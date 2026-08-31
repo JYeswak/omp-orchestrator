@@ -513,3 +513,47 @@ every doc that explains it. I added exactly this leg to the DIALOG detector
 (`framed_marker_far_from_status_line_is_not_a_dialog`) and to the SHA scanner
 (`a_grader_reporting_absence_is_not_a_citation`), and in both cases it went RED under mutation —
 so the leg is load-bearing, not decorative.
+
+---
+
+## A TOOL'S ERROR OUTPUT IS NOT ITS DATA — the unifying rule for every confident zero
+
+`grep -c` against a refusal string returns **0**, exactly like a real absence. `wc -l` counts error
+lines exactly like content. **Establish a query's semantics before believing its result.**
+
+The specimen that named the rule: `crontab` on this box can resolve to `bin/crontab-write-guard.sh`
+rather than `/usr/bin/crontab`, and a bare `crontab -l` then emits
+`CRONTAB GUARD REFUSED: write candidate is missing or unreadable`. Piped to
+`grep -c arc-keepalive` that yields **0** — indistinguishable from an erased crontab. The correct
+read is **`/usr/bin/crontab -l`**, which returned **63 lines** with the prefix intact.
+
+> **NEVER restore a backup on the strength of a count.** Read the actual lines. A restore from a
+> stale snapshot reverts whatever another agent added since — the same lost update that erased the
+> `TMUX_TMPDIR` prefix and left the fleet's watchdog blind for **4h19m**.
+
+**The shadowing is PATH-dependent, which makes it worse.** Measured here: `type crontab` →
+`/usr/bin/crontab`, both paths agreed at 63, zero guard lines. So one agent's identical command
+returns data and another's returns refusal text. **Being right by PATH is not being right** — use
+the absolute path for reads, and the guard for every write.
+
+### The full inventory — twelve in one session, every one looked like a healthy zero
+
+| # | query | believed | actual |
+|---|---|---|---|
+| 1 | `bv` `quick_ref.top_picks` | "no work, unblocks=0" | wrong key; `.triage.recommendations` has the scores |
+| 2 | `br dep list <id>` | "no dependents ⇒ orphan" | returns **out-edges only** |
+| 3 | `br show` says open+unassigned | "claimable" | only *attempting* the transition reveals the block |
+| 4 | inferred close-evidence regex | 1186 tokens, ~40% | 93 across 59 beads, ~5% |
+| 5 | absence from triage output | "not ranked" | envelope field, not substrate |
+| 6 | sparse-file size | 926 GB | apparent size, not allocated |
+| 7 | `lsof \| grep -c ESTABLISHED` | 82 sockets | **41** — loopback counts both endpoints |
+| 8 | `path\s*=\s*"` in Cargo.toml | "17-leaf claim is fabricated" | matched `[lib]`/`[[bin]]` build targets |
+| 9 | `crontab -l \| grep -c` | "crontab wiped" | guard **refusal text**, 63 lines intact |
+| 10 | cited paths absent from tree | 9 breakages | **4** — absent ≠ ever-present-and-deleted |
+| 11 | inherited "28 deadlock sites" | 28 across 23 crates | **5** — derived by the implementer |
+| 12 | `free_capacity` from `is_dispatchable` | test green | branch **unreachable**; green was vacuous |
+
+Rows 10–12 are mine. Row 12 is the sharpest: a test that passed **because the code it tested could
+not run**. Fixing the test helper turned it RED and it immediately caught a live defect — so the
+lesson is not "write more tests", it is **make each test capable of failing for the reason it
+claims**, then verify it does.
