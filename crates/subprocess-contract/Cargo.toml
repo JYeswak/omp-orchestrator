@@ -1,0 +1,12 @@
+[package]
+name = "subprocess-contract"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Shared cancel-correct process-group and dual-pipe subprocess boundary"
+
+[dependencies]
+asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", rev = "fa3c01aec" }
+
+[dev-dependencies]
+futures-lite = "2"

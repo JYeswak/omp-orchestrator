@@ -1,12 +1,17 @@
 #![forbid(unsafe_code)]
 
+use asupersync::Cx;
+use asupersync::process::Command;
+use asupersync::runtime::RuntimeBuilder;
+use asupersync::types::Budget;
 use std::{
     env,
     fs::{self, File, OpenOptions, TryLockError},
     io::{self, Write},
     path::{Path, PathBuf},
-    process::{Command, ExitCode, Stdio},
+    process::ExitCode,
 };
+use subprocess_contract::run_output;
 
 const EXIT_BUSY: u8 = 75;
 const EXIT_NOT_FREE: u8 = 76;
@@ -124,7 +129,7 @@ fn acquire(path: &Path, owner: &str) -> Result<File, AcquireError> {
     Ok(file)
 }
 
-fn run(config: Config) -> u8 {
+async fn run_async(config: Config, cx: &Cx) -> u8 {
     let path = lock_path(&config.state_dir, &config.session, &config.pane);
     let lock = match acquire(&path, &config.owner) {
         Ok(lock) => lock,
@@ -144,14 +149,12 @@ fn run(config: Config) -> u8 {
         }
     };
 
-    match Command::new(&config.ready_probe)
+    let mut probe = Command::new(&config.ready_probe);
+    probe
         .arg(&config.session)
-        .arg(format!("--pane={}", config.pane))
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-    {
-        Ok(status) if status.success() => {}
+        .arg(format!("--pane={}", config.pane));
+    match run_output(cx, probe).await {
+        Ok(output) if output.status.success() => {}
         Ok(_) => {
             eprintln!(
                 "PANE_DISPATCH_FENCE_NOT_FREE session={} pane={} owner={}",
@@ -165,20 +168,36 @@ fn run(config: Config) -> u8 {
         }
     }
 
-    let status = Command::new(&config.command[0])
-        .args(&config.command[1..])
-        .status();
-    drop(lock);
-    match status {
-        Ok(status) => status
-            .code()
-            .and_then(|code| u8::try_from(code).ok())
-            .unwrap_or(1),
+    let mut child = Command::new(&config.command[0]);
+    child.args(&config.command[1..]);
+    let output = match run_output(cx, child).await {
+        Ok(output) => output,
         Err(error) => {
+            drop(lock);
             eprintln!("PANE_DISPATCH_FENCE_CHILD_ERROR error={error}");
-            EXIT_CONFIG
+            return EXIT_CONFIG;
         }
-    }
+    };
+    let _ = io::stdout().write_all(&output.stdout);
+    let _ = io::stderr().write_all(&output.stderr);
+    drop(lock);
+    output
+        .status
+        .code()
+        .and_then(|code| u8::try_from(code).ok())
+        .unwrap_or(1)
+}
+
+fn run(config: Config) -> u8 {
+    let runtime = match RuntimeBuilder::current_thread().build() {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            eprintln!("PANE_DISPATCH_FENCE_RUNTIME_ERROR error={error}");
+            return EXIT_CONFIG;
+        }
+    };
+    let cx = runtime.request_cx_with_budget(Budget::INFINITE);
+    runtime.block_on(async move { run_async(config, &cx).await })
 }
 
 fn selftest(state_dir: &Path) -> ExitCode {

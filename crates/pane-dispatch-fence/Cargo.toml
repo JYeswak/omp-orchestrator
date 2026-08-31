@@ -9,3 +9,5 @@ name = "pane-dispatch-fence"
 path = "src/main.rs"
 
 [dependencies]
+asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", rev = "fa3c01aec" }
+subprocess-contract = { path = "../subprocess-contract" }
