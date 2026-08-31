@@ -1,0 +1,15 @@
+[package]
+name = "pre-delete-citation-check"
+version = "0.1.0"
+edition = "2021"
+description = "Refuses deleting a file that any closed bead cites as evidence"
+
+[[bin]]
+name = "pre-delete-citation-check"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "forbid"
