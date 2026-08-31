@@ -289,6 +289,40 @@ later as a gate refusing every dispatch.
 > **Before removing a file, grep CLOSED beads for its path.** A closed bead's evidence is a live
 > dependency on the filesystem, not a historical note. Tracked as `cp-rjuzj`.
 
+**MEASURED SCOPE, 2026-08-31.** `45c613d` deleted **four** files, and only **two** surfaced:
+
+| deleted path | close_reason | description | comments |
+|---|:-:|:-:|:-:|
+| `bin/omp-idle-dispatch.sh` | **1** (`cp-op5uu`) | 2 | 3 |
+| `bin/fleet-composite.py` | 0 | 2 | **4** (`cp-3k9jq`) |
+| `bin/omp-idle-dispatch-selftest.sh` | 0 | 0 | 2 |
+| `bin/wired-but-inert-guard.sh` | 0 | 1 | 2 |
+
+Two consequences the raw count hides:
+
+1. **`close_reason` is not the only field that breaks the gate.** `cp-3k9jq` has **zero** paths in
+   its `close_reason` (104 chars, no path) and still failed — it cites `fleet-composite.py` in its
+   description/comments. So a scan restricted to close reasons **understates** the exposure.
+2. **Close-evidence evaluates a WINDOW of beads, not the tracker.** Fixing two and seeing green is
+   a **false all-clear**: the rest are *unevaluated*, not passing. An unevaluated set reads exactly
+   like a clean one.
+
+**THE DURABLE FIX IS A PRE-DELETE CHECK, not a post-hoc repair.** Grepping closed beads for a path
+*before* `git rm` converts a gate failure discovered hours later at dispatch time into a
+**commit-time refusal at the point of the mistake**. Filed as `omp-orchestrator-pre-delete-citation-check`.
+
+**AND A TRAP IN THE OBVIOUS GENERALISATION — measured, mine.** Scanning all bead-cited scripts
+found **160** distinct `bin/*.sh|py` paths, of which **9** were absent from every repo working
+tree. That is *not* 9 breakages: `git log --diff-filter=D` proves exactly **4** were ever present
+and deleted (all in `45c613d`); the other 5 — `bin/x.sh`, `bin/jeff-issue.py`,
+`bin/jeff-issue-rubric.py`, `bin/dcg-latency-bench.sh`, `bin/safety-config-write-gate.sh` — were
+**never in any repo's history** and are foreign or illustrative paths. **"Absent from the tree" is
+not "deleted from this repo."** Verify presence-then-absence, never absence alone.
+
+One residue worth a look, independent of the port: `bin/safety-config-write-gate.sh` carries a
+**close_reason** citation yet has never existed in any of the three repos — so a closed bead cites
+a path that is either in a fourth repo or simply wrong.
+
 ### Adjacency is not authorship — a SHA near a bead is not a SHA belonging to it
 
 `tick-monitor lifecycle` reported `omp-orchestrator-2lo landed=3f821d4`. That bead has **no commit
