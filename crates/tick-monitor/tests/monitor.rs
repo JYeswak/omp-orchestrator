@@ -466,3 +466,115 @@ fn an_empty_pane_list_declares_nobody_dead() {
         "an empty scan is a failed scan, not a dead fleet"
     );
 }
+
+// ---------------------------------------------------------------------------
+// OBSCURED -- the capture shape I previously said I could not plant.
+//
+// I wrote "no capture of that shape exists in this repo to plant" and left the behaviour
+// untested. That was a real gap, not a formality: the operator's own watcher scored %1413
+// GONE on a covered status line at 09:15Z, and after their fix produced a FALSE DIALOG on
+// %1414 at 09:38Z when a box-drawing region briefly covered a pane mid-work at 26/26.
+// So the shape is synthesised here: a box-drawing region occupying the last lines, with NO
+// dialog footer. It must read OBSCURED -- neither dropped, nor promoted to DIALOG.
+// ---------------------------------------------------------------------------
+
+fn obs_at(id: &str, st: tick_monitor::PaneState, at: u64) -> tick_monitor::Observation {
+    tick_monitor::Observation { pane_id: id.into(), state: st, hash: 7, at }
+}
+
+/// A frame drawn OVER the status line: no model name, and no dialog footer either.
+const COVERED: &str = "\u{2502} building target/debug/foo\n\
+                       \u{2502} 26/26 crates\n\
+                       \u{2570}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}";
+
+#[test]
+fn a_covered_status_line_is_not_a_dialog() {
+    // THE FALSE-POSITIVE LEG, aimed at the exact %1414 09:38Z misread.
+    assert!(
+        !tick_monitor::dialog_open(COVERED),
+        "a box-drawing region with no footer must never read as an open dialog"
+    );
+    assert_eq!(tick_monitor::classify(COVERED).label(), "UNPROVEN");
+}
+
+#[test]
+fn a_covered_pane_that_was_working_is_obscured_not_dropped() {
+    // The pane carried a model line last tick, so it IS an agent pane and IS alive.
+    let prev = obs_at("%1414", tick_monitor::PaneState::Working { timer_secs: 60 }, 1000);
+    let now = obs_at("%1414", tick_monitor::classify(COVERED), 1200);
+    let l = tick_monitor::liveness(Some(&prev), &now);
+    assert_eq!(l.label(), "OBSCURED", "a covered live pane must not vanish into UNPROVEN");
+    assert!(l.needs_attention(), "the conductor must be told to LOOK");
+    assert!(!l.is_dispatchable() && !l.is_free_capacity(), "unreadable is not free");
+    assert!(!l.needs_answer(), "OBSCURED needs a deeper capture, not an answer");
+}
+
+#[test]
+fn a_shell_pane_stays_unproven_and_is_never_obscured() {
+    // The discriminator is the PRIOR observation, not the shape of this capture. Without
+    // this leg, "no model line -> alive and obscured" would relabel every shell pane as a
+    // live agent needing attention, and the attention list would be permanently noisy.
+    let prev = obs_at("%1396", tick_monitor::PaneState::Unproven, 1000);
+    let now = obs_at("%1396", tick_monitor::PaneState::Unproven, 1200);
+    assert_eq!(tick_monitor::liveness(Some(&prev), &now).label(), "UNPROVEN");
+}
+
+#[test]
+fn a_covered_pane_with_no_prior_is_unproven_not_obscured() {
+    // First sighting: we cannot know it was ever an agent. Claiming OBSCURED here would be
+    // a liveness claim from one capture, which is the rule this crate exists to enforce.
+    let now = obs_at("%1414", tick_monitor::classify(COVERED), 1200);
+    assert_eq!(tick_monitor::liveness(None, &now).label(), "UNPROVEN");
+}
+
+#[test]
+fn a_dialog_still_beats_a_covered_frame_when_the_footer_is_present() {
+    // OBSCURED must not swallow DIALOG: same framed shape, footer adjacent to a status line.
+    let st = tick_monitor::classify(DIALOG_FIXTURE);
+    assert_eq!(st.label(), "DIALOG");
+}
+
+// ---------------------------------------------------------------------------
+// WIRED, not merely BUILT. This repo's UNWIRED_LANE_ALLOWANCE is empty, which means a lane
+// with no production caller is a defect rather than a TODO. I shipped `vanished()` with
+// unit tests and ZERO callers and caught it myself; this leg is what stops it recurring.
+//
+// Honest about its own class: this is a SOURCE-level check, the same mechanism
+// no-shell-gate's wired_lanes uses. It proves a call site exists in the production binary.
+// It does NOT prove that call site executes on a live fleet -- that is the live run
+// recorded in the bead, and it is a separate kind of evidence.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn vanished_has_a_production_caller_in_the_binary() {
+    let main_rs = include_str!("../src/main.rs");
+    assert!(
+        main_rs.contains("tick_monitor::vanished(&prior.panes, &ids)"),
+        "vanished() lost its production call site in observe -- an unwired lane"
+    );
+    // POSITIVE CONTROL: the pattern must be capable of failing. A grep that can never miss
+    // is not evidence. `fh N043` is this repo failing exactly this way: a full battery of
+    // verification rituals that never fired once.
+    assert!(
+        !main_rs.contains("tick_monitor::a_function_that_does_not_exist("),
+        "positive control: the scan must be able to report absence"
+    );
+    // And the result must be RENDERED. A value computed and never printed is still unwired.
+    assert!(
+        main_rs.contains("\\\"dead_panes\\\""),
+        "dead panes computed but never emitted is not wired"
+    );
+    assert!(
+        main_rs.contains("\\\"attention\\\""),
+        "attention computed but never emitted is not wired"
+    );
+}
+
+#[test]
+fn needs_attention_has_a_production_caller_too() {
+    let main_rs = include_str!("../src/main.rs");
+    assert!(
+        main_rs.contains("live.needs_attention()"),
+        "needs_attention() is unwired -- the OBSCURED state would be computed and discarded"
+    );
+}

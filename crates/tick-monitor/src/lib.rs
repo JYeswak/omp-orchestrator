@@ -423,6 +423,13 @@ pub enum Liveness {
     /// arc-keepalive install approval reading as `WORKING`/`LIVE`, so the escalation it was
     /// waiting on was invisible to the conductor while looking perfectly healthy.
     Dialog { timer_secs: u64 },
+    /// The capture succeeded and the pane is PRESENT, but no model-name line was found --
+    /// and it carried one last tick. Alive, and unreadable rather than idle or dead.
+    ///
+    /// Distinct from `Dialog` on purpose. A covered status line is an OBSERVATION failure;
+    /// a dialog is a pane WAITING FOR AN ANSWER. Distinct from `Unproven` because that gets
+    /// dropped from capacity, which is how a live pane goes untended.
+    Obscured,
     /// Accepts input, submits nothing.
     Wedged,
     /// One capture only, gap too short, or unreadable. NOT idle.
@@ -438,6 +445,7 @@ impl Liveness {
             Liveness::Frozen => "FROZEN",
             Liveness::Wedged => "WEDGED",
             Liveness::Dialog { .. } => "DIALOG",
+            Liveness::Obscured => "OBSCURED",
             Liveness::Unproven { .. } => "UNPROVEN",
         }
     }
@@ -456,6 +464,12 @@ impl Liveness {
     /// not filling.
     pub fn needs_answer(&self) -> bool {
         matches!(self, Liveness::Dialog { .. })
+    }
+    /// Alive, but the conductor must LOOK rather than fill. `Dialog` needs an answer;
+    /// `Obscured` needs a deeper capture. Both used to vanish into `Unproven` and be
+    /// dropped from capacity, which is precisely how a live pane goes untended.
+    pub fn needs_attention(&self) -> bool {
+        matches!(self, Liveness::Dialog { .. } | Liveness::Obscured)
     }
 }
 
@@ -480,11 +494,6 @@ pub fn liveness(prev: Option<&Observation>, now: &Observation) -> Liveness {
     if matches!(now.state, PaneState::Wedged) {
         return Liveness::Wedged;
     }
-    if matches!(now.state, PaneState::Unproven) {
-        return Liveness::Unproven {
-            why: "capture_unrecognised",
-        };
-    }
     // Alive and awaiting an answer. Returned BEFORE the two-capture machinery on purpose:
     // its timer advances while blocked, so the (Working, Working) arm would call it Live.
     if let PaneState::Dialog { timer_secs } = now.state {
@@ -495,9 +504,34 @@ pub fn liveness(prev: Option<&Observation>, now: &Observation) -> Liveness {
             why: "no_prior_capture",
         };
     };
+    // MUST precede any use of `prev.state`: comparing a prior observation from a DIFFERENT
+    // pane is not evidence about this one.
     if prev.pane_id != now.pane_id {
         return Liveness::Unproven {
             why: "pane_id_mismatch",
+        };
+    }
+    // AN UNREADABLE CAPTURE FROM A PANE THAT WAS AN AGENT LAST TICK IS NOT A NON-EVENT.
+    //
+    // This check used to sit ABOVE the `prev` resolution and returned a flat `Unproven`,
+    // which the conductor drops from capacity -- and dropping is exactly how a live pane
+    // goes untended. The discriminator is the PRIOR observation, not the shape of this
+    // capture: a pane that carried a model-name line last tick and carries none now is
+    // alive and OBSCURED, while a pane that never had one is a shell.
+    //
+    // Deliberately NOT `Dialog`. Measured false positive on another watcher, %1414 at
+    // 09:38Z: a box-drawing region briefly covered the status line of a pane that was
+    // mid-work at 26/26, and the watcher reported DIALOG. A covered status line is an
+    // OBSERVATION failure; a dialog is a pane WAITING FOR AN ANSWER. Claiming the second
+    // from evidence for the first invents a blocker that does not exist.
+    if matches!(now.state, PaneState::Unproven) {
+        return match prev.state {
+            PaneState::Working { .. } | PaneState::Idle | PaneState::Dialog { .. } => {
+                Liveness::Obscured
+            }
+            PaneState::Wedged | PaneState::Unproven => Liveness::Unproven {
+                why: "capture_unrecognised",
+            },
         };
     }
     let gap = now.at.saturating_sub(prev.at);

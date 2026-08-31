@@ -195,10 +195,17 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
         return Err(3);
     }
 
+    // THE PRODUCTION CALLER for `vanished()`. Without this line the function was a lane
+    // with no caller -- and this repo's UNWIRED_LANE_ALLOWANCE is empty, so that is a
+    // defect, not a TODO. `ids` is proven non-empty two lines above, and `vanished`
+    // independently refuses an empty list, so a failed scan cannot produce an obituary.
+    let dead = tick_monitor::vanished(&prior.panes, &ids);
+
     let mut obs = Vec::new();
     let mut rows = Vec::new();
     let mut transitions = Vec::new();
     let mut dispatchable = Vec::new();
+    let mut attention = Vec::new();
     let mut free_capacity = Vec::new();
 
     for id in &ids {
@@ -229,6 +236,11 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
         // "LIVENESS counting the orchestrator as a worker" defect named in
         // /ntm-fleet-monitor's reporting contract. Measured: ticks 14 and 15 reported
         // free=['%1397','%1413'], where %1397 is the conductor.
+        // NOT excluded by --exclude-pane: the conductor's own pane can be obscured or
+        // prompting too, and "it is not worker capacity" is not "I need not look at it".
+        if live.needs_attention() {
+            attention.push(format!("{}:{}", id, live.label()));
+        }
         if live.is_free_capacity() && !excluded.contains(&id.as_str()) {
             free_capacity.push(id.clone());
         }
@@ -298,6 +310,8 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
         "{{\"observed_at\":{},\"prior_tick\":{},\"gap_secs\":{},\"session\":\"{}\",\
 \"panes_scanned\":{},\
 \"idle_panes\":{{\"dispatchable\":[{}],\"count\":{},\"free_capacity\":[{}]}},\
+\"attention\":{{\"panes\":[{}],\"count\":{}}},\
+\"dead_panes\":{{\"ids\":[{}],\"count\":{}}},\
 \"omp_lifecycle\":{{\"transitions\":[{}],\"panes\":[{}]}},\
 \"git_commits\":{{\"new_total\":{},\"repos\":[{}]}}}}",
         now,
@@ -316,6 +330,17 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
             .map(|d| format!("\"{}\"", esc(d)))
             .collect::<Vec<_>>()
             .join(","),
+        attention
+            .iter()
+            .map(|d| format!("\"{}\"", esc(d)))
+            .collect::<Vec<_>>()
+            .join(","),
+        attention.len(),
+        dead.iter()
+            .map(|d| format!("\"{}\"", esc(d)))
+            .collect::<Vec<_>>()
+            .join(","),
+        dead.len(),
         transitions.join(","),
         rows.join(","),
         new_commits,
