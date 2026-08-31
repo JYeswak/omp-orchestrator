@@ -1,0 +1,15 @@
+[package]
+name = "finding"
+version = "0.1.0"
+edition = "2024"
+description = "A named gap is an obligation: Finding cannot be dropped, only filed or waived."
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", rev = "fa3c01aec" }
+subprocess-contract = { path = "../subprocess-contract" }
+
+[dev-dependencies]
+futures-lite = "2"
