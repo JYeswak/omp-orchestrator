@@ -13,6 +13,22 @@ use std::io::{self, Write};
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
+    // COMMIT-MSG mode: git passes COMMIT_EDITMSG as argv[1]. Run the
+    // round-trip check and nothing else — the file gates are pre-commit work.
+    if let Some(arg) = std::env::args().nth(1) {
+        let editmsg = std::path::PathBuf::from(arg);
+        if editmsg.file_name().is_some_and(|n| n == "COMMIT_EDITMSG") {
+            return match round_trip_check(&editmsg) {
+                Some(refusal) => {
+                    eprintln!("COMMIT-MSG REFUSED: {refusal}");
+                    ExitCode::from(1)
+                }
+                None => ExitCode::SUCCESS,
+            };
+        }
+    }
+
+    // ── PRE-COMMIT mode: the five file gates below ──────────────────────
     let staged = match get_staged_files() {
         Ok(files) => files,
         Err(err) => {
@@ -149,4 +165,40 @@ fn get_staged_deletions() -> Vec<String> {
             .collect(),
         _ => Vec::new(),
     }
+}
+
+/// Round-trip check: the commit message must be byte-identical to what the
+/// author staged at .git/MSG_SRC. Catches ANY corruption between the author's
+/// write and git's receipt — not just the backtick family. Composes with the
+/// standing rule: always `git commit -F .git/MSG_SRC`, never `-m "string"`.
+///
+/// Runs at COMMIT-MSG time (git passes COMMIT_EDITMSG as argv[1]), after the
+/// message is written but before the commit is finalized.
+fn round_trip_check(editmsg_path: &std::path::Path) -> Option<String> {
+    let repo_root = std::env::current_dir().ok()?;
+    let msg_src = repo_root.join(".git").join("MSG_SRC");
+
+    if !msg_src.exists() {
+        return Some(format!(
+            "round-trip: .git/MSG_SRC not found — write the message to .git/MSG_SRC, then `git commit -F .git/MSG_SRC`. `-m \"...\"` lets the shell expand backticks, $(), and $VAR before git sees them."
+        ));
+    }
+
+    let src = match std::fs::read(&msg_src) {
+        Ok(bytes) => bytes,
+        Err(e) => return Some(format!("round-trip: cannot read MSG_SRC: {e}")),
+    };
+    let recv = match std::fs::read(editmsg_path) {
+        Ok(bytes) => bytes,
+        Err(e) => return Some(format!("round-trip: cannot read COMMIT_EDITMSG: {e}")),
+    };
+
+    if src != recv {
+        return Some(format!(
+            "round-trip: MESSAGE CORRUPTION — .git/MSG_SRC ({} bytes) differs from COMMIT_EDITMSG ({} bytes). The shell expanded something. Use `git commit -F .git/MSG_SRC`.",
+            src.len(),
+            recv.len()
+        ));
+    }
+    None
 }
