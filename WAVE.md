@@ -476,3 +476,40 @@ at all in that turn — I inferred "hasn't posted" from my own memory of dispatc
 > stale** while `br show` was correct. Note that 2lo stays WONTFIX: ~40 samples under
 > concurrent-writer stress could not reproduce the divergence, and **this incident is not evidence
 > for it**, because no list read occurred.
+
+### THE SELF-REFERENTIAL CHECKER — a gate whose input includes text ABOUT the defect will punish the documentation that prevents it
+
+**Five instances in one session.** This is not a coincidence; it is the default behaviour of any
+checker fed prose that discusses what it checks.
+
+| # | checker | what it scored |
+|---|---|---|
+| 1 | a safety guard | **its own pane's** command text |
+| 2 | a pane-state classifier | **its own stale scrollback** — one pane scored working AND idle simultaneously |
+| 3 | close-evidence path extractor | paths in comments **discussing** paths, manufacturing BAD_PATH |
+| 4 | `br-comment-form` (`cp-c2306`) | `CLAUDE.md:805` — a line that **names the `br comment` trap in order to warn about it** |
+| 5 | my own lifecycle SHA detector | **my own grading comment** quoting a SHA, creating a self-sustaining finding |
+
+> **THE GATE IS WRONG, NOT THE DOCS.** Never edit a warning to dodge a regex. The warning is the
+> artifact that prevents the defect; deleting it to make a checker green trades the fix for the
+> metric. 5 such lines exist across `CLAUDE.md` and `AGENTS.md`.
+
+**The mechanism every time:** the checker matched on **shape** where it needed **role**. Text
+containing the defect's name is not text committing the defect.
+
+**The remedies that actually worked here, in order of strength:**
+
+1. **Positional/adjacency anchoring.** The DIALOG detector fires only on a footer within three
+   non-blank lines of the status line — a framed `Esc cancel` in scrollback does not. The SHA
+   detector requires `in_citation_position`, not bare pattern presence.
+2. **An explicit marker as the discriminator.** `c37db1a` made `CITED_PATH` require a backtick or a
+   `path:`/`file:` prefix, which killed the whole prose class at once rather than narrowing it.
+3. **Excluding your own output from your own scan** — the guard-that-greps-its-own-pane fix.
+
+**ACCEPTANCE CRITERION, mandatory for any checker of this shape:** ship a **known-good leg whose
+content is a WARNING ABOUT THE DEFECT**, and assert it does **not** fire. An attack-only suite
+cannot detect this class — every planted bad input fires correctly while the gate quietly punishes
+every doc that explains it. I added exactly this leg to the DIALOG detector
+(`framed_marker_far_from_status_line_is_not_a_dialog`) and to the SHA scanner
+(`a_grader_reporting_absence_is_not_a_citation`), and in both cases it went RED under mutation —
+so the leg is load-bearing, not decorative.
