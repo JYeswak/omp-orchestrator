@@ -432,3 +432,47 @@ number from it.** Five confident-wrong queries in one session all looked like a 
 **41** connections; `path\s*=\s*"` matching `[lib]`/`[[bin]]` build targets as dependencies; and a
 claimable-looking bead that only failed on the transition attempt. **Check what a pattern can ALSO
 match, and check the other fields of an envelope, before diagnosing the tool.**
+
+---
+
+## Oracles, deadlocks, and not-reading — measured 2026-08-31
+
+### An oracle that cannot COMPLETE provides zero assurance while reading as "present"
+
+`check.sh` invokes a differential oracle and treats its presence as coverage. A hung oracle is not
+a failing oracle — it is an **absent** one that still occupies the slot. **An oracle needs its own
+liveness check**, distinct from the check it performs. `bin/close-evidence-differential` returns
+`rc=124` with **zero bytes** while the identical `br list` command returns `rc=0` from a shell.
+
+### 0% CPU with a live child is a DEADLOCK, not slowness — and widening the timeout HIDES it
+
+`cp-g6sy8` (P0): `crates/oracle-compare/src/lib.rs:262-263` pipes stdout **and** stderr; `:247-253`
+polls `try_wait()` and only reaches `wait_with_output()` — the call that drains — **after** exit. A
+child filling either ~64 KiB pipe buffer blocks forever. **28 call sites across 23 crates inherit
+it**, including `tick-dispatch`, `prune-cron`, `dispatcher-deadman`, `fleet-truth`,
+`docs-staleness-gate`, `arc-checkin`, `reap-finished-panes` — the scheduled lanes that run the loop.
+Candidate remedy under discussion: route through `crates/subprocess-contract`, which already drains.
+
+> **THIS RULE WAS ALREADY WRITTEN AND IT DID NOT PREVENT THE BUG.** `AGENTS.md:430-431` states it
+> verbatim — *"Drain both pipes. Undrained stdout+stderr with a `try_wait()` poll deadlocks past
+> ~64 KiB. The tell is 0% CPU with no children; widening the timeout hides it longer."* — and the
+> timeout was still widened 110s→400s before the code was read. **A rule with no enforcement
+> mechanism is a suggestion**, which is this repo's own BUILT ≠ WIRED rule pointed at its
+> documentation. The 28 sites are statically detectable; the fix for the CLASS is a lint, not
+> another paragraph. Filed as `omp-orchestrator-undrained-pipe-lint`.
+
+### Before chasing a pane for missing work, READ — and a stale read is not the worst failure
+
+I nearly spent a cycle chasing `%1413` for a `5cl` verdict that **already existed** (AmberGate
+posted it; commenters are AmberGate, BlueLantern, GreenFrog, josh).
+
+**The honest post-mortem is not that a list read went stale.** I have no record of querying `5cl`
+at all in that turn — I inferred "hasn't posted" from my own memory of dispatching it. That is
+**not-reading**, which is a worse failure than reading stale data and a different one: it is the
+`DERIVE, DO NOT QUOTE` trap applied to my own recent actions rather than to a document.
+
+> Verify with `br show <id>` or `br comments list <id>` — never a remembered dispatch, and never a
+> `br list` read alone, which `omp-orchestrator-2lo` records as having served state **2.5 min
+> stale** while `br show` was correct. Note that 2lo stays WONTFIX: ~40 samples under
+> concurrent-writer stress could not reproduce the divergence, and **this incident is not evidence
+> for it**, because no list read occurred.
