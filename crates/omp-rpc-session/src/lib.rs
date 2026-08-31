@@ -42,7 +42,7 @@ pub const NO_CLAIM_BOUNDARY: &str = "This adapter drives one configured OMP --mo
 
 const DEFAULT_MAX_FRAME_BYTES: usize = 1_048_576;
 const DEFAULT_MAX_CAPTURE_BYTES: usize = 4 * 1_048_576;
-const DEFAULT_BINARY: &str = "/Users/josh/.local/bin/omp";
+const DEFAULT_BINARY: &str = "omp";
 const REQUEST_IDS: [&str; 4] = ["negotiate-2", "state", "stats", "messages"];
 
 /// A bounded phase timeout. No phase, including shutdown, is unbounded.
@@ -133,13 +133,26 @@ impl OmpCommand {
     }
 
     fn process_command(&self, max_capture_bytes: usize) -> Command {
-        let mut command = Command::new(&self.binary);
+        let mut command = Command::new("omp");
         command.args(&self.args);
         if let Some(path) = &self.current_dir {
             command.current_dir(path);
         }
         for (key, value) in &self.environment {
             command.env(key, value);
+        }
+        if let Some(parent) = self
+            .binary
+            .parent()
+            .filter(|path| !path.as_os_str().is_empty())
+        {
+            let mut search_path = vec![parent.to_path_buf()];
+            if let Some(existing) = std::env::var_os("PATH") {
+                search_path.extend(std::env::split_paths(&existing));
+            }
+            if let Ok(joined) = std::env::join_paths(search_path) {
+                command.env("PATH", joined);
+            }
         }
         command
             .stdin(Stdio::Pipe)
@@ -826,11 +839,30 @@ fn map_io(stream: &'static str, error: std::io::Error) -> RpcError {
     }
 }
 
+fn validate_binary(binary: &Path) -> Result<(), RpcError> {
+    let valid_name = binary
+        .file_name()
+        .and_then(OsStr::to_str)
+        .is_some_and(|name| name == "omp");
+    if valid_name {
+        Ok(())
+    } else {
+        Err(RpcError::Process {
+            operation: "validate executable".to_owned(),
+            detail: format!(
+                "only an executable named omp is allowed: {}",
+                binary.display()
+            ),
+        })
+    }
+}
+
 /// Run one bounded OMP RPC session. The caller's `&Cx` owns cancellation.
 pub async fn run_session(
     cx: &asupersync::Cx,
     config: &RpcSessionConfig,
 ) -> Result<RpcSessionReport, RpcError> {
+    validate_binary(config.command.binary())?;
     checkpoint(cx)?;
     let mut child = config
         .command
@@ -1334,5 +1366,10 @@ mod tests {
                 ..
             })
         ));
+    }
+    #[test]
+    fn executable_name_is_allowlisted() {
+        assert!(validate_binary(Path::new("omp")).is_ok());
+        assert!(validate_binary(Path::new("/tmp/fake-omp")).is_err());
     }
 }

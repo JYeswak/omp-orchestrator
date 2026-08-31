@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use std::path::PathBuf;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-const DEFAULT_BINARY: &str = "/Users/josh/.local/bin/omp";
+const DEFAULT_BINARY: &str = "omp";
 
 fn print_json(value: Value) {
     println!("{value}");
@@ -41,8 +41,18 @@ fn usage() -> String {
     "usage: omp-rpc-session <doctor|health|version|quick> [--binary PATH]".to_owned()
 }
 
+fn binary_present(binary: &std::path::Path) -> bool {
+    if binary.is_file() {
+        return true;
+    }
+    let Some(path) = std::env::var_os("PATH") else {
+        return false;
+    };
+    std::env::split_paths(&path).any(|directory| directory.join(binary).is_file())
+}
+
 fn doctor(binary: &std::path::Path) -> Value {
-    let exists = binary.is_file();
+    let exists = binary_present(binary);
     json!({
         "schema": OMP_RPC_SCHEMA_VERSION,
         "kind": "doctor",
