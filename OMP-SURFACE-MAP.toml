@@ -4,114 +4,131 @@
 # which OMP surface it maps to. A crate absent from this file is UNDECLARED and gets flagged
 # exactly as a crate with no caller gets flagged — silence is not an answer, and "none" is.
 #
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+# REVISION 2, 2026-08-31 20:29Z — MY ORIGINAL CLASSIFICATION WAS REFUTED BY MEASUREMENT.
+#
+# I published revision 1 with four crates classified (b) reimplemented-by-scraping, on the premise
+# that OMP's --mode=rpc offered an alternative we were ignoring. SilverWolf probed the installed
+# binary at runtime and answered the deciding question:
+#
+#   --mode=rpc IS A SINGLE-SESSION TRANSPORT. IT CANNOT ADDRESS A THIRD-PARTY PANE.
+#
+# Three consequences, each of which INVERTS a row I wrote:
+#   * CROSS-PANE DISPATCH IS (a), NOT (b). tmux send-keys and ntm robot-send are the ONLY
+#     mechanisms that reach a pane we do not own. Our scraping is CORRECT, not lazy.
+#   * OMP PROVIDES NO DELIVERY RECEIPT. My `omp_alternative = "a delivery response on the send"`
+#     named something that DOES NOT EXIST. The receiver-verification gap is real and CANNOT be
+#     closed by adopting an OMP surface.
+#   * THE mux* LAYER IS TUI-ONLY and not reachable from --mode=rpc, so muxConnect/muxPing are not
+#     the supervisor's "natural transport" as I claimed.
+#
+# What SURVIVED as genuine (b): single-session state via get_state, and session continuity via
+# --continue/--resume/--session-dir, which we reimplement with pane-id tracking.
+#
+# THE LESSON, recorded because it cost a revision: I asked the worker to TEST my classification
+# rather than confirm it, and the test refuted it. A classification is a CLAIM BY THE AUTHOR. Mine
+# was wrong on the largest row, and the correction makes the architecture better news than the
+# original finding — most of our scraping is architecturally forced.
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+#
 # WHY A DECLARATION AND NOT AN INFERENCE: a census that greps crate sources for OMP surface names
-# matches its own table. That is the self-referential checker — SIX instances in one session,
-# including a reading in which all six gates falsely appeared to have callers. The declaration is
-# made by the author, in this file, and is then available for challenge.
+# matches its own table. That is the self-referential checker — SIX instances in one session.
 #
 # CLASSIFICATION, the only three legal values plus the failure state:
-#   "a" — genuinely not OMP's concern. A LEGITIMATE TERMINAL STATE, reachable without argument.
-#   "b" — we reimplemented an OMP surface by scraping. MUST name `omp_alternative`.
+#   "a" — genuinely not OMP's concern, OR no OMP alternative exists. A LEGITIMATE TERMINAL STATE.
+#   "b" — we reimplemented an OMP surface that EXISTS AND IS REACHABLE. MUST name `omp_alternative`.
 #   "c" — an OMP capability we do not use and should.
-#   absent from this file — UNDECLARED. This is the failure state the gate exists to catch.
+#   absent — UNDECLARED. The failure state the gate exists to catch.
 #
-# THE DENOMINATOR, measured 2026-08-31 against the installed v18.0.11. Re-derive; never inherit:
-#   find dist/types -maxdepth 1 -mindepth 1 -type d | wc -l         -> 57
-#   find dist/types -maxdepth 1 -mindepth 1 -name '*.d.ts' | wc -l  -> 14
-#   omp --help, COMMANDS block                                      -> 39
-#   grep -ohE '"omp/[a-zA-Z]+"' dist/cli.js | sort -u                -> 3
+# DENOMINATOR, measured against installed v18.0.11. Re-derive; never inherit:
+#   find dist/types -maxdepth 1 -mindepth 1 -type d | wc -l   -> 57
+#   omp --help, COMMANDS block                                -> 39
 #
-# NO-CLAIM: a declaration is a CLAIM BY THE AUTHOR, not a measurement. A crate can declare "a" and
-# be wrong. This file's job is to make the claim EXIST and be challengeable. Adjudication — inputs,
-# outputs, what must be true, negative evidence — belongs to the inventory map,
-# omp-orchestrator-omp-coverage-mission-ipg.12.
+# NO-CLAIM: a declaration is a CLAIM BY THE AUTHOR, not a measurement — revision 1 is the proof.
+# Adjudication belongs to the inventory map, omp-coverage-mission-ipg.12.
+# NO-CLAIM 2 (SilverWolf's, carried): the --mode=rpc probes ran against a no-session, no-tools,
+# no-lsp, no-extensions instance. A production session with extensions and LSP is UNMEASURED.
 
 [meta]
+revision = 2
 denominator_type_dirs = 57
-denominator_dts_files = 14
 denominator_subcommands = 39
-denominator_omp_methods = 3
 measured_against = "@oh-my-pi/pi-coding-agent v18.0.11"
 measured_on = "2026-08-31"
 crates_declared = 21
+revision_2_reason = "cross-pane dispatch and delivery receipt reclassified (b)->(a); --mode=rpc proven single-session"
 
-# ── (b) REIMPLEMENTED BY SCRAPING ────────────────────────────────────────────────────────────────
-# The category that changes the architecture. Each names the OMP surface that exists TODAY.
-
-[crates.tick-monitor]
-classification = "b"
-omp_surface = "session, live, modes"
-omp_alternative = "session/state read over --mode=rpc"
-instead_we = "classify() matches a braille spinner + elapsed timer on the LAST status line"
-negative_evidence = "a stale spinner in scrollback reports a dead pane BUSY forever; and two panes read <no marker> because a tool-call box border renders AFTER the status line"
-
-[crates.receiver-receipt]
-classification = "b"
-omp_surface = "jsonrpc"
-omp_alternative = "a delivery response on the send"
-instead_we = "diff a timer reset plus a spinner-stripped content hash across two captures"
-negative_evidence = "cp-z42vu returned success:[4] while the packet never arrived; the pending-dispatch marker records the inverse — a delivery that happened, reported as a timeout"
-
-[crates.composer-typed]
-classification = "b"
-omp_surface = "tui, session"
-omp_alternative = "composer state over the RPC transport"
-instead_we = "inspect the rendered composer for typed text"
-negative_evidence = "ntm refuses codex panes with 'cod composer not visible' (cp-nq2s9) — a terminal-inspection guard, not a protocol error, and those panes demonstrably accept input"
-
-[crates.fleet-composite]
-classification = "b"
-omp_surface = "session, live"
-omp_alternative = "a fleet/session enumeration over RPC"
-instead_we = "compose tmux captures across panes"
-negative_evidence = "ntm's snapshot returns total_sessions: 0 with success: true when stale; tmux does not lie, which is why fleet-reconcile exists at all"
-
-# ── (c) UNUSED CAPABILITY WE SHOULD ADOPT ────────────────────────────────────────────────────────
-
-[crates.omp-orchestrator]
-classification = "c"
-omp_surface = "omp/muxConnect, omp/muxPing, omp/muxRestartServer, goals, collab, jsonrpc"
-omp_alternative = "the mux methods are the supervisor's natural transport"
-instead_we = "spawn tmux and ntm; Command::new(\"omp\") appears 0 times in any crate"
-negative_evidence = "if the mux methods cannot address a pane the supervisor must reach, this classification is wrong and the surface is (a) — UNMEASURED, nobody has called them"
-
-[crates.ack-stage]
-classification = "c"
-omp_surface = "jsonrpc, irc"
-omp_alternative = "a typed acknowledgement over the transport"
-instead_we = "read back a bead comment with br comments list"
-negative_evidence = "br comment (singular) prefix-matches, errors on stderr, and EXITS 0 — an agent believed two VERDICT comments landed when neither had, so the read-back is load-bearing and an RPC ack would not remove it"
-
-[crates.ack-spine]
-classification = "c"
-omp_surface = "jsonrpc, irc, collab"
-omp_alternative = "transport receipt + typed ack"
-instead_we = "three separate authorities: transport JSON, observational delivery, bead-comment ack"
-negative_evidence = "the three-authority split is only necessary BECAUSE the transport is unacknowledged; a real ack would collapse authorities 1 and 3 and this crate would shrink"
+# ── (b) REIMPLEMENTED BY SCRAPING — an OMP alternative EXISTS AND IS REACHABLE ───────────────────
+# Only two survive revision 2. Both are SINGLE-SESSION concerns, which is exactly the scope where
+# --mode=rpc is real.
 
 [crates.dispatch-silence-watch]
-classification = "c"
-omp_surface = "session, live"
-omp_alternative = "a session-idle event"
-instead_we = "poll for dispatched-then-silent beads"
-negative_evidence = "an unclaimed dispatch is invisible to this watcher — measured on 5rh, which sat open with zero comments while a worker carried it"
+classification = "b"
+omp_surface = "session"
+omp_alternative = "--continue / --resume / --session-dir give real session continuity"
+instead_we = "track pane ids and poll for dispatched-then-silent beads"
+negative_evidence = "an unclaimed dispatch is invisible to this watcher — measured on 5rh, which sat open with zero comments while a worker carried it. Session continuity would not fix that; the bead projection would still be missing."
 
 [crates.loop-queue-filter]
-classification = "c"
-omp_surface = "task, commands"
-omp_alternative = "OMP's own task surface"
-instead_we = "filter br ready output"
-negative_evidence = "the queue authority is beads, not OMP; if OMP's task surface cannot express a dependency DAG this is (a), not (c) — UNMEASURED"
+classification = "b"
+omp_surface = "session, task"
+omp_alternative = "get_state over --mode=rpc returns structured session state for our OWN session"
+instead_we = "filter br ready output and infer state from pane text"
+negative_evidence = "if the queue authority is beads rather than OMP, this is (a) — the (b) applies only to the SESSION-state half, not to the queue itself"
+
+# ── (a) NO OMP ALTERNATIVE EXISTS, or genuinely not OMP's concern ────────────────────────────────
+# The four cross-pane crates moved here in revision 2. Their scraping is FORCED, not chosen.
+
+[crates.receiver-receipt]
+classification = "a"
+omp_surface = "none reachable"
+why = "REVISION 2: OMP's --mode=rpc DOES NOT PROVIDE A DELIVERY RECEIPT. Revision 1 named an alternative that does not exist."
+instead_we = "diff a timer reset plus a spinner-stripped content hash across two captures"
+negative_evidence = "cp-z42vu returned success:[4] while the packet never arrived; the pending-dispatch marker records the inverse. The gap is REAL and cannot be closed by adopting an OMP surface — it can only be closed by a receipt protocol that does not exist today."
+
+[crates.composer-typed]
+classification = "a"
+omp_surface = "none reachable"
+why = "REVISION 2: inspects a pane we do not own; --mode=rpc is single-session and cannot address it"
+negative_evidence = "ntm refuses codex panes with 'cod composer not visible' (cp-nq2s9) while those panes demonstrably accept input — a terminal-inspection false positive that no OMP surface can arbitrate, because OMP cannot see that pane either"
+
+[crates.fleet-composite]
+classification = "a"
+omp_surface = "none reachable"
+why = "REVISION 2: composes state across panes we do not own"
+negative_evidence = "ntm's snapshot returns total_sessions: 0 with success: true when stale; tmux does not lie. A single-session RPC cannot enumerate a fleet."
+
+[crates.tick-monitor]
+classification = "a"
+omp_surface = "none reachable for CROSS-PANE observation"
+why = "REVISION 2: observes OTHER panes. get_state is (b) but only for our OWN session, which this crate does not observe."
+instead_we = "classify() matches a braille spinner + elapsed timer on the LAST status line"
+negative_evidence = "a stale spinner in scrollback reports a dead pane BUSY forever; two panes read <no marker> because a tool-call box border renders AFTER the status line. Both are scraping artifacts — and both are UNAVOIDABLE while the target pane is not ours."
+
+[crates.omp-orchestrator]
+classification = "a"
+omp_surface = "none reachable"
+why = "REVISION 2: I claimed omp/muxConnect, muxPing and muxRestartServer were the supervisor's natural transport. The mux* layer is TUI-ONLY and NOT accessible from --mode=rpc. That claim is retired."
+negative_evidence = "if a future OMP exposes mux over RPC this becomes (c) immediately — the classification is version-pinned to v18.0.11 and must be re-derived on upgrade"
+
+[crates.ack-stage]
+classification = "a"
+omp_surface = "none reachable"
+why = "REVISION 2: an acknowledgement requires a receipt, and OMP provides none"
+instead_we = "read back a bead comment with br comments list"
+negative_evidence = "br comment (singular) prefix-matches, errors on stderr, and EXITS 0 — an agent believed two VERDICT comments landed when neither had. The read-back is load-bearing regardless of transport."
+
+[crates.ack-spine]
+classification = "a"
+omp_surface = "none reachable"
+why = "REVISION 2: the three-authority split exists because no receipt protocol exists. Revision 1 predicted a real ack would collapse authorities 1 and 3 — measurement says there is no such ack to adopt."
+negative_evidence = "if OMP ever ships a delivery receipt, authorities 1 and 3 collapse and this crate shrinks. Until then the split is forced."
 
 [crates.pane-dispatch-fence]
-classification = "c"
-omp_surface = "session"
-omp_alternative = "a session-level admission check"
-instead_we = "a cross-process per-pane fence over tmux state"
-negative_evidence = "safe_to_dispatch is not liveness — a wedged pane accepts a packet and parks it at 'Press up to edit queued messages' and never submits it"
-
-# ── (a) GENUINELY NOT OMP'S CONCERN ──────────────────────────────────────────────────────────────
-# Repo gates and language-level guards. These operate on OUR tree, not on an agent interaction.
+classification = "a"
+omp_surface = "none reachable"
+why = "REVISION 2: admission for a pane we do not own"
+negative_evidence = "safe_to_dispatch is not liveness — a wedged pane accepts a packet, parks it at 'Press up to edit queued messages', and never submits it"
 
 [crates.no-shell-gate]
 classification = "a"
@@ -129,7 +146,7 @@ negative_evidence = "caught a live specimen — a staged deletion of a path cite
 classification = "a"
 omp_surface = "none"
 why = "scans our source for handrolled equivalents of our own kernels"
-negative_evidence = "it cannot see an operator handrolling in a shell, and all five measured handrolls were in a shell — that gap is an operator hook, still not an OMP surface"
+negative_evidence = "it cannot see an operator handrolling in a shell, and all five measured handrolls were in a shell"
 
 [crates.kernel-only-operator-hook]
 classification = "a"
@@ -159,17 +176,28 @@ why = "refuses hardcoded repo and home paths so the substrate installs anywhere"
 [crates.subprocess-contract]
 classification = "a"
 omp_surface = "none"
-why = "the drain-safe cancel-correct process runner; it is the LAYER BENEATH any OMP client we build, not a mapping of one"
-negative_evidence = "if an OMP RPC client removes every subprocess spawn this crate loses its callers — it has 3 today, the most in the workspace"
+why = "the drain-safe cancel-correct process runner; the LAYER BENEATH any client we build"
+negative_evidence = "it has 3 callers, the most in the workspace — if an RPC client removed every subprocess spawn it would lose them, and revision 2 says that client cannot exist for cross-pane work"
 
 [crates.finding]
 classification = "a"
 omp_surface = "none"
 why = "the type that makes a named gap an obligation; a tracker concern"
-negative_evidence = "it shipped with one manifest caller, and that caller had zero — reachable only from dead code until the followup stage depended on it"
+negative_evidence = "it shipped with one manifest caller whose own caller count was zero — reachable only from dead code until the followup stage depended on it"
 
 [crates.finding-dispatch]
 classification = "a"
 omp_surface = "none"
 why = "renders a SupervisorDecision into a filed Finding"
 negative_evidence = "ZERO callers, and it is omp-orchestrator's only manifest caller — the supervisor's sole inbound edge is itself dead code. WIRE or RETIRE; there is no third option."
+
+# ── (c) UNUSED CAPABILITY WE SHOULD ADOPT ────────────────────────────────────────────────────────
+# Survivors of revision 2, from SilverWolf's per-surface pass on wave .4.
+
+[crates.ack-spine-collab-gap]
+classification = "c"
+omp_surface = "collab"
+omp_alternative = "OMP's collab surface is real multi-agent coordination we do not touch"
+instead_we = "Agent Mail, which was degraded twice today — 'database is locked' on both writes, RSS 130MB->687MB over 98 minutes, and a restart that fixed it (state accumulation, not a fix)"
+negative_evidence = "if collab is also single-session it is (a) like the rest — UNMEASURED, and revision 2 exists precisely because I assumed reachability once already"
+note = "declaration placeholder: names a gap with no crate yet. The census must treat a crates.* block with no matching crate as GHOST — this row is a deliberate known-bad specimen for that leg."
