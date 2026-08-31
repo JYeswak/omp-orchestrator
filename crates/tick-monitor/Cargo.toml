@@ -1,0 +1,11 @@
+[package]
+name = "tick-monitor"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Three repeatable monitors (OMP lifecycle, git commits, idle panes) behind one loop-enforcement choke point"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
