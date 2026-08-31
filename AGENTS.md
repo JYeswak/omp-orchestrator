@@ -330,3 +330,34 @@ verification-level tag (`[test]`, `(code-first, test pending)`, `[selftest-verif
   `std::process::Command` — a separate, unbuilt check.
 - The unwired-lane conformance test described above is **doctrine here, not yet code**. Until it
   exists, "wired" is checked by hand.
+
+## Grading gate: no bead closes on its own author's word
+
+**A bead is closed by an agent who did NOT implement it.** Verification runs
+`/beads-compliance-and-completion-verification` against the bead's own acceptance
+criteria, and the close reason cites what the GRADER re-executed — not what the
+implementer reported.
+
+Measured 2026-08-31: of the first three closes, one was independently graded (`-4ak`,
+pane 1, "re-run, not read") and two were self-certified by their implementer (`-7ai`
+GoldLark, `-a3p` BlueLantern). Both self-closes carried real evidence and a NO-CLAIM
+line, which is why this is a process gap and not a fabrication — but a report is a
+CLAIM, and the whole point of the grade is that a second agent ran the command.
+
+**Stage order, and grading outruns new work.** When a bead is implementation-complete,
+grading it takes priority over claiming anything new. A verification backlog is worse
+than an empty queue: unclosed finished work makes `br ready` keep serving it, which is
+how a pane ends up correctly reporting NO_ELIGIBLE_TARGET and going idle.
+
+Every bead carries a stage, and dispatches name it:
+
+```
+IMPL     implementation-complete, commit landed
+  ->  GRADING   a DIFFERENT agent re-executes the acceptance criteria
+  ->  CLOSED    the grader closes; reason starts MUTATION-VERIFIED / DONE / APPROVED / WONTFIX
+```
+
+The close policy REFUSES a prose reason, and the refusal scrolls past in-pane while the
+agent moves on believing the close landed. Always read the status back:
+`br show <id> --json | jq -r '.[0].status'` — note `br show` returns a BARE list, while
+`br list` wraps its rows in `.issues`.
