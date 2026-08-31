@@ -1,0 +1,12 @@
+[package]
+name = "path-literal-guard"
+version = "0.1.0"
+edition = "2021"
+description = "Repo-wide gate: zero hardcoded home-path literals across crates/*/src"
+
+[lib]
+name = "path_literal_guard"
+path = "src/lib.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
