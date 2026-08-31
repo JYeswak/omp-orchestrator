@@ -2,31 +2,14 @@
 
 //! installer — one-touch install with four-way identity proof.
 //!
-//! THE DECIDING LEG: identity is PROVEN at install time, not asserted. Four-way:
-//!   git rev-parse HEAD == build_id in the artifact's strings
-//!   == what --version reports == what the running process reports.
-//! Install FAILS if any pair disagrees.
+//! main wires the subprocess calls (git, cargo) to the lib's identity check.
+//! Single writer per file: SilverWolf owns main.rs; pane 1 owns lib.rs.
 
-use installer::{
-    build_workspace, check_build_fence, git_head, install_binary, verify_identity,
-    InstallError, InstallTarget,
-};
+use installer::{resolve_repo_ownership, verify_identity, RepoOwnership};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 const BINARIES: &[&str] = &["omp-orchestrator", "tick-monitor", "pane-truth"];
-
-fn usage() {
-    eprintln!(
-        "installer [--check | --install | --version] [--bin-dir PATH]\n\
-         \n\
-         --check     Verify four-way identity for all binaries. Exits 0 (consistent)\n\
-         \x20            or 1 (mismatch/drift). This is the pre-install gate.\n\
-         --install   Build workspace (release), verify identity, install to bin-dir.\n\
-         --version   Print the installer's own version.\n\
-         --bin-dir   Target directory for installed binaries (default: ~/.local/bin)."
-    );
-}
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -42,25 +25,28 @@ fn main() -> ExitCode {
             dirs_home().unwrap_or_else(|| PathBuf::from("/Users/josh")).join(".local/bin")
         });
 
-    let verb = args.first().map(String::as_str).unwrap_or("--check");
-
-    match verb {
-        "--check" => run_check(&repo_root, &bin_dir),
-        "--install" => run_install(&repo_root, &bin_dir),
-        "--version" => {
+    match args.first().map(String::as_str) {
+        Some("--check") => run_check(&repo_root, &bin_dir),
+        Some("--install") => run_install(&repo_root, &bin_dir),
+        Some("--version") => {
             println!("installer 0.1.0");
             ExitCode::SUCCESS
         }
-        "-h" | "--help" => {
+        Some("-h") | Some("--help") => {
             usage();
             ExitCode::SUCCESS
         }
-        _ => {
-            eprintln!("installer: unknown verb {verb:?}");
+        Some(other) => {
+            eprintln!("installer: unknown verb {other:?}");
             usage();
             ExitCode::from(2)
         }
+        None => run_check(&repo_root, &bin_dir),
     }
+}
+
+fn usage() {
+    eprintln!("installer [--check | --install | --version] [--bin-dir PATH]");
 }
 
 fn dirs_home() -> Option<PathBuf> {
@@ -76,11 +62,11 @@ fn run_check(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
         }
     };
     let head_short = installer::git_rev_parse_short(repo_root).unwrap_or_default();
-
     println!("installer --check: HEAD={head_short}");
 
     let mut mismatches = 0usize;
     let mut checked = 0usize;
+    let mut foreign = 0usize;
 
     for name in BINARIES {
         let binary = bin_dir.join(name);
@@ -88,17 +74,14 @@ fn run_check(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
             println!("  {name}: NOT INSTALLED (skipped)");
             continue;
         }
-        checked += 1;
-        let check = installer::verify_identity(&binary, &head);
+        let ownership = installer::resolve_repo_ownership(repo_root, name);
+        let check = installer::verify_identity(&binary, &head, &ownership);
         println!("  {check}");
-        if !check.consistent {
-            mismatches += 1;
+        match (&ownership, check.consistent) {
+            (RepoOwnership::Foreign { .. }, _) => foreign += 1,
+            _ if check.consistent => {}
+            _ => mismatches += 1,
         }
-    }
-
-    if checked == 0 {
-        eprintln!("INSTALLER ERROR: no binaries found in {} — nothing to check", bin_dir.display());
-        return ExitCode::from(3);
     }
 
     if mismatches > 0 {
@@ -107,28 +90,31 @@ fn run_check(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
         );
         return ExitCode::from(1);
     }
-
-    println!("INSTALLER IDENTITY OK: {checked}/{checked} binaries consistent with HEAD {head_short}");
+    if foreign > 0 {
+        println!(
+            "INSTALLER: {foreign} foreign artifact(s) named — excluded from drift denominator"
+        );
+    }
+    println!(
+        "INSTALLER IDENTITY OK: {checked}/{checked} binaries consistent with HEAD {head_short}"
+    );
     ExitCode::SUCCESS
 }
 
 fn run_install(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
-    // Build-in-flight fence.
     if let Err(error) = installer::check_build_fence(repo_root) {
         eprintln!("INSTALLER BLOCKED: {error}");
         return ExitCode::from(75);
     }
 
-    // Build the workspace.
-    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "~/.cargo/bin/cargo".to_owned());
+    let cargo = std::env::var("CARGO")
+        .unwrap_or_else(|_| "~/.cargo/bin/cargo".to_owned());
     let cargo = shellexpand_path(&cargo);
     if let Err(error) = installer::build_workspace(repo_root, &cargo) {
         eprintln!("INSTALLER BUILD FAILED: {error}");
         return ExitCode::from(2);
     }
 
-    // Resolve HEAD after the build (the build does not change HEAD, but the check
-    // must happen after the build to catch a concurrent commit during the build).
     let head = match installer::git_head(repo_root) {
         Ok(sha) => sha,
         Err(error) => {
@@ -137,9 +123,8 @@ fn run_install(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
         }
     };
 
-    // Discover binaries from the target dir.
     let target_dir = repo_root.join("target/release");
-    let mut installed = Vec::new();
+    let mut installed_count = 0usize;
     let mut identity_checks = Vec::new();
 
     for name in BINARIES {
@@ -147,10 +132,11 @@ fn run_install(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
         if !source.exists() {
             continue;
         }
-        match installer::install_binary(&source, bin_dir, &head) {
+        let ownership = installer::resolve_repo_ownership(repo_root, name);
+        match installer::install_binary(&source, bin_dir, &head, &ownership) {
             Ok(check) => {
-                let detail = format!("{check}");
-                installed.push(detail);
+                println!("  INSTALLED {name}: {check}");
+                installed_count += 1;
                 identity_checks.push(check);
             }
             Err(error) => {
@@ -160,18 +146,12 @@ fn run_install(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
         }
     }
 
-    if installed.is_empty() {
-        eprintln!(
-            "INSTALLER ERROR: no binaries found in target/release — did the build produce any?"
-        );
+    if installed_count == 0 {
+        eprintln!("INSTALLER ERROR: no binaries found in target/release");
         return ExitCode::from(3);
     }
 
-    // Summary.
-    println!("INSTALLER: {} binaries installed to {}", installed.len(), bin_dir.display());
-    for check in &identity_checks {
-        println!("  {check}");
-    }
+    println!("INSTALLER: {installed_count} binaries installed");
     ExitCode::SUCCESS
 }
 
