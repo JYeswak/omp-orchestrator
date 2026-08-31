@@ -1,0 +1,70 @@
+
+[2m•[0m [1mExplored[0m
+[2m  └ [0m[38;5;6mRead[39m cp-e0l5-live-report.txt
+
+[1m[38;5;1m•[0m [1mRan[0m [38;2;137;180;250mps[38;2;147;153;178m -[38;2;235;160;172mo[38;2;205;214;244m pid,etime,%cpu,stat,args[38;2;147;153;178m -[38;2;235;160;172mp[38;2;205;214;244m 35028[39m
+[2m  └   PID ELAPSED  %CPU STAT ARGS[0m
+
+[1m[38;5;2m•[0m [1mRan[0m [38;2;137;180;250mpgrep[38;2;147;153;178m -[38;2;235;160;172maf[38;2;205;214;244m [38;2;166;227;161m'tmp-target-reaper|lsof.*cargo-targets'[38;2;205;214;244m [38;2;148;226;213m||[38;2;205;214;244m [38;2;137;180;250mtrue[39m
+[2m  └ 40484[0m
+    [2m40537[0m
+    [2m63446[0m
+
+[1m[38;5;2m•[0m [1mRan[0m [38;2;137;180;250mps[38;2;147;153;178m -[38;2;235;160;172mo[38;2;205;214;244m pid,ppid,etime,%cpu,stat,args[38;2;147;153;178m -[38;2;235;160;172mp[38;2;205;214;244m 40484,40537,63446[39m
+[2m  └   PID  PPID ELAPSED  %CPU STAT ARGS[0m
+    [2m40484 70260   02:28   0.0 Ss   bash bin/tmp-target-reaper.sh report[0m
+    [2m40537 40484   02:28   0.0 S    bash bin/tmp-target-reaper.sh report[0m
+
+[2m•[0m [1mExplored[0m
+[2m  └ [0m[38;5;6mRead[39m cp-e0l5-live-report.txt
+
+[1m[38;5;2m•[0m [1mRan[0m [38;2;137;180;250mps[38;2;147;153;178m -[38;2;235;160;172maxo[38;2;205;214;244m pid,ppid,etime,%cpu,stat,args [38;2;148;226;213m|[38;2;205;214;244m [38;2;137;180;250mawk[38;2;205;214;244m [38;2;166;227;161m'$2==40484 || $2==40537 || $1==40484 || $1==40537 {print}'[39m
+[2m  └ 40484 70260       03:09   0.0 Ss   bash bin/tmp-target-reaper.sh report[0m
+    [2m70758 40484       00:04   0.0 S    bash bin/tmp-target-reaper.sh report[0m
+
+[1m[38;5;2m•[0m [1mRan[0m [38;2;137;180;250mps[38;2;147;153;178m -[38;2;235;160;172maxo[38;2;205;214;244m pid,ppid,etime,%cpu,stat,args [38;2;148;226;213m|[38;2;205;214;244m [38;2;137;180;250mgrep[38;2;147;153;178m -[38;2;235;160;172mE[38;2;205;214;244m [38;2;166;227;161m'lsof|du -sk|find /Volumes/ZestData|tmp-target-reaper'[38;2;205;214;244m [38;2;148;226;213m|[38;2;205;214;244m [38;2;137;180;250mgrep
+[2m[39m  │ [0m[38;2;147;153;178m-[38;2;235;160;172mv[38;2;205;214;244m grep[39m
+[2m  └ 26566 50603       11:26   0.0 Ss   /bin/zsh -c for p in /Volumes/ZestData/dicklesworthstone-mirror/[0m
+    [2mfrankensearch/target/debug/examples/validate_fusion /Volumes/ZestData/dicklesworthstone-mirror/frankensearch/[0m
+[2m    … +6 lines (ctrl + t to view transcript)[0m
+    [2m70759 70758       00:08  18.4 R    du -sk /Volumes/ZestData/zeststream-offload-20260609/build-cache/[0m
+    [2mcargo-targets[0m
+
+[1m• Waited for background terminal[0;2m · TMP_TARGET_REAPER_LEDGER=/tmp/unused TMP_TARGET_LEDGER="$HOME/.local/state/[0m
+[2mflywheel/tmp-target-reaper.jsonl" bash bin/tmp-target-reaper.sh report > /tmp/cp-e0l5-live-report.txt 2>&1[0m
+
+[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• [0mThe live report is progressing through the offload root (the first [38;5;6mdu[39m is walking a large target tree; no process
+  was stopped). The changed scanner itself has already passed syntax, selftest, and mutation; I’m preserving the
+  real report run so its root inventory is genuine rather than a synthetic shortcut.
+
+[1m[38;5;2m•[0m [1mRan[0m [38;2;137;180;250mps[38;2;147;153;178m -[38;2;235;160;172maxo[38;2;205;214;244m pid,ppid,etime,%cpu,stat,args [38;2;148;226;213m|[38;2;205;214;244m [38;2;137;180;250mgrep[38;2;147;153;178m -[38;2;235;160;172mE[38;2;205;214;244m [38;2;166;227;161m'lsof|du -sk /Volumes/ZestData/zeststream-offload-20260609/[39m
+[2m  │ [0m[38;2;166;227;161mbuild-cache/cargo-targets|tmp-target-reaper'[38;2;205;214;244m [38;2;148;226;213m|[38;2;205;214;244m [38;2;137;180;250mgrep[38;2;147;153;178m -[38;2;235;160;172mv[38;2;205;214;244m grep[39m
+[2m  │ [0m[38;2;137;180;250mwc[38;2;147;153;178m -[38;2;235;160;172ml[38;2;205;214;244m /tmp/cp-e0l5-live-report.txt[39m
+[2m  └ 40484 70260       03:52   0.0 Ss   bash bin/tmp-target-reaper.sh report[0m
+    [2m70758 40484       00:47   0.0 S    bash bin/tmp-target-reaper.sh report[0m
+    [2m70759 70758       00:47   5.4 U    du -sk /Volumes/ZestData/zeststream-offload-20260609/build-cache/[0m
+    [2mcargo-targets[0m
+    [2m       4 /tmp/cp-e0l5-live-report.txt[0m
+
+[1m[38;5;2m•[0m [1mRan[0m [38;2;137;180;250mps[38;2;147;153;178m -[38;2;235;160;172maxo[38;2;205;214;244m pid,ppid,etime,%cpu,stat,args [38;2;148;226;213m|[38;2;205;214;244m [38;2;137;180;250mgrep[38;2;147;153;178m -[38;2;235;160;172mE[38;2;205;214;244m [38;2;166;227;161m'lsof|du -sk /Volumes/ZestData/zeststream-offload-20260609/[39m
+[2m  │ [0m[38;2;166;227;161mbuild-cache/cargo-targets|tmp-target-reaper'[38;2;205;214;244m [38;2;148;226;213m|[38;2;205;214;244m [38;2;137;180;250mgrep[38;2;147;153;178m -[38;2;235;160;172mv[38;2;205;214;244m grep[39m
+[2m  │ [0m[38;2;137;180;250mwc[38;2;147;153;178m -[38;2;235;160;172ml[38;2;205;214;244m /tmp/cp-e0l5-live-report.txt[39m
+[2m  └ 40484 70260       05:15   0.0 Ss   bash bin/tmp-target-reaper.sh report[0m
+    [2m98599 40484       00:05   0.0 S    bash bin/tmp-target-reaper.sh report[0m
+    [2m       6 /tmp/cp-e0l5-live-report.txt[0m
+
+[2m•[0m [1mExplored[0m
+[2m  └ [0m[38;5;6mRead[39m cp-e0l5-live-report.txt
+
+[1m[38;2;230;230;230m•[0m [1m[38;2;230;230;230mWaiting for background termina[38;2;213;213;214ml[0m [2m(2m 08s • esc to interrupt) · 1 background terminal running · /ps to view · /sto…
+  └ TMP_TARGET_REAPER_LEDGER=/tmp/unused TMP_TARGET_LEDGER="$HOME/.local/state/flywheel/tmp-target-reaper.jsonl"…[0m
+
+[48;2;59;64;75m
+[1m[38;2;251;185;88m›[0m[48;2;59;64;75m [2mWrite tests for @filename[0m[48;2;59;64;75m
+
+[49m  [38;2;246;226;183mgpt-5.6-luna max[2m[39m · [0m[38;2;171;223;167m~/Developer/control-plane[2m[39m · [0m[38;2;246;226;183mgpt-5.6-luna[2m[39m · [0m[38;2;246;226;183mmax[2m[39m · [0m[38;2;171;223;167mcontrol-plane[2m[39m …[0m [38;5;5mGoal stalled (/goal resume)[39m
+
+
+

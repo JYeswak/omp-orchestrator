@@ -1,0 +1,16 @@
+[package]
+name = "composer-typed"
+version = "0.1.0"
+edition = "2021"
+description = "Does a pane composer hold real TYPED text. Port of bin/composer-typed.py; the Python file remains the differential oracle."
+
+[[bin]]
+name = "composer-typed"
+path = "src/main.rs"
+
+[lib]
+name = "composer_typed"
+path = "src/lib.rs"
+
+[dependencies]
+regex = "1"

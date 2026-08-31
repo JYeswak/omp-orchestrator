@@ -1,0 +1,11 @@
+[package]
+name = "pane-dispatch-fence"
+version = "0.1.0"
+edition = "2024"
+description = "Cross-process per-pane admission fence for control-plane dispatchers."
+
+[[bin]]
+name = "pane-dispatch-fence"
+path = "src/main.rs"
+
+[dependencies]
