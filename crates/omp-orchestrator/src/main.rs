@@ -11,7 +11,8 @@ use asupersync::runtime::RuntimeBuilder;
 use asupersync::time::{sleep, timeout};
 use asupersync::Cx;
 use omp_orchestrator::{
-    decide, read_idle_authorization, Observation, PaneObservation, QueueState, SupervisorDecision,
+    applicable, decide, read_idle_authorization, Observation, PaneObservation, QueueState,
+    SupervisorDecision,
 };
 use receiver_receipt::{
     assess_receiver_receipt, observe_capture, PostSendObservation, ReceiptVerdict,
@@ -686,7 +687,12 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         ready_count: bead_ids.len(),
         readable: true,
     };
-    let authorization = read_idle_authorization(&config.repo, now_unix());
+    let authorization = applicable(
+        read_idle_authorization(&config.repo, now_unix()),
+        &config.session,
+        &observation.panes,
+        &observation.queue,
+    );
     let free_count = observation
         .panes
         .iter()
