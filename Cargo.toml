@@ -1,0 +1,6 @@
+# Virtual workspace. Members is a glob on purpose: extraction (bead
+# omp-orchestrator-815) drops crates into crates/ without editing this shared
+# root manifest, so no pane ever holds a reservation conflict on it.
+[workspace]
+resolver = "2"
+members = ["crates/*"]

@@ -1,0 +1,26 @@
+# The no-shell/no-python gate, wired into CI (bead omp-orchestrator-4ak).
+#
+# Two legs on purpose: the binary is the direct scan (fails the step on any
+# tracked .sh/.py), and `cargo test -p no-shell-gate` re-runs the gate's own
+# red/green battery — so the gate fires in CI even when a change is never
+# exercised by a local `cargo test`, and locally even when CI is skipped.
+name: gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  no-shell-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal
+      - name: Gate binary — refuse tracked .sh/.py
+        run: cargo run --quiet -p no-shell-gate
+      - name: Gate tests — red/green legs and the real-tree leg
+        run: cargo test -p no-shell-gate

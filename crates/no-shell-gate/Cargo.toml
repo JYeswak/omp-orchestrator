@@ -1,0 +1,8 @@
+[package]
+name = "no-shell-gate"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Build gate: refuse tracked .sh/.py files; the exemption list is empty by design"
+
+[dependencies]
