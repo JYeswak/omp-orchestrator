@@ -188,3 +188,66 @@ the inverse of what it reads like. A parent epic blocking its own child makes BO
 unclosable. `br create` does not show you the edges it made — **`br dep list` readback is the
 only thing that catches it**, and `--force` with a recorded reason is correct where the graph is
 already inverted.
+
+---
+
+## Build-lane and pane-classification traps — measured 2026-08-31
+
+### The shared cargo target dir is caller-scoped, and a wrong lane COMPILES
+
+`/Volumes/BuildShared/cargo-targets` is the resolved `target_directory` for **both** repos, and
+**neither repo pins one**: `grep -A2 '^\[build\]' <repo>/.cargo/config.toml` finds nothing in
+either. The lane comes from `FRANKEN_CARGO_LANE` in the **caller's environment**, so it is a
+property of whoever invoked cargo, not of the repo.
+
+**Four crate names exist in both repos** — measured by set intersection, not recall:
+
+```bash
+comm -12 <(ls omp-orchestrator/crates | sort) <(ls control-plane/crates | sort)
+#   composer-typed  fleet-composite  loop-queue-filter  pane-dispatch-fence
+```
+
+> **Why it is worse than an ambiguity: `crates/fleet-composite/src/main.rs` is BYTE-IDENTICAL
+> across the two repos (`diff -q` silent).** A build against the wrong lane compiles and passes.
+> There is no error to notice. So *"I ran `cargo test -p fleet-composite` and it passed"* does
+> not say **which repo's** crate was tested — and these four are precisely the extraction set
+> mid-move, the moment duplication is most likely and least visible.
+
+**Remedy:** pin `target-dir` per repo in `.cargo/config.toml` so the lane belongs to the repo.
+**The value MUST name a target directory, never a lane root** — pointing it at a root makes
+cargo create `<root>/debug` and `<root>/release` directly, and those are orphans by construction
+that the reaper must never treat as lanes. That mistake has already been made here once.
+
+**Status: a live mechanism with NO measured victim.** Only one lane currently holds a binary for
+a shared name (`session-control-plane/release/fleet-composite`, 08-31 00:30). Filed as
+control-plane `cp-fg5up`. It *threatens* banked verifications; it does **not** establish that any
+are wrong. Do not upgrade that claim without a measured collision.
+
+**Count discipline, learned the hard way:** an earlier note here said *seven* shared names. That
+figure came from a recalled crate list, not an intersection — and it was stale twice over, since
+`loop-coverage` and `ntm-fleet-monitor` had been removed from `omp-orchestrator` in the interim.
+**A number that cannot be re-derived by a stated command is not a measurement.**
+
+### A dialog-covered status line reads as a dead pane
+
+A pane with an Ask/approval dialog open has its **model-name status line covered**, so a
+classifier keyed on that line sees nothing and can score the pane GONE. Measured 2026-08-31
+09:15Z: the fleet watcher scored `%1413` GONE when it had merely opened an Ask dialog.
+
+| Reading | Means | Distinguish by |
+|---|---|---|
+| absent from `tmux list-panes` | **dead** | the pane id is not in the list at all |
+| in the list, no model-name line | **alive and prompting** | capture deeper; look for the dialog |
+
+Never map "status line not found" to dead. `crates/tick-monitor` has this bug too: its
+`last_status_line` would return the dialog frame, and `classify` would score `Unproven` — which
+is at least fail-safe (excluded from capacity) but is still the wrong reason.
+
+### "Every 'wired' claim in this fleet is a source claim wearing a live badge"
+
+Until an install path exists that ties a source commit to a running artifact, a green suite plus
+a landed commit proves the **source**. The live lane is a separate artifact with its own
+identity. Three cases in one session, each caught by hand: `arc-keepalive` (fixed `108476c`,
+installed build still the old one), `controller-tick` (lifecycle landed `8802411`, installed
+artifact 4 days older and missing all four lifecycle symbols), and `ntm-fleet-monitor` per its
+own skill checkpoint. **Check the artifact, not the commit.**
