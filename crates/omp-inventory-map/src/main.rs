@@ -28,7 +28,12 @@ impl Arguments {
             if value == "--json" {
                 continue;
             }
-            if first && matches!(value.as_str(), "doctor" | "health" | "audit" | "version") {
+            if first
+                && matches!(
+                    value.as_str(),
+                    "doctor" | "health" | "audit" | "version" | "types"
+                )
+            {
                 command = value;
                 first = false;
                 continue;
@@ -224,5 +229,54 @@ fn main() -> ExitCode {
     if arguments.command == "audit" {
         return audit(arguments.command, arguments.config);
     }
+    if arguments.command == "types" {
+        return types_command(arguments.config);
+    }
     collect(arguments.command, arguments.config)
+}
+
+/// `types`: the workspace Rust TYPE inventory (bead ipg.17). Generated scan
+/// + collision gate + missing-vocabulary list + the Observation seam
+/// decision. Exit 0 = gate green, 2 = REFUSED (named errors), 1 = scan ERROR.
+fn types_command(config: ProbeConfig) -> ExitCode {
+    match omp_inventory_map::types_inventory::scan_workspace_types(&config.repo_root) {
+        Ok(inventory) => {
+            let (status, gate_errors) = match inventory.check() {
+                Ok(()) => ("OK", Vec::new()),
+                Err(errors) => ("REFUSED", errors),
+            };
+            let code = if status == "OK" { 0 } else { 2 };
+            let envelope = RobotEnvelope {
+                schema_version: SCHEMA_VERSION,
+                command: "types".to_owned(),
+                status,
+                data: Some(serde_json::json!({
+                    "counts": inventory.counts,
+                    "collisions": inventory.collisions,
+                    "seam_decisions": inventory.seam_decisions,
+                    "missing": inventory.missing,
+                    "named_zeros": inventory.named_zeros,
+                    "gate_errors": gate_errors,
+                    "crates": inventory.crates,
+                })),
+                error: None,
+            };
+            if print_json(&envelope).is_err() {
+                ExitCode::from(1)
+            } else {
+                ExitCode::from(code)
+            }
+        }
+        Err(error) => {
+            let envelope = RobotEnvelope::<Value> {
+                schema_version: SCHEMA_VERSION,
+                command: "types".to_owned(),
+                status: "ERROR",
+                data: None,
+                error: Some(error.to_string()),
+            };
+            let _ = print_json(&envelope);
+            ExitCode::from(1)
+        }
+    }
 }

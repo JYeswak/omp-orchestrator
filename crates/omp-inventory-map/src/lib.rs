@@ -10,6 +10,8 @@
 //! ownership. A missing or malformed probe is represented as `UNKNOWN` and
 //! never upgraded to a healthy result.
 
+
+pub mod types_inventory;
 use asupersync::Cx;
 use asupersync::process::{
     Command, Output, ProcessError, ProcessGroupMode, ProcessSignalTarget, Stdio,
@@ -55,6 +57,7 @@ impl ProbeState {
 pub enum InventoryError {
     EmptyMetadata,
     MalformedMetadata(String),
+    InvalidInput(String),
     Process { command: String, detail: String },
     Cancelled,
     OutputTooLarge { command: String, bytes: usize },
@@ -67,6 +70,7 @@ impl fmt::Display for InventoryError {
                 formatter.write_str("EMPTY_METADATA cargo metadata produced no bytes")
             }
             Self::MalformedMetadata(detail) => write!(formatter, "MALFORMED_METADATA {detail}"),
+            Self::InvalidInput(detail) => write!(formatter, "INVALID_INPUT {detail}"),
             Self::Process { command, detail } => {
                 write!(formatter, "PROCESS_ERROR command={command} detail={detail}")
             }

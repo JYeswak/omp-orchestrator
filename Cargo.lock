@@ -457,6 +457,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "dispatch-claim-fence"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "dispatch-silence-watch"
 version = "0.1.0"
 dependencies = [
@@ -940,6 +948,7 @@ name = "omp-inventory-map"
 version = "0.1.0"
 dependencies = [
  "asupersync",
+ "regex",
  "serde",
  "serde_json",
 ]
@@ -950,6 +959,8 @@ version = "0.1.0"
 dependencies = [
  "ack-stage",
  "asupersync",
+ "dispatch-claim-fence",
+ "omp-rpc-session",
  "receiver-receipt",
  "serde_json",
  "subprocess-contract",
@@ -961,6 +972,13 @@ version = "0.1.0"
 dependencies = [
  "asupersync",
  "serde_json",
+]
+
+[[package]]
+name = "omp-types"
+version = "0.1.0"
+dependencies = [
+ "asupersync",
 ]
 
 [[package]]
