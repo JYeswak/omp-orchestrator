@@ -1,4 +1,4 @@
-# FrankenMermaid — the system, generated not drawn
+# 04 — FrankenMermaid: the system, generated not drawn
 
 Every diagram below is emitted from a dataset, not from memory. The discipline is
 one rule: **a diagram is a rendering of an edge list, and the edge list must have a

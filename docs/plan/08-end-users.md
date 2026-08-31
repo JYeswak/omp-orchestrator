@@ -90,30 +90,31 @@ uninstalled. Second, **every `ABSENT` carries a remediation naming a command tha
 `MEASURED` precedent is the `--help` defect (brief §3.6), which produced the sixth gate property
 **ADDRESSABLE**. A probe reporting a condition it cannot route is that defect in a diagnostic hat.
 
-Prior art, per R7 — *what would Jeffrey do*: `br` routes its whole doctor surface through one
-mutation chokepoint with byte-identical undo. `beads_rust/tests/e2e_doctor_chokepoint.rs:1-14` in the
-mirror says it verbatim — *"corrupt → diagnose → `--repair` → assert healthy"*, then *"`br doctor
-undo <id>` → assert the affected files restore to the chokepoint's recorded `before_hash`"*, plus
-*"the dry-run / idempotence / capabilities / triage contracts"*. **We adopt that shape wholesale.**
+Prior art, per R7 — *what would Jeffrey do*: `br` runs its whole doctor surface through one mutation
+chokepoint with byte-identical undo — `beads_rust/tests/e2e_doctor_chokepoint.rs:1-14`: *"corrupt →
+diagnose → `--repair` → assert healthy"*, then *"`br doctor undo <id>` → … restore to the recorded
+`before_hash`"*, plus the dry-run, idempotence, capabilities and triage contracts. **Adopted whole.**
 
 **CORRECTION — a measurement defect of mine worth more than the answer.** I first reported *"searched
 `MISSING_DEPENDENCY|DependencyMissing|not_installed|NotInstalled`, no prior art found"* — a **false
 zero**. The search was `/usr/bin/grep -rl --include='*.rs' … ntm beads_rust`, and `ntm` is a **Go**
 repo: the filter matched nothing there and I read structural absence as semantic absence. Re-derived
 with the harness grep and no extension filter, the same pattern returns **93+ matching files**, and
-the prior art is exactly what §5 needed: a per-dependency typed sentinel (`ntm/internal/bv/bv.go:30`,
-`var ErrNotInstalled = errors.New("bv is not installed")`; same shape in `internal/cass/client.go:12`
-and `internal/caut/client.go:13`); a shared robot taxonomy carrying `ErrCodeDependencyMissing =
-"DEPENDENCY_MISSING"` (`ntm/docs/robot-action-handoff-contract.md:379`); a remediation string
-travelling *inside* the typed envelope (`internal/cli/bugs.go:85-89`, *"Install UBS from …, then
-rerun 'ntm bugs list --json'"*); a per-call-site degradation policy (`internal/alerts/generator.go:384`,
-*"Silently skip when bv is not installed; only warn on real errors"*); and a conformance test pinning
-the **exit code** of a dependency failure (`internal/cli/robot_registry_conformance_test.go:16-19`).
-**Two rules this earns, written down rather than left in chat.** A not-found is publishable only if
-it names the command *and* why the search space was right — *"I grepped `*.rs` across a Go repo and
-got nothing"* is a bug, not a finding. And a citation must name the **construct**, not just the line:
-three of us cited one precedent at three different line numbers, each correct about a different
-adjacent construct (§3). **NO-CLAIM:** I read these sites; I did not run `ntm`.
+the prior art is exactly what §5 needed — cited by construct, because four of these line numbers were
+off by one when a sibling re-opened the files while every construct held: a per-dependency typed
+sentinel (`ntm/internal/bv/bv.go:31`, `var ErrNotInstalled`; same sentinel at
+`internal/cass/client.go:13` and `internal/caut/client.go:14`, `fmt.Errorf` variant); a shared robot
+taxonomy (`docs/robot-action-handoff-contract.md:379`, `ErrCodeDependencyMissing`); a remediation
+string travelling *inside* the typed envelope (`internal/cli/bugs.go:85-89`, *"Install UBS from …,
+then rerun 'ntm bugs list --json'"*); a per-call-site degradation policy
+(`internal/alerts/generator.go:383`, *"Silently skip when bv is not installed; only warn on real
+errors"*); and a conformance test pinning the **exit code** of a dependency failure
+(`internal/cli/robot_registry_conformance_test.go:16-19`).
+**Two rules this earns, written down rather than left in chat.** A not-found is publishable only if it
+names the command *and* why the search space was right — *"I grepped `*.rs` across a Go repo"* is a
+bug, not a finding. And a citation names the **construct**, not the line: four of mine drifted by one
+while every construct held, and three of us cited one precedent (§3) at three different lines, each
+right about a different adjacent construct. **NO-CLAIM:** I re-opened these sites; I never ran `ntm`.
 
 ### 2.3 `init`
 
@@ -252,12 +253,11 @@ vocabulary — with **zero dependents**. **NO-CLAIM:** none of these traits exis
 
 ## 5. The degradation ladder
 
-The model is `MEASURED` twice over. Brief §3.7: `fh` MCP fails closed with a typed
-`SERVE_INPUT_STALE` when the mirror HEAD moves, emitting a remediation hint rather than stale rows.
-And `ntm` (§2.2) already ships the whole vocabulary — typed sentinel per dependency, a
-`DEPENDENCY_MISSING` code, an in-envelope remediation, a declared silent-skip-vs-warn policy, and a
-conformance test pinning the exit code. **A named code plus a route out is the model;** a plausible
-answer from stale state is the defect. Rows below are `PROJECTED`.
+The model is `MEASURED` three ways. `fh` fails closed on **both** surfaces with **different** typed
+codes: MCP returns `SERVE_INPUT_STALE` when the mirror HEAD moves; the CLI returns
+`SEARCH_INDEX_STALE` at **exit 3**, `retryable:false`, hinting the exact command (`fh
+technical-manifest`). And `ntm` (§2.2) ships the whole vocabulary. **A named code plus a route out is
+the model.**
 
 | missing | still works | refused | typed refusal |
 |---|---|---|---|
@@ -265,7 +265,7 @@ answer from stale state is the defect. Rows below are `PROJECTED`.
 | **ntm** | tmux observe, `TmuxSendKeysLiteral` dispatch | receipted dispatch | `TRANSPORT_WITHOUT_RECEIPT transport=TmuxSendKeysLiteral hint="install ntm for per-target JSON receipts"` |
 | **br** | gates, observe, dispatch, `--tracker=file` | bead ready/claim/close, `bv` queue | `TRACKER_ADAPTER_UNAVAILABLE adapter=br hint="init --tracker=file"` |
 | **bv** | everything except ranked ordering | priority ordering; falls back to declared order | `RANKING_UNAVAILABLE source=bv effect="units served in tracker order" hint="install bv"` |
-| **fh** | everything except prior-art lookup | evidence-backed prior-art citation | `EVIDENCE_STALE source=fh detail="mirror HEAD moved" hint="fh reindex"` — modelled on the measured `SERVE_INPUT_STALE` |
+| **fh** | everything except prior-art lookup | evidence-backed prior-art citation | `EVIDENCE_STALE source=fh detail="mirror HEAD moved" hint="fh technical-manifest"` — modelled on `SERVE_INPUT_STALE` (MCP) and `SEARCH_INDEX_STALE` (CLI, exit 3, `retryable:false`); two surfaces, two codes, neither serving stale rows |
 | **cargo** | observe, dispatch, tracker | build-gated close, `commit-build-fence` | `GATE_UNRUNNABLE gate=commit-build-fence reason=NO_BUILD_TOOL` |
 | **git** | nothing | adoption itself | `REPO_ADAPTER_UNAVAILABLE fatal=true detail="a git repository is a hard requirement"` |
 

@@ -355,8 +355,23 @@ Not built-vs-wired. **Wired-but-unaddressable.** It adds a sixth required gate p
   `ReceiptVerdict`, `SilenceVerdict`, `Verdict`), and **17 ack/receipt types in 3 incompatible
   dialects**.
 - `fh` MCP is failing closed with a typed `SERVE_INPUT_STALE` (mirror HEAD moved `5dec4212…` →
-  `ecdea397…`). Direct grep of the mirror at `/Volumes/ZestData/dicklesworthstone-mirror` (216
-  repos) still works. **Failing closed with a remediation hint is the model**, not a defect.
+  `ecdea397…`). Direct grep of the mirror at `/Volumes/ZestData/dicklesworthstone-mirror` still
+  works. **Failing closed with a remediation hint is the model**, not a defect.
+- **Mirror size — corrected. The first draft said "216 repos" and that figure is re-derivable from
+  nothing.** `PriorArtWriter` and `Installability` both flagged it independently. Four defensible
+  counts, all measured:
+
+  | count | command | meaning |
+  |---:|---|---|
+  | 218 | `ls $M \| wc -l` | visible entries, including files |
+  | 217 | `find $M -maxdepth 1 -type d \| tail -n +2 \| wc -l` | directories |
+  | **210** | `find $M -maxdepth 2 -name .git \| wc -l` | **actual git work-trees** |
+  | 1 | `ls $M \| grep -c corrupt` | `.corrupt-`suffixed copies |
+
+  **Any "N repos" claim must use 210** — it is the only count that counts repositories rather than
+  filesystem entries. 216 matched none of the four, which makes it the third unstated-denominator
+  defect in this brief after the retired "81 JSON-RPC / 17 used" figure and the `2/2`→`2/0` drift
+  ratio. A denominator nobody can reproduce is not a measurement.
 - Board at stand-down: **28 closed, 25 in_progress, 19 open, 2 blocked** (75 total).
 
 ---
@@ -367,11 +382,38 @@ This is the spine of the whole plan. Exactly one row works today.
 
 | layer | mechanism | measured state |
 |---|---|---|
-| observe | `tick-monitor` | **WORKS** |
+| observe | `tick-monitor` | **WORKS, WITH A MEASURED ASYMMETRY DEFECT** — see below |
 | actionable | `idle_panes` | **BROKEN** — discards `NewlyIdle`; `free_capacity` derives from the same `is_dispatchable` filter, which requires *Confirmed* Idle, so a pane at `t=0` is excluded from **both** lists |
 | consume | `decide()` | **FENCED** — 162 refused ticks over 4.2 hours, `DISPATCH_RETRY_BLOCKED` |
 | actuate | dispatch | **DOES NOT EXIST** — a human types into panes |
 | complete | worker says done | **DOES NOT EXIST** — every completion this session was found by a human looking |
+
+**The observe row was downgraded by `ActionsNegative`, and the defect is in the one layer this brief
+called working.** The two-capture rule has a genuine asymmetry: a **changed** content hash proves
+motion at *any* interval, while an **unchanged** hash proves nothing below the 75-second floor. The
+floor should therefore gate only the *idle* direction. It gates both:
+
+```rust
+// crates/tick-monitor/src/lib.rs:541-545  — the early return
+let gap = now.at.saturating_sub(prev.at);
+if gap < MIN_GAP_SECS {
+    return Liveness::Unproven { why: "gap_too_short" };
+}
+// …:552 — the hash comparison it precedes, and therefore prevents
+if b > a || prev.hash != now.hash { Liveness::Live } else { Liveness::Frozen }
+```
+
+A sub-floor capture pair whose hash **changed** is discarded as `gap_too_short`, so positive
+liveness evidence the system already holds is thrown away. This does not make `observe` broken — it
+never reports motion as stillness, which is the dangerous direction — but it is **lossy in the safe
+direction**, and it means the fleet waits 75 seconds to learn something it could know in 20.
+
+Two things make this worth the space it takes. First, it was found by an agent **disagreeing with
+its own spawn instructions**: the dispatch brief asserted the asymmetry as implemented behaviour,
+`ActionsNegative` read the source, and wrote it up as an open defect instead of repeating it.
+Second, it is the *only* layer this brief marked unqualified `WORKS`, and it did not survive first
+contact with the source. **The four-layer table now has zero unqualified working rows.**
+*Recorded under R11.*
 
 ---
 
@@ -470,6 +512,33 @@ method works on the person running it.
 wrong and are now recorded. The base rate of undetected errors in this document is unknown and is
 not estimated anywhere. Nothing here was found by an automated check; every one was found by an
 agent choosing to re-derive, and no gate in this repo enforces that choice.
+
+### 7.2 The rule cannot be held by discipline — measured on the author, twice
+
+Roughly twenty minutes after writing the pipeline-laundering finding into §3.1, the conductor
+repeated it. Verifying the `installer` fix, the check was run as
+`installer --check 2>&1 | head -10 | ... ; echo "exit=$?"` and reported **`exit=0`** for a binary
+that had just printed `INSTALLER IDENTITY DRIFT`. Re-measured without a pipeline:
+
+```
+installer --check >out 2>err ; echo $?
+  true_exit=1   stdout=347B   stderr=72B
+```
+
+The binary is **correct** — it exits 1, puts the drift line on stderr and the data on stdout, a
+clean split and an honest code. The measurement was wrong, in exactly the way documented one screen
+earlier, by the person who documented it.
+
+**This is the argument for mechanism over vigilance, and it is the only version of that argument
+backed by a measurement on the author.** Knowing the rule, having just written the rule, and
+actively verifying a fix *for a defect in the same family* was not sufficient to avoid the rule's
+own failure mode. A rule that must be remembered at the moment of use will be forgotten at the
+moment of use. That is why §7.1's admission items 12–14 are gate items rather than style guidance,
+and it is why the honest reading of §7 is not "our process caught five errors" but **"our process
+caught five errors and has no mechanism preventing the sixth."**
+
+*Recorded under R11. The corrective is a checker that refuses `$?` after a pipeline in any command
+cited as evidence — specified in `09-milestones.md` as PC7, and not built.*
 
 ---
 

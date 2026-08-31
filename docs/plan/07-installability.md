@@ -1,4 +1,4 @@
-## Installability — distribution, identity, and the canonical CLI contract
+# 07 — Installability: distribution, identity, and the canonical CLI contract
 
 This section answers one question an investor will ask before any other: *if this works on Josh's
 Mac Studio, what makes it work on a second machine, in a second repo, for a person who is not

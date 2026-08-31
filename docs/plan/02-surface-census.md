@@ -1,4 +1,4 @@
-## What we are mapping — every OMP surface
+# 02 — What we are mapping: every OMP surface
 
 Every number in this section is `MEASURED` unless the sentence says `PROJECTED`. The
 measurements come from one artifact: the built scanner `omp-inventory-map`, run as
