@@ -93,6 +93,41 @@ trigger exists; it cannot prove the gate *ran* this cycle. `tick-monitor` had ca
 the fleet for 4.5 hours anyway. And `.git/hooks/` is untracked and per-clone, so a fresh checkout on
 another machine has **no hook** and `no-shell-gate` reverts to unreachable there — which is why the
 census answers *for the machine it runs on* and says which one that is.
+
+---
+
+## The fourth rule: file → **claim** → dispatch, and never skip the middle beat
+
+A packet naming an unclaimed bead is a dispatch that **the tracker never learned about**. It does
+not appear as `in_progress`, `bv` cannot see it, no follow-up check can watch it, and when the pane
+goes quiet nothing can distinguish *"the worker went silent"* from *"nobody was ever asked."*
+
+**Measured 2026-08-31.** `5rh` was dispatched to `%1413` and never claimed. The bead sat `open`,
+`assignee: none`, **zero comments**, while a worker was carrying it. The failure was silent in both
+directions: the pane looked idle-with-no-assignment, and the queue looked like it still had ready
+work nobody had taken.
+
+**It also defeats the follow-up stage**, which is the part worth understanding. `classify_followup`
+keys on *assigned + in_progress + no comment since dispatch*. An unclaimed dispatch produces **no
+signal at all** — the detector built to catch dispatched-then-silent cannot see a dispatch that
+never became tracker state. The bead's status is a *projection* of the dispatch; here the projection
+was never written, so the watcher watched an empty slot.
+
+```
+file  →  claim  →  dispatch  →  observe  →  verify  →  close
+         ^^^^^
+         the beat that was being skipped
+```
+
+**The mechanical form:** the dispatch path must refuse to send a packet naming a bead that is not
+`in_progress` and assigned to the receiving agent. A dispatch that cannot be projected into the
+tracker is not a dispatch — it is a message.
+
+**NO-CLAIM.** Claiming makes the work *visible*, not *done*. A claimed bead with a silent pane is
+still a silent pane; this rule only guarantees the follow-up stage has something to look at. And an
+`open`+unassigned bead is not by itself evidence of a skipped claim — it may simply be unstarted.
+The signal is *dispatched* and unclaimed, which means the dispatch ledger, not the bead, is the
+authority that closes this hole.
 ---
 
 ## OMP lifecycles — what they are and where to find them
