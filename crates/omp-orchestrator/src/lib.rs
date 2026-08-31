@@ -869,3 +869,236 @@ mod kernel_tests {
         );
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BINDING VALIDATION: A PARSED FIELD THAT IS NEVER COMPARED IS A VACUOUS FIELD
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// `read_idle_authorization` parses session, pane_set_hash and queue_len, and
+// `decide` checked only the EXPIRY. So an approval granted for one session with
+// an empty queue silently authorized a DIFFERENT session with forty ready beads.
+// The fields read as safety and provided none — the same shape as `free_capacity`
+// derived from `is_dispatchable`, and as a test that passed because the branch it
+// covered could not run.
+//
+// The comparison lives HERE, not in main: `decide` is the only consumer of the
+// authorization, and policy that leaks into the binary gets reimplemented per
+// call site. It is exposed as an ADDITIVE function so no existing signature
+// changes — main calls `applicable(..)` and passes the result to `decide(..)`.
+
+/// Canonical pane-set hash. Order-independent, so a pane list read in a different
+/// order is the same fleet; and it names the PANE IDS, because a fleet with the
+/// same COUNT but different panes is not the fleet that was approved.
+pub fn pane_set_hash(panes: &[PaneObservation]) -> String {
+    let mut ids: Vec<&str> = panes.iter().map(|p| p.pane_id.as_str()).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for id in ids {
+        for byte in id.as_bytes() {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        hash ^= 0x1f;
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{hash:016x}")
+}
+
+/// Downgrade an authorization that does not describe the CURRENT situation.
+///
+/// An approval is a statement about a moment: this session, this fleet shape,
+/// this queue depth. When any of those move, the approval no longer describes
+/// what was approved, and continuing to honour it is how a stand-down granted for
+/// a quiet fleet licenses silence during a backlog.
+///
+/// Returns the authorization unchanged when every binding still holds, and
+/// `Unauthorized { why }` naming the FIRST binding that failed otherwise.
+pub fn applicable(
+    authorization: IdleAuthorization,
+    session: &str,
+    panes: &[PaneObservation],
+    queue: &QueueState,
+) -> IdleAuthorization {
+    let IdleAuthorization::Authorized {
+        session: token_session,
+        pane_set_hash: token_hash,
+        queue_len: token_queue,
+        ..
+    } = &authorization
+    else {
+        return authorization;
+    };
+    if token_session != session {
+        return IdleAuthorization::Unauthorized {
+            why: "token_session_mismatch",
+        };
+    }
+    if token_hash != &pane_set_hash(panes) {
+        return IdleAuthorization::Unauthorized {
+            why: "token_pane_set_changed",
+        };
+    }
+    // A stand-down granted over an empty queue does not authorize silence once
+    // work arrives. Growth invalidates; shrinkage does not.
+    if queue.ready_count > *token_queue {
+        return IdleAuthorization::Unauthorized {
+            why: "token_queue_grew",
+        };
+    }
+    authorization
+}
+
+/// The canonical token writer. Without it the format is unusable, which means the
+/// only reachable state is Unauthorized — fail-safe, and it makes the authorized
+/// path untestable in practice. A contract nobody can satisfy is not a contract.
+pub fn write_token(
+    reason: &str,
+    session: &str,
+    panes: &[PaneObservation],
+    queue: &QueueState,
+    issued_at: u64,
+    valid_for_secs: u64,
+) -> String {
+    format!(
+        "# minted by omp-orchestrator::write_token — bindings are load-bearing\n\
+         reason = {reason}\n\
+         session = {session}\n\
+         pane_set_hash = {}\n\
+         queue_len = {}\n\
+         issued_at = {issued_at}\n\
+         expires_at = {}\n",
+        pane_set_hash(panes),
+        queue.ready_count,
+        issued_at.saturating_add(valid_for_secs)
+    )
+}
+
+#[cfg(test)]
+mod binding_tests {
+    use super::*;
+
+    fn p(id: &str) -> PaneObservation {
+        PaneObservation {
+            pane_id: id.to_owned(),
+            state: "IDLE".to_owned(),
+            liveness: "CONFIRMED_IDLE".to_owned(),
+            is_dispatchable: true,
+            is_free_capacity: true,
+            is_working: false,
+        }
+    }
+    fn q(n: usize) -> QueueState {
+        QueueState { ready_count: n, readable: true }
+    }
+    /// `tag` MUST be unique per test. Keying the temp dir on `session` alone made
+    /// parallel tests clobber each other's token — shared mutable state with no
+    /// isolation, which produced two failures whose reported cause
+    /// (token_pane_set_changed) was a different test's fleet.
+    fn minted(
+        tag: &str,
+        session: &str,
+        panes: &[PaneObservation],
+        queue: &QueueState,
+    ) -> IdleAuthorization {
+        let dir = std::env::temp_dir().join(format!("bind-{}-{tag}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("dir");
+        std::fs::write(
+            dir.join(".idle_authorized"),
+            write_token("stand down", session, panes, queue, 1_000, 3_600),
+        )
+        .expect("write");
+        let auth = read_idle_authorization(&dir, 1_100);
+        let _ = std::fs::remove_dir_all(&dir);
+        auth
+    }
+
+    #[test]
+    fn the_canonical_writer_produces_a_token_the_reader_accepts() {
+        // KNOWN-GOOD, and it is mandatory: without a writer the only reachable
+        // state is Unauthorized, so every binding leg below would pass vacuously.
+        let panes = vec![p("%1"), p("%2")];
+        assert!(
+            matches!(
+                minted("writer", "omp-orchestrator", &panes, &q(0)),
+                IdleAuthorization::Authorized { .. }
+            ),
+            "the writer and reader must agree, or the authorized path is untestable"
+        );
+    }
+
+    #[test]
+    fn an_authorization_for_another_session_does_not_apply() {
+        let panes = vec![p("%1")];
+        let auth = minted("session", "some-other-session", &panes, &q(0));
+        assert_eq!(
+            applicable(auth, "omp-orchestrator", &panes, &q(0)),
+            IdleAuthorization::Unauthorized { why: "token_session_mismatch" }
+        );
+    }
+
+    #[test]
+    fn an_authorization_stops_applying_when_the_fleet_changes_shape() {
+        let approved = vec![p("%1"), p("%2")];
+        let auth = minted("shape", "omp-orchestrator", &approved, &q(0));
+        let now = vec![p("%1"), p("%2"), p("%3")];
+        assert_eq!(
+            applicable(auth, "omp-orchestrator", &now, &q(0)),
+            IdleAuthorization::Unauthorized { why: "token_pane_set_changed" }
+        );
+    }
+
+    #[test]
+    fn a_standdown_granted_over_an_empty_queue_does_not_survive_a_backlog() {
+        // THE LEG THAT MATTERS. Josh authorizes idleness when there is nothing to
+        // do; four ready beads is a different situation and must re-ask.
+        let panes = vec![p("%1")];
+        let auth = minted("grew", "omp-orchestrator", &panes, &q(0));
+        assert_eq!(
+            applicable(auth, "omp-orchestrator", &panes, &q(4)),
+            IdleAuthorization::Unauthorized { why: "token_queue_grew" }
+        );
+    }
+
+    #[test]
+    fn a_shrinking_queue_does_not_invalidate_an_authorization() {
+        // KNOWN-GOOD on the other side: growth invalidates, shrinkage does not.
+        // Without this leg the rule is "any queue change revokes", which makes an
+        // authorization useless the moment a worker closes a bead.
+        let panes = vec![p("%1")];
+        let auth = minted("shrank", "omp-orchestrator", &panes, &q(5));
+        assert!(
+            matches!(
+                applicable(auth, "omp-orchestrator", &panes, &q(2)),
+                IdleAuthorization::Authorized { .. }
+            ),
+            "a draining queue must not revoke a valid stand-down"
+        );
+    }
+
+    #[test]
+    fn the_pane_set_hash_is_order_independent_but_identity_sensitive() {
+        assert_eq!(
+            pane_set_hash(&[p("%1"), p("%2")]),
+            pane_set_hash(&[p("%2"), p("%1")]),
+            "the same fleet read in a different order is the same fleet"
+        );
+        assert_ne!(
+            pane_set_hash(&[p("%1"), p("%2")]),
+            pane_set_hash(&[p("%1"), p("%3")]),
+            "same COUNT, different panes: not the fleet that was approved"
+        );
+    }
+
+    #[test]
+    fn an_unauthorized_input_passes_through_unchanged() {
+        let panes = vec![p("%1")];
+        let before = IdleAuthorization::Unauthorized { why: "no_token" };
+        assert_eq!(
+            applicable(before.clone(), "omp-orchestrator", &panes, &q(0)),
+            before,
+            "applicable() must not manufacture authorization"
+        );
+    }
+}
