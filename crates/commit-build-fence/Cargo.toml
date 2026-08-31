@@ -1,0 +1,22 @@
+[package]
+name = "commit-build-fence"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Fail-closed pre-commit fence for registered in-flight builds"
+
+[[bin]]
+name = "commit-build-fence"
+path = "src/main.rs"
+
+[lib]
+name = "commit_build_fence"
+path = "src/lib.rs"
+
+[dependencies]
+asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", rev = "fa3c01aec" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "forbid"
