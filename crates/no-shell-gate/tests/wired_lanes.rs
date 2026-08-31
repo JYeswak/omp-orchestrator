@@ -561,3 +561,176 @@ fn workflow_comments_are_removed_without_breaking_quoted_values() {
         "a workflow comment must not prove wiring even trailing a quoted value"
     );
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// LEGS 2-5 — bead omp-coverage-mission-ipg.18.
+// Each leg owns ONE predicate, ONE input scan, ONE allowance, ONE validator.
+// Mutating one predicate must leave the other three green: no shared scan,
+// no shared helper beyond `workspace_crate_names` (a pure directory read).
+// ═════════════════════════════════════════════════════════════════════════════
+
+fn workspace_crate_names(root: &Path) -> Vec<String> {
+    let dir = root.join("crates");
+    let mut out = Vec::new();
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return out;
+    };
+    for e in entries.flatten() {
+        let p = e.path();
+        if p.join("Cargo.toml").is_file() {
+            if let Some(n) = p.file_name().and_then(|n| n.to_str()) {
+                out.push(n.to_owned());
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+fn validate_allowance_rows(rows: &[(&str, &str)], leg: &str) {
+    for (subject, reason) in rows {
+        assert!(
+            !subject.trim().is_empty(),
+            "{} allowance row has an empty subject",
+            leg
+        );
+        assert!(
+            reason.trim().len() >= 8,
+            "{} allowance row '{}' carries no reason — a bare path silences nothing",
+            leg,
+            subject
+        );
+    }
+}
+
+// ── LEG 2: SURFACE DECLARED ─────────────────────────────────────────────────
+const SURFACE_ALLOWANCE: &[(&str, &str)] = &[];
+
+#[test]
+fn every_crate_is_declared_in_the_surface_map() {
+    let root = repo_root();
+    let map_path = root.join("OMP-SURFACE-MAP.toml");
+    let map = std::fs::read_to_string(&map_path)
+        .unwrap_or_else(|e| panic!("surface map unreadable: {}", e));
+    let declared: std::collections::HashSet<String> = map
+        .lines()
+        .filter_map(|l| l.trim().strip_prefix("[crates."))
+        .filter_map(|l| l.strip_suffix(']'))
+        .map(str::to_owned)
+        .collect();
+    assert!(
+        !declared.is_empty(),
+        "ANTI-VACUITY: surface map declares zero crates"
+    );
+    let on_disk = workspace_crate_names(&root);
+    assert!(!on_disk.is_empty(), "ANTI-VACUITY: zero crates on disk");
+    validate_allowance_rows(SURFACE_ALLOWANCE, "leg2-surface");
+
+    let undeclared: Vec<_> = on_disk.iter().filter(|c| !declared.contains(*c)).collect();
+    let ghosts: Vec<_> = declared
+        .iter()
+        .filter(|d| !on_disk.iter().any(|c| c == *d))
+        .collect();
+    assert!(
+        undeclared.is_empty(),
+        "UNDECLARED CRATE (on disk, no [crates.x] block): {:?}",
+        undeclared
+    );
+    assert!(
+        ghosts.is_empty(),
+        "GHOST DECLARATION (in surface map, no crate on disk): {:?}",
+        ghosts
+    );
+}
+
+// ── LEG 3: ASUPERSYNC CONFORMANCE — forbid(unsafe_code) ────────────────────
+const FORBID_ALLOWANCE: &[(&str, &str)] = &[];
+
+#[test]
+fn every_crate_declares_the_forbid_lint() {
+    let root = repo_root();
+    let crates = workspace_crate_names(&root);
+    assert!(!crates.is_empty(), "ANTI-VACUITY: zero crates scanned");
+    validate_allowance_rows(FORBID_ALLOWANCE, "leg3-forbid");
+
+    let allowed: std::collections::HashSet<_> = FORBID_ALLOWANCE.iter().map(|(c, _)| *c).collect();
+    let mut missing = Vec::new();
+    for name in &crates {
+        let manifest = root.join("crates").join(name).join("Cargo.toml");
+        let text = std::fs::read_to_string(&manifest)
+            .unwrap_or_else(|e| panic!("{} unreadable: {}", manifest.display(), e));
+        let has_forbid = text.contains("unsafe_code") && text.contains("forbid");
+        if !has_forbid && !allowed.contains(name.as_str()) {
+            missing.push(name.clone());
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "MISSING forbid(unsafe_code) in [lints.rust]: {:?} — every crate in an asupersync repo must forbid unsafe",
+        missing
+    );
+}
+
+// ── LEG 5: NO PUBLIC-TYPE-NAME COLLISIONS ──────────────────────────────────
+const COLLISION_ALLOWANCE: &[(&str, &str)] = &[
+    ("Finding", "finding and finding-dispatch both model a scan result; unification is -232 scope, not this gate"),
+    ("LintReport", "state-wildcard-lint and path-literal-guard predate the shared crate; same -232 scope"),
+    ("Violation", "three gate crates declare it; aliasing to a shared type is a cross-crate refactor owned by the integrator"),
+    ("Observation", "REQUIRES A DECISION not an allowance: tick-monitor produces what omp-orchestrator consumes and each declares an incompatible struct — the free_capacity seam"),
+];
+
+#[test]
+fn no_public_type_name_collisions_across_crates() {
+    let root = repo_root();
+    let crates = workspace_crate_names(&root);
+    assert!(!crates.is_empty(), "ANTI-VACUITY: zero crates scanned");
+    validate_allowance_rows(COLLISION_ALLOWANCE, "leg5-collision");
+
+    let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut collisions: Vec<(String, String, String)> = Vec::new();
+    for name in &crates {
+        let src_dir = root.join("crates").join(name).join("src");
+        let Ok(entries) = std::fs::read_dir(&src_dir) else {
+            continue;
+        };
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.extension().and_then(|x| x.to_str()) != Some("rs") {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(&p) else {
+                continue;
+            };
+            for line in text.lines() {
+                let t = line.trim();
+                for kw in ["pub struct ", "pub enum "] {
+                    if let Some(rest) = t.strip_prefix(kw) {
+                        if let Some(type_name) = rest.split(|c: char| !c.is_alphanumeric() && c != '_').next() {
+                            if type_name.is_empty() {
+                                continue;
+                            }
+                            if let Some(first) = seen.get(type_name) {
+                                if first != name {
+                                    collisions.push((type_name.to_owned(), first.clone(), name.clone()));
+                                }
+                            } else {
+                                seen.insert(type_name.to_owned(), name.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let allowed: std::collections::HashSet<_> =
+        COLLISION_ALLOWANCE.iter().map(|(n, _)| n.to_owned()).collect();
+    let unallowed: Vec<_> = collisions
+        .iter()
+        .filter(|(n, _, _)| !allowed.contains(n.as_str()))
+        .collect();
+    assert!(
+        unallowed.is_empty(),
+        "PUBLIC TYPE NAME COLLISION (not in allowance): {:?} — two crates declaring the same pub type is a seam bug; add an allowance row WITH A REASON or unify the type",
+        unallowed
+    );
+}
