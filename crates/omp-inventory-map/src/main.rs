@@ -4,7 +4,7 @@ use asupersync::runtime::RuntimeBuilder;
 use asupersync::types::Budget;
 use omp_inventory_map::{
     CRATE_VERSION, EXPECTED_OMP_VERSION, InventoryMap, ProbeConfig, ProbeState, SCHEMA_VERSION,
-    collect_inventory,
+    SurfaceMapAudit, collect_inventory, collect_surface_map_audit,
 };
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -28,7 +28,7 @@ impl Arguments {
             if value == "--json" {
                 continue;
             }
-            if first && matches!(value.as_str(), "doctor" | "health" | "version") {
+            if first && matches!(value.as_str(), "doctor" | "health" | "audit" | "version") {
                 command = value;
                 first = false;
                 continue;
@@ -153,6 +153,52 @@ fn collect(command: String, config: ProbeConfig) -> ExitCode {
     }
 }
 
+fn audit(command: String, config: ProbeConfig) -> ExitCode {
+    let runtime = match RuntimeBuilder::current_thread().build() {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            let envelope = RobotEnvelope::<Value> {
+                schema_version: SCHEMA_VERSION,
+                command,
+                status: "ERROR",
+                data: None,
+                error: Some(format!("RUNTIME_ERROR {error}")),
+            };
+            let _ = print_json(&envelope);
+            return ExitCode::from(1);
+        }
+    };
+    let cx = runtime.request_cx_with_budget(Budget::INFINITE);
+    match runtime.block_on(async { collect_surface_map_audit(&cx, &config).await }) {
+        Ok(result) => {
+            let status = if result.is_known() { "OK" } else { "UNKNOWN" };
+            let code = if status == "OK" { 0 } else { 2 };
+            let envelope: RobotEnvelope<SurfaceMapAudit> = RobotEnvelope {
+                schema_version: SCHEMA_VERSION,
+                command,
+                status,
+                data: Some(result),
+                error: None,
+            };
+            if print_json(&envelope).is_err() {
+                ExitCode::from(1)
+            } else {
+                ExitCode::from(code)
+            }
+        }
+        Err(error) => {
+            let envelope = RobotEnvelope::<Value> {
+                schema_version: SCHEMA_VERSION,
+                command,
+                status: "ERROR",
+                data: None,
+                error: Some(error.to_string()),
+            };
+            let _ = print_json(&envelope);
+            ExitCode::from(1)
+        }
+    }
+}
 fn main() -> ExitCode {
     let arguments = match Arguments::parse(env::args().skip(1)) {
         Ok(arguments) => arguments,
@@ -174,6 +220,9 @@ fn main() -> ExitCode {
         } else {
             ExitCode::from(1)
         };
+    }
+    if arguments.command == "audit" {
+        return audit(arguments.command, arguments.config);
     }
     collect(arguments.command, arguments.config)
 }

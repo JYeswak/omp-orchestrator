@@ -16,7 +16,7 @@ use asupersync::process::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -96,6 +96,391 @@ pub struct CargoPackage {
 pub struct CargoSnapshot {
     pub workspace_root: String,
     pub packages: Vec<CargoPackage>,
+}
+
+/// One `[crates.<package>]` declaration from `OMP-SURFACE-MAP.toml`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SurfaceMapDeclaration {
+    pub package_name: String,
+    pub classification: Option<String>,
+    pub omp_surface: Option<String>,
+    pub line: usize,
+    pub fields: BTreeMap<String, String>,
+}
+
+/// A typed finding emitted by surface-map parsing or package-set auditing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE", tag = "kind")]
+pub enum SurfaceMapAuditOutcome {
+    DuplicateDeclaration {
+        package_name: String,
+        first_line: usize,
+        duplicate_line: usize,
+    },
+    InvalidClassification {
+        package_name: String,
+        classification: String,
+        line: usize,
+    },
+    UndeclaredPackage {
+        package_name: String,
+    },
+    GhostDeclaration {
+        package_name: String,
+        line: usize,
+    },
+    MalformedRow {
+        package_name: Option<String>,
+        line: usize,
+        detail: String,
+    },
+}
+
+/// Parsed declarations plus syntax findings retained for a fail-closed audit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SurfaceMap {
+    pub declarations: Vec<SurfaceMapDeclaration>,
+    pub outcomes: Vec<SurfaceMapAuditOutcome>,
+}
+
+/// Deterministic audit of the declared crate set against cargo metadata.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SurfaceMapAudit {
+    pub state: ProbeState,
+    pub outcomes: Vec<SurfaceMapAuditOutcome>,
+    pub declarations: Vec<SurfaceMapDeclaration>,
+    pub workspace_packages: Vec<String>,
+}
+
+impl SurfaceMapAudit {
+    #[must_use]
+    pub fn is_known(&self) -> bool {
+        self.state.is_known() && self.outcomes.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SurfaceMapSection {
+    Meta,
+    Crate(usize),
+}
+fn strip_toml_comment(line: &str) -> &str {
+    let mut quoted = false;
+    let mut escaped = false;
+    for (index, character) in line.char_indices() {
+        match (quoted, escaped, character) {
+            (false, _, '#') => return &line[..index],
+            (true, false, '"') => quoted = false,
+            (false, false, '"') => quoted = true,
+            (true, false, character) if character == 92u8 as char => escaped = true,
+            (true, true, _) => escaped = false,
+            _ => {}
+        }
+    }
+    line
+}
+
+fn valid_surface_map_package_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
+}
+
+fn parse_toml_string(raw: &str) -> Result<String, String> {
+    let mut characters = raw.trim().chars();
+    if characters.next() != Some('"') {
+        return Err("value must be a double-quoted string".to_owned());
+    }
+    let mut value = String::new();
+    let mut escaped = false;
+    while let Some(character) = characters.next() {
+        if escaped {
+            let decoded = match character {
+                '"' => '"',
+                '\\' => '\\',
+                'n' => '\n',
+                'r' => '\r',
+                't' => '\t',
+                _ => return Err(format!("unsupported string escape \\{character}")),
+            };
+            value.push(decoded);
+            escaped = false;
+        } else {
+            match character {
+                '\\' => escaped = true,
+                '"' => {
+                    if characters.any(|trailing| !trailing.is_whitespace()) {
+                        return Err("trailing characters after string value".to_owned());
+                    }
+                    return Ok(value);
+                }
+                _ => value.push(character),
+            }
+        }
+    }
+    if escaped {
+        Err("unterminated string escape".to_owned())
+    } else {
+        Err("unterminated string value".to_owned())
+    }
+}
+
+fn parse_surface_map_assignment(line: &str) -> Result<(String, String), String> {
+    let Some(equal) = line.find('=') else {
+        return Err("row field is missing '='".to_owned());
+    };
+    let key = line[..equal].trim();
+    if key.is_empty()
+        || !key
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
+    {
+        return Err("row field name is malformed".to_owned());
+    }
+    let value = parse_toml_string(&line[equal + 1..])?;
+    Ok((key.to_owned(), value))
+}
+
+fn push_surface_map_outcome(
+    outcomes: &mut Vec<SurfaceMapAuditOutcome>,
+    outcome: SurfaceMapAuditOutcome,
+) {
+    if !outcomes.contains(&outcome) {
+        outcomes.push(outcome);
+    }
+}
+
+/// Parse the crate declaration subset of OMP-SURFACE-MAP.toml.
+///
+/// This is intentionally a small, strict parser rather than a source grep:
+/// only crate rows and their quoted string fields are consumed. Syntax
+/// failures remain typed outcomes so an audit can report every defect in one
+/// pass instead of silently dropping a row.
+#[must_use]
+pub fn parse_surface_map(input: &str) -> SurfaceMap {
+    let mut declarations = Vec::new();
+    let mut outcomes = Vec::new();
+    let mut sections = BTreeMap::new();
+    let mut section = None;
+
+    if input.trim().is_empty() {
+        outcomes.push(SurfaceMapAuditOutcome::MalformedRow {
+            package_name: None,
+            line: 1,
+            detail: "surface map is empty".to_owned(),
+        });
+    }
+
+    for (line_index, raw_line) in input.lines().enumerate() {
+        let line = line_index + 1;
+        let content = strip_toml_comment(raw_line).trim();
+        if content.is_empty() {
+            continue;
+        }
+
+        if content.starts_with('[') {
+            let Some(header) = content.strip_suffix(']') else {
+                outcomes.push(SurfaceMapAuditOutcome::MalformedRow {
+                    package_name: None,
+                    line,
+                    detail: "table header is unterminated".to_owned(),
+                });
+                section = None;
+                continue;
+            };
+            let header = &header[1..];
+            if header == "meta" {
+                section = Some(SurfaceMapSection::Meta);
+                continue;
+            }
+            let Some(package_name) = header.strip_prefix("crates.") else {
+                outcomes.push(SurfaceMapAuditOutcome::MalformedRow {
+                    package_name: None,
+                    line,
+                    detail: format!("unsupported table [{header}]"),
+                });
+                section = None;
+                continue;
+            };
+            if !valid_surface_map_package_name(package_name) {
+                outcomes.push(SurfaceMapAuditOutcome::MalformedRow {
+                    package_name: Some(package_name.to_owned()),
+                    line,
+                    detail: "crate table name is malformed".to_owned(),
+                });
+                section = None;
+                continue;
+            }
+            if let Some(first_line) = sections.get(package_name) {
+                outcomes.push(SurfaceMapAuditOutcome::DuplicateDeclaration {
+                    package_name: package_name.to_owned(),
+                    first_line: *first_line,
+                    duplicate_line: line,
+                });
+            } else {
+                sections.insert(package_name.to_owned(), line);
+            }
+            declarations.push(SurfaceMapDeclaration {
+                package_name: package_name.to_owned(),
+                classification: None,
+                omp_surface: None,
+                line,
+                fields: BTreeMap::new(),
+            });
+            section = Some(SurfaceMapSection::Crate(declarations.len() - 1));
+            continue;
+        }
+
+        let Some(SurfaceMapSection::Crate(index)) = section else {
+            if !matches!(section, Some(SurfaceMapSection::Meta)) {
+                outcomes.push(SurfaceMapAuditOutcome::MalformedRow {
+                    package_name: None,
+                    line,
+                    detail: "row appears outside a supported table".to_owned(),
+                });
+            }
+            continue;
+        };
+        let declaration = &mut declarations[index];
+        match parse_surface_map_assignment(content) {
+            Ok((key, value)) => {
+                if declaration.fields.contains_key(&key) {
+                    push_surface_map_outcome(
+                        &mut outcomes,
+                        SurfaceMapAuditOutcome::MalformedRow {
+                            package_name: Some(declaration.package_name.clone()),
+                            line,
+                            detail: format!("duplicate field {key}"),
+                        },
+                    );
+                    continue;
+                }
+                declaration.fields.insert(key.clone(), value.clone());
+                match key.as_str() {
+                    "classification" => declaration.classification = Some(value),
+                    "omp_surface" => declaration.omp_surface = Some(value),
+                    _ => {}
+                }
+            }
+            Err(detail) => push_surface_map_outcome(
+                &mut outcomes,
+                SurfaceMapAuditOutcome::MalformedRow {
+                    package_name: Some(declaration.package_name.clone()),
+                    line,
+                    detail,
+                },
+            ),
+        }
+    }
+    SurfaceMap {
+        declarations,
+        outcomes,
+    }
+}
+
+/// Audit parsed surface declarations against the package names from cargo.
+#[must_use]
+pub fn audit_surface_map(surface_map: &SurfaceMap, cargo: &CargoSnapshot) -> SurfaceMapAudit {
+    let mut outcomes = surface_map.outcomes.clone();
+    let mut declared = BTreeSet::new();
+    let mut first_lines = BTreeMap::new();
+    for declaration in &surface_map.declarations {
+        if let Some(first_line) =
+            first_lines.insert(declaration.package_name.clone(), declaration.line)
+        {
+            push_surface_map_outcome(
+                &mut outcomes,
+                SurfaceMapAuditOutcome::DuplicateDeclaration {
+                    package_name: declaration.package_name.clone(),
+                    first_line,
+                    duplicate_line: declaration.line,
+                },
+            );
+        }
+        declared.insert(declaration.package_name.clone());
+        match declaration.classification.as_deref() {
+            None => push_surface_map_outcome(
+                &mut outcomes,
+                SurfaceMapAuditOutcome::MalformedRow {
+                    package_name: Some(declaration.package_name.clone()),
+                    line: declaration.line,
+                    detail: "classification is missing".to_owned(),
+                },
+            ),
+            Some("a" | "b" | "c") => {}
+            Some(classification) => push_surface_map_outcome(
+                &mut outcomes,
+                SurfaceMapAuditOutcome::InvalidClassification {
+                    package_name: declaration.package_name.clone(),
+                    classification: classification.to_owned(),
+                    line: declaration.line,
+                },
+            ),
+        }
+        if declaration.omp_surface.as_deref().is_none_or(str::is_empty) {
+            push_surface_map_outcome(
+                &mut outcomes,
+                SurfaceMapAuditOutcome::MalformedRow {
+                    package_name: Some(declaration.package_name.clone()),
+                    line: declaration.line,
+                    detail: "omp_surface is missing".to_owned(),
+                },
+            );
+        }
+    }
+
+    let workspace_packages = cargo
+        .packages
+        .iter()
+        .map(|package| package.name.clone())
+        .collect::<BTreeSet<_>>();
+    for package_name in &workspace_packages {
+        if !declared.contains(package_name) {
+            outcomes.push(SurfaceMapAuditOutcome::UndeclaredPackage {
+                package_name: package_name.clone(),
+            });
+        }
+    }
+    for declaration in &surface_map.declarations {
+        if !workspace_packages.contains(&declaration.package_name) {
+            outcomes.push(SurfaceMapAuditOutcome::GhostDeclaration {
+                package_name: declaration.package_name.clone(),
+                line: declaration.line,
+            });
+        }
+    }
+    let state = if outcomes.is_empty() {
+        ProbeState::Known
+    } else {
+        ProbeState::Unknown
+    };
+    SurfaceMapAudit {
+        state,
+        outcomes,
+        declarations: surface_map.declarations.clone(),
+        workspace_packages: workspace_packages.into_iter().collect(),
+    }
+}
+
+/// Parse both direct-probe payloads and perform the pure audit.
+pub fn audit_surface_map_text(
+    surface_map_input: &str,
+    cargo_metadata_input: &str,
+) -> Result<SurfaceMapAudit, InventoryError> {
+    let cargo = parse_cargo_metadata(cargo_metadata_input)?;
+    Ok(audit_surface_map(
+        &parse_surface_map(surface_map_input),
+        &cargo,
+    ))
+}
+
+/// Compatibility spelling for callers that name the metadata relation.
+pub fn audit_surface_map_against_metadata(
+    surface_map_input: &str,
+    cargo_metadata_input: &str,
+) -> Result<SurfaceMapAudit, InventoryError> {
+    audit_surface_map_text(surface_map_input, cargo_metadata_input)
 }
 
 /// A value parsed from a probe. `value=None` is intentional evidence of an
@@ -1374,6 +1759,76 @@ pub async fn collect_inventory(
         )),
     }
     build_inventory_map(inputs)
+}
+
+fn read_bounded_surface_map(path: &Path) -> Result<String, InventoryError> {
+    let reported_bytes = std::fs::metadata(path)
+        .map_err(|error| InventoryError::Process {
+            command: format!("read {}", path.display()),
+            detail: error.to_string(),
+        })
+        .and_then(|metadata| {
+            usize::try_from(metadata.len()).map_err(|_| InventoryError::OutputTooLarge {
+                command: format!("read {}", path.display()),
+                bytes: usize::MAX,
+            })
+        })?;
+    if reported_bytes > MAX_PROBE_BYTES {
+        return Err(InventoryError::OutputTooLarge {
+            command: format!("read {}", path.display()),
+            bytes: reported_bytes,
+        });
+    }
+    let bytes = std::fs::read(path).map_err(|error| InventoryError::Process {
+        command: format!("read {}", path.display()),
+        detail: error.to_string(),
+    })?;
+    if bytes.len() > MAX_PROBE_BYTES {
+        return Err(InventoryError::OutputTooLarge {
+            command: format!("read {}", path.display()),
+            bytes: bytes.len(),
+        });
+    }
+    String::from_utf8(bytes).map_err(|error| InventoryError::Process {
+        command: format!("read {}", path.display()),
+        detail: format!("surface map is not UTF-8: {error}"),
+    })
+}
+
+/// Read the repository surface declaration and cargo metadata through the
+/// same bounded direct process probe used by the inventory collector.
+pub async fn collect_surface_map_audit(
+    cx: &Cx,
+    config: &ProbeConfig,
+) -> Result<SurfaceMapAudit, InventoryError> {
+    let cargo_args = vec![
+        "metadata".to_owned(),
+        "--format-version".to_owned(),
+        "1".to_owned(),
+        "--no-deps".to_owned(),
+    ];
+    let cargo_probe = run_process(
+        cx,
+        &config.cargo_program,
+        &cargo_args,
+        Some(&config.repo_root),
+    )
+    .await?;
+    if !cargo_probe.output.status.success() {
+        return Err(InventoryError::Process {
+            command: command_display(&config.cargo_program, &cargo_args),
+            detail: String::from_utf8_lossy(&cargo_probe.output.stderr).into_owned(),
+        });
+    }
+    let cargo_metadata = output_text(&cargo_probe);
+    let cargo = parse_cargo_metadata(&cargo_metadata)?;
+    cx.checkpoint().map_err(|_| InventoryError::Cancelled)?;
+    let surface_map_path = config.repo_root.join("OMP-SURFACE-MAP.toml");
+    let surface_map_input = read_bounded_surface_map(&surface_map_path)?;
+    Ok(audit_surface_map(
+        &parse_surface_map(&surface_map_input),
+        &cargo,
+    ))
 }
 
 /// Small, pure trigger classifier used by fixture tests and consumers that

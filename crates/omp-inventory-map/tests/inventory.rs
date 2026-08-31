@@ -1,6 +1,7 @@
 use omp_inventory_map::{
-    InventoryInputs, ProbeState, build_inventory_map, classify_trigger_data, parse_cargo_metadata,
-    parse_cli_commands, parse_rpc_slash_commands,
+    InventoryInputs, ProbeState, SurfaceMapAuditOutcome, audit_surface_map_text,
+    build_inventory_map, classify_trigger_data, parse_cargo_metadata, parse_cli_commands,
+    parse_rpc_slash_commands,
 };
 use serde_json::json;
 
@@ -87,4 +88,71 @@ fn rpc_slash_command_frame_is_parsed_as_nested_paths() {
         parsed.value.expect("slash commands"),
         vec!["/security", "/security/plan"]
     );
+}
+
+#[test]
+fn surface_map_known_good_accepts_explicit_map_to_none() {
+    let map = "[meta]\nrevision = 2\n\n[crates.alpha]\nclassification = \"a\"\nomp_surface = \"none\"\n\n[crates.beta]\nclassification = \"b\"\nomp_surface = \"session\"\n";
+    let audit = audit_surface_map_text(map, &metadata(&["alpha", "beta"]))
+        .expect("metadata fixture parses");
+    assert_eq!(audit.state, ProbeState::Known);
+    assert!(audit.is_known());
+    assert!(audit.outcomes.is_empty());
+}
+
+#[test]
+fn surface_map_missing_package_is_undeclared_and_unknown() {
+    let map = "[crates.alpha]\nclassification = \"a\"\nomp_surface = \"none\"\n";
+    let audit = audit_surface_map_text(map, &metadata(&["alpha", "beta"]))
+        .expect("metadata fixture parses");
+    assert_eq!(audit.state, ProbeState::Unknown);
+    assert!(audit.outcomes.iter().any(|outcome| matches!(
+        outcome,
+        SurfaceMapAuditOutcome::UndeclaredPackage { package_name } if package_name == "beta"
+    )));
+}
+
+#[test]
+fn surface_map_ghost_is_unknown() {
+    let map = "[crates.alpha]\nclassification = \"a\"\nomp_surface = \"none\"\n\n[crates.phantom]\nclassification = \"c\"\nomp_surface = \"collab\"\n";
+    let audit =
+        audit_surface_map_text(map, &metadata(&["alpha"])).expect("metadata fixture parses");
+    assert_eq!(audit.state, ProbeState::Unknown);
+    assert!(audit.outcomes.iter().any(|outcome| matches!(
+        outcome,
+        SurfaceMapAuditOutcome::GhostDeclaration { package_name, .. } if package_name == "phantom"
+    )));
+}
+
+#[test]
+fn malformed_classification_is_typed_and_unknown() {
+    let map = "[crates.alpha]\nclassification = \"invalid\"\nomp_surface = \"none\"\n";
+    let audit =
+        audit_surface_map_text(map, &metadata(&["alpha"])).expect("metadata fixture parses");
+    assert_eq!(audit.state, ProbeState::Unknown);
+    assert!(audit.outcomes.iter().any(|outcome| matches!(
+        outcome,
+        SurfaceMapAuditOutcome::InvalidClassification {
+            package_name,
+            classification,
+            ..
+        } if package_name == "alpha" && classification == "invalid"
+    )));
+}
+
+#[test]
+fn malformed_row_and_duplicate_declaration_are_typed() {
+    let map = "[crates.alpha]\nclassification = \"a\"\n\n[crates.alpha]\nclassification = \"a\"\nomp_surface = \"none\"\n";
+    let audit =
+        audit_surface_map_text(map, &metadata(&["alpha"])).expect("metadata fixture parses");
+    assert_eq!(audit.state, ProbeState::Unknown);
+    assert!(audit.outcomes.iter().any(|outcome| matches!(
+        outcome,
+        SurfaceMapAuditOutcome::DuplicateDeclaration { package_name, .. } if package_name == "alpha"
+    )));
+    assert!(audit.outcomes.iter().any(|outcome| matches!(
+        outcome,
+        SurfaceMapAuditOutcome::MalformedRow { package_name, detail, .. }
+            if package_name.as_deref() == Some("alpha") && detail.contains("omp_surface")
+    )));
 }
