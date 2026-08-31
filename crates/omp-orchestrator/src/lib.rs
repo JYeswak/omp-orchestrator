@@ -205,18 +205,40 @@ pub struct Observation {
 /// genuinely empty AND the authorization permits idleness.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SupervisorDecision {
-    /// Free capacity + ready work + authorized -> dispatch.
+    /// A CONFIRMED-idle pane and ready work coexist -> send.
     Dispatch { pane: String, bead_hint: String },
     /// Free capacity + ready work + UNAUTHORIZED -> escalate (an incident).
-    EscalateIdleIncident { dispatchable_count: usize, ready_count: usize },
+    EscalateIdleIncident {
+        dispatchable_count: usize,
+        ready_count: usize,
+    },
     /// The monitor could not observe — fail closed.
     MonitorBlind { detail: String },
     /// The queue could not be read — fail closed.
     QueueUnreadable { detail: String },
     /// The workspace-load gate refused — do not dispatch into a broken repo.
     WorkspaceUnloaded { detail: String },
-    /// Queue is genuinely empty and the authorization permits idleness.
-    AuthorizedIdle { pane_count: usize },
+    /// Idleness is covered by an unexpired, BOUND authorization token. Carries
+    /// the expiry so the decision names its own deadline.
+    AuthorizedIdle { pane_count: usize, expires_at: u64 },
+    /// Queue empty AND free capacity exists AND no authorization.
+    ///
+    /// NOT AuthorizedIdle: nothing authorized this. NOT an EscalateIdleIncident
+    /// either — there is no work to dispatch, so no worker is being starved. An
+    /// empty queue with idle capacity is a decision only Josh can make, so
+    /// queue-empty must remain SUPERVISED rather than silently tolerated.
+    QueueEmptyNeedsJosh { free_capacity_count: usize },
+    /// Every pane is genuinely working (`LIVE`). Healthy — and still REPORTED,
+    /// because a supervisor that prints nothing while busy is indistinguishable
+    /// from one that has died.
+    ///
+    /// This is deliberately NOT AuthorizedIdle: nothing is idle. Reporting a
+    /// healthy busy fleet as an incident trains the operator to ignore the alarm,
+    /// which is how a real one gets missed.
+    SupervisedWorking {
+        working_count: usize,
+        ready_count: usize,
+    },
 }
 
 /// The pure deciding function: given an observation and the authorization state,
@@ -255,54 +277,67 @@ pub fn decide(observation: &Observation, authorization: &IdleAuthorization) -> S
         .filter(|p| p.is_free_capacity)
         .count();
 
+    let working = observation.panes.iter().filter(|p| p.is_working).count();
+    let expiry = match authorization {
+        IdleAuthorization::Authorized { expires_at, .. } => Some(*expires_at),
+        IdleAuthorization::Unauthorized { .. } => None,
+    };
+
     if observation.queue.ready_count == 0 {
-        // Queue is empty. Leg 3: is idleness authorized?
-        return match authorization {
-            IdleAuthorization::Authorized { .. } => SupervisorDecision::AuthorizedIdle {
-                pane_count: observation.panes.len(),
-            },
-            IdleAuthorization::Unauthorized { why: _ } => SupervisorDecision::EscalateIdleIncident {
-                dispatchable_count: dispatchable.len(),
+        // QUEUE EMPTY. A busy fleet with an empty queue is HEALTHY, not an
+        // incident. Reporting it as one trains the operator to ignore the alarm,
+        // which is how a real alarm gets missed — and it is why 178 consecutive
+        // capacity ticks were written to a file nobody read.
+        if free_capacity == 0 {
+            return SupervisorDecision::SupervisedWorking {
+                working_count: working,
                 ready_count: 0,
+            };
+        }
+        // Idle capacity with nothing queued. Not starvation — nobody is waiting —
+        // but not a state to sit in silently either. Only Josh can decide that the
+        // fleet has nothing to do.
+        return match expiry {
+            Some(expires_at) => SupervisorDecision::AuthorizedIdle {
+                pane_count: observation.panes.len(),
+                expires_at,
+            },
+            None => SupervisorDecision::QueueEmptyNeedsJosh {
+                free_capacity_count: free_capacity,
             },
         };
     }
 
-    // Queue has work. Are there dispatchable panes?
-    if dispatchable.is_empty() {
-        // No pane is ConfirmedIdle. Check the authorization for idle tolerance.
-        return match authorization {
-            IdleAuthorization::Authorized { .. } => {
-                // Josh authorized idleness — tolerated, not an incident.
-                SupervisorDecision::AuthorizedIdle {
-                    pane_count: observation.panes.len(),
-                }
-            }
-            IdleAuthorization::Unauthorized { why: _ } => {
-                // Free capacity exists (NewlyIdle) but no ConfirmedIdle — this is the
-                // exact gap that let the fleet sit idle: NewlyIdle panes are visible
-                // but not dispatchable. If the ready queue is non-empty and no pane
-                // is dispatchable, escalate.
-                if free_capacity > 0 {
-                    SupervisorDecision::EscalateIdleIncident {
-                        dispatchable_count: 0,
-                        ready_count: observation.queue.ready_count,
-                    }
-                } else {
-                    // All panes genuinely working — this is healthy.
-                    SupervisorDecision::AuthorizedIdle {
-                        pane_count: observation.panes.len(),
-                    }
-                }
-            }
+    // READY WORK EXISTS. A confirmed-idle pane wins immediately.
+    if let Some(target) = dispatchable.first() {
+        return SupervisorDecision::Dispatch {
+            pane: target.pane_id.clone(),
+            bead_hint: "first-ready-bead".to_owned(),
         };
     }
 
-    // Dispatchable panes + ready work = DISPATCH.
-    let pane = dispatchable[0].pane_id.clone();
-    SupervisorDecision::Dispatch {
-        pane,
-        bead_hint: "first-ready-bead".to_owned(),
+    // Ready work, nothing CONFIRMED idle. Free capacity here means NewlyIdle: a
+    // pane that just finished and is visible but not yet twice-confirmed. With
+    // work queued that must NOT be tolerated silently — it is the measured
+    // 4h19m failure.
+    if free_capacity > 0 {
+        return match expiry {
+            Some(expires_at) => SupervisorDecision::AuthorizedIdle {
+                pane_count: observation.panes.len(),
+                expires_at,
+            },
+            None => SupervisorDecision::EscalateIdleIncident {
+                dispatchable_count: 0,
+                ready_count: observation.queue.ready_count,
+            },
+        };
+    }
+
+    // Ready work and every pane working: healthy saturation. Reported, not
+    // alarmed, and NOT AuthorizedIdle — nothing here is idle.
+    SupervisorDecision::SupervisedWorking {
+        working_count: working,
+        ready_count: observation.queue.ready_count,
     }
 }
 
@@ -414,17 +449,68 @@ mod tests {
     // ── DECIDING LEG 3: IDLE_AUTHORIZED DEFAULT UNAUTHORIZED ─────────────────
 
     #[test]
-    fn unauthorized_idle_with_empty_queue_escalates() {
+    fn unauthorized_idle_with_empty_queue_needs_josh_not_an_incident() {
+        // CONTRACT SHARPENED. This previously asserted EscalateIdleIncident, which
+        // conflated two different situations: a starving fleet (work queued, panes
+        // free) and a fleet with nothing to do. Nobody is starving here — the
+        // queue is empty — so calling it an incident is the alarm-fatigue failure.
+        // It still must NOT be silent: an empty queue is a decision only Josh can
+        // make, so queue-empty stays SUPERVISED.
+        let observation = obs(vec![pane("%1409", "IDLE", true)], 0, true);
+        let decision = decide(&observation, &IdleAuthorization::Unauthorized { why: "test" });
+        match &decision {
+            SupervisorDecision::QueueEmptyNeedsJosh {
+                free_capacity_count,
+            } => {
+                assert_eq!(*free_capacity_count, 1, "the free pane must be counted");
+            }
+            other => panic!("expected QueueEmptyNeedsJosh, got {other:?}"),
+        }
+        // And it must NOT read as authorized — nothing authorized this.
+        assert!(
+            !matches!(decision, SupervisorDecision::AuthorizedIdle { .. }),
+            "unauthorized must never render as AuthorizedIdle"
+        );
+    }
+
+    #[test]
+    fn a_busy_fleet_with_an_empty_queue_is_supervised_working_not_an_incident() {
+        // The live smoke case: six panes working, nothing free. Escalating this
+        // trains the operator to ignore the alarm.
         let observation = obs(
-            vec![pane("%1409", "IDLE", true)],
+            vec![pane("%1413", "LIVE", false), pane("%1414", "LIVE", false)],
             0,
             true,
         );
         let decision = decide(&observation, &IdleAuthorization::Unauthorized { why: "test" });
-        assert!(
-            matches!(decision, SupervisorDecision::EscalateIdleIncident { .. }),
-            "idle + unauthorized + empty queue = incident, got {decision:?}"
+        match &decision {
+            SupervisorDecision::SupervisedWorking { working_count, .. } => {
+                assert_eq!(*working_count, 2, "both working panes must be counted");
+            }
+            other => panic!("expected SupervisedWorking, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_saturated_fleet_with_queued_work_is_supervised_working() {
+        // Ready work AND every pane working = healthy saturation, not idleness.
+        // This is the case BlueLantern's live smoke hit (panes=6 ready=4).
+        let observation = obs(
+            vec![pane("%1413", "LIVE", false), pane("%1414", "LIVE", false)],
+            4,
+            true,
         );
+        let decision = decide(&observation, &IdleAuthorization::Unauthorized { why: "test" });
+        match &decision {
+            SupervisorDecision::SupervisedWorking {
+                working_count,
+                ready_count,
+            } => {
+                assert_eq!(*working_count, 2);
+                assert_eq!(*ready_count, 4, "queued work must be reported, not hidden");
+            }
+            other => panic!("expected SupervisedWorking, got {other:?}"),
+        }
     }
 
     #[test]
