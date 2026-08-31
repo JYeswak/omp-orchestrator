@@ -40,6 +40,59 @@ without it firing once."*
 **Wiring proof needs a positive control.** Grep for something you *know* is wired and confirm it
 hits. A zero from a pattern that can never match is not evidence of absence.
 
+
+---
+
+## The third rule: no gate may exist without a reachable trigger
+
+**We cannot afford an unwired gate, and the flag must be baked into the kernels — not into a
+document, a log, or a CI file.** This rule is the standing one; read it every session.
+
+A gate that cannot fire is worse than no gate, because the repo *reads* as protected. Measured on
+2026-08-31, the flagship gate was correct — run by hand it exits 1, names the offending files, and
+prints *"the exemption list is empty by design"* — and it was invoked **only** from
+`.github/workflows/gate.yml`. `git remote -v` returns empty. **The workflow can never execute.**
+Two `.sh` files were committed into the tree that gate forbids while it watched from a runner that
+does not exist.
+
+**The census, same day — five of six gates could not fire:**
+
+| gate | trigger | reachable? |
+|---|---|---|
+| `no-shell-gate` | `.git/hooks/pre-commit` (Mach-O binary) | **yes** — proven by a staged `.sh` refused at `commit_exit=1` |
+| `kernel-bypass-gate` | none at all | no |
+| `pre-delete-citation-check` | none at all | no |
+| `path-literal-guard` | `.github/` only | no — no remote |
+| `state-wildcard-lint` | `.github/` only | no — no remote |
+| `undrained-pipe-lint` | `.github/` only | no — no remote |
+
+**Why it lives in the kernel processes.** Every other signalling path here is *measured silent*:
+`ATTENTION.txt` took 178 consecutive ticks from one writer with zero readers; the supervisor printed
+a typed refusal naming `owner=josh` 29 times and nobody read it for hours; `gate.yml` has no runner.
+A file, a log, and a CI job are each loud in principle and silent in fact. **The only path that
+reached a human was a nonzero typed outcome the operator had to answer.**
+
+So the census is the **first** check in `decide()`, ahead of the pane and queue checks, and it is
+unreachable-around: no branch may return `SupervisedWorking` or `AuthorizedIdle` while any gate is
+unwired. Four properties make it hold:
+
+1. **Absence of a census is itself a refusal.** `None => GateUnwired { CENSUS_NOT_PERFORMED }`.
+   Nobody satisfies the supervisor by declining to look.
+2. **Classify by trigger reachability, never caller existence.** `no-shell-gate` *had* a caller for
+   hours while being unable to fire. A census keyed on "does something reference this" calls that
+   WIRED and is wrong.
+3. **Positive control is mandatory.** `no-shell-gate` must come back reachable, or the census is
+   broken — one that reports everything unreachable is indistinguishable from one that works.
+4. **The census must exclude its own source file.** Measured: a shell census reported `src-only` for
+   all six gates because it grepped for gate names and *the census table names them all*. That is
+   the self-referential checker — sixth instance in one session — where a checker's input contains
+   text about the thing it checks.
+
+**NO-CLAIM.** This makes an unwired gate **loud, not impossible**. Static reachability proves a
+trigger exists; it cannot prove the gate *ran* this cycle. `tick-monitor` had callers and starved
+the fleet for 4.5 hours anyway. And `.git/hooks/` is untracked and per-clone, so a fresh checkout on
+another machine has **no hook** and `no-shell-gate` reverts to unreachable there — which is why the
+census answers *for the machine it runs on* and says which one that is.
 ---
 
 ## OMP lifecycles — what they are and where to find them
