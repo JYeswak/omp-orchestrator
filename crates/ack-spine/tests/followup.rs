@@ -8,6 +8,7 @@ use ack_spine::followup::{classify_followup, followup_action, FollowUpAction, Fo
 fn dispatched_silent_past_deadline_is_typed() {
     let verdict = classify_followup(
         "omp-orchestrator-he6",
+        /* bead_closed = */ false,
         "SilverWolf",       // current assignee
         "SilverWolf",       // original assignee (unchanged)
         false,              // no verdict comment
@@ -34,6 +35,7 @@ fn dispatched_silent_past_deadline_is_typed() {
 fn verdict_posted_is_healthy() {
     let verdict = classify_followup(
         "omp-orchestrator-0hk",
+        /* bead_closed = */ false,
         "SilverWolf",
         "SilverWolf",
         true,               // verdict comment present
@@ -56,6 +58,7 @@ fn verdict_posted_is_healthy() {
 fn reassigned_bead_is_not_silent() {
     let verdict = classify_followup(
         "omp-orchestrator-815",
+        /* bead_closed = */ false,
         "GreenFrog",        // current assignee (CHANGED)
         "AmberGate",        // original assignee
         false,              // no verdict comment
@@ -81,6 +84,7 @@ fn reassigned_bead_is_not_silent() {
 fn tracker_error_is_not_verdict_posted() {
     let verdict = classify_followup(
         "any-bead",
+        /* bead_closed = */ false,
         "anyone",
         "anyone",
         false,
@@ -103,6 +107,7 @@ fn tracker_error_is_not_verdict_posted() {
 fn within_deadline_and_working_is_healthy() {
     let verdict = classify_followup(
         "omp-orchestrator-6gq",
+        /* bead_closed = */ false,
         "BlueLantern",
         "BlueLantern",
         false,              // no verdict yet
@@ -130,6 +135,7 @@ fn boundary_case_deadline_equals_elapsed_is_silent() {
     // Exactly at the deadline: SILENT_PAST_DEADLINE (the >= boundary).
     let verdict = classify_followup(
         "omp-orchestrator-x",
+        /* bead_closed = */ false,
         "me",
         "me",
         false,
