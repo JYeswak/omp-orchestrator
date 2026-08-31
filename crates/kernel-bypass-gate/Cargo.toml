@@ -1,0 +1,12 @@
+[package]
+name = "kernel-bypass-gate"
+version = "0.1.0"
+edition = "2021"
+description = "Detects raw invocations that duplicate an existing kernel's interface"
+
+[[bin]]
+name = "kernel-bypass-gate"
+path = "src/main.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
