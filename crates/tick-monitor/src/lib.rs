@@ -350,6 +350,17 @@ pub enum Liveness {
     Live,
     /// `pi` glyph on both captures, far enough apart.
     ConfirmedIdle,
+    /// WORKING on the previous capture, `pi` on this one: it just finished.
+    ///
+    /// Deliberately NOT dispatchable and deliberately NOT `Live`. Filed as
+    /// `omp-orchestrator-transition-to-idle-misread-oco`: this case used to fall through a
+    /// `_ => Live` catch-all, because "it moved, so it is not frozen" is true and is not
+    /// the question a dispatcher asks. The operator spotted a freed worker my classifier
+    /// had hidden. It stays out of `is_dispatchable` because one idle capture is still one
+    /// capture -- the NEXT tick sees (Idle, Idle) and yields `ConfirmedIdle`. Naming it
+    /// separately is what makes a just-freed worker VISIBLE without buying a slot by
+    /// weakening the two-capture rule.
+    NewlyIdle,
     /// Timer and stable hash both static across a sufficient gap.
     Frozen,
     /// Accepts input, submits nothing.
@@ -363,6 +374,7 @@ impl Liveness {
         match self {
             Liveness::Live => "LIVE",
             Liveness::ConfirmedIdle => "CONFIRMED_IDLE",
+            Liveness::NewlyIdle => "NEWLY_IDLE",
             Liveness::Frozen => "FROZEN",
             Liveness::Wedged => "WEDGED",
             Liveness::Unproven { .. } => "UNPROVEN",
@@ -371,6 +383,12 @@ impl Liveness {
     /// Only a two-capture confirmed idle may receive work.
     pub fn is_dispatchable(&self) -> bool {
         matches!(self, Liveness::ConfirmedIdle)
+    }
+    /// Free capacity a conductor should be AWARE of, whether or not it may be filled yet.
+    /// `NewlyIdle` belongs here and not in `is_dispatchable`: report it, confirm it, then
+    /// fill it.
+    pub fn is_free_capacity(&self) -> bool {
+        matches!(self, Liveness::ConfirmedIdle | Liveness::NewlyIdle)
     }
 }
 
@@ -416,6 +434,10 @@ pub fn liveness(prev: Option<&Observation>, now: &Observation) -> Liveness {
             why: "gap_too_short",
         };
     }
+    // Exhaustive on purpose. The `_ => Live` catch-all this replaces is what hid a freed
+    // worker (bead -oco): every unlisted pair silently became "motion", which is true and
+    // useless. If a new PaneState is added, this match must fail to compile rather than
+    // absorb it into Live.
     match (&prev.state, &now.state) {
         (PaneState::Working { timer_secs: a }, PaneState::Working { timer_secs: b }) => {
             if b > a || prev.hash != now.hash {
@@ -424,16 +446,23 @@ pub fn liveness(prev: Option<&Observation>, now: &Observation) -> Liveness {
                 Liveness::Frozen
             }
         }
-        (PaneState::Idle, PaneState::Idle) => {
-            if prev.hash == now.hash {
-                Liveness::ConfirmedIdle
-            } else {
-                // Rendering while idle -- it finished something between captures.
-                Liveness::ConfirmedIdle
-            }
-        }
-        // Any transition is motion.
-        _ => Liveness::Live,
+        // Two idle captures across the floor. Content may differ -- a pane can render
+        // while idle -- and that does not make it busy.
+        (PaneState::Idle, PaneState::Idle) => Liveness::ConfirmedIdle,
+        // It just finished. Visible as free capacity, not yet fillable.
+        (PaneState::Working { .. }, PaneState::Idle) => Liveness::NewlyIdle,
+        // It picked work up. Unambiguously alive.
+        (PaneState::Idle, PaneState::Working { .. }) => Liveness::Live,
+        // Anything involving Wedged/Unproven on EITHER side is not a liveness claim.
+        // `now` being Wedged/Unproven already returned above, so this is a prior-side
+        // Wedged/Unproven paired with a readable now: motion, but not a verdict we will
+        // act on, so report it as unproven rather than inventing Live.
+        (PaneState::Wedged | PaneState::Unproven, _) => Liveness::Unproven {
+            why: "prior_capture_unusable",
+        },
+        (_, PaneState::Wedged | PaneState::Unproven) => Liveness::Unproven {
+            why: "capture_unrecognised",
+        },
     }
 }
 

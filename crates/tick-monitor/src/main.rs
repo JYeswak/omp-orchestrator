@@ -22,6 +22,7 @@ fn main() {
     }
     match args.first().map(String::as_str) {
         Some("observe") => exit(observe(&args[1..])),
+        Some("watch") => exit(watch(&args[1..])),
         Some("emit-tick") => exit(emit_tick(&args[1..])),
         Some("capabilities") => {
             println!("{}", capabilities());
@@ -29,9 +30,12 @@ fn main() {
         }
         _ => {
             eprintln!(
-                "usage: tick-monitor [observe|emit-tick|capabilities|--selftest]\n\
+                "usage: tick-monitor [observe|watch|emit-tick|capabilities|--selftest]\n\
                  \n\
                  observe   [--session NAME] [--repo PATH].. [--no-save] [--state PATH]\n\
+                 watch     [--interval SECS] [--max-ticks N] [--stall-after N]\n\
+                           [--watch-ledger PATH]  + all observe flags\n\
+                           THE LOOP: runs observe forever, one JSON line per tick\n\
                  emit-tick --mode MODE --verdict GREEN|RED|BLOCKED\n\
                            [--blocker CLASS:NAME] [--escalation TEXT] [--bead ID]\n\
                            [--note TEXT] [--ledger PATH] [--state PATH]\n"
@@ -162,7 +166,7 @@ fn head_sha(repo: &str) -> Option<String> {
 // observe
 // ---------------------------------------------------------------------------
 
-fn observe(args: &[String]) -> i32 {
+fn observe_core(args: &[String]) -> Result<String, i32> {
     let session = flag(args, "--session").unwrap_or("omp-orchestrator");
     let mut repos: Vec<String> = flags(args, "--repo").iter().map(|s| s.to_string()).collect();
     if repos.is_empty() {
@@ -178,19 +182,20 @@ fn observe(args: &[String]) -> i32 {
         Ok(v) => v,
         Err(e) => {
             eprintln!("REFUSE observe: {e}");
-            return 3;
+            return Err(3);
         }
     };
     // ANTI-VACUITY: an empty pane set is an ERROR, never a healthy fleet.
     if ids.is_empty() {
         eprintln!("REFUSE observe: pane set is EMPTY for session {session:?}; an empty scan set is an error, never a pass");
-        return 3;
+        return Err(3);
     }
 
     let mut obs = Vec::new();
     let mut rows = Vec::new();
     let mut transitions = Vec::new();
     let mut dispatchable = Vec::new();
+    let mut free_capacity = Vec::new();
 
     for id in &ids {
         let Some(cap) = capture(id) else {
@@ -211,6 +216,11 @@ fn observe(args: &[String]) -> i32 {
         let live = liveness(prev, &o);
         if live.is_dispatchable() {
             dispatchable.push(id.clone());
+        }
+        // Reported separately: a NewlyIdle pane is free capacity a conductor must SEE,
+        // even though it may not be filled until the next tick confirms it.
+        if live.is_free_capacity() {
+            free_capacity.push(id.clone());
         }
         if let Some(p) = prev {
             if p.state.label() != state.label() {
@@ -270,10 +280,10 @@ fn observe(args: &[String]) -> i32 {
         }
     }
 
-    println!(
+    let json = format!(
         "{{\"observed_at\":{},\"prior_tick\":{},\"gap_secs\":{},\"session\":\"{}\",\
 \"panes_scanned\":{},\
-\"idle_panes\":{{\"dispatchable\":[{}],\"count\":{}}},\
+\"idle_panes\":{{\"dispatchable\":[{}],\"count\":{},\"free_capacity\":[{}]}},\
 \"omp_lifecycle\":{{\"transitions\":[{}],\"panes\":[{}]}},\
 \"git_commits\":{{\"new_total\":{},\"repos\":[{}]}}}}",
         now,
@@ -287,6 +297,11 @@ fn observe(args: &[String]) -> i32 {
             .collect::<Vec<_>>()
             .join(","),
         dispatchable.len(),
+        free_capacity
+            .iter()
+            .map(|d| format!("\"{}\"", esc(d)))
+            .collect::<Vec<_>>()
+            .join(","),
         transitions.join(","),
         rows.join(","),
         new_commits,
@@ -306,7 +321,121 @@ fn observe(args: &[String]) -> i32 {
             eprintln!("WARN: state not saved ({e}); next tick will read no_prior_capture");
         }
     }
-    0
+    Ok(json)
+}
+
+fn observe(args: &[String]) -> i32 {
+    match observe_core(args) {
+        Ok(json) => {
+            println!("{json}");
+            0
+        }
+        Err(code) => code,
+    }
+}
+
+/// MONITOR LOOP. The thing that makes the three monitors "repeatedly available" rather
+/// than a command someone has to remember to type.
+///
+/// Runs `observe_core` forever on an interval, appending one JSON line per tick to a
+/// watch ledger so the latest fleet state is readable at any moment without re-running
+/// anything. Designed to be supervised (`hub start`), not backgrounded by a shell -- this
+/// repo has no `.sh` and a detached shell loop would be exactly the untracked process the
+/// substrate is meant to eliminate.
+///
+/// ESCALATION, mirroring /loop-enforcement's tick-budget rule: consecutive ticks that
+/// observe NO commits, NO lifecycle transitions and NO free capacity are no-value ticks.
+/// At the configured threshold the loop prints a STALL line naming the count. It does NOT
+/// dispatch, notify, or mutate a bead -- a monitor that acts is a second conductor, and
+/// this one is deliberately observation-only.
+fn watch(args: &[String]) -> i32 {
+    let interval: u64 = flag(args, "--interval")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(90)
+        .max(MIN_GAP_SECS);
+    let max_ticks: u64 = flag(args, "--max-ticks")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    let stall_after: u32 = flag(args, "--stall-after")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(3);
+    let state_file = flag(args, "--state")
+        .map(PathBuf::from)
+        .unwrap_or_else(state_path);
+    let watch_ledger = flag(args, "--watch-ledger")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| state_file.with_file_name("watch-ledger.jsonl"));
+    if let Some(dir) = watch_ledger.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+
+    // The interval is floored at MIN_GAP_SECS on purpose: a shorter loop would make every
+    // tick's second capture arrive inside the 75s window and report UNPROVEN forever -- a
+    // monitor that can never reach a verdict.
+    println!(
+        "{{\"watch_started\":{},\"interval_secs\":{},\"min_gap_secs\":{},\"stall_after\":{},\"ledger\":\"{}\"}}",
+        now_unix(),
+        interval,
+        MIN_GAP_SECS,
+        stall_after,
+        esc(&watch_ledger.display().to_string())
+    );
+
+    let mut ticks: u64 = 0;
+    let mut no_value: u32 = 0;
+    loop {
+        ticks += 1;
+        let line = match observe_core(args) {
+            Ok(json) => json,
+            Err(code) => {
+                // A refusal is a tick too, and it is recorded. An observe that cannot see
+                // the fleet must never be silently skipped -- that is how a dead loop
+                // looks alive.
+                format!(
+                    "{{\"observed_at\":{},\"observe_refused\":true,\"exit_code\":{}}}",
+                    now_unix(),
+                    code
+                )
+            }
+        };
+
+        // A tick has value if anything moved or any capacity opened.
+        let moved = !line.contains("\"new_total\":0")
+            || !line.contains("\"transitions\":[]")
+            || !line.contains("\"free_capacity\":[]");
+        if moved {
+            no_value = 0;
+        } else {
+            no_value += 1;
+        }
+
+        let record = format!(
+            "{{\"tick\":{},\"no_value_streak\":{},\"observation\":{}}}",
+            ticks, no_value, line
+        );
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&watch_ledger)
+        {
+            let _ = writeln!(f, "{record}");
+        }
+        println!("{record}");
+
+        if no_value >= stall_after {
+            println!(
+                "{{\"stall\":true,\"no_value_streak\":{},\"tick\":{},\"note\":\"{} consecutive ticks with no commit, no transition and no free capacity; a conductor should look, this monitor does not act\"}}",
+                no_value, ticks, no_value
+            );
+        }
+
+        if max_ticks > 0 && ticks >= max_ticks {
+            println!("{{\"watch_complete\":true,\"ticks\":{ticks}}}");
+            return 0;
+        }
+        std::thread::sleep(std::time::Duration::from_secs(interval));
+    }
 }
 
 // ---------------------------------------------------------------------------

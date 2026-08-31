@@ -275,3 +275,61 @@ fn a_missing_binary_is_typed_not_a_panic() {
         Outcome::SpawnFailed { .. }
     ));
 }
+
+#[test]
+fn a_just_finished_pane_is_newly_idle_not_live() {
+    // BEAD -oco, found by the operator, not by this suite. The old code had a
+    // `_ => Liveness::Live` catch-all, so a WORKING -> IDLE transition scored LIVE:
+    // technically true ("it moved") and useless to a dispatcher, which then passed over a
+    // freed worker. This assertion FAILS against that code and passes now.
+    let prev = Observation {
+        pane_id: "%1408".to_owned(),
+        state: PaneState::Working { timer_secs: 120 },
+        hash: 11,
+        at: 1000,
+    };
+    let now = Observation {
+        pane_id: "%1408".to_owned(),
+        state: PaneState::Idle,
+        hash: 22,
+        at: 1000 + MIN_GAP_SECS + 5,
+    };
+    let v = liveness(Some(&prev), &now);
+    assert_eq!(v, Liveness::NewlyIdle, "a just-finished pane is NEWLY_IDLE");
+    assert_ne!(v, Liveness::Live, "the defect: it used to read LIVE");
+
+    // Still not fillable on one idle capture -- visibility must not buy a slot.
+    assert!(!v.is_dispatchable(), "one idle capture is still one capture");
+    // But it MUST be visible as free capacity.
+    assert!(v.is_free_capacity(), "a conductor has to see the freed worker");
+
+    // The next tick confirms it and it becomes dispatchable.
+    let later = Observation {
+        pane_id: "%1408".to_owned(),
+        state: PaneState::Idle,
+        hash: 22,
+        at: now.at + MIN_GAP_SECS + 5,
+    };
+    let confirmed = liveness(Some(&now), &later);
+    assert_eq!(confirmed, Liveness::ConfirmedIdle);
+    assert!(confirmed.is_dispatchable());
+}
+
+#[test]
+fn a_pane_picking_work_up_is_live_and_not_free_capacity() {
+    let prev = Observation {
+        pane_id: "%1".to_owned(),
+        state: PaneState::Idle,
+        hash: 1,
+        at: 1000,
+    };
+    let now = Observation {
+        pane_id: "%1".to_owned(),
+        state: PaneState::Working { timer_secs: 30 },
+        hash: 2,
+        at: 1000 + MIN_GAP_SECS + 5,
+    };
+    let v = liveness(Some(&prev), &now);
+    assert_eq!(v, Liveness::Live);
+    assert!(!v.is_free_capacity(), "a working pane is never free capacity");
+}
