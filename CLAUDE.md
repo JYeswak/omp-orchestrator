@@ -8,6 +8,52 @@ This file adds only what is Claude-specific. Where the two disagree, **AGENTS.md
 
 ---
 
+## THE MISSION — read this before anything else
+
+> **100% coverage: every single OMP surface lives in an asupersync-native, memory-safe,
+> cancel-correct crate baked into our processes — and the whole journey from idea to shipped
+> product is typed, logged, observable, and reachable by one robot command.**
+
+**The crates exist to orchestrate OMP.** Today they orchestrate it by scraping its terminal.
+
+| | measured 2026-08-31, installed v18.0.11 |
+|---|---|
+| OMP publishes | **39** CLI subcommands · **57** type-surface dirs + **14** `.d.ts` (71 entries) · `--mode=rpc` · **42** handler methods |
+| we consume | **zero** — `Command::new("omp")` 0, `mode=rpc` 0, `muxConnect` 0, `omp/` 0 |
+| we spawn instead | `br` 5 · `git` 4 · `tmux` 1 · `cargo` 1 |
+
+Re-derive, never inherit: `find dist/types -maxdepth 1 -type d | wc -l`, `omp --help`. The retired
+`81 JSON-RPC / 17 used` figure is why — it shipped for weeks and **could not be re-derived**.
+
+**Every crate satisfies all eight clauses**, each earned from a measured failure: asupersync-native
+(`&Cx` first, kill the process *group*) · `forbid(unsafe_code)` · cancel-correct (*a timeout is not
+a verdict*; drain **both** pipes) · typed (exhaustive match, new variant = compile error) · logged
+(one typed row per step, count asserted) · observable (every field its **own** predicate plus an
+explicit UNKNOWN) · robot-reachable (doctor/health/repair, versioned JSON envelope, one command
+answers *what is true now*) · **wired** (a caller exists and a conformance test proves it).
+
+**The journey, and the skill that governs each stage:**
+
+```
+plan ──► beads ──► triage ──► dispatch ──► observe ──► verify ──► close
+/planning   /beads-   /beads-bv  /vibing-    /ntm-fleet-  /brenner   typed
+-workflow   workflow             with-ntm    monitor      bot        receipt
+```
+
+**Nothing unexamined stays.** Every crate and every surface carries a declared purpose, its inputs
+and outputs, what must be true for it to be correct, and the negative evidence that would refute it.
+A crate nobody can justify is a finding, not furniture — 12 of 20 currently have no path to
+execution.
+
+Tracked as epic `omp-orchestrator-omp-coverage-mission-ipg`, eleven lifecycle waves.
+
+> **NO-CLAIM.** The zero is measured for *our* crates only — whether NTM speaks OMP beneath
+> `--robot-send` is **unmeasured**. Mapping a surface is not adopting it; *(a) not ours* is a
+> legitimate terminal state. And covering the map is not correctness: `tick-monitor` had two
+> manifest callers and a live process and still starved the fleet for 4.5 hours.
+
+---
+
 ## First turn
 
 1. Read `AGENTS.md` completely. It is the contract, not background.

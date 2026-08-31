@@ -576,3 +576,155 @@ Rows 10–12 are mine. Row 12 is the sharpest: a test that passed **because the 
 not run**. Fixing the test helper turned it RED and it immediately caught a live defect — so the
 lesson is not "write more tests", it is **make each test capable of failing for the reason it
 claims**, then verify it does.
+
+---
+
+## Every dispatch names its OMP surface
+
+**The standing frame: these crates exist to orchestrate OMP.** Today they orchestrate it by
+scraping its terminal. That is the one thing a packet can get wrong without any gate noticing,
+because a screen-scrape compiles, passes its tests, and ships.
+
+Measured 2026-08-31 against the **installed** source —
+`/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent`, v18.0.11, `dist/cli.js` 19M — and
+against every crate's `src` in this repo:
+
+| OMP surface | Exists | We consume |
+|---|:-:|:-:|
+| CLI subcommands in the `omp --help` COMMANDS block | **39** | **0** |
+| type-surface **entries** under `dist/types` — **57** directories + **14** top-level `.d.ts` | **71** | **0** |
+| transports advertised by `--mode=<text\|json\|rpc\|rpc-ui>` | rpc **and** rpc-ui | **0** |
+| `omp/*` RPC methods present in the bundle | **3** | **0** |
+
+The 39: `acp`, `agents`, `auth-broker`, `auth-gateway`, `bench`, `browser-relay`, `cleanse`,
+`commit`, `completions`, `compress`, `config`, `dry-balance`, `gallery`, `gc`, `git`, `grep`,
+`grievances`, `if-bench`, `images`, `install`, `join`, `models`, `plugin`, `ps`, `read`, `render`,
+`say`, `search`, `setup`, `share`, `shell`, `ssh`, `stats`, `tiny-models`, `token`, `ttsr`,
+`update`, `usage`, `worktree`. The 3 methods: `omp/muxConnect`, `omp/muxPing`,
+`omp/muxRestartServer`.
+
+**The 71 is 57 directories plus 14 top-level declaration files, and the distinction was a
+correction, not a rounding.** Print the commands beside the number:
+
+```bash
+cd /Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent
+find dist/types -maxdepth 1 -mindepth 1 -type d       | wc -l   # 57
+find dist/types -maxdepth 1 -mindepth 1 -name '*.d.ts' | wc -l   # 14
+```
+
+> **How it was caught, and it is the session's own class again.** The orchestrator published
+> **71 directories**; a worker pane independently measured **57** and the two disagreed. Neither
+> figure was fabricated — 71 is the true entry count and 57 is the true directory count. **The
+> count was real and the noun attached to it was wrong**, which is `path\s*=\s*"` matching
+> `[[bin]]` targets and `lsof` counting both loopback endpoints, one more time. Two measurements
+> of the same thing disagreeing is the only reason the label got checked.
+
+The **directories** this project would have consumed first: `jsonrpc`, `tools`, `slash-commands`,
+`commands`, `session`, `task`, `goals`, `plan-mode`, `modes`, `subprocess`, `exec`, `dap`, `debug`,
+`capability`, `registry`, `extensibility`, `memories`, `mnemopi`, `memory-backend`, `irc`,
+`collab`, `live`, `eval`, `hindsight`, `autolearn`, `autoresearch`, `security`, `secrets`. Three
+names that belong on the **file** side of the split, caught while writing this paragraph:
+`telemetry-export.d.ts`, `sdk.d.ts`, `cli-commands.d.ts` — a first draft of this list called all
+31 of them directories, so the mislabel reproduced once inside its own correction.
+
+**The zero is four greps, and it is re-derivable in under a second:**
+
+```bash
+cd /Users/josh/Developer/omp-orchestrator
+grep -rlF 'Command::new("omp")' crates/*/src | wc -l   # 0
+grep -rlF 'mode=rpc'            crates/*/src | wc -l   # 0
+grep -rlF 'muxConnect'          crates/*/src | wc -l   # 0
+grep -rlF '"omp/'               crates/*/src | wc -l   # 0
+```
+
+What the same method says we **do** spawn: `br` 5 sites, `git` 4, `tmux` 1, `cargo` 1. The
+orchestrator of a 71-entry typed surface talks to it through `tmux`.
+
+### The dispatch requirement
+
+**Every packet dispatched from pane 1 names the OMP surface its work maps to, or states that it
+maps to none and why.** One line in the packet, not a design review:
+
+```
+OMP-SURFACE: none — repo-local gate, no agent interaction.
+OMP-SURFACE: scraped — would be a session/state read; we parse a braille spinner instead.
+OMP-SURFACE: unused — `dist/types/session` exists; we do not call it.
+```
+
+A packet that cannot answer that question is dispatching work whose relationship to the mission is
+unexamined. The answer is **often "none"**, and that is exactly when writing it down earns its
+keep: "none" is either a correct scope boundary or an undiscovered reimplementation, and the packet
+is the only place those two get told apart. Deciding it after the crate exists means deciding it
+against sunk code.
+
+### Worked examples — real beads from this wave
+
+| Bead / crate | Surface it maps to | What we built instead | Category |
+|---|---|---|:-:|
+| `-kxe` observe leg, `crates/tick-monitor` | a session/state read — `dist/types/session`, `dist/types/modes` | `classify()` matches a **braille spinner** and an elapsed timer; no spinner ⇒ `PaneState::Unproven` | **(b)** |
+| `-kxe` receiver proof, `crates/receiver-receipt` | a delivery response on the send — `dist/types/jsonrpc` | `assess_receiver_receipt()` diffs a **timer reset plus a spinner-stripped content hash** across two captures | **(b)** |
+| `-4ak`, `crates/no-shell-gate` | **none** | a repo gate over our own tree | **(a)** |
+
+**`tick-monitor` is category (b) and the cost is visible in its own source.** `classify` reads the
+last status line for a braille frame; `stable_hash` then strips braille and `π` precisely because a
+hash over the raw frame changes on every spinner advance and reports a dead pane BUSY forever. That
+comment is a correct fix to a problem a state RPC would not have. The same function scores
+`Unproven` on a dialog-covered pane — the entry above under *A dialog-covered status line reads as
+a dead pane* — which is a rendering artifact standing in for a state field.
+
+**`receiver-receipt` is category (b) and its nine passing legs are proof of the substitute, not of
+delivery.** `idle_to_working_with_large_timer_is_indeterminate`,
+`working_to_working_reset_without_content_change_is_no_receipt`, `dialog_is_indeterminate` — each
+leg exists because the transport returns no acknowledgement, so receipt has to be *inferred* from
+animation. A typed response makes all nine unnecessary, and makes `Indeterminate` unreachable.
+
+**`no-shell-gate` is category (a) and correctly so.** It gates our own repo for `.sh`/`.py`
+re-entry. It has no counterpart in OMP's surface and needs none, and recording "none" for it is
+what makes the two (b) rows above legible as findings rather than as ordinary work.
+
+### The classification every dispatch uses
+
+| | Category | Meaning |
+|:-:|---|---|
+| **(a)** | not OMP's concern | repo-local. Gates, lints, our own tracker. Nothing upstream to call. |
+| **(b)** | **reimplemented by scraping** | an OMP surface exists (or would) and we rebuilt it out of terminal bytes. |
+| **(c)** | unused capability | the surface exists, is reachable, and no crate calls it. |
+
+**The first pass over the unconsumed surface classifies nine, measured independently by a worker
+pane and by the orchestrator and agreeing on both sets.** Four land in **(b)** — pane state,
+dispatch, session, health check — and each of those four has an OMP RPC or CLI alternative that
+**exists today**, which is what makes them (b) rather than (a). Five land in **(c)**:
+`omp/muxConnect`, `omp/muxPing`, `omp/muxRestartServer`, `goals`, `collab`.
+
+**(b) is the one that changes the architecture.** (a) is a boundary; (c) is a backlog. (b) means a
+crate's whole design — its inputs, its failure modes, its test suite — is shaped by a transport we
+chose not to use, and every defect measured in this wave is downstream of exactly that:
+
+- pane state comes from a **braille spinner regex**, because there is no state read to call;
+- "receiver receipt" is a **timer reset plus a spinner-stripped content hash**, because the send
+  returns no delivery response;
+- two codex panes read `<no marker>` right now because a tool-call box border renders **after** the
+  status line — an artifact that cannot exist over a typed protocol;
+- `ntm --robot-send` refuses codex panes with *"cod composer not visible"* (`cp-nq2s9`). That is a
+  **terminal-inspection guard**, not a protocol error: the transport is asking whether a text box
+  is on screen;
+- `cp-z42vu` recorded a send returning `success:[4]` while the packet never arrived. The inverse
+  fired today in the pending-dispatch marker for `omp-orchestrator-undrained-pipe-lint-w4j` — the
+  packet was visible in `%1413` and the post-send observation was unavailable. **Both directions
+  are the signature of an unacknowledged transport**, and neither is a bug in the classifier that
+  reported them.
+
+> **NO-CLAIM:** the zero is measured for **our crates only** — the four greps above run against
+> `crates/*/src` in this repo and nothing else. **NTM may itself speak an OMP protocol beneath
+> `--robot-send`; that is UNMEASURED.** The evidence leans against it — a transport that refuses a
+> pane for *"cod composer not visible"* is inspecting a screen, and a receipt we can only obtain by
+> diffing timers is a transport that returned nothing to diff — but **leaning is not measuring**.
+> Do not write "NTM does not use OMP" anywhere until someone greps NTM's own source and says which
+> revision they read.
+
+> **NO-CLAIM:** **mapping a surface is not adopting it.** Some of the scraping here may be correct
+> precisely because no alternative exists — a third-party pane running someone else's agent offers
+> a terminal and nothing else, and for those panes a spinner is not a workaround, it is the only
+> signal there is. This rule makes the choice **visible at dispatch time**; it does not license a
+> rewrite, and a packet answering `OMP-SURFACE: scraped` is a finding to record, not a task to
+> reassign.

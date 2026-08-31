@@ -110,6 +110,68 @@ adjudicated — and adjudication reliably produces "no work to be done" instead 
 P0 bead at the head of the ready queue had **no ACCEPTANCE section at all**, and two agents in a
 row triaged it and idled rather than shipping.
 
+## How we reach OMP today — by scraping its terminal
+
+These crates exist to orchestrate OMP. Measured on 2026-08-31 against the installed
+`@oh-my-pi/pi-coding-agent` v18.0.11 (`~/.local/lib/node_modules/@oh-my-pi/pi-coding-agent`,
+`dist/cli.js` is 19M), the surface OMP publishes and the surface we consume do not overlap at all:
+
+| OMP publishes | We consume |
+|---|---|
+| **39 CLI subcommands** in the `omp --help` COMMANDS block — `acp`, `agents`, `auth-gateway`, `models`, `plugin`, `ps`, `read`, `search`, `share`, `shell`, `ssh`, `worktree`, … | nothing |
+| **57 type-surface directories plus 14 top-level declaration files** under `dist/types`, 71 entries in total — `jsonrpc`, `tools`, `slash-commands`, `commands`, `session`, `task`, `goals`, `plan-mode`, `modes`, `subprocess`, `exec`, `dap`, `debug`, `capability`, `registry`, `extensibility`, `memories`, `irc`, `collab`, `live`, `telemetry-export`, `eval`, `security`, `sdk`, … | nothing |
+| **`--mode=<text\|json\|rpc\|rpc-ui>`** as a documented top-level flag, so an RPC transport already exists | nothing |
+| **3 `omp/*` methods** in the bundle: `omp/muxConnect`, `omp/muxPing`, `omp/muxRestartServer` | nothing |
+
+Counted precisely, because the first count was wrong:
+
+```
+find dist/types -maxdepth 1 -mindepth 1 -type d        | wc -l   ->  57
+find dist/types -maxdepth 1 -mindepth 1 -name '*.d.ts' | wc -l   ->  14
+```
+
+That number was first published as "71 directories" and a worker pane independently measured 57.
+Two measurements of the same thing disagreed, and the reconciliation was that the first had counted
+*entries* and called them *directories*. Neither count was fabricated; the **noun attached to it**
+was. That is the same class of defect as every other confident-wrong figure in this file — the
+arithmetic was never the problem.
+
+Four greps across every crate's `src`, all zero: `Command::new("omp")` → **0 files**. `mode=rpc` →
+**0**. `muxConnect` → **0**. `omp/` → **0**. What the crates actually spawn is `br` at 5 sites,
+`git` at 4, `tmux` at 1, `cargo` at 1.
+
+The orchestration channel is a terminal, and every classifier defect measured today is downstream
+of that one fact:
+
+- **Pane state comes from a braille spinner regex**, because there is no state RPC to ask.
+- **A "receiver receipt" is a timer reset plus a spinner-stripped content hash**, because a
+  `send-keys` has no delivery response to read.
+- **Two codex panes read `<no marker>` today** because a tool-call box border renders *after* the
+  status line. That artifact cannot exist over a typed protocol — it exists only because we are
+  parsing a rendering.
+- **`ntm --robot-send` refuses codex panes with "cod composer not visible"** (`cp-nq2s9`). That is
+  a terminal-inspection guard, not a protocol error: nothing about the bead was wrong, the screen
+  was.
+- **Both polarities of transport failure have fired.** `cp-z42vu`: a send returned `success:[4]`
+  while the packet never arrived. The inverse fired today in the pending-dispatch marker — the
+  packet was visible, the confirming observation was not. That pair is the signature of one
+  unacknowledged transport, not of two unrelated bugs.
+
+**NO-CLAIM.** "No crate calls OMP" is measured for *our* crates only. NTM may itself speak an OMP
+protocol beneath `--robot-send`; that is **unmeasured**. The evidence leans against it — a protocol
+would not phrase a refusal as composer visibility, and would not need a timer reset to stand in for
+a receipt — but leaning is not measuring, and this stays a no-claim until someone reads NTM's send
+path.
+
+Of the surfaces we do not consume, four are **reimplemented by scraping** — pane state, dispatch,
+session, health check — and each has an OMP RPC or CLI alternative that exists today. Five are
+**should-use**: `omp/muxConnect`, `omp/muxPing`, `omp/muxRestartServer`, `goals`, `collab`.
+
+**NO-CLAIM.** Mapping a surface is not adopting it. Some scraping may be correct precisely because
+no alternative exists for third-party panes OMP does not own. The gap between 57 published
+type-surface directories and the zero we consume is this project's central open question; stating
+it makes the choice visible, it does not force a rewrite.
+
 ## Hard gates (they fail the build, not a report)
 
 1. **No `.sh`, no `.py`.** A Rust gate walks `git ls-files` and refuses either extension. It lands
@@ -122,11 +184,25 @@ row triaged it and idled rather than shipping.
    a mutation that turns the leg RED.
 4. **Anti-vacuity.** An empty scan set is an **error**, never a pass. A deliverable that was never
    checked reports identically to one that passed.
+5. **Every crate declares which OMP surface it maps to.** A crate that orchestrates OMP without
+   naming the subcommand, type surface, or RPC method it stands in for is scraping by default, and
+   the census flags it rather than letting the omission read as a design. Filed as
+   `omp-orchestrator-omp-surface-map-41b` and **not yet built** — a stated gate, not yet one with a
+   fires-on-known-bad leg.
 
 ## Status
 
-Resident deployment is active on the Studio: launchd owns `omp-orchestrator`, and the installed
-binary reports its build identity with `--version`. The live heartbeat and supervisor logs are under
-`~/.local/state/flywheel/`. The current deployment carries a pending-dispatch fence after one packet
-was visible in `%1413` but the post-send observation was unavailable; this is intentionally not claimed
-as an end-to-end receiver proof. The repository remains a proving ground, not a universal deployment.
+Two things are true at once.
+
+**The resident supervisor is deployed and launchd-owned.** launchd owns `omp-orchestrator` on the
+Studio, the installed binary reports its build identity with `--version`, and the live heartbeat and
+supervisor logs are under `~/.local/state/flywheel/`.
+
+**The binary does not speak OMP's protocol.** It types into panes and reads status lines. Zero of
+the 39 subcommands, 57 type-surface directories, and `--mode=rpc` transport OMP publishes are
+called from any crate — see *How we reach OMP today*. Every pane verdict this binary emits is
+therefore a claim about a rendering, not a claim from OMP.
+
+The current deployment carries a pending-dispatch fence after one packet was visible in `%1413` but
+the post-send observation was unavailable; this is intentionally not claimed as an end-to-end
+receiver proof. The repository remains a proving ground, not a universal deployment.

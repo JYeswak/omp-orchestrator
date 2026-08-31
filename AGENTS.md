@@ -128,15 +128,130 @@ still a silent pane; this rule only guarantees the follow-up stage has something
 `open`+unassigned bead is not by itself evidence of a skipped claim — it may simply be unstarted.
 The signal is *dispatched* and unclaimed, which means the dispatch ledger, not the bead, is the
 authority that closes this hole.
+
+---
+
+## The fifth rule: the crates exist to orchestrate OMP, and today they scrape it
+
+Everything in this repo is built to drive OMP. Measured 2026-08-31 against the **installed** source
+at `/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent` (v18.0.11, `dist/cli.js` 19 MB),
+the crates consume **none of it**. Not a thin subset, not a legacy subset — zero. Every `dist/…` path
+below is relative to that install root.
+
+**Two columns, same day. Every number has the command that produces it:**
+
+| surface that exists | command that counts it | measured | we consume |
+|---|---|---|---|
+| CLI subcommands | `omp --help`, COMMANDS block | **39** | **0** |
+| type-surface directories under `dist/types` | `find dist/types -mindepth 1 -maxdepth 1 -type d \| wc -l` | **57** | **0** |
+| top-level declaration files beside them | `find dist/types -mindepth 1 -maxdepth 1 -name '*.d.ts' \| wc -l` | **14** | **0** |
+| an RPC transport ships — `--mode=<text\|json\|rpc\|rpc-ui>` is a documented top-level flag | `omp --help \| grep -- --mode` | **1 flag, 4 modes** | **0** |
+| `omp/*` methods in the bundle | `grep -oE '"omp/[A-Za-z]+"' dist/cli.js \| sort -u` | **3** — `omp/muxConnect`, `omp/muxPing`, `omp/muxRestartServer` | **0** |
+
+57 + 14 = **71 entries** under `dist/types`. Say it that way. An earlier pass published "71
+directories"; a worker independently measured 57 and the two disagreed. The reconciliation was that
+entries had been counted and called directories. **Neither number was fabricated — the noun attached
+to the count was wrong**, which is the same class as every other confident-wrong figure here. The
+directories that *are* our lifecycle are named in that tree: `jsonrpc`, `tools`, `slash-commands`,
+`commands`, `session`, `task`, `goals`, `plan-mode`, `modes`, `subprocess`, `exec`, `dap`, `debug`,
+`capability`, `registry`, `extensibility`, `memories`, `mnemopi`, `memory-backend`, `irc`, `collab`,
+`live`, `eval`, `hindsight`, `autolearn`, `autoresearch`, `security`, `secrets`.
+
+**The zero is four greps over `crates/*/src/*`, each printed with the count it returned:**
+
+~~~bash
+cd /Users/josh/Developer/omp-orchestrator
+for p in 'Command::new("omp")' 'mode=rpc' 'muxConnect' 'omp/'; do
+  printf '%s -> %s files\n' "$p" "$(git grep --no-index -lF "$p" -- 'crates/*/src/*' | wc -l | tr -d ' ')"
+done
+~~~
+
+Measured output — `Command::new("omp")` → **0 files**; `mode=rpc` → **0**; `muxConnect` → **0**;
+`omp/` → **0**.
+
+**Positive control, per the second rule.** The identical command shape with a pattern we know is
+present returns nonzero: `Command::new("br")` → **3 files**. A zero from a pattern that can never
+match is not evidence of absence. `--no-index` is load-bearing, not cosmetic:
+`crates/no-shell-gate/src/bin/pre-commit-gate.rs` is untracked, so tracked-only `git grep` reports
+**3** `git` spawn sites where the working tree has **4**.
+
+What the crates *do* spawn, same census:
+
+~~~bash
+git grep --no-index -hoE 'Command::new\("[a-z_-]+"\)' -- 'crates/*/src/*' | sort | uniq -c | sort -rn
+~~~
+
+```
+   5 Command::new("br")
+   4 Command::new("git")
+   1 Command::new("tmux")
+   1 Command::new("cargo")
+```
+
+`br`, `git`, `tmux`, `cargo`. **No `omp`.** We orchestrate OMP by reading the terminal it drew.
+
+**Every classifier defect measured today is downstream of this one fact** — not correlated with it,
+caused by it. Each row names what we do instead of a protocol, and why the protocol makes the defect
+unconstructible:
+
+| defect, measured 2026-08-31 | what we do instead | why a protocol removes it |
+|---|---|---|
+| pane state | a **braille-spinner regex** over `capture-pane` | a state method exists; a spinner is a *rendering*, and we are parsing paint |
+| "receiver receipt" | **timer reset + spinner-stripped content hash** ≥75s apart | a typed send returns a delivery response; a hash of glyphs is a guess about one |
+| two codex panes read `<no marker>` | last-status-line scan, defeated by a **tool-call box border drawn AFTER the status line** | an artifact of *draw order*. Draw order does not exist over a typed protocol |
+| `ntm --robot-send` refuses codex panes with *"cod composer not visible"* (cp-nq2s9) | a **terminal-inspection guard** | a protocol refusal names a *state*; this one names a **visibility**, which is a fact about pixels |
+| cp-z42vu: a send returned `success:[4]` while the packet never arrived — and the **inverse** fired today in the pending-dispatch marker | fire-and-hope | both directions are the signature of an **unacknowledged transport**. Ack removes both, not one |
+
+**Of the surface we do not consume, the split that matters** (measured independently and agreeing):
+
+- **(b) reimplemented by scraping — 4:** pane state, dispatch, session, health check. Each has an OMP
+  RPC or CLI alternative *that exists today*. These are not gaps; they are rewrites of shipped
+  surface, done through a terminal.
+- **(c) should use — 5:** `omp/muxConnect`, `omp/muxPing`, `omp/muxRestartServer`, `goals`, `collab`.
+  Nothing in `crates/` mentions any of the five.
+
+`omp-orchestrator-omp-surface-map-41b` owns turning this into the per-crate table.
+
+**NO-CLAIM.** "No crate calls OMP" is measured **for our crates only** — the four greps above scan
+`crates/*/src/*` in this repo and nothing else. **NTM may itself speak an OMP protocol beneath
+`--robot-send`; that is UNMEASURED.** The evidence leans against it — a protocol-level refusal would
+not be phrased as *composer visibility*, and a protocol-level receipt would not be reconstructed from
+a timer reset — but leaning is not measuring. Until someone reads NTM's send path, the honest claim
+is about the boundary we scanned.
+
+**NO-CLAIM, second.** **Mapping a surface is not adopting it.** Some of the scraping is likely
+*correct*: a third-party pane (codex, a bare shell) has no OMP RPC to answer, so terminal inspection
+is the only channel that exists for it. This rule does not say "replace the scraper." It says the
+choice must be **visible** — for each scraped surface, either the typed alternative is named and not
+used for a stated reason, or it is used. Silence about a 71-entry surface we touch zero times is the
+failure, not the scraping.
+
 ---
 
 ## OMP lifecycles — what they are and where to find them
 
 OMP (Oh My Pi) v18.0.11 — node CLI "@oh-my-pi/pi-coding-agent", repo "can1357/oh-my-pi". 29 built-in
-tools plus 3 hidden (yield, goal, think), 136 slash commands, ~40 CLI subcommands.
-The installed RPC handler exposes **42 inbound JSON-RPC command methods**. Static production source
-reachability in the control-plane adapter is **5/42**; the old "17 of 81" claim is not reproduced by
-the installed binary and is replaced below with a derivation command and its output.
+tools plus 3 hidden (yield, goal, think), 136 slash commands, and **39 CLI subcommands** — counted,
+not estimated, from the COMMANDS block of `omp --help`:
+
+~~~bash
+omp --help | awk '/^COMMANDS/{f=1;next} f&&/^[[:space:]]*$/{exit} f&&/^  [a-z]/{c++} END{print c}'
+~~~
+
+Measured output: `39`.
+
+The installed RPC handler exposes **42 inbound JSON-RPC command methods**; the derivation command and
+its output are below. Static production reachability in the **control-plane** adapter — a *different*
+repo — is **5/42**. In **this** repo it is **0/42**, and that zero is the fifth rule.
+
+**Retired figure: "81 JSON-RPC methods, and we currently use 17 of the 81."** That pair was
+**inherited**, ships **no command that produces it**, and **could not be re-derived** on 2026-08-31
+against the installed binary. The reproducible figures are the **42** handler methods below, the
+**39** subcommands above, **3** `omp/*`-prefixed methods in the bundle (`omp/muxConnect`,
+`omp/muxPing`, `omp/muxRestartServer`), and **57 directories + 14 declaration files** under
+`dist/types`. **81 and 17 are retired — cite neither.** And do not read their retirement as a
+*smaller* surface: what is measurable is larger than 81 and we consume none of it.
+`omp-orchestrator-omp-surface-map-41b` owns producing the real per-crate table.
 
 ### Installed RPC command census (measured 2026-08-31)
 
