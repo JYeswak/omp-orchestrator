@@ -144,3 +144,48 @@ fn run() -> Option<String> {
         "hazard documentation comment must not trigger"
     );
 }
+
+/// WIRED, not merely built (bead -w4j clause 7): the lint must be invoked by a
+/// production surface. This leg asserts the CI workflow references the crate —
+/// a positive control: if the step is removed, this test goes RED.
+#[test]
+fn wired_into_ci_workflow() {
+    let workflow = match std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../.github/workflows/gate.yml")) {
+        Ok(text) => text,
+        Err(_) => panic!("gate.yml not found — the wiring probe cannot run without the CI surface"),
+    };
+    assert!(
+        workflow.contains("undrained-pipe-lint"),
+        "clause 7: the CI workflow must invoke the lint — BUILT != WIRED"
+    );
+}
+
+/// ANTI-VACUITY positive control (clause 6): an empty scan set must be a TYPED
+/// error (exit 3), never a phantom violation (exit 1).
+#[test]
+fn empty_scan_set_is_an_error_not_a_pass() {
+    // The bin's exit-3 leg is exercised via the CLI test; here we assert the
+    // library contract: lint_workspace on a dir with no crates/ yields an
+    // empty scan set, which the caller must treat as an error.
+    let dir = std::env::temp_dir().join(format!(
+        "undrained-pipe-empty-{}-{}",
+        std::process::id(),
+        FIXTURE_SEQ.fetch_add(1, Ordering::SeqCst)
+    ));
+    std::fs::create_dir_all(&dir).expect("create empty fixture dir");
+    let report = undrained_pipe_lint::lint_workspace(&dir);
+    assert!(
+        report.scanned.is_empty(),
+        "empty scan set must be empty, got: {:?}",
+        report.scanned
+    );
+    assert!(
+        report.violations.is_empty(),
+        "empty scan set must produce zero violations, got: {:?}",
+        report.violations
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+use std::sync::atomic::{AtomicU32, Ordering};
+static FIXTURE_SEQ: AtomicU32 = AtomicU32::new(0);

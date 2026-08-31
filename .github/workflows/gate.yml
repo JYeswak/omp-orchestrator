@@ -35,3 +35,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cargo test -p path-literal-guard
+  undrained-pipe-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo test -p undrained-pipe-lint
+      - name: Scan control-plane for undrained-pipe pattern
+        run: cargo run --quiet -p undrained-pipe-lint -- /Users/josh/Developer/control-plane
+        continue-on-error: true

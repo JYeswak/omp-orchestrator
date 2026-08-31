@@ -32,8 +32,10 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Violation {
     pub file: String,
-    /// Line of the FIRST piped-stdio call in the construction.
+    /// Line of the stdout Stdio::piped() call.
     pub piped_line: usize,
+    /// Line of the stderr Stdio::piped() call.
+    pub stderr_piped_line: usize,
     /// Line of the try_wait() call that polls without draining.
     pub try_wait_line: usize,
 }
@@ -42,9 +44,8 @@ impl fmt::Display for Violation {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
-            "{}: piped_stdio at line {}, try_wait poll at line {} — a child filling \
-             either 64 KiB pipe buffer blocks forever while the poll waits for exit",
-            self.file, self.piped_line, self.try_wait_line
+            "{}: stdout piped at line {}, stderr piped at line {}, try_wait poll at line {} — a child filling either 64 KiB pipe buffer blocks forever",
+            self.file, self.piped_line, self.stderr_piped_line, self.try_wait_line
         )
     }
 }
@@ -62,78 +63,188 @@ impl LintReport {
     }
 }
 
-/// Strip `//` line comments from a single line, respecting string literals.
-/// This is the minimum viable comment handling: a scan that does not strip
-/// comments classifies the hazard-documentation comment as a violation.
+/// Strip a line comment while respecting escaped quotes.
 pub fn strip_line_comment(line: &str) -> &str {
-    let mut in_str = false;
+    let mut in_string = false;
+    let mut escaped = false;
     let bytes = line.as_bytes();
-    for i in 0..bytes.len() {
-        match bytes[i] {
-            b'"' => in_str = !in_str,
-            b'\\' if in_str => {} // skip escaped char (advance handled by loop)
-            b'/' if !in_str && i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
-                return &line[..i];
+    for index in 0..bytes.len() {
+        let byte = bytes[index];
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                in_string = false;
             }
-            _ => {}
+        } else if byte == b'"' {
+            in_string = true;
+        } else if byte == b'/' && bytes.get(index + 1) == Some(&b'/') {
+            return &line[..index];
         }
     }
     line
 }
 
-/// Find undrained-pipe violations in a single .rs source text.
-///
-/// Returns (piped_first_line, try_wait_line) pairs for each construction that:
-/// 1. Sets BOTH stdout and stderr to Stdio::piped()
-/// 2. Polls with try_wait() before any drain mechanism
-/// 3. Has no wait_with_output() or thread::spawn between the construction and the poll
-pub fn find_violations_in_source(source: &str) -> Vec<(usize, usize)> {
-    let lines: Vec<&str> = source.lines().collect();
-    let stripped: Vec<&str> = lines.iter().map(|l| strip_line_comment(l)).collect();
-
-    let piped: Vec<usize> = stripped
-        .iter()
-        .enumerate()
-        .filter(|(_, l)| l.contains("Stdio::piped()"))
-        .map(|(i, _)| i)
-        .collect();
-
-    let mut violations = Vec::new();
-    let mut i = 0;
-    while i + 1 < piped.len() {
-        let start = piped[i];
-        let end = piped[i + 1];
-        if end - start > 20 {
-            i += 1;
+/// Mask comments and ordinary quoted strings without changing line count.
+fn code_line(line: &str) -> String {
+    let mut output = String::with_capacity(line.len());
+    let mut in_string = false;
+    let mut escaped = false;
+    let bytes = line.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if in_string {
+            output.push(' ');
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                in_string = false;
+            }
+            index += 1;
             continue;
         }
-        // Both pipes piped in this construction. Scan forward for the wait strategy.
-        let mut strategy = "";
-        let mut strategy_line = None;
-        for j in start..lines.len().min(start + 80) {
-            let code = strip_line_comment(lines[j]);
-            if code.contains("try_wait") {
-                strategy = "TRY_WAIT";
-                strategy_line = Some(j + 1);
-                break;
-            }
-            if code.contains("wait_with_output") {
-                strategy = "DRAINING";
-                break;
-            }
-            if code.contains("thread::spawn") && j > start {
-                strategy = "DRAINING";
-                break;
-            }
+        if byte == b'"' {
+            in_string = true;
+            output.push(' ');
+            index += 1;
+            continue;
         }
-        if strategy == "TRY_WAIT" {
-            if let Some(tw) = strategy_line {
-                violations.push((start + 1, tw));
-            }
+        if byte == b'/' && bytes.get(index + 1) == Some(&b'/') {
+            output.extend(std::iter::repeat(' ').take(bytes.len() - index));
+            break;
         }
-        i += 2;
+        output.push(byte as char);
+        index += 1;
     }
+    output
+}
+
+#[derive(Debug, Clone)]
+struct FunctionRegion {
+    name: String,
+    start: usize,
+    end: usize,
+}
+
+fn function_name(line: &str) -> Option<String> {
+    let position = line.find("fn ")? + 3;
+    let name: String = line[position..]
+        .chars()
+        .take_while(|character| character.is_ascii_alphanumeric() || *character == '_')
+        .collect();
+    (!name.is_empty()).then_some(name)
+}
+
+fn brace_delta(line: &str) -> i32 {
+    line.bytes().fold(0, |delta, byte| match byte {
+        b'{' => delta + 1,
+        b'}' => delta - 1,
+        _ => delta,
+    })
+}
+
+fn function_regions(code: &[String]) -> Vec<FunctionRegion> {
+    let mut regions = Vec::new();
+    for (start, line) in code.iter().enumerate() {
+        let Some(name) = function_name(line) else { continue };
+        let mut depth = 0;
+        let mut opened = false;
+        let mut end = start;
+        for (index, body) in code.iter().enumerate().skip(start) {
+            depth += brace_delta(body);
+            opened |= body.contains('{');
+            if opened && depth <= 0 {
+                end = index;
+                break;
+            }
+        }
+        if opened {
+            regions.push(FunctionRegion { name, start, end });
+        }
+    }
+    regions
+}
+
+fn piped_pair(code: &[String], region: &FunctionRegion) -> Option<(usize, usize)> {
+    let mut stdout = None;
+    let mut stderr = None;
+    for index in region.start..=region.end {
+        let line = &code[index];
+        if line.contains("stdout") && line.contains("Stdio::piped()") {
+            stdout = Some(index);
+        }
+        if line.contains("stderr") && line.contains("Stdio::piped()") {
+            stderr = Some(index);
+        }
+    }
+    match (stdout, stderr) {
+        (Some(out), Some(err)) if out.abs_diff(err) <= 20 => Some((out, err)),
+        _ => None,
+    }
+}
+
+fn try_wait_line(code: &[String], region: &FunctionRegion) -> Option<usize> {
+    (region.start..=region.end).find(|index| code[*index].contains("try_wait("))
+}
+
+fn drains_before_poll(code: &[String], start: usize, poll: usize) -> bool {
+    let mut stdout_taken = false;
+    let mut stderr_taken = false;
+    let mut read_to_end = 0;
+    let mut spawned_reader = false;
+    for line in code.iter().take(poll + 1).skip(start) {
+        stdout_taken |= line.contains("stdout.take");
+        stderr_taken |= line.contains("stderr.take");
+        read_to_end += usize::from(line.contains("read_to_end"));
+        spawned_reader |= line.contains("thread::spawn");
+        if line.contains("wait_with_output(") || line.contains("output_async(") {
+            return true;
+        }
+    }
+    stdout_taken && stderr_taken && read_to_end >= 2 && spawned_reader
+}
+
+/// Detailed violations: (stdout-piped line, stderr-piped line, try_wait line).
+pub fn find_detailed_violations_in_source(source: &str) -> Vec<(usize, usize, usize)> {
+    let code: Vec<String> = source.lines().map(code_line).collect();
+    let regions = function_regions(&code);
+    let mut violations = Vec::new();
+    for region in &regions {
+        let Some((stdout_line, stderr_line)) = piped_pair(&code, region) else { continue };
+        if let Some(poll) = try_wait_line(&code, region) {
+            if !drains_before_poll(&code, stdout_line.min(stderr_line), poll) {
+                violations.push((stdout_line + 1, stderr_line + 1, poll + 1));
+            }
+            continue;
+        }
+        let body = code[region.start..=region.end].join("\n");
+        for callee in &regions {
+            if callee.name == region.name || !body.contains(&format!("{}(", callee.name)) {
+                continue;
+            }
+            if let Some(poll) = try_wait_line(&code, callee) {
+                if !drains_before_poll(&code, callee.start, poll) {
+                    violations.push((stdout_line + 1, stderr_line + 1, poll + 1));
+                }
+            }
+        }
+    }
+    violations.sort_unstable();
+    violations.dedup();
     violations
+}
+
+/// Find violations while preserving the original two-field test helper API.
+pub fn find_violations_in_source(source: &str) -> Vec<(usize, usize)> {
+    find_detailed_violations_in_source(source)
+        .into_iter()
+        .map(|(stdout, _, poll)| (stdout, poll))
+        .collect()
 }
 
 /// Scan a directory tree for `.rs` files and lint each one.
@@ -188,13 +299,18 @@ pub fn lint_workspace(root: &Path) -> LintReport {
     let entries = match fs::read_dir(&crates_dir) {
         Ok(entries) => entries,
         Err(error) => {
+            // ANTI-VACUITY FIX (bead -w4j clause 6): the old code pushed a
+            // sentinel INTO the scan set and a zero-line Violation — the CLI
+            // then printed a phantom VIOLATION at exit 1 instead of the typed
+            // empty-scan error at exit 3. The fix: return an EMPTY scan set so
+            // the caller's empty-scan-set check fires with the typed exit code.
+            eprintln!(
+                "UNRAINED-PIPE-LINT ERROR: cannot read {}: {error}",
+                crates_dir.display()
+            );
             return LintReport {
-                scanned: vec![format!("ERROR: cannot read {}: {error}", crates_dir.display())],
-                violations: vec![Violation {
-                    file: String::new(),
-                    piped_line: 0,
-                    try_wait_line: 0,
-                }],
+                scanned: vec![],
+                violations: vec![],
             };
         }
     };
