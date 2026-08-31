@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd supervision for omp-orchestrator-kxe (bead -kxe, JOSH-APPROVED architecture A).
+
+  KeepAlive + SuccessfulExit=false + Crashed=true: launchd restarts the supervisor on
+  ANY exit (clean or crashed). ThrottleInterval=30 prevents a crash loop from pinning
+  the CPU while still restarting within 30 seconds.
+
+  EnvironmentVariables: arc-keepalive's nine-day blind spot was caused by cron/launchd
+  supplying NO environment, so tmux attached to its private default socket and the
+  locale dropped to ASCII. The plist carries the contract the deleted shell scripts
+  used to export — explicitly, not inherited.
+
+  ProgramArguments: --repo and --session are EXPLICIT and REQUIRED. The binary must
+  refuse to start without them (refill-idle-panes silently supervised the wrong repo
+  for hours by defaulting to control-plane).
+
+  The binary does not exist yet (build gated on cp-oakbv). The plist is the artifact;
+  `launchctl load` is gated on Joshua.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.omp.orchestrator</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/josh/Developer/omp-orchestrator/target/release/omp-orchestrator</string>
+        <string>--repo</string>
+        <string>/Users/josh/Developer/omp-orchestrator</string>
+        <string>--session</string>
+        <string>omp-orchestrator</string>
+        <string>--heartbeat-interval</string>
+        <string>60</string>
+    </array>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+        <key>Crashed</key>
+        <true/>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/josh/.local/state/omp-orchestrator/supervisor.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/josh/.local/state/omp-orchestrator/supervisor.err</string>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/josh/Developer/omp-orchestrator</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/Users/josh/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOME</key>
+        <string>/Users/josh</string>
+        <key>TMUX_TMPDIR</key>
+        <string>/Users/josh/.tmux-sockets</string>
+        <key>LC_ALL</key>
+        <string>C.UTF-8</string>
+        <key>OMP_ORCHESTRATOR_HEARTBEAT_PATH</key>
+        <string>/Users/josh/.local/state/omp-orchestrator/heartbeat.json</string>
+    </dict>
+</dict>
+</plist>
