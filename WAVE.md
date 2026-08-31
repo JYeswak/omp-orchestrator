@@ -146,3 +146,45 @@ will file into control-plane's tracker — which is exactly what happened once a
 - **`cargo test` emits `error: unclosed table, expected ]`** pointing at asupersync's
   `tests/fixtures/migration_readiness_planner/malformed/Cargo.toml`. That is a **deliberate
   known-bad fixture in a vendored dependency**, not our break. Do not chase it.
+
+---
+
+## Tracker-query traps — measured, and each produced a CONFIDENT ZERO
+
+Three defects on 2026-08-31 had one shape: **a query returned zero, and the zero was read as
+"the data is absent" when the data existed and the query was wrong.** A confident zero is
+indistinguishable from a healthy empty result, which is why all three survived review.
+
+| Wrong query | What it actually returns | Right query |
+|---|---|---|
+| `br dep list <id>` to ask "what depends on this" | **OUT-edges only** — what `<id>` depends on | read the children, or `.triage.recommendations` |
+| `bv --robot-triage \| jq '.triage.quick_ref.top_picks[]'` | a WEAKER view: `unblocks=0` on everything, omits high scorers | `jq -r '.triage.recommendations[:8][] \| "\(.id) score=\(.score)"'` — rank by `score`; `unblocks` is not even a key there |
+| `git log --all --grep=<bead-short-id>` | matches the **tracker** commit (`chore(beads): consolidate…`) for unrelated ids | join on a SHA cited in the bead and verify it with `git cat-file -e` |
+
+**`br show` returns a BARE list; `br list` wraps rows in `.issues`.** Guessing a jq path across
+the two produces confidently wrong readings.
+
+> **The generalisation, kept verbatim because two agents reached it independently within one
+> hour (recorded in control-plane `cp-khil9`): "envelope field, not substrate."** Check the
+> other fields of an envelope before diagnosing the tool.
+
+**MATERIALIZED_ORPHAN = 0 as of 10:55Z.** An earlier note said 3 (`-gfb`, `-ygc`, `-6gq`). That
+figure was produced by the out-edge bug above: `-gfb` had an in-edge from `-kxe` the whole time.
+`-ygc` is closed; `-6gq` now carries a `related` edge to `-815`. **Do not re-derive 3 from a
+stale note** — an orphan requires zero edges in BOTH directions, and `crates/tick-monitor`'s
+`lifecycle` subcommand now computes in-degree in a second pass:
+
+```bash
+tick-monitor lifecycle --repo <repo> [--repo <repo>]
+```
+
+**The DAG is NOT edgeless.** Measured on the control-plane tracker: 1412 of 1864 records carry
+dependency rows (1287 parent-child, 173 blocks, 5 discovered-from, 2 related). The real shape is
+~7.4:1 **taxonomy over sequencing** — beads filed into an epic and never sequenced against each
+other. So `unblocks=0` is TRUE and is an authoring gap, not a `bv` defect.
+
+**Parent-epic inversion.** `br create --deps blocks:X` means *this bead depends on X*, which is
+the inverse of what it reads like. A parent epic blocking its own child makes BOTH permanently
+unclosable. `br create` does not show you the edges it made — **`br dep list` readback is the
+only thing that catches it**, and `--force` with a recorded reason is correct where the graph is
+already inverted.
