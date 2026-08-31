@@ -5,7 +5,9 @@
 //! The hook changes one product decision: whether an operator may execute a raw command that
 //! duplicates an installed kernel. It blocks only the concrete bypass shapes it can classify and
 //! reports an unresolved or malformed hook event as DENY rather than silently allowing it.
-
+//!
+//! NO-CLAIM: this is not a general shell parser. It recognizes only the small set of command
+//! shapes and separators needed by this hook policy; shell syntax outside that set is not parsed.
 use asupersync::Cx;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -145,65 +147,184 @@ fn tool_command(input: &HookInput) -> Option<&str> {
         .and_then(Value::as_str)
 }
 
-fn basename(token: &str) -> &str {
-    token
-        .trim_matches(|character: char| matches!(character, '"' | '\'' | '`' | ';' | '|' | '&'))
-        .rsplit('/')
-        .next()
-        .unwrap_or(token)
+// Executable paths are intentionally matched by basename; this hook does not validate installation paths.
+fn executable_name(token: &str) -> &str {
+    token.rsplit('/').next().unwrap_or(token)
 }
 
-fn words(command: &str) -> Vec<&str> {
-    command.split_whitespace().map(basename).collect()
-}
+/// Split only on the shell separators this policy must notice. This is deliberately not a shell
+/// parser: quotes prevent a separator split, but expansion, escaping, and shell grammar are not
+/// interpreted.
+fn command_segments(command: &str) -> Vec<&str> {
+    let mut segments = Vec::new();
+    let mut start = 0;
+    let mut quote = None;
+    let mut escaped = false;
 
-fn has_adjacent(words: &[&str], first: &str, second: &str) -> bool {
-    words
-        .windows(2)
-        .any(|pair| pair[0] == first && pair[1] == second)
-}
-
-fn has_flag(words: &[&str], command: &str) -> bool {
-    words
-        .iter()
-        .any(|word| *word == command || word.starts_with(&format!("{command}=")))
-}
-
-fn kernel_candidate(command: &str) -> Option<&'static str> {
-    let tokens = words(command);
-    if has_adjacent(&tokens, "tick-monitor", "observe") {
-        return Some("tick-monitor observe");
+    for (index, character) in command.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if character == char::from(92) {
+            escaped = true;
+            continue;
+        }
+        if let Some(delimiter) = quote {
+            if character == delimiter {
+                quote = None;
+            }
+            continue;
+        }
+        if character == '\'' || character == '"' || character == char::from(96) {
+            quote = Some(character);
+        } else if character == ';'
+            || character == '|'
+            || character == '&'
+            || character == char::from(10)
+        {
+            segments.push(&command[start..index]);
+            start = index + character.len_utf8();
+        }
     }
-    if tokens.iter().any(|word| *word == "omp-orchestrator") {
-        return Some("omp-orchestrator");
-    }
-    if has_adjacent(&tokens, "ntm", "--robot-send") || has_flag(&tokens, "--robot-send") {
-        return Some("ntm --robot-send");
-    }
-    if has_adjacent(&tokens, "bv", "--robot-triage") || has_flag(&tokens, "--robot-triage") {
-        return Some("bv --robot-triage");
+    segments.push(&command[start..]);
+    segments
+}
+
+fn tokens(segment: &str) -> Vec<&str> {
+    segment.split_whitespace().collect()
+}
+
+fn command_name(segment: &str) -> Option<&str> {
+    tokens(segment).first().map(|token| executable_name(token))
+}
+
+fn option_subcommand<'a>(tokens: &[&'a str], subcommands: &[&str]) -> Option<&'a str> {
+    let mut index = 1;
+    while index < tokens.len() {
+        let token = tokens[index];
+        if subcommands.contains(&token) {
+            return Some(token);
+        }
+        if token == "--" {
+            return tokens
+                .get(index + 1)
+                .copied()
+                .filter(|candidate| subcommands.contains(candidate));
+        }
+        if !token.starts_with('-') {
+            return None;
+        }
+        // tmux/br global options may take a separate value. The policy only needs
+        // to skip these known option/value pairs before looking for the subcommand.
+        if matches!(token, "-L" | "-S" | "-f" | "-c") {
+            index += 1;
+        }
+        index += 1;
     }
     None
 }
 
+fn kernel_candidate(segment: &str) -> Option<&'static str> {
+    let tokens = tokens(segment);
+    let executable = tokens.first().map(|token| executable_name(token))?;
+    match executable {
+        "tick-monitor" if tokens.get(1) == Some(&"observe") => Some("tick-monitor observe"),
+        "omp-orchestrator" => Some("omp-orchestrator"),
+        "ntm"
+            if tokens.get(1).is_some_and(|token| {
+                *token == "--robot-send" || token.starts_with("--robot-send=")
+            }) =>
+        {
+            Some("ntm --robot-send")
+        }
+        "bv" if tokens.get(1).is_some_and(|token| {
+            *token == "--robot-triage" || token.starts_with("--robot-triage=")
+        }) =>
+        {
+            Some("bv --robot-triage")
+        }
+        _ => None,
+    }
+}
+
+fn raw_tmux_dispatch(segment: &str) -> bool {
+    let tokens = tokens(segment);
+    executable_name(tokens.first().copied().unwrap_or_default()) == "tmux"
+        && option_subcommand(&tokens, &["send-keys"]).is_some()
+}
+
+fn raw_br_mutation(segment: &str) -> Option<&'static str> {
+    let tokens = tokens(segment);
+    if executable_name(tokens.first().copied().unwrap_or_default()) != "br" {
+        return None;
+    }
+    match option_subcommand(&tokens, &["create", "ready"]) {
+        Some("create") => Some("finding"),
+        Some("ready") => Some("bv --robot-triage"),
+        _ => None,
+    }
+}
+
+fn diagnostic_tmux_read(segment: &str) -> bool {
+    let tokens = tokens(segment);
+    executable_name(tokens.first().copied().unwrap_or_default()) == "tmux"
+        && option_subcommand(&tokens, &["capture-pane", "list-panes"]).is_some()
+}
+
 fn classify_bash_with_allowlist(command: &str, allowlist: &[&str]) -> Decision {
-    let tokens = words(command);
+    let segments = command_segments(command);
+    let commands: Vec<&str> = segments
+        .iter()
+        .copied()
+        .filter(|segment| !segment.trim().is_empty())
+        .collect();
     // Deny raw effects before recognizing allowlisted text. A compound command
     // containing both a kernel name and raw send-keys is still a bypass.
-    if has_adjacent(&tokens, "tmux", "send-keys") {
+    if commands.iter().any(|segment| raw_tmux_dispatch(segment))
+        || commands.windows(2).any(|pair| {
+            command_name(pair[0]) == Some("tmux") && command_name(pair[1]) == Some("send-keys")
+        })
+    {
         return Decision::deny(
             "raw tmux send-keys dispatch is blocked; use the ntm --robot-send dispatch kernel",
         );
     }
-    if has_adjacent(&tokens, "br", "create") {
-        return Decision::deny(
-            "raw br create is blocked; use the finding kernel to create a named obligation",
-        );
+    let br_create_separator = commands
+        .windows(2)
+        .any(|pair| command_name(pair[0]) == Some("br") && command_name(pair[1]) == Some("create"));
+    let br_ready_separator = commands
+        .windows(2)
+        .any(|pair| command_name(pair[0]) == Some("br") && command_name(pair[1]) == Some("ready"));
+    if commands
+        .iter()
+        .any(|segment| raw_br_mutation(segment).is_some())
+        || br_create_separator
+        || br_ready_separator
+    {
+        let kernel = commands
+            .iter()
+            .find_map(|segment| raw_br_mutation(segment))
+            .unwrap_or(if br_ready_separator {
+                "bv --robot-triage"
+            } else {
+                "finding"
+            });
+        return Decision::deny(if kernel == "finding" {
+            "raw br create is blocked; use the finding kernel to create a named obligation"
+        } else {
+            "raw br ready is blocked; use the bv --robot-triage queue kernel"
+        });
     }
-    if has_adjacent(&tokens, "br", "ready") {
-        return Decision::deny("raw br ready is blocked; use the bv --robot-triage queue kernel");
-    }
-    if let Some(kernel) = kernel_candidate(command) {
+    if let Some(kernel) = commands
+        .iter()
+        .find_map(|segment| kernel_candidate(segment))
+    {
+        if segments.len() != 1 {
+            return Decision::deny(format!(
+                "kernel invocation {kernel:?} must be the sole shell command"
+            ));
+        }
         if allowlist.iter().any(|allowed| *allowed == kernel) {
             return Decision::allow(format!("kernel invocation accepted: {kernel}"));
         }
@@ -211,11 +332,8 @@ fn classify_bash_with_allowlist(command: &str, allowlist: &[&str]) -> Decision {
             "kernel invocation {kernel:?} is missing from the kernel allowlist; use the registered kernel path"
         ));
     }
-    if has_adjacent(&tokens, "tmux", "capture-pane") {
+    if commands.iter().any(|segment| diagnostic_tmux_read(segment)) {
         return Decision::allow("diagnostic tmux capture-pane is allowed; it does not dispatch");
-    }
-    if has_adjacent(&tokens, "tmux", "list-panes") {
-        return Decision::allow("diagnostic tmux list-panes is allowed; it does not dispatch");
     }
     Decision::allow("no registered kernel bypass command detected")
 }
@@ -336,5 +454,49 @@ mod tests {
         let json: Value = serde_json::from_str(&render_decision(&Decision::deny("test"))).unwrap();
         assert_eq!(json["hookSpecificOutput"]["hookEventName"], HOOK_EVENT);
         assert_eq!(json["hookSpecificOutput"]["permissionDecision"], "deny");
+    }
+}
+
+#[cfg(test)]
+mod scratch_home_tests {
+    use super::*;
+
+    #[test]
+    fn scratch_home_allows_clean_bash() {
+        // Under a scratch HOME, the hook classifies from the policy alone —
+        // no config files are loaded. A clean Bash command is allowed.
+        let input = HookInput {
+            hook_event_name: Some("PreToolUse".into()),
+            tool_name: Some("Bash".into()),
+            tool_input: Some(serde_json::json!({"command": "cargo test"})),
+            ..Default::default()
+        };
+        let decision = classify(&input);
+        assert_eq!(decision.permission, Permission::Allow);
+    }
+
+    #[test]
+    fn scratch_home_denies_raw_send_keys() {
+        // The policy is pure: no HOME lookup, no config file, no ambient state.
+        // A scratch HOME produces the same verdict as a production HOME.
+        let input = HookInput {
+            hook_event_name: Some("PreToolUse".into()),
+            tool_name: Some("Bash".into()),
+            tool_input: Some(serde_json::json!({"command": "tmux send-keys -t %1 packet"})),
+            ..Default::default()
+        };
+        let decision = classify(&input);
+        assert_eq!(decision.permission, Permission::Deny);
+    }
+
+    #[test]
+    fn no_claim_only_enumerated_shapes() {
+        // The doc comment at the top of lib.rs states the NO-CLAIM. This test
+        // is a structural check: the allowlist has exactly the declared entries.
+        assert_eq!(KERNEL_ALLOWLIST.len(), 4);
+        assert!(KERNEL_ALLOWLIST.contains(&"tick-monitor observe"));
+        assert!(KERNEL_ALLOWLIST.contains(&"omp-orchestrator"));
+        assert!(KERNEL_ALLOWLIST.contains(&"ntm --robot-send"));
+        assert!(KERNEL_ALLOWLIST.contains(&"bv --robot-triage"));
     }
 }

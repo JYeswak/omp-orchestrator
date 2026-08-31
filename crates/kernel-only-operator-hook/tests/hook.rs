@@ -48,12 +48,112 @@ fn diagnostic_tmux_read_is_allowed() {
     for command in [
         "tmux capture-pane -p -t %1413",
         "tmux list-panes -a -F '#{pane_id}'",
+        "tmux capture-pane -p -t %1413 | grep 'tmux send-keys'",
+        "tmux list-panes -a -F '#{pane_id}' | grep pane",
         "/Users/josh/.local/bin/tick-monitor observe --session omp-orchestrator",
         "/Users/josh/.local/bin/omp-orchestrator --once",
         "ntm --robot-send=omp-orchestrator --panes=%1413 --msg-file=/tmp/packet",
     ] {
         let input: HookInput = parse_input(&claude_event(command)).unwrap();
         assert_eq!(classify(&input).permission, Permission::Allow, "{command}");
+    }
+}
+
+#[test]
+fn exact_kernel_shapes_and_token_spoofs_have_distinct_verdicts() {
+    for command in [
+        "/Users/josh/.local/bin/tick-monitor observe --session omp-orchestrator",
+        "/Users/josh/.local/bin/omp-orchestrator --once",
+        "ntm --robot-send=omp-orchestrator --panes=%1413",
+        "bv --robot-triage --json",
+    ] {
+        let input: HookInput = parse_input(&claude_event(command)).unwrap();
+        let decision = classify(&input);
+        assert_eq!(
+            decision.permission,
+            Permission::Allow,
+            "{command}: {decision:?}"
+        );
+        assert!(decision.reason.contains("kernel invocation accepted"));
+    }
+
+    for command in [
+        "rm -rf --robot-send",
+        "echo omp-orchestrator",
+        "rm -rf tick-monitor observe",
+    ] {
+        let input: HookInput = parse_input(&claude_event(command)).unwrap();
+        let decision = classify(&input);
+        assert_eq!(
+            decision.permission,
+            Permission::Allow,
+            "{command}: {decision:?}"
+        );
+        assert!(
+            !decision.reason.contains("kernel invocation accepted"),
+            "{decision:?}"
+        );
+    }
+
+    for command in [
+        "ntm --robot-send; echo done",
+        "echo setup; omp-orchestrator --once",
+        "tick-monitor observe; echo done",
+    ] {
+        let input: HookInput = parse_input(&claude_event(command)).unwrap();
+        let decision = classify(&input);
+        assert_eq!(
+            decision.permission,
+            Permission::Deny,
+            "{command}: {decision:?}"
+        );
+        assert!(
+            decision.reason.contains("sole shell command"),
+            "{decision:?}"
+        );
+    }
+}
+
+#[test]
+fn raw_dispatch_options_and_separators_are_denied() {
+    for (command, kernel) in [
+        (
+            "tmux -L /tmp/socket send-keys -t %1413 packet",
+            "ntm --robot-send",
+        ),
+        (
+            "tmux -S /tmp/socket send-keys -t %1413 packet",
+            "ntm --robot-send",
+        ),
+        (
+            "echo setup; tmux send-keys -t %1413 packet",
+            "ntm --robot-send",
+        ),
+        (
+            "tmux capture-pane -p -t %1413 | tmux send-keys -t %1413 packet",
+            "ntm --robot-send",
+        ),
+        (
+            "tick-monitor observe; tmux send-keys -t %1413 packet",
+            "ntm --robot-send",
+        ),
+        ("tmux;send-keys -t %1413 packet", "ntm --robot-send"),
+        ("tmux&&send-keys -t %1413 packet", "ntm --robot-send"),
+        ("br --json create --title gap", "finding"),
+        ("br -q ready --json", "bv --robot-triage"),
+        ("echo setup; br create --title gap", "finding"),
+        ("echo setup; br ready --json", "bv --robot-triage"),
+        ("br;create --title gap", "finding"),
+        ("br&&ready --json", "bv --robot-triage"),
+    ] {
+        let input: HookInput = parse_input(&claude_event(command)).unwrap();
+        let decision = classify(&input);
+        assert_eq!(
+            decision.permission,
+            Permission::Deny,
+            "{command}: {decision:?}"
+        );
+        assert!(decision.reason.contains(kernel), "{decision:?}");
     }
 }
 

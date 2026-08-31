@@ -2,10 +2,12 @@
 
 //! PreToolUse stdin/stdout adapter for the kernel-only operator policy.
 
+mod shadow;
+
 use asupersync::runtime::RuntimeBuilder;
 use asupersync::Cx;
 use kernel_only_operator_hook::{
-    classify, evaluate, parse_input, render_decision, Permission, MAX_INPUT_BYTES,
+    classify, evaluate, parse_input, render_decision, Decision, Permission, MAX_INPUT_BYTES,
 };
 use std::io::{self, Read};
 use std::process::ExitCode;
@@ -24,7 +26,7 @@ const BUILD_ID: &str = match option_env!("KERNEL_ONLY_HOOK_BUILD_ID") {
 
 fn capabilities() -> String {
     format!(
-        r#"{{"schema":"kernel-only-operator-hook.v1","event":"PreToolUse","class":"gate","fail_mode":"closed","max_input_bytes":{},"build_id":"{}","registration":"disabled-until-human-certification"}}"#,
+        r#"{{"schema":"kernel-only-operator-hook.v1","event":"PreToolUse","class":"gate","fail_mode":"closed","max_input_bytes":{},"build_id":"{}","registration":"disabled-until-human-certification","shadow_mode":"--shadow","shadow_evidence":"not_certification"}}"#,
         MAX_INPUT_BYTES, BUILD_ID
     )
 }
@@ -47,28 +49,49 @@ fn selftest() -> ExitCode {
     }
 }
 
-fn run_hook(input: Vec<u8>) -> String {
+fn shadow_output(input: &[u8], decision: &Decision) -> String {
+    if let Err(error) = shadow::append_verdict(input, decision, BUILD_ID) {
+        eprintln!("KERNEL_HOOK_SHADOW_LEDGER_ERROR: {error}");
+    }
+    render_decision(&Decision::allow(
+        "shadow mode: enforcement disabled; would-be decision recorded",
+    ))
+}
+
+fn run_hook(input: Vec<u8>, shadow_mode: bool) -> String {
     let runtime = match RuntimeBuilder::current_thread().build() {
         Ok(runtime) => runtime,
         Err(error) => {
             eprintln!("KERNEL_HOOK_RUNTIME_ERROR: {error}");
-            return render_decision(&kernel_only_operator_hook::Decision::deny(
-                "hook runtime unavailable; fail-closed deny",
-            ));
+            let decision = Decision::deny("hook runtime unavailable; fail-closed deny");
+            return if shadow_mode {
+                shadow_output(&input, &decision)
+            } else {
+                render_decision(&decision)
+            };
         }
     };
     runtime.block_on(async move {
         let Some(cx) = Cx::current() else {
-            return render_decision(&kernel_only_operator_hook::Decision::deny(
-                "hook context unavailable; fail-closed deny",
-            ));
+            let decision = Decision::deny("hook context unavailable; fail-closed deny");
+            return if shadow_mode {
+                shadow_output(&input, &decision)
+            } else {
+                render_decision(&decision)
+            };
         };
-        render_decision(&evaluate(&cx, &input).await)
+        let decision = evaluate(&cx, &input).await;
+        if shadow_mode {
+            shadow_output(&input, &decision)
+        } else {
+            render_decision(&decision)
+        }
     })
 }
 
 fn main() -> ExitCode {
-    match std::env::args().nth(1).as_deref() {
+    let argument = std::env::args().nth(1);
+    match argument.as_deref() {
         Some("--capabilities") => {
             println!("{}", capabilities());
             return ExitCode::SUCCESS;
@@ -78,12 +101,13 @@ fn main() -> ExitCode {
             println!("kernel-only-operator-hook 0.1.0 build_id={BUILD_ID}");
             return ExitCode::SUCCESS;
         }
+        Some("--shadow") | None => {}
         Some(other) => {
-            eprintln!("usage: kernel-only-operator-hook [--capabilities|--selftest|--version]\nunknown argument: {other}");
+            eprintln!("usage: kernel-only-operator-hook [--shadow|--capabilities|--selftest|--version]\nunknown argument: {other}");
             return ExitCode::from(2);
         }
-        None => {}
     }
+    let shadow_mode = argument.as_deref() == Some("--shadow");
     let input = match read_bounded_stdin() {
         Ok(input) => input,
         Err(error) => {
@@ -91,7 +115,7 @@ fn main() -> ExitCode {
             Vec::new()
         }
     };
-    println!("{}", run_hook(input));
+    println!("{}", run_hook(input, shadow_mode));
     // Hook decisions live in hookSpecificOutput, not the exit channel.
     ExitCode::SUCCESS
 }
