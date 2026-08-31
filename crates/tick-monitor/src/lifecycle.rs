@@ -224,6 +224,50 @@ fn is_content_hash(chars: &[char], start: usize, end: usize) -> bool {
     prefix.contains("sha256") || prefix.contains("sha-256") || prefix.contains("sha 256")
 }
 
+/// True when a hex run sits in a COMMIT-CITATION POSITION.
+///
+/// This replaces "any hex token is a candidate", which had high recall and bad precision in
+/// two measured ways:
+///
+/// 1. OVER-ATTRIBUTION. `-orchestrator-grading-debt-ylq` showed 7 landed SHAs because its
+///    body *enumerates* my commits in a table. Mention is not implementation, so the LANDED
+///    set was an upper bound presented as a fact.
+///
+/// 2. SELF-POISONING, and this one is the real lesson. The join reported two dangling
+///    citations; I wrote that report INTO the bead as a comment; the next scan then read my
+///    own sentence -- "the lifecycle join surfaced (5042f809, 90840a00 ...)" -- as two fresh
+///    citations. The grader's reply ("git rev-parse --verify 5042f809 and 90840a00", "Dangling
+///    SHA verdict: ...") added four more. An observer that writes into the corpus it observes
+///    manufactures self-sustaining findings, and the finding survives its own resolution.
+///
+/// So a token counts only if something nearby says it is a commit. The operator's rule --
+/// "cite foreign commits as `reponame@sha`, never `reponame sha`" -- is honoured by treating
+/// a `@`-prefix as a citation marker too.
+fn in_citation_position(chars: &[char], start: usize) -> bool {
+    // `repo@sha` -- the qualified form the operator requires for foreign commits.
+    if start > 0 && chars[start - 1] == '@' {
+        return true;
+    }
+    let lo = start.saturating_sub(40);
+    let prefix: String = chars[lo..start]
+        .iter()
+        .collect::<String>()
+        .to_ascii_lowercase();
+    // Deliberately narrow. Adding "verify", "surfaced", or "verdict" here would re-open
+    // the self-poisoning hole, because those are the words a REPORT about SHAs uses.
+    const MARKERS: [&str; 8] = [
+        "commit ",
+        "commit:",
+        "landed in ",
+        "landed=",
+        "commit under grade:",
+        "fixed in ",
+        "in commit ",
+        "sha=",
+    ];
+    MARKERS.iter().any(|m| prefix.ends_with(m) || prefix.contains(m))
+}
+
 /// Extract every 7-to-40 hex commit-SHA-shaped token from text.
 ///
 /// Deliberately permissive on length and then verified against the object store, because
@@ -243,12 +287,17 @@ pub fn sha_candidates(text: &str) -> Vec<String> {
             // `_` counts as a word character. Without it, `crate_deadbeef_thing` yields a
             // false citation -- caught by the boundary test, which is why it exists.
             let is_word = |c: char| c.is_alphanumeric() || c == '_';
-            let boundary_ok = start == 0 || !is_word(chars[start - 1]);
+            // `@` is a citation marker (repo@sha), so it must not also count as the word
+            // boundary that disqualifies the token.
+            let boundary_ok = start == 0 || !is_word(chars[start - 1]) || chars[start - 1] == '@';
             let end_ok = i >= chars.len() || !is_word(chars[i]);
             if (7..=40).contains(&len) && boundary_ok && end_ok {
                 let tok: String = chars[start..i].iter().collect();
                 let all_digits = tok.chars().all(|c| c.is_ascii_digit());
-                if !all_digits && !is_content_hash(&chars, start, i) {
+                if !all_digits
+                    && !is_content_hash(&chars, start, i)
+                    && in_citation_position(&chars, start)
+                {
                     out.push(tok.to_ascii_lowercase());
                 }
             }
@@ -668,21 +717,60 @@ mod content_hash_tests {
         );
     }
 
-    /// KNOWN-GOOD: the filter must not eat real citations. Without this leg the fix could
-    /// silently suppress every SHA and the join would report an empty grading queue --
-    /// which looks like "nothing to grade" and is the worst possible failure here.
+    /// KNOWN-GOOD: the filter must not eat real citations. Without this leg the change
+    /// could silently suppress every SHA and the join would report an empty grading queue --
+    /// which reads as "nothing to grade" and is the worst possible failure here.
+    ///
+    /// This leg CHANGED when precision was tightened, and it caught the change: under
+    /// bare-pattern matching all three tokens below were found; under citation-position
+    /// matching only the marked ones are. That is the intended trade and the test now says
+    /// so out loud.
     #[test]
-    fn real_commit_citations_still_survive() {
-        let t = "landed in 831fdd6 and b6249a5; see also control-plane f9f4e37";
+    fn marked_commit_citations_still_survive() {
+        let t = "landed in 831fdd6; commit b6249a5 did the fix; control-plane@f9f4e37 too";
         let got = sha_candidates(t);
         for want in ["831fdd6", "b6249a5", "f9f4e37"] {
             assert!(got.contains(&want.to_owned()), "lost {want} from {got:?}");
         }
     }
 
+    /// THE RECALL COST, asserted rather than hidden.
+    ///
+    /// An unmarked SHA is now MISSED. That is a deliberate trade: over-attribution made the
+    /// LANDED set an upper bound presented as fact, and self-poisoning made a resolved
+    /// finding immortal. Both were worse than a miss, because a miss is visible as an empty
+    /// cell while a false positive is indistinguishable from evidence. Whoever widens the
+    /// marker list must keep the self-poisoning legs green -- "verify", "surfaced" and
+    /// "verdict" are the words a REPORT about SHAs uses, so adding them re-opens the loop.
+    #[test]
+    fn an_unmarked_sha_is_deliberately_missed() {
+        let got = sha_candidates("see 831fdd6 and b6249a5 for details");
+        assert!(
+            got.is_empty(),
+            "unmarked SHAs are out of scope by design; got {got:?}"
+        );
+    }
+
+    /// The self-poisoning sentences -- verbatim from my own comment and the grader's reply.
+    /// These are the exact strings that made a resolved finding regenerate itself.
+    #[test]
+    fn a_report_about_shas_does_not_become_new_citations() {
+        for s in [
+            "the lifecycle join surfaced (5042f809, 90840a00 -- unresolvable in both repos)",
+            "8. git rev-parse --verify 5042f809 and 90840a00 in both repos",
+            "Dangling SHA verdict: 5042f809 and 90840a00 do not resolve",
+        ] {
+            assert!(
+                sha_candidates(s).is_empty(),
+                "an observer must not read its own report as evidence: {s:?} -> {:?}",
+                sha_candidates(s)
+            );
+        }
+    }
+
     #[test]
     fn a_truncated_hash_is_rejected_even_without_a_label() {
         // Truncation alone is decisive: a display-truncated hash can never resolve.
-        assert!(sha_candidates("baseline was deadbeef\u{2026}9c1").is_empty());
+        assert!(sha_candidates("commit deadbeef\u{2026}9c1 was the baseline").is_empty());
     }
 }
