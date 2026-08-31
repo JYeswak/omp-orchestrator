@@ -6,14 +6,18 @@
 //! fail-closed default. The append happens synchronously in the caller's asupersync future; no
 //! detached task is created, and a ledger failure cannot turn shadow mode into enforcement.
 
+use asupersync::process::{Command, Output};
+use asupersync::time::timeout;
+use asupersync::Cx;
 use kernel_only_operator_hook::{Decision, Permission};
 use serde::Serialize;
 use serde_json::Value;
 use std::fmt::Write as _;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
-use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use subprocess_contract::{run_output, RunError};
 
 pub const DEFAULT_LEDGER_PATH: &str =
     "/Users/josh/.local/state/flywheel/kernel-only-operator-hook-shadow-verdicts.jsonl";
@@ -21,6 +25,12 @@ const SCHEMA_VERSION: &str = "kernel-only-operator-hook-shadow.v1";
 const EVENT: &str = "PreToolUse";
 const HOOK_ID: &str = "kernel-only-operator-hook";
 const STAGE: u8 = 4;
+const PREDECESSOR_DEADLINE: Duration = Duration::from_millis(250);
+
+#[cfg(target_os = "macos")]
+const PREDECESSOR_SCRIPT: &str = "printf '%s' \"$1\" | /usr/bin/base64 -D | \"$0\" --json";
+#[cfg(not(target_os = "macos"))]
+const PREDECESSOR_SCRIPT: &str = "printf '%s' \"$1\" | /usr/bin/base64 -d | \"$0\" --json";
 
 #[derive(Debug, Serialize)]
 struct ShadowVerdict<'a> {
@@ -31,17 +41,108 @@ struct ShadowVerdict<'a> {
     build_id: &'a str,
     ts_unix: u64,
     pid: u32,
+    effective_mode: &'a str,
     tool_name: String,
     command_sha256: String,
+    input_sha256: String,
+    session_id: String,
+    turn_id: String,
+    tool_use_id: String,
+    transcript_path: String,
+    cwd: String,
     rust_permission: &'static str,
     rust_reason: &'a str,
+    predecessor_outcome: String,
+    predecessor_reason_code: String,
+    predecessor_exit_status: String,
+    predecessor_stdout_sha256: String,
+    predecessor_stderr_sha256: String,
+    parity: String,
     review_status: &'static str,
     live_bash_parity: &'static str,
 }
 
+#[derive(Debug)]
+struct InputMetadata {
+    tool_name: String,
+    command_sha256: String,
+    input_sha256: String,
+    session_id: String,
+    turn_id: String,
+    tool_use_id: String,
+    transcript_path: String,
+    cwd: String,
+}
+
+#[derive(Debug)]
+struct PredecessorObservation {
+    outcome: String,
+    reason_code: String,
+    exit_status: String,
+    stdout_sha256: String,
+    stderr_sha256: String,
+    parity: String,
+}
+
+impl PredecessorObservation {
+    fn not_configured() -> Self {
+        Self {
+            outcome: "not_configured".to_owned(),
+            reason_code: "not_configured".to_owned(),
+            exit_status: "not_run".to_owned(),
+            stdout_sha256: String::new(),
+            stderr_sha256: String::new(),
+            parity: "not_applicable".to_owned(),
+        }
+    }
+
+    fn unavailable(outcome: &str, reason_code: &str, exit_status: &str) -> Self {
+        Self {
+            outcome: outcome.to_owned(),
+            reason_code: reason_code.to_owned(),
+            exit_status: exit_status.to_owned(),
+            stdout_sha256: String::new(),
+            stderr_sha256: String::new(),
+            parity: "unknown".to_owned(),
+        }
+    }
+}
+
 /// Append one JSON object with one O_APPEND write. The command is hashed, never stored.
 pub fn append_verdict(input: &[u8], decision: &Decision, build_id: &str) -> io::Result<()> {
-    let (tool_name, command_sha256) = input_metadata(input);
+    append_verdict_mode(
+        input,
+        decision,
+        build_id,
+        "shadow",
+        PredecessorObservation::not_configured(),
+    )
+}
+
+/// Append a shadow row with an explicit effective mode and no predecessor result.
+pub fn append_verdict_with_mode(
+    input: &[u8],
+    decision: &Decision,
+    build_id: &str,
+    effective_mode: &str,
+) -> io::Result<()> {
+    append_verdict_mode(
+        input,
+        decision,
+        build_id,
+        effective_mode,
+        PredecessorObservation::not_configured(),
+    )
+}
+
+fn append_verdict_mode(
+    input: &[u8],
+    decision: &Decision,
+    build_id: &str,
+    effective_mode: &str,
+    predecessor: PredecessorObservation,
+) -> io::Result<()> {
+    let metadata = input_metadata(input);
     let verdict = ShadowVerdict {
         schema_version: SCHEMA_VERSION,
         event: EVENT,
@@ -53,10 +154,23 @@ pub fn append_verdict(input: &[u8], decision: &Decision, build_id: &str) -> io::
             .map(|duration| duration.as_secs())
             .unwrap_or(0),
         pid: std::process::id(),
-        tool_name,
-        command_sha256,
+        effective_mode,
+        tool_name: metadata.tool_name,
+        command_sha256: metadata.command_sha256,
+        input_sha256: metadata.input_sha256,
+        session_id: metadata.session_id,
+        turn_id: metadata.turn_id,
+        tool_use_id: metadata.tool_use_id,
+        transcript_path: metadata.transcript_path,
+        cwd: metadata.cwd,
         rust_permission: permission_name(decision.permission),
         rust_reason: &decision.reason,
+        predecessor_outcome: predecessor.outcome,
+        predecessor_reason_code: predecessor.reason_code,
+        predecessor_exit_status: predecessor.exit_status,
+        predecessor_stdout_sha256: predecessor.stdout_sha256,
+        predecessor_stderr_sha256: predecessor.stderr_sha256,
+        parity: predecessor.parity,
         review_status: "unknown",
         live_bash_parity: "not_applicable",
     };
@@ -76,6 +190,215 @@ pub fn append_verdict(input: &[u8], decision: &Decision, build_id: &str) -> io::
     ledger.write_all(&line)
 }
 
+/// Compare the exact bounded hook bytes with an existing predecessor, then append only
+/// non-sensitive metadata and hashes. The comparison is observational and cannot affect the
+/// Rust decision or the shadow allow response.
+pub async fn append_verdict_with_predecessor(
+    cx: &Cx,
+    input: &[u8],
+    decision: &Decision,
+    build_id: &str,
+    predecessor: &Path,
+) -> io::Result<()> {
+    let observation = compare_predecessor(cx, input, decision, predecessor).await;
+    append_verdict_mode(input, decision, build_id, "shadow", observation)
+}
+
+async fn compare_predecessor(
+    cx: &Cx,
+    input: &[u8],
+    decision: &Decision,
+    predecessor: &Path,
+) -> PredecessorObservation {
+    // run_output owns the child process group and drains stdout and stderr. Because it exposes no
+    // stdin override, the wrapper decodes this in-memory base64 argument into the predecessor's
+    // stdin; the original bytes are never written to a file or a ledger row.
+    let encoded_input = base64_encode(input);
+    let mut command = Command::new("/bin/sh");
+    command
+        .args(["-c", PREDECESSOR_SCRIPT])
+        .arg(predecessor)
+        .arg(encoded_input);
+
+    match timeout(
+        cx.now_for_observability(),
+        PREDECESSOR_DEADLINE,
+        run_output(cx, command),
+    )
+    .await
+    {
+        Ok(Ok(output)) => predecessor_observation(output, decision),
+        Ok(Err(RunError::Timeout)) => {
+            eprintln!(
+                "KERNEL_HOOK_SHADOW_PREDECESSOR_TIMEOUT: path={} deadline_ms={}",
+                predecessor.display(),
+                PREDECESSOR_DEADLINE.as_millis()
+            );
+            PredecessorObservation::unavailable("timeout", "deadline_exceeded", "timeout")
+        }
+        Ok(Err(error)) => {
+            eprintln!(
+                "KERNEL_HOOK_SHADOW_PREDECESSOR_ERROR: path={} error={error}",
+                predecessor.display()
+            );
+            PredecessorObservation::unavailable("error", "process_error", "error")
+        }
+        Err(_) => {
+            eprintln!(
+                "KERNEL_HOOK_SHADOW_PREDECESSOR_TIMEOUT: path={} deadline_ms={}",
+                predecessor.display(),
+                PREDECESSOR_DEADLINE.as_millis()
+            );
+            PredecessorObservation::unavailable("timeout", "deadline_exceeded", "timeout")
+        }
+    }
+}
+
+fn predecessor_observation(output: Output, decision: &Decision) -> PredecessorObservation {
+    let stdout_sha256 = sha256_hex(&output.stdout);
+    let stderr_sha256 = sha256_hex(&output.stderr);
+    let exit_status = output
+        .status
+        .code()
+        .map_or_else(|| "signal".to_owned(), |code| code.to_string());
+
+    let value = match serde_json::from_slice::<Value>(&output.stdout) {
+        Ok(value) => value,
+        Err(_) => {
+            return PredecessorObservation {
+                outcome: if output.status.success() {
+                    "invalid_output".to_owned()
+                } else {
+                    "exit_failure".to_owned()
+                },
+                reason_code: if output.status.success() {
+                    "invalid_json".to_owned()
+                } else {
+                    format!("exit_{exit_status}")
+                },
+                exit_status,
+                stdout_sha256,
+                stderr_sha256,
+                parity: "unknown".to_owned(),
+            };
+        }
+    };
+    let Some(predecessor_permission) = predecessor_permission(&value) else {
+        return PredecessorObservation {
+            outcome: if output.status.success() {
+                "invalid_output".to_owned()
+            } else {
+                "exit_failure".to_owned()
+            },
+            reason_code: if output.status.success() {
+                "missing_permission_decision".to_owned()
+            } else {
+                format!("exit_{exit_status}")
+            },
+            exit_status,
+            stdout_sha256,
+            stderr_sha256,
+            parity: "unknown".to_owned(),
+        };
+    };
+
+    let outcome = permission_name(predecessor_permission).to_owned();
+    let parity = if predecessor_permission == decision.permission {
+        "match"
+    } else {
+        "mismatch"
+    };
+    PredecessorObservation {
+        outcome,
+        reason_code: predecessor_reason_code(&value, predecessor_permission),
+        exit_status,
+        stdout_sha256,
+        stderr_sha256,
+        parity: parity.to_owned(),
+    }
+}
+
+fn predecessor_permission(value: &Value) -> Option<Permission> {
+    let envelope = value.get("hookSpecificOutput").unwrap_or(value);
+    let permission = envelope
+        .get("permissionDecision")
+        .and_then(Value::as_str)
+        .or_else(|| value.get("decision").and_then(Value::as_str))?;
+    match permission {
+        "allow" => Some(Permission::Allow),
+        "deny" | "block" => Some(Permission::Deny),
+        _ => None,
+    }
+}
+
+fn predecessor_reason_code(value: &Value, permission: Permission) -> String {
+    value
+        .get("reason_code")
+        .or_else(|| value.get("reasonCode"))
+        .and_then(Value::as_str)
+        .filter(|reason| !reason.is_empty())
+        .map(sanitize_metadata)
+        .unwrap_or_else(|| match permission {
+            Permission::Allow => "predecessor_allow".to_owned(),
+            Permission::Deny => "predecessor_deny".to_owned(),
+        })
+}
+
+fn input_metadata(input: &[u8]) -> InputMetadata {
+    let value = serde_json::from_slice::<Value>(input).ok();
+    let tool_name = value
+        .as_ref()
+        .and_then(|value| first_text(value, &["tool_name", "toolName", "tool"]))
+        .map(sanitize_tool_name)
+        .unwrap_or_else(|| "unknown".to_owned());
+    let command_sha256 = value
+        .as_ref()
+        .and_then(|value| value.get("tool_input"))
+        .and_then(|value| value.get("command"))
+        .and_then(Value::as_str)
+        .map(|command| sha256_hex(command.as_bytes()))
+        .unwrap_or_else(|| sha256_hex(&[]));
+    InputMetadata {
+        tool_name,
+        command_sha256,
+        input_sha256: sha256_hex(input),
+        session_id: metadata_text(value.as_ref(), &["session_id", "sessionId"]),
+        turn_id: metadata_text(value.as_ref(), &["turn_id", "turnId"]),
+        tool_use_id: metadata_text(value.as_ref(), &["tool_use_id", "toolUseId"]),
+        transcript_path: metadata_text(value.as_ref(), &["transcript_path", "transcriptPath"]),
+        cwd: metadata_text(value.as_ref(), &["cwd"]),
+    }
+}
+
+fn metadata_text(value: Option<&Value>, keys: &[&str]) -> String {
+    value
+        .and_then(|value| first_text(value, keys))
+        .filter(|text| !text.is_empty())
+        .map(sanitize_metadata)
+        .unwrap_or_else(|| "unknown".to_owned())
+}
+
+fn first_text<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a str> {
+    keys.iter()
+        .find_map(|key| value.get(*key).and_then(Value::as_str))
+}
+
+fn sanitize_metadata(value: &str) -> String {
+    let mut sanitized = String::with_capacity(value.len().min(1024));
+    for character in value.chars().take(1024) {
+        if character.is_control() {
+            sanitized.push('?');
+        } else {
+            sanitized.push(character);
+        }
+    }
+    sanitized
+}
+
+fn sanitize_tool_name(tool_name: &str) -> String {
+    sanitize_metadata(tool_name)
+}
+
 fn ledger_path() -> PathBuf {
     std::env::var_os("KERNEL_ONLY_HOOK_SHADOW_LEDGER")
         .filter(|value| !value.is_empty())
@@ -90,37 +413,29 @@ fn permission_name(permission: Permission) -> &'static str {
     }
 }
 
-fn input_metadata(input: &[u8]) -> (String, String) {
-    let value = serde_json::from_slice::<Value>(input).ok();
-    let tool_name = value
-        .as_ref()
-        .and_then(|value| value.get("tool_name").or_else(|| value.get("toolName")))
-        .and_then(Value::as_str)
-        .map(sanitize_tool_name)
-        .unwrap_or_else(|| "unknown".to_owned());
-    let command_sha256 = value
-        .as_ref()
-        .and_then(|value| value.get("tool_input"))
-        .and_then(|value| value.get("command"))
-        .and_then(Value::as_str)
-        .map(|command| sha256_hex(command.as_bytes()))
-        .unwrap_or_else(|| sha256_hex(&[]));
-    (tool_name, command_sha256)
-}
-
-fn sanitize_tool_name(tool_name: &str) -> String {
-    let mut sanitized = String::with_capacity(tool_name.len().min(128));
-    for character in tool_name.chars().take(128) {
-        if character.is_control() {
-            sanitized.push('?');
+fn base64_encode(input: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut encoded = String::with_capacity(input.len().div_ceil(3) * 4);
+    for chunk in input.chunks(3) {
+        let first = chunk[0];
+        let second = chunk.get(1).copied().unwrap_or(0);
+        let third = chunk.get(2).copied().unwrap_or(0);
+        encoded.push(TABLE[(first >> 2) as usize] as char);
+        encoded.push(TABLE[(((first & 0x03) << 4) | (second >> 4)) as usize] as char);
+        encoded.push(if chunk.len() > 1 {
+            TABLE[(((second & 0x0f) << 2) | (third >> 6)) as usize] as char
         } else {
-            sanitized.push(character);
-        }
+            '='
+        });
+        encoded.push(if chunk.len() > 2 {
+            TABLE[(third & 0x3f) as usize] as char
+        } else {
+            '='
+        });
     }
-    sanitized
+    encoded
 }
 
-// Small, dependency-free SHA-256 implementation keeps this leaf's lockfile stable.
 fn sha256_hex(input: &[u8]) -> String {
     const INITIAL: [u32; 8] = [
         0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
@@ -199,4 +514,105 @@ fn sha256_hex(input: &[u8]) -> String {
         write!(&mut output, "{word:08x}").expect("writing to String cannot fail");
     }
     output
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn serialized_verdict(input: &[u8]) -> String {
+        let metadata = input_metadata(input);
+        let predecessor = PredecessorObservation::not_configured();
+        serde_json::to_string(&ShadowVerdict {
+            schema_version: SCHEMA_VERSION,
+            event: EVENT,
+            hook_id: HOOK_ID,
+            stage: STAGE,
+            build_id: "test-build",
+            ts_unix: 0,
+            pid: 0,
+            effective_mode: "shadow",
+            tool_name: metadata.tool_name,
+            command_sha256: metadata.command_sha256,
+            input_sha256: metadata.input_sha256,
+            session_id: metadata.session_id,
+            turn_id: metadata.turn_id,
+            tool_use_id: metadata.tool_use_id,
+            transcript_path: metadata.transcript_path,
+            cwd: metadata.cwd,
+            rust_permission: "allow",
+            rust_reason: "unit test",
+            predecessor_outcome: predecessor.outcome,
+            predecessor_reason_code: predecessor.reason_code,
+            predecessor_exit_status: predecessor.exit_status,
+            predecessor_stdout_sha256: predecessor.stdout_sha256,
+            predecessor_stderr_sha256: predecessor.stderr_sha256,
+            parity: predecessor.parity,
+            review_status: "unknown",
+            live_bash_parity: "not_applicable",
+        })
+        .expect("shadow verdict serialization cannot fail")
+    }
+
+    #[test]
+    fn extracts_snake_case_metadata_and_sha256_fields() {
+        let input = br#"{"tool_name":"Bash","tool_input":{"command":"echo hello"},"session_id":"session-snake","turn_id":"turn-snake","tool_use_id":"tool-snake","transcript_path":"/tmp/trace.jsonl","cwd":"/tmp"}"#;
+        let metadata = input_metadata(input);
+
+        assert_eq!(metadata.tool_name, "Bash");
+        assert_eq!(metadata.session_id, "session-snake");
+        assert_eq!(metadata.turn_id, "turn-snake");
+        assert_eq!(metadata.tool_use_id, "tool-snake");
+        assert_eq!(metadata.transcript_path, "/tmp/trace.jsonl");
+        assert_eq!(metadata.cwd, "/tmp");
+        assert_eq!(
+            metadata.command_sha256,
+            "584a331fd6b02dcb1ecbe2eba731f609a2e1e3dac0bb73ae998dfad14c309a77"
+        );
+        assert_eq!(
+            metadata.input_sha256,
+            "00d862530b4c377854c4bdc1229b63cb4d0e4c0e9068cce922808dcf42958f75"
+        );
+    }
+
+    #[test]
+    fn extracts_camel_case_metadata_fields() {
+        let input = br#"{"toolName":"Bash","tool_input":{"command":"echo hello"},"sessionId":"session-camel","turnId":"turn-camel","toolUseId":"tool-camel","transcriptPath":"/tmp/camel-trace.jsonl","cwd":"/tmp/camel"}"#;
+        let metadata = input_metadata(input);
+
+        assert_eq!(metadata.tool_name, "Bash");
+        assert_eq!(metadata.session_id, "session-camel");
+        assert_eq!(metadata.turn_id, "turn-camel");
+        assert_eq!(metadata.tool_use_id, "tool-camel");
+        assert_eq!(metadata.transcript_path, "/tmp/camel-trace.jsonl");
+        assert_eq!(metadata.cwd, "/tmp/camel");
+        assert_eq!(metadata.command_sha256.len(), 64);
+        assert_eq!(metadata.input_sha256.len(), 64);
+    }
+
+    #[test]
+    fn serialized_verdict_contains_hashes_but_never_raw_command() {
+        let input = br#"{"tool_name":"Bash","tool_input":{"command":"rm -rf /sensitive-command"},"session_id":"session","turn_id":"turn","tool_use_id":"tool","transcript_path":"/tmp/trace","cwd":"/tmp"}"#;
+        let serialized = serialized_verdict(input);
+
+        assert!(serialized.contains("command_sha256"));
+        assert!(serialized.contains("input_sha256"));
+        assert!(!serialized.contains("rm -rf /sensitive-command"));
+        assert!(!serialized.contains("\"command\""));
+    }
+
+    #[test]
+    fn metadata_values_are_bounded() {
+        let long_session = "s".repeat(2_000);
+        let input =
+            format!(r#"{{"session_id":"{long_session}","tool_input":{{"command":"echo hello"}}}}"#);
+        let metadata = input_metadata(input.as_bytes());
+
+        assert_eq!(metadata.session_id.len(), 1_024);
+    }
+
+    #[test]
+    fn predecessor_deadline_is_the_single_bounded_timeout() {
+        assert_eq!(PREDECESSOR_DEADLINE, Duration::from_millis(250));
+        assert_eq!(PREDECESSOR_DEADLINE.as_millis(), 250);
+    }
 }

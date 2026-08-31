@@ -4,6 +4,9 @@ use kernel_only_operator_hook::{
     classify, parse_input, render_decision, HookInput, Permission, MAX_INPUT_BYTES,
 };
 use serde_json::Value;
+use std::fs;
+use std::io::Write;
+use std::process::{Command, Stdio};
 use std::time::Instant;
 
 fn claude_event(command: &str) -> Vec<u8> {
@@ -243,4 +246,94 @@ fn evaluate_uses_the_runtime_context_and_keeps_exit_decision_typed() {
     });
     assert_eq!(decision.permission, Permission::Deny);
     assert!(decision.reason.contains("ntm --robot-send"));
+}
+#[test]
+fn shadow_compare_predecessor_records_safe_local_observation() {
+    let ledger_path = std::env::temp_dir().join(format!(
+        "kernel-only-operator-hook-shadow-compare-{}.jsonl",
+        std::process::id()
+    ));
+    let _ = fs::remove_file(&ledger_path);
+    let command = "printf safe";
+    let input = serde_json::to_vec(&serde_json::json!({
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": command},
+        "session_id": "integration-session",
+        "turn_id": "integration-turn",
+        "tool_use_id": "integration-tool",
+        "transcript_path": "/tmp/integration-transcript.jsonl",
+        "cwd": "/tmp/kernel-only-operator-hook-test"
+    }))
+    .unwrap();
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_kernel-only-operator-hook"))
+        .args(["--shadow", "--compare-predecessor", "/bin/cat"])
+        .env("KERNEL_ONLY_HOOK_SHADOW_LEDGER", &ledger_path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn kernel-only operator hook");
+    child
+        .stdin
+        .take()
+        .expect("hook stdin")
+        .write_all(&input)
+        .expect("write hook input");
+    let output = child
+        .wait_with_output()
+        .expect("wait for kernel-only operator hook");
+    assert!(output.status.success(), "hook failed: {:?}", output);
+
+    let stdout = String::from_utf8(output.stdout).expect("hook stdout is UTF-8");
+    assert_eq!(stdout.lines().count(), 1, "hook emits one JSON envelope");
+    let envelope: Value = serde_json::from_str(stdout.trim_end()).expect("valid hook envelope");
+    assert_eq!(
+        envelope["hookSpecificOutput"]["hookEventName"],
+        "PreToolUse"
+    );
+    assert_eq!(
+        envelope["hookSpecificOutput"]["permissionDecision"],
+        "allow"
+    );
+
+    let ledger = fs::read_to_string(&ledger_path).expect("shadow ledger");
+    assert_eq!(ledger.lines().count(), 1, "one JSONL shadow row");
+    assert!(
+        !ledger.contains(command),
+        "raw command must not be persisted in shadow evidence"
+    );
+    let row: Value = serde_json::from_str(ledger.trim()).expect("valid shadow JSONL row");
+    assert_eq!(row["effective_mode"], "shadow");
+    assert_eq!(row["rust_permission"], "allow");
+    for field in ["command_sha256", "input_sha256"] {
+        let hash = row[field].as_str().expect("hash field is text");
+        assert_eq!(hash.len(), 64, "{field} is SHA-256 hex");
+        assert!(
+            hash.bytes().all(|byte| byte.is_ascii_hexdigit()),
+            "{field} is hexadecimal"
+        );
+    }
+    for (field, expected) in [
+        ("session_id", "integration-session"),
+        ("turn_id", "integration-turn"),
+        ("tool_use_id", "integration-tool"),
+    ] {
+        assert_eq!(row[field], expected);
+    }
+    assert_eq!(row["transcript_path"], "/tmp/integration-transcript.jsonl");
+    assert_eq!(row["cwd"], "/tmp/kernel-only-operator-hook-test");
+    assert!(
+        row["predecessor_outcome"]
+            .as_str()
+            .is_some_and(|outcome| !outcome.is_empty()),
+        "predecessor outcome is recorded"
+    );
+    assert!(row["predecessor_exit_status"].as_str().is_some());
+    assert_eq!(
+        envelope["hookSpecificOutput"]["permissionDecision"], "allow",
+        "shadow effective behavior remains allow"
+    );
+    let _ = fs::remove_file(ledger_path);
 }
