@@ -173,6 +173,9 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
     if repos.is_empty() {
         repos.push(std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default());
     }
+    // Panes that are never worker capacity. The conductor's own pane belongs here: it is
+    // idle between turns by design, so counting it fires the idle alarm forever.
+    let excluded: Vec<&str> = flags(args, "--exclude-pane");
     let state_file = flag(args, "--state")
         .map(PathBuf::from)
         .unwrap_or_else(state_path);
@@ -215,12 +218,18 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
         };
         let prev = prior.panes.iter().find(|p| &p.pane_id == id);
         let live = liveness(prev, &o);
-        if live.is_dispatchable() {
+        if live.is_dispatchable() && !excluded.contains(&id.as_str()) {
             dispatchable.push(id.clone());
         }
         // Reported separately: a NewlyIdle pane is free capacity a conductor must SEE,
         // even though it may not be filled until the next tick confirms it.
-        if live.is_free_capacity() {
+        //
+        // The orchestrator's own pane is EXCLUDED. It goes idle between turns by design,
+        // and counting it as free capacity fires the idle alarm continuously -- the
+        // "LIVENESS counting the orchestrator as a worker" defect named in
+        // /ntm-fleet-monitor's reporting contract. Measured: ticks 14 and 15 reported
+        // free=['%1397','%1413'], where %1397 is the conductor.
+        if live.is_free_capacity() && !excluded.contains(&id.as_str()) {
             free_capacity.push(id.clone());
         }
         if let Some(p) = prev {
@@ -360,6 +369,12 @@ fn watch(args: &[String]) -> i32 {
     let stall_after: u32 = flag(args, "--stall-after")
         .and_then(|s| s.parse().ok())
         .unwrap_or(3);
+    // Two ticks of persistent free capacity is the alarm. One tick is normal -- a worker
+    // finishing is the healthy case, and NewlyIdle needs a second capture to confirm
+    // anyway. Two means nobody refilled it.
+    let capacity_alarm_after: u32 = flag(args, "--capacity-alarm-after")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(2);
     let state_file = flag(args, "--state")
         .map(PathBuf::from)
         .unwrap_or_else(state_path);
@@ -384,6 +399,7 @@ fn watch(args: &[String]) -> i32 {
 
     let mut ticks: u64 = 0;
     let mut no_value: u32 = 0;
+    let mut free_streak: u32 = 0;
     loop {
         ticks += 1;
         let line = match observe_core(args) {
@@ -401,18 +417,34 @@ fn watch(args: &[String]) -> i32 {
         };
 
         // A tick has value if anything moved or any capacity opened.
+        let has_free = !line.contains("\"free_capacity\":[]");
         let moved = !line.contains("\"new_total\":0")
             || !line.contains("\"transitions\":[]")
-            || !line.contains("\"free_capacity\":[]");
+            || has_free;
         if moved {
             no_value = 0;
         } else {
             no_value += 1;
         }
 
+        // THE ALARM THIS LOOP WAS MISSING, and it cost three incidents in one shift.
+        //
+        // `no_value` counts ticks where NOTHING happened. Free capacity is the opposite
+        // condition -- something DID happen (a worker finished) -- so every idle pane RESET
+        // the stall counter and no alarm ever fired. Measured: %1413 went idle at tick 12
+        // and was reported free at ticks 12, 13, 14 and 15 (~6 minutes) with the loop
+        // reporting healthy the whole time, because "a worker freed up" reads as motion.
+        //
+        // Idle capacity is the EXPENSIVE state, not the quiet one. It gets its own streak.
+        if has_free {
+            free_streak += 1;
+        } else {
+            free_streak = 0;
+        }
+
         let record = format!(
-            "{{\"tick\":{},\"no_value_streak\":{},\"observation\":{}}}",
-            ticks, no_value, line
+            "{{\"tick\":{},\"no_value_streak\":{},\"free_capacity_streak\":{},\"observation\":{}}}",
+            ticks, no_value, free_streak, line
         );
         use std::io::Write;
         if let Ok(mut f) = std::fs::OpenOptions::new()
@@ -429,6 +461,25 @@ fn watch(args: &[String]) -> i32 {
                 "{{\"stall\":true,\"no_value_streak\":{},\"tick\":{},\"note\":\"{} consecutive ticks with no commit, no transition and no free capacity; a conductor should look, this monitor does not act\"}}",
                 no_value, ticks, no_value
             );
+        }
+
+        // A single-line file, overwritten every tick, so ONE cheap read answers "is a
+        // worker sitting idle right now". The ledger is append-only and grows; nobody
+        // greps a growing file under time pressure. This is the file to read first.
+        let attention = watch_ledger.with_file_name("ATTENTION.txt");
+        let msg = if free_streak >= capacity_alarm_after {
+            format!(
+                "IDLE CAPACITY for {free_streak} consecutive ticks (tick {ticks}) -- DISPATCH OR GRADE NOW. An idle worker beside a ready queue is the conductor's failure.\n"
+            )
+        } else if has_free {
+            format!("free capacity seen this tick (streak {free_streak}, tick {ticks})\n")
+        } else {
+            format!("all panes occupied (tick {ticks})\n")
+        };
+        let _ = std::fs::write(&attention, &msg);
+        if free_streak >= capacity_alarm_after {
+            // Loud on stdout too, so `hub logs` shows it without parsing JSON.
+            print!("{msg}");
         }
 
         if max_ticks > 0 && ticks >= max_ticks {
