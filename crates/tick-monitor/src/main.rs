@@ -796,47 +796,6 @@ fn selftest() -> i32 {
     }
 }
 
-/// Resolve the repos the lifecycle JOIN monitors: `--repo` flags (repeatable) >
-/// `TICK_MONITOR_REPOS` (colon-separated) > upward walk from the cwd for a
-/// `.git`/`.beads` marker (the checkout you are standing in). NO silent
-/// default: with none of those, the typed error names the markers and both
-/// escape hatches — a wrong-repo default compiles and then quietly reads the
-/// wrong tree, which is worse than failing (beads omp-orchestrator-npq and
-/// -7ai; mechanism ported from omp-idle-dispatch's REPO_MARKERS walk).
-fn resolve_lifecycle_repos(args: &[String]) -> Result<Vec<String>, String> {
-    let flagged = flags(args, "--repo");
-    if !flagged.is_empty() {
-        return Ok(flagged.iter().map(|s| s.to_string()).collect());
-    }
-    if let Ok(list) = std::env::var("TICK_MONITOR_REPOS") {
-        let repos: Vec<String> = list
-            .split(':')
-            .filter(|p| !p.is_empty())
-            .map(str::to_string)
-            .collect();
-        if !repos.is_empty() {
-            return Ok(repos);
-        }
-    }
-    const MARKERS: [&str; 2] = [".git", ".beads"];
-    let start = std::env::current_dir()
-        .map_err(|e| format!("cannot read the current directory: {e}"))?;
-    let mut dir = start.clone();
-    loop {
-        if MARKERS.iter().any(|m| dir.join(m).exists()) {
-            return Ok(vec![dir.display().to_string()]);
-        }
-        if !dir.pop() {
-            break;
-        }
-    }
-    Err(format!(
-        "no repository marker ({}) found at or above {}; pass --repo <PATH> \
-         (repeatable) or set TICK_MONITOR_REPOS",
-        MARKERS.join(" or "),
-        start.display()
-    ))
-}
 
 /// The four-surface JOIN. Thin on purpose: the logic lives in `lifecycle::collect` where
 /// `cargo test` can reach it, not in a `main.rs` subcommand only a human invokes.

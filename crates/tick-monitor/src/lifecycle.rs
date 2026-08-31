@@ -90,6 +90,10 @@ pub struct Unit {
     pub status: String,
     pub assignee: Option<String>,
     pub dep_count: usize,
+    /// How many OTHER beads depend on this one. Required because `br dep list <id>` returns
+    /// only OUT-edges, so a bead that BLOCKS something reads as edgeless. Measured
+    /// 2026-08-31: `-gfb` was reported MATERIALIZED_ORPHAN while `kxe` depended on it.
+    pub in_degree: usize,
     /// SHAs cited by this bead's comments/close reason AND verified to exist in git.
     pub verified_shas: Vec<String>,
     /// SHAs cited but NOT found in the object store. A citation that does not resolve is a
@@ -124,7 +128,10 @@ impl Unit {
         if self.assignee.is_some() && self.status == "in_progress" {
             return Stage::Claimed;
         }
-        if self.dep_count == 0 {
+        // An orphan has NO edges in EITHER direction. Out-edges alone are the wrong
+        // measure: a bead that blocks work is sequenced, it just does not depend on
+        // anything itself.
+        if self.dep_count == 0 && self.in_degree == 0 {
             return Stage::MaterializedOrphan;
         }
         Stage::Triaged
@@ -440,6 +447,8 @@ pub fn collect(repos: &[String]) -> Result<Report, String> {
     }
 
     let mut report = Report::default();
+    // bead -> the ids it depends on, so in-degree can be computed after the walk.
+    let mut out_edges: Vec<(String, Vec<String>)> = Vec::new();
     for chunk in chunks {
         // Each chunk must yield exactly one id and one status, or the chunking assumption
         // is broken and we refuse rather than guess.
@@ -472,11 +481,20 @@ pub fn collect(repos: &[String]) -> Result<Report, String> {
             }
         }
 
-        let dep_count = if deps.contains("No dependencies") {
-            0
+        let dep_targets: Vec<String> = if deps.contains("No dependencies") {
+            Vec::new()
         } else {
-            deps.lines().filter(|l| l.contains("->")).count()
+            deps.lines()
+                .filter(|l| l.contains("->"))
+                .filter_map(|l| {
+                    l.split_whitespace()
+                        .find(|t| t.starts_with("omp-orchestrator-"))
+                        .map(str::to_owned)
+                })
+                .collect()
         };
+        let dep_count = dep_targets.len();
+        out_edges.push((id.clone(), dep_targets));
 
         let closed = status == "closed";
         let graded = has_verdict_marker(&corpus);
@@ -485,6 +503,7 @@ pub fn collect(repos: &[String]) -> Result<Report, String> {
             status,
             assignee,
             dep_count,
+            in_degree: 0, // filled in the second pass below
             verified_shas: verified,
             dangling_shas: dangling,
             has_verdict: graded && !closed,
@@ -494,6 +513,13 @@ pub fn collect(repos: &[String]) -> Result<Report, String> {
             closed_by_author: closed && !graded,
             refuted: has_refutation_marker(&corpus) && !closed,
         });
+    }
+    // SECOND PASS: in-degree. Without it a bead that BLOCKS work reads as an orphan.
+    for unit in report.units.iter_mut() {
+        unit.in_degree = out_edges
+            .iter()
+            .filter(|(src, targets)| src != &unit.bead && targets.contains(&unit.bead))
+            .count();
     }
     Ok(report)
 }
@@ -605,6 +631,7 @@ mod tests {
             status: "in_progress".into(),
             assignee: Some("GoldLark".into()),
             dep_count: 1,
+            in_degree: 0,
             verified_shas: vec!["abc1234".into()],
             dangling_shas: vec![],
             has_verdict: false,
@@ -627,6 +654,7 @@ mod tests {
             status: "in_progress".into(),
             assignee: Some("GoldLark".into()),
             dep_count: 1,
+            in_degree: 0,
             verified_shas: vec!["f9f4e37".into()],
             dangling_shas: vec![],
             has_verdict: false,
@@ -646,6 +674,7 @@ mod tests {
             status: "open".into(),
             assignee: None,
             dep_count: 0,
+            in_degree: 0,
             verified_shas: vec![],
             dangling_shas: vec![],
             has_verdict: false,
@@ -666,6 +695,7 @@ mod tests {
             status: "closed".into(),
             assignee: None,
             dep_count: 1,
+            in_degree: 0,
             verified_shas: vec![],
             dangling_shas: vec![],
             has_verdict: false,
@@ -772,5 +802,42 @@ mod content_hash_tests {
     fn a_truncated_hash_is_rejected_even_without_a_label() {
         // Truncation alone is decisive: a display-truncated hash can never resolve.
         assert!(sha_candidates("commit deadbeef\u{2026}9c1 was the baseline").is_empty());
+    }
+}
+
+#[cfg(test)]
+mod orphan_tests {
+    use super::*;
+
+    fn unit(dep_count: usize, in_degree: usize) -> Unit {
+        Unit {
+            bead: "x".into(),
+            status: "open".into(),
+            assignee: None,
+            dep_count,
+            in_degree,
+            verified_shas: vec![],
+            dangling_shas: vec![],
+            has_verdict: false,
+            closed_by_author: false,
+            refuted: false,
+        }
+    }
+
+    /// MEASURED FALSE POSITIVE, 2026-08-31. `-gfb` was reported MATERIALIZED_ORPHAN while
+    /// `kxe` depended on it (`br dep tree kxe` hit it). `br dep list <id>` returns only
+    /// OUT-edges, so a bead that BLOCKS work looked edgeless. A bead that something depends
+    /// on is sequenced -- it just does not itself depend on anything.
+    #[test]
+    fn a_bead_others_depend_on_is_not_an_orphan() {
+        assert_ne!(unit(0, 1).stage(), Stage::MaterializedOrphan);
+        assert_eq!(unit(0, 1).stage(), Stage::Triaged);
+    }
+
+    #[test]
+    fn only_zero_edges_in_both_directions_is_an_orphan() {
+        assert_eq!(unit(0, 0).stage(), Stage::MaterializedOrphan);
+        assert_ne!(unit(1, 0).stage(), Stage::MaterializedOrphan);
+        assert_ne!(unit(2, 3).stage(), Stage::MaterializedOrphan);
     }
 }
