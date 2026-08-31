@@ -1,0 +1,17 @@
+[package]
+name = "fleet-truth"
+version = "0.1.0"
+edition = "2021"
+description = "Ground-truth fleet inspection register. Port of bin/fleet-truth.sh; the shell remains the differential oracle."
+
+[[bin]]
+name = "fleet-truth"
+path = "src/main.rs"
+
+[lib]
+name = "fleet_truth"
+path = "src/lib.rs"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+serde_json = "1"
