@@ -20,6 +20,12 @@ jobs:
         uses: actions/checkout@v4
       - name: Install Rust
         run: rustup toolchain install stable --profile minimal
+      # Acceptance 3 (bead omp-orchestrator-workspace-load-gate-of3): the
+      # workspace LOADS as its own step, BEFORE and independently of the gate
+      # steps — a manifest break is attributed to itself, not surfaced as a
+      # mysterious gate failure.
+      - name: Workspace loads
+        run: cargo metadata --no-deps --format-version 1 > /dev/null
       - name: Gate binary — refuse tracked .sh/.py
         run: cargo run --quiet -p no-shell-gate
       - name: Gate tests — red/green legs and the real-tree leg

@@ -155,3 +155,138 @@ pub fn check_repo(repo_root: &Path) -> Result<Verdict, GateError> {
         Verdict::Violations(violations)
     })
 }
+
+// ---------------------------------------------------------------------------
+// Workspace load gate (bead omp-orchestrator-workspace-load-gate-of3).
+//
+// THE DEFECT THIS CLOSES: a workspace member whose manifest cannot load makes
+// `cargo test` exit nonzero at PARSE time with no test result line — the
+// no-shell gate never runs, and a nonzero exit is indistinguishable from the
+// gate refusing a violation. The anti-vacuity rule applied upstream of the
+// scan: the scan set is not merely possibly empty, it can be UNREACHABLE, and
+// an unreachable scan must report a TYPED, NAMED outcome — never a pass, and
+// never a bare exit code.
+// ---------------------------------------------------------------------------
+
+/// What one workspace-load probe found, with a named detector per outcome so a
+/// harness can assert WHICH case fired instead of a bare nonzero exit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WorkspaceLoad {
+    /// `cargo metadata` parsed the workspace; `members` lists every crate
+    /// directory under `crates/` that carries a manifest (the scan set).
+    Loaded { members: Vec<String> },
+    /// No root `Cargo.toml` at the given root.
+    ManifestMissing { path: String },
+    /// `cargo metadata` refused the workspace; `manifest` names the offending
+    /// member manifest extracted from cargo's own error output, `detail` is
+    /// that error text.
+    MemberUnreadable { manifest: String, detail: String },
+    /// The workspace loaded but enumerates ZERO member manifests — a scan set
+    /// that can never contain a violation. Anti-vacuity: an error, not a pass.
+    MembersEmpty,
+}
+
+impl WorkspaceLoad {
+    /// The specific detector name for this outcome. A harness asserts THIS, not
+    /// a bare exit code, so "the guard fired" is distinguishable from "the
+    /// check could not start".
+    pub fn detector(&self) -> &'static str {
+        match self {
+            WorkspaceLoad::Loaded { .. } => "WORKSPACE_LOADED",
+            WorkspaceLoad::ManifestMissing { .. } => "WORKSPACE_MANIFEST_MISSING",
+            WorkspaceLoad::MemberUnreadable { .. } => "WORKSPACE_MEMBER_UNREADABLE",
+            WorkspaceLoad::MembersEmpty => "WORKSPACE_MEMBERS_EMPTY",
+        }
+    }
+
+    pub fn is_loaded(&self) -> bool {
+        matches!(self, WorkspaceLoad::Loaded { .. })
+    }
+}
+
+/// Run `cargo metadata --no-deps` against `manifest`, bounded, both pipes
+/// drained. Returns (exit code, stderr).
+fn cargo_metadata(manifest: &Path) -> (Option<i32>, String) {
+    let output = Command::new("cargo")
+        .args([
+            "metadata",
+            "--no-deps",
+            "--format-version",
+            "1",
+            "--manifest-path",
+        ])
+        .arg(manifest)
+        .output();
+    match output {
+        Ok(out) => (
+            out.status.code(),
+            format!(
+                "{}{}",
+                String::from_utf8_lossy(&out.stderr),
+                String::from_utf8_lossy(&out.stdout)
+            ),
+        ),
+        Err(err) => (None, format!("cargo metadata could not be spawned: {err}")),
+    }
+}
+
+/// Probe whether the workspace at `repo_root` can LOAD at all — upstream of
+/// every gate scan, because a gate that cannot run reports like a gate that
+/// passed unless the load is checked first. `cargo metadata --no-deps` reads
+/// the root manifest and EVERY member manifest, which is exactly the surface
+/// extraction mutates.
+pub fn check_workspace_load(repo_root: &Path) -> WorkspaceLoad {
+    let manifest = repo_root.join("Cargo.toml");
+    if !manifest.exists() {
+        return WorkspaceLoad::ManifestMissing {
+            path: manifest.display().to_string(),
+        };
+    }
+    let (code, output) = cargo_metadata(&manifest);
+    if code != Some(0) {
+        let detail: String = output
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .take(6)
+            .collect::<Vec<_>>()
+            .join("\n");
+        return WorkspaceLoad::MemberUnreadable {
+            manifest: offending_manifest(&output, repo_root),
+            detail,
+        };
+    }
+    let mut members = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(repo_root.join("crates")) {
+        for entry in entries.flatten() {
+            if entry.path().join("Cargo.toml").is_file() {
+                if let Some(name) = entry.file_name().to_str() {
+                    members.push(name.to_string());
+                }
+            }
+        }
+    }
+    members.sort();
+    if members.is_empty() {
+        return WorkspaceLoad::MembersEmpty;
+    }
+    WorkspaceLoad::Loaded { members }
+}
+
+/// The last `Cargo.toml` path mentioned in cargo's error output — cargo names
+/// the offending manifest in its error text and location pointer, and the
+/// DEEPEST mention (the final caused-by line) is the actual broken file. The
+/// path may be relative to the manifest directory (`../…/member/Cargo.toml`)
+/// and may carry a `:line:col` suffix; both are handled here. Fallback when
+/// nothing parseable remains: the root manifest itself.
+fn offending_manifest(detail: &str, root: &Path) -> String {
+    let mut found: Option<String> = None;
+    for line in detail.lines() {
+        for token in line.split_whitespace() {
+            let bare = token.split(':').next().unwrap_or(token);
+            if bare.ends_with("Cargo.toml") {
+                found = Some(bare.to_string());
+            }
+        }
+    }
+    found.unwrap_or_else(|| root.join("Cargo.toml").display().to_string())
+}
