@@ -349,6 +349,54 @@ resolves the instant the dot is stripped. A further 13 are prose fragments (`bin
 harvester would leave it live to re-manufacture the same rows forever.
 `cp-cited-path-trailing-period-n5mkc`.
 
+### SUPERSEDED — the section above was measured against a regex that had already been replaced
+
+**PIN THE REVISION YOU READ.** "Read the consumer, do not infer it" is the right rule and it still
+produced stale analysis: in a shared checkout **the consumer is a moving target**. `CITED_PATH` was
+rewritten in `c37db1a` *"fix(close-evidence): require marked path citations [test]"* while the
+section above was being measured against the old one.
+
+**What is actually in production:**
+
+```
+const CITED_PATH: &str = r"(?:`|(?i:path|file):\s*)((?:bin/[\w.-]+|crates/[\w./-]+|\.flywheel/[\w./-]+))(?:`|\b)";
+```
+
+Three changes, each of which retires a claim above:
+
+1. **A leading marker is REQUIRED** — a backtick, or a case-insensitive `path:`/`file:` prefix.
+   Bare prose paths are no longer harvested, so the prose-harvesting class is gone **wholesale**.
+2. **A trailing anchor is REQUIRED.** A greedy match that swallowed a sentence period cannot satisfy
+   `\b`, so the engine gives the period back. **The trailing-period defect is unreachable by
+   construction**, and `cp-cited-path-trailing-period-n5mkc` is closed WONTFIX as obsolete.
+3. **`crates/` is now in the harvest set.** Any statement that this gate harvests "`bin/` and
+   `.flywheel/` only" is stale — including the correction that used it to revise an overstatement.
+
+**Re-measured under the current contract** (blank fences + inline code first, since
+`guards.rs:60` defaults `path_reads_blanked: true` and `grade.rs:372` therefore reads the blanked
+text), over `close_reason` + `comments` in both trackers:
+
+| scan | citations | unresolvable | beads |
+|---|:-:|:-:|:-:|
+| old regex (as measured above) | 259 | 73 | 74 |
+| **new regex (production)** | **3** | **1** | **1** |
+
+The lone survivor is `bin/does-not-exist.sh`, a test fixture. **There is no cleanup.**
+
+### How to write a path in a bead, under the current contract
+
+`path_reads_blanked` defaults **true**, so backticked content is blanked *before* the path scan —
+and the new regex *requires* a marker. With defaults the backtick is blanked away along with its
+marker, so:
+
+- **A backticked path is still SAFE** — invisible to the harvester, cannot produce a false BAD_PATH.
+- **A backticked path is no longer CHECKABLE evidence.** To have a citation the gate can verify,
+  write it as `path: bin/foo.sh` or `file: crates/x/src/lib.rs`.
+
+> **NO-CLAIM:** the installed `~/.local/bin/close-evidence-gate` is a **separate artifact** and
+> cannot be rebuilt under the mint floor, so the *running* gate may still carry the old regex. The
+> class is dead in source and may still be live in the lane — a source claim wearing a live badge.
+
 ### Adjacency is not authorship — a SHA near a bead is not a SHA belonging to it
 
 `tick-monitor lifecycle` reported `omp-orchestrator-2lo landed=3f821d4`. That bead has **no commit
