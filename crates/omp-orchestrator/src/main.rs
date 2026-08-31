@@ -45,6 +45,7 @@ struct Config {
     repo: PathBuf,
     session: String,
     interval: Duration,
+    run_subcommand: bool,
     command_timeout: Duration,
     max_ticks: Option<u64>,
     tick_monitor: String,
@@ -94,7 +95,12 @@ impl Config {
         let mut omp_binary = env::var_os("OMP_BINARY")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("omp"));
-        let mut index = 0;
+        // `run` is the explicit lifecycle entrypoint: `omp-orchestrator run
+        // --once ...`. It consumes only the leading token; every flag after
+        // it parses identically to the launchd flag-only invocation, and any
+        // positional other than a leading `run` is refused in the match arm.
+        let run_subcommand = args.first().map(String::as_str) == Some("run");
+        let mut index = if run_subcommand { 1 } else { 0 };
         while index < args.len() {
             match args[index].as_str() {
                 "--repo" => {
@@ -239,6 +245,7 @@ impl Config {
             br: env::var("OMP_BR_BIN").unwrap_or_else(|_| "br".to_owned()),
             ntm: env::var("OMP_NTM_BIN").unwrap_or_else(|_| "ntm".to_owned()),
             tmux_tmpdir,
+            run_subcommand,
             exclude_panes,
             heartbeat_ledger,
             tick_monitor_state,
@@ -249,9 +256,8 @@ impl Config {
         })
     }
 }
-
 fn usage() -> &'static str {
-    "usage: omp-orchestrator [--once|--max-ticks N] [--repo PATH] [--session NAME] [--interval-secs N] [--receiver-agent NAME] [--omp-quick] [--omp-binary PATH]"
+    "usage: omp-orchestrator [run] [--once|--max-ticks N] [--repo PATH] [--session NAME] [--interval-secs N] [--receiver-agent NAME] [--omp-quick] [--omp-binary PATH]\n       `run` is the explicit resident lifecycle entrypoint (observe -> ready queue -> dispatch -> receiver receipt); the flag-only form is unchanged for launchd"
 }
 
 fn now_unix() -> u64 {
@@ -1032,6 +1038,7 @@ mod tests {
             command_timeout: Duration::from_secs(1),
             max_ticks: Some(1),
             tick_monitor: "tick-monitor".to_owned(),
+            run_subcommand: false,
             br: "br".to_owned(),
             ntm: "ntm".to_owned(),
             tmux_tmpdir: PathBuf::from("/tmp/omp-orchestrator-test-tmux"),
@@ -1094,4 +1101,37 @@ mod tests {
         std::fs::remove_file(path).unwrap();
         std::fs::remove_dir(root).unwrap();
     }
+
+    #[test]
+    fn run_subcommand_parses_with_once() {
+        let args = ["run".to_owned(), "--once".to_owned()];
+        let config = Config::from_args(&args).unwrap();
+        assert!(config.run_subcommand);
+        assert_eq!(config.max_ticks, Some(1));
+    }
+
+    #[test]
+    fn flag_only_invocation_is_unchanged_for_launchd() {
+        let args = ["--once".to_owned()];
+        let config = Config::from_args(&args).unwrap();
+        assert!(!config.run_subcommand, "flag-only form must not require the subcommand");
+        assert_eq!(config.max_ticks, Some(1));
+    }
+
+    #[test]
+    fn unknown_positional_is_refused() {
+        let stray = Config::from_args(&["run".to_owned(), "extra".to_owned()])
+            .unwrap_err();
+        assert!(stray.contains("CONFIG_REFUSED unknown argument extra"), "{stray}");
+        let bare = Config::from_args(&["frobnicate".to_owned()]).unwrap_err();
+        assert!(bare.contains("CONFIG_REFUSED unknown argument frobnicate"), "{bare}");
+    }
+
+    #[test]
+    fn help_reports_the_run_entrypoint() {
+        let help = Config::from_args(&["--help".to_owned()]).unwrap_err();
+        assert_eq!(help, usage());
+        assert!(help.contains("[run]"), "usage must advertise the run subcommand");
+    }
+
 }
