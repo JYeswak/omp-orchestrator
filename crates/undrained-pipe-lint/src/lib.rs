@@ -175,11 +175,21 @@ fn piped_pair(code: &[String], region: &FunctionRegion) -> Option<(usize, usize)
     let mut stderr = None;
     for index in region.start..=region.end {
         let line = &code[index];
-        if line.contains("stdout") && line.contains("Stdio::piped()") {
-            stdout = Some(index);
+        // PER-METHOD CHECK: for a chained line like
+        // `cmd.stdout(Stdio::piped()).stderr(Stdio::null())` the line contains
+        // BOTH method names but only stdout is piped. Checking
+        // `line.contains("Stdio::piped()")` alone would match stdout's pipe
+        // against stderr's method name. Instead: find the method position and
+        // check whether Stdio::piped() appears AFTER it on the same line.
+        if let Some(out_pos) = line.find(".stdout(") {
+            if line[out_pos..].contains("Stdio::piped()") {
+                stdout = Some(index);
+            }
         }
-        if line.contains("stderr") && line.contains("Stdio::piped()") {
-            stderr = Some(index);
+        if let Some(err_pos) = line.find(".stderr(") {
+            if line[err_pos..].contains("Stdio::piped()") {
+                stderr = Some(index);
+            }
         }
     }
     match (stdout, stderr) {
