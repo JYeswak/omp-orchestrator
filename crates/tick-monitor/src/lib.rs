@@ -748,3 +748,122 @@ pub fn save(path: &Path, st: &State) -> std::io::Result<()> {
     std::fs::write(&tmp, out)?;
     std::fs::rename(&tmp, path)
 }
+
+// ---------------------------------------------------------------------------
+// repo discovery -- no hardcoded roots, ever
+// ---------------------------------------------------------------------------
+
+/// Why a repository set could not be resolved. Every variant names what it looked for,
+/// because the historic failure of this lane was worse than an error: a hardcoded root
+/// COMPILES after a move and then silently reads the WRONG repo (bead -7ai, -npq).
+#[derive(Debug, PartialEq, Eq)]
+pub enum RepoError {
+    /// An explicit source was set but empty.
+    ExplicitEmpty { source: &'static str },
+    /// No marker found walking up from `from`.
+    NotFound { from: String, markers: &'static str },
+}
+
+impl std::fmt::Display for RepoError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RepoError::ExplicitEmpty { source } => {
+                write!(f, "{source} is set but empty; refusing to guess a repository")
+            }
+            RepoError::NotFound { from, markers } => write!(
+                f,
+                "no repository marker ({markers}) found walking up from {from}; \
+                 pass --repo <path> or set {}",
+                REPOS_ENV
+            ),
+        }
+    }
+}
+
+/// Colon-separated repository list, honoured when no `--repo` flag is given.
+pub const REPOS_ENV: &str = "OMP_LIFECYCLE_REPOS";
+const MARKERS: [&str; 2] = [".git", ".beads"];
+
+/// Resolve the repository set: explicit flags > env > upward marker walk > typed error.
+///
+/// Precedence is documented because it is load-bearing (-7ai acceptance 2). There is NO
+/// silent cwd fallback: a tool that defaults to "wherever I happen to be" is the wrong-repo
+/// defect wearing a different hat.
+pub fn resolve_repos(explicit: &[&str]) -> Result<Vec<String>, RepoError> {
+    if !explicit.is_empty() {
+        if explicit.iter().any(|s| s.trim().is_empty()) {
+            return Err(RepoError::ExplicitEmpty { source: "--repo" });
+        }
+        return Ok(explicit.iter().map(|s| s.to_string()).collect());
+    }
+    if let Ok(v) = std::env::var(REPOS_ENV) {
+        if v.trim().is_empty() {
+            return Err(RepoError::ExplicitEmpty { source: REPOS_ENV });
+        }
+        return Ok(v
+            .split(':')
+            .filter(|s| !s.trim().is_empty())
+            .map(str::to_owned)
+            .collect());
+    }
+    let start = std::env::current_dir()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|_| ".".to_owned());
+    let mut dir = std::path::PathBuf::from(&start);
+    loop {
+        if MARKERS.iter().any(|m| dir.join(m).exists()) {
+            return Ok(vec![dir.display().to_string()]);
+        }
+        if !dir.pop() {
+            return Err(RepoError::NotFound {
+                from: start,
+                markers: ".git/.beads",
+            });
+        }
+    }
+}
+
+#[cfg(test)]
+mod repo_tests {
+    use super::*;
+
+    #[test]
+    fn explicit_flags_win() {
+        assert_eq!(
+            resolve_repos(&["/a", "/b"]).unwrap(),
+            vec!["/a".to_owned(), "/b".to_owned()]
+        );
+    }
+
+    #[test]
+    fn an_empty_explicit_value_is_a_typed_error_not_a_guess() {
+        assert_eq!(
+            resolve_repos(&[""]),
+            Err(RepoError::ExplicitEmpty { source: "--repo" })
+        );
+    }
+
+    #[test]
+    fn the_marker_walk_finds_this_repo_and_names_what_it_sought() {
+        // Running under cargo, cwd is inside the repo, so the walk must succeed.
+        let got = resolve_repos(&[]).expect("marker walk should find this repo");
+        assert_eq!(got.len(), 1);
+        let p = std::path::Path::new(&got[0]);
+        assert!(
+            p.join(".git").exists() || p.join(".beads").exists(),
+            "resolved {got:?} carries no marker"
+        );
+    }
+
+    #[test]
+    fn the_error_message_names_the_markers_and_the_escape_hatch() {
+        let e = RepoError::NotFound {
+            from: "/tmp/nowhere".into(),
+            markers: ".git/.beads",
+        };
+        let s = e.to_string();
+        assert!(s.contains(".git/.beads"), "must name what it looked for: {s}");
+        assert!(s.contains("--repo"), "must name the escape hatch: {s}");
+        assert!(s.contains(REPOS_ENV), "must name the env override: {s}");
+    }
+}
