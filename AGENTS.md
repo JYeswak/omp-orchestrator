@@ -580,3 +580,66 @@ end in a greedy class containing `.`, so a sentence-ending period is absorbed:
 prose fragments (`bin/a`, `bin/b`, `bin/crates`, the last a truncation at the next slash). **The
 real broken-citation count is 9**, and editing bead comments to work around the harvester would
 leave it live to re-manufacture the same rows forever. Tracked as `cp-cited-path-trailing-period-n5mkc`.
+
+## Post-mortem: the fleet went idle for 6+ hours while every watchdog fired (2026-08-31, session post-wave)
+
+The session's product claim — no session goes idle until Joshua says so — failed for ~6 hours
+(roughly 10:00Z to 16:00Z) while every detection layer worked. The causal chain, each link
+measured, not inferred:
+
+1. THE CONDUCTOR FAMILY IS WIRED AND FIRING — and refused at one gate, for hours. Cron entries
+   exist for controller-tick (18,38,58), fast-dispatch (*/5), loop-driver, refill-idle-panes,
+   challenge-lane, fleet-monitor, reap-finished-panes. controller-tick's log tail at 15:59:51Z:
+   "ADMISSION REFUSED — no fresh standing PASS at check-sh-ledger.json". fast-dispatch's log:
+   "drift UNRUN skipped-after-close-evidence; tests UNRUN; mutation UNRUN". The fail-fast chain
+   means ONE red gate makes every downstream gate UNRUN, and the admission verdict can never go
+   green while any single gate is red.
+2. THE GATES WENT RED FASTER THAN THEY WERE FIXED. The standing check-sh verdict failed at 10:00
+   (docs-staleness: the staleness metric counts commits since the doc's last DISK WRITE, so a wave
+   committing ~2/min re-stales AGENTS.md in ~25 minutes). Fixed by landing real findings (5107abc).
+   Then close-evidence RED: 39+5 closed beads without audit-trail comments — backfilled (34 fixed
+   by close-reason evidence patterns already present; 5 unfixable by comments because
+   close-evidence-gate's bead source omits the comments field entirely — source.rs:223). Then
+   bead-lineage RED. Each fix revealed the next red: the chain re-fails on the next gate every
+   time, and at wave rate the admission verdict was red ~continuously.
+3. THE DISK WALL MADE THE REST OF THE CHAIN UNFIXABLE. The `tests` and `mutation` gates require
+   cargo builds; builds are refused at the mint floor (container 6.5-6.8% vs 8%,
+   CARGO_MINT_CONTAINER_EXHAUSTED exit 75) — escalated to Joshua (cp-oakbv). The admission verdict
+   therefore cannot go PASS regardless of gate fixes until disk headroom exists.
+4. THE WATCHDOGS DETECTED AND FILED — AND THE P0s SAT OPEN. challenge-lane auto-filed
+   cp-rjuzj ("close-evidence RED blocks all dispatch") and cp-vgine ("idle OMP capacity beside a
+   ready queue") — both P0, both correct, both sat open for hours. dispatcher-deadman exists for
+   exactly this class. Detection fired; the response layer does not exist: every lane fail-closes
+   on admission, and no mechanism is authorized to act on a DEGRADED signal.
+5. THE CONDUCTOR WAS A PANE. Pane 1 hand-routed work all night (four grades, two fixes, the
+   blocker map) — the manual orchestration was load-bearing while the automated conductor was
+   admission-blocked. When pane 1 investigated the blockers, routing stopped and seven panes went
+   idle. The product's own claim (loop-driver: single-instance deadline-bounded conductor;
+   refill-idle-panes: "an idle worker beside a ready queue is the conductor's failure") is that
+   the conductor is a BINARY. The binary exists, is cron'd, and was refused — see 1-3.
+
+THE NAMED MECHANISMS THAT PREVENT RECURRENCE (in order of leverage):
+  M1 — TYPED DEGRADED DISPATCH: when admission is red, the conductor dispatches LOW-STAKES beads
+       (grading/verification/hygiene — the classes that need no green admission) with
+       admission=stale marked on the lifecycle row. Challenge-lane's own acceptance says
+       "dispatch the idle panes, OR name why the queue is not eligible" — the naming has run all
+       night and must be allowed to end in a dispatch for the work that does not need a green
+       tree. High-stakes dispatch keeps the full gate.
+  M2 — GRADING AS A DISPATCH LANE: beads in `grading` auto-route to eligible non-author graders.
+       Tonight four grades were MANUAL orchestrator routings; the handoffs created waits that
+       looked like idleness. (The close drought and the idle panes are one defect — confirmed
+       again: 5cl/6gq sat in grading while panes idled.)
+  M3 — CROSS-SESSION ROUTING: panes idled in a session whose repo was admission-blocked while
+       real work existed in the other repo (grades, backfills, doc currency). The conductor must
+       route by WORK LOCATION, not by session membership.
+  M4 — THE DISK WALL (cp-oakbv, with Joshua): the admission chain's tests/mutation gates
+       physically cannot run below the mint floor. Until resolved, M1 is the only dispatch path.
+  M5 — DOCS-STALENESS METRIC REDESIGN: a counter that re-stales in 25 minutes on a wave is a
+       gate that is red ~forever when the fleet is most active. Measure staleness against
+       substantive-commit classes, or gate it to a longer window during declared waves.
+
+ALSO CORRECTED IN THIS POST-MORTEM (the truncated-instrument class, third instance tonight):
+an early crontab read (head -10) reported controller-tick REMOVED from cron; grep found it at
+line 11+. Read the whole instrument. An uncommitted-edit attribution was also corrected by the
+orchestrator to a committed-land state (228f42a) — check git status at report time, not from
+memory.
