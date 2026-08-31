@@ -203,16 +203,19 @@ fn binding_name(scrutinee: &str) -> Option<&str> {
 }
 
 fn known_non_state_type(type_name: &str) -> bool {
-    let compact: String = type_name.chars().filter(|character| !character.is_whitespace()).collect();
+    let compact: String = type_name
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .collect();
     let lower = compact.to_ascii_lowercase();
     lower == "bool"
         || lower == "char"
         || lower == "string"
         || lower == "&str"
         || lower == "str"
-        || lower.starts_with('u') && lower[1..].chars().all(|character| character.is_ascii_digit())
-        || lower.starts_with('i') && lower[1..].chars().all(|character| character.is_ascii_digit())
-        || lower.starts_with('f') && lower[1..].chars().all(|character| character.is_ascii_digit())
+        || (lower.starts_with('u') && lower[1..].chars().all(|character| character.is_ascii_digit()))
+        || (lower.starts_with('i') && lower[1..].chars().all(|character| character.is_ascii_digit()))
+        || (lower.starts_with('f') && lower[1..].chars().all(|character| character.is_ascii_digit()))
         || lower.starts_with("option<")
         || lower.starts_with("result<")
         || lower.starts_with("vec<")
@@ -221,10 +224,18 @@ fn known_non_state_type(type_name: &str) -> bool {
 }
 
 fn wildcard_arm_line(code: &[String], start: usize, end: usize) -> Option<usize> {
-    (start + 1..=end).find(|index| {
-        let trimmed = code[*index].trim_start();
-        trimmed.starts_with("_ =>") || trimmed.starts_with("_=>") || trimmed.starts_with("_ if")
-    })
+    let has_wildcard = |line: &str| {
+        let trimmed = line.trim_start();
+        trimmed.starts_with("_ =>")
+            || trimmed.starts_with("_=>")
+            || trimmed.starts_with("_ if")
+            || line.contains("_ =>")
+            || line.contains("_=>")
+    };
+    if has_wildcard(&code[start]) {
+        return Some(start);
+    }
+    (start + 1..=end).find(|index| has_wildcard(&code[*index]))
 }
 
 fn type_for_match(
