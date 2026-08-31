@@ -28,9 +28,8 @@
 //! spinner-stripped content change — a different protocol than ntm's, and
 //! the DispatchReceipt type models both but neither is proven here.
 
-use serde_json::Value;
 use std::fmt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 // ── IDLE_AUTHORIZATION ─────────────────────────────────────────────────────────
 
@@ -657,6 +656,216 @@ mod tests {
         assert!(
             matches!(decision, SupervisorDecision::QueueUnreadable { .. }),
             "unreadable queue must be typed, got {decision:?}"
+        );
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// THE KERNEL: AN OBSERVATION CARRIES AN OBLIGATION
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Every failure this session had ONE shape: a state that could be OBSERVED but
+// carried NO OBLIGATION TO BE DISCHARGED.
+//
+//   tick-monitor detected idle capacity for 178 consecutive ticks -> wrote a file
+//   ATTENTION.txt was written                                     -> nobody read it
+//   admission went RED                                            -> nothing repaired it
+//   refill could not tell                                         -> printed "nothing to do"
+//   the conductor observed idle panes                              -> named it a next action
+//
+// Rules do not fix this; 4 of them were already written down and the failure
+// happened anyway. The obligation has to be IN THE TYPE.
+//
+// THE CONTRACT, enforced by the compiler rather than by discipline:
+//   1. A `Census` CANNOT be empty         -> "zero observed" cannot be a pass.
+//   2. Observing ALWAYS yields a `Duty`   -> there is no "nothing to do" outcome.
+//   3. `Duty` is `#[must_use]`            -> dropping it is a compile-time warning.
+//   4. Only consuming a `Duty` yields
+//      `Discharged`                       -> the sole proof of a completed tick.
+//   5. Only `Discharged` produces a
+//      success `ExitCode`                 -> exiting 0 having done nothing is
+//                                            unrepresentable.
+
+/// A non-empty pane census. The constructor is the anti-vacuity gate: an empty
+/// scan is an ERROR at the type boundary, not a healthy fleet reported as clean.
+#[derive(Debug, Clone)]
+pub struct Census {
+    panes: Vec<PaneObservation>,
+}
+
+impl Census {
+    /// Refuses an empty scan. A monitor that saw nothing has NOT seen an idle-free
+    /// fleet — those are opposite conditions and this is where they separate.
+    pub fn try_new(panes: Vec<PaneObservation>) -> Result<Self, &'static str> {
+        if panes.is_empty() {
+            return Err("empty census: a scan that observed zero panes is an ERROR, never a pass");
+        }
+        Ok(Self { panes })
+    }
+    pub fn panes(&self) -> &[PaneObservation] {
+        &self.panes
+    }
+}
+
+/// An obligation the supervisor MUST discharge this tick.
+///
+/// `#[must_use]` is the load-bearing attribute: it makes "observe and move on" a
+/// compiler warning instead of a 4-hour outage. There is deliberately NO variant
+/// meaning "nothing to do" — every reachable state names an action.
+#[must_use = "an undischarged Duty is the 178-tick failure: observed, recorded, and not acted on"]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Duty(SupervisorDecision);
+
+impl Duty {
+    /// The ONLY way to obtain a Duty, and it is TOTAL: every census plus
+    /// authorization yields one. A caller cannot reach a code path that observed
+    /// the fleet and owes nothing.
+    pub fn observe(census: &Census, queue: &QueueState, authorization: &IdleAuthorization) -> Self {
+        let observation = Observation {
+            panes: census.panes.to_vec(),
+            queue: queue.clone(),
+        };
+        Self(decide(&observation, authorization))
+    }
+
+    pub fn decision(&self) -> &SupervisorDecision {
+        &self.0
+    }
+
+    /// Does discharging this duty require ACTUATION rather than a heartbeat?
+    pub fn requires_action(&self) -> bool {
+        !matches!(self.0, SupervisorDecision::SupervisedWorking { .. })
+    }
+
+    /// Consume the duty. `evidence` must describe what was actually done — a
+    /// receipt, an escalation id, or a heartbeat row. It is REQUIRED because a
+    /// discharge with no evidence is the close-without-evidence debt in another
+    /// costume.
+    pub fn discharge(self, evidence: impl Into<String>) -> Discharged {
+        let evidence = evidence.into();
+        Discharged {
+            decision: self.0,
+            evidence,
+        }
+    }
+}
+
+/// Proof that a tick did something. The ONLY route to a success exit code.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Discharged {
+    decision: SupervisorDecision,
+    evidence: String,
+}
+
+impl Discharged {
+    pub fn decision(&self) -> &SupervisorDecision {
+        &self.decision
+    }
+    pub fn evidence(&self) -> &str {
+        &self.evidence
+    }
+    /// Success requires NON-EMPTY evidence. Empty evidence is a no-op wearing a
+    /// discharge, so it maps to a failure code rather than silently passing.
+    pub fn exit_code(&self) -> u8 {
+        if self.evidence.trim().is_empty() { 70 } else { 0 }
+    }
+}
+
+#[cfg(test)]
+mod kernel_tests {
+    use super::*;
+
+    fn working(id: &str) -> PaneObservation {
+        PaneObservation {
+            pane_id: id.to_owned(),
+            state: "WORKING".to_owned(),
+            liveness: "LIVE".to_owned(),
+            is_dispatchable: false,
+            is_free_capacity: false,
+            is_working: true,
+        }
+    }
+    fn idle(id: &str) -> PaneObservation {
+        PaneObservation {
+            pane_id: id.to_owned(),
+            state: "IDLE".to_owned(),
+            liveness: "CONFIRMED_IDLE".to_owned(),
+            is_dispatchable: true,
+            is_free_capacity: true,
+            is_working: false,
+        }
+    }
+    fn q(ready: usize) -> QueueState {
+        QueueState { ready_count: ready, readable: true }
+    }
+    fn unauth() -> IdleAuthorization {
+        IdleAuthorization::Unauthorized { why: "test" }
+    }
+
+    #[test]
+    fn an_empty_census_cannot_be_constructed() {
+        // ANTI-VACUITY AT THE TYPE BOUNDARY. Without this, a monitor that saw
+        // nothing reports identically to one that saw a busy fleet.
+        let err = Census::try_new(vec![]).expect_err("empty census must be refused");
+        assert!(err.contains("ERROR"), "the refusal must say so: {err}");
+    }
+
+    #[test]
+    fn observing_always_yields_a_duty_there_is_no_nothing_to_do() {
+        // TOTALITY. Four shapes, none of which can produce "no obligation".
+        let cases = vec![
+            (vec![idle("%1")], q(4)),   // free + ready
+            (vec![idle("%1")], q(0)),   // free, empty queue
+            (vec![working("%1")], q(4)),// saturated + ready
+            (vec![working("%1")], q(0)),// saturated, empty queue
+        ];
+        for (panes, queue) in cases {
+            let census = Census::try_new(panes).expect("non-empty");
+            let duty = Duty::observe(&census, &queue, &unauth());
+            // The duty exists and names something. `#[must_use]` forces this line.
+            let _ = duty.discharge("test-evidence");
+        }
+    }
+
+    #[test]
+    fn free_plus_ready_always_requires_action_never_a_heartbeat() {
+        // The 4h19m failure, made unrepresentable: an idle pane beside ready work
+        // can never discharge as SupervisedWorking.
+        let census = Census::try_new(vec![idle("%1"), working("%2")]).expect("non-empty");
+        let duty = Duty::observe(&census, &q(4), &unauth());
+        assert!(
+            duty.requires_action(),
+            "free + ready must demand actuation, got {:?}",
+            duty.decision()
+        );
+    }
+
+    #[test]
+    fn a_saturated_fleet_discharges_as_a_heartbeat_not_an_alarm() {
+        // The other half: a healthy busy fleet must NOT demand action, or the
+        // alarm fires constantly and gets discounted.
+        let census = Census::try_new(vec![working("%1"), working("%2")]).expect("non-empty");
+        let duty = Duty::observe(&census, &q(0), &unauth());
+        assert!(!duty.requires_action(), "a busy fleet is not an incident");
+    }
+
+    #[test]
+    fn a_discharge_with_no_evidence_cannot_exit_zero() {
+        // "I did something" with nothing to show is a no-op wearing a discharge.
+        let census = Census::try_new(vec![idle("%1")]).expect("non-empty");
+        let duty = Duty::observe(&census, &q(4), &unauth());
+        assert_eq!(duty.discharge("   ").exit_code(), 70, "empty evidence must fail");
+    }
+
+    #[test]
+    fn a_discharge_with_evidence_exits_zero() {
+        // KNOWN-GOOD, mandatory: without it the kernel could refuse everything and
+        // still pass, which is an over-strict gate that gets routed around.
+        let census = Census::try_new(vec![idle("%1")]).expect("non-empty");
+        let duty = Duty::observe(&census, &q(4), &unauth());
+        assert_eq!(
+            duty.discharge("dispatched %1 bead=x receipt=IDLE_TO_WORKING").exit_code(),
+            0
         );
     }
 }
