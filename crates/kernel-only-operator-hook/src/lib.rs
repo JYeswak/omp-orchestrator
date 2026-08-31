@@ -272,6 +272,238 @@ fn diagnostic_tmux_read(segment: &str) -> bool {
         && option_subcommand(&tokens, &["capture-pane", "list-panes"]).is_some()
 }
 
+#[derive(Debug, Clone, Copy)]
+struct ShellWord<'a> {
+    raw: &'a str,
+    closed: bool,
+}
+
+/// Tokenize only enough shell syntax to identify a quoted git commit message. This is deliberately
+/// not a general shell parser: expansion, escaping, and shell grammar outside this detector remain
+/// unparsed.
+fn shell_words(segment: &str) -> Vec<ShellWord<'_>> {
+    let mut words = Vec::new();
+    let mut start = None;
+    let mut quote = None;
+    let mut escaped = false;
+
+    for (index, character) in segment.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if character == char::from(92) {
+            if start.is_some() {
+                escaped = true;
+            }
+            continue;
+        }
+        if let Some(delimiter) = quote {
+            if character == delimiter {
+                quote = None;
+            }
+            continue;
+        }
+        if character == char::from(39) || character == '"' {
+            if start.is_none() {
+                start = Some(index);
+            }
+            quote = Some(character);
+            continue;
+        }
+        if character.is_whitespace() {
+            if let Some(word_start) = start.take() {
+                words.push(ShellWord {
+                    raw: &segment[word_start..index],
+                    closed: quote.is_none(),
+                });
+            }
+        } else if start.is_none() {
+            start = Some(index);
+        }
+    }
+    if let Some(word_start) = start {
+        words.push(ShellWord {
+            raw: &segment[word_start..],
+            closed: quote.is_none(),
+        });
+    }
+    words
+}
+/// Return the contents only when a shell word is one complete double-quoted word.
+///
+/// This validates only the quote boundary needed by the commit detector. It is deliberately not a
+/// general shell parser: operators, substitutions, and concatenated shell words remain unparsed.
+fn fully_double_quoted(word: &str) -> Option<&str> {
+    let bytes = word.as_bytes();
+    if bytes.len() < 2 || bytes.first() != Some(&b'"') || bytes.last() != Some(&b'"') {
+        return None;
+    }
+    let mut escaped = false;
+    for byte in &bytes[1..bytes.len() - 1] {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if *byte == char::from(92) as u8 {
+            escaped = true;
+        } else if *byte == b'"' {
+            return None;
+        }
+    }
+    (!escaped).then_some(&word[1..word.len() - 1])
+}
+
+fn commit_message_has_shell_expansion(message: &str) -> bool {
+    let Some(content) = fully_double_quoted(message) else {
+        return false;
+    };
+    let bytes = content.as_bytes();
+    let mut escaped = false;
+    for (index, byte) in bytes.iter().copied().enumerate() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if byte == char::from(92) as u8 {
+            escaped = true;
+            continue;
+        }
+        if byte == char::from(96) as u8 {
+            return true;
+        }
+        if byte == b'$' {
+            let Some(next) = bytes.get(index + 1).copied() else {
+                continue;
+            };
+            if next == b'(' || next == b'{' || next.is_ascii_alphabetic() || next == b'_' {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn git_global_option_value(token: &str) -> bool {
+    matches!(
+        token,
+        "-C" | "-c"
+            | "--config-env"
+            | "--git-dir"
+            | "--work-tree"
+            | "--namespace"
+            | "--super-prefix"
+            | "--list-cmds"
+    )
+}
+
+fn git_global_flag(token: &str) -> bool {
+    matches!(
+        token,
+        "--no-pager"
+            | "--paginate"
+            | "--no-replace-objects"
+            | "--no-optional-locks"
+            | "--literal-pathspecs"
+            | "--glob-pathspecs"
+            | "--noglob-pathspecs"
+            | "--icase-pathspecs"
+            | "--bare"
+            | "--exec-path"
+    ) || token.starts_with("--exec-path=")
+}
+
+/// Find the commit subcommand after the small, documented set of git global options recognized by
+/// this hook. Unknown options stop recognition rather than turning this into a general parser.
+fn git_commit_subcommand(words: &[ShellWord<'_>]) -> Option<usize> {
+    if words.get(0).map(|word| executable_name(word.raw)) != Some("git") {
+        return None;
+    }
+    let mut index = 1;
+    while index < words.len() {
+        let token = words[index].raw;
+        if token == "commit" {
+            return Some(index);
+        }
+        if git_global_option_value(token) {
+            if words.get(index + 1).is_none() {
+                return None;
+            }
+            index += 2;
+            continue;
+        }
+        if token.starts_with("-C") && token.len() > 2 {
+            index += 1;
+            continue;
+        }
+        if token.starts_with("-c") && token.len() > 2 {
+            index += 1;
+            continue;
+        }
+        if token.starts_with("--config-env=")
+            || token.starts_with("--git-dir=")
+            || token.starts_with("--work-tree=")
+            || token.starts_with("--namespace=")
+            || token.starts_with("--super-prefix=")
+            || token.starts_with("--list-cmds=")
+        {
+            index += 1;
+            continue;
+        }
+        if token == "--exec-path" {
+            if words
+                .get(index + 1)
+                .is_some_and(|word| word.raw != "commit")
+            {
+                index += 2;
+            } else {
+                index += 1;
+            }
+            continue;
+        }
+        if git_global_flag(token) {
+            index += 1;
+            continue;
+        }
+        return None;
+    }
+    None
+}
+
+fn git_commit_message_expansion(segment: &str) -> bool {
+    let words = shell_words(segment);
+    let Some(commit_index) = git_commit_subcommand(&words) else {
+        return false;
+    };
+    let mut index = commit_index + 1;
+    while index < words.len() {
+        let option = words[index].raw;
+        // Git's option terminator ends option parsing for the commit command. Everything
+        // after it is a pathspec, so a path named `-m` (or containing shell metacharacters)
+        // must not be mistaken for a commit-message option.
+        if option == "--" {
+            break;
+        }
+        let message = if option == "-m" || option == "--message" {
+            let message = words.get(index + 1).filter(|word| word.closed);
+            index += 2;
+            message.map(|word| word.raw)
+        } else if let Some(value) = option.strip_prefix("--message=") {
+            index += 1;
+            Some(value)
+        } else if let Some(value) = option.strip_prefix("-m") {
+            index += 1;
+            (!value.is_empty()).then_some(value)
+        } else {
+            index += 1;
+            None
+        };
+        if message.is_some_and(commit_message_has_shell_expansion) {
+            return true;
+        }
+    }
+    false
+}
 fn classify_bash_with_allowlist(command: &str, allowlist: &[&str]) -> Decision {
     let segments = command_segments(command);
     let commands: Vec<&str> = segments
@@ -331,6 +563,14 @@ fn classify_bash_with_allowlist(command: &str, allowlist: &[&str]) -> Decision {
         return Decision::deny(format!(
             "kernel invocation {kernel:?} is missing from the kernel allowlist; use the registered kernel path"
         ));
+    }
+    if commands
+        .iter()
+        .any(|segment| git_commit_message_expansion(segment))
+    {
+        return Decision::deny(
+            "git commit message expansion in a double-quoted -m/--message argument is blocked; use git commit -F <file> instead",
+        );
     }
     if commands.iter().any(|segment| diagnostic_tmux_read(segment)) {
         return Decision::allow("diagnostic tmux capture-pane is allowed; it does not dispatch");

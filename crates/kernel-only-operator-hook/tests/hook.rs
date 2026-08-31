@@ -174,6 +174,71 @@ fn other_raw_kernel_bypasses_are_denied() {
 }
 
 #[test]
+fn git_commit_message_expansion_requires_file_backed_message() {
+    // These are the supported commit spellings, including git global options and
+    // attached message forms. Every message value is a complete double-quoted word.
+    for command in [
+        r#"git commit -m "release `date`""#,
+        r#"git commit --message "release $(git status --short)""#,
+        r#"git commit -m "release $VERSION""#,
+        r#"git commit -m "it's $VAR""#,
+        r#"git commit -m"release $VERSION""#,
+        r#"git commit --message="release $(git status --short)""#,
+        r#"/usr/bin/git --no-pager -C /tmp/repo -c user.name=ci commit --message="release ${VERSION}""#,
+        r#"git --git-dir=/tmp/repo/.git --work-tree=/tmp/repo commit -m"release `date`""#,
+        r#"git -C /tmp/repo --exec-path /tmp/git commit -m "release $(git status)""#,
+    ] {
+        let input: HookInput = parse_input(&claude_event(command)).unwrap();
+        let decision = classify(&input);
+        assert_eq!(
+            decision.permission,
+            Permission::Deny,
+            "{command}: {decision:?}"
+        );
+        assert!(decision.reason.contains("-F <file>"), "{decision:?}");
+    }
+
+    // Quoting and file-backed forms stay outside this narrow detector. In
+    // particular, metacharacters in another option or another command are not
+    // commit-message expansions.
+    for command in [
+        "git commit -F /tmp/message",
+        r#"git commit --file="/tmp/$(git status)""#,
+        r#"git commit -m "plain text""#,
+        r#"git commit --message="plain text""#,
+        r#"git commit -m 'release `date` $(git status) $VERSION'"#,
+        r#"git commit -m "literal \`date\` \$VERSION \$(git status) \${HOME}""#,
+        r#"git commit --author="release `date`" -m "safe""#,
+        r#"git commit -m 'it'\''s "safe"'"#,
+        r#"git status -m "release $VERSION""#,
+        r#"printf "git commit -m `date`""#,
+        r#"echo "git commit -m $(git status)""#,
+    ] {
+        let input: HookInput = parse_input(&claude_event(command)).unwrap();
+        assert_eq!(classify(&input).permission, Permission::Allow, "{command}");
+    }
+}
+#[test]
+fn git_commit_option_terminator_keeps_pathspecs_outside_message_detector() {
+    // After `--`, Git treats every token as a pathspec. In particular, a pathspec that
+    // resembles `-m` must not activate the narrow commit-message expansion detector.
+    for command in [
+        r#"git commit -- -m "$VAR""#,
+        r#"git commit -- --message="release $(git status)""#,
+        r#"git commit -- "release `date`""#,
+        r#"git commit -- "path $(git status)""#,
+    ] {
+        let input: HookInput = parse_input(&claude_event(command)).unwrap();
+        let decision = classify(&input);
+        assert_eq!(
+            decision.permission,
+            Permission::Allow,
+            "{command}: {decision:?}"
+        );
+    }
+}
+
+#[test]
 fn malformed_and_oversized_inputs_fail_closed_without_panicking() {
     for bytes in [
         b"".as_ref(),
