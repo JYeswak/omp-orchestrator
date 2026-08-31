@@ -1,0 +1,12 @@
+[package]
+name = "undrained-pipe-lint"
+version = "0.1.0"
+edition = "2021"
+description = "Fails on the undrained-pipe deadlock pattern: both pipes piped + try_wait poll + no concurrent drain"
+
+[[bin]]
+name = "undrained-pipe-lint"
+path = "src/main.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
