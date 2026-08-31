@@ -110,8 +110,51 @@ session. Sections must use these figures and must not re-derive them differently
 | `jsm` | `jsm 0.1.4` | `/usr/local/bin/jsm` |
 | `tmux` | **rejects `--version`** (`tmux: unknown option -- -`) | `/opt/homebrew/bin/tmux` |
 
-`tmux` is the one binary in the set with no machine-readable version handshake, and pane truth is
-read through it. That is a named dependency risk, not a footnote.
+`tmux` is the one binary that refuses `--version` — but **it is not versionless**: `tmux -V` returns
+`tmux 3.6a` at exit 0. `IdeaSection` challenged the first draft of this sentence, which claimed tmux
+had "no machine-readable version handshake," and was right to. The corrected finding is narrower and
+considerably sharper, because there is **no single version flag that covers the set**:
+
+| flag | answers | fails |
+|---|---|---|
+| `--version` | 8 of 9 | `tmux` |
+| `-V` | 5 of 9 | `omp`, `bv`, `git`, and `tmux --version`'s counterpart cases |
+
+Only `ntm`, `br`, `cargo`, `fh`, `jsm` answer **both**. So a uniform probe loop must try more than
+one spelling or it will record a present binary as absent.
+
+**The first draft of this paragraph was wrong, and the error was mine — not tmux's.** It claimed
+`tmux --version` "prints a usage block **and exits 0**", making tmux the exemplar of an exit code
+that lies. `PriorArtWriter` re-measured without a pipeline and refuted it:
+
+```
+tmux --version >/tmp/t.out 2>/tmp/t.err ; echo $?
+  exit=1   stdout_bytes=0   stderr_bytes=158
+
+tmux --version 2>&1 | head -1 ; echo $?
+  exit=0                       <- head's status, not tmux's
+  PIPESTATUS=(1 0)
+```
+
+**tmux is well-behaved.** It fails, says so on stderr, writes *nothing* to stdout, and returns 1 —
+textbook. The "exits 0" came from my own probe, which read `$?` after a pipeline, where the status
+belongs to the last command. **My measurement harness laundered the failure into a success and I
+then attributed the defect to the subject.** The exit-code-that-lies example belongs to the harness
+and to our `installer` binary, not to tmux.
+
+The corrected hazard points the **opposite way**, and it is the live one. A probe that treats
+non-zero as *absent* records tmux — present, working, `3.6a` on `-V` — as **MISSING**. That is a
+false negative on the presence of the one binary through which we read pane truth. It is not
+theoretical: `pi_agent_rust/src/doctor.rs:924` gates `check_tool` on `output.status.success()` and
+only forgives a failure through `probe_failure_is_known_nonfatal` at `:1052`, which hard-codes
+`if tool.ne("sh")` — so tmux falls straight through to "invocation failed."
+
+**This is the third self-inflicted error in this brief caught by a subagent, and all three are one
+class:** a figure nobody recomputed (`1 of 8`), a search nobody re-ran without its harness artifact
+(the `--include=` false zero), and a measurement nobody re-took without its pipeline (this one). The
+swarm is functioning as the adversarial reviewer this plan argues it needs — against the conductor.
+*All three recorded rather than quietly patched, because the failures are more instructive than the
+corrected numbers.*
 
 ### 3.2 The OMP surface census
 
@@ -121,7 +164,15 @@ Produced by the built scanner: `/Volumes/BuildShared/cargo-targets/debug/omp-inv
 
 - **184 nodes, 207 edges, 183 rows.**
 - Counts: `cli_commands=39`, `type_roots=57`, `declarations=14`, `rpc_handlers=42`,
-  `slash_commands=0`, `omp_methods=3`, `workspace_crates=26`, `expected_cli_commands=39`.
+  `slash_commands=0`, `omp_methods=3`, `workspace_crates=26`.
+- **The scanner reports its own hole.** Every count has an `expected_*` twin. Six of the seven
+  match exactly. One does not: **`slash_commands=0` against `expected_slash_commands=136`.** That
+  single mismatch is why the envelope carries `status: UNKNOWN` and exits 2 — the scanner knows it
+  failed to enumerate a surface it expected to find, and refuses to report success. **136 slash
+  commands are the largest unmapped region of the OMP surface**, and they were missing from the
+  first draft of this brief; `SurfaceCensus` caught it by comparing the twins, which is exactly the
+  challenge the broadcast asked for. The census is not complete until slash-command enumeration
+  either succeeds or carries a named reason. *Recorded under R11 — it was not written down before.*
 - Row kinds: cli_command 39 · type_root 57 · rpc_handler 42 · workspace_crate 26 · declaration 14 ·
   omp_method 3 · transport 1 · slash_command 1.
 - Classification: **`CAPABILITY_NOT_USED` 157** · `SCRAPED_OR_OBSERVED_ALTERNATIVE` 18 ·
@@ -202,10 +253,50 @@ grep -rc '#\[test\]' …                                -> 370 #[test] fns
 | `pre-delete-citation-check` | 6 | 1 | 1 | 0 | 0 |
 | `path-literal-guard` | 3 | 1 | 0 | 0 | 2 |
 
-**1 of 8 gates has all four legs.** 5 of 8 have no mutation leg. 2 of 8 have no known-bad. 1 of 8 —
+**2 of 8 gates have all four legs** — `no-shell-gate` (4/3/2/6) and `undrained-pipe-lint` (1/1/1/3).
+**4 of 8 have no mutation leg** — `commit-build-fence`, `kernel-bypass-gate`,
+`pre-delete-citation-check`, `path-literal-guard`. 2 of 8 have no known-bad. 1 of 8 —
 `path-literal-guard` — has **no known-good leg**, which makes it the highest-risk gate in the set:
 an attack-only suite ships an over-strict gate, and an over-strict gate gets routed around, which is
 a slower death than no gate at all.
+
+> **The first draft of this headline said "1 of 8" and "5 of 8," and both were wrong against the
+> table printed directly above them.** `GateFrameworks` recomputed from the table and caught it.
+> This is the purest instance of the defect this whole document exists to prevent: **a transcribed
+> headline that nobody recomputes**, sitting one line below the data that refutes it. Prose review
+> does not catch it — only arithmetic does. It is the same family as the retired "81 JSON-RPC
+> methods, 17 used" figure, except this one was self-inflicted **in the brief that forbids it**, by
+> the conductor, in the act of writing the rule. Every section quoting "1 of 8" or "5 of 8" must be
+> corrected at assembly.
+
+**Measurement hazard — shell `grep -r --include=` returns empty instead of failing.** Also found by
+`GateFrameworks`, which measured 0 files matching `#![forbid(unsafe_code)]` while the harness grep
+returns **55**. Verified both directions: `grep -rl 'forbid(unsafe_code)' --include='*.rs' crates`
+→ `0`, quoted or unquoted; the same search without `--include` works and reproduces this table
+exactly. So the leg table above is sound, and any figure in any section derived with an
+`--include=` shell grep is a **false zero**. A blocked tool that returns empty rather than erroring
+is precisely the never-silent-fail violation we gate against — in our own measurement path.
+*Recorded under R11.*
+
+**An honest skip is not a useful test — found by `EndUserJourney`.** `composer-typed` ships a
+differential oracle, and the discipline in it is genuinely first-rate: `tests/differential.rs` types
+the absence of its comparison target as `OracleStatus::MissingScript(PathBuf)`, announces the skip
+loudly with the exact resolved path, and its header names the precise failure it exists to avoid —
+*"the report looked differential while nothing differential ran."* That is anti-vacuity implemented
+correctly.
+
+And the oracle it compares against **cannot exist in this repo**. Line 41 resolves it to
+`../../bin/composer-typed.py`; `ls bin/` returns *No such file or directory*, and
+`find . -name 'composer-typed.py'` returns nothing, because **the no-`.py` rule forbids it**. So the
+test is green forever and can only ever skip. Our hardest rule deleted the oracle our differential
+test needs.
+
+This is not the vacuity defect — the skip is typed and loud, which is exactly right. It is a
+different and less obvious failure: **a test that is permanently unable to run is indistinguishable
+from a passing one in any aggregate count**, and it sits inside the 370 `#[test]` figure quoted
+above. The fix is a policy decision the plan must make rather than dodge: either the oracle lives
+outside the tracked tree as a release artifact, or the differential lane is retired with a named
+reason, or the rule gets its first exemption. *Recorded under R11 — not previously written down.*
 
 ### 3.6 The addressability defect — how the sixth gate property was born
 
@@ -232,12 +323,36 @@ Not built-vs-wired. **Wired-but-unaddressable.** It adds a sixth required gate p
   in loops; region-owned tasks, no detached tasks; **kill the process GROUP, not the pid**; drain
   both pipes; **a timeout is not a verdict**.
 - Measured conformance across 29 raw spawn sites: 4 crates use `subprocess-contract`; 12 of 14 async
-  fns take `cx` first; 16 of 22 forbid unsafe.
-- `omp-types` exists, re-exports the canonical vocabulary from asupersync at the pinned rev
-  (`AckKind`, `DeliveryClass`, `ObligationLedger`, `Budget`, `Outcome`) — and has **zero
-  dependents**. The vocabulary is shipped and unadopted.
-- Type inventory: **51 public enums, 79 structs** across 22 of 24 crates; **4 colliding type
-  names**; **6 Verdict-shaped types with no shared trait**; **17 ack/receipt types in 3 incompatible
+  fns take `cx` first.
+- **Unsafe — corrected by `CrateSpecs`.** The first draft said "16 of 22 forbid unsafe," which had
+  both an unstated denominator and an unstated mechanism. Measured: **20 of 26** declare
+  `unsafe_code = "forbid"` in the manifest; **25 of 26** carry `#![forbid(unsafe_code)]` as an inner
+  attribute; **19 of 26** carry both; the **union is 26 of 26**. The finding survives correction and
+  is worse than it looked: total coverage holds by **two independent habits with no single
+  enforcement point**, so either habit lapsing on a new crate is invisible.
+- **`omp-types` — corrected by `CrateSpecs`.** The first draft claimed it re-exports `AckKind`,
+  `DeliveryClass`, `ObligationLedger`, `Budget`, and `Outcome`. **That is wrong.** Measured with
+  `grep -c` against `crates/omp-types/src/lib.rs`: `ObligationLedger` occurs **zero** times, and
+  `AckKind`/`DeliveryClass` occur only inside the doc comment that names them as blocked. What
+  actually re-exports is the `Outcome` family, the `Budget` family, and `ObligationId` / `RegionId` /
+  `TaskId` / `Time`.
+
+  The reason is documented in `crates/omp-types/Cargo.toml:11-17`: `AckKind` and `DeliveryClass`
+  live behind `#[cfg(feature = "messaging-fabric")]`, that feature transitively needs
+  `#[cfg(any(test, feature = "test-internals"))]`, and upstream issue #46 correctly removed
+  `test-internals` from the default set — so enabling it here would **reintroduce the exact
+  production leak #46 closed**.
+
+  This changes the plan, not just the sentence: **the half of the vocabulary that would collapse the
+  three ack dialects is blocked at an upstream feature boundary, not merely unadopted.** Any
+  migration schedule assuming `AckKind` is available today is wrong. The crate still has **zero
+  dependents**.
+- Type inventory — two scopes, published as an error bar rather than one figure. Excluding test
+  modules and bin sources: **51 public enums, 79 structs** across 22 of 24 crates. Including them
+  (`grep -rhoE` over all `*.rs`): **59 enums, 91 structs**. Both scopes agree exactly on the figures
+  that matter: **4 colliding type names** (`Finding`, `LintReport`, `Observation`, `Violation`),
+  **6 Verdict-shaped types with no shared trait** (`AckVerdict`, `FenceVerdict`, `FollowUpVerdict`,
+  `ReceiptVerdict`, `SilenceVerdict`, `Verdict`), and **17 ack/receipt types in 3 incompatible
   dialects**.
 - `fh` MCP is failing closed with a typed `SERVE_INPUT_STALE` (mirror HEAD moved `5dec4212…` →
   `ecdea397…`). Direct grep of the mirror at `/Volumes/ZestData/dicklesworthstone-mirror` (216
@@ -301,6 +416,60 @@ These rules exist because each one has already been violated in this repo and co
    state plainly `searched <pattern>, no prior art found`. A not-found is a valid, valuable result.
 8. **Write it to be failed.** State the strongest version of the objection an investor would raise,
    then answer it or concede it.
+
+---
+
+## 7. What the writing of this brief proved
+
+This section is the most investor-relevant thing in the document, and it is not about the product.
+
+Ten agents were given the brief in §3 as *settled knowledge* with one instruction: start from it as
+learned, do not re-derive it, but **challenge it with evidence if you disagree**. They challenged it.
+In one session they refuted **five measurements**, three of them the conductor's own, and every
+single refutation came from an agent **re-deriving rather than reading**.
+
+| # | claim | refuted by | mechanism of the error |
+|---|---|---|---|
+| 1 | "1 of 8 gates has all four legs / 5 of 8 lack mutation" | `GateFrameworks` | arithmetic never recomputed — the table one line above said 2 and 4 |
+| 2 | "tmux fails while exiting 0" | `PriorArtWriter` | `$?` read after a pipeline; `PIPESTATUS=(1 0)` |
+| 3 | "`omp-types` re-exports the ack vocabulary" | `CrateSpecs` | read the intent, not the file; `ObligationLedger` occurs zero times |
+| 4 | "no prior art for typed missing-dependency" | `EndUserJourney` | `--include='*.rs'` aimed at **ntm, a Go repo** |
+| 5 | "no prior art for anti-vacuity" | `GateFrameworks` | search space too narrow — 3 doc files; the concept lives in tests, telemetry, a shell gate, and a Lean proof |
+
+**Three distinct false-zero mechanisms**, none of which look like failure at the call site: a shell
+`grep --include=` that returns empty at exit 0; an extension filter pointed at the wrong language;
+and a search space too narrow to contain the answer. All three produce a confident *"no prior art
+found"* that is **indistinguishable from a real one**.
+
+The rule that fell out of it, now doctrine: **a not-found is publishable only if it names the command
+AND argues that the search space could have contained the answer.** *"I grepped and got nothing"* is
+not a finding. *"I grepped `*.rs` across a Go repo and got nothing"* is a bug.
+
+A fourth failure was purely editorial and produced its own rule. Three agents cited the same
+precedent as `doctor.rs:924`, `:949`, and `:950` — all partly right, because each named a **different
+construct on adjacent lines** (the function, the gate, an off-by-one). **A citation must name the
+construct, not just the line**: a line number is unverifiable alone and does not survive a reformat.
+
+### 7.1 The three newest gate-admission rules were all paid for by us
+
+`GateFrameworks` observed the thing that matters most here. The gate-admission checklist gained three
+items this session — **12** (an exit status is not evidence of a successful probe), **13** (a bare
+zero is not a finding), and **14** (cite the construct, not the line) — and **not one came from
+auditing a gate**. All three were paid for by the conductor getting it wrong *in the document that
+specifies the rule*.
+
+That is the strongest available evidence for the central claim of this plan. We argue that a fleet
+needs adversarial re-derivation because self-report is not evidence. The brief asserting that
+principle was itself corrected five times by agents applying it — against its author, within hours,
+each with a command and a result. The process caught its own author. **An investor should weigh that
+more heavily than any green test in this repo**, because it is the only evidence here that the
+method works on the person running it.
+
+**NO-CLAIM.** Five refutations in one session is evidence the challenge mechanism functions. It is
+**not** evidence that the remaining measurements are correct — only that five specific ones were
+wrong and are now recorded. The base rate of undetected errors in this document is unknown and is
+not estimated anywhere. Nothing here was found by an automated check; every one was found by an
+agent choosing to re-derive, and no gate in this repo enforces that choice.
 
 ---
 

@@ -65,8 +65,13 @@ fn run_check(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
     println!("installer --check: HEAD={head_short}");
 
     let mut mismatches = 0usize;
-    let mut checked = 0usize;
     let mut foreign = 0usize;
+    // Counted explicitly, never derived. `BINARIES.len() - foreign` looks equivalent and is not:
+    // a binary that is NOT INSTALLED hits the `continue` below without touching either counter,
+    // yet still sits in `BINARIES.len()`, so it would silently inflate the "owned" denominator.
+    // A ratio whose denominator includes rows it never examined is unverifiable — the same defect
+    // class as the retired "81 JSON-RPC methods, 17 used" figure.
+    let mut owned = 0usize;
 
     for name in BINARIES {
         let binary = bin_dir.join(name);
@@ -79,14 +84,17 @@ fn run_check(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
         println!("  {check}");
         match (&ownership, check.consistent) {
             (RepoOwnership::Foreign { .. }, _) => foreign += 1,
-            _ if check.consistent => {}
-            _ => mismatches += 1,
+            _ if check.consistent => owned += 1,
+            _ => {
+                owned += 1;
+                mismatches += 1;
+            }
         }
     }
 
     if mismatches > 0 {
         eprintln!(
-            "INSTALLER IDENTITY DRIFT: {mismatches}/{checked} binaries disagree with HEAD {head_short}"
+            "INSTALLER IDENTITY DRIFT: {mismatches}/{owned} owned binaries disagree with HEAD {head_short}"
         );
         return ExitCode::from(1);
     }
@@ -96,7 +104,7 @@ fn run_check(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
         );
     }
     println!(
-        "INSTALLER IDENTITY OK: {checked}/{checked} binaries consistent with HEAD {head_short}"
+        "INSTALLER IDENTITY OK: {owned}/{owned} binaries consistent with HEAD {head_short}"
     );
     ExitCode::SUCCESS
 }
