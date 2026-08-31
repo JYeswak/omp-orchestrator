@@ -1,0 +1,22 @@
+[package]
+name = "omp-types"
+version = "0.1.0"
+edition = "2024"
+description = "The canonical type vocabulary. Derived from asupersync at the pinned rev — never invented here."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# NO `messaging-fabric` FEATURE, and this is a measured upstream blocker, not a preference.
+# AckKind and DeliveryClass live behind `#[cfg(feature = "messaging-fabric")]`, and that feature
+# DOES NOT COMPILE at rev fa3c01aec: messaging/consumer.rs:1299-1300 has an un-gated `fn default()`
+# calling TaskId::new_ephemeral() / RegionId::new_ephemeral(), which are
+# `#[cfg(any(test, feature = "test-internals"))]`. Since issue #46 correctly removed
+# test-internals from the default feature set, messaging-fabric now requires a TEST feature to
+# build. Enabling test-internals here would reintroduce exactly the production leak #46 closed.
+# So the ack vocabulary is UNREACHABLE at our pinned rev; only the ungated `types` module is.
+asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", rev = "fa3c01aec" }
+
+[lints.rust]
+unsafe_code = "forbid"
