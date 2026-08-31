@@ -163,7 +163,10 @@ impl Config {
         }
         let heartbeat_ledger = env::var_os("OMP_HEARTBEAT_LEDGER")
             .map(PathBuf::from)
-            .unwrap_or_else(|| repo.join(".orchestrator/heartbeat.jsonl"));
+            .unwrap_or_else(|| {
+                home.join(".local/state/flywheel")
+                    .join(format!("omp-orchestrator-{session}.heartbeat.jsonl"))
+            });
         let tick_monitor_state = env::var_os("OMP_TICK_MONITOR_STATE")
             .map(PathBuf::from)
             .unwrap_or_else(|| {
