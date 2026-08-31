@@ -42,7 +42,13 @@ jobs:
       - run: cargo test -p undrained-pipe-lint
       - name: Scan checked-out workspace for undrained-pipe pattern
         run: cargo run --quiet -p undrained-pipe-lint -- .
-  state-wildcard-lint:
+  kernel-bypass-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo test -p kernel-bypass-gate
+      - name: Scan checked-out workspace for kernel bypasses
+        run: cargo run --quiet -p kernel-bypass-gate -- .
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
