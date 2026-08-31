@@ -323,6 +323,32 @@ One residue worth a look, independent of the port: `bin/safety-config-write-gate
 **close_reason** citation yet has never existed in any of the three repos — so a closed bead cites
 a path that is either in a fourth repo or simply wrong.
 
+### The harvester manufactures its own failures — and backticks are the mitigation
+
+**CORRECTION to the entry above:** it said `cp-3k9jq` cites the path in its
+"description/comments". Read from source, the gate's `Bead` struct (`grade.rs:44-51`) carries
+`close_reason` + `comments` and **no description at all**. A path in a description cannot break the
+gate. The citation that broke `cp-3k9jq` was in its **comments**.
+
+Two more facts that only reading `crates/close-evidence-gate/src/blob.rs` establishes:
+
+- `CITED_PATH` harvests **`bin/` and `.flywheel/` only** — not `crates/`. A scan including
+  `crates/` overstates the problem by ~13×.
+- **Fences and inline code are blanked before harvesting** (`blob.rs:95-96`). So a path written
+  `` `bin/foo.sh` `` is **invisible** to the harvester; written bare, it is harvested.
+
+> Measured: this file harvests **0** paths under production stripping despite naming nine of them,
+> because every one is backticked. A bead body written in plain prose harvested **9** — five of
+> which can never resolve. **Backtick every path you write into a bead.**
+
+**47 of 71 unresolvable citations are a REGEX ARTIFACT.** Both alternations end in a greedy class
+containing `.`, so a sentence-ending period is absorbed — `.flywheel/HARVEST-LOOP-PLAN.md.`
+resolves the instant the dot is stripped. A further 13 are prose fragments (`bin/a`, `bin/b`,
+`bin/crates` — truncated at the next slash). **The real broken-citation count is 9**: the 4 files
+`45c613d` deleted, plus 5 never present in any repo. Editing bead comments to work around the
+harvester would leave it live to re-manufacture the same rows forever.
+`cp-cited-path-trailing-period-n5mkc`.
+
 ### Adjacency is not authorship — a SHA near a bead is not a SHA belonging to it
 
 `tick-monitor lifecycle` reported `omp-orchestrator-2lo landed=3f821d4`. That bead has **no commit

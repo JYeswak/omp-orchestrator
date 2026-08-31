@@ -512,3 +512,71 @@ The close policy REFUSES a prose reason, and the refusal scrolls past in-pane wh
 agent moves on believing the close landed. Always read the status back:
 `br show <id> --json | jq -r '.[0].status'` — note `br show` returns a BARE list, while
 `br list` wraps its rows in `.issues`.
+
+---
+
+## Three graph and evidence rules that strangled real work tonight
+
+### An epic OWNS its leaves via parent-child — NEVER a `blocks` edge onto its own leaf
+
+A `blocks` edge from an epic onto a leaf it owns is **circular by construction**: the epic gates
+the leaf, so the leaf cannot start until the epic closes, and the epic cannot close until its
+children finish. **13 of the first 30 unassigned open beads were strangled this way, four of them
+P0.**
+
+`br show` reads `open` and unassigned and looks perfectly claimable. **The authority is ATTEMPTING
+the transition and reading the refusal text** — quote it when reporting a blocker:
+
+```
+br update cp-u9ikt --status in_progress
+  -> Error: cannot claim blocked issue: cp-epic-fleet-work-quality-08l6.74
+```
+
+**Find the writer before fixing the edges.** `br dep add <child> <parent>` **transposed** produces
+exactly this shape, so repaired edges regrow while the writer still runs. Also: `br dep list <id>`
+returns **OUT-edges only** — absence of an in-edge is not evidence of an orphan. And for triage use
+`.triage.recommendations`, never `.quick_ref.top_picks` (it reports `unblocks=0` and omits
+high-scoring beads); **skip epic containers**, whose PageRank accumulates from every child so they
+top the list and can never close.
+
+### A port that deletes a file invalidates every CLOSED bead that cited it
+
+`45c613d` deleted four scripts. All four were legitimately superseded and every citing bead was
+**validly closed at the time**. Hours later it surfaced as `check.sh` close-evidence RED with
+everything downstream UNRUN — a gate refusing every dispatch, far from the mistake.
+
+**Before `git rm`, grep CLOSED beads for the path.** A closed bead's evidence is a live dependency
+on the filesystem, not a historical note. Measured exposure: 2 beads via `close_reason`, plus
+comment-level citations the raw count hides. Tracked as `cp-rjuzj`; the commit-time gate that would
+have caught it at the point of the mistake is `omp-orchestrator-pre-delete-citation-check-igk`.
+
+### READ THE CONSUMER BEFORE SCANNING FOR IT — and the harvester manufactures its own failures
+
+The close-evidence extractor was twice sized from an **inferred** regex. Read from source
+(`crates/close-evidence-gate/src/blob.rs:59`) it is:
+
+```
+const CITED_PATH: &str = r"(?:^|[^\w/.])(bin/[\w.-]+|\.flywheel/[\w./-]+)";
+```
+
+Three facts that only reading it establishes:
+
+1. **It harvests `bin/` and `.flywheel/` ONLY** — not `crates/`. A scan including `crates/`
+   overstated the problem by ~13×.
+2. **The gate reads `close_reason` + `comments`, NOT `description`** (`grade.rs:44-51`: the `Bead`
+   struct has no description field). So a path in a description cannot break the gate — and a scan
+   restricted to `close_reason` still **understates** it, because comments count.
+3. **Fenced blocks and inline code are blanked before harvesting** (`blob.rs:95-96`:
+   `fence.replace_all` then `inline_code.replace_all`). So **backticks are the mitigation**: a path
+   written `` `bin/foo.sh` `` is invisible to the harvester; written bare, it is harvested.
+
+> **Write every path in a bead comment inside backticks.** Measured: this repo's `WAVE.md` harvests
+> **0** paths under production stripping despite naming nine, because they are all backticked —
+> while a bead body written in plain prose harvested **9**, five of which can never resolve.
+
+**And 47 of 71 unresolvable citations are a REGEX ARTIFACT, not broken evidence.** Both alternations
+end in a greedy class containing `.`, so a sentence-ending period is absorbed:
+`.flywheel/HARVEST-LOOP-PLAN.md.` — which resolves the moment the dot is stripped. A further 13 are
+prose fragments (`bin/a`, `bin/b`, `bin/crates`, the last a truncation at the next slash). **The
+real broken-citation count is 9**, and editing bead comments to work around the harvester would
+leave it live to re-manufacture the same rows forever. Tracked as `cp-cited-path-trailing-period-n5mkc`.
