@@ -55,7 +55,7 @@ denominator_type_dirs = 57
 denominator_subcommands = 39
 measured_against = "@oh-my-pi/pi-coding-agent v18.0.11"
 measured_on = "2026-08-31"
-crates_declared = 24
+crates_declared = 25
 revision_2_reason = "cross-pane dispatch and delivery receipt reclassified (b)->(a); --mode=rpc proven single-session"
 
 # ── (b) REIMPLEMENTED BY SCRAPING — an OMP alternative EXISTS AND IS REACHABLE ───────────────────
@@ -210,13 +210,11 @@ classification = "a"
 omp_surface = "none"
 why = "installs repository binaries and launchd configuration; OMP does not own this substrate installation boundary"
 
+[crates.omp-types]
+classification = "a"
+omp_surface = "none"
+why = "the canonical typed vocabulary derived from asupersync; it is not an OMP lifecycle surface"
+negative_evidence = "the crate is a workspace type boundary and has no OMP process caller or OMP protocol dependency"
+
 # ── (c) UNUSED CAPABILITY WE SHOULD ADOPT ────────────────────────────────────────────────────────
 # Survivors of revision 2, from SilverWolf's per-surface pass on wave .4.
-
-[crates.ack-spine-collab-gap]
-classification = "c"
-omp_surface = "collab"
-omp_alternative = "OMP's collab surface is real multi-agent coordination we do not touch"
-instead_we = "Agent Mail, which was degraded twice today — 'database is locked' on both writes, RSS 130MB->687MB over 98 minutes, and a restart that fixed it (state accumulation, not a fix)"
-negative_evidence = "if collab is also single-session it is (a) like the rest — UNMEASURED, and revision 2 exists precisely because I assumed reachability once already"
-note = "declaration placeholder: names a gap with no crate yet. The census must treat a crates.* block with no matching crate as GHOST — this row is a deliberate known-bad specimen for that leg."
