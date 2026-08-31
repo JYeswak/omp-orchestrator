@@ -6,17 +6,22 @@ across a fleet of agents, refusing every step it cannot prove.**
 Assembled 2026-08-31 from `docs/plan/`. **The section files are the source of truth**; this document
 is their concatenation. Edit a section, then re-assemble — never edit here.
 
+> **This instruction was violated within minutes of being written, by its author, and the drift was
+> silent.** No check enforces the second half. See `00-brief.md` §7.3 — it is the eighth
+> self-inflicted defect in this document and the most on-the-nose: a derived artifact diverging from
+> its source, inside the document whose subject is derived artifacts diverging from their sources.
+
 Written during a stand-down called because the project had been running without a plan. Written to
 be **failed**: every number carries the command that derives it, `MEASURED` and `PROJECTED` never
 share a sentence, and every load-bearing claim ends with what it does *not* cover. The most valuable
 review finds a `MEASURED` that is actually `PROJECTED`.
 
-> **Seven measured claims in this document were refuted while it was being written** — five of them
-> the author's — and every one was caught by an agent re-deriving rather than reading. They are kept
-> as labelled retractions rather than quietly corrected, because the failures are more instructive
-> than the corrected values. The gate-admission checklist gained three items this session and not
-> one came from auditing a gate; all three were paid for by the author getting it wrong in the
-> document that specifies the rule. See `00-brief.md` §7.
+> **Eight measured claims in this document were refuted while it was being written** — six of them
+> the author's — and every one was caught by an agent re-deriving rather than reading, or by
+> following a `NO-CLAIM` into the source. They are kept as labelled retractions rather than quietly
+> corrected, because the failures are more instructive than the corrected values. The
+> gate-admission checklist gained three items this session and not one came from auditing a gate;
+> all three were paid for by the author getting it wrong in the document that specifies the rule.
 
 ---
 
@@ -292,6 +297,26 @@ grep -rc '#\[test\]' …                                -> 370 #[test] fns
 | `kernel-bypass-gate` | 6 | 1 | 1 | 0 | 0 |
 | `pre-delete-citation-check` | 6 | 1 | 1 | 0 | 0 |
 | `path-literal-guard` | 3 | 1 | 0 | 0 | 2 |
+
+**The leg counts are a proxy, and following that NO-CLAIM found what it hides.** `06-gates.md`
+attaches this boundary to the table above: *"the leg table counts files whose name matches a
+property. A file named `mutation.rs` that mutates nothing still counts."* Acting on that warning and
+reading the tests, the `mutation` column turns out to conflate **three different things**:
+
+| kind | example | strength |
+|---|---|---|
+| an **automated** mutation test | `undrained-pipe-lint/tests/specimens.rs:205` `fn mutation_removing_stderr_pipe_retires_violation()` | strongest — the suite runs it |
+| a **documented manual** procedure | `no-shell-gate/tests/gate.rs:12-14` names the three tests that must go RED under mutation: *"A green mutation run would mean the legs are not attributable to the pattern and prove nothing"* | real, but a human must run it |
+| a **mutation affordance** | `no-shell-gate/tests/wired_lanes.rs:95-96` — *"The test-code stripping switch is deliberately named so its mutation is attributable"* over `const STRIP_TEST_CODE: bool = true;` | weakest — an invitation, not a leg |
+
+So `no-shell-gate` — the gate this brief has called the exemplar throughout — has **no test function
+with `mutation` in its name at all**. Its mutation discipline is a documented procedure over named
+tests, which is genuine and is *not the same thing* as a leg `cargo test` executes.
+
+That does not overturn the corrected `2 of 8`; it says the column is heterogeneous and the number
+alone cannot tell an automated leg from a hand-run one. **The honest table needs a fourth value, not
+a bigger count.** It is also the third time today a headline about these eight gates has moved: "1 of
+8" → "2 of 8" → "2 of 8, measuring three different things." *Recorded under R11.*
 
 **2 of 8 gates have all four legs** — `no-shell-gate` (4/3/2/6) and `undrained-pipe-lint` (1/1/1/3).
 **4 of 8 have no mutation leg** — `commit-build-fence`, `kernel-bypass-gate`,
@@ -579,6 +604,37 @@ caught five errors and has no mechanism preventing the sixth."**
 
 *Recorded under R11. The corrective is a checker that refuses `$?` after a pipeline in any command
 cited as evidence — specified in `09-milestones.md` as PC7, and not built.*
+
+---
+
+### 7.3 The eighth failure: the assembled document went stale against its own sources
+
+`docs/PLAN.md` carries this instruction in its own header: *"The section files are the source of
+truth; this document is their concatenation. **Edit a section, then re-assemble — never edit
+here.**"* Minutes after that line was committed, §3.5 of this brief gained the mutation-leg
+heterogeneity finding, and `PLAN.md` was **not** re-assembled. Measured:
+
+```
+stat -f %m docs/PLAN.md              -> assembly time
+stat -f %m docs/plan/00-brief.md     -> 132 seconds NEWER
+grep -c 'measuring three different things' docs/PLAN.md   -> 0
+```
+
+The rule was followed exactly — the section was edited, not the assembled file — and the artifact
+still drifted, because **the second half of the instruction has no enforcement**. Nothing re-runs
+the assembly and nothing notices when it is overdue. A reader opening `PLAN.md` would have found a
+document that silently omitted the newest finding while presenting itself as complete.
+
+This is the eighth self-inflicted defect recorded here and it is the most on-the-nose: **a derived
+artifact diverging from its source, in the document whose subject is derived artifacts diverging
+from their sources.** It is the same shape as the 23-commit supervisor drift in §07 and the
+`.corrupt-` mirror copies — a stale copy that answers questions as though it were current.
+
+The fix is one predicate: *no section file may be newer than the assembled document.* It is exactly
+the four-way identity check from `07-installability.md` applied to a document instead of a binary,
+and **it is not built.** Until it is, "re-assemble after editing" is a habit, and §7.2 already
+measured what habits are worth: the author violated the pipeline rule twenty minutes after writing
+it. *Recorded under R11.*
 
 ---
 
