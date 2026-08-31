@@ -7,22 +7,23 @@
 //! idle only with a bound Josh authorization token.
 
 use ack_stage::{
-    AckReadback, AckStageInput, AckStageResult, TransportReceipt, assess as assess_ack_stage,
+    assess as assess_ack_stage, AckReadback, AckStageInput, AckStageResult, TransportReceipt,
 };
-use asupersync::Cx;
 use asupersync::process::{Command, Output};
 use asupersync::runtime::RuntimeBuilder;
 use asupersync::time::{sleep, timeout};
+use asupersync::Cx;
+use dispatch_claim_fence::{authorize, parse_br_show_json, BeadSnapshot, DispatchIntent};
 use omp_orchestrator::{
-    GateCensus, Observation, PaneObservation, QueueState, SupervisorDecision, applicable,
-    census_gates, decide, read_idle_authorization,
+    applicable, census_gates, decide, read_idle_authorization, GateCensus, Observation,
+    PaneObservation, QueueState, SupervisorDecision,
 };
 use omp_rpc_session::{
-    NO_CLAIM_BOUNDARY, OMP_RPC_SCHEMA_VERSION, OMP_SURFACE, OmpCommand, RpcError, RpcSessionConfig,
-    run_session,
+    run_session, OmpCommand, RpcError, RpcSessionConfig, NO_CLAIM_BOUNDARY, OMP_RPC_SCHEMA_VERSION,
+    OMP_SURFACE,
 };
-use receiver_receipt::{PostSendObservation, ReceiptVerdict, observe_capture};
-use serde_json::{Value, json};
+use receiver_receipt::{observe_capture, PostSendObservation, ReceiptVerdict};
+use serde_json::{json, Value};
 use std::collections::BTreeSet;
 use std::env;
 use std::fs::{self, OpenOptions};
@@ -54,6 +55,7 @@ struct Config {
     heartbeat_ledger: PathBuf,
     tick_monitor_state: PathBuf,
     pending_dispatch: PathBuf,
+    receiver_agent: String,
     omp_quick: bool,
     omp_binary: PathBuf,
 }
@@ -87,6 +89,7 @@ impl Config {
         let mut interval = DEFAULT_INTERVAL;
         let mut command_timeout = DEFAULT_COMMAND_TIMEOUT;
         let mut max_ticks = None;
+        let mut receiver_agent = env::var("OMP_RECEIVER_AGENT").unwrap_or_default();
         let mut omp_quick = false;
         let mut omp_binary = env::var_os("OMP_BINARY")
             .map(PathBuf::from)
@@ -150,6 +153,15 @@ impl Config {
                 }
                 "--once" => max_ticks = Some(1),
                 "--omp-quick" => omp_quick = true,
+                "--receiver-agent" => {
+                    index += 1;
+                    receiver_agent = args
+                        .get(index)
+                        .ok_or_else(|| {
+                            "CONFIG_REFUSED --receiver-agent requires a name".to_owned()
+                        })?
+                        .clone();
+                }
                 "--omp-binary" => {
                     index += 1;
                     omp_binary =
@@ -231,6 +243,7 @@ impl Config {
             heartbeat_ledger,
             tick_monitor_state,
             pending_dispatch,
+            receiver_agent,
             omp_quick,
             omp_binary,
         })
@@ -238,7 +251,7 @@ impl Config {
 }
 
 fn usage() -> &'static str {
-    "usage: omp-orchestrator [--once|--max-ticks N] [--repo PATH] [--session NAME] [--interval-secs N] [--omp-quick] [--omp-binary PATH]"
+    "usage: omp-orchestrator [--once|--max-ticks N] [--repo PATH] [--session NAME] [--interval-secs N] [--receiver-agent NAME] [--omp-quick] [--omp-binary PATH]"
 }
 
 fn now_unix() -> u64 {
@@ -521,27 +534,37 @@ fn write_transport_receipt(
     write_heartbeat(config, tick, "TRANSPORT_RECEIPT_CAPTURED", &detail)
 }
 
-async fn send_and_verify(
-    cx: &Cx,
-    config: &Config,
-    pane: &str,
-    bead: &str,
-    before: &[u8],
-    tick: u64,
-) -> Result<AckStageResult, String> {
+async fn load_bead_snapshot(cx: &Cx, config: &Config, bead: &str) -> Result<BeadSnapshot, String> {
     let show_args = vec!["show".to_owned(), bead.to_owned(), "--json".to_owned()];
     let show = require_success(
         &config.br,
         invoke(cx, config, &config.br, &show_args).await?,
     )?;
-    let value: Value = serde_json::from_slice(&show)
-        .map_err(|error| format!("DISPATCH_BLOCKED bead={bead} malformed br show JSON: {error}"))?;
-    let row = value
-        .as_array()
-        .and_then(|rows| rows.first())
-        .ok_or_else(|| format!("DISPATCH_BLOCKED bead={bead} br show returned no row"))?;
-    let title = row.get("title").and_then(Value::as_str).unwrap_or(bead);
-    let body = row.get("description").and_then(Value::as_str).unwrap_or("");
+    parse_br_show_json(&show).map_err(|error| format!("DISPATCH_BLOCKED bead={bead} {error}"))
+}
+
+fn authorize_bead_dispatch(
+    config: &Config,
+    bead: &str,
+    snapshot: &BeadSnapshot,
+) -> Result<(), String> {
+    let intent = DispatchIntent::bead(bead, &config.receiver_agent);
+    authorize(&intent, Some(snapshot))
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+async fn send_and_verify(
+    cx: &Cx,
+    config: &Config,
+    pane: &str,
+    bead: &str,
+    snapshot: &BeadSnapshot,
+    before: &[u8],
+    tick: u64,
+) -> Result<AckStageResult, String> {
+    let title = snapshot.title();
+    let body = snapshot.description();
     let packet = format!(
         "Objective: complete bead {bead}.\nTarget repository: {}\n\n=== {title} ===\n{body}\n",
         config.repo.display()
@@ -826,9 +849,11 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             let bead = bead_ids.first().ok_or_else(|| {
                 "QUEUE_UNREADABLE ready count changed before bead selection".to_owned()
             })?;
+            let snapshot = load_bead_snapshot(cx, config, bead).await?;
+            authorize_bead_dispatch(config, bead, &snapshot)?;
             write_dispatch_intent(config, &pane, bead)?;
             let before = capture_pane(cx, config, &pane).await?;
-            let stage = send_and_verify(cx, config, &pane, bead, &before, tick).await?;
+            let stage = send_and_verify(cx, config, &pane, bead, &snapshot, &before, tick).await?;
             write_heartbeat(
                 config,
                 tick,
@@ -1014,6 +1039,7 @@ mod tests {
             heartbeat_ledger,
             tick_monitor_state: PathBuf::from("/tmp/omp-orchestrator-test-state"),
             pending_dispatch: PathBuf::from("/tmp/omp-orchestrator-test-pending"),
+            receiver_agent: "BlueLantern".to_owned(),
             omp_quick: false,
             omp_binary: PathBuf::from("omp"),
         }

@@ -1,0 +1,12 @@
+[package]
+name = "dispatch-claim-fence"
+version = "0.1.0"
+edition = "2021"
+description = "Fail-closed claim authorization for bead dispatch packets"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "forbid"
