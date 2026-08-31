@@ -10,22 +10,87 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Lanes that are correct but deliberately not yet wired. Every exception must name a reason.
-const UNWIRED_LANE_ALLOWANCE: &[(&str, &str)] = &[];
-
-/// Keep this list synchronized with the lanes declared by this workspace.
+/// Lanes that are correct but deliberately not yet wired. Every exception must name a
+/// lane AND a reason; a row naming an undeclared lane is an error, not a pass. Silence
+/// is forbidden — but so is an exception without its story (omp-orchestrator-0hk).
 ///
-/// Extraction adds rows here. A lane is not considered wired merely because it has a unit test.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// MAINTENANCE CONTRACT: rows are checked against the DERIVED lane set at every run.
+/// Stale rows are refused ("allowance names undeclared lane ...") — which fired live
+/// when extraction removed two members mid-grade. Rows come out as wiring lands (-kxe).
+const UNWIRED_LANE_ALLOWANCE: &[(&str, &str)] = &[
+    (
+        "composer-typed",
+        "wiring lands with -kxe (conductor lifecycle binary); extraction in flight",
+    ),
+    (
+        "fleet-composite",
+        "wiring lands with -kxe (conductor lifecycle binary); extraction in flight",
+    ),
+    (
+        "loop-queue-filter",
+        "wiring lands with -kxe (conductor lifecycle binary); extraction in flight",
+    ),
+    (
+        "pane-dispatch-fence",
+        "wiring lands with -kxe (conductor lifecycle binary); extraction in flight",
+    ),
+    (
+        "tick-monitor",
+        "wiring lands with -kxe (conductor lifecycle binary); extraction in flight",
+    ),
+];
+
+/// A workspace lane: one member crate, derived — NEVER hand-listed. A hand-listed
+/// expectation set is the same defect control-plane carries (check.sh EXPECTED_GATES
+/// hand-lists gates while the verdict claims completeness): the list drifts and the
+/// suite reports vacuously green while most lanes are unexamined (bead -0hk, found
+/// by the -a3p grade). The needle pair covers both real caller forms: the hyphen
+/// name as CI/-p/subprocess references spell it, and the underscore name as other
+/// crates import it.
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Lane {
-    name: &'static str,
-    needle: &'static str,
+    name: String,
+    needle_hyphen: String,
+    needle_underscore: String,
 }
 
-const DECLARED_LANES: &[Lane] = &[Lane {
-    name: "no-shell-gate",
-    needle: "no-shell-gate",
-}];
+/// Derive the lane set from the workspace member crates on disk.
+///
+/// An empty or unreadable derivation is an ERROR, never a pass: a deliverable that
+/// was never checked must never report like one that passed.
+fn derive_lanes(root: &Path) -> Result<Vec<Lane>, String> {
+    let crates_dir = root.join("crates");
+    let entries = fs::read_dir(&crates_dir)
+        .map_err(|error| format!("ERROR: read {}: {error}", crates_dir.display()))?;
+    let mut lanes = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("ERROR: read directory entry: {error}"))?;
+        let path = entry.path();
+        if !path.join("Cargo.toml").is_file() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        let name = name.to_owned();
+        if name.trim().is_empty() {
+            return Err("ERROR: workspace member crate with an empty name".to_owned());
+        }
+        lanes.push(Lane {
+            needle_hyphen: name.clone(),
+            needle_underscore: name.replace('-', "_"),
+            name,
+        });
+    }
+    if lanes.is_empty() {
+        return Err(format!(
+            "ERROR: derived lane set is empty — no member crates found under {}",
+            crates_dir.display()
+        ));
+    }
+    lanes.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(lanes)
+}
 
 /// The test-code stripping switch is deliberately named so its mutation is attributable.
 const STRIP_TEST_CODE: bool = true;
@@ -232,21 +297,35 @@ fn cleaned_source(source: &CallerSource, strip_tests: bool) -> String {
     }
 }
 
+/// Find a production caller for one lane, skipping the lane's own crate: a lane
+/// naming ITSELF is not wiring. Both real caller forms are searched — the hyphen
+/// name (CI jobs, `-p` flags, subprocess invocations) and the underscore name
+/// (`use` statements from other crates).
 fn find_caller(
-    needle: &str,
+    lane: &Lane,
     sources: &[CallerSource],
     strip_tests: bool,
 ) -> Result<Option<CallerHit>, String> {
+    // An EMPTY needle matches every line — the inverse vacuity of a never-matching
+    // needle — so both needles must be non-empty before the scan runs.
+    if lane.needle_hyphen.trim().is_empty() || lane.needle_underscore.trim().is_empty() {
+        return Err(format!(
+            "ERROR: lane {} has an empty caller needle",
+            lane.name
+        ));
+    }
     if sources.is_empty() {
         return Err("ERROR: production caller scan set is empty".to_owned());
     }
+    let own_prefix = format!("crates/{}/", lane.name);
     for source in sources {
+        if source.path.starts_with(&own_prefix) {
+            continue;
+        }
         let cleaned = cleaned_source(source, strip_tests);
-        if let Some((line, _)) = cleaned
-            .lines()
-            .enumerate()
-            .find(|(_, line)| line.contains(needle))
-        {
+        if let Some((line, _)) = cleaned.lines().enumerate().find(|(_, line)| {
+            line.contains(&lane.needle_hyphen) || line.contains(&lane.needle_underscore)
+        }) {
             return Ok(Some(CallerHit {
                 path: source.path.clone(),
                 line: line + 1,
@@ -286,7 +365,7 @@ fn check_wiring(
 
     let mut hits = Vec::with_capacity(lanes.len());
     for lane in lanes {
-        match find_caller(lane.needle, sources, strip_tests)? {
+        match find_caller(lane, sources, strip_tests)? {
             Some(hit) => hits.push(hit),
             None if allowance.iter().any(|(name, _)| *name == lane.name) => continue,
             None => return Err(format!("UNWIRED LANE: {}", lane.name)),
@@ -314,39 +393,52 @@ fn workflow_source(path: &str, contents: &str) -> CallerSource {
 #[test]
 fn every_declared_lane_has_a_production_caller() {
     let sources = collect_sources(&repo_root()).expect("production sources must be readable");
-    assert!(
-        !DECLARED_LANES.is_empty(),
-        "empty lane declarations are an error"
-    );
-    validate_allowance(DECLARED_LANES, UNWIRED_LANE_ALLOWANCE).expect("allowance must be valid");
 
-    let positive = find_caller("actions/checkout", &sources, STRIP_TEST_CODE)
+    // The lane set is DERIVED from the workspace (bead -0hk): a hand-listed
+    // DECLARED_LANES is the defect this crate exists to prevent. An empty or
+    // unreadable derivation is an error, never a pass.
+    let lanes = derive_lanes(&repo_root()).expect("lane derivation must be readable and non-empty");
+    validate_allowance(&lanes, UNWIRED_LANE_ALLOWANCE).expect("allowance must be valid");
+
+    let positive = find_caller(&positive_control(), &sources, STRIP_TEST_CODE)
         .expect("positive-control search must run")
         .expect("known wired checkout action must be found");
     assert_eq!(positive.path, PathBuf::from(".github/workflows/gate.yml"));
     assert_eq!(positive.line, 20);
 
-    let hits = check_wiring(
-        DECLARED_LANES,
-        &sources,
-        UNWIRED_LANE_ALLOWANCE,
-        STRIP_TEST_CODE,
-    )
-    .expect("every declared lane must have a production caller");
-    assert_eq!(hits.len(), DECLARED_LANES.len());
+    let hits = check_wiring(&lanes, &sources, UNWIRED_LANE_ALLOWANCE, STRIP_TEST_CODE)
+        .expect("every workspace lane must be wired or carry a named allowance reason");
+    let allowlisted = UNWIRED_LANE_ALLOWANCE.len();
+    assert_eq!(
+        hits.len(),
+        lanes.len() - allowlisted,
+        "wired hits must account for every lane minus the named allowances"
+    );
+}
+
+/// A lane the suite knows is wired, used as the caller-search positive control
+/// (criterion 6 of bead -a3p, carried here): a zero from a pattern that can never
+/// match is not evidence of absence.
+fn positive_control() -> Lane {
+    Lane {
+        name: "positive-control".to_owned(),
+        needle_hyphen: "actions/checkout".to_owned(),
+        needle_underscore: "actions/checkout".to_owned(),
+    }
 }
 
 #[test]
 fn planted_unwired_lane_is_red_then_green_in_one_run() {
     let lane = Lane {
-        name: "planted-lane",
-        needle: "planted-lane",
+        name: "planted-lane".to_owned(),
+        needle_hyphen: "planted-lane".to_owned(),
+        needle_underscore: "planted_lane".to_owned(),
     };
     let test_only = rust_source(
         "src/planted.rs",
         "#[cfg(test)]\nmod tests {\n    fn fake() { let _ = \"planted-lane\"; }\n}\n",
     );
-    let no_caller = check_wiring(&[lane], &[test_only.clone()], &[], STRIP_TEST_CODE);
+    let no_caller = check_wiring(&[lane.clone()], &[test_only.clone()], &[], STRIP_TEST_CODE);
     assert_eq!(no_caller, Err("UNWIRED LANE: planted-lane".to_owned()));
 
     let wired = rust_source(
@@ -366,18 +458,22 @@ fn comments_and_test_only_code_do_not_prove_wiring() {
         "src/commented.rs",
         "// comment-only-lane\n#[cfg(test)]\nmod tests {\n    fn fake() { let _ = \"comment-only-lane\"; }\n}\n",
     );
-    let hit = find_caller("comment-only-lane", &[source], STRIP_TEST_CODE)
-        .expect("caller search must run");
+    let lane = Lane {
+        name: "comment-only-lane".to_owned(),
+        needle_hyphen: "comment-only-lane".to_owned(),
+        needle_underscore: "comment_only_lane".to_owned(),
+    };
+    let hit = find_caller(&lane, &[source], STRIP_TEST_CODE).expect("caller search must run");
     assert!(
         hit.is_none(),
         "comments and cfg(test) code must not prove wiring"
     );
 }
-
 #[test]
 fn empty_scan_sets_are_errors_not_passes() {
+    let lanes = derive_lanes(&repo_root()).expect("derivation must work in this repo");
     assert_eq!(
-        check_wiring(DECLARED_LANES, &[], UNWIRED_LANE_ALLOWANCE, STRIP_TEST_CODE),
+        check_wiring(&lanes, &[], UNWIRED_LANE_ALLOWANCE, STRIP_TEST_CODE),
         Err("ERROR: production caller scan set is empty".to_owned())
     );
     assert_eq!(
@@ -387,21 +483,81 @@ fn empty_scan_sets_are_errors_not_passes() {
 }
 
 #[test]
-fn allowance_is_empty_or_requires_a_reason() {
-    assert!(UNWIRED_LANE_ALLOWANCE.is_empty());
-    assert!(validate_allowance(DECLARED_LANES, UNWIRED_LANE_ALLOWANCE).is_ok());
-    assert!(validate_allowance(DECLARED_LANES, &[("no-shell-gate", "")]).is_err());
+fn every_allowance_row_names_a_lane_and_carries_a_reason() {
+    let lanes = derive_lanes(&repo_root()).expect("derivation must work in this repo");
+    // Silence is forbidden: with derivation, the allowance legitimately carries named
+    // rows for lanes whose wiring lands later — but every row must name a DERIVED
+    // lane and carry a reason. A row for an undeclared lane, or a row with an empty
+    // reason, is an error, not a pass.
+    validate_allowance(&lanes, UNWIRED_LANE_ALLOWANCE).expect("allowance must validate");
+    assert!(
+        validate_allowance(&lanes, &[("not-a-workspace-crate", "a reason")]).is_err(),
+        "an allowance row naming an undeclared lane must be rejected"
+    );
+    assert!(
+        validate_allowance(&lanes, &[("no-shell-gate", "")]).is_err(),
+        "an allowance row without a reason must be rejected"
+    );
+    // No invented rows (validated above), and no silent gaps (check_wiring enforces
+    // them): the allowance is the only sanctioned unwired state.
+    for (name, reason) in UNWIRED_LANE_ALLOWANCE {
+        assert!(!reason.trim().is_empty(), "allowance {name} has an empty reason");
+    }
+}
+
+#[test]
+fn derivation_is_an_error_when_the_workspace_is_unreadable() {
+    // An empty or unreadable derivation is an ERROR, never a pass: a gate pointed at
+    // a root with no member crates must refuse, not report green.
+    let empty_root = std::env::temp_dir().join(format!("wl-empty-{}", std::process::id()));
+    std::fs::create_dir_all(&empty_root).expect("create empty root");
+    assert!(derive_lanes(&empty_root).is_err(), "an empty derivation must be an error");
+    let _ = std::fs::remove_dir_all(&empty_root);
+}
+
+#[test]
+fn a_lane_naming_itself_is_not_wired() {
+    // Self-exclusion: a crate's own source mentioning its own name proves nothing.
+    let lane = Lane {
+        name: "selfy".to_owned(),
+        needle_hyphen: "selfy".to_owned(),
+        needle_underscore: "selfy".to_owned(),
+    };
+    let self_source = rust_source(
+        "crates/selfy/src/lib.rs",
+        "pub fn init() { register(\"selfy\"); }\n",
+    );
+    let other_source = rust_source("crates/other/src/lib.rs", "pub fn unrelated() {}\n");
+    let verdict = check_wiring(&[lane], &[self_source, other_source], &[], STRIP_TEST_CODE);
+    assert_eq!(verdict, Err("UNWIRED LANE: selfy".to_owned()));
 }
 
 #[test]
 fn workflow_comments_are_removed_without_breaking_quoted_values() {
+    let quoted = Lane {
+        name: "quoted-lane".to_owned(),
+        needle_hyphen: "quoted-lane # value".to_owned(),
+        needle_underscore: "quoted_lane".to_owned(),
+    };
+    let commented = Lane {
+        name: "comment-only-lane".to_owned(),
+        needle_hyphen: "comment-only-lane".to_owned(),
+        needle_underscore: "comment_only_lane".to_owned(),
+    };
     let source = workflow_source(
         ".github/workflows/fixture.yml",
         "# quoted-lane\nrun: \"quoted-lane # value\" # comment-only-lane\n",
     );
-    let hit = find_caller("quoted-lane # value", &[source], STRIP_TEST_CODE)
+    let hit = find_caller(&quoted, &[source.clone()], STRIP_TEST_CODE)
         .expect("caller search must run")
         .expect("quoted workflow value must remain searchable");
     assert_eq!(hit.line, 2);
-    assert!(find_caller("comment-only-lane", &[], STRIP_TEST_CODE).is_err());
+    // The comment part of that same line must not itself count as a caller when
+    // searched as its own lane: the scan runs (non-empty set) and finds nothing.
+    assert!(
+        find_caller(&commented, &[source], STRIP_TEST_CODE)
+            .expect("caller search must run")
+            .is_none(),
+        "a workflow comment must not prove wiring even trailing a quoted value"
+    );
 }
