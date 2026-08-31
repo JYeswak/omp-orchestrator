@@ -312,6 +312,43 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
         });
     }
 
+    // All other workspace crates: they are LIBRARIES (not standalone gates),
+    // so their reachability is measured through the manifest caller count.
+    // A lib with no manifest caller is DEAD — the conductor routes by work
+    // location, and dead libs are invisible to both the conductor and the
+    // gate. These are NOT defects (bins without manifest callers are
+    // expected), but they must be VISIBLE.
+    for crate_name in [
+        "ack-spine", "ack-stage", "composer-typed", "dispatch-silence-watch",
+        "finding", "finding-dispatch", "fleet-composite", "fleet-truth",
+        "kernel-only-operator-hook", "oracle-compare",
+        "oracle-pane-state-differential", "receiver-receipt",
+        "subprocess-contract", "tick-monitor",
+    ] {
+        let has_caller = std::process::Command::new("grep")
+            .args(["-rl", crate_name, "--include=*.toml", "--include=*.rs", "."])
+            .current_dir(repo_root)
+            .output()
+            .map(|o| {
+                let hits = String::from_utf8_lossy(&o.stdout);
+                // Exclude self-references: a checker whose input includes
+                // text about the thing it checks is the self-referential
+                // checker defect.
+                hits.lines()
+                    .filter(|l| !l.contains(&format!("{crate_name}/src/")))
+                    .count() > 1
+            })
+            .unwrap_or(false);
+        rows.push(GateCensusRow {
+            gate: crate_name.into(),
+            reachability: if has_caller {
+                GateReachability::Reachable { trigger: "manifest dependency".into() }
+            } else {
+                GateReachability::Unreachable { reason: "no manifest dependency references this crate".into() }
+            },
+        });
+    }
+
     GateCensus { rows }
 }
 
