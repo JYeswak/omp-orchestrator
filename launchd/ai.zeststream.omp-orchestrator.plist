@@ -38,6 +38,8 @@
         <string>/Users/josh/.local/state/flywheel/omp-orchestrator.heartbeat.jsonl</string>
         <key>OMP_TICK_MONITOR_STATE</key>
         <string>/Users/josh/.local/state/flywheel/omp-orchestrator.tick-monitor-state.json</string>
+        <key>OMP_PENDING_DISPATCH</key>
+        <string>/Users/josh/.local/state/flywheel/omp-orchestrator.pending-dispatch</string>
     </dict>
 
     <key>WorkingDirectory</key>

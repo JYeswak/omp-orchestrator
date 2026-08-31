@@ -47,6 +47,7 @@ struct Config {
     exclude_panes: Vec<String>,
     heartbeat_ledger: PathBuf,
     tick_monitor_state: PathBuf,
+    pending_dispatch: PathBuf,
 }
 
 impl Config {
@@ -168,6 +169,11 @@ impl Config {
             .unwrap_or_else(|| {
                 heartbeat_ledger.with_file_name("omp-orchestrator.tick-monitor-state.json")
             });
+        let pending_dispatch = env::var_os("OMP_PENDING_DISPATCH")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                heartbeat_ledger.with_file_name("omp-orchestrator.pending-dispatch")
+            });
         Ok(Self {
             repo,
             session,
@@ -182,6 +188,7 @@ impl Config {
             exclude_panes,
             heartbeat_ledger,
             tick_monitor_state,
+            pending_dispatch,
         })
     }
 }
@@ -381,11 +388,19 @@ async fn post_send_observation(cx: &Cx, config: &Config, pane: &str) -> PostSend
         "-F".to_owned(),
         "#{pane_id}".to_owned(),
     ];
-    let Ok(list_output) = invoke(cx, config, "tmux list-panes", &list_args).await else {
-        return PostSendObservation::Missing;
+    let list_output = match invoke(cx, config, "tmux", &list_args).await {
+        Ok(output) => output,
+        Err(error) => {
+            eprintln!("RECEIVER_OBSERVATION_MISSING pane={pane} phase=list error={error}");
+            return PostSendObservation::Missing;
+        }
     };
-    let Ok(list_bytes) = require_success("tmux list-panes", list_output) else {
-        return PostSendObservation::Missing;
+    let list_bytes = match require_success("tmux list-panes", list_output) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            eprintln!("RECEIVER_OBSERVATION_MISSING pane={pane} phase=list error={error}");
+            return PostSendObservation::Missing;
+        }
     };
     let list_text = String::from_utf8_lossy(&list_bytes);
     let pane_ids: Vec<&str> = list_text
@@ -399,8 +414,12 @@ async fn post_send_observation(cx: &Cx, config: &Config, pane: &str) -> PostSend
     if !pane_ids.iter().any(|observed| *observed == pane) {
         return PostSendObservation::Absent;
     }
-    let Ok(capture) = capture_pane(cx, config, pane).await else {
-        return PostSendObservation::Missing;
+    let capture = match capture_pane(cx, config, pane).await {
+        Ok(capture) => capture,
+        Err(error) => {
+            eprintln!("RECEIVER_OBSERVATION_MISSING pane={pane} phase=capture error={error}");
+            return PostSendObservation::Missing;
+        }
     };
     let text = String::from_utf8_lossy(&capture);
     PostSendObservation::Present(observe_capture(pane, &text, now_unix()))
@@ -449,7 +468,7 @@ async fn send_and_verify(
             "-l".to_owned(),
             packet.clone(),
         ];
-        let typed = invoke(cx, config, "tmux send-keys -l", &typed_args)
+        let typed = invoke(cx, config, "tmux", &typed_args)
             .await
             .and_then(|output| require_success("tmux send-keys -l", output).map(|_| ()));
         if typed.is_err() {
@@ -461,7 +480,7 @@ async fn send_and_verify(
                 pane.to_owned(),
                 "Enter".to_owned(),
             ];
-            invoke(cx, config, "tmux send-keys Enter", &enter_args)
+            invoke(cx, config, "tmux", &enter_args)
                 .await
                 .and_then(|output| require_success("tmux send-keys Enter", output).map(|_| ()))
         }
@@ -551,8 +570,83 @@ fn write_heartbeat(config: &Config, tick: u64, status: &str, detail: &str) -> Re
         })?;
     Ok(())
 }
+fn read_pending_dispatch(config: &Config) -> Result<Option<String>, String> {
+    match fs::read_to_string(&config.pending_dispatch) {
+        Ok(text) => Ok(Some(if text.trim().is_empty() {
+            "marker_exists_but_is_empty".to_owned()
+        } else {
+            text.trim().to_owned()
+        })),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!(
+            "DISPATCH_RETRY_BLOCKED pending marker unreadable path={} error={error}",
+            config.pending_dispatch.display()
+        )),
+    }
+}
+
+fn write_dispatch_intent(config: &Config, pane: &str, bead: &str) -> Result<(), String> {
+    if let Some(parent) = config.pending_dispatch.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "DISPATCH_BLOCKED pending marker parent={} error={error}",
+                parent.display()
+            )
+        })?;
+    }
+    let row = serde_json::json!({
+        "event": "dispatch_intent",
+        "build_id": BUILD_ID,
+        "pid": std::process::id(),
+        "repo": config.repo.display().to_string(),
+        "session": config.session,
+        "pane": pane,
+        "bead": bead,
+        "issued_at": now_unix(),
+    });
+    let bytes = serde_json::to_vec(&row)
+        .map_err(|error| format!("DISPATCH_BLOCKED pending marker serialize: {error}"))?;
+    let mut marker = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&config.pending_dispatch)
+        .map_err(|error| {
+            format!(
+                "DISPATCH_RETRY_BLOCKED pane={pane} bead={bead} marker={} error={error}",
+                config.pending_dispatch.display()
+            )
+        })?;
+    marker
+        .write_all(&bytes)
+        .and_then(|_| marker.write_all(b"\n"))
+        .and_then(|_| marker.sync_data())
+        .map_err(|error| {
+            format!(
+                "DISPATCH_BLOCKED pending marker write path={} error={error}",
+                config.pending_dispatch.display()
+            )
+        })
+}
+
+fn clear_dispatch_intent(config: &Config) -> Result<(), String> {
+    match fs::remove_file(&config.pending_dispatch) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!(
+            "DISPATCH_CONFIRMED_BUT_MARKER_CLEAR_FAILED path={} error={error}",
+            config.pending_dispatch.display()
+        )),
+    }
+}
 async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     write_heartbeat(config, tick, "CYCLE_STARTED", "phase=observe")?;
+    if let Some(intent) = read_pending_dispatch(config)? {
+        write_heartbeat(config, tick, "DISPATCH_RETRY_BLOCKED", &intent)?;
+        return Err(format!(
+            "DISPATCH_RETRY_BLOCKED owner=josh next_action=inspect-or-clear-pending-dispatch marker={} detail={intent}",
+            config.pending_dispatch.display()
+        ));
+    }
     let mut monitor_args = vec![
         "observe".to_owned(),
         "--session".to_owned(),
@@ -629,6 +723,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             let bead = bead_ids.first().ok_or_else(|| {
                 "QUEUE_UNREADABLE ready count changed before bead selection".to_owned()
             })?;
+            write_dispatch_intent(config, &pane, bead)?;
             let before = capture_pane(cx, config, &pane).await?;
             let protocol = send_and_verify(cx, config, &pane, bead, &before).await?;
             write_heartbeat(
@@ -637,6 +732,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                 "DISPATCHED",
                 &format!("pane={pane} bead={bead} receiver={}", protocol.label()),
             )?;
+            clear_dispatch_intent(config)?;
             println!(
                 "DISPATCHED tick={tick} session={} pane={pane} bead={bead} RECEIVER_RECEIPT={}",
                 config.session,
@@ -798,6 +894,7 @@ mod tests {
             exclude_panes: Vec::new(),
             heartbeat_ledger,
             tick_monitor_state: PathBuf::from("/tmp/omp-orchestrator-test-state"),
+            pending_dispatch: PathBuf::from("/tmp/omp-orchestrator-test-pending"),
         }
     }
 
@@ -809,6 +906,25 @@ mod tests {
         .unwrap();
         assert!(observation.panes[0].is_free_capacity);
         assert!(!observation.panes[0].is_dispatchable);
+    }
+
+    #[test]
+    fn uncertain_dispatch_is_fenced_across_restarts() {
+        let root = env::temp_dir().join(format!(
+            "omp-orchestrator-pending-test-{}-{}",
+            std::process::id(),
+            now_unix()
+        ));
+        let pending = root.join("pending-dispatch");
+        let mut config = fixture_config(root.join("heartbeat.jsonl"));
+        config.pending_dispatch = pending.clone();
+        write_dispatch_intent(&config, "%1413", "omp-orchestrator-test").unwrap();
+        let intent = read_pending_dispatch(&config).unwrap().unwrap();
+        assert!(intent.contains("omp-orchestrator-test"));
+        let retry = write_dispatch_intent(&config, "%1414", "another-bead");
+        assert!(retry.unwrap_err().contains("DISPATCH_RETRY_BLOCKED"));
+        clear_dispatch_intent(&config).unwrap();
+        std::fs::remove_dir(root).unwrap();
     }
 
     #[test]
