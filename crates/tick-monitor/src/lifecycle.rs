@@ -272,7 +272,29 @@ fn in_citation_position(chars: &[char], start: usize) -> bool {
         "in commit ",
         "sha=",
     ];
-    MARKERS.iter().any(|m| prefix.ends_with(m) || prefix.contains(m))
+    // ADJACENCY ONLY. `contains` over a 40-char window was still self-poisoning: the
+    // grader's reply "found no commit object for 5042f809" contains "commit " and so scored
+    // a REPORT OF ABSENCE as a citation. A marker must IMMEDIATELY precede the token.
+    //
+    // Whitespace is normalised first because `br` wraps long comment lines, so a marker can
+    // be separated from its SHA by a newline plus indentation and still be adjacent in
+    // meaning.
+    let normalised = prefix
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let normalised = if prefix.ends_with(char::is_whitespace) {
+        format!("{normalised} ")
+    } else {
+        normalised
+    };
+    // Test both the space-terminated and trimmed forms: "COMMIT: <sha>" normalises to
+    // "commit: " while the marker is "commit:". Caught by the known-good leg, which is the
+    // only reason this narrowing did not silently drop a real citation form.
+    let trimmed = normalised.trim_end();
+    MARKERS
+        .iter()
+        .any(|m| normalised.ends_with(m) || trimmed.ends_with(m.trim_end()))
 }
 
 /// Extract every 7-to-40 hex commit-SHA-shaped token from text.
@@ -606,11 +628,21 @@ mod tests {
 
     #[test]
     fn sha_extraction_rejects_numbers_and_words() {
-        // Real citations from this wave.
+        // Real citation text from this wave. NOTE: this test CHANGED when the detector was
+        // narrowed from bare-pattern to citation-adjacency. Under the old semantics both
+        // SHAs scored; now only the one with an adjacent marker does, because "and b6249a5"
+        // carries no marker. That is the intended trade (see an_unmarked_sha_is_
+        // deliberately_missed) and the test says so rather than being quietly relaxed.
         let t = "landed in 831fdd6 and b6249a5, see line 750 and 200000 bytes";
         let got = sha_candidates(t);
-        assert!(got.contains(&"831fdd6".to_owned()));
-        assert!(got.contains(&"b6249a5".to_owned()));
+        assert!(
+            got.contains(&"831fdd6".to_owned()),
+            "the marked citation must survive: {got:?}"
+        );
+        assert!(
+            !got.contains(&"b6249a5".to_owned()),
+            "an unmarked SHA is out of scope by design: {got:?}"
+        );
         assert!(
             !got.iter().any(|s| s == "200000" || s == "750"),
             "a number is not a SHA: {got:?}"
@@ -839,5 +871,69 @@ mod orphan_tests {
         assert_eq!(unit(0, 0).stage(), Stage::MaterializedOrphan);
         assert_ne!(unit(1, 0).stage(), Stage::MaterializedOrphan);
         assert_ne!(unit(2, 3).stage(), Stage::MaterializedOrphan);
+    }
+}
+
+#[cfg(test)]
+mod adjacency_tests {
+    use super::*;
+
+    /// THE PLANTED GRADER REPLY. Verbatim from GreenFrog's 09:xx comment, which is the exact
+    /// string that survived the previous narrowing. `contains("commit ")` over a 40-char
+    /// window scored "found no commit object for X" as a citation, so a REPORT OF ABSENCE
+    /// regenerated the very finding it was reporting on.
+    ///
+    /// This is the self-pollution shape: a detector scanning text that includes its own
+    /// output, the same class as a guard grepping its own pane and matching its own
+    /// scrollback. Third iteration on this detector; each narrowing was caught by a test,
+    /// never by review.
+    #[test]
+    fn a_grader_reporting_absence_is_not_a_citation() {
+        for s in [
+            "searched the mirror and found no commit object for 5042f809 or 90840a00",
+            "git rev-parse --verify 5042f809 and 90840a00 in both repos",
+            "Dangling SHA verdict: 5042f809 and 90840a00 do not resolve",
+            "the lifecycle join surfaced (5042f809, 90840a00 -- unresolvable)",
+            "no commit object for deadbeef1 exists anywhere",
+        ] {
+            assert!(
+                sha_candidates(s).is_empty(),
+                "report-of-absence must not score as a citation: {s:?} -> {:?}",
+                sha_candidates(s)
+            );
+        }
+    }
+
+    /// KNOWN-GOOD, and mandatory: narrowing must not suppress real citations. Without this
+    /// leg the fix could empty the LANDED column, which reads as "nothing to grade" -- the
+    /// worst failure mode this join has.
+    #[test]
+    fn adjacent_markers_still_score() {
+        let cases = [
+            ("landed in 831fdd6", "831fdd6"),
+            ("commit b6249a5 did it", "b6249a5"),
+            ("COMMIT: 3f821d4", "3f821d4"),
+            ("control-plane@f9f4e37", "f9f4e37"),
+            ("fixed in 91a015c", "91a015c"),
+        ];
+        for (text, want) in cases {
+            let got = sha_candidates(text);
+            assert!(
+                got.contains(&want.to_owned()),
+                "lost a real citation: {text:?} -> {got:?}"
+            );
+        }
+    }
+
+    /// br wraps long comment lines, so a marker and its SHA can be split by a newline plus
+    /// indentation. Adjacency is about meaning, not literal bytes.
+    #[test]
+    fn a_wrapped_marker_is_still_adjacent() {
+        let wrapped = "the change landed in\n            e9a410a and turned the suite green";
+        assert!(
+            sha_candidates(wrapped).contains(&"e9a410a".to_owned()),
+            "wrapping must not break adjacency: {:?}",
+            sha_candidates(wrapped)
+        );
     }
 }
