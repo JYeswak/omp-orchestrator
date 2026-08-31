@@ -44,11 +44,86 @@ hits. A zero from a pattern that can never match is not evidence of absence.
 
 ## OMP lifecycles — what they are and where to find them
 
-OMP (Oh My Pi) v18.0.11 — node CLI `@oh-my-pi/pi-coding-agent`, repo `can1357/oh-my-pi`. 29 built-in
-tools plus 3 hidden (`yield`, `goal`, `think`), 136 slash commands, **81 JSON-RPC methods**, ~40 CLI
-subcommands. We currently use 17 of the 81.
+OMP (Oh My Pi) v18.0.11 — node CLI "@oh-my-pi/pi-coding-agent", repo "can1357/oh-my-pi". 29 built-in
+tools plus 3 hidden (yield, goal, think), 136 slash commands, ~40 CLI subcommands.
+The installed RPC handler exposes **42 inbound JSON-RPC command methods**. Static production source
+reachability in the control-plane adapter is **5/42**; the old "17 of 81" claim is not reproduced by
+the installed binary and is replaced below with a derivation command and its output.
 
-### The RPC lifecycle (typed, in `crates/xtask/src/omp_rpc.rs` in control-plane)
+### Installed RPC command census (measured 2026-08-31)
+
+Version gate and source identity:
+
+  omp --version -> omp/18.0.11
+  /Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js
+  SHA-256: a95635ad43ab85fcabcbee9bbcc593d9ea8e68ba54228b4c9fdbd1e25766281c; bytes: 19803745.
+
+This command derives the method list from the installed binary's RPC dispatch handler; it is not a
+hand-transcribed table:
+
+~~~bash
+omp --version && bun -e 'const p="/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js"; const s=await Bun.file(p).text(); const start=s.indexOf("let w=async(v)=>"); const end=s.indexOf("},E=new KWt",start); const methods=[...s.slice(start,end).matchAll(/case"([^"]+)"/g)].map(x=>x[1]); console.log("RPC_COMMAND_METHODS="+methods.length); console.log(methods.join("\n"));'
+~~~
+
+Measured output: RPC_COMMAND_METHODS=42.
+
+negotiate_protocol, prompt, steer, follow_up, abort, abort_and_prompt, new_session, switch_session,
+branch, get_state, set_fast_mode, get_available_commands, set_todos, set_host_tools,
+set_host_uri_schemes, set_subagent_subscription, get_subagents, get_subagent_messages, set_model,
+cycle_model, get_available_models, set_thinking_level, cycle_thinking_level, set_steering_mode,
+set_follow_up_mode, set_interrupt_mode, compact, set_auto_compaction, set_auto_retry, abort_retry,
+bash, abort_bash, get_session_stats, export_html, get_branch_messages, get_last_assistant_text,
+set_session_name, handoff, get_messages, get_messages_page, get_login_providers, login.
+
+### Static production reachability (measured 2026-08-31)
+
+Scope: production Rust under /Users/josh/Developer/control-plane/crates/xtask/src/; tests, comments,
+and compatibility tables are excluded. This command derives Rust constructor call sites and maps each
+constructor through RpcRequest::to_frame to the installed handler method:
+
+~~~bash
+bun -e '
+const installedPath="/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js";
+const installed=await Bun.file(installedPath).text();
+const handlerStart=installed.indexOf("let w=async(v)=>");
+const handlerEnd=installed.indexOf("},E=new KWt",handlerStart);
+const installedMethods=[...installed.slice(handlerStart,handlerEnd).matchAll(/case"([^"]+)"/g)].map(m=>m[1]);
+const sourcePath="/Users/josh/Developer/control-plane/crates/xtask/src/omp_rpc.rs";
+const source=await Bun.file(sourcePath).text();
+const frameStart=source.indexOf("pub fn to_frame");
+const frameEnd=source.indexOf("pub fn handshake_requests",frameStart);
+const frameSource=source.slice(frameStart,frameEnd);
+const variantToMethod=new Map();
+for(const match of frameSource.matchAll(/Self::([A-Za-z]+)(?:(?!Self::)[\s\S]){0,800}?"type"\s*:\s*"([^"]+)"/g)) variantToMethod.set(match[1],match[2]);
+const start=source.indexOf("pub fn handshake_requests");
+const end=source.indexOf("\n}",start);
+const rows=[];
+for(let lineStart=start;lineStart<end;){const lineEnd=source.indexOf("\n",lineStart);const stop=lineEnd<0||lineEnd>end?end:lineEnd;const match=source.slice(lineStart,stop).match(/RpcRequest::([A-Za-z]+)/);if(match){const method=variantToMethod.get(match[1]);if(!method||!installedMethods.includes(method))throw Error("unmapped RPC constructor: "+match[1]);rows.push(sourcePath+":"+source.slice(0,lineStart).split("\n").length+" "+method)}lineStart=stop+1}
+const unique=[...new Set(rows.map(row=>row.slice(row.lastIndexOf(" ")+1)))];
+console.log("installed_rpc_commands="+installedMethods.length);
+console.log("static_production_rpc_commands="+unique.length+"/"+installedMethods.length);
+console.log(rows.join("\n"));
+'
+~~~
+
+Measured output:
+
+installed_rpc_commands=42
+static_production_rpc_commands=5/42
+/Users/josh/Developer/control-plane/crates/xtask/src/omp_rpc.rs:275 negotiate_protocol
+/Users/josh/Developer/control-plane/crates/xtask/src/omp_rpc.rs:276 get_state
+/Users/josh/Developer/control-plane/crates/xtask/src/omp_rpc.rs:277 get_available_commands
+/Users/josh/Developer/control-plane/crates/xtask/src/omp_rpc.rs:278 get_available_models
+/Users/josh/Developer/control-plane/crates/xtask/src/omp_rpc.rs:279 set_fast_mode
+
+RpcRequest::CancelUiRequest at omp_rpc.rs:740 emits the separate extension_ui_response frame and is
+intentionally excluded from the inbound RpcCommand denominator.
+
+This is **static reachability**, not runtime usage. It proves production constructors exist in the scanned
+adapter source; it does not prove a live OMP process, provider response, or invocation through an
+unscanned path.
+
+### The RPC lifecycle (typed, in crates/xtask/src/omp_rpc.rs in control-plane)
 
 Read the enum, not this table, when precision matters — this is a map to the source.
 
