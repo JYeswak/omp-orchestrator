@@ -78,6 +78,14 @@ fn animation_alone_does_not_change_the_stable_hash() {
     assert_ne!(stable_hash(&a), stable_hash(&c));
 }
 
+
+#[test]
+fn idle_and_working_status_glyphs_do_not_change_stable_content_hash() {
+    let idle = "unchanged body\nπ . GPT-5.6 . /tmp/receiver";
+    let working = "unchanged body\n⠙ 1s . GPT-5.6 . /tmp/receiver";
+    assert_eq!(stable_hash(idle), stable_hash(working));
+}
+
 #[test]
 fn idle_is_never_reported_from_a_single_capture() {
     let o = Observation {

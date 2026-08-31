@@ -15,6 +15,7 @@ path = "src/lib.rs"
 
 [dependencies]
 serde_json = "1"
+finding = { path = "../finding" }
 
 [lints.rust]
 unsafe_code = "forbid"

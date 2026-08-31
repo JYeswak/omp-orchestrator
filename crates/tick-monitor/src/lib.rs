@@ -377,7 +377,7 @@ pub fn classify(capture: &str) -> PaneState {
 pub fn stable_hash(capture: &str) -> u64 {
     let mut cleaned = String::with_capacity(capture.len());
     for ch in capture.chars() {
-        if is_braille(ch) {
+        if is_braille(ch) || ch == 'π' {
             continue;
         }
         cleaned.push(ch);

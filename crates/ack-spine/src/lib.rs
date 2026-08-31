@@ -65,3 +65,4 @@ pub use ledger::*;
 /// `build_id` at all. That identity leg was unverifiable BY CONSTRUCTION.
 /// Porting it fixed the writer; this line makes the reader reachable.
 pub mod heartbeat;
+pub mod followup;

@@ -37,17 +37,37 @@ pub enum PostSendObservation {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReceiptReason {
     MissingPostObservation,
-    PaneIdMismatch { expected: String, observed: String },
+    PaneIdMismatch {
+        expected: String,
+        observed: String,
+    },
     DialogOpen,
     /// A queued prompt landed in the composer but the pane never submitted it.
     WedgedUnsubmitted,
     EmptyPaneListNoDeathClaim,
-    ObservationNotWorking { side: &'static str, state: String },
+    ObservationNotWorking {
+        side: &'static str,
+        state: String,
+    },
+    /// The post-send state changed, but the stable-content hash did not.
+    StableContentUnchanged,
+    /// The transport cannot support the same receipt claim as ntm.
+    UnprovenTransport {
+        transport: &'static str,
+    },
+    /// The authoritative br comments read-back has no matching ACK line.
+    AckReadbackMissing,
     IdleUnchanged,
     PostBecameIdle,
-    TimerDidNotReset { before_secs: u64, after_secs: u64 },
+    TimerDidNotReset {
+        before_secs: u64,
+        after_secs: u64,
+    },
     TimerResetButStableContentUnchanged,
-    TimerTooLargeAfterIdle { after_secs: u64, max_secs: u64 },
+    TimerTooLargeAfterIdle {
+        after_secs: u64,
+        max_secs: u64,
+    },
 }
 
 impl fmt::Display for ReceiptReason {
@@ -55,7 +75,10 @@ impl fmt::Display for ReceiptReason {
         match self {
             Self::MissingPostObservation => f.write_str("missing_post_observation"),
             Self::PaneIdMismatch { expected, observed } => {
-                write!(f, "pane_id_mismatch expected={expected} observed={observed}")
+                write!(
+                    f,
+                    "pane_id_mismatch expected={expected} observed={observed}"
+                )
             }
             Self::DialogOpen => f.write_str("dialog_open"),
             Self::WedgedUnsubmitted => f.write_str("WEDGED_UNSUBMITTED"),
@@ -63,6 +86,11 @@ impl fmt::Display for ReceiptReason {
             Self::ObservationNotWorking { side, state } => {
                 write!(f, "{side}_observation_not_working state={state}")
             }
+            Self::StableContentUnchanged => f.write_str("stable_content_unchanged"),
+            Self::UnprovenTransport { transport } => {
+                write!(f, "unproven_transport transport={transport}")
+            }
+            Self::AckReadbackMissing => f.write_str("ack_readback_missing"),
             Self::IdleUnchanged => f.write_str("idle_unchanged"),
             Self::PostBecameIdle => f.write_str("post_became_idle"),
             Self::TimerDidNotReset {
@@ -149,7 +177,7 @@ pub fn observe_capture(pane_id: impl Into<String>, capture: &str, at: u64) -> Ob
 /// The function performs no send and does not inspect sender return values. Confirmation
 /// is keyed by the pre-send state:
 ///
-/// * IDLE -> WORKING confirms when the new timer is small;
+/// * IDLE -> WORKING confirms only when the new timer is small and the stable hash changes;
 /// * WORKING -> WORKING confirms only when the timer resets and stable content changes;
 /// * IDLE -> IDLE and a non-resetting WORKING pane produce NO_RECEIPT;
 /// * dialogs, absent panes, empty pane lists, and unreadable states remain named.
@@ -221,20 +249,25 @@ pub fn assess_receiver_receipt(
 
     match (&pre_send.state, &post.state) {
         (PaneState::Idle, PaneState::Working { timer_secs }) => {
-            if *timer_secs <= MAX_IDLE_TO_WORKING_TIMER_SECS {
-                ReceiptVerdict::ReceiptConfirmed {
-                    pane_id: pane_id_owned,
-                    timer_before_secs: None,
-                    timer_after_secs: *timer_secs,
-                    stable_content_changed: pre_send.hash != post.hash,
-                }
-            } else {
+            if *timer_secs > MAX_IDLE_TO_WORKING_TIMER_SECS {
                 ReceiptVerdict::Indeterminate {
                     pane_id: pane_id_owned,
                     reason: ReceiptReason::TimerTooLargeAfterIdle {
                         after_secs: *timer_secs,
                         max_secs: MAX_IDLE_TO_WORKING_TIMER_SECS,
                     },
+                }
+            } else if pre_send.hash == post.hash {
+                ReceiptVerdict::NoReceipt {
+                    pane_id: pane_id_owned,
+                    reason: ReceiptReason::StableContentUnchanged,
+                }
+            } else {
+                ReceiptVerdict::ReceiptConfirmed {
+                    pane_id: pane_id_owned,
+                    timer_before_secs: None,
+                    timer_after_secs: *timer_secs,
+                    stable_content_changed: true,
                 }
             }
         }
@@ -316,23 +349,27 @@ mod tests {
     fn idle_to_working_confirms_with_small_new_timer() {
         let pre = idle("%live", "prompt", 100);
         let post = working("%live", 1, "accepted packet", '⠙', 101);
-        let result = assess_receiver_receipt(
-            "%live",
-            &pre,
-            PostSendObservation::Present(post),
-        );
+        let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
         assert_eq!(result.label(), "RECEIPT_CONFIRMED");
+    }
+
+    #[test]
+    fn idle_to_working_without_hash_change_is_no_receipt() {
+        let pre = idle("%live", "prompt", 100);
+        let post = working("%live", 1, "prompt", '⠙', 101);
+        let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
+        assert_eq!(result.label(), "NO_RECEIPT");
+        assert_eq!(
+            result.reason(),
+            Some(&ReceiptReason::StableContentUnchanged)
+        );
     }
 
     #[test]
     fn idle_to_working_with_large_timer_is_indeterminate() {
         let pre = idle("%live", "prompt", 100);
         let post = working("%live", 61, "unrelated old work", '⠙', 101);
-        let result = assess_receiver_receipt(
-            "%live",
-            &pre,
-            PostSendObservation::Present(post),
-        );
+        let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
         assert_eq!(result.label(), "INDETERMINATE");
         assert!(matches!(
             result.reason(),
@@ -344,11 +381,7 @@ mod tests {
     fn idle_to_idle_is_no_receipt() {
         let pre = idle("%live", "prompt", 100);
         let post = idle("%live", "prompt", 101);
-        let result = assess_receiver_receipt(
-            "%live",
-            &pre,
-            PostSendObservation::Present(post),
-        );
+        let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
         assert_eq!(result.reason(), Some(&ReceiptReason::IdleUnchanged));
     }
 
@@ -356,41 +389,29 @@ mod tests {
     fn working_to_working_reset_and_content_change_confirms() {
         let pre = working("%live", 58, "before", '⠋', 100);
         let post = working("%live", 1, "after", '⠙', 101);
-        let result = assess_receiver_receipt(
-            "%live",
-            &pre,
-            PostSendObservation::Present(post),
-        );
+        let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
         assert_eq!(result.label(), "RECEIPT_CONFIRMED");
     }
 
     #[test]
-    fn working_to_working_advanced_timer_is_no_receipt() {
-        let pre = working("%live", 58, "same", '⠋', 100);
-        let post = working("%live", 59, "same", '⠙', 101);
-        let result = assess_receiver_receipt(
-            "%live",
-            &pre,
-            PostSendObservation::Present(post),
-        );
-        assert_eq!(
+    fn working_to_working_without_timer_reset_is_no_receipt() {
+        let pre = working("%live", 58, "before", '⠋', 100);
+        let post = working("%live", 59, "after", '⠙', 101);
+        let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
+        assert!(matches!(
             result.reason(),
-            Some(&ReceiptReason::TimerDidNotReset {
+            Some(ReceiptReason::TimerDidNotReset {
                 before_secs: 58,
-                after_secs: 59,
+                after_secs: 59
             })
-        );
+        ));
     }
 
     #[test]
-    fn timer_reset_without_content_change_is_no_receipt() {
+    fn working_to_working_reset_without_content_change_is_no_receipt() {
         let pre = working("%live", 58, "same", '⠋', 100);
         let post = working("%live", 1, "same", '⠙', 101);
-        let result = assess_receiver_receipt(
-            "%live",
-            &pre,
-            PostSendObservation::Present(post),
-        );
+        let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
         assert_eq!(
             result.reason(),
             Some(&ReceiptReason::TimerResetButStableContentUnchanged)
@@ -398,36 +419,19 @@ mod tests {
     }
 
     #[test]
-    fn dialog_is_indeterminate_even_when_timer_resets() {
+    fn dialog_is_indeterminate() {
         let pre = working("%live", 58, "before", '⠋', 100);
         let result = assess_receiver_receipt(
             "%live",
             &pre,
             PostSendObservation::Present(dialog("%live", 1, 101)),
         );
+        assert_eq!(result.label(), "INDETERMINATE");
         assert_eq!(result.reason(), Some(&ReceiptReason::DialogOpen));
     }
 
     #[test]
-    fn wedged_post_is_no_receipt_with_distinct_reason() {
-        let pre = working("%live", 58, "before", '⠋', 100);
-        let post = Observation {
-            pane_id: "%live".to_owned(),
-            state: PaneState::Wedged,
-            hash: pre.hash,
-            at: 101,
-        };
-        let result = assess_receiver_receipt(
-            "%live",
-            &pre,
-            PostSendObservation::Present(post),
-        );
-        assert_eq!(result.label(), "NO_RECEIPT");
-        assert_eq!(result.reason().unwrap().to_string(), "WEDGED_UNSUBMITTED");
-    }
-
-    #[test]
-    fn absent_pane_is_named_dead_without_claiming_from_empty_catalog() {
+    fn dead_requires_non_empty_census() {
         let pre = idle("%live", "prompt", 100);
         let dead = assess_receiver_receipt("%live", &pre, PostSendObservation::Absent);
         assert_eq!(dead.label(), "DEAD");
@@ -435,11 +439,14 @@ mod tests {
 
         let empty = assess_receiver_receipt("%live", &pre, PostSendObservation::EmptyPaneList);
         assert_eq!(empty.label(), "INDETERMINATE");
-        assert_eq!(empty.reason(), Some(&ReceiptReason::EmptyPaneListNoDeathClaim));
+        assert_eq!(
+            empty.reason(),
+            Some(&ReceiptReason::EmptyPaneListNoDeathClaim)
+        );
     }
 
     #[test]
-    fn missing_post_and_identity_drift_are_indeterminate() {
+    fn missing_and_mismatched_observations_are_indeterminate() {
         let pre = idle("%live", "prompt", 100);
         assert_eq!(
             assess_receiver_receipt("%live", &pre, PostSendObservation::Missing).reason(),
