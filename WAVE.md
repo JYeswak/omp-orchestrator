@@ -47,7 +47,7 @@ Each pane owns **one bead** and the files that bead names. No two panes hold the
 | `%1409` | `omp-orchestrator-7ai` | in_progress | Kill every hardcoded path. 3 repo-root + 6 home refs, measured. |
 | `%1414` | `omp-orchestrator-5cl` + `-a3p` | `-5cl` in_progress, `-a3p` actionable | Forbid unsafe on all 23; then the unwired-lane conformance test. |
 | `%1413` | `omp-orchestrator-815` | blocked on `-7ai` only | Extract 23 crates, deps-first. |
-| `%1397` | `omp-orchestrator-kxe` | blocked on `-815` | The lifecycle binary. Integrates the rest; **starts last on purpose.** |
+| `%1397` | `omp-orchestrator-kxe` | **implemented and resident**; launchd owns the installed supervisor | The lifecycle binary: observe → queue → dispatch → receiver proof. |
 
 **`-815`'s stated precondition "commit the port in control-plane first" is CLEARED** and must not
 be re-derived: all 12 files of the three ported crates are committed at `45c613d`, plus `8fc3e4b`
@@ -59,6 +59,25 @@ drop `-7ai`'s work.
 the gate gets weakened to make the build pass. Portability lands before extraction, or the new repo
 inherits `/Users/josh/Developer/control-plane` — which **compiles** after a move and then silently
 reads the wrong repo.
+
+## Resident supervisor — live state
+
+`omp-orchestrator-kxe` is no longer a paper lane. The Studio LaunchAgent
+`ai.zeststream.omp-orchestrator` runs `/Users/josh/.local/bin/omp-orchestrator` against this repo/session.
+Its environment pins the tmux socket, `br`, `ntm`, `tick-monitor`, the worker exclusions `%1396,%1397`,
+an isolated tick-monitor state file, and a durable supervisor heartbeat. The checked-in source is
+`launchd/ai.zeststream.omp-orchestrator.plist`; the loaded job is the separate live claim.
+
+The supervisor now distinguishes: `SupervisedWorking` (heartbeat, continue),
+`QueueEmptyNeedsJosh` (typed nonzero escalation), `IDLE_UNAUTHORIZED` with ready work, and
+`DISPATCH_RETRY_BLOCKED` after an uncertain send. A pending-dispatch marker is intentionally present
+for `omp-orchestrator-undrained-pipe-lint-w4j`: the packet was visible in `%1413`, but the first
+post-send observation was unavailable. No end-to-end receiver success is claimed for that dispatch.
+
+The receiver contract is now a separate crate with nine passing unit legs: idle→working with a small
+timer, working→working timer reset plus stable-content change, idle→idle, advanced timer, dialogs,
+identity drift, absent panes, and empty-pane-list no-death. The remaining live gap is wiring evidence
+from a fresh dispatch after the pending marker is cleared by Josh.
 
 ---
 

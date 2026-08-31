@@ -42,15 +42,35 @@ match we shipped has been wrong at least once.
 
 ## Scope boundary
 
-**control-plane is the proving ground.** This substrate travels to another repo *only when proven
-there*. Building it does not deploy it. Every claim below is measured in control-plane or it is
-marked as unproven.
+**control-plane is the proving ground.** This substrate is currently installed on the Studio for the
+`omp-orchestrator` session only. It travels to another repo or machine only after that target has its
+own live proof; source code, an installed binary, and a loaded launchd job are separate claims.
 
 ## Non-goals
 
 - **Not** rebuilding NTM, FrankenTerm, Agent Mail, `br`, or `bv`. We wrap the existing stack.
-- **Not** a resident daemon or ringleader agent. Stateless: artifacts and tools, human on a cadence.
+- **Not** an unmanaged daemon or autonomous ringleader. The resident supervisor is a first-class
+  bounded controller: launchd owns its lifetime, every cycle emits a durable heartbeat, and idle
+  capacity requires dispatch, a typed escalation, or Josh's expiring authorization.
 - **Not** a shell-to-Rust transliteration. Where the shell was wrong, the port fixes it and says so.
+
+## Resident supervisor
+
+The `omp-orchestrator-kxe` path is now a resident Rust binary. The checked-in launchd job is
+`launchd/ai.zeststream.omp-orchestrator.plist`; it runs the installed binary with explicit `HOME`,
+`PATH`, `TMUX_TMPDIR`, repository/session, worker-pane exclusions, and state paths.
+
+Each cycle executes `tick-monitor observe` → `br ready --json` → typed decision → transport-specific
+dispatch → receiver-side proof. `SupervisedWorking` writes a heartbeat and continues.
+`QueueEmptyNeedsJosh` is a nonzero typed escalation. `IDLE_UNAUTHORIZED` is never silently consumed.
+`--robot-send` is not a receipt: codex panes route through literal `tmux send-keys -l`, and the
+shared receiver contract distinguishes idle-to-working, working-to-working, dialogs, absent panes,
+and empty pane lists. An uncertain send leaves a durable pending-dispatch fence rather than retrying
+the same bead.
+
+The current Studio deployment has an explicit pending-dispatch fence for `omp-orchestrator-undrained-pipe-lint-w4j`
+after the packet was visible in `%1413` but the first post-send observation was unavailable. That is
+an honest no-claim, not a successful receiver proof; Josh must inspect or clear the marker.
 
 ## The cancellation contract (asupersync)
 
@@ -86,8 +106,8 @@ a real `[lib]`), and these are contract, not style:
 | Close | typed receipt | Ground truth only: a commit, a bead close with cited evidence, a structured ack |
 
 **The rule that binds all six:** a bead with no acceptance criteria cannot be worked, only
-adjudicated — and adjudication reliably produces "no work to be done" instead of work. Measured:
-a P0 bead at the head of the ready queue had **no ACCEPTANCE section at all**, and two agents in a
+adjudicated — and adjudication reliably produces "no work to be done" instead of work. Measured: a
+P0 bead at the head of the ready queue had **no ACCEPTANCE section at all**, and two agents in a
 row triaged it and idled rather than shipping.
 
 ## Hard gates (they fail the build, not a report)
@@ -105,6 +125,8 @@ row triaged it and idled rather than shipping.
 
 ## Status
 
-Pre-extraction. 20 crates / 25,567 LOC / 18 with tests identified in `control-plane/crates/`.
-Nothing here is installed anywhere yet, and this README describes intent plus measured evidence —
-not a shipped capability.
+Resident deployment is active on the Studio: launchd owns `omp-orchestrator`, and the installed
+binary reports its build identity with `--version`. The live heartbeat and supervisor logs are under
+`~/.local/state/flywheel/`. The current deployment carries a pending-dispatch fence after one packet
+was visible in `%1413` but the post-send observation was unavailable; this is intentionally not claimed
+as an end-to-end receiver proof. The repository remains a proving ground, not a universal deployment.
