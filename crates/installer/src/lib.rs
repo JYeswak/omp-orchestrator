@@ -60,10 +60,25 @@ pub struct InstallTarget {
     pub install_path: PathBuf,
 }
 
-/// The four-way identity proof for one binary.
+/// Which repository a binary's source lives in. A binary whose owning repo is
+/// not THIS one reports FOREIGN — a distinct third state, neither MATCH nor
+/// MISMATCH — and is excluded from the drift denominator while still being
+/// NAMED. A foreign artifact on our PATH is a finding, not furniture.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RepoOwnership {
+    /// The crate exists in THIS workspace; identity compared against THIS HEAD.
+    ThisRepo,
+    /// The crate's source lives in a different repository.
+    Foreign { repo: String },
+    /// Cannot determine — neither this workspace nor any known sibling has it.
+    Unknown,
+}
+
+/// The identity check result for one binary.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IdentityCheck {
     pub binary_name: String,
+    pub repo_ownership: RepoOwnership,
     pub head_sha: String,
     pub build_id_in_binary: Option<String>,
     pub version_output: Option<String>,
@@ -72,6 +87,16 @@ pub struct IdentityCheck {
 
 impl fmt::Display for IdentityCheck {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let status = match &self.repo_ownership {
+            RepoOwnership::Foreign { repo } => {
+                return write!(
+                    formatter,
+                    "{}: FOREIGN (source in {repo}) — excluded from drift denominator",
+                    self.binary_name
+                );
+            }
+            _ => {}
+        };
         write!(
             formatter,
             "{}: HEAD={} build_id={} version={} {}",
@@ -82,6 +107,27 @@ impl fmt::Display for IdentityCheck {
             if self.consistent { "IDENTITY OK" } else { "MISMATCH" }
         )
     }
+}
+
+/// Sibling repos known to this fleet, checked in order.
+const SIBLING_REPOS: &[&str] = &["/Users/josh/Developer/control-plane"];
+
+/// Determine which repository owns a binary by checking whether its crate
+/// directory exists in this workspace or a known sibling.
+pub fn resolve_repo_ownership(this_root: &Path, binary_name: &str) -> RepoOwnership {
+    let this_crate = this_root.join("crates").join(binary_name);
+    if this_crate.is_dir() {
+        return RepoOwnership::ThisRepo;
+    }
+    for sibling in SIBLING_REPOS {
+        let sibling_crate = Path::new(sibling).join("crates").join(binary_name);
+        if sibling_crate.is_dir() {
+            return RepoOwnership::Foreign {
+                repo: sibling.to_string(),
+            };
+        }
+    }
+    RepoOwnership::Unknown
 }
 
 // ── GIT OPERATIONS ──────────────────────────────────────────────────────────────
@@ -180,6 +226,7 @@ pub fn probe_build_id_string(binary: &Path) -> Option<String> {
         .find(|l| l.contains("build_id="))
         .and_then(|l| l.split("build_id=").nth(1))
         .map(|s| s.trim().to_owned())
+        .filter(|s| !s.is_empty())
 }
 
 /// The four-way identity check for one binary:
@@ -187,6 +234,7 @@ pub fn probe_build_id_string(binary: &Path) -> Option<String> {
 pub fn verify_identity(
     binary: &Path,
     head_sha: &str,
+    repo_ownership: &RepoOwnership,
 ) -> IdentityCheck {
     let binary_name = binary
         .file_name()
@@ -206,6 +254,7 @@ pub fn verify_identity(
 
     IdentityCheck {
         binary_name,
+        repo_ownership: repo_ownership.clone(),
         head_sha: head_sha.to_owned(),
         build_id_in_binary: build_id,
         version_output: version,
@@ -219,6 +268,7 @@ pub fn install_binary(
     source: &Path,
     install_dir: &Path,
     head_sha: &str,
+    repo_ownership: &RepoOwnership,
 ) -> Result<IdentityCheck, InstallError> {
     let binary_name = source
         .file_name()
@@ -248,8 +298,8 @@ pub fn install_binary(
             })?;
     }
 
-    // Verify identity
-    let check = verify_identity(&install_path, head_sha);
+    // Verify the four-way identity after install.
+    let check = verify_identity(&install_path, head_sha, repo_ownership);
     if !check.consistent {
         // Roll back: remove the bad install.
         let _ = std::fs::remove_file(&install_path);
@@ -316,6 +366,7 @@ mod tests {
         };
         IdentityCheck {
             binary_name: "test".to_owned(),
+            repo_ownership: RepoOwnership::ThisRepo,
             head_sha: head_sha.to_owned(),
             build_id_in_binary: build_id,
             version_output,
