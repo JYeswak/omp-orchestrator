@@ -21,15 +21,16 @@ fn main() -> ExitCode {
 
     if report.scanned.is_empty() {
         // ANTI-VACUITY: an empty scan set is an ERROR, never a pass.
-        eprintln!("UNRAINED-PIPE-LINT ERROR: empty scan set under {}", root.display());
+        eprintln!("UNDRAINED-PIPE-LINT ERROR: empty scan set under {}", root.display());
         return ExitCode::from(3);
     }
 
     println!(
-        "UNRAINED-PIPE-LINT: {} files scanned, {} violation(s)",
+        "UNDRAINED-PIPE-LINT: {} files scanned, {} violation(s)",
         report.scanned.len(),
         report.violations.len()
     );
+    println!("LIMIT local lexical Rust scan; named cross-function calls are followed, but macros, raw strings, dynamic helper names, and external files are not resolved.");
     for violation in &report.violations {
         println!("  VIOLATION {violation}");
     }

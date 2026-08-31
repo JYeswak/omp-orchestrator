@@ -275,10 +275,13 @@ pub fn lint_tree(root: &Path, skip_dirs: &[&str]) -> LintReport {
                     .to_string();
                 scanned.push(rel.clone());
                 let source = fs::read_to_string(&path).unwrap_or_default();
-                for (piped_line, try_wait_line) in find_violations_in_source(&source) {
+                for (piped_line, stderr_piped_line, try_wait_line) in
+                    find_detailed_violations_in_source(&source)
+                {
                     violations.push(Violation {
                         file: rel.clone(),
                         piped_line,
+                        stderr_piped_line,
                         try_wait_line,
                     });
                 }
@@ -337,10 +340,13 @@ pub fn lint_workspace(root: &Path) -> LintReport {
                 }
                 scanned.push(path.display().to_string());
                 let source = fs::read_to_string(&path).unwrap_or_default();
-                for (piped_line, try_wait_line) in find_violations_in_source(&source) {
+                for (piped_line, stderr_piped_line, try_wait_line) in
+                    find_detailed_violations_in_source(&source)
+                {
                     violations.push(Violation {
                         file: path.display().to_string(),
                         piped_line,
+                        stderr_piped_line,
                         try_wait_line,
                     });
                 }

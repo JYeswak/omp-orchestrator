@@ -2,7 +2,7 @@
 
 //! Specimen-based legs for the undrained-pipe lint (bead -w4j acceptance 1-3).
 
-use undrained_pipe_lint::find_violations_in_source;
+use undrained_pipe_lint::{find_detailed_violations_in_source, find_violations_in_source, lint_workspace};
 
 /// KNOWN-BAD: both pipes piped + try_wait poll + no drain -> RED.
 #[test]
@@ -95,7 +95,14 @@ fn run() -> Option<String> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let mut child = cmd.spawn().ok()?;
-    let out = child.stdout.take().map(|mut r| {
+    let _out = child.stdout.take().map(|mut r| {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = r.read_to_end(&mut buf);
+            buf
+        })
+    });
+    let _err = child.stderr.take().map(|mut r| {
         std::thread::spawn(move || {
             let mut buf = Vec::new();
             let _ = r.read_to_end(&mut buf);
@@ -117,7 +124,7 @@ fn run() -> Option<String> {
 ";
     assert!(
         find_violations_in_source(source).is_empty(),
-        "thread drain must pass"
+        "both pipe readers must pass"
     );
 }
 
@@ -144,19 +151,95 @@ fn run() -> Option<String> {
         "hazard documentation comment must not trigger"
     );
 }
+/// KNOWN-BAD REAL SHAPE: oracle-compare splits the pipe construction and
+/// try_wait poll across spawn_timeout and wait_deadline. The local lint must
+/// still follow that named helper call so the real defect is not missed.
+#[test]
+fn oracle_compare_split_helper_is_flagged_with_actionable_lines() {
+    let mut lines = vec![String::new(); 243];
+    lines.extend([
+        "fn wait_deadline(mut child: Child) {",
+        "    loop {",
+        "        let _status = child.id();",
+        "        match child.try_wait() {",
+        "            Ok(Some(_)) => return,",
+        "            Ok(None) => return,",
+        "            Err(_) => return,",
+        "        }",
+        "    }",
+        "}",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "fn spawn_timeout(mut cmd: Command) {",
+        "    let mut child = cmd",
+        "        .stdout(Stdio::piped())",
+        "        .stderr(Stdio::piped());",
+        "    wait_deadline(child);",
+        "}",
+    ].into_iter().map(str::to_owned));
+    let source = lines.join("\n");
+    assert_eq!(
+        find_detailed_violations_in_source(&source),
+        vec![(262, 263, 247)],
+        "split oracle defect must name both pipes and the poll"
+    );
+}
 
-/// WIRED, not merely built (bead -w4j clause 7): the lint must be invoked by a
-/// production surface. This leg asserts the CI workflow references the crate —
-/// a positive control: if the step is removed, this test goes RED.
+/// KNOWN-GOOD in-tree contract: subprocess-contract uses its concurrent asupersync drain.
+#[test]
+fn subprocess_contract_is_not_flagged() {
+    let source = include_str!("../../subprocess-contract/src/lib.rs");
+    assert!(
+        find_violations_in_source(source).is_empty(),
+        "the shared subprocess contract must remain a known-good leg"
+    );
+}
+/// MUTATION: removing the second pipe repairs this specimen. The original
+/// source remains unchanged in the test, so the RED-to-GREEN attribution is
+/// against the actual scanner predicate rather than a test-only flag.
+#[test]
+fn mutation_removing_stderr_pipe_retires_violation() {
+    let source = r#"fn run() {
+    let mut cmd = Command::new("git");
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = cmd.spawn().unwrap();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => return,
+            Ok(None) => {}
+            Err(_) => return,
+        }
+    }
+}"#;
+    assert_eq!(find_violations_in_source(source).len(), 1);
+    let repaired = source.replace(
+        ".stderr(Stdio::piped())",
+        ".stderr(Stdio::null())",
+    );
+    assert!(
+        find_violations_in_source(&repaired).is_empty(),
+        "mutation removing stderr piping must make this site safe"
+    );
+}
+/// blocking CI step. The positive control proves the probe can detect absence.
+fn workflow_invokes_lint(workflow: &str) -> bool {
+    workflow.lines().any(|line| {
+        line.contains("cargo run --quiet -p undrained-pipe-lint -- .")
+    })
+}
+
 #[test]
 fn wired_into_ci_workflow() {
-    let workflow = match std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../.github/workflows/gate.yml")) {
-        Ok(text) => text,
-        Err(_) => panic!("gate.yml not found — the wiring probe cannot run without the CI surface"),
-    };
+    let workflow = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../.github/workflows/gate.yml"))
+        .expect("gate.yml not found — the wiring probe cannot run without the CI surface");
+    assert!(workflow_invokes_lint(&workflow), "CI must invoke the lint");
     assert!(
-        workflow.contains("undrained-pipe-lint"),
-        "clause 7: the CI workflow must invoke the lint — BUILT != WIRED"
+        !workflow_invokes_lint("run: cargo test -p another-crate"),
+        "positive control: unrelated workflow must not count as lint wiring"
     );
 }
 
