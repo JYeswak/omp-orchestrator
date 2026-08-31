@@ -26,6 +26,8 @@
 //! bead, and dispatches no work. `Unproven` is a first-class outcome and is excluded
 //! from idle capacity -- an unrecognised capture is never an idle pane.
 
+pub mod lifecycle;
+
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::io::Read;

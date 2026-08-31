@@ -24,6 +24,7 @@ fn main() {
         Some("observe") => exit(observe(&args[1..])),
         Some("watch") => exit(watch(&args[1..])),
         Some("emit-tick") => exit(emit_tick(&args[1..])),
+        Some("lifecycle") => exit(lifecycle(&args[1..])),
         Some("capabilities") => {
             println!("{}", capabilities());
             exit(0)
@@ -741,5 +742,31 @@ fn selftest() -> i32 {
     } else {
         println!("SELFTEST FAIL");
         1
+    }
+}
+
+/// The four-surface JOIN. Thin on purpose: the logic lives in `lifecycle::collect` where
+/// `cargo test` can reach it, not in a `main.rs` subcommand only a human invokes.
+fn lifecycle(args: &[String]) -> i32 {
+    let repos: Vec<String> = {
+        let r = flags(args, "--repo");
+        if r.is_empty() {
+            vec![
+                "/Users/josh/Developer/omp-orchestrator".to_owned(),
+                "/Users/josh/Developer/control-plane".to_owned(),
+            ]
+        } else {
+            r.iter().map(|s| s.to_string()).collect()
+        }
+    };
+    match tick_monitor::lifecycle::collect(&repos) {
+        Ok(report) => {
+            print!("{}", tick_monitor::lifecycle::render(&report));
+            0
+        }
+        Err(why) => {
+            eprintln!("REFUSE lifecycle: {why}");
+            3
+        }
     }
 }
