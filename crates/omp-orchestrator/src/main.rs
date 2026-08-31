@@ -642,10 +642,12 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     write_heartbeat(config, tick, "CYCLE_STARTED", "phase=observe")?;
     if let Some(intent) = read_pending_dispatch(config)? {
         write_heartbeat(config, tick, "DISPATCH_RETRY_BLOCKED", &intent)?;
-        return Err(format!(
+        let detail = format!(
             "DISPATCH_RETRY_BLOCKED owner=josh next_action=inspect-or-clear-pending-dispatch marker={} detail={intent}",
             config.pending_dispatch.display()
-        ));
+        );
+        println!("{detail}");
+        return Ok(());
     }
     let mut monitor_args = vec![
         "observe".to_owned(),
