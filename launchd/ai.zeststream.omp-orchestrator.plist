@@ -36,6 +36,8 @@
         <string>%1396</string>
         <key>OMP_HEARTBEAT_LEDGER</key>
         <string>/Users/josh/.local/state/flywheel/omp-orchestrator.heartbeat.jsonl</string>
+        <key>OMP_TICK_MONITOR_STATE</key>
+        <string>/Users/josh/.local/state/flywheel/omp-orchestrator.tick-monitor-state.json</string>
     </dict>
 
     <key>WorkingDirectory</key>

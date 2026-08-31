@@ -46,6 +46,7 @@ struct Config {
     tmux_tmpdir: PathBuf,
     exclude_panes: Vec<String>,
     heartbeat_ledger: PathBuf,
+    tick_monitor_state: PathBuf,
 }
 
 impl Config {
@@ -162,6 +163,11 @@ impl Config {
         let heartbeat_ledger = env::var_os("OMP_HEARTBEAT_LEDGER")
             .map(PathBuf::from)
             .unwrap_or_else(|| repo.join(".orchestrator/heartbeat.jsonl"));
+        let tick_monitor_state = env::var_os("OMP_TICK_MONITOR_STATE")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                heartbeat_ledger.with_file_name("omp-orchestrator.tick-monitor-state.json")
+            });
         Ok(Self {
             repo,
             session,
@@ -175,6 +181,7 @@ impl Config {
             tmux_tmpdir,
             exclude_panes,
             heartbeat_ledger,
+            tick_monitor_state,
         })
     }
 }
@@ -552,6 +559,8 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         config.session.clone(),
         "--repo".to_owned(),
         config.repo.display().to_string(),
+        "--state".to_owned(),
+        config.tick_monitor_state.display().to_string(),
     ];
     for pane in &config.exclude_panes {
         monitor_args.push("--exclude-pane".to_owned());
@@ -562,6 +571,12 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         invoke(cx, config, &config.tick_monitor, &monitor_args).await?,
     )?;
     let mut observation = parse_observation(&monitor_bytes)?;
+    observation.panes.retain(|pane| {
+        !config
+            .exclude_panes
+            .iter()
+            .any(|excluded| excluded == &pane.pane_id)
+    });
     let ready_args = vec!["ready".to_owned(), "--json".to_owned()];
     let ready_output = invoke(cx, config, &config.br, &ready_args).await?;
     let ready = require_success(&config.br, ready_output).map_err(|error| {
@@ -782,6 +797,7 @@ mod tests {
             tmux_tmpdir: PathBuf::from("/tmp/omp-orchestrator-test-tmux"),
             exclude_panes: Vec::new(),
             heartbeat_ledger,
+            tick_monitor_state: PathBuf::from("/tmp/omp-orchestrator-test-state"),
         }
     }
 
