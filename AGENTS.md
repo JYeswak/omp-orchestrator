@@ -643,3 +643,59 @@ an early crontab read (head -10) reported controller-tick REMOVED from cron; gre
 line 11+. Read the whole instrument. An uncommitted-edit attribution was also corrected by the
 orchestrator to a committed-land state (228f42a) — check git status at report time, not from
 memory.
+
+---
+
+## KERNEL-ONLY (binding): you may not handroll a capability a kernel provides
+
+**We build the system and then do not use it.** Measured 2026-08-31, five handrolls in one
+session — by the author of the kernels:
+
+| job | what I did | the kernel that already existed |
+|---|---|---|
+| observe panes | `tmux capture-pane \| grep -oE` for 12 hours | **`tick-monitor observe`** — installed, and returns *more*: state, timer, liveness, attention, dead panes, correct session scoping |
+| dispatch | raw `tmux send-keys` | **`ntm --robot-send`**, `refill-idle-panes`, `fast-dispatch`, `controller-tick`, `loop-driver` — all installed and cron-scheduled |
+| receipt | `grep -oE` on a timer | **`receiver-receipt`** |
+| file a bead | raw `br create` | **`crates/finding`** — which I wrote *thirty minutes earlier* to make an unfiled gap impossible, then bypassed in the next tool call |
+| read the queue | `br ready --json \| python3` | **`bv --robot-triage`** — the planning brain, which reports scores the raw query cannot see |
+
+My hand-grep silently mixed a control-plane pane into an omp-orchestrator census, because it never
+scoped. The kernel does. **A handroll is not merely redundant — it is usually worse.**
+
+### THE RULE: if a kernel is broken, FIXING IT IS THE WORK
+
+This is the clause that matters, because it names the mechanism rather than the symptom.
+`refill-idle-panes` carries **only control-plane paths** (measured via `strings`), so it supervised
+the wrong repo all night. Rather than fix one default, I hand-dispatched for hours.
+
+> **Every handroll is locally cheaper and removes exactly the pressure that would have fixed the
+> kernel.** That is why the kernels stay broken. Routing around a broken kernel is not pragmatism;
+> it is the thing that guarantees the next agent finds it broken too.
+
+The same shape, three ways in one session: prose instead of beads (`crates/finding` exists, zero
+callers); `br create` instead of `Finding` (the standard exists as a type, unenforced); hand-grep
+instead of `tick-monitor` (the census exists, unqueried).
+
+### The full loop, demonstrated end to end through kernels only
+
+```
+observe   tick-monitor observe --session omp-orchestrator   → dispatchable/free/attention/dead
+dispatch  ntm --robot-send=omp-orchestrator --panes=5       → {"success": true}
+receipt   tick-monitor observe                              → %1409 WORKING t=6
+```
+
+`t=6` from a previously IDLE pane is an **idle→working transition with a fresh timer** — the
+strongest receipt available, per the receiver-receipt contract. No `capture-pane`, no `grep`, no
+`send-keys`.
+
+### Enforcement, because a written rule has failed five times tonight
+
+- **Source half** — a gate scanning tracked files for handrolled equivalents, emitting `file:line`
+  **and naming the kernel that should have been used** (a finding that does not name the
+  replacement is not actionable). Its known-good leg is mandatory and non-obvious: the **kernel
+  crates themselves must pass**, since `tick-monitor` legitimately calls tmux and
+  `subprocess-contract` legitimately spawns — via a **declared, not inferred** allowlist.
+- **Operator half** — the gate can only see committed source. It **cannot** see an operator
+  handrolling in a shell, which is how all five above happened. That needs a `PreToolUse` hook and
+  is a separate bead. **The source gate must say so in its own output** rather than implying
+  coverage it does not have.
