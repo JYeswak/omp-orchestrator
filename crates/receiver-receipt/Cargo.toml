@@ -1,0 +1,12 @@
+[package]
+name = "receiver-receipt"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Receiver-side dispatch receipt classifier"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+tick-monitor = { path = "../tick-monitor" }
