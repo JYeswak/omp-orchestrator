@@ -6,16 +6,19 @@
 //! loop. It is intentionally not a report-only monitor: a managed session may
 //! idle only with a bound Josh authorization token.
 
+use ack_stage::{
+    assess as assess_ack_stage, AckReadback, AckStageInput, AckStageResult, TransportReceipt,
+};
 use asupersync::process::{Command, Output};
 use asupersync::runtime::RuntimeBuilder;
 use asupersync::time::{sleep, timeout};
 use asupersync::Cx;
 use omp_orchestrator::{
-    applicable, decide, read_idle_authorization, Observation, PaneObservation, QueueState,
-    SupervisorDecision,
+    applicable, census_gates, decide, read_idle_authorization, GateCensus, Observation, PaneObservation,
+    QueueState, SupervisorDecision,
 };
 use receiver_receipt::{
-    assess_receiver_receipt, observe_capture, PostSendObservation, ReceiptVerdict,
+    observe_capture, PostSendObservation, ReceiptVerdict,
 };
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -259,7 +262,7 @@ fn string_set(value: Option<&Value>) -> BTreeSet<String> {
         .collect()
 }
 
-fn parse_observation(bytes: &[u8]) -> Result<Observation, String> {
+fn parse_observation(bytes: &[u8], gate_census: GateCensus) -> Result<Observation, String> {
     let value: Value = serde_json::from_slice(bytes)
         .map_err(|error| format!("MONITOR_BLIND invalid tick-monitor JSON: {error}"))?;
     let panes_value = value
@@ -317,6 +320,7 @@ fn parse_observation(bytes: &[u8]) -> Result<Observation, String> {
             ready_count: 0,
             readable: true,
         },
+        gate_census: Some(gate_census),
     })
 }
 
@@ -352,21 +356,6 @@ async fn capture_pane(cx: &Cx, config: &Config, pane: &str) -> Result<Vec<u8>, S
         invoke(cx, config, "tmux", &args).await?,
     )
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ReceiverProtocol {
-    NtmRobotSend,
-    TmuxSendKeysLiteral,
-}
-
-impl ReceiverProtocol {
-    fn label(self) -> &'static str {
-        match self {
-            Self::NtmRobotSend => "ntm_robot_send",
-            Self::TmuxSendKeysLiteral => "tmux_send_keys_literal",
-        }
-    }
-}
-
 async fn receiver_is_codex(cx: &Cx, config: &Config, pane: &str) -> Result<bool, String> {
     let args = vec![
         "display-message".to_owned(),
@@ -429,13 +418,52 @@ async fn post_send_observation(cx: &Cx, config: &Config, pane: &str) -> PostSend
     PostSendObservation::Present(observe_capture(pane, &text, now_unix()))
 }
 
+async fn read_ack_readback(
+    cx: &Cx,
+    config: &Config,
+    bead: &str,
+    pane: &str,
+) -> Result<AckReadback, String> {
+    let args = vec![
+        "comments".to_owned(),
+        "list".to_owned(),
+        bead.to_owned(),
+        "--json".to_owned(),
+    ];
+    let bytes = require_success(
+        "br comments list",
+        invoke(cx, config, &config.br, &args).await?,
+    )?;
+    AckReadback::from_comments_json(bead, pane, &bytes).map_err(|error| {
+        format!("ACK_STAGE_INDETERMINATE bead={bead} pane={pane} comment read-back: {error}")
+    })
+}
+
+fn write_transport_receipt(
+    config: &Config,
+    tick: u64,
+    pane: &str,
+    bead: &str,
+    transport: &TransportReceipt,
+) -> Result<(), String> {
+    let detail = serde_json::json!({
+        "bead": bead,
+        "pane": pane,
+        "transport": transport.kind().label(),
+        "raw_transport_json": transport.raw_json(),
+    })
+    .to_string();
+    write_heartbeat(config, tick, "TRANSPORT_RECEIPT_CAPTURED", &detail)
+}
+
 async fn send_and_verify(
     cx: &Cx,
     config: &Config,
     pane: &str,
     bead: &str,
     before: &[u8],
-) -> Result<ReceiverProtocol, String> {
+    tick: u64,
+) -> Result<AckStageResult, String> {
     let show_args = vec!["show".to_owned(), bead.to_owned(), "--json".to_owned()];
     let show = require_success(
         &config.br,
@@ -461,10 +489,9 @@ async fn send_and_verify(
     ));
     fs::write(&staged, packet.as_bytes())
         .map_err(|error| format!("DISPATCH_BLOCKED bead={bead} stage packet: {error}"))?;
-    let pre_text = String::from_utf8_lossy(before);
-    let pre_observation = observe_capture(pane, &pre_text, now_unix());
+    let pre_observation = observe_capture(pane, &String::from_utf8_lossy(before), now_unix());
     let codex = receiver_is_codex(cx, config, pane).await?;
-    let send_result = if codex {
+    let transport = if codex {
         let typed_args = vec![
             "send-keys".to_owned(),
             "-t".to_owned(),
@@ -472,59 +499,94 @@ async fn send_and_verify(
             "-l".to_owned(),
             packet.clone(),
         ];
-        let typed = invoke(cx, config, "tmux", &typed_args)
-            .await
-            .and_then(|output| require_success("tmux send-keys -l", output).map(|_| ()));
-        if typed.is_err() {
-            typed
-        } else {
-            let enter_args = vec![
-                "send-keys".to_owned(),
-                "-t".to_owned(),
-                pane.to_owned(),
-                "Enter".to_owned(),
-            ];
-            invoke(cx, config, "tmux", &enter_args)
-                .await
-                .and_then(|output| require_success("tmux send-keys Enter", output).map(|_| ()))
-        }
+        let typed_stdout = require_success(
+            "tmux send-keys -l",
+            invoke(cx, config, "tmux", &typed_args).await?,
+        )?;
+        let enter_args = vec![
+            "send-keys".to_owned(),
+            "-t".to_owned(),
+            pane.to_owned(),
+            "Enter".to_owned(),
+        ];
+        let enter_stdout = require_success(
+            "tmux send-keys Enter",
+            invoke(cx, config, "tmux", &enter_args).await?,
+        )?;
+        TransportReceipt::capture_codex(
+            "tmux send-keys -l; tmux send-keys Enter",
+            &typed_stdout,
+            &enter_stdout,
+            Some(0),
+        )
     } else {
         let send_args = vec![
             format!("--robot-send={}", config.session),
             format!("--panes={pane}"),
             format!("--msg-file={}", staged.display()),
         ];
-        invoke(cx, config, &config.ntm, &send_args)
-            .await
-            .and_then(|output| require_success(&config.ntm, output).map(|_| ()))
+        let stdout = require_success(
+            &config.ntm,
+            invoke(cx, config, &config.ntm, &send_args).await?,
+        )?;
+        TransportReceipt::capture_ntm(&stdout).map_err(|error| {
+            format!("DISPATCH_BLOCKED bead={bead} malformed ntm receipt: {error}")
+        })?
     };
     let _ = fs::remove_file(&staged);
-    send_result?;
-
-    let protocol = if codex {
-        ReceiverProtocol::TmuxSendKeysLiteral
-    } else {
-        ReceiverProtocol::NtmRobotSend
-    };
+    write_transport_receipt(config, tick, pane, bead, &transport)?;
 
     let deadline = Instant::now() + RECEIPT_TIMEOUT;
     loop {
         cx.checkpoint()
             .map_err(|_| "CANCELLED while verifying receiver receipt".to_owned())?;
         let post_send = post_send_observation(cx, config, pane).await;
-        let verdict = assess_receiver_receipt(pane, &pre_observation, post_send);
-        if matches!(verdict, ReceiptVerdict::ReceiptConfirmed { .. }) {
-            return Ok(protocol);
+        let ack = read_ack_readback(cx, config, bead, pane).await?;
+        let stage = assess_ack_stage(&AckStageInput {
+            bead_id: bead.to_owned(),
+            pane_id: pane.to_owned(),
+            transport: transport.clone(),
+            pre_send: pre_observation.clone(),
+            post_send,
+            ack,
+            attempts_so_far: 0,
+        });
+        if stage.is_confirmed() {
+            return Ok(stage);
         }
-        if Instant::now() >= deadline {
-            let reason = verdict
+        let awaiting_ack = matches!(
+            stage.delivery,
+            ReceiptVerdict::Indeterminate {
+                reason: receiver_receipt::ReceiptReason::AckReadbackMissing,
+                ..
+            }
+        );
+        if !stage.action.is_retry() && !awaiting_ack {
+            let reason = stage
+                .delivery
                 .reason()
                 .map(ToString::to_string)
                 .unwrap_or_else(|| "unclassified".to_owned());
             return Err(format!(
-                "RECEIVER_RECEIPT_MISSING pane={pane} bead={bead} verdict={} reason={reason} after={}s",
-                verdict.label(),
-                RECEIPT_TIMEOUT.as_secs()
+                "ACK_STAGE_INDETERMINATE pane={pane} bead={bead} action={} verdict={} reason={} transport={}",
+                stage.action.label(),
+                stage.delivery.label(),
+                reason,
+                transport.kind().label(),
+            ));
+        }
+        if Instant::now() >= deadline {
+            let reason = stage
+                .delivery
+                .reason()
+                .map(ToString::to_string)
+                .unwrap_or_else(|| "unclassified".to_owned());
+            return Err(format!(
+                "ACK_STAGE_RETRY_BLOCKED pane={pane} bead={bead} action={} verdict={} reason={} after={}s",
+                stage.action.label(),
+                stage.delivery.label(),
+                reason,
+                RECEIPT_TIMEOUT.as_secs(),
             ));
         }
         sleep(cx.now_for_observability(), RECEIPT_POLL).await;
@@ -670,7 +732,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         &config.tick_monitor,
         invoke(cx, config, &config.tick_monitor, &monitor_args).await?,
     )?;
-    let mut observation = parse_observation(&monitor_bytes)?;
+    let mut observation = parse_observation(&monitor_bytes, census_gates(&config.repo))?;
     observation.panes.retain(|pane| {
         !config
             .exclude_panes
@@ -693,41 +755,6 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         &observation.panes,
         &observation.queue,
     );
-    let free_count = observation
-        .panes
-        .iter()
-        .filter(|pane| pane.is_free_capacity)
-        .count();
-    let working_count = observation
-        .panes
-        .iter()
-        .filter(|pane| pane.is_working)
-        .count();
-
-    // The pure policy surface uses AuthorizedIdle for the absence of confirmed
-    // free capacity. The executable labels the physically occupied state
-    // separately so a queue with all workers active never reads as idle.
-    if free_count == 0 && working_count == observation.panes.len() {
-        write_heartbeat(
-            config,
-            tick,
-            "SUPERVISED_WORKING",
-            &format!(
-                "working={} ready={} panes={}",
-                working_count,
-                observation.queue.ready_count,
-                observation.panes.len()
-            ),
-        )?;
-        println!(
-            "SUPERVISED_WORKING tick={tick} session={} ready={} panes={}",
-            config.session,
-            observation.queue.ready_count,
-            observation.panes.len()
-        );
-        return Ok(());
-    }
-
     let decision = decide(&observation, &authorization);
     match decision {
         SupervisorDecision::Dispatch { pane, .. } => {
@@ -736,19 +763,29 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             })?;
             write_dispatch_intent(config, &pane, bead)?;
             let before = capture_pane(cx, config, &pane).await?;
-            let protocol = send_and_verify(cx, config, &pane, bead, &before).await?;
+            let stage = send_and_verify(cx, config, &pane, bead, &before, tick).await?;
             write_heartbeat(
                 config,
                 tick,
                 "DISPATCHED",
-                &format!("pane={pane} bead={bead} receiver={}", protocol.label()),
+                &format!(
+                    "pane={pane} bead={bead} receiver={} ack_action={}",
+                    stage.transport.kind().label(),
+                    stage.action.label(),
+                ),
             )?;
             clear_dispatch_intent(config)?;
             println!(
-                "DISPATCHED tick={tick} session={} pane={pane} bead={bead} RECEIVER_RECEIPT={}",
+                "DISPATCHED tick={tick} session={} pane={pane} bead={bead} RECEIVER_RECEIPT={} ACK_ACTION={}",
                 config.session,
-                protocol.label()
+                stage.transport.kind().label(),
+                stage.action.label()
             );
+        }
+        SupervisorDecision::GateUnwired { unwired } => {
+            let detail = format!("unwired={unwired:?} owner=josh next_action=repair-gate-trigger");
+            write_heartbeat(config, tick, "GATE_UNWIRED", &detail)?;
+            return Err(format!("GATE_UNWIRED {detail}"));
         }
         SupervisorDecision::EscalateIdleIncident {
             dispatchable_count,
@@ -913,6 +950,7 @@ mod tests {
     fn observed_idle_state_counts_as_free_capacity_before_confirmation() {
         let observation = parse_observation(
             br#"{"omp_lifecycle":{"panes":[{"pane":"%1","state":"IDLE","liveness":"UNPROVEN"}]},"idle_panes":{"dispatchable":[],"free_capacity":[]}}"#,
+            GateCensus { rows: Vec::new() },
         )
         .unwrap();
         assert!(observation.panes[0].is_free_capacity);
