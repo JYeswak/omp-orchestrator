@@ -1,0 +1,13 @@
+[package]
+name = "state-wildcard-lint"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Reject wildcard match arms on locally resolvable state-like enums"
+
+[[bin]]
+name = "state-wildcard-lint"
+path = "src/main.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
