@@ -37,13 +37,22 @@ impl fmt::Display for AckVerdict {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Confirmed { bead_id, marker } => {
-                write!(formatter, "ACK_CONFIRMED: '{marker}' found in {bead_id} comments")
+                write!(
+                    formatter,
+                    "ACK_CONFIRMED: '{marker}' found in {bead_id} comments"
+                )
             }
             Self::Missing { bead_id, marker } => {
-                write!(formatter, "ACK_MISSING: '{marker}' not found in {bead_id} — the comment did not land")
+                write!(
+                    formatter,
+                    "ACK_MISSING: '{marker}' not found in {bead_id} — the comment did not land"
+                )
             }
             Self::Unverifiable { bead_id, detail } => {
-                write!(formatter, "ACK_UNVERIFIABLE: {bead_id} — {detail} (an ERROR, not 'no ack')")
+                write!(
+                    formatter,
+                    "ACK_UNVERIFIABLE: {bead_id} — {detail} (an ERROR, not 'no ack')"
+                )
             }
         }
     }
@@ -51,42 +60,22 @@ impl fmt::Display for AckVerdict {
 
 /// Run `br comments list <bead_id>` and check for the marker.
 ///
-/// This is the REAL read-back: it invokes br, captures the output, and
-/// classifies the result. The exit code of the POSTING command is not
-/// consulted — only the read-back matters.
+/// This is the I/O-bound wrapper that the hermetic tests bypass by calling the
+/// pure [`classify_ack_readback`] directly.
 pub fn detect_ack(bead_id: &str, marker: &str) -> AckVerdict {
     let output = Command::new("br")
         .args(["comments", "list", bead_id])
         .output();
 
-    let Ok(raw) = output else {
-        return AckVerdict::Unverifiable {
-            bead_id: bead_id.to_owned(),
-            detail: format!("br spawn failed: {}", std::io::Error::last_os_error()),
-        };
-    };
-
-    if !raw.status.success() {
-        return AckVerdict::Unverifiable {
-            bead_id: bead_id.to_owned(),
-            detail: format!(
-                "br comments list exited {:?}: {}",
-                raw.status.code(),
-                String::from_utf8_lossy(&raw.stderr)
-            ),
-        };
-    }
-
-    let text = String::from_utf8_lossy(&raw.stdout);
-    if text.contains(marker) {
-        AckVerdict::Confirmed {
-            bead_id: bead_id.to_owned(),
-            marker: marker.to_owned(),
+    match output {
+        Ok(raw) => {
+            let exit_code = raw.status.code();
+            let stdout = String::from_utf8_lossy(&raw.stdout).into_owned();
+            let stderr = String::from_utf8_lossy(&raw.stderr).into_owned();
+            classify_ack_readback(bead_id, marker, exit_code, &stdout, &stderr)
         }
-    } else {
-        AckVerdict::Missing {
-            bead_id: bead_id.to_owned(),
-            marker: marker.to_owned(),
+        Err(error) => {
+            classify_ack_readback(bead_id, marker, None, "", &format!("spawn failed: {error}"))
         }
     }
 }
@@ -109,6 +98,43 @@ pub fn simulate_singular_trap(bead_id: &str, text: &str) -> SingularTrapResult {
             exit_code: None,
             stderr: format!("spawn failed: {error}"),
             comment_landed: false,
+        },
+    }
+}
+
+/// Pure classifier for an ack read-back, given pre-captured raw inputs.
+///
+/// BlueLantern's hermetic tests call this directly with synthetic
+/// (exit_code, stdout, stderr) triples — no br subprocess required. The
+/// I/O-bound [`detect_ack`] delegates here after capturing the real output.
+pub fn classify_ack_readback(
+    bead_id: &str,
+    marker: &str,
+    exit_code: Option<i32>,
+    stdout: &str,
+    stderr: &str,
+) -> AckVerdict {
+    match exit_code {
+        Some(0) => {
+            if stdout.contains(marker) {
+                AckVerdict::Confirmed {
+                    bead_id: bead_id.to_owned(),
+                    marker: marker.to_owned(),
+                }
+            } else {
+                AckVerdict::Missing {
+                    bead_id: bead_id.to_owned(),
+                    marker: marker.to_owned(),
+                }
+            }
+        }
+        Some(code) => AckVerdict::Unverifiable {
+            bead_id: bead_id.to_owned(),
+            detail: format!("br comments list exited {code}: {stderr}"),
+        },
+        None => AckVerdict::Unverifiable {
+            bead_id: bead_id.to_owned(),
+            detail: format!("br spawn failed: {stderr}"),
         },
     }
 }

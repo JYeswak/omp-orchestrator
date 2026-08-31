@@ -1,50 +1,50 @@
-//! Slice-c tests: the ack detector's known-bad, known-good, and mutation legs.
+//! Hermetic slice-c tests: the ack detector's known-bad, known-good, and mutation legs.
+//!
+//! These tests feed repository-local read-back fixtures into the production
+//! classifier. They never mutate the live tracker or depend on a bead existing.
 
-use ack_spine::ack::{detect_ack, simulate_singular_trap, AckVerdict};
+use ack_spine::ack::{classify_ack_readback, AckVerdict, SingularTrapResult};
 
-/// KNOWN-BAD: simulate the SINGULAR-verb trap (br comment), then assert the
-/// detector reports NO ack. The trap's exit code varies (0 or 2 depending on
-/// argument shape) but the comment NEVER lands, so the read-back must find nothing.
+const FIXTURE_BEAD: &str = "fixture-bead";
+const TRAP_MARKER: &str = "ACK-TRAP-FIXTURE";
+const GOOD_MARKER: &str = "ACK-GOOD-FIXTURE";
+
+fn singular_trap_fixture() -> SingularTrapResult {
+    SingularTrapResult {
+        // Measured singular br comment trap shape: exit 0 with an error on stderr.
+        exit_code: Some(0),
+        stderr: "error: unexpected argument".to_owned(),
+        comment_landed: false,
+    }
+}
+
+fn empty_comment_list() -> &'static str {
+    "Comments for fixture-bead:\n"
+}
+
+/// KNOWN-BAD: the singular verb reports exit 0 but does not post. A subsequent
+/// successful read-back with no marker is Missing, never Confirmed.
 #[test]
 fn singular_verb_trap_produces_missing_ack() {
-    let unique_marker = format!("ACK-TRAP-{}", std::process::id());
-    let bead = format!("omp-orchestrator-nrj");
+    let trap = singular_trap_fixture();
+    assert_eq!(trap.exit_code, Some(0));
+    assert!(!trap.comment_landed);
+    assert!(trap.stderr.contains("unexpected argument"));
 
-    // Simulate the trap: br comment (SINGULAR) — the comment does not land.
-    let trap = simulate_singular_trap(&bead, &unique_marker);
-    assert!(
-        !trap.comment_landed,
-        "br comment (SINGULAR) must never post a comment"
-    );
-
-    // The detector must report NO ack, regardless of the trap's exit code.
-    let verdict = detect_ack(&bead, &unique_marker);
+    let verdict =
+        classify_ack_readback(FIXTURE_BEAD, TRAP_MARKER, Some(0), empty_comment_list(), "");
     assert!(
         matches!(verdict, AckVerdict::Missing { .. }),
         "the singular-verb trap must produce Missing, got {verdict:?}"
     );
 }
 
-/// KNOWN-GOOD (mandatory): a genuinely posted comment IS detected.
-/// br comments add (PLURAL) posts the comment; the read-back finds it.
+/// KNOWN-GOOD: a repository-local read-back fixture containing the marker is
+/// Confirmed. No live br comments add call is needed.
 #[test]
 fn genuinely_posted_comment_is_confirmed() {
-    let unique_marker = format!("ACK-GOOD-{}", std::process::id());
-    let bead = "omp-orchestrator-nrj";
-
-    // Post via the CORRECT form: br comments add (PLURAL).
-    let post = std::process::Command::new("br")
-        .args(["comments", "add", bead, "-m", &unique_marker, "--actor", "ack-test"])
-        .output()
-        .expect("br comments add must succeed");
-    assert!(
-        post.status.success(),
-        "br comments add must succeed: {}",
-        String::from_utf8_lossy(&post.stderr)
-    );
-
-    // The detector must confirm the ack.
-    let verdict = detect_ack(bead, &unique_marker);
+    let read_back = "Comments for fixture-bead:\n[ack-test] ACK-GOOD-FIXTURE\n";
+    let verdict = classify_ack_readback(FIXTURE_BEAD, GOOD_MARKER, Some(0), read_back, "");
     assert!(
         matches!(verdict, AckVerdict::Confirmed { .. }),
         "a genuinely posted comment must be Confirmed, got {verdict:?}"
@@ -54,60 +54,55 @@ fn genuinely_posted_comment_is_confirmed() {
 /// TRACKER UNREADABLE is an ERROR, never "no ack".
 #[test]
 fn tracker_unreadable_is_unverifiable_not_missing() {
-    // Point at a bead that cannot exist to force a br error.
-    let verdict = detect_ack("nonexistent-bead-xyz", "any-marker");
+    let verdict = classify_ack_readback(
+        FIXTURE_BEAD,
+        GOOD_MARKER,
+        Some(3),
+        "",
+        "Error: Issue not found: fixture-bead",
+    );
     match &verdict {
         AckVerdict::Unverifiable { detail, .. } => {
             assert!(
-                !detail.is_empty(),
-                "the Unverifiable variant must carry the detail: {verdict:?}"
+                detail.contains("Issue not found"),
+                "the Unverifiable variant must preserve tracker detail: {verdict:?}"
             );
         }
         AckVerdict::Missing { .. } => {
-            // br returns "Issue not found" with exit 0 in some configurations,
-            // so the detector may see Missing if br's stderr is empty and the
-            // marker is genuinely absent. This is acceptable ONLY when the
-            // tracker actually responded — the detail is the discriminator.
-            // For now, this is a known limitation documented in the module.
+            panic!("an unreadable tracker must not be reported as Missing");
         }
         AckVerdict::Confirmed { .. } => {
-            panic!("a nonexistent bead must never produce Confirmed");
+            panic!("an unreadable tracker must never produce Confirmed");
         }
     }
 }
 
-/// MUTATION: the read-back IS the detector. If the read-back is removed, both
-/// the trap and the good case produce the same verdict — which proves the
-/// read-back is the sole load-bearing component. This test asserts the
-/// detector's output CHANGES between the two cases, which is what the mutation
-/// would eliminate.
+/// MUTATION: read-back distinguishes an empty fixture from a marker-bearing
+/// fixture. Removing that comparison makes both cases produce the same result.
 #[test]
 fn read_back_distinguishes_trap_from_good() {
-    let bead = "omp-orchestrator-nrj";
-    let trap_marker = format!("ACK-TRAP-DISTINCT-{}", std::process::id());
-    let good_marker = format!("ACK-GOOD-DISTINCT-{}", std::process::id());
-
-    // The trap produces Missing.
-    let trap_verdict = detect_ack(bead, &trap_marker);
+    let trap_verdict =
+        classify_ack_readback(FIXTURE_BEAD, TRAP_MARKER, Some(0), empty_comment_list(), "");
     assert!(
         matches!(trap_verdict, AckVerdict::Missing { .. }),
         "trap must produce Missing, got {trap_verdict:?}"
     );
 
-    // The good case produces Confirmed (after posting via br comments add).
-    let post = std::process::Command::new("br")
-        .args(["comments", "add", bead, "-m", &good_marker, "--actor", "ack-test"])
-        .output()
-        .expect("br comments add");
-    assert!(post.status.success(), "br comments add must succeed");
-
-    let good_verdict = detect_ack(bead, &good_marker);
+    let good_read_back = "Comments for fixture-bead:\n[ack-test] ACK-GOOD-DISTINCT\n";
+    let good_verdict = classify_ack_readback(
+        FIXTURE_BEAD,
+        "ACK-GOOD-DISTINCT",
+        Some(0),
+        good_read_back,
+        "",
+    );
     assert!(
         matches!(good_verdict, AckVerdict::Confirmed { .. }),
         "good must produce Confirmed, got {good_verdict:?}"
     );
 
-    // The two verdicts must be DIFFERENT — if a mutation made them identical,
-    // the read-back would no longer distinguish trap from good.
-    assert_ne!(trap_verdict, good_verdict, "read-back must distinguish the two");
+    assert_ne!(
+        trap_verdict, good_verdict,
+        "read-back must distinguish the two"
+    );
 }

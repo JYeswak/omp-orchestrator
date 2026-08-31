@@ -1,7 +1,6 @@
-#[path = "../src/authorities.rs"]
-mod authorities;
-
-use authorities::{AckAuthority, AckEvidence, DeliveryAuthority, TransportAuthority};
+use ack_spine::authorities::{
+    AckAuthority, AckEvidence, AckSummary, DeliveryAuthority, TransportAuthority,
+};
 
 fn success() -> TransportAuthority {
     TransportAuthority::Succeeded {
@@ -60,7 +59,7 @@ fn live_shape_requires_all_three_citations_separately() {
     let evidence = AckEvidence::new(success(), observed(), read_back());
     assert_eq!(
         evidence.summary(),
-        authorities::AckSummary {
+        AckSummary {
             transport_succeeded: true,
             delivery_observed: true,
             acknowledgement_read_back: true,
