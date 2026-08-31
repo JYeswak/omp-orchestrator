@@ -1,0 +1,175 @@
+# OMP-SURFACE-MAP.toml — the declaration input for the crate census.
+#
+# THE MISSION (CLAUDE.md, AGENTS.md fifth rule): 100% OMP surface coverage. Every crate declares
+# which OMP surface it maps to. A crate absent from this file is UNDECLARED and gets flagged
+# exactly as a crate with no caller gets flagged — silence is not an answer, and "none" is.
+#
+# WHY A DECLARATION AND NOT AN INFERENCE: a census that greps crate sources for OMP surface names
+# matches its own table. That is the self-referential checker — SIX instances in one session,
+# including a reading in which all six gates falsely appeared to have callers. The declaration is
+# made by the author, in this file, and is then available for challenge.
+#
+# CLASSIFICATION, the only three legal values plus the failure state:
+#   "a" — genuinely not OMP's concern. A LEGITIMATE TERMINAL STATE, reachable without argument.
+#   "b" — we reimplemented an OMP surface by scraping. MUST name `omp_alternative`.
+#   "c" — an OMP capability we do not use and should.
+#   absent from this file — UNDECLARED. This is the failure state the gate exists to catch.
+#
+# THE DENOMINATOR, measured 2026-08-31 against the installed v18.0.11. Re-derive; never inherit:
+#   find dist/types -maxdepth 1 -mindepth 1 -type d | wc -l         -> 57
+#   find dist/types -maxdepth 1 -mindepth 1 -name '*.d.ts' | wc -l  -> 14
+#   omp --help, COMMANDS block                                      -> 39
+#   grep -ohE '"omp/[a-zA-Z]+"' dist/cli.js | sort -u                -> 3
+#
+# NO-CLAIM: a declaration is a CLAIM BY THE AUTHOR, not a measurement. A crate can declare "a" and
+# be wrong. This file's job is to make the claim EXIST and be challengeable. Adjudication — inputs,
+# outputs, what must be true, negative evidence — belongs to the inventory map,
+# omp-orchestrator-omp-coverage-mission-ipg.12.
+
+[meta]
+denominator_type_dirs = 57
+denominator_dts_files = 14
+denominator_subcommands = 39
+denominator_omp_methods = 3
+measured_against = "@oh-my-pi/pi-coding-agent v18.0.11"
+measured_on = "2026-08-31"
+crates_declared = 21
+
+# ── (b) REIMPLEMENTED BY SCRAPING ────────────────────────────────────────────────────────────────
+# The category that changes the architecture. Each names the OMP surface that exists TODAY.
+
+[crates.tick-monitor]
+classification = "b"
+omp_surface = "session, live, modes"
+omp_alternative = "session/state read over --mode=rpc"
+instead_we = "classify() matches a braille spinner + elapsed timer on the LAST status line"
+negative_evidence = "a stale spinner in scrollback reports a dead pane BUSY forever; and two panes read <no marker> because a tool-call box border renders AFTER the status line"
+
+[crates.receiver-receipt]
+classification = "b"
+omp_surface = "jsonrpc"
+omp_alternative = "a delivery response on the send"
+instead_we = "diff a timer reset plus a spinner-stripped content hash across two captures"
+negative_evidence = "cp-z42vu returned success:[4] while the packet never arrived; the pending-dispatch marker records the inverse — a delivery that happened, reported as a timeout"
+
+[crates.composer-typed]
+classification = "b"
+omp_surface = "tui, session"
+omp_alternative = "composer state over the RPC transport"
+instead_we = "inspect the rendered composer for typed text"
+negative_evidence = "ntm refuses codex panes with 'cod composer not visible' (cp-nq2s9) — a terminal-inspection guard, not a protocol error, and those panes demonstrably accept input"
+
+[crates.fleet-composite]
+classification = "b"
+omp_surface = "session, live"
+omp_alternative = "a fleet/session enumeration over RPC"
+instead_we = "compose tmux captures across panes"
+negative_evidence = "ntm's snapshot returns total_sessions: 0 with success: true when stale; tmux does not lie, which is why fleet-reconcile exists at all"
+
+# ── (c) UNUSED CAPABILITY WE SHOULD ADOPT ────────────────────────────────────────────────────────
+
+[crates.omp-orchestrator]
+classification = "c"
+omp_surface = "omp/muxConnect, omp/muxPing, omp/muxRestartServer, goals, collab, jsonrpc"
+omp_alternative = "the mux methods are the supervisor's natural transport"
+instead_we = "spawn tmux and ntm; Command::new(\"omp\") appears 0 times in any crate"
+negative_evidence = "if the mux methods cannot address a pane the supervisor must reach, this classification is wrong and the surface is (a) — UNMEASURED, nobody has called them"
+
+[crates.ack-stage]
+classification = "c"
+omp_surface = "jsonrpc, irc"
+omp_alternative = "a typed acknowledgement over the transport"
+instead_we = "read back a bead comment with br comments list"
+negative_evidence = "br comment (singular) prefix-matches, errors on stderr, and EXITS 0 — an agent believed two VERDICT comments landed when neither had, so the read-back is load-bearing and an RPC ack would not remove it"
+
+[crates.ack-spine]
+classification = "c"
+omp_surface = "jsonrpc, irc, collab"
+omp_alternative = "transport receipt + typed ack"
+instead_we = "three separate authorities: transport JSON, observational delivery, bead-comment ack"
+negative_evidence = "the three-authority split is only necessary BECAUSE the transport is unacknowledged; a real ack would collapse authorities 1 and 3 and this crate would shrink"
+
+[crates.dispatch-silence-watch]
+classification = "c"
+omp_surface = "session, live"
+omp_alternative = "a session-idle event"
+instead_we = "poll for dispatched-then-silent beads"
+negative_evidence = "an unclaimed dispatch is invisible to this watcher — measured on 5rh, which sat open with zero comments while a worker carried it"
+
+[crates.loop-queue-filter]
+classification = "c"
+omp_surface = "task, commands"
+omp_alternative = "OMP's own task surface"
+instead_we = "filter br ready output"
+negative_evidence = "the queue authority is beads, not OMP; if OMP's task surface cannot express a dependency DAG this is (a), not (c) — UNMEASURED"
+
+[crates.pane-dispatch-fence]
+classification = "c"
+omp_surface = "session"
+omp_alternative = "a session-level admission check"
+instead_we = "a cross-process per-pane fence over tmux state"
+negative_evidence = "safe_to_dispatch is not liveness — a wedged pane accepts a packet and parks it at 'Press up to edit queued messages' and never submits it"
+
+# ── (a) GENUINELY NOT OMP'S CONCERN ──────────────────────────────────────────────────────────────
+# Repo gates and language-level guards. These operate on OUR tree, not on an agent interaction.
+
+[crates.no-shell-gate]
+classification = "a"
+omp_surface = "none"
+why = "a repo gate over our own tracked files; OMP has no opinion about our .sh policy"
+negative_evidence = "if it ever needed to inspect a running agent it would become (b) — it does not; it reads git ls-files"
+
+[crates.pre-delete-citation-check]
+classification = "a"
+omp_surface = "none"
+why = "guards bead-cited paths against deletion; the tracker is beads, not OMP"
+negative_evidence = "caught a live specimen — a staged deletion of a path cited in a CLOSED bead's close_reason — with no OMP involvement at any step"
+
+[crates.kernel-bypass-gate]
+classification = "a"
+omp_surface = "none"
+why = "scans our source for handrolled equivalents of our own kernels"
+negative_evidence = "it cannot see an operator handrolling in a shell, and all five measured handrolls were in a shell — that gap is an operator hook, still not an OMP surface"
+
+[crates.kernel-only-operator-hook]
+classification = "a"
+omp_surface = "none"
+why = "a PreToolUse hook over OUR agent's tool calls, not over OMP's protocol"
+
+[crates.commit-build-fence]
+classification = "a"
+omp_surface = "none"
+why = "refuses a commit while a build is registered in flight; git and cargo, not OMP"
+
+[crates.undrained-pipe-lint]
+classification = "a"
+omp_surface = "none"
+why = "a source lint for the try_wait-without-draining deadlock; a Rust concurrency defect"
+
+[crates.state-wildcard-lint]
+classification = "a"
+omp_surface = "none"
+why = "refuses a wildcard match arm on a state enum so a new variant is a compile error"
+
+[crates.path-literal-guard]
+classification = "a"
+omp_surface = "none"
+why = "refuses hardcoded repo and home paths so the substrate installs anywhere"
+
+[crates.subprocess-contract]
+classification = "a"
+omp_surface = "none"
+why = "the drain-safe cancel-correct process runner; it is the LAYER BENEATH any OMP client we build, not a mapping of one"
+negative_evidence = "if an OMP RPC client removes every subprocess spawn this crate loses its callers — it has 3 today, the most in the workspace"
+
+[crates.finding]
+classification = "a"
+omp_surface = "none"
+why = "the type that makes a named gap an obligation; a tracker concern"
+negative_evidence = "it shipped with one manifest caller, and that caller had zero — reachable only from dead code until the followup stage depended on it"
+
+[crates.finding-dispatch]
+classification = "a"
+omp_surface = "none"
+why = "renders a SupervisorDecision into a filed Finding"
+negative_evidence = "ZERO callers, and it is omp-orchestrator's only manifest caller — the supervisor's sole inbound edge is itself dead code. WIRE or RETIRE; there is no third option."
