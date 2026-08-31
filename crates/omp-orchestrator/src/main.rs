@@ -7,20 +7,22 @@
 //! idle only with a bound Josh authorization token.
 
 use ack_stage::{
-    assess as assess_ack_stage, AckReadback, AckStageInput, AckStageResult, TransportReceipt,
+    AckReadback, AckStageInput, AckStageResult, TransportReceipt, assess as assess_ack_stage,
 };
+use asupersync::Cx;
 use asupersync::process::{Command, Output};
 use asupersync::runtime::RuntimeBuilder;
 use asupersync::time::{sleep, timeout};
-use asupersync::Cx;
 use omp_orchestrator::{
-    applicable, census_gates, decide, read_idle_authorization, GateCensus, Observation, PaneObservation,
-    QueueState, SupervisorDecision,
+    GateCensus, Observation, PaneObservation, QueueState, SupervisorDecision, applicable,
+    census_gates, decide, read_idle_authorization,
 };
-use receiver_receipt::{
-    observe_capture, PostSendObservation, ReceiptVerdict,
+use omp_rpc_session::{
+    NO_CLAIM_BOUNDARY, OMP_RPC_SCHEMA_VERSION, OMP_SURFACE, OmpCommand, RpcError, RpcSessionConfig,
+    run_session,
 };
-use serde_json::Value;
+use receiver_receipt::{PostSendObservation, ReceiptVerdict, observe_capture};
+use serde_json::{Value, json};
 use std::collections::BTreeSet;
 use std::env;
 use std::fs::{self, OpenOptions};
@@ -52,7 +54,28 @@ struct Config {
     heartbeat_ledger: PathBuf,
     tick_monitor_state: PathBuf,
     pending_dispatch: PathBuf,
+    omp_quick: bool,
+    omp_binary: PathBuf,
 }
+
+#[derive(Debug)]
+enum OmpQuickError {
+    Adapter(RpcError),
+    ReportNotOk,
+}
+
+impl std::fmt::Display for OmpQuickError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Adapter(error) => write!(formatter, "adapter probe failed: {error}"),
+            Self::ReportNotOk => {
+                formatter.write_str("adapter probe returned an unsuccessful report")
+            }
+        }
+    }
+}
+
+impl std::error::Error for OmpQuickError {}
 
 impl Config {
     fn from_args(args: &[String]) -> Result<Self, String> {
@@ -64,6 +87,10 @@ impl Config {
         let mut interval = DEFAULT_INTERVAL;
         let mut command_timeout = DEFAULT_COMMAND_TIMEOUT;
         let mut max_ticks = None;
+        let mut omp_quick = false;
+        let mut omp_binary = env::var_os("OMP_BINARY")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("omp"));
         let mut index = 0;
         while index < args.len() {
             match args[index].as_str() {
@@ -122,12 +149,20 @@ impl Config {
                     );
                 }
                 "--once" => max_ticks = Some(1),
+                "--omp-quick" => omp_quick = true,
+                "--omp-binary" => {
+                    index += 1;
+                    omp_binary =
+                        PathBuf::from(args.get(index).ok_or_else(|| {
+                            "CONFIG_REFUSED --omp-binary requires a path".to_owned()
+                        })?);
+                }
                 "--help" => return Err(usage().to_owned()),
                 "--version" => {
                     return Err(format!(
                         "omp-orchestrator {} build_id={BUILD_ID}",
                         env!("CARGO_PKG_VERSION")
-                    ))
+                    ));
                 }
                 other => return Err(format!("CONFIG_REFUSED unknown argument {other}")),
             }
@@ -196,12 +231,14 @@ impl Config {
             heartbeat_ledger,
             tick_monitor_state,
             pending_dispatch,
+            omp_quick,
+            omp_binary,
         })
     }
 }
 
 fn usage() -> &'static str {
-    "usage: omp-orchestrator [--once|--max-ticks N] [--repo PATH] [--session NAME] [--interval-secs N]"
+    "usage: omp-orchestrator [--once|--max-ticks N] [--repo PATH] [--session NAME] [--interval-secs N] [--omp-quick] [--omp-binary PATH]"
 }
 
 fn now_unix() -> u64 {
@@ -209,6 +246,34 @@ fn now_unix() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .unwrap_or(0)
+}
+
+async fn run_omp_quick(cx: &Cx, config: &Config) -> Result<(), OmpQuickError> {
+    let command = OmpCommand::new(config.omp_binary.clone()).current_dir(config.repo.clone());
+    let rpc_config = RpcSessionConfig::with_command(command);
+    match run_session(cx, &rpc_config).await {
+        Ok(report) => {
+            println!("{}", report.to_json());
+            if report.ok() {
+                Ok(())
+            } else {
+                Err(OmpQuickError::ReportNotOk)
+            }
+        }
+        Err(error) => {
+            println!(
+                "{}",
+                json!({
+                    "schema": OMP_RPC_SCHEMA_VERSION,
+                    "surface": OMP_SURFACE,
+                    "ok": false,
+                    "error": error.to_string(),
+                    "noClaim": NO_CLAIM_BOUNDARY,
+                })
+            );
+            Err(OmpQuickError::Adapter(error))
+        }
+    }
 }
 
 async fn invoke(
@@ -913,7 +978,13 @@ fn main() -> std::process::ExitCode {
     };
     let result = runtime.block_on(async move {
         let cx = Cx::current().ok_or_else(|| "SUPERVISOR_REFUSED no runtime context".to_owned())?;
-        run_supervisor(&cx, config).await
+        if config.omp_quick {
+            run_omp_quick(&cx, &config)
+                .await
+                .map_err(|error| error.to_string())
+        } else {
+            run_supervisor(&cx, config).await
+        }
     });
     match result {
         Ok(()) => std::process::ExitCode::SUCCESS,
@@ -943,6 +1014,8 @@ mod tests {
             heartbeat_ledger,
             tick_monitor_state: PathBuf::from("/tmp/omp-orchestrator-test-state"),
             pending_dispatch: PathBuf::from("/tmp/omp-orchestrator-test-pending"),
+            omp_quick: false,
+            omp_binary: PathBuf::from("omp"),
         }
     }
 
