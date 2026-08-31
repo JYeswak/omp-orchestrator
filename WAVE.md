@@ -5,23 +5,35 @@ this file says only who does what and how you communicate.
 
 ---
 
-## Roster (measured 2026-08-31, `tmux list-panes` + process profile)
+## Roster — re-measured 2026-08-31 07:05Z
 
-| Pane | tmux id | Agent | Model | Role |
-|---:|---|---|---|---|
-| 0 | `%1396` | — | shell | Operator scratch. Not an agent. Never dispatch here. |
-| 1 | `%1397` | `omp-claude` | Opus 5 (anthropic, OAuth) | **Integrator.** Owns cross-crate decisions and the final merge. |
-| 2 | `%1408` | `omp-glm` | GLM 5.3 (openrouter, 1.3M) | **Gate owner.** |
-| 3 | `%1409` | `omp-glm` | GLM 5.3 (openrouter, 1.3M) | **Portability owner.** |
-| 4 | `%1398` | `omp-codex` | GPT-5.6-Luna (OAuth) | **Extraction owner.** |
-| 5 | `%1399` | `omp-codex` | GPT-5.6-Luna (OAuth) | **Verification owner.** |
-
-**Pane indices are not stable handles.** They shift when panes are added or removed — measured
-twice in one session. Address by `pane_id` (`%1408`) and re-resolve indices immediately before use:
+Keyed on `pane_id`, which is the only stable handle. The `Idx` column is a convenience that
+**goes stale** — it already did: the previous version of this table listed `%1398`/`%1399`, which
+exist in no live session, and inverted the codex/glm profiles. That cost a real lost handoff
+(see below). Re-measured with:
 
 ```bash
-tmux list-panes -a -F '#{pane_id} #{session_name}:#{window_index}.#{pane_index}'
+tmux list-panes -a -F '#{pane_id} #{session_name}:#{window_index}.#{pane_index} #{pane_title}'
 ```
+
+| tmux id | Idx | Agent | Model | Mail identity | Role |
+|---|---:|---|---|---|---|
+| `%1396` | 0 | — | shell | — | Operator scratch. Not an agent. Never dispatch here. |
+| `%1397` | 1 | `omp-claude` | Opus 5 (anthropic, OAuth) | — (registration blocked, `-ygc`) | **Orchestrator / integrator.** Cross-crate decisions, verification, the only closer. |
+| `%1413` | 2 | `omp-codex` | GPT-5.6-Luna (OAuth) | `GreenFrog` | **Extraction owner.** |
+| `%1414` | 3 | `omp-codex` | GPT-5.6-Luna (OAuth) | `BlueLantern` | **Safety + conformance owner.** |
+| `%1408` | 4 | `omp-glm` | GLM 5.3 (openrouter, 1.3M) | `AmberGate` | **Gate owner.** |
+| `%1409` | 5 | `omp-glm` | GLM 5.3 (openrouter, 1.3M) | `GoldLark` | **Portability owner.** |
+
+**Roster names are not pane ids, and the mapping is not guessable.** `GoldLark` is the mail
+identity reserving `-7ai`'s files; the prose roster calls the same worker `SilverWolf`. Treat the
+mail identity as authoritative for reservations and the `pane_id` as authoritative for delivery.
+
+**The measured cost of trusting a stale roster:** at 06:58Z the gate owner closed `-4ak` and sent
+its "gate landed, extraction unblocked" handoff to **`%1398`** — read straight out of the old table
+above. `%1398` does not exist, so `GreenFrog` (`%1413`), the actual extraction owner, never received
+it. A send to a dead pane id is silent. The orchestrator re-delivered it at 07:09Z, corrected,
+and verified receipt at the receiving end. Tracked as `omp-orchestrator-75l`.
 
 ---
 
@@ -29,13 +41,19 @@ tmux list-panes -a -F '#{pane_id} #{session_name}:#{window_index}.#{pane_index}'
 
 Each pane owns **one bead** and the files that bead names. No two panes hold the same file.
 
-| Pane | Bead | Owns |
-|---:|---|---|
-| 2 | `omp-orchestrator-4ak` | The no-shell/no-python gate. **Lands first**, on an empty tree. |
-| 3 | `omp-orchestrator-7ai` | Kill every hardcoded path. 3 repo-root + 6 home refs, measured. |
-| 4 | `omp-orchestrator-815` | Extract 23 crates, deps-first. **Blocked on 3 and on the control-plane commit.** |
-| 5 | `omp-orchestrator-5cl` + `-a3p` | Forbid unsafe on all 23; then the unwired-lane conformance test. |
-| 1 | `omp-orchestrator-kxe` | The lifecycle binary. Integrates the rest; **starts last on purpose.** |
+| Pane | Bead | Status 07:10Z | Owns |
+|---|---|---|---|
+| `%1408` | `omp-orchestrator-4ak` | **CLOSED** `3f821d4` | The no-shell/no-python gate. Landed first, on an empty tree. |
+| `%1409` | `omp-orchestrator-7ai` | in_progress | Kill every hardcoded path. 3 repo-root + 6 home refs, measured. |
+| `%1414` | `omp-orchestrator-5cl` + `-a3p` | `-5cl` in_progress, `-a3p` actionable | Forbid unsafe on all 23; then the unwired-lane conformance test. |
+| `%1413` | `omp-orchestrator-815` | blocked on `-7ai` only | Extract 23 crates, deps-first. |
+| `%1397` | `omp-orchestrator-kxe` | blocked on `-815` | The lifecycle binary. Integrates the rest; **starts last on purpose.** |
+
+**`-815`'s stated precondition "commit the port in control-plane first" is CLEARED** and must not
+be re-derived: all 12 files of the three ported crates are committed at `45c613d`, plus `8fc3e4b`
+for the unsafe lint. What still blocks `-815` is `-7ai` alone — `GoldLark` holds four uncommitted
+`src/*.rs` files in those crates, and copying them now would either take a dirty tree or silently
+drop `-7ai`'s work.
 
 **Ordering is not advice.** The gate lands before any crate is copied, or the repo starts dirty and
 the gate gets weakened to make the build pass. Portability lands before extraction, or the new repo
