@@ -33,7 +33,7 @@
         <key>OMP_NTM_BIN</key>
         <string>/Users/josh/.local/bin/ntm</string>
         <key>OMP_EXCLUDE_PANES</key>
-        <string>%1396</string>
+        <string>%1396,%1397</string>
         <key>OMP_HEARTBEAT_LEDGER</key>
         <string>/Users/josh/.local/state/flywheel/omp-orchestrator.heartbeat.jsonl</string>
         <key>OMP_TICK_MONITOR_STATE</key>
