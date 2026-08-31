@@ -225,6 +225,10 @@ pub enum PaneState {
     Idle,
     /// A queued-but-unsubmitted marker: accepts packets, runs nothing.
     Wedged,
+    /// An Ask/approval dialog is open ABOVE the status line. ALIVE and blocked on an
+    /// answer -- the opposite of dead. `timer_secs` is the pane's turn timer, which keeps
+    /// ADVANCING while the pane waits, which is precisely why this needed its own state.
+    Dialog { timer_secs: u64 },
     /// Not an agent pane, or an unrecognised capture.
     Unproven,
 }
@@ -235,6 +239,7 @@ impl PaneState {
             PaneState::Working { .. } => "WORKING",
             PaneState::Idle => "IDLE",
             PaneState::Wedged => "WEDGED",
+            PaneState::Dialog { .. } => "DIALOG",
             PaneState::Unproven => "UNPROVEN",
         }
     }
@@ -300,12 +305,58 @@ pub fn last_status_line(capture: &str) -> &str {
         .unwrap_or("")
 }
 
+/// The model-name contract: every OMP/agent status line names its model.
+pub const MODEL_MARKERS: &[&str] = &["Opus 5", "GLM 5.3", "GPT-5.6", "GPT-5.5"];
+
+/// Verbatim footer markers from an OMP v18 Ask dialog (captured from `%1372`, 2026-08-31).
+const DIALOG_FOOTER: &[&str] = &["Enter select", "Esc cancel", "\u{2191}/\u{2193} move"];
+
+/// True when an Ask/approval dialog is open above the status line.
+///
+/// MEASURED 2026-08-31 on `%1372`: on OMP v18 the dialog renders ABOVE the status line and
+/// the status line remains last, WITH an advancing spinner and timer. So the failure is not
+/// "covered status line -> unreadable"; it is that a pane blocked on a human answer reads as
+/// healthy WORKING work indefinitely. Same class as `Wedged`: looks busy, is not.
+///
+/// POSITIONAL, not shape-based. My own pane carries BOX-FRAMED lines containing `Esc cancel`
+/// -- OMP renders tool-call blocks inside frames and my commands quoted the marker -- so
+/// `framed && contains(marker)` self-pollutes exactly like the grader-reply citation bug.
+/// The discriminator that survives is ADJACENCY: the footer sits within the three non-blank
+/// lines immediately above the status line.
+pub fn dialog_open(capture: &str) -> bool {
+    let nb: Vec<&str> = capture
+        .lines()
+        .map(str::trim_end)
+        .filter(|l| !l.trim().is_empty())
+        .collect();
+    // No model line at all: not an agent pane. NOT a dialog claim, and NOT death -- death
+    // is decided only by absence from `tmux list-panes`, never by an unreadable capture.
+    let Some(status_ix) = nb
+        .iter()
+        .rposition(|l| MODEL_MARKERS.iter().any(|m| l.contains(m)))
+    else {
+        return false;
+    };
+    let lo = status_ix.saturating_sub(3);
+    nb[lo..status_ix].iter().any(|l| {
+        let t = l.trim();
+        t.starts_with('\u{2502}') && DIALOG_FOOTER.iter().any(|m| t.contains(m))
+    })
+}
+
 /// Classify a capture by the OMP v18 contract: spinner + timer = Working, `pi` = Idle.
 pub fn classify(capture: &str) -> PaneState {
     if capture.contains("Press up to edit queued messages")
         || capture.contains("Messages to be submitted after next tool call")
     {
         return PaneState::Wedged;
+    }
+    // BEFORE the spinner branch, like `Wedged`: a dialog pane HAS a live spinner and timer,
+    // so checking spinner first would score it WORKING and hide a pane awaiting an answer.
+    if dialog_open(capture) {
+        return PaneState::Dialog {
+            timer_secs: parse_timer(last_status_line(capture)).unwrap_or(0),
+        };
     }
     let line = last_status_line(capture);
     let spinner = line.chars().any(is_braille);
@@ -365,6 +416,13 @@ pub enum Liveness {
     NewlyIdle,
     /// Timer and stable hash both static across a sufficient gap.
     Frozen,
+    /// An Ask dialog is open: ALIVE, and blocked on an answer rather than on work.
+    ///
+    /// Not dispatchable (it cannot accept a packet) and not free capacity (it is occupied),
+    /// but it MUST be surfaced. Measured 2026-08-31: `%1372` sat 26+ minutes on the
+    /// arc-keepalive install approval reading as `WORKING`/`LIVE`, so the escalation it was
+    /// waiting on was invisible to the conductor while looking perfectly healthy.
+    Dialog { timer_secs: u64 },
     /// Accepts input, submits nothing.
     Wedged,
     /// One capture only, gap too short, or unreadable. NOT idle.
@@ -379,6 +437,7 @@ impl Liveness {
             Liveness::NewlyIdle => "NEWLY_IDLE",
             Liveness::Frozen => "FROZEN",
             Liveness::Wedged => "WEDGED",
+            Liveness::Dialog { .. } => "DIALOG",
             Liveness::Unproven { .. } => "UNPROVEN",
         }
     }
@@ -391,6 +450,12 @@ impl Liveness {
     /// fill it.
     pub fn is_free_capacity(&self) -> bool {
         matches!(self, Liveness::ConfirmedIdle | Liveness::NewlyIdle)
+    }
+    /// Alive but blocked on an ANSWER, not on work. The conductor must act; a dispatcher
+    /// must not. Kept separate from `is_free_capacity` on purpose: answering is the action,
+    /// not filling.
+    pub fn needs_answer(&self) -> bool {
+        matches!(self, Liveness::Dialog { .. })
     }
 }
 
@@ -419,6 +484,11 @@ pub fn liveness(prev: Option<&Observation>, now: &Observation) -> Liveness {
         return Liveness::Unproven {
             why: "capture_unrecognised",
         };
+    }
+    // Alive and awaiting an answer. Returned BEFORE the two-capture machinery on purpose:
+    // its timer advances while blocked, so the (Working, Working) arm would call it Live.
+    if let PaneState::Dialog { timer_secs } = now.state {
+        return Liveness::Dialog { timer_secs };
     }
     let Some(prev) = prev else {
         return Liveness::Unproven {
@@ -462,9 +532,21 @@ pub fn liveness(prev: Option<&Observation>, now: &Observation) -> Liveness {
         (PaneState::Wedged | PaneState::Unproven, _) => Liveness::Unproven {
             why: "prior_capture_unusable",
         },
-        (_, PaneState::Wedged | PaneState::Unproven) => Liveness::Unproven {
-            why: "capture_unrecognised",
+        // Prior was blocked awaiting an answer; `now` is readable, so the dialog was
+        // answered and the pane resumed. Real motion -- but a timer that advanced across a
+        // human's thinking time is not evidence about WORK, so it buys no verdict. `now`
+        // being Dialog already returned above; this arm covers the resumed cases.
+        (PaneState::Dialog { .. }, _) => Liveness::Unproven {
+            why: "prior_awaiting_answer",
         },
+        // `now` being Dialog returned above, so that half is unreachable here -- but the
+        // match is exhaustive by design, so it must be spelled rather than wildcarded. A
+        // wildcard is exactly what let the WORKING->IDLE transition fall into `Live`.
+        (_, PaneState::Wedged | PaneState::Unproven | PaneState::Dialog { .. }) => {
+            Liveness::Unproven {
+                why: "capture_unrecognised",
+            }
+        }
     }
 }
 
@@ -701,6 +783,12 @@ pub fn load(path: &Path) -> State {
                     },
                     "IDLE" => PaneState::Idle,
                     "WEDGED" => PaneState::Wedged,
+                    // Without this arm the writer emits DIALOG and the next tick reads it
+                    // back as Unproven -- a silent downgrade that loses the prior-side
+                    // "was awaiting an answer" fact one tick after it was established.
+                    "DIALOG" => PaneState::Dialog {
+                        timer_secs: timer.parse().unwrap_or(0),
+                    },
                     _ => PaneState::Unproven,
                 };
                 st.panes.push(Observation {
@@ -729,9 +817,11 @@ pub fn save(path: &Path, st: &State) -> std::io::Result<()> {
         out.push_str(&format!("commit\t{repo}\t{sha}\n"));
     }
     for p in &st.panes {
+        // Both timer-bearing states must be written. A `_ => 0` catch-all silently zeroed
+        // DIALOG's timer -- caught by the round-trip leg, not by review.
         let timer = match &p.state {
-            PaneState::Working { timer_secs } => *timer_secs,
-            _ => 0,
+            PaneState::Working { timer_secs } | PaneState::Dialog { timer_secs } => *timer_secs,
+            PaneState::Idle | PaneState::Wedged | PaneState::Unproven => 0,
         };
         out.push_str(&format!(
             "pane\t{}\t{}\t{}\t{}\t{}\n",
@@ -747,6 +837,30 @@ pub fn save(path: &Path, st: &State) -> std::io::Result<()> {
     let tmp = path.with_extension("tsv.tmp");
     std::fs::write(&tmp, out)?;
     std::fs::rename(&tmp, path)
+}
+
+/// Panes observed on a previous tick that are ABSENT from the live pane list: the only
+/// evidence of death this crate accepts.
+///
+/// DEAD and DIALOG demand opposite responses -- a dead pane needs respawning, a prompting
+/// pane needs an ANSWER -- so conflating them destroys live work. Measured 2026-08-31: a
+/// fleet watcher scored `%1413` GONE when it had merely opened an Ask dialog.
+///
+/// The caller MUST pass a list it actually obtained. An empty list from a FAILED
+/// `tmux list-panes` would make this report the entire fleet dead, which is why
+/// `pane_ids` returns `Err` on a timeout instead of an empty vector: a timeout is not an
+/// empty fleet, and absence of evidence is not evidence of absence.
+pub fn vanished(prior: &[Observation], live_ids: &[String]) -> Vec<String> {
+    if live_ids.is_empty() {
+        // ANTI-VACUITY: refuse to declare a fleet-wide death from a scan that found
+        // nothing. Callers get an empty answer, never a mass obituary.
+        return Vec::new();
+    }
+    prior
+        .iter()
+        .map(|o| o.pane_id.clone())
+        .filter(|id| !live_ids.iter().any(|l| l == id))
+        .collect()
 }
 
 // ---------------------------------------------------------------------------

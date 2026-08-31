@@ -1,0 +1,39 @@
+│ test agrees_when_a_pane_is_genuinely_free ... ok                                                                     │
+│                                                                                                                      │
+│ test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s                        │
+│ ⟦Wall: 2.27s | Timeout: 300s⟧                                                                                        │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+╭─── ☑ Todo 6 tasks ───────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ I. Triage  2/2                                                                                                       │
+│ II. Repair  2/2                                                                                                      │
+│ III. Handoff  2/2                                                                                                    │
+│   ├─ ☑ Verify triage output and parser tests                                                                         │
+│   └─ ☑ Choose and claim next ranked bead                                                                             │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+ Requesting install approval
+
+│  under the exact env-isolated positive and negative commands afterward.                                              │
+│  ○ Approve install                                                                                                   │
+│    ↳ Replace the stale installed binary, then run the two acceptance commands and record the receipt.                │
+│  ○ Keep blocked                                                                                                      │
+│    ↳ Leave the rebuilt fix uninstalled and retain the crontab environment workaround.                                │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+  ⎋ Request gated binary install approval
+
+╭─ Ask ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Approve installing the rebuilt arc-keepalive binary from /Volumes/BuildFH/lanes/control-plane/debug/arc-keepalive to │
+│ ~/.local/bin/arc-keepalive? This is the gated step that makes the fix live; I will verify the installed binary under │
+│ the exact env-isolated positive and negative commands afterward.                                                     │
+├──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│   ○ Approve install                                                                                                  │
+│       Replace the stale installed binary, then run the two acceptance commands and record the receipt.               │
+│ ❯ ○ Keep blocked (Recommended)                                                                                       │
+│       Leave the rebuilt fix uninstalled and retain the crontab environment workaround.                               │
+│   ○ Other (type your own)                                                                                            │
+├──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Enter select · n note · ↑/↓ move · Esc cancel                                                                        │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ ⠹ 27m  · ◒ GPT-5.6-Luna · 📁 ~/Developer/control-plane · ⑂ main *18 +1 ?709 · ◫ 77.1%/272K ⟲ · S119.30

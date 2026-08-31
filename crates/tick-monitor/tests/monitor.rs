@@ -333,3 +333,136 @@ fn a_pane_picking_work_up_is_live_and_not_free_capacity() {
     assert_eq!(v, Liveness::Live);
     assert!(!v.is_free_capacity(), "a working pane is never free capacity");
 }
+
+// ---------------------------------------------------------------------------
+// DIALOG -- three planted states, each asserting a SPECIFIC name.
+//
+// Bead: omp-orchestrator-dialog-reads-as-working. The operator's watcher scored %1413 GONE
+// on an Ask dialog; MY defect was the opposite polarity, measured on %1372: on OMP v18 the
+// dialog renders ABOVE the status line, the status line stays last with an advancing
+// spinner+timer, so a pane blocked on a human answer read as WORKING/LIVE for 26 minutes.
+// ---------------------------------------------------------------------------
+
+/// Verbatim capture of the live arc-keepalive approval dialog on %1372, 2026-08-31.
+const DIALOG_FIXTURE: &str = include_str!("fixtures/dialog_v18.txt");
+
+#[test]
+fn planted_dialog_is_dialog_not_working() {
+    let st = tick_monitor::classify(DIALOG_FIXTURE);
+    assert_eq!(
+        st.label(),
+        "DIALOG",
+        "a pane awaiting an answer must not read as WORKING; got {st:?}"
+    );
+}
+
+#[test]
+fn planted_working_is_still_working_after_the_new_state() {
+    // The new state must not swallow the old ones.
+    let cap = " \u{2839} 27m  \u{b7} \u{25d2} GPT-5.6-Luna \u{b7} ~/Developer/control-plane";
+    assert_eq!(tick_monitor::classify(cap).label(), "WORKING");
+}
+
+#[test]
+fn planted_idle_is_still_idle_after_the_new_state() {
+    let cap = " \u{3c0}  \u{b7} \u{25c9} GLM 5.3 \u{b7} ~/Developer/omp-orchestrator";
+    assert_eq!(tick_monitor::classify(cap).label(), "IDLE");
+}
+
+#[test]
+fn framed_marker_far_from_status_line_is_not_a_dialog() {
+    // THE SELF-POLLUTION LEG. Measured: my own pane carries BOX-FRAMED lines containing
+    // "Esc cancel" because OMP renders tool-call blocks inside frames and my commands
+    // quoted the marker. `framed && contains` fired on my own scrollback. Only ADJACENCY
+    // to the status line discriminates. Without this leg the detector reports every pane
+    // that has ever discussed a dialog as blocked on one.
+    let cap = "\u{2502} grep -n 'Esc cancel' src/lib.rs\n\
+               \u{2502} Enter select \u{b7} n note\n\
+               some output\n\
+               more output\n\
+               another line of output\n\
+               \u{2839} 5m \u{b7} \u{25d2} Opus 5 \u{b7} ~/Developer/omp-orchestrator";
+    assert!(
+        !tick_monitor::dialog_open(cap),
+        "framed marker in scrollback must not read as an open dialog"
+    );
+    assert_eq!(tick_monitor::classify(cap).label(), "WORKING");
+}
+
+#[test]
+fn a_dialog_pane_is_neither_dispatchable_nor_free_capacity_but_needs_an_answer() {
+    let l = tick_monitor::Liveness::Dialog { timer_secs: 1560 };
+    assert!(!l.is_dispatchable(), "cannot accept a packet while prompting");
+    assert!(!l.is_free_capacity(), "it is occupied, not free");
+    assert!(l.needs_answer(), "the conductor must see it");
+}
+
+#[test]
+fn dialog_survives_the_state_file_round_trip() {
+    // A writer that emits DIALOG and a reader that parses it as UNPROVEN loses the fact
+    // one tick after it is established.
+    let obs = tick_monitor::Observation {
+        pane_id: "%1372".into(),
+        state: tick_monitor::PaneState::Dialog { timer_secs: 1560 },
+        hash: 42,
+        at: 1788170000,
+    };
+    let dir = std::env::temp_dir().join(format!("tmdlg{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let p = dir.join("state.tsv");
+    let st = tick_monitor::State {
+        panes: vec![obs],
+        ..Default::default()
+    };
+    tick_monitor::save(&p, &st).unwrap();
+    let back = tick_monitor::load(&p);
+    assert_eq!(
+        back.panes[0].state,
+        tick_monitor::PaneState::Dialog { timer_secs: 1560 },
+        "DIALOG must round-trip, not silently downgrade to UNPROVEN"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn an_absent_pane_id_is_dead_and_a_dialog_pane_is_not() {
+    // THE DEAD LEG. Death and DIALOG demand opposite responses; asserting both in one
+    // test is what proves they are actually distinguished rather than merged.
+    let prior = vec![
+        tick_monitor::Observation {
+            pane_id: "%1413".into(),
+            state: tick_monitor::PaneState::Dialog { timer_secs: 60 },
+            hash: 1,
+            at: 100,
+        },
+        tick_monitor::Observation {
+            pane_id: "%9999".into(),
+            state: tick_monitor::PaneState::Working { timer_secs: 60 },
+            hash: 2,
+            at: 100,
+        },
+    ];
+    let live = vec!["%1413".to_string(), "%1397".to_string()];
+    let dead = tick_monitor::vanished(&prior, &live);
+    assert_eq!(dead, vec!["%9999".to_string()], "only the absent id is dead");
+    assert!(
+        !dead.contains(&"%1413".to_string()),
+        "a pane with a dialog open is PRESENT and must never be called dead"
+    );
+}
+
+#[test]
+fn an_empty_pane_list_declares_nobody_dead() {
+    // ANTI-VACUITY. A failed `tmux list-panes` must not produce a fleet-wide obituary.
+    // Without this leg the death detector's worst failure looks identical to a quiet tick.
+    let prior = vec![tick_monitor::Observation {
+        pane_id: "%1413".into(),
+        state: tick_monitor::PaneState::Working { timer_secs: 1 },
+        hash: 1,
+        at: 100,
+    }];
+    assert!(
+        tick_monitor::vanished(&prior, &[]).is_empty(),
+        "an empty scan is a failed scan, not a dead fleet"
+    );
+}

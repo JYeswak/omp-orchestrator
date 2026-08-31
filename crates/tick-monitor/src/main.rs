@@ -242,9 +242,13 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
                 ));
             }
         }
+        // Both timer-bearing states, spelled out. The `_ => 0` catch-all that used to sit
+        // here reported `timer_secs: 0` for a DIALOG pane whose status line plainly read
+        // `35m` -- the same defect the state-file writer had, in a second place, and the
+        // round-trip test could not see it because it never rendered JSON.
         let timer = match &state {
-            PaneState::Working { timer_secs } => *timer_secs,
-            _ => 0,
+            PaneState::Working { timer_secs } | PaneState::Dialog { timer_secs } => *timer_secs,
+            PaneState::Idle | PaneState::Wedged | PaneState::Unproven => 0,
         };
         let why = match &live {
             Liveness::Unproven { why } => *why,
@@ -597,6 +601,40 @@ fn selftest() -> i32 {
     leg!(
         "wedged beats everything",
         classify("Press up to edit queued messages") == PaneState::Wedged
+    );
+    // DIALOG. Without these three, "41 legs green" under a heading that says `v18 detector`
+    // implies a completeness the harness did not have: the detector had no dialog coverage
+    // at all while reporting a full pass.
+    let dlg = concat!(
+        "\u{2502} Approve installing the rebuilt binary?\n",
+        "\u{2502} Enter select \u{b7} n note \u{b7} \u{2191}/\u{2193} move \u{b7} Esc cancel\n",
+        "\u{2570}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\n",
+        " \u{2839} 26m  \u{b7} \u{25d2} GPT-5.6-Luna \u{b7} ~/Developer/control-plane"
+    );
+    leg!(
+        "dialog beats the spinner (a prompting pane is not WORKING)",
+        matches!(classify(dlg), PaneState::Dialog { timer_secs: 1560 })
+    );
+    leg!(
+        "a framed marker in scrollback is NOT a dialog (self-pollution)",
+        !tick_monitor::dialog_open(concat!(
+            "\u{2502} grep -n 'Esc cancel' src/lib.rs\n",
+            "out\nout\nout\n",
+            " \u{2839} 5m \u{b7} \u{25d2} Opus 5 \u{b7} ~/x"
+        ))
+    );
+    leg!(
+        "an empty pane list declares nobody dead",
+        tick_monitor::vanished(
+            &[tick_monitor::Observation {
+                pane_id: "%1".into(),
+                state: PaneState::Working { timer_secs: 1 },
+                hash: 1,
+                at: 100,
+            }],
+            &[]
+        )
+        .is_empty()
     );
 
     println!("known-bad: tokens that must NOT read as an elapsed timer");
