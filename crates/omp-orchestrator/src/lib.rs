@@ -190,6 +190,10 @@ pub struct QueueState {
 pub struct Observation {
     pub panes: Vec<PaneObservation>,
     pub queue: QueueState,
+    /// The gate census for this cycle. None = not performed (the caller
+    /// should NOT dispatch without a census). Some = the census ran; if any
+    /// gate is unwired, the supervisor must refuse before anything else.
+    pub gate_census: Option<GateCensus>,
 }
 
 /// The supervisor's decision for one observation cycle.
@@ -202,8 +206,123 @@ pub struct Observation {
 /// There is NO branch that returns "nothing to do" when dispatchable panes
 /// and ready work coexist. The only "nothing" outcome is when the queue is
 /// genuinely empty AND the authorization permits idleness.
+/// The reachability of one gate's TRIGGER on this machine.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GateReachability {
+    /// A trigger exists on this machine and has been proven to fire.
+    Reachable { trigger: String },
+    /// A trigger is referenced but does not exist on this machine.
+    Unreachable { reason: String },
+    /// The gate has no trigger of any kind.
+    NotInstalled,
+}
+
+impl GateReachability {
+    pub fn is_reachable(&self) -> bool {
+        matches!(self, GateReachability::Reachable { .. })
+    }
+}
+
+/// One row in the gate census.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GateCensusRow {
+    pub gate: String,
+    pub reachability: GateReachability,
+}
+
+/// The full census across all known gates.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GateCensus {
+    pub rows: Vec<GateCensusRow>,
+}
+
+impl GateCensus {
+    /// The positive control: this gate MUST be reachable, or the census itself
+    /// is broken and its output is untrustworthy.
+    pub fn positive_control_gate() -> &'static str {
+        "no-shell-gate"
+    }
+
+    pub fn unwired_gates(&self) -> Vec<&GateCensusRow> {
+        self.rows.iter().filter(|r| !r.reachability.is_reachable()).collect()
+    }
+
+    pub fn all_reachable(&self) -> bool {
+        self.rows.iter().all(|r| r.reachability.is_reachable())
+    }
+
+    /// The POSITIVE CONTROL: no-shell-gate must be reachable, or the census
+    /// is broken and every "unreachable" verdict is suspect (a census that
+    /// reports everything unreachable is indistinguishable from a broken one).
+    pub fn positive_control_passes(&self) -> bool {
+        self.rows
+            .iter()
+            .any(|r| r.gate == Self::positive_control_gate() && r.reachability.is_reachable())
+    }
+}
+
+/// Classify each known gate by whether its TRIGGER exists on this machine.
+/// Trigger reachability, NOT caller existence: a caller in gate.yml is not a
+/// trigger when there is no remote to run the workflow on.
+pub fn census_gates(repo_root: &Path) -> GateCensus {
+    let hook_path = repo_root.join(".git/hooks/pre-commit");
+    let has_remote = std::process::Command::new("git")
+        .args(["remote"])
+        .current_dir(repo_root)
+        .output()
+        .map(|o| {
+            !String::from_utf8_lossy(&o.stdout).trim().is_empty()
+        })
+        .unwrap_or(false);
+
+    let mut rows = Vec::new();
+
+    // no-shell-gate: .git/hooks/pre-commit is the REAL trigger (proven to bite
+    // 2026-08-31, exit 1 naming the file). This is the positive control.
+    let nsg_reachable = hook_path.exists();
+    rows.push(GateCensusRow {
+        gate: "no-shell-gate".into(),
+        reachability: if nsg_reachable {
+            GateReachability::Reachable { trigger: ".git/hooks/pre-commit".into() }
+        } else {
+            GateReachability::Unreachable { reason: ".git/hooks/pre-commit does not exist on this clone".into() }
+        },
+    });
+
+    // path-literal-guard, state-wildcard-lint, undrained-pipe-lint:
+    // their only invocation is .github/workflows/gate.yml, and there is no
+    // remote to run it on.
+    for gate in ["path-literal-guard", "state-wildcard-lint", "undrained-pipe-lint"] {
+        rows.push(GateCensusRow {
+            gate: gate.into(),
+            reachability: if has_remote {
+                GateReachability::Reachable { trigger: ".github/workflows/gate.yml".into() }
+            } else {
+                GateReachability::Unreachable { reason: "no git remote: the CI workflow can never execute".into() }
+            },
+        });
+    }
+
+    // kernel-bypass-gate, pre-delete-citation-check: no caller, no manifest
+    // dep, no trigger of any kind.
+    for gate in ["kernel-bypass-gate", "pre-delete-citation-check"] {
+        rows.push(GateCensusRow {
+            gate: gate.into(),
+            reachability: GateReachability::Unreachable { reason: "no caller, no manifest dependency, no trigger".into() },
+        });
+    }
+
+    GateCensus { rows }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SupervisorDecision {
+    /// One or more gates lack a reachable trigger on this machine. The
+    /// supervisor structurally refuses to report healthy: no branch may
+    /// return SupervisedWorking or AuthorizedIdle while any gate is
+    /// unwired. UNREACHABLE-AROUND: no code path may dispatch while a
+    /// gate that defines the repo's guarantees cannot fire.
+    GateUnwired { unwired: Vec<String> },
     /// A CONFIRMED-idle pane and ready work coexist -> send.
     Dispatch { pane: String, bead_hint: String },
     /// Free capacity + ready work + UNAUTHORIZED -> escalate (an incident).
@@ -244,6 +363,35 @@ pub enum SupervisorDecision {
 /// produce the supervisor's decision. This is where the three deciding legs are
 /// encoded. It is PURE so the deciding legs are testable without subprocesses.
 pub fn decide(observation: &Observation, authorization: &IdleAuthorization) -> SupervisorDecision {
+    // GATE CENSUS — the FIRST check, before anything else. If any gate lacks
+    // a reachable trigger, the supervisor refuses: it cannot dispatch into a
+    // repo whose guarantees cannot fire. This is UNREACHABLE-AROUND — no
+    // branch after this may return SupervisedWorking or AuthorizedIdle.
+    match &observation.gate_census {
+        Some(census) => {
+            if !census.positive_control_passes() {
+                return SupervisorDecision::GateUnwired {
+                    unwired: vec![format!(
+                        "POSITIVE_CONTROL_FAILED: {} must be reachable",
+                        GateCensus::positive_control_gate()
+                    )],
+                };
+            }
+            let unwired: Vec<String> = census
+                .unwired_gates()
+                .iter()
+                .map(|r| r.gate.clone())
+                .collect();
+            if !unwired.is_empty() {
+                return SupervisorDecision::GateUnwired { unwired };
+            }
+        }
+        None => {
+            return SupervisorDecision::GateUnwired {
+                unwired: vec!["CENSUS_NOT_PERFORMED".to_owned()],
+            };
+        }
+    }
     // The monitor must have produced a readable census.
     // (In the real wiring, this is where a tick-monitor invoke failure surfaces.)
     if observation.panes.is_empty() {
@@ -281,7 +429,6 @@ pub fn decide(observation: &Observation, authorization: &IdleAuthorization) -> S
         IdleAuthorization::Authorized { expires_at, .. } => Some(*expires_at),
         IdleAuthorization::Unauthorized { .. } => None,
     };
-
     if observation.queue.ready_count == 0 {
         // QUEUE EMPTY. A busy fleet with an empty queue is HEALTHY, not an
         // incident. Reporting it as one trains the operator to ignore the alarm,
@@ -344,10 +491,32 @@ pub fn decide(observation: &Observation, authorization: &IdleAuthorization) -> S
 mod tests {
     use super::*;
 
+    /// A census where every gate is reachable, including the positive control.
+    ///
+    /// WHY NOT `gate_census: None`, which is the one-line fix that was asked
+    /// for: the census is the FIRST check in `decide()`, and `None` returns
+    /// `GateUnwired { CENSUS_NOT_PERFORMED }` before any other branch is
+    /// reached. Every existing test below would then pass its assertion on a
+    /// decision no test intended to exercise — twelve green legs measuring the
+    /// census instead of dispatch, idleness, and authorization. The gate-unwired
+    /// path gets its OWN tests; these helpers must clear the gate to reach the
+    /// branch under test.
+    fn passing_census() -> GateCensus {
+        GateCensus {
+            rows: vec![GateCensusRow {
+                gate: GateCensus::positive_control_gate().to_owned(),
+                reachability: GateReachability::Reachable {
+                    trigger: ".git/hooks/pre-commit".to_owned(),
+                },
+            }],
+        }
+    }
+
     fn obs(panes: Vec<PaneObservation>, ready: usize, readable: bool) -> Observation {
         Observation {
             panes,
             queue: QueueState { ready_count: ready, readable },
+            gate_census: Some(passing_census()),
         }
     }
 
@@ -720,10 +889,29 @@ impl Duty {
     /// The ONLY way to obtain a Duty, and it is TOTAL: every census plus
     /// authorization yields one. A caller cannot reach a code path that observed
     /// the fleet and owes nothing.
-    pub fn observe(census: &Census, queue: &QueueState, authorization: &IdleAuthorization) -> Self {
+    ///
+    /// `gates` is a REQUIRED PARAMETER, not a default. It previously read
+    /// `gate_census: None` hardcoded, which meant every Duty this constructor
+    /// produced was `GateUnwired { CENSUS_NOT_PERFORMED }` — so the kernel's
+    /// central obligation type could never report a healthy fleet, and the
+    /// alarm would fire on every cycle until the operator discounted it. That
+    /// is the failure `a_saturated_fleet_discharges_as_a_heartbeat_not_an_alarm`
+    /// exists to catch, and it caught it.
+    ///
+    /// It stays an `Option` rather than becoming mandatory because
+    /// `None` is a MEANINGFUL VALUE: it says "this caller performed no census",
+    /// which `decide` answers with a refusal. Making it non-optional would
+    /// delete that signal. The defect was hardcoding it, not offering it.
+    pub fn observe(
+        census: &Census,
+        queue: &QueueState,
+        authorization: &IdleAuthorization,
+        gates: Option<GateCensus>,
+    ) -> Self {
         let observation = Observation {
             panes: census.panes.to_vec(),
             queue: queue.clone(),
+            gate_census: gates,
         };
         Self(decide(&observation, authorization))
     }
@@ -821,7 +1009,7 @@ mod kernel_tests {
         ];
         for (panes, queue) in cases {
             let census = Census::try_new(panes).expect("non-empty");
-            let duty = Duty::observe(&census, &queue, &unauth());
+            let duty = Duty::observe(&census, &queue, &unauth(), gates());
             // The duty exists and names something. `#[must_use]` forces this line.
             let _ = duty.discharge("test-evidence");
         }
@@ -832,7 +1020,7 @@ mod kernel_tests {
         // The 4h19m failure, made unrepresentable: an idle pane beside ready work
         // can never discharge as SupervisedWorking.
         let census = Census::try_new(vec![idle("%1"), working("%2")]).expect("non-empty");
-        let duty = Duty::observe(&census, &q(4), &unauth());
+        let duty = Duty::observe(&census, &q(4), &unauth(), gates());
         assert!(
             duty.requires_action(),
             "free + ready must demand actuation, got {:?}",
@@ -845,7 +1033,7 @@ mod kernel_tests {
         // The other half: a healthy busy fleet must NOT demand action, or the
         // alarm fires constantly and gets discounted.
         let census = Census::try_new(vec![working("%1"), working("%2")]).expect("non-empty");
-        let duty = Duty::observe(&census, &q(0), &unauth());
+        let duty = Duty::observe(&census, &q(0), &unauth(), gates());
         assert!(!duty.requires_action(), "a busy fleet is not an incident");
     }
 
@@ -853,7 +1041,7 @@ mod kernel_tests {
     fn a_discharge_with_no_evidence_cannot_exit_zero() {
         // "I did something" with nothing to show is a no-op wearing a discharge.
         let census = Census::try_new(vec![idle("%1")]).expect("non-empty");
-        let duty = Duty::observe(&census, &q(4), &unauth());
+        let duty = Duty::observe(&census, &q(4), &unauth(), gates());
         assert_eq!(duty.discharge("   ").exit_code(), 70, "empty evidence must fail");
     }
 
@@ -862,11 +1050,49 @@ mod kernel_tests {
         // KNOWN-GOOD, mandatory: without it the kernel could refuse everything and
         // still pass, which is an over-strict gate that gets routed around.
         let census = Census::try_new(vec![idle("%1")]).expect("non-empty");
-        let duty = Duty::observe(&census, &q(4), &unauth());
+        let duty = Duty::observe(&census, &q(4), &unauth(), gates());
         assert_eq!(
             duty.discharge("dispatched %1 bead=x receipt=IDLE_TO_WORKING").exit_code(),
             0
         );
+    }
+
+    #[test]
+    fn a_duty_built_without_a_census_refuses_rather_than_reporting_healthy() {
+        // THE DEFECT THIS REPLACES, measured 2026-08-31: `Duty::observe` hardcoded
+        // `gate_census: None`, so EVERY duty the kernel produced was GateUnwired —
+        // a healthy busy fleet read as an incident, which trains the operator to
+        // discount the alarm. Passing None is now a CALLER'S CHOICE with a defined
+        // meaning, and this asserts that meaning.
+        let census = Census::try_new(vec![working("%1"), working("%2")]).expect("non-empty");
+        let duty = Duty::observe(&census, &q(0), &unauth(), None);
+        match duty.decision() {
+            SupervisorDecision::GateUnwired { unwired } => {
+                assert!(
+                    unwired.iter().any(|u| u.contains("CENSUS_NOT_PERFORMED")),
+                    "a caller that performed no census must be told exactly that, got {unwired:?}"
+                );
+            }
+            other => panic!("no census must refuse, got {other:?}"),
+        }
+        assert!(
+            duty.requires_action(),
+            "a refusal is never a heartbeat — it must demand actuation"
+        );
+    }
+
+    /// A census in which the positive control is reachable, so `decide` clears the
+    /// gate check and the test below it exercises the branch it actually names.
+    /// Without this every kernel test would assert against GateUnwired.
+    fn gates() -> Option<GateCensus> {
+        Some(GateCensus {
+            rows: vec![GateCensusRow {
+                gate: GateCensus::positive_control_gate().to_owned(),
+                reachability: GateReachability::Reachable {
+                    trigger: ".git/hooks/pre-commit".to_owned(),
+                },
+            }],
+        })
     }
 }
 
