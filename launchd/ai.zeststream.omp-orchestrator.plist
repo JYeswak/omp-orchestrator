@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ai.zeststream.omp-orchestrator</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/josh/.local/bin/omp-orchestrator</string>
+        <string>--repo</string>
+        <string>/Users/josh/Developer/omp-orchestrator</string>
+        <string>--session</string>
+        <string>omp-orchestrator</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>/Users/josh</string>
+        <key>PATH</key>
+        <string>/Users/josh/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>TMUX_TMPDIR</key>
+        <string>/Users/josh/.tmux-sockets</string>
+        <key>OMP_REPO</key>
+        <string>/Users/josh/Developer/omp-orchestrator</string>
+        <key>OMP_SESSION</key>
+        <string>omp-orchestrator</string>
+        <key>OMP_TICK_MONITOR_BIN</key>
+        <string>/Users/josh/.local/bin/tick-monitor</string>
+        <key>OMP_BR_BIN</key>
+        <string>/Users/josh/.local/bin/br</string>
+        <key>OMP_NTM_BIN</key>
+        <string>/Users/josh/.local/bin/ntm</string>
+        <key>OMP_EXCLUDE_PANES</key>
+        <string>%1396</string>
+        <key>OMP_HEARTBEAT_LEDGER</key>
+        <string>/Users/josh/.local/state/flywheel/omp-orchestrator.heartbeat.jsonl</string>
+    </dict>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/josh/Developer/omp-orchestrator</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    <key>ProcessType</key>
+    <string>Interactive</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/josh/.local/state/flywheel/omp-orchestrator.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/josh/.local/state/flywheel/omp-orchestrator.err</string>
+</dict>
+</plist>
