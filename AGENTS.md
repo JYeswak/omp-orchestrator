@@ -247,8 +247,10 @@ theories could only agree with themselves.
 
 ## The crates: what each one is and why it exists
 
-20 crates, 25,567 LOC, extracted from `control-plane/crates/`. 18 arrive with tests. Grouped by the
-lifecycle stage they serve.
+The source-backed table below records 24 current control-plane crate rows and 32,087 Rust LOC. 22 of
+the 24 have a `tests/` directory. The current `omp-orchestrator` workspace is a separate, partial
+extraction and loads 8 packages. Counts are derived from the source roots, not copied from the
+descriptions. Grouped by the lifecycle stage they serve.
 
 ### Ground truth — "what is actually true right now"
 
@@ -257,19 +259,20 @@ liveness read either interrupts real work or leaves a worker idle beside a full 
 
 | Crate | LOC | What it does | Why it exists |
 |---|---:|---|---|
-| `pane-truth` | 804 | Ground-truth tmux pane state | The shell version remains the differential oracle; this is the typed reading |
-| `fleet-truth` | 1556 | Fleet-wide inspection register | One place answers "what is the fleet doing" so callers stop re-deriving it |
-| `fleet-reconcile` | 1396 | NTM projection vs tmux reality | NTM's snapshot returns `total_sessions: 0` with `success: true` when stale; tmux does not lie |
+| `pane-truth` | 1247 | Ground-truth tmux pane state | The shell version remains the differential oracle; this is the typed reading |
+| `fleet-truth` | 1621 | Fleet-wide inspection register | One place answers "what is the fleet doing" so callers stop re-deriving it |
+| `fleet-reconcile` | 1424 | NTM projection vs tmux reality | NTM's snapshot returns `total_sessions: 0` with `success: true` when stale; tmux does not lie |
 | `oracle-compare` | 449 | Shared comparator: claim vs independent oracle | An empty or unreadable oracle must be an ERROR, never a silent agreement |
-| `pane-oracle-diff` | 725 | tmux pane census vs ntm projection | Catches projection drift before a dispatch rides it |
-| `oracle-pane-state-differential` | — | Z3 differential on pane_state | Formal check that two state sources agree |
+| `pane-oracle-diff` | 741 | tmux pane census vs ntm projection | Catches projection drift before a dispatch rides it |
+| `oracle-pane-state-differential` | 613 | session:index pane-set differential (tmux vs ntm) | Uses the shared set comparator; this source has no Z3 implementation |
+| `fleet-composite` | 1372 | Geometric fleet-health composite and diagnostic CLI | Refuses malformed, empty, and non-finite inputs instead of inventing a score |
 
 ### Readiness and admission — "may this pane receive work"
 
 | Crate | LOC | What it does | Why it exists |
 |---|---:|---|---|
-| `pane-dispatch-ready` | 1454 | Can this pane SAFELY receive a dispatch | `safe_to_dispatch` is not liveness |
-| `pane-dispatch-fence` | 417 | Cross-process per-pane admission fence | Two dispatchers landing during a `/clear` vaporise the packet |
+| `pane-dispatch-ready` | 1555 | Can this pane SAFELY receive a dispatch | `safe_to_dispatch` is not liveness |
+| `pane-dispatch-fence` | 468 | Cross-process per-pane admission fence | Two dispatchers landing during a `/clear` vaporise the packet |
 | `composer-typed` | 556 | Does the composer hold real TYPED text | Sender success is not receiver receipt |
 | `ntm-fleet-monitor` | 3122 | Typed fleet actions + approval waves. **Classifies; does not send** | Separating classification from actuation makes the verdict auditable |
 
@@ -277,35 +280,108 @@ liveness read either interrupts real work or leaves a worker idle beside a full 
 
 | Crate | LOC | What it does | Why it exists |
 |---|---:|---|---|
-| `loop-queue-filter` | 858 | Fail-closed queue selector | Epics invite unbounded scope; in-flight work must not be re-offered |
+| `loop-queue-filter` | 912 | Fail-closed queue selector | Epics invite unbounded scope; in-flight work must not be re-offered |
 | `loop-coverage` | 926 | Typed coverage matrix. **A map, not a gate** | Says honestly what is *not* covered rather than implying completeness |
-| `refill-idle-panes` | 735 | Refill every idle pane from the bv DAG | An idle worker beside a ready queue is the conductor's failure |
+| `refill-idle-panes` | 842 | Refill every idle pane from the bv DAG | An idle worker beside a ready queue is the conductor's failure |
+| `omp-idle-dispatch` | 1667 | Fail-closed idle OMP pane dispatch lane | Makes repository, session, ledger, and admission inputs explicit before dispatch |
 
 ### Dispatch — "send the work"
 
 | Crate | LOC | What it does | Why it exists |
 |---|---:|---|---|
-| `fast-dispatch` | 2073 | Admit on a fresh standing verdict, select free panes | Must fail closed on a stale verdict |
-| `tick-dispatch` | 907 | Ground-truth pane dispatch fence | Decided by tmux/ntm truth, not a cached label |
-| `loop-driver` | 2429 | Single-instance, deadline-bounded driver | Two ticks fighting over one pane is corruption |
-| `loop-tick` | 1472 | Single-pane dispatch tick | The unit the driver repeats |
-| `fleet-monitor` | 2503 | OBSERVE lane: attention wait + idle/ready scan | Block on a state transition; polling is the anti-pattern |
+| `fast-dispatch` | 2292 | Admit on a fresh standing verdict, select free panes | Must fail closed on a stale verdict |
+| `tick-dispatch` | 990 | Ground-truth pane dispatch fence | Decided by tmux/ntm truth, not a cached label |
+| `loop-driver` | 2484 | Single-instance, deadline-bounded driver | Two ticks fighting over one pane is corruption |
+| `loop-tick` | 1480 | Single-pane dispatch tick | The unit the driver repeats |
+| `fleet-monitor` | 2569 | OBSERVE lane: attention wait + idle/ready scan | Block on a state transition; polling is the anti-pattern |
 
 ### Verification and reaping — "did it actually happen"
 
 | Crate | LOC | What it does | Why it exists |
 |---|---:|---|---|
-| `verify-dispatch` | 1189 | Verification from **bead status only** | Ground truth, never a pane's self-report |
-| `dispatcher-deadman` | 875 | Watchdog: eligible work that received no packet | The failure that is invisible because everything looks healthy |
-| `reap-finished-panes` | 1121 | Sweep finished panes before the next dispatch | An unreaped pane is capacity that silently disappears |
+| `verify-dispatch` | 1291 | Verification from **bead status only** | Ground truth, never a pane's self-report |
+| `dispatcher-deadman` | 883 | Watchdog: eligible work that received no packet | The failure that is invisible because everything looks healthy |
+| `reap-finished-panes` | 1189 | Sweep finished panes before the next dispatch | An unreaped pane is capacity that silently disappears |
+| `wired-but-inert-guard` | 1394 | Fail-closed proof that declared dispatch gates are actually invoked | Prevents a green unused gate from counting as coverage |
 
-**Dependency shape** (from each `Cargo.toml`): 14 leaves with zero path deps; 6 with exactly one —
-`ntm-fleet-monitor` → `loop-coverage`, plus `fleet-monitor`, `pane-oracle-diff`, `tick-dispatch`,
-`fast-dispatch`, `loop-driver`. **Extract leaves first.**
+**Dependency shape** (from each `Cargo.toml`, current 24-row table): 17 leaves with zero path deps;
+7 with exactly one — `ntm-fleet-monitor` → `loop-coverage`, `fleet-monitor` →
+`ntm-fleet-monitor`, `pane-oracle-diff` → `oracle-compare`,
+`oracle-pane-state-differential` → `oracle-compare`, `tick-dispatch` → `oracle-compare`,
+`fast-dispatch` → `loop-switch`, and `loop-driver` → `loop-switch`. **Extract leaves first.**
 
-**Unsafe posture on arrival: 2 of 20.** Only `ntm-fleet-monitor` and `refill-idle-panes` declare
-`unsafe_code = "forbid"`. A crate that will not compile under the lint is a **finding**, not a
-reason to drop the lint.
+**Unsafe posture in the current 24-row table: 5 of 24.** `ntm-fleet-monitor`,
+`refill-idle-panes`, `omp-idle-dispatch`, `wired-but-inert-guard`, and `fleet-composite`
+declare `unsafe_code = "forbid"`. The 815 extraction scope is 23 crates and is also 5-for-23;
+the historical 815 comment claiming 3-for-23 is stale after control-plane commit `8fc3e4b`, which
+added the lint to the other two ported crates. A crate that will not compile under the lint is a
+**finding**, not a reason to drop the lint.
+
+**Measured set reconciliation (2026-08-31).** The pre-audit table had 21 rows, not 20. It included
+the real `oracle-pane-state-differential` crate. The three ported crates named by bead
+`omp-orchestrator-815` bring the documented table to 24 rows, while 815's stated 23-crate
+extraction scope is its original 20 rows plus those three and therefore excludes
+`oracle-pane-state-differential`. That is a real scope mismatch, not a rounding issue.
+
+- Target workspace `/Users/josh/Developer/omp-orchestrator`: 8 loaded Cargo packages.
+- Source workspace `/Users/josh/Developer/control-plane`: 58 tracked top-level crate manifests;
+  Cargo loads 57 packages. The excluded top-level manifest is `crates/loop-tick/Cargo.toml`,
+  which declares its own `[workspace]`; the two other tracked manifests are fixture manifests.
+- Working-tree source totals for the current 24-row table: 32,087 Rust LOC and 22 crate-level
+  `tests/` directories. The 815 23-crate scope totals 31,474 Rust LOC and 21 `tests/`
+  directories under the same counting rule.
+
+The audit is re-runnable from the target repo with the source root explicit:
+
+```bash
+# Target package count; run in /Users/josh/Developer/omp-orchestrator.
+/Users/josh/.cargo/bin/cargo metadata --no-deps --format-version 1 \
+  | jq '[.packages[].manifest_path | select(test("/crates/[^/]+/Cargo.toml$"))] | length'
+
+# Source package count; run in /Users/josh/Developer/control-plane. The warnings are meaningful.
+/Users/josh/.cargo/bin/cargo metadata --no-deps --format-version 1 \
+  | jq '[.packages[].manifest_path | select(test("/crates/[^/]+/Cargo.toml$"))] | length'
+
+# Every documented row -> source files and working-tree Rust LOC.
+bun -e 'const s=await Bun.file("AGENTS.md").text(); const start=s.indexOf("## The crates:"); const a=s.slice(start,s.indexOf(String.fromCharCode(10)+"## Use fh",start)); const ns=a.split(String.fromCharCode(10)).filter(x=>x.startsWith("| "+String.fromCharCode(96))).map(x=>x.split("|")[1].trim().slice(1,-1)); for(const n of ns){const d="/Users/josh/Developer/control-plane/crates/"+n; const p=Bun.spawnSync(["find",d,"-type","f","-name","*.rs","-print"]); const fs=new TextDecoder().decode(p.stdout).trim().split(String.fromCharCode(10)).filter(Boolean); let loc=0; for(const f of fs){const t=await Bun.file(f).text(); loc+=t.split(String.fromCharCode(10)).length-(t.endsWith(String.fromCharCode(10))?1:0)} console.log(n+String.fromCharCode(9)+loc+String.fromCharCode(9)+fs.join(","))}'
+```
+
+**Source audit result (control-plane `src/lib.rs`/`src/main.rs`, unless noted):**
+
+- **CONFIRMED** — `pane-truth`: pane rules, external command output, and two-capture timing are present.
+- **CONFIRMED** — `fleet-truth`: fleet sensors and truth-row rendering are present.
+- **CONFIRMED** — `fleet-reconcile`: tmux/NTM reconciliation, typed verdicts, and self-test are present.
+- **CONFIRMED** — `oracle-compare`: count/set verdicts and unreadable/empty-arm handling are present.
+- **CONFIRMED** — `pane-oracle-diff`: agent-pane census and NTM projection comparison are present.
+- **DIVERGENT** — `oracle-pane-state-differential`: it compares session:index `BTreeSet` values through `oracle-compare`; no Z3 dependency or Z3 implementation is present. The table row now states the implementation rather than the stale label.
+- **CONFIRMED** — `pane-dispatch-ready`: busy, agent, quota, composer, and motion checks feed admission classification.
+- **CONFIRMED** — `pane-dispatch-fence`: per-session/per-pane lock acquisition and release are implemented.
+- **CONFIRMED** — `composer-typed`: marker/ANSI-aware typed-composer parsing and self-test are implemented.
+- **CONFIRMED** — `ntm-fleet-monitor`: typed actions and approval/refusal wave rendering are implemented; the binary does not send.
+- **CONFIRMED** — `loop-queue-filter`: runtime-configured, fail-closed queue filtering is implemented.
+- **CONFIRMED** — `loop-coverage`: proof levels, loop layers, edge cases, and reuse authorities form a coverage map, not a gate.
+- **CONFIRMED** — `refill-idle-panes`: pane survey, refusal classification, recommendation parsing, and bounded assignment planning are implemented.
+- **CONFIRMED** — `fast-dispatch`: fresh-verdict admission, free-pane selection, bounded children, and lock/ledger handling are implemented.
+- **CONFIRMED** — `tick-dispatch`: ground-truth pane, discovery, readiness, and send decisions are implemented.
+- **CONFIRMED** — `loop-driver`: single-instance locking and deadline-bounded driver output are implemented.
+- **CONFIRMED** — `loop-tick`: single-pane dispatch decisions, bounded child execution, and lock acquisition are implemented; its standalone `[workspace]` manifest is the inventory caveat above.
+- **CONFIRMED** — `fleet-monitor`: observe wait, idle/ready scan, and standing-verdict writing are implemented.
+- **CONFIRMED** — `verify-dispatch`: bead-status-only verification and differential CLI behavior are implemented.
+- **CONFIRMED** — `dispatcher-deadman`: eligible-work/no-packet watchdog behavior is implemented.
+- **CONFIRMED** — `reap-finished-panes`: finished-pane sweep and bounded external probes are implemented.
+- **CONFIRMED** — `omp-idle-dispatch`: fail-closed idle-pane dispatch with typed repository/config inputs is implemented.
+- **CONFIRMED** — `wired-but-inert-guard`: tracked caller discovery, gate scans, fail-closed empty-scan handling, and diagnostic commands are implemented.
+- **CONFIRMED** — `fleet-composite`: four-factor geometric scoring, malformed-input refusal, and diagnostic CLI behavior are implemented.
+
+The four names shared by both repositories were checked explicitly: `composer-typed`,
+`fleet-composite`, and `loop-queue-filter` are byte-identical between
+`/Users/josh/Developer/control-plane/crates/<name>` and
+`/Users/josh/Developer/omp-orchestrator/crates/<name>`; `pane-dispatch-fence` has the same
+purpose but differs in both `Cargo.toml` and `src/main.rs` (the target adds
+`subprocess-contract`).
+
+This source audit finds one description divergence and the explicit set/inventory mismatches above;
+it does not establish runtime correctness, wiring, or future drift.
 
 ---
 
@@ -398,9 +474,9 @@ verification-level tag (`[test]`, `(code-first, test pending)`, `[selftest-verif
 ## Honest limits
 
 - Nothing here is installed. The binary does not exist.
-- The crate table is derived from `Cargo.toml` descriptions and LOC counts, **not** from reading all
-  25,567 lines. Treat per-crate "why" lines as stated intent until verified — bead
-  `omp-orchestrator-6gq` closes this.
+- The crate table is now source-audited against control-plane `src/lib.rs`/`src/main.rs` and
+  re-runnable inventory commands. The audit establishes description alignment only; it does not
+  establish runtime correctness, wiring, or future source drift.
 - The no-shell gate covers **file extensions**. It does not prove no crate shells out at runtime via
   `std::process::Command` — a separate, unbuilt check.
 - The unwired-lane conformance test described above is **doctrine here, not yet code**. Until it
