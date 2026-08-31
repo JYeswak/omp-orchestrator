@@ -251,3 +251,76 @@ identity. Three cases in one session, each caught by hand: `arc-keepalive` (fixe
 installed build still the old one), `controller-tick` (lifecycle landed `8802411`, installed
 artifact 4 days older and missing all four lifecycle symbols), and `ntm-fleet-monitor` per its
 own skill checkpoint. **Check the artifact, not the commit.**
+
+---
+
+## Graph and citation traps — measured 2026-08-31
+
+### An epic must NEVER carry a `blocks` edge onto its own leaf
+
+**The rule.** An epic **owns** its leaves through parent-child. A `blocks` edge from an epic onto
+a leaf it owns is **circular by construction**: the epic gates the leaf, so the leaf cannot start
+until the epic closes, and the epic cannot close until its children finish.
+
+**It is systemic, not a one-off.** 13 of the first 30 unassigned open beads carry a `blocks` edge
+from an epic, **including four P0s** (`cp-b56a6`, `cp-saegu`, `cp-u9ikt`, `cp-n56gj`).
+
+**Why nobody sees it:** `br show` reads `open` and unassigned and looks perfectly claimable.
+**Only ATTEMPTING the transition surfaces it:**
+
+```
+br update cp-u9ikt --status in_progress
+  -> Error: cannot claim blocked issue: cp-epic-fleet-work-quality-08l6.74
+```
+
+**FIND THE WRITER BEFORE FIXING THE EDGES.** `br dep add <child> <parent>` **transposed** produces
+exactly this shape, so 13 repaired edges regrow by morning if the writer is still running. Convert
+**one** edge, prove the leaf becomes claimable, then do the rest — with `br dep cycles` clean
+before and after and a recorded reason per edge. Tracked as `cp-0nfzp`.
+
+### A port that deletes a file invalidates every closed bead that cited it
+
+`check.sh` went RED on close-evidence with **everything downstream UNRUN**. Two of the seven
+failures were ours: `cp-3k9jq` and `cp-op5uu` cite `bin/fleet-composite.py` and
+`bin/omp-idle-dispatch.sh`, which tonight's shell-to-Rust port **deleted**. Both beads were
+**validly closed at the time**; the port silently invalidated the citation, and it surfaced hours
+later as a gate refusing every dispatch.
+
+> **Before removing a file, grep CLOSED beads for its path.** A closed bead's evidence is a live
+> dependency on the filesystem, not a historical note. Tracked as `cp-rjuzj`.
+
+### Adjacency is not authorship — a SHA near a bead is not a SHA belonging to it
+
+`tick-monitor lifecycle` reported `omp-orchestrator-2lo landed=3f821d4`. That bead has **no commit
+at all** (`git log --all --grep='2lo'` is empty); `3f821d4` is the `no-shell-gate` commit belonging
+to `4ak`, and it appeared in 2lo's prose as a **citation**. So `LANDED_UNGRADED` inflates with
+**phantom work**, and a phantom is indistinguishable from real work in the output because the SHA
+resolves in git.
+
+**The authoritative join is `git log --all --grep=<bead-short-id>` — the commit must NAME the
+bead.** A SHA appearing only in prose belongs in a separate `cites=` field that never feeds the
+queue. Until fixed (`…-phantom-landing-ma1`, blocked on `cp-oakbv`), treat `LANDED_UNGRADED` as an
+**upper bound** and confirm each row before dispatching a grader at it.
+
+Same tool, same failure, three times: `author=` reads the current **assignee** (observed live —
+`r3h` flipped GreenFrog→AmberGate when AmberGate was routed as its *grader*), dangling citations
+were counted as unresolvable commits, and now a resolvable SHA is credited to the wrong bead. It
+kept narrowing *which tokens look like commits* and never asked **whose** commit one is.
+
+### DERIVE, DO NOT QUOTE — your loaded copy of this repo's docs is a stale pin
+
+The `AGENTS.md` loaded into an agent's context claims **20 crates, 25,567 LOC, 2-of-20 unsafe**.
+The file **on disk** claims **24 crates, 32,087 LOC, 5-of-24**. Both are "AGENTS.md": the context
+pins a snapshot taken at session start.
+
+> An agent reasoning from its loaded context rather than re-reading the file will confidently
+> restate **retired numbers in the tone of someone quoting project doctrine** — and cannot tell
+> that its copy is old.
+
+That is the mechanical cause of the 20→23→24 and 2→3→5 drift. **Re-read the file before quoting a
+number from it.** Five confident-wrong queries in one session all looked like a healthy zero:
+`br dep list` out-edges read as "no dependents"; `bv` `quick_ref.top_picks` null read as "no work";
+`lsof | grep -c ESTABLISHED` counting **82** endpoint rows on a loopback port where the truth was
+**41** connections; `path\s*=\s*"` matching `[lib]`/`[[bin]]` build targets as dependencies; and a
+claimable-looking bead that only failed on the transition attempt. **Check what a pattern can ALSO
+match, and check the other fields of an envelope, before diagnosing the tool.**
