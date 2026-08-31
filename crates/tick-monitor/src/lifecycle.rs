@@ -192,11 +192,43 @@ impl Report {
     }
 }
 
-/// Extract every 7-to-40 hex SHA-shaped token from text.
+/// True when a hex run is a CONTENT hash rather than a commit citation.
+///
+/// MEASURED FALSE POSITIVE, 2026-08-31. The lifecycle join reported two "dangling
+/// citations" on `-pane-truth-omp-v18-blind-lre`: `5042f809` and `90840a00`. Neither is a
+/// commit. They are truncated **sha256 file-content hashes**, and the author labelled them
+/// correctly:
+///
+///   "final sha256 5042f809…701 after rustfmt"
+///   "Restored byte-identically: sha256 90840a00…6071d hash-equal to baseline"
+///
+/// The defect was mine, not the close's. And it is SYSTEMATIC, not a one-off: this repo's
+/// mutation doctrine REQUIRES citing a byte-identical restore hash, so every correctly
+/// evidenced mutation leg would produce a fresh false "dangling citation" forever. Two good
+/// practices colliding is worse than a random bug, because the noise arrives exactly when
+/// the evidence is strongest.
+///
+/// Two discriminators, both cheap:
+///   1. the token is preceded by `sha256` (or `sha-256`) within a short window;
+///   2. the token is immediately followed by an ellipsis, i.e. it was TRUNCATED for
+///      display -- a truncated hash is never a resolvable citation.
+fn is_content_hash(chars: &[char], start: usize, end: usize) -> bool {
+    // 2. truncation marker directly after the run.
+    let tail: String = chars[end..chars.len().min(end + 3)].iter().collect();
+    if tail.starts_with('\u{2026}') || tail.starts_with("...") {
+        return true;
+    }
+    // 1. a `sha256` label shortly before it.
+    let lo = start.saturating_sub(24);
+    let prefix: String = chars[lo..start].iter().collect::<String>().to_ascii_lowercase();
+    prefix.contains("sha256") || prefix.contains("sha-256") || prefix.contains("sha 256")
+}
+
+/// Extract every 7-to-40 hex commit-SHA-shaped token from text.
 ///
 /// Deliberately permissive on length and then verified against the object store, because
-/// agents cite both short and full SHAs. Rejects all-digit runs so a line number or a byte
-/// count cannot masquerade as a commit.
+/// agents cite both short and full SHAs. Rejects all-digit runs (a line number or byte
+/// count), embedded hex inside identifiers, and content hashes (see [`is_content_hash`]).
 pub fn sha_candidates(text: &str) -> Vec<String> {
     let mut out = Vec::new();
     let chars: Vec<char> = text.chars().collect();
@@ -215,8 +247,8 @@ pub fn sha_candidates(text: &str) -> Vec<String> {
             let end_ok = i >= chars.len() || !is_word(chars[i]);
             if (7..=40).contains(&len) && boundary_ok && end_ok {
                 let tok: String = chars[start..i].iter().collect();
-                // A run of only digits is a number, not a SHA.
-                if !tok.chars().all(|c| c.is_ascii_digit()) {
+                let all_digits = tok.chars().all(|c| c.is_ascii_digit());
+                if !all_digits && !is_content_hash(&chars, start, i) {
                     out.push(tok.to_ascii_lowercase());
                 }
             }
@@ -612,5 +644,45 @@ mod tests {
         assert!(!Stage::Landed.occupies_a_pane());
         assert!(!Stage::Triaged.occupies_a_pane());
         assert!(!Stage::Closed.occupies_a_pane());
+    }
+}
+
+#[cfg(test)]
+mod content_hash_tests {
+    use super::*;
+
+    /// The exact verbatim strings from the bead that produced the false positive.
+    #[test]
+    fn sha256_content_hashes_are_not_commit_citations() {
+        let a = "final sha256 5042f809\u{2026}701 after rustfmt";
+        let b = "Restored byte-identically: sha256 90840a00\u{2026}6071d hash-equal to baseline";
+        assert!(
+            sha_candidates(a).is_empty(),
+            "labelled+truncated sha256 must not read as a commit: {:?}",
+            sha_candidates(a)
+        );
+        assert!(
+            sha_candidates(b).is_empty(),
+            "restore-hash must not read as a commit: {:?}",
+            sha_candidates(b)
+        );
+    }
+
+    /// KNOWN-GOOD: the filter must not eat real citations. Without this leg the fix could
+    /// silently suppress every SHA and the join would report an empty grading queue --
+    /// which looks like "nothing to grade" and is the worst possible failure here.
+    #[test]
+    fn real_commit_citations_still_survive() {
+        let t = "landed in 831fdd6 and b6249a5; see also control-plane f9f4e37";
+        let got = sha_candidates(t);
+        for want in ["831fdd6", "b6249a5", "f9f4e37"] {
+            assert!(got.contains(&want.to_owned()), "lost {want} from {got:?}");
+        }
+    }
+
+    #[test]
+    fn a_truncated_hash_is_rejected_even_without_a_label() {
+        // Truncation alone is decisive: a display-truncated hash can never resolve.
+        assert!(sha_candidates("baseline was deadbeef\u{2026}9c1").is_empty());
     }
 }
