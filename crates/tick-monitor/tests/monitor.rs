@@ -46,7 +46,10 @@ fn v18_idle_lines_are_recognised() {
 fn token_budgets_and_spend_counters_are_not_elapsed_timers() {
     // Both appear on EVERY live v18 status line. If either parsed as a timer, an idle
     // pane would read as working forever.
-    assert!(parse_timer("13.0%/1.3M").is_none(), "1.3M is a token budget");
+    assert!(
+        parse_timer("13.0%/1.3M").is_none(),
+        "1.3M is a token budget"
+    );
     assert!(parse_timer("S0.25").is_none(), "S0.25 is a spend counter");
     assert!(parse_timer("5M").is_none(), "uppercase M is not minutes");
     assert_eq!(parse_timer("12m"), Some(720));
@@ -78,14 +81,12 @@ fn animation_alone_does_not_change_the_stable_hash() {
     assert_ne!(stable_hash(&a), stable_hash(&c));
 }
 
-
 #[test]
 fn idle_and_working_status_glyphs_do_not_change_stable_content_hash() {
     let idle = "unchanged body\nπ . GPT-5.6 . /tmp/receiver";
     let working = "unchanged body\n⠙ 1s . GPT-5.6 . /tmp/receiver";
     assert_eq!(stable_hash(idle), stable_hash(working));
 }
-
 #[test]
 fn idle_is_never_reported_from_a_single_capture() {
     let o = Observation {
@@ -126,7 +127,10 @@ fn working_and_unproven_panes_are_never_dispatchable() {
         &mk(PaneState::Working { timer_secs: 120 }, 2, 1100),
     );
     assert_eq!(working, Liveness::Live);
-    assert!(!working.is_dispatchable(), "a live pane must never be filled");
+    assert!(
+        !working.is_dispatchable(),
+        "a live pane must never be filled"
+    );
 
     let unproven = liveness(None, &mk(PaneState::Unproven, 0, 1000));
     assert!(!unproven.is_dispatchable());
@@ -142,7 +146,10 @@ fn static_timer_with_changed_content_is_live_not_frozen() {
         hash: h,
         at,
     };
-    assert_eq!(liveness(Some(&mk(60, 7, 1000)), &mk(60, 9, 1100)), Liveness::Live);
+    assert_eq!(
+        liveness(Some(&mk(60, 7, 1000)), &mk(60, 9, 1100)),
+        Liveness::Live
+    );
     assert_eq!(
         liveness(Some(&mk(60, 7, 1000)), &mk(60, 7, 1100)),
         Liveness::Frozen
@@ -191,7 +198,10 @@ fn blocked_requires_a_typed_blocker_and_an_escalation_artifact() {
         external_blocker: Some("infrastructure:rch-exit-103".to_owned()),
         ..bare.clone()
     };
-    assert_eq!(validate(&no_artifact, "", 0), Err(Reject::NoEscalationArtifact));
+    assert_eq!(
+        validate(&no_artifact, "", 0),
+        Err(Reject::NoEscalationArtifact)
+    );
 
     let ok = Tick {
         escalation_action: Some("bead comment with 3 new acceptance clauses".to_owned()),
@@ -269,8 +279,16 @@ fn both_pipes_are_drained_past_the_deadlock_threshold() {
     );
     match out {
         Outcome::Completed { stdout, stderr, .. } => {
-            assert!(stdout.len() >= 200_000, "stdout truncated: {}", stdout.len());
-            assert!(stderr.len() >= 200_000, "stderr truncated: {}", stderr.len());
+            assert!(
+                stdout.len() >= 200_000,
+                "stdout truncated: {}",
+                stdout.len()
+            );
+            assert!(
+                stderr.len() >= 200_000,
+                "stderr truncated: {}",
+                stderr.len()
+            );
         }
         other => panic!("200KB on both pipes deadlocked or failed: {}", other.kind()),
     }
@@ -307,9 +325,15 @@ fn a_just_finished_pane_is_newly_idle_not_live() {
     assert_ne!(v, Liveness::Live, "the defect: it used to read LIVE");
 
     // Still not fillable on one idle capture -- visibility must not buy a slot.
-    assert!(!v.is_dispatchable(), "one idle capture is still one capture");
+    assert!(
+        !v.is_dispatchable(),
+        "one idle capture is still one capture"
+    );
     // But it MUST be visible as free capacity.
-    assert!(v.is_free_capacity(), "a conductor has to see the freed worker");
+    assert!(
+        v.is_free_capacity(),
+        "a conductor has to see the freed worker"
+    );
 
     // The next tick confirms it and it becomes dispatchable.
     let later = Observation {
@@ -339,7 +363,10 @@ fn a_pane_picking_work_up_is_live_and_not_free_capacity() {
     };
     let v = liveness(Some(&prev), &now);
     assert_eq!(v, Liveness::Live);
-    assert!(!v.is_free_capacity(), "a working pane is never free capacity");
+    assert!(
+        !v.is_free_capacity(),
+        "a working pane is never free capacity"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -400,7 +427,10 @@ fn framed_marker_far_from_status_line_is_not_a_dialog() {
 #[test]
 fn a_dialog_pane_is_neither_dispatchable_nor_free_capacity_but_needs_an_answer() {
     let l = tick_monitor::Liveness::Dialog { timer_secs: 1560 };
-    assert!(!l.is_dispatchable(), "cannot accept a packet while prompting");
+    assert!(
+        !l.is_dispatchable(),
+        "cannot accept a packet while prompting"
+    );
     assert!(!l.is_free_capacity(), "it is occupied, not free");
     assert!(l.needs_answer(), "the conductor must see it");
 }
@@ -452,7 +482,11 @@ fn an_absent_pane_id_is_dead_and_a_dialog_pane_is_not() {
     ];
     let live = vec!["%1413".to_string(), "%1397".to_string()];
     let dead = tick_monitor::vanished(&prior, &live);
-    assert_eq!(dead, vec!["%9999".to_string()], "only the absent id is dead");
+    assert_eq!(
+        dead,
+        vec!["%9999".to_string()],
+        "only the absent id is dead"
+    );
     assert!(
         !dead.contains(&"%1413".to_string()),
         "a pane with a dialog open is PRESENT and must never be called dead"
@@ -487,7 +521,12 @@ fn an_empty_pane_list_declares_nobody_dead() {
 // ---------------------------------------------------------------------------
 
 fn obs_at(id: &str, st: tick_monitor::PaneState, at: u64) -> tick_monitor::Observation {
-    tick_monitor::Observation { pane_id: id.into(), state: st, hash: 7, at }
+    tick_monitor::Observation {
+        pane_id: id.into(),
+        state: st,
+        hash: 7,
+        at,
+    }
 }
 
 /// A frame drawn OVER the status line: no model name, and no dialog footer either.
@@ -508,13 +547,27 @@ fn a_covered_status_line_is_not_a_dialog() {
 #[test]
 fn a_covered_pane_that_was_working_is_obscured_not_dropped() {
     // The pane carried a model line last tick, so it IS an agent pane and IS alive.
-    let prev = obs_at("%1414", tick_monitor::PaneState::Working { timer_secs: 60 }, 1000);
+    let prev = obs_at(
+        "%1414",
+        tick_monitor::PaneState::Working { timer_secs: 60 },
+        1000,
+    );
     let now = obs_at("%1414", tick_monitor::classify(COVERED), 1200);
     let l = tick_monitor::liveness(Some(&prev), &now);
-    assert_eq!(l.label(), "OBSCURED", "a covered live pane must not vanish into UNPROVEN");
+    assert_eq!(
+        l.label(),
+        "OBSCURED",
+        "a covered live pane must not vanish into UNPROVEN"
+    );
     assert!(l.needs_attention(), "the conductor must be told to LOOK");
-    assert!(!l.is_dispatchable() && !l.is_free_capacity(), "unreadable is not free");
-    assert!(!l.needs_answer(), "OBSCURED needs a deeper capture, not an answer");
+    assert!(
+        !l.is_dispatchable() && !l.is_free_capacity(),
+        "unreadable is not free"
+    );
+    assert!(
+        !l.needs_answer(),
+        "OBSCURED needs a deeper capture, not an answer"
+    );
 }
 
 #[test]
@@ -524,7 +577,10 @@ fn a_shell_pane_stays_unproven_and_is_never_obscured() {
     // live agent needing attention, and the attention list would be permanently noisy.
     let prev = obs_at("%1396", tick_monitor::PaneState::Unproven, 1000);
     let now = obs_at("%1396", tick_monitor::PaneState::Unproven, 1200);
-    assert_eq!(tick_monitor::liveness(Some(&prev), &now).label(), "UNPROVEN");
+    assert_eq!(
+        tick_monitor::liveness(Some(&prev), &now).label(),
+        "UNPROVEN"
+    );
 }
 
 #[test]
@@ -584,5 +640,110 @@ fn needs_attention_has_a_production_caller_too() {
     assert!(
         main_rs.contains("live.needs_attention()"),
         "needs_attention() is unwired -- the OBSCURED state would be computed and discarded"
+    );
+}
+
+#[test]
+fn capacity_alarm_fires_once_after_three_free_ticks() {
+    let mut alarm = CapacityAlarm::new(3);
+    assert_eq!(
+        alarm.observe(true),
+        CapacityAlarmEvent::None {
+            consecutive_ticks: 1
+        }
+    );
+    assert_eq!(
+        alarm.observe(true),
+        CapacityAlarmEvent::None {
+            consecutive_ticks: 2
+        }
+    );
+    assert_eq!(
+        alarm.observe(true),
+        CapacityAlarmEvent::Fire {
+            consecutive_ticks: 3
+        }
+    );
+    assert_eq!(
+        alarm.observe(true),
+        CapacityAlarmEvent::None {
+            consecutive_ticks: 4
+        }
+    );
+}
+
+#[test]
+fn fully_occupied_fleet_never_fires_capacity_alarm() {
+    let mut alarm = CapacityAlarm::new(3);
+    for _ in 0..100 {
+        assert_eq!(
+            alarm.observe(false),
+            CapacityAlarmEvent::None {
+                consecutive_ticks: 0
+            }
+        );
+    }
+    assert_eq!(alarm.consecutive_free_ticks(), 0);
+}
+
+#[test]
+fn capacity_alarm_mutation_leg_rejects_inverted_predicate() {
+    // A mutant that changes the free-capacity predicate to `!free_capacity` fires here.
+    // This is the deciding negative: an occupied fleet must never notify.
+    let mut alarm = CapacityAlarm::new(2);
+    assert_eq!(
+        alarm.observe(false),
+        CapacityAlarmEvent::None {
+            consecutive_ticks: 0
+        }
+    );
+    assert_eq!(
+        alarm.observe(false),
+        CapacityAlarmEvent::None {
+            consecutive_ticks: 0
+        }
+    );
+}
+
+#[test]
+fn capacity_escalation_writes_urgent_and_observes_notification() {
+    let dir = std::env::temp_dir().join(format!(
+        "tick-monitor-capacity-alarm-{}-{}",
+        std::process::id(),
+        line!()
+    ));
+    std::fs::create_dir_all(&dir).expect("create alarm test directory");
+    let urgent = dir.join("URGENT_JOSH.md");
+    let receipt = escalate_idle_capacity_with_notifier(
+        &urgent,
+        17,
+        3,
+        "free_capacity=[%1413]",
+        std::path::Path::new("/bin/echo"),
+    )
+    .expect("test notifier should complete");
+    let urgent_text = std::fs::read_to_string(&urgent).expect("urgent artifact exists");
+    assert!(receipt.notification_observed);
+    assert_eq!(receipt.consecutive_ticks, 3);
+    assert!(urgent_text.contains("URGENT: persistent idle capacity"));
+    assert!(urgent_text.contains("consecutive_ticks: 3"));
+    assert!(urgent_text.contains("tick: 17"));
+    std::fs::remove_dir_all(&dir).expect("remove owned test directory");
+}
+
+#[test]
+fn capacity_alarm_is_wired_to_watch_escalation() {
+    let main_rs = include_str!("../src/main.rs");
+    assert!(
+        main_rs.contains("CapacityAlarm::new(capacity_alarm_after)"),
+        "watch lost the persistent capacity alarm state"
+    );
+    assert!(
+        main_rs.contains("escalate_idle_capacity(&urgent, ticks, consecutive_ticks, &line)"),
+        "watch computes capacity but does not reach the escalation mechanism"
+    );
+    assert!(
+        main_rs.contains("URGENT_JOSH.md"),
+        "watch escalation lost its durable urgent artifact"
     );
 }

@@ -299,7 +299,10 @@ pub fn last_status_line(capture: &str) -> &str {
             let t = l.trim();
             !t.is_empty()
                 && !t.chars().all(|c| {
-                    matches!(c, '-' | '=' | '_' | '\u{2500}' | '\u{2570}' | '\u{2502}' | '\u{256d}')
+                    matches!(
+                        c,
+                        '-' | '=' | '_' | '\u{2500}' | '\u{2570}' | '\u{2502}' | '\u{256d}'
+                    )
                 })
         })
         .unwrap_or("")
@@ -714,8 +717,13 @@ impl Tick {
         s.to_lowercase()
     }
     fn has_escalation(&self) -> bool {
-        self.escalation_action.as_ref().is_some_and(|s| !s.trim().is_empty())
-            || self.auto_filed_bead.as_ref().is_some_and(|s| !s.trim().is_empty())
+        self.escalation_action
+            .as_ref()
+            .is_some_and(|s| !s.trim().is_empty())
+            || self
+                .auto_filed_bead
+                .as_ref()
+                .is_some_and(|s| !s.trim().is_empty())
             || REMEDIATION.contains(&self.mode.as_str())
     }
 }
@@ -765,10 +773,7 @@ pub fn validate(tick: &Tick, prior_blocker: &str, prior_streak: u32) -> Result<u
     };
 
     if streak >= 3 && !tick.has_escalation() {
-        return Err(Reject::EscalationRequired {
-            blocker,
-            streak,
-        });
+        return Err(Reject::EscalationRequired { blocker, streak });
     }
     Ok(streak)
 }
@@ -788,6 +793,163 @@ pub struct State {
     pub red_streak: u32,
     pub panes: Vec<Observation>,
     pub commits: Vec<(String, String)>,
+}
+
+// ---------------------------------------------------------------------------
+// idle-capacity escalation
+// ---------------------------------------------------------------------------
+
+/// Events emitted by the persistent idle-capacity streak tracker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CapacityAlarmEvent {
+    None { consecutive_ticks: u32 },
+    Fire { consecutive_ticks: u32 },
+}
+
+/// Tracks free capacity independently of the no-value/stall streak. A fully occupied
+/// fleet resets the alarm; it can never fire merely because ticks continue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CapacityAlarm {
+    threshold: u32,
+    consecutive_free_ticks: u32,
+    fired: bool,
+}
+
+impl CapacityAlarm {
+    pub fn new(threshold: u32) -> Self {
+        Self {
+            threshold: threshold.max(1),
+            consecutive_free_ticks: 0,
+            fired: false,
+        }
+    }
+
+    pub fn observe(&mut self, free_capacity: bool) -> CapacityAlarmEvent {
+        if !free_capacity {
+            self.consecutive_free_ticks = 0;
+            self.fired = false;
+            return CapacityAlarmEvent::None {
+                consecutive_ticks: 0,
+            };
+        }
+        self.consecutive_free_ticks = self.consecutive_free_ticks.saturating_add(1);
+        if !self.fired && self.consecutive_free_ticks >= self.threshold {
+            self.fired = true;
+            CapacityAlarmEvent::Fire {
+                consecutive_ticks: self.consecutive_free_ticks,
+            }
+        } else {
+            CapacityAlarmEvent::None {
+                consecutive_ticks: self.consecutive_free_ticks,
+            }
+        }
+    }
+
+    pub fn consecutive_free_ticks(&self) -> u32 {
+        self.consecutive_free_ticks
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CapacityEscalationReceipt {
+    pub urgent_path: PathBuf,
+    pub notification_observed: bool,
+    pub consecutive_ticks: u32,
+}
+
+/// Escalate through the real macOS notification surface. The urgent artifact is written
+/// first so a notification failure cannot erase the durable signal. Tests use the sibling
+/// `_with_notifier` seam with `/bin/echo`; production always uses `/usr/bin/osascript`.
+pub fn escalate_idle_capacity(
+    urgent_path: &Path,
+    tick: u64,
+    consecutive_ticks: u32,
+    observation: &str,
+) -> Result<CapacityEscalationReceipt, String> {
+    escalate_idle_capacity_with_notifier(
+        urgent_path,
+        tick,
+        consecutive_ticks,
+        observation,
+        Path::new("/usr/bin/osascript"),
+    )
+}
+
+pub fn escalate_idle_capacity_with_notifier(
+    urgent_path: &Path,
+    tick: u64,
+    consecutive_ticks: u32,
+    observation: &str,
+    notifier: &Path,
+) -> Result<CapacityEscalationReceipt, String> {
+    if consecutive_ticks == 0 {
+        return Err("idle-capacity escalation requires a positive streak".to_owned());
+    }
+    if let Some(parent) = urgent_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "cannot create urgent directory {}: {error}",
+                parent.display()
+            )
+        })?;
+    }
+    let urgent = format!(
+        "URGENT: persistent idle capacity\nconsecutive_ticks: {consecutive_ticks}\ntick: {tick}\nobservation: {observation}\naction: macOS notification requested via osascript\n"
+    );
+    std::fs::write(urgent_path, urgent).map_err(|error| {
+        format!(
+            "cannot write urgent artifact {}: {error}",
+            urgent_path.display()
+        )
+    })?;
+
+    let notification = format!(
+        "display notification {} with title \"OMP idle capacity\" sound name \"Sosumi\"",
+        applescript_string(&format!(
+            "{consecutive_ticks} consecutive ticks; dispatch or grade now (tick {tick})"
+        ))
+    );
+    let executable = notifier.to_str().ok_or_else(|| {
+        format!(
+            "notification executable is not UTF-8: {}",
+            notifier.display()
+        )
+    })?;
+    let argv = [executable, "-e", notification.as_str()];
+    match run(&argv, Duration::from_secs(10)) {
+        Outcome::Completed { code: Some(0), .. } => Ok(CapacityEscalationReceipt {
+            urgent_path: urgent_path.to_owned(),
+            notification_observed: true,
+            consecutive_ticks,
+        }),
+        Outcome::Completed { code, stderr, .. } => Err(format!(
+            "notification command exited {:?}: {}",
+            code,
+            stderr.trim()
+        )),
+        Outcome::TimedOut { after_ms, .. } => {
+            Err(format!("notification command timed out after {after_ms}ms"))
+        }
+        Outcome::SpawnFailed { message } => {
+            Err(format!("notification command failed to spawn: {message}"))
+        }
+    }
+}
+
+fn applescript_string(input: &str) -> String {
+    let mut out = String::with_capacity(input.len() + 2);
+    out.push('\"');
+    for ch in input.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '\"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            c => out.push(c),
+        }
+    }
+    out.push('\"');
+    out
 }
 
 pub fn state_path() -> PathBuf {
@@ -916,7 +1078,10 @@ impl std::fmt::Display for RepoError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RepoError::ExplicitEmpty { source } => {
-                write!(f, "{source} is set but empty; refusing to guess a repository")
+                write!(
+                    f,
+                    "{source} is set but empty; refusing to guess a repository"
+                )
             }
             RepoError::NotFound { from, markers } => write!(
                 f,
@@ -1010,7 +1175,10 @@ mod repo_tests {
             markers: ".git/.beads",
         };
         let s = e.to_string();
-        assert!(s.contains(".git/.beads"), "must name what it looked for: {s}");
+        assert!(
+            s.contains(".git/.beads"),
+            "must name what it looked for: {s}"
+        );
         assert!(s.contains("--repo"), "must name the escape hatch: {s}");
         assert!(s.contains(REPOS_ENV), "must name the env override: {s}");
     }
