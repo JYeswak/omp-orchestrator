@@ -1,0 +1,22 @@
+[package]
+name = "omp-inventory-map"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Generated OMP v18 surface and workspace crate inventory map"
+
+[lib]
+name = "omp_inventory_map"
+path = "src/lib.rs"
+
+[[bin]]
+name = "omp-inventory-map"
+path = "src/main.rs"
+
+[dependencies]
+asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", rev = "fa3c01aec" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "forbid"

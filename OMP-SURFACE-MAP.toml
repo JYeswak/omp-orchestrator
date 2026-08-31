@@ -55,7 +55,7 @@ denominator_type_dirs = 57
 denominator_subcommands = 39
 measured_against = "@oh-my-pi/pi-coding-agent v18.0.11"
 measured_on = "2026-08-31"
-crates_declared = 21
+crates_declared = 24
 revision_2_reason = "cross-pane dispatch and delivery receipt reclassified (b)->(a); --mode=rpc proven single-session"
 
 # ── (b) REIMPLEMENTED BY SCRAPING — an OMP alternative EXISTS AND IS REACHABLE ───────────────────
@@ -190,6 +190,25 @@ classification = "a"
 omp_surface = "none"
 why = "renders a SupervisorDecision into a filed Finding"
 negative_evidence = "ZERO callers, and it is omp-orchestrator's only manifest caller — the supervisor's sole inbound edge is itself dead code. WIRE or RETIRE; there is no third option."
+
+[crates.omp-rpc-session]
+classification = "b"
+omp_surface = "jsonrpc, session"
+omp_alternative = "OMP --mode=rpc with negotiate_protocol v2, get_state, get_session_stats, and get_messages"
+instead_we = "drive one OMP child through an asupersync-owned typed stdin/stdout protocol"
+negative_evidence = "live quick probe succeeded with negotiated=2, response_count=4, and unknown_frames=3; this does not reach third-party panes or provide a delivery receipt"
+
+[crates.omp-inventory-map]
+classification = "b"
+omp_surface = "cli, type roots, jsonrpc, slash-commands"
+omp_alternative = "direct OMP --help, installed type listings, and RPC startup metadata"
+instead_we = "generate an evidence-carrying machine-readable inventory from direct probes and cargo metadata"
+negative_evidence = "live map reports UNKNOWN when slash-command startup metadata is incomplete; it does not convert missing probe data into healthy coverage"
+
+[crates.installer]
+classification = "a"
+omp_surface = "none"
+why = "installs repository binaries and launchd configuration; OMP does not own this substrate installation boundary"
 
 # ── (c) UNUSED CAPABILITY WE SHOULD ADOPT ────────────────────────────────────────────────────────
 # Survivors of revision 2, from SilverWolf's per-surface pass on wave .4.
