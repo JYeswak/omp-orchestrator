@@ -52,3 +52,16 @@ pub mod ledger;
 /// `use ack_spine::{StepKind, StepLedger}`. Moving the types into a module
 /// without re-exporting them would break that path silently at the callsite.
 pub use ledger::*;
+
+/// The typed heartbeat row — `build_id` + `pid`, findable by a third party.
+/// Owned by SilverWolf (%1409), landed in `41744d6`.
+///
+/// WIRING NOTE: `heartbeat.rs` was committed to HEAD and declared NOWHERE — a
+/// sixteenth unwired-source instance, and the first one found already *inside*
+/// the repository rather than in a working tree. It replaced
+/// `scripts/heartbeat-check.sh`, whose defect was that a shell checker writes
+/// nothing typed: BlueLantern cited heartbeat row #93 with `build_id=85828bf`
+/// and a search of every path under `~/.local/state` found no file containing
+/// `build_id` at all. That identity leg was unverifiable BY CONSTRUCTION.
+/// Porting it fixed the writer; this line makes the reader reachable.
+pub mod heartbeat;
