@@ -14,6 +14,37 @@ const LOCK_HOLDER_SCRIPT: &str = concat!(
     "    time.sleep(3)\n",
 );
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OracleStatus {
+    Ready,
+    MissingInterpreter,
+}
+
+fn oracle_status() -> OracleStatus {
+    match Command::new("python3")
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+    {
+        Ok(status) if status.success() => OracleStatus::Ready,
+        _ => OracleStatus::MissingInterpreter,
+    }
+}
+
+fn announce_skip(test: &str, status: &OracleStatus) {
+    let reason = match status {
+        OracleStatus::MissingInterpreter => "missing_interpreter",
+        OracleStatus::Ready => "ready",
+    };
+    println!(
+        "DIFFERENTIAL DID NOT RUN: test={test} reason={reason} detail=inline python3 lock-holder\n  \
+         This is a development-only comparison, not a gate. The Rust gate for this crate is \
+         free_pane_is_admitted plus the fence binary's Rust path.\n  \
+         0 cases compared. This is NOT a passing differential."
+    );
+}
+
 fn state_dir(label: &str) -> PathBuf {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -81,19 +112,39 @@ fn wait_until_holder_started(marker: &Path) {
 #[test]
 fn free_pane_is_admitted() {
     let state = state_dir("free");
-    let output = run_fence(&state, "free", Path::new("/usr/bin/true"), &["/usr/bin/true"]);
+    let output = run_fence(
+        &state,
+        "free",
+        Path::new("/usr/bin/true"),
+        &["/usr/bin/true"],
+    );
 
     assert_eq!(output.status.code(), Some(0), "stderr: {:?}", output.stderr);
 }
 
 #[test]
 fn held_pane_is_refused() {
+    let status = oracle_status();
+    let OracleStatus::Ready = status else {
+        announce_skip("held_pane_is_refused", &status);
+        return;
+    };
     let state = state_dir("held");
     let (mut holder, marker) = lock_holder(&state);
     wait_until_holder_started(&marker);
 
-    let second = run_fence(&state, "held", Path::new("/usr/bin/true"), &["/usr/bin/true"]);
-    assert_eq!(second.status.code(), Some(75), "stderr: {:?}", second.stderr);
+    let second = run_fence(
+        &state,
+        "held",
+        Path::new("/usr/bin/true"),
+        &["/usr/bin/true"],
+    );
+    assert_eq!(
+        second.status.code(),
+        Some(75),
+        "stderr: {:?}",
+        second.stderr
+    );
     assert!(
         String::from_utf8_lossy(&second.stderr).contains("PANE_DISPATCH_FENCE_BUSY"),
         "stderr: {:?}",

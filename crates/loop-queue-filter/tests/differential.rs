@@ -2,7 +2,7 @@ use std::{
     collections::BTreeMap,
     fs,
     io::Write,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
@@ -13,18 +13,64 @@ fn fixture_dir() -> PathBuf {
     path
 }
 
-fn run_python(input: &str, args: &[&str], envs: &BTreeMap<String, String>) -> std::process::Output {
+#[derive(Debug)]
+enum OracleStatus {
+    Ready(PathBuf),
+    MissingScript(PathBuf),
+    MissingInterpreter,
+}
+
+fn oracle_script() -> PathBuf {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let root = manifest
+    manifest
         .parent()
         .and_then(|p| p.parent())
-        .expect("repo root");
+        .expect("repo root")
+        .join("bin/loop-queue-filter.py")
+}
+
+fn oracle_status() -> OracleStatus {
+    let script = oracle_script();
+    if !script.is_file() {
+        return OracleStatus::MissingScript(script);
+    }
+    match Command::new("python3")
+        .arg("--version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+    {
+        Ok(status) if status.success() => OracleStatus::Ready(script),
+        _ => OracleStatus::MissingInterpreter,
+    }
+}
+
+fn announce_skip(test: &str, status: &OracleStatus) {
+    let (reason, detail) = match status {
+        OracleStatus::MissingScript(path) => ("missing_script", path.display().to_string()),
+        OracleStatus::MissingInterpreter => ("missing_interpreter", "python3".to_owned()),
+        OracleStatus::Ready(_) => ("ready", String::new()),
+    };
+    println!(
+        "DIFFERENTIAL DID NOT RUN: test={test} reason={reason} detail={detail}\n  \
+         This is a development-only comparison, not a gate. The Rust gate for this crate is \
+         src/lib.rs unit tests.\n  \
+         0 cases compared. This is NOT a passing differential."
+    );
+}
+
+fn run_python(
+    script: &Path,
+    input: &str,
+    args: &[&str],
+    envs: &BTreeMap<String, String>,
+) -> std::process::Output {
     let mut command = Command::new("python3");
-    command.arg(root.join("bin/loop-queue-filter.py"));
     command
+        .arg(script)
         .args(args)
         .envs(envs)
-        .current_dir(root)
+        .current_dir(script.parent().and_then(Path::parent).expect("oracle root"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -61,6 +107,14 @@ fn run_rust(input: &str, args: &[&str], envs: &BTreeMap<String, String>) -> std:
 
 #[test]
 fn differential_compares_nonempty_cases_and_detects_known_bad_probe() {
+    let status = oracle_status();
+    let OracleStatus::Ready(script) = &status else {
+        announce_skip(
+            "differential_compares_nonempty_cases_and_detects_known_bad_probe",
+            &status,
+        );
+        return;
+    };
     let dir = fixture_dir();
     let cooldown = dir.join("cooldown.json").display().to_string();
     let mut envs = BTreeMap::new();
@@ -120,7 +174,7 @@ fn differential_compares_nonempty_cases_and_detects_known_bad_probe() {
         "anti-vacuity: differential must execute at least one case"
     );
     for (input, args, case_env) in &cases {
-        let python = run_python(input, args, case_env);
+        let python = run_python(script, input, args, case_env);
         let rust = run_rust(input, args, case_env);
         if python.status != rust.status
             || python.stdout != rust.stdout
@@ -129,7 +183,7 @@ fn differential_compares_nonempty_cases_and_detects_known_bad_probe() {
             panic!("differential disagreement input={input:?} python={python:?} rust={rust:?}");
         }
     }
-    let probe_python = run_python(cases[1].0, &cases[1].1, &cases[1].2);
+    let probe_python = run_python(script, cases[1].0, &cases[1].1, &cases[1].2);
     let mut mutated_rust = run_rust(cases[1].0, &cases[1].1, &cases[1].2);
     mutated_rust.stdout.extend_from_slice(b"MUTATION");
     assert_ne!(
