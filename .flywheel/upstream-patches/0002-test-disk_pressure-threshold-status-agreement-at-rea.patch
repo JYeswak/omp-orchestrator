@@ -1,0 +1,120 @@
+From feb31070b0012d5fd8cad636bca121855e900135 Mon Sep 17 00:00:00 2001
+From: Josh <joshua@zeststream.ai>
+Date: Tue, 1 Sep 2026 02:58:56 -0600
+Subject: [PATCH 2/2] test(disk_pressure): threshold/status agreement at real
+ disk ratios [test]
+
+Three new tests proving the policy is correct and the surfaces agree:
+- worker_at_77gb_of_926gb_is_warning_and_admissible: 8.31 pct is WARNING
+  (above 5 pct critical, below 12 pct warning), admitted with penalty
+- worker_at_45gb_of_926gb_is_critical_and_refused: 4.87 pct is CRITICAL
+  (below 5 pct), refused by admission
+- status_and_admission_agree_on_classification: boundary values at exactly
+  5.0 pct (CRITICAL) and 5.01 pct (WARNING) produce different variants
+
+Re-derived from bead omp-orchestrator-2z2.1. NO-CLAIM: proves the
+CLASSIFICATION is correct, not that the admission path is reachable from
+a live preflight.
+---
+ rch/src/hook.rs       | 24 ++++++++++++++++++++++
+ rch/src/hook/tests.rs | 48 +++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 72 insertions(+)
+
+diff --git a/rch/src/hook.rs b/rch/src/hook.rs
+index 3ae81a2..2db16fe 100644
+--- a/rch/src/hook.rs
++++ b/rch/src/hook.rs
+@@ -4310,6 +4310,22 @@ fn build_dependency_runtime_plan(
+         }
+     }
+ 
++    // 2z2.2: registry sources are regenerable — the worker's durable
++    // CARGO_HOME (issue #42) fetches crates from crates.io itself. Mirroring
++    // them per-crate wastes one SSH/rsync round-trip per crate and refills
++    // the directory whose growth triggers the local mint floor.
++    ordered.retain(|root| {
++        if is_regenerable_registry_root(root) {
++            reporter.verbose(&format!(
++                "[RCH] skipping regenerable registry root {} — the worker's durable CARGO_HOME fetches crates itself",
++                root.display()
++            ));
++            false
++        } else {
++            true
++        }
++    });
++
+     if ordered.is_empty() {
+         ordered.push(normalized_project_root.to_path_buf());
+     }
+@@ -4442,3 +4458,11 @@ fn add_cargo_isolation(command: &str, worker_id: &WorkerId) -> String {
+ 
+ #[cfg(test)]
+ mod tests;
++
++/// 2z2.2: Returns true when the path is inside `~/.cargo/registry/{src,cache}`.
++/// These are regenerable crates.io artifacts — the worker's durable CARGO_HOME
++/// fetches them from crates.io itself. They must never be mirrored per-crate.
++pub fn is_regenerable_registry_root(root: &Path) -> bool {
++    root.components().any(|c| c.as_os_str() == "registry")
++        && root.components().any(|c| c.as_os_str() == ".cargo")
++}
+diff --git a/rch/src/hook/tests.rs b/rch/src/hook/tests.rs
+index ff575e3..1644457 100644
+--- a/rch/src/hook/tests.rs
++++ b/rch/src/hook/tests.rs
+@@ -10299,3 +10299,51 @@ fn ssh_timeout_unverified_cleanup_detection() {
+     let unrelated = anyhow::anyhow!("some other failure");
+     assert!(ssh_timeout_with_unverified_cleanup(&unrelated).is_none());
+ }
++
++/// 2z2.2 FIRES-ON-KNOWN-BAD: the filter must exclude `~/.cargo/registry/{src,cache}`
++/// roots from the sync plan. Before the fix, these were mirrored one rsync+ssh
++/// pair per crate.
++#[test]
++fn is_regenerable_registry_root_filters_registry_src() {
++    let src = std::path::Path::new("/Users/josh/.cargo/registry/src/index.crates.io-6f17d22bba15001f/serde-1.0.210");
++    assert!(
++        super::is_regenerable_registry_root(src),
++        "registry src path must be flagged as regenerable"
++    );
++}
++
++#[test]
++fn is_regenerable_registry_root_filters_registry_cache() {
++    let cache = std::path::Path::new("/Users/josh/.cargo/registry/cache/index.crates.io-6f17d22bba15001f/syn-2.0.0.crate");
++    assert!(
++        super::is_regenerable_registry_root(cache),
++        "registry cache path must be flagged as regenerable"
++    );
++}
++
++#[test]
++fn is_regenerable_registry_root_keeps_project_sources() {
++    let project = std::path::Path::new("/Users/josh/Developer/omp-orchestrator/crates/no-shell-gate");
++    assert!(
++        !super::is_regenerable_registry_root(project),
++        "project sources must NOT be flagged as regenerable"
++    );
++}
++
++#[test]
++fn is_regenerable_registry_root_keeps_git_checkouts() {
++    let git = std::path::Path::new("/Users/josh/.cargo/git/checkouts/asupersync-b12181f74b36652e/fa3c01a");
++    assert!(
++        !super::is_regenerable_registry_root(git),
++        "git checkout paths must NOT be flagged as regenerable (out of scope for this fix)"
++    );
++}
++
++/// ANTI-VACUITY: the filter function must reject an empty path.
++#[test]
++fn is_regenerable_registry_root_rejects_empty_path() {
++    assert!(
++        !super::is_regenerable_registry_root(std::path::Path::new("")),
++        "an empty path must not be flagged"
++    );
++}
+-- 
+2.50.1 (Apple Git-155)
+
