@@ -18,6 +18,35 @@ fn repo_root() -> PathBuf {
 
 struct Figure { key: String, command: String, expect: String }
 
+/// TOML basic-string unescaping, done once and correctly.
+///
+/// This is the THIRD instrument defect in this file, all the same shape. First the
+/// command measured the wrong quantity (`cargo build` reports nothing for an
+/// up-to-date workspace). Then the parser dropped `\"` and the command ran empty.
+/// Now it was leaving `\\` doubled, so every regex backslash became a literal pair
+/// and `grep '#\[test\]'` matched nothing — reported as drift to "0".
+///
+/// A partial unescaper is worse than none: it works on the simple rows and fails
+/// silently on exactly the rows that need escaping.
+fn unescape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' { out.push(c); continue; }
+        match chars.next() {
+            Some('"')  => out.push('"'),
+            Some('\\') => out.push('\\'),
+            Some('n')  => out.push('\n'),
+            Some('t')  => out.push('\t'),
+            // Unknown escape: keep both characters. A regex like \[ or \d is a
+            // legitimate payload here and must survive intact.
+            Some(other) => { out.push('\\'); out.push(other); }
+            None => out.push('\\'),
+        }
+    }
+    out
+}
+
 fn figures() -> Vec<Figure> {
     let text = fs::read_to_string(repo_root().join("NUMBERS.toml"))
         .expect("NUMBERS.toml must exist — it is the registry this gate re-runs");
@@ -34,7 +63,7 @@ fn figures() -> Vec<Figure> {
             let val = |s: &str| s.split_once('=').map(|(_, v)| {
                 let v = v.trim();
                 let v = v.strip_prefix('"').and_then(|x| x.strip_suffix('"')).unwrap_or(v);
-                v.replace("\\\"", "\"")
+                unescape(v)
             });
             if l.starts_with("command") { cur.command = val(l).unwrap_or_default(); }
             else if l.starts_with("expect") { cur.expect = val(l).unwrap_or_default(); }
@@ -86,6 +115,16 @@ fn no_declared_figure_has_drifted() {
     assert!(drifted.is_empty(),
         "{} of {ran} load-bearing figures have DRIFTED since they were written:\n    {}",
         drifted.len(), drifted.join("\n    "));
+}
+
+#[test]
+fn the_unescaper_handles_every_escape_the_registry_uses() {
+    assert_eq!(unescape(r#"say \"hi\""#), r#"say "hi""#, "quote escape");
+    assert_eq!(unescape(r"a\\b"), r"a\b", "backslash escape — the one that broke grep");
+    assert_eq!(unescape(r"grep '#\[test\]'"), r"grep '#\[test\]'",
+        "an unknown escape is a regex payload and MUST survive intact");
+    assert_eq!(unescape("plain"), "plain", "no escapes, no change");
+    assert_eq!(unescape(r"trailing\"), r"trailing\", "a dangling backslash must not panic");
 }
 
 #[test]

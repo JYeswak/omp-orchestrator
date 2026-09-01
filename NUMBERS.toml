@@ -55,3 +55,31 @@ command  = "ls -1 docs/plan/[0-9][0-9]-*.md | wc -l"
 expect   = "13"
 appears  = ["docs/PLAN.md", "docs/plan/CONVERGENCE.md"]
 note     = "12 analysis sections + 12-journey. The convergence gate hardcodes 12 SECTIONS and does NOT include 12-journey — deliberate, and it is why this figure is 13 while that list is 12."
+
+# ── The high-drift figures round 10 named. Added by the orchestrator, leading by
+#    example on the instruction given to the fix round: declaring one is worth more
+#    than correcting one, because a correction lasts until the next commit.
+
+[figures.test_functions]
+command  = "grep -rhc '#\\[test\\]' crates/*/src/*.rs crates/*/tests/*.rs 2>/dev/null | awk '{s+=$1} END{print s}'"
+expect   = "407"
+appears  = ["docs/plan/01-idea.md", "docs/plan/06-gates.md", "docs/plan/00-brief.md"]
+note     = "THE WORST OFFENDER, and it drifted WHILE THIS ROW WAS BEING WRITTEN. Three live values for one quantity — 370, 379, 402 — found in one round, in three sections. Measured 406, and by the time the parser was fixed it was 407, because writing the unescaper test added five functions. The gate caught drift caused by the commit that created it. Corrected by hand four times tonight and drifted again each time, because every new crate adds tests."
+
+[figures.no_claim_blocks]
+command  = "grep -rc '^\\*\\*NO-CLAIM' docs/plan/*.md 2>/dev/null | awk -F: '{s+=$2} END{print s}'"
+expect   = "46"
+appears  = ["docs/PLAN.md"]
+note     = "the header quantifies the plan's own hedging; it is generated at assembly but never checked against the sections after they are edited."
+
+[figures.surface_engaged_pct]
+command  = "python3 -c \"import json;r=[json.loads(l) for l in open('docs/plan/SURFACE-MAP.jsonl') if l.strip()];e=sum(1 for x in r if x.get('disposition') in ('CONSUMED','WIRE','VALIDATE'));print(f'{100*e/len(r):.1f}')\""
+expect   = "21.8"
+appears  = ["docs/PLAN.md", "docs/plan/02-surface-census.md"]
+note     = "published as 6.2% first, then 17.1%, then 21.8%. Round 10 found THREE unreconciled snapshots of the table this derives from."
+
+[figures.convergence_rows]
+command  = "grep -c . docs/plan/CONVERGENCE.jsonl"
+expect   = "36"
+appears  = ["docs/plan/CONVERGENCE.md"]
+note     = "3 rounds x 12 sections. A round that reports 11 rows is a pane that silently dropped a section, which has happened twice."
