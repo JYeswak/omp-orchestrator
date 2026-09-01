@@ -13,17 +13,6 @@ found a missing crate.
 
 The exemption list is empty. There is deliberately no `check.sh` carve-out — that carve-out is what
 let **160 scripts and 60,467 lines** accrete in the repo this substrate is extracted from.
----
-
-## Scratch homes
-
-Work that outlives the command that created it MUST use the session-scoped
-`ZS_SCRATCH` directory under `$HOME/.local/state/zeststream/scratch/<ntm-session>/<pane-or-agent>/<job>/`.
-Do not create durable scratch under `/private/tmp` or `$TMPDIR`; those locations have no
-session owner and cannot be safely reaped. Single-command ephemeral buffers MAY use
-`mktemp` only when removed before the command exits. Use the `scratch-home` crate to
-resolve, create, attribute, and age-reap jobs; missing or invalid owner metadata is
-`UNKNOWN` and MUST NOT be auto-reaped.
 
 ---
 
