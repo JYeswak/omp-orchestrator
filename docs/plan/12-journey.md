@@ -1428,3 +1428,33 @@ exhaustive: every OMP type root is either orchestration-plane or agent-plane.
 files, 732KB). It is the agent's complete tool registry — every built-in tool the agent can
 invoke, with approval policies, bridge routing, and activity snapshots. No crate in our workspace
 imports any of these types.
+
+### 12.20 Surface coverage: async, utils, lib, tiny, vibe, auto-thinking
+
+> **ipg.11**: *Wave RUNTIME. async is the one to read first: OMP's concurrency surface vs
+> asupersync's binding contract — compose, conflict, or duplicate?*
+
+**Swept 2026-09-01.** Six type roots, 63 files, 326 exported symbols, walked to symbol level.
+All six are agent-plane runtime features. None crosses the process boundary.
+
+| surface | OMP files | OMP KB | OMP symbols | 1-8 clauses | classification |
+|---|---:|---:|---:|:-:|---|
+| `async` | 3 | 20 | 15 | — — — — — — — — | **(a) NOT OURS** — background task scheduling (DEFAULT_AUTO_BACKGROUND_THRESHOLD_MS, formatBackgroundNotice) |
+| `utils` | 43 | 176 | 185 | — — — — — — — — | **(a) NOT OURS** — shared utilities (ActiveRepoContext, resolveActiveRepoContext) |
+| `lib` | 1 | 4 | 4 | — — — — — — — — | **(a) NOT OURS** — xAI HTTP credential transport (misnamed: not a general library) |
+| `tiny` | 9 | 48 | 83 | — — — — — — — — | **(a) NOT OURS** — tiny/local model completion (buildCompletionPrompt, TinyModelDevice) |
+| `vibe` | 3 | 16 | 25 | — — — — — — — — | **(a) NOT OURS** — vibe-mode lifecycle (VibeCli "fast"/"good") |
+| `auto-thinking` | 1 | 4 | 4 | — — — — — — — — | **(a) NOT OURS** — difficulty classification (classifyDifficulty) |
+
+**Positive control: FAILED — 0 of 6 FULLY COVERED.** Tenth consecutive wave. The mapping has
+converged: every OMP type root is orchestration-plane or agent-plane.
+
+**Anti-vacuity: PASSED** — 6 surfaces, 63 files.
+
+**The async question answered:** OMP's `async` root composes with asupersync — they operate at
+different levels. OMP's async manages when agent turns are scheduled (auto-background threshold,
+notice formatting); asupersync manages how the orchestrator's own async operations are cancelled
+and accounted. No crate needs to choose between them.
+
+**`lib` is misnamed:** its one file is an xAI HTTP credential transport. Second misnamed root
+found (first: `sharpshooter`). A future scanner could flag content-name mismatches.
