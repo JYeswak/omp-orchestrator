@@ -4,3 +4,6 @@
 {"section":"03-crates","round":8,"lens":"adversarial","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rA-03-crates.md"}
 {"section":"04-diagrams","round":8,"lens":"adversarial","new_findings":1,"verdict":"PASS-WITH-FIXES","evidence":"/tmp/grade/rA-04-diagrams.md"}
 {"section":"05-actions","round":8,"lens":"adversarial","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rA-05-actions.md"}
+{"section":"00-brief","round":8,"lens":"investor","new_findings":1,"verdict":"FAIL","evidence":"/tmp/grade/rA-00.md"}
+{"section":"01-idea","round":8,"lens":"investor","new_findings":2,"verdict":"FAIL","evidence":"/tmp/grade/rA-01.md"}
+{"section":"02-surface-census","round":8,"lens":"investor","new_findings":3,"verdict":"FAIL","evidence":"/tmp/grade/rA-02.md"}
