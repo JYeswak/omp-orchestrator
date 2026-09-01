@@ -365,3 +365,83 @@ gate was green on this file throughout.
 **NO-CLAIM:** these corrections align this section with `00-brief.md` as of `dea4af6`. They do not
 re-derive its nine framework specs against the refutation, and at least one — the mutation framework
 in §2.3 — argues from a scarcity of upstream prior art that the signal sweep has now partly refuted.
+
+---
+
+## 6.5 Two gate-wiring defects, both found by being blocked
+
+Measured 2026-09-01 while trying to land a commit. Neither is about a gate's
+*logic*; both are about the gap between a gate's source and the artifact that runs.
+
+### 6.5.1 `state-wildcard-lint` was 89% false positives and blocked every commit
+
+The pre-commit chain refused with `state-wildcard-lint: 9 finding(s)`. Read
+individually, **8 of the 9 were wildcards the compiler requires**:
+
+| site | scrutinee | why `_` is mandatory |
+|---|---|---|
+| `omp-inventory-map` ×5 | `Option<T>` with a **guarded** `Some(x) if …` arm | a guarded arm does not cover `Some` |
+| `tick-monitor:1034` | `&[&str]` slice patterns | slice space is unbounded |
+| `tick-monitor:1042` | `&str` literal match | string space is unbounded |
+| `tick-monitor:99` | **`Outcome`, a real 3-variant enum** | **genuine — now enumerated** |
+
+**Root cause:** `type_for_match` inferred the scrutinee's type from any `Enum::`
+appearing anywhere in the match **body** — including the *result* arms:
+
+```rust
+match value {                          // scrutinee: Option<Vec<_>>
+    Some(items) if !items.is_empty() => ProbeState::Known,
+    _ => ProbeState::Unknown,          // <- ProbeState is the OUTPUT
+}
+```
+
+Seeing `ProbeState::`, the lint concluded the scrutinee was `ProbeState` and
+demanded exhaustive arms for an `Option` match. Resolution now requires **pattern
+position** — left of the fat arrow, or the `match` header itself.
+
+Result: 9 → 0 findings, with a positive control in both directions (restore the
+wildcard on `Outcome` → 1 finding naming `scrutinee="self", type=Outcome`;
+byte-identical restore → 0).
+
+This is the AGENTS.md failure mode reached in practice: *"an over-strict gate gets
+routed around — a slower death than no gate."* It was blocking **every pane's
+commits**, which is the strongest possible pressure to bypass it.
+
+### 6.5.2 The hook is a compiled artifact, and nothing rebuilds it
+
+Fixing the library changed nothing, because `.git/hooks/pre-commit` is a **Mach-O
+binary** that links `state-wildcard-lint` as a *library* — it never shells out. So
+the live gate was a **third artifact**, distinct from both the source and the
+binaries I rebuilt:
+
+| artifact | timestamp | findings |
+|---|---|---|
+| `release/state-wildcard-lint` | 12:11:41 (**13h stale**) | 8 |
+| `debug/state-wildcard-lint` | 01:27:06 (fresh) | 0 |
+| `.git/hooks/pre-commit` | 01:21:59 (1.9 MB, another pane's debug build) | 8 |
+
+I measured my own fix with the 13-hour-old release binary — `find … | head -1`
+returned whichever path sorted first — and read "8 findings" as the fix having
+failed. **Fourth instrument error of the session, same class as the other three.**
+
+**BUILT ≠ WIRED, aimed at the enforcement layer itself.** A stale hook silently
+enforces yesterday's rules, and there is no gate on the freshness of the gate.
+The repair was manual: rebuild `--bin pre-commit-gate`, copy over
+`.git/hooks/pre-commit`, verify exit 0.
+
+**NOT BUILT:** a check that the installed hook's hash matches a build of current
+`HEAD`. Without it, every lint change needs a human to remember two extra steps,
+and forgetting them is invisible — the hook keeps passing or failing for reasons
+that no longer exist in the source.
+
+### 6.5.3 A broad `git add` swept four other panes' files
+
+`git add -- crates/` staged modified files in `ack-spine`, `installer`, and
+`kernel-only-operator-hook` — none mine — and the hook then refused on a
+**deliberate known-bad fixture** in `undrained-pipe-lint/tests/`, which is a
+specimen the lint that flags it is *supposed* to catch. Re-staging four explicit
+paths cleared it.
+
+AGENTS.md already requires `git commit -- <explicit paths>`, never `-A`. The
+measured consequence of ignoring it in a live shared checkout is a refusal whose
+message points at someone else's fixture, three crates from anything you touched.
