@@ -61,7 +61,7 @@ note     = "12 analysis sections + 12-journey. The convergence gate hardcodes 12
 #    than correcting one, because a correction lasts until the next commit.
 [figures.test_files]
 command  = "for d in crates/*/tests; do ls $d/*.rs 2>/dev/null; done | wc -l"
-expect   = "39"
+expect   = "40"
 appears  = ["docs/plan/00-brief.md", "docs/plan/01-idea.md", "docs/plan/06-gates.md"]
 note     = "was 26 when the brief measured it, 30 by round 10, 31 at the round-11 fix — five meta-gate test files landed during grading. 01-idea's 370/379 and 06-gates' transcribed copies all drift from this one quantity."
 
@@ -73,7 +73,7 @@ note     = "not a fixed figure — the board moves hourly. Declared so any prose
 
 [figures.test_functions]
 command  = "grep -rhc '#\\[test\\]' crates/*/src/*.rs crates/*/tests/*.rs 2>/dev/null | awk '{s+=$1} END{print s}'"
-expect   = "453"
+expect   = "455"
 appears  = ["docs/plan/01-idea.md", "docs/plan/06-gates.md", "docs/plan/00-brief.md"]
 note     = "THE WORST OFFENDER, and it drifted WHILE THIS ROW WAS BEING WRITTEN. Three live values for one quantity — 370, 379, 402 — found in one round, in three sections. Measured 406, and by the time the parser was fixed it was 407, because writing the unescaper test added five functions. The gate caught drift caused by the commit that created it. Corrected by hand four times tonight and drifted again each time, because every new crate adds tests."
 
