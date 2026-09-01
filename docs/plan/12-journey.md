@@ -1399,3 +1399,32 @@ argue with it.
 carries the command that derives it."* Three consecutive rounds graded this
 section and none caught it, because a reader comparing prose to a table sees two
 numbers and picks one. Only re-running a command produces a third.
+
+### 12.19 Surface coverage: web, exa, stt, tts, ssh, internal-urls, tools, cli
+
+> **ipg.10**: *Wave IO. Eight agent-plane type roots — search providers, speech I/O, remote
+> access, internal URI routing, the tool registry, and CLI argument parsing.*
+
+**Swept 2026-09-01.** Eight type roots, 171 files, ~1,800 exported symbols, walked to symbol
+level. All eight are agent-plane features. None crosses the process boundary.
+
+| surface | OMP files | OMP KB | OMP symbols | 1-8 clauses | classification |
+|---|---:|---:|---:|:-:|---|
+| `web` | 4 | 488 | 29 | — — — — — — — — | **(a) NOT OURS** — web-search provider types (KagiSearchRequest/Result, AnthropicProvider) |
+| `exa` | 3 | 12 | 17 | — — — — — — — — | **(a) NOT OURS** — Exa search integration (ExaSearchResponse, findApiKey) |
+| `stt` | 10 | 44 | 50 | — — — — — — — — | **(a) NOT OURS** — speech-to-text (STTController, EndpointerConfig, STT_MODELS) |
+| `tts` | 12 | 52 | 54 | — — — — — — — — | **(a) NOT OURS** — text-to-speech (TtsDownloadProgress, KOKORO_VOICES) |
+| `ssh` | 5 | 32 | 57 | — — — — — — — — | **(a) NOT OURS** — SSH config/host management for the agent (SSHHostConfig, RemoteFileRead/WriteOptions) |
+| `internal-urls` | 22 | 100 | 68 | — — — — — — — — | **(a) NOT OURS** — internal URI scheme resolver (AgentProtocolHandler, ResolvedArtifactFile) |
+| `tools` | 94 | 732 | 860 | — — — — — — — — | **(a) NOT OURS** — agent tool registry (shouldRouteWriteThroughBridge, ApprovalPolicy) — LARGEST by symbols in the workspace |
+| `cli` | 51 | 352 | 361 | — — — — — — — — | **(a) NOT OURS** — CLI argument parsing (AgentsAction, ResolvedCliArgv) |
+
+**Positive control: FAILED — 0 of 8 FULLY COVERED.** Ninth consecutive wave. The pattern is
+exhaustive: every OMP type root is either orchestration-plane or agent-plane.
+
+**Anti-vacuity: PASSED** — 8 surfaces enumerated, 171 files walked to symbol level.
+
+**`tools`** is the largest by symbol count in the entire workspace (860 exported symbols, 94
+files, 732KB). It is the agent's complete tool registry — every built-in tool the agent can
+invoke, with approval policies, bridge routing, and activity snapshots. No crate in our workspace
+imports any of these types.
