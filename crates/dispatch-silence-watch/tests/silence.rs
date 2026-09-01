@@ -81,3 +81,19 @@ fn multiple_comments_still_verdict_posted() {
     let v = classify(multi, "AmberGate", "AmberGate", DISPATCH, NOW, DEADLINE);
     assert_eq!(v, SilenceVerdict::VerdictPosted);
 }
+// Wiring proof: dispatch-silence-watch must appear in the live crontab.
+// The conductor cron (controller-tick) runs at :18,:38,:58 — silence-watch
+// fires at :01,:21,:41, 3 minutes after each tick, so it sees the post-tick
+// board state. This test reads the LIVE crontab and asserts the entry exists.
+#[test]
+fn dispatch_silence_watch_is_in_crontab() {
+    let output = std::process::Command::new("crontab")
+        .arg("-l")
+        .output()
+        .expect("crontab -l must be runnable");
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        text.contains("dispatch-silence-watch"),
+        "crontab must contain a dispatch-silence-watch entry — it is not wired to the conductor cadence"
+    );
+}
