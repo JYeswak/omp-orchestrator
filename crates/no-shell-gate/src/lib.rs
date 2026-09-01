@@ -29,6 +29,15 @@ use std::fmt;
 use std::path::Path;
 use std::process::Command;
 
+/// Bound for hook-context git index reads (ls-files/diff). AmberGate's
+/// contract: a wedged git fails the gate CLOSED (typed, exit 3 class),
+/// never hangs the hook, never reads as a clean scan.
+const GIT_READ_DEADLINE_SECS: u64 = 10;
+
+/// Bound for the workspace-load probe. Reads EVERY member manifest on a
+/// cold target dir; generous on purpose, bounded on principle.
+const CARGO_METADATA_DEADLINE_SECS: u64 = 300;
+
 /// File extensions this repo refuses, matched against the FINAL path
 /// component only (`scripts/deploy.sh` → `sh`; `notes.sh.txt` → `txt`, passes).
 /// The exemption list is empty by design — there is deliberately no
@@ -126,12 +135,25 @@ pub fn scan(paths: &[String]) -> Result<Vec<Violation>, GateError> {
 /// Enumerate the tracked paths (the git index) at `repo_root`, NUL-separated
 /// so paths containing spaces or newlines survive.
 pub fn tracked_files(repo_root: &Path) -> Result<Vec<String>, GateError> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo_root)
-        .args(["ls-files", "-z"])
-        .output()
-        .map_err(|e| GateError::GitFailed(format!("spawn git ls-files: {e}")))?;
+    // Bounded: this gate runs inside the commit hook; a wedged git must
+    // fail CLOSED as a typed gate error (exit 3 class), never hang the
+    // hook and never read as a clean scan.
+    let mut git_command = Command::new("git");
+    git_command.arg("-C").arg(repo_root).args(["ls-files", "-z"]);
+    let output = match subprocess_contract::bounded_output(
+        &mut git_command,
+        std::time::Duration::from_secs(GIT_READ_DEADLINE_SECS),
+    ) {
+        subprocess_contract::BoundedOutcome::Completed(output) => output,
+        subprocess_contract::BoundedOutcome::TimedOut => {
+            return Err(GateError::GitFailed(
+                "git ls-files exceeded deadline; group killed".to_owned(),
+            ));
+        }
+        subprocess_contract::BoundedOutcome::Unspawned(error) => {
+            return Err(GateError::GitFailed(format!("spawn git ls-files: {error}")));
+        }
+    };
     if !output.status.success() {
         return Err(GateError::GitFailed(format!(
             "exit {}: {}",
@@ -207,18 +229,20 @@ impl WorkspaceLoad {
 /// Run `cargo metadata --no-deps` against `manifest`, bounded, both pipes
 /// drained. Returns (exit code, stderr).
 fn cargo_metadata(manifest: &Path) -> (Option<i32>, String) {
-    let output = Command::new("cargo")
-        .args([
-            "metadata",
-            "--no-deps",
-            "--format-version",
-            "1",
-            "--manifest-path",
-        ])
-        .arg(manifest)
-        .output();
-    match output {
-        Ok(out) => (
+    let mut cargo_command = Command::new("cargo");
+    cargo_command.args([
+        "metadata",
+        "--no-deps",
+        "--format-version",
+        "1",
+        "--manifest-path",
+    ]);
+    cargo_command.arg(manifest);
+    match subprocess_contract::bounded_output(
+        &mut cargo_command,
+        std::time::Duration::from_secs(CARGO_METADATA_DEADLINE_SECS),
+    ) {
+        subprocess_contract::BoundedOutcome::Completed(out) => (
             out.status.code(),
             format!(
                 "{}{}",
@@ -226,7 +250,14 @@ fn cargo_metadata(manifest: &Path) -> (Option<i32>, String) {
                 String::from_utf8_lossy(&out.stdout)
             ),
         ),
-        Err(err) => (None, format!("cargo metadata could not be spawned: {err}")),
+        subprocess_contract::BoundedOutcome::TimedOut => (
+            None,
+            "cargo metadata exceeded deadline; group killed".to_owned(),
+        ),
+        subprocess_contract::BoundedOutcome::Unspawned(err) => (
+            None,
+            format!("cargo metadata could not be spawned: {err}"),
+        ),
     }
 }
 

@@ -85,6 +85,11 @@ impl fmt::Display for IdleAuthorization {
     }
 }
 
+/// Bound for the census's per-spawn git/grep reads. The census runs every
+/// tick; a wedged child must degrade to a typed "not observed" instead of
+/// stalling the resident loop past its own command timeout.
+const CENSUS_SPAWN_DEADLINE_SECS: u64 = 10;
+
 /// Required keys in the token. A token missing any of these is UNAUTHORIZED.
 const TOKEN_KEYS: &[&str] = &[
     "reason",
@@ -428,14 +433,23 @@ fn coverage_output_reachability(repo_root: &Path, crate_name: &str) -> GateReach
 
 pub fn census_gates(repo_root: &Path) -> GateCensus {
     let hook_path = repo_root.join(".git/hooks/pre-commit");
-    let has_remote = std::process::Command::new("git")
-        .args(["remote"])
-        .current_dir(repo_root)
-        .output()
-        .map(|o| {
-            !String::from_utf8_lossy(&o.stdout).trim().is_empty()
-        })
-        .unwrap_or(false);
+    // Bounded: this census runs EVERY tick; a wedged git must degrade to
+    // "no remote observed" (typed restrictive) instead of stalling the loop.
+    let has_remote = {
+        let mut remote_command = std::process::Command::new("git");
+        remote_command.args(["remote"]);
+        remote_command.current_dir(repo_root);
+        match subprocess_contract::bounded_output(
+            &mut remote_command,
+            std::time::Duration::from_secs(CENSUS_SPAWN_DEADLINE_SECS),
+        ) {
+            subprocess_contract::BoundedOutcome::Completed(output) => {
+                !String::from_utf8_lossy(&output.stdout).trim().is_empty()
+            }
+            subprocess_contract::BoundedOutcome::TimedOut
+            | subprocess_contract::BoundedOutcome::Unspawned(_) => false,
+        }
+    };
 
     let mut rows = Vec::new();
 
@@ -548,20 +562,30 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
         if COVERAGE_WAVE_OUTPUT_CRATES.contains(&crate_name) {
             continue;
         }
-        let has_caller = std::process::Command::new("grep")
-            .args(["-rl", crate_name, "--include=*.toml", "--include=*.rs", "."])
-            .current_dir(repo_root)
-            .output()
-            .map(|o| {
-                let hits = String::from_utf8_lossy(&o.stdout);
-                // Exclude self-references: a checker whose input includes
-                // text about the thing it checks is the self-referential
-                // checker defect.
-                hits.lines()
-                    .filter(|l| !l.contains(&format!("{crate_name}/src/")))
-                    .count() > 1
-            })
-            .unwrap_or(false);
+        // Same bounded census contract: a hung grep degrades to "no caller
+        // observed" instead of stalling the tick.
+        let has_caller = {
+            let mut grep_command = std::process::Command::new("grep");
+            grep_command.args(["-rl", crate_name, "--include=*.toml", "--include=*.rs", "."]);
+            grep_command.current_dir(repo_root);
+            match subprocess_contract::bounded_output(
+                &mut grep_command,
+                std::time::Duration::from_secs(CENSUS_SPAWN_DEADLINE_SECS),
+            ) {
+                subprocess_contract::BoundedOutcome::Completed(output) => {
+                    let hits = String::from_utf8_lossy(&output.stdout);
+                    // Exclude self-references: a checker whose input includes
+                    // text about the thing it checks is the self-referential
+                    // checker defect.
+                    hits.lines()
+                        .filter(|l| !l.contains(&format!("{crate_name}/src/")))
+                        .count()
+                        > 1
+                }
+                subprocess_contract::BoundedOutcome::TimedOut
+                | subprocess_contract::BoundedOutcome::Unspawned(_) => false,
+            }
+        };
         rows.push(GateCensusRow {
             gate: crate_name.into(),
             reachability: if has_caller {

@@ -9,6 +9,7 @@ description = "Detects dispatched-then-silent beads: a typed verdict after every
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+subprocess-contract = { path = "../subprocess-contract" }
 
 [[bin]]
 name = "dispatch-silence-watch"

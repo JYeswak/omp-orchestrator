@@ -8,6 +8,7 @@
 //! and the push went out red. I then wrote a commit message stating the rule —
 //!
 //! > "a verification whose output shares a command with the action it gates cannot
+
 //! > block that action. The tally must be its own step, and its exit code must be
 //! > read."
 //!
@@ -87,14 +88,18 @@ fn mtime_secs(p: &Path) -> Option<u64> {
 /// mistake is already recorded in this repo: a wiring scan matched a vendored
 /// `serde_json` copy inside `.rch-tmp/` and measured the wrong tree.
 fn newest_tracked_source(root: &Path) -> Option<(PathBuf, u64)> {
-    let out = std::process::Command::new("git")
-        .args(["ls-files", "-z"])
-        .current_dir(root)
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
+    // Bounded: this runs pre-push; a wedged git must yield "no newer file"
+    // (the freshness gate then does what it does with that evidence) instead
+    // of hanging every push.
+    let mut ls_command = std::process::Command::new("git");
+    ls_command.args(["ls-files", "-z"]).current_dir(root);
+    let out = match subprocess_contract::bounded_output(
+        &mut ls_command,
+        std::time::Duration::from_secs(10),
+    ) {
+        subprocess_contract::BoundedOutcome::Completed(out) if out.status.success() => out,
+        _ => return None,
+    };
     let mut best: Option<(PathBuf, u64)> = None;
     for raw in out.stdout.split(|b| *b == 0) {
         if raw.is_empty() {

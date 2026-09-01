@@ -11,6 +11,7 @@ path-literal-guard = { path = "../path-literal-guard" }
 state-wildcard-lint = { path = "../state-wildcard-lint" }
 pre-delete-citation-check = { path = "../pre-delete-citation-check" }
 undrained-pipe-lint = { path = "../undrained-pipe-lint" }
+subprocess-contract = { path = "../subprocess-contract" }
 
 [lints.rust]
 unsafe_code = "forbid"

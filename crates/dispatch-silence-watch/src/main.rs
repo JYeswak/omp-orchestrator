@@ -9,6 +9,11 @@
 use dispatch_silence_watch::{classify, parse_bead_assignee};
 use std::path::Path;
 use std::process::{Command, ExitCode};
+use std::time::Duration;
+
+/// A tracker read-back is metadata, not work: 30s bounds a wedged `br`
+/// without ever misreading the stall as a posted verdict.
+const TRACKER_READ_DEADLINE: Duration = Duration::from_secs(30);
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -40,46 +45,37 @@ fn main() -> ExitCode {
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
 
-    // READ BACK the comments — the authority for VERDICT_POSTED.
-    let comments = Command::new("br")
-        .args(["comments", "list", bead_id])
-        .current_dir(repo)
-        .output();
-    let comments_output = match comments {
-        Ok(out) if out.status.success() => {
-            String::from_utf8_lossy(&out.stdout).into_owned()
-        }
-        Ok(out) => {
-            // A nonzero exit from br comments list is a tracker error.
-            eprintln!(
-                "TRACKER_ERROR: br comments list exited {} for {}",
-                out.status.code().unwrap_or(-1),
-                bead_id
-            );
-            return ExitCode::from(3);
-        }
-        Err(err) => {
-            eprintln!("TRACKER_ERROR: cannot spawn br comments list: {err}");
+    // READ BACK the comments — the authority for VERDICT_POSTED. Bounded:
+    // a wedged br must produce a typed TRACKER_ERROR, never an unbounded
+    // stall and never an empty read that parses as "no verdict posted".
+    let mut comments_command = Command::new("br");
+    comments_command.args(["comments", "list", bead_id]);
+    comments_command.current_dir(repo);
+    let comments_output = match dispatch_silence_watch::tracker_read_from(
+        subprocess_contract::bounded_output(&mut comments_command, TRACKER_READ_DEADLINE),
+    ) {
+        dispatch_silence_watch::TrackerRead::Read(text) => text,
+        dispatch_silence_watch::TrackerRead::TrackerError(reason) => {
+            eprintln!("TRACKER_ERROR: br comments list: {reason} for {bead_id}");
             return ExitCode::from(3);
         }
     };
 
-    // READ BACK the bead's current assignee.
-    let show = Command::new("br")
-        .args(["show", bead_id, "--json"])
-        .current_dir(repo)
-        .output();
-    let current_assignee = match show {
-        Ok(out) if out.status.success() => {
-            parse_bead_assignee(&String::from_utf8_lossy(&out.stdout), bead_id)
-                .unwrap_or_default()
+    // READ BACK the bead's current assignee - same bounded, typed contract.
+    let mut show_command = Command::new("br");
+    show_command.args(["show", bead_id, "--json"]);
+    show_command.current_dir(repo);
+    let current_assignee = match dispatch_silence_watch::tracker_read_from(
+        subprocess_contract::bounded_output(&mut show_command, TRACKER_READ_DEADLINE),
+    ) {
+        dispatch_silence_watch::TrackerRead::Read(text) => {
+            parse_bead_assignee(&text, bead_id).unwrap_or_default()
         }
-        _ => {
-            eprintln!("TRACKER_ERROR: br show failed for {}", bead_id);
+        dispatch_silence_watch::TrackerRead::TrackerError(reason) => {
+            eprintln!("TRACKER_ERROR: br show: {reason} for {bead_id}");
             return ExitCode::from(3);
         }
     };
-
     let verdict = classify(
         &comments_output,
         &current_assignee,

@@ -99,22 +99,43 @@ fn main() -> ExitCode {
     // ── GATE 5: pre-delete-citation-check (refuse deleting cited files) ───
     let deletions = get_staged_deletions();
     if !deletions.is_empty() {
-        if let Ok(out) = std::process::Command::new("br")
-            .args(["list", "--status=closed", "--json"])
-            .output()
-        {
-            if out.status.success() {
-                let closed = pre_delete_citation_check::parse_closed_beads(
-                    &String::from_utf8_lossy(&out.stdout),
-                );
-                let conflicts = pre_delete_citation_check::check_deletions(&deletions, &closed);
-                for c in &conflicts {
-                    refusals.push(format!(
-                        "pre-delete-citation-check: {} cites deleted path {}",
-                        c.bead_id, c.deleted_path
-                    ));
-                }
+        // Bounded tracker readback. A wedged or failed `br` must not
+        // silently skip the citation gate: the refusal below fails the
+        // commit CLOSED (exit-3 class per AmberGate's contract).
+        let mut br_command = std::process::Command::new("br");
+        br_command.args(["list", "--status=closed", "--json"]);
+        let closed = match subprocess_contract::bounded_output(
+            &mut br_command,
+            std::time::Duration::from_secs(10),
+        ) {
+            subprocess_contract::BoundedOutcome::Completed(out) if out.status.success() => {
+                pre_delete_citation_check::parse_closed_beads(&String::from_utf8_lossy(
+                    &out.stdout,
+                ))
             }
+            subprocess_contract::BoundedOutcome::TimedOut => {
+                refusals.push(
+                    "pre-delete-citation-check: br readback exceeded deadline; \
+                     citation gate unrun"
+                        .to_owned(),
+                );
+                Vec::new()
+            }
+            _ => {
+                refusals.push(
+                    "pre-delete-citation-check: br readback failed; \
+                     citation gate unrun"
+                        .to_owned(),
+                );
+                Vec::new()
+            }
+        };
+        let conflicts = pre_delete_citation_check::check_deletions(&deletions, &closed);
+        for c in &conflicts {
+            refusals.push(format!(
+                "pre-delete-citation-check: {} cites deleted path {}",
+                c.bead_id, c.deleted_path
+            ));
         }
     }
 
@@ -135,38 +156,55 @@ fn main() -> ExitCode {
 }
 
 fn get_staged_files() -> Result<Vec<String>, String> {
-    let output = std::process::Command::new("git")
-        .args(["diff", "--cached", "--name-only", "--diff-filter=ACMR"])
-        .output()
-        .map_err(|e| format!("cannot spawn git diff --cached: {e}"))?;
-    if !output.status.success() {
-        return Err(format!(
+    // Bounded: a wedged git in the commit hook must fail the commit CLOSED
+    // with a typed reason, never hang the hook and never read as "no files".
+    let mut diff_command = std::process::Command::new("git");
+    diff_command.args(["diff", "--cached", "--name-only", "--diff-filter=ACMR"]);
+    match subprocess_contract::bounded_output(
+        &mut diff_command,
+        std::time::Duration::from_secs(10),
+    ) {
+        subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() => {
+            Ok(String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+                .map(str::to_owned)
+                .collect())
+        }
+        subprocess_contract::BoundedOutcome::Completed(output) => Err(format!(
             "git diff --cached exited {}: {}",
             output.status,
             String::from_utf8_lossy(&output.stderr).trim()
-        ));
+        )),
+        subprocess_contract::BoundedOutcome::TimedOut => Err(
+            "git diff --cached exceeded deadline; group killed".to_owned(),
+        ),
+        subprocess_contract::BoundedOutcome::Unspawned(error) => {
+            Err(format!("cannot spawn git diff --cached: {error}"))
+        }
     }
-    Ok(String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .filter(|l| !l.trim().is_empty())
-        .map(str::to_owned)
-        .collect())
 }
 
 fn get_staged_deletions() -> Vec<String> {
-    let output = std::process::Command::new("git")
-        .args(["diff", "--cached", "--name-only", "--diff-filter=D"])
-        .output();
-    match output {
-        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout)
-            .lines()
-            .filter(|l| !l.trim().is_empty())
-            .map(str::to_owned)
-            .collect(),
+    // Bounded, fail-closed to "no deletions observed": a wedged git must
+    // not hang the hook; the deletions scan is an OPT-IN check (empty list
+    // skips the citation gate), and a typed skip beats an unbounded stall.
+    let mut diff_command = std::process::Command::new("git");
+    diff_command.args(["diff", "--cached", "--name-only", "--diff-filter=D"]);
+    match subprocess_contract::bounded_output(
+        &mut diff_command,
+        std::time::Duration::from_secs(10),
+    ) {
+        subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+                .map(str::to_owned)
+                .collect()
+        }
         _ => Vec::new(),
     }
 }
-
 /// Round-trip check: the commit message must be byte-identical to what the
 /// author staged. Catches ANY corruption between the author's write and git's
 /// receipt — not just the backtick family.

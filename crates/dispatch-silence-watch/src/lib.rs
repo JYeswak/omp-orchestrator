@@ -167,3 +167,94 @@ pub fn parse_bead_assignee(text: &str, expected_id: &str) -> Option<String> {
         .filter(|v| !v.is_empty() && *v != "none")
         .map(str::to_owned)
 }
+
+/// How a tracker read-back turned out, typed so a bounded timeout can never
+/// wear a successful read's shape.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TrackerRead {
+    /// `br` exited 0; the text is the authoritative read-back.
+    Read(String),
+    /// The read-back could not complete: nonzero exit, deadline kill, or a
+    /// spawn failure. Every one of these is a TRACKER_ERROR - a restrictive
+    /// terminal, never an empty read-back a caller might parse as a verdict.
+    TrackerError(&'static str),
+}
+
+/// Map a bounded tracker spawn outcome onto the typed read. A timed-out or
+/// unspawned `br` MUST NOT surface as an empty successful read: an empty
+/// comment list parses as "no verdict posted", which would re-classify a
+/// wedged tracker as a silent bead - the false-green class this lane exists
+/// to close.
+pub fn tracker_read_from(outcome: subprocess_contract::BoundedOutcome) -> TrackerRead {
+    match outcome {
+        subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() => {
+            TrackerRead::Read(String::from_utf8_lossy(&output.stdout).into_owned())
+        }
+        subprocess_contract::BoundedOutcome::Completed(output) => TrackerRead::TrackerError(
+            if output.status.code().is_none() {
+                "br exited by signal"
+            } else {
+                "br exited nonzero"
+            },
+        ),
+        subprocess_contract::BoundedOutcome::TimedOut => {
+            TrackerRead::TrackerError("br read exceeded deadline; group killed")
+        }
+        subprocess_contract::BoundedOutcome::Unspawned(_) => {
+            TrackerRead::TrackerError("br could not be spawned")
+        }
+    }
+}
+
+#[cfg(test)]
+mod bounded_read_tests {
+    use super::*;
+
+    #[cfg(unix)]
+    fn completed(status: i32, stdout: &str) -> subprocess_contract::BoundedOutcome {
+        use std::os::unix::process::ExitStatusExt;
+        subprocess_contract::BoundedOutcome::Completed(std::process::Output {
+            // Unix raw encoding: an exited process is `code << 8`; a bare
+            // small integer would encode a signal death instead.
+            status: std::process::ExitStatus::from_raw(status << 8),
+            stdout: stdout.as_bytes().to_vec(),
+            stderr: Vec::new(),
+        })
+    }
+
+    #[test]
+    fn successful_read_carries_text() {
+        let read = tracker_read_from(completed(0, "bead=x verdict=VERDICT_POSTED"));
+        assert_eq!(
+            read,
+            TrackerRead::Read("bead=x verdict=VERDICT_POSTED".to_owned())
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn nonzero_exit_is_tracker_error_not_empty_read() {
+        assert_eq!(
+            tracker_read_from(completed(1, "")),
+            TrackerRead::TrackerError("br exited nonzero")
+        );
+    }
+
+    #[test]
+    fn timed_out_is_typed_error_never_a_read() {
+        assert_eq!(
+            tracker_read_from(subprocess_contract::BoundedOutcome::TimedOut),
+            TrackerRead::TrackerError("br read exceeded deadline; group killed")
+        );
+    }
+
+    #[test]
+    fn unspawned_is_typed_error_never_a_read() {
+        assert_eq!(
+            tracker_read_from(subprocess_contract::BoundedOutcome::Unspawned(
+                std::io::Error::new(std::io::ErrorKind::NotFound, "no br")
+            )),
+            TrackerRead::TrackerError("br could not be spawned")
+        );
+    }
+}
