@@ -44,7 +44,7 @@
       "contract_6_observable_own_predicates": "N/A \u2014 no local OMP async state projection",
       "contract_7_robot_reachable": "N/A \u2014 no local robot command owns OMP async",
       "contract_8_wired_with_empty_unwired_allowance": "N/A \u2014 no local caller; not an unwired local lane",
-      "classification": "a",
+      "classification": "b",
       "classification_note": "a \u2014 not ours: OMP schedules in-process bash/task/eval jobs inside the agent process",
       "omp_alternative": "AsyncJobManager, formatBackgroundNotice, and raceJobSettlement",
       "coverage": "FULLY COVERED",
@@ -54,7 +54,8 @@
         "crates/omp-rpc-session/src/lib.rs:1-16,23-46,135-163: independent asupersync Cx/process-group/bounded-pipe owner",
         "crates contains no AsyncJobManager or OMP async declaration import"
       ],
-      "disposition": "N/A-NOT-OURS"
+      "disposition": "VALIDATE",
+      "classification_phrase": "(b) reimplemented"
     },
     {
       "surface": "utils",
@@ -80,7 +81,8 @@
         "installed OMP v18.0.11 dist/types/utils/tools-manager.d.ts: tool-path and download helpers",
         "crates contains no ActiveRepoContext or OMP utility declaration import"
       ],
-      "disposition": "N/A-NOT-OURS"
+      "disposition": "RETIRE",
+      "classification_phrase": "(a) not ours"
     },
     {
       "surface": "lib",
@@ -105,7 +107,8 @@
         "installed OMP v18.0.11 dist/types/lib/xai-http.d.ts: resolveXAIHttpCredentials",
         "crates contains no XAIHttpTransport or OMP lib declaration import"
       ],
-      "disposition": "N/A-NOT-OURS"
+      "disposition": "RETIRE",
+      "classification_phrase": "(a) not ours"
     },
     {
       "surface": "tiny",
@@ -121,7 +124,7 @@
       "contract_6_observable_own_predicates": "N/A \u2014 no local model-state projection",
       "contract_7_robot_reachable": "N/A \u2014 no local robot command owns tiny inference",
       "contract_8_wired_with_empty_unwired_allowance": "N/A \u2014 no local caller; not an unwired local lane",
-      "classification": "a",
+      "classification": "c",
       "classification_note": "a \u2014 not ours: OMP owns tiny title/memory model registries and local inference",
       "omp_alternative": "TinyModelDevice, TinyModelDtype, TextGenerationPipeline, and buildCompletionPrompt",
       "coverage": "MAPPED_NOT_ADOPTED",
@@ -131,7 +134,8 @@
         "installed OMP v18.0.11 dist/types/tiny/worker.d.ts: TextGenerationPipeline and stopping criteria",
         "crates contains no TinyModelDevice or OMP tiny declaration import"
       ],
-      "disposition": "N/A-NOT-OURS"
+      "disposition": "RETIRE",
+      "classification_phrase": "(c) unused capability"
     },
     {
       "surface": "vibe",
@@ -147,7 +151,7 @@
       "contract_6_observable_own_predicates": "N/A \u2014 no local Vibe state projection",
       "contract_7_robot_reachable": "N/A \u2014 no local robot command owns Vibe mode",
       "contract_8_wired_with_empty_unwired_allowance": "N/A \u2014 no local caller; not an unwired local lane",
-      "classification": "a",
+      "classification": "c",
       "classification_note": "a \u2014 not ours: Vibe worker sessions and persisted lifecycle events remain inside OMP",
       "omp_alternative": "VibeSessionRegistry, VibeScreenSnapshot, and VibeLifecycleEvent",
       "coverage": "MAPPED_NOT_ADOPTED",
@@ -157,7 +161,8 @@
         "installed OMP v18.0.11 dist/types/vibe/lifecycle.d.ts: persisted lifecycle schema and parser",
         "crates contains no VibeSessionRegistry or OMP Vibe declaration import"
       ],
-      "disposition": "N/A-NOT-OURS"
+      "disposition": "RETIRE",
+      "classification_phrase": "(c) unused capability"
     },
     {
       "surface": "auto-thinking",
@@ -173,7 +178,7 @@
       "contract_6_observable_own_predicates": "N/A \u2014 no local effort projection",
       "contract_7_robot_reachable": "N/A \u2014 no local robot command owns auto-thinking",
       "contract_8_wired_with_empty_unwired_allowance": "N/A \u2014 no local caller; not an unwired local lane",
-      "classification": "a",
+      "classification": "c",
       "classification_note": "a \u2014 not ours: OMP maps prompt difficulty to model effort inside the agent runtime",
       "omp_alternative": "classifyDifficulty, parseDifficultyLevel, and parseDifficultyBucket",
       "coverage": "MAPPED_NOT_ADOPTED",
@@ -182,7 +187,8 @@
         "installed OMP v18.0.11 dist/types/auto-thinking/classifier.d.ts: online four-way and local three-way mappings",
         "crates contains no classifyDifficulty or OMP auto-thinking declaration import"
       ],
-      "disposition": "N/A-NOT-OURS"
+      "disposition": "RETIRE",
+      "classification_phrase": "(c) unused capability"
     }
   ],
   "no_claim": "Mapping is not adoption. A not-ours is a legitimate terminal state. This artifact does not claim these surfaces are correct, nor that any OMP type is consumed by this Rust repository."
