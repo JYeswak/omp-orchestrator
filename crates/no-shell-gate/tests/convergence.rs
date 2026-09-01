@@ -20,7 +20,15 @@ fn plan_dir() -> PathBuf {
 }
 
 #[derive(Debug)]
-struct Row { section: String, round: u32, lens: String, new_findings: u32 }
+struct Row { section: String, round: u32, lens: String, new_findings: u32, role: String }
+
+/// Roles borrowed from the AAR harness (`generic_aar/README.md`): a task needs a
+/// hill-climbing leg, a held-out leg on a different distribution, and optional
+/// don't-regress capability gates. We had only the first.
+///
+/// - `hillclimb`  the section being worked this round (default when absent)
+/// - `capability` a re-check of an ALREADY-CONVERGED section; a finding un-converges it
+/// - `held_out`   the withheld lens, run once at the end across everything
 
 fn ledger() -> Vec<Row> {
     let p = plan_dir().join("CONVERGENCE.jsonl");
@@ -41,7 +49,8 @@ fn ledger() -> Vec<Row> {
         let (Some(section), Some(round), Some(lens), Some(nf)) =
             (get("section"), get("round"), get("lens"), get("new_findings")) else { continue };
         let (Ok(round), Ok(new_findings)) = (round.parse(), nf.parse()) else { continue };
-        out.push(Row { section, round, lens, new_findings });
+        let role = get("role").unwrap_or_else(|| "hillclimb".to_owned());
+        out.push(Row { section, round, lens, new_findings, role });
     }
     out
 }
@@ -61,14 +70,45 @@ fn converged(rows: &[Row], section: &str) -> bool {
     })
 }
 
+/// THE FLOOR. A converged section that is re-checked and yields a finding is no
+/// longer converged — you may not bank a section and then regress it while
+/// grinding a neighbour. Several findings this session were cross-section: the
+/// 370-vs-379 count propagated from 06-gates into 01-idea, and the AgentEndEvent
+/// refutation had to be chased across five files.
+fn capability_regressed(rows: &[Row], section: &str) -> bool {
+    rows.iter().any(|r| r.section == section && r.role == "capability" && r.new_findings > 0)
+}
+
+#[test]
+fn a_capability_recheck_with_findings_unconverges_the_section() {
+    let mk = |round, lens, nf, role: &str| Row {
+        section: "x".to_owned(), round, lens: String::from(lens),
+        new_findings: nf, role: role.to_owned() };
+    // banked under two lenses...
+    let mut rows = vec![mk(1, "investor", 0, "hillclimb"), mk(2, "absence", 0, "hillclimb")];
+    assert!(converged(&rows, "x"), "precondition: two clean rounds two lenses");
+    assert!(!capability_regressed(&rows, "x"), "no re-check yet, no regression");
+    // ...then a re-check finds something.
+    rows.push(mk(3, "evidence", 2, "capability"));
+    assert!(capability_regressed(&rows, "x"),
+        "a capability re-check with findings MUST un-converge the section");
+    // a clean re-check does not.
+    let clean = vec![mk(1, "investor", 0, "hillclimb"), mk(2, "absence", 0, "hillclimb"),
+                     mk(3, "evidence", 0, "capability")];
+    assert!(!capability_regressed(&clean, "x"), "a clean re-check must not un-converge");
+}
+
 #[test]
 fn report_convergence_state() {
     let rows = ledger();
-    let done: Vec<_> = SECTIONS.iter().filter(|s| converged(&rows, s)).collect();
+    let done: Vec<_> = SECTIONS.iter()
+        .filter(|s| converged(&rows, s) && !capability_regressed(&rows, s))
+        .collect();
     println!("CONVERGED {}/{}", done.len(), SECTIONS.len());
     for s in SECTIONS {
         let n = rows.iter().filter(|r| r.section == *s).count();
-        let mark = if converged(&rows, s) { "CONVERGED" } else { "open" };
+        let mark = if capability_regressed(&rows, s) { "REGRESSED" }
+            else if converged(&rows, s) { "CONVERGED" } else { "open" };
         println!("  {s:<20} graded={n:<3} {mark}");
     }
 }
@@ -79,7 +119,13 @@ fn report_convergence_state() {
 #[ignore = "finish line: run with --ignored to check whether the DAG may be built"]
 fn every_section_converged_before_dag_conversion() {
     let rows = ledger();
-    let open: Vec<&str> = SECTIONS.iter().copied().filter(|s| !converged(&rows, s)).collect();
+    let open: Vec<&str> = SECTIONS.iter().copied()
+        .filter(|s| !converged(&rows, s) || capability_regressed(&rows, s)).collect();
+    let held = rows.iter().filter(|r| r.role == "held_out").count();
+    assert!(held >= SECTIONS.len(),
+        "the held-out lens must have run across all {} sections before the DAG is built; \
+         {held} held_out rows present. Without it, convergence cannot be distinguished from \
+         the graders having adapted to each other.", SECTIONS.len());
     assert!(open.is_empty(),
         "{} of {} sections are not converged; the plan may not become a bead DAG yet:\n  {}",
         open.len(), SECTIONS.len(), open.join("\n  "));
@@ -88,7 +134,8 @@ fn every_section_converged_before_dag_conversion() {
 #[test]
 fn the_convergence_predicate_is_strict() {
     let mk = |section, round, lens, nf| Row {
-        section: String::from(section), round, lens: String::from(lens), new_findings: nf };
+        section: String::from(section), round, lens: String::from(lens),
+        new_findings: nf, role: "hillclimb".to_owned() };
 
     // KNOWN-GOOD: two clean rounds, two lenses.
     let good = vec![mk("x", 1, "investor", 0), mk("x", 2, "adversarial", 0)];

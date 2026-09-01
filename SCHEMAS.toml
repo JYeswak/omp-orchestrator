@@ -1,0 +1,86 @@
+# SCHEMAS.toml — every artifact this system persists, declared once.
+#
+# WHY THIS EXISTS. Eleven persisted formats were counted on 2026-08-31 and not one
+# had a declared schema. Every one was invented mid-session by whoever needed it,
+# and three evolved SILENTLY within that same session:
+#
+#   CONVERGENCE.jsonl   gained `role` an hour after creation; existing rows have no
+#                       such field and the reader defaults it. A row written before
+#                       the change and one written after are indistinguishable.
+#   tick-monitor.tsv    gained `owner_pid`; load() defaults a missing owner to 0,
+#                       which reads as "unowned" — the same value a reclaimable
+#                       stale ledger has.
+#   SURFACE-MAP.jsonl   had a merge-precedence bug where older rows overwrote newer
+#                       ones, because rows carry no version or write order.
+#
+# Each was a silent widening. None broke a build. All three were caught by hand.
+#
+# THE RULE: an artifact this system writes MUST have a row here naming its required
+# fields. `schemas.rs` validates every declared artifact that exists on disk.
+
+[artifacts.convergence]
+path      = "docs/plan/CONVERGENCE.jsonl"
+format    = "jsonl"
+required  = ["section", "round", "lens", "new_findings", "verdict"]
+optional  = ["evidence", "role"]
+writer    = "grading panes"
+reader    = "crates/no-shell-gate/tests/convergence.rs"
+note      = "role added mid-session; absent means hillclimb. See AAR role taxonomy in docs/plan/12-journey.md."
+
+[artifacts.surface_map]
+path      = "docs/plan/SURFACE-MAP.jsonl"
+format    = "jsonl"
+required  = ["surface", "tool"]
+optional  = ["disposition", "validated_by", "maps_to_crate", "graded_by", "batch"]
+writer    = "surface-mapping panes"
+reader    = "assembly + census sections"
+note      = "no write-order field; a merge that does not sort newest-last silently loses newer classifications."
+
+[artifacts.crate_surface]
+path      = "OMP-SURFACE-MAP.toml"
+format    = "toml-table"
+required  = ["classification", "omp_surface", "why"]
+optional  = ["negative_evidence"]
+writer    = "humans and grading panes"
+reader    = "crates/no-shell-gate/tests/wired_lanes.rs"
+note      = "gated: every workspace crate must have a [crates.x] block and every block a crate."
+
+[artifacts.tick_state]
+path      = "~/.local/state/omp-orchestrator/sessions/<session>/tick-monitor.tsv"
+format    = "tsv"
+required  = ["last_tick"]
+optional  = ["owner_pid", "last_blocker", "blocker_streak", "red_streak", "commit", "pane"]
+writer    = "crates/tick-monitor"
+reader    = "crates/tick-monitor"
+note      = "session-scoped since 9356bd5; a missing owner_pid reads as 0 = reclaimable."
+
+[artifacts.watch_ledger]
+path      = "~/.local/state/omp-orchestrator/sessions/<session>/watch-ledger.jsonl"
+format    = "jsonl"
+required  = ["tick", "observation"]
+optional  = ["stall", "no_value_streak", "free_capacity_streak", "note"]
+writer    = "crates/tick-monitor watch"
+reader    = "the orchestrator, by eye"
+note      = "UNGATED CONSUMER: nothing parses this programmatically, so a field rename breaks nobody and is noticed by nobody."
+
+[artifacts.beads]
+path      = ".beads/issues.jsonl"
+format    = "jsonl"
+required  = ["id", "title", "status"]
+optional  = ["priority", "assignee", "description", "closed_at", "updated_at"]
+writer    = "br"
+reader    = "br, bv"
+note      = "OWNED UPSTREAM. Listed for completeness; we do not define this and must not widen it."
+
+# ── UNDECLARED AND UNSTRUCTURED — named so the gap is visible ────────────────
+#
+# dispatch packets    plain prose typed into panes. NINETEEN waves tonight, none
+#                     machine-readable, none replayable, none auditable. `ntm`
+#                     ships a `dispatch` template with required objective/target
+#                     variables and it was used zero times.
+# grade evidence      /tmp/grade/*.md — free-form. The ledger row is structured;
+#                     the reasoning behind it is not, and it lives in /tmp.
+# cooldown.json,      written by crates but never read back by a test.
+# heartbeat.jsonl,
+# tick-ledger.jsonl,
+# omp-build-registration.json
