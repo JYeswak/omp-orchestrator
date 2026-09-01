@@ -964,6 +964,7 @@ dependencies = [
  "receiver-receipt",
  "serde_json",
  "subprocess-contract",
+ "tempfile",
 ]
 
 [[package]]
@@ -1571,6 +1572,9 @@ dependencies = [
 [[package]]
 name = "tick-monitor"
 version = "0.1.0"
+dependencies = [
+ "tempfile",
+]
 
 [[package]]
 name = "tinyvec"

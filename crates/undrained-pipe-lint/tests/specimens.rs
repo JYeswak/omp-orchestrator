@@ -2,7 +2,7 @@
 
 //! Specimen-based legs for the undrained-pipe lint (bead -w4j acceptance 1-3).
 
-use undrained_pipe_lint::{find_detailed_violations_in_source, find_violations_in_source, lint_workspace};
+use undrained_pipe_lint::{find_detailed_violations_in_source, find_violations_in_source};
 
 /// KNOWN-BAD: both pipes piped + try_wait poll + no drain -> RED.
 #[test]

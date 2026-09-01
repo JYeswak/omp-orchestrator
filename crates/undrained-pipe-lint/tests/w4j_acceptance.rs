@@ -112,12 +112,14 @@ fn mutation_real_site_fix_turns_green_then_restores_byte_identically() {
 #[ignore = "corpus lives in /Users/josh/Developer/control-plane, not in CI"]
 fn coverage_over_the_control_plane_universe() {
     use std::path::Path;
+    const INHERITED_SITE_COUNT: usize = 28;
     let universe = Path::new("/Users/josh/Developer/control-plane/crates");
     let mut scanned = 0usize;
     let mut raw_files = Vec::new();
     let mut flagged_files = Vec::new();
     let mut flagged_sites = 0usize;
     let mut drain_justified = Vec::new();
+    let mut unexpected_misses = Vec::new();
     for entry in std::fs::read_dir(universe).expect("control-plane crates/") {
         let dir = entry.expect("dir entry").path();
         for p in walk_rs(&dir) {
@@ -133,13 +135,25 @@ fn coverage_over_the_control_plane_universe() {
                     // The lint's negative decision must be JUSTIFIED: the file
                     // must carry a recognized drain (take() + concurrent reader)
                     // before it is allowed to be un-flagged.
-                    let drains = text.contains(".stdout.take()")
-                        && (text.contains("thread::spawn") || text.contains("thread::scope"))
-                        && text.contains("read_to_end");
+                    let has_stdout_take = text.contains(".stdout.take()");
+                    let has_concurrent_reader =
+                        text.contains("thread::spawn") || text.contains("thread::scope");
+                    let has_read_to_end = text.contains("read_to_end");
+                    let drains = has_stdout_take && has_concurrent_reader && has_read_to_end;
                     if drains {
                         drain_justified.push(p.clone());
                     } else {
-                        println!("  UNJUSTIFIED NEGATIVE (needs eyes): {}", p.display());
+                        let mut missing = Vec::new();
+                        if !has_stdout_take {
+                            missing.push("missing .stdout.take()");
+                        }
+                        if !has_concurrent_reader {
+                            missing.push("missing thread::spawn/thread::scope");
+                        }
+                        if !has_read_to_end {
+                            missing.push("missing read_to_end");
+                        }
+                        unexpected_misses.push((p.clone(), missing.join(", ")));
                     }
                 } else {
                     flagged_files.push(p.clone());
@@ -149,24 +163,28 @@ fn coverage_over_the_control_plane_universe() {
         }
     }
     assert!(scanned > 0, "anti-vacuity: zero files scanned");
+    assert!(!raw_files.is_empty(), "anti-vacuity: zero raw-pattern files found");
+    assert!(
+        flagged_sites <= INHERITED_SITE_COUNT,
+        "lint-flagged sites exceed inherited denominator: {flagged_sites}/{INHERITED_SITE_COUNT}"
+    );
     println!("coverage: files scanned={scanned}");
-    println!("  raw-pattern files={} | lint-flagged files={} (sites={flagged_sites}) | drains recognized (correctly un-flagged)={}",
+    println!("  raw-pattern files={} | lint-flagged files={} (sites={flagged_sites}/{INHERITED_SITE_COUNT}) | drains recognized (correctly un-flagged)={}",
         raw_files.len(), flagged_files.len(), drain_justified.len());
     for f in &flagged_files { println!("  FLAGGED: {}", f.display()); }
     for f in &drain_justified { println!("  DRAINED (correctly un-flagged): {}", f.display()); }
-    let unjustified: Vec<_> = raw_files.iter()
-        .filter(|f| !flagged_files.iter().any(|g| g == *f) && !drain_justified.iter().any(|g| g == *f))
-        .collect();
-    for f in &unjustified { println!("  UNJUSTIFIED NEGATIVE (needs eyes): {}", f.display()); }
+    for (f, reason) in &unexpected_misses {
+        println!("  UNEXPECTED MISS: {} — {reason}", f.display());
+    }
     println!("  KNOWN LIMIT (stated in the gate output, not discovered later): a Command builder whose");
     println!("  stdio configuration or try_wait poll lives behind a macro, or crosses files via a helper, is");
     println!("  outside this lint's single-file scope.");
     // The honest coverage assertion: every raw-pattern file is either FLAGGED as
     // a defect or JUSTIFIED as drained. Anything else is the confident-zero class.
     assert!(
-        flagged_files.len() + drain_justified.len() >= raw_files.len() - unjustified.len() && unjustified.is_empty(),
+        unexpected_misses.is_empty(),
         "{} raw-pattern files are neither flagged nor justified-as-drained",
-        unjustified.len()
+        unexpected_misses.len()
     );
     // The FIXED oracle-compare at control-plane HEAD: its builders (:336-337,
     // :345-347) live in spawn_timeout*, which hands the child to wait_deadline
@@ -200,7 +218,7 @@ fn walk_rs(dir: &Path) -> Vec<std::path::PathBuf> {
             let p = e.path();
             if p.is_dir() {
                 let name = p.file_name().and_then(|x| x.to_str()).unwrap_or("");
-                if name != "target" && name != ".git" {
+                if name != "target" && name != ".git" && name != ".rch-tmp" {
                     stack.push(p);
                 }
             } else if p.extension().is_some_and(|x| x == "rs") {

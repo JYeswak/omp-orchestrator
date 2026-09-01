@@ -1,1 +1,19 @@
 /target/
+
+# ── Machine-local agent + tooling state. NEVER tracked.
+#
+# The publishability bar makes this load-bearing rather than tidy: going public
+# "distributes every tracked byte AND the full git history to third parties, where
+# it may be cloned, cached, and indexed before anyone notices a mistake."
+# Anything below is local orchestration residue with no value to a reader and a
+# non-zero chance of carrying paths, pids, or session identifiers.
+.ntm/
+.orchestrator/
+.rch-tmp/
+.rch-target-*/
+.ee/
+.claude/
+
+# Editor / OS noise
+.DS_Store
+*.swp
