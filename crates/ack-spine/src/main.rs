@@ -169,7 +169,33 @@ async fn selftest(cx: &Cx) -> Result<(), String> {
 }
 
 async fn spine_demo(cx: &Cx) -> Result<(), String> {
-    let pending_path = std::env::temp_dir().join(format!("ack-spine-demo-{}", std::process::id()));
+    // SCRATCH-HOME, NOT temp_dir(). A pending-dispatch marker outlives the command that
+    // wrote it -- that is its entire purpose -- and AGENTS.md is explicit: "Do not create
+    // durable scratch under /private/tmp or $TMPDIR; those locations have no session owner
+    // and cannot be safely reaped." A marker in temp_dir() is unattributable (nothing says
+    // which session or pane owns it), unreapable (the reaper cannot distinguish a live
+    // marker from an abandoned one), and gone on reboot.
+    //
+    // This is also the production caller `scratch-home` was missing: wired_lanes reported
+    // UNWIRED LANE: scratch-home, and UNWIRED_LANE_ALLOWANCE is empty by design, so the
+    // crate had to be genuinely USED rather than exempted. It is used here because this is
+    // precisely the case it was built for, not to satisfy the gate.
+    //
+    // Falls back to temp_dir() ONLY if the scratch root cannot be resolved, and SAYS SO on
+    // stderr: a demo that refuses to run because $HOME is unusual is worse than one that
+    // runs unattributed and announces it.
+    let pending_path = match scratch_home::ScratchRoot::default()
+        .and_then(|root| root.create_job("omp-orchestrator", "ack-spine", "spine-demo", "josh"))
+    {
+        Ok(dir) => dir.join("pending.json"),
+        Err(error) => {
+            eprintln!(
+                "ACK_SPINE_SCRATCH_UNAVAILABLE {error}; falling back to an UNATTRIBUTED \
+                 temp path that no reaper can own"
+            );
+            std::env::temp_dir().join(format!("ack-spine-demo-{}", std::process::id()))
+        }
+    };
     let mut spine = AckSpine::new(
         DispatchIntent::new("cp-spine-demo", "%1409", "omp-orchestrator"),
         pending_path,
