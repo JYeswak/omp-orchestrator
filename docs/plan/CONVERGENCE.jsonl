@@ -28,3 +28,6 @@
 {"section":"00-brief","round":10,"lens":"absence","role":"hillclimb","new_findings":5,"verdict":"FAIL","evidence":"/tmp/grade/r10-00-brief.md"}
 {"section":"01-idea","round":10,"lens":"absence","role":"hillclimb","new_findings":7,"verdict":"FAIL","evidence":"/tmp/grade/r10-01-idea.md"}
 {"section":"02-surface-census","round":10,"lens":"absence","role":"hillclimb","new_findings":5,"verdict":"FAIL","evidence":"/tmp/grade/r10-02-surface-census.md"}
+{"section":"09-milestones","round":10,"lens":"adversarial","role":"hillclimb","new_findings":16,"verdict":"FAIL","evidence":"/tmp/grade/r10-09-milestones.md"}
+{"section":"10-prior-art","round":10,"lens":"adversarial","role":"hillclimb","new_findings":13,"verdict":"FAIL","evidence":"/tmp/grade/r10-10-prior-art.md"}
+{"section":"11-lifecycle","round":10,"lens":"adversarial","role":"hillclimb","new_findings":10,"verdict":"FAIL","evidence":"/tmp/grade/r10-11-lifecycle.md"}
