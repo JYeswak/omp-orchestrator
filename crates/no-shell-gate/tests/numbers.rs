@@ -95,6 +95,25 @@ fn no_declared_figure_has_drifted() {
     let mut ran = 0usize;
 
     for f in figures() {
+        // VOLATILE FIGURES. A pane declaring `expect = "LIVE"` in the round-11 fix had
+        // the right instinct and no mechanism: the bead board moves hourly, so pinning
+        // it would fail the build every hour and get the gate switched off. But it must
+        // still be DECLARED, because prose quoting a board total without an "as of" is
+        // exactly the drift this registry exists to surface.
+        //
+        // So LIVE means: the command MUST still run and produce output — a volatile
+        // figure whose command has rotted is a silent hole — but its value is not
+        // compared. The obligation moves to the prose: cite the command, not a number.
+        if f.expect == "LIVE" {
+            let out = Command::new("sh").arg("-c").arg(&f.command).current_dir(&root).output();
+            match out {
+                Ok(o) if !String::from_utf8_lossy(&o.stdout).trim().is_empty() => { ran += 1; }
+                _ => drifted.push(format!(
+                    "{}: declared LIVE but its command produced nothing — a volatile figure \
+                     with a broken command is undetectable rot\n      $ {}", f.key, f.command)),
+            }
+            continue;
+        }
         let out = Command::new("sh").arg("-c").arg(&f.command).current_dir(&root).output();
         let Ok(out) = out else {
             drifted.push(format!("{}: command failed to spawn", f.key));
@@ -139,6 +158,33 @@ fn the_parser_unescapes_embedded_quotes() {
         "the embedded quote did not survive parsing: {:?}", bins.command);
     assert!(!bins.command.contains("\\\""),
         "the escape was left in place rather than unescaped: {:?}", bins.command);
+}
+
+#[test]
+fn a_live_figure_is_declared_but_not_pinned() {
+    let f = figures();
+    let live: Vec<_> = f.iter().filter(|x| x.expect == "LIVE").collect();
+    assert!(!live.is_empty(),
+        "no LIVE figure declared — if the board total stopped being volatile, pin it \
+         and delete this test rather than leaving a mode nothing exercises");
+    for x in &live {
+        assert!(!x.command.is_empty(), "[figures.{}] is LIVE with no command to run", x.key);
+    }
+}
+
+#[test]
+fn no_figure_key_is_declared_twice() {
+    // Two panes concurrently appended `board_total` in the round-11 fix and one of them
+    // clobbered the NOTE of the block above it. A duplicate key is silent in TOML-by-
+    // convention parsers like this one: the second wins and the first vanishes.
+    let f = figures();
+    let mut keys: Vec<&str> = f.iter().map(|x| x.key.as_str()).collect();
+    keys.sort_unstable();
+    let before = keys.len();
+    keys.dedup();
+    assert_eq!(before, keys.len(),
+        "a figure key is declared more than once — concurrent appends to a shared \
+         registry silently drop the earlier block");
 }
 
 #[test]
