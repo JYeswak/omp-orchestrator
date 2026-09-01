@@ -244,8 +244,31 @@ fn type_for_match(
     bindings: &BTreeMap<String, String>,
     state_enums: &BTreeSet<String>,
 ) -> (Option<String>, bool) {
+    // An enum named in the match BODY may be the match's OUTPUT rather than its
+    // scrutinee, and conflating the two is how this lint produced an 8-of-9 false
+    // positive rate that blocked every commit in the repo (measured 2026-09-01).
+    //
+    //     match value {                        // scrutinee: Option<Vec<_>>
+    //         Some(items) if !items.is_empty() => ProbeState::Known,
+    //         _ => ProbeState::Unknown,        // <- ProbeState is the RESULT
+    //     }
+    //
+    // The old rule saw `ProbeState::` anywhere in the body, concluded the
+    // scrutinee was ProbeState, and demanded exhaustive arms for an `Option`
+    // match whose `_` the COMPILER REQUIRES (a guarded `Some` arm does not cover
+    // `Some`). An over-strict gate gets routed around, which is a slower death
+    // than no gate — so resolution now requires PATTERN position.
     for enum_name in state_enums {
-        if body.contains(&format!("{enum_name}::")) {
+        let needle = format!("{enum_name}::");
+        let in_pattern = body.lines().any(|l| {
+            match l.find("=>") {
+                // left of the fat arrow is pattern position
+                Some(arrow) => l[..arrow].contains(&needle),
+                // no arrow on this line: the `match X {` header itself counts
+                None => l.contains("match ") && l.contains(&needle),
+            }
+        });
+        if in_pattern {
             return (Some(enum_name.clone()), true);
         }
     }

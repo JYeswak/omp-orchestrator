@@ -96,9 +96,14 @@ impl Outcome {
     /// stdout only when the process genuinely completed. A timeout yields None, so a
     /// caller cannot accidentally treat a killed child's empty buffer as output.
     pub fn stdout_if_completed(&self) -> Option<&str> {
+        // Enumerated, not wildcarded: both non-Completed arms are RESTRICTIVE
+        // terminals, and a wildcard here would silently swallow a fourth variant
+        // into "no output" — the same shape as reading a killed child's empty
+        // buffer as a real answer, which is what this method exists to prevent.
         match self {
             Outcome::Completed { stdout, .. } => Some(stdout),
-            _ => None,
+            Outcome::TimedOut { .. } => None,
+            Outcome::SpawnFailed { .. } => None,
         }
     }
 
