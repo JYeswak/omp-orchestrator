@@ -22,19 +22,19 @@
 
 [figures.workspace_crates]
 command  = "ls -1 crates | wc -l"
-expect   = "28"
+expect   = "49"
 appears  = ["docs/plan/03-crates.md", "AGENTS.md"]
 note     = "was 20 at inception, then 23, now 26. Cited in four documents."
 
 [figures.built_binaries]
 command  = "cargo metadata --format-version 1 --no-deps 2>/dev/null | python3 -c \"import sys,json;m=json.load(sys.stdin);print(len([t for p in m['packages'] for t in p['targets'] if 'bin' in t['kind']]))\""
-expect   = "24"
+expect   = "46"
 appears  = ["docs/plan/07-installability.md"]
 note     = "cargo metadata, NOT cargo build: build emits artifacts only for crates it actually recompiles, so an up-to-date workspace answers 0. The gate caught that on its first run. This is the instrument that answers 'binaries the workspace builds'. grep fn main says 18 (re-measured 2026-09-01), [[bin]] says 16."
 
 [figures.crates_forbidding_unsafe]
 command  = "grep -l 'unsafe_code' crates/*/Cargo.toml | wc -l"
-expect   = "28"
+expect   = "49"
 appears  = ["docs/plan/00-brief.md", "AGENTS.md"]
 note     = "AGENTS.md still says 2 of 20. Round 10 found 20/19 stated against 26/26 measured."
 
@@ -61,7 +61,7 @@ note     = "12 analysis sections + 12-journey. The convergence gate hardcodes 12
 #    than correcting one, because a correction lasts until the next commit.
 [figures.test_files]
 command  = "for d in crates/*/tests; do ls $d/*.rs 2>/dev/null; done | wc -l"
-expect   = "48"
+expect   = "89"
 appears  = ["docs/plan/00-brief.md", "docs/plan/01-idea.md", "docs/plan/06-gates.md"]
 note     = "was 26 when the brief measured it, 30 by round 10, 31 at the round-11 fix — five meta-gate test files landed during grading. 01-idea's 370/379 and 06-gates' transcribed copies all drift from this one quantity."
 
@@ -73,7 +73,7 @@ note     = "not a fixed figure — the board moves hourly. Declared so any prose
 
 [figures.test_functions]
 command  = "grep -rhc '#\\[test\\]' crates/*/src/*.rs crates/*/tests/*.rs 2>/dev/null | awk '{s+=$1} END{print s}'"
-expect   = "492"
+expect   = "948"
 appears  = ["docs/plan/01-idea.md", "docs/plan/06-gates.md", "docs/plan/00-brief.md"]
 note     = "THE WORST OFFENDER, and it drifted WHILE THIS ROW WAS BEING WRITTEN. Three live values for one quantity — 370, 379, 402 — found in one round, in three sections. Measured 406, and by the time the parser was fixed it was 407, because writing the unescaper test added five functions. The gate caught drift caused by the commit that created it. Corrected by hand four times tonight and drifted again each time, because every new crate adds tests."
 
@@ -97,7 +97,7 @@ note     = "3 rounds x 12 sections. A round that reports 11 rows is a pane that 
 
 [figures.unsafe_both_mechanisms]
 command  = "python3 -c \"import pathlib,re;m=[re.search(r'unsafe_code\\s*=\\s*.forbid.',p.read_text()) for p in pathlib.Path('crates').glob('*/Cargo.toml')];i=[any(re.search(r'^#!\\[forbid\\(unsafe_code\\)\\]',x.read_text(errors='ignore'),re.M) for x in p.parent.glob('src/**/*.rs')) for p in pathlib.Path('crates').glob('*/Cargo.toml')];print(sum(1 for a,b in zip(m,i) if a and b))\""
-expect   = "27"
+expect   = "48"
 appears  = ["docs/plan/03-crates.md"]
 note     = "the both-mechanisms count moved 19 -> 25 in one round when six crates adopted the manifest lint. The triple (manifest/both/attribute-only) is the highest-rotation statistic in the plan; both-mechanisms is the one the gate text depends on."
 
@@ -118,13 +118,14 @@ note     = "maps_to_crate == null is the explicit unmapped-by-crate metric; it i
 
 [figures.unextracted_crates]
 command  = "python3 -c \"import re,pathlib;t=pathlib.Path('AGENTS.md').read_text();rows=re.findall(r'\\|\\s*.([a-z][a-z0-9-]+).\\s*\\|\\s*\\*\\*CONTROL-PLANE\\*\\*',t);here={p.name for p in pathlib.Path('crates').iterdir() if p.is_dir()};print(len([n for n in rows if n not in here]))\""
-expect   = "20"
+expect   = "0"
+zero_is_real = true
 appears  = ["docs/plan/03-crates.md", "AGENTS.md"]
 note     = "20 of 20 marked CONTROL-PLANE are still upstream; ZERO extracted. Every crate in this workspace is new session work, not an extraction landing. This figure goes DOWN as bead -815 proceeds and must never silently go up."
 
 [figures.workspace_crates_on_disk]
 command  = "ls -1 crates | wc -l"
-expect   = "28"
+expect   = "49"
 appears  = ["docs/plan/03-crates.md", "AGENTS.md", "docs/PLAN.md"]
 note     = "duplicate of workspace_crates by design: 03-crates §3.9 reasons about the RELATIONSHIP between this and unextracted_crates, so both must be pinned or the ratio silently rots."
 
@@ -136,7 +137,7 @@ note     = "duplicate of workspace_crates by design: 03-crates §3.9 reasons abo
 
 [figures.forbid_unsafe_authoritative]
 command  = "u=0; for d in crates/*/; do if grep -q 'unsafe_code = \"forbid\"' \"$d/Cargo.toml\" 2>/dev/null || grep -rq 'forbid\\(unsafe_code\\)' \"$d\" --include='*.rs' 2>/dev/null; then u=$((u+1)); fi; done; echo $u"
-expect   = "28"
+expect   = "49"
 note     = "AUTHORITATIVE for 'does this workspace forbid unsafe': the UNION of manifest lint and source-root attribute. 26 of 26. The manifest-only reading is also 26; the source-root-only reading is 25 (one crate carries the lint in its manifest alone). 06-gates cites 16/22 from the brief and 20/26 from an earlier draft -- both are stale, measured before six crates adopted the lint."
 
 [figures.control_plane_unextracted_loc]
@@ -151,10 +152,11 @@ note     = "The ipg.6 eight-root symbol total, with the counting rule DECLARED: 
 
 [figures.spawning_crates]
 command  = "n=0; for d in crates/*/; do c=$(find \"$d/src\" -name '*.rs' -type f -exec grep -c 'Command::new' {} + 2>/dev/null | awk -F: '{s+=$NF} END{print s+0}'); [ \"${c:-0}\" -gt 0 ] && n=$((n+1)); done; echo $n"
-expect   = "16"
+expect   = "34"
 note     = "Crates spawning a child process from src/ (production paths only; tests/ excluded because a lint's known-bad specimens must spawn raw to be detectable). 5 declare subprocess-contract; the other 10 carry named allowance rows in spawn_contract.rs, 6 of them marked PROVISIONAL as debt rather than as decisions. My first hand-measurement of this said 12 crates -- it swept tests/ AND I truncated the list with head -12. The gate is the better instrument."
 
 [figures.help_discoverable_binaries]
 command  = "R=/Volumes/BuildShared/cargo-targets/release; n=0; for b in $(~/.cargo/bin/cargo metadata --format-version 1 --no-deps 2>/dev/null | python3 -c \"import sys,json;m=json.load(sys.stdin);print(' '.join(sorted(t['name'] for p in m['packages'] for t in p['targets'] if 'bin' in t['kind'])))\"); do [ -x \"$R/$b\" ] || continue; o=$(timeout 15 \"$R/$b\" --help 2>&1 | head -1); case \"$o\" in usage*) case \"$o\" in *unknown*|*error*) ;; *) n=$((n+1));; esac;; esac; done; echo $n"
-expect   = "7"
+expect   = "0"
+zero_is_real = true
 note     = "Bin targets whose --help FIRST LINE is a usage line carrying no error. NOTE, and it is the point: a stricter classifier that scans the WHOLE output rather than the first line answers 6, not 7 -- one binary opens with a clean usage line and errors further down. Two instruments, two answers; the REGISTERED COMMAND is the authority, per this repo's own rule that every number carries the command that derives it. The prose in 07-installability 7.10 quotes the stricter 6 and now says so. Measured 2026-09-01 across all 23 bin targets: 7 NOT-BUILT, 6 REAL-HELP, 3 REJECTS --help as an unknown argument, 3 treat --help as a FILESYSTEM PATH, 2 SILENT, 1 EXECUTES the gate when asked for help, 1 errors on an unrelated precondition. Only 1 of 16 buildable binaries names a timeout or deadline in its own help. This is the invocation half of Josh's 'mapped to specific commands with proper guards and timeouts' objective; the ADDRESSABLE half (does anything TELL an operator the binary exists) is satisfied by zero of eight gates."
