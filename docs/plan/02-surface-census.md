@@ -734,3 +734,64 @@ fourteen binaries (`rch`, `fh`, `cargo`, `git`, `tmux`, `cass`, `ubs`, `caut`, `
 will move again. `WIRE` remains a *proposal with a named beneficiary* — 46 of them, none
 implemented. And a probed `RETIRE` establishes that someone ran the surface and formed a judgement;
 it does not establish the judgement is right.
+
+---
+
+## 10. Evidence inherited from a vacuous source is not evidence
+
+`%1408`, closing Task B, found the deepest defect in the census and it is a **chain-of-custody**
+problem rather than a counting one:
+
+> *"every RETIRE whose only evidence is scanner `CAPABILITY_NOT_USED` inherits the §3.3 self-twin
+> vacuity."*
+
+§3.3 measured that the scanner's own census carries **183 rows with exactly one distinct
+`must_be_true` and one distinct `negative_evidence`** — the four-field discipline satisfied
+syntactically and vacuously. Any retirement justified by *"the scanner classified it
+`CAPABILITY_NOT_USED`"* therefore rests on a classification produced by a process already measured
+as vacuous. **The evidence is inherited from a source known not to carry any.**
+
+That is not the same as being wrong. Those surfaces may well be irrelevant. It is that the map
+recorded a *judgement* where it held only a *relay*.
+
+### 10.1 The reclassification
+
+```
+CONSUMED 30    WIRE 66    VALIDATE 25    RETIRE 407    UNPROBEABLE-PENDING 63
+```
+
+The 63 break down as **54** OMP `type_root` rows retired on scanner classification plus grep zeros
+with no functional statement, **3** for the mux trio's six-mux ambiguity, and **6** rows `%1408`
+retired itself on thin reasoning and then withdrew.
+
+It also corrected **ten of its own `rpc_handler` rows** that had cited the mux null-probe as
+evidence — *"wrong basis, restated to adapter-vocabulary zero."* An agent auditing its own prior
+output and finding the reasoning unsound, unprompted, is the third self-retraction of the session.
+
+### 10.2 The model case, named by a worker
+
+`ntm:ntm` is what `%1408` calls **the positive null**: probing it returns *unknown command*, and an
+unknown command **is a verdict**. That is the distinction the whole re-probe wave turned on:
+
+| probe result | classification | why |
+|---|---|---|
+| *unknown command* | **RETIRE** | the absence is *answered* — the surface does not exist |
+| *no output, empty, timeout* | **UNPROBEABLE-PENDING** | the absence is *unexplained* — a timeout is not a verdict |
+
+Both are nulls. Only one is evidence. Every retirement in this map now has to say which kind it is.
+
+### 10.3 Where the census actually stands
+
+| | count | meaning |
+|---|---:|---|
+| engaged | **121** | CONSUMED + WIRE + VALIDATE — 20.5 % |
+| honestly unknown | **63** | UNPROBEABLE-PENDING — the map says *we do not know* |
+| retired | **407** | probed, or answered by a positive null |
+
+**The 63 is the most valuable column in the table.** It did not exist three waves ago, when those
+same rows read `RETIRE` and the census claimed to know something it did not.
+
+**NO-CLAIM.** 407 retirements are now probe-backed *or* scanner-backed, and `%1408`'s residual
+finding is that the second class needs its own sweep — the reclassification caught the 54 it could
+identify, not necessarily all of them. No count exists yet for how many of the 407 rest on inherited
+scanner classification. That sweep is unrun and unowned.
