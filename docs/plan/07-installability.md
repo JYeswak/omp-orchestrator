@@ -620,3 +620,62 @@ grouping rule to be true.
 is one `ompo` aggregator with adapter subcommands, 23 separate installed binaries, or
 something else is a design decision that remains open — and it is now open *honestly*,
 against a measured 3-of-23, rather than behind a seven that nobody could look up.
+
+---
+
+## 7.10 The journey surfaces, mapped — and 1 of 16 names its own timeout
+
+Josh's standing objective, verbatim: *"Every surface of our journey mapped to specific
+commands with proper guards and timeouts, everything typed — nothing unknown."*
+
+`Lens05Actions`, the held-out operator-at-3am lens, filed the BLOCKED form of this:
+
+> 466-line specification of what 11 actions SHOULD do but **NO STATED COMMAND,
+> BINARY, API, or FUNCTION CALL** to actually RUN any action.
+
+Measured 2026-09-01 by invoking `--help` on every one of the 23 bin targets
+`cargo metadata` reports. Not a hand-written map — a probe.
+
+### How 23 binaries answer `--help`
+
+| behaviour | count | what it means for a stranger |
+|---|---:|---|
+| **NOT-BUILT** | 7 | the release binary does not exist; nothing to invoke |
+| **REAL-HELP** | 6 | `usage:` line, no error anywhere in the output — the only genuinely discoverable surfaces. The registered figure `help_discoverable_binaries` answers **7**, because it inspects only the FIRST LINE; one binary opens cleanly and errors below. Two instruments, two answers — the registered command is the authority and this row quotes the stricter one deliberately |
+| **REJECTS** | 3 | answers `unknown argument: --help` |
+| **HELP-AS-PATH** | 3 | treats `--help` as a **filesystem path** and reports it missing |
+| **SILENT** | 2 | prints nothing at all |
+| **EXECUTES** | 1 | **runs the gate** instead of describing it |
+| ERRORS | 1 | errors on an unrelated precondition |
+
+**Names a timeout or deadline in its own help: 1 of 16 buildable** —
+`dispatch-silence-watch`. Fifteen do not.
+
+### The three that deserve naming
+
+- **`no-shell-gate`, `state-wildcard-lint`, `undrained-pipe-lint`** treat `--help` as a
+  path: *"cannot read --help"*, *"repo root --help: No such file or directory"*. An
+  operator asking a gate what it does is told their file is missing.
+- **`pre-commit-gate` EXECUTES.** Asking it for help runs the gate — output
+  `MULTI-GATE: no staged files to check`. On a dirty tree that is a real gate run with
+  real refusals, produced by a request for documentation.
+- **`loop-queue-filter` and `pre-delete-citation-check` are silent.** No usage, no
+  error, exit and nothing. Indistinguishable from a binary that does nothing.
+
+### What this does and does not close
+
+**Closes** the mapping question with a number instead of an impression: the commands
+exist (16 built), and the *guards and timeouts are not discoverable from the commands
+themselves* (1 of 16). The objective's "nothing unknown" clause is measurably unmet at
+the invocation surface, and the gap is now sized rather than asserted.
+
+**Does not close** the actions themselves. This maps BINARIES; `Lens05Actions`'
+complaint was about **actions A1–A11**, which are specified as *behaviours* and do not
+correspond one-to-one with bin targets. Several actions are functions inside
+`omp-orchestrator` with no independent entry point, so no `--help` probe can find them.
+Mapping action → binary → subcommand is a further step and is **not built**.
+
+**NO-CLAIM:** `--help` answering is a proxy for discoverability, not a measure of it.
+A binary with perfect help can still be undiscoverable if nothing tells an operator it
+exists — which is §2's `ADDRESSABLE` property, satisfied by **zero of eight gates**.
+This probe measures the second gate of two, and the first is still shut.

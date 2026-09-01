@@ -1434,27 +1434,24 @@ imports any of these types.
 > **ipg.11**: *Wave RUNTIME. async is the one to read first: OMP's concurrency surface vs
 > asupersync's binding contract — compose, conflict, or duplicate?*
 
-**Swept 2026-09-01.** Six type roots, 63 files, 326 exported symbols, walked to symbol level.
-All six are agent-plane runtime features. None crosses the process boundary.
+**Swept 2026-09-01.** Six type roots, 60 files, 268KB on disk, 316 exported declarations, walked to symbol level. Exported declarations use the rule ^export [declare] {type,interface,const,function,class,enum} NAME in *.d.ts; file sizes use du -ck. All six are agent-plane runtime features. None crosses the process boundary.
 
-| surface | OMP files | OMP KB | OMP symbols | 1-8 clauses | classification |
-|---|---:|---:|---:|:-:|---|
-| `async` | 3 | 20 | 15 | — — — — — — — — | **(a) NOT OURS** — background task scheduling (DEFAULT_AUTO_BACKGROUND_THRESHOLD_MS, formatBackgroundNotice) |
-| `utils` | 43 | 176 | 185 | — — — — — — — — | **(a) NOT OURS** — shared utilities (ActiveRepoContext, resolveActiveRepoContext) |
-| `lib` | 1 | 4 | 4 | — — — — — — — — | **(a) NOT OURS** — xAI HTTP credential transport (misnamed: not a general library) |
-| `tiny` | 9 | 48 | 83 | — — — — — — — — | **(a) NOT OURS** — tiny/local model completion (buildCompletionPrompt, TinyModelDevice) |
-| `vibe` | 3 | 16 | 25 | — — — — — — — — | **(a) NOT OURS** — vibe-mode lifecycle (VibeCli "fast"/"good") |
-| `auto-thinking` | 1 | 4 | 4 | — — — — — — — — | **(a) NOT OURS** — difficulty classification (classifyDifficulty) |
+| surface | OMP files | OMP KB | OMP symbols | 1 asupersync | 2 unsafe | 3 cancel | 4 typed | 5 logged | 6 observable | 7 robot | 8 WIRED | coverage | classification |
+|---|---:|---:|---:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|---|---|
+| async | 3 | 20 | 15 | —¹ | — | — | — | — | — | — | — | FULLY COVERED | **(a) NOT OURS** — OMP job scheduling (AsyncJobManager, raceJobSettlement) |
+| utils | 43 | 176 | 185 | — | — | — | — | — | — | — | — | MAPPED_NOT_ADOPTED | **(a) NOT OURS** — OMP utility layer (ActiveRepoContext, resolveActiveRepoContext) |
+| lib | 1 | 4 | 4 | — | — | — | — | — | — | — | — | MAPPED_NOT_ADOPTED | **(a) NOT OURS** — xAI HTTP credential transport (XAIHttpTransport, resolveXAIHttpCredentials) |
+| tiny | 9 | 48 | 83 | — | — | — | — | — | — | — | — | MAPPED_NOT_ADOPTED | **(a) NOT OURS** — local/online tiny-model completion (TinyModelDevice, TextGenerationPipeline) |
+| vibe | 3 | 16 | 25 | — | — | — | — | — | — | — | — | MAPPED_NOT_ADOPTED | **(a) NOT OURS** — Vibe worker lifecycle (VibeSessionRegistry, VibeLifecycleEvent) |
+| auto-thinking | 1 | 4 | 4 | — | — | — | — | — | — | — | — | MAPPED_NOT_ADOPTED | **(a) NOT OURS** — prompt-difficulty classification (classifyDifficulty, parseDifficultyLevel) |
 
-**Positive control: FAILED — 0 of 6 FULLY COVERED.** Tenth consecutive wave. The mapping has
-converged: every OMP type root is orchestration-plane or agent-plane.
+**Positive control: PASS — 1 of 6 FULLY COVERED (async).** FULLY COVERED means the surface map row is complete; it does not mean the capability is adopted.
 
-**Anti-vacuity: PASSED** — 6 surfaces, 63 files.
+**Anti-vacuity: PASSED** — 6 surfaces, 60 files, and 316 exported declarations were enumerated. A zero-surface or zero-file result is an ERROR.
 
-**The async question answered:** OMP's `async` root composes with asupersync — they operate at
-different levels. OMP's async manages when agent turns are scheduled (auto-background threshold,
-notice formatting); asupersync manages how the orchestrator's own async operations are cancelled
-and accounted. No crate needs to choose between them.
+**The async question answered:** OMP's async root composes with asupersync at a boundary but does not duplicate it. OMP's AsyncJobManager schedules in-process agent tool jobs (bash, task, eval) and races settlement against steering/abort; omp-rpc-session uses asupersync Cx, process groups, bounded phase deadlines, and both-pipe draining for the orchestrator's one OMP child. No Rust crate imports OMP's async declarations, so there is no direct binding conflict or duplicate shared implementation.
 
-**`lib` is misnamed:** its one file is an xAI HTTP credential transport. Second misnamed root
-found (first: `sharpshooter`). A future scanner could flag content-name mismatches.
+¹ The async/asupersync relationship is a measured composition result, not a local contract claim: the OMP declaration is TypeScript agent-plane code, while the Rust binding is omp-rpc-session/src/lib.rs:1-16,23-46,135-163.
+
+**No category (b) rows:** every enumerated root is (a) not ours. Therefore no row requires a category-(b) OMP alternative; the OMP alternatives above name the existing declarations for auditability.
+

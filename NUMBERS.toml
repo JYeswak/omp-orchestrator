@@ -79,7 +79,7 @@ note     = "THE WORST OFFENDER, and it drifted WHILE THIS ROW WAS BEING WRITTEN.
 
 [figures.no_claim_blocks]
 command  = "grep -rc '^\\*\\*NO-CLAIM' docs/plan/*.md 2>/dev/null | awk -F: '{s+=$2} END{print s}'"
-expect   = "48"
+expect   = "49"
 appears  = ["docs/PLAN.md"]
 note     = "the header quantifies the plan's own hedging; it is generated at assembly but never checked against the sections after they are edited."
 
@@ -153,3 +153,8 @@ note     = "The ipg.6 eight-root symbol total, with the counting rule DECLARED: 
 command  = "n=0; for d in crates/*/; do c=$(find \"$d/src\" -name '*.rs' -type f -exec grep -c 'Command::new' {} + 2>/dev/null | awk -F: '{s+=$NF} END{print s+0}'); [ \"${c:-0}\" -gt 0 ] && n=$((n+1)); done; echo $n"
 expect   = "16"
 note     = "Crates spawning a child process from src/ (production paths only; tests/ excluded because a lint's known-bad specimens must spawn raw to be detectable). 5 declare subprocess-contract; the other 10 carry named allowance rows in spawn_contract.rs, 6 of them marked PROVISIONAL as debt rather than as decisions. My first hand-measurement of this said 12 crates -- it swept tests/ AND I truncated the list with head -12. The gate is the better instrument."
+
+[figures.help_discoverable_binaries]
+command  = "R=/Volumes/BuildShared/cargo-targets/release; n=0; for b in $(~/.cargo/bin/cargo metadata --format-version 1 --no-deps 2>/dev/null | python3 -c \"import sys,json;m=json.load(sys.stdin);print(' '.join(sorted(t['name'] for p in m['packages'] for t in p['targets'] if 'bin' in t['kind'])))\"); do [ -x \"$R/$b\" ] || continue; o=$(timeout 15 \"$R/$b\" --help 2>&1 | head -1); case \"$o\" in usage*) case \"$o\" in *unknown*|*error*) ;; *) n=$((n+1));; esac;; esac; done; echo $n"
+expect   = "7"
+note     = "Bin targets whose --help FIRST LINE is a usage line carrying no error. NOTE, and it is the point: a stricter classifier that scans the WHOLE output rather than the first line answers 6, not 7 -- one binary opens with a clean usage line and errors further down. Two instruments, two answers; the REGISTERED COMMAND is the authority, per this repo's own rule that every number carries the command that derives it. The prose in 07-installability 7.10 quotes the stricter 6 and now says so. Measured 2026-09-01 across all 23 bin targets: 7 NOT-BUILT, 6 REAL-HELP, 3 REJECTS --help as an unknown argument, 3 treat --help as a FILESYSTEM PATH, 2 SILENT, 1 EXECUTES the gate when asked for help, 1 errors on an unrelated precondition. Only 1 of 16 buildable binaries names a timeout or deadline in its own help. This is the invocation half of Josh's 'mapped to specific commands with proper guards and timeouts' objective; the ADDRESSABLE half (does anything TELL an operator the binary exists) is satisfied by zero of eight gates."
