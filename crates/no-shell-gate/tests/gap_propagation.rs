@@ -35,7 +35,7 @@ const GAPS: &[(&str, &str, &[&str])] = &[
 /// 13 -> 9: this repair propagated ownershipToken/inputWatermark into 02-surface-census
 /// and GuestIdleReconcilerCtx into 04-diagrams; the detector measured 9 remaining pairs
 /// in 00/01/05/09/10. Baseline is a regression ceiling, not a claim that the backlog is clear.
-const BASELINE: usize = 2;
+const BASELINE: usize = 0;
 //    9 -> 12  adding sections 3.9, 3.10, 12.10 and 12.11 raised it. "I wrote more
 //             prose" is exactly the excuse this ratchet exists to refuse, so the
 //             paragraphs were fixed rather than the number.
@@ -225,11 +225,63 @@ fn the_discharged_detector_fires_on_a_planted_claim() {
         "a bare keyword match on an unrelated sentence is a false finding");
 }
 
+/// ANTI-VACUITY, and it had to change shape the moment the work finished.
+///
+/// The original asserted `!stale_pairs().is_empty()` — "if you find nothing, the detector
+/// is broken." That is right while a backlog exists and WRONG the instant it is cleared:
+/// it makes success unreachable, and the only way to get green becomes lowering the bar
+/// or deleting the test. A gate that punishes completion gets deleted, and then nothing
+/// guards the class at all.
+///
+/// The real question was never "are there stale pairs" but "can this detector still SEE".
+/// So it now checks the raw needles still match SOMETHING in the plan. Zero stale pairs
+/// with live needles means the work is done; zero stale pairs with dead needles means the
+/// patterns rotted out from under the gate and it is guarding nothing — which is exactly
+/// the silent-false-zero that `citation_integrity` hit today, matching 0 of 32 citations.
 #[test]
 fn the_scan_is_not_vacuous() {
-    assert!(!stale_pairs().is_empty(),
-        "zero pairs while BASELINE is {BASELINE} — either the work is done \
-         (lower BASELINE in the same commit) or the needles stopped matching");
+    let dir = plan_dir();
+    let mut matched_paragraphs = 0usize;
+    let mut sections = 0usize;
+    for e in fs::read_dir(&dir).expect("docs/plan must exist") {
+        let p = e.unwrap().path();
+        let name = p.file_name().unwrap().to_string_lossy().to_string();
+        if !name.ends_with(".md") || !name.chars().next().unwrap().is_ascii_digit() {
+            continue;
+        }
+        sections += 1;
+        let t = fs::read_to_string(&p).unwrap();
+        for para in t.split("\n\n") {
+            if GAPS
+                .iter()
+                .any(|(_, _, stale)| stale.iter().any(|s| para.contains(s)))
+            {
+                matched_paragraphs += 1;
+            }
+        }
+    }
+    assert!(
+        sections >= 10,
+        "scanned {sections} sections; the plan has 12 — the scan set collapsed"
+    );
+    assert!(
+        matched_paragraphs > 0,
+        "the gap needles match NOTHING in {sections} sections. The detector is blind, and a \
+         blind detector reports identically to a clean plan."
+    );
+    let stale = stale_pairs();
+    assert!(
+        stale.len() <= BASELINE,
+        "stale pairs {} exceed BASELINE {BASELINE}",
+        stale.len()
+    );
+    if stale.is_empty() && BASELINE > 0 {
+        panic!(
+            "zero stale pairs while BASELINE is {BASELINE}: the needles still match \
+             {matched_paragraphs} paragraphs, so the detector can see and the work IS done — \
+             lower BASELINE to 0 in this same commit so the ratchet cannot slip back."
+        );
+    }
 }
 
 #[test]

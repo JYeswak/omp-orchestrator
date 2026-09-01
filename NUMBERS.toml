@@ -62,7 +62,7 @@ note     = "13 numbered plan sections are in docs/plan/00 through 12; convergenc
 [figures.test_files]
 
 command  = "find crates -type f -path '*/tests/*.rs' | wc -l"
-expect   = "93"
+expect   = "95"
 note     = "Recursive source-file count; the prior top-level glob undercounted nested fixture tests and is historical."
 [figures.board_total]
 command  = "for s in closed in_progress open blocked grading; do br list --status $s --json | jq '.issues | length'; done | awk '{s += $1} END {print s}'"
@@ -73,7 +73,7 @@ note     = "not a fixed figure — the board moves hourly. Declared so any prose
 [figures.test_functions]
 command  = "grep -RhoF '#[test]' crates --include='*.rs' | wc -l"
 note     = "Recursive annotation count across all Rust sources; current re-derived value is 987; earlier 962/983/984 values are dated snapshots."
-expect   = "998"
+expect   = "1006"
 appears  = ["docs/plan/01-idea.md", "docs/plan/06-gates.md", "docs/plan/00-brief.md"]
 
 [figures.no_claim_blocks]

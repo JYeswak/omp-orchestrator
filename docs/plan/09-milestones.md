@@ -53,6 +53,8 @@ Run exactly:
 
 The test must print one JSON line with `{"fixture":"tick-monitor-newly-idle.json","state":"NewlyIdle","free_capacity":true,"shared_type":"PaneObservation","revision":"<git sha>"}` and exit 0. It must compile the real fixture through the production parser and fail if either crate's public parse/emit signature does not use the same `omp-types::PaneObservation` type; the pre-milestone tree fails because the test, fixture, dependency edge, and shared signature are absent, while the post-milestone tree passes only with that JSON and exit 0. A separate source check is the exact command
 `grep -rn "omp-types\\|omp_types" crates/*/Cargo.toml | grep -v "^crates/omp-types/"`; its non-empty result must name both consumers. **NOT IN SCOPE.** Selection, dispatch, ack — M1 changes what the loop *sees*.
+> **Upstream type for the idle gap:** the fixture's `NewlyIdle` state corresponds to `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts:9-30`) upstream. The milestone asserts our own `PaneObservation` shape; it does not claim the distinction is precedent-free.
+> **Completion vocabulary exists upstream:** `AgentEndEvent` carries the terminal signal this milestone re-derives from a fixture. The milestone asserts our own shape; it makes no precedent-free claim about the platform.
 
 > *Upstream type for this gap: `GuestIdleReconcilerCtx` (DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
@@ -320,6 +322,7 @@ BANKED rows cite evidence; UNPROVEN rows name the experiment that settles them. 
 | The observe layer works and the NewlyIdle filter defect is fixed in source — tick-monitor/src/lib.rs:467-468 exposes ConfirmedIdle or NewlyIdle free capacity; regression test observed_idle_state_counts_as_free_capacity_before_confirmation at omp-orchestrator/src/main.rs:1646-1653 | **The seam cannot silently diverge again.** No shared type crosses it; parse_observation uses JSON lists plus an IDLE fallback. Settled by M1 only after the shared-type fixture lands. |
 | The one hard rule is enforced mechanically — a Rust gate walks `git ls-files` and fails on `.sh`/`.py`, exemption list empty | **The gates bite under attack.** The former **2-of-8 / 4-of-8** figures are **HISTORICAL, UNPROVEN** snapshots and are not a current verdict. Settled by bringing all 8 to four legs plus ADDRESSABLE, and a planted-known-bad campaign per gate. |
 | Failing closed with a remediation hint works — `fh` MCP returns a typed `SERVE_INPUT_STALE` naming the moved mirror HEAD (`5dec4212…` → `ecdea397…`) rather than an empty result | **This plan enforces its own discipline.** `MEASURED`: `ls crates/ \| grep plan-check` → empty. Settled by shipping `plan-check` (§4) with its known-bad fixture. |
+> **Idle vocabulary exists upstream:** `GuestIdleReconcilerCtx` declares the NewlyIdle/ConfirmedIdle distinction. What is UNPROVEN here is our consumption of it, not its existence.
 
 > *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 

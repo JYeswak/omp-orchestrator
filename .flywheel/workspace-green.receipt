@@ -1,5 +1,5 @@
 workspace_green_receipt
-recorded_at_unix=1788304764
+recorded_at_unix=1788305303
 failing_suites=0
 recorded_by=pre-push-gate
 NOTE: the count is asserted by the caller, not observed by this binary.
