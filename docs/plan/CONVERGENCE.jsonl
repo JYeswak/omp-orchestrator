@@ -1,27 +1,30 @@
-{"section":"09-milestones","round":8,"lens":"evidence","new_findings":1,"verdict":"PASS-WITH-FIXES","evidence":"/tmp/grade/rA-09.md"}
-{"section":"10-prior-art","round":8,"lens":"evidence","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rA-10.md"}
-{"section":"11-lifecycle","round":8,"lens":"evidence","new_findings":1,"verdict":"PASS-WITH-FIXES","evidence":"/tmp/grade/rA-11.md"}
-{"section":"03-crates","round":8,"lens":"adversarial","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rA-03-crates.md"}
-{"section":"04-diagrams","round":8,"lens":"adversarial","new_findings":1,"verdict":"PASS-WITH-FIXES","evidence":"/tmp/grade/rA-04-diagrams.md"}
-{"section":"05-actions","round":8,"lens":"adversarial","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rA-05-actions.md"}
-{"section":"00-brief","round":8,"lens":"investor","new_findings":1,"verdict":"FAIL","evidence":"/tmp/grade/rA-00.md"}
-{"section":"01-idea","round":8,"lens":"investor","new_findings":2,"verdict":"FAIL","evidence":"/tmp/grade/rA-01.md"}
-{"section":"02-surface-census","round":8,"lens":"investor","new_findings":3,"verdict":"FAIL","evidence":"/tmp/grade/rA-02.md"}
-{"section":"06-gates","round":8,"lens":"absence","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rA-06-gates.md"}
-{"section":"07-installability","round":8,"lens":"absence","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rA-07-installability.md"}
-{"section":"08-end-users","round":8,"lens":"absence","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rA-08-end-users.md"}
-{"section":"03-crates","round":9,"lens":"investor","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rB-03.md"}
-{"section":"04-diagrams","round":9,"lens":"investor","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rB-04.md"}
-{"section":"05-actions","round":9,"lens":"investor","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rB-05.md"}
-{"section":"00-brief","round":9,"lens":"evidence","new_findings":4,"verdict":"FAIL","evidence":"/tmp/grade/rB-00.md"}
-{"section":"01-idea","round":9,"lens":"evidence","new_findings":3,"verdict":"FAIL","evidence":"/tmp/grade/rB-01.md"}
-{"section":"02-surface-census","round":9,"lens":"evidence","new_findings":2,"verdict":"FAIL","evidence":"/tmp/grade/rB-02.md"}
-{"section":"06-gates","round":9,"lens":"adversarial","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rB-06-gates.md"}
-{"section":"07-installability","round":9,"lens":"adversarial","new_findings":1,"verdict":"PASS-WITH-FIXES","evidence":"/tmp/grade/rB-07-installability.md"}
-{"section":"08-end-users","round":9,"lens":"adversarial","new_findings":1,"verdict":"PASS-WITH-FIXES","evidence":"/tmp/grade/rB-08-end-users.md"}
-{"section":"09-milestones","round":9,"lens":"absence","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rB-09-milestones.md"}
-{"section":"10-prior-art","round":9,"lens":"absence","new_findings":1,"verdict":"FAIL","evidence":"/tmp/grade/rB-10-prior-art.md"}
-{"section":"11-lifecycle","round":9,"lens":"absence","new_findings":1,"verdict":"FAIL","evidence":"/tmp/grade/rB-11-lifecycle.md"}
-{"section":"06-gates","round":10,"lens":"investor","role":"capability","new_findings":4,"verdict":"FAIL","evidence":"/tmp/grade/r10-06-gates.md"}
-{"section":"07-installability","round":10,"lens":"investor","role":"hillclimb","new_findings":8,"verdict":"FAIL","evidence":"/tmp/grade/r10-07-installability.md"}
-{"section":"08-end-users","round":10,"lens":"investor","role":"hillclimb","new_findings":5,"verdict":"FAIL","evidence":"/tmp/grade/r10-08-end-users.md"}
+{"section": "09-milestones", "round": 8, "lens": "evidence", "new_findings": 1, "verdict": "PASS-WITH-FIXES", "evidence": "/tmp/grade/rA-09.md"}
+{"section": "10-prior-art", "round": 8, "lens": "evidence", "new_findings": 0, "verdict": "PASS", "evidence": "/tmp/grade/rA-10.md"}
+{"section": "11-lifecycle", "round": 8, "lens": "evidence", "new_findings": 1, "verdict": "PASS-WITH-FIXES", "evidence": "/tmp/grade/rA-11.md"}
+{"section": "03-crates", "round": 8, "lens": "adversarial", "new_findings": 0, "verdict": "PASS", "evidence": "/tmp/grade/rA-03-crates.md"}
+{"section": "04-diagrams", "round": 8, "lens": "adversarial", "new_findings": 1, "verdict": "PASS-WITH-FIXES", "evidence": "/tmp/grade/rA-04-diagrams.md"}
+{"section": "05-actions", "round": 8, "lens": "adversarial", "new_findings": 0, "verdict": "PASS", "evidence": "/tmp/grade/rA-05-actions.md"}
+{"section": "00-brief", "round": 8, "lens": "investor", "new_findings": 1, "verdict": "FAIL", "evidence": "/tmp/grade/rA-00.md"}
+{"section": "01-idea", "round": 8, "lens": "investor", "new_findings": 2, "verdict": "FAIL", "evidence": "/tmp/grade/rA-01.md"}
+{"section": "02-surface-census", "round": 8, "lens": "investor", "new_findings": 3, "verdict": "FAIL", "evidence": "/tmp/grade/rA-02.md"}
+{"section": "06-gates", "round": 8, "lens": "absence", "new_findings": 0, "verdict": "PASS", "evidence": "/tmp/grade/rA-06-gates.md"}
+{"section": "07-installability", "round": 8, "lens": "absence", "new_findings": 0, "verdict": "PASS", "evidence": "/tmp/grade/rA-07-installability.md"}
+{"section": "08-end-users", "round": 8, "lens": "absence", "new_findings": 0, "verdict": "PASS", "evidence": "/tmp/grade/rA-08-end-users.md"}
+{"section": "03-crates", "round": 9, "lens": "investor", "new_findings": 0, "verdict": "PASS", "evidence": "/tmp/grade/rB-03.md"}
+{"section": "04-diagrams", "round": 9, "lens": "investor", "new_findings": 0, "verdict": "PASS", "evidence": "/tmp/grade/rB-04.md"}
+{"section": "05-actions", "round": 9, "lens": "investor", "new_findings": 0, "verdict": "PASS", "evidence": "/tmp/grade/rB-05.md"}
+{"section": "00-brief", "round": 9, "lens": "evidence", "new_findings": 4, "verdict": "FAIL", "evidence": "/tmp/grade/rB-00.md"}
+{"section": "01-idea", "round": 9, "lens": "evidence", "new_findings": 3, "verdict": "FAIL", "evidence": "/tmp/grade/rB-01.md"}
+{"section": "02-surface-census", "round": 9, "lens": "evidence", "new_findings": 2, "verdict": "FAIL", "evidence": "/tmp/grade/rB-02.md"}
+{"section": "06-gates", "round": 9, "lens": "adversarial", "new_findings": 0, "verdict": "PASS", "evidence": "/tmp/grade/rB-06-gates.md"}
+{"section": "07-installability", "round": 9, "lens": "adversarial", "new_findings": 1, "verdict": "PASS-WITH-FIXES", "evidence": "/tmp/grade/rB-07-installability.md"}
+{"section": "08-end-users", "round": 9, "lens": "adversarial", "new_findings": 1, "verdict": "PASS-WITH-FIXES", "evidence": "/tmp/grade/rB-08-end-users.md"}
+{"section": "09-milestones", "round": 9, "lens": "absence", "new_findings": 0, "verdict": "PASS", "evidence": "/tmp/grade/rB-09-milestones.md"}
+{"section": "10-prior-art", "round": 9, "lens": "absence", "new_findings": 1, "verdict": "FAIL", "evidence": "/tmp/grade/rB-10-prior-art.md"}
+{"section": "11-lifecycle", "round": 9, "lens": "absence", "new_findings": 1, "verdict": "FAIL", "evidence": "/tmp/grade/rB-11-lifecycle.md"}
+{"section": "06-gates", "round": 10, "lens": "investor", "role": "capability", "new_findings": 3, "verdict": "FAIL", "evidence": "/tmp/grade/r10-06-gates.md", "note": "minus one: the runbook-contract BLOCKER was a scope error in the round-10 briefing, not a section defect. See docs/plan/12-journey.md SCOPE."}
+{"section": "07-installability", "round": 10, "lens": "investor", "role": "hillclimb", "new_findings": 7, "verdict": "FAIL", "evidence": "/tmp/grade/r10-07-installability.md", "note": "minus one: the runbook-contract BLOCKER was a scope error in the round-10 briefing, not a section defect. See docs/plan/12-journey.md SCOPE."}
+{"section": "08-end-users", "round": 10, "lens": "investor", "role": "hillclimb", "new_findings": 4, "verdict": "FAIL", "evidence": "/tmp/grade/r10-08-end-users.md", "note": "minus one: the runbook-contract BLOCKER was a scope error in the round-10 briefing, not a section defect. See docs/plan/12-journey.md SCOPE."}
+{"section":"00-brief","round":10,"lens":"absence","role":"hillclimb","new_findings":5,"verdict":"FAIL","evidence":"/tmp/grade/r10-00-brief.md"}
+{"section":"01-idea","round":10,"lens":"absence","role":"hillclimb","new_findings":7,"verdict":"FAIL","evidence":"/tmp/grade/r10-01-idea.md"}
+{"section":"02-surface-census","round":10,"lens":"absence","role":"hillclimb","new_findings":5,"verdict":"FAIL","evidence":"/tmp/grade/r10-02-surface-census.md"}
