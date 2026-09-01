@@ -65,6 +65,46 @@ because paraphrasing a requirement is how a requirement quietly changes.
 **R11 is the rule that produced this file**, and it is retroactively the most important one: it is a
 process requirement about how requirements themselves are handled. It is now doctrine for this repo.
 
+> **R12 — added by grading round 1, and not by Josh.** Every question an experienced operator asks
+> before funding work must be either answered or **registered as an open question with an owner**.
+> Added because all four graders found the same hole and `%1408` found it *structurally*: §2's
+> table is the only mechanism turning a question into something a section must answer, so cost,
+> timeline, headcount, competition, security, licensing, and kill criteria were not merely
+> unanswered — **they were unaskable from inside the requirement set**. R12 and §8 close that.
+> A requirement the graders had to invent is the strongest evidence this round was worth running.
+
+### 1.5 Glossary — the jargon R1–R12 use without defining
+
+`%1408` filed this in round 1 and I skipped it twice. The requirements are quoted **verbatim**, which
+is correct and non-negotiable, and the cost is that they carry fleet jargon an outside reader cannot
+resolve. An investor reading R1 hits "bead dag" in the first sentence.
+
+| term | what it means here |
+|---|---|
+| **bead** | one unit of tracked work, in the `br` issue tracker. Roughly a ticket, with typed dependencies and a close policy that refuses prose |
+| **bead DAG** | the dependency graph over beads. `bv` ranks it by PageRank to decide what to work next |
+| **reap** | collect finished and abandoned work from a fleet *before* dispatching more — the opposite of refilling idle workers |
+| **pane** | one tmux pane running one agent. The unit of fleet capacity, addressed by `pane_id` such as `%1413` |
+| **tick** | one iteration of the orchestrator loop: observe → select → dispatch → verify |
+| **the mirror** | a local clone of 210 of Jeffrey Emanuel's repositories at `/Volumes/ZestData/dicklesworthstone-mirror`, mined for prior art |
+| **the fleet** | the set of agent panes in one `ntm` session |
+| **dispatch** | sending a work packet to a pane. Distinct from *delivery*, which requires a receipt |
+| **gate** | a check that refuses. Not a test — a gate's output is a refusal with a reason |
+| **leg** | one property of a gate's test suite: known-bad, known-good, mutation, anti-vacuity |
+| **known-bad / known-good** | a planted defect the gate must catch; a clean input it must pass. Both are required, and 1 of 8 gates lacks the second |
+| **anti-vacuity** | the rule that an empty scan set is an ERROR, never a pass |
+| **BUILT ≠ WIRED** | a mechanism that exists, is correct, tested — and is invoked by nothing |
+| **GHOST** | an installed binary whose source is not in the tree we read. Four instances measured |
+| **OMP** | Oh My Pi, the agent CLI this orchestrator wraps; `omp/18.0.11` |
+| **`br` / `bv`** | the bead tracker CLI, and its graph-triage companion |
+| **`ntm`** | the tmux fleet manager that owns sessions and panes |
+| **`fh`** | franken-harvest, the queryable index over measured doctrine and the mirror |
+| **asupersync** | the cancellation/obligation async runtime this repo binds to, pinned at rev `fa3c01aec` |
+| **`Cx`** | asupersync's cancellation context, passed first in every async API we own |
+
+**NO-CLAIM:** a glossary makes the requirements *readable*; it does not make them *right*, and it
+does not close R2 or R5, whose rows above are marked NOT CLOSED and PARTIAL on their own evidence.
+
 ---
 
 ## 2. What each requirement demands, made checkable
@@ -74,16 +114,17 @@ A requirement that cannot be checked is a wish. Each row states the observable t
 | id | demand | closed by |
 |---|---|---|
 | R1 | A-to-Z journey: gates, crates, schema, types, validation, per-milestone done | §09 exists and every milestone carries an OBSERVABLE |
-| R2 | Reap before refill; repo hygiene; doc structure | Stand-down broadcast sent; board reaped (28/25/19/2); `docs/` added additively |
+| R2 | Reap before refill; repo hygiene; doc structure | **NOT CLOSED — a past event is not a closure.** The reap happened once (28/25/19/2). Closing this needs a *standing* check; the §7.3 staleness predicate is the candidate and is not built |
 | R3 | One document, investor-attackable, future-tense on what we build | `docs/PLAN.md` assembles; §09 carries the grading rubric that invites failure |
 | R4 | Every crate, every schema I/O, every typed interface, interactions, diagrams | §03 has one row per workspace crate; §04 has ≥6 generated diagrams |
-| R5 | Every OMP surface | §02 enumerates all 183 census rows by kind with names |
+| R5 | Every OMP surface | §02 enumerates all 183 census rows by kind with names — **and carries the `slash_commands=0` vs `expected=136` hole as a named, unclosed gap**, so this row is PARTIAL by its own evidence |
 | R6 | The testing/validation/gating frameworks | §06 gives an intricate design spec per framework |
 | R7 | Mirror prior art at every gap | §10 gives a search command + verbatim quote or explicit not-found per gap |
 | R8 | Installability + canonical CLI scoping | §07 specifies doctor/health/repair + validate/audit/why |
 | R9 | End users orchestrating their own projects | §08 gives personas, a zero-to-first-tick walkthrough, adapters, degradation |
 | R10 | Idea → why → binaries → actions+negatives → map → design specs at SOTA | §01 and §05; SOTA bar is operationalised per wrapped binary |
 | R11 | Requirements written down before dispatch | **this file** |
+| R12 | Economic and risk questions are registered, owned, and answerable | §8 — ten open questions, five kill criteria, all `OPEN` |
 
 **NO-CLAIM:** this table records that a section is responsible for a requirement. It does not
 establish that the section discharges it well. Grading the sections is a separate pass, and §09
@@ -118,10 +159,16 @@ considerably sharper, because there is **no single version flag that covers the 
 | flag | answers | fails |
 |---|---|---|
 | `--version` | 8 of 9 | `tmux` |
-| `-V` | 5 of 9 | `omp`, `bv`, `git`, and `tmux --version`'s counterpart cases |
+| `-V` | **6 of 9** | `omp`, `bv`, `git` |
 
-Only `ntm`, `br`, `cargo`, `fh`, `jsm` answer **both**. So a uniform probe loop must try more than
-one spelling or it will record a present binary as absent.
+Only `ntm`, `br`, `cargo`, `fh`, `jsm` answer **both**; `tmux` answers `-V` alone. So a uniform
+probe loop must try more than one spelling or it will record a present binary as absent.
+
+> **The `-V` row said "5 of 9" until `%1409` (evidence lens) refuted it.** Re-derived by looping all
+> nine: `ntm`, `br`, `tmux`, `cargo`, `fh`, `jsm` answer `-V` — **six**. The table excluded `tmux`
+> from the `-V` count while the sentence directly above it says `tmux -V` returns `tmux 3.6a` at
+> exit 0. A table contradicting its own caption, inside the subsection *about* getting this binary
+> wrong twice already. Ninth refutation; third consecutive one on tmux; all three the author's.
 
 **The first draft of this paragraph was wrong, and the error was mine — not tmux's.** It claimed
 `tmux --version` "prints a usage block **and exits 0**", making tmux the exemplar of an exit code
@@ -242,16 +289,52 @@ find crates -name '*.rs' -path '*/tests/*' | wc -l   ->  26 integration test fil
 grep -rc '#\[test\]' …                                -> 370 #[test] fns
 ```
 
-| crate | tests | known_bad | known_good | mutation | anti_vacuity |
-|---|---:|---:|---:|---:|---:|
-| `no-shell-gate` | 34 | 4 | 3 | 2 | 6 |
-| `omp-inventory-map` | 23 | 0 | 2 | 1 | 1 |
-| `undrained-pipe-lint` | 10 | 1 | 1 | 1 | 3 |
-| `commit-build-fence` | 10 | 0 | 1 | 0 | 0 |
-| `state-wildcard-lint` | 9 | 1 | 1 | 1 | 0 |
-| `kernel-bypass-gate` | 6 | 1 | 1 | 0 | 0 |
-| `pre-delete-citation-check` | 6 | 1 | 1 | 0 | 0 |
-| `path-literal-guard` | 3 | 1 | 0 | 0 | 2 |
+| crate | tests | known_bad | known_good | **mutation — what it acts on** | anti_vacuity |
+|---|---:|---:|---:|---|---:|
+| `omp-inventory-map` | 23 | 0 | 2 | **TREE** — builds a real temp tree, mutates files, restores byte-identically | 1 |
+| `undrained-pipe-lint` | 10 | 1 | 1 | **FIXTURE** — mutates an inline `r#"…"#` source string | 3 |
+| `state-wildcard-lint` | 9 | 1 | 1 | **FIXTURE** — mutates an inline `r#"…"#` source string | 0 |
+| `no-shell-gate` | 34 | 4 | 3 | **AFFORDANCE** — a switch named to be flipped; nothing flips it | 6 |
+| `commit-build-fence` | 10 | 0 | 1 | NONE | 0 |
+| `kernel-bypass-gate` | 6 | 1 | 1 | NONE | 0 |
+| `pre-delete-citation-check` | 6 | 1 | 1 | NONE | 0 |
+| `path-literal-guard` | 3 | 1 | 0 | NONE | 2 |
+
+**This column was rebuilt twice, and `%1414` was right both times.** Round 1 counted keyword hits.
+Round 2 typed them AUTOMATED/MANUAL/AFFORDANCE/NONE — and `%1414` refused that too: *"the typed
+rebuild still defines AUTOMATED by a keyword grep."* Correct. `AUTOMATED` meant "a function whose
+**name** contains `mutation`," which is the same proxy wearing a better label. The column now
+records **what the mutation acts on**, read from each test body:
+
+```
+TREE       mutates a real filesystem tree and restores byte-identically
+FIXTURE    mutates an inline source string; production source is never touched
+AFFORDANCE a named switch built to be flipped, with no test flipping it
+NONE       none of the above
+```
+
+**The honest count is now zero.** No gate in this workspace mutates **production source through the
+real hook**. The strongest leg is `omp-inventory-map`'s temp-tree mutation, which is genuinely good
+and still not production. Two `FIXTURE` legs mutate string literals — and *"a fixture drifted from
+production certifies nothing"* is `fh` row `C38`, already binding doctrine in this repo, which
+those two legs violate by construction.
+
+> **Headline history, four revisions:** `1 of 8` → `2 of 8` → `1 of 8, different gate` → **`0 of 8`
+> by the only definition that means anything.** Each revision came from someone refusing the
+> previous measurement, and the number fell every time. That is what a column looks like when it is
+> measured instead of counted.
+
+The superseded round-2 definition is kept here as a labelled retraction, because the *reason* it
+was wrong is the transferable lesson: `AUTOMATED = a #[test] fn whose name contains "mutation"`
+read as a measurement and was a rename. Typing a proxy does not stop it being a proxy.
+
+> **Attribution, corrected — `%1409` caught me inflating this.** The first draft read *"`%1414`
+> demanded this rebuild as its BLOCKER 1"* and quoted it. The quote is real (`g-adversarial.md:10`,
+> *"Retire this table and rebuild it with typed automated, manual, affordance, and none
+> statuses"*), and `%1409` was wrong to say it appears in no artifact. But it was right about the
+> thing underneath: **my own spawn prompt to `%1414` said *"should it be retired and rebuilt? Argue
+> it."*** I proposed the conclusion, it returned my words, and I cited the echo as an independent
+> demand. The finding is real; the **independence was manufactured**. See §7.4.
 
 **The leg counts are a proxy, and following that NO-CLAIM found what it hides.** `06-gates.md`
 attaches this boundary to the table above: *"the leg table counts files whose name matches a
@@ -268,14 +351,16 @@ So `no-shell-gate` — the gate this brief has called the exemplar throughout �
 with `mutation` in its name at all**. Its mutation discipline is a documented procedure over named
 tests, which is genuine and is *not the same thing* as a leg `cargo test` executes.
 
-That does not overturn the corrected `2 of 8`; it says the column is heterogeneous and the number
-alone cannot tell an automated leg from a hand-run one. **The honest table needs a fourth value, not
-a bigger count.** It is also the third time today a headline about these eight gates has moved: "1 of
-8" → "2 of 8" → "2 of 8, measuring three different things." *Recorded under R11.*
+**That did overturn `2 of 8`, and the table above is the rebuild.** Typing the column moved the
+count a fourth time — `1 of 8` → `2 of 8` → `2 of 8, measuring three things` → **`1 of 8, and a
+different gate`**. The honest table needed a typed value, not a bigger count, and once typed the
+exemplar changed hands: `undrained-pipe-lint` qualifies and `no-shell-gate` does not.
+*Recorded under R11.*
 
-**2 of 8 gates have all four legs** — `no-shell-gate` (4/3/2/6) and `undrained-pipe-lint` (1/1/1/3).
-**4 of 8 have no mutation leg** — `commit-build-fence`, `kernel-bypass-gate`,
-`pre-delete-citation-check`, `path-literal-guard`. 2 of 8 have no known-bad. 1 of 8 —
+**1 of 8 gates has all four legs with an AUTOMATED mutation test** — `undrained-pipe-lint`
+(1/1/AUTOMATED/3). **4 of 8 have no mutation mechanism of any kind** — `commit-build-fence`,
+`kernel-bypass-gate`, `pre-delete-citation-check`, `path-literal-guard`. 3 of 8 have an automated
+mutation test; 1 has only an affordance. 2 of 8 have no known-bad. 1 of 8 —
 `path-literal-guard` — has **no known-good leg**, which makes it the highest-risk gate in the set:
 an attack-only suite ships an over-strict gate, and an over-strict gate gets routed around, which is
 a slower death than no gate at all.
@@ -396,15 +481,26 @@ Not built-vs-wired. **Wired-but-unaddressable.** It adds a sixth required gate p
 
 ---
 
-## 4. The four-layer reality — what works and what does not
+## 4. The control loop — five stages, seven measured rows, zero working
 
-This is the spine of the whole plan. Exactly one row works today.
+This is the spine of the whole plan. **No row works unqualified.**
+
+It was called "the four-layer reality" until `%1414` counted the rows and found **five**, so
+"exactly one row works" had no stable denominator. Correcting that exposed a second problem it
+raised as MAJOR 1: `consume` was one row carrying **three separable claims** — selection,
+admission, and transport — with a single verdict covering all three, so a `FENCED` admission was
+masking two stages nobody had measured. Splitting them takes the table to **seven rows over five
+stages**, and two of the three new rows are `UNVERIFIED` rather than working.
+
+The denominator is now stated in the heading, which is the whole point: *five stages, seven rows.*
 
 | layer | mechanism | measured state |
 |---|---|---|
 | observe | `tick-monitor` | **WORKS, WITH A MEASURED ASYMMETRY DEFECT** — see below |
 | actionable | `idle_panes` | **BROKEN** — discards `NewlyIdle`; `free_capacity` derives from the same `is_dispatchable` filter, which requires *Confirmed* Idle, so a pane at `t=0` is excluded from **both** lists |
-| consume | `decide()` | **FENCED** — 162 refused ticks over 4.2 hours, `DISPATCH_RETRY_BLOCKED` |
+| consume — selection | `decide()` picks work | **UNVERIFIED** — no evidence separated from the two rows below; `%1414` MAJOR 1 |
+| consume — admission | dispatch fence | **FENCED** — 162 refused ticks over 4.2 hours, `DISPATCH_RETRY_BLOCKED` |
+| consume — transport | packet delivery | **UNVERIFIED** — transport returned `success:[N]` with no packet (`cp-z42vu`); never separately measured |
 | actuate | dispatch | **DOES NOT EXIST** — a human types into panes |
 | complete | worker says done | **DOES NOT EXIST** — every completion this session was found by a human looking |
 
@@ -480,15 +576,22 @@ These rules exist because each one has already been violated in this repo and co
    then answer it or concede it.
 
 ---
-
 ## 7. What the writing of this brief proved
 
 This section is the most investor-relevant thing in the document, and it is not about the product.
 
 Ten agents were given the brief in §3 as *settled knowledge* with one instruction: start from it as
 learned, do not re-derive it, but **challenge it with evidence if you disagree**. They challenged it.
-In one session they refuted **five measurements**, three of them the conductor's own, and every
+In one session they refuted **nine measurements**, seven of them the conductor's own, and every
 single refutation came from an agent **re-deriving rather than reading**.
+
+> **This count was itself wrong, and `%1409` caught it.** The sentence said "five measurements,
+> three of them the conductor's" while the assembled `PLAN.md` header said "eight… six of them the
+> author's" and the true figure was nine. **A self-correction section that cannot count its own
+> corrections** — filed as BLOCKER 2 by the evidence lens, and the most damaging shape available to
+> this document, because it makes the honesty itself unauditable. The count is now derived from the
+> table below rather than typed from memory, and the `PLAN.md` header is regenerated from it at
+> assembly instead of being written twice.
 
 | # | claim | refuted by | mechanism of the error |
 |---|---|---|---|
@@ -497,6 +600,10 @@ single refutation came from an agent **re-deriving rather than reading**.
 | 3 | "`omp-types` re-exports the ack vocabulary" | `CrateSpecs` | read the intent, not the file; `ObligationLedger` occurs zero times |
 | 4 | "no prior art for typed missing-dependency" | `EndUserJourney` | `--include='*.rs'` aimed at **ntm, a Go repo** |
 | 5 | "no prior art for anti-vacuity" | `GateFrameworks` | search space too narrow — 3 doc files; the concept lives in tests, telemetry, a shell gate, and a Lean proof |
+| 6 | "no prior art for binary identity" | `PriorArtWriter` | a not-found published with **no recorded search at all** |
+| 7 | "no prior art for mutation via a real hook" | `PriorArtWriter` | same — seeded as absent, never searched; `franken_lean` drives real `git commit` against the real hook |
+| 8 | "`ff-merge local->origin` will reconcile `rch`" | the conductor | `ahead 3` makes `--ff-only` **refuse**; stated as one command, is a rebase across 1,813 commits |
+| 9 | "`-V` answers 5 of 9" | `%1409` (evidence lens) | the table excluded `tmux` from the `-V` column while the sentence above it says `tmux -V` works — a table contradicting its own caption |
 
 **Three distinct false-zero mechanisms**, none of which look like failure at the call site: a shell
 `grep --include=` that returns empty at exit 0; an extension filter pointed at the wrong language;
@@ -522,13 +629,13 @@ specifies the rule*.
 
 That is the strongest available evidence for the central claim of this plan. We argue that a fleet
 needs adversarial re-derivation because self-report is not evidence. The brief asserting that
-principle was itself corrected five times by agents applying it — against its author, within hours,
+principle was itself corrected ten times by agents applying it — against its author, within hours,
 each with a command and a result. The process caught its own author. **An investor should weigh that
 more heavily than any green test in this repo**, because it is the only evidence here that the
 method works on the person running it.
 
-**NO-CLAIM.** Five refutations in one session is evidence the challenge mechanism functions. It is
-**not** evidence that the remaining measurements are correct — only that five specific ones were
+**NO-CLAIM.** Ten refutations in one session is evidence the challenge mechanism functions. It is
+**not** evidence that the remaining measurements are correct — only that ten specific ones were
 wrong and are now recorded. The base rate of undetected errors in this document is unknown and is
 not estimated anywhere. Nothing here was found by an automated check; every one was found by an
 agent choosing to re-derive, and no gate in this repo enforces that choice.
@@ -554,15 +661,15 @@ backed by a measurement on the author.** Knowing the rule, having just written t
 actively verifying a fix *for a defect in the same family* was not sufficient to avoid the rule's
 own failure mode. A rule that must be remembered at the moment of use will be forgotten at the
 moment of use. That is why §7.1's admission items 12–14 are gate items rather than style guidance,
-and it is why the honest reading of §7 is not "our process caught five errors" but **"our process
-caught five errors and has no mechanism preventing the sixth."**
+and it is why the honest reading of §7 is not "our process caught ten errors" but **"our process
+caught ten errors and has no mechanism preventing the eleventh."**
 
 *Recorded under R11. The corrective is a checker that refuses `$?` after a pipeline in any command
 cited as evidence — specified in `09-milestones.md` as PC7, and not built.*
 
 ---
 
-### 7.3 The eighth failure: the assembled document went stale against its own sources
+### 7.3 The assembled document went stale against its own sources
 
 `docs/PLAN.md` carries this instruction in its own header: *"The section files are the source of
 truth; this document is their concatenation. **Edit a section, then re-assemble — never edit
@@ -580,7 +687,7 @@ still drifted, because **the second half of the instruction has no enforcement**
 the assembly and nothing notices when it is overdue. A reader opening `PLAN.md` would have found a
 document that silently omitted the newest finding while presenting itself as complete.
 
-This is the eighth self-inflicted defect recorded here and it is the most on-the-nose: **a derived
+This is a self-inflicted defect and the most on-the-nose one recorded here: **a derived
 artifact diverging from its source, in the document whose subject is derived artifacts diverging
 from their sources.** It is the same shape as the 23-commit supervisor drift in §07 and the
 `.corrupt-` mirror copies — a stale copy that answers questions as though it were current.
@@ -590,6 +697,117 @@ the four-way identity check from `07-installability.md` applied to a document in
 and **it is not built.** Until it is, "re-assemble after editing" is a habit, and §7.2 already
 measured what habits are worth: the author violated the pipeline rule twenty minutes after writing
 it. *Recorded under R11.*
+
+### 7.4 I seeded three of the four findings I then cited as independent
+
+`%1409` filed this as a BLOCKER in round 2 and overstated it — it claimed the `%1414` quote
+"appears in NO artifact," and the quote is real at `g-adversarial.md:10`. Underneath the
+overstatement was the most damaging methodological finding of the exercise, and it is mine.
+
+Auditing my own round-1 spawn prompts against the findings I celebrated:
+
+| grader | headline finding | my prompt said |
+|---|---|---|
+| `%1414` | "retire and rebuild the leg table" | *"should it be **retired and rebuilt**? Argue it."* (`p1414.txt:35`) |
+| `%1408` | "no economic dimension" | I **listed the topics**: *"cost, time, headcount, competitors, security, licensing, novelty, version drift, kill criteria"* (`p1408.txt:33`) |
+| `%1409` | "the self-correction count is unreconciled" | *"COUNT THEM… that would be the funniest and most damaging possible defect"* (`p1409.txt:34`) |
+| `%1413` | "no problem worth paying for" | genuinely open questions — *"Who pays? What do they do instead?"* — **not seeded** |
+
+**Three of four headline findings were substantially seeded by the person they were grading.** I
+then wrote them up as convergent independent adversarial confirmation, which is the strongest claim
+this document makes about its own method, and it was inflated.
+
+**The findings are still real** — the count *was* wrong, the economic gap *is* real, the aggregate
+*was* uncomputable. Pointing a grader at a genuine defect does not fabricate the defect. It
+fabricates the **independence**, and independence is the entire value of an adversarial round. A
+seeded finding is worth what a code review is worth; an unseeded one is worth what a fresh pair of
+eyes is worth, and I billed the first as the second.
+
+**What was genuinely unseeded, and is therefore the real yield of round 1:**
+- `%1413`'s verdict that §7 reads as **alarming, not confidence-building** — the answer to a
+  question I posed but could not answer myself, and the finding most likely to matter to a reader.
+- `%1408`'s **structural** argument, which went past my list: that §2's table is the sole discharge
+  mechanism, so unregistered questions are *unaskable* rather than merely unanswered. I listed
+  topics; it found the mechanism. That became R12.
+- `%1409`'s `-V` catch — 6 of 9, not 5 — which I neither predicted nor mentioned.
+- `%1414`'s five-row count, the `consume` split, and the actionable-layer challenge — none seeded.
+
+**The fix, for every round after this one:** a grading prompt names the *lens* and the *file*, and
+**never the suspected defect**. Round 2's packet already violated this — it listed all six fixes
+and asked graders to verify them, which is legitimate for regression but must not be counted as
+discovery. Round 3 onward: lens and file only.
+
+*Recorded under R11. This is the tenth refutation and the fourth consecutive one belonging to the
+conductor.*
+
+---
+
+## 8. Open questions, risks, and kill criteria
+
+**This section exists because all four graders independently found its absence, and one of them
+found it structurally.** `%1408` (negative-space lens) made the argument that matters: §2's
+checkability table is the *sole* mechanism by which a requirement becomes answerable, so a question
+never registered as a requirement **can never be discharged by any of the eleven sections**. The
+plan could execute flawlessly and still have no answer. That is a defect in the requirement set,
+not a missing paragraph, and it is filed as **R12** below.
+
+`%1413` (investor lens) reached the same place from the other side: *"the document does not
+establish a problem worth paying for"* and *"does not say what happens if this works."*
+
+### 8.1 R12 — the economic and risk dimension is a requirement, not an appendix
+
+> **R12.** Every question an experienced operator asks before funding work must be either answered
+> or **registered here as an open question with an owner**. A question that is neither is a gap the
+> requirement set cannot see.
+
+### 8.2 The open questions, unanswered and owned
+
+Every row is `OPEN` unless marked. None of these had a home in the document before this round.
+
+| # | question | status | owner |
+|---|---|---|---|
+| Q1 | Who pays for this, and what is their current workaround? | **OPEN** — no buyer named anywhere in eleven sections | Josh |
+| Q2 | What does the current workaround cost, measurably? | **OPEN** — the only cost figure in the brief is the phrase *"cost real time"* | Josh |
+| Q3 | What is the outcome if this works, in customer terms with a baseline and a target? | **OPEN** — the plan describes mechanism end-to-end and outcome nowhere | Josh |
+| Q4 | How long, and with how many people? | **OPEN** — no timeline, no headcount, in any section | Josh |
+| Q5 | Buy, adopt, or build? What existing tool was evaluated and rejected, and why? | **OPEN** — §10 mines the mirror for *patterns*, never for a *substitute* | orchestrator |
+| Q6 | What happens when OMP changes under us? | **OPEN** — we pin `omp/18.0.11` and have no compatibility policy; 136 slash commands are already unmapped | orchestrator |
+| Q7 | What is the security posture — secrets, tokens, the blast radius of a dispatch? | **OPEN** — `security\|secret\|credential\|token` appears **0 times** in this brief | orchestrator |
+| Q8 | Licensing, for us and for what we vendor? | **OPEN** — `licens` appears **once** across all eleven sections | Josh |
+| Q9 | Is any of this novel, and does novelty matter here? | **OPEN** — §10 found the completion protocol precedent-free across 210 repos, which is the strongest available answer and is not framed as one | orchestrator |
+| Q11 | Who owns the `composer-typed` policy decision — oracle outside the tree, retire the lane, or the rule's first exemption? | **OPEN** — §3.5 states the trilemma and assigns it to nobody; `%1408` flagged it ownerless twice | orchestrator |
+| Q12 | Who owns the `pi_agent_rust` tmux-missing defect we inherit if we adopt its two-signal probe? | **OPEN** — cited in §3.1 as precedent, never assigned; adopting the pattern adopts the bug | orchestrator |
+| Q10 | **What kills this?** | **PARTIAL** — §09 carries technical kill conditions; none is economic, and no one owns the decision | Josh |
+
+### 8.3 The kill criteria, stated so they can fire
+
+A kill criterion nobody can evaluate is decoration. Each names its observable.
+
+| # | we stop if… | observable |
+|---|---|---|
+| K1 | the completion protocol cannot be built | §10 Gap 7: precedent-free across 210 work-trees. If two attempts fail, the loop cannot close and the product is a monitor |
+| K2 | verification costs more than the review it replaces | no instrumentation exists to detect this — **building the measurement is itself unowned** |
+| K3 | a second machine cannot run it | §07: never attempted; installer hardcodes `/Users/josh` as its fallback home |
+| K4 | the gates get routed around | measurable as: any commit landing with a gate disabled and no named allowance row |
+| K5 | the fleet needs more tending than the work it does | the honest version of K2, and the one this session's 4.2 hours of refused ticks bears on |
+
+### 8.4 The blind spot this method cannot see
+
+`%1408`'s second blocker, and the sharpest structural point of the round. **Every one of the nine
+refutations in §7 is an error of commission** — a wrong number, caught by re-deriving it. The one
+omission ever caught this session was `slash_commands=0` vs `expected_slash_commands=136`, and it
+was caught **only because the scanner emits an `expected_*` twin**. The prose has no twin
+mechanism, so **an omission in prose is structurally invisible to this process** — nobody
+re-derives a paragraph that was never written.
+
+That is why this section exists at all, and why it took a lens explicitly assigned to absence to
+find it. The fix is R12 plus the per-subsection expected-contents list `%1408` proposed, which is
+**not built**.
+
+**NO-CLAIM.** This section registers ten open questions and five kill criteria. It **answers
+none of them**. Registering a question is not progress on it; it makes the gap visible and
+assignable, which is strictly less than knowing the answer and strictly more than the previous
+state, where the question could not be asked from inside the requirement set.
 
 ---
 
