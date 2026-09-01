@@ -1118,3 +1118,57 @@ plan calls WORKS — but the information it extracts is a lossy projection of wh
 types carry. The golden-frame test (reprobe wave, VALIDATE classification) would pin the
 projection against the vendor's names; the type adoption would eliminate the projection entirely.
 Neither has been built. Both are recorded here.
+
+### 12.15 Surface coverage: eval, if-bench, hindsight, debug, dap, autoresearch, autolearn, advisor
+
+> **ipg.6**: *Wave VERIFY. Skill /brennerbot-with-ntm — a session is a machine for deleting
+> hypothesis space cheaply. Prefer refuters over supporters; no falsifier means no session.*
+
+**Swept 2026-09-01.** Eight type roots, 66 files, 488KB, 533 exported symbols, walked to symbol
+level. All eight are agent-plane quality-improvement or debugging features: eval kernels,
+instruction-following benchmarks, memory retrieval, debug UIs, a full DAP client, self-improvement
+research, self-learning, and an advisory review panel. None crosses the process boundary into our
+orchestration layer.
+
+| surface | OMP files | OMP KB | OMP symbols | 1-8 clauses | classification |
+|---|---:|---:|---:|:-:|---|
+| `eval` | 17 | 216 | 95 | — — — — — — — — | **(a) NOT OURS** — kernel-session eval system: agent bridges, budget/completion/concurrency bridges, runner cache, runtime env, probe |
+| `if-bench` | 5 | 20 | 30 | — — — — — — — — | **(a) NOT OURS** — instruction-following benchmark (glyph array actions, cat-sound directives) |
+| `hindsight` | 9 | 52 | 81 | — — — — — — — — | **(a) NOT OURS** — memory retrieval (MentalModels, RecallTagsMatch, BankScope, HindsightApi, Budget "low"/"mid"/"high") |
+| `debug` | 11 | 44 | 55 | — — — — — — — — | **(a) NOT OURS** — agent debug UI (DebugSelectorComponent, OverlayPanel, formatDebugLogLine) |
+| `dap` | 5 | 40 | 93 | — — — — — — — — | **(a) NOT OURS** — full DAP client (DapClient, waitForTcpServerListening, DapAdapterConfig, resolveAdapter, LaunchAdapterSelection); a typed debugger we reimplement with print statements |
+| `autoresearch` | 7 | 52 | 83 | — — — — — — — — | **(a) NOT OURS** — self-improvement research loop (DashboardController, AutoresearchRuntime, EnsureAutoresearchBranch) |
+| `autolearn` | 2 | 8 | 13 | — — — — — — — — | **(a) NOT OURS** — agent self-learning (AutoLearnController, buildAutoLearnInstructions) |
+| `advisor` | 10 | 56 | 53 | — — — — — — — — | **(a) NOT OURS** — advisory review panel (AdviseParams, AdvisorSeverity "nit"/"concern"/"blocker", AdviseDetails) |
+
+**Positive control: FAILED — 0 of 8 FULLY COVERED.** Fifth consecutive wave. The pattern is now
+exhaustive: every OMP type root splits into orchestration-plane (consumed in wave 1: session-
+adjacent output, subprocess, jsonrpc, cli, commands, slash-commands — 7 consumes edges) and
+agent-plane (not adopted). Eight more agent-plane surfaces confirmed.
+
+**Anti-vacuity: PASSED** — 8 surfaces enumerated, 66 files walked to symbol level, 0 is not the
+count.
+
+#### The two surfaces worth naming
+
+**`dap`** is a full Debug Adapter Protocol client — `DapClient`, `waitForTcpServerListening`,
+`connectSocket`, `getAdapterConfigs`, `resolveAdapter`, `getAvailableAdapters`,
+`LaunchAdapterSelection` — and the bead's own briefing names it: *"a typed debugger surface we
+reimplement with print statements."* When a dispatch goes wrong tonight, the forensic trail is
+`println!` and scrollback. The DAP client exists in the tool we wrap, DECLARED only. Adoption
+would be a debugging-infrastructure decision, not an orchestration change.
+
+**`advisor`** has `AdvisorSeverity: "nit" | "concern" | "blocker"` — a typed severity taxonomy
+that directly parallels our convergence-lens severity tags (BLOCKER/MAJOR/MINOR). The prior art
+is the same shape: a reviewer classifying findings by severity so downstream work can prioritize.
+The vocabulary is one `use` away; the gap is that neither surface is consumed by a crate.
+
+#### Why all eight are (a), and the convergence is complete
+
+Five consecutive waves (ipg.1 through ipg.5, plus this ipg.6) have mapped 20+ OMP type roots and
+every one outside the original 7-consumes-edge set is (a) NOT OURS. The pattern is structural:
+the OMP type roots split into an orchestration plane (session-adjacent output, subprocess,
+jsonrpc, cli, commands, slash-commands — consumed by omp-inventory-map and omp-rpc-session) and
+an agent plane (eval, benchmarks, memory, debug, DAP, self-improvement, advisory — consumed by
+the agent inside the pane, not by the orchestrator outside it). The mapping has converged: the
+boundary is correct, and the remaining roots confirm it rather than challenge it.

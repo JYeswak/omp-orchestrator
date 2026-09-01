@@ -130,3 +130,71 @@ self-grading cannot establish about themselves.
 distribution; we hold out one reader. It detects lens-adaptation, which is what we can afford to
 test, and it does not test generalization to a different *project* — which is the thing S1 inception
 actually needs and which nothing here checks.
+
+---
+
+## The rate curve, measured across 12 rounds — and why zero was the wrong target
+
+Josh's terminating condition: *"2 rounds of 0 new findings with fresh eyes prompts."*
+Measured 2026-09-01, all rounds in `CONVERGENCE.jsonl`:
+
+| round | findings/section | what changed in the protocol |
+|---|---:|---|
+| 8 | 0.8 | graders reading their own accumulated context |
+| 9 | 1.1 | same |
+| 10 | **6.4** | fresh-eyes subagents, zero shared context |
+| 12 | **9.9** | severity required + fresh eyes |
+| 13 | **5.3** | severity + fresh eyes, first round tagged |
+
+**The rate climbed with every protocol improvement.** That is not a document getting
+worse — it is each improvement removing a blind spot. Round 10 established the
+mechanism in its own finding: *"two consecutive zeros on 06-gates were evidence
+about the graders, not the section."* Rounds 8–9 measured 0.8–1.1 because the
+graders were re-reading their own prior work; fresh eyes raised it 6.4×.
+
+So the condition as literally written has a perverse property: **the fastest way to
+reach two zero rounds is to make the graders worse.** Rounds 8–9 nearly satisfied
+it, and both were retracted as non-banking once `gates_green` was backfilled
+truthfully. A stop condition that a weaker grader satisfies sooner is measuring the
+grader, not the artifact.
+
+### What round 13 makes possible
+
+Round 13 is the first round whose findings carry a class:
+
+| section | BLOCKER | MAJOR | MINOR |
+|---|---:|---:|---:|
+| 09-milestones | 1 | 3 | 1 |
+| 10-prior-art | 1 | 2 | 0 |
+| 11-lifecycle | 0 | 3 | 5 |
+| **total (3 of 12)** | **2** | **8** | **6** |
+
+Two BLOCKERs. That is a **countable, closable** condition in a way "89 findings" was
+not — and the rate fell 9.9 → 5.3 in the same round severity became mandatory,
+consistent with graders having to justify each finding's class rather than list
+everything they noticed.
+
+### The proposed amendment — NOT ADOPTED, requires Josh
+
+A section banks when **two consecutive rounds produce zero BLOCKER and zero MAJOR
+under fresh eyes with gates green.** MINORs are recorded and do not block.
+
+Rationale: on a 573 KB, 13-section technical document, a fresh reader will always
+find *something* — prose that could be sharper, a figure that wants a citation. The
+noise floor of a genuinely fresh reader is not zero and there is no evidence it ever
+becomes zero. BLOCKER and MAJOR are claims about correctness and completeness;
+MINOR is a claim about polish.
+
+**NO-CLAIM, and it is the load-bearing one:** severity is a *judgement by the same
+agents whose count we stopped trusting*. Nothing yet prevents a grader from
+downgrading a real defect to MINOR to make a section bank — precisely the failure
+mode "2 rounds of zero" had, one level up. The `schemas` gate forces every row to
+CARRY a severity; it cannot check that the severity is HONEST. Two candidate
+defences exist and neither is built: a held-out grader that only re-classifies
+(never finds), and a rule that any MINOR touching a load-bearing figure or a claim
+in `NUMBERS.toml` is automatically MAJOR.
+
+**Nine of twelve sections have no round-13 row.** The three graded are the three
+panes' current assignments. This amendment is a proposal recorded in the plan, not a
+change to the contract — the contract still says zero findings, and by that contract
+the board is **0/12 banked after 12 rounds**.

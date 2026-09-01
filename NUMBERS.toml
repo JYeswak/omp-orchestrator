@@ -79,7 +79,7 @@ note     = "THE WORST OFFENDER, and it drifted WHILE THIS ROW WAS BEING WRITTEN.
 
 [figures.no_claim_blocks]
 command  = "grep -rc '^\\*\\*NO-CLAIM' docs/plan/*.md 2>/dev/null | awk -F: '{s+=$2} END{print s}'"
-expect   = "43"
+expect   = "44"
 appears  = ["docs/PLAN.md"]
 note     = "the header quantifies the plan's own hedging; it is generated at assembly but never checked against the sections after they are edited."
 
@@ -91,7 +91,7 @@ note     = "published as 6.2% first, then 17.1%, then 21.8%. Round 10 found THRE
 
 [figures.convergence_rows]
 command  = "grep -c . docs/plan/CONVERGENCE.jsonl"
-expect   = "45"
+expect   = "48"
 appears  = ["docs/plan/CONVERGENCE.md"]
 note     = "3 rounds x 12 sections. A round that reports 11 rows is a pane that silently dropped a section, which has happened twice."
 
