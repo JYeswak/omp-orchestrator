@@ -37,3 +37,6 @@
 {"section":"06-gates","round":12,"lens":"evidence","role":"hillclimb","new_findings":6,"verdict":"FAIL","evidence":"/tmp/grade/r12-06.md"}
 {"section":"07-installability","round":12,"lens":"evidence","role":"hillclimb","new_findings":8,"verdict":"FAIL","evidence":"/tmp/grade/r12-07.md"}
 {"section":"08-end-users","round":12,"lens":"evidence","role":"hillclimb","new_findings":6,"verdict":"FAIL","evidence":"/tmp/grade/r12-08.md"}
+{"section":"00-brief","round":12,"lens":"adversarial","role":"hillclimb","new_findings":16,"verdict":"PASS-WITH-FIXES","evidence":"/tmp/grade/r12-00-brief.md"}
+{"section":"01-idea","round":12,"lens":"adversarial","role":"hillclimb","new_findings":19,"verdict":"PASS-WITH-FIXES","evidence":"/tmp/grade/r12-01-idea.md"}
+{"section":"02-surface-census","round":12,"lens":"adversarial","role":"hillclimb","new_findings":12,"verdict":"PASS-WITH-FIXES","evidence":"/tmp/grade/r12-02-surface-census.md"}

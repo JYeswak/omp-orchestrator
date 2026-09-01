@@ -106,3 +106,8 @@ command  = "python3 -c \"import pathlib;print(sum(p.read_text(errors='ignore').c
 expect   = "LIVE"
 appears  = ["docs/plan/08-end-users.md"]
 note     = "moves with every landed test file (tests cite CARGO_MANIFEST_DIR for fixture paths); LIVE mode requires the command to run and produce output, and obliges the prose to cite the command rather than a frozen count."
+[figures.surface_map_unmapped_rows]
+command  = "jq -s '[.[] | select(.maps_to_crate == null)] | length' docs/plan/SURFACE-MAP.jsonl"
+expect   = "478"
+appears  = ["docs/plan/02-surface-census.md"]
+note     = "maps_to_crate == null is the explicit unmapped-by-crate metric; it is distinct from non-null validated_by and from missing rows."
