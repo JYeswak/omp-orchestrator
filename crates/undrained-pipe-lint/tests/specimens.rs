@@ -83,6 +83,34 @@ fn run() -> Option<String> {
     );
 }
 
+/// KNOWN-BAD: a wait_with_output call nested inside the try_wait exit arm is
+/// too late to drain a child blocked while writing; it must not mask the lint.
+#[test]
+fn nested_wait_with_output_after_poll_is_still_flagged() {
+    let source = r#"
+use std::process::{Command, Stdio};
+fn run() {
+    let mut cmd = Command::new("git");
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = cmd.spawn().unwrap();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => {
+                let _ = child.wait_with_output();
+                return;
+            }
+            Ok(None) => {}
+            Err(_) => return,
+        }
+    }
+}
+"#;
+    assert_eq!(
+        find_violations_in_source(source),
+        vec![(5, 8)],
+        "a post-poll wait_with_output cannot justify undrained pipes"
+    );
+}
 /// KNOWN-GOOD: concurrent thread drain passes (the known-good specimen pattern).
 #[test]
 fn known_good_thread_drain_passes() {

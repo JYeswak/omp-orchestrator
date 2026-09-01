@@ -369,7 +369,7 @@ pub fn lint_workspace(root: &Path) -> LintReport {
             // empty-scan error at exit 3. The fix: return an EMPTY scan set so
             // the caller's empty-scan-set check fires with the typed exit code.
             eprintln!(
-                "UNRAINED-PIPE-LINT ERROR: cannot read {}: {error}",
+                "UNDRAINED-PIPE-LINT ERROR: cannot read {}: {error}",
                 crates_dir.display()
             );
             return LintReport {
