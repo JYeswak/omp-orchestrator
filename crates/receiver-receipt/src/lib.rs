@@ -577,3 +577,48 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+mod escalation_tests {
+    use super::*;
+    use crate::{ComposerEvidence, NonDeliveryEscalation, escalate_non_delivery};
+    use tick_monitor::PaneState;
+
+    /// 6q5 THE MEASURED DEFECT: sender reported success, pane stayed Idle,
+    /// composer was empty. Must escalate to ResendDirect, not KeepPolling.
+    #[test]
+    fn idle_with_free_composer_escalates_to_resend_direct() {
+        let result = escalate_non_delivery(&PaneState::Idle, ComposerEvidence::Free);
+        assert_eq!(result, NonDeliveryEscalation::ResendDirect);
+    }
+
+    /// 6q5 POSITIVE: packet arrived but sits unsubmitted (Typed composer).
+    /// Escalate to SubmitParked — the documented Enter recovery.
+    #[test]
+    fn idle_with_typed_composer_escalates_to_submit_parked() {
+        let result = escalate_non_delivery(&PaneState::Idle, ComposerEvidence::Typed);
+        assert_eq!(result, NonDeliveryEscalation::SubmitParked);
+    }
+
+    /// Working panes carry their own verdict in assess_receiver_receipt.
+    /// The escalation must not fire there.
+    #[test]
+    fn working_pane_keeps_polling_regardless_of_composer() {
+        let r1 = escalate_non_delivery(&PaneState::Working { timer_secs: 60 }, ComposerEvidence::Free);
+        let r2 = escalate_non_delivery(&PaneState::Working { timer_secs: 60 }, ComposerEvidence::Typed);
+        assert_eq!(r1, NonDeliveryEscalation::KeepPolling);
+        assert_eq!(r2, NonDeliveryEscalation::KeepPolling);
+    }
+
+    /// MUTATION: if escalate_non_delivery always returned KeepPolling, the
+    /// Idle+Free case (the 6q5 defect) would go undetected — the dispatcher
+    /// would sit beside an idle worker and never resend. This assertion is
+    /// the mutation leg: break the Idle+Free arm and this test goes RED.
+    #[test]
+    fn mutation_breaking_idle_free_arm_is_detected() {
+        // The real function must return ResendDirect for the defect case.
+        // If it returned KeepPolling, the 6q5 bug would reproduce silently.
+        let result = escalate_non_delivery(&PaneState::Idle, ComposerEvidence::Free);
+        assert_ne!(result, NonDeliveryEscalation::KeepPolling);
+    }
+}
