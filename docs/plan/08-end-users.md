@@ -106,11 +106,14 @@ probe MUST NOT invent one.* Stated that way it is checkable, and the sample abov
 The original phrasing was checkable too — and the sample failed it, which is how the grader found
 it in one pass.
 
-Two load-bearing commitments. First, **`ABSENT` is not `FAIL`** — a foreign repo lacking our tracker
+Two load-bearing commitments. First, **ABSENT is not FAIL** — a foreign repo lacking our tracker
 is a repo we have not adapted to, and a doctor that scolds an adopter for not being us gets
-uninstalled. Second, **every `ABSENT` carries a remediation naming a command that exists**;
-`MEASURED` precedent is the `--help` defect (brief §3.6), which produced the sixth gate property
-**ADDRESSABLE**. A probe reporting a condition it cannot route is that defect in a diagnostic hat.
+uninstalled. Second, the remediation invariant is scoped to capability-family probes: each family
+`ABSENT` **MUST** carry a remediation naming a command that exists. A specific-probe `ABSENT`
+row (such as `tracker.br` or `worker.tmux`) is informational and **MUST NOT** invent an install
+command; it may point the reader to its family probe instead. `MEASURED` precedent is the
+`--help` defect (brief §3.6), which produced the sixth gate property **ADDRESSABLE**. A probe
+reporting a condition it cannot route is that defect in a diagnostic hat.
 
 Prior art, per R7 — *what would Jeffrey do*: `br` runs its whole doctor surface through one mutation
 chokepoint with byte-identical undo — `beads_rust/tests/e2e_doctor_chokepoint.rs:1-14`: *"corrupt →
@@ -121,10 +124,22 @@ diagnose → `--repair` → assert healthy"*, then *"`br doctor undo <id>` → �
 `MISSING_DEPENDENCY|DependencyMissing|not_installed|NotInstalled`, no prior art found"* — a **false
 zero**. The search was `/usr/bin/grep -rl --include='*.rs' … ntm beads_rust`, and `ntm` is a **Go**
 repo: the filter matched nothing there and I read structural absence as semantic absence. Re-derived
-with the harness grep and no extension filter, the same pattern returns **93+ matching files**, and
-the prior art is exactly what §5 needed — cited by construct, because four of these line numbers were
-off by one when a sibling re-opened the files while every construct held: a per-dependency typed
-sentinel (`ntm/internal/bv/bv.go:31`, `var ErrNotInstalled`; same sentinel at
+with the harness grep and no extension filter, the same pattern returns **89 matching files**, and
+
+`MEASURED` re-derivation of that count (2026-08-31, source checkout `/Users/josh/Developer/jeff-shadow`,
+HEAD `7c28478`):
+
+```sh
+$ cd /Users/josh/Developer/jeff-shadow
+$ /usr/bin/grep -rlE 'MISSING_DEPENDENCY|DependencyMissing|not_installed|NotInstalled' ntm beads_rust | wc -l
+89
+```
+
+The command searches both complete directory trees with no extension filter and counts matching file
+paths once; the output above is retained in the round-11 evidence file. The prior art is exactly what
+§5 needed — cited by construct, because four of these line numbers were off by one when a sibling
+re-opened the files while every construct held: a per-dependency typed sentinel (`ntm/internal/bv/bv.go:31`,
+`var ErrNotInstalled`; same sentinel at
 `internal/cass/client.go:13` and `internal/caut/client.go:14`, `fmt.Errorf` variant); a shared robot
 taxonomy (`docs/robot-action-handoff-contract.md:379`, `ErrCodeDependencyMissing`); a remediation
 string travelling *inside* the typed envelope (`internal/cli/bugs.go:85-89`, *"Install UBS from …,
@@ -191,6 +206,39 @@ $ omp-orchestrator tick --once --json                               # PROJECTED,
    "detail":"worker reported done; no artifact diff and no gate result in this unit's ledger",
    "remediation":"omp-orchestrator why TA-2"}]}}
 ```
+
+### 2.6 Versioned proof contract for every projected command
+
+The preceding transcripts show the domain payload, but the adopter-facing robot surface MUST wrap
+each command in the same versioned envelope. This is **PROJECTED**, not an emitted format:
+
+```json
+{"schema_version":"omp-orchestrator/v1","run_id":"<run_id>",
+ "command":"doctor|init|tick|grade","status":"OK|DEGRADED|REFUSED",
+ "error":null,"data":{},
+ "proof":{"artifact":".omp-orchestrator/runs/<run_id>/<command>.json",
+          "ledger":".omp-orchestrator/ledger.jsonl",
+          "verify":"omp-orchestrator verify --run <run_id>"}}
+```
+
+The envelope is the proof contract, not decoration. `run_id` is unique and stable across retries;
+`data` contains the command-specific fields shown above; `error` is a typed object when the command
+cannot complete. Every invocation that reaches a verdict writes its envelope before returning:
+
+| command | durable write | proving command |
+|---|---|---|
+| `doctor` | `.omp-orchestrator/runs/<run_id>/doctor.json` | `omp-orchestrator verify --run <run_id> --command doctor` |
+| `init` | `.omp-orchestrator/config.toml` and `.omp-orchestrator/runs/<run_id>/init.json` | `omp-orchestrator verify --run <run_id> --command init` |
+| `tick` | `.omp-orchestrator/ledger.jsonl` and `.omp-orchestrator/runs/<run_id>/tick.json` | `omp-orchestrator verify --run <run_id> --command tick` |
+| `grade` | `.omp-orchestrator/ledger.jsonl` and `.omp-orchestrator/runs/<run_id>/grade.json` | `omp-orchestrator verify --run <run_id> --command grade` |
+
+Exit status is deliberately separate from the domain `status`: **0** means the envelope and its
+proof record were persisted (including `DEGRADED` diagnostics and a tick that withheld dispatch);
+**2** means the requested state transition was refused but the refusal envelope was persisted;
+**64** means usage or configuration was invalid before a run could start; and **70** means the
+proof record could not be persisted. Thus an adopter can use either the typed envelope or the exit
+code without treating an absent optional dependency as a crash. A proof command MUST fail closed if
+the envelope, ledger entry, or referenced artifact is missing or has a mismatched `run_id`.
 
 `CLOSE_REFUSED_NO_EVIDENCE` is the most valuable output here and the one an adopter will hate first.
 It is the one our own board needed: `MEASURED` (brief §4), every completion this session was found by
@@ -323,7 +371,28 @@ N consecutive refusals of one code escalates, because silent perpetual refusal r
 
 `MEASURED` denominator: the board at stand-down was 28 closed, 25 in_progress, 19 open, 2 blocked.
 **NO-CLAIM:** each item pairs a measured failure with an intended mechanism; none has been observed.
+### 6.1 Adoption outcomes we will actually measure
 
+The value claims above are hypotheses, not adoption evidence. The following pilot scorecard makes
+the internal buyer's walk-away benefit and the foreign-adopter bar falsifiable. All targets are
+**PROJECTED** until a run records the stated proof artifact; the current baseline is either explicitly
+measured below or marked unavailable rather than guessed.
+
+| pilot scope | outcome | current baseline | target | proof artifact |
+|---|---|---|---|---|
+| internal dogfood (Josh) | time from install to first valid doctor envelope | unavailable: no adopter command exists | ≤10 minutes on a clean git repo | timed transcript + `.omp-orchestrator/runs/<run_id>/doctor.json` |
+| internal dogfood (Josh) | manual intervention per closed unit | every completion in the measured session was found by a human; seconds per unit not recorded | ≤1 manual intervention per 10 ticks and no hand-edit below `.omp-orchestrator/` | tick ledger plus operator event log |
+| internal dogfood (Josh) | false-close prevention | completion/evidence layer absent | 100% of seeded no-evidence closes return `CLOSE_REFUSED_NO_EVIDENCE` and persist a ledger row | `grade.json` + `omp-orchestrator verify --run <run_id> --command grade` |
+| internal dogfood (Josh) | operator time saved | not measured; the current workflow is manual inspection | ≥30% fewer human-seconds per closed unit on the same fixed unit set | before/after timed transcript and unit-set hash |
+| external pilot | clean-host onboarding | no foreign repo or machine has run this system | 3 clean repos reach a valid first tick in ≤10 minutes, with 0 edits outside `.omp-orchestrator/` | install transcript, config hash, and tick envelope per repo |
+| external pilot | vendor-blind worker support | no non-OMP worker adapter exists | at least 1 non-OMP fixture reaches observe → dispatch → receipt without OMP markers | adapter fixture, receipt envelope, and proof command output |
+| external pilot | refusal visibility | no outside run; internal evidence includes 162 refused ticks over 4.2 hours with no reader | every refusal is ledger-backed, typed, and visible to the proof command | ledger row + `verify --run` output |
+
+These measures answer the abandonment question without laundering a design goal into a result:
+install time and hand-edit count test whether adoption is cheaper than the tracking it replaces;
+false-close and refusal rows test risk reduction; and human-seconds per closed unit tests whether
+Josh should walk away from the manual loop. **NO-CLAIM:** no target has yet been achieved, and this
+section still carries zero external adoption evidence.
 ---
 
 ## 7. What would make an end user abandon this

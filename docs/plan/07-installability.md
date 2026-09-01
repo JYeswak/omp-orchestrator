@@ -6,13 +6,24 @@ Josh?* Today the honest answer is "nothing yet, and we can prove it." What follo
 starting point, then the contract we will ship against.
 
 All measurements in this section were taken on 2026-08-31 at repo HEAD `fb89714`
-(`git rev-parse --short HEAD`). Every claim is marked MEASURED or PROJECTED. MEASURED means a
-command in this document produced the number. PROJECTED means we intend to build it and it does
-not exist.
+(`git rev-parse --short HEAD`). Every current claim is marked MEASURED or PROJECTED. MEASURED means a
+command in this document produced the number; historical values explicitly marked non-rederivable
+are retained only as audit context and are not acceptance evidence. PROJECTED means we intend to
+build it and it does not exist.
+**Scope note (important):** this is an investor-facing installability plan and contract, not a
+dispatchable operator runbook. It therefore does not pretend to carry runbook-only fields such as
+Trigger, Dispatch packet, Amazing/Adequate bars, Skills, or Done signals. Those fields belong in
+the operational runbook that will execute this contract; their absence here is intentional scope,
+not a missing installability requirement.
+Where `$M` appears in a measurement command, it is explicitly
+`/Volumes/ZestData/dicklesworthstone-mirror`; the reproducible shell prefix is
+`M=/Volumes/ZestData/dicklesworthstone-mirror`. No command in this section relies on an ambient,
+undefined `$M`.
 
 ### 1. The measured starting point
 
-**MEASURED — the workspace builds 21 binaries and the installer knows about 3 of them.**
+**MEASURED — the workspace declares 21 binary targets, and the installer knows about 3 of them.**
+The target declaration count is not itself a successful artifact count; the artifact proof is the command and receipt described below.
 
 The number was `18` until round 10, taken from `grep -rl 'fn main' crates --include='main.rs' | wc -l`.
 The investor lens filed it as *"fn main count is not binary/build evidence"* and it was right twice
@@ -23,17 +34,34 @@ instruments, three answers, re-measured at commit time:
 |---|---:|---|
 | `grep -rl 'fn main' --include=main.rs` | 17 | crates having a `main.rs` — a **source shape**, not an artifact |
 | `grep -c '^\[\[bin\]\]' crates/*/Cargo.toml` | 16 | **explicitly declared** targets; misses every implicit `src/main.rs` |
-| `cargo build --message-format=json`, kind `bin` | **21** | what the toolchain **actually produced and linked** |
+| `cargo metadata --format-version 1 --no-deps` (targets with `bin` kind) | **21** | the workspace's declared binary targets; this is the canonical denominator |
 
-Only the third answers the question the sentence asks. It is higher than both proxies because a
-crate may declare more than one `[[bin]]` and because implicit and explicit targets both build.
+Only the third is the canonical **target** denominator; it counts both implicit and explicit Cargo
+binary targets and does not pretend that a source shape or an explicit-`[[bin]]` grep is an artifact.
+Successful output is a separate proof: `cargo build --workspace --message-format=json` is filtered to
+`compiler-artifact` messages whose target kind is `bin`, and the receipt records target names,
+artifact paths, and the command exit code. A target in metadata without a successful artifact is
+reported missing and cannot satisfy install acceptance.
 
 `crates/installer/src/main.rs:12` declares
 `const BINARIES: &[&str] = &["omp-orchestrator", "tick-monitor", "pane-truth"];`.
 
-**So the install surface covers 3/21 = 14%** — not the 17% this section claimed — and the other 18
-binaries have no declared install path at all. They are reachable only by someone who already has
-the repo, a toolchain, and the knowledge of what to build.
+**MEASURED — the current installer list covers 3/21 target rows (14%), but only 2/21 are owned
+install entries (9.5%); the third is foreign.** The remaining 19 workspace targets have no current
+owned install path and are reachable only by someone who already has the repo, a toolchain, and the
+knowledge of what to build.
+
+**Canonical manifest (PROJECTED; the one denominator for this section).** The release manifest is
+generated from the Cargo target graph with the exact command in `NUMBERS.toml`:
+`cargo metadata --format-version 1 --no-deps 2>/dev/null | python3 -c "import sys,json;m=json.load(sys.stdin);print(len([t for p in m['packages'] for t in p['targets'] if 'bin' in t['kind']]))"`.
+It has one row per target and the fields `target`, `owner`, `distribution` (`INSTALL`,
+`FOREIGN`, or `UNRELEASED`), and `adapter`. The installer, runtime adapter list, and
+post-install expected set MUST all be projections of this manifest; none may maintain a second-
+hand count. At this HEAD the manifest denominator is `workspace_targets=21`; the current installer
+list is `installer_entries=3`, of which `foreign=1` (`pane-truth`) and `owned_entries=2`.
+The seven runtime adapters are a projected manifest field, not a second denominator. The expected
+install set is exactly the rows with `distribution=INSTALL`, so a foreign or unreleased row can
+never be mistaken for a missing artifact.
 
 **The defect class, for the fourth time in this document's history:** a number produced by an
 instrument that does not measure the quantity in the sentence. `06-gates` did it with test counts
@@ -49,12 +77,11 @@ control-plane, a different repo. It is on PATH, it is named in our installer's B
 we do not build it. That is the GHOST class: an artifact the tooling asserts authority over and
 cannot produce. Any drift check that treats it as ours will report a mismatch forever, because
 there is no HEAD in this repo it could ever agree with.
-
 **MEASURED — one of those three binaries cannot report its own identity.**
 `grep -c 'version' crates/tick-monitor/src/main.rs` returns `0`. `tick-monitor` has no `--version`
 flag and no version string anywhere in its entrypoint. Its identity is not *unmeasured*; it is
 *unmeasurable by construction*. No amount of probing an installed `tick-monitor` will tell you
-which commit produced it. Across the workspace, only 5 of 18 binaries mention `--version` at all
+which commit produced it. Across the workspace, only 5 of 21 binary targets mention `--version` at all
 (`for c in $(ls crates); do grep -c '\-\-version' crates/$c/src/*.rs; done` — nonzero for
 `installer`, `kernel-only-operator-hook`, `omp-inventory-map`, `omp-orchestrator`,
 `omp-rpc-session`).
@@ -97,7 +124,7 @@ binaries disagreeing with HEAD, and the launchd supervisor running a build 23 co
 Not re-derivable at `fb89714`; recorded as history, not current state.
 
 NO-CLAIM: §1 measures the *declared* install surface and identity surface. It does not claim the
-15 unlisted binaries are unusable, nor that any of them is broken — only that none of them has a
+18 unlisted binaries are unusable, nor that any of them is broken — only that none of them has a
 documented, reproducible path from this repo onto a second machine.
 
 ### 2. The canonical CLI contract we will ship
@@ -107,8 +134,8 @@ PROJECTED for the whole of §2, except the envelope shape, which is MEASURED at
 
 We adopt `/canonical-cli-scoping` and `/cfs-cli-discipline` wholesale rather than minting a local
 standard. The unit of installation is a single umbrella binary, `ompo`, which scopes every one of
-the 18 workspace binaries as an **adapter** — the aggregator shape both skills mandate: when a CLI
-proxies to N substrates, the triad is scoped per-adapter, never bundled. We do not ship 18 CLIs
+the 21 workspace binary targets as an **adapter** — the aggregator shape both skills mandate: when a CLI
+proxies to N substrates, the triad is scoped per-adapter, never bundled. We do not ship 21 CLIs
 each with its own doctor; we ship one CLI whose doctor takes an adapter name. Every command emits
 the envelope we already emit today:
 
@@ -119,7 +146,7 @@ the envelope we already emit today:
 Probe ids are namespaced under `^omp(\.[a-z][a-z0-9_-]*){2,}$` — e.g.
 `omp.identity.binary.tick_monitor.version_absent`; bare segments are rejected at construction, not
 at review. Every probe detail is a structured `=N` value, never prose: `installed_binaries=3`,
-`produced_binaries=18`, `foreign=1`, never `"looks about right"`.
+`workspace_targets=21`, `foreign=1`, never "looks about right".
 
 #### The mandatory triad
 
@@ -201,18 +228,22 @@ silently in production.
 **ADDRESSABLE is a first-class gate property, not a nicety.** MEASURED (brief §3.6):
 `omp-inventory-map --help` returns
 `{"schema_version":"omp-inventory-map/v1","command":"doctor","status":"ERROR","data":null,"error":"CONFIG_ERROR unknown argument --help"}`.
-That gate is built and correct — 13 tests pass, and
-`crates/omp-inventory-map/src/types_inventory.rs:176-178` deliberately excludes `Observation` from
-the allowance list so the collision demands convergence — yet the running binary's 544 KB doctor
-output contains **zero** occurrences of `Observation`, `CONVERGE`, or `Verdict`. This is not
-built-versus-wired; it is **wired-but-unaddressable**, and a correct gate nobody can invoke has the
+Historical MEASURED values from brief §3.6 were `13 tests` and `544 KB` of doctor output, but
+that record retained neither the exact command nor the output artifact. They are therefore not
+re-derivable measurements and MUST NOT serve as acceptance denominators. The replacement receipt
+must record these exact commands and their artifacts:
+
+`cargo test -p omp-inventory-map -- --list 2>/dev/null | tee artifacts/inventory-map-tests.list | grep -c ': test$'` (test count and saved stdout), and
+`omp-inventory-map doctor --json > artifacts/inventory-map-doctor.json; wc -c < artifacts/inventory-map-doctor.json; grep -E 'Observation|CONVERGE|Verdict' artifacts/inventory-map-doctor.json` (byte count and token search, with the named JSON artifact). The receipt records the
+exit code and commit for both; a changed command, scope, or artifact path is a new measurement.
+This is not built-versus-wired; it is **wired-but-unaddressable**, and a correct gate nobody can invoke has the
 same operational value as no gate.
 
 Installability is where that property is either satisfied or lost for good. A binary distributed to
 a second machine is reachable only through its documented surface; there is no repo to grep and no
 author in the room. Under the umbrella, every adapter is reachable as `ompo doctor <adapter>`,
 `ompo help <adapter>` names the command, and `ompo doctor capabilities --json` enumerates every
-probe id — so ADDRESSABLE is discharged by the CLI shape once, rather than by 18 separate `--help`
+probe id — so ADDRESSABLE is discharged by the single umbrella CLI shape, rather than by separate
 implementations that can each drift independently. A capabilities snapshot is checked in as a
 golden artifact; drift between the declared probe list and the implemented one fails CI.
 
@@ -253,8 +284,8 @@ from a process that never produced a signal is not evidence. Every refusal code 
 own `status:"REFUSED"` value in the envelope, distinct from `OK` and from `DOWN`, and the CI
 aggregator treats `REFUSED` as blocking rather than passing.
 
-NO-CLAIM: this table does not claim the codes are currently uniform across all 18 binaries. At
-HEAD, `installer` uses 1/2/3/75 and `omp-inventory-map` uses 2; the other 16 are unaudited against
+NO-CLAIM: this table does not claim the codes are currently uniform across all 21 binary targets. At
+HEAD, `installer` uses 1/2/3/75 and `omp-inventory-map` uses 2; the remaining 20 are unaudited against
 this table.
 
 ### 4. Identity and drift
@@ -295,7 +326,7 @@ check that reports a permanent, unfixable mismatch trains operators to ignore th
 a third outcome alongside CONSISTENT and DRIFTED, and it is printed, not swallowed.
 
 **The denominator is printed with its derivation.** Output is
-`identity: consistent=N drifted=M foreign=K produced=18 probed=P` — five named integers whose
+`identity: consistent=N drifted=M foreign=K expected=E workspace_targets=21 probed=P` — six named integers whose
 relationship a reader can check, not a bare `2/2`. MEASURED defect this rule exists to prevent:
 `crates/installer/src/main.rs:68` and `:87` (§1). The exclusion logic decremented one variable
 while the message printed another, and the resulting `2/0` was arithmetically impossible but
@@ -316,6 +347,14 @@ SHA256 verification via `sha256sum` *or* `shasum -a 256`, Sigstore verification 
 present, a build-from-source fallback, `install -m 0755` for the atomic place, shell completions to
 XDG paths, PATH setup, `trap cleanup EXIT`, a final per-component status summary, and printed
 uninstall instructions.
+**Bootstrap authenticity is a precondition, not a post-install hope.** The generated `install.sh`
+MUST never be executed directly from a curl pipeline. The one-liner downloads it into the private
+temporary directory, verifies its SHA256 against the pinned digest in the versioned release metadata
+(or verifies a detached signature against the release channel's trusted public key), and executes it
+only after verification succeeds. The Rust installer then repeats artifact verification before
+placing any target. If neither a trusted package channel nor a pinned digest/signature is available,
+the curl path is unavailable and the supported fallback is an exact-commit `cargo install --git`
+from the trusted source; there is no unsigned bootstrap fallback.
 
 MEASURED prior art from the mirror (`ls $M/*/install.sh | wc -l` → 50 installers; count caveat in
 §7): 38/50 verify a checksum, 29/50 use `install -m 0755`, 17/50 mention uninstall, 16/50 install
@@ -337,12 +376,37 @@ artifacts*. So:
   `install.sh` into `target/release-artifacts/` at release time; CI uploads it to the GitHub
   release; it is never `git add`ed. `git ls-files` never sees it, so the gate never fires, and the
   gate keeps its empty exemption list — which is the property that makes the gate credible.
-- That generated shell script is deliberately thin: detect platform, fetch `installer-<target>`,
-  verify its SHA256 against a published `SHASUMS256.txt`, `chmod +x`, exec it. What shell is bad at
+- That generated shell script is deliberately thin: detect platform, download `install.sh` and its
+  pinned release metadata, verify the bootstrap before executing it, then fetch `installer-<target>`
+  and verify its SHA256 against the published `SHASUMS256.txt`. What shell is bad at
   — JSON merging, identity arithmetic, idempotent repair — happens in Rust. What shell is uniquely
   good at — bootstrapping before any of our binaries exist — happens in ~80 readable lines. The
   generator is golden-tested: the emitted script is diffed against a checked-in expected output
   stored as a `.txt` fixture (not `.sh`, so the gate stays happy), and drift fails CI.
+The installer-workmanship contract is complete only when the release path also covers the following
+items; each is an acceptance check, not an optional polish item:
+
+- **Shell safety and output:** the generated bootstrap uses `set -euo pipefail`, quotes every
+  expansion, uses a private temporary directory, traps cleanup on EXIT and signals, and emits
+  human-readable gum/ANSI status only when stdout is a TTY (plain deterministic lines otherwise).
+- **Fetch modes:** every network fetch honors `HTTPS_PROXY`, `HTTP_PROXY`, and `NO_PROXY`;
+  `--proxy` overrides them explicitly, and `--offline` refuses before any network access while
+  consuming only a verified local cache. No fetch path bypasses the selected proxy or offline mode.
+- **Version and repeatability:** an explicit version is preferred; if the latest-version lookup is
+  unavailable, the installer falls back to the release version encoded in the immutable artifact
+  URL and reports that fallback. An already-installed matching build exits successfully without
+  rewriting files; a different build produces a planned replacement and requires confirmation.
+- **Operator setup:** installation configures the agent-facing PATH, shell completions, hook and
+  skill registration, and the doctor/health entrypoints, with each resulting path listed in the
+  final status summary. Missing optional integrations are reported as `SKIPPED`, never silently
+  treated as installed.
+- **Migration and removal:** a predecessor install is detected by its owner/build id, backed up,
+  migrated or explicitly refused before replacement, and left reversible. The final summary prints
+  exact uninstall and rollback commands and identifies every component that was changed.
+
+The contract is not discharged until each bullet has a deterministic acceptance result in the
+install receipt; the generated-script golden test covers syntax and control flow, while the Rust
+installer tests exercise the platform, proxy/offline, repeat-install, setup, and migration matrix.
 
 This is not a loophole. It is the honest boundary: the rule exists so that logic is not smuggled
 into untested shell inside our repo, and an 80-line generated bootstrap whose output is
@@ -351,19 +415,42 @@ golden-tested in Rust does not violate that intent. If a reviewer disagrees, the
 
 **The self-test exercises the install; it does not certify it.** `ompo doctor --json` immediately
 post-install is the acceptance criterion, not "the files landed." The install is accepted when the
-four-way identity check reports `consistent=N drifted=0 foreign=K produced=18` with every term
+four-way identity check reports `consistent=N drifted=0 foreign=K expected_set=N missing=0 probed=P` with every term
 printed, and `ompo health` returns 0. That raises the floor from "bytes were copied" to "the copied
-bytes answer for themselves"; it does not establish that the installed system does useful work,
-which is §6's and §09's problem. An installer that copies files and exits 0 without running the
-check is the §1 false-green class again.
+bytes answer for themselves"; it does not establish that the installed system does useful work, which is §6's and §09's problem.
+The `expected_set` is not a best-effort count: it is the sorted target-name set from canonical
+manifest rows with `distribution=INSTALL`, printed (or emitted as a hash plus names) in the receipt.
+The doctor MUST probe every member, report each absent member as `missing=<target>`, and refuse the
+install with a nonzero exit whenever `missing!=0` or any expected target is `DRIFTED`. `FOREIGN`
+rows are named and excluded from `expected_set`; they cannot make a partial install appear green.
+An installer that copies files and exits 0 without running the check is the §1 false-green class again.
 
-NO-CLAIM: §5 does not claim we will publish signed releases at launch. Sigstore verification is
-specified as best-effort (skip if cosign absent, hard-fail if cosign present and the signature is
-bad); we are not claiming a signing key exists.
+NO-CLAIM: HEAD does not claim that a signing key already exists or that signed releases are ready at
+launch. The release contract nevertheless requires a pinned bootstrap digest from a trusted channel,
+or a detached signature verified against a trusted public key, before execution. Sigstore may be the
+signature mechanism; if a signature is advertised and cosign is present, a bad signature hard-fails.
+Absent both a trusted channel and a pinned digest/signature, the curl installer is not published.
 
 ### 6. Multi-machine
 
 PROJECTED. Three categories of hardcoding must be resolved, and they resolve differently.
+**Internal-buyer pilot scoreboard (PROJECTED).** Installability earns adoption only if a person who
+is not Josh can reach first useful use. We will run a five-person/five-machine pilot and record one
+receipt per attempt. Baseline at this HEAD is `pilot_attempts=0`, so the operational baseline for
+success, time, and support is **not yet measured**, rather than an invented percentage. The targets
+are:
+
+| metric | pilot target | evidence in each receipt |
+|---|---:|---|
+| first-attempt install success | ≥ 4/5 (80%) | verified bootstrap, expected-set `missing=0`, and health exit 0 |
+| median time to first use | ≤ 10 minutes | timestamps from verified bootstrap start to first successful `ompo doctor` and one accepted adapter invocation |
+| operator support burden | ≤ 1 intervention per install | intervention count plus named reason; retries caused by installer defects count |
+| downstream value | ≥ 4/5 complete one real, reversible adapter action | receipt with `status=APPLIED`; typed refusals are reported separately and do not count as useful work |
+
+A release does not claim adoption from installation bytes alone: it must publish the pilot counts,
+median, and intervention total, and any target miss remains a release-blocking finding until the
+cause is classified. This measures internal buyer value without pretending that an external customer
+or useful-work result already exists.
 
 **Becomes config.** `crates/installer/src/main.rs:28` falls back to
 `PathBuf::from("/Users/josh")` when `HOME` is unset, and line 113 defaults `CARGO` to
@@ -408,6 +495,9 @@ are.
 
 ### 7. What Jeffrey would do
 
+For every command in this section, `M` is explicitly `/Volumes/ZestData/dicklesworthstone-mirror`;
+the reproducible shell prefix is `M=/Volumes/ZestData/dicklesworthstone-mirror` followed by the
+command. The mirror counts below are historical prior-art measurements, not workspace denominators.
 **Disagreement with the brief, stated plainly.** The brief §3.7 records the mirror at
 `/Volumes/ZestData/dicklesworthstone-mirror` as **216 repos** — a figure since retired in favour of
 **210** git work-trees, the only count that counts repositories. I ran `ls $M | wc -l` and got
@@ -451,9 +541,9 @@ We adopt it unchanged rather than hand-rolling a `git rev-parse` in each `build.
 `MISSING_DEPENDENCY|missing_dependency|DependencyMissing` across `$M/*/src/*.rs` — no prior art
 found.* Jeffrey's installers detect missing dependencies in shell at install time; none of the
 Rust binaries surfaced by that pattern carries a typed runtime refusal for an absent substrate.
-This is a place where our aggregator shape is genuinely different: we wrap seven binaries at
-*runtime*, not just at install time, so we need the refusal as a first-class envelope status. We
-will design it ourselves and be explicit that it is not borrowed.
+This is a place where our aggregator shape is genuinely different: the manifest exposes seven runtime
+adapters, not seven binaries; each adapter maps to one or more target rows and is independently
+refused or reported as DOWN; the refusal is a first-class envelope status. We will design it ourselves and be explicit that it is not borrowed.
 
 NO-CLAIM: §7 cites prior art for the *pattern*. It does not claim we have read those
 implementations in full, that they are bug-free, or that their licenses permit copying source —
@@ -486,4 +576,4 @@ ratified by a gate, and none of them is enforced by code at HEAD `fb89714`.
 not specify the probe list (gates section), the orchestration semantics (crate specs), or the
 milestone at which each surface lands (milestones section). Every PROJECTED item is unbuilt at
 HEAD `fb89714`; the only MEASURED install-adjacent code in the tree is `crates/installer`, which
-covers 3 of 18 binaries, one of which it does not build.
+covers 3 installer entries against 21 workspace targets, one of which is foreign and not built here.
