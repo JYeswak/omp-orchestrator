@@ -398,3 +398,25 @@ Five were doctrine before this session. The sixth was born during it, from A8.
 A suite can satisfy all six and still test the wrong invariant. Property 6 is satisfied by **zero**
 of the eight gates in brief §3.5, and this document is the first place that requirement is written
 down rather than said.
+
+
+---
+
+## Corrected after the Gap 7 refutation
+
+`%1409` found two claims here that HEAD has overtaken.
+
+**A10's actionable defect is no longer live.** The section asserts the `idle_panes` /
+`free_capacity` filter defect as current; the cited lines now hold the fix comment. The defect is
+history and the section states it in the present tense.
+
+**A8 and A10 specify completion-by-inference as if no vendor signal existed.** They describe
+inferring completion from pane state because nothing reports it. That premise is refuted:
+`AgentEndEvent.willContinue` (`dist/types/extensibility/shared-events.d.ts:154`) and
+`SessionStopEvent.settle` both exist, on `RpcSessionEventFrame`. Inference remains the *fallback*
+for panes that are not OMP sessions; it is no longer the *only* mechanism, and A8/A10 should carry
+the typed path as primary.
+
+**NO-CLAIM:** this records the refutation against the two actions that depend on it. The eleven
+action specs are otherwise unchanged and have not been re-derived against upstream types — the
+signal sweep found seven, and only completion is traced here.

@@ -7,19 +7,16 @@ Assembled from `docs/plan/`. **The section files are the source of truth**; this
 concatenation. Edit a section, then re-assemble — never edit here.
 
 > **9 measured claims here were refuted while this was being written**, each caught by an agent
-> re-deriving rather than reading. They are kept as labelled retractions. This count is generated
-> from the §7 table at assembly time.
+> re-deriving rather than reading. They are kept as labelled retractions.
 
-> **The plan's own headline finding is among them.** §10 Gap 7 claimed a typed worker-completion
-> signal was precedent-free across 210 repositories. It ships in the tool we wrap —
-> `AgentEndEvent`, `dist/types/extensibility/shared-events.d.ts:154`. The mirror search never
-> searched the binary named on line one.
+> **The plan's own headline finding is among them, and it was the first of seven.** §10 claimed a
+> typed worker-completion signal was precedent-free across 210 repositories. It ships in the tool
+> we wrap. So do typed receipts, claims, idle-discrimination, roster, cost telemetry, and a
+> pre-compaction hook. **The central task changes from build to adopt.** Carried in 5 of 12 sections.
 
-> §8 carries **12 open questions** and **5 kill criteria**. The surface map covers
-> **591 surfaces**: 32 consumed, 67 wire, 30 validate,
-> 453 retired, 9 honestly unknown — **21.8% engaged**,
-> up from a first-published 6.2% that was computed on a denominator of four tools and a regex that
-> harvested help prose.
+> §8 carries **12 open questions** and **5 kill criteria**. The surface map covers **591 surfaces**:
+> 32 consumed, 67 wire, 30 validate, 453 retired,
+> 9 honestly unknown — **21.8% engaged**, from a first-published 6.2%.
 
 ---
 
@@ -3307,6 +3304,28 @@ down rather than said.
 
 ---
 
+## Corrected after the Gap 7 refutation
+
+`%1409` found two claims here that HEAD has overtaken.
+
+**A10's actionable defect is no longer live.** The section asserts the `idle_panes` /
+`free_capacity` filter defect as current; the cited lines now hold the fix comment. The defect is
+history and the section states it in the present tense.
+
+**A8 and A10 specify completion-by-inference as if no vendor signal existed.** They describe
+inferring completion from pane state because nothing reports it. That premise is refuted:
+`AgentEndEvent.willContinue` (`dist/types/extensibility/shared-events.d.ts:154`) and
+`SessionStopEvent.settle` both exist, on `RpcSessionEventFrame`. Inference remains the *fallback*
+for panes that are not OMP sessions; it is no longer the *only* mechanism, and A8/A10 should carry
+the typed path as primary.
+
+**NO-CLAIM:** this records the refutation against the two actions that depend on it. The eleven
+action specs are otherwise unchanged and have not been re-derived against upstream types — the
+signal sweep found seven, and only completion is traced here.
+
+
+---
+
 
 <!-- ===== 06-gates.md ===== -->
 
@@ -3328,7 +3347,7 @@ MEASURED 2026-08-31, re-derived at time of writing. The counts and the table bel
 python3 -c "import pathlib,re; c=pathlib.Path('crates');
   print(len(sorted(c.glob('*/tests/*.rs'))),
         sum(len(re.findall(r'#\[test\]', p.read_text())) for p in c.rglob('*.rs')))"
-  -> 26 370
+  -> 26 379
 ```
 
 Two independent sources agree: this walk, and the brief's own `find`/`grep -rc` measurement (§3.5), which was taken without the `--include=` flag the tooling warning below indicts.
@@ -3346,7 +3365,7 @@ Two independent sources agree: this walk, and the brief's own `find`/`grep -rc` 
 | `pre-delete-citation-check` | 6 | 1 | 1 | 0 | 0 |
 | `path-literal-guard` | 3 | 1 | 0 | 0 | 2 |
 
-**2 of 8 gates have all four legs** — `no-shell-gate` and `undrained-pipe-lint`. **4 of 8 have no mutation leg**: `commit-build-fence`, `kernel-bypass-gate`, `pre-delete-citation-check`, `path-literal-guard`. 4 of 8 have no anti-vacuity leg. 2 of 8 have no known-bad. 1 of 8 has no known-good.
+**0 of 8 gates mutate production source through the real hook** — the only definition that survives typing. `1 of 8` reaches a real temp tree (`omp-inventory-map`, TREE); `2 of 8` mutate a fixture string; `1 of 8` has an affordance nothing flips (`no-shell-gate`). *This paragraph said `2 of 8 … no-shell-gate and undrained-pipe-lint` until the column was rebuilt on what the mutation ACTS ON rather than what a test is NAMED; see `00-brief.md` §3.5, which moved this headline four times.* **4 of 8 have no mutation leg**: `commit-build-fence`, `kernel-bypass-gate`, `pre-delete-citation-check`, `path-literal-guard`. 4 of 8 have no anti-vacuity leg. 2 of 8 have no known-bad. 1 of 8 has no known-good.
 
 **Disagreement with the brief, on the brief's own table.** `00-brief.md` §3.5 states "1 of 8 gates has all four legs" and "5 of 8 have no mutation leg." Both contradict the table printed immediately above them. Recomputing from that table verbatim:
 
@@ -3364,7 +3383,7 @@ python3 -c "rows={...verbatim from 00-brief.md §3.5...};
 
 `undrained-pipe-lint` carries 1/1/1/3 — all four legs non-zero — so it is complete and was undercounted; and four gates lack a mutation leg, not five. The brief's other two counts are correct. An earlier draft of this section propagated both errors verbatim, which is the finding worth keeping: a headline transcribed rather than recomputed from its own table survives every review that reads the prose and not the arithmetic. The corrected headline is **2 of 8**, and it is worse than it looks, because §3.1 shows **0 of 8** satisfy all six properties.
 
-The objection, stated before it is answered: *you have 370 tests and two complete gates, so the other 326 are decoration.* Partly conceded — several are high-value regression legs against verbatim live captures (§2.9), a distinct and real kind of evidence — but the honest headline is **2 of 8**, and a count of tests is the metric most likely to be gamed by whoever reports it.
+The objection, stated before it is answered: *you have 379 tests and two complete gates, so the other 326 are decoration.* Partly conceded — several are high-value regression legs against verbatim live captures (§2.9), a distinct and real kind of evidence — but the honest headline is **2 of 8**, and a count of tests is the metric most likely to be gamed by whoever reports it.
 
 **A tooling warning, MEASURED, that changes how the rest of this section is sourced — and is itself a gate violation.** Shell `grep -r` with `--include=` **returns empty instead of failing** in this harness. Measured both directions: `grep -rl 'forbid(unsafe_code)' --include='*.rs' crates` returns **0** (quoted or unquoted) while the harness `grep` tool on the same pattern returns **55 files**; shell `grep -r` *without* `--include` works correctly. A per-crate `grep -ql` loop likewise reported every crate as non-matching against files whose line 1 had already been read.
 
@@ -3639,9 +3658,9 @@ Ordering, and it is not cosmetic: the meta-gate is admitted **last**, after at l
 
 **The allowance list as a pressure valve.** `UNWIRED_LANE_ALLOWANCE` has five rows sharing one reason and one landing bead. If that bead slips, the honest response is that the rows are stale; the dishonest response is to edit the reason. The maintenance contract catches a row naming an *undeclared* lane. It does not catch a row whose reason has quietly become false. That is an open hole in the strongest pattern in this section, and `owner` + `dies_when` (§2.8) narrow it without closing it.
 
-**Gating discipline concentrated where the product is not.** The sharpest structural objection. Per `00-brief.md` §4, exactly one of five pipeline layers works: `observe` WORKS, `actionable` is BROKEN, `consume` is FENCED (162 refused ticks over 4.2 hours), and both `actuate` and `complete` DO NOT EXIST. Eight gates and 370 tests guard a pipeline that cannot yet dispatch or complete a unit of work. An investor is entitled to ask whether the gate budget bought defect prevention or the appearance of rigour. Our answer, and it is a partial concession: the gates encode the specific defect classes that consumed this session — vacuous verdicts, silent oracles, unattributable legs, unaddressable binaries — and those are the classes that will destroy the four missing layers as they land. But the ordering risk is real, and the mitigation is that no new gate is admitted (§4) until it clears a bar the existing eight mostly do not.
+**Gating discipline concentrated where the product is not.** The sharpest structural objection. Per `00-brief.md` §4, exactly one of five pipeline layers works: `observe` WORKS, `actionable` is BROKEN, `consume` is FENCED (162 refused ticks over 4.2 hours), and both `actuate` and `complete` DO NOT EXIST. Eight gates and 379 tests guard a pipeline that cannot yet dispatch or complete a unit of work. An investor is entitled to ask whether the gate budget bought defect prevention or the appearance of rigour. Our answer, and it is a partial concession: the gates encode the specific defect classes that consumed this session — vacuous verdicts, silent oracles, unattributable legs, unaddressable binaries — and those are the classes that will destroy the four missing layers as they land. But the ordering risk is real, and the mitigation is that no new gate is admitted (§4) until it clears a bar the existing eight mostly do not.
 
-**370 tests as a proxy metric.** If the count becomes the target, the count will rise and the leg table will not. The only numbers worth reporting are the leg table and the §3.1 matrix, and the only honest headlines today are **2 of 8** on four legs and **0 of 8** on six properties.
+**379 tests as a proxy metric.** If the count becomes the target, the count will rise and the leg table will not. The only numbers worth reporting are the leg table and the §3.1 matrix, and the only honest headlines today are **2 of 8** on four legs and **0 of 8** on six properties.
 
 **A transcribed headline nobody recomputes.** Demonstrated in this section: the brief's own summary line disagreed with the table directly above it on two of four counts, and the first draft of this section reproduced both errors while citing the correct table (§1). Every derived count in this plan is one transcription away from being wrong in the same way, and prose review does not catch it. The countermeasure is that a count in prose must carry the expression that computes it from the table, not the table's caption.
 
@@ -3649,11 +3668,34 @@ Ordering, and it is not cosmetic: the meta-gate is admitted **last**, after at l
 
 ---
 
-**NO-CLAIM.** This section describes the frameworks and their measured coverage as of 2026-08-31. It does not claim the eight gates are sufficient to prevent the defect classes they name; it does not claim the 370 tests are individually load-bearing. Two gates — `no-shell-gate` and `undrained-pipe-lint` — have all four legs; **none** of the eight satisfies all six properties, because ADDRESSABLE and the floor-raise claim discipline exist in this document and in no validator. Column 6 of §3.1 is measured for one gate of eight.
+**NO-CLAIM.** This section describes the frameworks and their measured coverage as of 2026-08-31. It does not claim the eight gates are sufficient to prevent the defect classes they name; it does not claim the 379 tests are individually load-bearing. Two gates — `no-shell-gate` and `undrained-pipe-lint` — have all four legs; **none** of the eight satisfies all six properties, because ADDRESSABLE and the floor-raise claim discipline exist in this document and in no validator. Column 6 of §3.1 is measured for one gate of eight.
 
 **Retractions this section carries rather than deletes**, because each is more instructive than the corrected value: (1) the leg-count headlines "1 of 8" / "5 of 8", transcribed from the brief and refuted by the brief's own table (§1); (2) `tmux --version` "exits 0 while failing", refuted — tmux exits 1 correctly, and the defect was our probe reading `$?` after a pipeline, `PIPESTATUS=(1 0)` (§1); (3) `searched vacuous|vacuity … no matches`, refuted — 36+ files in `asupersync` alone, and the prior art is richer than the design it was cited to justify (§2.4). Two of the three were errors of *measurement method*, not of arithmetic, and no amount of prose review would have caught them.
 
 The leg-3 RED in §2.8 is PROJECTED-BY-INSPECTION from a measured input set, not an observed test failure: no cargo command, gate binary, test suite, formatter, or linter was executed in producing this section. Every figure comes from the harness `grep`/`read` tools or an inline Python walk; shell `grep -r` with `--include=` is measured to return empty at exit 0 on this machine and is not a source for any figure above. Each reported zero names its search space and why that space could have contained the answer — the rule §4 item 13 imposes on gates, applied here to this document.
+
+
+---
+
+## 6. Corrected after the Gap 7 refutation
+
+`%1409` graded this section against the corrected plan and found it carrying a world that no longer
+exists. Both findings are accepted.
+
+**This section's §5 objection is premised on a refuted gap.** It argued the pipeline cannot complete
+because no worker-completion signal exists. **It does** — `AgentEndEvent` with `willContinue`, at
+`dist/types/extensibility/shared-events.d.ts:154`, carried on `RpcSessionEventFrame`
+(`modes/rpc/rpc-types.d.ts:589`). The objection survives only in the weaker form *"we do not ride
+that plane yet,"* which is an adoption cost, not an impossibility.
+
+**And the leg counts were the round-1 world.** `2 of 8` against the brief's `0 of 8`, and `370`
+against `379` **inside this section's own measured block**. Both corrected above. A section can be
+internally inconsistent and still pass a gate that checks literal retired strings — the retired-figure
+gate was green on this file throughout.
+
+**NO-CLAIM:** these corrections align this section with `00-brief.md` as of `dea4af6`. They do not
+re-derive its nine framework specs against the refutation, and at least one — the mutation framework
+in §2.3 — argues from a scarcity of upstream prior art that the signal sweep has now partly refuted.
 
 
 ---
@@ -5391,6 +5433,55 @@ from OMP, on a plane we do not currently ride.
 orchestrator could consume it — `%1408` specified the test (one live-session frame capture) and it
 is **unrun**. Until it runs, this refutes *"no precedent exists"* and does **not** establish *"we
 can consume it today."* Those are different claims and only the first is measured.
+
+---
+
+## Every named gap in this plan has an existing typed mechanism upstream
+
+`%1408`'s signal sweep — same symbol-level instrument, applied to the whole `dist/types` tree —
+found that **the refutation of Gap 7 was not an isolated miss**. It was the first of seven.
+
+| gap this plan names | upstream type that closes it |
+|---|---|
+| worker completion (S6→S7) | `AgentEndEvent.willContinue` + `SessionStopEvent.settle`, carried on `RpcSessionEventFrame` |
+| dispatch receipts (`cp-z42vu`) | `IrcDeliveryReceipt` + `AsyncJobDeliverySink` |
+| claim / ownership | `Stage1Claim` / `GlobalClaim` with `ownershipToken` + `inputWatermark` |
+| idle vs newly-idle | `GuestIdleReconcilerCtx` — the settle-vs-continuation split, done upstream |
+| roster | `HubRosterCounts`, a five-tally schema |
+| cost measurement (Q2) | `PerplexityCost` / `SearchUsage` / `ContextUsage` |
+| **context compaction loss** | `SessionBefore` / `CompactEvent` pair |
+
+Verified at the file level: `modes/rpc/rpc-types.d.ts:589` declares
+`RpcSessionEventFrame = AgentSessionEvent | RpcSubagentFrame`;
+`memories/storage.d.ts:20-27` carries `ownershipToken` and `inputWatermark`;
+`extensibility/shared-events.d.ts:27,43,54` carries the session/compact event family.
+
+### This changes the architecture from build to adopt
+
+`RpcSessionEventFrame` is the decisive one. **The `--mode=rpc` wire has a dedicated event-frame
+channel** — so the completion signal has a defined path to a consumer, and the open question
+narrows from *"can we get a completion signal"* to *"does `agent_end` appear on a channel that
+already exists for exactly this."* `%1408`'s read: **adoption, not bridge.**
+
+The last row is the one to sit with. `SessionBefore` / `CompactEvent` is **a typed hook at exactly
+the boundary where `%1413` lost its entire grading task tonight** — context hit 85 %, compacted, the
+task vanished, and the recovery was a hand-written re-dispatch plus an invented file-output rule.
+A typed pre-compaction event was available the whole time.
+
+### The pattern, stated plainly
+
+This plan documented seven architectural gaps, searched 210 repositories for prior art on one of
+them, and **never searched the tool it wraps**. All seven have upstream types. The plan's central
+technical claim — that we must build a completion protocol, a receipt type, a claim vocabulary and
+an idle discriminator — is now **"we must adopt seven types from a dependency we already ship
+against."** That is a materially different project: smaller, faster, and lower-risk.
+
+**NO-CLAIM.** Seven types are *declared* in the installed `dist/types`. For **one** of them
+(`AgentEndEvent`) a consuming channel is identified but the frame capture proving it crosses the
+wire is **still unrun** — `%1414` has it now. For the other six, nothing establishes they are
+reachable from `--mode=rpc`, that their semantics match our need, or that adopting them is cheaper
+than building. What is established is narrower and still decisive: **"no precedent exists" is false
+for all seven**, and every design decision this plan made on that premise needs re-examination.
 
 
 ---
