@@ -64,6 +64,7 @@ struct Config {
     pending_dispatch: PathBuf,
     receiver_agent: String,
     omp_quick: bool,
+    reap_finished_panes: String,
     omp_binary: PathBuf,
 }
 
@@ -258,6 +259,8 @@ impl Config {
             pending_dispatch,
             receiver_agent,
             omp_quick,
+            reap_finished_panes: env::var("OMP_REAP_FINISHED_PANES_BIN")
+                .unwrap_or_else(|_| "reap-finished-panes".to_owned()),
             omp_binary,
         })
     }
@@ -311,6 +314,12 @@ async fn invoke(
         .map_err(|_| "CANCELLED supervisor context".to_owned())?;
     let mut command = Command::new(program);
     command.args(args).current_dir(&config.repo);
+    if program == config.reap_finished_panes {
+        command.env(
+            "REAP_SWEEP_DEADLINE_SECS",
+            config.command_timeout.as_secs().max(1).to_string(),
+        );
+    }
     command.env("TMUX_TMPDIR", &config.tmux_tmpdir);
     match timeout(
         cx.now_for_observability(),
@@ -1226,6 +1235,24 @@ fn clear_dispatch_intent(config: &Config) -> Result<(), String> {
         )),
     }
 }
+fn finished_pane_reaper_args(config: &Config) -> Vec<String> {
+    vec!["--repo".to_owned(), config.repo.display().to_string()]
+}
+async fn run_finished_pane_sweep(cx: &Cx, config: &Config) -> Result<String, String> {
+    let reaper_args = finished_pane_reaper_args(config);
+    let reaper_output = invoke(cx, config, &config.reap_finished_panes, &reaper_args).await?;
+    let reaper_bytes = require_success(&config.reap_finished_panes, reaper_output)?;
+    let reaper_summary = String::from_utf8_lossy(&reaper_bytes).trim().to_owned();
+    if reaper_summary.is_empty() {
+        return Err(format!(
+            "REAP_FINISHED_PANES_EMPTY program={}",
+            config.reap_finished_panes
+        ));
+    }
+    Ok(reaper_summary)
+}
+
+
 async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     write_heartbeat(config, tick, "CYCLE_STARTED", "phase=observe")?;
     if let Some(intent) = read_pending_dispatch(config)? {
@@ -1300,6 +1327,12 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         pane_states,
         free_capacity_count,
         dispatchable_count
+    );
+    let reaper_summary = run_finished_pane_sweep(cx, config).await?;
+    write_heartbeat(config, tick, "REAP_FINISHED_PANES", &reaper_summary)?;
+    println!(
+        "REAP_FINISHED_PANES tick={tick} session={} summary={reaper_summary}",
+        config.session
     );
     let ready_args = vec!["ready".to_owned(), "--json".to_owned()];
     let ready_output = invoke(cx, config, &config.br, &ready_args).await?;
@@ -1565,6 +1598,8 @@ mod tests {
     fn fixture_config(heartbeat_ledger: PathBuf) -> Config {
         Config {
             repo: PathBuf::from("/tmp/omp-orchestrator-test-repo"),
+            reap_finished_panes: "reap-finished-panes".to_owned(),
+            omp_quick: false,
             session: "test-session".to_owned(),
             interval: Duration::from_secs(1),
             command_timeout: Duration::from_secs(1),
@@ -1579,7 +1614,6 @@ mod tests {
             tick_monitor_state: PathBuf::from("/tmp/omp-orchestrator-test-state"),
             pending_dispatch: PathBuf::from("/tmp/omp-orchestrator-test-pending"),
             receiver_agent: "BlueLantern".to_owned(),
-            omp_quick: false,
             omp_binary: PathBuf::from("omp"),
         }
     }
@@ -1665,6 +1699,34 @@ mod tests {
         assert_eq!(help, usage());
         assert!(help.contains("[run]"), "usage must advertise the run subcommand");
     }
+    #[test]
+    fn finished_pane_reaper_receives_the_same_repository() {
+        let config = fixture_config(PathBuf::from("/tmp/omp-orchestrator-reaper-heartbeat.jsonl"));
+        assert_eq!(
+            finished_pane_reaper_args(&config),
+            vec!["--repo".to_owned(), config.repo.display().to_string()]
+        );
+    }
+    #[test]
+    fn finished_pane_reaper_runs_through_the_production_helper() {
+        let temp = tempfile::tempdir().expect("reaper repo");
+        let mut config = fixture_config(temp.path().join("heartbeat.jsonl"));
+        config.repo = temp.path().to_owned();
+        config.reap_finished_panes = "/bin/echo".to_owned();
+        let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
+        let summary = runtime
+            .block_on(async {
+                let cx = Cx::current().expect("runtime context");
+                run_finished_pane_sweep(&cx, &config).await
+            })
+            .expect("reaper output");
+        assert_eq!(
+            summary,
+            format!("--repo {}", temp.path().display()),
+            "the production helper must invoke the configured reaper with the repository root"
+        );
+    }
+
     #[test]
     fn missing_receiver_agent_inherits_claimed_assignee() {
         let mut config = fixture_config(std::env::temp_dir().join("receiver-assignment-heartbeat.jsonl"));

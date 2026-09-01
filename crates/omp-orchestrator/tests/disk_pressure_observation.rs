@@ -34,6 +34,11 @@ fn disk_pressure_still_reports_observation_before_refusal() {
         "#!/bin/sh\nprintf '%s\\n' '{\"omp_lifecycle\":{\"panes\":[{\"pane\":\"%probe\",\"state\":\"IDLE\",\"liveness\":\"CONFIRMED_IDLE\"}]},\"idle_panes\":{\"dispatchable\":[],\"free_capacity\":[]}}'\n",
     );
     executable(&fake_bin, "br", "#!/bin/sh\nprintf '%s\\n' '[]'\n");
+    executable(
+        &fake_bin,
+        "reap-finished-panes",
+        "#!/bin/sh\nprintf '%s\n' 'REAP_SWEEP reaped=0 skipped=1 awaiting_human=0 unswept=0 deadline_hit=0'\n",
+    );
 
     let inherited_path = env::var_os("PATH").unwrap_or_default();
     let path = format!("{}:{}", fake_bin.display(), inherited_path.to_string_lossy());
