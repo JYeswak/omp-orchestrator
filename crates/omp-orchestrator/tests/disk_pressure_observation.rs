@@ -66,11 +66,22 @@ fn disk_pressure_still_reports_observation_before_refusal() {
     let observation = stdout
         .find("OBSERVATION ")
         .expect("disk pressure must not suppress the observation line");
+    let reaper = stdout
+        .find("REAP_FINISHED_PANES ")
+        .expect("finished-pane sweep must run before disk-pressure refusal");
     let refusal = stdout
         .find("DISK_PRESSURE owner=josh next_action=cargo-clean-or-grow-volume")
         .expect("disk pressure refusal must retain its owner and next action");
     assert!(
         observation < refusal,
         "observation must precede disk refusal; stdout={stdout}"
+    );
+    assert!(
+        observation < reaper,
+        "observation must precede finished-pane sweep; stdout={stdout}"
+    );
+    assert!(
+        reaper < refusal,
+        "finished-pane sweep must precede disk refusal; stdout={stdout}"
     );
 }
