@@ -14,9 +14,13 @@ be absent. Generating from the census means the picture degrades when the system
 degrades. It is a load-bearing artifact, not decoration.
 
 The source of truth for Diagrams 1, 2 and 6's node set is the built scanner at
-`/Volumes/BuildShared/cargo-targets/debug/omp-inventory-map`, whose output was
-captured once at `/tmp/inv.txt` (544,697 bytes, exit 2, envelope
-`{"schema_version":"omp-inventory-map/v1","command":"doctor","status":"UNKNOWN",…}`).
+`/Volumes/BuildShared/cargo-targets/debug/omp-inventory-map`. The 2026-08-31 capture is
+preserved at `.flywheel/inventory-artifacts/inv.txt.gz` (decompressed 544,697 bytes;
+compressed SHA-256 `8f62893e6a4a04a9b4e8922781a5f8a687f73ca84f5c4ea9d69c5f8998ae0561`,
+exit 2). The newer scanner capture is preserved at
+`.flywheel/inventory-artifacts/omp-inventory-map-2026-08-31.json.gz` (decompressed
+3,032,388 bytes; compressed SHA-256 `8de42c7cb9e653a79b9781602b16db21e4e281346e42c47c95e71041d9404f52`,
+exit 2). These are retained historical snapshots, not a current live diagram feed.
 Diagrams 3 and 4 are generated from the five-stage control loop (formerly "five-stage" — renamed, the table has five stages and seven rows) table and gate-leg table
 in §00 (`docs/plan/00-brief.md` §3.5, §4); the `find`/`grep` invocations behind those
 tables are reproduced under each diagram rather than re-derived.
@@ -85,6 +89,7 @@ graph TD
     pane_dispatch_fence --> subprocess_contract
 ```
 
+**HISTORICAL GRAPH SNAPSHOT.** The following edge, degree, and `/tmp` extraction claims are the preserved `inv.txt.gz` snapshot above. They are not current workspace counts; current map and metadata authorities live in `NUMBERS.toml` and the current census sections.
 **MEASURED.** Source: all 18 `path-depends-on` edges in `/tmp/inv.txt`, extracted with
 `python3 -c "import json; d=json.load(open('/tmp/inv.txt'))['data']; [print(e['from'],'->',e['to']) for e in d['edges'] if e['relation']=='path-depends-on']"`.
 Every edge in the picture is one line of that output; the four subgraph groupings are
@@ -181,13 +186,13 @@ graph LR
     OBS["1 · OBSERVE<br/>tick-monitor<br/>WORKS"]
     ACT["2 · ACTIONABLE<br/>idle_panes / free_capacity<br/>FILTER FIXED (-oco); SEAM OPEN — no shared type"]
     CON["3 · CONSUME<br/>dispatch-claim-fence<br/>FENCED"]
-    ACU["4 · ACTUATE<br/>send to pane<br/>DOES NOT EXIST"]
+    ACU["4 · ACTUATE<br/>send_and_verify from the resident supervisor<br/>AVAILABLE, NOT VERIFIED — delivery proof remains open"]
     CMP["5 · COMPLETE<br/>worker to conductor<br/>AVAILABLE, NOT WIRED"]
 
     OBS -->|pane state observed| ACT
     ACT -.->|"Local path: filter fixed (-oco); the SEAM remains —<br/>the production parser derives capacity from its own<br/>JSON string, never the producer's NewlyIdle field;<br/>upstream GuestIdleReconcilerCtx (collab/guest.d.ts:9-30)<br/>is DECLARED only"| CON
     CON -.->|"162 refused ticks over 4.2h<br/>DISPATCH_RETRY_BLOCKED"| ACU
-    ACU -.->|"a human types into the pane"| CMP
+    ACU -.->|"sends without the claim beat; sender success logged as receipt"| CMP
     CMP -.->|"no path back"| OBS
 
     style OBS fill:#2d5016,color:#fff
@@ -202,7 +207,7 @@ graph LR
     linkStyle 4 stroke:#c04040,stroke-width:3px
 ```
 
-**MEASURED.** Source: layer 1 from the `tick-monitor` crate's live operation; layer 2 from the local `idle_panes`/`free_capacity` producer-consumer path. State, corrected 2026-09-01: the filter defect is FIXED (commit -oco; `is_free_capacity` is now its own field and `NewlyIdle` is included), and what remains broken is the SEAM — the producer's field and the consumer's parser agree by convention across a process boundary with no shared type (09 M1). OMP supplies `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts:9-30`) for guest host-idle reconciliation and settle handling, but this declared type has no measured path into the local filter. Layer 3 is from the tick ledger — **162 refused ticks across 4.2 hours, every one carrying `DISPATCH_RETRY_BLOCKED`**; layers 4 and 5 are recorded as absent because no crate in Diagram 1 emits into a pane and no crate receives a completion.
+**MEASURED.** Source: layer 1 from the `tick-monitor` crate's live operation; layer 2 from the local `idle_panes`/`free_capacity` producer-consumer path. State, corrected 2026-09-01: the filter defect is FIXED (commit -oco; `is_free_capacity` is now its own field and `NewlyIdle` is included), and what remains broken is the SEAM — the producer's field and the consumer's parser agree by convention across a process boundary with no shared type (09 M1). OMP supplies `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts:9-30`) for guest host-idle reconciliation and settle handling, but this declared type has no measured path into the local filter. Layer 3 is from the tick ledger — **162 refused ticks across 4.2 hours, every one carrying `DISPATCH_RETRY_BLOCKED`**; layer 5 is recorded as absent because no crate receives a completion. **Layer 4 was corrected 2026-09-01 by the guardian pass:** it is not absent — the resident `omp-orchestrator` (launchd, build `9a61acd`) emits into panes via `ntm --robot-send`, and the heartbeat ledger records 131 `DISPATCHED` rows for bead `815` to `%1408` between 11:45 and 15:53 MDT with the bead `open` and the pane dead on HTTP 402 (00-brief §4 carries the command). The dashed link now names the defect that is live rather than an absence that is not. This node text is hand-edited, as every node in this diagram has been since it was captured — the generator this section requires still has no command and no owner.
 
 
 Read left to right, exactly one of five links is solid. The loop is not slow, it is
@@ -228,21 +233,20 @@ under a fixed layer 2.
 
 ```mermaid
 graph TD
-    subgraph COMPLETE["4 of 4 legs — 1 gate"]
+    subgraph COMPLETE["4 of 4 legs — 2 gates"]
         g1["no-shell-gate<br/>57 tests (was 34; four test files landed since)<br/>known_bad 4 · known_good 3<br/>mutation 2 · anti_vacuity 6"]
+        g3["undrained-pipe-lint<br/>10 tests<br/>known_bad 1 · known_good 3<br/>mutation 1 · anti_vacuity 1"]
     end
-
-    subgraph PARTIAL["partial — 4 gates"]
+    subgraph PARTIAL["partial — 3 gates"]
         g2["omp-inventory-map<br/>23 tests<br/>known_bad 0 · known_good 2<br/>mutation 1 · anti_vacuity 1"]
-        g3["undrained-pipe-lint<br/>10 tests<br/>known_bad 1 · known_good 1<br/>mutation 1 · anti_vacuity 3"]
-        g4["state-wildcard-lint<br/>9 tests<br/>known_bad 1 · known_good 0<br/>mutation 1 · anti_vacuity 0"]
+        g4["state-wildcard-lint<br/>9 tests<br/>known_bad 1 · known_good 1<br/>mutation 1 · anti_vacuity 0"]
         g5["path-literal-guard<br/>3 tests<br/>known_bad 1 · known_good 0<br/>mutation 0 · anti_vacuity 2"]
     end
 
-    subgraph THIN["known-bad + known-good only — 3 gates"]
-        g6["kernel-bypass-gate<br/>6 tests · mutation 0 · anti_vacuity 0"]
-        g7["pre-delete-citation-check<br/>6 tests · mutation 0 · anti_vacuity 0"]
-        g8["commit-build-fence<br/>10 tests<br/>known_bad 0 · mutation 0 · anti_vacuity 0"]
+    subgraph THIN["partial leg coverage — 3 gates"]
+        g6["kernel-bypass-gate<br/>6 tests<br/>known_bad 1 · known_good 1<br/>mutation 0 · anti_vacuity 0"]
+        g7["pre-delete-citation-check<br/>6 tests<br/>known_bad 1 · known_good 1<br/>mutation 0 · anti_vacuity 0"]
+        g8["commit-build-fence<br/>10 tests<br/>known_bad 0 · known_good 1<br/>mutation 0 · anti_vacuity 0"]
     end
 
     style COMPLETE fill:#2d5016,color:#fff
@@ -250,23 +254,22 @@ graph TD
     style THIN fill:#4a1010,color:#fff
 ```
 
-**MEASURED.** Source: `find crates -name '*.rs' -path '*/tests/*' | wc -l` → 31
-integration test files; `grep -rhc '#\[test\]'` over crates/*/src/*.rs crates/*/tests/*.rs → 407 `#[test]` functions (regenerated 2026-09-01; this figure drifts with every landing test and is now tracked in NUMBERS.toml `[figures.test_functions]`);
+**MEASURED (historical snapshot at the plan's 2026-09-01 measurement revision; current worktree census authority is §1 of `06-gates.md`).** Source: `find crates -name '*.rs' -path '*/tests/*' | wc -l` → 31
+integration test files; `grep -rhc '#\[test\]'` over crates/*/src/*.rs crates/*/tests/*.rs → 409 `#[test]` functions (this figure drifts with every landing test and is now tracked in NUMBERS.toml `[figures.test_functions]`);
 per-leg presence from `grep -rli` for each of `known_bad`, `known_good`, `mutation`,
 `anti_vacuity` per gate crate. Counts in each node are that grep's file count, not a
 quality judgement.
 
 **2 of 8 gates have all four legs** — `no-shell-gate` and `undrained-pipe-lint`. **4 of 8 have no
 mutation leg** — meaning for four gates we have never demonstrated that breaking the
-thing under test makes the test fail. 2 of 8 have no known-bad, i.e. no proof they
-fire at all. **Two gates have no known-good leg** — `path-literal-guard` and
-`state-wildcard-lint` (regenerated 2026-09-01: zero known-good occurrences in that crate's tests,
-correcting this diagram's earlier kg=1 cell) — and per §00 §3.5 that makes both the
-highest-risk gates in the set rather than merely the thinnest: an attack-only suite
-ships an over-strict gate, an over-strict gate gets routed around, and a routed-around
-gate is a slower death than no gate at all. Note also what a full four-leg row buys —
-it raises the floor on a class of defect; it never guarantees the class is absent.
+thing under test makes the test fail. **2 of 8 have no known-bad**, i.e. no proof they
+fire at all. **One of 8 gates has no known-good leg** — `path-literal-guard` (regenerated
+2026-09-01: zero known-good occurrences in that crate's tests). Per §00 §3.5, an attack-only
+suite ships an over-strict gate, an over-strict gate gets routed around, and a routed-around
+gate is a slower death than no gate at all. A full four-leg row raises the floor on a class
+of defect; it never guarantees the class is absent.
 
+**HISTORICAL ADDRESSABILITY SNAPSHOT.** The old --help refusal, 13-test count, and 544,697-byte output below were measured before the retained artifact update. Current source has 28 test markers and the current debug --help probe emits 158 bytes at exit 1. No current ADDRESSABLE pass is claimed without a retained command/output/revision receipt.
 A sixth required property fell out of this session and is not in the table because
 nothing measures it yet: **ADDRESSABLE**. `omp-inventory-map --help` returns
 `{"status":"ERROR","error":"CONFIG_ERROR unknown argument --help"}`. The gate is
@@ -274,9 +277,15 @@ built, its 13 tests pass, and `types_inventory.rs:176-178` deliberately excludes
 `Observation` from the allowance list so the name collision *demands* convergence
 rather than tolerating it. It is correct and it is undiscoverable. A gate nobody can
 invoke has a real-world firing rate of zero regardless of its test count.
+**CURRENT ACCEPTANCE AUTHORITY (UNRESOLVED).** The diagram generator and CI diff gate named by
+the requirement above do not exist in this repository: generator command = **NONE**; CI job =
+**NONE**; owner = **UNASSIGNED**. Until a bead assigns an owner and lands an executable command,
+these diagrams are snapshots only. The future bead is not accepted until its command regenerates
+Diagram 1 from the live census and a deliberately changed crate edge makes CI fail on the diff;
+there is currently no command or owner to run.
 
 **What would Jeffrey do.** Searched the mirror at
-`/Volumes/ZestData/dicklesworthstone-mirror` (210 git work-trees; the earlier "216 repos" figure is retired) for diagram-generation and
+/Volumes/ZestData/dicklesworthstone-mirror (210 filesystem .git entries, not validated as git work-trees) for diagram-generation and
 contract-test prior art: `grep -rl "mermaid" --include=*.rs` surfaces
 `franken_markdown/src/pdf.rs` and `franken_markdown/tests/cli_contract.rs`, i.e. a
 *renderer* for mermaid plus a CLI-contract test harness — the useful borrow is the
@@ -348,32 +357,18 @@ sequenceDiagram
     participant B as bead board (br 0.4.1)
     participant C as conductor
 
-    H->>T: tmux send-keys (typed by hand)
-    T->>P: keystrokes delivered
-    Note over P: work may or may not begin;<br/>no crate observes this transition
-    P--)C: receipt / ack
-    Note right of C: NO SUCH MESSAGE EXISTS<br/>17 ack types in 3 dialects,<br/>none wired to this path
+    C->>T: send_and_verify packet via ntm --robot-send or tmux
+    T->>P: transport attempt
+    P-->>C: receiver-receipt / ComposerEvidence when observed
+    Note right of C: sender success is not receiver acceptance; missing receipt remains a typed refusal
     C->>B: br status read, later, out of band
     B-->>C: bead state as of read time
     Note over C,B: the only feedback channel is<br/>polling a board a human updated
 ```
 
-**MEASURED.** Source: the absence of any `actuate` or `complete` crate in the 18-edge
-DAG of Diagram 1 — `receiver-receipt` exists as a crate and is depended on by
-`ack-stage` and `omp-orchestrator`, but no edge connects it to a pane; the tmux
-version from `tmux` at `/opt/homebrew/bin/tmux` (which rejects `--version` with
-`tmux: unknown option -- -`, hence the shell-reported `3.6a`); `br 0.4.1` from
-`br --version`; the 17-ack-types-in-3-dialects figure from the type inventory
-(regenerated 2026-09-01, two scopes published as an error bar: 59 public enums / 91 structs
-across 24 of 26 crates including test modules and bin sources; 59 / 88 for
-src-only-minus-bins-minus-test-modules), plus 4 colliding names.
+**MEASURED.** This sequence is the current actuator shape: the conductor calls `send_and_verify`, which selects `ntm --robot-send` or tmux transport, writes transport evidence, and waits for receiver-side evidence. The diagram does not claim that a packet was accepted; sender success remains weaker than receiver acknowledgement.
 
-Step 4 is the receiver-verification gap, drawn as a dashed unanswered arrow because
-that is literally what it is: a message we assume and never observe. Every ack type we
-own is a type without a wire. The board at stand-down — 28 closed, 25 in_progress,
-19 open, 2 blocked, 75 total — is a human's account of what happened, not the system's.
-Twenty-five `in_progress` beads with no completion channel is twenty-five unfalsifiable
-claims of work in flight.
+**HISTORICAL SNAPSHOT.** The old 18-edge graph, 17 ack types, 59/91 type counts, 4 colliding names, and 74-row board were pre-extraction measurements. They remain explanatory context only; current workspace counts belong to the registry and current source probes.
 
 ---
 
@@ -409,18 +404,12 @@ is technically true and still misleading:
 Six hours and 5.6× apart. The diagrams are built from the **earlier, smaller** capture
 while the brief cites the later one, and nothing in either document says so.
 
-### The finding the grade did not reach
+### Provenance finding disposition
+**Resolved:** the earlier capture paths were ephemeral `/tmp` locations. The bytes are now preserved and hash-identified under `.flywheel/inventory-artifacts/`; the source-era paths below are historical evidence, not current dependencies.
 
-**Both artifacts live in `/tmp`.** Every diagram's provenance in this section rests on
-files that a reboot deletes. The date was never the real defect — the defect is that
-after the next restart, none of the five citations could be checked by anyone,
-including their author, and the diagrams would become exactly the *"hand-drawn diagram
-with better provenance"* this section's own §R4 note warns about.
+The diagrams are still **not regenerated from the fresh capture**. §R4 records the separate system gap: generator command = NONE and CI job = NONE. The honest state is a labelled, preserved 16:50 snapshot, not a live view. The 23:01 capture remains preserved for comparison.
 
-Preserved, compressed, and hashed at
-`.flywheel/inventory-artifacts/` — 3.5 MB of provenance in 120 KB (22× and 32×). A
-citation to a `/tmp` path is a citation to nothing in a week; a citation to a
-content-hashed in-repo artifact survives.
+**Current retained artifacts:** `inv.txt.gz` decompresses to 544,697 bytes and `omp-inventory-map-2026-08-31.json.gz` decompresses to 3,032,388 bytes. Their compressed hashes are recorded above and enforced by the artifact-provenance gate.
 
 ### What is corrected and what is not
 
@@ -434,5 +423,4 @@ of work. So the honest state is: **the diagrams reflect a 16:50 snapshot, which 
 labelled, hashed, and preserved, and they are not current.** Row counts in Diagram 2
 (176 census rows) are from that capture; the 23:01 capture holds 981 rows.
 
-That gap is now stated in the document rather than discoverable only by diffing two
-`/tmp` files that will not exist next week.
+That gap is now stated in the document; the retained artifacts make the historical comparison reproducible without depending on ephemeral source-era paths.
