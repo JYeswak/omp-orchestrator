@@ -868,6 +868,77 @@ fn docs_are_stale(config: &Config) -> Result<Option<String>, String> {
         )))
     }
 }
+/// Resolve the directory cargo will actually write to, the way cargo resolves it.
+///
+/// # The measured defect this fixes
+///
+/// Measured 2026-09-01, answering "why is our own system limited on sending due to
+/// disk space": this gate probed `repo/target` and refused at 20 GiB free on a 98%
+/// root volume, while every build in this workspace lands on a DIFFERENT disk:
+///
+/// | what                                         | volume       | state       |
+/// |----------------------------------------------|--------------|-------------|
+/// | the old probe, `./target`                    | `/dev/disk3s5` | 98%, 20 GiB |
+/// | where binaries actually are, `/Volumes/BuildShared/cargo-targets` | `/dev/disk3s9` | 63%, 3.5 GiB |
+/// | `target/release/omp-orchestrator`            | —            | DOES NOT EXIST |
+///
+/// The old code honoured `CARGO_TARGET_DIR` but never read `build.target-dir` from
+/// cargo's own config, which is where this machine's redirect lives. So it refused on
+/// a number describing a volume the work never touches — the same defect class as
+/// `omp-orchestrator-8b1`, where a probe measured topology roots rather than the build
+/// volume, in a second binary.
+///
+/// # Resolution order, matching cargo
+///
+/// 1. `CARGO_TARGET_DIR` (env wins, as in cargo)
+/// 2. `build.target-dir` in `<repo>/.cargo/config.toml`
+/// 3. `build.target-dir` in `$HOME/.cargo/config.toml`
+/// 4. `<repo>/target`
+///
+/// # NO-CLAIM
+///
+/// This does not parse TOML properly — it is a line scan for a `target-dir` key under
+/// a `[build]` table, which is what the sibling gates in this workspace do and is
+/// enough for the one key that matters. A `target-dir` set through a profile override,
+/// a `--target-dir` flag on the invoking command, or a workspace manifest key is NOT
+/// seen. Fixing the volume also does not guarantee the gate passes: the correct
+/// volume holds only 3.5 GiB, which is tighter in absolute terms than the wrong one.
+fn resolve_target_dir(config: &Config) -> PathBuf {
+    if let Some(v) = std::env::var_os("CARGO_TARGET_DIR") {
+        return PathBuf::from(v);
+    }
+    for cfg in [
+        config.repo.join(".cargo/config.toml"),
+        std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_default()
+            .join(".cargo/config.toml"),
+    ] {
+        let Ok(text) = std::fs::read_to_string(&cfg) else { continue };
+        let mut in_build = false;
+        for raw in text.lines() {
+            let line = raw.trim();
+            if line.starts_with('#') {
+                continue;
+            }
+            if line.starts_with('[') {
+                in_build = line == "[build]";
+                continue;
+            }
+            if !in_build {
+                continue;
+            }
+            let Some(rest) = line.strip_prefix("target-dir") else { continue };
+            let Some(eq) = rest.find('=') else { continue };
+            let val = rest[eq + 1..].trim().trim_matches('"').trim_matches('\'');
+            if !val.is_empty() {
+                return PathBuf::from(val);
+            }
+        }
+    }
+    config.repo.join("target")
+}
+
 /// Refuse to tick when the volume a build would write to is nearly full.
 ///
 /// # Why this refuses rather than warns
@@ -891,9 +962,7 @@ fn docs_are_stale(config: &Config) -> Result<Option<String>, String> {
 /// 4 GiB, so 1 GiB is already too little — the floor is a refusal point, not a
 /// comfort margin, and a tick that passes here can still exhaust the volume.
 fn disk_pressure(config: &Config) -> Result<Option<String>, String> {
-    let target = std::env::var_os("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| config.repo.join("target"));
+    let target = resolve_target_dir(config);
 
     // Walk up to the nearest existing ancestor: the target dir may not exist yet on
     // a fresh clone, and statfs on a missing path answers nothing useful.
@@ -1413,6 +1482,73 @@ mod tests {
         let help = Config::from_args(&["--help".to_owned()]).unwrap_err();
         assert_eq!(help, usage());
         assert!(help.contains("[run]"), "usage must advertise the run subcommand");
+    }
+
+
+    /// The build volume must be resolved from cargo's own config, not assumed to be
+    /// `<repo>/target`.
+    ///
+    /// # The measured defect
+    ///
+    /// Measured 2026-09-01, answering the question "why is our own system limited on
+    /// sending due to disk space": the loop refused every tick with `DISK_PRESSURE
+    /// volume=./target free=20.26GiB` on a root volume at 98%, while every binary in
+    /// this workspace is written to `/Volumes/BuildShared/cargo-targets` at 63% — a
+    /// different device. `target/release/omp-orchestrator` did not exist at all.
+    ///
+    /// The old code honoured `CARGO_TARGET_DIR` and then fell back to `repo/target`,
+    /// never reading `build.target-dir` from cargo config, which is where this
+    /// machine's redirect lives.
+    ///
+    /// **The doc comment already described the correct behaviour** — "here it is
+    /// `/Volumes/BuildShared`, a different device from the checkout, so checking the
+    /// repo's own filesystem would have reported 84% free and passed while builds
+    /// failed" — and the code did the opposite. The prose was right and unchecked,
+    /// which is the exact gap a test closes.
+    #[test]
+    fn build_volume_comes_from_cargo_config_not_the_repo_default() {
+        let tmp = std::env::temp_dir().join(format!("omp-tgt-{}", std::process::id()));
+        let cargo_dir = tmp.join(".cargo");
+        std::fs::create_dir_all(&cargo_dir).expect("temp repo");
+        std::fs::write(
+            cargo_dir.join("config.toml"),
+            "# a comment mentioning target-dir that must be ignored\n\
+             [build]\n\
+             target-dir = \"/Volumes/Elsewhere/cargo-targets\"\n",
+        )
+        .expect("write cargo config");
+
+        let args = vec![
+            "run".to_owned(),
+            "--repo".to_owned(),
+            tmp.display().to_string(),
+        ];
+        let config = Config::from_args(&args).expect("config");
+
+        // The env var wins, exactly as it does in cargo, so it must be absent here for
+        // the config path to be the thing under test.
+        let saved = std::env::var_os("CARGO_TARGET_DIR");
+        // SAFETY-EQUIVALENT NOTE: single-threaded test, restored below. This crate
+        // forbids unsafe; remove_var/set_var are safe in this edition.
+        std::env::remove_var("CARGO_TARGET_DIR");
+        let resolved = resolve_target_dir(&config);
+        if let Some(v) = saved {
+            std::env::set_var("CARGO_TARGET_DIR", v);
+        }
+
+        assert_eq!(
+            resolved,
+            PathBuf::from("/Volumes/Elsewhere/cargo-targets"),
+            "resolve_target_dir must read build.target-dir from cargo config; falling \
+             back to <repo>/target measures a volume the build never writes to, which \
+             is how a 63%-full build disk was reported as a 98% refusal"
+        );
+        assert_ne!(
+            resolved,
+            config.repo.join("target"),
+            "the repo default is the specific wrong answer this test exists to refuse"
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
 }

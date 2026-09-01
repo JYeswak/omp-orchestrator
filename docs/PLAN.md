@@ -15,8 +15,8 @@ mtime to satisfy the freshness gate (§12.11 records the author doing exactly th
 > more named gaps have upstream types; an eighth root (`dist/types/plan-mode/`) surfaced later.
 
 > **2. Convergence has been retracted once.** Rounds 8–9 banked 3 sections under a two-lens rule.
-> Round 10 graded with readers who had never seen the ledger and all three fell — 340 findings
-> across 6 rounds. Rounds 8–9 measured the graders. Fresh eyes is now a clause of the rule.
+> Round 10 graded with readers who had never seen the ledger and all three fell — 360 findings
+> across 7 rounds. Rounds 8–9 measured the graders. Fresh eyes is now a clause of the rule.
 
 > **3. There is no external-validation loop.** Every gate suite here is internal — us checking us.
 > `loop-engineering` names that as insufficient for "shipped"; §12.11 records the gap.
