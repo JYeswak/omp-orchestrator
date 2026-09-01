@@ -176,6 +176,21 @@ pub struct PaneObservation {
     /// LIVE — genuinely working. Distinguishes a healthy busy fleet from an idle
     /// one, so queue-empty-and-everyone-working is not reported as an incident.
     pub is_working: bool,
+    /// An Ask/approval dialog is open: the pane is ALIVE and blocked on a HUMAN.
+    ///
+    /// # Why this is not covered by `is_working`
+    ///
+    /// Measured 2026-08-31, bead `dialog-reads-as-working-zag`: on OMP v18 the
+    /// dialog renders ABOVE the status line, the status line stays LAST, and its
+    /// timer KEEPS ADVANCING while the pane waits. A pane blocked on an answer is
+    /// byte-indistinguishable from a pane doing work, and `%1372` sat **36 minutes**
+    /// on an install approval while reading as healthy.
+    ///
+    /// `is_working` is right about CAPACITY — do not dispatch there, it is busy. It
+    /// is wrong about HEALTH — nobody is coming unless a human is told. Folding the
+    /// two together is what hid the 36 minutes, so they are separate fields and the
+    /// supervisor escalates on this one.
+    pub awaits_human: bool,
 }
 
 /// The queue: how many beads are ready.
@@ -579,6 +594,13 @@ pub enum SupervisorDecision {
     MonitorBlind { detail: String },
     /// The queue could not be read — fail closed.
     QueueUnreadable { detail: String },
+    /// One or more panes are ALIVE and blocked on a HUMAN answer.
+    ///
+    /// Distinct from every other variant because the loop cannot clear it by working:
+    /// no dispatch, no retry and no timeout resolves an unanswered approval dialog.
+    /// Measured 2026-08-31: 36 minutes on an install approval, invisible because the
+    /// pane's timer advances while it waits, so every classifier read it as healthy.
+    AwaitingHuman { panes: String },
     /// The workspace-load gate refused — do not dispatch into a broken repo.
     WorkspaceUnloaded { detail: String },
     /// Idleness is covered by an unexpired, BOUND authorization token. Carries
@@ -650,6 +672,29 @@ pub fn decide(observation: &Observation, authorization: &IdleAuthorization) -> S
         return SupervisorDecision::QueueUnreadable {
             detail: "br ready produced no parseable output".to_owned(),
         };
+    }
+
+    // A pane blocked on a HUMAN is checked BEFORE capacity, because it is the one
+    // condition the loop cannot resolve by working harder.
+    //
+    // Measured 2026-08-31 (bead dialog-reads-as-working-zag): `%1372` sat 36 MINUTES
+    // on an install approval while every classifier read it as healthy work — the
+    // dialog renders above the status line, the status line stays last, and the timer
+    // keeps advancing while nobody answers. Counting that as "working" is right about
+    // capacity and wrong about health, and the wrongness is invisible precisely
+    // because the pane looks busy.
+    //
+    // This is Rule Zero's shape: a blocker HALTS and surfaces ONE named decision,
+    // rather than being routed around by dispatching elsewhere.
+    let awaiting: Vec<&PaneObservation> =
+        observation.panes.iter().filter(|p| p.awaits_human).collect();
+    if !awaiting.is_empty() {
+        let panes = awaiting
+            .iter()
+            .map(|p| p.pane_id.clone())
+            .collect::<Vec<_>>()
+            .join(",");
+        return SupervisorDecision::AwaitingHuman { panes };
     }
 
     // Count dispatchable panes (ConfirmedIdle only — one capture is not enough).
@@ -780,8 +825,95 @@ mod tests {
             liveness: liveness.to_owned(),
             is_dispatchable: liveness == "CONFIRMED_IDLE",
             is_free_capacity: matches!(liveness, "CONFIRMED_IDLE" | "NEWLY_IDLE"),
-            is_working: matches!(liveness, "LIVE" | "WORKING"),
+            // MIRRORS PRODUCTION EXACTLY (main.rs: is_working). This helper
+            // previously derived is_working from `liveness` alone, so a "DIALOG"
+            // fixture reported NOT working while production reported working — a
+            // fixture drifted from the code it certifies, which is `fh C38`: its
+            // green is indistinguishable from a working check.
+            is_working: matches!(liveness, "LIVE" | "WORKING")
+                || matches!(state, "WORKING" | "DIALOG"),
+            // Derived from the state string exactly as production does, so a test
+            // passing "DIALOG" exercises the real escalation path rather than a
+            // hand-set flag. A fixture that cannot reproduce the condition certifies
+            // nothing about it.
+            awaits_human: state == "DIALOG",
         }
+    }
+
+    // ── DIALOG: ALIVE AND BLOCKED ON A HUMAN ─────────────────────────────────
+
+    /// A pane awaiting a human answer must ESCALATE, not read as healthy work.
+    ///
+    /// # The measured failure
+    ///
+    /// 2026-08-31, bead `dialog-reads-as-working-zag`. On OMP v18 an Ask/approval
+    /// dialog renders ABOVE the status line; the status line stays LAST and its
+    /// timer KEEPS ADVANCING while the pane waits. Every classifier therefore read
+    /// a human-blocked pane as `Working`/`Live`, and `%1372` sat **36 minutes** on
+    /// an install approval while the fleet reported healthy.
+    ///
+    /// `tick-monitor` already classified this correctly as `PaneState::Dialog` — the
+    /// detection was BUILT. The supervisor folded `"DIALOG"` into `is_working` and
+    /// escalated nothing, so the detection was NOT WIRED. This test is the wiring.
+    #[test]
+    fn a_pane_on_a_dialog_escalates_to_a_human_and_does_not_read_as_working() {
+        let observation = Observation {
+            panes: vec![pane("%1372", "DIALOG", false)],
+            queue: QueueState { ready_count: 3, readable: true },
+            gate_census: Some(passing_census()),
+        };
+        let decision = decide(&observation, &IdleAuthorization::Unauthorized { why: "no_token" });
+        match decision {
+            SupervisorDecision::AwaitingHuman { panes } => {
+                assert!(
+                    panes.contains("%1372"),
+                    "the escalation must NAME the pane a human has to go look at, got {panes:?}"
+                );
+            }
+            other => panic!(
+                "a pane blocked on a human must escalate; got {other:?}. \
+                 This is the 36-minute stall: ready work exists, the pane looks busy, \
+                 and nobody is coming."
+            ),
+        }
+    }
+
+    /// The escalation must NOT fire for a pane that is genuinely working.
+    ///
+    /// KNOWN-GOOD leg. Without it this gate is over-strict in the direction that
+    /// gets it routed around: every busy fleet would page a human.
+    #[test]
+    fn a_working_pane_does_not_escalate_to_a_human() {
+        let observation = Observation {
+            panes: vec![pane("%1408", "WORKING", false)],
+            queue: QueueState { ready_count: 3, readable: true },
+            gate_census: Some(passing_census()),
+        };
+        let decision = decide(&observation, &IdleAuthorization::Unauthorized { why: "no_token" });
+        assert!(
+            !matches!(decision, SupervisorDecision::AwaitingHuman { .. }),
+            "a genuinely working pane must not page a human; got {decision:?}"
+        );
+    }
+
+    /// DIALOG is still counted as busy for CAPACITY purposes.
+    ///
+    /// The fix separates health from capacity; it must not accidentally make a
+    /// human-blocked pane look dispatchable, which would send work into a pane
+    /// that cannot accept it until someone answers.
+    #[test]
+    fn a_dialog_pane_is_not_dispatchable_capacity() {
+        let p = pane("%1372", "DIALOG", false);
+        assert!(
+            !p.is_dispatchable,
+            "a pane holding an open dialog must never be offered as dispatchable"
+        );
+        assert!(
+            p.is_working,
+            "DIALOG must still count as busy for capacity accounting — the pane is \
+             occupied, it just is not progressing"
+        );
+        assert!(p.awaits_human, "and it must be flagged for escalation");
     }
 
     // ── DECIDING LEG 1: NO NO-OP GREEN PATH ──────────────────────────────────
@@ -1215,7 +1347,7 @@ mod kernel_tests {
             liveness: "LIVE".to_owned(),
             is_dispatchable: false,
             is_free_capacity: false,
-            is_working: true,
+            is_working: true, awaits_human: false,
         }
     }
     fn idle(id: &str) -> PaneObservation {
@@ -1225,7 +1357,7 @@ mod kernel_tests {
             liveness: "CONFIRMED_IDLE".to_owned(),
             is_dispatchable: true,
             is_free_capacity: true,
-            is_working: false,
+            is_working: false, awaits_human: false,
         }
     }
     fn q(ready: usize) -> QueueState {
@@ -1456,7 +1588,7 @@ mod binding_tests {
             liveness: "CONFIRMED_IDLE".to_owned(),
             is_dispatchable: true,
             is_free_capacity: true,
-            is_working: false,
+            is_working: false, awaits_human: false,
         }
     }
     fn q(n: usize) -> QueueState {

@@ -389,6 +389,19 @@ fn parse_observation(bytes: &[u8], gate_census: GateCensus) -> Result<Observatio
         let is_dispatchable = dispatchable.contains(pane_id);
         let is_free_capacity =
             is_dispatchable || free_capacity.contains(pane_id) || state == "IDLE";
+        // DIALOG is deliberately NOT folded into is_working.
+        //
+        // Measured 2026-08-31 (bead dialog-reads-as-working-zag): on OMP v18 an
+        // Ask/approval dialog renders ABOVE the status line, the status line stays
+        // LAST, and its timer KEEPS ADVANCING while the pane waits for a human. So a
+        // pane blocked on an answer is byte-indistinguishable from a pane doing work,
+        // and `%1372` sat 36 MINUTES on an install approval reading as healthy.
+        //
+        // Counting it as working is right about capacity (do not dispatch there) and
+        // wrong about health (nobody is coming). Those are different questions and
+        // they now have different fields: `is_working` drives capacity accounting,
+        // `awaits_human` drives escalation.
+        let awaits_human = state == "DIALOG";
         let is_working = matches!(liveness.as_str(), "LIVE" | "WORKING")
             || matches!(state.as_str(), "WORKING" | "DIALOG");
         panes.push(PaneObservation {
@@ -398,6 +411,7 @@ fn parse_observation(bytes: &[u8], gate_census: GateCensus) -> Result<Observatio
             is_dispatchable,
             is_free_capacity,
             is_working,
+            awaits_human,
         });
     }
     Ok(Observation {
@@ -1069,6 +1083,21 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     );
     let decision = decide(&observation, &authorization);
     match decision {
+        SupervisorDecision::AwaitingHuman { panes } => {
+            // The one refusal a human MUST see, because no amount of looping clears
+            // it. Named panes, named action, and the authority is the operator rather
+            // than a policy row — there is nothing for the loop to authorize.
+            //
+            // Measured 2026-08-31: 36 minutes on an install approval, invisible
+            // because the pane's turn timer advances while it waits.
+            write_heartbeat(config, tick, "AWAITING_HUMAN", &panes)?;
+            println!(
+                "AWAITING_HUMAN panes={panes} owner=josh \
+                 next_action=answer-the-open-dialog detail=\"alive and blocked on an \
+                 answer; the timer advances while nobody comes\""
+            );
+            return Ok(());
+        }
         SupervisorDecision::Dispatch { pane, .. } => {
             let bead = bead_ids.first().ok_or_else(|| {
                 "QUEUE_UNREADABLE ready count changed before bead selection".to_owned()

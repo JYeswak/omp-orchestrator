@@ -25,6 +25,28 @@ pub fn finding_for(decision: &SupervisorDecision, recurrence_count: u32) -> Opti
     }
 
     let (what, why, acceptance, labels) = match decision {
+        SupervisorDecision::AwaitingHuman { panes } => (
+            format!("A pane is alive and blocked on a human answer: {panes}"),
+            "On OMP v18 an Ask/approval dialog renders ABOVE the status line, the status line \
+             stays LAST, and its turn timer KEEPS ADVANCING while nobody answers. Every \
+             classifier therefore reads a human-blocked pane as healthy work. Measured \
+             2026-08-31: %1372 sat 36 minutes on an install approval while the fleet reported \
+             green. This is the one condition the loop cannot clear by working — no dispatch, \
+             retry or timeout resolves an unanswered dialog — so it becomes durable work rather \
+             than a printed line that scrolls past."
+                .to_owned(),
+            format!(
+                "Answer or dismiss the dialog on {panes}, then run the supervisor and verify it \
+                 no longer emits AWAITING_HUMAN for that pane. Negative leg: a pane in WORKING \
+                 must NOT produce this finding, which is covered by \
+                 a_working_pane_does_not_escalate_to_a_human."
+            ),
+            vec![
+                "supervisor".to_owned(),
+                "awaiting-human".to_owned(),
+                "liveness".to_owned(),
+            ],
+        ),
         SupervisorDecision::EscalateIdleIncident {
             dispatchable_count,
             ready_count,
