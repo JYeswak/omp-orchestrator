@@ -1,0 +1,24 @@
+[package]
+license.workspace = true
+name = "omp-idle-dispatch"
+version = "0.1.0"
+edition = "2021"
+description = "Fail-closed idle OMP pane dispatch lane"
+
+[package.metadata.merge_gate]
+blocking = false
+reason = "Provides an operational dispatch lane; it is not invoked as an independent merge gate."
+
+[[bin]]
+name = "omp-idle-dispatch"
+path = "src/main.rs"
+
+[lib]
+name = "omp_idle_dispatch"
+path = "src/lib.rs"
+
+[dependencies]
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "forbid"

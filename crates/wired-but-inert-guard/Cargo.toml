@@ -1,0 +1,24 @@
+[package]
+license.workspace = true
+name = "wired-but-inert-guard"
+version = "0.1.0"
+edition = "2021"
+description = "Fail-closed proof that declared dispatch gates are actually invoked"
+
+[package.metadata.merge_gate]
+blocking = false
+reason = "Reusable proof support; the owning migration and gate-chain checkers carry the merge decision."
+
+[lib]
+name = "wired_but_inert_guard"
+path = "src/lib.rs"
+
+[[bin]]
+name = "wired-but-inert-guard"
+path = "src/main.rs"
+[dependencies]
+subprocess-contract = { path = "../subprocess-contract" }
+
+
+[lints.rust]
+unsafe_code = "forbid"
