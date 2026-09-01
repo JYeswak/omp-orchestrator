@@ -51,6 +51,7 @@ not earn a verdict. A timeout is not a verdict; neither is an empty probe.
 
 ### 2. The coverage headline
 
+**Tooling warning.** This host's `grep` is a regex engine: metacharacters can produce false zeros unless escaped. Re-run with literal-safe tools or escaped patterns; on this map, `grep -c '^{' docs/plan/SURFACE-MAP.jsonl` returns 0 while an escaped brace returns 614. The same warning applies to parentheses and braces in every census query.
 `MEASURED` — `python3 -c "import json,collections; print(collections.Counter(r['classification'] for r in json.load(open('/tmp/inv.txt'))['data']['rows']))"`
 
 ```
@@ -91,17 +92,7 @@ wires named handlers, but this document makes no forecast of a target percentage
 because a coverage target would immediately become a metric to game: wiring a
 handler nobody calls raises the ratio and lowers the truth.
 
-There is a structural reason for the ratio, and it is recorded in the brief's
-five-stage control loop (formerly "five-stage" — renamed, the table has five stages and seven rows) table rather than discovered here: of the five layers
-(observe / actionable / consume / actuate / complete), exactly one — `observe`,
-via `tick-monitor` — is `MEASURED` as WORKS. `actuate` **does not exist**; a human
-types into panes. A project whose actuation layer does not exist cannot consume an
-actuation surface, so the 157 `CAPABILITY_NOT_USED` rows are not 157 independent
-oversights. They are largely one missing layer, counted 157 times. That reframing
-makes the number smaller *and* the fix harder: it is one hard thing, not 157 easy
-ones. `NO-CLAIM:` this attributes the ratio to the missing actuation layer as an
-explanation, not as a measurement — no experiment here isolates how many of the
-157 rows would flip once actuation exists.
+There is a structural reason for the historical ratio, and it is recorded in the brief's five-stage control loop table rather than discovered here: the retained scanner snapshot predates the current actuator. The current source contains `send_and_verify` at `crates/omp-orchestrator/src/main.rs:714` and its tick call at `:1461`, but transport and receiver receipts remain unverified. The 157 `CAPABILITY_NOT_USED` rows therefore remain historical classifications, not a current proof that actuation is absent.
 
 ### 3. The surface, enumerated by kind
 
