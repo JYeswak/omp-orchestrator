@@ -386,3 +386,53 @@ absence (the dashed arrows in Diagrams 3 and 6, the `no edge exists` link in
 Diagram 2), the absence is inferred from an empty result set, and an empty result set
 proves only that the scanner and the greps named above found nothing — not that
 nothing exists outside their reach.
+
+---
+
+## 4.7 BLOCKER resolution — the provenance was clearable, which is worse than stale
+
+`GradeDiagrams` filed:
+
+> The brief documents a fresh 2026-08-31 capture at
+> `/tmp/omp-inventory-map-2026-08-31.json` (3,032,388 bytes), but the diagrams
+> section cites sources from `/tmp/inv.txt` (544,697 bytes, round-10 historical). A
+> diagram cannot be dated 2026-08-31 while sourced from data predating that capture.
+
+Measured. Both artifacts exist, **and both are dated 2026-08-31** — so the date claim
+is technically true and still misleading:
+
+| artifact | size | mtime | sha256 (16) |
+|---|---:|---|---|
+| `/tmp/inv.txt` — **what the diagrams use, 5 citations** | 544,697 | 16:50 | `86491732a5581a6d` |
+| `/tmp/omp-inventory-map-2026-08-31.json` — what the brief cites | 3,032,388 | 23:01 | `876809f0779a81b3` |
+
+Six hours and 5.6× apart. The diagrams are built from the **earlier, smaller** capture
+while the brief cites the later one, and nothing in either document says so.
+
+### The finding the grade did not reach
+
+**Both artifacts live in `/tmp`.** Every diagram's provenance in this section rests on
+files that a reboot deletes. The date was never the real defect — the defect is that
+after the next restart, none of the five citations could be checked by anyone,
+including their author, and the diagrams would become exactly the *"hand-drawn diagram
+with better provenance"* this section's own §R4 note warns about.
+
+Preserved, compressed, and hashed at
+`.flywheel/inventory-artifacts/` — 3.5 MB of provenance in 120 KB (22× and 32×). A
+citation to a `/tmp` path is a citation to nothing in a week; a citation to a
+content-hashed in-repo artifact survives.
+
+### What is corrected and what is not
+
+**Corrected:** the diagrams are hereby labelled as sourced from the **16:50 capture**,
+not the 23:01 one, with size and hash recorded above so the claim is checkable.
+
+**NOT corrected:** the diagrams are not regenerated from the fresh capture. §R4 of
+this section already records why — *"Nothing in this repo currently regenerates these
+diagrams … that command does not exist today"* — and building it is a separate piece
+of work. So the honest state is: **the diagrams reflect a 16:50 snapshot, which is
+labelled, hashed, and preserved, and they are not current.** Row counts in Diagram 2
+(176 census rows) are from that capture; the 23:01 capture holds 981 rows.
+
+That gap is now stated in the document rather than discoverable only by diffing two
+`/tmp` files that will not exist next week.
