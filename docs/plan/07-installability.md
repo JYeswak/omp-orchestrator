@@ -12,13 +12,34 @@ not exist.
 
 ### 1. The measured starting point
 
-**MEASURED — the workspace builds 18 binaries and the installer knows about 3 of them.**
-`grep -rl 'fn main' crates --include='main.rs' | wc -l` returns `18`.
+**MEASURED — the workspace builds 21 binaries and the installer knows about 3 of them.**
+
+The number was `18` until round 10, taken from `grep -rl 'fn main' crates --include='main.rs' | wc -l`.
+The investor lens filed it as *"fn main count is not binary/build evidence"* and it was right twice
+over — the proxy was wrong, and by the time it was challenged the count had drifted too. Three
+instruments, three answers, re-measured at commit time:
+
+| instrument | answer | what it actually counts |
+|---|---:|---|
+| `grep -rl 'fn main' --include=main.rs` | 17 | crates having a `main.rs` — a **source shape**, not an artifact |
+| `grep -c '^\[\[bin\]\]' crates/*/Cargo.toml` | 16 | **explicitly declared** targets; misses every implicit `src/main.rs` |
+| `cargo build --message-format=json`, kind `bin` | **21** | what the toolchain **actually produced and linked** |
+
+Only the third answers the question the sentence asks. It is higher than both proxies because a
+crate may declare more than one `[[bin]]` and because implicit and explicit targets both build.
+
 `crates/installer/src/main.rs:12` declares
 `const BINARIES: &[&str] = &["omp-orchestrator", "tick-monitor", "pane-truth"];`.
-So the install surface covers 3/18 = 17% of the produced binaries, and the other 15 have no
-declared install path at all. They are reachable only by someone who already has the repo, a
-nightly toolchain, and knowledge of the crate names.
+
+**So the install surface covers 3/21 = 14%** — not the 17% this section claimed — and the other 18
+binaries have no declared install path at all. They are reachable only by someone who already has
+the repo, a toolchain, and the knowledge of what to build.
+
+**The defect class, for the fourth time in this document's history:** a number produced by an
+instrument that does not measure the quantity in the sentence. `06-gates` did it with test counts
+(`370`/`379`), `gap_propagation.rs` did it with a baseline carried between detectors, `02-surface-census`
+did it with a denominator that grew 50% in one exchange, and this section did it with `fn main`.
+Every one survived multiple readings because a plausible integer reads as a measurement.
 
 **MEASURED — one of those three names has no source in this workspace.**
 `which pane-truth` returns `/Users/josh/.local/bin/pane-truth`. There is no `crates/pane-truth`

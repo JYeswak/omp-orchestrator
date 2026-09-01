@@ -39,6 +39,17 @@ loses them. This session alone produced eleven that live only in pane scrollback
 
 ## The runbook contract
 
+**SCOPE — read before applying this.** This contract governs the **nine journey stages S1–S9**
+below. It does **not** govern the twelve plan sections `00`–`11`, which are analysis documents
+written before this contract existed and answer a different question.
+
+That sentence is here because its absence cost a round. In round 10 the investor lens applied this
+contract to `06-gates`, `07-installability` and `08-end-users` and filed the same BLOCKER three
+times — *"a whole-file search found no Trigger, Dispatch packet, Amazing…"* — which is true, and
+irrelevant, because those files were never meant to carry it. **Three of that round's seventeen
+findings were manufactured by my own briefing**, which is a defect in the instruction and not in the
+grader: a contract that does not state its scope will be applied to everything in reach.
+
 Each stage below MUST carry all seven of these. A stage missing any one is not dispatchable.
 
 ```

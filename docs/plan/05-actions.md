@@ -51,7 +51,9 @@ dispatcher, a conductor, and an alarm each act on differently.
 
 **Outputs.** `Liveness`, eight arms (`:403-440`), plus four predicates so consumers never re-derive
 policy: `is_dispatchable()` is `ConfirmedIdle` only, `is_free_capacity()` adds `NewlyIdle`, and
-`needs_answer()`/`needs_attention()` cover `Dialog` and `Obscured` (`:456-476`).
+`needs_answer()`/`needs_attention()` cover `Dialog` and `Obscured` (`:456-476`). Upstream models
+the same split as settle-vs-continuation: `GuestIdleReconcilerCtx`
+(`dist/types/collab/guest.d.ts`) is an idle *reconciler* over states, not one predicate.
 
 **Must be true before.** `prev.pane_id == now.pane_id`, checked before every use of `prev.state`
 (`:510-516`) — a prior observation from a different pane is not evidence about this one.
@@ -112,7 +114,14 @@ irreversible send.
 
 **Must be true before.** `is_dispatchable()` — `ConfirmedIdle` and nothing else
 (`tick-monitor/src/lib.rs:456-458`). One idle capture is one capture; `NewlyIdle` is visible as
-capacity and not fillable (`:409-419`).
+capacity and not fillable (`:409-419`). **Upstream precedent for the two-state split**: the
+substrate models settle-vs-continuation explicitly — `AgentEndEvent.willContinue`
+(`dist/types/extensibility/shared-events.d.ts:154`, *"subscribers must not treat this as a
+user-visible terminal settle"*) and `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts`,
+an idle *reconciler*, not a single filter). Our NewlyIdle/ConfirmedIdle pair should mirror
+that split: a continuation flag distinguishes a pane that will act again from one that has
+settled — what one predicate cannot say. The defect stands (our crates still conflate); the
+upstream vocabulary is the model for the fix, not a fix.
 
 **Negative pattern — what this action must REFUSE to do.** *(a) Refuse a pane advertised free that
 is wedged.* **MEASURED**: the composite reads a pane as available on `observation_state == "idle" &&
@@ -145,7 +154,16 @@ transport occurred; the dispatch ledger remains the authority"* (`:3-7`).
 unrecognised string becomes `Unknown` carrying the literal, never coerced to a known arm.
 
 **Negative pattern — what this action must REFUSE to do.** *Refuse to send a packet naming an
-unclaimed bead.* The order is **file → CLAIM → dispatch**, and the middle beat is not optional
+unclaimed bead.* The order is **file → CLAIM → dispatch**, and the middle beat is not optional.
+**Upstream claim vocabulary**: the substrate's claim shape is
+`Stage1Claim { threadId, ownershipToken, inputWatermark, sourceUpdatedAt, … }` /
+`GlobalClaim { ownershipToken, inputWatermark }`
+(`dist/types/memories/storage.d.ts:20-27`) — an ownership TOKEN plus a WATERMARK, claimed
+before work starts. Our `DispatchIntent` should mirror that pair: the token binds the claim
+to a specific dispatch, the watermark makes a stale claim detectable. This does not close
+the defect (our fence already refuses and the type is DECLARED, not wire-proven on our
+plane); it validates the design and names the schema the fence's claim should grow into.
+The middle beat remains not optional
 because the follow-up detector keys on `assigned ∧ in_progress ∧ no-comment`. An unclaimed dispatch
 is therefore **invisible to the detector built to notice a silent worker**: `classify()` takes
 `current_assignee` and `dispatch_assignee` as required parameters
@@ -186,6 +204,15 @@ the guard's **true** positives with its false one; a sibling override instead *"
 superseding artifact"* and comments on each affected bead
 (`pre-delete-citation-check/src/main.rs:5-7`). **PROJECTED — no measured incident yet**; written
 down because R11 makes an unwritten requirement a dropped one.
+**Upstream receipt vocabulary**: typed delivery receipts exist in the substrate —
+`IrcDeliveryReceipt` (`dist/types/tools/hub/types.d.ts:8`) and `AsyncJobDeliverySink` /
+`AsyncJobDeliveryState` (`dist/types/extensibility/async.d.ts`) — on the IRC-bus and
+background-job planes. This rule STANDS: those are DECLARED types on transports we do not
+ride, not a receipt for `tmux send-keys` or `ntm --robot-send`. What changes is the
+long-term answer: the gap is a transport CHOICE, not an impossibility — a receipt-capable
+transport migration (or an omp collab/irc-plane adapter) is the path that makes A7's proof
+constructible from the sender side. Until a wire-proven receipt exists on a plane we ride,
+receiver-side evidence remains the only proof.
 
 **How we know it refused.** No `TransportReceipt` is constructed; the failure is a typed error
 naming the missing field (`:79-91`), so A7 cannot receive a receipt-shaped hole. **NO-CLAIM:**
@@ -300,7 +327,10 @@ finished worker becomes visible capacity rather than a quiet hole.
 
 **Must be true before.** The transition to idle is **observed**, not assumed: `(Working, Idle)`
 yields `NewlyIdle` (`tick-monitor/src/lib.rs:562`), and the next tick's `(Idle, Idle)` yields
-`ConfirmedIdle` (`:560`).
+`ConfirmedIdle` (`:560`). The substrate separates the same two states: `AgentEndEvent.willContinue`
+(`dist/types/extensibility/shared-events.d.ts:154`) marks a continuation that must not read as
+settled, and `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts`) reconciles over that
+boundary instead of deriving both from one predicate.
 
 **Negative pattern — what this action must REFUSE to do.** *Refuse to leave a finished pane
 unreaped, because an unreaped pane is capacity that silently disappears.* **MEASURED**: the
@@ -316,10 +346,17 @@ sound here only because the subjects are Rust, the hazard A8(b) names — → 7 
 command-line match is not proof that FrankenTerm created the process, and a PID can be recycled
 between discovery and signalling"* (`:1-14`), so it ships **inert** rather than unsound. We adopt
 it: **reap only what you own, keyed on immutable identity, never on a name match**. §10 carries it.
+Upstream answers the same hazard with a reconciler, not a filter — `GuestIdleReconcilerCtx`
+(`dist/types/collab/guest.d.ts`) — and with `AgentEndEvent.willContinue`
+(`dist/types/extensibility/shared-events.d.ts:154`) separating settle from scheduled
+continuation; our fix keeps both states and adds the reconciliation the defect demanded.
 
 **How we know it refused.** A pane in `NewlyIdle` or `ConfirmedIdle` with no reap record is itself
 the alarm: reaped and free-capacity panes must reconcile each tick. **NO-CLAIM:** returns a slot —
-not that the work finished, only that the pane stopped. `Frozen` is not a reap.
+not that the work finished, only that the pane stopped. `Frozen` is not a reap. Reconciliation
+over idle states is upstream vocabulary as well — `GuestIdleReconcilerCtx`
+(`dist/types/collab/guest.d.ts`) — which is the shape the reap record + capacity delta pair
+implements on our side.
 
 ### A11. REFUSE
 **Purpose.** The meta-action. Every gate here has one real output — a refusal a machine can consume;

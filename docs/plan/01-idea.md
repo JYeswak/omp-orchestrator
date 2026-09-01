@@ -48,15 +48,12 @@ supervision. From the five-stage control loop (formerly "five-stage" — renamed
 | layer | mechanism | measured state |
 |---|---|---|
 | observe | `tick-monitor` | **WORKS** |
-| actionable | `idle_panes` | **BROKEN** — discards `NewlyIdle`; `free_capacity` derives from the same `is_dispatchable` filter, which requires *Confirmed* Idle, so a pane at `t=0` is excluded from **both** lists |
+| actionable | `idle_panes` | **BROKEN** — discards `NewlyIdle`; `free_capacity` derives from the same `is_dispatchable` filter, which requires *Confirmed* Idle, so a pane at `t=0` is excluded from **both** lists. OMP declares `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts:9-30`) with the analogous settle/continuation split, but it is DECLARED ONLY and not wired here |
 | consume | `decide()` | **FENCED** — 162 refused ticks over 4.2 hours, `DISPATCH_RETRY_BLOCKED` |
 | actuate | dispatch | **DOES NOT EXIST** — a human types into panes |
-| complete | worker says done | **DOES NOT EXIST** — every completion this session was found by a human looking |
+| complete | worker says done | **AVAILABLE, NOT WIRED** — OMP emits `AgentEndEvent.willContinue` on `RpcSessionEventFrame` (`modes/rpc/rpc-types.d.ts:589`); a raw `agent_end` frame with `isTerminal:true` crossed the `--mode=rpc` wire, but this supervisor does not consume it |
 
-Exactly one of five layers works. Read the `actionable` row closely: a pane that has *just* become
-idle is excluded from the actionable list **and** from the free-capacity count, because both derive
-from the same `is_dispatchable` filter demanding *Confirmed* Idle. The supervisor therefore observes
-a fleet with capacity, computes that it has none, and refuses — correctly, given its inputs.
+Exactly one of five layers works in the local supervisor. Completion is no longer an upstream absence: `AgentEndEvent.willContinue` is WIRE-PROVEN on the `--mode=rpc` channel, but the local loop still has no consumer for it.
 
 Nothing crashed. Nothing threw. A single shared predicate, used to answer two different questions,
 produced a coherent and completely wrong world model 162 times in a row, and the only reason anyone
@@ -64,13 +61,27 @@ found out is that a human was watching. That is why the answer is *types* and no
 log would have faithfully recorded 162 correct refusals. The defect is that "is this pane
 dispatchable" and "how much capacity is free" were ever allowed to be the same question.
 
-Four symptoms, one shape: **no typed answer to a question the supervisor must answer in one call.**
-What is finished? What is broken that nobody holds? Why did the loop refuse? Is the enforcer
-current? Each should return a verdict with evidence attached, and fail closed when it cannot.
+Four symptoms, one shape: **no typed answer to a question the supervisor must answer in one call.** What is finished? What is broken that nobody holds? Why did the loop refuse? Is the enforcer current? The completion signal now exists on the wire, but the supervisor still does not attach to it; the other six gap types remain DECLARED ONLY.
 
 **NO-CLAIM:** these counts come from a single session's reap on one machine and one checkout. They
 are not claimed representative of any other session, operator, or workload, and no rate, average, or
 trend is asserted. They establish that these failures *occurred*, not how often they occur.
+
+### 1.2.1 The seven gap claims — what the upstream types actually change
+
+The upstream sweep changes the strength of the absence claims without pretending that a declared type is a consumed contract. One gap is WIRE-PROVEN; the other six are DECLARED ONLY.
+
+| gap | upstream type and source | true strength | effect on the idea
+|---|---|---|
+| completion | AgentEndEvent.willContinue + SessionStopEvent (extensibility/shared-events.d.ts:83-93,154-162), on RpcSessionEventFrame (modes/rpc/rpc-types.d.ts:589) | WIRE-PROVEN — raw agent_end with isTerminal:true crossed --mode=rpc | adopt the existing event channel; supervisor integration remains the work
+| receipts | IrcDeliveryReceipt + AsyncJobDeliverySink (tools/hub/types.d.ts:8,84) | DECLARED ONLY — no wire path measured | the cp-z42vu transport/receipt gap remains; type existence does not replace receiver proof
+| claims | Stage1Claim / GlobalClaim with ownershipToken + inputWatermark (memories/storage.d.ts:20-27) | DECLARED ONLY — no wire path measured | local claim/ownership gap remains until reachability and semantics are proven
+| idle | GuestIdleReconcilerCtx (dist/types/collab/guest.d.ts:9-30) | DECLARED ONLY — no wire path measured | the local NewlyIdle/ConfirmedIdle defect remains; the upstream split is corroboration, not a fix
+| roster | HubRosterCounts (dist/types/tools/hub/types.d.ts:33-90) | DECLARED ONLY — no wire path measured | hand-derived roster remains an unclosed observation gap
+| cost | SearchUsage (dist/types/web/search/types.d.ts:232-254), PerplexityCost (:510-527), ContextUsage (dist/types/extensibility/extensions/types.d.ts:238-240) | DECLARED ONLY — no wire path measured | cost telemetry remains unmeasured
+| compaction | SessionBeforeCompactEvent / SessionCompactEvent (dist/types/extensibility/shared-events.d.ts:54-75) | DECLARED ONLY — no wire path measured | context-loss recovery remains unproven; the type narrows adoption work but does not close it
+
+**NO-CLAIM:** The completion result proves a wire frame, not supervisor consumption. The other six entries refute “no upstream type exists” only; they do not prove --mode=rpc reachability, semantic fit, or adoption cost.
 
 ---
 
@@ -305,8 +316,7 @@ this row."* The scanner consumes OMP because the scanner's job is to look at OMP
 
 Rule 8 of the writing contract: state the strongest form, then answer or concede.
 
-**Objection 1 — "You have built 26 crates of scaffolding around a hole. The one integration that
-justifies the name does not exist."** *Largely conceded.* The 25-of-26 measurement is ours, not a
+**Objection 1 — "You have built 26 crates of scaffolding around a hole. The one integration that justifies the name does not exist."** *Partly conceded, with a narrower truth.* The completion signal is now WIRE-PROVEN upstream, but the supervisory integration that would consume it still does not exist. The 25-of-26 measurement is ours, not a reviewer’s.
 reviewer's. The partial answer is that the layer census shows `observe` WORKS and failure is
 concentrated in `actionable`/`consume`/`actuate` — but we will not lean on it, because "one of five
 layers works" is not a rebuttal. What we do not concede is that the crates are therefore waste: the

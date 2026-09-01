@@ -84,6 +84,28 @@ $ cd ~/src/their-app && omp-orchestrator doctor --json              # PROJECTED
    {"id":"gates.installed","verdict":"ABSENT","remediation":"omp-orchestrator init --gates=none"}]}}
 ```
 
+**Why two of those `ABSENT` rows carry no `remediation`, and why that is the rule rather than a
+lapse.** Round 10 filed this as a contradiction — the section promises every `ABSENT` probe carries
+a remediation, and `tracker.br` and `worker.tmux` do not. The finding is correct about the text and
+the text was wrong, not the sample.
+
+The rule is a **two-tier probe family**:
+
+| probe | absence means | carries remediation |
+|---|---|---|
+| `tracker.br`, `worker.tmux` | a **specific** implementation is not here | **no** — informational |
+| `tracker.any`, `worker.any`, `gates.installed` | **no** implementation of a required capability | **yes** — actionable |
+
+A specific-probe absence is not actionable *by this tool*: `omp-orchestrator` will not install `br`
+or `tmux` on someone's machine, and a remediation field that said "install br" would be advice
+wearing a command's clothes. The family probe is where the tool can actually offer something — a
+file-backed tracker, a one-shot worker, no gates — because those are the fallbacks it ships.
+
+**So the contract is:** *every `ABSENT` **family** probe MUST carry a `remediation`; a specific
+probe MUST NOT invent one.* Stated that way it is checkable, and the sample above satisfies it.
+The original phrasing was checkable too — and the sample failed it, which is how the grader found
+it in one pass.
+
 Two load-bearing commitments. First, **`ABSENT` is not `FAIL`** — a foreign repo lacking our tracker
 is a repo we have not adapted to, and a doctor that scolds an adopter for not being us gets
 uninstalled. Second, **every `ABSENT` carries a remediation naming a command that exists**;

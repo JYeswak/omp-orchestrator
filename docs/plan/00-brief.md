@@ -488,6 +488,28 @@ Not built-vs-wired. **Wired-but-unaddressable.** It adds a sixth required gate p
   ratio. A denominator nobody can reproduce is not a measurement.
 - Board at stand-down: **28 closed, 25 in_progress, 19 open, 2 blocked** (75 total).
 
+### 3.8 The seven formerly missing gaps — strength corrected, not erased
+
+The prior-art sweep found an upstream type for every gap this plan had treated as an absence. That
+changes the strength of the claims, not all of the local engineering conclusions. **Completion is
+WIRE-PROVEN; the other six are DECLARED ONLY.** A declaration weakens “no precedent” but does not
+prove reachability, semantic fit, or that this repository can consume the signal today.
+
+| gap | upstream type and source | strength here | consequence for this plan |
+|---|---|---|---|
+| completion | AgentEndEvent.willContinue + SessionStopEvent (extensibility/shared-events.d.ts:83-93,154-162), carried by RpcSessionEventFrame (modes/rpc/rpc-types.d.ts:589) | **WIRE-PROVEN** — raw agent_end frame captured with isTerminal:true | adopt the existing event channel; the remaining gap is wiring it into the supervisor, not inventing a completion protocol |
+| receipts | IrcDeliveryReceipt + AsyncJobDeliverySink (tools/hub/types.d.ts:8,84) | **DECLARED ONLY** — no wire path measured | cp-z42vu and the local transport-receipt gap remain; prove reachability before replacing the local receipt contract |
+| claims | Stage1Claim / GlobalClaim with ownershipToken + inputWatermark (memories/storage.d.ts:20-27) | **DECLARED ONLY** — no wire path measured | the local claim fence remains necessary; adoption is an experiment, not a completed fix |
+| idle | GuestIdleReconcilerCtx (dist/types/collab/guest.d.ts:9-30) | **DECLARED ONLY** — settle-vs-continuation semantics found, no wire path | the local NewlyIdle/ConfirmedIdle seam remains broken until this repository consumes it |
+| roster | HubRosterCounts (dist/types/tools/hub/types.d.ts:33-90) | **DECLARED ONLY** — schema found, no wire path | hand-derived roster evidence remains unclosed |
+| cost | SearchUsage (dist/types/web/search/types.d.ts:232-254), PerplexityCost (:510-527), and ContextUsage (dist/types/extensibility/extensions/types.d.ts:238-240) | **DECLARED ONLY** — no wire path measured | Q2 remains an instrumentation question; do not claim cost telemetry exists |
+| compaction | SessionBeforeCompactEvent / SessionCompactEvent (dist/types/extensibility/shared-events.d.ts:54-75) | **DECLARED ONLY** — typed hook found, no wire path measured | context-loss recovery remains unproven; the type narrows the build, it does not close the operational gap |
+
+**NO-CLAIM:** “WIRE-PROVEN” means the completion frame crossed the observed OMP RPC wire. It does
+not mean omp-orchestrator consumes it, closes a bead from it, or that any of the other six types
+are reachable from this process. “DECLARED ONLY” means the installed type surface exists and names
+the relevant distinction; it does not mean the type is usable by this project today.
+
 ---
 
 ## 4. The control loop — five stages, seven measured rows, zero working
@@ -506,12 +528,12 @@ The denominator is now stated in the heading, which is the whole point: *five st
 | layer | mechanism | measured state |
 |---|---|---|
 | observe | `tick-monitor` | **WORKS, WITH A MEASURED ASYMMETRY DEFECT** — see below |
-| actionable | `idle_panes` | **BROKEN** — discards `NewlyIdle`; `free_capacity` derives from the same `is_dispatchable` filter, which requires *Confirmed* Idle, so a pane at `t=0` is excluded from **both** lists |
+| actionable | `idle_panes` | **BROKEN** — discards `NewlyIdle`; `free_capacity` derives from the same `is_dispatchable` filter, which requires *Confirmed* Idle, so a pane at `t=0` is excluded from **both** lists. OMP declares `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts:9-30`) with the analogous settle/continuation split, but it is DECLARED ONLY and not wired here |
 | consume — selection | `decide()` picks work | **UNVERIFIED** — no evidence separated from the two rows below; `%1414` MAJOR 1 |
 | consume — admission | dispatch fence | **FENCED** — 162 refused ticks over 4.2 hours, `DISPATCH_RETRY_BLOCKED` |
-| consume — transport | packet delivery | **UNVERIFIED** — transport returned `success:[N]` with no packet (`cp-z42vu`); never separately measured |
+| consume — transport | packet delivery | **UNVERIFIED** — transport returned `success:[N]` with no packet (`cp-z42vu`); OMP also declares `IrcDeliveryReceipt` + `AsyncJobDeliverySink` (`tools/hub/types.d.ts:8,84`), but no wire path has been measured |
 | actuate | dispatch | **DOES NOT EXIST** — a human types into panes |
-| complete | worker says done | **AVAILABLE, NOT WIRED** — `AgentEndEvent` verified crossing `--mode=rpc` with `isTerminal:true` (raw frame captured). The signal exists and is reachable; we do not attach to the plane that carries it|
+| complete | worker says done | **AVAILABLE, NOT WIRED** — `AgentEndEvent.willContinue` crossed `--mode=rpc` as a raw `agent_end` frame with `isTerminal:true`; the signal exists and is reachable, but the supervisor does not consume it |
 
 **The observe row was downgraded by `ActionsNegative`, and the defect is in the one layer this brief
 called working.** The two-capture rule has a genuine asymmetry: a **changed** content hash proves
@@ -783,7 +805,7 @@ Every row is `OPEN` unless marked. None of these had a home in the document befo
 | Q6 | What happens when OMP changes under us? | **OPEN** — we pin `omp/18.0.11` and have no compatibility policy; 136 slash commands are already unmapped | orchestrator |
 | Q7 | What is the security posture — secrets, tokens, the blast radius of a dispatch? | **OPEN** — `security\|secret\|credential\|token` appears **0 times** in this brief | orchestrator |
 | Q8 | Licensing, for us and for what we vendor? | **OPEN** — `licens` appears **once** across all eleven sections | Josh |
-| Q9 | Is any of this novel, and does novelty matter here? | **ANSWER MOVED** — the strongest novelty claim was §10's completion protocol precedent-free across 210 repos, which is the strongest available answer and is not framed as one | orchestrator |
+| Q9 | Is any of this novel, and does novelty matter here? | **ANSWER MOVED** — the completion protocol’s precedent-free claim is REFUTED: `AgentEndEvent.willContinue` is WIRE-PROVEN on `RpcSessionEventFrame` via `--mode=rpc`; the novelty question remains open for the other six DECLARED ONLY types and their adoption path | orchestrator |
 | Q11 | Who owns the `composer-typed` policy decision — oracle outside the tree, retire the lane, or the rule's first exemption? | **OPEN** — §3.5 states the trilemma and assigns it to nobody; `%1408` flagged it ownerless twice | orchestrator |
 | Q12 | Who owns the `pi_agent_rust` tmux-missing defect we inherit if we adopt its two-signal probe? | **OPEN** — cited in §3.1 as precedent, never assigned; adopting the pattern adopts the bug | orchestrator |
 | Q10 | **What kills this?** | **PARTIAL** — §09 carries technical kill conditions; none is economic, and no one owns the decision | Josh |
@@ -794,7 +816,7 @@ A kill criterion nobody can evaluate is decoration. Each names its observable.
 
 | # | we stop if… | observable |
 |---|---|---|
-| K1 | the completion protocol cannot be built | **WEAKENED** — §10 Gap 7 is REFUTED: OMP ships `AgentEndEvent` with `willContinue` (`dist/types/extensibility/shared-events.d.ts:154`). Not precedent-free; the open question is whether it reaches the `--mode=rpc` plane. If two attempts fail, the loop cannot close and the product is a monitor |
+| K1 | the completion signal cannot be consumed by the supervisor | **WIRE-PROVEN, ADOPTION REMAINS** — OMP ships `AgentEndEvent.willContinue` and `SessionStopEvent` (`dist/types/extensibility/shared-events.d.ts:83-93,154-162`), and a raw `agent_end` frame with `isTerminal:true` crossed `--mode=rpc` via `RpcSessionEventFrame` (`modes/rpc/rpc-types.d.ts:589`). The remaining kill condition is failed adoption into the supervisor, not inability to build a completion protocol |
 | K2 | verification costs more than the review it replaces | no instrumentation exists to detect this — **building the measurement is itself unowned** |
 | K3 | a second machine cannot run it | §07: never attempted; installer hardcodes `/Users/josh` as its fallback home |
 | K4 | the gates get routed around | measurable as: any commit landing with a gate disabled and no named allowance row |
