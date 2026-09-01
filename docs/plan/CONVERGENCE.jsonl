@@ -40,3 +40,6 @@
 {"section":"00-brief","round":12,"lens":"adversarial","role":"hillclimb","new_findings":16,"verdict":"PASS-WITH-FIXES","evidence":"/tmp/grade/r12-00-brief.md"}
 {"section":"01-idea","round":12,"lens":"adversarial","role":"hillclimb","new_findings":19,"verdict":"PASS-WITH-FIXES","evidence":"/tmp/grade/r12-01-idea.md"}
 {"section":"02-surface-census","round":12,"lens":"adversarial","role":"hillclimb","new_findings":12,"verdict":"PASS-WITH-FIXES","evidence":"/tmp/grade/r12-02-surface-census.md"}
+{"section":"03-crates","round":12,"lens":"absence","role":"hillclimb","new_findings":10,"verdict":"FAIL","evidence":"/tmp/grade/r12-03-crates.md"}
+{"section":"04-diagrams","round":12,"lens":"absence","role":"hillclimb","new_findings":6,"verdict":"FAIL","evidence":"/tmp/grade/r12-04-diagrams.md"}
+{"section":"05-actions","round":12,"lens":"absence","role":"hillclimb","new_findings":6,"verdict":"FAIL","evidence":"/tmp/grade/r12-05-actions.md"}
