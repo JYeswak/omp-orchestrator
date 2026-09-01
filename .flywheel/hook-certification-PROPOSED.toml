@@ -1,0 +1,96 @@
+# PROPOSED certification row — NOT hooks_certified.toml, and deliberately not.
+#
+# The bead's own acceptance: "A hook error reads as DENY and can brick every
+# Write/Edit/Bash fleet-wide, so registration is the single highest-risk action and
+# must never be automated." CLAUDE.md's hook-certification doctrine says the same.
+#
+# So this file is the EVIDENCE PACKET and a row Josh can move by hand. Creating
+# hooks_certified.toml is the enable switch; an agent must not throw it.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# ⛔ DO NOT ENABLE YET. There is a named blocking dependency, measured below.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[proposed.kernel-only-operator-hook]
+event          = "PreToolUse"
+binary         = "kernel-only-operator-hook"
+language       = "rust"
+forbids_unsafe = true
+status         = "CERTIFIED-READY-BUT-BLOCKED"
+blocked_on     = "cp-nq2s9"
+
+# ── WHY IT IS BLOCKED, and this is the whole decision ───────────────────────
+#
+# Measured 2026-09-01 against the built release binary:
+#
+#   input : tmux send-keys -t %1413 -l "$(cat /tmp/packet.txt)"
+#   output: deny — "raw tmux send-keys dispatch is blocked; use the ntm
+#           --robot-send dispatch kernel"
+#
+# That is the EXACT form this orchestrator used to dispatch every codex pane
+# tonight. It used it because `ntm --robot-send` REFUSES codex panes with
+# "cod composer not visible" — tracked as cp-nq2s9, documented at AGENTS.md:202
+# and docs/plan/09-milestones.md:139, and observed with a codex pane replying
+# READY to a probe while ntm insisted it could not deliver.
+#
+# So the hook names a kernel that cannot reach codex panes, and enabling it today
+# leaves NO WORKING CODEX DISPATCH PATH. The bead anticipated exactly this:
+# "or the hook blocks real work and gets disabled wholesale."
+#
+# Three ways forward, and the choice is Josh's:
+#   1. Fix cp-nq2s9 (ntm's over-strict codex guard) first, then enable. Cleanest.
+#   2. Enable with a codex-pane carve-out in the allowlist. Fastest, and it
+#      permits precisely the shape the hook exists to forbid — the carve-out
+#      would need its own expiry.
+#   3. Leave disabled. Costs nothing today; the five measured handrolls of
+#      2026-08-31 stay unprevented.
+#
+# NO-CLAIM on option 2: a carve-out keyed on pane id is not keyed on intent. An
+# operator handrolling a dispatch to a glm pane while claiming it is codex would
+# pass it, and nothing here detects that.
+
+# ── EVIDENCE, all re-derived 2026-09-01, not inherited ──────────────────────
+
+tests_total = 29   # 10 lib + 5 shadow + 14 integration, all green
+
+# FIRES-ON-KNOWN-BAD, on the LIVE BINARY not only in unit tests:
+#   tmux send-keys dispatch                    -> deny, kernel NAMED in the reason
+# plus in-crate: scratch_home_denies_raw_send_keys,
+#   raw_dispatch_is_denied_with_kernel_name,
+#   claude_raw_dispatch_is_denied_and_names_kernel,
+#   other_raw_kernel_bypasses_are_denied,
+#   raw_dispatch_options_and_separators_are_denied,
+#   raw_bypass_wins_over_kernel_text_in_compound_command
+fires_on_known_bad = true
+
+# KNOWN-GOOD, mandatory per the bead — verified on the LIVE BINARY:
+#   tick-monitor observe --session omp-orchestrator   -> allow  (kernel binary)
+#   tmux capture-pane -p -t %1408 -S -12              -> allow  (diagnostic read)
+# plus in-crate: kernel_binary_is_allowed, diagnostic_capture_is_allowed,
+#   scratch_home_allows_clean_bash, diagnostic_tmux_read_is_allowed
+known_good = true
+
+# MUTATION — and this one is REAL, which I checked rather than trusted:
+#   allowlist_mutation_turns_kernel_good_leg_red calls the PRODUCTION classifier
+#   with a mutated allowlist, asserts the known-good leg flips to Deny, then
+#   asserts the real allowlist still Allows. Both directions, production path.
+#   (I shipped a fixture-only test earlier in this same session that passed while
+#   its subject was reverted, so the check was not rhetorical.)
+mutation_verified = true
+
+fail_closed = true   # malformed_event_is_denied,
+                     # malformed_and_oversized_inputs_fail_closed_without_panicking
+bounded_timeout = true   # shadow::predecessor_deadline_is_the_single_bounded_timeout
+secret_hygiene = true    # serialized_verdict_contains_hashes_but_never_raw_command
+no_claim_present = true  # no_claim_only_enumerated_shapes
+
+# ── WHAT IS NOT PROVEN ──────────────────────────────────────────────────────
+#
+# - Shadow mode is implemented (51 references, 5 tests) but I did NOT run it
+#   against live fleet traffic for any period. Certification doctrine wants a
+#   shadow observation window; this packet does not supply one.
+# - The NO-CLAIM the bead requires, carried verbatim: a hook cannot prevent an
+#   agent from reasoning its way around the rule, only from executing the
+#   specific handrolled command shapes enumerated in it.
+# - hooks_certified.toml does not exist. Nothing is registered. Nothing is
+#   enabled. This file changes no behaviour.
