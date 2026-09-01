@@ -195,3 +195,93 @@ fn the_comparison_is_exact_not_substring() {
     let loose = "26".contains("2");
     assert!(loose, "substring matching WOULD accept it — which is why this gate compares with !=");
 }
+
+/// A figure that derives ZERO must declare that the zero is real.
+///
+/// # The measured failure this exists to catch
+///
+/// 2026-09-01: grading flagged `03-crates.md` for claiming "25 of 26 source roots
+/// carry `#![forbid(unsafe_code)]`". Checking it, I ran:
+///
+/// ```text
+/// grep -rl 'forbid(unsafe_code)' crates --include='*.rs'   ->  0 files
+/// ```
+///
+/// and was one commit away from filing a BLOCKER against the plan. The document
+/// was RIGHT — 25 of 26 is the true answer.
+///
+/// SCOPE, corrected after measuring both engines: this hazard belongs to the
+/// AGENT HARNESS's grep, which is a Rust regex engine. Shell `grep` reached
+/// through `sh -c` — the path every figure in this registry uses — treats `(`
+/// as a LITERAL in a basic regex and answers correctly. A planted figure using
+/// the unescaped pattern returned 64, not 0. So the registry was never exposed;
+/// the reviewer was. The gate below is therefore not a fix for that bug at all.
+/// It raises the floor on a different and real case: a figure that derives zero
+/// for ANY reason now has to say why — the real answer is 25 of 26. My pattern was wrong: the built-in
+/// grep is a REGEX engine, so `(` and `)` are grouping metacharacters and
+/// `forbid(unsafe_code)` matches the literal string `forbidunsafe_code`, which
+/// appears nowhere. The correct pattern escapes them: `forbid\(unsafe_code\)`.
+///
+/// **It returned zero and exited zero.** A broken pattern and a true absence are
+/// byte-identical to the caller. The only thing that caught it was a positive
+/// control — grepping for a substring I knew existed (`forbid`) found the files,
+/// while the full pattern found none, and those two facts cannot both be true of
+/// a working instrument.
+///
+/// So: any figure deriving 0 or empty must carry `zero_is_real = "<reason>"`.
+/// Writing that reason forces the author to say WHY nothing is there, which is
+/// exactly the sentence a broken pattern cannot honestly produce.
+///
+/// # What this does NOT do
+///
+/// It cannot tell a correct pattern from a broken one when both return non-zero.
+/// A pattern that matches 20 things when the truth is 26 passes this gate
+/// silently. This raises the floor on the zero case only, because zero is the
+/// case where a broken instrument is indistinguishable from a real measurement.
+#[test]
+fn a_figure_deriving_zero_must_declare_the_zero_is_real() {
+    // Reuse figures() and unescape() -- the helpers directly above, whose own doc
+    // comment says "a partial unescaper is worse than none". My first version of
+    // this test hand-rolled a replace() chain instead and reported 16 of 17
+    // figures as deriving zero, which was its own bug, not the data.
+    let text = std::fs::read_to_string(repo_root().join("NUMBERS.toml")).expect("readable");
+    let mut undeclared = Vec::new();
+    let mut checked = 0usize;
+    for f in figures() {
+        if f.command.is_empty() || f.expect == "LIVE" { continue; }
+        // .current_dir(repo_root()) is LOAD-BEARING, and omitting it is how this
+        // gate first reported 14 of 17 figures deriving zero. The commands use
+        // repo-relative paths (`crates/*/Cargo.toml`); run from the harness's cwd
+        // they match nothing and exit 0. Same silent-false-zero as the unescaped-
+        // paren grep this gate exists to catch — reproduced inside the gate itself.
+        let out = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(&f.command)
+            .current_dir(repo_root())
+            .output();
+        let got = match out {
+            Ok(o) => String::from_utf8_lossy(&o.stdout).trim().to_owned(),
+            Err(_) => continue,
+        };
+        checked += 1;
+        if got.is_empty() || got == "0" {
+            let block = text
+                .split("[figures.")
+                .find(|b| b.starts_with(&f.key))
+                .unwrap_or("");
+            if !block.contains("zero_is_real") {
+                undeclared.push(format!("{} -> {:?}", f.key, got));
+            }
+        }
+    }
+    assert!(
+        checked > 0,
+        "ANTI-VACUITY: no figure commands ran -- this gate proves nothing about an empty set"
+    );
+    assert!(
+        undeclared.is_empty(),
+        "{} figure(s) derive zero without `zero_is_real`: {:?}",
+        undeclared.len(),
+        undeclared
+    );
+}

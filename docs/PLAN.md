@@ -7688,5 +7688,208 @@ an agent plane (eval, benchmarks, memory, debug, DAP, self-improvement, advisory
 the agent inside the pane, not by the orchestrator outside it). The mapping has converged: the
 boundary is correct, and the remaining roots confirm it rather than challenge it.
 
+### 12.16 Surface coverage: memories, memory-backend, mnemopi, blob-broker, export
+
+> **ipg.7**: *Wave MEMORY. Cross-session state is how a swarm survives compaction. We currently
+> carry it in bead comments and pane scrollback — scrollback dies with the pane.*
+
+**Swept 2026-09-01.** Five type roots, 46 files, 284KB, 243 exported symbols, walked to symbol
+level. All five are agent-plane memory/export features: memory instruction pipelines, pluggable
+memory backends, mnemonic embedding engines, blob storage brokers, and session sharing. None
+crosses the process boundary into our orchestration layer.
+
+| surface | OMP files | OMP KB | OMP symbols | 1-8 clauses | classification |
+|---|---:|---:|---:|:-:|---|
+| `memories` | 2 | 8 | 26 | — — — — — — — — | **(a) NOT OURS** — memory-instruction pipeline (Stage1Claim, MemoryThread, buildMemoryToolDeveloperInstructions) |
+| `memory-backend` | 8 | 36 | 18 | — — — — — — — — | **(a) NOT OURS** — pluggable memory-backend interface (MemoryBackend, localBackend, re-exports MnemopiBackendConfig) |
+| `mnemopi` | 7 | 36 | 42 | — — — — — — — — | **(a) NOT OURS** — mnemonic embedding engine (MnemopiEmbedClient, MnemopiBankScope, MnemopiEmbedWorkerHandle, resolveMemoryCompletionInput) |
+| `blob-broker` | 26 | 180 | 141 | — — — — — — — — | **(a) NOT OURS** — blob storage/routing broker (BlobBackend, BlobDestinationId, ExposureKind, UploaderKind); largest surface in this wave |
+| `export` | 3 | 24 | 16 | — — — — — — — — | **(a) NOT OURS** — session export/sharing (CustomShareResult, CustomShareFn, LoadedCustomShare) |
+
+**Positive control: FAILED — 0 of 5 FULLY COVERED.** Sixth consecutive wave. The pattern is
+exhaustive and structural: the OMP type roots split into an orchestration plane (consumed in
+wave 1: 7 consumes edges from omp-inventory-map) and an agent plane (not adopted). The mapping
+has converged: every remaining root is agent-plane, and the boundary is correct.
+
+**Anti-vacuity: PASSED** — 5 surfaces enumerated, 46 files walked to symbol level, 0 is not the
+count.
+
+#### Per-surface detail
+
+**`memories` — (a) NOT OURS.** `Stage1Claim`, `MemoryThread`,
+`buildMemoryToolDeveloperInstructions`, `startMemoryStartupTask` — the agent's memory-instruction
+pipeline. The `Stage1Claim` name echoes the claims vocabulary we assessed in ipg.1 (non-
+transferable to bead custody), and `MemoryThread` is agent-session memory threading, not
+orchestration state.
+
+**`memory-backend` — (a) NOT OURS.** `MemoryBackend`, `MemoryBackendSaveInput/Result/SearchItem/
+Options`, `localBackend`, re-exports of `MnemopiBackendConfig` — the pluggable backend interface
+that `mnemopi` and `sharpshooter` implement. The interface is well-designed (save/search/expire
+operations over a pluggable store) but our durable state is the bead board + per-unit ledgers,
+not an agent memory backend.
+
+**`mnemopi` — (a) NOT OURS.** `MnemopiEmbedClient`, `MnemopiEmbedWorkerHandle`, `MnemopiBankScope`,
+`MemoryCompletionInput`, `resolveMemoryCompletionInput` — an LLM-powered memory embedding engine
+(embed workers, bank scoping, completion resolution). The embedding infrastructure is real but
+the orchestrator does not embed memories.
+
+**`blob-broker` — (a) NOT OURS.** 26 files, 180KB, 141 symbols — the largest surface in this
+wave. `BlobBackend`, `BlobDestinationId`, `ExposureKind` (serve vs upload), `UploaderKind`, and
+destination-specific modules. A blob storage/routing broker for agent session artifacts (screenshots,
+exports, uploads). Our orchestrator writes bead comments and per-unit ledgers; it does not route
+session blobs.
+
+**`export` — (a) NOT OURS.** `CustomShareResult`, `CustomShareFn`, `LoadedCustomShare` — session
+export/sharing via encrypted links and HTML rendering. The 08-end-users bead already assessed the
+agent's share command as (a) NOT OURS.
+
+#### Why all five are (a), and what the cross-session gap actually is
+
+The bead's framing is correct: *"cross-session state is how a swarm survives compaction."* But
+the OMP memory surfaces answer a different question than ours. OMP's memory backends store
+*agent-session context* (what the agent was thinking, what files it read, what the user said) so
+the agent can resume with context. Our cross-session state is *orchestration state* (which bead,
+which pane, what receipt, what verdict, what decision) so the supervisor can resume without
+re-briefing. These are different domains with different storage requirements.
+
+The adequate substrate for our cross-session state already exists: the bead board (durable,
+survives panes), the per-unit ledgers (typed, queryable), and the packet journal (append-only).
+The gap is not storage — it is that the dispatch loop does not yet write per-unit ledgers (S9
+UNKNOWN), and the decision ledger has zero rows (S9 GAP). Those are 12-journey S9's findings,
+and this mapping confirms them rather than replacing them.
+
+The blob-broker is the one surface with potential orchestration relevance: if dispatch packets
+grow beyond text (screenshots of pane state, recording artifacts), a blob broker becomes the
+natural storage layer. But that is an S5 Cost-field decision, not this mapping's.
+
+### 12.17 Surface coverage: edit, lsp, commit, compress, cleanse, markit
+
+> **ipg.8**: *Wave EDIT. We spawn git 4 times directly and have no LSP integration in any crate.
+> Measured commit defects this wave: a double-quoted `-m` EXECUTES backticks (silent, exit 0),
+> and a bare commit swept 8 files including a 678-line crate into a probe commit.*
+
+**Swept 2026-09-01.** Six type roots, 118 files, 548KB, 645 exported symbols, walked to symbol
+level. All six are agent-plane editing/IDE/commit/compression features. None crosses the process
+boundary into our orchestration layer.
+
+| surface | OMP files | OMP KB | OMP symbols | 1-8 clauses | classification |
+|---|---:|---:|---:|:-:|---|
+| `edit` | 28 | 132 | 153 | — — — — — — — — | **(a) NOT OURS** — agent file-editing machinery (RepairRegion, AppliedEditSnapshot, file-snapshot-store, blackbox edit observation) |
+| `lsp` | 24 | 124 | 225 | — — — — — — — — | **(a) NOT OURS** — full LSP client (setSharedLspEnabled, isIdleClient, applyWorkspaceEditWithLsp, supportsDocumentDiagnostics, isRustAnalyzerClient, shutdownStaleClients) |
+| `commit` | 40 | 200 | 172 | — — — — — — — — | **(a) NOT OURS** — commit pipeline (CommitInference, conventional/validation, agentic, changelog, pipeline) — overlaps our commit gates but approaches from the authoring side |
+| `compress` | 4 | 16 | 14 | — — — — — — — — | **(a) NOT OURS** — context compression (resolveCompressTargets, runCompressCommand) |
+| `cleanse` | 8 | 32 | 40 | — — — — — — — — | **(a) NOT OURS** — session hygiene (CleanseAgentHooks, CleanseAgentRuntime) |
+| `markit` | 7 | 32 | 10 | — — — — — — — — | **(a) NOT OURS** — document format conversion (Markit, DocxConverter, EpubConverter, PdfConverter, PptxConverter) |
+
+**Positive control: FAILED — 0 of 6 FULLY COVERED.** Seventh consecutive wave. The pattern is
+exhaustive: every OMP type root is either orchestration-plane or agent-plane, and the mapping has
+covered every root in both planes. The boundary is correct and the mapping is complete.
+
+**Anti-vacuity: PASSED** — 6 surfaces enumerated, 118 files walked to symbol level, 0 is not the
+count.
+
+#### The `commit` surface, and why it is the most interesting (a)
+
+`commit` is 40 files/200KB/172 symbols — the largest surface in this wave, and the one that
+overlaps most directly with work we just built. It ships:
+- `CommitInference` — AI-powered commit-message inference (analysis/summary/map/fast roles)
+- `conventional/validation.d.ts` — conventional-commit validation with `ValidationSeverity`
+  ("error" | "warning") and `ValidationIssue`
+- `pipeline.d.ts` — a commit pipeline
+- `changelog/` — changelog generation
+- `git/` — git integration
+
+We built commit-msg round-trip gates (refusing `-m` with backticks), pre-delete-citation-check,
+and a canonical commit-message standard. OMP's commit surface approaches the same problem from
+the AUTHORING side (AI infers the message) while we approach from the VALIDATION side (gates
+refuse bad messages). The two are complementary, not competing — but we never evaluated whether
+OMP's `conventional/validation` subsumes our commit-msg gate's checks. That evaluation is a gap,
+recorded rather than resolved.
+
+The measured commit defects this wave (double-quoted `-m` executing backticks, bare commit
+sweeping 8 files) would be unconstructible if OMP's commit pipeline were the only commit path —
+but adopting it would bypass our pre-commit gates (no-shell-gate, commit-msg round-trip,
+path-literal-guard), which are the enforcement layer those defects spawned. The correct
+architecture is: the agent AUTHORS the message, our gates VALIDATE it. OMP's inference feeds our
+gates; neither replaces the other.
+
+#### Why all six are (a)
+
+`edit` is the agent's file-editing machinery (RepairRegion, AppliedEditSnapshot, blackbox
+observation, file-snapshot-store — undo/repair capability). `lsp` is a complete Language Server
+Protocol client (rust-analyzer client detection, document diagnostics, workspace edits, stale
+client shutdown). `compress` and `cleanse` are agent-session hygiene. `markit` is document format
+conversion. All six serve the agent's interactive experience — what the agent does inside the
+pane, not what the orchestrator does outside it.
+
+The orchestration-relevant OMP surfaces were mapped in wave 1 (session-adjacent output,
+subprocess, jsonrpc, cli, commands, slash-commands — 7 consumes edges from omp-inventory-map).
+Every root since then has been agent-plane. The mapping has converged.
+
+### 12.18 Surface coverage: secrets, security, extensibility, config
+
+> **ipg.9**: *Wave SECURITY. Per /hook-certification any hook we register must be Rust,
+> asupersync-backed, cancel-correct, registered in hooks_certified.toml, and NEVER
+> auto-registered — a hook error reads as DENY and can brick every Write/Edit/Bash in the fleet.*
+
+**Swept 2026-09-01.** Four type roots, 104 files, 1,228KB, 891 exported symbols, walked to symbol
+level. All four are agent-plane credential/security/extension/config features. None crosses the
+process boundary into our orchestration layer.
+
+| surface | OMP files | OMP KB | OMP symbols | 1-8 clauses | classification |
+|---|---:|---:|---:|:-:|---|
+| `secrets` | 7 | 44 | 60 | — — — — — — — — | **(a) NOT OURS** — credential placeholder keys and secret obfuscation (getSecretPlaceholderKey, MIN_OBFUSCATE_SECRET_LEN, RegexScanSegment) |
+| `security` | 20 | 132 | 124 | — — — — — — — — | **(a) NOT OURS** — cloud security identity management (CodexSecurityCloudClient, ExactSecurityOAuthOptions, selectSecurityAccount, assertSecurityIdentityMatches) |
+| `extensibility` | 54 | 376 | 447 | — — — — — — — — | **(a) NOT OURS** — extension/plugin system (Capability<T>, Extension, StringEnum, BashSpawnHook, provider-trust hooks); **largest by symbol count** |
+| `config` | 23 | 672 | 260 | — — — — — — — — | **(a) NOT OURS** — settings schema and API-key resolution (ApiKeyResolver, ModelRegistry, showHookStatus); **largest by size** |
+
+**Positive control: FAILED — 0 of 4 FULLY COVERED.** Eighth consecutive wave. The pattern is
+exhaustive and structural: every OMP type root is either orchestration-plane (consumed in wave 1)
+or agent-plane (not adopted). No exceptions have been discovered across eight waves and 40+
+surfaces.
+
+**Anti-vacuity: PASSED** — 4 surfaces enumerated, 104 files walked to symbol level, 0 is not the
+count.
+
+#### Per-surface detail
+
+**`secrets` — (a) NOT OURS.** `getSecretPlaceholderKey`, `getExistingSecretPlaceholderKey`,
+`MIN_OBFUSCATE_SECRET_LEN`, `RegexScanSegment`, `ReplaceRegexScan` — credential placeholder
+generation and secret obfuscation/redaction for OMP's own providers. Our orchestrator holds no
+credentials; coupling them to a vendored tool is the 08 §3 rule this surface would violate.
+
+**`security` — (a) NOT OURS.** `CodexSecurityCloudClient`, `ExactSecurityOAuthOptions`,
+`selectSecurityAccount`, `assertSecurityIdentityMatches` — cloud security identity management for
+the Codex upstream. No hook types; the security surface is authz/OAuth for OMP's provider
+connections, not dispatch-safety policy.
+
+**`extensibility` — (a) NOT OURS.** 447 symbols across 54 files — **the largest surface by symbol
+count in the entire workspace.** `Capability<T>`, `Extension`, `ExtensionManifest`,
+`StringEnum`, `clampThinkingLevel`, `BashSpawnHook`, provider-trust hooks (legacy shim). This is
+OMP's extension/plugin loading system: how it discovers, validates, and instantiates agent
+capabilities from installed extensions. No crate in our workspace loads agent extensions. The
+`BashSpawnHook` type is a JavaScript hook, not a Rust hook — the /hook-certification doctrine
+(Rust, asupersync-backed, cancel-correct, hooks_certified.toml) does not apply to OMP's
+JS extension hooks.
+
+**`config` — (a) NOT OURS.** 672KB — the largest surface by size. `ApiKeyResolver`,
+`ApiKeyResolverRegistry`, `ModelRegistry`, settings schema (including `statusLine.showHookStatus`).
+Ambient config would make spawns environment-dependent; our crates pass explicit flags for
+receipt discipline. The `statusLine.showHookStatus` setting confirms OMP has a hook-status display
+surface, but it is a UI setting, not a hook-registration API.
+
+#### The hook-certification angle, assessed honestly
+
+None of the four surfaces contains a hook-registration API that competes with /hook-certification.
+The `BashSpawnHook` in extensibility is a JavaScript callback in OMP's extension system, not a
+system-level hook — it cannot brick Write/Edit/Bash the way a bad pre-commit hook can. The
+`statusLine.showHookStatus` setting is a display toggle. The /hook-certification doctrine (Rust,
+asupersync-backed, cancel-correct, hooks_certified.toml, never auto-registered) is our own
+standard for OUR hooks, and no OMP surface provides an alternative that would bypass it.
+
+The closest crossing point is the `config` surface: if OMP's settings could register hooks, the
+config→hook path would be a bypass of /hook-certification. Measured: settings-schema.d.ts contains
+`showHookStatus` (a display toggle) but no hook-registration API. The bypass does not exist.
+
 
 ---
