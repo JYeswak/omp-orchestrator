@@ -1246,3 +1246,67 @@ and this mapping confirms them rather than replacing them.
 The blob-broker is the one surface with potential orchestration relevance: if dispatch packets
 grow beyond text (screenshots of pane state, recording artifacts), a blob broker becomes the
 natural storage layer. But that is an S5 Cost-field decision, not this mapping's.
+
+### 12.17 Surface coverage: edit, lsp, commit, compress, cleanse, markit
+
+> **ipg.8**: *Wave EDIT. We spawn git 4 times directly and have no LSP integration in any crate.
+> Measured commit defects this wave: a double-quoted `-m` EXECUTES backticks (silent, exit 0),
+> and a bare commit swept 8 files including a 678-line crate into a probe commit.*
+
+**Swept 2026-09-01.** Six type roots, 118 files, 548KB, 645 exported symbols, walked to symbol
+level. All six are agent-plane editing/IDE/commit/compression features. None crosses the process
+boundary into our orchestration layer.
+
+| surface | OMP files | OMP KB | OMP symbols | 1-8 clauses | classification |
+|---|---:|---:|---:|:-:|---|
+| `edit` | 28 | 132 | 153 | — — — — — — — — | **(a) NOT OURS** — agent file-editing machinery (RepairRegion, AppliedEditSnapshot, file-snapshot-store, blackbox edit observation) |
+| `lsp` | 24 | 124 | 225 | — — — — — — — — | **(a) NOT OURS** — full LSP client (setSharedLspEnabled, isIdleClient, applyWorkspaceEditWithLsp, supportsDocumentDiagnostics, isRustAnalyzerClient, shutdownStaleClients) |
+| `commit` | 40 | 200 | 172 | — — — — — — — — | **(a) NOT OURS** — commit pipeline (CommitInference, conventional/validation, agentic, changelog, pipeline) — overlaps our commit gates but approaches from the authoring side |
+| `compress` | 4 | 16 | 14 | — — — — — — — — | **(a) NOT OURS** — context compression (resolveCompressTargets, runCompressCommand) |
+| `cleanse` | 8 | 32 | 40 | — — — — — — — — | **(a) NOT OURS** — session hygiene (CleanseAgentHooks, CleanseAgentRuntime) |
+| `markit` | 7 | 32 | 10 | — — — — — — — — | **(a) NOT OURS** — document format conversion (Markit, DocxConverter, EpubConverter, PdfConverter, PptxConverter) |
+
+**Positive control: FAILED — 0 of 6 FULLY COVERED.** Seventh consecutive wave. The pattern is
+exhaustive: every OMP type root is either orchestration-plane or agent-plane, and the mapping has
+covered every root in both planes. The boundary is correct and the mapping is complete.
+
+**Anti-vacuity: PASSED** — 6 surfaces enumerated, 118 files walked to symbol level, 0 is not the
+count.
+
+#### The `commit` surface, and why it is the most interesting (a)
+
+`commit` is 40 files/200KB/172 symbols — the largest surface in this wave, and the one that
+overlaps most directly with work we just built. It ships:
+- `CommitInference` — AI-powered commit-message inference (analysis/summary/map/fast roles)
+- `conventional/validation.d.ts` — conventional-commit validation with `ValidationSeverity`
+  ("error" | "warning") and `ValidationIssue`
+- `pipeline.d.ts` — a commit pipeline
+- `changelog/` — changelog generation
+- `git/` — git integration
+
+We built commit-msg round-trip gates (refusing `-m` with backticks), pre-delete-citation-check,
+and a canonical commit-message standard. OMP's commit surface approaches the same problem from
+the AUTHORING side (AI infers the message) while we approach from the VALIDATION side (gates
+refuse bad messages). The two are complementary, not competing — but we never evaluated whether
+OMP's `conventional/validation` subsumes our commit-msg gate's checks. That evaluation is a gap,
+recorded rather than resolved.
+
+The measured commit defects this wave (double-quoted `-m` executing backticks, bare commit
+sweeping 8 files) would be unconstructible if OMP's commit pipeline were the only commit path —
+but adopting it would bypass our pre-commit gates (no-shell-gate, commit-msg round-trip,
+path-literal-guard), which are the enforcement layer those defects spawned. The correct
+architecture is: the agent AUTHORS the message, our gates VALIDATE it. OMP's inference feeds our
+gates; neither replaces the other.
+
+#### Why all six are (a)
+
+`edit` is the agent's file-editing machinery (RepairRegion, AppliedEditSnapshot, blackbox
+observation, file-snapshot-store — undo/repair capability). `lsp` is a complete Language Server
+Protocol client (rust-analyzer client detection, document diagnostics, workspace edits, stale
+client shutdown). `compress` and `cleanse` are agent-session hygiene. `markit` is document format
+conversion. All six serve the agent's interactive experience — what the agent does inside the
+pane, not what the orchestrator does outside it.
+
+The orchestration-relevant OMP surfaces were mapped in wave 1 (session-adjacent output,
+subprocess, jsonrpc, cli, commands, slash-commands — 7 consumes edges from omp-inventory-map).
+Every root since then has been agent-plane. The mapping has converged.
