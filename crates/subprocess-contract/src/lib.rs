@@ -245,6 +245,106 @@ pub fn bounded_output(
     }
 }
 
+/// A bounded spawn that INHERITS stdio instead of capturing it.
+///
+/// # Why this exists — the kernel was incomplete, and 18 crates handrolled around it
+///
+/// Measured 2026-09-01: `spawn_contract` reports **18 crates / 145 spawn sites** with no
+/// `subprocess-contract` dependency. Some are genuine oversights, but a whole class of
+/// them are *passthrough* spawns — `scratch-home` handing control to `ntm`, a wrapper
+/// exec'ing a child whose output belongs on the operator's terminal. Those cannot use
+/// [`bounded_output`]: it pipes stdout and stderr, so converting a passthrough with it
+/// silently swallows the child's interactive output and breaks the very UX the spawn
+/// exists for.
+///
+/// So the only bounded primitive we shipped did not fit, and the honest consequence is
+/// what the census measured — callers reached for a bare `.status()` with **no deadline
+/// at all**. That is the AGENTS.md KERNEL-ONLY rule biting us in its stated direction:
+/// *"every handroll is locally cheaper and removes exactly the pressure that would have
+/// fixed the kernel."* This is the kernel being fixed rather than routed around.
+///
+/// # What it guarantees, identically to [`bounded_output`]
+///
+/// - the child is its own **process group leader**, and the deadline signals the GROUP
+///   (`-pid`), TERM then a graced KILL — grandchildren included. Killing the pid alone
+///   left orphans at `ppid=1` holding an admission lock, so every subsequent timeout was
+///   guaranteed to fail too: the failure created the condition for its own repetition.
+/// - the post-kill reap is itself **bounded**. No wait here is unbounded, including
+///   shutdown, so a future mutation that drops the KILL leg cannot hang the restrictive
+///   path.
+/// - [`BoundedOutcome::TimedOut`] is **restrictive** and carries no status. A killed
+///   child must never be readable as a child that exited non-zero on its own.
+///
+/// # What is deliberately different
+///
+/// stdio is INHERITED, so there are no pipes and therefore no drain concern — the
+/// ~64 KiB undrained-pipe deadlock cannot form here because no pipe exists. `Completed`
+/// carries an `Output` whose `stdout`/`stderr` are EMPTY by construction, not because
+/// the child was silent. Callers wanting bytes want [`bounded_output`].
+///
+/// # NO-CLAIM
+///
+/// A deadline bounds how long we WAIT, not how long the child runs after we stop
+/// waiting: TERM-then-KILL is best effort, and a process ignoring both in uninterruptible
+/// state survives us. This raises a floor from "blocks the operator forever" to "returns
+/// a typed restrictive outcome"; it does not guarantee the child is gone.
+pub fn bounded_status(
+    command: &mut std::process::Command,
+    deadline: std::time::Duration,
+) -> BoundedOutcome {
+    use std::os::unix::process::CommandExt as _;
+
+    let mut child = match command.process_group(0).spawn() {
+        Ok(child) => child,
+        Err(error) => return BoundedOutcome::Unspawned(error),
+    };
+    let pid = child.id();
+
+    let started = std::time::Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break Some(status),
+            Ok(None) => {}
+            Err(_) => break None,
+        }
+        if started.elapsed() >= deadline {
+            break None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    };
+
+    match status {
+        Some(status) => BoundedOutcome::Completed(std::process::Output {
+            status,
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+        }),
+        None => {
+            let group = format!("-{pid}");
+            let _ = std::process::Command::new("/bin/kill")
+                .args(["-TERM", &group])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            let _ = std::process::Command::new("/bin/kill")
+                .args(["-KILL", &group])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+            let reap_deadline = std::time::Instant::now() + READER_JOIN_GRACE;
+            loop {
+                match child.try_wait() {
+                    Ok(Some(_)) | Err(_) => break,
+                    Ok(None) if std::time::Instant::now() >= reap_deadline => break,
+                    Ok(None) => std::thread::sleep(std::time::Duration::from_millis(10)),
+                }
+            }
+            BoundedOutcome::TimedOut
+        }
+    }
+}
+
 /// The outcome of a bounded synchronous spawn. The two restrictive variants
 /// are the whole contract: a child the deadline killed can NEVER surface as
 /// [`BoundedOutcome::Completed`], and a child that could not start is named
@@ -454,4 +554,85 @@ mod tests {
         );
         let _ = fs::remove_file(pid_file);
     }
+
+    /// A passthrough child that exits on its own is Completed, and its Output is
+    /// EMPTY BY CONSTRUCTION rather than because the child was silent.
+    #[test]
+    fn bounded_status_completes_a_fast_child_with_empty_captured_output() {
+        let mut c = std::process::Command::new("/bin/sh");
+        c.args(["-c", "echo this-goes-to-the-terminal-not-a-pipe; exit 3"]);
+        match bounded_status(&mut c, std::time::Duration::from_secs(10)) {
+            BoundedOutcome::Completed(out) => {
+                assert_eq!(out.status.code(), Some(3), "the child's own exit code survives");
+                assert!(
+                    out.stdout.is_empty() && out.stderr.is_empty(),
+                    "stdio is INHERITED, so Completed must carry no bytes - a caller \
+                     reading these as the child's output would silently get nothing"
+                );
+            }
+            other => panic!("expected Completed, got {other:?}"),
+        }
+    }
+
+    /// THE LEG THAT MATTERS. A child we killed must NEVER be readable as a child that
+    /// exited on its own, because the two demand opposite responses: one is a verdict
+    /// about the subject, the other is a verdict about us.
+    #[test]
+    fn bounded_status_kills_a_hung_child_and_refuses_to_call_it_completed() {
+        let mut c = std::process::Command::new("/bin/sh");
+        c.args(["-c", "sleep 30"]);
+        let started = std::time::Instant::now();
+        let outcome = bounded_status(&mut c, std::time::Duration::from_millis(300));
+        let elapsed = started.elapsed();
+        assert!(
+            matches!(outcome, BoundedOutcome::TimedOut),
+            "a killed child must be TimedOut, never Completed: got {outcome:?}"
+        );
+        assert!(
+            elapsed < std::time::Duration::from_secs(10),
+            "the deadline must bound the WAIT; took {elapsed:?} against a 30s child"
+        );
+    }
+
+    /// A command that cannot start is named, not folded into a timeout - the remedy
+    /// differs (path/env vs deadline), which is the whole reason the variant exists.
+    #[test]
+    fn bounded_status_names_an_unspawnable_command() {
+        let mut c = std::process::Command::new("/nonexistent/definitely-not-a-real-binary");
+        assert!(
+            matches!(bounded_status(&mut c, std::time::Duration::from_secs(5)),
+                     BoundedOutcome::Unspawned(_)),
+            "a missing binary is Unspawned, never TimedOut"
+        );
+    }
+
+    /// The group kill must reach GRANDCHILDREN. Killing the pid alone left orphans at
+    /// ppid=1 holding an admission lock, so every later timeout was guaranteed to fail
+    /// too - the failure created the condition for its own repetition.
+    #[test]
+    fn bounded_status_signals_the_group_so_grandchildren_die_too() {
+        let marker = std::env::temp_dir().join(format!("bs-grandchild-{}", std::process::id()));
+        let _ = std::fs::remove_file(&marker);
+        let script = format!(
+            "( sleep 2; touch {} ) & sleep 30",
+            marker.display()
+        );
+        let mut c = std::process::Command::new("/bin/sh");
+        c.args(["-c", &script]);
+        assert!(matches!(
+            bounded_status(&mut c, std::time::Duration::from_millis(200)),
+            BoundedOutcome::TimedOut
+        ));
+        // The grandchild would touch the marker at t+2s. If the group kill worked it is
+        // dead and the marker never appears.
+        std::thread::sleep(std::time::Duration::from_millis(2600));
+        assert!(
+            !marker.exists(),
+            "grandchild survived the group kill and touched {} - the signal went to the \
+             pid, not the group",
+            marker.display()
+        );
+        let _ = std::fs::remove_file(&marker);
+    }
+
 }
