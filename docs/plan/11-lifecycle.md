@@ -1,68 +1,119 @@
-# 11 — The lifecycle: idea to shipped, walked down the crates and the skills
+# 11 — Lifecycle evidence map: idea to shipped, walked down the crates and skills
 
 **R13, added by Josh mid-grading:** *"part of our plan needs to be intimately aware of the entire
 lifecycle of an idea to a finished project then walk the list down the crates and our skills to
 ensure that throughout dispatch we have proper templates, proper dispatch, proper reap, proper
 logging, proper build grading, etc."*
 
-No section was written against R13, so this one is new and its findings are mostly **absences**.
-That is the expected result and it is the point: the plan had ten sections describing *parts* and
-none describing the *spine*. A reader could finish §00–§10 knowing every crate and still not know
-what happens between "someone has an idea" and "it shipped."
+This section is an evidence map for that spine. It is not itself the dispatchable runbook.
 
-Every claim here is `MEASURED` unless marked `PROJECTED`.
+## Scope boundary: §12 owns the dispatchable runbook contract
 
----
+The canonical journey is **§12, `docs/plan/12-journey.md`**. It defines the nine stage IDs
+`S1`–`S9`, their artifacts, and the seven-field dispatch contract:
 
-## 11.1 The nine stages, and who owns each
+```text
+### S<n> — <name>
 
-| # | stage | owning crate(s) | covering skill | measured state |
-|---|---|---|---|---|
-| S1 | **idea** | none | `/idea-wizard` | **NO CRATE.** Ideas arrive in chat and die there — the failure R11 was written to stop |
-| S2 | **plan** | none | `/planning-workflow` | **NO CRATE.** This document is the artifact; nothing enforces its shape |
-| S3 | **bead** | none (uses `br`) | `/beads-workflow` | wrapped, not owned. Close-policy lives in `br` |
-| S4 | **select** | `loop-queue-filter` | `/beads-bv` | crate exists; **`Command::new("bv")` appears nowhere** — the graph is never called |
-| S5 | **dispatch** | `dispatch-claim-fence`, `pane-dispatch-fence`, `fast-dispatch`, `tick-dispatch` | `/ntm-fleet-monitor` | four crates, one fence up 4.2h, **actuation is a human** |
-| S6 | **work** | — | `/vibing-with-ntm` | the agent's own business; we observe only |
-| S7 | **reap** | `reap-finished-panes` | `/vibing-with-ntm` | crate exists; the only reap this session was hand-run |
-| S8 | **grade** | `verify-dispatch`, `ack-spine`, `ack-stage` | none | grading is prose; **6 Verdict types, no shared trait, nothing countable** |
-| S9 | **ship** | `installer`, `commit-build-fence` | `/installer-workmanship` | installer covers 3 of 18 binaries; `--install` never run against a foreign host |
-
-**Four of nine stages have no owning crate.** S1, S2, S6 arguably should not — an idea is not a
-program. But **S3 has none and should**: the bead lifecycle is where our close-policy discipline
-lives, and it is entirely delegated to `br`, which means our rules about evidence-bearing closes
-are convention, not code.
-
----
-
-## 11.2 The five dispatch properties Josh named, measured per stage
-
-For each stage: is there a **template**, a **dispatch** mechanism, a **reap**, **logging**, and
-**build grading**? `Y` = exists and was used this session. `y` = exists, unused. `—` = absent.
-
-| stage | template | dispatch | reap | logging | build grading |
-|---|:--:|:--:|:--:|:--:|:--:|
-| S1 idea | — | — | — | — | — |
-| S2 plan | — | — | — | — | — |
-| S3 bead | — | n/a | — | `Y` (`.beads/issues.jsonl`) | — |
-| S4 select | — | n/a | n/a | — | n/a |
-| S5 dispatch | **`y`** | `Y` (hand-rolled) | n/a | partial | n/a |
-| S6 work | n/a | n/a | n/a | — | n/a |
-| S7 reap | — | n/a | `y` | — | n/a |
-| S8 grade | — | n/a | n/a | `Y` (bead comments) | **`Y`** |
-| S9 ship | — | — | n/a | — | `Y` |
-
-**Reading the table honestly: 3 cells are `Y`-and-used out of 45. Two are `y`-exists-unused, and
-those two are the most damning, because they cost nothing to adopt.**
-
----
-
-## 11.3 The template we own and did not use
-
-`ntm template list` returns four templates. One is exactly the thing this session hand-rolled
-roughly thirty times:
-
+Trigger.             What state means this stage is next.
+Dispatch packet.     What an orchestrator sends a pane.
+Amazing.             The fail-able quality bar.
+Adequate.            The lower bar and its later cost.
+Negative patterns.   Measured failure shapes.
+Skills.              Skills used and not used.
+Done signal.         Artifact, proof command, and exit code.
 ```
+
+Those seven fields intentionally are **not duplicated in this analysis section**. §11 cross-
+references §12 rather than pretending to be a second runbook; applying the runbook contract to
+this file is a **scope error**. The transition tables below still record measured inputs,
+outputs, refusals, and current boundaries so that §12 can be implemented against evidence.
+
+All claims below are `MEASURED` unless explicitly marked `PROJECTED`, `DECLARED`, `WIRE-PROVEN`,
+`NOT CONSUMED`, or `NO-CLAIM`.
+
+---
+
+## 11.1 Canonical stage graph and current ownership
+
+The nine names and IDs below are copied from §12. The old words *idea*, *plan*, *bead*, *select*,
+*dispatch*, *work*, *reap*, *grade*, and *ship* are useful **operational subphases**, but are not
+additional `S` IDs. `viability`, `loop`, and `honesty` are cross-stage attributes, not stages.
+
+| canonical ID | stage (the §12 name) | operational subphases represented here | accountable owner / consumer | observer | current crate state |
+|---|---|---|---|---|---|
+| `S1` | **Inception** | idea intake and viability | human decision owner; `/idea-wizard` and `/product-viability-gauntlet` are process consumers | none identified | no dedicated crate; process artifact only |
+| `S2` | **Planning** | plan authoring | plan author; `/planning-workflow` | none identified | no dedicated crate; this plan is a document |
+| `S3` | **Grading the plan** | independent plan grading | independent grader; no single local crate was identified | none identified | no shared grade value is measured |
+| `S4` | **Beads DAG** | bead creation, dependency closure, ready selection, graph ranking | `loop-queue-filter` is the intended local consumer of `bv`; `br` remains an external tracker | none identified | `loop-queue-filter` exists, but focused search found no `bv` invocation |
+| `S5` | **Execution** | claim, dispatch, worker work, receiver receipt | **`omp-orchestrator` is the resident accountable consumer**; its manifest supports `dispatch-claim-fence`, `ack-stage`, `omp-rpc-session`, `subprocess-contract`, and `receiver-receipt` | `tick-monitor` is observation-only and is consumed by the resident supervisor | automated observe → queue → dispatch → receipt path is designed; runtime proof is absent; `pane-dispatch-fence` exists in the inventory but is not proven a resident dependency |
+| `S6` | **Grading the work** | receipt review and independent grade | `ack-stage` exists; `ack-spine` contains a follow-up candidate; no `verify-dispatch` crate exists | none identified | grading remains non-shared/prose-shaped |
+| `S7` | **Validation** | completion/reap and external validation | no current reap owner; `omp-rpc-session` is transport-only, not a completion consumer | `tick-monitor` can observe panes, but observation is not reap | `reap-finished-panes` is absent; completion consumer is not wired |
+| `S8` | **Ship** | release, build, install, rollback | `installer` and `commit-build-fence`; `/installer-workmanship` and `/release-preparations` | none identified | installer covers 3 of 18 binaries; foreign-host `--install` is unverified |
+| `S9` | **Human requirements stored** | decision capture and retrieval, cross-cutting across S1–S8 | human is the decision owner; **PROJECTED** append owner: `omp-orchestrator` | every stage must observe its own decision handoff | no dedicated S9 consumer is proven; `ack-spine::ledger` is not proven to be this ledger |
+
+### Current crate names versus projected names
+
+The former map called several names current owners without checking the current inventory. The
+focused R10 search found no current crates named `fast-dispatch`, `tick-dispatch`,
+`reap-finished-panes`, or `verify-dispatch`. Those names are **PROJECTED / unbuilt**, not owners.
+Conversely, `crates/omp-orchestrator/Cargo.toml:16-23` lists `ack-stage`,
+`dispatch-claim-fence`, `omp-rpc-session`, `subprocess-contract`, and `receiver-receipt`, and
+`crates/omp-orchestrator/src/main.rs:563-631,801-879` implements the resident dispatch/receipt
+path. `pane-dispatch-fence` is present in the crate inventory but is not listed as an
+`omp-orchestrator` manifest dependency in the measured slice. Ownership claims therefore name
+`omp-orchestrator` as the S5 consumer and list only the manifest dependencies as supporting
+edges; a separate current crate is not thereby proven called in production.
+
+The graph represented by this section is therefore:
+
+```text
+S1 Inception → S2 Planning → S3 Grade plan → S4 Beads DAG
+→ S5 Execution → S6 Grade work → S7 Validation → S8 Ship
+                         ↘ S9 Human requirements stored (cross-cutting)
+```
+
+`S9` is not a ninth sequential finish step. Every arrow and every stage must emit a decision
+record for S9.
+
+---
+
+## 11.2 The five R13 properties, measured against the canonical stages
+
+For this matrix, `Y` means a distinct mechanism exists **and was used in the measured session**;
+`y` means it exists but was not used; `—` means absent; `n/a` means the property is not
+meaningful for that stage; and `↗ S<n>` means the evidence is shared with another stage and is
+not a second observed cell.
+
+| canonical stage | template | dispatch | reap | logging | build grading |
+|---|:--:|:--:|:--:|:--:|:--:|
+| `S1` Inception | — | — | — | — | — |
+| `S2` Planning | — | — | — | — | — |
+| `S3` Grading the plan | — | n/a | — | — | — |
+| `S4` Beads DAG | — | n/a | — | `Y` (`.beads/issues.jsonl`) | — |
+| `S5` Execution | `y` | `Y` (resident observe → queue → dispatch → receipt path) | n/a | partial | n/a |
+| `S6` Grading the work | — | n/a | n/a | `Y` (bead comments) | `Y` |
+| `S7` Validation | — | n/a | `y` (candidate only) | — | n/a |
+| `S8` Ship | — | — | n/a | — | `↗ S6` (shared build evidence; not an independent `Y`) |
+| `S9` Human requirements stored | — | n/a | n/a | — | n/a |
+
+There are **four distinct visible `Y` cells out of 45**, not three: S4 logging, S5 dispatch,
+S6 logging, and S6 build grading. This is the known LIFE-09 reinforcement of R8 `m-l6`, not a
+new finding. The `S8` alias is deliberately not counted twice. The count says only that those
+four observations occurred; it does not say that the nine-stage journey completed.
+
+The `S5` dispatch `Y` is also not a completion `Y`: the resident path is automated and designed,
+but R10 did not runtime-verify it. The older wording **"actuation is a human"** was too broad;
+human actuation remains a prerequisite for an unclaimed bead, while the resident supervisor does
+perform the later dispatch path.
+
+---
+
+## 11.3 Template omission refusal is not claim-custody refusal
+
+`ntm template list` measured four templates, including the `dispatch` template:
+
+```text
 Name:        dispatch
 Description: ZestStream controller dispatch packet — bounded assignment with proof obligations
              and a named …
@@ -73,35 +124,43 @@ Variables:
   - why_now
 ```
 
-Every dispatch packet in this session was written by hand into a `/tmp` file and sent with
-`tmux send-keys -l`. The template has **required variables that fail closed on omission** —
-`objective`, `target` — and `ntm send -t dispatch --var … --dry-run` performs full substitution and
-refuses on a missing required variable.
+The template's required variables protect **packet shape**. They do not prove tracker custody.
+`dispatch-claim-fence/src/lib.rs:257-319` authorizes a bead only from a fresh snapshot whose
+status is `in_progress` and whose assignee exactly matches the receiver. A `target` string that
+contains a path and bead ID cannot establish that state.
 
-**Two dispatch defects this session would have been structurally impossible with it.** The
-`5rh`-to-`%1413` packet named an **unclaimed bead** — the missing file → CLAIM → dispatch middle
-beat — and `target` is a required variable pairing the path *with the bead ID*, which is where a
-claim check belongs. And the `omp-coverage-mission-ipg.4` packet was sent without the claim written
-first, for the same reason.
-UPSTREAM VOCABULARY NOTE: OMP declares its own claim family — `Stage1Claim`/`GlobalClaim` with
+The two historical packets (`5rh` → `%1413` and `omp-coverage-mission-ipg.4`) demonstrate the
+missing middle beat: `select → claim → dispatch`. The target was hand-written into `/tmp` and
+sent with `tmux send-keys -l`; the template was not used. The template's body was not tested in
+R10, so there is **NO-CLAIM** that its body itself catches either packet defect.
 
-`ownershipToken`/`inputWatermark` (memories/storage.d.ts:20-27) — but that is memory-claim domain,
-not bead custody; it does not transfer. The claim wire for S5 remains `ntm claim` plus
-`dispatch-claim-fence` (L1/L2 above).
+### Required refusal probes, kept as separate contracts
 
-That is the sharpest instance of `BUILT ≠ WIRED` in the lifecycle: not a mechanism nobody built,
-but **a mechanism already built, already correct, and never invoked by the person who most needed
-it.** `NO-CLAIM:` I have not verified that the template's body would have caught these two cases —
-only that its required-variable contract addresses the field that was wrong in both.
+The following are the exact probes the future runbook must execute. Expected refusal text and
+exit are **PROJECTED** unless marked otherwise; R10 captured no omitted-variable stderr/exit
+artifact.
+
+| contract | input | expected fail-closed result |
+|---|---|---|
+| template omission | `ntm send -t dispatch --var target=/abs/repo:BEAD --dry-run` (omit required `objective`) | nonzero template refusal naming the missing required variable; **PROJECTED, not captured** |
+| template omission | `ntm send -t dispatch --var objective=outcome --dry-run` (omit required `target`) | nonzero template refusal naming the missing required variable; **PROJECTED, not captured** |
+| absent tracker snapshot | `authorize(DispatchIntent::Bead { bead_id, receiver_agent }, None)` | `MissingSnapshot`, rendered as `DISPATCH_BLOCKED … tracker snapshot is missing` |
+| open/unassigned tracker row | matching snapshot with status `open` and no assignee | `ClaimRequired`, with `br update <bead> --assignee <receiver> --status in_progress` |
+| closed, blocked, deferred, or unknown row | matching snapshot with that status | `ClaimRequired` or `UnknownStatus`; never a dispatch permit |
+| assigned elsewhere | matching `in_progress` snapshot with another assignee | `AssignedElsewhere`, with a `DISPATCH_BLOCKED` refusal |
+| snapshot for another bead | requested ID differs from snapshot ID | `SnapshotIdMismatch`, with a `DISPATCH_BLOCKED` refusal |
+
+The claim-fence is therefore a **custody verifier**, not a claim creator. Its refusal cannot be
+replaced by a template-variable check.
 
 ---
 
 ## 11.4 The build-grading hook is a shell script, and the rule cannot see it
 
 The repo's one hard rule is **no `.sh`, no `.py`**, enforced by `no-shell-gate` with an empty
-exemption list. Measured:
+exemption list. R10 measured:
 
-```
+```text
 ls -la .git/hooks/*.sh
   .git/hooks/commit-msg-verification-level.sh   6288 bytes
 
@@ -109,234 +168,300 @@ git ls-files | grep -c commit-msg-verification
   0
 ```
 
-**The script that enforces our build-grading discipline is a 6.3 KB shell script**, and it is
-invisible to the rule because `no-shell-gate` scans the git index. The gate is not defective — it
-declares this boundary itself, at `crates/no-shell-gate/src/lib.rs:14`: *"this gate covers FILE
-EXTENSIONS of tracked files, nothing else."* An honest, stated limit.
+The script that enforces build-grading discipline is a 6.3 KB shell script, invisible to the
+rule because `no-shell-gate` scans the git index. The gate states its boundary at
+`crates/no-shell-gate/src/lib.rs:14`: *"this gate covers FILE EXTENSIONS of tracked files,
+nothing else."* This is a coverage finding, not a claim that the gate implementation is
+incorrect. Q13 remains unresolved and is retained here rather than silently closed:
 
-The finding is about **coverage, not correctness**: our most consequential policy hook lives in the
-one directory the policy cannot reach. Three readings, and the plan must pick one:
+1. declare `.git/hooks` legitimately outside the rule because hooks are machine-local;
+2. replace the hook with a Rust binary like the other gates; or
+3. record a named allowance, owner, and reason.
 
-1. `.git/hooks` is legitimately outside the rule — hooks are machine-local, never distributed, and
-   a shell hook is the ecosystem norm. Then say so in the rule, because right now the rule reads
-   absolute and is not.
-2. It is a real violation and the hook should be a Rust binary like the other five gates. Note the
-   installed `pre-commit` already *is* Mach-O, so precedent favours this.
-3. It is a violation we accept with a named reason and an owner — the allowance-row shape.
-
-**Silence is the one unacceptable option**, and silence is the current state. Registered as **Q13**.
+The lifecycle section does not choose among those policy decisions. **NO-CLAIM:** Q13 is retained
+for its owner and policy decision; no new exemption or migration is asserted here.
 
 ---
 
-## 11.5 Where the lifecycle actually breaks
+## 11.5 Selection → claim → dispatch, and every measured downstream break
 
-Reading §11.1 and §11.2 together, the spine has three severed links, and they are not the ones the
-crate list would suggest:
+The former text called this "three severed links" while naming only two arrows. The reconciled
+count is **four sequential breaks plus one cross-cutting S9 ledger handoff**. A break means that
+the next-stage artifact is not produced or consumed by the current production path; it does not
+mean that no partial mechanism exists.
 
-**S4 → S5, selection to dispatch.** `loop-queue-filter` exists and `bv` provides the graph, but
-`grep -rn 'Command::new("bv")'` over `crates/` returns **no matches** — measured. Nothing in this
-workspace ever invokes the ranking tool. Selection this session was the conductor picking by
-recency of his own discovery, which `/beads-bv` names as the cherry-picking pathology, and the
-graph disagreed: the top-3 PageRank items sat unclaimed.
+| edge | required input | expected handoff artifact | refusal / non-terminal rule | measured current state |
+|---|---|---|---|---|
+| `S4 → S5` | graph-selected bead, fresh `br show --json`, receiver | claim record, then dispatch-template packet and permit | refuse missing/open/elsewhere-assigned snapshot; do not send before claim | `main.rs:836-860` runs `br ready`, takes `bead_ids.first()`, reads a snapshot, and calls `authorize`; no production claim/update caller was found. **Human claim required today; atomic handoff PROJECTED.** |
+| `S5 → S6` | dispatch attempt, receiver receipt, session/pane identity | grade packet tied to the receipt and bead | refuse absent receiver receipt; receipt is not a grade | resident path reaches receipt and stops; no production grade handoff is wired |
+| `S6 → S7` | independent grade plus worker completion evidence | validation/reap input | an in-progress or non-terminal completion is not finished | completion frame is wire-proven, but local parser/consumer/reap are absent |
+| `S7 → S8` | validation result, external/foreign-host run evidence | ship/release packet with rollback | refuse without validation artifact or rollback path | no production validation-to-ship edge is measured |
+| `S8 → S9` | ship decision and human choice | append-only S9 decision record | refuse missing decision owner, decision, or retrieval key | S9 ledger owner and retrieval path are **PROJECTED**, not wired |
 
-**S6 → S7, work to reap.** There is no worker→conductor completion path *wired*. **The type exists** — `AgentEndEvent` at `dist/types/extensibility/shared-events.d.ts:154`, carrying `willContinue` to separate a terminal settle from a scheduled continuation, which is the exact `NewlyIdle`/`ConfirmedIdle` distinction our own filter gets wrong. The gap is adoption, not invention. §10 Gap 7 measured
-that this is precedent-free across 210 mirror work-trees — **since REFUTED: OMP itself ships `AgentEndEvent`; the mirror search never searched the binary we wrap**. Original text: — `SupervisionEvent` has 8 variants and
-`StopReason` 6, and not one of the 14 means *"the worker finished."* Every completion tonight was
-found by a human looking.
-OMP independently declares `GuestIdleReconcilerCtx` with the same settle-vs-continuation split
-(DECLARED only) — two tools, one distinction, and ours is the one with the measured defect.
-
-**S8, grade, has no template and no type.** Grading produced four long prose documents this
-session. `omp-types` exists to fix exactly this and has **zero dependents**, and the half of the
-vocabulary that would collapse the ack dialects is blocked upstream behind
-`messaging-fabric → test-internals` (issue #46). So the type that would make a grade *countable*
-is not merely unadopted — it is unreachable at our pinned rev.
+The current contract is therefore explicit: until an atomic claim owner is implemented, a human
+MUST run the claim command and the fence MUST read back the resulting `in_progress` row before
+S5 dispatch. The future atomic wrapper is a `PROJECTED` remedy, not a current capability.
 
 ---
 
-## 11.6 What R13 demands that is not yet built
+## 11.6 S5 completion boundaries and the reap consumer
 
-| # | demand | state |
+### S5 is automated through receipt, not through a proven full journey
+
+`crates/omp-orchestrator/src/main.rs:563-631,801-879` and `src/lib.rs:24-29` describe an automated
+observe → queue → dispatch → receiver-receipt path. That corrects the old human-only S5 claim,
+but it does not prove runtime behavior on the live fleet. The current local `omp-rpc-session`
+crate is explicitly a transport for **one** `--mode=rpc` child (`crates/omp-rpc-session/src/lib.rs:5-21`)
+and does not claim cross-session continuity.
+
+Completion evidence has five separate layers; they must not be collapsed:
+
+| layer | evidence | status |
 |---|---|---|
-| L1 | every dispatch goes through the `dispatch` template, not a hand-rolled file | **not adopted** — template exists, unused |
-| L2 | selection calls the graph | **not wired** — zero `bv` invocations in the workspace |
-| L3 | a worker can signal completion in a typed way | **WIRE-PROVEN adoptable** — `AgentEndEvent` crosses `--mode=rpc` as `{"type":"agent_end","isTerminal":true}`; the largest gap became the largest adoption |
-| L4 | a grade is a value, not a document | **blocked upstream** at the feature boundary |
-| L5 | reap runs before refill, mechanically | **hand-run once**; `reap-finished-panes` exists uncalled |
-| L6 | every stage writes a durable record | **3 of 9 stages log anything** |
-| L7 | the build-grading hook obeys the repo's own rule, or names its exemption | **unresolved**, Q13 |
+| declaration | upstream `AgentEndEvent` at `dist/types/extensibility/shared-events.d.ts:154`, with `willContinue` | **AVAILABLE / DECLARED** |
+| wire observation | `%1408` / `%1414`; `/tmp/grade/agent-end-raw-frame.json` contains `{"type":"agent_end","isTerminal":true}` | **WIRE-PROVEN for one terminal frame** |
+| local parser | `omp-rpc-session/src/lib.rs:416-423` recognizes only Ready/Response/Unknown/Malformed | **NOT IMPLEMENTED for AgentEndEvent** |
+| local consumer | focused search found no `agent_end`, `willContinue`, `isTerminal`, `RpcSessionEventFrame`, or `AgentEndEvent` consumer | **NOT CONSUMED** |
+| reap | no production completion consumer and no current `reap-finished-panes` crate | **NOT WIRED** |
+
+`isTerminal: true` is not proven equivalent to `willContinue: false`; one terminal frame cannot
+establish non-terminal settle behavior, crashes, killed panes, rate-limited turns, or compaction.
+The honest status is therefore **completion AVAILABLE and WIRE-PROVEN, but NOT CONSUMED locally**.
+The work moved from inventing a protocol to adopting an existing event plane, but adoption still
+requires changing the one-child attachment topology. No completion crate is claimed.
+
+### Reap is a consumer, not an idle observation
+
+The named `reap-finished-panes` crate is absent. `ack-spine/src/followup.rs:86-137` is a pure
+candidate classifier, and the focused `classify_followup|followup_action` search found no
+production caller. It has a measured false-completion path:
+
+* for an open/in-progress bead, unchanged assignee, no comment, and before the deadline,
+  `classify_followup` returns `FollowUpVerdict::VerdictPosted`; and
+* `followup_action` maps `VerdictPosted` to `Healthy` at `followup.rs:150-156`.
+
+That state is **in progress**, not a posted verdict and not a finish. A future consumer MUST
+represent it as a distinct non-terminal `InProgress` result. Only a read-back closed row may
+produce `Finished`; only `Finished` may authorize refill. `SilentPastDeadline` remains a
+follow-up, not a refill. These are **PROJECTED contract repairs**, not claims that the current
+candidate has been changed.
+
+The resident cycle (`main.rs:648-687,801-880`) stops after dispatch/receipt. It has no production
+reap → grade → validation → ship edge. This is the explicit post-dispatch **NO-CLAIM** boundary
+for the current supervisor.
+
+### Settled wire fact
+
+The `%1414` result remains useful and is not withdrawn: `AgentEndEvent` crosses `--mode=rpc` in
+the captured terminal case. It closes the claim that OMP has no completion precedent, but it does
+not close the adoption, parser, consumer, or reap claims above.
 
 ---
 
-**NO-CLAIM.** This section maps nine stages and measures five properties across them. It does not
-establish that nine is the right decomposition — S1/S2/S6 may not want crates at all, and a
-different cut might make the severed links appear elsewhere. It does not measure how often each
-break actually costs anything; the `bv` gap is measured as *never invoked*, not as *decisions made
-worse*, and those are different claims. Every `PROJECTED` remedy in §11.6 is unbuilt and unowned
-except where an owner is named.
+## 11.7 Surface-map counts: measured universe and current WIRE cardinality
 
----
+R14/R15 batch rows 1–9 were the declared scoped universe: **270 mapped rows out of the 544-row
+R14/R15 surface universe** across `ntm`, `br`, `bv`, and OMP. The disposition policy is exact:
+include rows whose `batch` is an integer from 1 through 9 inclusive, then group by the literal
+`disposition` field. The R10 derivation command was:
 
-## 11.7 The surface mapping converged on one crate
-
-R14/R15 batches 1–9 mapped **270 of 544 surfaces** across `ntm`, `br`, `bv` and OMP. Dispositions:
-
+```sh
+jq -s '[.[] | select(.batch >= 1 and .batch <= 9)]
+  | {rows: length,
+     by_disposition: (group_by(.disposition)
+       | map({disposition: .[0].disposition, count: length}))}' \
+  docs/plan/SURFACE-MAP.jsonl
 ```
-RETIRE    243     CONSUMED  8     WIRE  11     VALIDATE  8
+
+Its measured result is:
+
+```text
+rows 270
+RETIRE               214
+CONSUMED               8
+WIRE                 31
+VALIDATE             11
+UNPROBEABLE-PENDING   6
 ```
 
-**243 of 270 retire, and that is the correct result** — adopting a surface because it exists is the
-opposite of this plan's discipline. The value is in the 11.
+The old `RETIRE 243 / WIRE 11 / VALIDATE 8` totals were stale. The earlier 11-row routing
+excerpt was illustrative, **not the WIRE universe**. The statement "the value is in the 11"
+is withdrawn; there are 31 WIRE proposals and they must be treated as proposals until wired.
 
-### Six of eleven WIREs name the same crate
+A grouped WIRE derivation was:
 
-| surface | → crate |
-|---|---|
-| `bv:robot` | `loop-queue-filter` |
-| `bv:candidates` | `loop-queue-filter` |
-| `bv:decision-relevant` | `loop-queue-filter` |
-| `bv:dependencies` | `loop-queue-filter` |
-| `bv:not-ready` | `loop-queue-filter` |
-| `br:blocked` | `loop-queue-filter` |
-| `br:dep` | `loop-queue-filter` |
-| `ntm:template` | `omp-orchestrator` |
-| `ntm:version`, `br:version` | `installer` |
-| `cli_command:usage` | `tick-monitor` |
+```sh
+jq -s '[.[] | select(.batch >= 1 and .batch <= 9
+  and .disposition == "WIRE")]
+  | group_by(.maps_to_crate // "UNASSIGNED")
+  | map({crate: (.[0].maps_to_crate // "UNASSIGNED"), count: length})' \
+  docs/plan/SURFACE-MAP.jsonl
+```
 
-Three agents working disjoint batches, given no shared hypothesis, independently routed **seven
-selection-related surfaces into `loop-queue-filter`** — the crate that owns lifecycle stage **S4**,
-the stage §11.5 names as severed, in the tool (`bv`) measured at zero consumption.
+The measured grouping is:
 
-That convergence is worth more than any single mapping. It was not seeded: the batch packet named
-four dispositions and no crate, and §11.5's S4 finding was not quoted to the mappers.
+| current beneficiary | WIRE rows |
+|---|---:|
+| `omp-orchestrator` | 18 |
+| `loop-queue-filter` | 7 |
+| `installer` | 4 |
+| `fleet-composite` | 1 |
+| `tick-monitor` | 1 |
+| **total** | **31** |
 
-**`loop-queue-filter` is the missing consumer of the graph, and now seven surfaces say so.**
+The seven selection-related WIRE rows (`br:blocked`, `br:dep`, `bv:candidates`,
+`bv:decision-relevant`, `bv:dependencies`, `bv:not-ready`, `bv:robot`) still point to
+`loop-queue-filter`, supporting it as the intended S4 graph consumer. The 18 rows pointing to
+`omp-orchestrator` are the larger current WIRE cluster and include `ntm:template` plus other
+resident-control-plane surfaces. Neither convergence result proves implementation or schedule.
 
-### The eight VALIDATEs are almost all `br`
+The eight VALIDATE rows remain a dependency warning: `br:close`, `br:create`, `br:init`,
+`br:list`, `br:schema`, `br:sync`, `br:update`, and `bv:exit-codes` rely on external behavior
+without a local assertion. A `VALIDATE` disposition is not a passing test.
 
-`br:close`, `br:create`, `br:init`, `br:list`, `br:schema`, `br:sync`, `br:update` — we depend on
-`br`'s **behaviour** without asserting on it anywhere. This is §11.1's S3 row measured from the
-other direction: the close policy that refuses prose, the schema our beads must satisfy, the sync
-that keeps `.beads/issues.jsonl` honest — all inherited, none tested. If `br` changed its close
-policy tomorrow, nothing in this workspace would fail.
-
-`bv:exit-codes` is the eighth, and it belongs with them: we would be reading `bv`'s exit contract
-without a test pinning it.
-
-**NO-CLAIM.** 270 of 544 rows are mapped; the remaining 274 are OMP, `ee` and `ms` and may shift
-these proportions. A `WIRE` disposition is a *proposal with a named beneficiary*, not a decision —
-none of the eleven has been implemented, and the convergence on `loop-queue-filter` argues the crate
-is the right home, not that wiring it is scheduled or scoped. The `bv` rows carry the §7.2 scrape
-defect: they are subcommand-shaped names harvested from help prose, so `bv:robot` stands in for the
-40+ real `--robot-*` flags rather than naming one.
+**NO-CLAIM:** the R14/R15 denominator is the declared snapshot universe, not a claim that every
+later row or every future surface is included. Future updates MUST freeze an immutable JSONL
+snapshot before deriving counts; no hash for such a snapshot is supplied here. A WIRE row names
+a proposed beneficiary, not a completed integration.
 
 ---
 
-## 11.8 The A-to-Z process exists, is distributed across twelve skills, and has never been assembled
+## 11.8 Skills are facets of the canonical stages, not twelve extra stages
 
-Josh: *"what is the defined — from a to z — typed process for managing an idea to shipped project
-with swarm orchestration? use jsm search and lets identify this."*
+The R10 `jsm search` output had **12 operational rows, 18 skill references, and 16 unique skill
+names**. That is a skill/facet inventory, not a second stage graph. The canonical mapping is:
 
-Answer: **there is no single defined process. There are twelve skills that each own one stage, and
-nothing composes them.** Found via `jsm search`:
-
-| stage | skill(s) | typed? |
+| canonical stage or attribute | skill references | boundary |
 |---|---|---|
-| S1 idea | `idea-wizard`, `dueling-idea-wizards`, `brainstorming` | **no** — prose in, prose out |
-| S1.5 viability | `product-viability-gauntlet` | **partly** — fail-closed kill/narrow/pilot/build verdict |
-| S2 plan | `planning-workflow` | **no** — markdown; convergence judged by eye |
-| S2.5 loop | `loop-engineering` | **partly** — tick-loop with a verified-value bar |
-| S3 bead | `beads-workflow`, `beads-north-star`, `beads-br` | **yes** — `br` schema, typed close policy |
-| S4 select | `beads-bv` | **yes** — PageRank over a typed DAG |
-| S5 dispatch | `ntm`, `vibing-with-ntm` | **partly** — `--robot-*` JSON; no receipt type consumed (upstream declares `IrcDeliveryReceipt`, tools/hub/types.d.ts:8 — DECLARED only) |
-| S6 work | `vibing-with-ntm` | **no** |
-| S7 reap | `vibing-with-ntm` | **no** |
-| S8 grade | `beads-compliance-and-completion-verification` | **no** — prose verdicts |
-| S8.5 honesty | `just-say-no-to-process-porn-and-ceremony` | **no** — a lens, not a type |
-| S9 ship | `installer-workmanship`, `release-preparations` | **partly** |
+| `S1` Inception | `/idea-wizard`, `/dueling-idea-wizards`, `/brainstorming` | prose ideation; no durable typed output by itself |
+| `S1` viability attribute | `/product-viability-gauntlet` | fail-closed kill/narrow/pilot/build verdict; not an inception artifact |
+| `S2` Planning | `/planning-workflow` | markdown plan; convergence is judged by review |
+| `S2` loop attribute | `/loop-engineering` | verified-value tick loop; not a new stage |
+| `S4` Beads DAG | `/beads-workflow`, `/beads-north-star`, `/beads-br`, `/beads-bv` | tracker schema, close policy, and graph ranking; local `bv` consumption is absent |
+| `S5` Execution | `/ntm`, `/vibing-with-ntm` | robot surfaces and operator doctrine; local completion/reap adoption is absent |
+| `S6` Grading the work | `/beads-compliance-and-completion-verification` | prose verdicts; no shared grade value |
+| `S7` Validation | `/vibing-with-ntm` | observation and tending; not a production reap consumer |
+| `S8` Ship | `/installer-workmanship`, `/release-preparations` | installer/release process; foreign-host install proof remains absent |
+| `S9` decision attribute | `/just-say-no-to-process-porn-and-ceremony` | honesty lens, not a decision ledger |
 
-### What "typed" means here, and why only two stages have it
+The prior `S1.5`, `S2.5`, and `S8.5` labels are now explicitly attributes. They must not be
+reused as stage IDs, and they do not conflict with §12's S1–S9.
 
-A stage is **typed** when its output is a value another stage can consume without a human reading
-it. By that test only **S3** and **S4** qualify: a bead is a row with a schema, and `bv`'s ranking
-is a number over a graph.
+A stage is **typed** only when a downstream stage can consume its output as a value without a
+human reading prose. The measured typed boundaries are narrow:
 
-Everything else hands prose to the next stage. That is the mechanism behind every measured defect
-in this plan:
+* `br` supplies a typed bead row for S4, and `bv` declares a typed ranking contract, but the
+  local `loop-queue-filter` consumer is not wired;
+* S5 has a receiver receipt mechanism, but `omp-orchestrator` does not consume a local
+  completion event type;
+* S6 has six Verdict-shaped types across the repo with no shared trait, so its result is not one
+  countable value; and
+* S7 has an upstream completion frame but no local parser/consumer/reap.
 
-- **S8 has no grade type**, so grading produces four-page documents. §03 measured the cause:
-  **6 Verdict-shaped types with no shared trait**, so a grade cannot be a value, only an essay.
-- **S5 consumes no receipt type** — upstream declares one (`IrcDeliveryReceipt`,
-  `tools/hub/types.d.ts:8`; `AsyncJobDeliverySink`, `:84`; DECLARED only, never wire-proven) — so
-  `success:[N]` from the transport was read as delivery (`cp-z42vu`) and a packet vanished.
-- **S7's completion gap** was filed as precedent-free across 210 mirror work-trees — 14
-  supervision variants, none meaning *"the worker finished"* — and **REFUTED**: `AgentEndEvent`
-  ships in OMP itself (`extensibility/shared-events.d.ts:154`) and crosses the wire (S6→S7 above).
-  The residue is the adoption work, not an absence.
+`omp-types` has zero dependents and is a possible future home for shared handoff types. The
+upstream `IrcDeliveryReceipt` declaration (`tools/hub/types.d.ts:8`) and `AsyncJobDeliverySink`
+(`:84`) remain **DECLARED only** and are not evidence that this local S5 path consumes them.
 
-### The composition nobody wrote
-
-The twelve skills are each good and none of them knows about the next. There is no artifact that says
-*idea → viability → plan → beads → graph-select → dispatch → work → reap → grade → ship*, with a
-typed handoff at each arrow. This document's §11.1 is the closest thing that exists, and it was
-written tonight, in response to R13, after nineteen dispatch waves had already run without it.
-
-**That is the honest answer to the question: the process is real, it is distributed, and its
-composition is the missing artifact — not another skill, but the typed spine that lets the twelve
-compose.** `omp-types` is the crate that would hold those types and has zero dependents.
-
-**NO-CLAIM.** This maps twelve skills to nine stages from `jsm search` output and their
-descriptions. It does **not** establish that the twelve are the right twelve, that no thirteenth
-exists, or that any of them would compose cleanly if typed — three of the four `jsm` queries tried
-returned useful results and one (`"planning workflow beads dispatch"`) returned **No skills found**,
-so the search space is not exhausted. The typed/untyped column is a judgement from each skill's
-description and this repo's measurements, not from reading all twelve skills end to end.
+**NO-CLAIM:** this maps the R10 search results; it does not prove that the 16 skills are the only
+skills that could participate, or that they compose cleanly merely because they are named here.
 
 ---
 
-## 11.9 SETTLED — the completion signal crosses the wire, and S6→S7 closes by adoption
+## 11.9 Stage logging and the S9 decision ledger
 
-The test `%1408` specified and `%1414` ran. **`AgentEndEvent` crosses `--mode=rpc`.** Raw frame
-captured at `/tmp/grade/agent-end-raw-frame.json`, 4,772 bytes, verified independently:
+Current heartbeat rows at `crates/omp-orchestrator/src/main.rs:698-708` contain `event`, `status`,
+`tick`, `repo`, `session`, and `detail`. Focused search found no `stage_id`, `from_stage`, or
+`to_stage`. The old "3 of 9 stages log" statement is withdrawn as a stage-level guarantee: a
+few files contain records, but those records cannot prove a stage transition.
+
+The required **PROJECTED** append-only lifecycle event shape is:
 
 ```json
-{ "type": "agent_end",
-  "messages": [ … full assistant turn, thinking + text + providerPayload … ],
-  "isTerminal": true }
+{
+  "schema_version": 1,
+  "event_id": "unique-within-session",
+  "session_id": "session-name",
+  "stage_id": "S5",
+  "from_stage": "S4",
+  "to_stage": "S5",
+  "command": "br update BEAD --assignee AGENT --status in_progress",
+  "exit_code": 0,
+  "artifact": ".omp/lifecycle-events.jsonl",
+  "status": "CLAIMED",
+  "observed_at": "RFC3339"
+}
 ```
 
-`isTerminal: true` is the wire form of the terminal/continuation distinction that
-`AgentEndEvent.willContinue` declares in the type. The channel is `RpcSessionEventFrame`
-(`modes/rpc/rpc-types.d.ts:589`), which exists for exactly this.
+The append target MUST be session-scoped and append-only. The event must record the command,
+exit, artifact path, and canonical stage IDs; `detail` alone is insufficient. The current
+heartbeat schema does not satisfy this shape and is not being represented as if it did.
 
-### What this decides
+S9's minimum decision record is also **PROJECTED**:
 
-**The severed S6→S7 link closes by adoption.** `%1414`'s verdict: *"architecture should adapt the
-existing event plane, not invent a completion protocol."*
+```json
+{
+  "decision_id": "unique-within-session",
+  "session_id": "session-name",
+  "stage_id": "S8",
+  "owner": "human-operator",
+  "question": "ship, hold, or rollback?",
+  "decision": "HOLD",
+  "decided_at": "RFC3339",
+  "evidence_artifact": "relative/path",
+  "conditions": ["foreign-host install proof pending"]
+}
+```
 
-| plan artifact | status now |
-|---|---|
-| §10 Gap 7 "precedent-free across 210 work-trees" | **refuted, and the precedent is reachable** |
-| §11.5 "S6→S7 severed, no completion path" | **closes by consuming an existing frame** |
-| §09 M4 "completion detected by the loop, not a human" | **scope collapses** from build-a-protocol to consume-a-frame |
-| §08 K1 "we stop if the completion protocol cannot be built" | **void** — it need not be built |
-| a completion crate | **unnecessary** |
+The projected accountable append owner is `omp-orchestrator`; the human remains the decision
+owner. The projected retrieval command is:
 
-This was the single largest open question in the plan and the largest claimed risk. It cost one
-frame capture, and the answer was available from the first hour: the type was declared in
-`dist/types`, the channel was declared in `modes/rpc`, and the plan searched 210 other repositories
-instead.
+```sh
+jq -c 'select(.stage_id == "S9" or .decision_id != null)' \
+  "$OMP_LIFECYCLE_EVENTS" \
+  | jq -c 'select(.session_id == env.OMP_SESSION)'
+```
 
-### The honest size of what remains
+No such file, owner wiring, or retrieval output was measured in R10. The session produced eleven
+human decisions in pane scrollback, which is evidence of loss, not evidence of a ledger.
 
-Adoption is not free. `tick-monitor` reads panes through tmux; consuming `RpcSessionEventFrame`
-means holding an rpc session per worker, which is a different process topology from the one every
-crate in §03 assumes. **The work moved from "invent a protocol" to "change how we attach to
-workers"** — smaller, but not nothing, and no crate does it today.
+---
 
-**NO-CLAIM.** One frame, from one session, driven to one `agent_end`. This establishes the event
-crosses the wire and carries `isTerminal`. It does **not** establish behaviour under the cases that
-actually break loops: a crashed worker, a killed pane, a rate-limited turn, or a worker that
-compacts mid-task. `willContinue` exists in the type to mark a scheduled continuation and **did not
-appear in this frame** — whether it appears on a non-terminal settle is untested. The `18/18` mux
-pong result is a separate finding and is not evidence about this channel.
+## 11.10 One-to-many namespace and cardinality contract
+
+The current implementation is not a proven 1:many orchestrator. Its measured cardinalities are:
+
+| surface | observed cardinality / behavior | safe current contract |
+|---|---|---|
+| resident `omp-orchestrator` process | one configured supervisor process | one process per session until fan-out is proven |
+| `omp-rpc-session` | exactly one OMP `--mode=rpc` child; no cross-session continuity | one child per attached session; no cross-session completion claim |
+| pane candidates | `lib.rs:447-462,494-499` counts dispatchable panes but returns `.first()` | one selected pane per cycle; `N > 1` must not silently truncate |
+| ready beads | `main.rs:854-862` selects `bead_ids.first()` | one selected bead per cycle; `N > 1` must not silently truncate |
+| heartbeat ledger | session-named path exists, but tick-monitor state and pending-dispatch are fixed filenames (`main.rs:221-236`) | fixed paths are a collision; refuse a second owner or use per-session keys |
+| claim permit | one bead ID plus one receiver in `DispatchIntent::Bead` | one bead → one receiver → one permit |
+| completion/reap | no local AgentEndEvent consumer and no reap producer | zero automatic refill claims until a consumer is wired |
+
+Until the namespace repair is implemented, the honest support boundary is:
+
+```text
+1 process : 1 session : 1 OMP child : 1 selected bead : 1 selected pane : 1 receipt
+```
+
+A request that observes more than one candidate MUST produce a typed `CARDINALITY_REFUSED`
+(or an equivalent explicit human decision) rather than taking `.first()` silently. A second
+session in the same HOME MUST refuse when it would reuse a fixed state or pending-dispatch path.
+Per-session keys, collision detection, and bounded fan-out are **PROJECTED**; no 1:many runtime
+proof is claimed.
+
+---
+
+## Closing boundary
+
+The A-to-Z process is now named without inventing a second graph: canonical runbook stages are in
+§12; this section supplies the measured crate ownership, transition gaps, template/fence split,
+completion/reap boundary, surface-map counts, logging/S9 schema, skill facets, and cardinality
+limit that §12 must honor.
+
+**NO-CLAIM.** This section does not establish that the current journey ships software unattended.
+It establishes where the current resident path stops, which upstream completion fact is reachable,
+which local consumers are absent, which records are durable or not, and which 1:many behaviors are
+explicitly refused until proven.
