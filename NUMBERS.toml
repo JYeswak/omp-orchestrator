@@ -22,19 +22,19 @@
 
 [figures.workspace_crates]
 command  = "ls -1 crates | wc -l"
-expect   = "27"
+expect   = "28"
 appears  = ["docs/plan/03-crates.md", "AGENTS.md"]
 note     = "was 20 at inception, then 23, now 26. Cited in four documents."
 
 [figures.built_binaries]
 command  = "cargo metadata --format-version 1 --no-deps 2>/dev/null | python3 -c \"import sys,json;m=json.load(sys.stdin);print(len([t for p in m['packages'] for t in p['targets'] if 'bin' in t['kind']]))\""
-expect   = "23"
+expect   = "24"
 appears  = ["docs/plan/07-installability.md"]
 note     = "cargo metadata, NOT cargo build: build emits artifacts only for crates it actually recompiles, so an up-to-date workspace answers 0. The gate caught that on its first run. This is the instrument that answers 'binaries the workspace builds'. grep fn main says 18 (re-measured 2026-09-01), [[bin]] says 16."
 
 [figures.crates_forbidding_unsafe]
 command  = "grep -l 'unsafe_code' crates/*/Cargo.toml | wc -l"
-expect   = "27"
+expect   = "28"
 appears  = ["docs/plan/00-brief.md", "AGENTS.md"]
 note     = "AGENTS.md still says 2 of 20. Round 10 found 20/19 stated against 26/26 measured."
 
@@ -73,7 +73,7 @@ note     = "not a fixed figure — the board moves hourly. Declared so any prose
 
 [figures.test_functions]
 command  = "grep -rhc '#\\[test\\]' crates/*/src/*.rs crates/*/tests/*.rs 2>/dev/null | awk '{s+=$1} END{print s}'"
-expect   = "489"
+expect   = "490"
 appears  = ["docs/plan/01-idea.md", "docs/plan/06-gates.md", "docs/plan/00-brief.md"]
 note     = "THE WORST OFFENDER, and it drifted WHILE THIS ROW WAS BEING WRITTEN. Three live values for one quantity — 370, 379, 402 — found in one round, in three sections. Measured 406, and by the time the parser was fixed it was 407, because writing the unescaper test added five functions. The gate caught drift caused by the commit that created it. Corrected by hand four times tonight and drifted again each time, because every new crate adds tests."
 
@@ -97,7 +97,7 @@ note     = "3 rounds x 12 sections. A round that reports 11 rows is a pane that 
 
 [figures.unsafe_both_mechanisms]
 command  = "python3 -c \"import pathlib,re;m=[re.search(r'unsafe_code\\s*=\\s*.forbid.',p.read_text()) for p in pathlib.Path('crates').glob('*/Cargo.toml')];i=[any(re.search(r'^#!\\[forbid\\(unsafe_code\\)\\]',x.read_text(errors='ignore'),re.M) for x in p.parent.glob('src/**/*.rs')) for p in pathlib.Path('crates').glob('*/Cargo.toml')];print(sum(1 for a,b in zip(m,i) if a and b))\""
-expect   = "26"
+expect   = "27"
 appears  = ["docs/plan/03-crates.md"]
 note     = "the both-mechanisms count moved 19 -> 25 in one round when six crates adopted the manifest lint. The triple (manifest/both/attribute-only) is the highest-rotation statistic in the plan; both-mechanisms is the one the gate text depends on."
 
@@ -124,7 +124,7 @@ note     = "20 of 20 marked CONTROL-PLANE are still upstream; ZERO extracted. Ev
 
 [figures.workspace_crates_on_disk]
 command  = "ls -1 crates | wc -l"
-expect   = "27"
+expect   = "28"
 appears  = ["docs/plan/03-crates.md", "AGENTS.md", "docs/PLAN.md"]
 note     = "duplicate of workspace_crates by design: 03-crates §3.9 reasons about the RELATIONSHIP between this and unextracted_crates, so both must be pinned or the ratio silently rots."
 
@@ -136,7 +136,7 @@ note     = "duplicate of workspace_crates by design: 03-crates §3.9 reasons abo
 
 [figures.forbid_unsafe_authoritative]
 command  = "u=0; for d in crates/*/; do if grep -q 'unsafe_code = \"forbid\"' \"$d/Cargo.toml\" 2>/dev/null || grep -rq 'forbid\\(unsafe_code\\)' \"$d\" --include='*.rs' 2>/dev/null; then u=$((u+1)); fi; done; echo $u"
-expect   = "27"
+expect   = "28"
 note     = "AUTHORITATIVE for 'does this workspace forbid unsafe': the UNION of manifest lint and source-root attribute. 26 of 26. The manifest-only reading is also 26; the source-root-only reading is 25 (one crate carries the lint in its manifest alone). 06-gates cites 16/22 from the brief and 20/26 from an earlier draft -- both are stale, measured before six crates adopted the lint."
 
 [figures.control_plane_unextracted_loc]

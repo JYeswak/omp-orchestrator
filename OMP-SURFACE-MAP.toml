@@ -233,3 +233,8 @@ outputs = "versioned JSON gate report with six clause results and a refusal code
 what_must_be_true = "all six porting clauses pass in one archived repository state before a crate arrival is accepted"
 negative_evidence = "missing caller, declaration, conformance row, archive-green result, shell/python file, or inventory field refuses the candidate; zero candidates is an anti-vacuity error"
 instead_we = "run one candidate-scoped gate instead of treating a copied crate or installed binary as an arrival"
+
+[crates.plan-assemble]
+classification = "a"
+omp_surface = "none"
+why = "regenerates docs/PLAN.md from its section files; OMP has no opinion about how we assemble our own documentation. Exists because the prior assembler was 3,297 bytes of Python in /tmp while assembly_freshness demanded the 651 KB artifact be current — a gate whose remedy did not exist. Ported to Rust because the repo forbids .py, and accepted on byte-identical output (sha 56881bf3c2cd3958)."

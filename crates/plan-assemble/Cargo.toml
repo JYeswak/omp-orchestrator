@@ -1,0 +1,23 @@
+[package]
+license.workspace = true
+name = "plan-assemble"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Regenerate docs/PLAN.md from the section files — the in-repo replacement for a /tmp Python script"
+
+[[bin]]
+name = "plan-assemble"
+path = "src/main.rs"
+
+# No dependencies on purpose.
+#
+# This binary is the only thing that can regenerate a 651 KB document that a gate
+# demands be fresh. Its predecessor was 3 KB of Python in /tmp, which meant one reboot
+# would have made the gate unsatisfiable forever. Replacing that fragility with a
+# dependency tree would trade one un-runnable state for another, so the JSONL reads are
+# hand-rolled the way the sibling gates already do it.
+[dependencies]
+
+[lints.rust]
+unsafe_code = "forbid"

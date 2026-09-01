@@ -99,3 +99,13 @@ jobs:
       - run: cargo test -p porting-gate
       - name: Gate candidate porting-gate from clean archive
         run: cargo run --quiet -p porting-gate -- --repo . --crate porting-gate
+      # The assembled plan is GENERATED, and a gate demands it be current. Detecting
+      # staleness was never the hard part — the remedy was: before 2026-09-01 the only
+      # assembler was 3,297 bytes of Python in /tmp, so one reboot made the freshness
+      # gate permanently unsatisfiable. Regenerating here and refusing a diff makes
+      # staleness IMPOSSIBLE rather than merely reportable, which is the wiring
+      # docs/plan/04-diagrams.md R4 says every generated artifact still needs.
+      - name: docs/PLAN.md must match its section files
+        run: |
+          cargo run --quiet -p plan-assemble
+          git diff --exit-code -- docs/PLAN.md

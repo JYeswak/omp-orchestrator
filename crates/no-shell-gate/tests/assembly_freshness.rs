@@ -92,3 +92,68 @@ fn the_detector_measures_real_files_and_a_real_direction() {
     let brief = mtime(&root.join("docs/plan/00-brief.md")).expect("00-brief mtime readable");
     let _ = plan.duration_since(brief); // Err() when brief is newer — which is the stale case
 }
+
+
+/// The tool that regenerates the assembly must live IN THE REPOSITORY.
+///
+/// # The measured failure
+///
+/// `Lens00Brief`, the held-out operator-at-3am lens, filed:
+///
+/// > The brief says the assembled document must be "re-assembled" … But I have no
+/// > command to re-assemble it, no path to the four-way identity check, and no
+/// > explicit instruction whether I should edit PLAN.md in place, invoke an assembly
+/// > script (which path?), or wait for a gate to rebuild it (what gate?).
+///
+/// Measured 2026-09-01, and worse than one section could reveal:
+///
+/// - `docs/PLAN.md` is 651,662 bytes — the document a reader opens.
+/// - `assembly_freshness` (this file) DEMANDS it be current.
+/// - The only thing that could produce it was **3,297 bytes of Python in `/tmp`**.
+///
+/// A gate required freshness while the tool satisfying it lived nowhere in the repo.
+/// One reboot and `PLAN.md` becomes permanently stale and un-regenerable — this gate
+/// failing forever with no available remedy. **A gate whose remedy does not exist is
+/// a trap, not a guard.**
+///
+/// The repo's one rule forbade the shortcut: no `.sh`, no `.py`, enforced over
+/// `git ls-files`. So the assembler could not simply be committed; it had to be
+/// ported. The rule refused a Python dependency in a Rust workspace and this test is
+/// what keeps that from silently regressing.
+///
+/// # What it cannot do
+///
+/// It checks that an assembler is TRACKED, not that it WORKS. The port was accepted on
+/// a separate criterion — byte-identical output to the original, verified by SHA-256
+/// (`56881bf3c2cd3958…`) — which this test does not re-run, because re-assembling
+/// inside a test would rewrite the artifact the sibling test is measuring.
+#[test]
+fn the_assembler_is_tracked_in_repo_not_in_tmp() {
+    let root = repo_root();
+    let out = std::process::Command::new("git")
+        .args(["ls-files"])
+        .current_dir(&root)
+        .output();
+    let listing = match out {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        _ => {
+            eprintln!("SKIP the_assembler_is_tracked_in_repo_not_in_tmp: git ls-files unavailable");
+            return;
+        }
+    };
+    assert!(
+        !listing.trim().is_empty(),
+        "ANTI-VACUITY: git ls-files returned nothing; a broken listing would pass this \
+         test for the wrong reason"
+    );
+    let has_assembler = listing
+        .lines()
+        .any(|l| l.contains("plan-assemble") && l.ends_with(".rs"));
+    assert!(
+        has_assembler,
+        "no tracked assembler found. docs/PLAN.md is a 651 KB generated artifact and \
+         assembly_freshness demands it be current — so the generator must be IN the \
+         repository, not in /tmp where a reboot makes this gate unsatisfiable forever. \
+         Expected a tracked crates/plan-assemble/**.rs"
+    );
+}
