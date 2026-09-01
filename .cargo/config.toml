@@ -1,0 +1,5 @@
+[build]
+# Repo-owned target directory. This overrides the global ~/.cargo/config.toml
+# and prevents cargo from writing to /tmp or an unowned path. The explicit
+# CARGO_TARGET_DIR env var still overrides this file (cargo precedence).
+target-dir = "target"
