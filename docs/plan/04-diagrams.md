@@ -182,7 +182,7 @@ graph LR
     ACT["2 · ACTIONABLE<br/>idle_panes / free_capacity<br/>FILTER FIXED (-oco); SEAM OPEN — no shared type"]
     CON["3 · CONSUME<br/>dispatch-claim-fence<br/>FENCED"]
     ACU["4 · ACTUATE<br/>send to pane<br/>DOES NOT EXIST"]
-    CMP["5 · COMPLETE<br/>worker to conductor<br/>DOES NOT EXIST"]
+    CMP["5 · COMPLETE<br/>worker to conductor<br/>AVAILABLE, NOT WIRED"]
 
     OBS -->|pane state observed| ACT
     ACT -.->|"Local path: filter fixed (-oco); the SEAM remains —<br/>the production parser derives capacity from its own<br/>JSON string, never the producer's NewlyIdle field;<br/>upstream GuestIdleReconcilerCtx (collab/guest.d.ts:9-30)<br/>is DECLARED only"| CON

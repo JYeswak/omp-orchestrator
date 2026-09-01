@@ -93,8 +93,8 @@ the artifact. If observation is the only thing we can currently trust, we cannot
 which build produced the observations.
 
 **MEASURED, and it bounds everything in this section.** The brief's §4 also records *actuate* as
-**DOES NOT EXIST — a human types into panes**, and *complete* as **DOES NOT EXIST — every
-completion this session was found by a human looking**. Installability is therefore not merely
+**DOES NOT EXIST — a human types into panes**, and *complete* as **AVAILABLE, NOT WIRED —
+`AgentEndEvent` crossed the wire but the supervisor does not consume it**. Installability is therefore not merely
 unbuilt; two of the five layers it would need to install are unbuilt. A second machine that ran a
 perfect installer today would receive a working observer, a broken actionable filter, a fenced
 consumer, and two absent layers. Every PROJECTED item below is contingent on those layers landing,
