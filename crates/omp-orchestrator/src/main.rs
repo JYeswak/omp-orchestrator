@@ -1175,16 +1175,77 @@ fn disk_pressure(config: &Config) -> Result<Option<String>, String> {
         return Err("DISK_PRESSURE df reported a zero-size volume".to_owned());
     }
 
-    let pct_free = (avail as f64 / total as f64) * 100.0;
-    let gib_free = avail as f64 / 1024.0 / 1024.0;
-    if pct_free < 8.0 || gib_free < 1.0 {
-        return Ok(Some(format!(
-            "volume={} free={gib_free:.2}GiB ({pct_free:.1}%) below floor 8%/1GiB; a build here \
-             fails as a LINKER error, not as disk-full",
-            probe.display()
-        )));
+    if let Some(why) = disk_floor_verdict(total, avail) {
+        return Ok(Some(format!("volume={} {why}", probe.display())));
     }
     Ok(None)
+}
+
+/// Decide whether a volume has room for a build. Pure, so a test can reach it.
+///
+/// # The measured defect: a percentage is the wrong unit for "does a build fit"
+///
+/// Measured 2026-09-01. The loop refused every tick on a machine with **58 GiB free**:
+///
+/// ```text
+/// DISK_PRESSURE volume=target free=58.24GiB (6.3%) below floor 8%/1GiB
+/// ```
+///
+/// The old predicate was `pct_free < 8.0 || gib_free < 1.0` — an OR, so the percentage
+/// arm refused regardless of how much absolute room existed. On this volume:
+///
+/// | quantity | value |
+/// |---|---:|
+/// | volume size | 926 GiB |
+/// | free | 58 GiB (6.3%) |
+/// | 8% of the volume | **74 GiB required** |
+/// | one full release rebuild (this function's own doc) | **~4 GiB** |
+///
+/// **74 GiB of headroom demanded to permit a 4 GiB build — an 18x over-requirement that
+/// gets STRICTER as the disk gets bigger.** Buying a larger drive tightens the gate in
+/// absolute terms, which is the tell that the unit is wrong: the question is "does a
+/// build fit", and a build's size has nothing to do with the volume's size.
+///
+/// # What it does now
+///
+/// The floor is still a percentage on small volumes, where 8% is a sane proxy — but it
+/// is **capped** at a few rebuilds' worth, because that is what the floor was ever for.
+/// Behaviour on small volumes is deliberately unchanged:
+///
+/// | volume | old required | new required | 
+/// |---|---:|---:|
+/// | 9.3 GiB (BuildShared) | 1.0 GiB (8% floors to the 1 GiB minimum) | 1.0 GiB — identical |
+/// | 926 GiB (root) | 74 GiB | 16 GiB |
+///
+/// # NO-CLAIM
+///
+/// 16 GiB is a JUDGEMENT — four rebuilds of this workspace at the ~4 GiB figure the
+/// original comment states. It is not derived from a measurement of peak build usage,
+/// and a workspace that grows past ~4 GiB per rebuild needs this raised. It remains a
+/// refusal point, not a comfort margin: a tick that passes here can still exhaust the
+/// volume, exactly as before.
+fn disk_floor_verdict(total_kb: u64, avail_kb: u64) -> Option<String> {
+    /// Never demand more than this much free space. Four rebuilds at the ~4 GiB the
+    /// original comment measured; the cap is what stops a large volume from demanding
+    /// absurd absolute headroom.
+    const HEADROOM_CAP_GIB: f64 = 16.0;
+    /// A volume with less than this cannot complete a single link step regardless of
+    /// its size. Unchanged from the original floor.
+    const ABSOLUTE_MIN_GIB: f64 = 1.0;
+
+    let total_gib = total_kb as f64 / 1024.0 / 1024.0;
+    let free_gib = avail_kb as f64 / 1024.0 / 1024.0;
+    let pct_free = (avail_kb as f64 / total_kb as f64) * 100.0;
+
+    let required_gib = (0.08 * total_gib).min(HEADROOM_CAP_GIB).max(ABSOLUTE_MIN_GIB);
+    if free_gib < required_gib {
+        return Some(format!(
+            "free={free_gib:.2}GiB ({pct_free:.1}%) below floor {required_gib:.2}GiB \
+             (8% of {total_gib:.0}GiB, capped at {HEADROOM_CAP_GIB:.0}GiB, min \
+             {ABSOLUTE_MIN_GIB:.0}GiB); a build here fails as a LINKER error, not as disk-full"
+        ));
+    }
+    None
 }
 
 
@@ -1913,6 +1974,70 @@ mod tests {
             "the repo default is the specific wrong answer this test exists to refuse"
         );
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+
+    /// A big disk with plenty of absolute room must not be refused.
+    ///
+    /// # The measured failure this reproduces
+    ///
+    /// 2026-09-01: the loop refused every tick on a 926 GiB volume with 58 GiB free,
+    /// because the predicate was `pct_free < 8.0 || gib_free < 1.0` and 58/926 = 6.3%.
+    /// The gate demanded **74 GiB of headroom to permit a ~4 GiB build**, and grew
+    /// stricter in absolute terms the larger the disk got.
+    ///
+    /// This test FAILS against that predicate and passes against the capped floor.
+    #[test]
+    fn a_large_volume_with_room_for_many_rebuilds_is_not_refused() {
+        // The exact numbers measured on the machine, in df's 1K blocks.
+        let total = 926u64 * 1024 * 1024;
+        let avail = 58u64 * 1024 * 1024;
+        let pct = (avail as f64 / total as f64) * 100.0;
+        assert!(
+            pct < 8.0,
+            "fixture must reproduce the ORIGINAL trigger ({pct:.1}% is below 8%), or this \
+             test passes for the wrong reason and proves nothing about the fix"
+        );
+        assert_eq!(
+            disk_floor_verdict(total, avail),
+            None,
+            "58 GiB free is ~14 rebuilds of headroom; refusing it demands 74 GiB to permit \
+             a 4 GiB build"
+        );
+    }
+
+    /// The guard must still bite. Same 9.3 GiB volume the fleet actually uses.
+    ///
+    /// Without this leg the "fix" is indistinguishable from deleting the floor — and an
+    /// over-permissive gate is the failure mode that lets a build die as a LINKER error
+    /// three layers below the thing that broke.
+    #[test]
+    fn a_small_volume_below_the_absolute_minimum_is_still_refused() {
+        let total = 9u64 * 1024 * 1024 + 300 * 1024; // ~9.3 GiB, BuildShared
+        let avail = 500u64 * 1024; // 0.49 GiB — under the 1 GiB absolute minimum
+        let verdict = disk_floor_verdict(total, avail);
+        assert!(
+            verdict.is_some(),
+            "half a gigabyte cannot complete a link step at any volume size"
+        );
+        let why = verdict.unwrap();
+        assert!(
+            why.contains("LINKER"),
+            "the refusal must still say WHY a full volume is dangerous: {why}"
+        );
+    }
+
+    /// Small volumes keep their old threshold exactly — the cap must not loosen them.
+    #[test]
+    fn the_cap_does_not_change_small_volume_behaviour() {
+        let total = 9u64 * 1024 * 1024 + 300 * 1024; // ~9.3 GiB
+        // 8% of 9.3 GiB is 0.74 GiB, which floors up to the 1 GiB absolute minimum,
+        // so 1.5 GiB passes and 0.9 GiB refuses -- identical to the original predicate.
+        assert_eq!(disk_floor_verdict(total, 1536 * 1024), None, "1.5 GiB must pass");
+        assert!(
+            disk_floor_verdict(total, 920 * 1024).is_some(),
+            "0.9 GiB must refuse, exactly as the original 1 GiB floor did"
+        );
     }
 
 }

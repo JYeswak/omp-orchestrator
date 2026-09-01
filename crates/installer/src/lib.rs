@@ -20,8 +20,14 @@ pub enum InstallError {
     IdentityMismatch { binary: String, head: String, build_id: String, version: String },
     NotAGitRepo { path: String },
     NoBinaries { repo_root: String },
+    /// A build is already running in this repo (a `.build_in_flight` marker is
+    /// present). RESTRICTIVE: installing over an in-flight build races the linker and
+    /// produces a binary whose identity matches neither tree.
     BuildInFlight { detail: String },
     IoError { path: String, detail: String },
+    /// A bounded spawn exceeded its deadline and the process group was
+    /// killed. RESTRICTIVE: names the step, never a partial success.
+    InstallTimeout { step: &'static str, deadline_secs: u64 },
 }
 
 impl fmt::Display for InstallError {
@@ -46,9 +52,46 @@ impl fmt::Display for InstallError {
             Self::IoError { path, detail } => {
                 write!(formatter, "I/O error at {path}: {detail}")
             }
+            Self::InstallTimeout { step, deadline_secs } => write!(
+                formatter,
+                "INSTALL TIMEOUT at {step}: exceeded {deadline_secs}s; \\
+                 the process group was killed - remedy: retry, or inspect \\
+                 for a credential prompt / build lock before retrying"
+            ),
         }
     }
 }
+// ── BOUNDED SPAWNS (bead omp-orchestrator-n4q) ────────────────────────────────
+
+/// Local git reads are network-free but a foreign host can still hang them
+/// (credential prompt, stale lock). 30s bounds the hang without racing the
+/// read.
+const GIT_DEADLINE: std::time::Duration = std::time::Duration::from_secs(30);
+/// A full release build is legitimately minutes; generous but FINITE.
+const BUILD_DEADLINE: std::time::Duration = std::time::Duration::from_secs(600);
+/// Identity probes run a local binary; 10s is a ceiling, not a race.
+const PROBE_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Run a git read under the bounded-spawn contract (bead m3c's
+/// bounded_output): its own process group, both pipes drained on dedicated
+/// readers, deadline enforced, group TERM+grace+KILL on expiry. A timeout
+/// maps to the typed [`InstallError::InstallTimeout`] - never to a partial
+/// answer and never to NotAGitRepo, which would misname the failure.
+fn bounded_git(command: &mut Command) -> Result<std::process::Output, InstallError> {
+    match subprocess_contract::bounded_output(command, GIT_DEADLINE) {
+        subprocess_contract::BoundedOutcome::Completed(output) => Ok(output),
+        subprocess_contract::BoundedOutcome::TimedOut => Err(InstallError::InstallTimeout {
+            step: "git read",
+            deadline_secs: GIT_DEADLINE.as_secs(),
+        }),
+        subprocess_contract::BoundedOutcome::Unspawned(error) => Err(InstallError::IoError {
+            path: command.get_program().display().to_string(),
+            detail: format!("spawn failed: {error}"),
+        }),
+    }
+}
+
+// ── GIT OPERATIONS ──────────────────────────────────────────────────────────────
 
 impl std::error::Error for InstallError {}
 
@@ -148,13 +191,14 @@ pub fn resolve_repo_ownership(this_root: &Path, binary_name: &str) -> RepoOwners
 // ── GIT OPERATIONS ──────────────────────────────────────────────────────────────
 
 pub fn git_rev_parse_short(repo: &Path) -> Result<String, InstallError> {
-    let out = Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
-        .current_dir(repo)
-        .output()
-        .map_err(|error| InstallError::NotAGitRepo {
-            path: repo.display().to_string(),
-        })?;
+    let mut git_command = Command::new("git");
+    git_command.args(["rev-parse", "--short", "HEAD"]);
+    git_command.current_dir(repo);
+    // `bounded_git` already collapses BoundedOutcome -> Result<Output, InstallError>,
+    // mapping TimedOut to InstallTimeout and Unspawned to Io (see its body). A second
+    // match here was a half-finished edit against a two-variant `Bounded` type that has
+    // never existed; it broke the whole workspace build.
+    let out = bounded_git(&mut git_command)?;
     if !out.status.success() {
         return Err(InstallError::NotAGitRepo {
             path: repo.display().to_string(),
@@ -164,13 +208,10 @@ pub fn git_rev_parse_short(repo: &Path) -> Result<String, InstallError> {
 }
 
 pub fn git_head(repo: &Path) -> Result<String, InstallError> {
-    let out = Command::new("git")
-        .args(["rev-parse", "HEAD"])
-        .current_dir(repo)
-        .output()
-        .map_err(|error| InstallError::NotAGitRepo {
-            path: repo.display().to_string(),
-        })?;
+    let mut git_command = Command::new("git");
+    git_command.args(["rev-parse", "HEAD"]);
+    git_command.current_dir(repo);
+    let out = bounded_git(&mut git_command)?;
     if !out.status.success() {
         return Err(InstallError::NotAGitRepo {
             path: repo.display().to_string(),
@@ -196,14 +237,31 @@ pub fn check_build_fence(repo: &Path) -> Result<(), InstallError> {
 // ── BUILD ──────────────────────────────────────────────────────────────────────
 
 pub fn build_workspace(repo: &Path, cargo: &str) -> Result<(), InstallError> {
-    let out = Command::new(cargo)
-        .args(["build", "--release", "--workspace"])
-        .current_dir(repo)
-        .output()
-        .map_err(|error| InstallError::BuildFailed {
-            crate_name: "workspace".to_owned(),
-            detail: format!("cargo spawn failed: {error}"),
-        })?;
+    let mut build_command = Command::new(cargo);
+    build_command.args(["build", "--release", "--workspace"]);
+    build_command.current_dir(repo);
+    let out = match subprocess_contract::bounded_output(
+        &mut build_command,
+        BUILD_DEADLINE,
+    ) {
+        subprocess_contract::BoundedOutcome::Completed(out) => out,
+        subprocess_contract::BoundedOutcome::TimedOut => {
+            return Err(InstallError::BuildFailed {
+                crate_name: "workspace".to_owned(),
+                detail: format!(
+                    "cargo build exceeded {}s deadline; process group killed - \
+                     check for a stuck build lock or a credential prompt",
+                    BUILD_DEADLINE.as_secs()
+                ),
+            });
+        }
+        subprocess_contract::BoundedOutcome::Unspawned(error) => {
+            return Err(InstallError::BuildFailed {
+                crate_name: "workspace".to_owned(),
+                detail: format!("cargo spawn failed: {error}"),
+            });
+        }
+    };
     if !out.status.success() {
         return Err(InstallError::BuildFailed {
             crate_name: "workspace".to_owned(),
@@ -217,7 +275,17 @@ pub fn build_workspace(repo: &Path, cargo: &str) -> Result<(), InstallError> {
 
 /// Probe the installed binary's build_id via `--version`.
 pub fn probe_version(binary: &Path) -> Option<String> {
-    let out = Command::new(binary).arg("--version").output().ok()?;
+    let mut probe_command = Command::new(binary);
+    probe_command.arg("--version");
+    let out = match subprocess_contract::bounded_output(
+        &mut probe_command,
+        PROBE_DEADLINE,
+    ) {
+        subprocess_contract::BoundedOutcome::Completed(out) => out,
+        // A probe that hangs or cannot spawn is a typed absence, not a
+        // partial answer: the caller treats None as "identity unproven".
+        _ => return None,
+    };
     if !out.status.success() {
         return None;
     }
@@ -231,10 +299,15 @@ pub fn probe_version(binary: &Path) -> Option<String> {
 
 /// Probe the installed binary's embedded build_id via strings.
 pub fn probe_build_id_string(binary: &Path) -> Option<String> {
-    let out = Command::new("strings")
-        .arg(binary)
-        .output()
-        .ok()?;
+    let mut strings_command = Command::new("strings");
+    strings_command.arg(binary);
+    let out = match subprocess_contract::bounded_output(
+        &mut strings_command,
+        PROBE_DEADLINE,
+    ) {
+        subprocess_contract::BoundedOutcome::Completed(out) => out,
+        _ => return None,
+    };
     let text = String::from_utf8_lossy(&out.stdout);
     // Look for the build_id pattern
     text.lines()
