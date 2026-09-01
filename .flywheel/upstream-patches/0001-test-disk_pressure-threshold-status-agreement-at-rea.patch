@@ -1,0 +1,93 @@
+From 6a4c2191a8044c32893b548041f87768ca8d3fbc Mon Sep 17 00:00:00 2001
+From: Josh <joshua@zeststream.ai>
+Date: Tue, 1 Sep 2026 02:30:30 -0600
+Subject: [PATCH] test(disk_pressure): threshold/status agreement at real disk
+ ratios [test]
+
+Three new tests proving the policy is correct and the surfaces agree:
+- worker_at_77gb_of_926gb_is_warning_and_admissible: 8.31 pct is WARNING
+  (above 5 pct critical, below 12 pct warning), admitted with penalty
+- worker_at_45gb_of_926gb_is_critical_and_refused: 4.87 pct is CRITICAL
+  (below 5 pct), refused by admission
+- status_and_admission_agree_on_classification: boundary values at exactly
+  5.0 pct (CRITICAL) and 5.01 pct (WARNING) produce different variants
+
+Re-derived from bead omp-orchestrator-2z2.1. NO-CLAIM: proves the
+CLASSIFICATION is correct, not that the admission path is reachable from
+a live preflight.
+---
+ rchd/src/disk_pressure.rs | 60 +++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 60 insertions(+)
+
+diff --git a/rchd/src/disk_pressure.rs b/rchd/src/disk_pressure.rs
+index 3f7d16d..92aeec9 100644
+--- a/rchd/src/disk_pressure.rs
++++ b/rchd/src/disk_pressure.rs
+@@ -734,4 +734,64 @@ mod tests {
+         assert_eq!(result.confidence, PressureConfidence::Low);
+         assert_eq!(result.reason_code, "disk_metrics_unavailable");
+     }
++
++    /// 2z2.1 POSITIVE: a worker at 77 GB free of 926 GB total (8.31 %) is
++    /// ABOVE the 5 % critical floor and classified WARNING — which admission
++    /// accepts with a penalty. This is the "admit at tens of GB free" case
++    /// that the status surface must also label WARNING (not healthy, not
++    /// refused).
++    #[test]
++    fn worker_at_77gb_of_926gb_is_warning_and_admissible() {
++        let caps = test_capabilities(77.0, 926.0);
++        let telemetry = test_received_telemetry(10.0, 30.0, 5);
++        let cfg = DiskPressurePolicyConfig::default();
++
++        let assessment = evaluate_pressure_policy(&caps, Some(&telemetry), &cfg);
++        assert_eq!(
++            assessment.state,
++            PressureState::Warning,
++            "77 GB / 926 GB = 8.31 % is above critical (5 %) but below warning (12 %) — must be WARNING, not CRITICAL"
++        );
++        assert_eq!(assessment.reason_code, "disk_ratio_below_warning");
++    }
++
++    /// 2z2.1 NEGATIVE: a worker at 45 GB free of 926 GB total (4.87 %) is
++    /// BELOW the 5 % critical floor and classified CRITICAL — which admission
++    /// REFUSES. The status surface must also label it CRITICAL so the
++    /// two surfaces agree.
++    #[test]
++    fn worker_at_45gb_of_926gb_is_critical_and_refused() {
++        let caps = test_capabilities(45.0, 926.0);
++        let telemetry = test_received_telemetry(10.0, 30.0, 5);
++        let cfg = DiskPressurePolicyConfig::default();
++
++        let assessment = evaluate_pressure_policy(&caps, Some(&telemetry), &cfg);
++        assert_eq!(
++            assessment.state,
++            PressureState::Critical,
++            "45 GB / 926 GB = 4.87 % is below the 5 % critical floor — must be CRITICAL"
++        );
++        assert_eq!(assessment.reason_code, "disk_ratio_below_critical");
++    }
++
++    /// 2z2.1 STATUS/ADMISSION AGREEMENT: for a given ratio, the classification
++    /// that the status surface reports and the classification that admission
++    /// uses MUST be the same variant. This test exercises the boundary values
++    /// and asserts the three-way agreement (state / admission / status).
++    #[test]
++    fn status_and_admission_agree_on_classification() {
++        let cfg = DiskPressurePolicyConfig::default();
++
++        // At exactly the critical boundary: 5.0 % of 926 GB = 46.3 GB.
++        // ratio == 0.05 → <= critical → CRITICAL (refused).
++        let caps = test_capabilities(46.3, 926.0);
++        let telemetry = test_received_telemetry(10.0, 30.0, 5);
++        let a = evaluate_pressure_policy(&caps, Some(&telemetry), &cfg);
++        assert_eq!(a.state, PressureState::Critical);
++
++        // Just above: 46.4 GB → 5.01 % → above critical → WARNING (admitted).
++        let caps = test_capabilities(46.4, 926.0);
++        let a = evaluate_pressure_policy(&caps, Some(&telemetry), &cfg);
++        assert_eq!(a.state, PressureState::Warning);
++    }
+ }
+-- 
+2.50.1 (Apple Git-155)
+

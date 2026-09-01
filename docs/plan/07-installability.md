@@ -59,7 +59,7 @@ It has one row per target and the fields `target`, `owner`, `distribution` (`INS
 post-install expected set MUST all be projections of this manifest; none may maintain a second-
 hand count. At this HEAD the manifest denominator is `workspace_targets=21`; the current installer
 list is `installer_entries=3`, of which `foreign=1` (`pane-truth`) and `owned_entries=2`.
-The seven runtime adapters are a projected manifest field, not a second denominator. The expected
+~~The seven runtime adapters are a projected manifest field, not a second denominator.~~ **RETRACTED 2026-09-01 — see §7.9: no seven-item list exists anywhere in the repo.** The expected
 install set is exactly the rows with `distribution=INSTALL`, so a foreign or unreleased row can
 never be mistaken for a missing artifact.
 
@@ -573,3 +573,50 @@ not specify the probe list (gates section), the orchestration semantics (crate s
 milestone at which each surface lands (milestones section). Every PROJECTED item is unbuilt at
 HEAD `fb89714`; the only MEASURED install-adjacent code in the tree is `crates/installer`, which
 covers 3 installer entries against 21 workspace targets, one of which is foreign and not built here.
+
+---
+
+## 7.9 BLOCKER resolution — the seven adapters were never named, and the 21 is now 23
+
+`GradeInstall` filed two BLOCKERs against this section:
+
+> The document asserts every target becomes an adapter (21) while simultaneously
+> claiming seven adapters. If 21 targets map to 7 adapters, the grouping rule is
+> absent — which targets belong in which adapter is unspecified, making the CLI
+> contract unexecutable.
+
+> The document specifies commands that take `<adapter>` parameters but provides zero
+> examples of valid adapter names. A user on a second machine cannot invoke
+> `ompo doctor <adapter>` without guessing.
+
+Both are correct, and measurement makes them worse rather than better.
+
+### What is actually true, 2026-09-01
+
+| claim | measured | derivation |
+|---|---:|---|
+| binary targets | **23** | `cargo metadata --no-deps`, registered as `built_binaries` |
+| known to the installer | **3** | `omp-orchestrator`, `pane-truth`, `tick-monitor` |
+| "seven runtime adapters" | **no list exists** | grep of the whole repo finds no enumeration |
+
+The `21` was already stale when graded — two crates landed since — which is why it is
+registered as a derived figure rather than written in prose. **The `7` is worse than
+stale: it is unsourced.** Five places in this section invoke `ompo doctor <adapter>`,
+and no adapter is named in any of them.
+
+### Retraction
+
+The sentence *"the seven runtime adapters are a projected manifest field, not a second
+denominator"* is **retracted**. It defended a number against being read as a
+denominator while never establishing where the number came from. There is no
+seven-item list, no grouping rule from 23 targets onto 7 names, and no way for a
+reader to check either.
+
+What replaces it: **23 targets, 3 installed, 20 unowned.** That is a coverage gap of
+87%, it is derivable from `cargo metadata` on any machine, and it does not require a
+grouping rule to be true.
+
+**NO-CLAIM:** this resolves the *arithmetic*, not the design. Whether the right shape
+is one `ompo` aggregator with adapter subcommands, 23 separate installed binaries, or
+something else is a design decision that remains open — and it is now open *honestly*,
+against a measured 3-of-23, rather than behind a seven that nobody could look up.
