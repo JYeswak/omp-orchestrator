@@ -898,3 +898,52 @@ does **not** re-classify them — reading a directory proves a probe exists, not
 should be. The 3 `omp_method` rows remain genuinely pending on the six-mux ambiguity, and the 6
 `subcommand` rows were withdrawn by their author for thin reasoning, which is a different defect
 again. Only 54 of the 63 are refuted here.
+
+---
+
+## 2.12 Three dispositions from the `plan-mode` / `modes` / `goals` sweep
+
+`%1408`, bead `ipg.1`, coverage table at `29958a3`. Three type roots, three genuinely different
+answers — which is the point of a disposition rather than a count.
+
+**(a) `plan-mode` — NOT OURS.** Thin types; our system is strictly more capable. This confirms the
+downgrade recorded in §12.11: `PlanApprovalDetails` is `{planFilePath, title, planExists}` and
+`ResolvedApprovedPlan` adds `planContent`. A plan *reference* and an approval *flag*, against a
+convergence protocol we had to build as `CONVERGENCE.jsonl` + `convergence.rs` + a held-out lens.
+**The adoption pattern paid nine times and does not pay here**, and saying so is the more useful
+result than another adoption claim.
+
+**(b) `modes` — REIMPLEMENTED BY SCRAPING.** 204 files, 843 symbols. `tick-monitor` does not consume
+any of it; **it reads the rendered output.** Every pane-state classification in this system is a
+regex over a terminal buffer — the braille-spinner-and-timer contract, the `π` glyph, the
+spinner-stripped content hash — against 843 typed symbols describing the same states.
+
+That is the largest single instance in this repo of the defect Josh's objective names: *"everything
+typed — nothing unknown."* And it explains a class of failure we have paid for repeatedly: the v18
+status-line change that scored 0/3 on live payload, the stale spinner in scrollback that reported a
+dead pane alive, the whole-buffer scan that scored one pane working AND idle simultaneously. **A
+scraper inherits every rendering change as a correctness bug.** A typed consumer does not.
+
+**(c) `goals` — UNUSED CAPABILITY.** A typed token-budget runtime, consumed nowhere. It could ground
+**S5 Cost** and **Q2** — the cost question §00 has carried as OPEN since the first pass, and which
+`%1408` earlier priced as "grading is 30+ pane-hours unmeasured". We have been reasoning about cost
+from per-pane dollar figures scraped off status lines while a typed budget surface sits unused.
+
+### The positive control FAILED, and the diagnosis is why that is reportable
+
+No root came back FULLY COVERED. A failed positive control normally means **the scan is broken** and
+every verdict is suspect — that is the rule this repo enforces on its own censuses. `%1408` argued
+the other case: these are **agent-plane surfaces**, not orchestrator-plane, so partial coverage is
+the true answer rather than a scan artifact. Anti-vacuity passed independently.
+
+Distinguishing "my instrument is broken" from "the world is genuinely partial" is the single
+hardest call in this whole methodology, and it was made explicitly instead of silently.
+
+### NO-CLAIM
+
+(b) names a defect and does not fix it: `tick-monitor` still scrapes, and replacing a regex over a
+terminal buffer with a typed consumer means holding a session per pane — the same topology change
+§11.9 records as the real cost of the completion-signal adoption. (c) is a *capability*, not a
+measurement: nothing here shows the `goals` budget runtime is reachable from a process we run, and
+that is exactly the declared-versus-wire-proven distinction that made seven of the eight gap
+adoptions weaker than the first.
