@@ -21,11 +21,11 @@
 [artifacts.convergence]
 path      = "docs/plan/CONVERGENCE.jsonl"
 format    = "jsonl"
-required  = ["section", "round", "lens", "new_findings", "verdict"]
-optional  = ["evidence", "role"]
+required  = ["section", "round", "lens", "new_findings", "verdict", "gates_green"]
+optional  = ["evidence", "role", "note"]
 writer    = "grading panes"
 reader    = "crates/no-shell-gate/tests/convergence.rs"
-note      = "role added mid-session; absent means hillclimb. See AAR role taxonomy in docs/plan/12-journey.md."
+note      = "gates_green REQUIRED since 2026-09-01 (Josh: \"having not wired gates is plan issue number 1\"). convergence.rs contained ZERO references to wiring, so a round could bank a section as CONVERGED while wired_lanes was RED -- and that state existed, the wiring gate failing on a vendored serde_json under .rch-tmp/ while rounds were being graded. A clean round over a broken lane is BUILT != WIRED wearing a convergence badge. ABSENT IS TREATED AS FALSE: an unrecorded check is not a check. role added mid-session; absent means hillclimb. See AAR role taxonomy in docs/plan/12-journey.md."
 
 [artifacts.surface_map]
 path      = "docs/plan/SURFACE-MAP.jsonl"

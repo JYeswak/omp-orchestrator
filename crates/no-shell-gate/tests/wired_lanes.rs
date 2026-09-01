@@ -111,11 +111,35 @@ fn repo_root() -> PathBuf {
         .to_path_buf()
 }
 
+/// Directories the wiring scan must never enter.
+///
+/// # Measured 2026-09-01: a vendored dependency broke the positive control
+///
+/// `rch` (the remote-compilation helper) materialises a cargo cache INSIDE the
+/// repository at `.rch-tmp/`, and `.rch-target-<hash>/` alongside it. The scan
+/// walked into `.rch-tmp/rch-cargo-cache-.../serde_json-1.0.151/` and the
+/// positive control — which asserts `find_caller` locates `.github/workflows/
+/// gate.yml` — matched a path inside that vendored crate instead. The gate
+/// FAILED while the repository's actual wiring was fine.
+///
+/// A gate scanning a vendored copy of somebody else's source is not measuring
+/// this tree. These names match `.gitignore`, and the duplication is deliberate:
+/// `.gitignore` governs what is COMMITTED, this governs what is SCANNED, and a
+/// build tool can drop a cache into the working directory without either being
+/// wrong. Keeping them in sync is a maintenance cost; conflating them is a bug.
 fn is_ignored_directory(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
     matches!(
-        path.file_name().and_then(|name| name.to_str()),
-        Some(".git" | ".beads" | ".ntm" | ".zestgraph" | "target")
+        name,
+        ".git" | ".beads" | ".ntm" | ".zestgraph" | "target"
+            | ".orchestrator" | ".rch-tmp" | ".ee" | ".claude"
     )
+        // `.rch-target-<64-hex>` is generated per remote worker pool, so the
+        // suffix cannot be enumerated — match the prefix.
+        || name.starts_with(".rch-target-")
+        || name.starts_with(".rch-cargo-cache")
 }
 
 fn is_production_path(path: &Path) -> bool {

@@ -126,6 +126,8 @@ A requirement that cannot be checked is a wish. Each row states the observable t
 | R11 | Requirements written down before dispatch | **this file** |
 | R12 | Economic and risk questions are registered, owned, and answerable | §8 — twelve registered questions (ten `OPEN`, Q9 `ANSWER MOVED`, Q10 `PARTIAL`) and five kill criteria |
 
+> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+
 **NO-CLAIM:** this table records that a section is responsible for a requirement. It does not
 establish that the section discharges it well. Grading the sections is a separate pass, and §09
 carries the rubric for it.

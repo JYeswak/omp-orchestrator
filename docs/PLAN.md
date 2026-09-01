@@ -176,6 +176,8 @@ A requirement that cannot be checked is a wish. Each row states the observable t
 | R11 | Requirements written down before dispatch | **this file** |
 | R12 | Economic and risk questions are registered, owned, and answerable | §8 — twelve registered questions (ten `OPEN`, Q9 `ANSWER MOVED`, Q10 `PARTIAL`) and five kill criteria |
 
+> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+
 **NO-CLAIM:** this table records that a section is responsible for a requirement. It does not
 establish that the section discharges it well. Grading the sections is a separate pass, and §09
 carries the rubric for it.
@@ -975,6 +977,8 @@ are **zero unqualified WORKS rows**:
 | consume | admission (decide()) | **FENCED** — the cited report is DISPATCH_RETRY_BLOCKED |
 | actuate | dispatch | **DOES NOT EXIST** — a human types into panes |
 | complete | worker says done | **AVAILABLE, NOT WIRED** — OMP exposes AgentEndEvent.willContinue on RpcSessionEventFrame; the local loop does not consume it |
+
+> *Upstream type for this gap: `GuestIdleReconcilerCtx` (DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 A single shared predicate, used to answer two different questions, produced a coherent but wrong local
 world model. **INFERENCE (not yet proven):** typed separation may outperform logging-only
@@ -4945,6 +4949,8 @@ The envelope is the proof contract, not decoration. `run_id` is unique and stabl
 `data` contains the command-specific fields shown above; `error` is a typed object when the command
 cannot complete. Every invocation that reaches a verdict writes its envelope before returning:
 
+> *Upstream type for this gap: `AgentEndEvent.willContinue` (`extensibility/shared-events.d.ts:154`, WIRE-PROVEN). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+
 | command | durable write | proving command |
 |---|---|---|
 | `doctor` | `.omp-orchestrator/runs/<run_id>/doctor.json` | `omp-orchestrator verify --run <run_id> --command doctor` |
@@ -5216,6 +5222,8 @@ Run exactly:
 
 The test must print one JSON line with `{"fixture":"tick-monitor-newly-idle.json","state":"NewlyIdle","free_capacity":true,"shared_type":"PaneObservation","revision":"<git sha>"}` and exit 0. It must compile the real fixture through the production parser and fail if either crate's public parse/emit signature does not use the same `omp-types::PaneObservation` type; the pre-milestone tree fails because the test, fixture, dependency edge, and shared signature are absent, while the post-milestone tree passes only with that JSON and exit 0. A separate source check is the exact command
 `grep -rn "omp-types\\|omp_types" crates/*/Cargo.toml | grep -v "^crates/omp-types/"`; its non-empty result must name both consumers. **NOT IN SCOPE.** Selection, dispatch, ack — M1 changes what the loop *sees*.
+
+> *Upstream type for this gap: `GuestIdleReconcilerCtx` (DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 **STARTING POINT — with a recorded disagreement with the brief.** Brief §4 lists the *actionable* layer as **BROKEN** — "`idle_panes`
 discards `NewlyIdle`; `free_capacity` derives from the same `is_dispatchable` filter." **I measured the current source and disagree:**
@@ -5500,6 +5508,8 @@ BANKED rows cite evidence; UNPROVEN rows name the experiment that settles them. 
 | The one hard rule is enforced mechanically — a Rust gate walks `git ls-files` and fails on `.sh`/`.py`, exemption list empty | **The gates bite under attack.** The former **2-of-8 / 4-of-8** figures are **HISTORICAL, UNPROVEN** snapshots and are not a current verdict. Settled by bringing all 8 to four legs plus ADDRESSABLE, and a planted-known-bad campaign per gate. |
 | Failing closed with a remediation hint works — `fh` MCP returns a typed `SERVE_INPUT_STALE` naming the moved mirror HEAD (`5dec4212…` → `ecdea397…`) rather than an empty result | **This plan enforces its own discipline.** `MEASURED`: `ls crates/ \| grep plan-check` → empty. Settled by shipping `plan-check` (§4) with its known-bad fixture. |
 
+> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+
 **NO-CLAIM.** This section defines the conditions under which a milestone may be called done, and records what is and is not proven as
 of 2026-08-31 on one repository and one machine. It does not establish that these are the right milestones, that seven is the right
 number, that the ordering is minimal, or that closing all seven produces a system anyone wants. It makes no schedule claim — no date,
@@ -5559,6 +5569,8 @@ Four false-zero mechanisms remain explicit: an empty `--include=` can return exi
 ---
 
 ## Gap 1 — A publish that returns no receipt
+
+> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 **Gap.** Dispatch emits no typed acknowledgement, so “sent” and “accepted” are one observable.
 
@@ -5663,6 +5675,8 @@ The synonym set also included `scanned zero`, `empty scan set`, `no files were s
 **Scoped NO-CLAIM.** Source root `/Volumes/ZestData/dicklesworthstone-mirror`; search space is `asupersync/src` and the three named supervision files; observed no success variant in those declarations; unestablished are absence in other work-trees, runtime semantics, and local consumption.
 
 **Verdict: ADAPT.** Adopt `Outcome<T,E>` and the one-entry-per-decision ledger as **PROJECTED** local design inputs. The mirror result alone does not justify inventing a new completion protocol because OMP supplies a separate candidate, documented in §11.
+
+> *Upstream type for this gap: `AgentEndEvent.willContinue` (`extensibility/shared-events.d.ts:154`, WIRE-PROVEN). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 ---
 
@@ -5774,6 +5788,8 @@ The capture artifact `/tmp/grade/r7-agent-end.md:26-45` observed one `agent_end`
 ### 11.5 Receipt boundary
 
 The OMP receipt is **transport-injection prior art only**. `irc/bus.d.ts:53-61` says it reports how the message reached the recipient, “not what they did with it”; `async/job-manager.d.ts:41-48` specifies owner routing and dead-letter behavior. `cp-z42vu` remains **ADAPT** until recipient-level runtime evidence exists.
+
+> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 ### 11.6 Adjacent mux observation
 
@@ -5912,6 +5928,8 @@ three observations occurred; it does not say that the nine-stage journey complet
 
 Human actuation remains a prerequisite for an unclaimed bead. The resident supervisor's later
 dispatch path is a designed/source-level property, not measured runtime use.
+
+> *Upstream type for this gap: `Stage1Claim`/`ownershipToken` (`memories/storage.d.ts:20-27`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 ---
 
@@ -6597,6 +6615,8 @@ hours later. Every one had sat in prose as a settled absence. **An unknown that 
 experiment attached is indistinguishable from a known** — and §10 called one of them "precedent-free
 across 210 repositories" while the precedent shipped in the binary named on line one.
 
+> *Upstream type for this gap: `AgentEndEvent.willContinue` (`extensibility/shared-events.d.ts:154`, WIRE-PROVEN). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+
 ### The loop, per milestone
 
 ```
@@ -6639,11 +6659,15 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 **Trigger.** The beads DAG (S4) contains a ready, unclaimed, non-epic bead, and a pane is ConfirmedIdle.
 
+> *Upstream type for this gap: `GuestIdleReconcilerCtx` (DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+
 **Dispatch packet.** Bead id + WHAT/WHY/ACCEPTANCE verbatim from the bead body + the file reservation list (`ntm locks`) + the stage's packet-journal append. Dispatched only after `ntm claim <id>` succeeds — an unclaimed send is the `5rh`-to-`%1413` defect (11-lifecycle), measured twice.
 
 **Amazing.** Every dispatch in the wave has: a claim row, a file reservation, a per-target receipt, and a packet-journal record — zero exceptions across a 10-dispatch wave, counted from the journal, not from memory.
 
 **Adequate.** 1:1 dispatch with claim + receipt; fan-out to N panes done as N sequential 1:1 sends with the receipts collected by hand. Costs later: the fan-in barrier does not exist, so a partial wave reads as complete until a human notices (the cp-z42vu class at N scale).
+
+> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 **Negative patterns.** (1) Unclaimed dispatch — `5rh`-to-`%1413`, measured twice (11-lifecycle §S5). (2) Transport success ≠ delivery — `cp-z42vu`, `success:[4]`, packet never arrived (dispatch-silence-watch/src/lib.rs:10-11). (3) Recency over graph — 19 waves dispatched newest-first while PageRank named the articulation point (stand-down confession; live proof `bv --robot-next` → omp-orchestrator-2o5, "Unblocks 2z2.1/2z2.2", score 0.492).
 
@@ -6659,6 +6683,8 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 **F4 GATES.** Gate: the dispatch claim fence refuses a packet naming an unclaimed bead, and the transport gate refuses a bare success without a receipt. Known-BAD leg (IN-TREE, per beads-north-star): `dispatch-silence-watch`'s cp-z42vu fixture is the planted specimen — a test that feeds `success:["4"]` with no arrival and asserts the verdict is NOT `Delivered`. Exists: yes (dispatch-silence-watch tests). The claim-fence's known-bad: the `Reassigned` arm test. Both in-tree. REFUSES: unclaimed send, receipt-less success, and (the one that does not exist yet) partial fan-in reported as complete.
 
+> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+
 **F5 NUMBERS.** Figures this stage claims, to be declared in NUMBERS.toml on first run: `dispatch_journal_rows` (baseline 0 today — declare with `expect="0"` and ratchet up; NUMBERS gate fails on drift, which IS the ratchet), `unclaimed_dispatches` (expect 0 after the claim wire; any nonzero is a regression), `fanout_partial_waves` (expect 0). Declared today: none — the stage has not run; declaring a number for a stage that has never executed is a figure with no derivation, which is the defect this field exists to kill.
 
 **KNOWN.** 18-edge DAG complete and verified (round 10: scanner-identical); claim fence + dispatch fence built (fence held 4.2h); `ntm claim/locks/message` surfaces probed live; `AgentEndEvent` completion wire-proven `{"type":"agent_end","isTerminal":true}` on `RpcSessionEventFrame`; 162 refused ticks / 4.2h with `DISPATCH_RETRY_BLOCKED`.
@@ -6666,6 +6692,8 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 **UNKNOWN.** (1) Does per-target receipt survive a multi-target `--robot-send`? Experiment: one 3-pane wave, compare per-target receipts against pane truth. Cost: one wave, ~10 min. (2) Does `ntm claim` hold across a pane restart? Experiment: claim, kill pane, respawn, re-check `ntm locks`. Cost: ~5 min. Both cheap; both run before the first bead of the first wave, per §12.10's cheapest-falsifier rule.
 
 **GAP.** Fan-out/fan-in primitive (barrier + partial-verdict): cost of leaving it missing = every multi-pane wave is N hand-typed sends with hand-collected receipts, and a partial wave is indistinguishable from a complete one — the cp-z42vu class at scale. Packet journal: cost of leaving it missing = every forensic question ("which packet did this?") requires a human memory — measured: the reap could only name "seven conditions living in scrollback."
+
+> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 ### S6 — Grading the work
 

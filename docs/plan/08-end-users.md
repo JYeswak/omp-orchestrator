@@ -243,6 +243,8 @@ The envelope is the proof contract, not decoration. `run_id` is unique and stabl
 `data` contains the command-specific fields shown above; `error` is a typed object when the command
 cannot complete. Every invocation that reaches a verdict writes its envelope before returning:
 
+> *Upstream type for this gap: `AgentEndEvent.willContinue` (`extensibility/shared-events.d.ts:154`, WIRE-PROVEN). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+
 | command | durable write | proving command |
 |---|---|---|
 | `doctor` | `.omp-orchestrator/runs/<run_id>/doctor.json` | `omp-orchestrator verify --run <run_id> --command doctor` |

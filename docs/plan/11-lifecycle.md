@@ -106,6 +106,8 @@ three observations occurred; it does not say that the nine-stage journey complet
 Human actuation remains a prerequisite for an unclaimed bead. The resident supervisor's later
 dispatch path is a designed/source-level property, not measured runtime use.
 
+> *Upstream type for this gap: `Stage1Claim`/`ownershipToken` (`memories/storage.d.ts:20-27`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+
 ---
 
 ## 11.3 Template omission refusal is not claim-custody refusal

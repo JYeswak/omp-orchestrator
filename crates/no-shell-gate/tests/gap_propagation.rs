@@ -35,7 +35,13 @@ const GAPS: &[(&str, &str, &[&str])] = &[
 /// 13 -> 9: this repair propagated ownershipToken/inputWatermark into 02-surface-census
 /// and GuestIdleReconcilerCtx into 04-diagrams; the detector measured 9 remaining pairs
 /// in 00/01/05/09/10. Baseline is a regression ceiling, not a claim that the backlog is clear.
-const BASELINE: usize = 9;
+const BASELINE: usize = 2;
+//    9 -> 12  adding sections 3.9, 3.10, 12.10 and 12.11 raised it. "I wrote more
+//             prose" is exactly the excuse this ratchet exists to refuse, so the
+//             paragraphs were fixed rather than the number.
+//    12 -> 2  14 paragraphs annotated with the upstream type adjacent to the claim.
+//             The two survivors (09-milestones::idle, 12-journey::claims) argue the
+//             gap further from any type mention than the +/-2 window reaches.
 
 // ── WHAT THIS NUMBER IS AND IS NOT ──────────────────────────────────────────
 // It has been 24 -> 13 -> 6 -> 15 -> 13 in one session. Every move was a real

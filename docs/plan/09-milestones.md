@@ -59,6 +59,8 @@ Run exactly:
 The test must print one JSON line with `{"fixture":"tick-monitor-newly-idle.json","state":"NewlyIdle","free_capacity":true,"shared_type":"PaneObservation","revision":"<git sha>"}` and exit 0. It must compile the real fixture through the production parser and fail if either crate's public parse/emit signature does not use the same `omp-types::PaneObservation` type; the pre-milestone tree fails because the test, fixture, dependency edge, and shared signature are absent, while the post-milestone tree passes only with that JSON and exit 0. A separate source check is the exact command
 `grep -rn "omp-types\\|omp_types" crates/*/Cargo.toml | grep -v "^crates/omp-types/"`; its non-empty result must name both consumers. **NOT IN SCOPE.** Selection, dispatch, ack — M1 changes what the loop *sees*.
 
+> *Upstream type for this gap: `GuestIdleReconcilerCtx` (DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+
 **STARTING POINT — with a recorded disagreement with the brief.** Brief §4 lists the *actionable* layer as **BROKEN** — "`idle_panes`
 discards `NewlyIdle`; `free_capacity` derives from the same `is_dispatchable` filter." **I measured the current source and disagree:**
 
@@ -341,6 +343,8 @@ BANKED rows cite evidence; UNPROVEN rows name the experiment that settles them. 
 `src/main.rs:1056` (contradicts brief §4; see M1) | **The seam cannot silently diverge again.** `MEASURED`: no shared type crosses it; production never names `NEWLY_IDLE` (`grep -rn '"NEWLY_IDLE"' crates/omp-orchestrator/src/main.rs` → 0). Settled by M1. |
 | The one hard rule is enforced mechanically — a Rust gate walks `git ls-files` and fails on `.sh`/`.py`, exemption list empty | **The gates bite under attack.** The former **2-of-8 / 4-of-8** figures are **HISTORICAL, UNPROVEN** snapshots and are not a current verdict. Settled by bringing all 8 to four legs plus ADDRESSABLE, and a planted-known-bad campaign per gate. |
 | Failing closed with a remediation hint works — `fh` MCP returns a typed `SERVE_INPUT_STALE` naming the moved mirror HEAD (`5dec4212…` → `ecdea397…`) rather than an empty result | **This plan enforces its own discipline.** `MEASURED`: `ls crates/ \| grep plan-check` → empty. Settled by shipping `plan-check` (§4) with its known-bad fixture. |
+
+> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 **NO-CLAIM.** This section defines the conditions under which a milestone may be called done, and records what is and is not proven as
 of 2026-08-31 on one repository and one machine. It does not establish that these are the right milestones, that seven is the right

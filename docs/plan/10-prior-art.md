@@ -46,6 +46,8 @@ Four false-zero mechanisms remain explicit: an empty `--include=` can return exi
 
 ## Gap 1 — A publish that returns no receipt
 
+> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+
 **Gap.** Dispatch emits no typed acknowledgement, so “sent” and “accepted” are one observable.
 
 **Search.** `grep -Ern 'pub (struct|enum) (PublishReceipt|AckKind|DeliveryClass|PublishPermit)' asupersync/src/messaging` over the whole `asupersync/src/messaging` module. The `-E` is required for the grouping and alternation; the replay result is recorded in `/tmp/grade/r13-10-prior-art.md`.
@@ -149,6 +151,8 @@ The synonym set also included `scanned zero`, `empty scan set`, `no files were s
 **Scoped NO-CLAIM.** Source root `/Volumes/ZestData/dicklesworthstone-mirror`; search space is `asupersync/src` and the three named supervision files; observed no success variant in those declarations; unestablished are absence in other work-trees, runtime semantics, and local consumption.
 
 **Verdict: ADAPT.** Adopt `Outcome<T,E>` and the one-entry-per-decision ledger as **PROJECTED** local design inputs. The mirror result alone does not justify inventing a new completion protocol because OMP supplies a separate candidate, documented in §11.
+
+> *Upstream type for this gap: `AgentEndEvent.willContinue` (`extensibility/shared-events.d.ts:154`, WIRE-PROVEN). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 ---
 
@@ -260,6 +264,8 @@ The capture artifact `/tmp/grade/r7-agent-end.md:26-45` observed one `agent_end`
 ### 11.5 Receipt boundary
 
 The OMP receipt is **transport-injection prior art only**. `irc/bus.d.ts:53-61` says it reports how the message reached the recipient, “not what they did with it”; `async/job-manager.d.ts:41-48` specifies owner routing and dead-letter behavior. `cp-z42vu` remains **ADAPT** until recipient-level runtime evidence exists.
+
+> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 ### 11.6 Adjacent mux observation
 

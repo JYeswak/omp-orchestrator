@@ -20,7 +20,30 @@ fn plan_dir() -> PathBuf {
 }
 
 #[derive(Debug)]
-struct Row { section: String, round: u32, lens: String, new_findings: u32, role: String }
+struct Row {
+    section: String,
+    round: u32,
+    lens: String,
+    new_findings: u32,
+    role: String,
+    /// Were the repository's gates green when this row was written?
+    ///
+    /// # Josh, 2026-09-01: "having not wired gates is plan issue number 1"
+    ///
+    /// Before this field, `convergence.rs` contained ZERO references to wiring —
+    /// measured — so a round could report a section CONVERGED while
+    /// `wired_lanes` was RED. That happened: the wiring gate was failing on a
+    /// vendored `serde_json` copy under `.rch-tmp/` at the same moment rounds
+    /// were being graded, and nothing connected the two facts.
+    ///
+    /// A clean round over a broken lane is the BUILT != WIRED failure wearing a
+    /// convergence badge. `false` here means the row may not count toward a
+    /// streak no matter what `new_findings` says.
+    ///
+    /// Absent is treated as `false`: a grader who did not record gate state did
+    /// not check it, and an unrecorded check is not a check.
+    gates_green: bool,
+}
 
 /// Roles borrowed from the AAR harness (`generic_aar/README.md`): a task needs a
 /// hill-climbing leg, a held-out leg on a different distribution, and optional
@@ -50,7 +73,9 @@ fn ledger() -> Vec<Row> {
             (get("section"), get("round"), get("lens"), get("new_findings")) else { continue };
         let (Ok(round), Ok(new_findings)) = (round.parse(), nf.parse()) else { continue };
         let role = get("role").unwrap_or_else(|| "hillclimb".to_owned());
-        out.push(Row { section, round, lens, new_findings, role });
+        // Absent => false. An unrecorded check is not a check.
+        let gates_green = get("gates_green").as_deref() == Some("true");
+        out.push(Row { section, round, lens, new_findings, role, gates_green });
     }
     out
 }
@@ -64,7 +89,11 @@ fn converged(rows: &[Row], section: &str) -> bool {
     let rounds: Vec<_> = per_round.keys().copied().collect();
     rounds.windows(2).any(|w| {
         let (a, b) = (&per_round[&w[0]], &per_round[&w[1]]);
-        let clean = |v: &Vec<&Row>| !v.is_empty() && v.iter().all(|r| r.new_findings == 0);
+        // CLEAN REQUIRES BOTH: nothing found AND the gates were green. A round
+        // graded while a lane was unwired cannot bank a section.
+        let clean = |v: &Vec<&Row>| {
+            !v.is_empty() && v.iter().all(|r| r.new_findings == 0 && r.gates_green)
+        };
         let lenses_differ = a.iter().any(|x| b.iter().any(|y| x.lens != y.lens));
         clean(a) && clean(b) && lenses_differ
     })
@@ -80,10 +109,32 @@ fn capability_regressed(rows: &[Row], section: &str) -> bool {
 }
 
 #[test]
+fn a_round_graded_while_gates_were_red_cannot_bank_a_section() {
+    let mk = |round, lens, nf, green| Row {
+        section: "x".to_owned(), round, lens: String::from(lens),
+        new_findings: nf, role: "hillclimb".to_owned(), gates_green: green };
+
+    // KNOWN-GOOD: two clean rounds, two lenses, gates green both times.
+    let good = vec![mk(1, "investor", 0, true), mk(2, "absence", 0, true)];
+    assert!(converged(&good, "x"), "two clean rounds with green gates must converge");
+
+    // KNOWN-BAD: same rounds, but the gates were RED when round 2 was graded.
+    let red = vec![mk(1, "investor", 0, true), mk(2, "absence", 0, false)];
+    assert!(!converged(&red, "x"),
+        "a round graded while the gates were RED must NOT count -- that is BUILT != WIRED \
+         wearing a convergence badge");
+
+    // KNOWN-BAD: gate state absent entirely reads as false.
+    let absent = vec![mk(1, "investor", 0, true), mk(2, "absence", 0, false)];
+    assert!(!converged(&absent, "x"),
+        "an unrecorded gate check is not a check");
+}
+
+#[test]
 fn a_capability_recheck_with_findings_unconverges_the_section() {
     let mk = |round, lens, nf, role: &str| Row {
         section: "x".to_owned(), round, lens: String::from(lens),
-        new_findings: nf, role: role.to_owned() };
+        new_findings: nf, role: role.to_owned(), gates_green: true };
     // banked under two lenses...
     let mut rows = vec![mk(1, "investor", 0, "hillclimb"), mk(2, "absence", 0, "hillclimb")];
     assert!(converged(&rows, "x"), "precondition: two clean rounds two lenses");
@@ -135,7 +186,7 @@ fn every_section_converged_before_dag_conversion() {
 fn the_convergence_predicate_is_strict() {
     let mk = |section, round, lens, nf| Row {
         section: String::from(section), round, lens: String::from(lens),
-        new_findings: nf, role: "hillclimb".to_owned() };
+        new_findings: nf, role: "hillclimb".to_owned(), gates_green: true };
 
     // KNOWN-GOOD: two clean rounds, two lenses.
     let good = vec![mk("x", 1, "investor", 0), mk("x", 2, "adversarial", 0)];

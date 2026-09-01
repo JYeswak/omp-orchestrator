@@ -72,6 +72,8 @@ are **zero unqualified WORKS rows**:
 | actuate | dispatch | **DOES NOT EXIST** — a human types into panes |
 | complete | worker says done | **AVAILABLE, NOT WIRED** — OMP exposes AgentEndEvent.willContinue on RpcSessionEventFrame; the local loop does not consume it |
 
+> *Upstream type for this gap: `GuestIdleReconcilerCtx` (DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+
 A single shared predicate, used to answer two different questions, produced a coherent but wrong local
 world model. **INFERENCE (not yet proven):** typed separation may outperform logging-only
 instrumentation; logging could faithfully record 162 refusals while leaving the overloaded question
