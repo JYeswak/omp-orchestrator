@@ -566,7 +566,7 @@ return a typed refusal. NUMBERS.toml and SCHEMAS.toml are necessary supporting g
 complete F2/F3/epistemic gate.
 
 **F5 NUMBERS.** S2 may reuse the existing plan_sections, no_claim_blocks, and current registry
-figures only when the prose names their NUMBERS.tomL keys. It claims no new plan-size, effort, or
+figures only when the prose names their NUMBERS.toml keys. It claims no new plan-size, effort, or
 coverage number here. A future plan count, schedule, or effort estimate is not admitted until its
 command and expectation are added to NUMBERS.toml.
 
@@ -657,4 +657,66 @@ materialize beads from a smooth but untested plan.
 **S3 refusal:** no S4 bead materialization when any section lacks the required grade evidence,
 clean-round evidence, independent-lens condition, or epistemic experiment for the finding-rate
 unknown.
+
+
+
+## 12.14 S4 — Beads DAG foundation
+
+S4 is the first stage allowed to create implementation work. It must transform an approved plan
+into a dependency-complete work graph without losing the human intent, evidence boundaries, or
+kill conditions established upstream.
+
+### FIELD 8 — FOUNDATION
+
+**F1 SCHEMA.** S4 reads the S3-approved plan, the active requirements and decision references,
+and the S1/S2/S3 foundation rows. It writes .beads/issues.jsonl through the upstream br schema,
+whose declared local contract requires id, title, and status in SCHEMAS.toml [artifacts.beads].
+Each non-trivial bead additionally requires WHAT, WHY, ACCEPTANCE, dependencies, owner, labels,
+known-BAD/known-GOOD expectations where applicable, and evidence paths under the bead standard.
+The foundation row records the materialization source revision and graph digest; no second hidden
+DAG is permitted.
+
+**F2 I/O CONTRACT.** S3 produces the approved plan and its grade evidence; the S4 materializer
+produces .beads/issues.jsonl and a dependency graph. br consumes and persists the issue records;
+bv consumes dependency/priority data for selection; omp-orchestrator consumes ready work for
+execution. A bead with no downstream consumer, owner, or executable acceptance is not materialized
+as complete work.
+
+**F3 CRATES.** br owns the upstream issue persistence and close-policy contract. Existing
+loop-queue-filter owns runtime ready-work selection and omp-orchestrator consumes the selected
+queue. No current local crate owns the complete plan-to-beads materializer, dependency-cycle
+validator, or graph-digest comparison; that mechanism must be created. Do not assign this work to
+a plausible existing crate merely because it can read the board.
+
+**F4 GATES.** The S4 foundation gate must refuse a bead missing WHAT/WHY/ACCEPTANCE, a dependency
+cycle, a parent accounting node offered as work, an unresolved requirement reference, an orphaned
+output, or a graph whose materialized digest differs from the approved plan. Its known-BAD in-tree
+specimens are a two-bead cycle and a bead with a blank acceptance section; both must produce typed
+refusals before any dispatch. The upstream br close-policy refusal remains a supporting gate, not
+the complete S4 materialization gate.
+
+**F5 NUMBERS.** S4 claims no fixed bead or edge count until the full graph is materialized. Any
+materialized bead count, dependency-edge count, leaf/root count, or graph digest must be generated
+from the same artifact and registered in NUMBERS.toml before it appears in a load-bearing claim.
+The current surface_map_rows figure is an input inventory, not an S4 DAG count.
+
+### FIELD 9 — THE EPISTEMIC LEDGER
+
+**KNOWN.** The upstream beads artifact has a declared SCHEMAS.toml row, and the journey contract
+already requires self-contained beads with testable acceptance and no cycles at docs/plan/12-journey.md:29-30.
+The current tracker artifact can be located with test -f .beads/issues.jsonl; this proves presence,
+not graph quality.
+
+**UNKNOWN.** Can the complete approved plan be materialized without losing dependencies, acceptance,
+ownership, or refusal conditions? Experiment: run a full br create dry-run from the approved graph,
+then compare bead IDs, dependency edges, acceptance hashes, and the foundation source revision
+against the materialization report. Cost: one bounded dry-run and one graph comparison before any
+worker receives a bead.
+
+**GAP.** No current local materializer proves that the approved plan and the br/bv execution graph
+are the same graph. Leaving this missing costs hidden cycle/orphan work, agents dispatched from a
+partial plan, and rework that cannot be attributed to the original human requirements.
+
+**S4 refusal:** no S5 execution dispatch while the materialized graph lacks a source digest,
+cycle-free proof, complete bead fields, named consumers, or a resolvable acceptance command.
 

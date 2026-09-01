@@ -133,3 +133,12 @@ optional  = ["evidence", "status", "degradations"]
 writer    = "S1 inception foundation"
 reader    = "S2 planning foundation and S7 validation"
 note      = "The manifest is the durable S1 boundary. Missing, ambiguous, or stale identity/capability fields refuse the next stage before any bead exists."
+
+[artifacts.numbers]
+path      = "NUMBERS.toml"
+format    = "toml-tables"
+required  = ["command", "expect", "appears"]
+optional  = ["note"]
+writer    = "journey foundation and figure owners"
+reader    = "numbers.rs and every load-bearing plan claim"
+note      = "Every numeric claim has one runnable command and expectation; LIVE figures use an explicit live boundary. Duplicate figure keys are refused by the registry gate."
