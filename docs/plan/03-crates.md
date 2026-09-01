@@ -542,3 +542,52 @@ blocked node or an extraction into a larger cut than planned. Nothing here has b
 none of these acceptance commands has ever run. The LOC total measured now is **29,512**, against
 **28,779** summed from `AGENTS.md`'s own table — a 733-line discrepancy, unreconciled, and a further
 instance of the counted-vs-stated gap this document keeps producing.
+
+---
+
+## 3.11 BLOCKER resolutions — the denominators, settled by measurement
+
+Round 13 graders `GradeCrates` and `GradeGates` independently filed BLOCKERs
+against this section and `06-gates` for the same shape: **one property carrying
+several live denominators, none declared authoritative.** Measured 2026-09-01,
+every number involved is TRUE and they measure different things.
+
+### forbid-unsafe
+
+| reading | value | what it measures |
+|---|---:|---|
+| manifests declaring `[lints.rust] unsafe_code = "forbid"` | **26 of 26** | the lint is configured |
+| source roots carrying `#![forbid(unsafe_code)]` | **25 of 26** | the attribute is in the code |
+| **union — AUTHORITATIVE** | **26 of 26** | *does this workspace forbid unsafe* |
+
+One crate carries the lint in its manifest alone; that is why 25 and 26 both
+appear and neither is wrong. `NUMBERS.toml` now declares
+`forbid_unsafe_authoritative` with the union command, so the figure re-derives.
+
+The figures this section previously carried — the brief's `16 of 22` and an
+earlier draft's `20 of 26` — are **stale, not contradictory**: both were measured
+before six crates adopted the lint. `grep -l` and `grep -c` now agree at 26.
+
+**A REVIEWER ERROR, on the record, because it is the more useful half.** Checking
+the `25 of 26` claim I ran the agent harness's grep for `forbid(unsafe_code)` and
+got **zero**, and came within one commit of filing a BLOCKER saying this section
+was false. The section was right. That grep is a Rust regex engine: `(` and `)`
+are grouping metacharacters, so the pattern matches the literal string
+`forbidunsafe_code`, which exists nowhere. It returned zero and exited zero.
+
+Scope, corrected after measuring both engines: shell `grep` through `sh -c` — the
+path every `NUMBERS.toml` figure uses — treats `(` as a literal and answers
+correctly. A planted figure with the unescaped pattern returned 64, not 0. **The
+registry was never exposed. The reviewer was.**
+
+### Extraction debt
+
+| reading | value |
+|---|---:|
+| `AGENTS.md` table, summed | 28,779 |
+| **source walk across the 20 named crates — AUTHORITATIVE** | **29,512** |
+
+A 733-line gap, and the resolution is not arithmetic: a hand-maintained table
+summed against a live walk is the defect. Registered as
+`control_plane_unextracted_loc`. §3.9 and §3.10 keep the 28,779 figure only as
+the stale table sum it is, now labelled.

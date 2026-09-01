@@ -847,3 +847,34 @@ mechanism, which is why §8 exists.
 **NO-CLAIM.** This brief records requirements and measurements. It does not establish that the plan
 satisfies them, that the measurements are complete, or that the sections listed in §5 exist yet at
 the quality bar §6 demands. Grading is a separate pass and it has not run.
+
+---
+
+## 3.8 BLOCKER resolution — the board count, and why it kept moving
+
+`GradeBrief` filed a BLOCKER: §6 requires *"every number carries the command that
+derives it"*, and this section's board counts never did. The history:
+
+| appearance | value | derivation |
+|---|---:|---|
+| stand-down snapshot prose | 75 | none |
+| its own four counts | 28+25+19+2 = **74** | none |
+| corrected fresh count | 30+23+23+3 = **79** | none |
+| per-status enumeration, 2026-09-01 | **80** | `board_total` (declared `LIVE` — the board moves hourly, so it is deliberately unpinned) |
+
+Four values, none previously re-derivable. The mechanism behind the drift is now
+visible: the fresh count enumerated **four** statuses, and the tracker carries
+**five** — `open` 12, `in_progress` 23, `blocked` 3, `closed` 41, and `grading` 1.
+A status nobody thought to count cannot appear in a hand-summed total, and its
+absence is invisible in exactly the way a missing row always is.
+
+`board_total` was already declared `LIVE` before this resolution, and appending a
+second block with the same key made the registry's own duplicate-key gate fail —
+21 declarations, 20 unique. That gate exists because this is a shared checkout
+with concurrent writers, and it caught a concurrent append by its author within
+a minute. The duplicate was removed; the `LIVE` declaration stands, because
+pinning a number that moves hourly would drift by design.
+
+The `75` and `74` were not
+a typo and a correction — **they were two different hand-sums of an
+under-enumerated set**, which is why correcting one never fixed the other.

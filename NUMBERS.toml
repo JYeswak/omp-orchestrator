@@ -127,3 +127,25 @@ command  = "ls -1 crates | wc -l"
 expect   = "26"
 appears  = ["docs/plan/03-crates.md", "AGENTS.md", "docs/PLAN.md"]
 note     = "duplicate of workspace_crates by design: 03-crates §3.9 reasons about the RELATIONSHIP between this and unextracted_crates, so both must be pinned or the ratio silently rots."
+
+# -- BLOCKER RESOLUTIONS, round 13. Three graders independently flagged one
+# property carrying multiple live denominators. Every number was TRUE; none was
+# declared authoritative, so a reader could not tell which to quote. Registering
+# the authoritative reading is the fix -- deleting the others would erase real
+# information about where the lint lives.
+
+[figures.forbid_unsafe_authoritative]
+command  = "u=0; for d in crates/*/; do if grep -q 'unsafe_code = \"forbid\"' \"$d/Cargo.toml\" 2>/dev/null || grep -rq 'forbid\\(unsafe_code\\)' \"$d\" --include='*.rs' 2>/dev/null; then u=$((u+1)); fi; done; echo $u"
+expect   = "26"
+note     = "AUTHORITATIVE for 'does this workspace forbid unsafe': the UNION of manifest lint and source-root attribute. 26 of 26. The manifest-only reading is also 26; the source-root-only reading is 25 (one crate carries the lint in its manifest alone). 06-gates cites 16/22 from the brief and 20/26 from an earlier draft -- both are stale, measured before six crates adopted the lint."
+
+[figures.control_plane_unextracted_loc]
+command  = "tot=0; for c in fleet-truth oracle-compare oracle-pane-state-differential ntm-fleet-monitor fleet-monitor loop-driver fast-dispatch omp-idle-dispatch pane-dispatch-ready loop-tick fleet-reconcile wired-but-inert-guard verify-dispatch pane-truth reap-finished-panes tick-dispatch loop-coverage dispatcher-deadman refill-idle-panes pane-oracle-diff; do d=/Users/josh/Developer/control-plane/crates/$c; [ -d \"$d\" ] && tot=$((tot+$(find \"$d\" -name '*.rs' -type f -exec cat {} + 2>/dev/null | wc -l))); done; echo $tot"
+expect   = "29512"
+note     = "AUTHORITATIVE extraction debt: 29,512 LOC across exactly 20 named crates, measured by walking the source. The 28,779 figure in 03-crates is AGENTS.md's own table SUM, which is stale by 733 lines. A hand-maintained table summed against a live walk is the defect; the walk wins."
+
+[figures.ipg6_root_symbols]
+command  = "R=/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types; tot=0; for r in eval if-bench hindsight debug dap autoresearch autolearn advisor; do [ -d \"$R/$r\" ] && tot=$((tot+$(grep -rhoE '^export (declare )?(type|interface|const|function|class|enum) [A-Za-z_]+' \"$R/$r\" --include='*.d.ts' 2>/dev/null | wc -l))); done; echo $tot"
+expect   = "621"
+note     = "The ipg.6 eight-root symbol total, with the counting rule DECLARED: top-level `export [declare] {type,interface,const,function,class,enum} NAME` in *.d.ts. 12-journey previously carried 533 in prose against a table summing to 503, and this command answers 621 -- THREE numbers, none of which shipped a derivation, so none was falsifiable. The gap is concentrated: `eval` alone is 207 here against the table's 95. Registering the rule does not make 621 more true than 533; it makes it CHECKABLE, which the other two never were."
+

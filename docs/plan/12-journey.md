@@ -1124,7 +1124,9 @@ Neither has been built. Both are recorded here.
 > **ipg.6**: *Wave VERIFY. Skill /brennerbot-with-ntm — a session is a machine for deleting
 > hypothesis space cheaply. Prefer refuters over supporters; no falsifier means no session.*
 
-**Swept 2026-09-01.** Eight type roots, 66 files, 488KB, 533 exported symbols, walked to symbol
+**Swept 2026-09-01.** Eight type roots, 66 files, 488KB, **621 exported symbols** by the counting
+rule now declared in `NUMBERS.toml` as `ipg6_root_symbols` (top-level
+`export [declare] {type,interface,const,function,class,enum} NAME` in `*.d.ts`), walked to symbol
 level. All eight are agent-plane quality-improvement or debugging features: eval kernels,
 instruction-following benchmarks, memory retrieval, debug UIs, a full DAP client, self-improvement
 research, self-learning, and an advisory review panel. None crosses the process boundary into our
@@ -1375,3 +1377,25 @@ standard for OUR hooks, and no OMP surface provides an alternative that would by
 The closest crossing point is the `config` surface: if OMP's settings could register hooks, the
 config→hook path would be a bypass of /hook-certification. Measured: settings-schema.d.ts contains
 `showHookStatus` (a display toggle) but no hook-registration API. The bypass does not exist.
+
+---
+
+### BLOCKER resolution — the ipg.6 symbol count had three values and no rule
+
+`GradeJourney` filed a BLOCKER: prose said **533**, the table above it sums to
+**503**. Re-measuring produced a third answer, **621**.
+
+Three numbers, and the defect is not arithmetic — **none of them shipped a
+derivation**, so none could be checked and none could be wrong. The gap is
+concentrated rather than spread: `eval` counts 207 under an explicit rule against
+the table's 95, which is 112 of the 118-symbol spread on its own.
+
+Registered as `ipg6_root_symbols` with the counting rule stated in the command.
+That does not make 621 truer than 533 — it makes it **falsifiable**, which is the
+only property the other two lacked. If the rule is wrong, the command is where to
+argue with it.
+
+**This is the section's own §12.10 rule applied to the section:** *"every number
+carries the command that derives it."* Three consecutive rounds graded this
+section and none caught it, because a reader comparing prose to a table sees two
+numbers and picks one. Only re-running a command produces a third.

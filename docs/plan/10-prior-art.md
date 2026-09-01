@@ -290,3 +290,48 @@ The mux artifact records six workers and 18/18 correct socket probes returning `
 **Done signal**: write an immutable result artifact containing `{gap_id, command, input, source_root, source_revision, result, verdict, no_claim}`; record its SHA-256; exit `0` only when the artifact exists and verdict is `ADOPT`, `ADAPT`, or `REJECT`, and exit non-zero on missing artifact, unreadable source, or unscoped negative.
 
 **Out of scope for this section:** implementing adopted mechanisms, running build/gate verification, and reconciling `NUMBERS.toml` are implementation/orchestrator tasks; this section records prior art and evidence boundaries only.
+
+---
+
+## 10.9 The mirror paid — asupersync already solved three things we invented worse
+
+`ipg.14` (`%1408`), first verified payoff from mining the local Dicklesworthstone
+mirror rather than reasoning from memory. **asupersync is already our binding
+dependency**, so this is not a discovery of prior art in the abstract — it is
+finding the answer inside a crate the workspace already compiles against.
+
+| ours | theirs | status |
+|---|---|---|
+| ad-hoc ack strings across three dialects | **`AckKind`** — typed ack boundary | we invented worse |
+| *(nothing)* | **`DeliveryClass`** — five semantic delivery classes | **we lack this entirely** |
+| the pending-dispatch fence, hand-rolled | **`PublishPermit`** — two-phase reservation with `Drop`-abort | solved upstream |
+
+`PublishPermit` is the sharpest: a two-phase reservation whose `Drop` aborts the
+claim is *exactly* the pending-dispatch fence this session built by hand, and the
+`Drop` half is the part ours does not have — our marker survives the process that
+wrote it, which is the `C112` ownership defect (an ownership claim must name
+something that dies with the thing it owns).
+
+**Recorded as a vocabulary mapping, not a type import.** Adoption requires
+restructuring the dispatch path around the asupersync fabric, which is a topology
+change, not a dependency line. Naming the mapping is free; taking it is not.
+
+### The positive control PASSED, which is why this row is trustworthy
+
+Six gaps were mined; five carry mirror citations (cost telemetry via OMP's
+`telemetry-export` OTLP surface, obligation-ledger for the claim wire,
+`scope.spawn` readers) and **two came back genuinely NOT FOUND** —
+`path-literal-guard` has no upstream analogue, and neither does the cargo-shim
+problem.
+
+Every prior `ipg` wave reported a FAILED positive control, correctly diagnosed as
+the agent-plane boundary holding. This one **found a real absence**, which is the
+control working in the direction that matters: a search that can only confirm is
+not a search. Seven waves of "not ours" plus one honest "not found anywhere" is a
+mapping with a demonstrated negative.
+
+**This is the seventh instance of the pattern** — after `AgentEndEvent`,
+`AdvisorSeverity`, `modes`, `session`, `task`, `slash-commands`, `dap`. The
+distinguishing feature here is that the substrate is one we already depend on and
+build against, which removes the usual excuse that adoption means a new
+dependency. It does not: it means reading the crate we already link.

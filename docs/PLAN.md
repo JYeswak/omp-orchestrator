@@ -15,7 +15,7 @@ mtime to satisfy the freshness gate (§12.11 records the author doing exactly th
 > more named gaps have upstream types; an eighth root (`dist/types/plan-mode/`) surfaced later.
 
 > **2. Convergence has been retracted once.** Rounds 8–9 banked 3 sections under a two-lens rule.
-> Round 10 graded with readers who had never seen the ledger and all three fell — 204 findings
+> Round 10 graded with readers who had never seen the ledger and all three fell — 268 findings
 > across 5 rounds. Rounds 8–9 measured the graders. Fresh eyes is now a clause of the rule.
 
 > **3. There is no external-validation loop.** Every gate suite here is internal — us checking us.
@@ -897,6 +897,37 @@ mechanism, which is why §8 exists.
 **NO-CLAIM.** This brief records requirements and measurements. It does not establish that the plan
 satisfies them, that the measurements are complete, or that the sections listed in §5 exist yet at
 the quality bar §6 demands. Grading is a separate pass and it has not run.
+
+---
+
+## 3.8 BLOCKER resolution — the board count, and why it kept moving
+
+`GradeBrief` filed a BLOCKER: §6 requires *"every number carries the command that
+derives it"*, and this section's board counts never did. The history:
+
+| appearance | value | derivation |
+|---|---:|---|
+| stand-down snapshot prose | 75 | none |
+| its own four counts | 28+25+19+2 = **74** | none |
+| corrected fresh count | 30+23+23+3 = **79** | none |
+| per-status enumeration, 2026-09-01 | **80** | `board_total` (declared `LIVE` — the board moves hourly, so it is deliberately unpinned) |
+
+Four values, none previously re-derivable. The mechanism behind the drift is now
+visible: the fresh count enumerated **four** statuses, and the tracker carries
+**five** — `open` 12, `in_progress` 23, `blocked` 3, `closed` 41, and `grading` 1.
+A status nobody thought to count cannot appear in a hand-summed total, and its
+absence is invisible in exactly the way a missing row always is.
+
+`board_total` was already declared `LIVE` before this resolution, and appending a
+second block with the same key made the registry's own duplicate-key gate fail —
+21 declarations, 20 unique. That gate exists because this is a shared checkout
+with concurrent writers, and it caught a concurrent append by its author within
+a minute. The duplicate was removed; the `LIVE` declaration stands, because
+pinning a number that moves hourly would drift by design.
+
+The `75` and `74` were not
+a typo and a correction — **they were two different hand-sums of an
+under-enumerated set**, which is why correcting one never fixed the other.
 
 
 ---
@@ -3046,6 +3077,55 @@ blocked node or an extraction into a larger cut than planned. Nothing here has b
 none of these acceptance commands has ever run. The LOC total measured now is **29,512**, against
 **28,779** summed from `AGENTS.md`'s own table — a 733-line discrepancy, unreconciled, and a further
 instance of the counted-vs-stated gap this document keeps producing.
+
+---
+
+## 3.11 BLOCKER resolutions — the denominators, settled by measurement
+
+Round 13 graders `GradeCrates` and `GradeGates` independently filed BLOCKERs
+against this section and `06-gates` for the same shape: **one property carrying
+several live denominators, none declared authoritative.** Measured 2026-09-01,
+every number involved is TRUE and they measure different things.
+
+### forbid-unsafe
+
+| reading | value | what it measures |
+|---|---:|---|
+| manifests declaring `[lints.rust] unsafe_code = "forbid"` | **26 of 26** | the lint is configured |
+| source roots carrying `#![forbid(unsafe_code)]` | **25 of 26** | the attribute is in the code |
+| **union — AUTHORITATIVE** | **26 of 26** | *does this workspace forbid unsafe* |
+
+One crate carries the lint in its manifest alone; that is why 25 and 26 both
+appear and neither is wrong. `NUMBERS.toml` now declares
+`forbid_unsafe_authoritative` with the union command, so the figure re-derives.
+
+The figures this section previously carried — the brief's `16 of 22` and an
+earlier draft's `20 of 26` — are **stale, not contradictory**: both were measured
+before six crates adopted the lint. `grep -l` and `grep -c` now agree at 26.
+
+**A REVIEWER ERROR, on the record, because it is the more useful half.** Checking
+the `25 of 26` claim I ran the agent harness's grep for `forbid(unsafe_code)` and
+got **zero**, and came within one commit of filing a BLOCKER saying this section
+was false. The section was right. That grep is a Rust regex engine: `(` and `)`
+are grouping metacharacters, so the pattern matches the literal string
+`forbidunsafe_code`, which exists nowhere. It returned zero and exited zero.
+
+Scope, corrected after measuring both engines: shell `grep` through `sh -c` — the
+path every `NUMBERS.toml` figure uses — treats `(` as a literal and answers
+correctly. A planted figure with the unescaped pattern returned 64, not 0. **The
+registry was never exposed. The reviewer was.**
+
+### Extraction debt
+
+| reading | value |
+|---|---:|
+| `AGENTS.md` table, summed | 28,779 |
+| **source walk across the 20 named crates — AUTHORITATIVE** | **29,512** |
+
+A 733-line gap, and the resolution is not arithmetic: a hand-maintained table
+summed against a live walk is the defect. Registered as
+`control_plane_unextracted_loc`. §3.9 and §3.10 keep the 28,779 figure only as
+the stale table sum it is, now labelled.
 
 
 ---
@@ -5988,6 +6068,51 @@ The mux artifact records six workers and 18/18 correct socket probes returning `
 
 **Out of scope for this section:** implementing adopted mechanisms, running build/gate verification, and reconciling `NUMBERS.toml` are implementation/orchestrator tasks; this section records prior art and evidence boundaries only.
 
+---
+
+## 10.9 The mirror paid — asupersync already solved three things we invented worse
+
+`ipg.14` (`%1408`), first verified payoff from mining the local Dicklesworthstone
+mirror rather than reasoning from memory. **asupersync is already our binding
+dependency**, so this is not a discovery of prior art in the abstract — it is
+finding the answer inside a crate the workspace already compiles against.
+
+| ours | theirs | status |
+|---|---|---|
+| ad-hoc ack strings across three dialects | **`AckKind`** — typed ack boundary | we invented worse |
+| *(nothing)* | **`DeliveryClass`** — five semantic delivery classes | **we lack this entirely** |
+| the pending-dispatch fence, hand-rolled | **`PublishPermit`** — two-phase reservation with `Drop`-abort | solved upstream |
+
+`PublishPermit` is the sharpest: a two-phase reservation whose `Drop` aborts the
+claim is *exactly* the pending-dispatch fence this session built by hand, and the
+`Drop` half is the part ours does not have — our marker survives the process that
+wrote it, which is the `C112` ownership defect (an ownership claim must name
+something that dies with the thing it owns).
+
+**Recorded as a vocabulary mapping, not a type import.** Adoption requires
+restructuring the dispatch path around the asupersync fabric, which is a topology
+change, not a dependency line. Naming the mapping is free; taking it is not.
+
+### The positive control PASSED, which is why this row is trustworthy
+
+Six gaps were mined; five carry mirror citations (cost telemetry via OMP's
+`telemetry-export` OTLP surface, obligation-ledger for the claim wire,
+`scope.spawn` readers) and **two came back genuinely NOT FOUND** —
+`path-literal-guard` has no upstream analogue, and neither does the cargo-shim
+problem.
+
+Every prior `ipg` wave reported a FAILED positive control, correctly diagnosed as
+the agent-plane boundary holding. This one **found a real absence**, which is the
+control working in the direction that matters: a search that can only confirm is
+not a search. Seven waves of "not ours" plus one honest "not found anywhere" is a
+mapping with a demonstrated negative.
+
+**This is the seventh instance of the pattern** — after `AgentEndEvent`,
+`AdvisorSeverity`, `modes`, `session`, `task`, `slash-commands`, `dap`. The
+distinguishing feature here is that the substrate is one we already depend on and
+build against, which removes the usual excuse that adoption means a new
+dependency. It does not: it means reading the crate we already link.
+
 
 ---
 
@@ -7639,7 +7764,9 @@ Neither has been built. Both are recorded here.
 > **ipg.6**: *Wave VERIFY. Skill /brennerbot-with-ntm — a session is a machine for deleting
 > hypothesis space cheaply. Prefer refuters over supporters; no falsifier means no session.*
 
-**Swept 2026-09-01.** Eight type roots, 66 files, 488KB, 533 exported symbols, walked to symbol
+**Swept 2026-09-01.** Eight type roots, 66 files, 488KB, **621 exported symbols** by the counting
+rule now declared in `NUMBERS.toml` as `ipg6_root_symbols` (top-level
+`export [declare] {type,interface,const,function,class,enum} NAME` in `*.d.ts`), walked to symbol
 level. All eight are agent-plane quality-improvement or debugging features: eval kernels,
 instruction-following benchmarks, memory retrieval, debug UIs, a full DAP client, self-improvement
 research, self-learning, and an advisory review panel. None crosses the process boundary into our
@@ -7890,6 +8017,28 @@ standard for OUR hooks, and no OMP surface provides an alternative that would by
 The closest crossing point is the `config` surface: if OMP's settings could register hooks, the
 config→hook path would be a bypass of /hook-certification. Measured: settings-schema.d.ts contains
 `showHookStatus` (a display toggle) but no hook-registration API. The bypass does not exist.
+
+---
+
+### BLOCKER resolution — the ipg.6 symbol count had three values and no rule
+
+`GradeJourney` filed a BLOCKER: prose said **533**, the table above it sums to
+**503**. Re-measuring produced a third answer, **621**.
+
+Three numbers, and the defect is not arithmetic — **none of them shipped a
+derivation**, so none could be checked and none could be wrong. The gap is
+concentrated rather than spread: `eval` counts 207 under an explicit rule against
+the table's 95, which is 112 of the 118-symbol spread on its own.
+
+Registered as `ipg6_root_symbols` with the counting rule stated in the command.
+That does not make 621 truer than 533 — it makes it **falsifiable**, which is the
+only property the other two lacked. If the rule is wrong, the command is where to
+argue with it.
+
+**This is the section's own §12.10 rule applied to the section:** *"every number
+carries the command that derives it."* Three consecutive rounds graded this
+section and none caught it, because a reader comparing prose to a table sees two
+numbers and picks one. Only re-running a command produces a third.
 
 
 ---
