@@ -745,6 +745,82 @@ fn read_pending_dispatch(config: &Config) -> Result<Option<String>, String> {
     }
 }
 
+/// Josh's condition on the tick loop, recorded as `HD-0001` in `docs/decisions.jsonl`:
+///
+/// > *"tick loop continues as long as we're keeping our docs up to date"*
+///
+/// That is a **buyer condition**, not a preference, so it is a precondition on the
+/// tick rather than a note in a plan. The loop refuses to dispatch while the
+/// artifact-of-record is stale against its sources.
+///
+/// # Why this is the loop's business and not CI's
+///
+/// `docs/PLAN.md` was measured 190 minutes and 16 commits stale on 2026-09-01,
+/// while four grading rounds ran against it. CI would have caught it on the next
+/// push; the tick loop dispatches many times between pushes, and every dispatch in
+/// that window sent an agent to work from an assembly that did not contain the last
+/// four rounds of findings.
+///
+/// # The bypass this deliberately does not have
+///
+/// `assembly_freshness.rs` compares **mtimes**, and the author of that gate
+/// bypassed it within a minute by re-stamping `PLAN.md` with `os.utime` — green on
+/// a file that did not contain the section just written (§12.11). Comparing mtimes
+/// here would inherit that hole, so this compares **content**: every section's
+/// bytes must appear inside the assembly. Touching a timestamp cannot satisfy it;
+/// only re-assembling can.
+fn docs_are_stale(config: &Config) -> Result<Option<String>, String> {
+    let plan = config.repo.join("docs/PLAN.md");
+    let dir = config.repo.join("docs/plan");
+    let Ok(assembly) = fs::read_to_string(&plan) else {
+        // No assembly at all is not a stale assembly — say which it is.
+        return Ok(Some(format!("assembly absent path={}", plan.display())));
+    };
+
+    let Ok(entries) = fs::read_dir(&dir) else {
+        return Err(format!("DOCS_STALE section dir unreadable path={}", dir.display()));
+    };
+
+    let mut scanned = 0usize;
+    let mut missing = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|s| s.to_str()) else { continue };
+        if !name.ends_with(".md") || !name.starts_with(|c: char| c.is_ascii_digit()) {
+            continue;
+        }
+        let Ok(section) = fs::read_to_string(&path) else { continue };
+        scanned += 1;
+        // Compare a stable interior slice, not the whole file: the assembler trims
+        // trailing whitespace, so an exact whole-file match would false-positive.
+        let body = section.trim();
+        let probe: String = body.chars().rev().take(240).collect::<Vec<_>>()
+            .into_iter().rev().collect();
+        if !probe.trim().is_empty() && !assembly.contains(probe.trim()) {
+            missing.push(name.to_owned());
+        }
+    }
+
+    // ANTI-VACUITY: zero sections scanned reports identically to a fresh assembly.
+    if scanned == 0 {
+        return Err(format!(
+            "DOCS_STALE scanned zero sections in {} — an empty scan set cannot distinguish \
+             fresh from broken",
+            dir.display()
+        ));
+    }
+
+    if missing.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(format!(
+            "{} of {scanned} sections are not in the assembly: {}",
+            missing.len(),
+            missing.join(",")
+        )))
+    }
+}
+
 fn write_dispatch_intent(config: &Config, pane: &str, bead: &str) -> Result<(), String> {
     if let Some(parent) = config.pending_dispatch.parent() {
         fs::create_dir_all(parent).map_err(|error| {
@@ -805,6 +881,21 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         let detail = format!(
             "DISPATCH_RETRY_BLOCKED owner=josh next_action=inspect-or-clear-pending-dispatch marker={} detail={intent}",
             config.pending_dispatch.display()
+        );
+        println!("{detail}");
+        return Ok(());
+    }
+
+    // HD-0001 (docs/decisions.jsonl): "tick loop continues as long as we're keeping
+    // our docs up to date". A buyer condition, so it gates the tick — and it is
+    // checked AFTER the dispatch fence and BEFORE observation, because a stale
+    // assembly makes every downstream dispatch send an agent to work from old
+    // knowledge, which is the failure this condition exists to prevent.
+    if let Some(why) = docs_are_stale(config)? {
+        write_heartbeat(config, tick, "DOCS_STALE", &why)?;
+        let detail = format!(
+            "DOCS_STALE owner=josh next_action=re-assemble-docs/PLAN.md detail={why} \
+             authority=HD-0001"
         );
         println!("{detail}");
         return Ok(());

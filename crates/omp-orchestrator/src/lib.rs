@@ -261,9 +261,55 @@ impl GateCensus {
     }
 }
 
+/// Does the INSTALLED hook actually invoke this gate?
+///
+/// The hook is a compiled binary, so the only thing readable from outside is its
+/// string table. That is a weak probe and it is named as weak: a gate name may
+/// appear in a diagnostic message without ever being executed. It is still
+/// strictly better than a hardcoded verdict, because it changes when the hook
+/// changes.
+///
+/// A stronger probe — running the hook against a planted bad input and observing
+/// which gate refuses — is what `no-shell-gate` does for itself and is unbuilt
+/// here.
+fn hook_invokes(hook_path: &Path, gate: &str) -> bool {
+    let Ok(bytes) = std::fs::read(hook_path) else { return false };
+    // Scan the raw bytes: the hook may be Mach-O, a script, or a shim.
+    bytes
+        .windows(gate.len())
+        .any(|w| w == gate.as_bytes())
+}
+
+/// Is this gate declared in a workflow that a remote could run?
+///
+/// Declaration is not execution — `has_remote` is checked separately at the call
+/// site, and a declared-but-unrunnable gate reports Unreachable with that as the
+/// stated reason rather than being silently lumped in with "no caller at all".
+/// Those are different repository states and the operator needs to tell them apart.
+fn workflow_invokes(repo_root: &Path, gate: &str) -> bool {
+    let dir = repo_root.join(".github/workflows");
+    let Ok(entries) = std::fs::read_dir(&dir) else { return false };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) != Some("yml") {
+            continue;
+        }
+        if let Ok(text) = std::fs::read_to_string(&path) {
+            if text.contains(&format!("-p {gate}")) || text.contains(&format!("{gate}:")) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+
 /// Classify each known gate by whether its TRIGGER exists on this machine.
-/// Trigger reachability, NOT caller existence: a caller in gate.yml is not a
-/// trigger when there is no remote to run the workflow on.
+///
+/// Trigger reachability, NOT caller existence: a caller in `gate.yml` is not a
+/// trigger when there is no remote to run the workflow on. This repository has
+/// **zero git remotes** (measured 2026-09-01), which is why three CI-only gates
+/// report Unreachable — correctly. A workflow nothing can run is not a gate.
 pub fn census_gates(repo_root: &Path) -> GateCensus {
     let hook_path = repo_root.join(".git/hooks/pre-commit");
     let has_remote = std::process::Command::new("git")
@@ -303,12 +349,38 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
         });
     }
 
-    // kernel-bypass-gate, pre-delete-citation-check: no caller, no manifest
-    // dep, no trigger of any kind.
+    // kernel-bypass-gate, pre-delete-citation-check.
+    //
+    // These two rows were HARDCODED to `Unreachable` with the literal reason
+    // "no caller, no manifest dependency, no trigger". That was true when written
+    // and it is not a measurement: the census returned the same verdict no matter
+    // what the repository contained, so **no amount of wiring could ever make the
+    // supervisor tick**. Both were in fact wired into `.github/workflows/gate.yml`
+    // on 2026-08-31 and the census kept saying otherwise.
+    //
+    // A frozen snapshot presented as a census is the defect class this whole
+    // repository keeps finding — a hand-maintained list masquerading as a probe.
+    // These now measure the same two triggers every other gate is measured on:
+    // the installed hook, and a workflow that a remote could actually run.
     for gate in ["kernel-bypass-gate", "pre-delete-citation-check"] {
+        let in_hook = hook_invokes(&hook_path, gate);
+        let in_workflow = workflow_invokes(repo_root, gate);
         rows.push(GateCensusRow {
             gate: gate.into(),
-            reachability: GateReachability::Unreachable { reason: "no caller, no manifest dependency, no trigger".into() },
+            reachability: if in_hook {
+                GateReachability::Reachable { trigger: ".git/hooks/pre-commit".into() }
+            } else if in_workflow && has_remote {
+                GateReachability::Reachable { trigger: ".github/workflows/gate.yml".into() }
+            } else if in_workflow {
+                GateReachability::Unreachable {
+                    reason: "declared in gate.yml but no git remote: the workflow can never execute"
+                        .into(),
+                }
+            } else {
+                GateReachability::Unreachable {
+                    reason: "not invoked by the installed hook and not declared in gate.yml".into(),
+                }
+            },
         });
     }
 
@@ -1362,6 +1434,87 @@ mod binding_tests {
             applicable(before.clone(), "omp-orchestrator", &panes, &q(0)),
             before,
             "applicable() must not manufacture authorization"
+        );
+    }
+}
+
+#[cfg(test)]
+mod census_is_measured_not_frozen {
+    use super::*;
+
+    /// KNOWN-BAD: a gate absent from both triggers must be Unreachable, and the
+    /// reason must say WHICH absence — "not invoked and not declared" is a
+    /// different repository state from "declared but no remote", and an operator
+    /// fixes them differently.
+    #[test]
+    fn an_absent_gate_reports_which_absence() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".git/hooks")).unwrap();
+        std::fs::write(dir.path().join(".git/hooks/pre-commit"), b"no gates here").unwrap();
+
+        let census = census_gates(dir.path());
+        let row = census
+            .rows
+            .iter()
+            .find(|r| r.gate == "kernel-bypass-gate")
+            .expect("kernel-bypass-gate must appear in the census");
+        match &row.reachability {
+            GateReachability::Unreachable { reason } => assert!(
+                reason.contains("not invoked") || reason.contains("no git remote"),
+                "the reason must name which absence, got: {reason}"
+            ),
+            other => panic!("expected Unreachable for an unwired gate, got {other:?}"),
+        }
+    }
+
+    /// The row must MOVE when the repository changes. This is the whole point:
+    /// the previous implementation hardcoded Unreachable and returned it no
+    /// matter what the tree contained, so wiring a gate could never make the
+    /// supervisor tick.
+    #[test]
+    fn wiring_a_gate_into_the_hook_changes_its_verdict() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".git/hooks")).unwrap();
+        let hook = dir.path().join(".git/hooks/pre-commit");
+
+        std::fs::write(&hook, b"nothing").unwrap();
+        let before = census_gates(dir.path());
+        let before_row = before
+            .rows
+            .iter()
+            .find(|r| r.gate == "pre-delete-citation-check")
+            .unwrap();
+        assert!(
+            !before_row.reachability.is_reachable(),
+            "precondition: unwired before"
+        );
+
+        // Now the hook mentions it — the only thing readable from a compiled hook.
+        std::fs::write(&hook, b"invoking pre-delete-citation-check now").unwrap();
+        let after = census_gates(dir.path());
+        let after_row = after
+            .rows
+            .iter()
+            .find(|r| r.gate == "pre-delete-citation-check")
+            .unwrap();
+        assert!(
+            after_row.reachability.is_reachable(),
+            "a gate present in the installed hook MUST report Reachable — if this fails the \
+             census is frozen again"
+        );
+    }
+
+    /// ANTI-VACUITY: an empty census reports identically to an all-reachable one
+    /// through `all_reachable()`, which returns true for zero rows.
+    #[test]
+    fn the_census_is_never_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let census = census_gates(dir.path());
+        assert!(
+            census.rows.len() >= 6,
+            "census produced {} rows on a bare directory; all_reachable() returns true for an \
+             empty census, so a collapsed scan reads as a green fleet",
+            census.rows.len()
         );
     }
 }
