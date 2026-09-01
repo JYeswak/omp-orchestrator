@@ -25,8 +25,7 @@ Mn — <one-sentence goal, future tense>
 An observable is **admissible** only if it (1) is a command, not a description of a condition, (2) is runnable by someone who did not
 build the thing — no undocumented environment, no "and then check the pane", (3) reads without interpretation, and (4) **fails on the
 pre-milestone state.** Property 4 is the anti-vacuity leg from §06 applied to project management, and we owe it to a failure of our own:
-brief §3.3 measured all 183 census rows carrying the four mandatory evidence fields with **zero missing** and exactly **one distinct
-value** of `must_be_true` — satisfied syntactically, teaching nothing. A milestone whose observable already passes is that defect
+the brief's **183-row / zero-missing / one-distinct-`must_be_true`** result is a **HISTORICAL, UNPROVEN** snapshot: no retained census artifact or deriving command is available here, so it is not a current baseline. It nevertheless illustrates the vacuity defect; a milestone whose observable already passes is that defect
 wearing a Gantt chart.
 
 **NO-CLAIM.** Property 4 makes an observable *discriminating*, not *sufficient* — an observable can fail-before, pass-after, and still
@@ -50,14 +49,15 @@ graph LR
 
 ### M1 — One shared pane-state type will cross the observe→decide seam, so a filter change breaks the consumer at compile time
 
-**OBSERVABLE.** (a) `grep -rn "omp-types\|omp_types" crates/*/Cargo.toml | grep -v "^crates/omp-types/"` names both `tick-monitor` and
-`omp-orchestrator` — empty today; AND (b) a NAMED shared pane-state type (the omp-types
-observation struct, not a re-export shim) appears in both crates' public parse/emit signatures —
-grep the type name, not the crate name, because adding an unused manifest line would satisfy (a)
-alone — plus the second leg below (a real stdout fixture compiled through it). Both legs fail
-today. Second leg: a test feeding **real `tick-monitor` stdout** into the
-`omp-orchestrator` parser, asserting a just-finished pane is visible as capacity. **NOT IN SCOPE.** Selection, dispatch, ack — M1
-changes what the loop *sees*.
+**OBSERVABLE.** Both legs are run from the repository root at the recorded `git rev-parse HEAD`,
+with the pinned Rust toolchain and the checked-in fixture
+`crates/omp-orchestrator/tests/fixtures/tick-monitor-newly-idle.json` (its SHA-256 is printed).
+Run exactly:
+
+`cargo test -p omp-orchestrator --test pane_state_seam -- --exact tick_monitor_newly_idle_reaches_orchestrator --nocapture`
+
+The test must print one JSON line with `{"fixture":"tick-monitor-newly-idle.json","state":"NewlyIdle","free_capacity":true,"shared_type":"PaneObservation","revision":"<git sha>"}` and exit 0. It must compile the real fixture through the production parser and fail if either crate's public parse/emit signature does not use the same `omp-types::PaneObservation` type; the pre-milestone tree fails because the test, fixture, dependency edge, and shared signature are absent, while the post-milestone tree passes only with that JSON and exit 0. A separate source check is the exact command
+`grep -rn "omp-types\\|omp_types" crates/*/Cargo.toml | grep -v "^crates/omp-types/"`; its non-empty result must name both consumers. **NOT IN SCOPE.** Selection, dispatch, ack — M1 changes what the loop *sees*.
 
 **STARTING POINT — with a recorded disagreement with the brief.** Brief §4 lists the *actionable* layer as **BROKEN** — "`idle_panes`
 discards `NewlyIdle`; `free_capacity` derives from the same `is_dispatchable` filter." **I measured the current source and disagree:**
@@ -97,9 +97,10 @@ it; M1's measured three-predicate seam and the RISK above stand unchanged.
 
 ### M2 — Selection will run through the graph kernel instead of queue recency
 
-**OBSERVABLE.** A harness grep for `Command::new\("bv"\)` over `crates` (no extension filter — PV7) returns a hit outside `tests/`, plus
-a differential test showing graph and recency selection choosing **different** beads on a fixture with a known blocking chain. Fails
-today. **NOT IN SCOPE.** Dispatch — M2 decides *what* is worked; M3 delivers it.
+**OBSERVABLE.** From the repository root and the recorded revision, run
+`cargo test -p omp-orchestrator --test selection_graph -- --exact graph_and_recency_choose_different_beads --nocapture`
+against the checked-in fixture `crates/omp-orchestrator/tests/fixtures/blocking-chain.json`. The test must print one JSON line with
+`{"fixture":"blocking-chain.json","graph_bead":"<id>","recency_bead":"<different-id>","selected_by":"bv","revision":"<git sha>"}` and exit 0; the pre-milestone tree fails because no `bv` invocation or test exists, and the post-milestone tree fails if the IDs are equal or `selected_by` is not `bv`. The corroborating source command is `grep -R -n --include='*.rs' 'Command::new("bv")' crates --exclude-dir=tests`, which must return a production hit. **NOT IN SCOPE.** Dispatch — M2 decides *what* is worked; M3 delivers it.
 
 **STARTING POINT.** `MEASURED` — the rule is enforced and the implementation is absent:
 
@@ -119,13 +120,10 @@ a degradation path with a typed refusal, or M2 blocks M6. **NO-CLAIM.** Graph se
 
 ### M3 — Dispatch will return an acknowledgement or a typed refusal, never a bare success
 
-**OBSERVABLE.** A planted-known-bad fixture in which the transport reports success while no packet arrives, and the dispatcher's verdict
-is a refusal rather than `ReceiptConfirmed` — closed when that test exists and fails when the ack check is removed (mutation leg).
-The verdict is receiver-side screen evidence (timer reset + content change), NOT packet arrival:
-the honest name for what M3 proves is "the receiver's screen changed in packet-shaped ways." The
-stronger form — a packet-correlated receipt carrying an id the receiver echoes — is the
-`IrcDeliveryReceipt`-shaped upgrade (DECLARED only upstream) and is not required for M3.
-**NOT IN SCOPE.** Detecting whether the worker *finished* (M4); M3 ends at "the packet provably arrived".
+**OBSERVABLE.** From the repository root at the recorded revision, run
+`cargo test -p omp-orchestrator --test dispatch_receipt -- --exact known_bad_transport_is_refused --nocapture`
+with fixture `crates/omp-orchestrator/tests/fixtures/transport-success-no-packet.json`. The test must print one JSON line with
+`{"fixture":"transport-success-no-packet.json","transport":"success","screen_changed":false,"verdict":"Refused","receipt":"not-confirmed","revision":"<git sha>"}` and exit 0. The pre-milestone tree fails because the journaled fixture/test and receipt check are absent. Run the explicit mutation leg `cargo test -p omp-orchestrator --test dispatch_receipt -- --exact ack_removal_is_rejected --nocapture` against `crates/omp-orchestrator/tests/fixtures/transport-success-no-packet-mutated.json`; it must exit non-zero before the mutation is repaired and exit 0 when the harness proves the mutation was rejected. The verdict is receiver-side screen evidence (timer reset + content change), **not** packet arrival; the stronger packet-correlated receipt is not required for M3. **NOT IN SCOPE.** Detecting whether the worker *finished* (M4); M3 ends at the journaled arrival/refusal decision.
 
 **STARTING POINT.** `MEASURED` — brief §4 lists actuate as **DOES NOT EXIST**: a human types into panes. Both polarities have fired.
 `cp-z42vu` (`README.md:155`, `dispatch-silence-watch/src/lib.rs:10`): a send returned **`success:[4]` while the packet never arrived**;
@@ -146,11 +144,10 @@ observable is unchanged.
 
 ### M4 — Completion will be detected by the loop, not by a human looking
 
-**OBSERVABLE.** A stored trace in which a bead moves to closed with **zero** human-originated events — `human_touch_count == 0`,
-re-readable — AND the close actor is not the dispatched worker identity: `ack-spine`'s own
-taxonomy classifies worker-asserted `Finished` as a *claim* (followup.rs), so M4 requires the
-close to originate from the verification/grader side (A8), never from the worker that reported
-done. A worker closing its own bead satisfies `human_touch_count == 0` and proves nothing. **NOT IN SCOPE.** Whether the work is *good* (the verify gate), and autonomy end to end (M5).
+**OBSERVABLE.** From the repository root at the recorded revision, run
+`cargo test -p ack-spine --test completion_trace -- --exact verifier_closes_without_human --nocapture`
+against `crates/ack-spine/tests/fixtures/m4-completion-trace.json`. The test must print one JSON line with
+`{"trace":"m4-completion-trace.json","human_touch_count":0,"close_actor":"verifier","worker_actor":"<different-id>","bead_state":"closed","revision":"<git sha>"}` and exit 0. The pre-milestone tree fails because no consumer records this trace. Run the explicit mutation leg `cargo test -p ack-spine --test completion_trace -- --exact worker_close_is_rejected --nocapture` against the same fixture; it must exit non-zero if a worker can close its own bead, and the verifier trace test must exit 0 only when that mutation is rejected. **NOT IN SCOPE.** Whether the work is *good* (the verify gate), and autonomy end to end (M5).
 
 **STARTING POINT.** `MEASURED` — the vocabulary exists, nothing reaches it, and brief §4 records that every completion this session was
 found by a human looking.
@@ -162,7 +159,7 @@ harness grep "ack-spine|ack_spine" in crates/*/Cargo.toml -> only ack-spine's ow
 
 `FollowUpVerdict::Finished { bead_id, close_verdict }` is declared at `ack-spine/src/followup.rs:27`, distinguished from the
 silent-past-deadline arm by a mutation leg at `:205`: a good type, a mutation test, **zero callers outside its own file**, in a crate
-with **zero dependents** — occurrence 21 of the class.
+with `zero dependents` — the reported occurrence count (21) is a historical, UNPROVEN snapshot and is not used as a baseline; the exact M4 trace command above is the replacement evidence.
 
 **RISK.** A worker asserting `Finished` is a *claim*, and this plan's thesis is that claims are what fail. M4 must land the ack path
 without letting worker-asserted done become the close condition, or it manufactures the false-completion signal the project exists to
@@ -170,28 +167,20 @@ eliminate. **NO-CLAIM.** M4 delivers *detection*; detection without verification
 
 ### M5 — The loop will close a bead end to end with no human in the trace
 
-**OBSERVABLE.** The plan's headline claim, **never observed once**: ten consecutive closes from one recorded run — each of the ten bead
-IDs bound to that run in the dispatch record (packet journal entry or claim row naming worker and
-packet), with the union of human-originated events empty, every refusal in the window accounted
-for by a named verdict, and the beads independently confirmable via
-`br show <id> --json` per bead. A global `br list --status closed` count alone proves nothing
-about which run closed them. **NOT IN SCOPE.** Duration (M7) and portability (M6) — M5 is one closed loop, once,
-ten times.
+**OBSERVABLE.** From the repository root at the recorded revision, run
+`cargo test -p omp-orchestrator --test control_loop -- --exact ten_recorded_closes_without_human --nocapture`
+against `crates/omp-orchestrator/tests/fixtures/m5-run.json`. The test must print one JSON line with
+`{"run":"m5-run","close_count":10,"human_event_count":0,"unaccounted_refusals":0,"bead_ids":["id-01","id-02","id-03","id-04","id-05","id-06","id-07","id-08","id-09","id-10"],"independent_readback":true,"revision":"<git sha>"}` and exit 0; each ID must be independently checked by `br show <id> --json`. The pre-milestone tree fails because no recorded run or consumer exists, and a global board count is explicitly insufficient. **NOT IN SCOPE.** Duration (M7) and portability (M6) — M5 is one closed loop, once, ten times.
 
 **STARTING POINT.** `MEASURED` against the current seven-row control loop (brief §4): observe WORKS-with-defect; actionable's filter is
-FIXED (-oco) with the seam still open; consume FENCED with **162 consecutive refused ticks over
-4.2 hours** (`DISPATCH_RETRY_BLOCKED`; incident count from the tick ledger — §00 §4 carries this
-figure as a named evidence gap with no deriving command, which is itself recorded); actuate DOES
-NOT EXIST; and complete is AVAILABLE-NOT-WIRED — the upstream completion type is wire-proven, the
-local consumer is not built (Gap 7, refuted and adopted). Board right now:
+FIXED (-oco) with the seam still open; consume FENCED. The reported **162 consecutive refused ticks over 4.2 hours** (`DISPATCH_RETRY_BLOCKED`) is a historical, UNPROVEN snapshot: the source ledger export and deriving command are not retained, so it is not a current baseline. Actuate DOES NOT EXIST; and complete is AVAILABLE-NOT-WIRED — the upstream completion type is wire-proven, the local consumer is not built (Gap 7, refuted and adopted). Board counts are re-runnable only with this failure-preserving probe:
 
-```
-for s in open in_progress blocked closed; do printf "%s " "$s"; br list --status $s | grep -c .; done
-   open 19 · in_progress 22 · blocked 3 · closed 30
-```
+`set -o errexit -o nounset -o pipefail
+  for s in open in_progress blocked closed; do
+    STATUS="$s" br list --status "$s" --json | STATUS="$s" python3 -c 'import json, os, sys; d=json.load(sys.stdin); rows = d if isinstance(d, list) else d.get("issues", d.get("items", [])); print(json.dumps({"status": os.environ["STATUS"], "count": len(rows)}, sort_keys=True))'
+  done`
 
-`MEASURED`: 74 beads, against the brief §3.7 stand-down snapshot of 75 (28/25/19/2) — the board moved mid-stand-down. Reported rather
-than reconciled, because silently picking whichever number suits the sentence is the defect this document exists to prevent.
+A `br` failure or malformed JSON exits non-zero rather than becoming a zero count. The prior **19/22/3/30** output and **74-bead** total are historical, UNPROVEN snapshots and are not used as the current board state; rerun the probe above before recording a new snapshot.
 
 **RISK.** M5 is where maximum pressure belongs: everything before it is infrastructure demonstrable in isolation, while M5 is the first
 milestone whose failure invalidates the thesis rather than delaying it, and there is **no evidence for or against it.** **NO-CLAIM.**
@@ -199,22 +188,23 @@ Ten closes is an existence proof, not a rate.
 
 ### M6 — A repository that is not this one will run the orchestrator on a machine that has never built it
 
-**OBSERVABLE.** On a host with no build cache for this workspace (`cargo clean -p` evidence or a
-fresh checkout at an unpinned path), run the documented install command, then a first tick against
-a foreign fixture repo, producing a readable verdict — closed by a transcript naming (1) the
-install command and its exit code, (2) the proof of cache absence (`ls target/` empty or fresh
-clone hash), (3) the fixture repo path, (4) the first-tick command, and (5) the verdict JSON —
-reproducible by a third party from the transcript alone. **NOT IN SCOPE.**
-Unattended operation (M7); M6 is one successful cold first tick elsewhere.
+**OBSERVABLE.** On a clean host, from the repository root at the recorded revision, run this exact shell script:
+
+```sh
+set -o errexit -o nounset -o pipefail
+git rev-parse HEAD
+test ! -e target
+tmpdir="$(mktemp -d)"
+env -i HOME="$HOME" TMPDIR="$tmpdir" PATH="/usr/bin:/bin:/opt/homebrew/bin" sh -ceu 'cargo install --locked --path crates/installer --root "$TMPDIR/omp-m6"'
+env -i HOME="$HOME" TMPDIR="$tmpdir" PATH="$tmpdir/omp-m6/bin:/usr/bin:/bin" omp-orchestrator --repo crates/installer/tests/fixtures/foreign-repo --once --evidence "$tmpdir/m6.json"
+```
+The checked-in fixture path, checkout SHA, `target/` absence, install exit code, first-tick exit code, and JSON evidence must be captured; `$tmpdir/m6.json` must contain `{"install_exit":0,"cache_absent":true,"fixture":"foreign-repo","first_tick_exit":0,"verdict":"progress|named_refusal","revision":"<git sha>"}`. The pre-milestone tree fails because the install/consumer path is absent; post-milestone success requires every named field and exit code. **NOT IN SCOPE.** Unattended operation (M7); M6 is one successful cold first tick elsewhere.
 
 **STARTING POINT.** `MEASURED`: never attempted. The `installer` crate exists and is **isolated** — on neither side of any of the 18
 `path-depends-on` edges (brief §3.4), so nothing consumes it. Host coupling shows in the binary table: `bv` under `/opt/homebrew`,
 `cargo` a shim at `~/.rch/shims/cargo`, the mirror on `/Volumes/ZestData/…`.
 
-**RISK.** Absolute paths and host assumptions invisible until the first foreign host, plus a per-binary version-probe map. `MEASURED`
-here, twice, and **tmux is well-behaved** — brief §3.1 ("no handshake") and its first correction ("exits 0 while failing") are both
-refuted:
-
+**RISK.** Absolute paths and host assumptions are invisible until the first foreign host, plus a per-binary version-probe map. `MEASURED` here twice: tmux is installed and `-V` succeeds; `--version` is unsupported and fails with exit 1, so it must not be used as the presence probe. The brief's "no handshake" and its first correction ("exits 0 while failing") are both refuted:
 ```
 tmux -V                              -> tmux 3.6a                       exit 0
 tmux --version >out 2>err            -> stdout 0 bytes, stderr 158       exit 1
@@ -238,13 +228,9 @@ tmux MISSING today. **NO-CLAIM.** M6 proves portability to one host and only "di
 
 ### M7 — The fleet will run unattended for a defined window with every refusal accounted for
 
-**OBSERVABLE.** A 24-hour window — the first defensible number, chosen because the measured
-failure (4h 19m of undetected fleet idleness) fits inside it five times — in which
-human-originated events are zero, every tick produced either progress or a named refusal, and no
-refusal class recurs beyond `FINDING_THRESHOLD == 3`
-(`crates/finding-dispatch/src/lib.rs:15`, consumed by the escalation path
-`finding-dispatch/src/lib.rs:23` — the production consumer of the threshold, not the test). **NOT IN SCOPE.** Increasing the window — M7 is the first defensible number, not the
-best one.
+**OBSERVABLE.** From the repository root at the recorded revision, run
+`cargo run -p omp-orchestrator --bin omp-orchestrator -- --repo crates/omp-orchestrator/tests/fixtures/foreign-repo --duration 24h --evidence target/milestones/m7.json`.
+The command must exit 0 only after 24 hours in the pinned environment and must emit JSON with `{"window_seconds":86400,"human_event_count":0,"ticks":1,"progress_or_named_refusal":true,"max_same_refusal":3,"refusal_inventory":["refusal-class"] ,"revision":"<git sha>"}` (the actual `ticks` value is an integer greater than zero and the inventory contains the observed classes); a missing tick, unnamed refusal, empty inventory, or recurrence above `FINDING_THRESHOLD == 3` exits non-zero. The pre-milestone tree fails because no unattended runner/evidence exists. **NOT IN SCOPE.** Increasing the window — M7 is the first defensible number, not the best one.
 
 **STARTING POINT.** `MEASURED`: the longest unattended interval observed to date is a **failure** — 4h 19m of fleet idleness while every
 watchdog reported healthy. We have an unattended duration; it is the duration of an undetected outage.
@@ -267,8 +253,7 @@ R3 wants a document an investor can pass or fail, so it must be checkable, not m
 - **PV6 — No unstated denominators.** Three measured instances. **"81 JSON-RPC methods, 17 of 81 used"** — inherited, no producing
   command, **not re-derivable** on 2026-08-31, retired at `AGENTS.md:247` (`grep -n "17 used\|81 JSON" AGENTS.md` returns only notices
   at 247, 582, 615). **A drift ratio where excluding a foreign binary decremented the wrong variable, turning `2/2` into `2/0`** (brief
-  §6 rule 4). And **the brief's own gate headline**, "1 of 8 / 5 of 8", refuted by the table one line above it — corrected to 2 of 8 and
-  4 of 8 (§5).
+  §6 rule 4). The brief's gate-count headlines (1 of 8 / 5 of 8, later corrected to 2 of 8 / 4 of 8) are historical, UNPROVEN snapshots: no current derivation is retained, so they are not a baseline or a present verdict. A fresh gate report must be captured before any new count is stated.
 - **PV7 — A zero must be distinguished from a silence, and a not-found must name its search space.** A command that returns **empty
   instead of failing** is indistinguishable from a true zero, so every "nothing found" built on one is unfalsifiable. Three mechanisms
   `MEASURED` in one session — (a) and (c) by me, (b) by a sibling. (a) Shell `grep -r … --include='*.rs'` returns **0** for
@@ -302,9 +287,9 @@ because rule-compliance is not correctness.
 |---|---|---|
 | PC1 | a numeral appears in prose with no command in the same block | PV1 |
 | PC2 | `guarantees` / `proves` / `makes impossible` appears within a gate section | PV5 |
-| PC3 | an `Mn` milestone heading has no `OBSERVABLE` field | PV4 |
+| PC3 | **syntax precheck only:** an `Mn` milestone heading has no `OBSERVABLE` field | PV4 heading presence; **does not establish semantic admissibility** |
 | PC4 | a sentence marked `MEASURED` contains a projection verb (`will`, `would`, `should`) | PV2 |
-| PC5 | a section has no `NO-CLAIM` paragraph | PV3 |
+| PC5 | **syntax precheck only:** a section has no `NO-CLAIM` paragraph | PV3 paragraph presence; **does not establish per-claim scope coverage** |
 | PC6 | a ratio appears whose denominator has no separate derivation | PV6 |
 | PC7 | a zero-result claim names no search space, or no failure-vs-empty distinction | PV7 |
 | PC8 | a `path:line` citation names no construct at that line | PV8 |
@@ -336,13 +321,8 @@ adversarially, and a document engineered to pass all six is useless to us.
 | **The gates actually bite** | Each gate has known-bad, known-good, mutation, anti-vacuity, and is ADDRESSABLE | Attack-only or defence-only suites; a gate no documented command runs; `guarantees` in a header |
 | **The adoption path is credible** | A cold foreign host installs and takes a first tick, with degradation for absent dependencies | Installability asserted and never attempted; hard dependency on host-specific paths |
 | **The team tells on itself** | The document names defects its own author committed, and records disagreement with its own brief | Every finding indicts a worker; no self-indictment; no open contradiction |
-
-**Where we expect to fail today, stated first so a reviewer can check our self-assessment.** *Gates actually bite → FAIL*: `MEASURED`, 2
-of 8 gates have all four legs and 4 of 8 have no mutation leg (brief §3.5, recomputed — its own headline said 1 and 5, refuted by the
-table above it); `path-literal-guard` has a known-bad with **no known-good**, and over-strict gates get routed around, a slower death
-than no gate. *Adoption path is credible → FAIL*: `MEASURED`, never attempted (M6); `installer` is isolated in the dependency graph.
-*Architecture is sound → CONTESTED*: `MEASURED`, 6 Verdict-shaped types with no shared trait, 17 ack/receipt types in 3 dialects, 4
-colliding names.
+**Where we expect to fail today, stated first so a reviewer can check our self-assessment.** *Gates actually bite → FAIL*: the former **2-of-8 / 4-of-8** figures are **HISTORICAL, UNPROVEN** snapshots with no retained derivation and are not a current verdict; `path-literal-guard` still has a known-bad with **no known-good**, and over-strict gates get routed around, a slower death than no gate. A fresh gate report is required before stating a new count. *Adoption path is credible → FAIL*: `MEASURED`, never attempted (M6); `installer` is isolated in the dependency graph.
+*Architecture is sound → CONTESTED*: the former **6 / 17 / 4** type counts are **HISTORICAL, UNPROVEN** snapshots with no retained derivation and are not a current baseline; the typed-seam risk remains the subject of M1–M4.
 
 **NO-CLAIM.** This rubric grades *this document*, not the software. A document that passes all six describes a system that may still not
 work — which is why M5 exists and why it is unproven.
@@ -351,15 +331,15 @@ work — which is why M5 exists and why it is unproven.
 
 BANKED rows cite evidence; UNPROVEN rows name the experiment that settles them. No row sits between.
 
-| BANKED — with evidence | UNPROVEN — with the experiment that settles it |
+| BANKED — qualitative evidence only; stale counts excluded | UNPROVEN — with the experiment that settles it |
 |---|---|
-| The build-and-never-call class is real and frequent here — **20 occurrences**, plus a 21st found while writing M4 (harness grep `Finished` in `crates` → 8 hits all in `ack-spine/src/followup.rs`; harness grep of `crates/*/Cargo.toml` shows `ack-spine` has zero dependents) | **The loop can close without a human.** Never observed once. Settled by M5: ten consecutive closes from one recorded run with zero human-originated events. |
-| Silent refusal is real — **162 consecutive refused ticks over 4.2h** (`DISPATCH_RETRY_BLOCKED`), and **178 ticks** of an idle-capacity alarm written to a file with one writer and zero readers | **The substrate installs elsewhere.** `MEASURED`: never attempted; `installer` is isolated in the 18-edge graph. Settled by M6: a cold foreign host, documented install, first tick, reproducible transcript. |
+| The build-and-never-call class is real and frequent here — the **20-occurrence / 21st-occurrence** counts are **HISTORICAL, UNPROVEN** snapshots and are not banked; the retained evidence is the named `Finished` grep and zero-dependency check | **The loop can close without a human.** Never observed once. Settled by M5: ten consecutive closes from one recorded run with zero human-originated events. |
+| Silent refusal is real — the **162-tick** and **178-tick** counts are **HISTORICAL, UNPROVEN** snapshots with no retained ledger derivation and are not banked | **The substrate installs elsewhere.** `MEASURED`: never attempted; `installer` is isolated in the 18-edge graph. Settled by M6: a cold foreign host, documented install, first tick, reproducible transcript. |
 | Transport lies in both directions — `cp-z42vu` returned **`success:[4]`** with no packet delivered (`README.md:155`); the inverse fired the same session | **Verification is cheaper than review.** No instrumentation exists. Settled by recording human-seconds per closed bead before and after M4 on the same bead mix — that ratio is the whole economic argument and is unmeasured. |
-| The evidence-field discipline can be satisfied vacuously — **183/183 rows complete, 1 distinct `must_be_true`** (brief §3.3) | **Graph selection beats recency.** `MEASURED`: `bv` is spawned zero times. Settled by M2's differential test plus a measured close-rate comparison on a fixed bead set. |
+| The evidence-field discipline can be satisfied vacuously — the brief's **183/183** and **one-distinct-value** figures are **HISTORICAL, UNPROVEN** snapshots and are not banked | **Graph selection beats recency.** `MEASURED`: `bv` is spawned zero times. Settled by M2's differential test plus a measured close-rate comparison on a fixed bead set. |
 | The observe layer works and the NewlyIdle filter defect is **fixed in source** — `crates/omp-orchestrator/src/lib.rs:461`, regression test `observed_idle_state_counts_as_free_capacity_before_confirmation` at
 `src/main.rs:1056` (contradicts brief §4; see M1) | **The seam cannot silently diverge again.** `MEASURED`: no shared type crosses it; production never names `NEWLY_IDLE` (`grep -rn '"NEWLY_IDLE"' crates/omp-orchestrator/src/main.rs` → 0). Settled by M1. |
-| The one hard rule is enforced mechanically — a Rust gate walks `git ls-files` and fails on `.sh`/`.py`, exemption list empty | **The gates bite under attack.** `MEASURED`: 2 of 8 gates have four legs, 4 of 8 have no mutation leg. Settled by bringing all 8 to four legs plus ADDRESSABLE, and a planted-known-bad campaign per gate. |
+| The one hard rule is enforced mechanically — a Rust gate walks `git ls-files` and fails on `.sh`/`.py`, exemption list empty | **The gates bite under attack.** The former **2-of-8 / 4-of-8** figures are **HISTORICAL, UNPROVEN** snapshots and are not a current verdict. Settled by bringing all 8 to four legs plus ADDRESSABLE, and a planted-known-bad campaign per gate. |
 | Failing closed with a remediation hint works — `fh` MCP returns a typed `SERVE_INPUT_STALE` naming the moved mirror HEAD (`5dec4212…` → `ecdea397…`) rather than an empty result | **This plan enforces its own discipline.** `MEASURED`: `ls crates/ \| grep plan-check` → empty. Settled by shipping `plan-check` (§4) with its known-bad fixture. |
 
 **NO-CLAIM.** This section defines the conditions under which a milestone may be called done, and records what is and is not proven as

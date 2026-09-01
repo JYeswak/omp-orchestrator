@@ -36,7 +36,7 @@ All mirror searches therefore ran against the filesystem, without semantic-index
 | supervision variants | direct reads of `enum SupervisionEvent` and `enum StopReason` | **MEASURED 8 + 6 = 14 variants** in the named file, not corpus-wide |
 | OMP completion capture | `/tmp/grade/r7-agent-end.md` and raw frame | **MEASURED 1 `agent_end` frame** in one ephemeral run |
 | seeded corrections | comparison of nine seeded Gap rows with this record | **PROJECTED 6/9 = 66.7%**; document comparison, not an independent run |
-| refuted not-founds | four false-zero mechanisms described below | **PROJECTED 7** session count; completeness and attribution are NO-CLAIM |
+| refuted not-founds | four false-zero mechanisms described below | **MEASURED 4** named mechanisms in this section; no session-count or completeness claim |
 
 The correction arithmetic is `6 ÷ 9 = 0.666…`. “Strongest,” “highest priority,” and similar rankings are not measured claims; where priority is discussed it is marked **PROJECTED** from stated evidence.
 
@@ -48,7 +48,7 @@ Four false-zero mechanisms remain explicit: an empty `--include=` can return exi
 
 **Gap.** Dispatch emits no typed acknowledgement, so “sent” and “accepted” are one observable.
 
-**Search.** `grep 'pub (struct|enum) (PublishReceipt|AckKind|DeliveryClass|PublishPermit)'` over the whole `asupersync/src/messaging` module.
+**Search.** `grep -Ern 'pub (struct|enum) (PublishReceipt|AckKind|DeliveryClass|PublishPermit)' asupersync/src/messaging` over the whole `asupersync/src/messaging` module. The `-E` is required for the grouping and alternation; the replay result is recorded in `/tmp/grade/r13-10-prior-art.md`.
 
 **Found.** `asupersync/src/messaging/fabric.rs:1913` (`struct PublishReceipt`) carries `subject`, `payload_len`, `ack_kind`, and `delivery_class`; `asupersync/src/messaging/fabric.rs:1944` carries `#[must_use = "a PublishPermit must be sent or explicitly aborted"]`. `AckKind` is `asupersync/src/messaging/class.rs:83`; `DeliveryClass` is `asupersync/src/messaging/class.rs:17`; `cost_vector` and `minimum_ack` carry the `#[must_use]` rule at `asupersync/src/messaging/class.rs:43,56`.
 
@@ -88,7 +88,7 @@ Four false-zero mechanisms remain explicit: an empty `--include=` can return exi
 
 ## Gap 4 — The canonical doctor shape
 
-**Gap.** `omp-inventory-map --help` returns `CONFIG_ERROR unknown argument --help`; doctor must remain discoverable and runnable while the workspace is broken.
+**Gap.** **Historical seed premise (not reproducible in the current checkout):** an earlier run reported `omp-inventory-map --help` as `CONFIG_ERROR unknown argument --help`; doctor must remain discoverable and runnable while the workspace is broken. The current probe is explicitly bounded: `command -v omp-inventory-map` found no executable, and `omp-inventory-map --help` returned shell status 127 with only the shell's command-not-found diagnostic (captured-output SHA-256 `e7f99353a1c4a87853d1710c7b0f319cd8545a349fd0943633238cfad162c9df`). **NO-CLAIM:** this current absence does not reproduce or disprove the historical CONFIG_ERROR behavior.
 
 **Search.** `grep -rn 'DoctorExitCode' beads_rust/src`; `grep -n 'Commands::Doctor' beads_rust/src/main.rs`; `find pi_agent_rust -name doctor.rs`.
 
@@ -138,9 +138,9 @@ The synonym set also included `scanned zero`, `empty scan set`, `no files were s
 
 ## Gap 7 — A worker that cannot say it is done
 
-**Gap.** Brief §4’s `complete` row says worker completion was found by a human looking.
+**Gap.** **Historical document premise:** `docs/plan/00-brief.md` §4 (SHA-256 `84569dd180bad9dd7ee6c90fde86fc5ee0d55be46253aa2dd6c9244aa1efd502`) records the `complete` row as worker completion found by “a human looking.” This is a historical statement from that hashed artifact, not a current runtime observation. **NO-CLAIM:** this section does not claim that the historical observation is reproducible or that it describes every worker mode.
 
-**Search.** `grep 'pub enum Outcome' asupersync/src`; then `grep 'pub enum (ChildExit|ExitReason|ChildOutcome|SupervisionEvent|ChildStatus)' supervision.rs gen_server.rs spork.rs` over the three enumerated supervision surfaces.
+**Search.** `grep -n 'pub enum Outcome' asupersync/src`; then `(cd asupersync/src && grep -En 'pub enum (ChildExit|ExitReason|ChildOutcome|SupervisionEvent|ChildStatus)' supervision.rs gen_server.rs spork.rs)` over the three enumerated supervision surfaces. The `-E` is required for the grouping and alternation; the replay result is recorded in `/tmp/grade/r13-10-prior-art.md`.
 
 **Found, half.** `asupersync/src/types/outcome.rs:213-227` (`enum Outcome<T,E>`) declares `Ok`, `Err`, `Cancelled`, and `Panicked`, with the cited severity order `Ok < Err < Cancelled < Panicked`.
 
@@ -156,11 +156,11 @@ The synonym set also included `scanned zero`, `empty scan set`, `no files were s
 
 **Gap.** A CLI run inside another repository must scope what it touches and degrade per adapter when a dependency is absent.
 
-**Search 1 (Rust-only, negative).** `grep '(adapter|Adapter)\\w*(registry|Registry|scope|Scope)|per-adapter' beads_rust/src eidetic_engine_cli/src` -> no matches. **Scoped NO-CLAIM:** this establishes only that regex had no match in those two Rust roots; it says nothing about asupersync or Go.
+**Search 1 (Rust-only, negative).** `grep -Ern '(adapter|Adapter)[[:alnum:]_]*(registry|Registry|scope|Scope)|per-adapter' beads_rust/src eidetic_engine_cli/src` -> no matches (status 1). The `-E` enables grouping/alternation and `[[:alnum:]_]` replaces non-POSIX `\w`. **Scoped NO-CLAIM:** this establishes only that the corrected ERE had no match in those two Rust roots; it says nothing about asupersync or Go.
 
 **Search 2 (asupersync declaration).** `grep -rn 'AdapterCategory|AdapterCertificationStatus|AdapterRenderedStatus|AdapterCertificationDeclaration' asupersync/src/adapter_certification.rs` finds the module doc at `asupersync/src/adapter_certification.rs:1-6`, `enum AdapterCategory` at `asupersync/src/adapter_certification.rs:10`, `enum AdapterCertificationStatus` at `asupersync/src/adapter_certification.rs:39`, `enum AdapterRenderedStatus` at `asupersync/src/adapter_certification.rs:65`, and `struct AdapterCertificationDeclaration` at `asupersync/src/adapter_certification.rs:88`.
 
-**Search 3 (Go dependency vocabulary).** `grep -rn 'ErrNotInstalled|DEPENDENCY_MISSING' ntm` with no extension filter finds the Go vocabulary. The spaces are separate; the asupersync result was not a first-pass result from the Rust-only command.
+**Search 3 (Go dependency vocabulary).** `grep -ErnI 'ErrNotInstalled|DEPENDENCY_MISSING' ntm` with no extension filter (`-I` skips binary data, not source extensions) finds the Go vocabulary. The `-E` enables the alternation; the spaces are separate; the asupersync result was not a first-pass result from the Rust-only command.
 
 **Found.** `ntm/internal/bv/bv.go:31`, `ntm/internal/cass/client.go:13`, and `ntm/internal/caut/client.go:14` define typed `ErrNotInstalled` sentinels. `ntm/docs/robot-action-handoff-contract.md:379` defines `ErrCodeDependencyMissing = "DEPENDENCY_MISSING"`. `ntm/internal/cli/bugs.go:85-89` carries remediation in the envelope; `ntm/internal/alerts/generator.go:383-385` makes per-call-site degradation explicit; `ntm/internal/cli/robot_registry_conformance_test.go:15` pins the exit-code taxonomy.
 
@@ -172,7 +172,7 @@ The synonym set also included `scanned zero`, `empty scan set`, `no files were s
 
 **Gap.** A present binary can be marked absent when its chosen version flag fails.
 
-**Search.** `grep -n 'PresenceOnly|ProbeExecution|fn check_tool|fn probe_failure_is_known_nonfatal|fn which_tool|status.success()' pi_agent_rust/src/doctor.rs`, then read each named construct.
+**Search.** `grep -En 'PresenceOnly|ProbeExecution|fn check_tool|fn probe_failure_is_known_nonfatal|fn which_tool|status.success\(\)' pi_agent_rust/src/doctor.rs`, then read each named construct. The `-E` is required for the alternation and escaped literal parentheses; the replay result is recorded in `/tmp/grade/r13-10-prior-art.md`.
 
 **Found.** In `pi_agent_rust/src/doctor.rs`, `fn check_tool` is at `pi_agent_rust/src/doctor.rs:924`; the naive success arm at `pi_agent_rust/src/doctor.rs:950`; the two-signal arm at `pi_agent_rust/src/doctor.rs:967-968`; `fn probe_failure_is_known_nonfatal` at `pi_agent_rust/src/doctor.rs:1052`; its one-tool allowlist at `pi_agent_rust/src/doctor.rs:1057`; and `fn which_tool` at `pi_agent_rust/src/doctor.rs:1066`. Tests `fn check_tool_falls_back_when_probe_args_are_unsupported` and `fn check_tool_reports_invocation_failure_for_broken_executable` are at `pi_agent_rust/src/doctor.rs:13948` and `pi_agent_rust/src/doctor.rs:13964`. The design separates presence (`which_tool`) from version probing and forgives only a named failure.
 
@@ -204,7 +204,7 @@ The earlier exit-0 claim came from `tmux --version 2>&1 | head -1` (`PIPESTATUS=
 | 8 | adapter scope/dependency | **ADOPT (PROJECTED locally)** | `ntm/internal/bv/bv.go:31`; `ntm/docs/robot-action-handoff-contract.md:379`; `ntm/internal/cli/bugs.go:85-89`; `ntm/internal/alerts/generator.go:383-385`; `ntm/internal/cli/robot_registry_conformance_test.go:15` |
 | 9 | tool probe | **ADOPT + NAMED GAP** | `pi_agent_rust/src/doctor.rs:924,950,967-971,1052,1057,1066,13948,13964`; workstation tmux measurement above |
 
-**Correction count:** seeded comparison is **PROJECTED 6/9 = 66.7%**; seven refuted not-founds is also **PROJECTED** from the session record. These are not mirror coverage rates. Gap 7’s old corpus-wide precedent-free conclusion is retracted.
+**Correction count:** seeded comparison is **PROJECTED 6/9 = 66.7%**; the section records **MEASURED 4** named false-zero mechanisms, and makes no session-count or completeness claim. These are not mirror coverage rates. Gap 7’s old corpus-wide precedent-free conclusion is retracted.
 
 **Direct mapping:** Gap 1 maps to receipt prior art; Gap 7 maps to completion prior art. The five other OMP rows are adjacent mechanisms, not replacements for Gaps 2–6, 8, or 9.
 

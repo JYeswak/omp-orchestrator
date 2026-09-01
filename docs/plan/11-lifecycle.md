@@ -49,7 +49,7 @@ additional `S` IDs. `viability`, `loop`, and `honesty` are cross-stage attribute
 | `S5` | **Execution** | claim, dispatch, worker work, receiver receipt | **`omp-orchestrator` is the resident accountable consumer**; its manifest supports `dispatch-claim-fence`, `ack-stage`, `omp-rpc-session`, `subprocess-contract`, and `receiver-receipt` | `tick-monitor` is observation-only and is consumed by the resident supervisor | automated observe → queue → dispatch → receipt path is designed; runtime proof is absent; `pane-dispatch-fence` exists in the inventory but is not proven a resident dependency |
 | `S6` | **Grading the work** | receipt review and independent grade | `ack-stage` exists; `ack-spine` contains a follow-up candidate; no `verify-dispatch` crate exists | none identified | grading remains non-shared/prose-shaped |
 | `S7` | **Validation** | completion/reap and external validation | no current reap owner; `omp-rpc-session` is transport-only, not a completion consumer | `tick-monitor` can observe panes, but observation is not reap | `reap-finished-panes` is absent; completion consumer is not wired |
-| `S8` | **Ship** | release, build, install, rollback | `installer` and `commit-build-fence`; `/installer-workmanship` and `/release-preparations` | none identified | installer covers 3 of 18 binaries; foreign-host `--install` is unverified |
+| `S8` | **Ship** | release, build, install, rollback | `installer` and `commit-build-fence`; /installer-workmanship and /release-preparations | none identified | **DECLARED (R10):** installer covers 3 of 18 binaries; the denominator's inventory/counting rule was not preserved; foreign-host `--install` is unverified |
 | `S9` | **Human requirements stored** | decision capture and retrieval, cross-cutting across S1–S8 | human is the decision owner; **PROJECTED** append owner: `omp-orchestrator` | every stage must observe its own decision handoff | no dedicated S9 consumer is proven; `ack-spine::ledger` is not proven to be this ledger |
 
 ### Current crate names versus projected names
@@ -73,8 +73,8 @@ S1 Inception → S2 Planning → S3 Grade plan → S4 Beads DAG
                          ↘ S9 Human requirements stored (cross-cutting)
 ```
 
-`S9` is not a ninth sequential finish step. Every arrow and every stage must emit a decision
-record for S9.
+`S9` is not a ninth sequential finish step. **PROJECTED REQUIREMENT:** every arrow and every
+stage must emit a decision record for S9; no current emitter or consumer was measured.
 
 ---
 
@@ -91,21 +91,20 @@ not a second observed cell.
 | `S2` Planning | — | — | — | — | — |
 | `S3` Grading the plan | — | n/a | — | — | — |
 | `S4` Beads DAG | — | n/a | — | `Y` (`.beads/issues.jsonl`) | — |
-| `S5` Execution | `y` | `Y` (resident observe → queue → dispatch → receipt path) | n/a | partial | n/a |
+| `S5` Execution | `y` | `y` (resident observe → queue → dispatch → receipt path; source/design evidence only) | n/a | partial | n/a |
 | `S6` Grading the work | — | n/a | n/a | `Y` (bead comments) | `Y` |
 | `S7` Validation | — | n/a | `y` (candidate only) | — | n/a |
 | `S8` Ship | — | — | n/a | — | `↗ S6` (shared build evidence; not an independent `Y`) |
 | `S9` Human requirements stored | — | n/a | n/a | — | n/a |
 
-There are **four distinct visible `Y` cells out of 45**, not three: S4 logging, S5 dispatch,
-S6 logging, and S6 build grading. This is the known LIFE-09 reinforcement of R8 `m-l6`, not a
+There are **three distinct visible `Y` cells out of 45**: S4 logging, S6 logging, and S6 build
+grading. S5 dispatch is deliberately `y`, because the resident path is source/design evidence
+only; R10 did not runtime-verify it. This is the known LIFE-09 reinforcement of R8 `m-l6`, not a
 new finding. The `S8` alias is deliberately not counted twice. The count says only that those
-four observations occurred; it does not say that the nine-stage journey completed.
+three observations occurred; it does not say that the nine-stage journey completed.
 
-The `S5` dispatch `Y` is also not a completion `Y`: the resident path is automated and designed,
-but R10 did not runtime-verify it. The older wording **"actuation is a human"** was too broad;
-human actuation remains a prerequisite for an unclaimed bead, while the resident supervisor does
-perform the later dispatch path.
+Human actuation remains a prerequisite for an unclaimed bead. The resident supervisor's later
+dispatch path is a designed/source-level property, not measured runtime use.
 
 ---
 
@@ -260,44 +259,84 @@ not close the adoption, parser, consumer, or reap claims above.
 
 ## 11.7 Surface-map counts: measured universe and current WIRE cardinality
 
-R14/R15 batch rows 1–9 were the declared scoped universe: **270 mapped rows out of the 544-row
-R14/R15 surface universe** across `ntm`, `br`, `bv`, and OMP. The disposition policy is exact:
-include rows whose `batch` is an integer from 1 through 9 inclusive, then group by the literal
-`disposition` field. The R10 derivation command was:
+R14/R15 batch rows 1–9 contain **270 mapped rows** across `ntm`, `br`, `bv`, and OMP. The
+**544-row R14/R15 surface-universe denominator is `DECLARED` from the R14/R15 review** rather
+than derived from this section; `NUMBERS.toml` records related surface-map snapshot drift and figure discipline. The named
+frozen input for the reproducible scoped count is `docs/plan/SURFACE-MAP.jsonl`, SHA-256
+`f155a358dd302982367a7c0107fe0eb1e3cd6f5ec7d4689bac67f11b1c5063f7`; that snapshot currently
+contains 591 rows. The disposition policy is exact: include rows whose `batch` is a JSON number
+equal to its floor and in 1 through 9 inclusive, then group by the literal `disposition` field.
+Both count commands below use that same frozen input and explicit integer predicate.
 
 ```sh
-jq -s '[.[] | select(.batch >= 1 and .batch <= 9)]
-  | {rows: length,
-     by_disposition: (group_by(.disposition)
-       | map({disposition: .[0].disposition, count: length}))}' \
-  docs/plan/SURFACE-MAP.jsonl
+SNAPSHOT=docs/plan/SURFACE-MAP.jsonl
+printf 'snapshot_sha256 '; shasum -a 256 "$SNAPSHOT"
+jq -s '
+  def in_scope:
+    .batch as $b
+    | if ($b|type) == "number"
+      then (($b == ($b|floor)) and $b >= 1 and $b <= 9)
+      else false
+      end;
+  {
+    surface_universe: length,
+    scoped_integer_1_9: (map(select(in_scope)) | length),
+    excluded_batch_type: (map(select((.batch|type) != "number")) | length),
+    excluded_non_integer_batch:
+      (map(select(.batch as $b
+        | if ($b|type) == "number" then $b != ($b|floor) else false end)) | length),
+    excluded_numeric_out_of_range:
+      (map(select(.batch as $b
+        | if ($b|type) == "number"
+          then (($b == ($b|floor)) and ($b < 1 or $b > 9))
+          else false
+          end)) | length),
+    by_disposition: (map(select(in_scope))
+      | group_by(.disposition)
+      | map({disposition: .[0].disposition, count: length}))
+  }' "$SNAPSHOT"
 ```
 
-Its measured result is:
+The measured result (exit 0) is:
 
 ```text
-rows 270
-RETIRE               214
-CONSUMED               8
-WIRE                 31
-VALIDATE             11
-UNPROBEABLE-PENDING   6
+snapshot_sha256 f155a358dd302982367a7c0107fe0eb1e3cd6f5ec7d4689bac67f11b1c5063f7  docs/plan/SURFACE-MAP.jsonl
+{
+  "surface_universe": 591,
+  "scoped_integer_1_9": 270,
+  "excluded_batch_type": 0,
+  "excluded_non_integer_batch": 0,
+  "excluded_numeric_out_of_range": 321,
+  "by_disposition": [
+    {"disposition": "CONSUMED", "count": 8},
+    {"disposition": "RETIRE", "count": 214},
+    {"disposition": "UNPROBEABLE-PENDING", "count": 6},
+    {"disposition": "VALIDATE", "count": 11},
+    {"disposition": "WIRE", "count": 31}
+  ]
+}
 ```
 
 The old `RETIRE 243 / WIRE 11 / VALIDATE 8` totals were stale. The earlier 11-row routing
 excerpt was illustrative, **not the WIRE universe**. The statement "the value is in the 11"
 is withdrawn; there are 31 WIRE proposals and they must be treated as proposals until wired.
 
-A grouped WIRE derivation was:
+A grouped WIRE derivation using the same frozen input and predicate is:
 
 ```sh
-jq -s '[.[] | select(.batch >= 1 and .batch <= 9
-  and .disposition == "WIRE")]
+SNAPSHOT=docs/plan/SURFACE-MAP.jsonl
+jq -s '
+  def in_scope:
+    .batch as $b
+    | if ($b|type) == "number"
+      then (($b == ($b|floor)) and $b >= 1 and $b <= 9)
+      else false
+      end;
+  [.[] | select(in_scope and .disposition == "WIRE")]
   | group_by(.maps_to_crate // "UNASSIGNED")
   | map({crate: (.[0].maps_to_crate // "UNASSIGNED"), count: length})' \
-  docs/plan/SURFACE-MAP.jsonl
+  "$SNAPSHOT"
 ```
-
 The measured grouping is:
 
 | current beneficiary | WIRE rows |
@@ -319,17 +358,18 @@ The eight VALIDATE rows remain a dependency warning: `br:close`, `br:create`, `b
 `br:list`, `br:schema`, `br:sync`, `br:update`, and `bv:exit-codes` rely on external behavior
 without a local assertion. A `VALIDATE` disposition is not a passing test.
 
-**NO-CLAIM:** the R14/R15 denominator is the declared snapshot universe, not a claim that every
-later row or every future surface is included. Future updates MUST freeze an immutable JSONL
-snapshot before deriving counts; no hash for such a snapshot is supplied here. A WIRE row names
-a proposed beneficiary, not a completed integration.
+**NO-CLAIM:** the 544-row R14/R15 denominator remains the declared review figure, not a claim that
+every later row or every future surface is included. The hash above identifies only the current
+`SURFACE-MAP.jsonl` snapshot; future updates MUST freeze an immutable JSONL snapshot before deriving
+counts. A WIRE row names a proposed beneficiary, not a completed integration.
 
 ---
 
 ## 11.8 Skills are facets of the canonical stages, not twelve extra stages
 
-The R10 `jsm search` output had **12 operational rows, 18 skill references, and 16 unique skill
-names**. That is a skill/facet inventory, not a second stage graph. The canonical mapping is:
+The R10 `jsm search` output was **declared** as having 12 operational rows, 18 skill references,
+and 16 unique skill names; the raw output and counting derivation were not preserved. That is a
+skill/facet inventory, not a second stage graph. The canonical mapping is:
 
 | canonical stage or attribute | skill references | boundary |
 |---|---|---|
@@ -421,16 +461,19 @@ jq -c 'select(.stage_id == "S9" or .decision_id != null)' \
   | jq -c 'select(.session_id == env.OMP_SESSION)'
 ```
 
-No such file, owner wiring, or retrieval output was measured in R10. The session produced eleven
-human decisions in pane scrollback, which is evidence of loss, not evidence of a ledger.
+No such file, owner wiring, or retrieval output was measured in R10. Pane scrollback contained
+human decision activity, but no pane/session artifact or extraction/count procedure was preserved;
+therefore no numeric count is claimed. This is evidence of decision loss, not evidence of a ledger.
 
 ---
 
 ## 11.10 One-to-many namespace and cardinality contract
 
-The current implementation is not a proven 1:many orchestrator. Its measured cardinalities are:
+The current implementation is not a proven 1:many orchestrator. Its source/configuration facts and
+behavior are listed below; no captured multi-session runtime probe is presented, so `observed` is
+reserved for a captured runtime probe.
 
-| surface | observed cardinality / behavior | safe current contract |
+| surface | source-derived/static behavior | safe current contract |
 |---|---|---|
 | resident `omp-orchestrator` process | one configured supervisor process | one process per session until fan-out is proven |
 | `omp-rpc-session` | exactly one OMP `--mode=rpc` child; no cross-session continuity | one child per attached session; no cross-session completion claim |
