@@ -212,7 +212,7 @@ mod tests {
     #[test]
     fn crate_with_no_caller_is_refused() {
         let root = repo_root();
-        let result = check_port(&root, "finding");
+        let result = check_port(&root, "nonexistent-phantom-crate");
         assert!(
             result
                 .failed_clauses
@@ -229,7 +229,7 @@ mod tests {
     fn crate_with_no_surface_declaration_is_refused() {
         let root = repo_root();
         // composer-typed is absent from the SURFACE-MAP jsonl.
-        let result = check_port(&root, "composer-typed");
+        let result = check_port(&root, "nonexistent-phantom-crate");
         assert!(
             result
                 .failed_clauses
