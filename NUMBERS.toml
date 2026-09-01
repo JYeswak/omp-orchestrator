@@ -61,7 +61,7 @@ note     = "12 analysis sections + 12-journey. The convergence gate hardcodes 12
 #    than correcting one, because a correction lasts until the next commit.
 [figures.test_files]
 command  = "for d in crates/*/tests; do ls $d/*.rs 2>/dev/null; done | wc -l"
-expect   = "40"
+expect   = "41"
 appears  = ["docs/plan/00-brief.md", "docs/plan/01-idea.md", "docs/plan/06-gates.md"]
 note     = "was 26 when the brief measured it, 30 by round 10, 31 at the round-11 fix — five meta-gate test files landed during grading. 01-idea's 370/379 and 06-gates' transcribed copies all drift from this one quantity."
 
@@ -73,7 +73,7 @@ note     = "not a fixed figure — the board moves hourly. Declared so any prose
 
 [figures.test_functions]
 command  = "grep -rhc '#\\[test\\]' crates/*/src/*.rs crates/*/tests/*.rs 2>/dev/null | awk '{s+=$1} END{print s}'"
-expect   = "455"
+expect   = "459"
 appears  = ["docs/plan/01-idea.md", "docs/plan/06-gates.md", "docs/plan/00-brief.md"]
 note     = "THE WORST OFFENDER, and it drifted WHILE THIS ROW WAS BEING WRITTEN. Three live values for one quantity — 370, 379, 402 — found in one round, in three sections. Measured 406, and by the time the parser was fixed it was 407, because writing the unescaper test added five functions. The gate caught drift caused by the commit that created it. Corrected by hand four times tonight and drifted again each time, because every new crate adds tests."
 
@@ -149,3 +149,7 @@ command  = "R=/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist
 expect   = "621"
 note     = "The ipg.6 eight-root symbol total, with the counting rule DECLARED: top-level `export [declare] {type,interface,const,function,class,enum} NAME` in *.d.ts. 12-journey previously carried 533 in prose against a table summing to 503, and this command answers 621 -- THREE numbers, none of which shipped a derivation, so none was falsifiable. The gap is concentrated: `eval` alone is 207 here against the table's 95. Registering the rule does not make 621 more true than 533; it makes it CHECKABLE, which the other two never were."
 
+[figures.spawning_crates]
+command  = "n=0; for d in crates/*/; do c=$(find \"$d/src\" -name '*.rs' -type f -exec grep -c 'Command::new' {} + 2>/dev/null | awk -F: '{s+=$NF} END{print s+0}'); [ \"${c:-0}\" -gt 0 ] && n=$((n+1)); done; echo $n"
+expect   = "15"
+note     = "Crates spawning a child process from src/ (production paths only; tests/ excluded because a lint's known-bad specimens must spawn raw to be detectable). 5 declare subprocess-contract; the other 10 carry named allowance rows in spawn_contract.rs, 6 of them marked PROVISIONAL as debt rather than as decisions. My first hand-measurement of this said 12 crates -- it swept tests/ AND I truncated the list with head -12. The gate is the better instrument."
