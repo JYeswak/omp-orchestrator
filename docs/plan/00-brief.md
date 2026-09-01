@@ -101,7 +101,7 @@ resolve. An investor reading R1 hits "bead dag" in the first sentence.
 | **anti-vacuity** | the rule that an empty scan set is an ERROR, never a pass |
 | **BUILT ≠ WIRED** | a mechanism that exists, is correct, tested — and is invoked by nothing |
 | **GHOST** | an installed binary whose source is not in the tree we read. **Historical unverified count: four; the instance list, source-tree result, comparison command, and date were not retained, so this is non-authoritative.** |
-| **OMP** | Oh My Pi, the agent CLI this orchestrator wraps; `omp/18.0.11` |
+| **OMP** | Oh My Pi, the agent CLI this orchestrator wraps; current host recheck: `omp/18.1.2` (the retained scanner snapshots target `omp/18.0.11`) |
 | **`br` / `bv`** | the bead tracker CLI, and its graph-triage companion |
 | **`ntm`** | the tmux fleet manager that owns sessions and panes |
 | **`fh`** | franken-harvest, the queryable index over measured doctrine and the mirror |
@@ -150,7 +150,7 @@ session. Sections must use these figures and must not re-derive them differently
 
 | binary | version | path |
 |---|---|---|
-| `omp` | `omp/18.0.11` | `/Users/josh/.local/bin/omp` |
+| `omp` | `omp/18.1.2` (host recheck; scanner snapshots remain `omp/18.0.11`) | `/Users/josh/.local/bin/omp` |
 | `ntm` | `ntm version v1.30.0-1-gda270719` | `/Users/josh/.local/bin/ntm` |
 | `br` | `br 0.4.1` | `/Users/josh/.local/bin/br` |
 | `bv` | `bv v0.20.0` | `/opt/homebrew/bin/bv` |
@@ -522,7 +522,7 @@ The denominator is now stated in the heading, which is the whole point: *five st
 | consume — selection | decide() picks work | **UNVERIFIED** — no independent selection receipt is recorded |
 | consume — admission | dispatch fence | **FENCED** — the 162 refused-tick/4.2-hour value is historical and unverified; no current refusal-rate figure is claimed |
 | consume — transport | packet delivery | **UNVERIFIED** — cp-z42vu is a historical incident only; the current repository has no planted fixture or receipt payload |
-| actuate | dispatch | **EXISTS AND IS UNFENCED IN THE INSTALLED BINARY** — the resident supervisor sends via `ntm --robot-send`; the "a human types into panes" reading is historical (pre-`kxe`). MEASURED 2026-09-01: build `9a61acd` (208 commits behind HEAD) re-sent bead `815` to `%1408` **131 times in 247 minutes** (11:45–15:53 MDT, one per tick) while the bead stayed `open`/unassigned and the pane was dead on HTTP 402; every row logged `DISPATCHED … RECEIVER_RECEIPT=ntm_robot_send`. Command: `jq -r 'select(.pid==70561 and .status=="DISPATCHED") \| .detail' ~/.local/state/flywheel/omp-orchestrator.heartbeat.jsonl \| sort \| uniq -c`. The claim fence (`dispatch-claim-fence`) exists in the working tree and is called from no committed or installed `main.rs` |
+| actuate | dispatch | **AVAILABLE, NOT VERIFIED** — `send_and_verify` exists at `crates/omp-orchestrator/src/main.rs:714` and is called at `:1461`; the installed 402-dead-pane incident proves an unsafe runtime path, not successful delivery |
 | complete | worker says done | **AVAILABLE, NOT WIRED** — one raw agent_end frame carried isTerminal=true; AgentEndEvent.willContinue is declared upstream, and the supervisor does not consume it |
 
 **The observe row was re-checked against current source after the Round 21 finding.** The current two-capture implementation compares positive timer or stable-hash motion at tick-monitor/src/lib.rs:564-572 before applying the 75-second floor at :574-577. A changed Working pair is Live; an unchanged short-gap pair is Unproven. The earlier block claiming the floor ran first was a historical description, not current behavior.
@@ -784,7 +784,7 @@ Every row is OPEN unless marked. None of these had a home in the document before
 | Q3 | What is the outcome if this works, in customer terms with a baseline and a target? | **OPEN** — the plan describes mechanism end-to-end and outcome nowhere | Josh |
 | Q4 | How long, and with how many people? | **OPEN** — no timeline, no headcount, in any section | Josh |
 | Q5 | Buy, adopt, or build? What existing tool was evaluated and rejected, and why? | **OPEN** — §10 mines the mirror for *patterns*, never for a *substitute* | orchestrator |
-| Q6 | What happens when OMP changes under us? | **OPEN** — we pin omp/18.0.11 and have no compatibility policy; the pre-extraction scanner recorded 799 slash-command rows versus expected 136 and remained UNKNOWN | orchestrator |
+| Q6 | What happens when OMP changes under us? | **OPEN** — the host now reports `omp/18.1.2`; the retained scanner snapshots target `omp/18.0.11`, and no compatibility policy governs upgrades. The pre-extraction scanner's 799-versus-136 slash-command mismatch remains historical. | orchestrator |
 | Q7 | What is the security posture — secrets, tokens, the blast radius of a dispatch? | **OPEN** — no numerical corpus claim is made here; the census recipe below scans all twelve companion files (01–12), case-insensitively | orchestrator |
 | Q8 | Licensing, for us and for what we vendor? | **OPEN** — no numerical corpus claim is made here; the same twelve-file, case-insensitive census recipe below is the source of any future count | Josh |
 | Q9 | Is any of this novel, and does novelty matter here? | **ANSWER MOVED** — the completion protocol’s precedent-free claim is REFUTED: AgentEndEvent.willContinue is WIRE-PROVEN on RpcSessionEventFrame via --mode=rpc; the novelty question remains open for the other six DECLARED ONLY types and their adoption path | orchestrator |
