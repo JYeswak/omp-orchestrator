@@ -1,0 +1,9 @@
+{
+  "success": true,
+  "session": "control-plane",
+  "agents": [
+    {"pane": "1", "pane_idx": 1},
+    {"pane": "2", "pane_idx": 2},
+    {"pane": "3", "pane_idx": 3}
+  ]
+}

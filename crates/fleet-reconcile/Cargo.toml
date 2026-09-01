@@ -1,0 +1,20 @@
+[package]
+license.workspace = true
+name = "fleet-reconcile"
+version = "0.1.0"
+edition = "2021"
+description = "NTM vs tmux ground-truth compare. Port of bin/fleet-reconcile.sh; the shell remains the differential oracle."
+
+[[bin]]
+name = "fleet-reconcile"
+path = "src/main.rs"
+
+[lib]
+name = "fleet_reconcile"
+path = "src/lib.rs"
+
+[dependencies]
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "forbid"

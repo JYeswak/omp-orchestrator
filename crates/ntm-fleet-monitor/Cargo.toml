@@ -1,0 +1,21 @@
+[package]
+license.workspace = true
+name = "ntm-fleet-monitor"
+version = "0.1.0"
+edition = "2021"
+description = "Typed fleet-loop actions and approval/non-approval waves. Classifies; does not send."
+
+[lib]
+name = "ntm_fleet_monitor"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ntm-fleet-monitor"
+path = "src/main.rs"
+
+[dependencies]
+loop-coverage = { path = "../loop-coverage" }
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "forbid"

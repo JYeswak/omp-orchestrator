@@ -1,0 +1,3 @@
+#!/bin/sh
+printf 'pane 2: BUSY fixture\n'
+exit 1

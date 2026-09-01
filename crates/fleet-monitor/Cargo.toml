@@ -1,0 +1,27 @@
+[package]
+license.workspace = true
+name = "fleet-monitor"
+version = "0.1.0"
+edition = "2021"
+description = "The OBSERVE lane: fleet-wide attention wait, idle/ready scan, and the only scheduled writer of the standing admission verdict."
+
+[[bin]]
+name = "fleet-monitor"
+path = "src/main.rs"
+
+[lib]
+name = "fleet_monitor"
+path = "src/lib.rs"
+
+[profile.release]
+opt-level = 2
+
+[dependencies]
+subprocess-contract = { path = "../subprocess-contract" }
+fs2 = "0.4"
+regex = "1"
+serde_json = "1"
+ntm-fleet-monitor = { path = "../ntm-fleet-monitor" }
+
+[lints.rust]
+unsafe_code = "forbid"

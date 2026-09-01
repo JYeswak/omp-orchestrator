@@ -1,0 +1,145 @@
+{
+  "success": true,
+  "timestamp": "2026-08-31T03:06:39Z",
+  "version": "1.0.0",
+  "output_format": "json",
+  "session": "control-plane",
+  "captured_at": "2026-08-31T03:06:39.050306Z",
+  "agents": [
+    {
+      "pane": "1",
+      "pane_idx": 1,
+      "agent_type": "claude",
+      "state": "WAITING",
+      "confidence": 0.9,
+      "velocity": 0,
+      "state_since": "2026-08-31T03:06:39Z",
+      "detected_patterns": [
+        "sigkill",
+        "failed_text",
+        "claude_unicode_prompt",
+        "claude_spinner_past"
+      ],
+      "pane_pid": 74018,
+      "capture_collected_at": "2026-08-31T03:06:39Z",
+      "capture_provenance": "live",
+      "observation_state": "idle",
+      "observation_freshness": "fresh",
+      "observation_confidence": 0.95,
+      "safe_to_dispatch": true,
+      "output_sequence": {
+        "epoch": "b17c1233c8b5d733",
+        "sequence": 15492,
+        "changed_at": "2026-08-31T03:05:41Z"
+      }
+    },
+    {
+      "pane": "2",
+      "pane_idx": 2,
+      "agent_type": "omp",
+      "state": "THINKING",
+      "confidence": 0.8,
+      "velocity": 0,
+      "state_since": "2026-08-31T03:06:39Z",
+      "detected_patterns": [
+        "braille_spinner"
+      ],
+      "pane_pid": 8292,
+      "capture_collected_at": "2026-08-31T03:06:39Z",
+      "capture_provenance": "live",
+      "observation_state": "idle",
+      "observation_freshness": "fresh",
+      "observation_confidence": 0.95,
+      "safe_to_dispatch": true,
+      "output_sequence": {
+        "epoch": "07ee4b9b84f63bfd",
+        "sequence": 222,
+        "changed_at": "2026-08-31T03:06:39Z"
+      }
+    },
+    {
+      "pane": "3",
+      "pane_idx": 3,
+      "agent_type": "omp-claude",
+      "state": "ERROR",
+      "confidence": 0.95,
+      "velocity": 0,
+      "state_since": "2026-08-31T03:06:39Z",
+      "detected_patterns": [
+        "api_error",
+        "braille_spinner"
+      ],
+      "pane_pid": 60448,
+      "capture_collected_at": "2026-08-31T03:06:39Z",
+      "capture_provenance": "live",
+      "observation_state": "idle",
+      "observation_freshness": "fresh",
+      "observation_confidence": 0.95,
+      "safe_to_dispatch": true,
+      "output_sequence": {
+        "epoch": "2e86e8b6b951d59c",
+        "sequence": 836,
+        "changed_at": "2026-08-31T03:06:39Z"
+      }
+    },
+    {
+      "pane": "4",
+      "pane_idx": 4,
+      "agent_type": "omp",
+      "state": "UNKNOWN",
+      "confidence": 0.5,
+      "velocity": 0,
+      "state_since": "2026-08-31T03:06:39Z",
+      "detected_patterns": [
+        "braille_spinner"
+      ],
+      "pane_pid": 3634,
+      "capture_collected_at": "2026-08-31T03:06:39Z",
+      "capture_provenance": "live",
+      "observation_state": "idle",
+      "observation_freshness": "fresh",
+      "observation_confidence": 0.95,
+      "safe_to_dispatch": true,
+      "output_sequence": {
+        "epoch": "f4ec48d1a17ac730",
+        "sequence": 1576,
+        "changed_at": "2026-08-31T03:04:09Z"
+      }
+    }
+  ],
+  "summary": {
+    "total_agents": 4,
+    "by_state": {
+      "ERROR": 1,
+      "THINKING": 1,
+      "UNKNOWN": 1,
+      "WAITING": 1
+    }
+  },
+  "_agent_hints": {
+    "summary": "4 agents: 1 available, 1 busy, 1 problems",
+    "available_agents": [
+      "1"
+    ],
+    "busy_agents": [
+      "2"
+    ],
+    "problem_agents": [
+      "3"
+    ],
+    "suggested_actions": [
+      "Check error/stalled agents in panes: 3",
+      "Send work to available panes: 1"
+    ]
+  },
+  "source_health": {
+    "tmux": {
+      "source": "tmux",
+      "status": "fresh",
+      "collected_at": "2026-08-31T03:06:39Z",
+      "freshness_sec": 0,
+      "stale_after_sec": 5,
+      "provenance": "live"
+    }
+  }
+}

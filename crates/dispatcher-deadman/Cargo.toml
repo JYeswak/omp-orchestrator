@@ -1,0 +1,17 @@
+[package]
+license.workspace = true
+name = "dispatcher-deadman"
+version = "0.1.0"
+edition = "2021"
+description = "Watchdog: eligible work that receives no packet. Port of bin/dispatcher-deadman.sh; the shell remains the differential oracle."
+
+[[bin]]
+name = "dispatcher-deadman"
+path = "src/main.rs"
+
+[lib]
+name = "dispatcher_deadman"
+path = "src/lib.rs"
+
+[lints.rust]
+unsafe_code = "forbid"

@@ -1,0 +1,17 @@
+[package]
+license.workspace = true
+name = "oracle-compare"
+version = "0.1.0"
+edition = "2021"
+description = "Shared comparator: claimed state vs an independent oracle. Empty/unreadable is never agreement."
+
+[package.metadata.merge_gate]
+blocking = false
+reason = "Library-only comparison support; it cannot emit or publish a merge-blocking verdict by itself."
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lib]
+name = "oracle_compare"
+path = "src/lib.rs"

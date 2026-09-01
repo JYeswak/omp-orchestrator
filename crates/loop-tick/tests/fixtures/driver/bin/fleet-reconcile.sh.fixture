@@ -1,0 +1,2 @@
+#!/bin/sh
+printf '{"detector":"fixture","verdict":"PASS","tmux_count":0,"ntm_count":0}\n'

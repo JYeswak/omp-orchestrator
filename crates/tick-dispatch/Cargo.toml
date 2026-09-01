@@ -1,0 +1,21 @@
+[package]
+license.workspace = true
+name = "tick-dispatch"
+version = "0.1.0"
+edition = "2021"
+description = "Ground-truth pane dispatch fence. Port of bin/tick-dispatch.sh; ntm/tmux/br/pane-truth remain EXTERNAL."
+
+[[bin]]
+name = "tick-dispatch"
+path = "src/main.rs"
+
+[lib]
+name = "tick_dispatch"
+path = "src/lib.rs"
+
+[dependencies]
+oracle-compare = { path = "../oracle-compare" }
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "forbid"

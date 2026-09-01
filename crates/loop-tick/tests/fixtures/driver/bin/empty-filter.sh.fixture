@@ -1,0 +1,7 @@
+#!/bin/sh
+if [ "${1:-}" = "--selftest-guard" ]; then
+  printf 'queue-filter guard: PASS (fixture)\n'
+  exit 0
+fi
+cat >/dev/null
+exit 0

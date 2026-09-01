@@ -1,0 +1,21 @@
+[package]
+license.workspace = true
+name = "reap-finished-panes"
+version = "0.1.0"
+edition = "2021"
+description = "Sweep finished worker panes before the next dispatch. Port of bin/reap-finished-panes.sh; the shell remains the differential oracle."
+
+[[bin]]
+name = "reap-finished-panes"
+path = "src/main.rs"
+
+[lib]
+name = "reap_finished_panes"
+path = "src/lib.rs"
+
+[dependencies]
+fs2 = "0.4"
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "forbid"

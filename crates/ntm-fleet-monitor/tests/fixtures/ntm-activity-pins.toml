@@ -1,0 +1,15 @@
+schema_version = 1
+
+[[pinned_versions]]
+version = "v1.30.0-1-gda270719"
+revision = "da27071925adc8530402fa10fcfdf5d181e9c28a"
+source = "ntm version"
+
+
+[[captures]]
+version = "v1.30.0-1-gda270719"
+command = "ntm --robot-activity=control-plane"
+captured_at = "2026-08-31T03:06:39.050306Z"
+payload = "ntm-activity-v1.30.0.json"
+payload_sha256 = "e71ab8b8193272eceba41745595ce0332b1a771be9168ef2113413a8ed9d70d1"
+provenance = "live tmux-backed NTM robot response"

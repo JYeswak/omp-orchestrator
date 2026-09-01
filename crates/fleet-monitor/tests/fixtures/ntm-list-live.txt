@@ -1,0 +1,7 @@
+  clutterfreespaces: 1 windows
+  control-plane: 1 windows
+  franken-harvest: 1 windows
+  opencode-qwen: 2 windows
+  qwen38: 1 windows
+  zeststream-cast: 1 windows
+  zeststream-cast-wave-20260825-1910: 1 windows

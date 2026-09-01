@@ -1,0 +1,13 @@
+{
+  "success": true,
+  "timestamp": "2026-08-26T20:07:15Z",
+  "version": "1.0.0",
+  "output_format": "json",
+  "session": "control-plane",
+  "captured_at": "2026-08-26T20:07:15.204657Z",
+  "agents": [
+    {"pane": "1", "pane_idx": 1, "agent_type": "claude", "observation_state": "idle", "safe_to_dispatch": true, "pane_pid": 74018},
+    {"pane": "2", "pane_idx": 2, "agent_type": "codex", "observation_state": "idle", "safe_to_dispatch": true, "pane_pid": 74019},
+    {"pane": "3", "pane_idx": 3, "agent_type": "grok", "observation_state": "idle", "safe_to_dispatch": true, "pane_pid": 74020}
+  ]
+}

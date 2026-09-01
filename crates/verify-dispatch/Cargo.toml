@@ -1,0 +1,22 @@
+[package]
+license.workspace = true
+name = "verify-dispatch"
+version = "0.1.0"
+edition = "2021"
+description = "Ground-truth dispatch verification from bead status only. Port of bin/verify-dispatch.py; the Python file remains the differential oracle."
+
+[[bin]]
+name = "verify-dispatch"
+path = "src/main.rs"
+
+[lib]
+name = "verify_dispatch"
+path = "src/lib.rs"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "forbid"

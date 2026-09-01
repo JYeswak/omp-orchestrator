@@ -1,0 +1,21 @@
+[package]
+license.workspace = true
+name = "pane-dispatch-ready"
+version = "0.1.0"
+edition = "2021"
+description = "Can this pane SAFELY RECEIVE a dispatch. Port of bin/pane-dispatch-ready.sh; the shell remains the differential oracle."
+
+[[bin]]
+name = "pane-dispatch-ready"
+path = "src/main.rs"
+
+[lib]
+name = "pane_dispatch_ready"
+path = "src/lib.rs"
+
+[dependencies]
+regex = "1"
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "forbid"
