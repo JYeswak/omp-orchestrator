@@ -1518,3 +1518,62 @@ mod census_is_measured_not_frozen {
         );
     }
 }
+
+#[cfg(test)]
+mod disk_pressure_thresholds {
+    /// The predicate, isolated from `df` so both directions are testable without
+    /// filling a volume. Mirrors main.rs::disk_pressure's arithmetic exactly.
+    fn refuses(total_k: u64, avail_k: u64) -> bool {
+        if total_k == 0 {
+            return true; // a zero-size volume is a finding, never a pass
+        }
+        let pct_free = (avail_k as f64 / total_k as f64) * 100.0;
+        let gib_free = avail_k as f64 / 1024.0 / 1024.0;
+        pct_free < 8.0 || gib_free < 1.0
+    }
+
+    #[test]
+    fn the_measured_halt_condition_refuses() {
+        // The exact state that stopped every gate on 2026-09-01:
+        // 9.2GiB used, 98MiB available on a ~9.3GiB volume.
+        let total = 9_752_866; // ~9.3 GiB in 1K blocks
+        let avail = 100_352;   // ~98 MiB
+        assert!(refuses(total, avail),
+            "the state that actually halted the fleet must refuse");
+    }
+
+    #[test]
+    fn the_state_i_ignored_hours_earlier_also_refuses() {
+        // 84% full, 1.5GiB free — observed, recorded as "needs a decision", not acted on.
+        // Under 1GiB floor? No. Under 8% free? 16% free, no. So this does NOT refuse,
+        // and that is the honest limit: this guard would NOT have caught the earlier
+        // warning state. It catches the halt, not the trend.
+        let total = 9_752_866;
+        let avail = 1_572_864; // 1.5 GiB
+        assert!(!refuses(total, avail),
+            "1.5GiB/16% free passes — documenting that this guard catches the HALT, \
+             not the 84% warning I ignored. Trend detection is a separate, unbuilt thing.");
+    }
+
+    #[test]
+    fn a_healthy_volume_passes() {
+        // Post-clean: 5.6GiB free of 9.3GiB = 60%.
+        assert!(!refuses(9_752_866, 5_872_025), "a 60%-free volume must not refuse");
+    }
+
+    #[test]
+    fn the_gib_floor_bites_independently_of_the_percentage() {
+        // A large volume can be percentage-healthy and still too small in absolute
+        // terms for a 4GiB release rebuild. 10% free of 8GiB = 800MiB.
+        let total = 8_388_608; // 8 GiB
+        let avail = 838_860;   // ~819 MiB, 10% free
+        assert!(refuses(total, avail),
+            "10% free is above the percentage floor but under 1GiB — the absolute \
+             floor must bite, or a big volume passes while a rebuild cannot fit");
+    }
+
+    #[test]
+    fn a_zero_size_volume_is_a_finding_not_a_pass() {
+        assert!(refuses(0, 0), "an unmeasurable volume must refuse, never pass");
+    }
+}

@@ -947,3 +947,65 @@ terminal buffer with a typed consumer means holding a session per pane — the s
 measurement: nothing here shows the `goals` budget runtime is reachable from a process we run, and
 that is exactly the declared-versus-wire-proven distinction that made seven of the eight gap
 adoptions weaker than the first.
+
+---
+
+## 2.13 The scraping finding is systemic: three roots, one pattern
+
+`%1408`, bead `ipg.2`, coverage table at `cab09e0`, extending §2.12. Three more roots, and the
+disposition repeats hard enough to stop being a per-root fact.
+
+| root | disposition | scale |
+|---|---|---|
+| `modes` (§2.12) | **REIMPLEMENTED BY SCRAPING** | 204 files, 843 symbols |
+| `task` | **REIMPLEMENTED BY SCRAPING** | 27 files — the **entire subagent lifecycle** |
+| `slash-commands` | **REIMPLEMENTED BY SCRAPING** | census enumerates **0** against an expected **136** |
+| `commands` | NOT OURS | 42 CLI verbs for human users |
+
+### `task` is the one that should stop the room
+
+27 files typing **spawn, parallel, worktree, structured-output and yield** — the complete subagent
+lifecycle — and this system consumes it **as pane text**. Every subagent dispatched tonight was
+launched by typing into a terminal and its completion inferred by regex over a scrollback buffer,
+against a typed lifecycle that describes exactly those states.
+
+That is not a missing feature. It is the same mechanism we already refuted once: §10 claimed a
+worker-completion signal was precedent-free across 210 repositories while `AgentEndEvent` shipped in
+the dependency. **`task` is that finding again, one layer up** — not a completion event this time but
+the whole lifecycle around it.
+
+### `slash-commands`: 0 of 136
+
+The census consumes the type root and enumerates **zero** members against an expected 136. Largest
+unmapped OMP surface in the project. A count of zero from a root we can read is not "no surface" —
+it is an unfinished enumeration, and §02's own history contains four instances of exactly that error
+being reported as a measurement.
+
+### Why this is a plan-level finding and not a backlog item
+
+Josh's standing objective: *"Every surface of our journey mapped to specific commands with proper
+guards and timeouts, everything typed — nothing unknown."*
+
+Measured against that sentence, the orchestrator's **primary sensor is a regex over rendered text**
+for pane state, subagent lifecycle, and command surface alike. Every rendering change upstream
+arrives here as a correctness bug, and the record already shows the bill:
+
+- the v18 status-line contract changed and the shipped classifier scored **0/3 on live payload**
+- a stale spinner in scrollback reported a **dead pane alive**
+- a whole-buffer scan scored one pane **working AND idle simultaneously**
+- `muxPing` returned null against a six-mux machine and was read as a broken surface
+
+Four failures, one cause. A typed consumer has none of them, and `task` + `modes` + `slash-commands`
+is the typed surface sitting unused.
+
+### NO-CLAIM
+
+The positive control **FAILED** on both `ipg.1` and `ipg.2` — no root came back FULLY COVERED — and
+was diagnosed as agent-plane rather than a broken scan, with anti-vacuity passing independently on
+each. That diagnosis is a judgement, and it is the judgement most likely to be wrong here: a scan
+that reports partial coverage on every root it touches is *also* what a subtly broken scan looks
+like. Nothing in either bead distinguishes those two worlds beyond the argument itself.
+
+Adopting any of this means holding a session per worker rather than reading a pane — the topology
+change §11.9 already prices as the real cost of the completion-signal adoption. **Nothing here has
+been adopted.** The finding is that we built a scraper where a typed surface existed, three times.

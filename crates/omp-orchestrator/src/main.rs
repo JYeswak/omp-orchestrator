@@ -820,6 +820,80 @@ fn docs_are_stale(config: &Config) -> Result<Option<String>, String> {
         )))
     }
 }
+/// Refuse to tick when the volume a build would write to is nearly full.
+///
+/// # Why this refuses rather than warns
+///
+/// A full build volume does not fail as "disk full". It fails as
+/// `failed to link or copy .../out/pre_commit_gate` — a LINKER error, indistinguishable
+/// at a glance from a code defect, three layers below the thing that actually broke.
+/// Every gate in this repository stopped that way on 2026-09-01 while the volume sat
+/// at 99%.
+///
+/// # Which volume
+///
+/// `CARGO_TARGET_DIR` when set, because that is where the bytes land and it is
+/// frequently NOT under the repository — here it is `/Volumes/BuildShared`, a
+/// different device from the checkout, so checking the repo's own filesystem would
+/// have reported 84% free and passed while builds failed.
+///
+/// # Threshold
+///
+/// 8% free, floored at 1 GiB. One full release rebuild of this workspace is roughly
+/// 4 GiB, so 1 GiB is already too little — the floor is a refusal point, not a
+/// comfort margin, and a tick that passes here can still exhaust the volume.
+fn disk_pressure(config: &Config) -> Result<Option<String>, String> {
+    let target = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| config.repo.join("target"));
+
+    // Walk up to the nearest existing ancestor: the target dir may not exist yet on
+    // a fresh clone, and statfs on a missing path answers nothing useful.
+    let mut probe = target.clone();
+    while !probe.exists() {
+        match probe.parent() {
+            Some(p) if p != probe => probe = p.to_path_buf(),
+            _ => return Ok(None), // nothing to measure; do not invent a refusal
+        }
+    }
+
+    let out = std::process::Command::new("df")
+        .args(["-k", &probe.display().to_string()])
+        .output()
+        .map_err(|e| format!("DISK_PRESSURE df failed to spawn: {e}"))?;
+    let text = String::from_utf8_lossy(&out.stdout);
+
+    // df's second line: Filesystem 1K-blocks Used Available Capacity ... Mounted
+    let Some(line) = text.lines().nth(1) else {
+        return Err(format!(
+            "DISK_PRESSURE df produced no data row for {} — an unreadable volume is a \
+             FINDING, never a pass",
+            probe.display()
+        ));
+    };
+    let f: Vec<&str> = line.split_whitespace().collect();
+    let (Some(total), Some(avail)) = (
+        f.get(1).and_then(|v| v.parse::<u64>().ok()),
+        f.get(3).and_then(|v| v.parse::<u64>().ok()),
+    ) else {
+        return Err(format!("DISK_PRESSURE could not parse df row: {line:?}"));
+    };
+    if total == 0 {
+        return Err("DISK_PRESSURE df reported a zero-size volume".to_owned());
+    }
+
+    let pct_free = (avail as f64 / total as f64) * 100.0;
+    let gib_free = avail as f64 / 1024.0 / 1024.0;
+    if pct_free < 8.0 || gib_free < 1.0 {
+        return Ok(Some(format!(
+            "volume={} free={gib_free:.2}GiB ({pct_free:.1}%) below floor 8%/1GiB; a build here \
+             fails as a LINKER error, not as disk-full",
+            probe.display()
+        )));
+    }
+    Ok(None)
+}
+
 
 fn write_dispatch_intent(config: &Config, pane: &str, bead: &str) -> Result<(), String> {
     if let Some(parent) = config.pending_dispatch.parent() {
@@ -898,6 +972,25 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
              authority=HD-0001"
         );
         println!("{detail}");
+        return Ok(());
+    }
+
+    // DISK PRESSURE. Checked BEFORE observation because every downstream step in
+    // this tick spawns a build, and a build on a full volume fails as a LINKER
+    // error that reads like a code defect.
+    //
+    // Measured 2026-09-01, while executing the objective that asks for "proper
+    // guards": /Volumes/BuildShared reached 99% (98MiB free) and every gate in the
+    // repository stopped with `No space left on device (os error 28)`. The volume
+    // had been observed at 84% hours earlier and recorded as an item needing a
+    // decision. It was the only item on that list that could halt the fleet.
+    //
+    // A guard that observes and does not refuse is a note. This refuses.
+    if let Some(why) = disk_pressure(config)? {
+        write_heartbeat(config, tick, "DISK_PRESSURE", &why)?;
+        println!(
+            "DISK_PRESSURE owner=josh next_action=cargo-clean-or-grow-volume detail={why}"
+        );
         return Ok(());
     }
     let mut monitor_args = vec![

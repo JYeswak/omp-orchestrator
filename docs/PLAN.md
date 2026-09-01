@@ -2372,6 +2372,68 @@ measurement: nothing here shows the `goals` budget runtime is reachable from a p
 that is exactly the declared-versus-wire-proven distinction that made seven of the eight gap
 adoptions weaker than the first.
 
+---
+
+## 2.13 The scraping finding is systemic: three roots, one pattern
+
+`%1408`, bead `ipg.2`, coverage table at `cab09e0`, extending §2.12. Three more roots, and the
+disposition repeats hard enough to stop being a per-root fact.
+
+| root | disposition | scale |
+|---|---|---|
+| `modes` (§2.12) | **REIMPLEMENTED BY SCRAPING** | 204 files, 843 symbols |
+| `task` | **REIMPLEMENTED BY SCRAPING** | 27 files — the **entire subagent lifecycle** |
+| `slash-commands` | **REIMPLEMENTED BY SCRAPING** | census enumerates **0** against an expected **136** |
+| `commands` | NOT OURS | 42 CLI verbs for human users |
+
+### `task` is the one that should stop the room
+
+27 files typing **spawn, parallel, worktree, structured-output and yield** — the complete subagent
+lifecycle — and this system consumes it **as pane text**. Every subagent dispatched tonight was
+launched by typing into a terminal and its completion inferred by regex over a scrollback buffer,
+against a typed lifecycle that describes exactly those states.
+
+That is not a missing feature. It is the same mechanism we already refuted once: §10 claimed a
+worker-completion signal was precedent-free across 210 repositories while `AgentEndEvent` shipped in
+the dependency. **`task` is that finding again, one layer up** — not a completion event this time but
+the whole lifecycle around it.
+
+### `slash-commands`: 0 of 136
+
+The census consumes the type root and enumerates **zero** members against an expected 136. Largest
+unmapped OMP surface in the project. A count of zero from a root we can read is not "no surface" —
+it is an unfinished enumeration, and §02's own history contains four instances of exactly that error
+being reported as a measurement.
+
+### Why this is a plan-level finding and not a backlog item
+
+Josh's standing objective: *"Every surface of our journey mapped to specific commands with proper
+guards and timeouts, everything typed — nothing unknown."*
+
+Measured against that sentence, the orchestrator's **primary sensor is a regex over rendered text**
+for pane state, subagent lifecycle, and command surface alike. Every rendering change upstream
+arrives here as a correctness bug, and the record already shows the bill:
+
+- the v18 status-line contract changed and the shipped classifier scored **0/3 on live payload**
+- a stale spinner in scrollback reported a **dead pane alive**
+- a whole-buffer scan scored one pane **working AND idle simultaneously**
+- `muxPing` returned null against a six-mux machine and was read as a broken surface
+
+Four failures, one cause. A typed consumer has none of them, and `task` + `modes` + `slash-commands`
+is the typed surface sitting unused.
+
+### NO-CLAIM
+
+The positive control **FAILED** on both `ipg.1` and `ipg.2` — no root came back FULLY COVERED — and
+was diagnosed as agent-plane rather than a broken scan, with anti-vacuity passing independently on
+each. That diagnosis is a judgement, and it is the judgement most likely to be wrong here: a scan
+that reports partial coverage on every root it touches is *also* what a subtly broken scan looks
+like. Nothing in either bead distinguishes those two worlds beyond the argument itself.
+
+Adopting any of this means holding a session per worker rather than reading a pane — the topology
+change §11.9 already prices as the real cost of the completion-signal adoption. **Nothing here has
+been adopted.** The finding is that we built a scraper where a typed surface existed, three times.
+
 
 ---
 
@@ -7296,6 +7358,78 @@ third goal-tracker beside beads and the OMP goal runtime would be the 20-mechani
 
 NO-CLAIM: mapping is not adopting. (a) not-ours is a legitimate terminal state. The coverage table
 records what exists; the build decision is §09's, not §12.11's.
+
+### 12.12 Surface coverage: task, commands, slash-commands
+
+> **ipg.2**: *each surface gets a row in the coverage table with all 8 columns and a classification —
+> (a) not ours, (b) reimplemented by scraping, (c) unused capability.*
+
+**Swept 2026-09-01.** Three type roots, 82 files total, walked to export level. The per-crate
+contract's eight clauses are assessed against our crates.
+
+| surface | OMP files | OMP symbols | 1 asuper | 2 forbid | 3 cancel | 4 typed | 5 logged | 6 observable | 7 robot | 8 WIRED | classification |
+|---|---:|---:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|---|
+| `task` | 27 | ~200 | — | — | — | — | — | — | — | — | **(b) REIMPLEMENTED BY SCRAPING** — the agent's entire subagent lifecycle (spawn, parallel, worktree, structured output, yield) consumed as pane text by tick-monitor |
+| `commands` | 42 | ~120 | ✓¹ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | **(a) NOT OURS** — 39 agent CLI subcommands for human users; we probe `--version` and `--help` only |
+| `slash-commands` | 13 | ~80 | ✓² | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓² | **(b) REIMPLEMENTED BY SCRAPING** — census `slash_commands=0` vs `expected=136`: we try to scrape them over RPC and get zero; the scanner consumes the type root but enumerates nothing |
+
+¹ The ✓s on `commands` and `slash-commands` are omp-inventory-map's census clauses: the scanner
+consumes the type root, parses the installed cli.js, and emits typed rows. They are NOT a
+modes-adopting crate's clauses — the census observes, it does not adopt.
+² `slash-commands` is consumed by the census (type_root:slash-commands is one of the 7 consumes
+edges) but the census probe returns zero slash commands (the `slash_commands=0`/`expected=136`
+mismatch), so the coverage is scanner-level only: the type root is touched, the commands are not
+enumerated.
+
+**Positive control: FAILED — 0 of 3 surfaces is FULLY COVERED.** Same result as ipg.1, same reason:
+all three are agent-plane features. `task` is the agent's subagent lifecycle; `commands` are the
+agent's CLI verbs for human users; `slash-commands` are the agent's interactive-session shortcuts.
+Our orchestration layer dispatches work to agents, it does not BE the agent. The scan is not broken
+— the surfaces are genuinely outside the orchestration scope, and mapping them confirms the
+boundary rather than expanding it.
+
+**Anti-vacuity: PASSED** — 3 surfaces enumerated, 82 files walked to export level, 0 is not the
+count.
+
+#### Per-surface detail
+
+**`task` — (b) REIMPLEMENTED BY SCRAPING.** 27 files covering the agent's ENTIRE subagent
+lifecycle: `AgentDefinition` parsing, `StructuredSubagent` with schema modes ("permissive" |
+"strict"), `mapWithConcurrencyLimit` (parallel execution), `WorktreeBaseline`/`RepoBaseline`
+(worktree isolation), `ResolvedSpawnPolicy`, `PromptPolicy`, `YieldItem`/`assembleYieldResult`
+(yield assembly), `SubprocessToolRegistry`, `OutputManager`, `ErrorAttribution`, `PersistedRevive`,
+and `PreWalk`. We interact with agents through tmux panes (screen-scraping), consuming the rendered
+output without adopting any of these types. The `parallel.d.ts` concurrency primitive
+(`mapWithConcurrencyLimit`) is a generic utility our subprocess-contract could use, but adopting
+a TypeScript concurrency function into a Rust crate is not a type-adoption — it is a
+reimplementation decision.
+
+**`commands` — (a) NOT OURS.** 42 CLI subcommand classes for human users interacting with the
+agent: `acp`, `agents`, `auth-broker`, `auth-gateway`, `bench`, `browser-relay`, `cleanse`,
+`commit`, `complete`, `completions`, `compress`, `config`, `dry-balance`, `gallery`, `gc`, `git`,
+`grep`, `grievances`, `if-bench`, `images`, `install`, `join`, `models`, `plugin`, `ps`, `read`,
+`render`, `say`, `search`, `setup`, `share`, `shell`, `ssh`, `stats`, `tiny-models`, `token`,
+`ttsr`, `update`, `usage`, `web-search`, `worktree`. Our orchestrator probes `--version` and
+`--help` for census and identity purposes; it does not consume the command classes.
+
+**`slash-commands` — (b) REIMPLEMENTED BY SCRAPING.** 13 files of built-in slash-command
+definitions (ACP builtins, collaboration, completions, control, lifecycle, marketplace, modes,
+registry, session). The census consumes this type root and probes the RPC startup stream for
+slash commands, finding **zero** against `expected_slash_commands=136`. The 136-command gap is the
+largest unmapped OMP surface and this scanner-level gap is why the type root is consumed but the
+commands are not enumerated.
+
+#### What would Jeffrey do
+
+`task/parallel.d.ts`'s `mapWithConcurrencyLimit` is the surface that crosses the agent/orchestration
+boundary most cleanly — it is a generic concurrency primitive that does not know about coding
+agents. If our subprocess-contract grew a TypeScript-bridged concurrency adapter, it would use this
+shape. But adopting a TypeScript function into a Rust crate is a reimplementation decision, not a
+type adoption, and the bridge cost exceeds the benefit when `rayon` or `tokio::spawn` already
+provide the same primitive in Rust.
+
+NO-CLAIM: mapping is not adopting. The coverage table records what exists; the adoption decision
+is §09's.
 
 
 ---
