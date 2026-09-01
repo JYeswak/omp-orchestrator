@@ -28,7 +28,7 @@ note     = "was 20 at inception, then 23, now 26. Cited in four documents."
 
 [figures.built_binaries]
 command  = "cargo metadata --format-version 1 --no-deps 2>/dev/null | python3 -c \"import sys,json;m=json.load(sys.stdin);print(len([t for p in m['packages'] for t in p['targets'] if 'bin' in t['kind']]))\""
-expect   = "22"
+expect   = "23"
 appears  = ["docs/plan/07-installability.md"]
 note     = "cargo metadata, NOT cargo build: build emits artifacts only for crates it actually recompiles, so an up-to-date workspace answers 0. The gate caught that on its first run. This is the instrument that answers 'binaries the workspace builds'. grep fn main says 18 (re-measured 2026-09-01), [[bin]] says 16."
 
