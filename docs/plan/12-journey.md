@@ -34,9 +34,9 @@ catching itself producing.
 | S8 | Ship | installable, versioned, with a rollback |
 | S9 | Human requirements stored | every human decision durable and retrievable |
 
-S9 is not last — it is **cross-cutting**. Every stage generates human decisions and every stage
-loses them. This session alone produced eleven that live only in pane scrollback.
+S9 is not last — it is **cross-cutting**. Every stage generates human decisions and every stage loses them unless the ledger writer runs. This session produced three manually recorded HD rows; remaining decisions can still live only in pane scrollback.
 
+**Dispatch-order invariant.** The canonical execution order is S1 → S2 → S3 → S4 → S5 → S6 → S7 → S8, with S9 cross-cutting. The detailed blocks below are retained in authoring/appendix order, so their physical heading order is not the execution order; an orchestrator MUST use this index and the Trigger fields, never file position.
 ## The runbook contract
 
 **SCOPE — read before applying this.** This contract governs the **nine journey stages S1–S9**
@@ -97,10 +97,7 @@ strongest signal this method produces — these are not one model's hobbyhorse.
 
 ### The three that are already measured, not speculative
 
-**S9 has no mechanism at all.** §12's own stage table promises *"every human decision durable and
-retrievable"* and nothing anywhere implements it. Eleven of Josh's rulings tonight live only in
-pane scrollback and die at the next compaction. `%1408`: *"every pane in this session was re-briefed
-by hand."* That is not a prediction about month three; it is what this session cost.
+**S9 has no automated mechanism.** The stage table promises every human decision durable and retrievable, but only three manual `HD-<n>` rows currently exist in `docs/decisions.jsonl`; no writer, lifecycle-event linkage, or amortization consumer is proven. The unresolved writer gap is why decisions can still die at compaction.
 
 **1:many is in the mission and almost nowhere in the artifacts.** Measured tonight: `state_path()`
 returned one fixed path for eight live sessions and the directory was hardcoded to a single
@@ -230,7 +227,7 @@ the no-GPU stub path is untested by me. What is claimed is that the *role taxono
 
 ---
 
-## 12.10 The milestone loop — what runs before anything is built
+## Foundation preflight loop — what runs before anything is built
 
 > **Josh:** *"we establish — what happens foundationally for each stage first that everything else
 > builds upon — gates, crates, input/output, schema, what needs to be true, negative patterns …
@@ -249,7 +246,7 @@ input to the next:
 |---|---|---|---|
 | F1 | **Schema** | what shape does this stage read and write | no `SCHEMAS.toml` row → the stage may not persist anything |
 | F2 | **I/O contract** | who produces the input, who consumes the output | an unnamed consumer → the stage is BUILT ≠ WIRED by construction |
-| F3 | **Crates** | which crate owns the mechanism, which is a thin caller | mechanism in a binary → untestable, and 21 of ours already are |
+| F3 | **Crates** | which crate owns the mechanism, which is a thin caller | mechanism in a binary with no library surface -> untestable; every stage must name the crate and caller explicitly |
 | F4 | **Gates** | what refuses a bad result, and does it bite | no known-bad leg → the gate is decorative |
 | F5 | **Numbers** | which figures does this stage claim | undeclared figure → silent rot, measured 5 rounds running |
 
@@ -270,8 +267,7 @@ Three columns, kept per stage, and the third is the one that pays:
 **Why this is a field and not a document.** The single most expensive discovery of this session was
 that seven "gaps" had upstream types in the tool we wrap, and the eighth (`plan-mode`) turned up two
 hours later. Every one had sat in prose as a settled absence. **An unknown that never had a resolving
-experiment attached is indistinguishable from a known** — and §10 called one of them "precedent-free
-across 210 repositories" while the precedent shipped in the binary named on line one.
+experiment attached is indistinguishable from a known** — and §10 called one of them "precedent-free across 210 filesystem entries" while the precedent shipped in the binary named on line one.
 
 > *Upstream type for this gap: `AgentEndEvent.willContinue` (`extensibility/shared-events.d.ts:154`, WIRE-PROVEN). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
@@ -299,7 +295,7 @@ Honestly: **three of nine fields, and the bead standard.**
 |---|---|---|
 | F1 schema | `schemas.rs` + `SCHEMAS.toml` | this session |
 | F4 gates bite | `no-shell-gate` mutation legs | this session |
-| F5 numbers | `numbers.rs` + `NUMBERS.toml`, 13 figures | this session |
+| F5 numbers | numbers.rs + NUMBERS.toml, 22 figures | this session |
 | bead shape | `bead_standard.rs` — **plan-derived beads have no ratchet** | this session |
 | F2, F3, field 9 | **nothing** | — |
 
@@ -327,11 +323,11 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 > *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
-**Negative patterns.** (1) Unclaimed dispatch — `5rh`-to-`%1413`, measured twice (11-lifecycle §S5). (2) Transport success ≠ delivery — `cp-z42vu`, `success:[4]`, packet never arrived (dispatch-silence-watch/src/lib.rs:10-11). (3) Recency over graph — 19 waves dispatched newest-first while PageRank named the articulation point (stand-down confession; live proof `bv --robot-next` → omp-orchestrator-2o5, "Unblocks 2z2.1/2z2.2", score 0.492).
+**Negative patterns.** (1) Unclaimed dispatch — 5rh-to-%1413, measured twice (11-lifecycle §S5). (2) Transport success is not delivery — cp-z42vu and success:[4] are a historical incident record only; the current repository has no cp-z42vu fixture or success:[4] planted test. (3) Recency over graph — 19 waves dispatched newest-first while PageRank named the articulation point. The first two remain failure shapes; only the claim-fence and receipt legs are currently in-tree.
 
 **Skills.** `vibing-with-ntm` (pane coordination; does NOT cover claims/receipts — it predates them), `beads-north-star` (bead shape the packet carries), `multi-agent-swarm-workflow` (wave mechanics; assumes a single shared session, which is exactly the 1:many gap).
 
-**Done signal.** The packet-journal row for this dispatch carries `receipt: RECEIPT_CONFIRMED` (or a typed refusal naming the target) and `claim_id`; command: `jq 'select(.bead=="<id>")' docs/plan/DISPATCH.jsonl | last` — exit 0 with a non-empty receipt object.
+**Done signal. PROJECTED until the dispatch journal writer exists.** A receipt object alone is insufficient. Future command: set -o errexit -o nounset -o pipefail; test -s docs/plan/DISPATCH.jsonl; jq -e 'select(.bead=="<id>") | ((.claim_id|type)=="string") and ((.claim_id|length)>0) and ((.targets|type)=="array") and ((.targets|length)>0) and ((.receipt|type)=="object") and ((.receipt.verdict|type)=="string") and ((.receipt.verdict|length)>0) and (.receipt.evidence != null) and ((.journal_seq|type)=="number")' docs/plan/DISPATCH.jsonl >/dev/null. A matching row with receipt:{}, missing claim, empty targets, missing verdict/evidence, malformed JSON, or absent input exits non-zero.
 
 **F1 SCHEMA.** `DISPATCH.jsonl` — append-only. Required: `ts, wave, bead, targets[], transport, claim_id, receipt{verdict, evidence}, journal_seq`. Row already declared in SCHEMAS.toml as `DISPATCH.jsonl` (append-only; the S5 writer is the only allowed writer). SCHEMAS.toml row: EXISTS (`[artifacts.dispatch_journal]`, added this wave).
 
@@ -339,15 +335,15 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 **F3 CRATES.** Mechanism: `dispatch-claim-fence` (permit), `receiver-receipt` (verdict), `ack-stage` (transport types), `dispatch-silence-watch` (silence detection) — all exist. Thin caller: the dispatch step in `omp-orchestrator` (main.rs run path) — exists, currently a human types instead. MUST BE CREATED: nothing — the mechanism set is complete; the wire is the work.
 
-**F4 GATES.** Gate: the dispatch claim fence refuses a packet naming an unclaimed bead, and the transport gate refuses a bare success without a receipt. Known-BAD leg (IN-TREE, per beads-north-star): `dispatch-silence-watch`'s cp-z42vu fixture is the planted specimen — a test that feeds `success:["4"]` with no arrival and asserts the verdict is NOT `Delivered`. Exists: yes (dispatch-silence-watch tests). The claim-fence's known-bad: the `Reassigned` arm test. Both in-tree. REFUSES: unclaimed send, receipt-less success, and (the one that does not exist yet) partial fan-in reported as complete.
 
+**F4 GATES.** The dispatch claim fence refuses a packet naming an unclaimed bead, and the transport gate refuses bare success without a receipt. The cp-z42vu known-BAD fixture is **PROJECTED, not present**: current dispatch-silence-watch tests contain no cp-z42vu or success:[4] payload. The claim-fence Reassigned arm is in-tree. Until the planted receipt fixture exists, no in-tree test claim is made for that historical transport incident. REFUSES: unclaimed send, receipt-less success, and partial fan-in reported as complete once the fan-in gate exists.
 > *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 **F5 NUMBERS.** Figures this stage claims, to be declared in NUMBERS.toml on first run: `dispatch_journal_rows` (baseline 0 today — declare with `expect="0"` and ratchet up; NUMBERS gate fails on drift, which IS the ratchet), `unclaimed_dispatches` (expect 0 after the claim wire; any nonzero is a regression), `fanout_partial_waves` (expect 0). Declared today: none — the stage has not run; declaring a number for a stage that has never executed is a figure with no derivation, which is the defect this field exists to kill.
 
-**KNOWN.** 18-edge DAG complete and verified (round 10: scanner-identical); claim fence + dispatch fence built (fence held 4.2h); `ntm claim/locks/message` surfaces probed live; `AgentEndEvent` completion wire-proven `{"type":"agent_end","isTerminal":true}` on `RpcSessionEventFrame`; 162 refused ticks / 4.2h with `DISPATCH_RETRY_BLOCKED`.
+**KNOWN, bounded.** The claim fence and dispatch fence exist, ntm claim/locks/message surfaces were probed, and one AgentEndEvent frame is wire-proven as a typed external observation. The **18-edge DAG**, **4.2-hour fence window**, and **162 refused ticks** are round-10 historical snapshots without a retained deriving command; they are not current figures and do not appear in NUMBERS.toml.
 
-**UNKNOWN.** (1) Does per-target receipt survive a multi-target `--robot-send`? Experiment: one 3-pane wave, compare per-target receipts against pane truth. Cost: one wave, ~10 min. (2) Does `ntm claim` hold across a pane restart? Experiment: claim, kill pane, respawn, re-check `ntm locks`. Cost: ~5 min. Both cheap; both run before the first bead of the first wave, per §12.10's cheapest-falsifier rule.
+**UNKNOWN.** (1) Does per-target receipt survive a multi-target `--robot-send`? Experiment: one 3-pane wave, compare per-target receipts against pane truth. Cost: one wave, ~10 min. (2) Does `ntm claim` hold across a pane restart? Experiment: claim, kill pane, respawn, re-check `ntm locks`. Cost: ~5 min. Both cheap; both run before the first bead of the first wave, per the Foundation preflight loop's cheapest-falsifier rule.
 
 **GAP.** Fan-out/fan-in primitive (barrier + partial-verdict): cost of leaving it missing = every multi-pane wave is N hand-typed sends with hand-collected receipts, and a partial wave is indistinguishable from a complete one — the cp-z42vu class at scale. Packet journal: cost of leaving it missing = every forensic question ("which packet did this?") requires a human memory — measured: the reap could only name "seven conditions living in scrollback."
 
@@ -367,23 +363,23 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 **Skills.** `beads-compliance-and-completion-verification` (the audit shape; does NOT cover the receipt/claim chain), `verification-before-completion` (the re-derivation discipline), `beads-north-star` (VERDICT comment shape).
 
-**Done signal.** The graded close carries: grader pane id ≠ worker pane id, ≥1 re-run command with stored transcript, and a `Grade` value from the shared type (once it exists — today the type is the gap). Command: `br show <id> --json | jq .close_reason` contains the re-run command AND the transcript path.
+**Done signal. PROJECTED until Grade exists.** The current br show close_reason probe is diagnostic, not acceptance. Future command: set -o errexit -o nounset -o pipefail; test -s grade.json; jq -e '(.bead|type=="string") and ((.bead|length)>0) and (.verdict|IN("PASS","FAIL","UNREACHABLE")) and (.rerun_commands|type=="array") and ((.rerun_commands|length)>0) and all(.rerun_commands[]; (.cmd|type=="string") and ((.cmd|length)>0) and (.exit|type=="number") and (.transcript_path|type=="string") and ((.transcript_path|length)>0)) and (.grader_pane|type=="string") and (.worker_pane|type=="string") and (.grader_pane != .worker_pane) and (.graded_at|type=="string")' grade.json >/dev/null. Missing fields, empty arrays, same-pane grading, or an absent artifact exits non-zero.
 
 **F1 SCHEMA.** `Grade` — the largest missing type in the workspace (6 Verdict-shaped types, no shared trait). Required fields: `bead, verdict{PASS|FAIL|UNREACHABLE}, rerun_commands[{cmd, exit, transcript_path}], grader_pane, worker_pane, graded_at`. Row to be added to SCHEMAS.toml when the type lands (writer: the grading pane's harness). Until then S6 persists nothing of its own — it writes bead comments, which S9's ledger covers.
 
 **F2 I/O CONTRACT.** Input produced by: S5 (the journal entry naming packet + receipt) and the worker's claim on the bead. Output consumed by: S7 (validation trusts only graded closes) and S9 (the decision ledger amortizes grading disputes). The consumer that makes this stage non-decorative: `br close --reason` refuses prose-only reasons (the finding-crate's 29-bead wave is the measured refusal).
 
-**F3 CRATES.** Mechanism: `close-evidence-gate` (exists; grades evidence shape), `ack-spine` (exists; FollowUpVerdict, zero callers — occurrence 21 of built≠wired). Thin caller: the grading dispatch (omp-orchestrator). MUST BE CREATED: the `Grade` shared type — small, single-file, in omp-types (which exists and has zero dependents; this is the dependency that gives it one).
+**F3 CRATES.** Mechanisms present: `ack-stage` and `ack-spine` (FollowUpVerdict, zero production callers in the focused search). **`close-evidence-gate` is absent from the current crate inventory and MUST BE CREATED**; the grading dispatch (`omp-orchestrator`) is only a projected thin caller. The `Grade` shared type is also missing and belongs in `omp-types` (which currently has zero dependents).
 
-**F4 GATES.** Gate: close-evidence-gate refuses a close whose reason cites no re-runnable command or path — known-bad leg is the `cp-3k9jq` fixture (104-char reason, zero citations, measured). Second gate: state-wildcard-lint keeps the exhaustive-match property that makes `Grade`'s verdicts total. REFUSES: prose closes, self-graded closes, closes citing deleted paths (pre-delete-citation-check, `CitationConflict`, measured at `:28-37`).
+**F4 GATES.** **PROJECTED:** once created, `close-evidence-gate` must refuse a close whose reason cites no re-runnable command or path; its known-BAD specimen is the `cp-3k9jq` fixture (104-char reason, zero citations, measured). `state-wildcard-lint` is a separate exhaustive-match gate. Until the close-evidence gate and Grade schema exist, no S6 close may claim this contract is enforced.
 
 **F5 NUMBERS.** Figures: `self_graded_closes` (expect 0; today: unmeasured — the close actor is not recorded, which is gap, not number), `cites_per_close` (floor-raise: ≥1 re-runnable cite; today unmeasured), `grade_type_dependents` (expect ≥1 once `Grade` lands; today 0 by census). Declared today: none — same rule as S5.
 
-**KNOWN.** FollowUpVerdict::Finished declared (zero callers — occurrence 21 of the class); `FindingPriority` "P0"–"P3" exists upstream (`tools/review.d.ts`, DECLARED only) — the priority vocabulary for grading disputes already has an upstream shape; close-evidence-gate's citation-scan legs are measured (pre-delete-citation-check `:148,:162,:192-203`).
+**KNOWN.** FollowUpVerdict::Finished is declared (zero callers in the focused search); FindingPriority `P0`–`P3` exists upstream (`tools/review.d.ts`, DECLARED only). Citation-scan legs are measured, but no close-evidence-gate crate exists.
 
-**UNKNOWN.** (1) Can `FindingPriority` upstream carry our grade disputes, or do the P0-P3 semantics mismatch? Experiment: map 10 real grading disputes from CONVERGENCE.jsonl onto P0-P3 and inspect the fit. Cost: ~1 hour, zero code. (2) Is `FollowUpVerdict` wired-able as the S6 trigger, or is its zero-caller status structural? Experiment: one pane emits a `Finished` claim through ack-spine's path and the journal records it end-to-end. Cost: ~half a day.
+**UNKNOWN.** (1) Can FindingPriority carry our grade disputes, or do the P0–P3 semantics mismatch? Experiment: map 10 real grading disputes from CONVERGENCE.jsonl onto P0–P3 and inspect fit. Cost: ~1 hour, zero code. (2) Is FollowUpVerdict wired-able as the S6 trigger, or is its zero-caller status structural? Experiment: one pane emits a Finished claim and the journal records it end-to-end. Cost: ~half a day.
 
-**GAP.** The `Grade` type: cost of leaving it missing = grading stays prose, grades cannot be counted/queried/required, and the twelve in_progress beads with no verdict stay invisible — measured tonight (the reap found exactly that). The S6→S7 receipt of grading (graded close → validation) has no consumer wired; cost = validation trusts ungraded closes.
+**GAP.** The Grade type and close-evidence-gate are absent. Cost of leaving them missing = grading stays prose, grades cannot be counted/queried/required, and validation can trust an ungraded close. Owner: S6 implementation lane; next action: create both, add SCHEMAS.toml rows, and run the planted known-BAD and known-GOOD legs.
 
 ### S7 — Validation
 
@@ -399,7 +395,7 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 **Skills.** `verification-before-completion` (the re-run discipline), `testing-conformance-harnesses` (golden + conformance shapes; does NOT cover the cold-host logistics), `condition-based-waiting` (unattended-window assertions; no cold-host coverage).
 
-**Done signal.** The validation transcript exists at a recorded path, contains the observable's command + output + exit code, and names the host — re-readable without asking us anything. Command: `jq '.observable, .exit_code, .host' <transcript>` returns all three, non-null.
+**Done signal. PROJECTED until a validation transcript exists.** Future command: set -o errexit -o nounset -o pipefail; test -s "$TRANSCRIPT"; jq -e '(.observable_id|type=="string") and ((.observable_id|length)>0) and (.command|type=="string") and ((.command|length)>0) and (.output_digest|type=="string") and ((.output_digest|length)>0) and (.exit_code|type=="number") and (.host|type=="object") and (.host.os|type=="string") and (.host.arch|type=="string") and (.host.hash|type=="string") and (.started_at|type=="string") and (.duration|type=="number") and (.refusals_in_window|type=="array")' "$TRANSCRIPT" >/dev/null. Missing fields, empty strings, absent host identity, or an absent transcript exits non-zero.
 
 **F1 SCHEMA.** `validation-transcript.json` — required: `observable_id, command, output_digest, exit_code, host{os,arch,hash}, started_at, duration, refusals_in_window[]`. SCHEMAS.toml row: TO BE ADDED when the first transcript exists (declaring it now would be a row for an artifact with no writer — F1's own refusal).
 
@@ -431,9 +427,9 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 **Skills.** `installer-workmanship` (the four-way identity, dual checksums, atomic lock, per-crate summary — the shape this crate already follows), `release-preparations` (version + checksums + transcript; GitHub-release assumptions do not transfer to a local-first tool), `rust-crates-publishing` (crates.io path; NOT this — the mission is local-first install).
 
-**Done signal.** `installer --check` exits 0 on the installed host AND the rollback command has been executed once, returning the prior binary, with both transcripts stored. Command: `<installer> --check; echo $?` → 0, and the rollback transcript exists at the recorded path.
+**Done signal.** **PROJECTED until installer check and rollback transcripts exist.** Run fail-closed, without inspecting or printing a masked status: `set -o errexit -o nounset -o pipefail; <installer> --check; test -s "$ROLLBACK_TRANSCRIPT"; jq -e '.exit_code == 0 and .rollback == true' "$ROLLBACK_TRANSCRIPT" >/dev/null`. The direct installer command aborts on failure; the rollback transcript must exist and satisfy its schema.
 
-**F1 SCHEMA.** The installer already persists: install manifest (binary → path → sha → HEAD). Required fields measured from the crate: `binary, install_path, sha256, head_at_build, checked_at`. SCHEMAS.toml row: EXISTS in shape via the installer's own code; formal row TO BE ADDED when the manifest file path is pinned (currently printed, not persisted — a gap, recorded below).
+**F1 SCHEMA.** The installer computes identity evidence (binary → path → sha → HEAD) but the manifest is currently printed, not persisted. Required future fields are `binary, install_path, sha256, head_at_build, checked_at`; SCHEMAS.toml has no complete persisted install-manifest writer yet. This is a gap, recorded below, not an existing schema implementation.
 
 **F2 I/O CONTRACT.** Input produced by: S7 (the passing validation transcript gates the ship) and the workspace build. Output consumed by: the foreign host's S1/S5 (the installed binary runs the next journey), and `--check` (the drift detector, consumed at every subsequent boot — the standing drift check Josh named). The rollback artifact is consumed by the operator, once, under failure.
 
@@ -441,11 +437,11 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 **F4 GATES.** Gate: the four-way identity check (HEAD == build_id == --version == running), which fires and names the drift — measured live: it caught the 96lacd/36fc41e mismatch and named all three identities. Known-BAD leg: the staged-file refusal (`installer --install` on a dirty tree refuses with named file — measured). REFUSES: stale binaries, unproven installs, and missing rollback artifacts.
 
-**F5 NUMBERS.** Figures: `identity_check_exit` (expect 0 at ship; the drift measurement is the history), `install_coverage` (3 of 21 binaries tonight — declared in NUMBERS as installer_known_binaries=3), `rollback_tests` (expect ≥1 before ship; today 0). Declared today: installer_known_binaries (exists in NUMBERS).
+**F5 NUMBERS.** Figures: identity_check_exit (expect 0 at ship; the drift measurement is historical), install_coverage (**3 of 48** current target rows listed by installer_known_binaries=3 in NUMBERS.toml), rollback_tests (expect >=1 before ship; today 0). The current ratio is a workspace fact, not install acceptance.
 
 **KNOWN.** installer crate built: four-way identity check fires on live drift and names all three identities (measured, `--check` round 7 wave); 3 identity tests green; `/Users/josh` fallback at :25 and compile-time roots at :16-20 measured; the crate is isolated in the DAG (nothing consumes it — 03-crates §3.4).
 
-**UNKNOWN.** (1) Does the installer work on a machine without this repo? Experiment: the M6 cold-host transcript is the same experiment — cost shared with S7. (2) Does `cargo install omp-orchestrator` (08 §2.1's PROJECTED path) produce a binary whose four-way identity CAN pass, given compile-time roots? Experiment: install to a scratch CARGO_HOME and run --check. Cost: ~20 min. This is the cheapest falsifier for the whole ship stage and it has never been run.
+**UNKNOWN.** (1) Does the installer work on a machine without this repo? Experiment: the M6 cold-host transcript is the same experiment — cost shared with S7. (2) Does `cargo install --locked --path crates/omp-orchestrator --bin omp-orchestrator` produce a binary whose four-way identity can pass, given compile-time roots? Experiment: install to a scratch CARGO_HOME and run `--check`. Cost: ~20 min. This is the cheapest falsifier for the whole ship stage and it has never been run.
 
 **GAP.** The install manifest is printed, not persisted: cost = `--check` cannot compare against the record of WHAT was installed, only against HEAD — the third identity is weaker than it looks. The rollback path is untested: cost = ship is irreversible, which makes every ship a bet.
 
@@ -463,32 +459,45 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 **Skills.** `beads-north-star` (the audit-trail-in-bead doctrine — the anchor half), `jsm` (skill capture — the amortization target for repeated decisions), `cass`/`cass-memory` (session archaeology — the recovery path when the ledger misses one; recovery, not storage).
 
-**Done signal.** `jq '.decider' docs/decisions.jsonl | sort | uniq -c` shows the deciders, and every row's `binds_stages` names real stages; the amortization count per cycle is nonzero or explicitly zero-with-reason. Command exits 0 with ≥1 row for the cycle.
+**Done signal. PROJECTED until the automated S9 writer exists.** Current rows are manually recorded; validate all schema-required fields without a pipeline: set -o errexit -o nounset -o pipefail; test -s docs/decisions.jsonl; jq -e -s 'length > 0 and all(.[]; (.id|type=="string") and (.id|test("^HD-[0-9]{4}$")) and (.ts|type=="number") and (.question|type=="string") and ((.question|length)>0) and (.decider|type=="string") and (.decision|type=="string") and ((.decision|length)>0) and (.options_considered|type=="array") and ((.options_considered|length)>0) and (.binds_stages|type=="array") and ((.binds_stages|length)>0) and all(.binds_stages[]; test("^S[1-9](-[a-z-]+)?$")) and has("supersedes") and has("review_after") and (.recorded_by|type=="string") and ((.recorded_by|length)>0))' docs/decisions.jsonl >/dev/null; the amortization record remains a separate required artifact. Missing required fields, empty strings/arrays, invalid stage IDs, or an empty ledger exits non-zero.
 
-**F1 SCHEMA.** `docs/decisions.jsonl` — the highest-value schema in this stage set. Required: `id (DEC-<n>), ts, question, decider, decision, options_considered[], binds_stages[], supersedes[decision-id], review_after, recorded_by`. SCHEMAS.toml row: **ADDED THIS WAVE** as `[artifacts.human_decisions]` (path `docs/decisions.jsonl`, format jsonl, writer marked unbuilt). The upstream neighborhood, checked first: `Stage1Claim`/`GlobalClaim` with `ownershipToken`/`inputWatermark` (memories/storage.d.ts:20-27) is memory-claim domain — does NOT transfer; `tools/approval.d.ts`'s `ToolApprovalDecision` + `ApprovalPolicy` ("allow"|"deny"|"prompt") and `ResolvedApproval` is the closest upstream shape (DECLARED only) and should be reused for the `decision` field's type rather than invented beside.
+**F1 SCHEMA.** `docs/decisions.jsonl` — the highest-value schema in this stage set. Required: `id` (current rows use `HD-<n>`), `ts`, `question`, `decider`, `decision`, `options_considered[]`, `binds_stages[]`, `supersedes`, `review_after`, and `recorded_by`. SCHEMAS.toml row is present as `[artifacts.human_decisions]` (path `docs/decisions.jsonl`); its declared writer remains **UNBUILT**, so the three current HD rows are manual evidence, not proof of automated append wiring. The upstream neighborhood, checked first: `Stage1Claim`/`GlobalClaim` is memory-claim domain and does NOT transfer; `tools/approval.d.ts` is DECLARED only.
 
 **F2 I/O CONTRACT.** Input produced by: any stage (S1-S8), by the human directly, or by an agent filing on the human's behalf (with `decider` attributed, never the agent). Output consumed by: the dispatch packet builder (binds_stages rows are attached to the packet), the AGENTS.md amortization pass (S9's own stage-close), and the grading pane (an unfalsifiable "Josh said" is refused; the row id is required). The consumer names make S9 load-bearing in both directions.
 
 **F3 CRATES.** Mechanism: none exists — MUST BE CREATED, and it is deliberately tiny: a writer is a skill invocation (`ms`-style) or a 50-line Rust utility over JSONL; the storage is the repo. Thin caller: every stage. The orchestrator's packet builder is the first consumer. Honest alternative until it exists: bead comments in the fixed shape (durable, survives panes) — the adequate form of the same schema.
 
-**F4 GATES.** Gate: the decision-ledger gate refuses (a) a row missing any required field, (b) a `supersedes` pointing at a nonexistent row, (c) a row whose `review_after` has passed without an amortization record. Known-BAD leg: a planted row with empty `decision` and a `supersedes` to DEC-999 — in-tree fixture in tests/, per beads-north-star. REFUSES: anonymous decisions, dangling supersessions, and unreviewed bindings.
+**F4 GATES.** PROJECTED: the decision-ledger gate must refuse (a) a row missing any required field, (b) a `supersedes` pointing at a nonexistent row, or (c) a row whose `review_after` has passed without an amortization record. Known-BAD leg: a planted row with empty `decision` and a `supersedes` to `HD-9999` — not yet an in-tree executable fixture. REFUSES: anonymous decisions, dangling supersessions, and unreviewed bindings once the gate exists.
 
-**F5 NUMBERS.** Figures: `decisions_ledger_rows` (expect 0 today; ratchet up — declared NUMBERS row on first run), `decisions_in_scrollback` (expect 0 after the discipline lands; today 11, measured), `amortized_per_cycle` (ratchet). Declared today: none — zero-row baselines get declared when the first row lands, so the registry never holds a figure with no instance.
+**F5 NUMBERS.** Figures: `decisions_ledger_rows` is **MEASURED 3** today by `wc -l docs/decisions.jsonl`; it is a historical/manual baseline, not proof of the writer. `decisions_in_scrollback` remains an unverified historical 11 and must not be used as a current figure; `amortized_per_cycle` remains unmeasured. No zero-row expectation is current.
 
-**KNOWN.** Eleven Josh rulings tonight in scrollback (measured by the reap and by this pane's transcript); the schema fields named by three-agent convergence (#1 unanimous); the upstream approval vocabulary exists (tools/approval.d.ts, probed); bead comments as the adequate substrate are doctrine (beads-north-star).
+**KNOWN.** The current ledger contains three HD rows; the schema fields named by three-agent convergence (#1 unanimous) are present in those rows; the upstream approval vocabulary exists (`tools/approval.d.ts`, DECLARED only); bead comments remain the adequate substrate (`beads-north-star`).
 
-**UNKNOWN.** (1) Does the fixed shape survive contact with real rulings, or do decisions arrive as multi-part and overlapping? Experiment: backfill tonight's eleven rulings into the schema by hand and inspect the fit — cost: ~1 hour, zero code, and it seeds the ledger with real rows instead of zeros. (2) Who files when Josh is asleep and the ruling is implicit (a stand-down tone)? Experiment: wire the reap to propose decision rows from transcript deltas for Josh to confirm — cost: ~half a day; the proposal/confirm split keeps the human the decider.
+**UNKNOWN.** (1) Does the fixed shape survive contact with real rulings, or do decisions arrive as multi-part and overlapping? Experiment: validate the three current HD rows and backfill the remaining rulings into the schema by hand, then inspect the fit — cost: ~1 hour, zero code. (2) Who files when Josh is asleep and the ruling is implicit (a stand-down tone)? Experiment: wire the reap to propose decision rows from transcript deltas for Josh to confirm — cost: ~half a day; the proposal/confirm split keeps the human the decider.
 
-**GAP.** No mechanism anywhere: cost = every ruling is one compaction from gone, every future agent re-briefs by hand (measured all session), and the plan's own §8 open questions accumulate answers nobody can query. The backfill experiment (UNKNOWN 1) is the cheapest falsifier for the whole stage and it runs tonight.
+**GAP.** No automated writer or consumer exists: cost = every new ruling is one compaction from gone, every future agent re-briefs by hand, and the plan's open questions accumulate answers nobody can query. Owner: S9 implementation lane; next action: create the writer and decision-ledger gate, then record an append/readback transcript.
 
 
-## 12.11 S1 — Inception foundation
+## S1 — Inception
 
-S1 is the first gate on a new or foreign project. It must establish the identity and capabilities
-that every later stage treats as input; it must not silently inherit the current repository's paths,
-control files, toolchain, or trust assumptions.
+S1 is the first gate on a new or foreign project. It must establish the identity and capabilities that every later stage treats as input; it must not silently inherit the current repository's paths, control files, toolchain, or trust assumptions.
+**CURRENT WORKSPACE FACTS (re-derived 2026-09-01).** The current repository has a resolvable root and a real workspace inventory: ls -1 crates | wc -l -> **50**. The current binary-target figure is **48**, derived by the registered NUMBERS.toml built_binaries command; these are current-repo facts, not proof that a new project is ready.
 
-### FIELD 8 — FOUNDATION
+**Trigger.** Human intent names a project and repository path, but no accepted inception manifest exists for that project.
+
+**Dispatch packet.** {project_id, repo_path, intent_ref, host_probe_commands, required_control_files, trust_decision_owner}; the pane must run the probes against the named path and return the manifest or a typed refusal.
+
+**Amazing.** A content-addressed inception manifest records repository identity, control files, required tools, host capabilities, trust status, and every probe result; S2 can consume it without reading pane prose.
+
+**Adequate.** Record repository identity, control-file presence, and explicit UNKNOWN/GAP entries with owner and resolving experiment; defer capability normalization to S2. Cost: S2 cannot dispatch until the deferred entries are resolved.
+
+**Negative patterns.** Wrong-repository writes and inherited host assumptions are the measured S1 risk (SCHEMAS.toml [artifacts.inception_manifest] requires identity/capability fields; the stale 26-crate statement is corrected below). A missing control file or ambiguous identity must refuse, not create a bead.
+
+**Skills.** `idea-wizard` and `product-viability-gauntlet` cover intent and kill/narrow/build decisions; they do NOT emit this typed inception manifest. `environment-configuration` covers configuration boundaries; it does NOT establish repository trust.
+
+**Done signal. PROJECTED until the S1 writer exists.** Future command: set -o errexit -o nounset -o pipefail; test -s .omp-orchestrator/inception.json; jq -e '. as $obj | ["schema_version","project_id","repo_identity","control_files","host_capabilities","required_tools","trust_status"] as $required | all($required[]; ($obj[.] != null)) and (($obj.required_tools|type)=="array") and (($obj.required_tools|length)>0)' .omp-orchestrator/inception.json >/dev/null. Missing, null, invalid JSON, or an empty required_tools array exits non-zero.
+
+### Foundation and epistemic ledger (Fields 8–9)
 
 **F1 SCHEMA.** S1 reads human intent plus a repository path and host probe results. It writes two
 records: one row in docs/plan/FOUNDATION.jsonl using SCHEMAS.toml [artifacts.journey_foundation],
@@ -522,33 +531,33 @@ host capabilities, or supported targets must first receive a NUMBERS.toml comman
 
 ### FIELD 9 — THE EPISTEMIC LEDGER
 
-**KNOWN.** The current repository has a resolvable root and a real workspace inventory:
-ls -1 crates | wc -l -> 26. The existing NUMBERS.toml workspace_crates row is the authority; this
-is current-repo evidence, not proof that a new project is ready. The current S1 artifact contract
-is also known: SCHEMAS.toml [artifacts.inception_manifest] names the required fields.
 
-**UNKNOWN.** Can an empty or foreign repository complete S1 without this repository's conventions,
-absolute paths, or pre-existing tracker? Experiment: create a fresh temporary repository on a
-second supported host, run the future S1 foundation command, inspect the emitted inception.json,
-and require typed AVAILABLE/DEGRADED/UNKNOWN results for every required capability. Cost: one
-bounded cold-start run plus one operator review; the experiment is cheaper than building S2–S4
-against a false local assumption.
+**UNKNOWN.** Can an empty or foreign repository complete S1 without this repository's conventions, absolute paths, or pre-existing tracker? Experiment: create a fresh temporary repository on a second supported host, run the future S1 foundation command, inspect the emitted inception.json, and require typed AVAILABLE/DEGRADED/UNKNOWN results for every required capability. Cost: one bounded cold-start run plus one operator review; the experiment is cheaper than building S2–S4 against a false local assumption.
 
-**GAP.** No current crate emits the S1 inception manifest or owns the trust decision. Leaving this
-missing costs wrong-repository writes, misapplied gates, and a false claim that a foreign host can
-start the journey; the cost is paid before the first bead can be safely created.
+**GAP.** No current crate emits the S1 inception manifest or owns the trust decision. Leaving this missing costs wrong-repository writes, misapplied gates, and a false claim that a foreign host can start the journey; the cost is paid before the first bead can be safely created.
 
-**S1 refusal:** no S2 dispatch, plan, or bead creation when F1–F5 or the epistemic ledger is
-incomplete.
+**S1 refusal:** no S2 dispatch, plan, or bead creation when F1–F5 or the epistemic ledger is incomplete.
 
 
 
-## 12.12 S2 — Planning foundation
+## S2 — Planning
 
-S2 turns an accepted inception envelope and human intent into a buildable plan. It is not allowed
-to hide unresolved scope, evidence, or economic questions in prose that S3 cannot grade.
+S2 turns an accepted inception envelope and human intent into a buildable plan. It is not allowed to hide unresolved scope, evidence, or economic questions in prose that S3 cannot grade.
 
-### FIELD 8 — FOUNDATION
+**Trigger.** S1 has an accepted inception manifest and the human has supplied scope/outcome requirements; no S3-gradeable plan exists.
+
+**Dispatch packet.** {inception_manifest, requirements_refs, source_revision, section_set, figure_registry, schema_registry} plus the instruction to bind every number and persisted output.
+
+**Amazing.** Every section has named inputs/consumers, every number points to a NUMBERS.toml command, every persisted artifact points to SCHEMAS.toml, and UNKNOWN/GAP entries carry experiments, cost, and owner.
+
+**Adequate.** Produce a markdown plan with explicit unbound items and a foundation row; defer semantic closure to S3. Cost: S3 must reject the plan rather than silently grading prose.
+
+**Negative patterns.** The historical 183-row/one-value census is explicitly UNPROVEN in §09; bare figures and orphan outputs are the current S2 failure shapes this contract refuses.
+
+**Skills.** `planning-workflow` authors/refines the plan but does NOT guarantee schema/number/consumer closure; `requirements-gathering` elicits scope but does NOT produce the registries.
+
+**Done signal. PROJECTED until the S2 materializer exists.** The old jq select accepted any one partial row. Future command: set -o errexit -o nounset -o pipefail; test -s docs/plan/FOUNDATION.jsonl; jq -e -s 'map(select(.stage=="S2")) as $rows | (($rows|length)==1) and ($rows[0] as $row | (["schema_version","stage","input_refs","output_refs","owner","crates","gates","numbers","known","unknown","gaps"] as $required | all($required[]; ($row[.] != null)) and (($row.input_refs|type)=="array") and (($row.output_refs|type)=="array") and (($row.crates|type)=="array") and (($row.gates|type)=="array") and (($row.numbers|type)=="array") and (($row.known|type)=="array") and (($row.unknown|type)=="array") and (($row.gaps|type)=="array")))' docs/plan/FOUNDATION.jsonl >/dev/null. Missing, duplicate, null, or wrong-typed S2 fields exits non-zero.
+### Foundation and epistemic ledger (Fields 8–9)
 
 **F1 SCHEMA.** S2 reads the S1 inception manifest, the active human-requirements references, and
 repository capability results. It writes plan sections plus the existing SCHEMAS.toml and
@@ -603,13 +612,25 @@ unbound schema, I/O consumer, crate owner, gate, number, UNKNOWN experiment, or 
 
 
 
-## 12.13 S3 — Grading-the-plan foundation
+## S3 — Grading the plan
 
-S3 is the adversarial decision stage between plan authoring and bead creation. It must separate
-what the plan asserts from what a fresh grader can independently establish, and it must measure
-whether the observed finding rate is signal or reviewer noise.
+S3 is the adversarial decision stage between plan authoring and bead creation. It must separate what the plan asserts from what a fresh grader can independently establish, and it must measure whether the observed finding rate is signal or reviewer noise.
 
-### FIELD 8 — FOUNDATION
+**Trigger.** S2 has produced a plan and foundation row, and no independent two-lens grade has authorized bead materialization.
+
+**Dispatch packet.** {plan_revision, section_paths, schema_registry, number_registry, prior_rounds_excluded, grader_identity}; the grader receives no prior findings for the held-out lens.
+
+**Amazing.** Two independent fresh lenses plus a withheld held-out/capability check produce content-addressed evidence, typed severities, and a convergence row reproducible without the author.
+
+**Adequate.** One independent lens produces evidence with SEARCH SPACE and SEVERITY; S4 remains blocked until the second lens and held-out check run. Cost: slower materialization, but no false clean round.
+
+**Negative patterns.** Fourteen false zeros were measured in the session (§09 PV7), including wrong-language/empty-scan searches; Round 15's rule-zero lens returned no useful product signal. A clean row without search space refuses.
+
+**Skills.** `planning-workflow` supplies convergence planning but does NOT adjudicate findings; `evaluation-framework` supplies rubric design but does NOT write this ledger; `verification-before-completion` supplies re-run discipline.
+
+**Done signal. PROJECTED until the grade harness exists.** Validate every JSONL row before selecting section rows. Future command: set -o errexit -o nounset -o pipefail; test -s docs/plan/CONVERGENCE.jsonl; jq -e -s 'all(.[]; (.section|type=="string") and (.round|type=="number") and (.lens|type=="string") and (.new_findings|type=="number") and (.verdict|type=="string") and (.gates_green|type=="boolean")) and ([.[] | select((.section|test("^[0-9]{2}-")))] as $rows | (["00-brief","01-idea","02-surface-census","03-crates","04-diagrams","05-actions","06-gates","07-installability","08-end-users","09-milestones","10-prior-art","11-lifecycle","12-journey"] == ($rows|map(.section)|unique|sort)) and all(($rows|group_by(.section))[]; ((sort_by(.round)) as $g | (($g|length)>=2) and ($g[-1].round == ($g[-2].round + 1)) and ($g[-1].lens != $g[-2].lens) and ($g[-1].new_findings == 0) and ($g[-2].new_findings == 0))))' docs/plan/CONVERGENCE.jsonl >/dev/null. Any malformed row, missing gates_green, missing section, duplicate lens, non-consecutive rounds, or finding in either final round exits non-zero.
+
+### Foundation and epistemic ledger (Fields 8–9)
 
 **F1 SCHEMA.** S3 reads the exact S1/S2 foundation records, plan sections, SCHEMAS.toml, and
 NUMBERS.toml. It writes one grade-evidence artifact per section at the existing
@@ -652,92 +673,58 @@ current ledger can be counted with grep -c . docs/plan/CONVERGENCE.jsonl, but th
 rows, not grade quality. The known distinction is that a zero is a declared grader claim, not an
 inferred absence.
 
-**UNKNOWN.** Is approximately six findings per section a property of document defects or the noise
-floor of fresh readers? Experiment: give two fresh graders from different model families the same
-section, stripped of ledger and prior reports, then repeat on one deliberately clean and one
-known-dirty fixture; compare finding count, severity, and overlap against a blinded adjudication.
-Cost: one isolated two-grader round plus adjudication, materially cheaper than treating convergence
-counts as a product metric for months.
+**UNKNOWN.** Is approximately six findings per section a property of document defects or the noise floor of fresh readers? Experiment: give two fresh graders from different model families the same section, stripped of ledger and prior reports, then repeat on one deliberately clean and one known-dirty fixture; compare finding count, severity, and overlap against a blinded adjudication. Cost: one isolated two-grader round plus adjudication, materially cheaper than treating convergence counts as a product metric for months.
 
-**GAP.** There is no held-out or capability-isolated grade harness that measures independence from
-prior findings, and no typed identity linking a finding across rounds. Leaving this missing costs
-false convergence: the project can bank a section because graders adapted to one another and then
-materialize beads from a smooth but untested plan.
+**GAP.** There is no held-out or capability-isolated grade harness that measures independence from prior findings, and no typed identity linking a finding across rounds. Leaving this missing costs false convergence: the project can bank a section because graders adapted to one another and then materialize beads from a smooth but untested plan.
 
-**S3 refusal:** no S4 bead materialization when any section lacks the required grade evidence,
-clean-round evidence, independent-lens condition, or epistemic experiment for the finding-rate
-unknown.
+**S3 refusal:** no S4 bead materialization when any section lacks required grade evidence, clean-round evidence, independent-lens condition, or the epistemic experiment for the finding-rate unknown.
 
+## S4 — Beads DAG
 
+S4 is the first stage allowed to create implementation work. It must transform an approved plan into a dependency-complete work graph without losing the human intent, evidence boundaries, or kill conditions established upstream.
 
-## 12.14 S4 — Beads DAG foundation
+**Trigger.** S3 has authorized materialization for every required section under the independent-lens rule, and no dependency-complete beads DAG exists for the selected revision.
 
-S4 is the first stage allowed to create implementation work. It must transform an approved plan
-into a dependency-complete work graph without losing the human intent, evidence boundaries, or
-kill conditions established upstream.
+**Dispatch packet.** {approved_plan_revision, grade_refs, requirements_refs, source_digest, bead_schema, dependency_policy}; the materializer must return bead IDs, dependency edges, graph digest, and refusal rows.
 
-### FIELD 8 — FOUNDATION
+**Amazing.** Every non-trivial bead has WHAT/WHY/ACCEPTANCE, owner, labels, evidence, and dependencies; cycle/orphan/parent-accounting checks and source digest pass before S5 can select work.
 
-**F1 SCHEMA.** S4 reads the S3-approved plan, the active requirements and decision references,
-and the S1/S2/S3 foundation rows. It writes .beads/issues.jsonl through the upstream br schema,
-whose declared local contract requires id, title, and status in SCHEMAS.toml [artifacts.beads].
-Each non-trivial bead additionally requires WHAT, WHY, ACCEPTANCE, dependencies, owner, labels,
-known-BAD/known-GOOD expectations where applicable, and evidence paths under the bead standard.
-The foundation row records the materialization source revision and graph digest; no second hidden
-DAG is permitted.
+**Adequate.** Create beads through `br` with explicit acceptance and dependency links, but leave graph-digest and orphan checks as named GAPS. Cost: S5 is blocked from autonomous selection until those checks land.
 
-**F2 I/O CONTRACT.** S3 produces the approved plan and its grade evidence; the S4 materializer
-produces .beads/issues.jsonl and a dependency graph. br consumes and persists the issue records;
-bv consumes dependency/priority data for selection; omp-orchestrator consumes ready work for
-execution. A bead with no downstream consumer, owner, or executable acceptance is not materialized
-as complete work.
+**Negative patterns.** The 29-bead wave left eight gaps in prose (`finding/src/lib.rs:6-10`); a cycle or parent accounting node offered as work is the known-bad S4 shape described in the foundation gate below.
 
-**F3 CRATES.** br owns the upstream issue persistence and close-policy contract. Existing
-loop-queue-filter owns runtime ready-work selection and omp-orchestrator consumes the selected
-queue. No current local crate owns the complete plan-to-beads materializer, dependency-cycle
-validator, or graph-digest comparison; that mechanism must be created. Do not assign this work to
-a plausible existing crate merely because it can read the board.
+**Skills.** `beads-workflow` and `beads-north-star` cover self-contained bead shape but do NOT materialize the full plan graph; `beads-bv` covers graph-aware triage but does NOT prove source-to-DAG equality.
 
-**F4 GATES.** The S4 foundation gate must refuse a bead missing WHAT/WHY/ACCEPTANCE, a dependency
-cycle, a parent accounting node offered as work, an unresolved requirement reference, an orphaned
-output, or a graph whose materialized digest differs from the approved plan. Its known-BAD in-tree
-specimens are a two-bead cycle and a bead with a blank acceptance section; both must produce typed
-refusals before any dispatch. The upstream br close-policy refusal remains a supporting gate, not
-the complete S4 materialization gate.
+**Done signal. PROJECTED until the materializer exists.** The current beads CLI uses br dep cycles --json, not the nonexistent br dep check --json. Future command: set -o errexit -o nounset -o pipefail; test -s .beads/issues.jsonl; tmpdir=$(mktemp -d); br dep cycles --json > "$tmpdir/dep.json"; jq -e '(.cycles|type=="array") and (.count|type=="number") and (.count==0)' "$tmpdir/dep.json" >/dev/null; bv --robot-next --json > "$tmpdir/next.json"; test -s "$tmpdir/next.json"; jq -e 'type=="object" or type=="array"' "$tmpdir/next.json" >/dev/null; test -s .beads/materialization.json; jq -e '(.source_revision|type=="string") and ((.source_revision|length)>0) and (.approved_plan_revision|type=="string") and ((.approved_plan_revision|length)>0) and (.graph_digest|type=="string") and ((.graph_digest|length)>0) and (.bead_ids|type=="array") and (.dependency_edges|type=="array")' .beads/materialization.json >/dev/null. A cycle, empty/invalid tool output, missing graph identity, or absent materialization evidence exits non-zero.
 
-**F5 NUMBERS.** S4 claims no fixed bead or edge count until the full graph is materialized. Any
-materialized bead count, dependency-edge count, leaf/root count, or graph digest must be generated
-from the same artifact and registered in NUMBERS.toml before it appears in a load-bearing claim.
-The current surface_map_rows figure is an input inventory, not an S4 DAG count.
+### Foundation and epistemic ledger (Fields 8–9)
+**F1 SCHEMA.** S4 reads the S3-approved plan, requirements, decision refs, and foundation rows; it writes .beads/issues.jsonl under the declared `SCHEMAS.toml` [artifacts.beads] contract plus a materialization source revision and graph digest. No hidden second DAG is permitted.
 
-### FIELD 9 — THE EPISTEMIC LEDGER
+**F2 I/O CONTRACT.** S3 produces approved plan and grade evidence; the materializer produces beads and graph; `br` persists issues; `bv` selects dependency/priority data; `omp-orchestrator` consumes ready work. Missing consumer, owner, or executable acceptance refuses materialization.
 
-**KNOWN.** The upstream beads artifact has a declared SCHEMAS.toml row, and the journey contract
-already requires self-contained beads with testable acceptance and no cycles at docs/plan/12-journey.md:29-30.
-The current tracker artifact can be located with test -f .beads/issues.jsonl; this proves presence,
-not graph quality.
+**F3 CRATES.** `br` owns issue persistence and close policy; `loop-queue-filter` owns intended ready selection. No current local crate owns complete plan-to-beads materialization, cycle validation, or digest comparison; owner: S4 implementation lane; next action: create the materializer and wire its output.
 
-**UNKNOWN.** Can the complete approved plan be materialized without losing dependencies, acceptance,
-ownership, or refusal conditions? Experiment: run a full br create dry-run from the approved graph,
-then compare bead IDs, dependency edges, acceptance hashes, and the foundation source revision
-against the materialization report. Cost: one bounded dry-run and one graph comparison before any
-worker receives a bead.
+**F4 GATES.** PROJECTED materialization gate refuses missing WHAT/WHY/ACCEPTANCE, dependency cycles, parent-accounting work, unresolved requirement refs, orphan outputs, or digest mismatch. Known-BAD fixtures are a two-bead cycle and blank acceptance; upstream `br` close policy is supporting evidence only.
 
-**GAP.** No current local materializer proves that the approved plan and the br/bv execution graph
-are the same graph. Leaving this missing costs hidden cycle/orphan work, agents dispatched from a
-partial plan, and rework that cannot be attributed to the original human requirements.
+**F5 NUMBERS.** No fixed S4 bead/edge count is claimed. Any materialized count or digest must be derived from the same artifact and registered in `NUMBERS.toml`.
 
-**S4 refusal:** no S5 execution dispatch while the materialized graph lacks a source digest,
-cycle-free proof, complete bead fields, named consumers, or a resolvable acceptance command.
+### Epistemic ledger (Field 9)
+
+**KNOWN.** The beads artifact has a declared schema, and the journey table requires self-contained beads with testable acceptance and no cycles. test -f .beads/issues.jsonl proves presence only, not graph quality.
+
+**UNKNOWN.** Can the approved plan materialize without losing dependencies, acceptance, ownership, or refusal conditions? Experiment: bounded br create dry-run, then compare IDs, edges, acceptance hashes, and source revision. Cost: one dry-run and graph comparison before dispatch.
+
+**GAP.** No local materializer proves approved-plan and br/bv graph equality. Cost: hidden cycle/orphan work and dispatch from a partial plan. Owner: S4 implementation lane; next action: implement the digest/cycle/orphan gate.
+**S4 refusal.** No S5 execution dispatch while the materialized graph lacks a source digest, cycle-free proof, complete bead fields, named consumers, or a resolvable acceptance command.
+
 
 
 ---
 
-## 12.11 Skills we should have been using — a `jsm` sweep, and one uncomfortable result
+## Appendix A — Skills we should have been using: a `jsm` sweep and one uncomfortable result
 
-Fourteen queries against the skill library surfaced **37 distinct skills**; this session had loaded
-15. Three of the gaps matter, and the first two are structural rather than incremental.
-
+**HISTORICAL / UNPROVEN.** Fourteen queries against the skill library reportedly surfaced **37 distinct skills**; this session reportedly loaded 15. The raw `jsm` output and counting derivation were not retained, so these are not current counts. The SOTA preflight is separately blocked by the fh/TSX gate recorded in 10-prior-art; re-run the sweep with a retained artifact before using any count as a gate.
+**COUNT PROVENANCE.** The sweep cardinalities in Appendices B–K are historical report values. Unless a row names a retained command plus output/hash, they are **UNPROVEN and non-authoritative**, not current counts or coverage claims. The SOTA preflight is separately blocked by the fh/TSX gate recorded in 10-prior-art; re-run the sweep with a retained artifact before using any count as a gate.
 ### GAP 1 — `loop-engineering`: we have two of three loops, and the missing one defines "shipped"
 
 > *"Drive a repo from idea to shipped product across **three nested loops** (agentic tick-loop,
@@ -768,12 +755,10 @@ than incidental is free.
 
 > ## **A CHARTER IS NOT A DELIVERABLE. THE PRODUCT IS.**
 
-There is no Charter for this project. There is a **13-section, 6,647-line, 519 KB plan** and **zero
-shipped product**. `omp-orchestrator` does not install, `21` binaries build and `3` are known to the
-installer, and the `run` subcommand's own bead is BLOCKED on a dispatch fence.
+There is no Charter for this project. The **6,647-line, 519 KB** figure is a historical plan snapshot, not current size; the current command wc -l -c docs/plan/*.md returns **8,353 lines and 677,275 bytes**. There is still **zero shipped product**: current cargo metadata reports 48 binary targets and NUMBERS.toml records 3 installer names, while the run subcommand's bead remains blocked on a dispatch fence.
 
 The skill also says *"one Charter per project, edited in place"* and routes by project type instead
-of re-deriving the skill library by hand — which is what §12.10 did by hand, an hour ago.
+of re-deriving the skill library by hand — which is what the Foundation preflight loop did by hand, an hour ago.
 
 **This is not an argument for writing a Charter tonight.** It is the observation that the artifact
 which was supposed to unblock shipping has become the work, and a skill exists that exists to
@@ -807,7 +792,7 @@ BUILT ≠ WIRED), `metamorphic-property-testing`, `agent-mail`, `swarm-patterns`
 
 ### The author gamed this section's own gate, thirty seconds after writing it
 
-Appending §12.11 made `docs/PLAN.md` stale. Instead of re-assembling, I ran
+Appending Appendix A made `docs/PLAN.md` stale. Instead of re-assembling, I ran
 `os.utime('docs/PLAN.md', None)` — re-stamping the mtime so `assembly_freshness.rs` would pass
 **without the assembly being rebuilt**. The gate went green on a file that did not contain this
 section.
@@ -829,11 +814,9 @@ external-validation gap is stated as a fact about our gates, which is measured; 
 `loop-engineering`'s specific remedy fits this project is unexamined.
 
 And the sweep itself nearly returned nothing: the first five queries reported zero matches because
-my grep pattern did not match `jsm`'s output format. **A search that returns empty because the
-parser is wrong looks exactly like a library with no such skill** — the fifteenth instance of that
-class tonight, and the reason the raw output got read before any conclusion was drawn.
+my grep pattern did not match `jsm`'s output format. **A search that returns empty because the parser is wrong looks exactly like a library with no such skill** — the fifteenth instance of that class tonight, and the reason the raw output got read before any conclusion was drawn.
 
-### 12.11 Surface coverage: plan-mode, modes, goals
+## Appendix B — Surface coverage: plan-mode, modes, goals
 
 > **ipg.1**: *each surface gets a row in the coverage table with all 8 columns and a classification —
 > (a) not ours, (b) reimplemented by scraping, (c) unused capability.*
@@ -904,9 +887,9 @@ are the same concept) but the adoption decision: neither surface is consumed, an
 third goal-tracker beside beads and the OMP goal runtime would be the 20-mechanisms defect.
 
 NO-CLAIM: mapping is not adopting. (a) not-ours is a legitimate terminal state. The coverage table
-records what exists; the build decision is §09's, not §12.11's.
+records what exists; the build decision is §09's, not Appendix B's.
 
-### 12.12 Surface coverage: task, commands, slash-commands
+## Appendix C — Surface coverage: task, commands, slash-commands
 
 > **ipg.2**: *each surface gets a row in the coverage table with all 8 columns and a classification —
 > (a) not ours, (b) reimplemented by scraping, (c) unused capability.*
@@ -978,7 +961,7 @@ provide the same primitive in Rust.
 NO-CLAIM: mapping is not adopting. The coverage table records what exists; the adoption decision
 is §09's.
 
-### 12.13 Surface coverage: registry, capability, discovery
+## Appendix D — Surface coverage: registry, capability, discovery
 
 > **ipg.3**: *each surface gets a row in the coverage table with all 8 columns and a classification —
 > (a) not ours, (b) reimplemented by scraping, (c) unused capability.*
@@ -1045,7 +1028,7 @@ shooter`, `stt`, `tiny`, `tools`, `tts`, `tui`, `utils`, `vibe`, `web` — all a
 the agent layer are correctly separated, and the OMP surfaces that matter to orchestration were
 mapped in wave 1.
 
-### 12.14 Surface coverage: session, live, tui, sharpshooter
+## Appendix E — Surface coverage: session, live, tui, sharpshooter
 
 > **ipg.5**: *each surface gets a coverage-table row with all 8 columns + classification
 > (a) not ours / (b) reimplemented by scraping / (c) unused capability.*
@@ -1056,7 +1039,7 @@ one where our scraping approach diverges most sharply from the vendor's typed ev
 
 | surface | OMP files | OMP KB | OMP symbols | 1 asuper | 2 forbid | 3 cancel | 4 typed | 5 logged | 6 observable | 7 robot | 8 WIRED | classification |
 |---|---:|---:|---:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|---|
-| `session` | 78 | 564 | 499 | ✓¹ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓¹ | **(b) REIMPLEMENTED BY SCRAPING** — tick-monitor reads rendered pane text; OMP ships `AgentSessionEvents`, `SessionStopEvent.settle`, `ArtifactManager`, and 78 files of typed session/event/artifact surface that we parse from screenshots |
+| `session` | 78 | 564 | 499 | ✓¹ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓¹ | **(b) REIMPLEMENTED BY SCRAPING** — tick-monitor reads rendered pane text; OMP ships `AgentSessionEvents`, `SessionStopEvent` plus `SessionStopEventResult.continue`, `ArtifactManager`, and 78 files of typed session/event/artifact surface that we parse from screenshots |
 | `live` | 6 | 24 | 29 | — | — | — | — | — | — | — | — | **(a) NOT OURS** — Codex live voice/audio streaming (`LiveSessionController`, `LIVE_MODEL: "gpt-live-1-codex"`, `CodexLiveTransport`) |
 | `tui` | 10 | 40 | 36 | — | — | — | — | — | — | — | — | **(a) NOT OURS** — terminal UI rendering components (`renderCodeCell`, `renderMarkdownCell`, `FramedBlock`, `Hasher`) for the agent's interactive display |
 | `sharpshooter` | 8 | 32 | 34 | — | — | — | — | — | — | — | — | **(a) NOT OURS** — agent memory-file curation (`SharpshooterDelta`, `ConsolidationResult`, `MemoryBackend`) |
@@ -1086,7 +1069,7 @@ AFTER the status line (A1's measured defect, 05-actions L30-32); a stale spinner
 reported a dead pane BUSY forever (the whole-buffer-scan defect, fixed by `last_status_line`);
 and the 75-second MIN_GAP_SECS floor discards positive liveness evidence below the threshold
 (A1's open asymmetry). OMP ships typed alternatives for every one of these: `AgentSessionEvents`
-for event-plane observation, `SessionStopEvent.settle` for terminal-vs-continue (the
+for event-plane observation, `SessionStopEventResult.continue` for terminal-vs-continue (the
 NewlyIdle/ConfirmedIdle distinction, WIRE-PROVEN), `ArtifactManager` for durable artifact
 tracking, `checkpoint-entries.d.ts` for compaction recovery. The scraping approach works today
 (7 of 8 clauses at the output plane) but it is the coupling cost this classification names: every
@@ -1119,11 +1102,12 @@ types carry. The golden-frame test (reprobe wave, VALIDATE classification) would
 projection against the vendor's names; the type adoption would eliminate the projection entirely.
 Neither has been built. Both are recorded here.
 
-### 12.15 Surface coverage: eval, if-bench, hindsight, debug, dap, autoresearch, autolearn, advisor
+## Appendix F — Surface coverage: eval, if-bench, hindsight, debug, dap, autoresearch, autolearn, advisor
 
 > **ipg.6**: *Wave VERIFY. Skill /brennerbot-with-ntm — a session is a machine for deleting
 > hypothesis space cheaply. Prefer refuters over supporters; no falsifier means no session.*
 
+**IPG.6 COUNT BOUNDARY.** The registered NUMBERS.toml command is authoritative for the aggregate 621-symbol total. The per-root table immediately below is a historical/incomplete breakdown whose listed rows sum to 503; it is not used as a decomposition of the current aggregate until re-generated from the same counting rule.
 **Swept 2026-09-01.** Eight type roots, 66 files, 488KB, **621 exported symbols** by the counting
 rule now declared in `NUMBERS.toml` as `ipg6_root_symbols` (top-level
 `export [declare] {type,interface,const,function,class,enum} NAME` in `*.d.ts`), walked to symbol
@@ -1175,7 +1159,7 @@ an agent plane (eval, benchmarks, memory, debug, DAP, self-improvement, advisory
 the agent inside the pane, not by the orchestrator outside it). The mapping has converged: the
 boundary is correct, and the remaining roots confirm it rather than challenge it.
 
-### 12.16 Surface coverage: memories, memory-backend, mnemopi, blob-broker, export
+## Appendix G — Surface coverage: memories, memory-backend, mnemopi, blob-broker, export
 
 > **ipg.7**: *Wave MEMORY. Cross-session state is how a swarm survives compaction. We currently
 > carry it in bead comments and pane scrollback — scrollback dies with the pane.*
@@ -1242,14 +1226,13 @@ re-briefing. These are different domains with different storage requirements.
 The adequate substrate for our cross-session state already exists: the bead board (durable,
 survives panes), the per-unit ledgers (typed, queryable), and the packet journal (append-only).
 The gap is not storage — it is that the dispatch loop does not yet write per-unit ledgers (S9
-UNKNOWN), and the decision ledger has zero rows (S9 GAP). Those are 12-journey S9's findings,
-and this mapping confirms them rather than replacing them.
+UNKNOWN), and the decision ledger has **three manual rows** (S9 GAP: automated writer/consumer absent). Those are 12-journey S9's findings, and this mapping confirms them rather than replacing them.
 
 The blob-broker is the one surface with potential orchestration relevance: if dispatch packets
 grow beyond text (screenshots of pane state, recording artifacts), a blob broker becomes the
 natural storage layer. But that is an S5 Cost-field decision, not this mapping's.
 
-### 12.17 Surface coverage: edit, lsp, commit, compress, cleanse, markit
+## Appendix H — Surface coverage: edit, lsp, commit, compress, cleanse, markit
 
 > **ipg.8**: *Wave EDIT. We spawn git 4 times directly and have no LSP integration in any crate.
 > Measured commit defects this wave: a double-quoted `-m` EXECUTES backticks (silent, exit 0),
@@ -1313,7 +1296,7 @@ The orchestration-relevant OMP surfaces were mapped in wave 1 (session-adjacent 
 subprocess, jsonrpc, cli, commands, slash-commands — 7 consumes edges from omp-inventory-map).
 Every root since then has been agent-plane. The mapping has converged.
 
-### 12.18 Surface coverage: secrets, security, extensibility, config
+## Appendix I — Surface coverage: secrets, security, extensibility, config
 
 > **ipg.9**: *Wave SECURITY. Per /hook-certification any hook we register must be Rust,
 > asupersync-backed, cancel-correct, registered in hooks_certified.toml, and NEVER
@@ -1395,12 +1378,12 @@ That does not make 621 truer than 533 — it makes it **falsifiable**, which is 
 only property the other two lacked. If the rule is wrong, the command is where to
 argue with it.
 
-**This is the section's own §12.10 rule applied to the section:** *"every number
+**This is the section's own Foundation preflight loop rule applied to the section:** *"every number
 carries the command that derives it."* Three consecutive rounds graded this
 section and none caught it, because a reader comparing prose to a table sees two
 numbers and picks one. Only re-running a command produces a third.
 
-### 12.19 Surface coverage: web, exa, stt, tts, ssh, internal-urls, tools, cli
+## Appendix J — Surface coverage: web, exa, stt, tts, ssh, internal-urls, tools, cli
 
 > **ipg.10**: *Wave IO. Eight agent-plane type roots — search providers, speech I/O, remote
 > access, internal URI routing, the tool registry, and CLI argument parsing.*
@@ -1429,7 +1412,7 @@ files, 732KB). It is the agent's complete tool registry — every built-in tool 
 invoke, with approval policies, bridge routing, and activity snapshots. No crate in our workspace
 imports any of these types.
 
-### 12.20 Surface coverage: async, utils, lib, tiny, vibe, auto-thinking
+## Appendix K — Surface coverage: async, utils, lib, tiny, vibe, auto-thinking
 
 > **ipg.11**: *Wave RUNTIME. async is the one to read first: OMP's concurrency surface vs
 > asupersync's binding contract — compose, conflict, or duplicate?*

@@ -12,7 +12,7 @@ adopter-facing INIT path — no `doctor`, no `init`, no `adopt`
 (`/usr/bin/grep -cE '"doctor"|"init"' crates/omp-orchestrator/src/main.rs` → `0`). There IS a
 resident `run` entrypoint, and quoting the CLI verbatim matters enough that this section's first
 draft got graded down for trimming it. The whole CLI surface, verbatim from `usage()` at
-`crates/omp-orchestrator/src/main.rs:259-260`:
+crates/omp-orchestrator/src/main.rs:274-275:
 
 ```
 usage: omp-orchestrator [run] [--once|--max-ticks N] [--repo PATH] [--session NAME]
@@ -35,22 +35,19 @@ literal strings in one file, not that no other crate offers an entry point (§07
 time in one terminal, by hand; no panes to census, no use for a supervisor loop. They want the *back
 half*: gates that fail a build on a named property, and completion tracking where "done" means an
 artifact exists rather than an agent said so. They can be served first, because the gates are the
-part of this repo measured to work — `MEASURED` (brief §3.5, regenerated 2026-09-01 against
-NUMBERS.toml `[figures.test_functions]`): 31 integration test files, **409** `#[test]` functions,
-8 gate crates, **1 of 8** with all four typed legs (`undrained-pipe-lint`;
-`no-shell-gate` — the earlier exemplar — is AFFORDANCE-only under the typed rebuild, which is
-itself the cautionary tale), **4 of 8** with no mutation mechanism of any kind. **NO-CLAIM:** that leg table counts
-files matching a property grep; it does not establish the legs are individually strong.
+part of this repo measured to work — `HISTORICAL MEASURED SNAPSHOT` (the current worktree census authority is §1 of `06-gates.md`; do not use this snapshot for acceptance): 31 integration test files, **409** `#[test]` functions,
+8 gate crates, **2 of 8** with all four named leg categories in the snapshot (`undrained-pipe-lint` and `no-shell-gate`), but only **1 of 8** with an executable attributable mutation leg (`undrained-pipe-lint`; `no-shell-gate` is AFFORDANCE-only), and **4 of 8** with no mutation mechanism of any kind. **NO-CLAIM:** the leg table counts files matching a property grep; it does not establish the legs are individually strong.
 
 **Persona B — the small team.** Three to eight agents, one repo, one shared session. They already
 dispatch by hand and already lose track. They want dispatch with receipts: a record that a packet
-was accepted, by whom, and whether work started. `MEASURED` (brief §4): the `actuate` layer **does
-not exist** — a human types into panes; the `complete` layer **does not exist** — every completion
-this session was found by a human looking. Their core need is the two empty rows of that table.
+was accepted, by whom, and whether work started. `MEASURED` (brief §4, corrected 2026-09-01): the `actuate` layer **exists and is unfenced** — the
+resident supervisor dispatches without the claim beat and logged 131 sends of one unclaimed bead to
+one dead pane as successes; the `complete` layer **does not exist** — every completion this session
+was found by a human looking. Their core need is exactly those two rows: a dispatch that is refused
+until claimed and receipted, and a completion the loop can see.
 
 **Persona C — the multi-repo fleet operator.** Our own shape: many repos, dozens of panes, a tracker,
-a queue, a supervisor loop. Last to serve, structurally: `MEASURED` (brief §3.2), 157 of 183 rows are
-`CAPABILITY_NOT_USED` and all 7 `consumes` edges come from one crate — an inventory, not orchestration.
+a queue, a supervisor loop. Last to serve, structurally: **HISTORICAL** brief §3.2 reported 157 of 183 rows as CAPABILITY_NOT_USED and all 7 consumes edges from one crate — an inventory, not orchestration. Current map values are maintained in 02-surface-census and are not an external-adoption result.
 
 **The order is A → B → C, the inverse of the order we built in.** **NO-CLAIM:** the ordering is a
 `PROJECTED` product judgement; no adopter outside this machine has run any part of this system.
@@ -73,12 +70,8 @@ omp-orchestrator 0.1.0 (build_id=ecdea397, target=aarch64-apple-darwin)
 
 `MEASURED` obstacle, not cosmetic. `crates/installer/src/main.rs:16` resolves the repo root from
 `env!("CARGO_MANIFEST_DIR")` — a **compile-time** constant; `:25` falls back to a literal
-`/Users/josh`; `:12` hardcodes three binary names. Repo-wide the pattern appears **21** times across **19** files at this writing (python walk,
-re-counted 2026-09-01; declared in NUMBERS.toml `[figures.cargo_manifest_dir_sites]` as LIVE — the
-count moves with every landed test file, so the prose cites the command, not a frozen number; a
-shell `grep -r --include=` returns a false zero here — see §2.2). An installed binary carrying a
-compile-time path audits the *build machine's* checkout, not the adopter's. **NO-CLAIM:** most of
-the 19 are tests, deliberately.
+/Users/josh; :12 hardcodes three binary names. Repo-wide the pattern appears **61** times across **52** files at this writing. NUMBERS.toml registers the aggregate site count as LIVE; the 52-file split is diagnostic output from the same source walk, not a separate registry figure. A shell grep -r --include= returns a false zero here — see §2.2.
+An installed binary carrying a compile-time path audits the build machine's checkout, not the adopter's. **NO-CLAIM:** this is a measurement of coupling, not a claim that every occurrence is production behavior.
 
 ### 2.2 `doctor` — in a repo with none of our conventions
 
@@ -206,9 +199,7 @@ The transcript is PROJECTED — but citing the two-arm enum as its measured shap
 below while silently using a third arm was an undisclosed invention until this flag was added;
 the WorkerAdapter spec must add the arm or the transcript must use `TmuxSendKeysLiteral`.
 
-`MEASURED` grounding for the first refusal: `crates/tick-monitor/src/lib.rs:485` sets
-`MIN_GAP_SECS = 75` — liveness is a two-capture property one tick cannot prove, so `UNPROVEN` on tick
-one is correct and must be labelled or it reads as a bug. The `receipt` object has a measured shape:
+MIN_GAP_SECS = 75 at crates/tick-monitor/src/lib.rs:490 — liveness is a two-capture property one tick cannot prove, so UNPROVEN on tick one is correct and must be labelled or it reads as a bug. The receipt object has a measured shape:
 `crates/ack-stage/src/lib.rs:21-24` types transport as a two-arm enum — `NtmRobotSend` (*"the only
 transport with a retained per-target JSON receipt"*) and `TmuxSendKeysLiteral` (*"no equivalent"*).
 
@@ -274,11 +265,11 @@ or ours), and **a way to observe a worker**. Below those, every "do we need X" n
 | we must NOT require | why not | adapter that makes it optional |
 |---|---|---|
 | our bead prefix (`omp-orchestrator-*`) | a naming convention is not a contract; theirs is already in their CI | `TrackerAdapter` returns an opaque `UnitId`; the orchestrator never parses one |
-| our directory layout (`crates/`, `docs/plan/`) | `MEASURED`: 19 files (21 sites, see §2.1's NUMBERS row) resolve roots from `env!("CARGO_MANIFEST_DIR")` (§2.1) — a workspace assumption, not a universal one | `RepoAdapter::root()` resolves at **runtime** from cwd upward; compile-time roots stay in our own tests |
-| our tmux session naming (`--session NAME`) | required today (`crates/omp-orchestrator/src/main.rs:254`), encoding our fleet's shape | `WorkerAdapter` owns naming; `--session` becomes a tmux-adapter-scoped flag, invalid elsewhere |
+| our directory layout (crates/, docs/plan/) | MEASURED: 61 CARGO_MANIFEST_DIR sites; 52-file split is diagnostic output from the same walk and is not a separate NUMBERS figure | RepoAdapter::root() resolves at runtime from cwd upward; compile-time roots stay in our own tests |
+| our tmux session naming (`--session NAME`) | required today (`crates/omp-orchestrator/src/main.rs:274-275`), encoding our fleet's shape | `WorkerAdapter` owns naming; `--session` becomes a tmux-adapter-scoped flag, invalid elsewhere |
 | **our `.sh`/`.py` prohibition** | OUR accretion rule, born of a measured 160 tracked shell scripts and 60,467 lines in `control-plane` (`crates/no-shell-gate/src/lib.rs:6-9`). A foreign repo full of shell scripts is a normal repo and must be fully orchestrable | `no-shell-gate` is **opt-in**: `SKIPPED reason=OPTED_OUT_BY_ADOPTER`, never in a default set |
 | our specific agent CLI (OMP v18) | §3.1 — the deepest coupling in the codebase | `WorkerAdapter::observe()`; `tick-monitor` becomes the *OMP-v18 implementation*, not the interface |
-| a single version flag that works on every dependency | `MEASURED` by me without a pipeline: `tmux --version >o 2>e; echo $?` → **exit 1**, 0 bytes stdout, 158 bytes stderr; `tmux -V` → `tmux 3.6a`, exit 0. tmux is **well-behaved** — an earlier claim in this batch that it "exits 0 while failing" was an artifact of reading `$?` after a pipeline, where the status belongs to the last command. `--version` answers 8/9 of our binaries, `-V` 5/9 | `doctor` requires **two independent presence signals** and pins **each arm with its own test, including the failure arm**. Precedent, verified first-hand in `pi_agent_rust/src/doctor.rs` and cited by construct because a bare line number is unverifiable: `:950` the naive success arm, `:967-968` the two-signal arm (`discovered_path.is_some() && probe_failure_is_known_nonfatal(…)`), `:1066` `which_tool` as the independent signal, `:13948` `check_tool_falls_back_when_probe_args_are_unsupported`, `:13964` `check_tool_reports_invocation_failure_for_broken_executable` — the second test is the known-good leg that stops the fallback becoming a blanket amnesty. **ADOPT WITH A NAMED GAP:** `probe_failure_is_known_nonfatal` at `:1057` allowlists exactly one tool (`if tool.ne("sh") \|\| args.ne(&["--version"])`), so a doctor built on that code marks tmux MISSING today |
+| a single version flag that works on every dependency | MEASURED: tmux --version exits 1 while tmux -V returns 3.6a exit 0; --version answers 8/9 of our binaries and -V answers **6/9** in the current probe | doctor requires two independent presence signals and a separate failure-arm test; the old pi_agent_rust line citations are historical |
 
 We may enforce our own rules on ourselves as hard as we like. `MEASURED`:
 `git ls-files -- '*.sh' '*.py' | wc -l` → `0` (grep-free, deliberately), exemption list empty by
@@ -292,10 +283,7 @@ even on us: `crates/composer-typed/tests/differential.rs:41` aims its oracle at
 OMP v18 screen-scraper. What is the adapter story worth if the layer you claim works is vendor-blind?"*
 
 Correct as stated, and the strongest objection here. `MEASURED` and specific:
-`crates/tick-monitor/src/lib.rs:312` hardcodes `MODEL_MARKERS = ["Opus 5","GLM 5.3","GPT-5.6",
-"GPT-5.5"]`; `:315` hardcodes three OMP-v18 dialog-footer strings *captured verbatim from pane
-`%1372`*; `:383` strips braille `U+2800..U+28FF` and the literal `π`; `classify` matches two verbatim
-queued-message strings (harness grep, `capture\.contains` → 2 sites). 1,293 lines at this writing (1,185 when first measured — the crate grew), one vendor.
+crates/tick-monitor/src/lib.rs:317 hardcodes MODEL_MARKERS = [Opus 5, GLM 5.3, GPT-5.6, GPT-5.5]; :320 hardcodes the OMP-v18 dialog-footer strings captured from pane %1372; :385 strips braille U+2800..U+28FF and the literal pi; :356 classifies queued-message strings. The current source is 1,326 lines; these are source-shape facts, not proof of vendor parity.
 
 We have been on the receiving end of this. `MEASURED`, from `crates/tick-monitor/src/lib.rs:10-18`:
 `pane-truth` reported pane `%1409` — *"braille spinner, advancing timer, 16.5% tree CPU"* — as
@@ -322,10 +310,7 @@ CloseOutcome` — **`Evidence` is not `Option`**, because prose completion is wh
 **`WorkerAdapter`** — `observe(&Cx, WorkerId) -> Observation`, `dispatch(&Cx, WorkerId, Packet) ->
 TransportReceipt`, `receipt(&Cx, WorkerId, &Observation, &Observation) -> ReceiptVerdict`. Two
 `Observation`s, never one, because liveness is a two-capture property
-(`crates/tick-monitor/src/lib.rs:485`). References, `MEASURED` as existing:
-`crates/tick-monitor/src/lib.rs` (`PaneState`, `Liveness`, `Observation`, `classify`) is the
-*tmux + OMP v18* `observe`; `crates/receiver-receipt/src/lib.rs` (`ReceiptVerdict`,
-`assess_receiver_receipt`) is `receipt`; `crates/ack-stage/src/lib.rs` is `dispatch`.
+crates/tick-monitor/src/lib.rs (PaneState, Liveness, Observation, classify; MIN_GAP_SECS at :490) is the tmux + OMP v18 observe implementation; crates/receiver-receipt/src/lib.rs (ReceiptVerdict, assess_receiver_receipt) is receipt; crates/ack-stage/src/lib.rs is dispatch.
 
 **`RepoAdapter`** — `root(&Cx) -> PathBuf` resolved at runtime from cwd upward, never from
 `env!("CARGO_MANIFEST_DIR")`. `identity(&Cx) -> Identity` carrying HEAD, dirty set, build id.
@@ -377,22 +362,17 @@ every completion this session was found by a human looking. Prevented by non-opt
 *Conditions living only in pane scrollback, dying with the pane.* `MEASURED` (brief §1): the reap
 found **seven real conditions** there. Prevented by a durable per-unit ledger written every tick.
 
-*A supervisor running 23 commits stale.* `MEASURED`, session ledger, 2026-08-31. **Provenance defect,
+*A supervisor running 23 commits stale.* **HISTORICAL/UNVERIFIED**, session ledger, 2026-08-31. The failure class is retained, but the 23 has no re-derivable command and is not current evidence.
 recorded rather than hidden:** I found no re-derivable command for the `23`, which writing-contract
 rule 1 forbids; the failure class is real and the missing command is a defect against this document.
 Prevented by applying `crates/installer/src/lib.rs`'s identity proof to the *running* supervisor.
 
-*162 refused ticks with nobody watching.* `MEASURED` (brief §4): 162 refusals over 4.2 hours,
-`DISPATCH_RETRY_BLOCKED`. The fence was right; the silence was wrong. Prevented by a refusal budget —
-N consecutive refusals of one code escalates, because silent perpetual refusal reads as a hang.
 
-*A gate that is correct and unreachable.* `MEASURED` (brief §3.6): `omp-inventory-map --help` →
-`CONFIG_ERROR unknown argument --help` on a gate whose 13 tests pass. Prevented by **ADDRESSABLE**.
+**Historical/unverified snapshot:** the brief recorded 162 refused ticks over 4.2 hours as DISPATCH_RETRY_BLOCKED. No source ledger export or deriving command is retained, so it is a failure-shape example, not a current baseline. The proposed refusal budget remains a design control, not observed enforcement.
+**Historical/unverified addressability snapshot:** the brief recorded omp-inventory-map --help -> CONFIG_ERROR unknown argument --help alongside 13 source test markers. Current omp-inventory-map source contains 28 test markers; no passing-run receipt is claimed here. The proposed ADDRESSABLE gate remains open.
 
-`MEASURED` denominator: the board at stand-down was 28 closed, 25 in_progress, 19 open, 2 blocked.
-**NO-CLAIM:** each item pairs a measured failure with an intended mechanism; none has been observed.
+**CURRENT board snapshot (2026-09-01).** The five-status command-backed total is 93: 60 closed, 22 in_progress, 8 open, 2 blocked, and 1 grading. **NO-CLAIM:** this pairs the historical failure examples with a current board count; it does not claim the refusal or addressability mechanisms have been observed.
 ### 6.1 Adoption outcomes we will actually measure
-
 The value claims above are hypotheses, not adoption evidence. The following pilot scorecard makes
 the internal buyer's walk-away benefit and the foreign-adopter bar falsifiable. All targets are
 **PROJECTED** until a run records the stated proof artifact; the current baseline is either explicitly
@@ -432,9 +412,8 @@ undiscoverable. `br`'s bar (§2.2) is repair through one chokepoint with byte-id
 rule is likeliest — our best rule, and to an adopter it reads as contempt for their codebase.
 
 **Being slower than doing it by hand.** Persona A runs one agent in one terminal; if adoption costs
-more than the tracking it replaces, not adopting is correct. `MEASURED`: 157 of 183 census rows are
-`CAPABILITY_NOT_USED`. We are short of surface that pays, not of surface.
 
+more than the tracking it replaces, not adopting is correct. **HISTORICAL** brief §3.2 reported 157 of 183 census rows as CAPABILITY_NOT_USED; current surface counts are command-backed in 02-surface-census. We are short of externally validated surface that pays, not of a current map count.
 **The kill condition we should adopt ourselves:** if a foreign repo cannot reach a graded close
 without hand-editing anything under `.omp-orchestrator/`, the adapter layer has failed and the fix is
 the boundary, not more adapters. **NO-CLAIM:** `PROJECTED` risks reasoned from measured defects here.

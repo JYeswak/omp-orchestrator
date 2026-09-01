@@ -167,15 +167,19 @@ fn retired_rows_carry_non_empty_reasons() {
 /// gate at all (`00-brief.md` §3.5, on `path-literal-guard`).
 #[test]
 fn a_live_figure_is_not_flagged() {
-    let live = "210 git work-trees";
+    const LIVE_FIGURE: &str = "210 filesystem .git entries";
     let texts: Vec<String> = sections()
         .iter()
         .map(|p| fs::read_to_string(p).unwrap_or_default())
         .collect();
-    let hits: Vec<&String> = texts.iter().filter(|t| t.contains(live)).collect();
+    assert!(
+        RETIRED.iter().all(|figure| figure.needle != LIVE_FIGURE),
+        "known-good fixture subject {LIVE_FIGURE:?} must not be retired"
+    );
+    let hits: Vec<&String> = texts.iter().filter(|t| t.contains(LIVE_FIGURE)).collect();
     assert!(
         !hits.is_empty(),
-        "known-good leg is vacuous: the live figure {live:?} appears in no section, so this test \
+        "known-good leg is vacuous: the live figure {LIVE_FIGURE:?} appears in no section, so this test \
          proves nothing about the gate's discrimination"
     );
 }

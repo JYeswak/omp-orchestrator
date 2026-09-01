@@ -8,16 +8,17 @@ Nine named gaps are researched below. Each record gives the gap, exact search, a
 
 ## 0. Corpus, tooling, and measurement boundaries
 
+**Replay prefix (required).** Every relative mirror search below runs after M=/Volumes/ZestData/dicklesworthstone-mirror and cd "$M"; a result obtained from the orchestrator repository root is invalid and must not be cited as mirror evidence.
 Recorded filesystem measurements:
 
 ```
 ls -1 | wc -l                                      -> 218   # visible entries
 find . -maxdepth 1 -mindepth 1 -type d | wc -l     -> 217   # directories
-find . -maxdepth 2 -mindepth 2 -name .git | wc -l  -> 210   # git work-trees
+find . -maxdepth 2 -mindepth 2 -name .git | wc -l  -> 210   # filesystem .git entries; NOT validated work-trees
 ls -1 | grep -c corrupt                            -> 1     # ntm.corrupt-20260819
 ```
 
-The research denominator is **MEASURED 210 git work-trees**, not 218 entries, 217 directories, or Brief §3.7's un-re-derived “216 repos.” `fh` refused stale input as `SERVE_INPUT_STALE` after mirror movement `5dec4212… -> ecdea397…`; its CLI also refused `SEARCH_INDEX_STALE` at exit 3:
+The research denominator is **MEASURED 210 filesystem `.git` entries**, not 210 validated work-trees, 218 visible entries, 217 directories, or Brief §3.7's un-re-derived “216 repos.” A validation pass has not classified these entries as non-bare work-trees, linked worktrees, nested repositories, or submodules. `fh` refused stale input as `SERVE_INPUT_STALE` after mirror movement `5dec4212… -> ecdea397…`; its CLI also refused `SEARCH_INDEX_STALE` at exit 3:
 
 ```
 SEARCH_INDEX_STALE: published key f2845efff917afd4 differs from current b1acb6e7b011b1f5
@@ -26,15 +27,17 @@ hint: run `fh technical-manifest`
 
 All mirror searches therefore ran against the filesystem, without semantic-index assistance. Full mirror commit IDs were unavailable in this pass; §10.1 records that limitation instead of inventing revisions.
 
+**UNRESOLVED PROVENANCE / PLAN GATE.** The required SOTA preflight is not green: `fh suggest` returned `SEARCH_INDEX_STALE` (published `f284...` vs current `b1ac...`), and `fh technical-manifest --check` failed `TSX_ITEMS_PARSE_FAILED` at `apps/wire/scripts/suites.ts`. `jsm suggest` was offline and returned only generic context suggestions. This section makes no claim that the mirror index or SOTA skill recommendation gate passed; owner: integrator; next action: refresh the fh technical manifest, repair the TSX parse failure, then re-run both commands and retain their outputs.
+
 ### 0.1 Measurement ledger
 
 | measure | derivation/input | result and boundary |
 |---|---|---|
-| mirror denominator | `find . -maxdepth 2 -mindepth 2 -name .git \| wc -l` | **MEASURED 210** work-trees at one snapshot; not 216/218 entries |
-| visible entries / directories | `ls -1 \| wc -l`; `find . -maxdepth 1 -mindepth 1 -type d \| wc -l` | **MEASURED 218 / 217**, not project denominators |
-| `vergen` matches | `grep -rl vergen --include=Cargo.toml . \| wc -l` | **MEASURED 18 manifest paths / 210 work-trees**; unique-repository numerator is NO-CLAIM |
+| mirror denominator | `find . -maxdepth 2 -mindepth 2 -name .git | wc -l` | **MEASURED 210 filesystem entries** at one snapshot; work-tree validity is **UNVALIDATED**, not a repository count |
+| visible entries / directories | `ls -1 | wc -l`; `find . -maxdepth 1 -mindepth 1 -type d | wc -l` | **MEASURED 218 / 217**, not project denominators |
+| `vergen` matches | `grep -rl vergen --include=Cargo.toml . | wc -l` | **MEASURED 18 manifest paths**; unique-repository numerator is NO-CLAIM and the 210 filesystem denominator is not validated |
 | supervision variants | direct reads of `enum SupervisionEvent` and `enum StopReason` | **MEASURED 8 + 6 = 14 variants** in the named file, not corpus-wide |
-| OMP completion capture | `/tmp/grade/r7-agent-end.md` and raw frame | **MEASURED 1 `agent_end` frame** in one ephemeral run |
+| OMP completion capture | `.flywheel/grade-evidence/r7-agent-end.md.gz` and raw frame | **MEASURED 1 `agent_end` frame** in one ephemeral run |
 | seeded corrections | comparison of nine seeded Gap rows with this record | **PROJECTED 6/9 = 66.7%**; document comparison, not an independent run |
 | refuted not-founds | four false-zero mechanisms described below | **MEASURED 4** named mechanisms in this section; no session-count or completeness claim |
 
@@ -50,7 +53,7 @@ Four false-zero mechanisms remain explicit: an empty `--include=` can return exi
 
 **Gap.** Dispatch emits no typed acknowledgement, so “sent” and “accepted” are one observable.
 
-**Search.** `grep -Ern 'pub (struct|enum) (PublishReceipt|AckKind|DeliveryClass|PublishPermit)' asupersync/src/messaging` over the whole `asupersync/src/messaging` module. The `-E` is required for the grouping and alternation; the replay result is recorded in `/tmp/grade/r13-10-prior-art.md`.
+**Search.** `grep -Ern 'pub (struct|enum) (PublishReceipt|AckKind|DeliveryClass|PublishPermit)' asupersync/src/messaging` over the whole `asupersync/src/messaging` module. The `-E` is required for the grouping and alternation; the replay result is recorded in `.flywheel/grade-evidence/r13-10-prior-art.md.gz`.
 
 **Found.** `asupersync/src/messaging/fabric.rs:1913` (`struct PublishReceipt`) carries `subject`, `payload_len`, `ack_kind`, and `delivery_class`; `asupersync/src/messaging/fabric.rs:1944` carries `#[must_use = "a PublishPermit must be sent or explicitly aborted"]`. `AckKind` is `asupersync/src/messaging/class.rs:83`; `DeliveryClass` is `asupersync/src/messaging/class.rs:17`; `cost_vector` and `minimum_ack` carry the `#[must_use]` rule at `asupersync/src/messaging/class.rs:43,56`.
 
@@ -142,7 +145,7 @@ The synonym set also included `scanned zero`, `empty scan set`, `no files were s
 
 **Gap.** **Historical document premise:** `docs/plan/00-brief.md` §4 (SHA-256 `84569dd180bad9dd7ee6c90fde86fc5ee0d55be46253aa2dd6c9244aa1efd502`) records the `complete` row as worker completion found by “a human looking.” This is a historical statement from that hashed artifact, not a current runtime observation. **NO-CLAIM:** this section does not claim that the historical observation is reproducible or that it describes every worker mode.
 
-**Search.** `grep -n 'pub enum Outcome' asupersync/src`; then `(cd asupersync/src && grep -En 'pub enum (ChildExit|ExitReason|ChildOutcome|SupervisionEvent|ChildStatus)' supervision.rs gen_server.rs spork.rs)` over the three enumerated supervision surfaces. The `-E` is required for the grouping and alternation; the replay result is recorded in `/tmp/grade/r13-10-prior-art.md`.
+**Search.** `grep -n 'pub enum Outcome' asupersync/src`; then `(cd asupersync/src && grep -En 'pub enum (ChildExit|ExitReason|ChildOutcome|SupervisionEvent|ChildStatus)' supervision.rs gen_server.rs spork.rs)` over the three enumerated supervision surfaces. The `-E` is required for the grouping and alternation; the replay result is recorded in `.flywheel/grade-evidence/r13-10-prior-art.md.gz`.
 
 **Found, half.** `asupersync/src/types/outcome.rs:213-227` (`enum Outcome<T,E>`) declares `Ok`, `Err`, `Cancelled`, and `Panicked`, with the cited severity order `Ok < Err < Cancelled < Panicked`.
 
@@ -176,7 +179,7 @@ The synonym set also included `scanned zero`, `empty scan set`, `no files were s
 
 **Gap.** A present binary can be marked absent when its chosen version flag fails.
 
-**Search.** `grep -En 'PresenceOnly|ProbeExecution|fn check_tool|fn probe_failure_is_known_nonfatal|fn which_tool|status.success\(\)' pi_agent_rust/src/doctor.rs`, then read each named construct. The `-E` is required for the alternation and escaped literal parentheses; the replay result is recorded in `/tmp/grade/r13-10-prior-art.md`.
+**Search.** `grep -En 'PresenceOnly|ProbeExecution|fn check_tool|fn probe_failure_is_known_nonfatal|fn which_tool|status.success\(\)' pi_agent_rust/src/doctor.rs`, then read each named construct. The `-E` is required for the alternation and escaped literal parentheses; the replay result is recorded in `.flywheel/grade-evidence/r13-10-prior-art.md.gz`.
 
 **Found.** In `pi_agent_rust/src/doctor.rs`, `fn check_tool` is at `pi_agent_rust/src/doctor.rs:924`; the naive success arm at `pi_agent_rust/src/doctor.rs:950`; the two-signal arm at `pi_agent_rust/src/doctor.rs:967-968`; `fn probe_failure_is_known_nonfatal` at `pi_agent_rust/src/doctor.rs:1052`; its one-tool allowlist at `pi_agent_rust/src/doctor.rs:1057`; and `fn which_tool` at `pi_agent_rust/src/doctor.rs:1066`. Tests `fn check_tool_falls_back_when_probe_args_are_unsupported` and `fn check_tool_reports_invocation_failure_for_broken_executable` are at `pi_agent_rust/src/doctor.rs:13948` and `pi_agent_rust/src/doctor.rs:13964`. The design separates presence (`which_tool`) from version probing and forgives only a named failure.
 
@@ -216,12 +219,12 @@ The earlier exit-0 claim came from `tmux --version 2>&1 | head -1` (`PIPESTATUS=
 
 ## 10.1 Mirror source manifest and search provenance
 
-| source | revision identity | search/input | durable evidence |
+| source | revision identity | search/input | evidence and retention |
 |---|---|---|---|
-| Jeffrey mirror | root `/Volumes/ZestData/dicklesworthstone-mirror`; snapshot manifest `/Volumes/ZestData/dicklesworthstone-mirror/MANIFEST.json` SHA-256 `09640f3d3f7fdabbd21d13aa3e3881d8e88aa8d080c21075fb3ed9765e530947`; sync log SHA-256 `9e6af9e7df9de50020dd28a8235aed276515699143e6c31973538e437dc51b40`; only observed movement `5dec4212… -> ecdea397…`; full commit unavailable because stale input was refused | per-gap commands above; Gap 7 limited to named asupersync roots/files | cited source constructs at the recorded snapshot; no broader absence claim |
-| OMP signal sweep | installed package, not mirror | suffix sweep over all `.d.ts` plus field reads; root and instrument are recorded in the artifact | `/tmp/grade/omp-signals.md`, SHA-256 `f9b33f5e9f11ab5f003740b2161cb2aebdf77691615d81070c3051a796819cb0` |
-| OMP completion capture | installed package, not mirror | `/Users/josh/.local/bin/omp --mode=rpc --no-session --no-tools --no-lsp --max-time=30`; stdin prompt `AGENT_END_PROBE_OK` | `/tmp/grade/r7-agent-end.md`, SHA-256 `661a6125fe36a71fc698ddadcfebb6769cbcea2c5f92e736c3e6c10d37af0d50`; raw frame SHA-256 `d8bd80c6949b2ec48af1639b5b5e241bd90b4dce1e769483dd1690ed2be8f644` |
-| mux adjacent probe | installed package, not mirror | Content-Length JSON-RPC `omp/muxPing` against scoped `lsp-mux.sock` endpoints, three probes per endpoint | `/tmp/grade/mux-investigation.md`, SHA-256 `d6a58a671112fadb95e3f1fe4499eaf659af26d6007c64f983eb0d8356ec34f1` |
+| Jeffrey mirror | root /Volumes/ZestData/dicklesworthstone-mirror; manifest and sync-log hashes recorded | per-gap commands above; Gap 7 limited to named asupersync roots/files | source constructs at the recorded snapshot; no broader absence claim |
+| OMP signal sweep | installed package, not mirror | suffix sweep over all .d.ts plus field reads | .flywheel/grade-evidence/omp-signals.md.gz is ephemeral; its hash identifies that snapshot but does not make it durable |
+| OMP completion capture | installed package, not mirror; bounded rpc probe | omp --mode=rpc --no-session --no-tools --no-lsp --max-time=30; prompt AGENT_END_PROBE_OK | .flywheel/grade-evidence/r7-agent-end.md.gz and raw frame are ephemeral; copy into an in-repo artifact before calling them durable |
+| mux adjacent probe | installed package, not mirror | Content-Length JSON-RPC omp/muxPing against scoped lsp-mux.sock endpoints | .flywheel/grade-evidence/mux-investigation.md.gz is ephemeral; its hash identifies the snapshot only |
 
 ---
 
@@ -259,7 +262,7 @@ Declaration-file SHA-256s: `extensibility/shared-events.d.ts` `78a6e4236680fa243
 
 ### 11.4 Gap 7 retraction
 
-The capture artifact `/tmp/grade/r7-agent-end.md:26-45` observed one `agent_end` frame in an OMP `--mode=rpc` stream. Its parsed frame at `/tmp/grade/r7-agent-end.md:47-71` has `isTerminal: true`, two messages, and absent `willContinue`. Gap 7 is therefore **REFUTED as a claim that no completion signal exists in OMP**, while the mirror negative remains a scoped declaration result. Remaining work is adapter/event consumption, not inventing a new completion type.
+The capture artifact `.flywheel/grade-evidence/r7-agent-end.md.gz:26-45` observed one `agent_end` frame in an OMP `--mode=rpc` stream. Its parsed frame at `.flywheel/grade-evidence/r7-agent-end.md.gz:47-71` has `isTerminal: true`, two messages, and absent `willContinue`. Gap 7 is therefore **REFUTED as a claim that no completion signal exists in OMP**, while the mirror negative remains a scoped declaration result. Remaining work is adapter/event consumption, not inventing a new completion type.
 
 ### 11.5 Receipt boundary
 
@@ -318,17 +321,9 @@ change, not a dependency line. Naming the mapping is free; taking it is not.
 
 ### The positive control PASSED, which is why this row is trustworthy
 
-Six gaps were mined; five carry mirror citations (cost telemetry via OMP's
-`telemetry-export` OTLP surface, obligation-ledger for the claim wire,
-`scope.spawn` readers) and **two came back genuinely NOT FOUND** —
-`path-literal-guard` has no upstream analogue, and neither does the cargo-shim
-problem.
+Seven evidence rows were mined in this positive-control pass: five carry mirror citations (cost telemetry via OMP's telemetry-export OTLP surface, obligation-ledger for the claim wire, and scope.spawn readers), and **two came back genuinely NOT FOUND** — path-literal-guard has no upstream analogue, and neither does the cargo-shim problem.
 
-Every prior `ipg` wave reported a FAILED positive control, correctly diagnosed as
-the agent-plane boundary holding. This one **found a real absence**, which is the
-control working in the direction that matters: a search that can only confirm is
-not a search. Seven waves of "not ours" plus one honest "not found anywhere" is a
-mapping with a demonstrated negative.
+Every prior ipg wave reported a FAILED positive control, correctly diagnosed as the agent-plane boundary holding. This pass found real absences, which is the direction that matters: a search that can only confirm is not a search. The row count and each NOT FOUND result are scoped to this pass, not a claim about all prior-art coverage.
 
 **This is the seventh instance of the pattern** — after `AgentEndEvent`,
 `AdvisorSeverity`, `modes`, `session`, `task`, `slash-commands`, `dap`. The

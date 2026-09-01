@@ -95,7 +95,7 @@ The upstream sweep changes the strength of the absence claims without pretending
 
 | gap | upstream type and source | true strength | effect on the idea
 |---|---|---|
-| completion | **`isTerminal` on RpcSessionEventFrame** (modes/rpc/rpc-types.d.ts:589) is what was OBSERVED. `AgentEndEvent.willContinue` and `SessionStopEvent` (extensibility/shared-events.d.ts:83-93,154-162) are DECLARED ONLY — see §1.2.3 | **WIRE-PROVEN for one observed frame, and for `isTerminal` only** — exact raw receipt PRESERVED IN-REPO at `.flywheel/inventory-artifacts/agent-end-raw-frame.json.gz` (hash-gated by `artifact_provenance`; the original `/tmp/grade/agent-end-raw-frame.json` is reboot-volatile and must not be cited); capture command /Users/josh/.local/bin/omp --mode=rpc --no-session --no-tools --no-lsp --max-time=30; artifact mtime/retrieval observed 2026-08-31T19:52:26-0600; SHA-256 d8bd80c6949b2ec48af1639b5b5e241bd90b4dce1e769483dd1690ed2be8f644 | the frame's session-specific isTerminal=true was observed; shared willContinue was absent; repeatability, semantic fit, and supervisor consumption remain UNKNOWN
+| completion | **`isTerminal` on RpcSessionEventFrame** (modes/rpc/rpc-types.d.ts:589) is what was OBSERVED. `AgentEndEvent.willContinue` and `SessionStopEvent` (extensibility/shared-events.d.ts:83-93,154-162) are DECLARED ONLY — see §1.2.3 | **WIRE-PROVEN for one observed frame, and for `isTerminal` only** — exact raw receipt PRESERVED IN-REPO at `.flywheel/inventory-artifacts/agent-end-raw-frame.json.gz` (hash-gated by `artifact_provenance`; the original `.flywheel/grade-evidence/agent-end-raw-frame.json.gz` is reboot-volatile and must not be cited); capture command /Users/josh/.local/bin/omp --mode=rpc --no-session --no-tools --no-lsp --max-time=30; artifact mtime/retrieval observed 2026-08-31T19:52:26-0600; SHA-256 d8bd80c6949b2ec48af1639b5b5e241bd90b4dce1e769483dd1690ed2be8f644 | the frame's session-specific isTerminal=true was observed; shared willContinue was absent; repeatability, semantic fit, and supervisor consumption remain UNKNOWN
 | receipts | IrcDeliveryReceipt + AsyncJobDeliverySink (tools/hub/types.d.ts:8,84) | DECLARED ONLY — no wire path measured | the cp-z42vu transport/receipt gap remains; type existence does not replace receiver proof
 | claims | Stage1Claim / GlobalClaim with ownershipToken + inputWatermark (memories/storage.d.ts:20-27) | DECLARED ONLY — no wire path measured | local claim/ownership gap remains until reachability and semantics are proven
 | idle | GuestIdleReconcilerCtx (dist/types/collab/guest.d.ts:9-30) | DECLARED ONLY — no wire path measured | the local NewlyIdle/ConfirmedIdle defect remains; the upstream split is corroboration, not a fix
@@ -465,7 +465,7 @@ The current number registry and corrected brief win over every copied value.
 | 8 gates and gate-leg counts | reported corrected snapshot from 00-brief.md §3.5 as of 2026-08-31; grep naming counts are not semantic coverage |
 | 51/59 enums, 79/91 structs, 6/17/4 collisions | reported type-inventory snapshot as of 2026-08-31; library-only versus all-source scopes are intentionally distinct |
 | tmux 3.6a | captured by tmux -V; echo "exit=$?" on the host, as of 2026-08-31; the long-flag failure is not absence |
-| raw agent_end receipt | .flywheel/inventory-artifacts/agent-end-raw-frame.json.gz; capture command and SHA-256 d8bd80c6949b2ec48af1639b5b5e241bd90b4dce1e769483dd1690ed2be8f644 are retained in section 1.2.1; /tmp/grade/agent-end-raw-frame.json is only the historical source location and must not be cited |
+| raw agent_end receipt | .flywheel/inventory-artifacts/agent-end-raw-frame.json.gz; capture command and SHA-256 d8bd80c6949b2ec48af1639b5b5e241bd90b4dce1e769483dd1690ed2be8f644 are retained in section 1.2.1; .flywheel/grade-evidence/agent-end-raw-frame.json.gz is only the historical source location and must not be cited |
 
 Any later correction must update this ledger or remove the figure. Historical/retracted values are never
 silently promoted back to current facts.
@@ -503,7 +503,7 @@ The artifact is real and checkable — that part of the section is in good order
 
 | | |
 |---|---|
-| path | `/tmp/grade/agent-end-raw-frame.json`, 4,772 bytes |
+| path | `.flywheel/grade-evidence/agent-end-raw-frame.json.gz`, 4,772 bytes |
 | cited SHA-256 | `d8bd80c6949b2ec4…` |
 | **re-derived 2026-09-01** | `d8bd80c6949b2ec4…` — **exact match** |
 

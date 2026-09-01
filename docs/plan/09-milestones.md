@@ -9,10 +9,8 @@ we are allowed to say it works, and the conditions under which this document sho
 **A milestone is closed by an OBSERVABLE, not by a claim** — not by a passing test suite, a commit, an agent reporting success, or a
 human's recollection that it seemed to work. An observable is a command someone else can run and a result they can read without asking
 us what it means. That is the output of the failure this project was stood down over: **a workspace whose own census measured
-mechanisms built, tested, hardened, and called by nothing** (§01: twenty-six crates, 379→407 tests
-at last count, and a BUILT≠WIRED census whose row set outgrew the twenty-mechanism figure this
-text first cited — see the section-map note at the bottom of this file) — evidence code does what its author thought, not that it runs. Every milestone
-below is stated in this shape:
+mechanisms built, tested, hardened, and called by nothing** — a **historical** §01 snapshot of twenty-six crates and 379→407 tests, with a BUILT≠WIRED census whose row set outgrew the then-current twenty-mechanism figure. Current workspace counts are command-backed in NUMBERS.toml; this historical scar shows why evidence code must prove invocation, not merely correct source.
+Every milestone below is stated in this shape:
 
 ```
 Mn — <one-sentence goal, future tense>
@@ -35,10 +33,7 @@ measure the wrong quantity. Guarding against that is §5's job.
 
 Seven, ordered by dependency — forced, not chosen: each consumes the capability the previous one produces, so there is no parallel path
 here and no way to buy schedule with more agents. The ordering is not asserted from preference: it
-mirrors the measured crate chain of §04 (finding-dispatch → omp-orchestrator → ack-stage →
-receiver-receipt → tick-monitor is the deepest path in the 18-edge DAG), with M1's seam at the
-head and M7's window at the tail.
-
+mirrors the crate chain captured in the **historical 18-edge DAG snapshot** (§04): finding-dispatch → omp-orchestrator → ack-stage → receiver-receipt → tick-monitor. M1's seam is at the head and M7's window at the tail.
 ```mermaid
 graph LR
   M1[M1 observe<br/>the seam] --> M2[M2 select<br/>by graph] --> M3[M3 dispatch<br/>with a receipt]
@@ -64,58 +59,33 @@ The test must print one JSON line with `{"fixture":"tick-monitor-newly-idle.json
 **STARTING POINT — with a recorded disagreement with the brief.** Brief §4 lists the *actionable* layer as **BROKEN** — "`idle_panes`
 discards `NewlyIdle`; `free_capacity` derives from the same `is_dispatchable` filter." **I measured the current source and disagree:**
 
-```
-crates/tick-monitor/src/lib.rs:462-463   is_free_capacity() = ConfirmedIdle | NewlyIdle
-crates/tick-monitor/src/main.rs:244      if live.is_free_capacity() && !excluded.contains(...)
-crates/omp-orchestrator/src/lib.rs:461       .filter(|p| p.is_free_capacity)
-strings ~/.local/bin/tick-monitor     | grep -c NEWLY_IDLE  -> 1
-strings ~/.local/bin/omp-orchestrator | grep -c NEWLY_IDLE  -> 0
-grep -rn '"NEWLY_IDLE"' crates/omp-orchestrator/src/main.rs -> 0 hits
-grep -rn  "NEWLY_IDLE"  crates/omp-orchestrator/            -> 2 hits, both #[cfg(test)]
-```
+CURRENT SEAM EVIDENCE (2026-09-01):
+crates/tick-monitor/src/lib.rs:467-468       is_free_capacity() = ConfirmedIdle | NewlyIdle
+crates/omp-orchestrator/src/lib.rs:739       consumer counts pane.is_free_capacity
+crates/omp-orchestrator/src/main.rs:1646-1653 regression test proves IDLE -> free_capacity but not dispatchable
 
-The producer emits `free_capacity` from its own predicate including `NewlyIdle`; the consumer counts its own field;
-`crates/omp-orchestrator/src/lib.rs:451-457` comments the former defect, with the regression test
-`observed_idle_state_counts_as_free_capacity_before_confirmation` at `src/main.rs:1056`
-(predicate asserts `:1062-1063`). `MEASURED`: **the
-filter defect is fixed in source** — the brief's row describes the tree at the 4h19m incident, not this commit, and should be amended in
-place. What remains broken is the **seam**. `MEASURED`: the producer names the state; the production parser at `src/main.rs:383`
-**never** does, deriving capacity from a JSON string list plus a `state == "IDLE"` fallback, so the NewlyIdle branch is exercised only
-through a `#[cfg(test)]` constructor mapping a label production never reads. Three predicates agree by convention across a process
-boundary with **no shared type and no end-to-end fixture** (`ls crates/omp-orchestrator/tests/` → `no_noop.rs`); `omp-orchestrator` has
-no `path-depends-on` edge to `tick-monitor` (brief §3.4).
+The producer emits free_capacity from its own predicate; the consumer counts its own field. The filter defect is fixed in source. What remains broken is the seam: parse_observation at crates/omp-orchestrator/src/main.rs:383-410 reads JSON lists plus a state == IDLE fallback, so the NewlyIdle branch is not represented by a shared type or an end-to-end fixture. omp-orchestrator has no path-depends-on edge to tick-monitor (brief §3.4).
 
-**RISK.** A live-seam refactor the repo has flagged as needing an owner: `crates/no-shell-gate/tests/wired_lanes.rs:679` records
-`Observation` as "REQUIRES A DECISION not an allowance… the `free_capacity` seam". The failure mode is a partial migration adding a
-shared type *beside* the two existing structs, producing three dialects where there were two — and the vocabulary that would collapse
-the ack dialects is not merely unadopted but **blocked upstream**: `AckKind` and `DeliveryClass` sit behind `#[cfg(feature =
-"messaging-fabric")]`, which needs `test-internals`, which upstream issue #46 removed from defaults, and `ObligationLedger` occurs zero
-times. **NO-CLAIM.** M1 makes one defect class a compile error; a shared type with a wrong predicate is wrong in both crates.
+**RISK.** A live-seam refactor needs an owner: crates/no-shell-gate/tests/wired_lanes.rs:679 records Observation as REQUIRES A DECISION, not an allowance, at the free_capacity seam. A partial migration adding a shared type beside the existing structs would create three dialects rather than collapsing two.
 
-**UPSTREAM CORROBORATION, declared only.** OMP declares `GuestIdleReconcilerCtx`
-(`dist/types/collab/guest.d.ts:9-30`; probed) with a settle-vs-continuation split — the same two-tier idle design
-as `NewlyIdle`/`ConfirmedIdle`, arrived at independently. DECLARED only: no wire probe has carried
-it; M1's measured three-predicate seam and the RISK above stand unchanged.
+**UPSTREAM CORROBORATION, declared only.** OMP declares GuestIdleReconcilerCtx at dist/types/collab/guest.d.ts:9-30 with a settle-vs-continuation split analogous to NewlyIdle/ConfirmedIdle. No wire probe has carried it; the measured local seam and risk above remain.
+
 
 ### M2 — Selection will run through the graph kernel instead of queue recency
 
 **OBSERVABLE.** From the repository root and the recorded revision, run
 `cargo test -p omp-orchestrator --test selection_graph -- --exact graph_and_recency_choose_different_beads --nocapture`
 against the checked-in fixture `crates/omp-orchestrator/tests/fixtures/blocking-chain.json`. The test must print one JSON line with
-`{"fixture":"blocking-chain.json","graph_bead":"<id>","recency_bead":"<different-id>","selected_by":"bv","revision":"<git sha>"}` and exit 0; the pre-milestone tree fails because no `bv` invocation or test exists, and the post-milestone tree fails if the IDs are equal or `selected_by` is not `bv`. The corroborating source command is `grep -R -n --include='*.rs' 'Command::new("bv")' crates --exclude-dir=tests`, which must return a production hit. **NOT IN SCOPE.** Dispatch — M2 decides *what* is worked; M3 delivers it.
+`{"fixture":"blocking-chain.json","graph_bead":"<id>","recency_bead":"<different-id>","selected_by":"bv","revision":"<git sha>"}` and exit 0; the pre-milestone tree fails because no `bv` invocation or test exists, and the post-milestone tree fails if the IDs are equal or `selected_by` is not `bv`. The test MUST exercise the real `bv --robot-next` invocation (or a recorded executable-equivalent adapter) and assert the parsed JSON fields; a source-text grep is diagnostic only and cannot close M2. **NOT IN SCOPE.** Dispatch — M2 decides *what* is worked; M3 delivers it.
 
-**STARTING POINT.** `MEASURED` — the rule is enforced and the implementation is absent:
+**STARTING POINT.** `MEASURED` — the sanctioned graph selector is not invoked by production code:
 
-```
+```text
 harness grep, pattern Command::new\("bv"\), path crates   -> No matches found
-grep -rhoE 'Command::new\("[a-z...]+"\)' crates/ --include=*.rs | sort | uniq -c   # non-empty, so not a false zero
-  11 git · 6 python3 · 6 br · 4 /bin/kill · 2 tmux · 2 /bin/sh · 1 strings · 1 omp · 1 grep · 1 cargo
 ```
 
-`bv` is spawned **zero** times, while `crates/kernel-only-operator-hook/src/lib.rs:548` refuses raw queue reads with *"raw `br ready` is
-blocked; use the `bv --robot-triage` queue kernel"*, allowlisted at `:24`. **We ship a prohibition whose sanctioned alternative nothing
-calls**, and six `Command::new("br")` sites read the queue directly.
-
+This zero is not acceptance evidence: it is a scoped source observation, and the executable behavior above is the only admissible M2 proof. `bv` is spawned zero times today while `crates/kernel-only-operator-hook/src/lib.rs:548` refuses raw queue reads with *"raw `br ready` is blocked; use the `bv --robot-triage` queue kernel"*. **NO-CLAIM.** Graph selection being invoked is not graph selection being better; the differential leg proves only that the strategies differ.
+```
 **RISK.** `bv v0.20.0` is at `/opt/homebrew/bin/bv`, not `~/.local/bin`; a foreign machine (M6) may lack it, so M2's dependency must be
 a degradation path with a typed refusal, or M2 blocks M6. **NO-CLAIM.** Graph selection being *invoked* is not graph selection being
 *better*: the differential leg proves the strategies differ, not that the graph wins.
@@ -190,22 +160,34 @@ Ten closes is an existence proof, not a rate.
 
 ### M6 — A repository that is not this one will run the orchestrator on a machine that has never built it
 
-**OBSERVABLE.** On a clean host, from the repository root at the recorded revision, run this exact shell script:
+**OBSERVABLE.** On a clean host, from the repository root at the recorded revision, run this exact shell script. The install leg targets the `omp-orchestrator` package (not the separate `installer` package), and the cargo executable is resolved before the empty-environment probe so the probe does not accidentally test whether an inherited PATH happens to contain Cargo.
 
 ```sh
 set -o errexit -o nounset -o pipefail
 git rev-parse HEAD
 test ! -e target
 tmpdir="$(mktemp -d)"
-env -i HOME="$HOME" TMPDIR="$tmpdir" PATH="/usr/bin:/bin:/opt/homebrew/bin" sh -ceu 'cargo install --locked --path crates/installer --root "$TMPDIR/omp-m6"'
-env -i HOME="$HOME" TMPDIR="$tmpdir" PATH="$tmpdir/omp-m6/bin:/usr/bin:/bin" omp-orchestrator --repo crates/installer/tests/fixtures/foreign-repo --once --evidence "$tmpdir/m6.json"
+cargo_bin="$(command -v cargo)"
+test -x "$cargo_bin"
+cargo_dir="$(dirname "$cargo_bin")"
+env -i HOME="$HOME" TMPDIR="$tmpdir" PATH="$cargo_dir:/usr/bin:/bin:/opt/homebrew/bin" \
+  cargo install --locked --path crates/omp-orchestrator --bin omp-orchestrator --root "$TMPDIR/omp-m6"
+first_tick_log="$tmpdir/m6-output.log"
+if env -i HOME="$HOME" TMPDIR="$tmpdir" PATH="$tmpdir/omp-m6/bin:/usr/bin:/bin" \
+  omp-orchestrator run --repo crates/omp-orchestrator/tests/fixtures/foreign-repo --once >"$first_tick_log" 2>&1; then
+  first_tick_exit=0
+else
+  first_tick_exit=$?
+fi
+test -s "$first_tick_log"
+if grep -q 'SUPERVISOR_REFUSED' "$first_tick_log"; then verdict=named_refusal
+elif grep -q 'OBSERVATION' "$first_tick_log"; then verdict=progress
+else printf 'M6_UNCLASSIFIED_OUTPUT\n' >&2; exit 1
+fi
+FIRST_TICK_EXIT="$first_tick_exit" VERDICT="$verdict" REVISION="$(git rev-parse HEAD)" python3 -c 'import json, os; print(json.dumps({"install_exit": 0, "cache_absent": True, "fixture": "foreign-repo", "first_tick_exit": int(os.environ["FIRST_TICK_EXIT"]), "verdict": os.environ["VERDICT"], "revision": os.environ["REVISION"]}, sort_keys=True))' >"$tmpdir/m6.json"
+test -s "$tmpdir/m6.json"
+jq -e '(.install_exit == 0) and (.cache_absent == true) and (.fixture == "foreign-repo") and (.first_tick_exit == 0) and (.verdict == "progress" or .verdict == "named_refusal") and (.revision|type == "string") and (.revision|length > 0)' "$tmpdir/m6.json" >/dev/null
 ```
-The checked-in fixture path, checkout SHA, `target/` absence, install exit code, first-tick exit code, and JSON evidence must be captured; `$tmpdir/m6.json` must contain `{"install_exit":0,"cache_absent":true,"fixture":"foreign-repo","first_tick_exit":0,"verdict":"progress|named_refusal","revision":"<git sha>"}`. The pre-milestone tree fails because the install/consumer path is absent; post-milestone success requires every named field and exit code. **NOT IN SCOPE.** Unattended operation (M7); M6 is one successful cold first tick elsewhere.
-
-**STARTING POINT.** `MEASURED`: never attempted. The `installer` crate exists and is **isolated** — on neither side of any of the 18
-`path-depends-on` edges (brief §3.4), so nothing consumes it. Host coupling shows in the binary table: `bv` under `/opt/homebrew`,
-`cargo` a shim at `~/.rch/shims/cargo`, the mirror on `/Volumes/ZestData/…`.
-
 **RISK.** Absolute paths and host assumptions are invisible until the first foreign host, plus a per-binary version-probe map. `MEASURED` here twice: tmux is installed and `-V` succeeds; `--version` is unsupported and fails with exit 1, so it must not be used as the presence probe. The brief's "no handshake" and its first correction ("exits 0 while failing") are both refuted:
 ```
 tmux -V                              -> tmux 3.6a                       exit 0
@@ -234,8 +216,7 @@ tmux MISSING today. **NO-CLAIM.** M6 proves portability to one host and only "di
 `cargo run -p omp-orchestrator --bin omp-orchestrator -- --repo crates/omp-orchestrator/tests/fixtures/foreign-repo --duration 24h --evidence target/milestones/m7.json`.
 The command must exit 0 only after 24 hours in the pinned environment and must emit JSON with `{"window_seconds":86400,"human_event_count":0,"ticks":1,"progress_or_named_refusal":true,"max_same_refusal":3,"refusal_inventory":["refusal-class"] ,"revision":"<git sha>"}` (the actual `ticks` value is an integer greater than zero and the inventory contains the observed classes); a missing tick, unnamed refusal, empty inventory, or recurrence above `FINDING_THRESHOLD == 3` exits non-zero. The pre-milestone tree fails because no unattended runner/evidence exists. **NOT IN SCOPE.** Increasing the window — M7 is the first defensible number, not the best one.
 
-**STARTING POINT.** `MEASURED`: the longest unattended interval observed to date is a **failure** — 4h 19m of fleet idleness while every
-watchdog reported healthy. We have an unattended duration; it is the duration of an undetected outage.
+**STARTING POINT.** **HISTORICAL/UNVERIFIED:** a prior session reported 4h 19m of fleet idleness while watchdogs reported healthy. No deriving command or retained artifact exists, so this is a failure-shape example, not a measured current duration. M7's actual unattended duration remains unproven until its transcript exists.
 
 **RISK.** Goodhart, the sharpest risk here. **An unattended window achieved by widening tolerance is a regression that scores as
 progress.** M7 is trivially closable by deleting refusals, so acceptance requires the refusal *inventory* to be non-empty and unchanged
@@ -302,10 +283,7 @@ it, because `omp-inventory-map --help` returns `CONFIG_ERROR unknown argument --
 exist. It ships a **known-bad leg** — planted bare number, planted `guarantees`, observable-less milestone — since known-good-only
 fixtures are vacuity again.
 
-**This checker does not exist.** `MEASURED`: `ls crates/ | grep plan-check` returns nothing; the workspace has 26 crates and none is
-this one. It is the sharpest thing an investor can hold against this document: **a plan that asserts a discipline it does not enforce is
-exactly the vacuity defect we found in our own census.** Brief §3.3 measured 183 rows meeting a four-field requirement with one distinct
-value across all 183 — met and meaningless. §3 is in that position now: eight rules enforced by the author's attention.
+**This checker does not exist.** MEASURED: ls crates/ | grep plan-check returns nothing; the workspace has **50 crate directories** (ls -1 crates | wc -l) and none is this one. It is the sharpest thing an investor can hold against this document: **a plan that asserts a discipline it does not enforce is exactly the vacuity defect we found in our own census.** Brief §3.3 measured 183 rows meeting a four-field requirement with one distinct value across all 183 — met and meaningless. §3 is in that position now: eight rules enforced by the author's attention.
 
 **NO-CLAIM.** `plan-check` would enforce *form*. Nothing in this design detects a false `MEASURED` whose command was never run, or an
 observable that is admissible and irrelevant. Those need a reader.
@@ -339,8 +317,7 @@ BANKED rows cite evidence; UNPROVEN rows name the experiment that settles them. 
 | Silent refusal is real — the **162-tick** and **178-tick** counts are **HISTORICAL, UNPROVEN** snapshots with no retained ledger derivation and are not banked | **The substrate installs elsewhere.** `MEASURED`: never attempted; `installer` is isolated in the 18-edge graph. Settled by M6: a cold foreign host, documented install, first tick, reproducible transcript. |
 | Transport lies in both directions — `cp-z42vu` returned **`success:[4]`** with no packet delivered (`README.md:155`); the inverse fired the same session | **Verification is cheaper than review.** No instrumentation exists. Settled by recording human-seconds per closed bead before and after M4 on the same bead mix — that ratio is the whole economic argument and is unmeasured. |
 | The evidence-field discipline can be satisfied vacuously — the brief's **183/183** and **one-distinct-value** figures are **HISTORICAL, UNPROVEN** snapshots and are not banked | **Graph selection beats recency.** `MEASURED`: `bv` is spawned zero times. Settled by M2's differential test plus a measured close-rate comparison on a fixed bead set. |
-| The observe layer works and the NewlyIdle filter defect is **fixed in source** — `crates/omp-orchestrator/src/lib.rs:461`, regression test `observed_idle_state_counts_as_free_capacity_before_confirmation` at
-`src/main.rs:1056` (contradicts brief §4; see M1) | **The seam cannot silently diverge again.** `MEASURED`: no shared type crosses it; production never names `NEWLY_IDLE` (`grep -rn '"NEWLY_IDLE"' crates/omp-orchestrator/src/main.rs` → 0). Settled by M1. |
+| The observe layer works and the NewlyIdle filter defect is fixed in source — tick-monitor/src/lib.rs:467-468 exposes ConfirmedIdle or NewlyIdle free capacity; regression test observed_idle_state_counts_as_free_capacity_before_confirmation at omp-orchestrator/src/main.rs:1646-1653 | **The seam cannot silently diverge again.** No shared type crosses it; parse_observation uses JSON lists plus an IDLE fallback. Settled by M1 only after the shared-type fixture lands. |
 | The one hard rule is enforced mechanically — a Rust gate walks `git ls-files` and fails on `.sh`/`.py`, exemption list empty | **The gates bite under attack.** The former **2-of-8 / 4-of-8** figures are **HISTORICAL, UNPROVEN** snapshots and are not a current verdict. Settled by bringing all 8 to four legs plus ADDRESSABLE, and a planted-known-bad campaign per gate. |
 | Failing closed with a remediation hint works — `fh` MCP returns a typed `SERVE_INPUT_STALE` naming the moved mirror HEAD (`5dec4212…` → `ecdea397…`) rather than an empty result | **This plan enforces its own discipline.** `MEASURED`: `ls crates/ \| grep plan-check` → empty. Settled by shipping `plan-check` (§4) with its known-bad fixture. |
 

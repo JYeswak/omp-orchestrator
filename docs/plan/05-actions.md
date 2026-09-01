@@ -7,11 +7,7 @@ whether it is entitled to do a thing — and the interesting half is the refusal
 specified twice: as an intent, and as the wrong behaviour it must be structurally unable to do. **An
 action whose negative pattern is hypothetical is weaker than one whose negative pattern has a
 scar**, so each is marked. `How we know it refused` names the observable that stops a refusal from
-being a line in a log nobody reads — measured at **162 consecutive refused ticks whose typed refusal
-nobody consumed** (brief §4). Citations are relative to `crates/` and **name the construct, not just
-the line**, since a bare line number is unverifiable and drifts; §03 owns the full schema, so
-`Inputs`/`Outputs` carry only the contract and the refusal shape; and a not-found is reported only
-with the command **and** why its search space was right.
+being a line in a log nobody reads — the 162-consecutive-refusal figure is a historical brief snapshot with no retained deriving ledger. Citations are relative to crates/ and name the construct, not just the line, since a bare line number is unverifiable and drifts; §03 owns the full schema, so Inputs/Outputs carry only the contract and the refusal shape; and a not-found is reported only with the command and why its search space was right.
 
 ### A1. OBSERVE a pane
 **Purpose.** Turn one pane's rendered terminal into a typed, timestamped `Observation`.
@@ -33,11 +29,7 @@ AND idle simultaneously while genuinely idle"* (`:288-292`); the fix is `last_st
 called two live panes frozen, because a lane deep in a tool call has a static timer and changing
 output; the floor became `MIN_GAP_SECS = 75` — *"a missed freeze costs idle minutes, a false freeze
 destroys work in flight"* (`:479-485`). **Disagreement with the brief:** my spawn instructions
-asserted a **changed** hash at 20s proves working. Logically right; the code does not do it.
-`liveness()` returns `Unproven { why: "gap_too_short" }` at `:541-545`, *before* the `(Working,
-Working)` arm at `:551-557` that compares `prev.hash != now.hash` — positive proof of life is
-discarded. **Correctly reasoned, incorrectly implemented; recorded as an open defect.** PROJECTED:
-hoisting that check above the floor would make `Live` provable at watcher cadence.
+The earlier 20-second assertion and citations were stale. Current liveness() compares positive timer or stable-hash motion in tick-monitor/src/lib.rs:564-572 before applying MIN_GAP_SECS at :574-577; a changed Working capture returns Live, while an unchanged short-gap pair remains Unproven. This is now the source-backed behavior, not an open defect.
 
 **How we know it refused.** `PaneState::Unproven`, excluded from every capacity list rather than
 defaulted into one; sub-floor refusals carry a machine-readable `why: &'static str` (`:506-586`).
@@ -69,10 +61,8 @@ rather than this capture's shape (`:517-539`). **MEASURED**, and why `Dialog` ex
 on was invisible to the conductor while looking perfectly healthy"* (`:422-428`). A timer advancing
 while a pane blocks on a human is motion, and motion is not work.
 
-**How we know it refused.** The match at `:550-587` is **exhaustive with no wildcard arm**: the `_
-=> Live` catch-all it replaces hid a freed worker, and `state-wildcard-lint` keeps that from
-regressing. **NO-CLAIM:** a two-capture claim about motion — it cannot tell work from a loop.
 
+**How we know it refused.** The current match at tick-monitor/src/lib.rs:583-620 is exhaustive with no wildcard arm; the old catch-all that could misclassify Working-to-Idle is absent, and state-wildcard-lint guards that shape. **NO-CLAIM:** a two-capture motion claim cannot tell work from a loop.
 ### A3. SELECT work
 **Purpose.** Choose which ready beads to offer next by graph position, so the fleet works the
 critical path rather than the operator's most recent discovery.
@@ -170,7 +160,14 @@ is therefore **invisible to the detector built to notice a silent worker**: `cla
 (`dispatch-silence-watch/src/lib.rs:108-115`) and has a `Reassigned` arm — *"the original dispatch
 is moot regardless of whether comments exist"* (`:32-34`). With no claim the bead cannot be silent,
 only absent. **MEASURED by consequence**: brief §4 records that every completion this session was
-found by a human looking. A second refusal closes the bypass — `DispatchIntent` splits `Bead` from
+found by a human looking. **MEASURED directly, 2026-09-01, and it is the largest instance:** the
+installed supervisor (build `9a61acd`, which calls no claim fence) sent bead `815` — `open`,
+`assignee: null` — to `%1408` **131 times in 247 minutes**, one per tick, each row logged
+`DISPATCHED … RECEIVER_RECEIPT=ntm_robot_send`; the receiver was dead on HTTP 402 and held 54
+copies of the packet. `dispatch-silence-watch` could not see it because the bead was never
+`in_progress`, which is exactly the blindness this paragraph predicts. Command:
+`jq -r 'select(.pid==70561 and .status=="DISPATCHED") | .detail' ~/.local/state/flywheel/omp-orchestrator.heartbeat.jsonl | sort | uniq -c`.
+A second refusal closes the bypass — `DispatchIntent` splits `Bead` from
 `Broadcast` and `Correction` *"so they cannot bypass the bead fence by supplying an empty bead
 identifier"* (`dispatch-claim-fence/src/lib.rs:100-117`).
 
@@ -194,16 +191,19 @@ before any later observation overwrites it.
 `UnprovenTransport` (`receiver-receipt/src/lib.rs:54-57`).
 
 **Negative pattern — what this action must REFUSE to do.** *(a) Refuse to treat `success:[N]` as
-delivery.* **MEASURED — `cp-z42vu`**: *"`ntm --robot-send` returned `successful:["4"]` while the
-packet never reached the pane"* (`dispatch-silence-watch/src/lib.rs:10-11`). The wrong behaviour is
+delivery.* **Historical incident only — not an in-tree fixture:** cp-z42vu records ntm --robot-send successful:[4] without receiver arrival, but current dispatch-silence-watch tests contain no cp-z42vu or success:[4] payload. The failure shape remains the reason receiver-side evidence is required; no current test result is claimed.
 *the natural one*: the transport told the truth about its own send and nothing about the receiver —
-the most important negative here. Hence the receiver crate's first rule: *"A sender return value is
+the most important negative here. **MEASURED 2026-09-01, 131 times:** every one of the 131 re-sends
+recorded under A5 carried `RECEIVER_RECEIPT=ntm_robot_send` — the transport's own success, written
+into the heartbeat as if it were a receipt — to a pane that could not act. This is not a historical
+incident record; the rows are in `~/.local/state/flywheel/omp-orchestrator.heartbeat.jsonl` today. Hence the receiver crate's first rule: *"A sender return value is
 therefore never part of the receipt proof"* (`receiver-receipt/src/lib.rs:5-7`). *(b) Refuse to
 bypass a guard without recording what the bypass skipped.* A bypass that logs "overridden" discards
 the guard's **true** positives with its false one; a sibling override instead *"names the
 superseding artifact"* and comments on each affected bead
 (`pre-delete-citation-check/src/main.rs:5-7`). **PROJECTED — no measured incident yet**; written
 down because R11 makes an unwritten requirement a dropped one.
+**CURRENT RECEIVER EVIDENCE (0689154).** The receiver-receipt lane now consumes `ComposerEvidence::{Typed, Free}` when `escalate_non_delivery` runs; that is recipient-side evidence of non-delivery, not acceptance. The stronger acceptance claim remains open.
 **Upstream receipt vocabulary**: typed delivery receipts exist in the substrate —
 `IrcDeliveryReceipt` (`dist/types/tools/hub/types.d.ts:8`) and `AsyncJobDeliverySink` /
 `AsyncJobDeliveryState` (`dist/types/async/job-manager.d.ts:38,52`) — on the IRC-bus and
@@ -267,18 +267,9 @@ worker's session — and known to have actually run, which A11 shows is not free
 **Negative pattern — what this action must REFUSE to do.** *(a) Refuse to read the worker's report
 instead of re-running the command.* **MEASURED — bead `ipg.17`**, instructive: re-running
 **refined** the claim rather than refuting it. `omp-inventory-map/src/types_inventory.rs:176-178`
-excludes `Observation` from the allowance list so the collision demands convergence, and 13 tests
-pass — **and** the binary's 544,697-byte doctor output contains **zero** occurrences of
-`Observation`, `CONVERGE`, or `Verdict`, **and** `--help` returns `CONFIG_ERROR unknown argument
---help`. The honest grade is neither PASS nor FAIL: **built, correct, and undiscoverable** (brief
-§3.6). **A grading action that can only pass or fail cannot represent it** — `Grade` needs an arm
-for *correct and unreachable*. *(b) Refuse a zero from a tool that cannot distinguish "no matches"
-from "did not run".* **MEASURED**: shell `grep -rl 'forbid(unsafe_code)' --include='*.rs' crates`
-returns **0** where the harness tool returns **55 files**; without `--include` it is correct. A
-second mechanism hit a sibling: `--include='*.rs'` pointed at `ntm`, a **Go** repo — structural
-absence read as semantic absence. A grade built on either reads as a clean refutation of a true
-claim. A sixth refutation this session landed in shipped source rather than in the plan (A11(a)): a
-doc-comment defect claim, cited onward as measured because the source presented it that way.
+**HISTORICAL ADDRESSABILITY SNAPSHOT:** the gate's old artifact reported 13 source tests, 544,697 output bytes, and an unknown-argument --help result. Current omp-inventory-map has 28 test markers; the current debug binary emits 158 help bytes and exits 1. No current ADDRESSABLE pass is claimed without a retained command/output/revision receipt. **Grade** still needs an arm for correct-and-unreachable.
+*(b) Refuse a zero from a tool that cannot distinguish "no matches" from "did not run".* **HISTORICAL MEASUREMENT:** shell grep with --include reported 0 in an earlier harness context; current probes must be re-run and the Rust gate must fail closed.
+That earlier comparison recorded shell 0 versus harness 55, and a second search targeted a Go repository with a Rust extension filter; both are historical failure shapes, not current results. A grade built on either is refused. A sixth refutation this session landed in shipped source rather than in the plan (A11(a)); it is retained as a historical lesson, not current acceptance.
 
 **How we know it refused.** A stored transcript naming the discrepancy — claimed token, command
 re-run, observed count — and, for (b), the second tool that disagreed. **NO-CLAIM:** proves what the
@@ -326,25 +317,12 @@ finished worker becomes visible capacity rather than a quiet hole.
 **Outputs.** A capacity delta and a reap record naming the pane, the bead, and the terminal state.
 
 **Must be true before.** The transition to idle is **observed**, not assumed: `(Working, Idle)`
-yields `NewlyIdle` (`tick-monitor/src/lib.rs:562`), and the next tick's `(Idle, Idle)` yields
-`ConfirmedIdle` (`:560`). The substrate separates the same two states: `AgentEndEvent.willContinue`
-(`dist/types/extensibility/shared-events.d.ts:154`) marks a continuation that must not read as
-settled, and `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts`) reconciles over that
-boundary instead of deriving both from one predicate.
+yields NewlyIdle (tick-monitor/src/lib.rs:595), and the next tick's Idle, Idle yields ConfirmedIdle (:593). The substrate separates the same states with AgentEndEvent.willContinue (:154) and GuestIdleReconcilerCtx; no upstream wire is claimed.
 
 **Negative pattern — what this action must REFUSE to do.** *Refuse to leave a finished pane
 unreaped, because an unreaped pane is capacity that silently disappears.* **MEASURED**: the
-`NewlyIdle` arm exists only because *"The operator spotted a freed worker my classifier had hidden"*
-— that transition previously fell through a `_ => Live` catch-all (`:409-419`). The `actionable`
-filter defect itself is **FIXED** (commit `-oco`; `is_free_capacity` is now its own field at
-`omp-orchestrator/src/lib.rs:162-175`, with the regression test
-`observed_idle_state_counts_as_free_capacity_before_confirmation` at `main.rs:1056`) — what
-remains broken is the SEAM: the producer's field and the consumer's parser agree by convention
-across a process boundary with no shared type, so a future filter change is invisible again
-(09 M1). The scar quote stands as history: *"the exact shape that let the fleet sit idle for hours
-while the watchdogs reported healthy"* (`omp-orchestrator/src/lib.rs:451-462`, whose comment now
-records the fix). **What would Jeffrey do:** `rg -li --type rust -e
-'reap(ed|ing)?_pane|pane_reap|kill-pane' --glob '!target' .` in the mirror — the extension filter is
+NewlyIdle is the current arm at tick-monitor/src/lib.rs:595; the old catch-all citation is historical. The actionable filter is fixed: tick-monitor/src/lib.rs:467-468 exposes free capacity for ConfirmedIdle or NewlyIdle, and the regression test is omp-orchestrator/src/main.rs:1646-1653. What remains broken is the SEAM: the producer's field and the consumer's parser agree by convention across a process boundary with no shared type, so a future filter change is invisible again (09 M1). **What would Jeffrey do:** rg -li --type rust -e
+'reap(ed|ing)?_pane|pane_reap|kill-pane' --glob '!target' . in the mirror — the extension filter is
 sound here only because the subjects are Rust, the hazard A8(b) names — → 7 files, load-bearing
 `frankenterm/crates/frankenterm-core/src/orphan_reaper.rs`, whose module doc refuses name-based
 reaping outright — a command-line match is not proof of ownership, and PIDs can be recycled
@@ -478,6 +456,7 @@ satisfied — and measuring it produced a worse finding than the gap it was chec
 `.append(true)`, written by `write_heartbeat`. Every row carries
 `ts_unix / event / build_id / status / tick / pid / repo / session / detail`.
 
+**HISTORICAL HEARTBEAT SNAPSHOT (2026-09-01).** The 1,323-row table and its 489/56/469 ratios below are retained to explain the failure shape, not as current counts. This host ledger is volatile and now has additional rows; current status must be derived with jq -s over the path above before quoting any total.
 **1,323 rows:**
 
 | status | count |
@@ -516,13 +495,15 @@ outlived `pid=92834` by twelve hours.
 The gap is not logging. It is that **nothing consumes the log**. Two things follow:
 
 1. `dispatcher-deadman` — a watchdog for eligible work that received no packet — is
-   one of the 20 crates still unextracted (883 LOC, §3.9). It is the consumer this
-   ledger needed and did not have.
+   now extracted at `crates/dispatcher-deadman` (548 source LOC across `src/lib.rs` and
+   `src/main.rs`, verified by `find crates/dispatcher-deadman/src -name '*.rs' -print0 |
+   xargs -0 wc -l`). It is **not yet consumed by `omp-orchestrator`** (no dependency or
+   source reference in that crate), so the gap is wiring/observation, not extraction.
 2. The remaining unlogged dispatches are **operator handrolls**: every `tmux
    send-keys` and `task` dispatch this session bypassed the binary entirely and
    appears in no ledger. That is exactly what `kernel-only-operator-hook` exists to
-   refuse, and it is blocked on `cp-nq2s9` (§7 of the hook packet) because the kernel
-   it names cannot reach codex panes.
+   refuse; the current tracker bead is `omp-orchestrator-kernel-only-operator-hook-5rh`,
+   blocked because its kernel cannot yet reach codex panes.
 
 **NO-CLAIM:** an append-only ledger with no reader is not observability, and adding a
 reader is not in this section. What is established is the count, the cause, and the

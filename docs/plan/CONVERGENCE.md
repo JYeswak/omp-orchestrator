@@ -285,7 +285,7 @@ so it is Josh's to make, not mine.
    provenance class already fixed in §1.2.3 and §4.7. Three sections, one defect,
    found only by someone asking "could I retrieve this at 3am".
 2. **A dead citation I created an hour earlier.** `Lens01Idea`: the §1.2.1 table
-   still pointed at `/tmp/grade/agent-end-raw-frame.json` while the durable path
+   still pointed at `.flywheel/grade-evidence/agent-end-raw-frame.json.gz` while the durable path
    lived only in the §1.2.3 subsection *"I might skip, thinking it's already
    resolved."* Corrected in the same tick.
 3. **`br comment` exits 2 and drops the comment.** The section claimed it, and the

@@ -29,8 +29,8 @@ references §12 rather than pretending to be a second runbook; applying the runb
 this file is a **scope error**. The transition tables below still record measured inputs,
 outputs, refusals, and current boundaries so that §12 can be implemented against evidence.
 
-All claims below are `MEASURED` unless explicitly marked `PROJECTED`, `DECLARED`, `WIRE-PROVEN`,
-`NOT CONSUMED`, or `NO-CLAIM`.
+All claims below are `MEASURED` unless explicitly marked `PROJECTED`, `DECLARED`,
+`WIRE-PROVEN`, `NOT CONSUMED`, or `NO-CLAIM`. R13 is represented by the stage/property matrix below, and Q13 remains an unresolved policy choice in §11.4; §00 is outside this assignment and is not treated as a second authority.
 
 ---
 
@@ -47,23 +47,16 @@ additional `S` IDs. `viability`, `loop`, and `honesty` are cross-stage attribute
 | `S3` | **Grading the plan** | independent plan grading | independent grader; no single local crate was identified | none identified | no shared grade value is measured |
 | `S4` | **Beads DAG** | bead creation, dependency closure, ready selection, graph ranking | `loop-queue-filter` is the intended local consumer of `bv`; `br` remains an external tracker | none identified | `loop-queue-filter` exists, but focused search found no `bv` invocation |
 | `S5` | **Execution** | claim, dispatch, worker work, receiver receipt | **`omp-orchestrator` is the resident accountable consumer**; its manifest supports `dispatch-claim-fence`, `ack-stage`, `omp-rpc-session`, `subprocess-contract`, and `receiver-receipt` | `tick-monitor` is observation-only and is consumed by the resident supervisor | automated observe → queue → dispatch → receipt path is designed; runtime proof is absent; `pane-dispatch-fence` exists in the inventory but is not proven a resident dependency |
-| `S6` | **Grading the work** | receipt review and independent grade | `ack-stage` exists; `ack-spine` contains a follow-up candidate; no `verify-dispatch` crate exists | none identified | grading remains non-shared/prose-shaped |
-| `S7` | **Validation** | completion/reap and external validation | no current reap owner; `omp-rpc-session` is transport-only, not a completion consumer | `tick-monitor` can observe panes, but observation is not reap | `reap-finished-panes` is absent; completion consumer is not wired |
-| `S8` | **Ship** | release, build, install, rollback | `installer` and `commit-build-fence`; /installer-workmanship and /release-preparations | none identified | **DECLARED (R10):** installer covers 3 of 18 binaries; the denominator's inventory/counting rule was not preserved; foreign-host `--install` is unverified |
-| `S9` | **Human requirements stored** | decision capture and retrieval, cross-cutting across S1–S8 | human is the decision owner; **PROJECTED** append owner: `omp-orchestrator` | every stage must observe its own decision handoff | no dedicated S9 consumer is proven; `ack-spine::ledger` is not proven to be this ledger |
+| `S6` | **Grading the work** | receipt review and independent grade | `ack-stage` exists; `ack-spine` contains a follow-up candidate; no shared grade consumer is proven | none identified | grading remains non-shared/prose-shaped; `verify-dispatch` exists but is not proven the S6 consumer |
+| `S7` | **Validation** | completion/reap and external validation | `reap-finished-panes` is invoked by the resident supervisor for the finished-pane sweep; no local AgentEndEvent completion consumer | `tick-monitor` can observe panes, but observation is not completion reap | finished-pane sweep is wired; completion consumer and completion-based refill are not wired |
+| S8 | **Ship** | release, build, install, rollback | installer and commit-build-fence; /installer-workmanship and /release-preparations | none identified | **DECLARED (NUMBERS.toml):** installer knows 3 of 48 current binary targets; the denominator/counting rule is registry-backed; foreign-host --install is unverified |
+| `S9` | **Human requirements stored** | decision capture and retrieval, cross-cutting across S1–S8 | human is the decision owner; **PROJECTED** append owner: `omp-orchestrator` | every stage must observe its own decision handoff | no automated S9 writer/consumer is proven; `docs/decisions.jsonl` has manually recorded HD rows, not proof of wiring |
 
 ### Current crate names versus projected names
 
-The former map called several names current owners without checking the current inventory. The
-focused R10 search found no current crates named `fast-dispatch`, `tick-dispatch`,
-`reap-finished-panes`, or `verify-dispatch`. Those names are **PROJECTED / unbuilt**, not owners.
-Conversely, `crates/omp-orchestrator/Cargo.toml:16-23` lists `ack-stage`,
-`dispatch-claim-fence`, `omp-rpc-session`, `subprocess-contract`, and `receiver-receipt`, and
-`crates/omp-orchestrator/src/main.rs:563-631,801-879` implements the resident dispatch/receipt
-path. `pane-dispatch-fence` is present in the crate inventory but is not listed as an
-`omp-orchestrator` manifest dependency in the measured slice. Ownership claims therefore name
-`omp-orchestrator` as the S5 consumer and list only the manifest dependencies as supporting
-edges; a separate current crate is not thereby proven called in production.
+The former map called several names current owners without checking the current inventory. The current inventory confirms `fast-dispatch`, `tick-dispatch`, `reap-finished-panes`, and `verify-dispatch` as crates. Their existence does not prove production ownership or a complete stage handoff. The names are therefore **CURRENT CRATES / UNPROVEN CONSUMERS**, not projected or absent.
+
+Conversely, `crates/omp-orchestrator/Cargo.toml:21-30` lists `ack-stage`, `dispatch-claim-fence`, `omp-rpc-session`, `subprocess-contract`, `receiver-receipt`, and other supporting dependencies. The resident dispatch path is in `crates/omp-orchestrator/src/main.rs:1255-1553`; the finished-pane sweep helper is at `main.rs:1241-1253`. `pane-dispatch-fence` is present in the crate inventory but is not listed as an `omp-orchestrator` manifest dependency in the measured slice. Ownership claims therefore name `omp-orchestrator` as the S5 consumer and list only manifest dependencies as supporting edges; a separate current crate is not thereby proven called in production.
 
 The graph represented by this section is therefore:
 
@@ -93,7 +86,7 @@ not a second observed cell.
 | `S4` Beads DAG | — | n/a | — | `Y` (`.beads/issues.jsonl`) | — |
 | `S5` Execution | `y` | `y` (resident observe → queue → dispatch → receipt path; source/design evidence only) | n/a | partial | n/a |
 | `S6` Grading the work | — | n/a | n/a | `Y` (bead comments) | `Y` |
-| `S7` Validation | — | n/a | `y` (candidate only) | — | n/a |
+| `S7` Validation | — | n/a | `y` (finished-pane sweep exists and is invoked; completion-event reap remains absent) | — | n/a |
 | `S8` Ship | — | — | n/a | — | `↗ S6` (shared build evidence; not an independent `Y`) |
 | `S9` Human requirements stored | — | n/a | n/a | — | n/a |
 
@@ -112,7 +105,7 @@ dispatch path is a designed/source-level property, not measured runtime use.
 
 ## 11.3 Template omission refusal is not claim-custody refusal
 
-`ntm template list` measured four templates, including the `dispatch` template:
+**HISTORICAL SNAPSHOT:** ntm template list reported four templates including dispatch. The current read-only command ntm template list --json | jq 'if type=="array" then length elif .templates then (.templates|length) else empty end' returns **16** templates, including dispatch; the excerpt below is retained as the packet-shape example, not a current inventory.
 
 ```text
 Name:        dispatch
@@ -193,11 +186,11 @@ mean that no partial mechanism exists.
 
 | edge | required input | expected handoff artifact | refusal / non-terminal rule | measured current state |
 |---|---|---|---|---|
-| `S4 → S5` | graph-selected bead, fresh `br show --json`, receiver | claim record, then dispatch-template packet and permit | refuse missing/open/elsewhere-assigned snapshot; do not send before claim | `main.rs:836-860` runs `br ready`, takes `bead_ids.first()`, reads a snapshot, and calls `authorize`; no production claim/update caller was found. **Human claim required today; atomic handoff PROJECTED.** |
+| `S4 → S5` | graph-selected bead, fresh `br show --json`, receiver | claim record, then dispatch-template packet and permit | refuse missing/open/elsewhere-assigned snapshot; do not send before claim | `main.rs:1318-1394` runs the finished-pane sweep and `br ready`, takes `bead_ids.first()`, then `prepare_bead_dispatch` at `main.rs:645-673` claims open rows and calls `authorize`; no separate atomic claim service is proven |
 | `S5 → S6` | dispatch attempt, receiver receipt, session/pane identity | grade packet tied to the receipt and bead | refuse absent receiver receipt; receipt is not a grade | resident path reaches receipt and stops; no production grade handoff is wired |
-| `S6 → S7` | independent grade plus worker completion evidence | validation/reap input | an in-progress or non-terminal completion is not finished | completion frame is wire-proven, but local parser/consumer/reap are absent |
+| `S6 → S7` | independent grade plus worker completion evidence | validation/reap input | an in-progress or non-terminal completion is not finished | completion frame is wire-proven, but local parser/consumer/reap-by-completion are absent |
 | `S7 → S8` | validation result, external/foreign-host run evidence | ship/release packet with rollback | refuse without validation artifact or rollback path | no production validation-to-ship edge is measured |
-| `S8 → S9` | ship decision and human choice | append-only S9 decision record | refuse missing decision owner, decision, or retrieval key | S9 ledger owner and retrieval path are **PROJECTED**, not wired |
+| `S8 → S9` | ship decision and human choice | append-only S9 decision record | refuse missing decision owner, decision, or retrieval key | S9 ledger writer and retrieval path are **PROJECTED**, while three manual HD rows exist |
 
 The current contract is therefore explicit: until an atomic claim owner is implemented, a human
 MUST run the claim command and the fence MUST read back the resulting `in_progress` row before
@@ -209,21 +202,17 @@ S5 dispatch. The future atomic wrapper is a `PROJECTED` remedy, not a current ca
 
 ### S5 is automated through receipt, not through a proven full journey
 
-`crates/omp-orchestrator/src/main.rs:563-631,801-879` and `src/lib.rs:24-29` describe an automated
-observe → queue → dispatch → receiver-receipt path. That corrects the old human-only S5 claim,
-but it does not prove runtime behavior on the live fleet. The current local `omp-rpc-session`
-crate is explicitly a transport for **one** `--mode=rpc` child (`crates/omp-rpc-session/src/lib.rs:5-21`)
-and does not claim cross-session continuity.
+`crates/omp-orchestrator/src/main.rs:1255-1553` and `src/lib.rs:24-29` describe an automated observe → queue → finished-pane sweep → dispatch → receiver-receipt path. That corrects the old human-only S5 claim, but it does not prove runtime behavior on the live fleet. The current local `omp-rpc-session` crate is explicitly a transport for **one** `--mode=rpc` child (`crates/omp-rpc-session/src/lib.rs:5-21`) and does not claim cross-session continuity.
 
 Completion evidence has five separate layers; they must not be collapsed:
 
 | layer | evidence | status |
 |---|---|---|
 | declaration | upstream `AgentEndEvent` at `dist/types/extensibility/shared-events.d.ts:154`, with `willContinue` | **AVAILABLE / DECLARED** |
-| wire observation | `%1408` / `%1414`; `/tmp/grade/agent-end-raw-frame.json` contains `{"type":"agent_end","isTerminal":true}` | **WIRE-PROVEN for one terminal frame** |
+| wire observation | `1408` / `1414`; `.flywheel/grade-evidence/agent-end-raw-frame.json.gz` contains `{"type":"agent_end","isTerminal":true}` | **WIRE-PROVEN for one terminal frame** |
 | local parser | `omp-rpc-session/src/lib.rs:416-423` recognizes only Ready/Response/Unknown/Malformed | **NOT IMPLEMENTED for AgentEndEvent** |
 | local consumer | focused search found no `agent_end`, `willContinue`, `isTerminal`, `RpcSessionEventFrame`, or `AgentEndEvent` consumer | **NOT CONSUMED** |
-| reap | no production completion consumer and no current `reap-finished-panes` crate | **NOT WIRED** |
+| reap | `reap-finished-panes` exists and is invoked by `omp-orchestrator` at `main.rs:1241-1253,1331`, but it sweeps finished panes rather than consuming AgentEndEvent | **WIRED for pane sweep; NOT WIRED for completion event** |
 
 `isTerminal: true` is not proven equivalent to `willContinue: false`; one terminal frame cannot
 establish non-terminal settle behavior, crashes, killed panes, rate-limited turns, or compaction.
@@ -233,12 +222,9 @@ requires changing the one-child attachment topology. No completion crate is clai
 
 ### Reap is a consumer, not an idle observation
 
-The named `reap-finished-panes` crate is absent. `ack-spine/src/followup.rs:86-137` is a pure
-candidate classifier, and the focused `classify_followup|followup_action` search found no
-production caller. It has a measured false-completion path:
+The named `reap-finished-panes` crate is **present** and its binary is invoked by the resident supervisor, but it is a finished-pane sweep, not an AgentEndEvent completion consumer. `ack-spine/src/followup.rs:86-137` remains a pure candidate classifier, and the focused `classify_followup|followup_action` search found no production caller. It has a measured false-completion path:
 
-* for an open/in-progress bead, unchanged assignee, no comment, and before the deadline,
-  `classify_followup` returns `FollowUpVerdict::VerdictPosted`; and
+* for an open/in-progress bead, unchanged assignee, no comment, and before the deadline, `classify_followup` returns `FollowUpVerdict::VerdictPosted`; and
 * `followup_action` maps `VerdictPosted` to `Healthy` at `followup.rs:150-156`.
 
 That state is **in progress**, not a posted verdict and not a finish. A future consumer MUST
@@ -247,15 +233,11 @@ produce `Finished`; only `Finished` may authorize refill. `SilentPastDeadline` r
 follow-up, not a refill. These are **PROJECTED contract repairs**, not claims that the current
 candidate has been changed.
 
-The resident cycle (`main.rs:648-687,801-880`) stops after dispatch/receipt. It has no production
-reap → grade → validation → ship edge. This is the explicit post-dispatch **NO-CLAIM** boundary
-for the current supervisor.
+The resident cycle (`main.rs:1255-1553`) invokes the finished-pane sweep before reading the ready queue and then proceeds through dispatch/receipt. It has no production AgentEndEvent reap → grade → validation → ship edge. This is the explicit post-dispatch **NO-CLAIM** boundary for the current supervisor.
 
 ### Settled wire fact
 
-The `%1414` result remains useful and is not withdrawn: `AgentEndEvent` crosses `--mode=rpc` in
-the captured terminal case. It closes the claim that OMP has no completion precedent, but it does
-not close the adoption, parser, consumer, or reap claims above.
+The `1414` result remains useful and is not withdrawn: `AgentEndEvent` crosses `--mode=rpc` in the captured terminal case. It closes the claim that OMP has no completion precedent, but it does not close the adoption, parser, consumer, or completion-reap claims above.
 
 ---
 
@@ -264,11 +246,7 @@ not close the adoption, parser, consumer, or reap claims above.
 R14/R15 batch rows 1–9 contain **270 mapped rows** across `ntm`, `br`, `bv`, and OMP. The
 **544-row R14/R15 surface-universe denominator is `DECLARED` from the R14/R15 review** rather
 than derived from this section; `NUMBERS.toml` records related surface-map snapshot drift and figure discipline. The named
-frozen input for the reproducible scoped count is `docs/plan/SURFACE-MAP.jsonl`, SHA-256
-`f155a358dd302982367a7c0107fe0eb1e3cd6f5ec7d4689bac67f11b1c5063f7`; that snapshot currently
-contains 591 rows. The disposition policy is exact: include rows whose `batch` is a JSON number
-equal to its floor and in 1 through 9 inclusive, then group by the literal `disposition` field.
-Both count commands below use that same frozen input and explicit integer predicate.
+query below is a historical snapshot: it used 591 rows and SHA-256 f155a358dd302982367a7c0107fe0eb1e3cd6f5ec7d4689bac67f11b1c5063f7. The current map identity is **614 rows, 302,002 bytes, SHA-256 5b3c3238c4ec9dd7f72a097bb3668e7de224e3b6f0eddc1132de2902a1d9d93c**; NUMBERS.toml is the current count authority.
 
 ```sh
 SNAPSHOT=docs/plan/SURFACE-MAP.jsonl
@@ -301,6 +279,7 @@ jq -s '
 
 The measured result (exit 0) is:
 
+HISTORICAL OUTPUT (not current):
 ```text
 snapshot_sha256 f155a358dd302982367a7c0107fe0eb1e3cd6f5ec7d4689bac67f11b1c5063f7  docs/plan/SURFACE-MAP.jsonl
 {
@@ -380,9 +359,9 @@ skill/facet inventory, not a second stage graph. The canonical mapping is:
 | `S2` Planning | `/planning-workflow` | markdown plan; convergence is judged by review |
 | `S2` loop attribute | `/loop-engineering` | verified-value tick loop; not a new stage |
 | `S4` Beads DAG | `/beads-workflow`, `/beads-north-star`, `/beads-br`, `/beads-bv` | tracker schema, close policy, and graph ranking; local `bv` consumption is absent |
-| `S5` Execution | `/ntm`, `/vibing-with-ntm` | robot surfaces and operator doctrine; local completion/reap adoption is absent |
+| `S5` Execution | `/ntm`, `/vibing-with-ntm` | robot surfaces and operator doctrine; local completion-event adoption is absent, while finished-pane sweep is wired |
 | `S6` Grading the work | `/beads-compliance-and-completion-verification` | prose verdicts; no shared grade value |
-| `S7` Validation | `/vibing-with-ntm` | observation and tending; not a production reap consumer |
+| `S7` Validation | `/vibing-with-ntm` | observation and tending; not a production AgentEndEvent completion consumer |
 | `S8` Ship | `/installer-workmanship`, `/release-preparations` | installer/release process; foreign-host install proof remains absent |
 | `S9` decision attribute | `/just-say-no-to-process-porn-and-ceremony` | honesty lens, not a decision ledger |
 
@@ -411,10 +390,7 @@ skills that could participate, or that they compose cleanly merely because they 
 
 ## 11.9 Stage logging and the S9 decision ledger
 
-Current heartbeat rows at `crates/omp-orchestrator/src/main.rs:698-708` contain `event`, `status`,
-`tick`, `repo`, `session`, and `detail`. Focused search found no `stage_id`, `from_stage`, or
-`to_stage`. The old "3 of 9 stages log" statement is withdrawn as a stage-level guarantee: a
-few files contain records, but those records cannot prove a stage transition.
+Current heartbeat rows written by `write_heartbeat` at `crates/omp-orchestrator/src/main.rs:907-950` contain `event`, `status`, `tick`, `repo`, `session`, and `detail`. Focused search found no `stage_id`, `from_stage`, or `to_stage`. The old "3 of 9 stages log" statement is withdrawn as a stage-level guarantee: a few files contain records, but those records cannot prove a stage transition.
 
 The required **PROJECTED** append-only lifecycle event shape is:
 
@@ -454,18 +430,15 @@ S9's minimum decision record is also **PROJECTED**:
 }
 ```
 
-The projected accountable append owner is `omp-orchestrator`; the human remains the decision
-owner. The projected retrieval command is:
+The projected accountable append owner remains `omp-orchestrator`; the human remains the decision owner. The current repository does have `docs/decisions.jsonl` with three manually recorded `HD-<n>` rows, but no automated writer or lifecycle-event artifact was measured. A fail-closed retrieval check for the current manual ledger is:
 
 ```sh
-jq -c 'select(.stage_id == "S9" or .decision_id != null)' \
-  "$OMP_LIFECYCLE_EVENTS" \
-  | jq -c 'select(.session_id == env.OMP_SESSION)'
+set -o errexit -o nounset -o pipefail
+test -s docs/decisions.jsonl
+jq -e -s 'length > 0 and all(.[]; (.id|type=="string") and (.id|test("^HD-[0-9]{4}$")) and (.binds_stages|type=="array") and all(.binds_stages[]; test("^S[1-9](-[a-z-]+)?$")))' docs/decisions.jsonl >/dev/null
 ```
 
-No such file, owner wiring, or retrieval output was measured in R10. Pane scrollback contained
-human decision activity, but no pane/session artifact or extraction/count procedure was preserved;
-therefore no numeric count is claimed. This is evidence of decision loss, not evidence of a ledger.
+This proves nonempty, schema-shaped manual rows only; it does not prove an append owner, stage-event linkage, or amortization. The lifecycle-event writer, session-scoped retrieval, and automatic decision handoff remain **PROJECTED** with owner: S9 implementation lane; next action: create the writer/gate and capture an append/readback transcript.
 
 ---
 
@@ -479,11 +452,11 @@ reserved for a captured runtime probe.
 |---|---|---|
 | resident `omp-orchestrator` process | one configured supervisor process | one process per session until fan-out is proven |
 | `omp-rpc-session` | exactly one OMP `--mode=rpc` child; no cross-session continuity | one child per attached session; no cross-session completion claim |
-| pane candidates | `lib.rs:447-462,494-499` counts dispatchable panes but returns `.first()` | one selected pane per cycle; `N > 1` must not silently truncate |
-| ready beads | `main.rs:854-862` selects `bead_ids.first()` | one selected bead per cycle; `N > 1` must not silently truncate |
-| heartbeat ledger | session-named path exists, but tick-monitor state and pending-dispatch are fixed filenames (`main.rs:221-236`) | fixed paths are a collision; refuse a second owner or use per-session keys |
+| pane candidates | omp-orchestrator/src/lib.rs:773-777 counts dispatchable panes and returns dispatchable.first() | one selected pane per cycle; N > 1 must not silently truncate |
+| ready beads | omp-orchestrator/src/main.rs:1393-1396 selects bead_ids.first() after parse_ready | one selected bead per cycle; N > 1 must not silently truncate |
+| heartbeat ledger | session-named heartbeat path is formed at `main.rs:228-235`, while default tick-monitor state and pending-dispatch basenames are formed at `main.rs:236-243` | basename reuse can collide across sessions; env overrides exist, but collision refusal is unverified |
 | claim permit | one bead ID plus one receiver in `DispatchIntent::Bead` | one bead → one receiver → one permit |
-| completion/reap | no local AgentEndEvent consumer and no reap producer | zero automatic refill claims until a consumer is wired |
+| completion/reap | `reap-finished-panes` is invoked for finished-pane sweep; no local AgentEndEvent consumer | zero automatic completion-based refill claims until a consumer is wired |
 
 Until the namespace repair is implemented, the honest support boundary is:
 
