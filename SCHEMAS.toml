@@ -22,10 +22,11 @@
 path      = "docs/plan/CONVERGENCE.jsonl"
 format    = "jsonl"
 required  = ["section", "round", "lens", "new_findings", "verdict", "gates_green"]
-optional  = ["evidence", "role", "note"]
+optional  = ["evidence", "role", "note", "pin", "void", "void_reason", "lens_limitation", "false_positives_verified", "gates_scope", "graded_by", "recorded_by", "severity"]
 writer    = "grading panes"
 reader    = "crates/no-shell-gate/tests/convergence.rs"
 note      = "gates_green REQUIRED since 2026-09-01 (Josh: \"having not wired gates is plan issue number 1\"). convergence.rs contained ZERO references to wiring, so a round could bank a section as CONVERGED while wired_lanes was RED -- and that state existed, the wiring gate failing on a vendored serde_json under .rch-tmp/ while rounds were being graded. A clean round over a broken lane is BUILT != WIRED wearing a convergence badge. ABSENT IS TREATED AS FALSE: an unrecorded check is not a check. role added mid-session; absent means hillclimb. See AAR role taxonomy in docs/plan/12-journey.md."
+pin_note  = "`pin` is the sha the round was graded against, REQUIRED from round 22 onward by HD-0005 (docs/decisions.jsonl). A round with no pin cannot be reconciled: the tree moves ~2 commits/min during a wave, so a finding recorded without a pin cites a state nobody can reconstruct, and the four round-22 rows written before this rule are void=true for exactly that reason. It is optional in this schema rather than required because rounds 8-21 predate the rule and retrofitting a pin onto them would be inventing one. The forward-looking requirement belongs in the findings-ledger gate (omp-orchestrator-hsv), which can see the round number and enforce it only where it applies. MEASURED 2026-09-01: 22 rows carried NEITHER round NOR lens while both are listed REQUIRED above, and no gate caught it -- the declaration existed and nothing read it. Those rows were per-finding resolutions misfiled into the per-round file; they now live in FINDINGS.jsonl. A required-field list that nothing enforces is documentation, not a schema."
 
 [artifacts.surface_map]
 path      = "docs/plan/SURFACE-MAP.jsonl"
@@ -35,6 +36,15 @@ optional  = ["disposition", "validated_by", "maps_to_crate", "graded_by", "batch
 writer    = "surface-mapping panes"
 reader    = "assembly + census sections"
 note      = "no write-order field; a merge that does not sort newest-last silently loses newer classifications."
+
+[artifacts.preserved_inventory]
+path      = ".flywheel/inventory-artifacts/"
+format    = "gzip-artifact-set"
+required  = ["artifact", "content_sha256", "source", "captured_at"]
+optional  = ["compressed_sha256", "source_revision", "command", "note"]
+writer    = "artifact_provenance gate"
+reader    = "plan provenance claims and evidence reviewers"
+note      = "Preserved compressed evidence is distinct from volatile /tmp inputs. The gate must verify each declared member's content hash; a directory with no declared members is an anti-vacuity failure."
 
 [artifacts.crate_surface]
 path      = "OMP-SURFACE-MAP.toml"
@@ -123,7 +133,16 @@ required  = ["id", "ts", "question", "decider", "decision", "options_considered"
 optional  = ["transcript_ref", "promoted_to"]
 writer    = "S9 mechanism (unbuilt — adequate substrate until it exists: bead comments in the same shape)"
 reader    = "dispatch packet builder (binds_stages), AGENTS.md amortization pass, grading pane (unfalsifiable Josh-said refusal)"
-note      = "declared 2026-09-01 by 12-journey S9 F1 — the unanimous #1 gap of the dueling ideation wave. Eleven rulings tonight live only in pane scrollback. Zero rows today; the backfill experiment (12-journey S9 UNKNOWN 1) seeds the first real ones."
+note      = "declared 2026-09-01 by 12-journey S9 F1. The ledger currently contains 3 manually recorded HD rows; the automated writer, lifecycle-event linkage, and amortization consumer remain unbuilt."
+
+[artifacts.findings_ledger]
+path      = "docs/plan/FINDINGS.jsonl"
+format    = "jsonl"
+required  = ["id", "round", "section", "graded_by", "severity", "finding", "disposition"]
+optional  = ["fixed_in", "retracted_reason", "deferred_to", "evidence", "dispositioned_by", "dispositioned_at"]
+writer    = "reconciliation panes (rounds 15-21), then every grading pane from round 22 on"
+reader    = "crates/no-shell-gate/tests/findings_ledger.rs (unbuilt at declaration) and the integrator before cutting a pin"
+note      = "Declared 2026-09-01 by HD-0006 (Josh: no new rounds until ALL fixes from rounds 15-22 are in the plan properly). One row per DECLARED finding: id is the grader's finding id where one exists (R19-00-section-map-omits-11-12) or <round>-<section>-<eye>-<n> where the eye recorded only a count. disposition is FIXED (fixed_in = commit sha), RETRACTED (retracted_reason, dispositioned_by), or DEFERRED (deferred_to = bead id); OPEN is the initial state and any OPEN row refuses the next round. Anti-vacuity: a ledger with fewer rows than the sum of new_findings across the reconciled round files is an ERROR, not a pass."
 
 [artifacts.inception_manifest]
 path      = ".omp-orchestrator/inception.json"
