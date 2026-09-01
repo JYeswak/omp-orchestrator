@@ -470,3 +470,191 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 **UNKNOWN.** (1) Does the fixed shape survive contact with real rulings, or do decisions arrive as multi-part and overlapping? Experiment: backfill tonight's eleven rulings into the schema by hand and inspect the fit — cost: ~1 hour, zero code, and it seeds the ledger with real rows instead of zeros. (2) Who files when Josh is asleep and the ruling is implicit (a stand-down tone)? Experiment: wire the reap to propose decision rows from transcript deltas for Josh to confirm — cost: ~half a day; the proposal/confirm split keeps the human the decider.
 
 **GAP.** No mechanism anywhere: cost = every ruling is one compaction from gone, every future agent re-briefs by hand (measured all session), and the plan's own §8 open questions accumulate answers nobody can query. The backfill experiment (UNKNOWN 1) is the cheapest falsifier for the whole stage and it runs tonight.
+
+
+## 12.11 S1 — Inception foundation
+
+S1 is the first gate on a new or foreign project. It must establish the identity and capabilities
+that every later stage treats as input; it must not silently inherit the current repository's paths,
+control files, toolchain, or trust assumptions.
+
+### FIELD 8 — FOUNDATION
+
+**F1 SCHEMA.** S1 reads human intent plus a repository path and host probe results. It writes two
+records: one row in docs/plan/FOUNDATION.jsonl using SCHEMAS.toml [artifacts.journey_foundation],
+and .omp-orchestrator/inception.json using SCHEMAS.toml [artifacts.inception_manifest]. The
+inception record requires schema_version, project_id, repo_identity, control_files,
+host_capabilities, required_tools, and trust_status; optional evidence, status, and degradations
+must be explicit rather than inferred from omission.
+
+**F2 I/O CONTRACT.** The human decision owner produces the initial intent, repository path, and
+trust decision. The S1 foundation owner consumes those inputs and produces the project identity and
+capability envelope. S2 planning consumes the envelope; S9 human-requirements storage consumes the
+intent and authority references; S7 validation later re-checks the same identity and capabilities.
+No S1 output is complete without a named S2 consumer.
+
+**F3 CRATES.** Existing installer owns host/binary identity and install mechanics, but no current
+crate owns the complete S1 repository identity, control-file bootstrap, trust classification, and
+capability envelope. That foundation mechanism must be created. The existing installer is the thin
+caller for host probes; no current thin caller creates the complete S1 record.
+
+**F4 GATES.** A new S1 foundation gate must refuse a missing or ambiguous project identity, missing
+required control-file decision, untrusted repository instructions treated as policy, or a capability
+claim without a probe. Its known-BAD in-tree specimen is a fixture with a missing AGENTS.md or a
+repo identity that does not match the requested project; the gate must return a typed refusal and
+must not create a bead. Existing path-literal and installer identity checks are supporting gates,
+not this complete S1 gate.
+
+**F5 NUMBERS.** S1 claims only registry-backed environment facts: workspace_crates is already
+registered in NUMBERS.toml, and built_binaries is already registered there. It claims no new
+support-count figure until the capability probe exists. Any future count of required control files,
+host capabilities, or supported targets must first receive a NUMBERS.toml command and expectation.
+
+### FIELD 9 — THE EPISTEMIC LEDGER
+
+**KNOWN.** The current repository has a resolvable root and a real workspace inventory:
+ls -1 crates | wc -l -> 26. The existing NUMBERS.toml workspace_crates row is the authority; this
+is current-repo evidence, not proof that a new project is ready. The current S1 artifact contract
+is also known: SCHEMAS.toml [artifacts.inception_manifest] names the required fields.
+
+**UNKNOWN.** Can an empty or foreign repository complete S1 without this repository's conventions,
+absolute paths, or pre-existing tracker? Experiment: create a fresh temporary repository on a
+second supported host, run the future S1 foundation command, inspect the emitted inception.json,
+and require typed AVAILABLE/DEGRADED/UNKNOWN results for every required capability. Cost: one
+bounded cold-start run plus one operator review; the experiment is cheaper than building S2–S4
+against a false local assumption.
+
+**GAP.** No current crate emits the S1 inception manifest or owns the trust decision. Leaving this
+missing costs wrong-repository writes, misapplied gates, and a false claim that a foreign host can
+start the journey; the cost is paid before the first bead can be safely created.
+
+**S1 refusal:** no S2 dispatch, plan, or bead creation when F1–F5 or the epistemic ledger is
+incomplete.
+
+
+
+## 12.12 S2 — Planning foundation
+
+S2 turns an accepted inception envelope and human intent into a buildable plan. It is not allowed
+to hide unresolved scope, evidence, or economic questions in prose that S3 cannot grade.
+
+### FIELD 8 — FOUNDATION
+
+**F1 SCHEMA.** S2 reads the S1 inception manifest, the active human-requirements references, and
+repository capability results. It writes plan sections plus the existing SCHEMAS.toml and
+NUMBERS.toml registries, and appends its stage foundation row to docs/plan/FOUNDATION.jsonl. The
+foundation row requires schema_version, stage, input_refs, output_refs, owner, crates, gates,
+numbers, known, unknown, and gaps. Every plan figure must point to a NUMBERS.toml key; every
+persisted plan artifact must point to a SCHEMAS.toml row.
+
+**F2 I/O CONTRACT.** S1 produces the project and host envelope; the human decision owner produces
+scope and outcome requirements; S2 planning consumes both. S2 produces the plan, schema/number
+registries, and a complete S2 foundation record. S3 fresh graders consume those exact artifacts;
+S4 bead materialization consumes only an S3-approved plan. A plan clause with no S3 consumer is an
+orphan requirement, not completed planning.
+
+**F3 CRATES.** No current crate owns plan-foundation assembly, semantic plan validation, or
+plan-to-artifact provenance. That mechanism must be created. Existing no-shell-gate and numbers
+checks can remain thin supporting callers for their registries; they are not a plan compiler and
+must not be described as one.
+
+**F4 GATES.** The S2 foundation gate must refuse a plan with an unbound number, a persisted artifact
+without a SCHEMAS.toml row, an unknown without a resolving experiment and cost, a gap without a
+cost-if-left-open, or an output without a named S3 consumer. Its known-BAD in-tree specimen is a
+plan foundation row containing one bare figure and one UNKNOWN with no experiment; the gate must
+return a typed refusal. NUMBERS.toml and SCHEMAS.toml are necessary supporting gates, not the
+complete F2/F3/epistemic gate.
+
+**F5 NUMBERS.** S2 may reuse the existing plan_sections, no_claim_blocks, and current registry
+figures only when the prose names their NUMBERS.tomL keys. It claims no new plan-size, effort, or
+coverage number here. A future plan count, schedule, or effort estimate is not admitted until its
+command and expectation are added to NUMBERS.toml.
+
+### FIELD 9 — THE EPISTEMIC LEDGER
+
+**KNOWN.** The plan already has a declared registry mechanism: NUMBERS.toml rows carry command and
+expectation, and SCHEMAS.toml rows carry artifact format and required fields. The current plan's
+foundation contract says F1–F5 run before beads at docs/plan/12-journey.md:243-258; this is the
+input contract S2 must instantiate, not evidence that S2 currently works.
+
+**UNKNOWN.** Can a plan validator detect semantic omissions rather than only present fields? 
+Experiment: create a known-good plan and three mutations—remove a consumer, replace a figure with
+a bare number, and leave a gap without cost—then run the future S2 validator and inspect typed
+refusals. Cost: one small fixture matrix and one validator run; it is cheaper than grading a large
+DAG whose missing seam is discovered after materialization.
+
+**GAP.** No current crate produces the S2 foundation record or validates the complete plan-to-schema,
+plan-to-number, and plan-to-consumer closure. Leaving this missing costs beads that preserve
+unmeasured figures, orphan outputs, and unresolved requirements; the cost is rework at every later
+stage and cannot be recovered by a green syntax check.
+
+**S2 refusal:** no S3 grading packet and no S4 materialization when the foundation row has an
+unbound schema, I/O consumer, crate owner, gate, number, UNKNOWN experiment, or GAP cost.
+
+
+
+## 12.13 S3 — Grading-the-plan foundation
+
+S3 is the adversarial decision stage between plan authoring and bead creation. It must separate
+what the plan asserts from what a fresh grader can independently establish, and it must measure
+whether the observed finding rate is signal or reviewer noise.
+
+### FIELD 8 — FOUNDATION
+
+**F1 SCHEMA.** S3 reads the exact S1/S2 foundation records, plan sections, SCHEMAS.toml, and
+NUMBERS.toml. It writes one grade-evidence artifact per section at the existing
+/tmp/grade/r<N>-<section>.md shape and one convergence record in docs/plan/CONVERGENCE.jsonl.
+Grade evidence requires SEVERITY and SEARCH SPACE; each finding carries BLOCKER, MAJOR, or MINOR,
+and optional DEFERRED, RETRACTED, or UNVERIFIABLE. The convergence row requires section, round,
+lens, new_findings, and verdict, with role and evidence optional under the existing schema. The
+FOUNDATION row records the exact grade inputs and outputs so a later S4 materializer cannot rely
+on an unbound count.
+
+**F2 I/O CONTRACT.** S2 produces the plan and foundation record; a fresh grader produces the
+evidence file; the convergence writer consumes that file and emits the ledger row. S4 consumes
+only a per-section result that satisfies the required clean-round rule under the required lenses.
+The plan author is not the grade authority, and a grader's prose report is not itself a bead-DAG
+approval.
+
+**F3 CRATES.** The existing no-shell-gate crate owns structural schema/convergence checks, including
+the evidence and ledger contracts. No current crate owns an independent typed grade value,
+held-out grader isolation, or the comparison of finding identity across rounds; that mechanism must
+be created. The grading panes and the ledger writer are thin callers, not authorities on whether
+a finding exists.
+
+**F4 GATES.** The S3 foundation gate must refuse grade evidence without SEVERITY or SEARCH SPACE,
+a ledger row without new_findings, a PASS with unresolved BLOCKER/MAJOR findings, a zero result
+without its search-space record, or a clean-round claim produced by the same grader context that
+saw the prior result. Its known-BAD in-tree specimen is a grade artifact with SEVERITY removed and
+a convergence row omitting new_findings; the gate must reject both. A second known-BAD specimen
+is a premature clean row with only one lens; it must refuse materialization.
+
+**F5 NUMBERS.** S3 may use the existing convergence_rows, refutation_count, test_files, and
+test_functions NUMBERS.toml keys only with their recorded commands. The observed finding rate per
+section is not a known figure: do not put the approximate six-findings-per-section intuition in
+NUMBERS.toml until the noise-floor experiment below produces a stable, scoped result.
+
+### FIELD 9 — THE EPISTEMIC LEDGER
+
+**KNOWN.** The grade-evidence schema already requires SEVERITY and SEARCH SPACE in SCHEMAS.toml,
+and the convergence schema already requires section, round, lens, new_findings, and verdict. The
+current ledger can be counted with grep -c . docs/plan/CONVERGENCE.jsonl, but that count measures
+rows, not grade quality. The known distinction is that a zero is a declared grader claim, not an
+inferred absence.
+
+**UNKNOWN.** Is approximately six findings per section a property of document defects or the noise
+floor of fresh readers? Experiment: give two fresh graders from different model families the same
+section, stripped of ledger and prior reports, then repeat on one deliberately clean and one
+known-dirty fixture; compare finding count, severity, and overlap against a blinded adjudication.
+Cost: one isolated two-grader round plus adjudication, materially cheaper than treating convergence
+counts as a product metric for months.
+
+**GAP.** There is no held-out or capability-isolated grade harness that measures independence from
+prior findings, and no typed identity linking a finding across rounds. Leaving this missing costs
+false convergence: the project can bank a section because graders adapted to one another and then
+materialize beads from a smooth but untested plan.
+
+**S3 refusal:** no S4 bead materialization when any section lacks the required grade evidence,
+clean-round evidence, independent-lens condition, or epistemic experiment for the finding-rate
+unknown.
+

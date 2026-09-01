@@ -1,16 +1,34 @@
 # 02 — What we are mapping: every OMP surface
 
-Every number in this section is `MEASURED` unless the sentence says `PROJECTED`. The
-measurements come from one artifact: the built scanner `omp-inventory-map`, run as
+Every number in §§1–5 is `MEASURED` only when the inventory artifact and exact query
+are named. §§6–11 also use the separately identified surface-map snapshot and retained
+worker observations; those observations are explicitly marked `HISTORICAL`,
+`ESTIMATE`, or `UNVERIFIED` when no command receipt is retained. A number is not
+made measured by repeating it. The primary inventory artifact is the built scanner
+`omp-inventory-map`, run as
 
 ```
 /Volumes/BuildShared/cargo-targets/debug/omp-inventory-map > /tmp/inv.txt   # 544697 bytes, exit 2
 ```
 
-against installed `omp/18.0.11` on 2026-08-31. Every derived count below is a
+against installed `omp/18.0.11` on 2026-08-31 from repo
+`/Users/josh/Developer/omp-orchestrator`. The captured inventory snapshot is
+544,697 bytes, SHA-256
+`86491732a5581a6d2e342d0db59bdf20e5f47f6da93150ae78bd2649562f5081`, exit 2.
+The snapshot is ephemeral; the hash, generator, tool version, repo, input, and exit
+status identify exactly what §§1–5 mean. Every derived count in those sections is a
 `python3` query over that file, and the query is printed next to the number it
-produces. Nothing in this section is estimated, remembered, or inferred from
-reading source.
+produces. Later sections do not inherit this provenance boundary.
+
+**Provenance register.** `INV-2026-08-31` is the scanner output above. The current
+map artifact is `docs/plan/SURFACE-MAP.jsonl`, generated/maintained by the census
+workers; its captured identity is 591 non-empty JSONL rows, 295,754 bytes, SHA-256
+`f155a358dd302982367a7c0107fe0eb1e3cd6f5ec7d4689bac67f11b1c5063f7`. The map is from repo `/Users/josh/Developer/omp-orchestrator`; its generator/tool version and source revision were not retained, so later claims are limited to this hashed file and named queries.
+Map counts below are derived by the exact NUMBERS.toml commands:
+`grep -c . docs/plan/SURFACE-MAP.jsonl` and the `surface_engaged_pct` Python
+query. Sections 6–11 also cite their exact `--help`/grep probes where retained;
+where a worker observation has no retained command/output/revision, it is historical
+context rather than a current measurement.
 
 ### 1. The census, in one table
 
@@ -31,16 +49,20 @@ crates.** It is not 183 OMP features. It is 157 OMP surfaces and 26 things we bu
 | `workspace_crate` | 26 | One of *our* crates, from `cargo metadata --no-deps` |
 | `declaration` | 14 | A top-level `.d.ts` file in the shipped type surface |
 | `omp_method` | 3 | A JSON-RPC method whose name matches `omp/*` |
-| `slash_command` | 1 | A single `UNKNOWN_PROBE` placeholder — see §3 |
+| `slash_command` | 1 | Synthetic `UNKNOWN_PROBE` placeholder row; not an observed slash command — see §3 |
 | `transport` | 1 | The process-level transport selector |
 | **Total** | **183** | |
 
-The envelope's own `counts` block agrees with the row tally on every kind and
-carries an `expected_*` twin for each. Six of seven twins match exactly. One does
-not: `expected_slash_commands: 136` against `slash_commands: 0`. That mismatch is
-the honest reason `status` is `UNKNOWN` and the process exits 2 — the scanner
-knows it failed to enumerate slash commands and refuses to report a verdict it
-did not earn. A timeout is not a verdict; neither is an empty probe.
+The envelope's `counts` block records observed counts, while the row tally also includes
+synthetic rows. For the seven counted kinds, six observed/expected pairs match exactly;
+`slash_commands: 0` is the real observed count and `expected_slash_commands: 136` is
+the unsatisfied scanner expectation. The one emitted `slash_command` row is only the
+`UNKNOWN_PROBE` placeholder and must not be counted as an observed command. The row
+tally also contains one `transport` row, but the envelope has neither
+`counts.transport` nor `expected_transport`; therefore there is no transport twin.
+The scanner status is `UNKNOWN` and the process exits 2 because slash enumeration did
+not earn a verdict. A timeout is not a verdict; neither is an empty probe.
+
 
 ### 2. The coverage headline
 
@@ -51,13 +73,10 @@ CAPABILITY_NOT_USED             157
 SCRAPED_OR_OBSERVED_ALTERNATIVE  18
 MAPPED_BY_DIRECT_PROBE            8
 ```
-
-The arithmetic, written out so it can be attacked:
-
-- direct-probe coverage = 8 / 183 = **4.37%** (8 ÷ 183 = 0.043715…)
-- alternative-path coverage = 18 / 183 = **9.84%** (18 ÷ 183 = 0.098360…)
-- unconsumed capability = 157 / 183 = **85.79%** (157 ÷ 183 = 0.857923…)
-- 8 + 18 + 157 = 183, so the three classes partition the census with no residue.
+- direct-probe coverage = 8 / 183 = **4.37%** of the all-census rows (8 ÷ 183 = 0.043715…);
+- OMP-only direct-probe coverage = 7 / 157 = **4.46%** (the eighth direct row is the workspace crate `omp-inventory-map`);
+- alternative-path coverage = 18 / 183 = **9.84%** and unconsumed capability = 157 / 183 = **85.79%**;
+- 8 + 18 + 157 = 183, so the three classes partition the all-census rows with no residue. The OMP-only denominator is 157, not 183.
 
 The edge graph tells the same story from the other side. Of 207 edges, exactly **7
 are `consumes`**, and all 7 originate from a single crate, `omp-inventory-map`,
@@ -74,14 +93,14 @@ enumerate OMP surface. Twenty-five of twenty-six crates consume none.
 
 An investor should read that as the project's **central open question, not its
 verdict**. Two readings are available and we are obliged to state the hostile one
-first. *Hostile reading:* an orchestrator built on OMP that touches 4.37% of OMP is
-not an orchestrator, it is a census with ambitions, and the 25 crates are gates and
-lints that would work identically if OMP did not exist. *Our reading:* the map is
-honest, which is the hard part and the part usually skipped — most projects at this
-stage cannot tell you their consumption ratio at all, because nobody enumerated the
-denominator. We enumerated it, we published it, and it says 4.37%. The plan's job
-from here is to move that number by named decisions, one surface at a time, with a
-disposition on each of the 157.
+first. *Hostile reading:* an orchestrator built on OMP that touches 4.46% of OMP
+surfaces (7/157) is not an orchestrator, it is a census with ambitions, and the 25
+workspace crates are gates and lints that would work identically if OMP did not exist.
+*Our reading:* the map is honest, which is the hard part and the part usually skipped
+— most projects at this stage cannot tell you their consumption ratio at all, because
+nobody enumerated the denominator. The all-census figure is 4.37% (8/183); the
+OMP-only figure is 4.46% (7/157). The plan's job from here is to move the latter by
+named decisions, one surface at a time, with a disposition on each of the 157 OMP rows.
 
 `PROJECTED` — we expect direct-probe coverage to rise as the RPC session crate
 wires named handlers, but this document makes no forecast of a target percentage,
@@ -143,8 +162,8 @@ One transport selector, classification `MAPPED_BY_DIRECT_PROBE`, owner
 `counts.slash_commands` is `0` while `counts.expected_slash_commands` is `136`.
 The scanner could not enumerate slash commands, so instead of emitting 136
 guesses or 0 rows and calling it clean, it emits one row named `UNKNOWN_PROBE`
-and drives `status` to `UNKNOWN` with exit 2. `MEASURED` — the single largest
-unmapped region of the OMP surface is 136 slash commands we have never seen.
+and drives `status` to `UNKNOWN` with exit 2. `MEASURED` — the largest **unenumerated**
+region of the OMP expectation is 136 slash commands; no claim is made that 136 is the world count.
 
 **Recorded under R11, because it is not yet written down anywhere else.** The
 brief's §3.2 lists `slash_commands=0` among the counts but does not carry
@@ -270,10 +289,13 @@ plan to" is a `CAPABILITY_NOT_USED` row wearing a better hat.
 reason text is *"The repository has no measured runtime trigger for `<surface>`."*
 This class admits exactly two dispositions and no third:
 
-- **WIRE** — we will consume it, and a bead exists that says who and when.
-- **RETIRE / NAMED_REASON** — we will not consume it, and the row carries the
-  sentence explaining why, in a form an investor can dispute.
-
+- **WIRE** — a proposal to consume it. The current map has no bead ID, owner, or due-time
+field, so a WIRE row is not evidence that a bead exists. A conforming WIRE record must
+carry explicit `bead_id`, owner, and timing fields and a retained
+validation receipt; until then it is a proposal, not bead-backed disposition.
+- **RETIRE / NAMED_REASON** — a proposed non-consumption decision. It is not validated merely
+because `validated_by` is non-null; a current RETIRE proof requires structured
+read-only probe evidence (command, exit/result, timestamp, and artifact identity).
 "Not yet triaged" is not a disposition. `MEASURED` — 175 rows currently sit at
 `NAMED_REASON` and 8 at `WIRE`, so 175 ÷ 183 = **95.63%** of the census is
 currently answered with a reason rather than a plan. `PROJECTED` — the plan's
@@ -377,10 +399,11 @@ belongs on the record next to the vacuity finding because it has the same cause 
 a gate that is correct but unreachable is as vacuous as an invariant that is
 populated but identical. `MEASURED` — `omp-inventory-map --help` returns
 `{"status":"ERROR","error":"CONFIG_ERROR unknown argument --help"}`. The gate is
-built and correct (13 tests pass; `types_inventory.rs:176-178` deliberately
-excludes `Observation` from the allowance list so the collision demands
-convergence) and **undiscoverable**. Hence the sixth property: **ADDRESSABLE** —
-one documented command runs the gate, and `--help` names that command.
+**UNVERIFIED:** the retained record has no exact scoped test command, exit/output receipt,
+or source revision for the claim that the gate is built/correct or that 13 tests pass.
+`types_inventory.rs:176-178` is a source assertion, not test execution. The only
+current runtime evidence is the `--help` error above; ADDRESSABLE remains a required
+property until a command, receipt, and revision are attached.
 
 I re-derived the brief's §3.6 corroborating claim independently rather than
 inheriting it, because it is the one fact in the brief that lives inside *my*
@@ -395,21 +418,18 @@ check is unobservable from the only output the binary offers, which is the defec
 being named.
 
 ---
-
-`NO-CLAIM:` This section claims only what the 2026-08-31 run of
-`omp-inventory-map` against `omp/18.0.11` on this machine emitted, plus arithmetic
-over that file. It does **not** claim the census is complete — `expected_slash_commands: 136`
-against `slash_commands: 0` proves it is not, and 136 slash commands remain
-entirely unenumerated. It does **not** claim the 42 `rpc_handler` names are the
-whole RPC surface, only the whole set the probe returned. It does **not** claim any
-`CAPABILITY_NOT_USED` row is genuinely unused at runtime — only that no *measured*
-runtime trigger exists, and an unmeasured trigger would look identical. It does
-**not** claim the 18 `SCRAPED_OR_OBSERVED_ALTERNATIVE` alternatives named in §4 are
-adequate substitutes for the OMP surfaces they stand in for; four of them
-(`dap`, `debug`, `tools`, `modes`) have no named alternative at all. It does
-**not** claim the coverage percentages will move, or should move to any particular
-figure. And it makes **no** claim that the four mandatory fields on any row have
-been independently verified — §5 is the measurement that they have not.
+`NO-CLAIM:` §§1–5 claim only what the `INV-2026-08-31` snapshot of
+`omp-inventory-map` against `omp/18.0.11` emitted, plus the printed arithmetic.
+The snapshot is not a completeness claim: `expected_slash_commands: 136` against
+`slash_commands: 0` proves 136 expected slash commands remain unenumerated. The 42
+`rpc_handler` names are only the set returned by this probe, not the whole RPC surface.
+Sections 6–11 instead use `docs/plan/SURFACE-MAP.jsonl` (identity in the provenance
+register), exact retained `--help`/grep observations, and historical worker reports;
+a worker report without a command, output, and revision is not a current measurement.
+The map's non-null `validated_by` field is not proof of structured RETIRE evidence,
+and current WIRE rows are proposals, not proof of bead existence. No claim is made that
+any `CAPABILITY_NOT_USED` row is genuinely unused at runtime, that the alternatives
+are adequate substitutes, or that any coverage target should move to a particular figure.
 
 ---
 
@@ -418,9 +438,10 @@ been independently verified — §5 is the measurement that they have not.
 **R14, added by Josh:** *"mining of dicklesworthstone-mirror projects, ntm surfaces, br surfaces, bv
 surfaces, and any surfaces that this system relies on."*
 
-§1–§5 census **one** dependency. The orchestrator sits on four, and the other three were never
-counted. Measured 2026-08-31 by enumerating each tool's subcommand surface from `--help` and
-grepping `crates/` plus `docs/plan/` for a reference to each:
+§1–§5 census one dependency. The pre-correction §6 table below is a HISTORICAL SNAPSHOT
+(NON-AUTHORITATIVE): its retained method was `--help` subcommand extraction plus grep over
+`crates/` and `docs/plan/`, but this section retains no complete output receipt or
+source revision. The current map correction is recorded in §9; do not treat §6 shares as live.
 
 | surface | total | consumed | share |
 |---|---:|---:|---:|
@@ -455,9 +476,9 @@ beads are the unit of work, so the surface gets exercised. It is also the tool w
 we describe as convention rather than code (§11.1, S3), so even here the consumption is shallow —
 we call `create`/`update`/`close`/`comments` and inherit the policy without asserting on it.
 
-`ntm` at 5.3 % of 114 is the sharpest gap after `bv`. This session hand-rolled roughly thirty
-dispatch packets while `ntm template` — a surface we *do* reference — ships a `dispatch` template
-with fail-closed required variables (§11.3).
+`ntm` at 5.3 % of 114 is the sharpest gap after `bv`. HISTORICAL SESSION OBSERVATION
+(approximate; no command/output receipt retained): this session hand-rolled dispatch packets while
+`ntm template` — a surface we *do* reference — ships a `dispatch` template with fail-closed required variables (§11.3).
 
 **NO-CLAIM.** These shares measure *reference*, not *correct use*: a `grep` hit means the name
 appears in a crate or a doc, not that we invoke it correctly or at all. The counts come from
@@ -476,9 +497,10 @@ stage the plan names as broken, is a gap with a measured cost.
 the section above is now known-incomplete rather than merely incomplete.
 
 ### 7.1 Josh: "what other binaries are we missing? rch, ru, etc."
-
-§6 censused **four** surfaces. Measured: **19 relevant binaries are installed**, and the four were
-chosen without stating why those four.
+The following is a HISTORICAL INVENTORY (NON-AUTHORITATIVE), not a live count: 19 relevant
+binaries were reported installed, but the retained evidence does not include a complete exact
+enumeration command/output or source revision. The four-tool choice was not justified; §6's
+pre-correction figures are superseded by §9's map snapshot.
 
 | binary | refs in repo | censused | note |
 |---|---:|:--:|---|
@@ -486,6 +508,7 @@ chosen without stating why those four.
 | `git` | 44 | **no** | spawned by our crates |
 | `br` | 40 | yes | |
 | `cargo` | 31 | **no** | resolves to `/Users/josh/.rch/shims/cargo` — **a shim** |
+| `ntm` | HISTORICAL ESTIMATE (~26; command/output receipt not retained) | **yes (§6)** | 1:many session plane; second-largest censused consumer, omitted from this table's first draft |
 | `tmux` | 29 | **no** | pane truth is read through it |
 | `bv` | 15 | yes | census was wrong — see §7.2 |
 | `fh` | 10 | **no** | **R7's entire mechanism** |
@@ -495,11 +518,12 @@ chosen without stating why those four.
 | `ubs` | 1 | **no** | |
 | `ru`, `dcg`, `pt`, `sbh`, `slb`, `gh` | **0** | **no** | installed, unreferenced |
 
+
 **Three of these are load-bearing and absent from the census:**
 
 - **`rch` gates every compile.** `cargo` on `PATH` is its shim. Every `cargo` invocation this
-  session carried `RCH_ENABLED=false` — and `grep -rc 'RCH_ENABLED' docs/plan/*.md` returns **0**.
-  We disable a build gate on every command and never wrote down that we do.
+  session carried `RCH_ENABLED=false` — a HISTORICAL observation with no retained command receipt or revision. The current query `grep -rc 'RCH_ENABLED' docs/plan/*.md` returns **2 matching lines**, both historical references in this section; this is not evidence that builds are currently disabled.
+  The earlier workflow therefore disabled a build gate on each command; this section records that historical gap, not current status.
 - **`dcg` has zero references and is an active participant.** `dcg 0.5.6` is installed and it
   **blocked one of this session's commands**. A tool that can refuse our actions, cited nowhere.
 - **`fh` is R7.** The requirement "mine the mirror at every gap" is executed entirely through `fh`,
@@ -558,15 +582,16 @@ rows are known-bad and remain in `SURFACE-MAP.jsonl` pending re-extraction again
 
 ### 7.5 `ee` and `ms` — Josh: "vital too"
 
-Two more, both installed, both larger than surfaces already censused, both referenced **once**:
-
 | binary | version | surfaces | refs | what it is |
 |---|---|---:|---:|---|
-| `ee` | 0.14.2 | **123** | 1 | Eidetic Engine — durable, local-first agent memory |
+| `ee` | 0.14.2 | **111** | 1 | Eidetic Engine — durable, local-first agent memory; the "123" first published here was the help-text count — the map carries 111 rows (109 RETIRE, 2 WIRE), reconciled in §9 |
 | `ms` | 0.2.1 | 61 | 1 | Meta Skill — mines CASS sessions to generate skills |
 
-`ee` at 123 surfaces is **larger than `ntm`'s 114**, and it is the sharpest omission in the whole
-census, because of what tonight measured:
+
+`ee` at 111 mapped surfaces is **smaller than `ntm`'s 114**. The separate 123 figure
+is the historical help-text entry count, not mapped rows; 123 is larger than 114 but is not
+the comparable map measure. The omission remains sharp because of what the retained session
+observation recorded:
 
 ```
 ee resume   Resume recent session end-state, open loops, and stale next steps
@@ -582,9 +607,7 @@ The failure and its remedy were in the same `PATH`. This is the strongest instan
 `BUILT ≠ WIRED` — not our code unwired from itself, but **a solved problem sitting one command away
 from a session that solved it again by hand, worse.**
 
-`ms` is the same shape one level up: it mines prior sessions to *generate skills*, and this session
-produced roughly a dozen durable rules — the replacement-naming rule, the not-found search-space
-rule, the construct-citation rule — all written by hand into a brief.
+`ms` is the same shape one level up: it mines prior sessions to *generate skills*. HISTORICAL SESSION OBSERVATION (no exact count retained): this session produced several durable rules — the replacement-naming rule, the not-found search-space rule, and the construct-citation rule — all written by hand into a brief.
 
 ### 7.6 The denominator, corrected as far as it currently goes
 
@@ -603,8 +626,9 @@ favour of the three claims that survive independently of the denominator:
 
 1. `bv` consumption is **zero**, and one call to `--robot-next` named the articulation point that
    nineteen hand-picked waves missed.
-2. `rch` gates every build, is disabled on every command via `RCH_ENABLED=false`, and that fact
-   appears in **zero** lines of this plan.
+2. The historical observation was that `rch` gated builds while `RCH_ENABLED=false`;
+the claim that this appears in zero plan lines is withdrawn. The current two matching lines are
+the explicit historical records at §7.1; no current enablement status is claimed.
 3. `ee resume` exists, is installed, and this session lost a worker's entire output to the failure
    it prevents.
 
@@ -618,21 +642,22 @@ because it exists is the opposite of the discipline this plan argues for.
 
 ## 8. The retire rate is too high, and it is unvalidated
 
-Josh, twice: *"i feel like we're naming a lot retired without fully testing them"* and *"we're
-retiring most of the surfaces."* Both correct. Measured after merging batches 1–19:
+Josh's concern was that the historical map named many rows RETIRE without fully testing them; the snapshot below preserves that finding.
+`HISTORICAL SNAPSHOT — NON-AUTHORITATIVE` (pre-current-map batch 1–19; the snapshot date,
+hash, and command receipt were not retained here):
 
-```
 CONSUMED  12     WIRE  13     VALIDATE  8     RETIRE  469     unmapped 42
-RETIRE with no validating command: 144  (31% of all retires)
-```
+RETIRE with no validating command: 144 (31% of the 469 historical retires)
 
-**93 % retired.** The batch packet said most surfaces *should* retire, and that framing was mine —
-which makes the rate partly an artifact of the instruction rather than the evidence.
+The displayed categories total 544 rows. On the all-listed-row denominator, the historical
+RETIRE rate is 469/544 = **86.2%**. If and only if the 42 unmapped rows are excluded, the
+dispositioned-row denominator is 502 and the rate is 469/502 = **93.4%** (rounded 93%).
+Neither rate describes the current 591-row map below.
 
 ### 8.1 Fifteen retired surfaces are named for this session's own defects
-
-Filtering retires with `validated_by: null` whose name is orchestration-shaped:
-
+In that HISTORICAL snapshot, filtering rows with `validated_by: null` yielded the
+orchestration-shaped set below. This query and its result are not a query over the current map:
+the current map has no null `validated_by` values, which still does not prove structured probe evidence.
 ```
 ntm:claim        ntm:mail         ntm:locks       ntm:lock        ntm:handoff
 ntm:conflicts    ntm:coordinator  ntm:controller  ntm:checkpoint  ntm:beads
@@ -651,55 +676,66 @@ Set against the measured failures of the same session:
 
 The upstream OMP memory vocabulary does not close this NTM/bead claim gap. memories/storage.d.ts:18-29 declares Stage1Claim and GlobalClaim with ownershipToken and inputWatermark, but those fields govern memory-storage work ownership and watermarks, not bead assignment or pane dispatch. This is a type-level weakening of the “no claim vocabulary” absence, not a consumed dispatch contract: no caller maps either type to ntm:claim here, so the local file→CLAIM→dispatch gap remains unclosed.
 
-**Every one was retired without running it.** A `RETIRE` carrying `validated_by: null` is an
-assertion that a surface is irrelevant, made without touching the surface — which is the same shape
-as every other defect this document records: a claim nobody re-derived.
+**HISTORICAL FINDING:** every row in that prior set was retired without a recorded run. A
+`RETIRE` carrying `validated_by: null` was an assertion that a surface was irrelevant
+without touching it. The current map's non-null field is weaker than the structured evidence contract.
 
 ### 8.2 The rule this produces
+**Current rule:** `RETIRE` requires structured read-only probe evidence, exactly like the
+other dispositions require their own evidence. `CONSUMED` demands a citation,
+`VALIDATE` demands a test, and `WIRE` demands explicit bead ID/owner/timing fields.
+The historical 144 unprobed rows are the reason for this gate; they are not a current map count.
 
-**`RETIRE` requires a probe, exactly like the other three dispositions.** The four dispositions were
-specified as symmetric and they were not treated symmetrically: `CONSUMED` demanded a citation,
-`WIRE` demanded a named beneficiary, `VALIDATE` demanded a test — and `RETIRE` was allowed to be a
-shrug. 144 shrugs.
-
-Minimum probe for a retire: **run the surface's `--help`, or invoke it read-only, and state what it
-does and why that is irrelevant to orchestration.** `ntm:claim --help` costs one second and would
-have made `ntm:claim` unretirable by anyone who ran it.
+Minimum probe for a retire: **run the surface's `--help`, or invoke it read-only,
+and state what it does and why that is irrelevant to orchestration. For non-invokable surfaces,
+the equivalent declaration/file probe must record command, result, timestamp, and artifact identity.
 
 `%1409` demonstrated the standard unprompted in the same wave: it probed `ms:agents`, found it an
 **unrecognised subcommand**, and classified it a scrape artifact rather than a surface — a retire
 backed by an invocation. That is the bar, set by a worker, not by me.
 
-**NO-CLAIM.** This establishes that 144 retires lack a probe and that 15 of them are
-orchestration-shaped and defect-adjacent. It does **not** establish that those 15 should be `WIRE` —
-`ntm:claim` may well be irrelevant to us for a reason nobody has written down. The finding is that
-**nobody knows**, and the census currently reports "irrelevant" where the truth is "unexamined."
-Those are different words and the map used the wrong one 144 times.
+**NO-CLAIM (historical snapshot):** 144 rows lacked a recorded probe and 15 were
+orchestration-shaped and defect-adjacent. This does **not** establish that those 15 should be
+`WIRE`. The current map records non-null `validated_by` on every row, but its schema
+does not expose the required command/exit/timestamp/artifact fields, so current RETIRE validation
+remains unproven rather than silently upgraded.
 
 ---
 
 ## 9. The corrected census — and how far wrong §6 was
 
-Two corrections, both forced by Josh, moved every number in §6. The final map is
-`docs/plan/SURFACE-MAP.jsonl`, **591 surfaces, zero unmapped, zero unvalidated retires**.
+Two corrections, both forced by Josh, moved every number in §6. The current map is
+`docs/plan/SURFACE-MAP.jsonl`, with **591 non-empty rows** in snapshot
+`f155a358dd302982367a7c0107fe0eb1e3cd6f5ec7d4689bac67f11b1c5063f7`. In this section,
+**unmapped** means `maps_to_crate == null`, not “missing from the file.” The exact map query
+`python3 -c "import json; m=[json.loads(l) for l in open('docs/plan/SURFACE-MAP.jsonl') if l.strip()]; print(len(m),sum(x.get('maps_to_crate') is None for x in m),sum(x.get('validated_by') is None for x in m))"`
+returns `591 478 0`: 478 rows are unmapped by crate, while all 591 have non-null
+`validated_by`. The field is non-null on all 591 rows, but it is not structured RETIRE proof;
+the current map therefore does not establish RETIRE validation.
 
 ```
-CONSUMED  30     WIRE  46     VALIDATE  25     RETIRE  490
-engaged (CONSUMED+WIRE+VALIDATE)  101 / 591  =  17.1 %
+CONSUMED  32     WIRE  67     VALIDATE  30     RETIRE  453     UNPROBEABLE-PENDING  9
+engaged (CONSUMED+WIRE+VALIDATE)  129 / 591  =  21.8 %      [current MAP snapshot; exact command in NUMBERS.toml]
 ```
+
+**Reconciliation (round 11).** The current values above are derived from the map snapshot and
+the exact commands in `NUMBERS.toml` (`grep -c . docs/plan/SURFACE-MAP.jsonl` and
+the `surface_engaged_pct` Python query). Superseded earlier snapshots are HISTORICAL and retained only in `NUMBERS.toml`'s audit trail; they are not quoted as current status and their prior identities are not the current hash.
+Current engagement is **129/591 = 21.8%**, and current WIRE count is **67**. The “ee … 123 surfaces” figure is the
+historical help-text count; the current map carries **111** ee rows (109 RETIRE, 2 WIRE).
+The bv rows below are the LIVE split over all 76, not 47 alone.
 
 ### 9.1 What the two corrections did
 
 | | §6 as published | after correction |
-|---|---|---|
-| retires with no probe | **144** | **0** |
-| `bv` surfaces | 29 (scrape artifacts) | **47 real `--robot-*` flags** |
-| `bv` disposition | 0 consumed, retire all | **25 WIRE · 17 VALIDATE · 5 RETIRE** |
-| engagement | "6.2 %" | **17.1 %** |
+| `bv` surfaces | 29 (scrape artifacts) | **76 mapped: 29 original rows retained + 47 real `--robot-*` rows appended** |
+| `bv` disposition | 0 consumed, retire all | **30 WIRE · 18 VALIDATE · 27 RETIRE · 1 UNPROBEABLE across all 76** |
+| engagement | "6.2 %" | **21.8 % (129/591), live** |
 
 **`bv` inverts completely.** The tool §6 reported at *zero consumption, retire everything* is, once
-its real surface is enumerated, **the most under-adopted tool in the system: 42 of 47 surfaces
-should be wired or validated.** The scrape artifact did not merely under-count it — it inverted the
+its real surface is mapped, **the most under-adopted tool in the system: 48 of 76 mapped surfaces
+should be wired or validated (30 WIRE + 18 VALIDATE; the 47 `--robot-*` rows contribute 42 of
+those 48).** The scrape artifact did not merely under-count it — it inverted the
 conclusion, and the inverted conclusion agreed with a prior belief, which is why it survived a
 round of grading.
 
@@ -714,7 +750,7 @@ is the first movement on any §8 economic question.
 `%1408` re-probed batches 12–13 and **flipped 9 of 42 on probe evidence**, including a live one:
 
 > probed `omp/muxPing` into a fresh `--mode=rpc` session — the ready envelope answered, **no
-> `muxPing` result came back.** The mux trio is retired on a probe, not on vibes.
+> `muxPing` result came back.** The worker report records this as a probe observation; the map does not retain the structured receipt required to validate a RETIRE.
 
 It also caught pane 3 having filed `VALIDATE` rows for surfaces with **zero references**
 (`set_host_tools`) — *"exactly the defect the new retire rule stops."*
@@ -730,13 +766,13 @@ The correction did not come from a gate or a re-read. It came from Josh saying *
 naming a lot retired without fully testing them"* and *"we're retiring most of the surfaces"* —
 twice, because the first time I recorded the finding and did not act on it.
 
-**NO-CLAIM.** 17.1 % is engagement against a 591-row denominator that is still a *lower bound*:
-fourteen binaries (`rch`, `fh`, `cargo`, `git`, `tmux`, `cass`, `ubs`, `caut`, `dcg`, `ru`, `pt`,
-`sbh`, `slb`, `gh`) have **no surface count at all**, so the true denominator is unknown and 17.1 %
-will move again. `WIRE` remains a *proposal with a named beneficiary* — 46 of them, none
-implemented. And a probed `RETIRE` establishes that someone ran the surface and formed a judgement;
-it does not establish the judgement is right.
-
+**NO-CLAIM.** Superseded historical engagement and WIRE values are excluded from current-status prose; their snapshot identities are not the current map hash. The live, declared figure is **21.8%**
+engagement (**129/591**) and the live WIRE count is **67**. Fourteen binaries (`rch`, `fh`,
+`cargo`, `git`, `tmux`, `cass`, `ubs`, `caut`, `dcg`, `ru`, `pt`,
+`sbh`, `slb`, `gh`) still have no surface count, so the external-tool denominator is
+unknown. WIRE is a proposal, not proof of implementation, and non-null `validated_by` is not
+structured RETIRE evidence. A probe establishes that someone ran a surface; it does not establish
+that the resulting judgement is right.
 ---
 
 ## 10. Evidence inherited from a vacuous source is not evidence
@@ -759,12 +795,16 @@ recorded a *judgement* where it held only a *relay*.
 ### 10.1 The reclassification
 
 ```
-CONSUMED 30    WIRE 66    VALIDATE 25    RETIRE 407    UNPROBEABLE-PENDING 63
+CONSUMED 32    WIRE 67    VALIDATE 30    RETIRE 453    UNPROBEABLE-PENDING 9
+[LIVE — this table moved twice during writing; NUMBERS.toml surface_engaged_pct is the source]
 ```
 
-The 63 break down as **54** OMP `type_root` rows retired on scanner classification plus grep zeros
-with no functional statement, **3** for the mux trio's six-mux ambiguity, and **6** rows `%1408`
-retired itself on thin reasoning and then withdrew.
+**Snapshot history, kept because it is the finding:** when this subsection was written the split
+was 30/66/25/407 with **63** UNPROBEABLE-PENDING — 54 `type_root` rows retired on scanner
+classification plus grep zeros, 3 mux rows, 6 thin-reason withdrawals. Since then the 54 type_root
+rows were probed per-kind and RE-CLASSIFIED (only 3 VALIDATEs among them survived: extensibility,
+goals, internal-urls), collapsing the honestly-unknown set to **9** (3 mux + 6 thin-reason). The
+63 → 9 collapse is the per-kind probe rule working, not drift.
 
 It also corrected **ten of its own `rpc_handler` rows** that had cited the mux null-probe as
 evidence — *"wrong basis, restated to adapter-vocabulary zero."* An agent auditing its own prior
@@ -780,23 +820,25 @@ unknown command **is a verdict**. That is the distinction the whole re-probe wav
 | *unknown command* | **RETIRE** | the absence is *answered* — the surface does not exist |
 | *no output, empty, timeout* | **UNPROBEABLE-PENDING** | the absence is *unexplained* — a timeout is not a verdict |
 
-Both are nulls. Only one is evidence. Every retirement in this map now has to say which kind it is.
+Both are nulls. Only one is evidence. The policy requires each current RETIRE to identify which kind it is, but the present map's non-null `validated_by` strings do not prove that this structured evidence was recorded.
 
 ### 10.3 Where the census actually stands
 
 | | count | meaning |
 |---|---:|---|
-| engaged | **121** | CONSUMED + WIRE + VALIDATE — 20.5 % |
-| honestly unknown | **63** | UNPROBEABLE-PENDING — the map says *we do not know* |
-| retired | **407** | probed, or answered by a positive null |
+| engaged | **129** | CONSUMED + WIRE + VALIDATE — **21.8%** (129/591; `NUMBERS.toml` command) |
+| honestly unknown | **9** | UNPROBEABLE-PENDING — 3 mux + 6 thin-reason; this is a disposition count |
+| retired | **453** | rows with disposition `RETIRE`; structured probe backing is not proven by the map schema |
+| unmapped by crate | **478** | `maps_to_crate == null`; overlaps the disposition rows and is not “missing rows” |
 
-**The 63 is the most valuable column in the table.** It did not exist three waves ago, when those
-same rows read `RETIRE` and the census claimed to know something it did not.
-
-**NO-CLAIM.** 407 retirements are now probe-backed *or* scanner-backed, and `%1408`'s residual
-finding is that the second class needs its own sweep — the reclassification caught the 54 it could
-identify, not necessarily all of them. No count exists yet for how many of the 407 rest on inherited
-scanner classification. That sweep is unrun and unowned.
+**The honestly-unknown column is the most valuable in the table.** It did not exist three waves
+ago, when those same rows read `RETIRE` and the census claimed to know something it did not. It
+peaked at 63, and the per-kind probe rule resolved 54 of them — what remains is the honest
+residue, not the peak.
+**NO-CLAIM.** 453 is a disposition count only. The map query proves 0 null `validated_by` values,
+not 453 structured probe receipts; no count exists for RETIRE rows carrying command, exit/result,
+timestamp, and artifact identity. The inherited-scanner-classification sweep is therefore unrun and
+unowned, and the status table must not call all 453 probe-backed.
 
 ---
 
@@ -804,8 +846,7 @@ scanner classification. That sweep is unrun and unowned.
 
 Josh: *"why are they unprobeable, lets test this on pane 0."*
 
-Tested. **They are not unprobeable.** Measured:
-
+`HISTORICAL OBSERVATION — NON-AUTHORITATIVE`: the retained report says these rows are readable, but no exact directory-listing command, output receipt, or revision is retained in this section. The figures below are not current measurements.
 ```
 dist/types/cli/       54 files   352 KB   ->  359 exported symbols
 dist/types/session/   78 files   564 KB   ->  acp-permission-gate.d.ts,

@@ -124,3 +124,12 @@ optional  = ["transcript_ref", "promoted_to"]
 writer    = "S9 mechanism (unbuilt — adequate substrate until it exists: bead comments in the same shape)"
 reader    = "dispatch packet builder (binds_stages), AGENTS.md amortization pass, grading pane (unfalsifiable Josh-said refusal)"
 note      = "declared 2026-09-01 by 12-journey S9 F1 — the unanimous #1 gap of the dueling ideation wave. Eleven rulings tonight live only in pane scrollback. Zero rows today; the backfill experiment (12-journey S9 UNKNOWN 1) seeds the first real ones."
+
+[artifacts.inception_manifest]
+path      = ".omp-orchestrator/inception.json"
+format    = "json"
+required  = ["schema_version", "project_id", "repo_identity", "control_files", "host_capabilities", "required_tools", "trust_status"]
+optional  = ["evidence", "status", "degradations"]
+writer    = "S1 inception foundation"
+reader    = "S2 planning foundation and S7 validation"
+note      = "The manifest is the durable S1 boundary. Missing, ambiguous, or stale identity/capability fields refuse the next stage before any bead exists."
