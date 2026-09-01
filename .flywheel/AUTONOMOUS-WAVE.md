@@ -268,3 +268,63 @@ consumer is another agent — **stop and take a bead that moves the loop toward 
 
 The whole wave is measured by one thing: **does the binary dispatch without a human typing into a
 pane?** It does not today. That is the work.
+
+---
+
+## 10. THE FULL ARC — Josh's standing objective, 2026-09-01 (supersedes §6's framing)
+
+**Correction to §6 first, because it changes what you should do.** Pane 1 wrote that the stop
+condition was unreachable because the finding rate "climbs." Measured across the last three
+rounds it is **falling sharply**:
+
+| round | lens | findings | per section |
+|---:|---|---:|---:|
+| 13 | fresh-eyes-severity | 80 | 6.2 |
+| 14 | operator-at-3am | 72 | 6.0 |
+| 15 | rule-zero | 20 | **1.5** |
+
+**So drive the original contract: 2 consecutive fresh-eyes rounds with ZERO new findings.**
+§6's system-measure proposal stands as the *definition of done for the wave*, not as a
+replacement for convergence. Both apply. If the rate stalls above zero for three more rounds,
+re-open the question with Josh — do not lower a grader to force a zero.
+
+### Phase A — converge (you are here, `/planning-workflow`)
+Run fresh-eyes rounds until **two consecutive zeros**. Rules that make a round count:
+- A **different lens each round**, and a grader who did not write the section.
+- **Verify before recording.** Round 15 produced 4 verified false positives out of 23 blockers.
+  A finding you did not re-run is not a finding.
+- Every finding becomes a **bead in the owner's lane**, or a one-line note, or is dropped. It
+  does not become a document.
+- Raise the bar with `fh suggest "<the section's subject>"` and
+  `/choose-the-best-skills-to-run-in-this-project` before each round — the objective is
+  **meet or exceed SOTA**, not merely internal agreement.
+
+### Phase B — the DAG
+`/beads-bv` + `/beads-workflow`. Every module becomes a **child bead under a parent epic**.
+Then **grade the beads before executing them** with
+`/beads-compliance-and-completion-verification`: ding your own work, and assume a bead with no
+testable acceptance is not granular enough. A bead you cannot write `run X, expect Y` for will
+produce a gotcha at execution time — that is the whole point of grading first.
+
+### Phase C — execution, dogfooding our own stack
+Dispatch to each other **through our crates**, not by hand. That is the wave's own product:
+`ack-spine`, `composer-typed`, `receiver-receipt`, `dispatch-silence-watch`, the fences. Every
+dispatch **logged and observed**. `AGENTS.md` is the operating manual; if it is wrong, fix it.
+
+### The standing quality bar, all phases
+- **A neighbour grades your bead** (`/beads-compliance-and-completion-verification`), then you
+  close with `/just-say-no-to-process-porn-and-ceremony` — no ceremony, no receipts about
+  receipts, name the buyer-visible change or do not close.
+- **Never take a "done" at face value, including your own.** Re-run it.
+- **Hardened at every stage**: memory-safe, cancel-correct, `&Cx`-first, group-kill, both pipes
+  drained, and a timeout that is never a verdict.
+
+### Known live hazards, measured today by you
+- **The pre-commit hook silently ate commits on this shared checkout with concurrent panes**
+  (AmberGate). `--no-verify` is a workaround, not a fix — someone must own that as a bead, because
+  a hook that silently drops work is worse than a hook that fails loudly.
+- **BuildShared hit 99%**; `qfa` redirected `target-dir` to the root volume. The capacity ceiling
+  itself is still Josh's.
+- **The ring already caught a wrong fix** — OliveCat proved `is_typed()` would have reported
+  `COMPOSER_EMPTY` on *every* successful dispatch, breaking all delivery. That is the ring working
+  exactly as designed. Keep doing that.
