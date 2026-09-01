@@ -1594,6 +1594,7 @@ fn main() -> std::process::ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
 
     fn fixture_config(heartbeat_ledger: PathBuf) -> Config {
         Config {
@@ -1617,6 +1618,23 @@ mod tests {
             omp_binary: PathBuf::from("omp"),
         }
     }
+    fn run_reaper_for_test(config: &Config) -> Result<String, String> {
+        let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
+        runtime.block_on(async {
+            let cx = Cx::current().expect("runtime context");
+            run_finished_pane_sweep(&cx, config).await
+        })
+    }
+
+    fn executable_reaper(temp: &tempfile::TempDir, body: &str) -> PathBuf {
+        let path = temp.path().join("reaper");
+        std::fs::write(&path, body).expect("write reaper fixture");
+        let mut permissions = std::fs::metadata(&path).expect("reaper metadata").permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&path, permissions).expect("make reaper executable");
+        path
+    }
+
 
     #[test]
     fn observed_idle_state_counts_as_free_capacity_before_confirmation() {
@@ -1713,24 +1731,68 @@ mod tests {
         let mut config = fixture_config(temp.path().join("heartbeat.jsonl"));
         config.repo = temp.path().to_owned();
         config.reap_finished_panes = "/bin/echo".to_owned();
-        let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
-        let summary = runtime
-            .block_on(async {
-                let cx = Cx::current().expect("runtime context");
-                run_finished_pane_sweep(&cx, &config).await
-            })
-            .expect("reaper output");
+        let summary = run_reaper_for_test(&config).expect("reaper output");
         assert_eq!(
             summary,
             format!("--repo {}", temp.path().display()),
             "the production helper must invoke the configured reaper with the repository root"
         );
     }
+    #[test]
+    fn finished_pane_reaper_rejects_empty_output() {
+        let temp = tempfile::tempdir().expect("reaper repo");
+        let mut config = fixture_config(temp.path().join("heartbeat.jsonl"));
+        config.repo = temp.path().to_owned();
+        config.reap_finished_panes = "/usr/bin/true".to_owned();
+        let error = run_reaper_for_test(&config).expect_err("empty output must be restrictive");
+        assert!(error.contains("REAP_FINISHED_PANES_EMPTY"), "{error}");
+    }
+
+    #[test]
+    fn finished_pane_reaper_propagates_child_failure() {
+        let temp = tempfile::tempdir().expect("reaper repo");
+        let mut config = fixture_config(temp.path().join("heartbeat.jsonl"));
+        config.repo = temp.path().to_owned();
+        config.reap_finished_panes = "/usr/bin/false".to_owned();
+        let error = run_reaper_for_test(&config).expect_err("failed child must be restrictive");
+        assert!(error.contains("exited=1"), "{error}");
+    }
+
+    #[test]
+    fn finished_pane_reaper_receives_bounded_deadline() {
+        let temp = tempfile::tempdir().expect("reaper repo");
+        let mut config = fixture_config(temp.path().join("heartbeat.jsonl"));
+        config.repo = temp.path().to_owned();
+        config.command_timeout = Duration::from_secs(7);
+        config.reap_finished_panes = executable_reaper(
+            &temp,
+            "#!/bin/sh\nprintf '%s\n' \"$REAP_SWEEP_DEADLINE_SECS\"\n",
+        )
+        .display()
+        .to_string();
+        let summary = run_reaper_for_test(&config).expect("deadline output");
+        assert_eq!(summary, "7");
+    }
+
+    #[test]
+    fn finished_pane_reaper_timeout_is_restrictive() {
+        let temp = tempfile::tempdir().expect("reaper repo");
+        let mut config = fixture_config(temp.path().join("heartbeat.jsonl"));
+        config.repo = temp.path().to_owned();
+        config.command_timeout = Duration::from_secs(1);
+        config.reap_finished_panes = executable_reaper(&temp, "#!/bin/sh\nsleep 5\n")
+            .display()
+            .to_string();
+        let error = run_reaper_for_test(&config).expect_err("hung child must time out");
+        assert!(error.contains("TIMEOUT program="), "{error}");
+    }
+
 
     #[test]
     fn missing_receiver_agent_inherits_claimed_assignee() {
         let mut config = fixture_config(std::env::temp_dir().join("receiver-assignment-heartbeat.jsonl"));
         config.receiver_agent.clear();
+
         let snapshot = BeadSnapshot::new(
             "receiver-assignment-test",
             "title",

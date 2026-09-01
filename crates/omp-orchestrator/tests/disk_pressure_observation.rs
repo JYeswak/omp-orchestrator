@@ -63,6 +63,19 @@ fn disk_pressure_still_reports_observation_before_refusal() {
         output.status.success(),
         "bounded pressure refusal should be reported as a tick outcome; stdout={stdout} stderr={stderr}"
     );
+    let heartbeat = fs::read_to_string(temp.path().join("heartbeat.jsonl"))
+        .expect("heartbeat ledger");
+    let reaper_receipt = heartbeat
+        .lines()
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .find(|row| row["status"] == "REAP_FINISHED_PANES")
+        .expect("reaper heartbeat receipt");
+    assert!(
+        reaper_receipt["detail"]
+            .as_str()
+            .is_some_and(|detail| !detail.is_empty()),
+        "reaper heartbeat must carry non-empty detail"
+    );
     let observation = stdout
         .find("OBSERVATION ")
         .expect("disk pressure must not suppress the observation line");
