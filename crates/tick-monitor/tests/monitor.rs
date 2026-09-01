@@ -857,3 +857,90 @@ fn distinct_sessions_are_distinct_even_after_sanitisation() {
     let b = tick_monitor::state_path("zeststream-cast-wave-20260825-1910");
     assert_ne!(a, b, "sanitisation collapsed two live session names onto one ledger");
 }
+
+/// POSITIVE PROOF OF LIFE SURVIVES A SHORT GAP.
+///
+/// # The defect this covers
+///
+/// `05-actions` A1 recorded it and the held-out operator-at-3am lens flagged it
+/// again: `liveness()` returned `Unproven { gap_too_short }` BEFORE the
+/// `(Working, Working)` arm could compare timers and hashes. A pane that had
+/// demonstrably moved was reported unproven whenever two captures landed inside
+/// `MIN_GAP_SECS`.
+///
+/// The section's own words: *"positive proof of life is discarded. Correctly
+/// reasoned, incorrectly implemented; recorded as an open defect."*
+///
+/// The whole existing suite — 76 tests — passed both BEFORE and AFTER the fix, so
+/// nothing covered it. This test fails without the hoist.
+#[test]
+fn an_advanced_timer_inside_the_gap_floor_is_live_not_unproven() {
+    let prev = Observation {
+        pane_id: "%1408".into(),
+        state: PaneState::Working { timer_secs: 30 },
+        hash: 111,
+        at: 1_000,
+    };
+    // 10 seconds later: well inside MIN_GAP_SECS (75), and the turn timer ADVANCED.
+    let now = Observation {
+        pane_id: "%1408".into(),
+        state: PaneState::Working { timer_secs: 40 },
+        hash: 111,
+        at: 1_010,
+    };
+    assert_eq!(
+        liveness(Some(&prev), &now),
+        Liveness::Live,
+        "a turn timer cannot advance in a dead pane; the gap floor must not discard it"
+    );
+}
+
+/// Same, via content rather than the timer.
+#[test]
+fn a_changed_hash_inside_the_gap_floor_is_live_not_unproven() {
+    let prev = Observation {
+        pane_id: "%1408".into(),
+        state: PaneState::Working { timer_secs: 30 },
+        hash: 111,
+        at: 1_000,
+    };
+    let now = Observation {
+        pane_id: "%1408".into(),
+        state: PaneState::Working { timer_secs: 30 },
+        hash: 222,
+        at: 1_010,
+    };
+    assert_eq!(
+        liveness(Some(&prev), &now),
+        Liveness::Live,
+        "content that changed cannot have been rendered by a dead pane"
+    );
+}
+
+/// KNOWN-GOOD, and it is the leg that proves the guard was not simply removed.
+///
+/// The floor exists because the ABSENCE of change over a short window proves
+/// nothing — a genuinely working pane may render nothing for ten seconds, and
+/// calling that Frozen would be a false accusation. So with no timer movement and
+/// no hash change inside the floor, the verdict must STILL be `gap_too_short`.
+#[test]
+fn no_movement_inside_the_gap_floor_is_still_unproven() {
+    let prev = Observation {
+        pane_id: "%1408".into(),
+        state: PaneState::Working { timer_secs: 30 },
+        hash: 111,
+        at: 1_000,
+    };
+    let now = Observation {
+        pane_id: "%1408".into(),
+        state: PaneState::Working { timer_secs: 30 },
+        hash: 111,
+        at: 1_010,
+    };
+    assert_eq!(
+        liveness(Some(&prev), &now),
+        Liveness::Unproven { why: "gap_too_short" },
+        "the floor must still guard the NEGATIVE verdict; absence of change inside \
+         ten seconds is not evidence of freezing"
+    );
+}

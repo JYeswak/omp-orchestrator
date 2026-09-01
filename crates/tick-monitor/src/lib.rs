@@ -543,6 +543,34 @@ pub fn liveness(prev: Option<&Observation>, now: &Observation) -> Liveness {
         };
     }
     let gap = now.at.saturating_sub(prev.at);
+
+    // POSITIVE PROOF IS HOISTED ABOVE THE GAP FLOOR, and the asymmetry is the point.
+    //
+    // Measured defect, recorded in 05-actions A1 and flagged again by the held-out
+    // operator-at-3am lens: the floor returned `Unproven { gap_too_short }` BEFORE the
+    // `(Working, Working)` arm could compare timers and hashes, so a pane that had
+    // demonstrably moved was reported unproven whenever two captures landed inside 75
+    // seconds. The section's own words: "positive proof of life is discarded.
+    // Correctly reasoned, incorrectly implemented."
+    //
+    // WHY THE FLOOR EXISTS AT ALL, so this does not read as removing a guard: the
+    // ABSENCE of change over a short window proves nothing — a genuinely working pane
+    // may render nothing for two seconds, and calling that Frozen would be a false
+    // accusation. The floor protects the NEGATIVE verdict.
+    //
+    // The PRESENCE of change needs no such protection. A turn timer that advanced, or a
+    // content hash that differs, cannot occur in a dead pane at any gap. The floor now
+    // guards only the direction it was reasoned for.
+    if let (
+        PaneState::Working { timer_secs: before },
+        PaneState::Working { timer_secs: after },
+    ) = (&prev.state, &now.state)
+    {
+        if after > before || prev.hash != now.hash {
+            return Liveness::Live;
+        }
+    }
+
     if gap < MIN_GAP_SECS {
         return Liveness::Unproven {
             why: "gap_too_short",
