@@ -565,15 +565,58 @@ async fn load_bead_snapshot(cx: &Cx, config: &Config, bead: &str) -> Result<Bead
     parse_br_show_json(&show).map_err(|error| format!("DISPATCH_BLOCKED bead={bead} {error}"))
 }
 
+fn receiver_agent_for_dispatch(
+    config: &Config,
+    bead: &str,
+    snapshot: &BeadSnapshot,
+) -> Result<String, String> {
+    if !config.receiver_agent.trim().is_empty() {
+        return Ok(config.receiver_agent.trim().to_owned());
+    }
+    if let Some(agent) = snapshot.assignee().filter(|agent| !agent.trim().is_empty()) {
+        return Ok(agent.to_owned());
+    }
+    Err(format!(
+        "DISPATCH_BLOCKED bead={bead} receiver agent is missing owner=josh next_action=claim-bead"
+    ))
+}
+
 fn authorize_bead_dispatch(
     config: &Config,
     bead: &str,
     snapshot: &BeadSnapshot,
-) -> Result<(), String> {
-    let intent = DispatchIntent::bead(bead, &config.receiver_agent);
-    authorize(&intent, Some(snapshot))
-        .map(|_| ())
+) -> Result<String, String> {
+    let receiver_agent = receiver_agent_for_dispatch(config, bead, snapshot)?;
+    authorize(&DispatchIntent::bead(bead, &receiver_agent), Some(snapshot))
+        .map(|_| receiver_agent)
         .map_err(|error| error.to_string())
+}
+async fn prepare_bead_dispatch(
+    cx: &Cx,
+    config: &Config,
+    bead: &str,
+) -> Result<(BeadSnapshot, String), String> {
+    let mut snapshot = load_bead_snapshot(cx, config, bead).await?;
+    let receiver_agent = receiver_agent_for_dispatch(config, bead, &snapshot)?;
+
+    if snapshot.status_label() == "open" {
+        let claim_args = vec![
+            "update".to_owned(),
+            bead.to_owned(),
+            "--assignee".to_owned(),
+            receiver_agent.clone(),
+            "--status".to_owned(),
+            "in_progress".to_owned(),
+        ];
+        require_success(
+            &config.br,
+            invoke(cx, config, &config.br, &claim_args).await?,
+        )?;
+        snapshot = load_bead_snapshot(cx, config, bead).await?;
+    }
+
+    let receiver_agent = authorize_bead_dispatch(config, bead, &snapshot)?;
+    Ok((snapshot, receiver_agent))
 }
 
 async fn run_silence_watch(
@@ -581,11 +624,12 @@ async fn run_silence_watch(
     config: &Config,
     bead: &str,
     dispatch_epoch: i64,
+    receiver_agent: &str,
 ) -> Result<SilenceVerdict, String> {
     let args = vec![
         bead.to_owned(),
         config.session.clone(),
-        config.receiver_agent.clone(),
+        receiver_agent.to_owned(),
         dispatch_epoch.to_string(),
         config.interval.as_secs().max(1).to_string(),
     ];
@@ -695,6 +739,25 @@ async fn send_and_verify(
         });
         if stage.is_confirmed() {
             return Ok(stage);
+        }
+        // composer-typed receipt check: the pane's captured content must hold
+        // typed operator text. An empty composer means the packet never
+        // arrived, even if ntm reported delivery signals. This check fires
+        // AFTER the ack stage so a confirmed ack still wins, and BEFORE the
+        // deadline check so an empty composer is named in the final error.
+        let pane_capture = capture_pane(cx, config, pane).await?;
+        let pane_text = String::from_utf8_lossy(&pane_capture);
+        let rules = composer_typed::Rules::default();
+        if !composer_typed::is_typed(&pane_text, &rules) {
+            if Instant::now() >= deadline {
+                return Err(format!(
+                    "COMPOSER_EMPTY pane={pane} bead={bead} — ntm reported delivery but the composer holds no typed text; \
+                     the packet never arrived (sender exit is not a receipt)"
+                ));
+            }
+            // First few polls may race the terminal renderer; retry.
+            sleep(cx.now_for_observability(), RECEIPT_POLL).await;
+            continue;
         }
         let awaiting_ack = matches!(
             stage.delivery,
@@ -1193,13 +1256,12 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             let bead = bead_ids.first().ok_or_else(|| {
                 "QUEUE_UNREADABLE ready count changed before bead selection".to_owned()
             })?;
-            let snapshot = load_bead_snapshot(cx, config, bead).await?;
-            authorize_bead_dispatch(config, bead, &snapshot)?;
+            let (snapshot, receiver_agent) = prepare_bead_dispatch(cx, config, bead).await?;
             let dispatch_epoch = now_unix() as i64;
             write_dispatch_intent(config, &pane, bead)?;
             let before = capture_pane(cx, config, &pane).await?;
             let stage = send_and_verify(cx, config, &pane, bead, &snapshot, &before, tick).await?;
-            let silence = run_silence_watch(cx, config, bead, dispatch_epoch).await?;
+            let silence = run_silence_watch(cx, config, bead, dispatch_epoch, &receiver_agent).await?;
             write_heartbeat(
                 config,
                 tick,
@@ -1504,6 +1566,26 @@ mod tests {
         let help = Config::from_args(&["--help".to_owned()]).unwrap_err();
         assert_eq!(help, usage());
         assert!(help.contains("[run]"), "usage must advertise the run subcommand");
+    }
+    #[test]
+    fn missing_receiver_agent_inherits_claimed_assignee() {
+        let mut config = fixture_config(std::env::temp_dir().join("receiver-assignment-heartbeat.jsonl"));
+        config.receiver_agent.clear();
+        let snapshot = BeadSnapshot::new(
+            "receiver-assignment-test",
+            "title",
+            "description",
+            "in_progress",
+            Some("SilverWolf"),
+        );
+
+        let receiver_agent = authorize_bead_dispatch(
+            &config,
+            "receiver-assignment-test",
+            &snapshot,
+        )
+        .expect("an assigned bead should supply the receiver agent when config is unset");
+        assert_eq!(receiver_agent, "SilverWolf");
     }
 
 
