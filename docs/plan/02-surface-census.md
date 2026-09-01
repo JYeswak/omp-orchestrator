@@ -613,3 +613,124 @@ the true denominator is unknown and every share against it is unavailable rather
 imprecise. Nothing here measures whether adopting any of these surfaces would help — `ee` at 123
 surfaces is not an argument for consuming 123 surfaces, and §6's warning stands: adopting a surface
 because it exists is the opposite of the discipline this plan argues for.
+
+---
+
+## 8. The retire rate is too high, and it is unvalidated
+
+Josh, twice: *"i feel like we're naming a lot retired without fully testing them"* and *"we're
+retiring most of the surfaces."* Both correct. Measured after merging batches 1–19:
+
+```
+CONSUMED  12     WIRE  13     VALIDATE  8     RETIRE  469     unmapped 42
+RETIRE with no validating command: 144  (31% of all retires)
+```
+
+**93 % retired.** The batch packet said most surfaces *should* retire, and that framing was mine —
+which makes the rate partly an artifact of the instruction rather than the evidence.
+
+### 8.1 Fifteen retired surfaces are named for this session's own defects
+
+Filtering retires with `validated_by: null` whose name is orchestration-shaped:
+
+```
+ntm:claim        ntm:mail         ntm:locks       ntm:lock        ntm:handoff
+ntm:conflicts    ntm:coordinator  ntm:controller  ntm:checkpoint  ntm:beads
+ntm:agents       ntm:adopt        ntm:assign      ntm:bind        rpc_handler:handoff
+```
+
+Set against the measured failures of the same session:
+
+| retired surface | the defect it names |
+|---|---|
+| `ntm:claim` | packets dispatched naming **unclaimed beads** — the missing file→CLAIM→dispatch beat, twice |
+| `ntm:mail`, `ntm:locks`, `ntm:lock` | Agent Mail was down; **no file reservations** all session; two agents on overlapping crates |
+| `ntm:handoff`, `rpc_handler:handoff` | a bead handoff sent to **pane 4 (`%1398`) — a pane that does not exist** |
+| `ntm:conflicts` | `SilverWolf` and pane 3 both editing the same three ported crates with no advisory lock |
+| `ntm:agents` | the roster was re-derived by hand from `tmux list-panes` every tick |
+
+**Every one was retired without running it.** A `RETIRE` carrying `validated_by: null` is an
+assertion that a surface is irrelevant, made without touching the surface — which is the same shape
+as every other defect this document records: a claim nobody re-derived.
+
+### 8.2 The rule this produces
+
+**`RETIRE` requires a probe, exactly like the other three dispositions.** The four dispositions were
+specified as symmetric and they were not treated symmetrically: `CONSUMED` demanded a citation,
+`WIRE` demanded a named beneficiary, `VALIDATE` demanded a test — and `RETIRE` was allowed to be a
+shrug. 144 shrugs.
+
+Minimum probe for a retire: **run the surface's `--help`, or invoke it read-only, and state what it
+does and why that is irrelevant to orchestration.** `ntm:claim --help` costs one second and would
+have made `ntm:claim` unretirable by anyone who ran it.
+
+`%1409` demonstrated the standard unprompted in the same wave: it probed `ms:agents`, found it an
+**unrecognised subcommand**, and classified it a scrape artifact rather than a surface — a retire
+backed by an invocation. That is the bar, set by a worker, not by me.
+
+**NO-CLAIM.** This establishes that 144 retires lack a probe and that 15 of them are
+orchestration-shaped and defect-adjacent. It does **not** establish that those 15 should be `WIRE` —
+`ntm:claim` may well be irrelevant to us for a reason nobody has written down. The finding is that
+**nobody knows**, and the census currently reports "irrelevant" where the truth is "unexamined."
+Those are different words and the map used the wrong one 144 times.
+
+---
+
+## 9. The corrected census — and how far wrong §6 was
+
+Two corrections, both forced by Josh, moved every number in §6. The final map is
+`docs/plan/SURFACE-MAP.jsonl`, **591 surfaces, zero unmapped, zero unvalidated retires**.
+
+```
+CONSUMED  30     WIRE  46     VALIDATE  25     RETIRE  490
+engaged (CONSUMED+WIRE+VALIDATE)  101 / 591  =  17.1 %
+```
+
+### 9.1 What the two corrections did
+
+| | §6 as published | after correction |
+|---|---|---|
+| retires with no probe | **144** | **0** |
+| `bv` surfaces | 29 (scrape artifacts) | **47 real `--robot-*` flags** |
+| `bv` disposition | 0 consumed, retire all | **25 WIRE · 17 VALIDATE · 5 RETIRE** |
+| engagement | "6.2 %" | **17.1 %** |
+
+**`bv` inverts completely.** The tool §6 reported at *zero consumption, retire everything* is, once
+its real surface is enumerated, **the most under-adopted tool in the system: 42 of 47 surfaces
+should be wired or validated.** The scrape artifact did not merely under-count it — it inverted the
+conclusion, and the inverted conclusion agreed with a prior belief, which is why it survived a
+round of grading.
+
+### 9.2 The probe rule paid for itself immediately
+
+`%1409` re-probed 56 OMP rows: **51 confirmed, 5 flipped** — 2 to `CONSUMED` (they had been consumed
+all along and the census said otherwise), 2 to `VALIDATE`, and one to `WIRE` that matters
+economically: **`telemetry-export.d.ts` — OMP ships OTLP export behind `OTEL_*` env vars.** That
+moves **Q2** (*"what does the current workaround cost, measurably?"*) from `OPEN` to *sampled*, which
+is the first movement on any §8 economic question.
+
+`%1408` re-probed batches 12–13 and **flipped 9 of 42 on probe evidence**, including a live one:
+
+> probed `omp/muxPing` into a fresh `--mode=rpc` session — the ready envelope answered, **no
+> `muxPing` result came back.** The mux trio is retired on a probe, not on vibes.
+
+It also caught pane 3 having filed `VALIDATE` rows for surfaces with **zero references**
+(`set_host_tools`) — *"exactly the defect the new retire rule stops."*
+
+### 9.3 What this says about the method, not the numbers
+
+Three of the four §6 figures were wrong, and each was wrong for a different reason: a **denominator
+chosen without justification** (four tools of nineteen), an **extraction that harvested prose**
+(`bv`), and a **disposition that permitted a shrug** (144 unprobed retires). None was a
+typo — each was a measurement that looked like a measurement.
+
+The correction did not come from a gate or a re-read. It came from Josh saying *"i feel like we're
+naming a lot retired without fully testing them"* and *"we're retiring most of the surfaces"* —
+twice, because the first time I recorded the finding and did not act on it.
+
+**NO-CLAIM.** 17.1 % is engagement against a 591-row denominator that is still a *lower bound*:
+fourteen binaries (`rch`, `fh`, `cargo`, `git`, `tmux`, `cass`, `ubs`, `caut`, `dcg`, `ru`, `pt`,
+`sbh`, `slb`, `gh`) have **no surface count at all**, so the true denominator is unknown and 17.1 %
+will move again. `WIRE` remains a *proposal with a named beneficiary* — 46 of them, none
+implemented. And a probed `RETIRE` establishes that someone ran the surface and formed a judgement;
+it does not establish the judgement is right.

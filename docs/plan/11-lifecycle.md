@@ -222,3 +222,62 @@ none of the eleven has been implemented, and the convergence on `loop-queue-filt
 is the right home, not that wiring it is scheduled or scoped. The `bv` rows carry the §7.2 scrape
 defect: they are subcommand-shaped names harvested from help prose, so `bv:robot` stands in for the
 40+ real `--robot-*` flags rather than naming one.
+
+---
+
+## 11.8 The A-to-Z process exists, is distributed across twelve skills, and has never been assembled
+
+Josh: *"what is the defined — from a to z — typed process for managing an idea to shipped project
+with swarm orchestration? use jsm search and lets identify this."*
+
+Answer: **there is no single defined process. There are twelve skills that each own one stage, and
+nothing composes them.** Found via `jsm search`:
+
+| stage | skill(s) | typed? |
+|---|---|---|
+| S1 idea | `idea-wizard`, `dueling-idea-wizards`, `brainstorming` | **no** — prose in, prose out |
+| S1.5 viability | `product-viability-gauntlet` | **partly** — fail-closed kill/narrow/pilot/build verdict |
+| S2 plan | `planning-workflow` | **no** — markdown; convergence judged by eye |
+| S2.5 loop | `loop-engineering` | **partly** — tick-loop with a verified-value bar |
+| S3 bead | `beads-workflow`, `beads-north-star`, `beads-br` | **yes** — `br` schema, typed close policy |
+| S4 select | `beads-bv` | **yes** — PageRank over a typed DAG |
+| S5 dispatch | `ntm`, `vibing-with-ntm` | **partly** — `--robot-*` JSON, no receipt type |
+| S6 work | `vibing-with-ntm` | **no** |
+| S7 reap | `vibing-with-ntm` | **no** |
+| S8 grade | `beads-compliance-and-completion-verification` | **no** — prose verdicts |
+| S8.5 honesty | `just-say-no-to-process-porn-and-ceremony` | **no** — a lens, not a type |
+| S9 ship | `installer-workmanship`, `release-preparations` | **partly** |
+
+### What "typed" means here, and why only two stages have it
+
+A stage is **typed** when its output is a value another stage can consume without a human reading
+it. By that test only **S3** and **S4** qualify: a bead is a row with a schema, and `bv`'s ranking
+is a number over a graph.
+
+Everything else hands prose to the next stage. That is the mechanism behind every measured defect
+in this plan:
+
+- **S8 has no grade type**, so grading produces four-page documents. §03 measured the cause:
+  **6 Verdict-shaped types with no shared trait**, so a grade cannot be a value, only an essay.
+- **S5 has no receipt type**, so `success:[N]` from the transport was read as delivery (`cp-z42vu`)
+  and a packet vanished.
+- **S7 has no completion type**, and §10 Gap 7 found that gap is **precedent-free across 210 mirror
+  work-trees** — 14 supervision variants, none meaning *"the worker finished."*
+
+### The composition nobody wrote
+
+The twelve skills are each good and none of them knows about the next. There is no artifact that says
+*idea → viability → plan → beads → graph-select → dispatch → work → reap → grade → ship*, with a
+typed handoff at each arrow. This document's §11.1 is the closest thing that exists, and it was
+written tonight, in response to R13, after nineteen dispatch waves had already run without it.
+
+**That is the honest answer to the question: the process is real, it is distributed, and its
+composition is the missing artifact — not another skill, but the typed spine that lets the twelve
+compose.** `omp-types` is the crate that would hold those types and has zero dependents.
+
+**NO-CLAIM.** This maps twelve skills to nine stages from `jsm search` output and their
+descriptions. It does **not** establish that the twelve are the right twelve, that no thirteenth
+exists, or that any of them would compose cleanly if typed — three of the four `jsm` queries tried
+returned useful results and one (`"planning workflow beads dispatch"`) returned **No skills found**,
+so the search space is not exhausted. The typed/untyped column is a judgement from each skill's
+description and this repo's measurements, not from reading all twelve skills end to end.
