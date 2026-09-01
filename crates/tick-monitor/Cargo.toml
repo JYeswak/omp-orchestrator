@@ -9,3 +9,6 @@ description = "Three repeatable monitors (OMP lifecycle, git commits, idle panes
 unsafe_code = "forbid"
 
 [dependencies]
+
+[dev-dependencies]
+tempfile = "3"

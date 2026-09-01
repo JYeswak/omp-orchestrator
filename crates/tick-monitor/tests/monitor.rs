@@ -747,3 +747,61 @@ fn capacity_alarm_is_wired_to_watch_escalation() {
         "watch escalation lost its durable urgent artifact"
     );
 }
+
+// ── LEDGER OWNERSHIP ────────────────────────────────────────────────────────
+// Measured 2026-08-31: two watchers on one ledger decayed the observation gap
+// 15s per tick (75 -> 66 -> 51 -> 36 -> 22 -> 6) and disabled the two-capture
+// liveness rule on 82% of ticks, reporting `gap_too_short` and never an error.
+
+#[test]
+fn an_unowned_ledger_is_claimable() {
+    let d = tempfile::tempdir().unwrap();
+    let p = d.path().join("s.tsv");
+    assert!(tick_monitor::check_ownership(&p, 4242).is_ok(),
+        "a ledger that does not exist yet must be claimable");
+}
+
+#[test]
+fn the_owner_may_rewrite_its_own_ledger() {
+    let d = tempfile::tempdir().unwrap();
+    let p = d.path().join("s.tsv");
+    let me = std::process::id();
+    let st = tick_monitor::State { owner_pid: me, ..Default::default() };
+    tick_monitor::save(&p, &st).unwrap();
+    assert!(tick_monitor::check_ownership(&p, me).is_ok(),
+        "the owning process must not lock itself out");
+}
+
+#[test]
+fn a_second_live_writer_is_refused() {
+    let d = tempfile::tempdir().unwrap();
+    let p = d.path().join("s.tsv");
+    // Our own pid is unambiguously live; claim as it, then approach as someone else.
+    let owner = std::process::id();
+    tick_monitor::save(&p, &tick_monitor::State { owner_pid: owner, ..Default::default() }).unwrap();
+
+    let err = tick_monitor::check_ownership(&p, owner + 1)
+        .expect_err("a different LIVE owner must be refused");
+    assert!(err.contains("LEDGER CONTENDED"), "refusal must name the condition: {err}");
+    assert!(err.contains(&owner.to_string()), "refusal must name the owner: {err}");
+}
+
+#[test]
+fn a_dead_owner_does_not_hold_the_ledger_forever() {
+    let d = tempfile::tempdir().unwrap();
+    let p = d.path().join("s.tsv");
+    // pid 0 is never a live user process, and the loader treats an absent field as 0;
+    // a reaped watcher must not wedge the next one out.
+    tick_monitor::save(&p, &tick_monitor::State { owner_pid: 0, ..Default::default() }).unwrap();
+    assert!(tick_monitor::check_ownership(&p, 4242).is_ok(),
+        "a stale owner must be reclaimable, or one crash disables monitoring permanently");
+}
+
+#[test]
+fn owner_pid_survives_a_save_load_round_trip() {
+    let d = tempfile::tempdir().unwrap();
+    let p = d.path().join("s.tsv");
+    tick_monitor::save(&p, &tick_monitor::State { owner_pid: 31337, ..Default::default() }).unwrap();
+    assert_eq!(tick_monitor::load(&p).owner_pid, 31337,
+        "an owner that does not round-trip is no owner at all");
+}

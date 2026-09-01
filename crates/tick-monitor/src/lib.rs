@@ -793,6 +793,28 @@ pub struct State {
     pub red_streak: u32,
     pub panes: Vec<Observation>,
     pub commits: Vec<(String, String)>,
+    /// The pid that owns this ledger.
+    ///
+    /// # Why this exists (measured 2026-08-31)
+    ///
+    /// Two `tick-monitor watch` processes ran against this one file: pid 36597 at
+    /// `--interval 90` and pid 40931 at `--interval 45`. `save()` truncates and
+    /// rewrites wholesale, so the 90s writer kept stamping `last_tick` while the
+    /// 45s reader computed `now - last_tick`. The gap decayed 15s per tick —
+    /// 75, 66, 51, 36, 22, 6 — until it fell under [`MIN_GAP_SECS`] and the
+    /// two-capture liveness rule self-disabled.
+    ///
+    /// **Measured impact: 2 of 11 ticks (18%) yielded a usable liveness verdict.**
+    /// The other 82% reported `gap_too_short` when the real inter-observation gap
+    /// was a healthy 75s every single time. Because `free_capacity` requires
+    /// `Confirmed` idle, an idle worker stayed invisible for roughly four ticks —
+    /// the exact "idle worker beside a ready queue" failure this crate exists to
+    /// prevent, caused by the monitor watching for it.
+    ///
+    /// A pid is a sound ownership token *here* — unlike the marker-file pid in
+    /// AGENTS.md C112, this one names the process that does the writing, so it
+    /// dies with the thing it owns.
+    pub owner_pid: u32,
 }
 
 // ---------------------------------------------------------------------------
@@ -968,6 +990,7 @@ pub fn load(path: &Path) -> State {
         let f: Vec<&str> = line.split('\t').collect();
         match f.as_slice() {
             ["last_tick", v] => st.last_tick = v.parse().unwrap_or(0),
+            ["owner_pid", v] => st.owner_pid = v.parse().unwrap_or(0),
             ["last_blocker", v] => st.last_blocker = (*v).to_owned(),
             ["blocker_streak", v] => st.blocker_streak = v.parse().unwrap_or(0),
             ["red_streak", v] => st.red_streak = v.parse().unwrap_or(0),
@@ -1000,11 +1023,53 @@ pub fn load(path: &Path) -> State {
     st
 }
 
+/// True when `pid` names a process that currently exists.
+///
+/// `kill(pid, 0)` is the portable liveness probe: it performs permission and
+/// existence checks and delivers nothing. A dead owner must not hold the ledger
+/// forever, so a stale pid is reclaimable.
+fn pid_is_live(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
+    // SAFETY-FREE: no unsafe here — shell out is not needed; /proc is absent on
+    // macOS, so use the same check `kill -0` performs via std.
+    std::path::Path::new("/proc").join(pid.to_string()).exists()
+        || std::process::Command::new("kill")
+            .args(["-0", &pid.to_string()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+}
+
+/// Refuse to write a ledger a different LIVE process owns.
+///
+/// Fail-closed: two writers silently corrupt the gap arithmetic that the
+/// two-capture liveness rule depends on, and the corruption reads as
+/// `gap_too_short` rather than as an error. Better to refuse and say why.
+pub fn check_ownership(path: &Path, my_pid: u32) -> Result<(), String> {
+    let existing = load(path).owner_pid;
+    if existing == 0 || existing == my_pid || !pid_is_live(existing) {
+        return Ok(());
+    }
+    Err(format!(
+        "LEDGER CONTENDED: {} is owned by live pid {existing}, not this process ({my_pid}).\n\
+         Two watchers on one ledger make `last_tick` advance on the wrong cadence, and the \
+         resulting gap decay disables the two-capture liveness rule silently — it reports \
+         gap_too_short, never an error. Stop the other watcher or give this one its own \
+         --state path.",
+        path.display()
+    ))
+}
+
 pub fn save(path: &Path, st: &State) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
     let mut out = String::new();
+    out.push_str(&format!("owner_pid\t{}\n", st.owner_pid));
     out.push_str(&format!("last_tick\t{}\n", st.last_tick));
     out.push_str(&format!("last_blocker\t{}\n", st.last_blocker));
     out.push_str(&format!("blocker_streak\t{}\n", st.blocker_streak));

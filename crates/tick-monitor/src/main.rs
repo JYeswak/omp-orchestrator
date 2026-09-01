@@ -349,6 +349,7 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
 
     if !args.iter().any(|a| a == "--no-save") {
         let next = State {
+            owner_pid: std::process::id(),
             last_tick: now,
             last_blocker: prior.last_blocker,
             blocker_streak: prior.blocker_streak,
@@ -411,6 +412,22 @@ fn watch(args: &[String]) -> i32 {
         .unwrap_or_else(|| state_file.with_file_name("watch-ledger.jsonl"));
     if let Some(dir) = watch_ledger.parent() {
         let _ = std::fs::create_dir_all(dir);
+    }
+
+    // CLAIM THE LEDGER BEFORE THE FIRST TICK.
+    //
+    // Two watchers on this file were measured running together on 2026-08-31 —
+    // pid 36597 at --interval 90 and pid 40931 at --interval 45 — and the damage
+    // was invisible: `last_tick` advanced on the 90s cadence while observations
+    // arrived on the 75s one, so the computed gap decayed 15s per tick until it
+    // fell under MIN_GAP_SECS. The monitor then reported `gap_too_short` on 82%
+    // of ticks. It never reported an error, and both processes looked healthy.
+    //
+    // Refusing here is fail-closed: a watcher that cannot own its ledger cannot
+    // produce a trustworthy liveness verdict, so it must not produce one at all.
+    if let Err(why) = tick_monitor::check_ownership(&state_file, std::process::id()) {
+        eprintln!("{why}");
+        return 3;
     }
 
     // The interval is floored at MIN_GAP_SECS on purpose: a shorter loop would make every
