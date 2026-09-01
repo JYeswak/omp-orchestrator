@@ -163,6 +163,136 @@ impl SurfaceMapAudit {
     }
 }
 
+/// One row in the explicit OMP surface coverage table.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OmpCoverageRow {
+    pub surface: String,
+    pub tool: String,
+    pub kind: String,
+    pub batch: u32,
+    pub maps_to_crate: Option<String>,
+    pub disposition: String,
+    pub validated_by: String,
+    pub graded_by: String,
+    pub classification: String,
+    pub classification_note: String,
+    pub omp_alternative: Option<String>,
+    pub coverage: String,
+}
+
+/// Typed failures for the OMP coverage table.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoverageTableError {
+    Empty,
+    Malformed { line: usize, detail: String },
+    DuplicateSurface { surface: String },
+    InvalidClassification { surface: String, classification: String },
+    MissingOmpAlternative { surface: String },
+    NoPositiveControl,
+}
+
+impl fmt::Display for CoverageTableError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Empty => f.write_str("EMPTY_COVERAGE_TABLE"),
+            Self::Malformed { line, detail } => write!(f, "MALFORMED_COVERAGE_ROW line={line} {detail}"),
+            Self::DuplicateSurface { surface } => write!(f, "DUPLICATE_COVERAGE_SURFACE {surface}"),
+            Self::InvalidClassification { surface, classification } => {
+                write!(f, "INVALID_COVERAGE_CLASSIFICATION surface={surface} value={classification}")
+            }
+            Self::MissingOmpAlternative { surface } => {
+                write!(f, "MISSING_OMP_ALTERNATIVE surface={surface}")
+            }
+            Self::NoPositiveControl => f.write_str("NO_FULLY_COVERED_POSITIVE_CONTROL"),
+        }
+    }
+}
+
+impl std::error::Error for CoverageTableError {}
+
+/// Parse and validate the explicit OMP coverage table.
+///
+/// The table is intentionally separate from correctness claims: FULLY COVERED
+/// means the map row is complete, not that the capability is adopted.
+pub fn parse_omp_coverage_table(text: &str) -> Result<Vec<OmpCoverageRow>, CoverageTableError> {
+    const REQUIRED_FIELDS: &[&str] = &[
+        "surface",
+        "tool",
+        "kind",
+        "batch",
+        "maps_to_crate",
+        "disposition",
+        "validated_by",
+        "graded_by",
+        "classification",
+        "classification_note",
+        "omp_alternative",
+        "coverage",
+    ];
+
+    let mut rows = Vec::new();
+    for (line_index, raw_line) in text.lines().enumerate() {
+        let line = line_index + 1;
+        if raw_line.trim().is_empty() {
+            continue;
+        }
+        let value: Value = serde_json::from_str(raw_line).map_err(|error| CoverageTableError::Malformed {
+            line,
+            detail: error.to_string(),
+        })?;
+        let object = value.as_object().ok_or_else(|| CoverageTableError::Malformed {
+            line,
+            detail: "row must be a JSON object".to_owned(),
+        })?;
+        for field in REQUIRED_FIELDS {
+            if !object.contains_key(*field) {
+                return Err(CoverageTableError::Malformed {
+                    line,
+                    detail: format!("missing field {field}"),
+                });
+            }
+        }
+        let row: OmpCoverageRow = serde_json::from_value(value).map_err(|error| {
+            CoverageTableError::Malformed {
+                line,
+                detail: error.to_string(),
+            }
+        })?;
+        if row.surface.is_empty() || row.tool.is_empty() || row.kind.is_empty() {
+            return Err(CoverageTableError::Malformed {
+                line,
+                detail: "surface, tool, and kind must be non-empty".to_owned(),
+            });
+        }
+        if !matches!(row.classification.as_str(), "a" | "b" | "c") {
+            return Err(CoverageTableError::InvalidClassification {
+                surface: row.surface,
+                classification: row.classification,
+            });
+        }
+        if row.classification == "b"
+            && row
+                .omp_alternative
+                .as_ref()
+                .is_none_or(|alternative| alternative.trim().is_empty())
+        {
+            return Err(CoverageTableError::MissingOmpAlternative { surface: row.surface });
+        }
+        if rows.iter().any(|existing: &OmpCoverageRow| existing.surface == row.surface) {
+            return Err(CoverageTableError::DuplicateSurface { surface: row.surface });
+        }
+        rows.push(row);
+    }
+
+    if rows.is_empty() {
+        return Err(CoverageTableError::Empty);
+    }
+    if !rows.iter().any(|row| row.coverage == "FULLY COVERED") {
+        return Err(CoverageTableError::NoPositiveControl);
+    }
+    Ok(rows)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SurfaceMapSection {
     Meta,
