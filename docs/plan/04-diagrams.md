@@ -365,6 +365,7 @@ sequenceDiagram
     B-->>C: bead state as of read time
     Note over C,B: the only feedback channel is<br/>polling a board a human updated
 ```
+> **Upstream type for the receipts gap:** `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`) exists upstream, so "missing receipt" names an UNCONSUMED type, not an absent one. The diagram shows what our transport does today, not what the platform can express.
 
 **MEASURED.** This sequence is the current actuator shape: the conductor calls `send_and_verify`, which selects `ntm --robot-send` or tmux transport, writes transport evidence, and waits for receiver-side evidence. The diagram does not claim that a packet was accepted; sender success remains weaker than receiver acknowledgement.
 
