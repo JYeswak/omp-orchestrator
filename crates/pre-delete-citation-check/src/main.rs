@@ -14,9 +14,18 @@ fn main() -> ExitCode {
         .args(["diff", "--cached", "--diff-filter=D", "--name-only"])
         .output();
     let Ok(diff_output) = git_diff else {
-        eprintln!("pre-delete-citation-check: git diff failed");
+        eprintln!("pre-delete-citation-check: git diff failed to spawn");
         return ExitCode::from(3);
     };
+    if !diff_output.status.success() {
+        // A killed or failed git produces empty stdout — reading that as
+        // "no staged deletions" would pass the gate on a dead child.
+        eprintln!(
+            "pre-delete-citation-check: git diff exited {:?} — refusing to pass on a killed child",
+            diff_output.status.code()
+        );
+        return ExitCode::from(3);
+    }
     let staged: Vec<String> = String::from_utf8_lossy(&diff_output.stdout)
         .lines()
         .map(|line| line.trim().to_owned())
@@ -33,12 +42,18 @@ fn main() -> ExitCode {
         .args(["list", "--json", "--status", "closed"])
         .output();
     let Ok(br_raw) = br_output else {
-        eprintln!("pre-delete-citation-check: br list failed");
+        eprintln!("pre-delete-citation-check: br list failed to spawn");
+        return ExitCode::from(3);
+    };
+    if !br_raw.status.success() {
+        eprintln!(
+            "pre-delete-citation-check: br list exited {:?} — refusing to pass on a killed child",
+            br_raw.status.code()
+        );
         return ExitCode::from(3);
     };
     let br_text = String::from_utf8_lossy(&br_raw.stdout).into_owned();
     let closed_beads = pre_delete_citation_check::parse_closed_beads(&br_text);
-
     // 3. Cross-reference.
     let conflicts =
         pre_delete_citation_check::check_deletions(&staged, &closed_beads);
