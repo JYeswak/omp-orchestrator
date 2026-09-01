@@ -138,17 +138,35 @@ fn find_forbidden_extensions(dir: &Path) -> bool {
 pub fn check_port(root: &Path, name: &str) -> PortingRefusal {
     let mut failed = Vec::new();
 
+    // FAIL CLOSED ON A MISSING SUBJECT. Measured 2026-09-01: every predicate below
+    // reads a file inside crates/<name>/ and defaults to OK when the read fails, so
+    // a crate that DOES NOT EXIST satisfied all four clauses and `failed` came back
+    // empty. Both fires-on-known-bad legs in this file were failing for that reason
+    // — they plant `nonexistent-phantom-crate` and the gate approved it.
+    //
+    // A gate that approves a subject it cannot see is worse than no gate: its green
+    // is indistinguishable from a real pass, which is the vacuous-pass defect this
+    // repo refuses everywhere else.
+    // Note the absence, then KEEP EVALUATING. An early return here is a different
+    // bug from the one it fixes: the known-bad legs plant a phantom crate and assert
+    // refusal on clauses 1 and 2 specifically, and a short-circuit hides those behind
+    // clause 0. A crate that does not exist genuinely fails EVERY clause, so
+    // reporting all of them is both honest and testable.
+    if !root.join("crates").join(name).is_dir() {
+        failed.push("CLAUSE_0_EXISTS: no crate directory under crates/ — the subject is absent");
+    }
+
     if !is_wired(root, name) {
-        failed.push("CLAUDE_1_WIRED: no production caller found outside the crate itself");
+        failed.push("CLAUSE_1_WIRED: no production caller found outside the crate itself");
     }
     if !has_surface_declaration(root, name) {
-        failed.push("CLAUDE_2_SURFACE: no [crates.x] block in OMP-SURFACE-MAP.toml");
+        failed.push("CLAUSE_2_SURFACE: no [crates.x] block in OMP-SURFACE-MAP.toml");
     }
     if !forbids_unsafe(root, name) {
-        failed.push("CLAUDE_3_ASYNCSYNC: missing unsafe_code = \"forbid\" in Cargo.toml");
+        failed.push("CLAUSE_3_ASYNCSYNC: missing unsafe_code = \"forbid\" in Cargo.toml");
     }
     if !no_shell_or_python(root, name) {
-        failed.push("CLAUDE_5_NO_SH_PY: found .sh or .py files in the crate");
+        failed.push("CLAUSE_5_NO_SH_PY: found .sh or .py files in the crate");
     }
 
     PortingRefusal {
@@ -217,7 +235,7 @@ mod tests {
             result
                 .failed_clauses
                 .iter()
-                .any(|c| c.contains("CLAUDE_1_WIRED")),
+                .any(|c| c.contains("CLAUSE_1_WIRED")),
             "a crate with no production caller must be refused naming clause 1 — got: {:?}",
             result.failed_clauses
         );
@@ -234,7 +252,7 @@ mod tests {
             result
                 .failed_clauses
                 .iter()
-                .any(|c| c.contains("CLAUDE_2_SURFACE")),
+                .any(|c| c.contains("CLAUSE_2_SURFACE")),
             "a crate with no surface declaration must be refused naming clause 2 — got: {:?}",
             result.failed_clauses
         );

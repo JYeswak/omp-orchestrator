@@ -203,6 +203,25 @@ pub const ALLOWED_COLLISIONS: &[(&str, &str, &str)] = &[
          until then the collision is cosmetic, both are crate-gated at use \
          sites.",
     ),
+    (
+        "DispatchIntent",
+        "ack-spine+dispatch-claim-fence",
+        "ack-spine::DispatchIntent is a STRUCT (bead_id/pane_id/session) naming one \
+         concrete pane-targeted dispatch for the ledger; dispatch-claim-fence's is an \
+         ENUM (Bead/Broadcast/Correction) naming the KIND of dispatch authorized. \
+         Different arities, no shared caller. The enum is a kind, not an intent, so \
+         the honest resolution is a rename rather than a unification. Dies when \
+         omp-types provides the shared dispatch vocabulary.",
+    ),
+    (
+        "GateError",
+        "no-shell-gate+porting-gate",
+        "no-shell-gate::GateError carries GitFailed and the empty-scan anti-vacuity \
+         case for a FILE-EXTENSION scan; porting-gate::GateError carries \
+         EmptyCandidates/InvalidCandidate/Io/Metadata for a CRATE-ARRIVAL check. \
+         Disjoint domains, no shared caller. Dies when a workspace error trait exists; \
+         unifying them earlier would couple two gates sharing only a suffix.",
+    ),
 ];
 /// Crates allowed to own zero public types, with the reason each zero is
 /// real. `omp-types` is a re-export vocabulary crate: it must have reexports
@@ -961,9 +980,24 @@ mod tests {
         assert!(inv.counts.crates_with_types >= 20, "crates-with-types floor");
 
         let names: Vec<&str> = inv.collisions.iter().map(|c| c.name.as_str()).collect();
+        // Pinned to the measured set, re-derived 2026-09-01 after two crates landed.
+        //
+        // `DispatchIntent` and `GateError` are new since this list was written, and
+        // both are already carried with reasons in no-shell-gate's COLLISION_ALLOWANCE
+        // — which is the real finding here: **two crates independently pin the same
+        // fact.** This assertion and that allowance list must be edited together, and
+        // nothing enforces that they agree. A single shared source would remove the
+        // class; it does not exist yet, so this comment is the only link between them.
         assert_eq!(
             names,
-            vec!["Finding", "LintReport", "Observation", "Violation"],
+            vec![
+                "DispatchIntent",
+                "Finding",
+                "GateError",
+                "LintReport",
+                "Observation",
+                "Violation",
+            ],
             "today's measured collision set (sorted)"
         );
 

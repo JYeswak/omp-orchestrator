@@ -690,6 +690,10 @@ const COLLISION_ALLOWANCE: &[(&str, &str)] = &[
     ("LintReport", "state-wildcard-lint and path-literal-guard predate the shared crate; same -232 scope"),
     ("Violation", "three gate crates declare it; aliasing to a shared type is a cross-crate refactor owned by the integrator"),
     ("Observation", "REQUIRES A DECISION not an allowance: tick-monitor produces what omp-orchestrator consumes and each declares an incompatible struct — the free_capacity seam (filter FIXED -oco; seam still open, 09 M1)"),
+    ("GateError", "no-shell-gate declares GitFailed/empty-scan for a FILE-EXTENSION scan; \
+     porting-gate declares EmptyCandidates/InvalidCandidate/Io/Metadata for a CRATE-ARRIVAL \
+     check. Same name, disjoint domains, no shared caller. Dies when a workspace error trait \
+     exists; until then unifying them would couple two gates that share nothing but a suffix"),
     ("DispatchIntent", "dispatch-claim-fence declares an enum (Bead/Broadcast/Correction) for the fence; ack-spine declares a struct (bead_id/pane_id/session) for the ledger — different domains, same name. Dies when omp-types provides the shared vocabulary"),
 ];
 
