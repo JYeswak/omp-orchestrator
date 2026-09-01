@@ -805,3 +805,55 @@ fn owner_pid_survives_a_save_load_round_trip() {
     assert_eq!(tick_monitor::load(&p).owner_pid, 31337,
         "an owner that does not round-trip is no owner at all");
 }
+
+// ── SESSION SCOPING ─────────────────────────────────────────────────────────
+// Eight tmux sessions were live on 2026-08-31 and state_path() returned ONE
+// fixed path for all of them — hardcoded to the name of a single session.
+// 1:many orchestration is the mission; a shared ledger makes it impossible.
+
+#[test]
+fn two_sessions_do_not_share_a_ledger() {
+    let a = tick_monitor::state_path("omp-orchestrator");
+    let b = tick_monitor::state_path("zeststream-cast");
+    assert_ne!(a, b, "distinct sessions MUST get distinct ledgers — this is the 1:many property");
+}
+
+#[test]
+fn the_same_session_is_stable_across_calls() {
+    assert_eq!(tick_monitor::state_path("franken-harvest"),
+               tick_monitor::state_path("franken-harvest"),
+        "a watcher restarting must find its own prior state, not a fresh one");
+}
+
+#[test]
+fn a_session_name_cannot_escape_the_state_directory() {
+    // tmux permits `/` and `..`; an unsanitised name writes outside the state dir.
+    for hostile in ["../../etc/passwd", "a/b/c", "..", "../.ssh/authorized_keys"] {
+        let p = tick_monitor::state_path(hostile);
+        let s = p.to_string_lossy();
+        assert!(s.contains("/.local/state/omp-orchestrator/sessions/"),
+            "{hostile:?} escaped the state root: {s}");
+        assert!(!s.contains(".."), "{hostile:?} left a traversal segment: {s}");
+        assert!(p.ends_with("tick-monitor.tsv"), "{hostile:?} lost the filename: {s}");
+        // THE REAL INVARIANT: exactly one directory segment under sessions/.
+        let tail: Vec<_> = s.rsplit("/sessions/").next().unwrap().split('/').collect();
+        assert_eq!(tail.len(), 2, "{hostile:?} produced nested segments: {tail:?}");
+    }
+}
+
+#[test]
+fn an_empty_or_dotted_session_still_yields_a_usable_path() {
+    for degenerate in ["", ".", "..", "..."] {
+        let p = tick_monitor::state_path(degenerate);
+        assert!(p.to_string_lossy().contains("/sessions/unnamed/"),
+            "{degenerate:?} must fall back to a named directory, got {}", p.display());
+    }
+}
+
+#[test]
+fn distinct_sessions_are_distinct_even_after_sanitisation() {
+    // The sanitiser must not collapse two real sessions onto one path.
+    let a = tick_monitor::state_path("zeststream-cast");
+    let b = tick_monitor::state_path("zeststream-cast-wave-20260825-1910");
+    assert_ne!(a, b, "sanitisation collapsed two live session names onto one ledger");
+}

@@ -178,7 +178,7 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
     let excluded: Vec<&str> = flags(args, "--exclude-pane");
     let state_file = flag(args, "--state")
         .map(PathBuf::from)
-        .unwrap_or_else(state_path);
+        .unwrap_or_else(|| state_path(session_of(args)));
     let prior = load(&state_file);
     let now = now_unix();
 
@@ -406,7 +406,7 @@ fn watch(args: &[String]) -> i32 {
         .unwrap_or(3);
     let state_file = flag(args, "--state")
         .map(PathBuf::from)
-        .unwrap_or_else(state_path);
+        .unwrap_or_else(|| state_path(session_of(args)));
     let watch_ledger = flag(args, "--watch-ledger")
         .map(PathBuf::from)
         .unwrap_or_else(|| state_file.with_file_name("watch-ledger.jsonl"));
@@ -550,8 +550,15 @@ fn watch(args: &[String]) -> i32 {
 // emit-tick -- the choke point
 // ---------------------------------------------------------------------------
 
+/// The session a subcommand is acting on. One helper so every entry point
+/// scopes its state identically — three call sites drifting apart is how the
+/// shared-ledger collision reappears.
+fn session_of(args: &[String]) -> &str {
+    flag(args, "--session").unwrap_or("omp-orchestrator")
+}
+
 fn emit_tick(args: &[String]) -> i32 {
-    let state_file = flag(args, "--state").map(PathBuf::from).unwrap_or_else(state_path);
+    let state_file = flag(args, "--state").map(PathBuf::from).unwrap_or_else(|| state_path(session_of(args)));
     let ledger = flag(args, "--ledger")
         .map(PathBuf::from)
         .unwrap_or_else(|| state_file.with_file_name("tick-ledger.jsonl"));

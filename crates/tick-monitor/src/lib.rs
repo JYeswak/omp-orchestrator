@@ -974,10 +974,53 @@ fn applescript_string(input: &str) -> String {
     out
 }
 
-pub fn state_path() -> PathBuf {
+/// Where a watcher keeps its state, **scoped to the session it watches**.
+///
+/// # Why this takes an argument (measured 2026-08-31)
+///
+/// This used to return one fixed path with no session component — and the
+/// directory was hardcoded to `omp-orchestrator`, so a watcher on any of the
+/// other seven live sessions wrote its state into a folder named after a
+/// session it was not watching.
+///
+/// Eight tmux sessions were live at the time. Every watcher started without an
+/// explicit `--state` therefore contended for **one** file. The damage is not a
+/// crash: `save()` truncates and rewrites wholesale, so watchers silently
+/// overwrite each other's `last_tick`, the observation gap decays on the wrong
+/// cadence, and the two-capture liveness rule reports `gap_too_short` instead of
+/// an error. Measured on the one collision found by hand: **2 of 11 ticks (18%)
+/// yielded a usable verdict.**
+///
+/// [`check_ownership`] makes that collision *visible*, but refusing is the wrong
+/// outcome at scale — eight sessions **should** have eight watchers. Scoping the
+/// path is what makes them independent; ownership then only fires when two
+/// watchers genuinely target the same session, which is a real conflict.
+///
+/// A session name reaches the filesystem here, so it is sanitised: anything
+/// outside `[A-Za-z0-9._-]` becomes `_`. `tmux` permits `/` and `..` in session
+/// names, and an unsanitised name would escape the state directory.
+pub fn state_path(session: &str) -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_owned());
+    let safe: String = session
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') { c } else { '_' })
+        .collect();
+    // Collapse any traversal-shaped run. `../../etc/passwd` sanitises to
+    // `.._.._etc_passwd`, which is a harmless single segment — but leaving a
+    // literal `..` in a path this code joins invites a later refactor to split
+    // on it. Distinctness is preserved: two different names stay different.
+    // ORDER MATTERS. Collapsing first turns ".." into "__", which is neither
+    // empty nor all-dots, so the degenerate check below stops firing. Caught by
+    // an_empty_or_dotted_session_still_yields_a_usable_path within a minute of
+    // being written — the fallback must be decided on the ORIGINAL shape.
+    let safe = if safe.is_empty() || safe.chars().all(|c| c == '.') {
+        "unnamed".to_owned()
+    } else {
+        safe.replace("..", "__")
+    };
     Path::new(&home)
-        .join(".local/state/omp-orchestrator")
+        .join(".local/state/omp-orchestrator/sessions")
+        .join(safe)
         .join("tick-monitor.tsv")
 }
 
