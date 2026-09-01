@@ -48,12 +48,11 @@ That is not yet a market claim; it is a local reap. From one stand-down session 
   to no bead; two were pre-existing red tests in a suite expected to be red. The detailed reap artifact
   and derivation command were not retained here, so this is not a measured prevalence claim.
  - **UNVERIFIED REPORTED VALUE:** 162 refused dispatch ticks across a reported 4.2 hours, with a human as the only
-   actuator (00-brief.md §3.7, line 546). The brief's command receipt is not preserved in this section;
+  actuator (00-brief.md §4, dispatch-admission row at line 526). The brief's command receipt is not preserved in this section;
    treat this as a cited report, not an independently reproducible measurement or market-frequency claim.
  - **Historical, non-authoritative recollection:** a 23-commit drift between the installed supervisor
   binary and HEAD. No immutable receipt or derivation command is retained here.
- - Board snapshot (**reported FACT, as of 2026-08-31; authoritative reference 00-brief.md §3.3,
-  lines 498-502; command receipt not preserved here**): **28 closed, 25 in_progress, 19 open,
+- Board snapshot (**reported FACT, as of 2026-08-31; authoritative reference 00-brief.md §3.7, lines 485-486; command receipt not preserved here**): **28 closed, 25 in_progress, 19 open,
   2 blocked (74 total)**. The snapshot is not the live board.
 
 ### The mechanism behind the 162
@@ -69,7 +68,7 @@ are **zero unqualified WORKS rows**:
 | consume | selection | **UNVERIFIED** — no durable receipt here proves the selected work was consumed |
 | consume | transport | **UNVERIFIED** — no durable receipt here proves delivery to the intended worker |
 | consume | admission (decide()) | **FENCED** — the cited report is DISPATCH_RETRY_BLOCKED |
-| actuate | dispatch | **DOES NOT EXIST** — a human types into panes |
+| actuate | dispatch | **EXISTS, UNFENCED** (corrected 2026-09-01; "does not exist" was the pre-`kxe` reading) — the installed supervisor dispatches via `ntm --robot-send` and, per 00-brief §4, re-sent one unclaimed bead to one 402-dead pane 131 times in 247 minutes |
 | complete | worker says done | **AVAILABLE, NOT WIRED** — OMP exposes AgentEndEvent.willContinue on RpcSessionEventFrame; the local loop does not consume it |
 
 > *Upstream type for this gap: `GuestIdleReconcilerCtx` (DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
@@ -206,7 +205,7 @@ to "cargo" without qualification. **Every crate-metadata claim inherits whatever
 we have not measured what it does.** Open item, recorded here rather than left in chat (R11).
 
 **1.3.7 `fh` — evidence, failing closed.** We call it for retrieval against the dicklesworthstone
-mirror — 210 git work-trees at `/Volumes/ZestData/dicklesworthstone-mirror` — which is how R7 gets
+mirror — 210 filesystem .git entries at /Volumes/ZestData/dicklesworthstone-mirror; they are not validated as git work-trees, so this is a filesystem-entry census rather than a repository count — which is how R7 gets
 answered with a citation instead of a memory. *Contract depended on:* `fh` **fails closed with a
 type**. As of this session its MCP surface returns `SERVE_INPUT_STALE` because the mirror HEAD moved
 (`5dec4212…` → `ecdea397…`); direct grep still works, and this section's citations were taken that
@@ -269,31 +268,13 @@ runs.
 | `jsm` | **single-store invariant, checked at session start** | installation topology is checked, not assumed |
 | `tmux` | machine-readable version at `-V`, exit 0 | our binaries answer a version probe **on the conventional flag** — we do not ship tmux's asymmetry ourselves |
 
-**Where the enforcement substrate meets the dependency floor (reported receipt, as of 2026-08-31).**
-The built scanner at /Volumes/BuildShared/cargo-targets/debug/omp-inventory-map reportedly emits
-schema_version omp-inventory-map/v1 with command doctor and status UNKNOWN, exits 2 on UNKNOWN, and
-produces 544,697 bytes (00-brief.md §3.4; the exact command receipt is not retained in this section).
-This demonstrates a versioned envelope and distinct uncertainty exit in the cited report; it does not
-establish product superiority or customer value.
+**HISTORICAL SCANNER SNAPSHOT (2026-08-31).** The built scanner report described `omp-inventory-map/v1`, command `doctor`, status `UNKNOWN`, exit 2, and 544,697 bytes. The retained raw capture is `.flywheel/inventory-artifacts/inv.txt.gz` with SHA-256 `86491732a5581a6d2e342d0db59bdf20e5f47f6da93150ae78bd2649562f5081`; this is not current product or workspace evidence.
 
-**Where the enforcement substrate is below the dependency floor — a named defect (reported receipt, as of 2026-08-31).** omp-inventory-map --help returns:
+**HISTORICAL ADDRESSABILITY SNAPSHOT (2026-08-31).** `omp-inventory-map --help` returned the typed `CONFIG_ERROR unknown argument --help` refusal; the source snapshot counted 23 functions and 544 KB of output, with no `Observation`, `CONVERGE`, or `Verdict` strings. The collision guard at `crates/omp-inventory-map/src/types_inventory.rs:176-178` remains the cited design evidence.
 
-```json
-{"schema_version":"omp-inventory-map/v1","command":"doctor","status":"ERROR",
- "data":null,"error":"CONFIG_ERROR unknown argument --help"}
-```
+**CURRENT RECHECK.** The current source has 28 test markers and the debug binary's `--help` probe emits 158 bytes and exits 1. No current ADDRESSABLE pass is claimed without a retained command/output/revision receipt; the gate remains a real system gap, not a buyer-visible result.
 
-The gate is **built, correct, and undiscoverable.** **23 test functions are present in source** (13 in types_inventory.rs and 10 in tests/inventory.rs; source-count FACT as of 2026-08-31, not a test-pass claim).
-`crates/omp-inventory-map/src/types_inventory.rs:176-178` deliberately excludes `Observation` from
-the allowance list so a name collision *demands* convergence rather than being waved through — and
-the running binary's 544 KB output contains **zero** occurrences of `Observation`, `CONVERGE`, or
-`Verdict`. This is not built-versus-wired. It is **wired-but-unaddressable**, a worse diagnosis,
-because it survives every check that asks "does the code exist and pass."
-
-Note the shape, because it recurs in §1.5: `--help` did not return a generic error. It returned a
-*typed* error (`CONFIG_ERROR`) with an accurate message. **The typing discipline was applied
-perfectly, to the wrong outcome.** Rigor pointed at the wrong target is this codebase's
-characteristic defect. Hence a sixth required gate property, now first-class across the plan:
+The **historical** addressability shape recurs in §1.5: `--help` did not return a generic error; it returned a typed `CONFIG_ERROR` with an accurate message. The typing discipline was applied perfectly to the wrong outcome. Hence the current design requirement:
 
 > **ADDRESSABLE** — one documented command runs the gate, and `--help` names that command.
 
@@ -346,15 +327,7 @@ Matching a bar is a floor-raise, never a guarantee.
 
 ## 1.5 The honest position
 
-**What is genuinely built (reported snapshot, as of 2026-08-31 ~21:45).** The workspace contains 26
-crates. The current registry value is **413 test functions across 31 integration test files**
-(NUMBERS.toml keys test_functions/test_files); **406 and 407 are historical, non-authoritative values**
-from earlier rounds and must not be copied forward. The exact registry derivation command is owned by the
-number registry, not reproduced here. The same cited snapshot reports **184 nodes, 207 edges, 183 rows,
-544,697 bytes, 18 dependency edges, and 4 dependents** for subprocess-contract; these are reported
-inventory values, not product completion evidence, and the command receipt is not retained in this
-section. The no-.sh/no-.py rule is enforced over the authoritative git ls-files set with an empty
-exemption list.
+**What is genuinely built (re-derived during this integration).** Historical 26-crate/413-test-function/31-file values stay labelled as snapshots; current workspace authority is **50 crates, 987 test functions, and 92 integration test files**, from the recursive NUMBERS.toml commands. These are workspace facts, not product-completion evidence.
 
 The omp-types crate re-exports Outcome, OutcomeError, PanicPayload, Severity, and join_outcomes; Budget,
 CapabilityBudget, CapabilityBudgetDimension, CapabilityBudgetRefusal, CapabilityBudgetRequirements, and
@@ -372,6 +345,7 @@ this row."* The scanner consumes OMP because the scanner's job is to look at OMP
 
 ### The three objections an investor should raise
 
+**HISTORICAL DENOMINATOR NOTE.** The 26-crate and 25-of-26 figures in the following objection and type snapshot are pre-extraction values. Current workspace authority is 50 packages; the old figures are retained only as the historical argument being answered.
 **Objection 1 — "You have built 26 crates of scaffolding around a hole. The one integration that justifies the name does not exist."** *Partly conceded, with a narrower truth.* The completion signal is now WIRE-PROVEN upstream, but the supervisory integration that would consume it still does not exist. The 25-of-26 measurement is ours, not a reviewer's. The partial answer is that the layer census shows `observe` WORKS and failure is
 concentrated in actionable/consume/actuate — and the seven-row table above records **zero unqualified WORKS rows**. We will not use the qualified observe result as a rebuttal. What we do not concede is that the crates are therefore waste: the
 gates operate on the repository and the process boundary, not on OMP, and they run today. The
@@ -381,7 +355,7 @@ and running.
 **Objection 2 — "Your own evidence discipline is theatre."** *Conceded outright, and we found it
 ourselves.* All 183 census rows carry the four mandatory fields — `inputs`, `outputs`, `must_be_true`,
 `negative_evidence` — with **zero missing**, and exactly **one distinct value** of `must_be_true` and
-**one distinct** `negative_evidence` across the entire census (`00-brief.md` §3.3;
+**one distinct** `negative_evidence` across the historical census snapshot (00-brief.md §3.2;
 `python3 -c "…Counter(json.dumps(r.get('must_be_true')) for r in rows)…"` → crate rows n=26,
 distinct=1; non-crate rows n=157, distinct=1). For the 26 crate rows, `inputs`/`outputs` describe
 *the scanner's own provenance* rather than the crate's contract, and `what_it_provides` is
@@ -483,15 +457,15 @@ The current number registry and corrected brief win over every copied value.
 | figures | provenance and as-of |
 |---|---|
 | 6, 7, 23 | historical recollections from one stand-down; no retained artifact or derivation command; non-authoritative |
-| 162 and 4.2 hours | UNVERIFIED REPORTED VALUE in 00-brief.md §3.7 line 546; command receipt not retained in this section; cited as of 2026-08-31, not independently reproducible or a market-frequency claim |
-| 28/25/19/2 and 74 total | board snapshot reported in 00-brief.md §3.3 lines 498–502, as of 2026-08-31; command receipt not retained; corrected arithmetic, not live-board truth |
+| 162 and 4.2 hours | UNVERIFIED REPORTED VALUE in 00-brief.md §4 line 526; command receipt not retained in this section; cited as of 2026-08-31, not independently reproducible or a market-frequency claim |
+| 28/25/19/2 and 74 total | board snapshot reported in 00-brief.md §3.7 lines 485–486, as of 2026-08-31; command receipt not retained; corrected arithmetic, not live-board truth |
 | 23 scanner tests | source-count FACT as of 2026-08-31: 13 markers in types_inventory.rs and 10 in tests/inventory.rs; not a pass count |
-| 26 crates, 413 tests, 31 test files | current registry-backed snapshot as of 2026-08-31; 406/407 are historical and retracted; NUMBERS.toml is authoritative |
-| 184/207/183, 544,697, 18, 4 | reported inventory snapshot from 00-brief.md §3.3 as of 2026-08-31; command receipt not retained here; not product completion evidence |
+| 26 crates, 413 test functions, 31 test files | historical snapshot as of 2026-08-31; current re-derived values are 50 crates, 987 test functions, and 92 test files from the recursive NUMBERS.toml commands |
+| 184/207/183, 544,697, 18, 4 | historical inventory snapshot from 00-brief.md §3.2 lines 212-219 as of 2026-08-31; command receipt not retained here; not product completion evidence |
 | 8 gates and gate-leg counts | reported corrected snapshot from 00-brief.md §3.5 as of 2026-08-31; grep naming counts are not semantic coverage |
 | 51/59 enums, 79/91 structs, 6/17/4 collisions | reported type-inventory snapshot as of 2026-08-31; library-only versus all-source scopes are intentionally distinct |
 | tmux 3.6a | captured by tmux -V; echo "exit=$?" on the host, as of 2026-08-31; the long-flag failure is not absence |
-| raw agent_end receipt | /tmp/grade/agent-end-raw-frame.json; capture command and SHA-256 are recorded in section 1.2.1; artifact mtime/retrieval 2026-08-31T19:52:26-0600 |
+| raw agent_end receipt | .flywheel/inventory-artifacts/agent-end-raw-frame.json.gz; capture command and SHA-256 d8bd80c6949b2ec48af1639b5b5e241bd90b4dce1e769483dd1690ed2be8f644 are retained in section 1.2.1; /tmp/grade/agent-end-raw-frame.json is only the historical source location and must not be cited |
 
 Any later correction must update this ledger or remove the figure. Historical/retracted values are never
 silently promoted back to current facts.
@@ -567,4 +541,3 @@ One frame is not repeatability. `isTerminal` being observed does not establish t
 is semantically equivalent to `willContinue=false`, that a supervisor consumes it, or
 that it survives crashes, killed panes, rate limits or compaction. Section 10 already
 records the cost of overreading this surface: it claimed a worker-completion signal was
-precedent-free across 210 repositories while `AgentEndEvent` shipped in the dependency.

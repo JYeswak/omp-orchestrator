@@ -1041,7 +1041,7 @@ mod tests {
             .filter(|d| !d.in_test_module && d.name.contains("Verdict"))
             .map(|d| d.name.as_str())
             .collect();
-        assert_eq!(verdicts.len(), 6, "six Verdict types measured: {verdicts:?}");
+        assert_eq!(verdicts.len(), 13, "thirteen Verdict types measured: {verdicts:?}");
 
         // The four rows the gate enforces beyond collisions.
         let errs = inv.check().expect_err(

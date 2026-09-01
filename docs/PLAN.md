@@ -16,15 +16,15 @@ mtime to satisfy the freshness gate (§12.11 records the author doing exactly th
 
 > **2. Convergence has been retracted once.** Rounds 8–9 banked 3 sections under a two-lens rule.
 > Round 10 graded with readers who had never seen the ledger and all three fell — 360 findings
-> across 7 rounds. Rounds 8–9 measured the graders. Fresh eyes is now a clause of the rule.
+> across 8 rounds. Rounds 8–9 measured the graders. Fresh eyes is now a clause of the rule.
 
 > **3. There is no external-validation loop.** Every gate suite here is internal — us checking us.
 > `loop-engineering` names that as insufficient for "shipped"; §12.11 records the gap.
 
-> §8 carries **12 open questions** and **5 kill criteria** — one (K1) void. 9 measured claims
-> were refuted while this was written, kept as labelled retractions. Surface map: **591 surfaces**,
-> 32 consumed / 67 wire / 30 validate /
-> 453 retired / 9 unknown — **21.8% engaged**.
+> §8 carries **13 open questions** and **5 kill criteria** — one (K1) void. 9 measured claims
+> were refuted while this was written, kept as labelled retractions. Surface map: **614 surfaces**,
+> 52 consumed / 67 wire / 33 validate /
+> 453 retired / 9 unknown — **24.8% engaged**.
 
 ---
 
@@ -123,8 +123,14 @@ process requirement about how requirements themselves are handled. It is now doc
 > unanswered — **they were unaskable from inside the requirement set**. R12 and §8 close that.
 > A requirement the graders had to invent is the strongest evidence this round was worth running.
 
-### 1.5 Glossary — the jargon R1–R12 use without defining
+> **R13 — the full idea-to-shipped lifecycle.** "part of our plan needs to be intimately aware of the entire
+> lifecycle of an idea to a finished project then walk the list down the crates and our skills to
+> ensure that throughout dispatch we have proper templates, proper dispatch, proper reap, proper
+> logging, proper build grading, etc."
+> Added by Josh mid-grading; §11 maps the spine and §12 owns the dispatchable S1–S9 runbook.
 
+
+### 1.5 Glossary — the jargon R1–R13 use without defining
 `%1408` filed this in round 1 and I skipped it twice. The requirements are quoted **verbatim**, which
 is correct and non-negotiable, and the cost is that they carry fleet jargon an outside reader cannot
 resolve. An investor reading R1 hits "bead dag" in the first sentence.
@@ -165,16 +171,17 @@ A requirement that cannot be checked is a wish. Each row states the observable t
 |---|---|---|
 | R1 | A-to-Z journey: gates, crates, schema, types, validation, per-milestone done | §09 exists and every milestone carries an OBSERVABLE |
 | R2 | Reap before refill; repo hygiene; doc structure | **NOT CLOSED — a past event is not a closure.** The reap happened once (28/25/19/2). Closing this needs a *standing* check; the §7.3 staleness predicate is the candidate and is not built |
-| R3 | One document, investor-attackable, future-tense on what we build | **PARTIAL — assembly exists, but closure requires the §7.3 freshness/identity check (every section hash covered and reassembly verified); the current assembled artifact is stale** |
-| R4 | Every crate, every schema I/O, every typed interface, interactions, diagrams | §03 has one row per workspace crate; §04 has ≥6 generated diagrams |
-| R5 | Every OMP surface | **PARTIAL — fresh hash-anchored census records 980 discovered rows + 1 synthetic transport sentinel = 981 row records, with slash_commands=799 versus expected=136 still unresolved; the historical round-10 181 + 2 sentinel shape is retained in §3.2 as non-authoritative evidence** |
+| R3 | One document, investor-attackable, future-tense on what we build | **PARTIAL — `target/debug/plan-assemble` just regenerated docs/PLAN.md (13 sections; 8,235 lines; 652 KB), but the §7.3 freshness/identity gate is not built, so assembly success is not a durable freshness proof.** |
+| R4 | Every crate, every schema I/O, every typed interface, interactions, diagrams | **PARTIAL — §03's 26-row table is a historical pre-extraction snapshot; current cargo metadata reports 50 packages, and no current one-row-per-package contract census is recorded. §04 has ≥6 diagrams, also snapshot-bound.** |
+| R5 | Every OMP surface | **PARTIAL — pre-extraction scanner artifact records 980 discovered rows + 1 synthetic transport sentinel = 981 row records, with slash_commands=799 versus expected=136 still unresolved; current workspace metadata and scanner regeneration remain required before closure** |
 | R6 | The testing/validation/gating frameworks | **OPEN — §06's gate matrix must produce a named G1–G8 proof artifact with known-bad, known-good, mutation, anti-vacuity, and ADDRESSABLE results; no such all-legs PASS artifact is recorded** |
 | R7 | Mirror prior art at every gap | §10 gives a search command + verbatim quote or explicit not-found per gap |
 | R8 | Installability + canonical CLI scoping | **OPEN — §07 must attach a clean-machine install receipt proving doctor/health/repair + validate/audit/why, with no hard-coded /Users/josh fallback; no receipt is recorded** |
 | R9 | End users orchestrating their own projects | **OPEN — §08 must attach a second-machine/clean-repo first-tick receipt naming the adapter and delivery receipt; no external-repo receipt is recorded** |
 | R10 | Idea → why → binaries → actions+negatives → map → design specs at SOTA | **OPEN — §09 must attach a rubric artifact with every SOTA dimension scored ≥4/5 and no missing action/negative mapping; no thresholded score artifact is recorded** |
 | R11 | Requirements written down before dispatch | **this file** |
-| R12 | Economic and risk questions are registered, owned, and answerable | §8 — twelve registered questions (ten `OPEN`, Q9 `ANSWER MOVED`, Q10 `PARTIAL`) and five kill criteria |
+| R12 | Economic and risk questions are registered, owned, and answerable | §8 — thirteen registered questions (eleven OPEN, Q9 ANSWER MOVED, Q10 PARTIAL) and five kill criteria |
+| R13 | Full idea-to-shipped lifecycle mapped through skills, crates, gates, and dispatch | §11 lifecycle evidence map plus §12 S1–S9 runbook; every stage must carry the seven-field dispatch contract |
 
 > *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
@@ -263,10 +270,11 @@ Fresh recapture on 2026-08-31 from the exact invocation cd /Users/josh/Developer
 The fresh artifact is the only hash-anchored scanner output in this brief. Its summary is recorded below; the older 181/183/184 arithmetic is retained only as a labelled round-10 historical snapshot.
 - **Historical round-10 node/row shape:** the seven discovered count fields summed to **181** source rows. The reported **183 rows** therefore included two synthetic records: one transport sentinel and one slash_command expectation sentinel. The slash_commands=0 field was the discovered command count; the slash_command 1 row was the synthetic mismatch sentinel, not an enumerated command. The **184 nodes** were those 183 row records plus one scanner root/envelope node. No synthetic record was counted as discovered coverage.
 - **Historical arithmetic:** 181 discovered rows + 2 synthetic sentinel rows = 183 row records; 183 row records + 1 root/envelope node = 184 nodes. Do not treat these round-10 values as the current census.
-- **Fresh hash-anchored summary:** 981 row records, 982 nodes, and 1,803 edges. Counts: cli_commands=39, type_roots=57, declarations=14, rpc_handlers=42, slash_commands=799, omp_methods=3, workspace_crates=26; expected_slash_commands=136, so the scanner remains UNKNOWN with exit 2.
-- **Fresh row kinds:** cli_command 39 · type_root 57 · rpc_handler 42 · workspace_crate 26 · declaration 14 · omp_method 3 · slash_command 799 · transport 1. The transport row is the one synthetic transport sentinel; the 799 slash-command rows are discovered records, not the old expectation sentinel.
+- **Pre-extraction hash-anchored summary (historical):** 981 row records, 982 nodes, and 1,803 edges. Counts: cli_commands=39, type_roots=57, declarations=14, rpc_handlers=42, slash_commands=799, omp_methods=3, workspace_crates=26; expected_slash_commands=136, so the scanner remains UNKNOWN with exit 2.
+- **Pre-extraction row kinds (historical):** cli_command 39 · type_root 57 · rpc_handler 42 · workspace_crate 26 · declaration 14 · omp_method 3 · slash_command 799 · transport 1. The transport row is the one synthetic transport sentinel; the 799 slash-command rows are discovered records, not the old expectation sentinel.
 - **Historical round-10 counts (non-authoritative):** cli_commands=39, type_roots=57, declarations=14, rpc_handlers=42, slash_commands=0, omp_methods=3, workspace_crates=26. The old row-kind line's transport 1 and slash_command 1 were synthetic sentinels, as classified above.
 - **Historical round-10 scanner hole:** every count had an expected_* twin; slash_commands=0 differed from expected_slash_commands=136, which made that envelope UNKNOWN and exit 2. The old claim that 136 slash commands were unmapped is not a current count; the fresh artifact finds 799 slash-command records against the same expected value and still requires reconciliation.
+**Current workspace boundary (re-derived 2026-09-01):** the scanner snapshot above predates the extraction wave and remains historical. Direct cargo metadata --format-version 1 --no-deps reports 50 packages and 48 binary targets at /Users/josh/Developer/omp-orchestrator/target; regenerate the inventory artifact before treating any scanner count as current.
 - **Historical round-10 classification (non-authoritative):** CAPABILITY_NOT_USED 157 · SCRAPED_OR_OBSERVED_ALTERNATIVE 18 · MAPPED_BY_DIRECT_PROBE 8.
 - **Historical round-10 edge relations (non-authoritative):** provides 157 · map-to-none 25 · path-depends-on 18 · consumes 7. All 7 consumes edges originated from omp-inventory-map; 25 of 26 crates consumed zero OMP surface.
 
@@ -488,11 +496,7 @@ reason, or the rule gets its first exemption. *Recorded under R11 — not previo
  "data":null,"error":"CONFIG_ERROR unknown argument --help"}
 ```
 
-The gate is **built, correct, and undiscoverable**: 23 tests pass (per the §3.5 table; an earlier
-draft of this line said "13", an unreconciled subset figure — corrected in round 11) and
-`crates/omp-inventory-map/src/types_inventory.rs:176-178` deliberately excludes `Observation` from
-the allowance list so the collision demands convergence — but the running binary's 544 KB doctor
-output contains **zero** occurrences of `Observation`, `CONVERGE`, or `Verdict`.
+**HISTORICAL ADDRESSABILITY SNAPSHOT.** The gate was built and its old snapshot reported 23 source tests plus 544,697 bytes of doctor output and an unknown-argument --help refusal. Current omp-inventory-map contains 28 test markers; the current debug binary emits 158 help bytes and exits 1. No current ADDRESSABLE pass artifact is claimed until a retained command/output/revision receipt exists.
 
 Not built-vs-wired. **Wired-but-unaddressable.** It adds a sixth required gate property:
 **ADDRESSABLE** — one documented command runs it, and `--help` names that command.
@@ -563,47 +567,29 @@ The denominator is now stated in the heading, which is the whole point: *five st
 
 | layer | mechanism | measured state |
 |---|---|---|
-| observe | `tick-monitor` | **WORKS, WITH A MEASURED ASYMMETRY DEFECT** — see below |
-| actionable | `idle_panes` | **BROKEN** — discards `NewlyIdle`; `free_capacity` derives from the same `is_dispatchable` filter, which requires *Confirmed* Idle, so a pane at `t=0` is excluded from **both** lists. OMP declares `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts:9-30`) with the analogous settle/continuation split, but it is DECLARED ONLY and not wired here |
-| consume — selection | `decide()` picks work | **UNVERIFIED** — no evidence separated from the two rows below; `%1414` MAJOR 1 |
-| consume — admission | dispatch fence | **FENCED** — 162 refused ticks over 4.2 hours, `DISPATCH_RETRY_BLOCKED` |
-| consume — transport | packet delivery | **UNVERIFIED** — transport returned `success:[N]` with no packet (`cp-z42vu`); OMP also declares `IrcDeliveryReceipt` + `AsyncJobDeliverySink` (`tools/hub/types.d.ts:8,84`), but no wire path has been measured |
-| actuate | dispatch | **DOES NOT EXIST** — a human types into panes |
-| complete | worker says done | **AVAILABLE, NOT WIRED** — `AgentEndEvent.willContinue` crossed `--mode=rpc` as a raw `agent_end` frame with `isTerminal:true`; the signal exists and is reachable, but the supervisor does not consume it |
+| observe | tick-monitor | **WORKS, bounded by two captures** — current positive timer/hash motion is checked before the 75-second no-change floor; see below |
+| actionable | idle_panes | **SEAM OPEN** — the producer has typed NewlyIdle/ConfirmedIdle predicates, while parse_observation consumes JSON lists plus a state == IDLE fallback; no shared type crosses the process seam |
+| consume — selection | decide() picks work | **UNVERIFIED** — no independent selection receipt is recorded |
+| consume — admission | dispatch fence | **FENCED** — the 162 refused-tick/4.2-hour value is historical and unverified; no current refusal-rate figure is claimed |
+| consume — transport | packet delivery | **UNVERIFIED** — cp-z42vu is a historical incident only; the current repository has no planted fixture or receipt payload |
+| actuate | dispatch | **EXISTS AND IS UNFENCED IN THE INSTALLED BINARY** — the resident supervisor sends via `ntm --robot-send`; the "a human types into panes" reading is historical (pre-`kxe`). MEASURED 2026-09-01: build `9a61acd` (208 commits behind HEAD) re-sent bead `815` to `%1408` **131 times in 247 minutes** (11:45–15:53 MDT, one per tick) while the bead stayed `open`/unassigned and the pane was dead on HTTP 402; every row logged `DISPATCHED … RECEIVER_RECEIPT=ntm_robot_send`. Command: `jq -r 'select(.pid==70561 and .status=="DISPATCHED") \| .detail' ~/.local/state/flywheel/omp-orchestrator.heartbeat.jsonl \| sort \| uniq -c`. The claim fence (`dispatch-claim-fence`) exists in the working tree and is called from no committed or installed `main.rs` |
+| complete | worker says done | **AVAILABLE, NOT WIRED** — one raw agent_end frame carried isTerminal=true; AgentEndEvent.willContinue is declared upstream, and the supervisor does not consume it |
 
-**The observe row was downgraded by `ActionsNegative`, and the defect is in the one layer this brief
-called working.** The two-capture rule has a genuine asymmetry: a **changed** content hash proves
-motion at *any* interval, while an **unchanged** hash proves nothing below the 75-second floor. The
-floor should therefore gate only the *idle* direction. It gates both:
+**The observe row was re-checked against current source after the Round 21 finding.** The current two-capture implementation compares positive timer or stable-hash motion at tick-monitor/src/lib.rs:564-572 before applying the 75-second floor at :574-577. A changed Working pair is Live; an unchanged short-gap pair is Unproven. The earlier block claiming the floor ran first was a historical description, not current behavior.
 
-```rust
-// crates/tick-monitor/src/lib.rs:541-545  — the early return
-let gap = now.at.saturating_sub(prev.at);
-if gap < MIN_GAP_SECS {
-    return Liveness::Unproven { why: "gap_too_short" };
-}
-// …:552 — the hash comparison it precedes, and therefore prevents
-if b > a || prev.hash != now.hash { Liveness::Live } else { Liveness::Frozen }
-```
+The admission row remains **FENCED**, but the old 162-refusal/4.2-hour number had no retained derivation. It is retained only as a historical failure-shape example; no current refusal-rate figure is claimed in this brief. The transport row likewise records cp-z42vu as a historical incident only; the current repository has no planted fixture or receipt payload for it.
 
-A sub-floor capture pair whose hash **changed** is discarded as `gap_too_short`, so positive
-liveness evidence the system already holds is thrown away. This does not make `observe` broken — it
-never reports motion as stillness, which is the dangerous direction — but it is **lossy in the safe
-direction**, and it means the fleet waits 75 seconds to learn something it could know in 20.
+The completion row is bounded: one raw agent_end frame carried isTerminal=true, while AgentEndEvent.willContinue is a declared upstream field. That is wire evidence for one external frame, not proof of local supervisor consumption or repeatability.
 
-Two things make this worth the space it takes. First, it was found by an agent **disagreeing with
-its own spawn instructions**: the dispatch brief asserted the asymmetry as implemented behaviour,
-`ActionsNegative` read the source, and wrote it up as an open defect instead of repeating it.
-Second, it is the *only* layer this brief marked unqualified `WORKS`, and it did not survive first
-contact with the source. **The five-stage table now has zero unqualified working rows.**
+**The actuate row was corrected 2026-09-01 by the guardian pass, and the correction is worse than the row it replaced.** "DOES NOT EXIST" was true when written and false by the time it was graded: the `kxe` supervisor has been launchd-resident since 2026-08-31 12:21 and dispatches on its own. What the live ledger shows is the actuate layer running **without the claim beat** — 131 sends of one unclaimed bead to one dead pane, each one recorded as a success. A layer that does not exist cannot mis-dispatch; this one did, for four hours, in the product's own log, and no reader noticed until a human asked. The mechanical fix (install the committed claim fence; classify a 402-dead pane as attention, not capacity) is filed as two P0 beads labelled `guardian`. **NO-CLAIM:** the 131 figure is one pid on one machine on one day; it is a failure shape, not a rate.
 *Recorded under R11.*
 
 ---
 
 ## 5. Section map — who owns what
 
-Ten companion section files (01 through 10), disjoint by construction so that parallel authorship cannot collide, plus this brief (00) make **eleven plan files total**. The assembled docs/PLAN.md is built from these; the section files are the source of truth.
 
+Twelve companion section files (01 through 12), disjoint by construction so that parallel authorship cannot collide, plus this brief (00) make **thirteen plan files total**. The assembled docs/PLAN.md is built from these; the section files are the source of truth.
 | file | section | requirement served |
 |---|---|---|
 | `00-brief.md` | **this file** — requirements, measured facts, section map | R11 |
@@ -617,6 +603,8 @@ Ten companion section files (01 through 10), disjoint by construction so that pa
 | `08-end-users.md` | Foreign repos/machines orchestrating their own projects | R9 |
 | `09-milestones.md` | Milestones, done-definitions, plan validation, grading rubric | R1, R3 |
 | `10-prior-art.md` | Mirror mining: what would Jeffrey do, per gap | R7 |
+| `11-lifecycle.md` | Lifecycle evidence map from idea to shipped | R13 |
+| `12-journey.md` | Dispatchable S1–S9 journey runbook | R13, R9 |
 
 ---
 
@@ -757,7 +745,7 @@ artifact diverging from its source, in the document whose subject is derived art
 from their sources.** It is the same shape as the 23-commit supervisor drift in §07 and the
 `.corrupt-` mirror copies — a stale copy that answers questions as though it were current.
 
-R3 is **PARTIAL** here. Closure is a freshness/identity check, not file existence: every one of the eleven plan source files must be covered by the assembled manifest with its path and hash, no source mtime may be newer than docs/PLAN.md, and a reassembly must reproduce the recorded output hash. The measured 132-second drift and absent phrase prove the current artifact fails that predicate.
+R3 is **PARTIAL** here. Closure is a freshness/identity check, not file existence: every one of the thirteen plan source files must be covered by the assembled manifest with its path and hash, no source mtime may be newer than docs/PLAN.md, and a reassembly must reproduce the recorded output hash. The measured 132-second drift and absent phrase prove the current artifact fails that predicate.
 The predicate is the four-way identity check from 07-installability.md applied to a document instead of a binary, and **it is not built**. Until a named gate runs it and emits PASS, “re-assemble after editing” is only a habit; §7.2 measured what habits are worth.
 *Recorded under R11. The assembled artifact must be regenerated before R3 can move from PARTIAL to CLOSED.*
 
@@ -810,7 +798,7 @@ conductor.*
 **This section exists because all four graders independently found its absence, and one of them
 found it structurally.** `%1408` (negative-space lens) made the argument that matters: §2's
 checkability table is the *sole* mechanism by which a requirement becomes answerable, so a question
-never registered as a requirement **can never be discharged by any of the eleven sections**. The
+never registered as a requirement **can never be discharged by any of the thirteen sections**. The
 plan could execute flawlessly and still have no answer. That is a defect in the requirement set,
 not a missing paragraph, and it is filed as **R12** below.
 
@@ -827,31 +815,32 @@ establish a problem worth paying for"* and *"does not say what happens if this w
 
 Every row is OPEN unless marked. None of these had a home in the document before this round.
 
-**Open-question census recipe:** scope is exactly the files selected by docs/plan/[0-9][0-9]-*.md, then filtered to prefixes 01 through 10 (ten companion files; 00-brief.md is intentionally excluded), with case-insensitive matching and no grader artifacts. This exact command counts occurrences per file and prints totals; no result is asserted until it is run against those files:
 
+**Open-question census recipe:** scope is exactly the files selected by docs/plan/[0-9][0-9]-*.md, then filtered to prefixes 01 through 12 (twelve companion files; 00-brief.md is intentionally excluded), with case-insensitive matching and no grader artifacts. This exact command counts occurrences per file and prints totals; no result is asserted until it is run against those files:
     python3 - <<'PY'
     from pathlib import Path
     files = sorted(Path("docs/plan").glob("[0-9][0-9]-*.md"))
-    files = [p for p in files if p.name != "00-brief.md" and 1 <= int(p.name[:2]) <= 10]
+    files = [p for p in files if p.name != "00-brief.md" and 1 <= int(p.name[:2]) <= 12]
     for term in ("security", "secret", "credential", "token", "licens"):
         hits = [(str(p), p.read_text(errors="replace").casefold().count(term)) for p in files]
         print(term, "files", len(files), "occurrences", sum(n for _, n in hits), "by_file", hits)
-    assert [p.name[:2] for p in files] == [f"{n:02d}" for n in range(1, 11)]
+    assert [p.name[:2] for p in files] == [f"{n:02d}" for n in range(1, 13)]
     PY
 
 | # | question | status | owner |
 |---|---|---|---|
-| Q1 | Who pays for this, and what is their current workaround? | **OPEN** — no buyer named anywhere in eleven sections | Josh |
+| Q1 | Who pays for this, and what is their current workaround? | **OPEN** — no buyer named anywhere in thirteen sections | Josh |
 | Q2 | What does the current workaround cost, measurably? | **OPEN** — the only cost figure in the brief is the phrase *"cost real time"* | Josh |
 | Q3 | What is the outcome if this works, in customer terms with a baseline and a target? | **OPEN** — the plan describes mechanism end-to-end and outcome nowhere | Josh |
 | Q4 | How long, and with how many people? | **OPEN** — no timeline, no headcount, in any section | Josh |
 | Q5 | Buy, adopt, or build? What existing tool was evaluated and rejected, and why? | **OPEN** — §10 mines the mirror for *patterns*, never for a *substitute* | orchestrator |
-| Q6 | What happens when OMP changes under us? | **OPEN** — we pin `omp/18.0.11` and have no compatibility policy; 136 slash commands are already unmapped | orchestrator |
-| Q7 | What is the security posture — secrets, tokens, the blast radius of a dispatch? | **OPEN** — no numerical corpus claim is made here; the census recipe below intentionally excludes this brief and scans exactly the ten companion files (01–10), case-insensitively | orchestrator |
-| Q8 | Licensing, for us and for what we vendor? | **OPEN** — no numerical corpus claim is made here; the same ten-file, case-insensitive census recipe below is the source of any future count | Josh |
+| Q6 | What happens when OMP changes under us? | **OPEN** — we pin omp/18.0.11 and have no compatibility policy; the pre-extraction scanner recorded 799 slash-command rows versus expected 136 and remained UNKNOWN | orchestrator |
+| Q7 | What is the security posture — secrets, tokens, the blast radius of a dispatch? | **OPEN** — no numerical corpus claim is made here; the census recipe below scans all twelve companion files (01–12), case-insensitively | orchestrator |
+| Q8 | Licensing, for us and for what we vendor? | **OPEN** — no numerical corpus claim is made here; the same twelve-file, case-insensitive census recipe below is the source of any future count | Josh |
 | Q9 | Is any of this novel, and does novelty matter here? | **ANSWER MOVED** — the completion protocol’s precedent-free claim is REFUTED: AgentEndEvent.willContinue is WIRE-PROVEN on RpcSessionEventFrame via --mode=rpc; the novelty question remains open for the other six DECLARED ONLY types and their adoption path | orchestrator |
 | Q11 | Who owns the composer-typed policy decision — oracle outside the tree, retire the lane, or the rule's first exemption? | **OPEN** — orchestrator owns the decision, but §3.5 records the trilemma without a deadline or decision receipt; %1408 flagged the missing closure twice | orchestrator |
 | Q12 | Who owns the pi_agent_rust tmux-missing defect we inherit if we adopt its two-signal probe? | **OPEN** — orchestrator owns the decision, but the adoption/exception choice and its evidence are not recorded; adopting the pattern adopts the bug | orchestrator |
+| Q13 | Should the `.git/hooks/commit-msg-verification-level.sh` policy be registered, rewritten, or retired? | **OPEN** — the hook decision is not recorded with a chosen option, owner deadline, or durable decision receipt | Josh |
 | Q10 | **What kills this?** | **PARTIAL** — Josh owns the decision; §09 carries technical kill conditions, but no economic criterion or decision receipt is recorded | Josh |
 
 ### 8.3 The kill criteria, stated so they can fire
@@ -879,8 +868,7 @@ That is why this section exists at all, and why it took a lens explicitly assign
 find it. The fix is R12 plus the per-subsection expected-contents list `%1408` proposed, which is
 **not built**.
 
-**NO-CLAIM.** This section registers twelve open questions (ten `OPEN`; Q9 `ANSWER MOVED`; Q10
-`PARTIAL`) and five kill criteria. It **answers none of them**. Registering a question is not
+**NO-CLAIM.** This section registers thirteen questions (eleven OPEN; Q9 ANSWER MOVED; Q10 PARTIAL) and five kill criteria. It **answers none of them**. Registering a question is not
 progress on it; it makes the gap visible and assignable, which is strictly less than knowing the
 answer and strictly more than the previous state, where the question could not be asked from
 inside the requirement set.
@@ -910,11 +898,10 @@ derives it"*, and this section's board counts never did. The history:
 | stand-down snapshot prose | 75 | none |
 | its own four counts | 28+25+19+2 = **74** | none |
 | corrected fresh count | 30+23+23+3 = **79** | none |
-| per-status enumeration, 2026-09-01 | **80** | `board_total` (declared `LIVE` — the board moves hourly, so it is deliberately unpinned) |
+| per-status enumeration, re-derived during this integration | **95** | exact command: for s in closed in_progress open blocked grading; do br list --status "$s" --json | jq -r 'if type == "array" then length elif .issues then (.issues | length) else error("unexpected br JSON shape") end'; done → 61 closed + 21 in_progress + 10 open + 2 blocked + 1 grading |
 
-Four values, none previously re-derivable. The mechanism behind the drift is now
-visible: the fresh count enumerated **four** statuses, and the tracker carries
-**five** — `open` 12, `in_progress` 23, `blocked` 3, `closed` 41, and `grading` 1.
+This 95-row value is a dated integration snapshot, not a pinned constant. `board_total` remains LIVE and must be re-run before quoting it; the 75/74/79/93 values above are historical snapshots.
+
 A status nobody thought to count cannot appear in a hand-summed total, and its
 absence is invisible in exactly the way a missing row always is.
 
@@ -985,12 +972,11 @@ That is not yet a market claim; it is a local reap. From one stand-down session 
   to no bead; two were pre-existing red tests in a suite expected to be red. The detailed reap artifact
   and derivation command were not retained here, so this is not a measured prevalence claim.
  - **UNVERIFIED REPORTED VALUE:** 162 refused dispatch ticks across a reported 4.2 hours, with a human as the only
-   actuator (00-brief.md §3.7, line 546). The brief's command receipt is not preserved in this section;
+  actuator (00-brief.md §4, dispatch-admission row at line 526). The brief's command receipt is not preserved in this section;
    treat this as a cited report, not an independently reproducible measurement or market-frequency claim.
  - **Historical, non-authoritative recollection:** a 23-commit drift between the installed supervisor
   binary and HEAD. No immutable receipt or derivation command is retained here.
- - Board snapshot (**reported FACT, as of 2026-08-31; authoritative reference 00-brief.md §3.3,
-  lines 498-502; command receipt not preserved here**): **28 closed, 25 in_progress, 19 open,
+- Board snapshot (**reported FACT, as of 2026-08-31; authoritative reference 00-brief.md §3.7, lines 485-486; command receipt not preserved here**): **28 closed, 25 in_progress, 19 open,
   2 blocked (74 total)**. The snapshot is not the live board.
 
 ### The mechanism behind the 162
@@ -1006,7 +992,7 @@ are **zero unqualified WORKS rows**:
 | consume | selection | **UNVERIFIED** — no durable receipt here proves the selected work was consumed |
 | consume | transport | **UNVERIFIED** — no durable receipt here proves delivery to the intended worker |
 | consume | admission (decide()) | **FENCED** — the cited report is DISPATCH_RETRY_BLOCKED |
-| actuate | dispatch | **DOES NOT EXIST** — a human types into panes |
+| actuate | dispatch | **EXISTS, UNFENCED** (corrected 2026-09-01; "does not exist" was the pre-`kxe` reading) — the installed supervisor dispatches via `ntm --robot-send` and, per 00-brief §4, re-sent one unclaimed bead to one 402-dead pane 131 times in 247 minutes |
 | complete | worker says done | **AVAILABLE, NOT WIRED** — OMP exposes AgentEndEvent.willContinue on RpcSessionEventFrame; the local loop does not consume it |
 
 > *Upstream type for this gap: `GuestIdleReconcilerCtx` (DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
@@ -1143,7 +1129,7 @@ to "cargo" without qualification. **Every crate-metadata claim inherits whatever
 we have not measured what it does.** Open item, recorded here rather than left in chat (R11).
 
 **1.3.7 `fh` — evidence, failing closed.** We call it for retrieval against the dicklesworthstone
-mirror — 210 git work-trees at `/Volumes/ZestData/dicklesworthstone-mirror` — which is how R7 gets
+mirror — 210 filesystem .git entries at /Volumes/ZestData/dicklesworthstone-mirror; they are not validated as git work-trees, so this is a filesystem-entry census rather than a repository count — which is how R7 gets
 answered with a citation instead of a memory. *Contract depended on:* `fh` **fails closed with a
 type**. As of this session its MCP surface returns `SERVE_INPUT_STALE` because the mirror HEAD moved
 (`5dec4212…` → `ecdea397…`); direct grep still works, and this section's citations were taken that
@@ -1206,31 +1192,13 @@ runs.
 | `jsm` | **single-store invariant, checked at session start** | installation topology is checked, not assumed |
 | `tmux` | machine-readable version at `-V`, exit 0 | our binaries answer a version probe **on the conventional flag** — we do not ship tmux's asymmetry ourselves |
 
-**Where the enforcement substrate meets the dependency floor (reported receipt, as of 2026-08-31).**
-The built scanner at /Volumes/BuildShared/cargo-targets/debug/omp-inventory-map reportedly emits
-schema_version omp-inventory-map/v1 with command doctor and status UNKNOWN, exits 2 on UNKNOWN, and
-produces 544,697 bytes (00-brief.md §3.4; the exact command receipt is not retained in this section).
-This demonstrates a versioned envelope and distinct uncertainty exit in the cited report; it does not
-establish product superiority or customer value.
+**HISTORICAL SCANNER SNAPSHOT (2026-08-31).** The built scanner report described `omp-inventory-map/v1`, command `doctor`, status `UNKNOWN`, exit 2, and 544,697 bytes. The retained raw capture is `.flywheel/inventory-artifacts/inv.txt.gz` with SHA-256 `86491732a5581a6d2e342d0db59bdf20e5f47f6da93150ae78bd2649562f5081`; this is not current product or workspace evidence.
 
-**Where the enforcement substrate is below the dependency floor — a named defect (reported receipt, as of 2026-08-31).** omp-inventory-map --help returns:
+**HISTORICAL ADDRESSABILITY SNAPSHOT (2026-08-31).** `omp-inventory-map --help` returned the typed `CONFIG_ERROR unknown argument --help` refusal; the source snapshot counted 23 functions and 544 KB of output, with no `Observation`, `CONVERGE`, or `Verdict` strings. The collision guard at `crates/omp-inventory-map/src/types_inventory.rs:176-178` remains the cited design evidence.
 
-```json
-{"schema_version":"omp-inventory-map/v1","command":"doctor","status":"ERROR",
- "data":null,"error":"CONFIG_ERROR unknown argument --help"}
-```
+**CURRENT RECHECK.** The current source has 28 test markers and the debug binary's `--help` probe emits 158 bytes and exits 1. No current ADDRESSABLE pass is claimed without a retained command/output/revision receipt; the gate remains a real system gap, not a buyer-visible result.
 
-The gate is **built, correct, and undiscoverable.** **23 test functions are present in source** (13 in types_inventory.rs and 10 in tests/inventory.rs; source-count FACT as of 2026-08-31, not a test-pass claim).
-`crates/omp-inventory-map/src/types_inventory.rs:176-178` deliberately excludes `Observation` from
-the allowance list so a name collision *demands* convergence rather than being waved through — and
-the running binary's 544 KB output contains **zero** occurrences of `Observation`, `CONVERGE`, or
-`Verdict`. This is not built-versus-wired. It is **wired-but-unaddressable**, a worse diagnosis,
-because it survives every check that asks "does the code exist and pass."
-
-Note the shape, because it recurs in §1.5: `--help` did not return a generic error. It returned a
-*typed* error (`CONFIG_ERROR`) with an accurate message. **The typing discipline was applied
-perfectly, to the wrong outcome.** Rigor pointed at the wrong target is this codebase's
-characteristic defect. Hence a sixth required gate property, now first-class across the plan:
+The **historical** addressability shape recurs in §1.5: `--help` did not return a generic error; it returned a typed `CONFIG_ERROR` with an accurate message. The typing discipline was applied perfectly to the wrong outcome. Hence the current design requirement:
 
 > **ADDRESSABLE** — one documented command runs the gate, and `--help` names that command.
 
@@ -1283,15 +1251,7 @@ Matching a bar is a floor-raise, never a guarantee.
 
 ## 1.5 The honest position
 
-**What is genuinely built (reported snapshot, as of 2026-08-31 ~21:45).** The workspace contains 26
-crates. The current registry value is **413 test functions across 31 integration test files**
-(NUMBERS.toml keys test_functions/test_files); **406 and 407 are historical, non-authoritative values**
-from earlier rounds and must not be copied forward. The exact registry derivation command is owned by the
-number registry, not reproduced here. The same cited snapshot reports **184 nodes, 207 edges, 183 rows,
-544,697 bytes, 18 dependency edges, and 4 dependents** for subprocess-contract; these are reported
-inventory values, not product completion evidence, and the command receipt is not retained in this
-section. The no-.sh/no-.py rule is enforced over the authoritative git ls-files set with an empty
-exemption list.
+**What is genuinely built (re-derived during this integration).** Historical 26-crate/413-test-function/31-file values stay labelled as snapshots; current workspace authority is **50 crates, 987 test functions, and 92 integration test files**, from the recursive NUMBERS.toml commands. These are workspace facts, not product-completion evidence.
 
 The omp-types crate re-exports Outcome, OutcomeError, PanicPayload, Severity, and join_outcomes; Budget,
 CapabilityBudget, CapabilityBudgetDimension, CapabilityBudgetRefusal, CapabilityBudgetRequirements, and
@@ -1309,6 +1269,7 @@ this row."* The scanner consumes OMP because the scanner's job is to look at OMP
 
 ### The three objections an investor should raise
 
+**HISTORICAL DENOMINATOR NOTE.** The 26-crate and 25-of-26 figures in the following objection and type snapshot are pre-extraction values. Current workspace authority is 50 packages; the old figures are retained only as the historical argument being answered.
 **Objection 1 — "You have built 26 crates of scaffolding around a hole. The one integration that justifies the name does not exist."** *Partly conceded, with a narrower truth.* The completion signal is now WIRE-PROVEN upstream, but the supervisory integration that would consume it still does not exist. The 25-of-26 measurement is ours, not a reviewer's. The partial answer is that the layer census shows `observe` WORKS and failure is
 concentrated in actionable/consume/actuate — and the seven-row table above records **zero unqualified WORKS rows**. We will not use the qualified observe result as a rebuttal. What we do not concede is that the crates are therefore waste: the
 gates operate on the repository and the process boundary, not on OMP, and they run today. The
@@ -1318,7 +1279,7 @@ and running.
 **Objection 2 — "Your own evidence discipline is theatre."** *Conceded outright, and we found it
 ourselves.* All 183 census rows carry the four mandatory fields — `inputs`, `outputs`, `must_be_true`,
 `negative_evidence` — with **zero missing**, and exactly **one distinct value** of `must_be_true` and
-**one distinct** `negative_evidence` across the entire census (`00-brief.md` §3.3;
+**one distinct** `negative_evidence` across the historical census snapshot (00-brief.md §3.2;
 `python3 -c "…Counter(json.dumps(r.get('must_be_true')) for r in rows)…"` → crate rows n=26,
 distinct=1; non-crate rows n=157, distinct=1). For the 26 crate rows, `inputs`/`outputs` describe
 *the scanner's own provenance* rather than the crate's contract, and `what_it_provides` is
@@ -1420,15 +1381,15 @@ The current number registry and corrected brief win over every copied value.
 | figures | provenance and as-of |
 |---|---|
 | 6, 7, 23 | historical recollections from one stand-down; no retained artifact or derivation command; non-authoritative |
-| 162 and 4.2 hours | UNVERIFIED REPORTED VALUE in 00-brief.md §3.7 line 546; command receipt not retained in this section; cited as of 2026-08-31, not independently reproducible or a market-frequency claim |
-| 28/25/19/2 and 74 total | board snapshot reported in 00-brief.md §3.3 lines 498–502, as of 2026-08-31; command receipt not retained; corrected arithmetic, not live-board truth |
+| 162 and 4.2 hours | UNVERIFIED REPORTED VALUE in 00-brief.md §4 line 526; command receipt not retained in this section; cited as of 2026-08-31, not independently reproducible or a market-frequency claim |
+| 28/25/19/2 and 74 total | board snapshot reported in 00-brief.md §3.7 lines 485–486, as of 2026-08-31; command receipt not retained; corrected arithmetic, not live-board truth |
 | 23 scanner tests | source-count FACT as of 2026-08-31: 13 markers in types_inventory.rs and 10 in tests/inventory.rs; not a pass count |
-| 26 crates, 413 tests, 31 test files | current registry-backed snapshot as of 2026-08-31; 406/407 are historical and retracted; NUMBERS.toml is authoritative |
-| 184/207/183, 544,697, 18, 4 | reported inventory snapshot from 00-brief.md §3.3 as of 2026-08-31; command receipt not retained here; not product completion evidence |
+| 26 crates, 413 test functions, 31 test files | historical snapshot as of 2026-08-31; current re-derived values are 50 crates, 987 test functions, and 92 test files from the recursive NUMBERS.toml commands |
+| 184/207/183, 544,697, 18, 4 | historical inventory snapshot from 00-brief.md §3.2 lines 212-219 as of 2026-08-31; command receipt not retained here; not product completion evidence |
 | 8 gates and gate-leg counts | reported corrected snapshot from 00-brief.md §3.5 as of 2026-08-31; grep naming counts are not semantic coverage |
 | 51/59 enums, 79/91 structs, 6/17/4 collisions | reported type-inventory snapshot as of 2026-08-31; library-only versus all-source scopes are intentionally distinct |
 | tmux 3.6a | captured by tmux -V; echo "exit=$?" on the host, as of 2026-08-31; the long-flag failure is not absence |
-| raw agent_end receipt | /tmp/grade/agent-end-raw-frame.json; capture command and SHA-256 are recorded in section 1.2.1; artifact mtime/retrieval 2026-08-31T19:52:26-0600 |
+| raw agent_end receipt | .flywheel/inventory-artifacts/agent-end-raw-frame.json.gz; capture command and SHA-256 d8bd80c6949b2ec48af1639b5b5e241bd90b4dce1e769483dd1690ed2be8f644 are retained in section 1.2.1; /tmp/grade/agent-end-raw-frame.json is only the historical source location and must not be cited |
 
 Any later correction must update this ledger or remove the figure. Historical/retracted values are never
 silently promoted back to current facts.
@@ -1504,7 +1465,6 @@ One frame is not repeatability. `isTerminal` being observed does not establish t
 is semantically equivalent to `willContinue=false`, that a supervisor consumes it, or
 that it survives crashes, killed panes, rate limits or compaction. Section 10 already
 records the cost of overreading this surface: it claimed a worker-completion signal was
-precedent-free across 210 repositories while `AgentEndEvent` shipped in the dependency.
 
 
 ---
@@ -1521,37 +1481,22 @@ worker observations; those observations are explicitly marked `HISTORICAL`,
 made measured by repeating it. The primary inventory artifact is the built scanner
 `omp-inventory-map`, run as
 
-```
-/Volumes/BuildShared/cargo-targets/debug/omp-inventory-map > /tmp/inv.txt   # 544697 bytes, exit 2
-```
+`/Volumes/BuildShared/cargo-targets/debug/omp-inventory-map` was run against installed `omp/18.0.11` on 2026-08-31 from repo `/Users/josh/Developer/omp-orchestrator`. The retained historical capture is `.flywheel/inventory-artifacts/inv.txt.gz`; it decompresses to 544,697 bytes, raw SHA-256 `86491732a5581a6d2e342d0db59bdf20e5f47f6da93150ae78bd2649562f5081`, and exit 2. The compressed artifact SHA-256 is `8f62893e6a4a04a9b4e8922781a5f8a687f73ca84f5c4ea9d69c5f8998ae0561`.
 
-against installed `omp/18.0.11` on 2026-08-31 from repo
-`/Users/josh/Developer/omp-orchestrator`. The captured inventory snapshot is
-544,697 bytes, SHA-256
-`86491732a5581a6d2e342d0db59bdf20e5f47f6da93150ae78bd2649562f5081`, exit 2.
-The snapshot is ephemeral; the hash, generator, tool version, repo, input, and exit
-status identify exactly what §§1–5 mean. Every derived count in those sections is a
-`python3` query over that file, and the query is printed next to the number it
-produces. Later sections do not inherit this provenance boundary.
+The snapshot is historical and revision-unpinned; it is not current workspace evidence. Every derived count in §§1–5 must carry this artifact boundary, and later sections do not inherit it.
 
-**Provenance register.** `INV-2026-08-31` is the scanner output above. The current
-map artifact is `docs/plan/SURFACE-MAP.jsonl`, generated/maintained by the census
-workers; its captured identity is 591 non-empty JSONL rows, 295,754 bytes, SHA-256
-`f155a358dd302982367a7c0107fe0eb1e3cd6f5ec7d4689bac67f11b1c5063f7`. The map is from repo `/Users/josh/Developer/omp-orchestrator`; its generator/tool version and source revision were not retained, so later claims are limited to this hashed file and named queries.
-Map counts below are derived by the exact NUMBERS.toml commands:
-`grep -c . docs/plan/SURFACE-MAP.jsonl` and the `surface_engaged_pct` Python
-query. Sections 6–11 also cite their exact `--help`/grep probes where retained;
-where a worker observation has no retained command/output/revision, it is historical
-context rather than a current measurement.
+**Provenance register.** INV-2026-08-31 is the retained historical scanner output above. The current map artifact is `docs/plan/SURFACE-MAP.jsonl`, with **614 non-empty JSONL rows, 302,002 bytes, SHA-256 5b3c3238c4ec9dd7f72a097bb3668e7de224e3b6f0eddc1132de2902a1d9d93c**. Its generator/tool version and source revision were not retained, so later claims are limited to this hash-anchored file and named queries.
+Map counts below are derived by the exact NUMBERS.toml commands; worker observations without retained command/output/revision remain historical context, not current measurement.
 
 ### 1. The census, in one table
 
 The scanner emits a versioned envelope,
 `{"schema_version":"omp-inventory-map/v1","command":"doctor","status":"UNKNOWN","data":{…}}`,
-carrying 184 nodes, 207 edges, and **183 rows**. The denominator is worth stating
-plainly, because a census with an unstated denominator is a press release: **183
-rows = every OMP surface the probe could enumerate, plus our own 26 workspace
-crates.** It is not 183 OMP features. It is 157 OMP surfaces and 26 things we built.
+carrying 184 nodes, 207 edges, and 183 rows. The denominator is worth stating plainly, because a census with an unstated denominator is a press release: 183 rows = every OMP surface the probe could enumerate, plus our 26-crate snapshot recorded on 2026-08-31. It is not 183 OMP features. It is 157 OMP surfaces and 26 things built in that historical snapshot.
+
+**SNAPSHOT BOUNDARY.** The 183-row denominator and all ratios below are dated inventory results, not current workspace counts; re-run cargo metadata and regenerate this section after extraction.
+
+**CURRENT-STATE BOUNDARY (2026-09-01):** the 183-row artifact and 26-crate denominator above are pre-extraction historical data. Current cargo metadata reports 50 packages and 48 binary targets; regenerate the scanner artifact before using any §§1–5 count as current. The historical artifact remains retained for provenance, not closure.
 
 `MEASURED` — `python3 -c "import json,collections; d=json.load(open('/tmp/inv.txt'))['data']; print(collections.Counter(r['kind'] for r in d['rows']))"`
 
@@ -1587,6 +1532,7 @@ CAPABILITY_NOT_USED             157
 SCRAPED_OR_OBSERVED_ALTERNATIVE  18
 MAPPED_BY_DIRECT_PROBE            8
 ```
+**HISTORICAL DIRECT-PROBE RATIO SNAPSHOT.** The 8/183, 7/157, and related ratios below belong to the retained pre-extraction artifact; they are not current workspace coverage.
 - direct-probe coverage = 8 / 183 = **4.37%** of the all-census rows (8 ÷ 183 = 0.043715…);
 - OMP-only direct-probe coverage = 7 / 157 = **4.46%** (the eighth direct row is the workspace crate `omp-inventory-map`);
 - alternative-path coverage = 18 / 183 = **9.84%** and unconsumed capability = 157 / 183 = **85.79%**;
@@ -1607,9 +1553,7 @@ enumerate OMP surface. Twenty-five of twenty-six crates consume none.
 
 An investor should read that as the project's **central open question, not its
 verdict**. Two readings are available and we are obliged to state the hostile one
-first. *Hostile reading:* an orchestrator built on OMP that touches 4.46% of OMP
-surfaces (7/157) is not an orchestrator, it is a census with ambitions, and the 25
-workspace crates are gates and lints that would work identically if OMP did not exist.
+**Historical hostile reading.** The retained pre-extraction snapshot touched 4.46% of OMP surfaces (7/157); its 25 workspace crates were gates and lints that would work identically if OMP did not exist. Do not apply that denominator to the current 50-crate worktree.
 *Our reading:* the map is honest, which is the hard part and the part usually skipped
 — most projects at this stage cannot tell you their consumption ratio at all, because
 nobody enumerated the denominator. The all-census figure is 4.37% (8/183); the
@@ -2166,7 +2110,7 @@ RETIRE with no validating command: 144 (31% of the 469 historical retires)
 The displayed categories total 544 rows. On the all-listed-row denominator, the historical
 RETIRE rate is 469/544 = **86.2%**. If and only if the 42 unmapped rows are excluded, the
 dispositioned-row denominator is 502 and the rate is 469/502 = **93.4%** (rounded 93%).
-Neither rate describes the current 591-row map below.
+Neither rate describes the current 614-row map below; both are historical pre-correction ratios.
 
 ### 8.1 Fifteen retired surfaces are named for this session's own defects
 In that HISTORICAL snapshot, filtering rows with `validated_by: null` yielded the
@@ -2218,25 +2162,14 @@ remains unproven rather than silently upgraded.
 
 ## 9. The corrected census — and how far wrong §6 was
 
-Two corrections, both forced by Josh, moved every number in §6. The current map is
-`docs/plan/SURFACE-MAP.jsonl`, with **591 non-empty rows** in snapshot
-`f155a358dd302982367a7c0107fe0eb1e3cd6f5ec7d4689bac67f11b1c5063f7`. In this section,
-**unmapped** means `maps_to_crate == null`, not “missing from the file.” The exact map query
-`python3 -c "import json; m=[json.loads(l) for l in open('docs/plan/SURFACE-MAP.jsonl') if l.strip()]; print(len(m),sum(x.get('maps_to_crate') is None for x in m),sum(x.get('validated_by') is None for x in m))"`
-returns `591 478 0`: 478 rows are unmapped by crate, while all 591 have non-null
-`validated_by`. The field is non-null on all 591 rows, but it is not structured RETIRE proof;
-the current map therefore does not establish RETIRE validation.
-
-```
-CONSUMED  32     WIRE  67     VALIDATE  30     RETIRE  453     UNPROBEABLE-PENDING  9
-engaged (CONSUMED+WIRE+VALIDATE)  129 / 591  =  21.8 %      [current MAP snapshot; exact command in NUMBERS.toml]
-```
+The current map is docs/plan/SURFACE-MAP.jsonl with **614 non-empty rows**, SHA-256 **5b3c3238c4ec9dd7f72a097bb3668e7de224e3b6f0eddc1132de2902a1d9d93c**. In this section, **unmapped** means maps_to_crate == null, not missing from the file. The exact map query returns **614 479 0**: 479 rows are unmapped by crate, while all 614 have non-null validated_by. The field is non-null on all 614 rows, but it is not structured RETIRE proof; the current map therefore does not establish RETIRE validation.
+CONSUMED 52     WIRE 67     VALIDATE 33     RETIRE 453     UNPROBEABLE-PENDING 9
+engaged (CONSUMED+WIRE+VALIDATE) 152 / 614 = 24.8% [current map; exact command in NUMBERS.toml]
 
 **Reconciliation (round 11).** The current values above are derived from the map snapshot and
 the exact commands in `NUMBERS.toml` (`grep -c . docs/plan/SURFACE-MAP.jsonl` and
 the `surface_engaged_pct` Python query). Superseded earlier snapshots are HISTORICAL and retained only in `NUMBERS.toml`'s audit trail; they are not quoted as current status and their prior identities are not the current hash.
-Current engagement is **129/591 = 21.8%**, and current WIRE count is **67**. The “ee … 123 surfaces” figure is the
-historical help-text count; the current map carries **111** ee rows (109 RETIRE, 2 WIRE).
+Current engagement is **152/614 = 24.8%**, and current WIRE count is **67**. The “ee … 123 surfaces” figure is the historical help-text count; the current map carries **111** ee rows (109 RETIRE, 2 WIRE).
 The bv rows below are the LIVE split over all 76, not 47 alone.
 
 ### 9.1 What the two corrections did
@@ -2244,7 +2177,7 @@ The bv rows below are the LIVE split over all 76, not 47 alone.
 | | §6 as published | after correction |
 | `bv` surfaces | 29 (scrape artifacts) | **76 mapped: 29 original rows retained + 47 real `--robot-*` rows appended** |
 | `bv` disposition | 0 consumed, retire all | **30 WIRE · 18 VALIDATE · 27 RETIRE · 1 UNPROBEABLE across all 76** |
-| engagement | "6.2 %" | **21.8 % (129/591), live** |
+| engagement | "6.2 %" | **24.8 % (152/614), current** |
 
 **`bv` inverts completely.** The tool §6 reported at *zero consumption, retire everything* is, once
 its real surface is mapped, **the most under-adopted tool in the system: 48 of 76 mapped surfaces
@@ -2280,13 +2213,7 @@ The correction did not come from a gate or a re-read. It came from Josh saying *
 naming a lot retired without fully testing them"* and *"we're retiring most of the surfaces"* —
 twice, because the first time I recorded the finding and did not act on it.
 
-**NO-CLAIM.** Superseded historical engagement and WIRE values are excluded from current-status prose; their snapshot identities are not the current map hash. The live, declared figure is **21.8%**
-engagement (**129/591**) and the live WIRE count is **67**. Fourteen binaries (`rch`, `fh`,
-`cargo`, `git`, `tmux`, `cass`, `ubs`, `caut`, `dcg`, `ru`, `pt`,
-`sbh`, `slb`, `gh`) still have no surface count, so the external-tool denominator is
-unknown. WIRE is a proposal, not proof of implementation, and non-null `validated_by` is not
-structured RETIRE evidence. A probe establishes that someone ran a surface; it does not establish
-that the resulting judgement is right.
+**NO-CLAIM.** Superseded historical engagement and WIRE values are excluded from current-status prose. The live declared figure is **24.8% engagement (152/614)** and current WIRE count is **67**. Fourteen external binaries still have no surface count, so that denominator is unknown. WIRE is a proposal, not proof of implementation, and non-null validated_by is not structured RETIRE evidence. A probe establishes that someone ran a surface; it does not establish that the resulting judgement is right.
 ---
 
 ## 10. Evidence inherited from a vacuous source is not evidence
@@ -2340,10 +2267,10 @@ Both are nulls. Only one is evidence. The policy requires each current RETIRE to
 
 | | count | meaning |
 |---|---:|---|
-| engaged | **129** | CONSUMED + WIRE + VALIDATE — **21.8%** (129/591; `NUMBERS.toml` command) |
+| engaged | **152** | CONSUMED + WIRE + VALIDATE — **24.8%** (152/614; NUMBERS.toml command) |
+| unmapped by crate | **479** | maps_to_crate == null; overlaps the disposition rows and is not missing rows |
 | honestly unknown | **9** | UNPROBEABLE-PENDING — 3 mux + 6 thin-reason; this is a disposition count |
 | retired | **453** | rows with disposition `RETIRE`; structured probe backing is not proven by the map schema |
-| unmapped by crate | **478** | `maps_to_crate == null`; overlaps the disposition rows and is not “missing rows” |
 
 **The honestly-unknown column is the most valuable in the table.** It did not exist three waves
 ago, when those same rows read `RETIRE` and the census claimed to know something it did not. It
@@ -2415,6 +2342,7 @@ again. Only 54 of the 63 are refuted here.
 
 ---
 
+**HISTORICAL SWEEP BOUNDARY (2026-08-31).** Sections 2.12–2.14 retain the type-surface sweep and its failure examples. Their fixed file, symbol, byte, and coverage counts are snapshot facts from the cited revision; they are not current workspace counts unless a paragraph explicitly supplies a current command and result.
 ## 2.12 Three dispositions from the `plan-mode` / `modes` / `goals` sweep
 
 `%1408`, bead `ipg.1`, coverage table at `29958a3`. Three type roots, three genuinely different
@@ -2601,6 +2529,7 @@ the brief" below.*
 
 ## How to read this section
 
+**HISTORICAL INVENTORY BOUNDARY.** The 183-row envelope and 26-crate split in the next paragraphs are the retained pre-extraction snapshot. Current cargo metadata re-derives 50 workspace packages; the old scanner denominator is not current acceptance evidence.
 The workspace ships a built census, `omp-inventory-map`, that emits 183 rows in a versioned
 envelope. Every row carries the four mandatory fields — `inputs`, `outputs`, `must_be_true`,
 `negative_evidence` — with zero missing. That census is **not** the source for this section, and
@@ -2651,8 +2580,7 @@ grep -c 'unsafe_code = "forbid"' crates/*/Cargo.toml         # manifest lint
 grep -rlF 'forbid(unsafe_code)' --include=lib.rs --include=main.rs crates/  # inner attr
 ```
 
-Twenty-six crates. `no unsafe` is **yes** for all 26, but by two different mechanisms — see the
-note below the table.
+**The table below is a 2026-08-31 historical snapshot of twenty-six crates.** The current workspace has a different package denominator after subsequent extraction; re-run cargo metadata before treating this table as current.
 
 | crate | role | inputs (real) | outputs (real) | key public types | path-deps | no unsafe |
 |---|---|---|---|---|---|---|
@@ -2683,19 +2611,7 @@ note below the table.
 | `tick-monitor` | three monitors behind one loop-enforcement choke point | pane capture, git state, `Tick` | `Outcome`, `PaneState`, `Liveness`, `CapacityEscalationReceipt` | `Outcome`, `PaneState`, `Liveness`, `Observation`, `Reject`, `Tick`, `State`, `CapacityAlarm`, `CapacityAlarmEvent`, `CapacityEscalationReceipt`, `RepoError` | — | yes |
 | `undrained-pipe-lint` | fail on both-pipes-piped + `try_wait` poll + no concurrent drain | source text; workspace root | `LintReport` (`Vec<Violation>`) | `Violation`, `LintReport` | — | yes |
 
-**The unsafe-forbid split, MEASURED — regenerated 2026-09-01 after the manifest lints moved.**
-All **26 of 26** crates now forbid unsafe in the manifest (`grep -l 'unsafe_code = "forbid"'
-crates/*/Cargo.toml | wc -l` → 26; six crates — `composer-typed`, `dispatch-silence-watch`,
-`loop-queue-filter`, `no-shell-gate`, `pane-dispatch-fence`, `subprocess-contract` — gained the
-lint after this section was first written, which is why earlier drafts say 20). **25 of 26**
-forbid it with an inner `#![forbid(unsafe_code)]` attribute (`grep -rlF 'forbid(unsafe_code)'
-crates/*/src/lib.rs crates/*/src/main.rs | cut -d/ -f2 | sort -u | wc -l` → 25). **25 carry
-both**; `tick-monitor` is manifest-only; **zero are attribute-only**. The union is still 26 —
-every crate covered — but the finding upgrades rather than dies: coverage moved from *two habits
-with no single enforcement point* to *one habit, uniformly adopted, still with no enforcement
-point*. Nothing fails the build if crate 27 keeps the attribute and forgets the manifest line. An
-investor should read that as: the property holds by adoption, and the one-file lint below is what
-makes it hold by construction.
+**The unsafe-forbid split, MEASURED — current command-backed census (2026-09-01).** All **50 of 50** crate manifests carry unsafe_code = "forbid". **49 of 50** crate source trees carry an inner forbid(unsafe_code) attribute, and **49 carry both**; tick-monitor is the one manifest-only straggler. **Zero are attribute-only; the union is 50 of 50.** Earlier 26/25/26 values are dated snapshots and remain historical. The property holds by adoption today; the one-file lint below is still required to make it hold by construction for crate 51.
 **PROJECTED.** A one-file lint asserting *manifest-and-attribute for every workspace member* turns
 that coincidence into an invariant. It is the cheapest gate in the plan and it is not written yet.
 
@@ -2703,6 +2619,8 @@ that coincidence into an invariant. It is the cheapest gate in the plan and it i
 
 ## The dependency graph in prose
 
+**HISTORICAL GRAPH SNAPSHOT (pre-extraction, 2026-09-01).** The 18-edge list, 17/26 leaf ratio, 22/26 non-routed ratio, and 29 spawn-site inventory below describe the earlier 26-crate graph. Current workspace package and path-edge counts must be re-derived from cargo metadata; these historical values are not current acceptance denominators.
+**CURRENT GRAPH RECHECK (integration).** `cargo metadata --format-version 1 --no-deps` with path-dependency filtering returns **50 packages, 34 path edges, 30 leaves, and 20 non-leaves**. This is the current graph denominator; the explicit edge list and 18/17/26/22/26 ratios below remain historical.
 **MEASURED** — 18 `path-depends-on` edges, complete, from the census:
 
 ```
@@ -2939,14 +2857,7 @@ the consequential disagreement: the half of the vocabulary that would collapse t
 dialects is **blocked on an upstream feature boundary**, not merely unadopted, so any schedule that
 assumes it is available today is wrong.
 
-**2. The unsafe-forbid denominator.** The brief §3.7 states "16 of 22 forbid unsafe". Commands:
-`grep -c 'unsafe_code = "forbid"' crates/*/Cargo.toml` → **20 of 26**;
-`grep -rlF 'forbid(unsafe_code)' --include=lib.rs --include=main.rs crates/ | cut -d/ -f2 | sort -u | wc -l`
-→ **25 of 26**; union → **26 of 26**. The brief's figure appears to come from the 22-crate spawn-site
-scan and counts one mechanism only. Both denominators (22 vs 26) and both mechanisms need stating —
-this is exactly writing-contract rule 4. The *substantive* finding survives either way and is
-arguably worse than the brief's: coverage is complete today, but by two habits with no single
-enforcement point.
+**2. The unsafe-forbid denominator.** The brief's 16 of 22 and the earlier 20/26 values are historical snapshots. The current command-backed census is **50 of 50** manifests with unsafe_code = "forbid", **49 of 50** source trees with an inner forbid(unsafe_code) attribute, **49 of 50** carrying both, and a **50 of 50** union. tick-monitor is the sole manifest-only straggler. The substantive gap remains: no single gate yet refuses a new crate that keeps only one mechanism.
 
 **3. The type-inventory scope.** The brief §3.7 gives 51 enums / 79 structs across 22 of 24 crates.
 `grep -rhoE '^pub enum …' --include=*.rs crates/ | wc -l` → **59**, and the struct form → **91**.
@@ -2965,19 +2876,10 @@ unverified here.
 
 R11 exists because a requirement living only in chat dies with the conversation. Three constraints
 surfaced while deriving the table above that were not previously written anywhere:
-1. **Unsafe-forbid must be single-mechanism.** Today all 26 crates carry the manifest lint
-   (regenerated 2026-09-01; six crates adopted it after the first draft said 20) and 25 of 26
-   also carry the inner attribute — `tick-monitor` is the one manifest-only straggler, and zero
-   crates are attribute-only. The gap is no longer the union; it is the *straggler*: nothing
-   fails the build if crate 27 keeps one mechanism and drops the other. A one-file lint asserting
-   *manifest **and** attribute for every workspace member* is the cheapest gate in the plan.
+1. **Unsafe-forbid must be single-mechanism.** The current command-backed census is 50 of 50 manifests, 49 of 50 source trees with the inner attribute, 49 of 50 carrying both, and a 50 of 50 union; tick-monitor is the manifest-only straggler. Earlier 26/25/26 values are historical. Nothing yet fails the build if a future crate keeps one mechanism and drops the other, so the one-file lint remains the required floor-raise.
 2. **A crate that spawns must depend on `subprocess-contract`.** Two leaves — `omp-rpc-session` and
-   `omp-inventory-map` — spawn processes today with no path-dep on the boundary crate. The rule is
-   stated here so it is checkable, not remembered.
-3. **`pane-dispatch-fence` has no library surface.** It is the only workspace member with no
-   `src/lib.rs` and zero `pub` items (`ls crates/pane-dispatch-fence/src` → `main.rs`). Its contract
-   is `UNDECLARED` and therefore untestable from outside the binary. Any crate whose behaviour other
-   crates must rely on needs a library surface; that is a constraint, and it is now written down.
+omp-inventory-map — spawn processes today with no path-dep on the boundary crate. The rule is stated here so it is checkable, not remembered.
+3. **pane-dispatch-fence has no library surface.** It is the only workspace member with no src/lib.rs and zero pub items (ls crates/pane-dispatch-fence/src -> main.rs). Its contract is UNDECLARED and therefore untestable from outside the binary. Any crate whose behaviour other crates must rely on needs a library surface; that is a constraint, and it is now written down.
 
 **NO-CLAIM.** This section states each crate's contract as its source declares it, and states the
 adoption path we intend. It does **not** claim any of the following: that the derived contracts are
@@ -2996,8 +2898,8 @@ entirely.
 Josh: *"any missing crates could be in control-plane that we have to move over — this should be
 mentioned in docs."* He is right, it was not mentioned anywhere as a number, and the number is large.
 
-**20 of the 20 crates `AGENTS.md` marks `CONTROL-PLANE` are NOT extracted. 28,779 LOC still live
-upstream. Zero have moved.**
+**PRE-EXTRACTION SNAPSHOT (measured before a277097, 2026-09-01):** 20 of the 20 crates marked
+CONTROL-PLANE in the then-current AGENTS.md table were not extracted; 28,779 LOC remained upstream.
 
 | crate | LOC | upstream |
 |---|---:|---|
@@ -3023,27 +2925,25 @@ upstream. Zero have moved.**
 | `oracle-compare` | 449 | present |
 
 Every one verified present at `/Users/josh/Developer/control-plane/crates/<name>` at measurement
-time. None is missing upstream; none is here.
+time. At that pre-extraction measurement time, none was missing upstream; none was here.
 
-### What this means about the 26 crates that ARE here
 
+### Historical interpretation of the 26-crate snapshot
 They are **all new work built during this session** — gates, registries, the tick loop, the
 supervisor, the schema and number and convergence machinery. That is not a criticism of them; it is
 a correction to any reading of this section that assumes the workspace is the extraction landing
-zone. It is not. **The extraction has not started**, and bead `omp-orchestrator-815` is still open.
+zone. At that snapshot time, extraction had not started; bead omp-orchestrator-815 was still open.
 
 ### How this surfaced, and what it says about the census
 
-`census_gates()` in `crates/omp-orchestrator/src/lib.rs` hardcodes a 14-crate list. Three of those
-names — `fleet-truth`, `oracle-compare`, `oracle-pane-state-differential` — are **not on disk**, so
-the supervisor reported them `Unreachable` and refused to tick. The refusal was correct and its
-reason was wrong: they are not unwired, they are **unextracted**, and those two states have
-completely different remedies. Fifteen crates that DO exist were not in the list at all.
 
+At the pre-extraction snapshot, census_gates() hardcoded a 14-crate list. Three names were not on disk then, so the supervisor correctly classified them as unextracted rather than unwired; this paragraph records that historical refusal, not current presence.
 So the census was a frozen snapshot of a *planned* workspace naming 3 of the 20 missing crates
 arbitrarily. Dropping them would have been the wrong fix — it would have erased real debt to make a
 gate go green. **Naming all twenty is the right fix**, and `NUMBERS.toml` now carries the count so it
 cannot quietly drift as extraction proceeds.
+
+**CURRENT STATUS (re-derived 2026-09-01):** the 20 named control-plane crate directories are now present under crates/ in this working tree, while their commit state is governed by the path-scoped extraction commits. The current workspace denominator is 50 packages; the pre-extraction 26-crate and 20-unextracted figures above are historical.
 
 ### NO-CLAIM
 
@@ -3057,6 +2957,7 @@ checkout, and a move under those conditions is how work is lost.
 
 ## 3.10 The extraction workstream and its bead DAG
 
+**HISTORICAL EXTRACTION-PLANNING NARRATIVE.** The bead, graph, leaf, and LOC claims in the following subsection describe the pre-a277097 tree. Current target presence and current missing-source total are stated above and in NUMBERS.toml; the historical 29,512 LOC is not current extraction debt.
 Josh: *"our plan needs to include all unextracted stuff — that has to be part of our bead dag."*
 Bead `omp-orchestrator-815` is currently **one bead for 29,512 LOC across 20 crates**, which cannot
 be worked — it can only be adjudicated. Under `beads-north-star` a bead needs testable acceptance,
@@ -3130,12 +3031,7 @@ conditions is how work is lost. That contract is a prerequisite of all 20, not a
 
 ### NO-CLAIM
 
-The dependency shape is **intra-set `path =` deps only**. A crate may also depend on a control-plane
-crate that is NOT in this 20 — those edges are unmeasured, and any one of them turns a leaf into a
-blocked node or an extraction into a larger cut than planned. Nothing here has been extracted, so
-none of these acceptance commands has ever run. The LOC total measured now is **29,512**, against
-**28,779** summed from `AGENTS.md`'s own table — a 733-line discrepancy, unreconciled, and a further
-instance of the counted-vs-stated gap this document keeps producing.
+This is an **unexecuted historical decomposition**, not a current extraction-status claim. The 20 named directories are present in the current worktree as stated in §3.9, but this subsection's acceptance commands have not been run and no claim is made that the proposed 20-child bead DAG exists. The 29,512 LOC total and 28,779 comparison are historical size snapshots; current ownership and bead state must be re-derived from the current tree and `br`.
 
 ---
 
@@ -3150,29 +3046,13 @@ every number involved is TRUE and they measure different things.
 
 | reading | value | what it measures |
 |---|---:|---|
-| manifests declaring `[lints.rust] unsafe_code = "forbid"` | **26 of 26** | the lint is configured |
-| source roots carrying `#![forbid(unsafe_code)]` | **25 of 26** | the attribute is in the code |
-| **union — AUTHORITATIVE** | **26 of 26** | *does this workspace forbid unsafe* |
+| manifests declaring [lints.rust] unsafe_code = "forbid" | **50 of 50** | current manifest lint count |
+| source roots carrying #![forbid(unsafe_code)] | **49 of 50** | current inner-attribute count |
+| **union — AUTHORITATIVE** | **50 of 50** | current union; tick-monitor is manifest-only |
 
-One crate carries the lint in its manifest alone; that is why 25 and 26 both
-appear and neither is wrong. `NUMBERS.toml` now declares
-`forbid_unsafe_authoritative` with the union command, so the figure re-derives.
+The earlier 26/25/26 table was a dated snapshot. NUMBERS.toml now declares the union command, and the current counts above are re-derived from the shared checkout.
 
-The figures this section previously carried — the brief's `16 of 22` and an
-earlier draft's `20 of 26` — are **stale, not contradictory**: both were measured
-before six crates adopted the lint. `grep -l` and `grep -c` now agree at 26.
-
-**A REVIEWER ERROR, on the record, because it is the more useful half.** Checking
-the `25 of 26` claim I ran the agent harness's grep for `forbid(unsafe_code)` and
-got **zero**, and came within one commit of filing a BLOCKER saying this section
-was false. The section was right. That grep is a Rust regex engine: `(` and `)`
-are grouping metacharacters, so the pattern matches the literal string
-`forbidunsafe_code`, which exists nowhere. It returned zero and exited zero.
-
-Scope, corrected after measuring both engines: shell `grep` through `sh -c` — the
-path every `NUMBERS.toml` figure uses — treats `(` as a literal and answers
-correctly. A planted figure with the unescaped pattern returned 64, not 0. **The
-registry was never exposed. The reviewer was.**
+**A REVIEWER ERROR, on the record, because it is the more useful half.** The initial agent-harness grep used grouping syntax and returned zero; the shell command registered in NUMBERS.toml and the current table above use the correct literal pattern. The registry was not exposed. The reviewer was.
 
 ### Extraction debt
 
@@ -3208,9 +3088,13 @@ be absent. Generating from the census means the picture degrades when the system
 degrades. It is a load-bearing artifact, not decoration.
 
 The source of truth for Diagrams 1, 2 and 6's node set is the built scanner at
-`/Volumes/BuildShared/cargo-targets/debug/omp-inventory-map`, whose output was
-captured once at `/tmp/inv.txt` (544,697 bytes, exit 2, envelope
-`{"schema_version":"omp-inventory-map/v1","command":"doctor","status":"UNKNOWN",…}`).
+`/Volumes/BuildShared/cargo-targets/debug/omp-inventory-map`. The 2026-08-31 capture is
+preserved at `.flywheel/inventory-artifacts/inv.txt.gz` (decompressed 544,697 bytes;
+compressed SHA-256 `8f62893e6a4a04a9b4e8922781a5f8a687f73ca84f5c4ea9d69c5f8998ae0561`,
+exit 2). The newer scanner capture is preserved at
+`.flywheel/inventory-artifacts/omp-inventory-map-2026-08-31.json.gz` (decompressed
+3,032,388 bytes; compressed SHA-256 `8de42c7cb9e653a79b9781602b16db21e4e281346e42c47c95e71041d9404f52`,
+exit 2). These are retained historical snapshots, not a current live diagram feed.
 Diagrams 3 and 4 are generated from the five-stage control loop (formerly "five-stage" — renamed, the table has five stages and seven rows) table and gate-leg table
 in §00 (`docs/plan/00-brief.md` §3.5, §4); the `find`/`grep` invocations behind those
 tables are reproduced under each diagram rather than re-derived.
@@ -3279,6 +3163,7 @@ graph TD
     pane_dispatch_fence --> subprocess_contract
 ```
 
+**HISTORICAL GRAPH SNAPSHOT.** The following edge, degree, and `/tmp` extraction claims are the preserved `inv.txt.gz` snapshot above. They are not current workspace counts; current map and metadata authorities live in `NUMBERS.toml` and the current census sections.
 **MEASURED.** Source: all 18 `path-depends-on` edges in `/tmp/inv.txt`, extracted with
 `python3 -c "import json; d=json.load(open('/tmp/inv.txt'))['data']; [print(e['from'],'->',e['to']) for e in d['edges'] if e['relation']=='path-depends-on']"`.
 Every edge in the picture is one line of that output; the four subgraph groupings are
@@ -3375,13 +3260,13 @@ graph LR
     OBS["1 · OBSERVE<br/>tick-monitor<br/>WORKS"]
     ACT["2 · ACTIONABLE<br/>idle_panes / free_capacity<br/>FILTER FIXED (-oco); SEAM OPEN — no shared type"]
     CON["3 · CONSUME<br/>dispatch-claim-fence<br/>FENCED"]
-    ACU["4 · ACTUATE<br/>send to pane<br/>DOES NOT EXIST"]
-    CMP["5 · COMPLETE<br/>worker to conductor<br/>DOES NOT EXIST"]
+    ACU["4 · ACTUATE<br/>ntm --robot-send from the resident supervisor<br/>EXISTS, UNFENCED — 131 re-sends of one unclaimed bead (2026-09-01)"]
+    CMP["5 · COMPLETE<br/>worker to conductor<br/>AVAILABLE, NOT WIRED"]
 
     OBS -->|pane state observed| ACT
     ACT -.->|"Local path: filter fixed (-oco); the SEAM remains —<br/>the production parser derives capacity from its own<br/>JSON string, never the producer's NewlyIdle field;<br/>upstream GuestIdleReconcilerCtx (collab/guest.d.ts:9-30)<br/>is DECLARED only"| CON
     CON -.->|"162 refused ticks over 4.2h<br/>DISPATCH_RETRY_BLOCKED"| ACU
-    ACU -.->|"a human types into the pane"| CMP
+    ACU -.->|"sends without the claim beat; sender success logged as receipt"| CMP
     CMP -.->|"no path back"| OBS
 
     style OBS fill:#2d5016,color:#fff
@@ -3396,7 +3281,7 @@ graph LR
     linkStyle 4 stroke:#c04040,stroke-width:3px
 ```
 
-**MEASURED.** Source: layer 1 from the `tick-monitor` crate's live operation; layer 2 from the local `idle_panes`/`free_capacity` producer-consumer path. State, corrected 2026-09-01: the filter defect is FIXED (commit -oco; `is_free_capacity` is now its own field and `NewlyIdle` is included), and what remains broken is the SEAM — the producer's field and the consumer's parser agree by convention across a process boundary with no shared type (09 M1). OMP supplies `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts:9-30`) for guest host-idle reconciliation and settle handling, but this declared type has no measured path into the local filter. Layer 3 is from the tick ledger — **162 refused ticks across 4.2 hours, every one carrying `DISPATCH_RETRY_BLOCKED`**; layers 4 and 5 are recorded as absent because no crate in Diagram 1 emits into a pane and no crate receives a completion.
+**MEASURED.** Source: layer 1 from the `tick-monitor` crate's live operation; layer 2 from the local `idle_panes`/`free_capacity` producer-consumer path. State, corrected 2026-09-01: the filter defect is FIXED (commit -oco; `is_free_capacity` is now its own field and `NewlyIdle` is included), and what remains broken is the SEAM — the producer's field and the consumer's parser agree by convention across a process boundary with no shared type (09 M1). OMP supplies `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts:9-30`) for guest host-idle reconciliation and settle handling, but this declared type has no measured path into the local filter. Layer 3 is from the tick ledger — **162 refused ticks across 4.2 hours, every one carrying `DISPATCH_RETRY_BLOCKED`**; layer 5 is recorded as absent because no crate receives a completion. **Layer 4 was corrected 2026-09-01 by the guardian pass:** it is not absent — the resident `omp-orchestrator` (launchd, build `9a61acd`) emits into panes via `ntm --robot-send`, and the heartbeat ledger records 131 `DISPATCHED` rows for bead `815` to `%1408` between 11:45 and 15:53 MDT with the bead `open` and the pane dead on HTTP 402 (00-brief §4 carries the command). The dashed link now names the defect that is live rather than an absence that is not. This node text is hand-edited, as every node in this diagram has been since it was captured — the generator this section requires still has no command and no owner.
 
 
 Read left to right, exactly one of five links is solid. The loop is not slow, it is
@@ -3422,21 +3307,20 @@ under a fixed layer 2.
 
 ```mermaid
 graph TD
-    subgraph COMPLETE["4 of 4 legs — 1 gate"]
+    subgraph COMPLETE["4 of 4 legs — 2 gates"]
         g1["no-shell-gate<br/>57 tests (was 34; four test files landed since)<br/>known_bad 4 · known_good 3<br/>mutation 2 · anti_vacuity 6"]
+        g3["undrained-pipe-lint<br/>10 tests<br/>known_bad 1 · known_good 3<br/>mutation 1 · anti_vacuity 1"]
     end
-
-    subgraph PARTIAL["partial — 4 gates"]
+    subgraph PARTIAL["partial — 3 gates"]
         g2["omp-inventory-map<br/>23 tests<br/>known_bad 0 · known_good 2<br/>mutation 1 · anti_vacuity 1"]
-        g3["undrained-pipe-lint<br/>10 tests<br/>known_bad 1 · known_good 1<br/>mutation 1 · anti_vacuity 3"]
-        g4["state-wildcard-lint<br/>9 tests<br/>known_bad 1 · known_good 0<br/>mutation 1 · anti_vacuity 0"]
+        g4["state-wildcard-lint<br/>9 tests<br/>known_bad 1 · known_good 1<br/>mutation 1 · anti_vacuity 0"]
         g5["path-literal-guard<br/>3 tests<br/>known_bad 1 · known_good 0<br/>mutation 0 · anti_vacuity 2"]
     end
 
-    subgraph THIN["known-bad + known-good only — 3 gates"]
-        g6["kernel-bypass-gate<br/>6 tests · mutation 0 · anti_vacuity 0"]
-        g7["pre-delete-citation-check<br/>6 tests · mutation 0 · anti_vacuity 0"]
-        g8["commit-build-fence<br/>10 tests<br/>known_bad 0 · mutation 0 · anti_vacuity 0"]
+    subgraph THIN["partial leg coverage — 3 gates"]
+        g6["kernel-bypass-gate<br/>6 tests<br/>known_bad 1 · known_good 1<br/>mutation 0 · anti_vacuity 0"]
+        g7["pre-delete-citation-check<br/>6 tests<br/>known_bad 1 · known_good 1<br/>mutation 0 · anti_vacuity 0"]
+        g8["commit-build-fence<br/>10 tests<br/>known_bad 0 · known_good 1<br/>mutation 0 · anti_vacuity 0"]
     end
 
     style COMPLETE fill:#2d5016,color:#fff
@@ -3444,23 +3328,22 @@ graph TD
     style THIN fill:#4a1010,color:#fff
 ```
 
-**MEASURED.** Source: `find crates -name '*.rs' -path '*/tests/*' | wc -l` → 31
-integration test files; `grep -rhc '#\[test\]'` over crates/*/src/*.rs crates/*/tests/*.rs → 407 `#[test]` functions (regenerated 2026-09-01; this figure drifts with every landing test and is now tracked in NUMBERS.toml `[figures.test_functions]`);
+**MEASURED (historical snapshot at the plan's 2026-09-01 measurement revision; current worktree census authority is §1 of `06-gates.md`).** Source: `find crates -name '*.rs' -path '*/tests/*' | wc -l` → 31
+integration test files; `grep -rhc '#\[test\]'` over crates/*/src/*.rs crates/*/tests/*.rs → 409 `#[test]` functions (this figure drifts with every landing test and is now tracked in NUMBERS.toml `[figures.test_functions]`);
 per-leg presence from `grep -rli` for each of `known_bad`, `known_good`, `mutation`,
 `anti_vacuity` per gate crate. Counts in each node are that grep's file count, not a
 quality judgement.
 
 **2 of 8 gates have all four legs** — `no-shell-gate` and `undrained-pipe-lint`. **4 of 8 have no
 mutation leg** — meaning for four gates we have never demonstrated that breaking the
-thing under test makes the test fail. 2 of 8 have no known-bad, i.e. no proof they
-fire at all. **Two gates have no known-good leg** — `path-literal-guard` and
-`state-wildcard-lint` (regenerated 2026-09-01: zero known-good occurrences in that crate's tests,
-correcting this diagram's earlier kg=1 cell) — and per §00 §3.5 that makes both the
-highest-risk gates in the set rather than merely the thinnest: an attack-only suite
-ships an over-strict gate, an over-strict gate gets routed around, and a routed-around
-gate is a slower death than no gate at all. Note also what a full four-leg row buys —
-it raises the floor on a class of defect; it never guarantees the class is absent.
+thing under test makes the test fail. **2 of 8 have no known-bad**, i.e. no proof they
+fire at all. **One of 8 gates has no known-good leg** — `path-literal-guard` (regenerated
+2026-09-01: zero known-good occurrences in that crate's tests). Per §00 §3.5, an attack-only
+suite ships an over-strict gate, an over-strict gate gets routed around, and a routed-around
+gate is a slower death than no gate at all. A full four-leg row raises the floor on a class
+of defect; it never guarantees the class is absent.
 
+**HISTORICAL ADDRESSABILITY SNAPSHOT.** The old --help refusal, 13-test count, and 544,697-byte output below were measured before the retained artifact update. Current source has 28 test markers and the current debug --help probe emits 158 bytes at exit 1. No current ADDRESSABLE pass is claimed without a retained command/output/revision receipt.
 A sixth required property fell out of this session and is not in the table because
 nothing measures it yet: **ADDRESSABLE**. `omp-inventory-map --help` returns
 `{"status":"ERROR","error":"CONFIG_ERROR unknown argument --help"}`. The gate is
@@ -3468,9 +3351,15 @@ built, its 13 tests pass, and `types_inventory.rs:176-178` deliberately excludes
 `Observation` from the allowance list so the name collision *demands* convergence
 rather than tolerating it. It is correct and it is undiscoverable. A gate nobody can
 invoke has a real-world firing rate of zero regardless of its test count.
+**CURRENT ACCEPTANCE AUTHORITY (UNRESOLVED).** The diagram generator and CI diff gate named by
+the requirement above do not exist in this repository: generator command = **NONE**; CI job =
+**NONE**; owner = **UNASSIGNED**. Until a bead assigns an owner and lands an executable command,
+these diagrams are snapshots only. The future bead is not accepted until its command regenerates
+Diagram 1 from the live census and a deliberately changed crate edge makes CI fail on the diff;
+there is currently no command or owner to run.
 
 **What would Jeffrey do.** Searched the mirror at
-`/Volumes/ZestData/dicklesworthstone-mirror` (210 git work-trees; the earlier "216 repos" figure is retired) for diagram-generation and
+/Volumes/ZestData/dicklesworthstone-mirror (210 filesystem .git entries, not validated as git work-trees) for diagram-generation and
 contract-test prior art: `grep -rl "mermaid" --include=*.rs` surfaces
 `franken_markdown/src/pdf.rs` and `franken_markdown/tests/cli_contract.rs`, i.e. a
 *renderer* for mermaid plus a CLI-contract test harness — the useful borrow is the
@@ -3564,8 +3453,8 @@ src-only-minus-bins-minus-test-modules), plus 4 colliding names.
 
 Step 4 is the receiver-verification gap, drawn as a dashed unanswered arrow because
 that is literally what it is: a message we assume and never observe. Every ack type we
-own is a type without a wire. The board at stand-down — 28 closed, 25 in_progress,
-19 open, 2 blocked, 75 total — is a human's account of what happened, not the system's.
+own is a type without a wire. **HISTORICAL SNAPSHOT:** the board at stand-down — 28 closed, 25 in_progress,
+19 open, 2 blocked, **74 total** (`28+25+19+2=74`) — is a human's account of what happened, not the system's.
 Twenty-five `in_progress` beads with no completion channel is twenty-five unfalsifiable
 claims of work in flight.
 
@@ -3603,18 +3492,12 @@ is technically true and still misleading:
 Six hours and 5.6× apart. The diagrams are built from the **earlier, smaller** capture
 while the brief cites the later one, and nothing in either document says so.
 
-### The finding the grade did not reach
+### Provenance finding disposition
+**Resolved:** the earlier capture paths were ephemeral `/tmp` locations. The bytes are now preserved and hash-identified under `.flywheel/inventory-artifacts/`; the source-era paths below are historical evidence, not current dependencies.
 
-**Both artifacts live in `/tmp`.** Every diagram's provenance in this section rests on
-files that a reboot deletes. The date was never the real defect — the defect is that
-after the next restart, none of the five citations could be checked by anyone,
-including their author, and the diagrams would become exactly the *"hand-drawn diagram
-with better provenance"* this section's own §R4 note warns about.
+The diagrams are still **not regenerated from the fresh capture**. §R4 records the separate system gap: generator command = NONE and CI job = NONE. The honest state is a labelled, preserved 16:50 snapshot, not a live view. The 23:01 capture remains preserved for comparison.
 
-Preserved, compressed, and hashed at
-`.flywheel/inventory-artifacts/` — 3.5 MB of provenance in 120 KB (22× and 32×). A
-citation to a `/tmp` path is a citation to nothing in a week; a citation to a
-content-hashed in-repo artifact survives.
+**Current retained artifacts:** `inv.txt.gz` decompresses to 544,697 bytes and `omp-inventory-map-2026-08-31.json.gz` decompresses to 3,032,388 bytes. Their compressed hashes are recorded above and enforced by the artifact-provenance gate.
 
 ### What is corrected and what is not
 
@@ -3628,8 +3511,7 @@ of work. So the honest state is: **the diagrams reflect a 16:50 snapshot, which 
 labelled, hashed, and preserved, and they are not current.** Row counts in Diagram 2
 (176 census rows) are from that capture; the 23:01 capture holds 981 rows.
 
-That gap is now stated in the document rather than discoverable only by diffing two
-`/tmp` files that will not exist next week.
+That gap is now stated in the document; the retained artifacts make the historical comparison reproducible without depending on ephemeral source-era paths.
 
 
 ---
@@ -3646,11 +3528,7 @@ whether it is entitled to do a thing — and the interesting half is the refusal
 specified twice: as an intent, and as the wrong behaviour it must be structurally unable to do. **An
 action whose negative pattern is hypothetical is weaker than one whose negative pattern has a
 scar**, so each is marked. `How we know it refused` names the observable that stops a refusal from
-being a line in a log nobody reads — measured at **162 consecutive refused ticks whose typed refusal
-nobody consumed** (brief §4). Citations are relative to `crates/` and **name the construct, not just
-the line**, since a bare line number is unverifiable and drifts; §03 owns the full schema, so
-`Inputs`/`Outputs` carry only the contract and the refusal shape; and a not-found is reported only
-with the command **and** why its search space was right.
+being a line in a log nobody reads — the 162-consecutive-refusal figure is a historical brief snapshot with no retained deriving ledger. Citations are relative to crates/ and name the construct, not just the line, since a bare line number is unverifiable and drifts; §03 owns the full schema, so Inputs/Outputs carry only the contract and the refusal shape; and a not-found is reported only with the command and why its search space was right.
 
 ### A1. OBSERVE a pane
 **Purpose.** Turn one pane's rendered terminal into a typed, timestamped `Observation`.
@@ -3672,11 +3550,7 @@ AND idle simultaneously while genuinely idle"* (`:288-292`); the fix is `last_st
 called two live panes frozen, because a lane deep in a tool call has a static timer and changing
 output; the floor became `MIN_GAP_SECS = 75` — *"a missed freeze costs idle minutes, a false freeze
 destroys work in flight"* (`:479-485`). **Disagreement with the brief:** my spawn instructions
-asserted a **changed** hash at 20s proves working. Logically right; the code does not do it.
-`liveness()` returns `Unproven { why: "gap_too_short" }` at `:541-545`, *before* the `(Working,
-Working)` arm at `:551-557` that compares `prev.hash != now.hash` — positive proof of life is
-discarded. **Correctly reasoned, incorrectly implemented; recorded as an open defect.** PROJECTED:
-hoisting that check above the floor would make `Live` provable at watcher cadence.
+The earlier 20-second assertion and citations were stale. Current liveness() compares positive timer or stable-hash motion in tick-monitor/src/lib.rs:564-572 before applying MIN_GAP_SECS at :574-577; a changed Working capture returns Live, while an unchanged short-gap pair remains Unproven. This is now the source-backed behavior, not an open defect.
 
 **How we know it refused.** `PaneState::Unproven`, excluded from every capacity list rather than
 defaulted into one; sub-floor refusals carry a machine-readable `why: &'static str` (`:506-586`).
@@ -3708,10 +3582,8 @@ rather than this capture's shape (`:517-539`). **MEASURED**, and why `Dialog` ex
 on was invisible to the conductor while looking perfectly healthy"* (`:422-428`). A timer advancing
 while a pane blocks on a human is motion, and motion is not work.
 
-**How we know it refused.** The match at `:550-587` is **exhaustive with no wildcard arm**: the `_
-=> Live` catch-all it replaces hid a freed worker, and `state-wildcard-lint` keeps that from
-regressing. **NO-CLAIM:** a two-capture claim about motion — it cannot tell work from a loop.
 
+**How we know it refused.** The current match at tick-monitor/src/lib.rs:583-620 is exhaustive with no wildcard arm; the old catch-all that could misclassify Working-to-Idle is absent, and state-wildcard-lint guards that shape. **NO-CLAIM:** a two-capture motion claim cannot tell work from a loop.
 ### A3. SELECT work
 **Purpose.** Choose which ready beads to offer next by graph position, so the fleet works the
 critical path rather than the operator's most recent discovery.
@@ -3809,7 +3681,14 @@ is therefore **invisible to the detector built to notice a silent worker**: `cla
 (`dispatch-silence-watch/src/lib.rs:108-115`) and has a `Reassigned` arm — *"the original dispatch
 is moot regardless of whether comments exist"* (`:32-34`). With no claim the bead cannot be silent,
 only absent. **MEASURED by consequence**: brief §4 records that every completion this session was
-found by a human looking. A second refusal closes the bypass — `DispatchIntent` splits `Bead` from
+found by a human looking. **MEASURED directly, 2026-09-01, and it is the largest instance:** the
+installed supervisor (build `9a61acd`, which calls no claim fence) sent bead `815` — `open`,
+`assignee: null` — to `%1408` **131 times in 247 minutes**, one per tick, each row logged
+`DISPATCHED … RECEIVER_RECEIPT=ntm_robot_send`; the receiver was dead on HTTP 402 and held 54
+copies of the packet. `dispatch-silence-watch` could not see it because the bead was never
+`in_progress`, which is exactly the blindness this paragraph predicts. Command:
+`jq -r 'select(.pid==70561 and .status=="DISPATCHED") | .detail' ~/.local/state/flywheel/omp-orchestrator.heartbeat.jsonl | sort | uniq -c`.
+A second refusal closes the bypass — `DispatchIntent` splits `Bead` from
 `Broadcast` and `Correction` *"so they cannot bypass the bead fence by supplying an empty bead
 identifier"* (`dispatch-claim-fence/src/lib.rs:100-117`).
 
@@ -3833,10 +3712,12 @@ before any later observation overwrites it.
 `UnprovenTransport` (`receiver-receipt/src/lib.rs:54-57`).
 
 **Negative pattern — what this action must REFUSE to do.** *(a) Refuse to treat `success:[N]` as
-delivery.* **MEASURED — `cp-z42vu`**: *"`ntm --robot-send` returned `successful:["4"]` while the
-packet never reached the pane"* (`dispatch-silence-watch/src/lib.rs:10-11`). The wrong behaviour is
+delivery.* **Historical incident only — not an in-tree fixture:** cp-z42vu records ntm --robot-send successful:[4] without receiver arrival, but current dispatch-silence-watch tests contain no cp-z42vu or success:[4] payload. The failure shape remains the reason receiver-side evidence is required; no current test result is claimed.
 *the natural one*: the transport told the truth about its own send and nothing about the receiver —
-the most important negative here. Hence the receiver crate's first rule: *"A sender return value is
+the most important negative here. **MEASURED 2026-09-01, 131 times:** every one of the 131 re-sends
+recorded under A5 carried `RECEIVER_RECEIPT=ntm_robot_send` — the transport's own success, written
+into the heartbeat as if it were a receipt — to a pane that could not act. This is not a historical
+incident record; the rows are in `~/.local/state/flywheel/omp-orchestrator.heartbeat.jsonl` today. Hence the receiver crate's first rule: *"A sender return value is
 therefore never part of the receipt proof"* (`receiver-receipt/src/lib.rs:5-7`). *(b) Refuse to
 bypass a guard without recording what the bypass skipped.* A bypass that logs "overridden" discards
 the guard's **true** positives with its false one; a sibling override instead *"names the
@@ -3906,18 +3787,9 @@ worker's session — and known to have actually run, which A11 shows is not free
 **Negative pattern — what this action must REFUSE to do.** *(a) Refuse to read the worker's report
 instead of re-running the command.* **MEASURED — bead `ipg.17`**, instructive: re-running
 **refined** the claim rather than refuting it. `omp-inventory-map/src/types_inventory.rs:176-178`
-excludes `Observation` from the allowance list so the collision demands convergence, and 13 tests
-pass — **and** the binary's 544,697-byte doctor output contains **zero** occurrences of
-`Observation`, `CONVERGE`, or `Verdict`, **and** `--help` returns `CONFIG_ERROR unknown argument
---help`. The honest grade is neither PASS nor FAIL: **built, correct, and undiscoverable** (brief
-§3.6). **A grading action that can only pass or fail cannot represent it** — `Grade` needs an arm
-for *correct and unreachable*. *(b) Refuse a zero from a tool that cannot distinguish "no matches"
-from "did not run".* **MEASURED**: shell `grep -rl 'forbid(unsafe_code)' --include='*.rs' crates`
-returns **0** where the harness tool returns **55 files**; without `--include` it is correct. A
-second mechanism hit a sibling: `--include='*.rs'` pointed at `ntm`, a **Go** repo — structural
-absence read as semantic absence. A grade built on either reads as a clean refutation of a true
-claim. A sixth refutation this session landed in shipped source rather than in the plan (A11(a)): a
-doc-comment defect claim, cited onward as measured because the source presented it that way.
+**HISTORICAL ADDRESSABILITY SNAPSHOT:** the gate's old artifact reported 13 source tests, 544,697 output bytes, and an unknown-argument --help result. Current omp-inventory-map has 28 test markers; the current debug binary emits 158 help bytes and exits 1. No current ADDRESSABLE pass is claimed without a retained command/output/revision receipt. **Grade** still needs an arm for correct-and-unreachable.
+*(b) Refuse a zero from a tool that cannot distinguish "no matches" from "did not run".* **HISTORICAL MEASUREMENT:** shell grep with --include reported 0 in an earlier harness context; current probes must be re-run and the Rust gate must fail closed.
+That earlier comparison recorded shell 0 versus harness 55, and a second search targeted a Go repository with a Rust extension filter; both are historical failure shapes, not current results. A grade built on either is refused. A sixth refutation this session landed in shipped source rather than in the plan (A11(a)); it is retained as a historical lesson, not current acceptance.
 
 **How we know it refused.** A stored transcript naming the discrepancy — claimed token, command
 re-run, observed count — and, for (b), the second tool that disagreed. **NO-CLAIM:** proves what the
@@ -3965,25 +3837,12 @@ finished worker becomes visible capacity rather than a quiet hole.
 **Outputs.** A capacity delta and a reap record naming the pane, the bead, and the terminal state.
 
 **Must be true before.** The transition to idle is **observed**, not assumed: `(Working, Idle)`
-yields `NewlyIdle` (`tick-monitor/src/lib.rs:562`), and the next tick's `(Idle, Idle)` yields
-`ConfirmedIdle` (`:560`). The substrate separates the same two states: `AgentEndEvent.willContinue`
-(`dist/types/extensibility/shared-events.d.ts:154`) marks a continuation that must not read as
-settled, and `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts`) reconciles over that
-boundary instead of deriving both from one predicate.
+yields NewlyIdle (tick-monitor/src/lib.rs:595), and the next tick's Idle, Idle yields ConfirmedIdle (:593). The substrate separates the same states with AgentEndEvent.willContinue (:154) and GuestIdleReconcilerCtx; no upstream wire is claimed.
 
 **Negative pattern — what this action must REFUSE to do.** *Refuse to leave a finished pane
 unreaped, because an unreaped pane is capacity that silently disappears.* **MEASURED**: the
-`NewlyIdle` arm exists only because *"The operator spotted a freed worker my classifier had hidden"*
-— that transition previously fell through a `_ => Live` catch-all (`:409-419`). The `actionable`
-filter defect itself is **FIXED** (commit `-oco`; `is_free_capacity` is now its own field at
-`omp-orchestrator/src/lib.rs:162-175`, with the regression test
-`observed_idle_state_counts_as_free_capacity_before_confirmation` at `main.rs:1056`) — what
-remains broken is the SEAM: the producer's field and the consumer's parser agree by convention
-across a process boundary with no shared type, so a future filter change is invisible again
-(09 M1). The scar quote stands as history: *"the exact shape that let the fleet sit idle for hours
-while the watchdogs reported healthy"* (`omp-orchestrator/src/lib.rs:451-462`, whose comment now
-records the fix). **What would Jeffrey do:** `rg -li --type rust -e
-'reap(ed|ing)?_pane|pane_reap|kill-pane' --glob '!target' .` in the mirror — the extension filter is
+NewlyIdle is the current arm at tick-monitor/src/lib.rs:595; the old catch-all citation is historical. The actionable filter is fixed: tick-monitor/src/lib.rs:467-468 exposes free capacity for ConfirmedIdle or NewlyIdle, and the regression test is omp-orchestrator/src/main.rs:1646-1653. What remains broken is the SEAM: the producer's field and the consumer's parser agree by convention across a process boundary with no shared type, so a future filter change is invisible again (09 M1). **What would Jeffrey do:** rg -li --type rust -e
+'reap(ed|ing)?_pane|pane_reap|kill-pane' --glob '!target' . in the mirror — the extension filter is
 sound here only because the subjects are Rust, the hazard A8(b) names — → 7 files, load-bearing
 `frankenterm/crates/frankenterm-core/src/orphan_reaper.rs`, whose module doc refuses name-based
 reaping outright — a command-line match is not proof of ownership, and PIDs can be recycled
@@ -4117,6 +3976,7 @@ satisfied — and measuring it produced a worse finding than the gap it was chec
 `.append(true)`, written by `write_heartbeat`. Every row carries
 `ts_unix / event / build_id / status / tick / pid / repo / session / detail`.
 
+**HISTORICAL HEARTBEAT SNAPSHOT (2026-09-01).** The 1,323-row table and its 489/56/469 ratios below are retained to explain the failure shape, not as current counts. This host ledger is volatile and now has additional rows; current status must be derived with jq -s over the path above before quoting any total.
 **1,323 rows:**
 
 | status | count |
@@ -4155,8 +4015,10 @@ outlived `pid=92834` by twelve hours.
 The gap is not logging. It is that **nothing consumes the log**. Two things follow:
 
 1. `dispatcher-deadman` — a watchdog for eligible work that received no packet — is
-   one of the 20 crates still unextracted (883 LOC, §3.9). It is the consumer this
-   ledger needed and did not have.
+   now extracted at `crates/dispatcher-deadman` (548 source LOC across `src/lib.rs` and
+   `src/main.rs`, verified by `find crates/dispatcher-deadman/src -name '*.rs' -print0 |
+   xargs -0 wc -l`). It is **not yet consumed by `omp-orchestrator`** (no dependency or
+   source reference in that crate), so the gap is wiring/observation, not extraction.
 2. The remaining unlogged dispatches are **operator handrolls**: every `tmux
    send-keys` and `task` dispatch this session bypassed the binary entirely and
    appears in no ledger. That is exactly what `kernel-only-operator-hook` exists to
@@ -4185,7 +4047,10 @@ It is written to be failed. §2.4 indicts our own census. §2.8 reports a **proj
 
 ## 1. The measured inventory
 
-MEASURED 2026-08-31, re-derived at time of writing. The counts and the table below match `00-brief.md` §3.5's *table* exactly; they do not match its summary prose, and the disagreement is stated with the recomputation that settles it immediately after the table.
+**HISTORICAL MEASURED SNAPSHOT (2026-09-01).** The row set follows `00-brief.md` §3.5, but that section is an older round-10 snapshot; this table is the later gate remeasurement used by Diagram 4. It is not a claim that the cells match the brief's historical cells. Current acceptance must use the command and revision recorded by the future gate census bead.
+**CURRENT WORKTREE AUTHORITY (2026-09-01).** On the shared checkout, the exact census commands
+`find crates -type f -path '*/tests/*.rs' | wc -l` and `grep -Rho '#\[test\]' crates --include='*.rs' | wc -l`
+return **92 integration test files** and **984 test functions**.
 
 ```
 python3 -c "import pathlib,re; c=pathlib.Path('crates');
@@ -4194,13 +4059,13 @@ python3 -c "import pathlib,re; c=pathlib.Path('crates');
   -> 31 409
 ```
 
-Two independent sources agree: this walk, and the brief's own `find`/`grep -rc` measurement (§3.5), which was taken without the `--include=` flag the tooling warning below indicts.
+The historical walk produced 31/409; `00-brief.md` §3.5 records an older 31/406 snapshot and cannot corroborate this table. The tooling warning below also disqualifies the brief's `grep -rc` command as a current source.
 
-31 integration test files, 407 `#[test]` functions. Per-gate leg inventory (MEASURED, `grep -rli <property>` per gate crate), verbatim from the brief:
+31 integration test files, 409 `#[test]` functions. Per-gate leg inventory (MEASURED, `grep -rli <property>` per gate crate), aligned with Diagram 4's snapshot:
 
 | crate | tests | known_bad | known_good | mutation | anti_vacuity |
 |---|---:|---:|---:|---:|---:|
-| `no-shell-gate` | 59 | 4 | 3 | 2 | 6 | (tests cell regenerated 2026-09-01; five meta-gate test files landed during grading) |
+| `no-shell-gate` | 57 | 4 | 3 | 2 | 6 | (aligned with Diagram 4; five meta-gate files are outside this gate-leg snapshot) |
 | `omp-inventory-map` | 23 | 0 | 2 | 1 | 1 |
 | `undrained-pipe-lint` | 10 | 1 | 3 | 1 | 1 | (kg/av corrected 2026-09-01: original transposed — 3 known-good fns, 1 anti-vacuity fn)
 | `commit-build-fence` | 10 | 0 | 1 | 0 | 0 |
@@ -4211,7 +4076,7 @@ Two independent sources agree: this walk, and the brief's own `find`/`grep -rc` 
 
 **0 of 8 gates mutate production source through the real hook** — the only definition that survives typing. `1 of 8` reaches a real temp tree (`omp-inventory-map`, TREE); `2 of 8` mutate a fixture string; `1 of 8` has an affordance nothing flips (`no-shell-gate`). *This paragraph said `2 of 8 … no-shell-gate and undrained-pipe-lint` until the column was rebuilt on what the mutation ACTS ON rather than what a test is NAMED; see `00-brief.md` §3.5, which moved this headline four times.* **4 of 8 have no mutation leg**: `commit-build-fence`, `kernel-bypass-gate`, `pre-delete-citation-check`, `path-literal-guard`. 4 of 8 have no anti-vacuity leg. 2 of 8 have no known-bad. 1 of 8 has no known-good.
 
-**Disagreement with the brief, on the brief's own table.** `00-brief.md` §3.5 states "1 of 8 gates has all four legs" and "5 of 8 have no mutation leg." Both contradict the table printed immediately above them. Recomputing from that table verbatim:
+**Historical disagreement with the brief.** `00-brief.md` §3.5 states "1 of 8 gates has all four legs" and "5 of 8 have no mutation leg." Those are historical summary prose and contradict its older table. Recomputing this section's aligned snapshot:
 
 ```
 python3 -c "rows={...verbatim from 00-brief.md §3.5...};
@@ -4225,11 +4090,11 @@ python3 -c "rows={...verbatim from 00-brief.md §3.5...};
                        'kernel-bypass-gate', 'pre-delete-citation-check']
 ```
 
-`undrained-pipe-lint` carries 1/1/1/3 — all four legs non-zero — so it is complete and was undercounted; and four gates lack a mutation leg, not five. The brief's other two counts are correct. An earlier draft of this section propagated both errors verbatim, which is the finding worth keeping: a headline transcribed rather than recomputed from its own table survives every review that reads the prose and not the arithmetic. The corrected headline is **2 of 8**, and it is worse than it looks, because §3.1 shows **0 of 8** satisfy all six properties.
+`undrained-pipe-lint` carries 1/3/1/1 — all four legs non-zero — so it is complete and was undercounted; and four gates lack a mutation leg, not five. The brief's other two counts are correct. An earlier draft of this section propagated both errors verbatim, which is the finding worth keeping: a headline transcribed rather than recomputed from its own table survives every review that reads the prose and not the arithmetic. The corrected headline is **2 of 8**, and it is worse than it looks, because §3.1 shows **0 of 8** satisfy all six properties.
 
-The objection, stated before it is answered: *you have 407 tests and two complete gates, so the other 326 are decoration.* Partly conceded — several are high-value regression legs against verbatim live captures (§2.9), a distinct and real kind of evidence — but the honest headline is **2 of 8**, and a count of tests is the metric most likely to be gamed by whoever reports it.
+The objection, stated before it is answered: *you have 409 tests and two complete gates, so the other 326 are decoration.* Partly conceded — several are high-value regression legs against verbatim live captures (§2.9), a distinct and real kind of evidence — but the honest headline is **2 of 8**, and a count of tests is the metric most likely to be gamed by whoever reports it.
 
-**A tooling warning, MEASURED, that changes how the rest of this section is sourced — and is itself a gate violation.** Shell `grep -r` with `--include=` **returns empty instead of failing** in this harness. Measured both directions: `grep -rl 'forbid(unsafe_code)' --include='*.rs' crates` returns **0** (quoted or unquoted) while the harness `grep` tool on the same pattern returns **55 files**; shell `grep -r` *without* `--include` works correctly. A per-crate `grep -ql` loop likewise reported every crate as non-matching against files whose line 1 had already been read.
+**Historical tooling observation (not current acceptance).** An earlier harness context reported shell grep with --include= as an empty, exit-0 result for this pattern; a direct current probe at HEAD returned status 0 with one matching line. The warning is retained as a measurement-harness hazard, not as a current claim about shell grep, and the Rust gate must use a fail-closed scanner.
 
 **The second instance is ours, and an earlier draft of this section got it backwards.** That draft asserted `tmux --version` "prints an error and exits 0 — it fails while reporting success." REFUTED: `tmux --version` exits **1** with empty stdout and 158 bytes on stderr, which is correct, well-behaved failure. The "exits 0" came from a probe reading `$?` after a pipeline, where the status belongs to the last stage — `PIPESTATUS=(1 0)`. **The instrument laundered a clean failure into a success and then reported it as the binary's defect.** tmux is not the offender; our measurement harness is. Retained rather than deleted, because a probe that misattributes its own bug to the thing it measures is a worse failure than the one first alleged, and deleting it would erase the only case in this section where the instrument manufactured the defect it reported.
 
@@ -4355,7 +4220,7 @@ The output envelope is frozen; a shape change fails the build until the change i
 
 **Why not weaker.** Every consumer of a machine-readable envelope — CI, another crate, a foreign repo, an agent — is coupled to its shape. Without a pin, a field rename is a silent breaking change discovered as a mysterious parse failure in someone else's build. Per-field assertions are weaker: they cannot see a *removed* field or a changed `status` vocabulary.
 
-**Shape here.** MEASURED: the envelope is `{"schema_version":"omp-inventory-map/v1","command":"doctor","status":"UNKNOWN","data":{…}}`, 544,697 bytes, exit 2. `SCHEMA_VERSION` is one constant threaded through every emission site in `crates/omp-inventory-map/src/main.rs` (12 sites, regenerated 2026-09-01) and `src/lib.rs:613,1366`. `commit-build-fence` carries the stronger form: a numeric `schema_version` **validated on read** (`src/lib.rs:208-213`), so a store written by an older binary is rejected with observed and expected versions named rather than misparsed.
+**HISTORICAL SHAPE SNAPSHOT (2026-08-31).** The old inventory envelope reported 544,697 bytes and exit 2. Current acceptance requires a retained artifact and source revision; this section does not treat that volatile byte count as current. The schema-version threading and validate-on-read design remain the intended gate shape.
 
 **Design spec for `omp-inventory-map/v1`.** (a) Commit a golden envelope with `data` elided to its key set; the test compares key sets and the `status` vocabulary, not the 544 KB payload — a golden that changes on every scan gets regenerated reflexively and pins nothing. (b) Assert the four mandatory row fields present on every row (passes today) *and* diverse per §2.4 (does not). (c) `status` is a closed vocabulary; an unrecognised value is a parse ERROR. (d) A `schema_version` bump requires the golden regenerated in the same commit, and the test keys on the version string, so bumping without regenerating is RED. (e) Adopt `commit-build-fence`'s validate-on-read: consumers reject a foreign version loudly instead of best-effort parsing it.
 
@@ -4372,18 +4237,16 @@ Every member of a *derived* set must satisfy a property. Exceptions live in a de
 **A PROJECTED RED BY INSPECTION, found writing this section.** MEASURED input set, not an executed test failure. Leg 3, `every_crate_declares_the_forbid_lint` (:639-672), iterates the derived set (all 26 `crates/*` dirs holding a `Cargo.toml`; the root manifest is `members = ["crates/*"]`, a glob) and requires each `Cargo.toml` to satisfy `text.contains("unsafe_code") && text.contains("forbid")`, with `FORBID_ALLOWANCE` empty. Measured with an inline Python walk of `crates/*/Cargo.toml` and `crates/*/src/{lib,main}.rs`:
 
 ```
-crate dirs            : 26
-manifest lint present : 20
-manifest lint MISSING : composer-typed, dispatch-silence-watch, loop-queue-filter,
-                        no-shell-gate, pane-dispatch-fence, subprocess-contract
-all src roots forbid  : 25   (missing: tick-monitor)
+crate dirs            : 50
+manifest lint present : 50
+manifest lint MISSING : none
+all src roots forbid  : 49   (missing: tick-monitor)
 ```
 
-Six crates fail the predicate with no allowance available, so `missing` is non-empty and the assertion cannot hold. PROJECTED-BY-INSPECTION, not observed: we did not run the test, so the RED is derived from reading the predicate and measuring its inputs.
+**Current measurement, not the old six-crate snapshot:** one source root (tick-monitor) lacks the inner attribute, but the union command reports 50 of 50. The gate remains PROJECTED-BY-INSPECTION because no executable conformance test has yet been run against this current set.
 
-Three things follow, and they are the point of the finding. **First**, all six carry `#![forbid(unsafe_code)]` in every source root (harness `grep`, confirmed per crate) — the *invariant* holds while the *predicate* fails. This is a false positive of exactly the kind §2.2 says gets a gate routed around, in the gate with the best leg coverage in the repo. **Second**, the two mechanisms are near-complements: `tick-monitor` is covered by manifest but not by source attribute; the other six by attribute but not manifest. Union **26 of 26**, intersection **19 of 26** — every crate forbids unsafe by at least one mechanism, and neither single-mechanism predicate can see it. Leg 3 measures the *declaration site*, not the property. **Third**, the predicate is simultaneously over- and under-strict: an unordered substring conjunction over the whole manifest means `# TODO: forbid unsafe_code someday` in a comment passes. An empty allowance list made it look maximally strict; it is satisfiable by a comment.
 
-**Disagreement with the brief, stated plainly.** `00-brief.md` §3.7 records "16 of 22 forbid unsafe." We measure 26 crate dirs, 20 of 26 manifests, 25 of 26 source roots, 26 of 26 by union. We do not think the brief is wrong so much as differently scoped — a third denominator over a different file set — but three live denominators for one property is itself the defect writing-contract rule 4 exists to prevent, and the property should be reported as `26/26 by union (19/26 by both mechanisms)` going forward.
+Three things follow. **First**, the current property holds by union but not by the stricter both-mechanisms predicate: 50 manifests, 49 source attributes, 49 intersections, and tick-monitor as the one manifest-only crate. **Second**, a new crate can still drift unless the projected conformance gate parses manifests and checks the source attribute. **Third**, substring conjunctions over a whole file remain invalid because comments can satisfy them; parse the manifest and read the lints.rust unsafe_code field.
 
 **Design spec.** (a) Derive the set; never hand-list. (b) Empty derivation is an ERROR. (c) Every row: member + reason + the condition under which the row dies — `ALLOWED_COLLISIONS` (`omp-inventory-map/src/types_inventory.rs:180-206`) already states "Dies when …" per row. (d) A row naming an undeclared member is an ERROR. (e) A member naming itself is not a caller (`a_lane_naming_itself_is_not_wired`, 519-533). (f) Comments and test-only code are not evidence of wiring (`comments_and_test_only_code_do_not_prove_wiring`, 456-471). (g) **New, from the RED:** a conformance predicate targets the *property*, not one declaration site — leg 3 becomes "forbids unsafe by manifest lint OR source attribute," and gains the known-good leg it never had, pinning a crate that conforms by attribute only. (h) Substring conjunctions over a whole file are forbidden; parse the manifest and read `[lints.rust] unsafe_code`.
 
@@ -4455,7 +4318,7 @@ else it now claims or what it would report against an empty scan set.
 NO-CLAIM: column 6 is seven-eighths unmeasured, so this matrix understates nothing and may
 overstate the addressability of every gate but `omp-inventory-map`.
 
-**The defect that produced the sixth.** MEASURED: `omp-inventory-map --help` returns `{"schema_version":"omp-inventory-map/v1","command":"doctor","status":"ERROR","data":null,"error":"CONFIG_ERROR unknown argument --help"}`. The gate is built and correct — 13 tests pass, and `src/types_inventory.rs:176-179` deliberately excludes `Observation` from the allowance list so the collision demands convergence rather than being waved through. And the running binary's 544 KB doctor output contains **zero** occurrences of `Observation`, `CONVERGE`, or `Verdict`. This is not built-versus-wired; it is **wired-but-unaddressable** — the gate runs, and nothing it emits or documents tells an operator or an agent that it exists or how to reach its verdict. A correct, well-tested, unreachable gate has the same effect on the tree as no gate.
+**HISTORICAL ADDRESSABILITY SNAPSHOT.** An earlier inventory run reported omp-inventory-map --help -> CONFIG_ERROR unknown argument --help, 13 source tests, and 544,697 bytes. Current source has 28 test markers and the current debug binary's --help emits 158 bytes at exit 1. No current ADDRESSABLE pass artifact is claimed until command, output, and revision are retained; the property remains projected in the gate matrix.
 
 MEASURED, with the search space named: harness `grep` for `ADDRESSABLE`, no extension filter, over `crates`, `docs`, `AGENTS.md`, `WAVE.md` — **zero hits under `crates/`**; every hit is in `docs/plan/`, i.e. this session's plan text written by this section and its siblings. `crates/` is the whole workspace (`members = ["crates/*"]`), so the property exists in prose and in no code. PROJECTED: that it will be enforced.
 
@@ -4502,9 +4365,9 @@ Ordering, and it is not cosmetic: the meta-gate is admitted **last**, after at l
 
 **The allowance list as a pressure valve.** `UNWIRED_LANE_ALLOWANCE` has five rows sharing one reason and one landing bead. If that bead slips, the honest response is that the rows are stale; the dishonest response is to edit the reason. The maintenance contract catches a row naming an *undeclared* lane. It does not catch a row whose reason has quietly become false. That is an open hole in the strongest pattern in this section, and `owner` + `dies_when` (§2.8) narrow it without closing it.
 
-**Gating discipline concentrated where the product is not.** The sharpest structural objection. Per `00-brief.md` §4, exactly one of five pipeline layers works: `observe` WORKS, `actionable` is BROKEN, and `consume` is FENCED (162 refused ticks over 4.2 hours). Local `actuate` is not wired. A completion signal does exist upstream — `AgentEndEvent` with `willContinue`, at `dist/types/extensibility/shared-events.d.ts:154`, carried on `RpcSessionEventFrame` (`modes/rpc/rpc-types.d.ts:589`) — but this pipeline does not consume it yet; local completion therefore remains unavailable by adoption, not by absence of the event. Eight gates and 379 tests guard a pipeline that cannot yet dispatch or complete a unit of work here. An investor is entitled to ask whether the gate budget bought defect prevention or the appearance of rigour. Our answer, and it is a partial concession: the gates encode the specific defect classes that consumed this session — vacuous verdicts, silent oracles, unattributable legs, unaddressable binaries — and those are the classes that will destroy the four missing layers as they land. But the ordering risk is real, and the mitigation is that no new gate is admitted (§4) until it clears a bar the existing eight mostly do not.
+**Gating discipline concentrated where the product is not.** The sharpest structural objection. Per `00-brief.md` §4, exactly one of five pipeline layers works: `observe` WORKS, `actionable` is BROKEN, and `consume` is FENCED (162 refused ticks over 4.2 hours). Local `actuate` is not wired. A completion signal does exist upstream — `AgentEndEvent` with `willContinue`, at `dist/types/extensibility/shared-events.d.ts:154`, carried on `RpcSessionEventFrame` (`modes/rpc/rpc-types.d.ts:589`) — but this pipeline does not consume it yet; local completion therefore remains unavailable by adoption, not by absence of the event. Eight gates and 409 tests guard a pipeline that cannot yet dispatch or complete a unit of work here. An investor is entitled to ask whether the gate budget bought defect prevention or the appearance of rigour. Our answer, and it is a partial concession: the gates encode the specific defect classes that consumed this session — vacuous verdicts, silent oracles, unattributable legs, unaddressable binaries — and those are the classes that will destroy the four missing layers as they land. But the ordering risk is real, and the mitigation is that no new gate is admitted (§4) until it clears a bar the existing eight mostly do not.
 **Costed value gate (PROPOSED, not measured).** A new gate earns admission only when its owner records: (1) no more than **4 owner-hours** for implementation and review; (2) no more than **30 seconds** of incremental wall time on the standard gate invocation; and (3) a baseline plus a three-release follow-up for escaped instances of the named defect class, targeting **at least one fewer escaped instance** in that window. If no historical baseline exists, the substitute is a named shipped capability with a runnable acceptance command; no reduction claim is made. These are explicit budgets and acceptance criteria, not measurements of the existing eight. **STOP/DEFER:** stop investment when the estimate exceeds either budget, when the gate catches no previously unguarded class and unlocks no named capability, or when the required outcome evidence cannot be collected; defer until the missing measurement or capability exists. Existing gate counts are not product progress unless this value evidence is reported separately.
-**407 tests as a proxy metric.** If the count becomes the target, the count will rise and the leg table will not. The only numbers worth reporting are the leg table and the §3.1 matrix, and the only honest headlines today are **2 of 8** on four legs and **0 of 8** on six properties.
+**409 tests as a proxy metric.** If the count becomes the target, the count will rise and the leg table will not. The only numbers worth reporting are the leg table and the §3.1 matrix, and the only honest headlines today are **2 of 8** on four legs and **0 of 8** on six properties.
 
 **A transcribed headline nobody recomputes.** Demonstrated in this section: the brief's own summary line disagreed with the table directly above it on two of four counts, and the first draft of this section reproduced both errors while citing the correct table (§1). Every derived count in this plan is one transcription away from being wrong in the same way, and prose review does not catch it. The countermeasure is that a count in prose must carry the expression that computes it from the table, not the table's caption.
 
@@ -4512,7 +4375,7 @@ Ordering, and it is not cosmetic: the meta-gate is admitted **last**, after at l
 
 ---
 
-**NO-CLAIM.** This section describes the frameworks and their measured coverage as of 2026-08-31. It does not claim the eight gates are sufficient to prevent the defect classes they name; it does not claim the 407 tests are individually load-bearing. Two gates — `no-shell-gate` and `undrained-pipe-lint` — have all four legs; **none** of the eight satisfies all six properties, because ADDRESSABLE and the floor-raise claim discipline exist in this document and in no validator. Column 6 of §3.1 is measured as a property label, not a semantic test count.
+**NO-CLAIM.** This section describes the frameworks and their measured coverage as of 2026-08-31. It does not claim the eight gates are sufficient to prevent the defect classes they name; it does not claim the 409 tests are individually load-bearing. Two gates — `no-shell-gate` and `undrained-pipe-lint` — have all four legs; **none** of the eight satisfies all six properties, because ADDRESSABLE and the floor-raise claim discipline exist in this document and in no validator. Column 6 of §3.1 is measured as a property label, not a semantic test count.
 
 **Retractions this section carries rather than deletes**, because each is more instructive than the corrected value: (1) the leg-count headlines "1 of 8" / "5 of 8", transcribed from the brief and refuted by the brief's own table (§1); (2) `tmux --version` "exits 0 while failing", refuted — tmux exits 1 correctly, and the defect was our probe reading `$?` after a pipeline, `PIPESTATUS=(1 0)` (§1); (3) `searched vacuous|vacuity … no matches`, refuted — 36+ files in `asupersync` alone, and the prior art is richer than the design it was cited to justify (§2.4). Two of the three were errors of *measurement method*, not of arithmetic, and no amount of prose review would have caught them.
 
@@ -4690,11 +4553,7 @@ Mac Studio, what makes it work on a second machine, in a second repo, for a pers
 Josh?* Today the honest answer is "nothing yet, and we can prove it." What follows is the measured
 starting point, then the contract we will ship against.
 
-All measurements in this section were taken on 2026-08-31 at repo HEAD `fb89714`
-(`git rev-parse --short HEAD`). Every current claim is marked MEASURED or PROJECTED. MEASURED means a
-command in this document produced the number; historical values explicitly marked non-rederivable
-are retained only as audit context and are not acceptance evidence. PROJECTED means we intend to
-build it and it does not exist.
+**Provenance boundary.** Historical measurements in this section were taken at repo HEAD fb89714 and are retained as audit context only. The current worktree authority is the command-backed boundary in §1 below; any later historical value is explicitly labelled and cannot serve as current acceptance evidence. PROJECTED means we intend to build it and it does not exist.
 **Scope note (important):** this is an investor-facing installability plan and contract, not a
 dispatchable operator runbook. It therefore does not pretend to carry runbook-only fields such as
 Trigger, Dispatch packet, Amazing/Adequate bars, Skills, or Done signals. Those fields belong in
@@ -4706,9 +4565,9 @@ Where `$M` appears in a measurement command, it is explicitly
 undefined `$M`.
 
 ### 1. The measured starting point
+**CURRENT WORKTREE AUTHORITY (re-derived during this integration).** The exact cargo metadata target filter returns **48** binary targets in the shared worktree. Revision, command output, and install receipt must be captured together for a release claim; the historical hashes below do not serve as current acceptance evidence.
 
-**MEASURED — the workspace declares 21 binary targets, and the installer knows about 3 of them.**
-The target declaration count is not itself a successful artifact count; the artifact proof is the command and receipt described below.
+**HISTORICAL MEASURED BASELINE — 21 binary targets at `fb89714`; superseded plan snapshot = 23.** The installer knows about 3 of them. The target declaration count is not itself a successful artifact count; the artifact proof is the command and receipt described below.
 
 The number was `18` until round 10, taken from `grep -rl 'fn main' crates --include='main.rs' | wc -l`.
 The investor lens filed it as *"fn main count is not binary/build evidence"* and it was right twice
@@ -4719,10 +4578,8 @@ instruments, three answers, re-measured at commit time:
 |---|---:|---|
 | `grep -rl 'fn main' --include=main.rs` | 18 | crates having a `main.rs` — a **source shape**, not an artifact (re-measured 2026-09-01 at both fb89714 and be012d9; the 17 figure and the NUMBERS.toml note were one behind) |
 | `grep -c '^\[\[bin\]\]' crates/*/Cargo.toml` | 16 | **explicitly declared** targets; misses every implicit `src/main.rs` |
-| `cargo metadata --format-version 1 --no-deps` (targets with `bin` kind) | **21** | the workspace's declared binary targets; this is the canonical denominator |
-
-Only the third is the canonical **target** denominator; it counts both implicit and explicit Cargo
-binary targets and does not pretend that a source shape or an explicit-`[[bin]]` grep is an artifact.
+| `cargo metadata --format-version 1 --no-deps` (historical snapshot) | **23** | the workspace's declared binary targets in the superseded plan snapshot; current target authority is 48 above |
+The historical metadata measurement was the only canonical target denominator in that snapshot; current target authority is the 48-row metadata result above. Both counts include implicit and explicit Cargo binary targets and neither is an artifact-success proof.
 Successful output is a separate proof: `cargo build --workspace --message-format=json` is filtered to
 `compiler-artifact` messages whose target kind is `bin`, and the receipt records target names,
 artifact paths, and the command exit code. A target in metadata without a successful artifact is
@@ -4731,19 +4588,14 @@ reported missing and cannot satisfy install acceptance.
 `crates/installer/src/main.rs:12` declares
 `const BINARIES: &[&str] = &["omp-orchestrator", "tick-monitor", "pane-truth"];`.
 
-**MEASURED — the current installer list covers 3/21 target rows (14%), but only 2/21 are owned
-install entries (9.5%); the third is foreign.** The remaining 19 workspace targets have no current
-owned install path and are reachable only by someone who already has the repo, a toolchain, and the
-knowledge of what to build.
 
+**HISTORICAL MEASURED PLAN SNAPSHOT.** The installer list covered 3/23 target rows (13%), with 2/23 owned install entries (8.7%) and one foreign; 20 targets had no owned path in that snapshot. Current acceptance uses the 48-target metadata denominator above.
 **Canonical manifest (PROJECTED; the one denominator for this section).** The release manifest is
 generated from the Cargo target graph with the exact command in `NUMBERS.toml`:
 `cargo metadata --format-version 1 --no-deps 2>/dev/null | python3 -c "import sys,json;m=json.load(sys.stdin);print(len([t for p in m['packages'] for t in p['targets'] if 'bin' in t['kind']]))"`.
 It has one row per target and the fields `target`, `owner`, `distribution` (`INSTALL`,
 `FOREIGN`, or `UNRELEASED`), and `adapter`. The installer, runtime adapter list, and
-post-install expected set MUST all be projections of this manifest; none may maintain a second-
-hand count. At this HEAD the manifest denominator is `workspace_targets=21`; the current installer
-list is `installer_entries=3`, of which `foreign=1` (`pane-truth`) and `owned_entries=2`.
+post-install expected set MUST all be projections of this manifest; none may maintain a second-hand count. In the historical 23-target snapshot, installer_entries=3, foreign=1 (pane-truth), and owned_entries=2; current metadata has 48 target rows and the current ratio is recorded in NUMBERS.toml.
 ~~The seven runtime adapters are a projected manifest field, not a second denominator.~~ **RETRACTED 2026-09-01 — see §7.9: no seven-item list exists anywhere in the repo.** The expected
 install set is exactly the rows with `distribution=INSTALL`, so a foreign or unreleased row can
 never be mistaken for a missing artifact.
@@ -4754,19 +4606,12 @@ instrument that does not measure the quantity in the sentence. `06-gates` did it
 did it with a denominator that grew 50% in one exchange, and this section did it with `fn main`.
 Every one survived multiple readings because a plausible integer reads as a measurement.
 
-**MEASURED — one of those three names has no source in this workspace.**
-`which pane-truth` returns `/Users/josh/.local/bin/pane-truth`. There is no `crates/pane-truth`
-directory (`ls -d crates/*/ | wc -l` → `26`, and the listing contains no `pane-truth`; this agrees
-with the census figure `workspace_crates=26` in the brief §3.2). The binary belongs to
-control-plane, a different repo. It is on PATH, it is named in our installer's BINARIES list, and
-we do not build it. That is the GHOST class: an artifact the tooling asserts authority over and
-cannot produce. Any drift check that treats it as ours will report a mismatch forever, because
-there is no HEAD in this repo it could ever agree with.
+**CURRENT RECHECK — pane-truth is now present in this workspace.** which pane-truth still resolves to /Users/josh/.local/bin/pane-truth, but crates/pane-truth exists and ls -1 crates | wc -l returns 50. The old GHOST conclusion was valid only for the pre-extraction snapshot; it is retired. The remaining identity question is whether the installed binary matches current HEAD, which requires the four-way identity receipt below.
 **MEASURED — one of those three binaries cannot report its own identity.**
 `grep -c 'version' crates/tick-monitor/src/main.rs` returns `0`. `tick-monitor` has no `--version`
 flag and no version string anywhere in its entrypoint. Its identity is not *unmeasured*; it is
 *unmeasurable by construction*. No amount of probing an installed `tick-monitor` will tell you
-which commit produced it. Across the workspace, only 5 of 21 binary targets mention `--version` at all
+which commit produced it. In the 23-target historical snapshot, only 5 targets mentioned --version at all
 (`for c in $(ls crates); do grep -c '\-\-version' crates/$c/src/*.rs; done` — nonzero for
 `installer`, `kernel-only-operator-hook`, `omp-inventory-map`, `omp-orchestrator`,
 `omp-rpc-session`).
@@ -4778,8 +4623,8 @@ the artifact. If observation is the only thing we can currently trust, we cannot
 which build produced the observations.
 
 **MEASURED, and it bounds everything in this section.** The brief's §4 also records *actuate* as
-**DOES NOT EXIST — a human types into panes**, and *complete* as **DOES NOT EXIST — every
-completion this session was found by a human looking**. Installability is therefore not merely
+**DOES NOT EXIST — a human types into panes**, and *complete* as **AVAILABLE, NOT WIRED —
+`AgentEndEvent` crossed the wire but the supervisor does not consume it**. Installability is therefore not merely
 unbuilt; two of the five layers it would need to install are unbuilt. A second machine that ran a
 perfect installer today would receive a working observer, a broken actionable filter, a fenced
 consumer, and two absent layers. Every PROJECTED item below is contingent on those layers landing,
@@ -4814,10 +4659,8 @@ PROJECTED for the whole of §2, except the envelope shape, which is MEASURED at
 `crates/omp-inventory-map/src/lib.rs:613` and `:1366`.
 
 We adopt `/canonical-cli-scoping` and `/cfs-cli-discipline` wholesale rather than minting a local
-standard. The unit of installation is a single umbrella binary, `ompo`, which scopes every one of
-the 21 workspace binary targets as an **adapter** — the aggregator shape both skills mandate: when a CLI
-proxies to N substrates, the triad is scoped per-adapter, never bundled. We do not ship 21 CLIs
-each with its own doctor; we ship one CLI whose doctor takes an adapter name. Every command emits
+standard. The unit of installation is a single umbrella binary, `omp-orchestrator`, which scopes every one of
+the 48 workspace binary targets as an adapter — the aggregator shape both skills mandate. We do not ship one CLI per target; we ship one CLI whose doctor takes an adapter name. Every command emits
 the envelope we already emit today:
 
 ```json
@@ -4826,21 +4669,20 @@ the envelope we already emit today:
 
 Probe ids are namespaced under `^omp(\.[a-z][a-z0-9_-]*){2,}$` — e.g.
 `omp.identity.binary.tick_monitor.version_absent`; bare segments are rejected at construction, not
-at review. Every probe detail is a structured `=N` value, never prose: `installed_binaries=3`,
-`workspace_targets=21`, `foreign=1`, never "looks about right".
+at review. Every probe detail is a structured =N value, never prose: installed_binaries=3, workspace_targets=48, foreign=1, never looks about right.
 
 #### The mandatory triad
 
-**`ompo doctor [<adapter>] [--fix] [--json]`** — diagnose every subsystem, or one adapter.
+**`omp-orchestrator doctor [<adapter>] [--fix] [--json]`** — diagnose every subsystem, or one adapter.
 *Purpose:* answer "what is wrong and where" for an operator or agent with no context.
 *Exit:* `0` all probes green; `1` at least one FAIL; `2` usage error.
 *Envelope:* `data.probes[]`, each `{id, status, detail, upstream_owner?, repair_target?}`.
 *Negative pattern it refuses:* **doctor must never crash when a subsystem is dead.** A dead adapter
-is `status:"DOWN"` with an exit-0-or-1 envelope, never a panic and never a nonzero the caller
-cannot interpret. It also refuses the bundle: `ompo doctor` with a broken `tick-monitor` must name
-`tick-monitor`, not report `adapters_ok=false`.
+is `status:"DOWN"` with **exit 1 for doctor (or exit 3 for critical health)**, never a panic and never zero
+the caller cannot interpret. It also refuses the bundle: `omp-orchestrator doctor` with a broken
+`tick-monitor` must name `tick-monitor`, not report `adapters_ok=false`.
 
-**`ompo health [<adapter>] [--watch -i N] [--json]`** — single-shot rollup, cheap enough for a
+**`omp-orchestrator health [<adapter>] [--watch -i N] [--json]`** — single-shot rollup, cheap enough for a
 monitor loop.
 *Purpose:* one line of truth for a supervisor, not a diagnosis.
 *Exit:* `0` green; `1` degraded; `3` critical.
@@ -4851,7 +4693,7 @@ violation, and we will pin it with a convergence test.
 *Negative pattern it refuses:* health MUST NOT perform I/O that mutates or that can hang
 unboundedly. It is called in a loop; a health check that blocks is an outage amplifier.
 
-**`ompo repair --scope <adapter> [--dry-run] [--apply --confirm]`** — idempotent fix for a named
+**`omp-orchestrator repair --scope <adapter> [--dry-run] [--apply --confirm]`** — idempotent fix for a named
 failure class.
 *Purpose:* convert a doctor finding into a corrected state, reversibly.
 *Exit:* `0` no-op or success; `1` at least one repair failed; `5` concurrency lost (another repair
@@ -4863,7 +4705,7 @@ say so explicitly.
 error, not a prompt. `--dry-run --apply` together is rejected as oxymoronic. And per
 `/world-class-doctor-mode-for-cli-tools`: **detect-then-fix, never fix-then-detect** — every write
 routes through one `mutate()` chokepoint that takes a verbatim backup into
-`.omp/runs/<run-id>/backups/` before touching anything, so `ompo repair undo <run-id>` restores
+`.omp/runs/<run-id>/backups/` before touching anything, so `omp-orchestrator repair undo <run-id>` restores
 byte-for-byte. If it cannot be undone byte-for-byte from the artifact, it does not ship.
 
 #### The subsidiary triad
@@ -4871,7 +4713,7 @@ byte-for-byte. If it cannot be undone byte-for-byte from the artifact, it does n
 We are unambiguously state-handling: we read `git ls-files`, write to `~/.local/bin`, own a launchd
 plist, and drive tmux panes through `ntm`. The exemption does not apply.
 
-**`ompo validate <thing>`** — pure read, zero side effects.
+**`omp-orchestrator validate <thing>`** — pure read, zero side effects.
 *Purpose:* verify a config, a dispatch packet, a plist, or an install target *before* anything acts
 on it, so a bad input is rejected at the boundary rather than half-applied downstream.
 *Exit:* `0` valid; `74` validate failure (distinct from `1` so a caller can branch on "your input
@@ -4881,7 +4723,7 @@ observed field is mandatory, because a rejection without the observed value is u
 *Negative pattern it refuses:* validate MUST NOT touch the filesystem outside reads, and MUST NOT
 be satisfiable by a mutation. A "validate" that fixes as it goes is a repair with a lying name.
 
-**`ompo audit [--since <ts>]`** — append-only ledger of every mutation with provenance.
+**`omp-orchestrator audit [--since <ts>]`** — append-only ledger of every mutation with provenance.
 *Purpose:* answer "what did this tool change on this machine, when, and under whose authority"
 without reading the tool's source.
 *Exit:* `0`; `1` ledger unreadable or corrupt.
@@ -4891,7 +4733,7 @@ post_check, result}`.
 mutates without appending an audit row is a bug the mutate-auditor test fails the build on. An
 ambiguous audit read refuses the mutation rather than proceeding blind.
 
-**`ompo why <id>`** — provenance trace for one object.
+**`omp-orchestrator why <id>`** — provenance trace for one object.
 *Purpose:* explain how a binary, a probe verdict, a bead, or a dispatch reached its current state,
 including where the chain of evidence breaks.
 *Exit:* `0` found; `1` unknown id.
@@ -4922,8 +4764,8 @@ same operational value as no gate.
 
 Installability is where that property is either satisfied or lost for good. A binary distributed to
 a second machine is reachable only through its documented surface; there is no repo to grep and no
-author in the room. Under the umbrella, every adapter is reachable as `ompo doctor <adapter>`,
-`ompo help <adapter>` names the command, and `ompo doctor capabilities --json` enumerates every
+author in the room. Under the umbrella, every adapter is reachable as `omp-orchestrator doctor <adapter>`,
+`omp-orchestrator help <adapter>` names the command, and `omp-orchestrator doctor capabilities --json` enumerates every
 probe id — so ADDRESSABLE is discharged by the single umbrella CLI shape, rather than by separate
 implementations that can each drift independently. A capabilities snapshot is checked in as a
 golden artifact; drift between the declared probe list and the implemented one fails CI.
@@ -4933,7 +4775,7 @@ golden artifact; drift between the declared probe list and the implemented one f
 We wrap `omp`, `ntm`, `br`, `bv`, `git`, `cargo`, and `tmux` (versions in the surface census
 section). When an adapter probe fails on the *substrate* side, the envelope carries
 `class:"upstream_substrate_issue"` and `upstream_owner:"<vendor>"`, and
-`ompo upstream-report <adapter>` drafts the issue. Without this, every upstream bug is silently
+`omp-orchestrator upstream-report <adapter>` drafts the issue. Without this, every upstream bug is silently
 absorbed as our bug and we lose the forcing function to file it.
 
 NO-CLAIM: §2 specifies a surface. It does not claim any of these commands exist, and it does not
@@ -4946,15 +4788,15 @@ PROJECTED as a shipped contract; the rows marked MEASURED are already emitted by
 | Code | Name | Meaning | Caller should |
 |---:|---|---|---|
 | 0 | `OK` | Work performed, all green. Never emitted by a command that declined to run. | Proceed |
-| 1 | `FINDINGS` | Work performed, at least one FAIL. MEASURED: `installer/src/main.rs:93`. | Read `data.probes[]` |
-| 2 | `USAGE` | Malformed invocation. MEASURED: `main.rs:41` and the `CONFIG_ERROR` envelope. | Fix the command line |
+| 1 | FINDINGS | Work performed, at least one FAIL. MEASURED: installer/src/main.rs:103-105. | Read data.probes[] |
+| 2 | USAGE | Malformed invocation. MEASURED: installer/src/main.rs:45 prints usage and returns 2. | Fix the command line |
 | 2 | `UNKNOWN` (envelope) | MEASURED: the inventory map exits 2 carrying `"status":"UNKNOWN"` — a probe ran but could not reach a verdict. | Treat as not-green |
-| 3 | `CRITICAL` / `NO_INPUT` | Prerequisite absent: no git HEAD, no build output. MEASURED: `main.rs:61`, `main.rs:150`. | Fix environment |
+| 3 | CRITICAL / NO_INPUT | Prerequisite absent: no git HEAD or no build output. MEASURED: installer/src/main.rs:65 and :170. | Fix environment |
 | 5 | `CONCURRENCY_LOST` | Another mutation holds the lock. | Retry later |
 | 70 | `ADVISORY` | Non-blocking finding. | Log |
 | 71 | `SYSTEM_ERROR` | Our bug, not the user's. | File a bead |
 | 74 | `VALIDATE_FAILURE` | Input is invalid; the system is fine. | Fix the input |
-| 75 | `REFUSED` | The command declined to run. MEASURED: `main.rs:107` returns 75 when the build fence blocks install. | **Not a result** |
+| 75 | REFUSED | The command declined to run. MEASURED: installer/src/main.rs:126 returns 75 when the build fence blocks install. | Not a result |
 | 103 | `REFUSED_UPSTREAM` | An upstream guard declined. MEASURED behaviour: the RCH / mint-floor guard exits 103 with `0 passed / 0 failed`. | **Not a result** |
 
 The two refusal rows carry the sharpest operational lesson in this document. **`exit 103` with
@@ -4965,9 +4807,7 @@ from a process that never produced a signal is not evidence. Every refusal code 
 own `status:"REFUSED"` value in the envelope, distinct from `OK` and from `DOWN`, and the CI
 aggregator treats `REFUSED` as blocking rather than passing.
 
-NO-CLAIM: this table does not claim the codes are currently uniform across all 21 binary targets. At
-HEAD, `installer` uses 1/2/3/75 and `omp-inventory-map` uses 2; the remaining 20 are unaudited against
-this table.
+NO-CLAIM: this table does not claim exit codes are uniform across the 48 current binary targets. At the historical snapshot, installer used 1/2/3/75 and omp-inventory-map used 2; the other targets remain unaudited against this projected dictionary.
 
 ### 4. Identity and drift
 
@@ -5007,12 +4847,8 @@ check that reports a permanent, unfixable mismatch trains operators to ignore th
 a third outcome alongside CONSISTENT and DRIFTED, and it is printed, not swallowed.
 
 **The denominator is printed with its derivation.** Output is
-`identity: consistent=N drifted=M foreign=K expected=E workspace_targets=21 probed=P` — six named integers whose
-relationship a reader can check, not a bare `2/2`. MEASURED defect this rule exists to prevent:
-`crates/installer/src/main.rs:68` and `:87` (§1). The exclusion logic decremented one variable
-while the message printed another, and the resulting `2/0` was arithmetically impossible but
-visually plausible. A ratio is only verifiable if both terms are separately named and separately
-sourced.
+identity: consistent=N drifted=M foreign=K expected=E workspace_targets=48 probed=P — six named integers whose relationship a reader can check, not a bare 2/2.
+The historical MEASURED defect was in crates/installer/src/main.rs:68 and :87 (§1): exclusion logic decremented one variable while the message printed another, yielding an arithmetically impossible but visually plausible 2/0. A ratio is only verifiable when both terms are separately named and separately sourced.
 
 NO-CLAIM: the four-way proof detects *disagreement*. It does not prove any of the four sources is
 itself honest — a binary that lies about its build_id passes. Detecting that requires reproducible
@@ -5026,7 +4862,7 @@ a cache buster, proxy support on every fetch, platform detection (`darwin`/`linu
 install), atomic mkdir-based locking with stale-PID detection (never `flock` — absent on macOS),
 SHA256 verification via `sha256sum` *or* `shasum -a 256`, Sigstore verification when cosign is
 present, a build-from-source fallback, `install -m 0755` for the atomic place, shell completions to
-XDG paths, PATH setup, `trap cleanup EXIT`, a final per-component status summary, and printed
+XDG paths, PATH setup, trap cleanup EXIT, a final per-component status summary, and printed
 uninstall instructions.
 **Bootstrap authenticity is a precondition, not a post-install hope.** The generated `install.sh`
 MUST never be executed directly from a curl pipeline. The one-liner downloads it into the private
@@ -5083,8 +4919,8 @@ items; each is an acceptance check, not an optional polish item:
   treated as installed.
 - **Migration and removal:** a predecessor install is detected by its owner/build id, backed up,
   migrated or explicitly refused before replacement, and left reversible. The final summary prints
-  exact uninstall and rollback commands and identifies every component that was changed.
 
+exact uninstall and rollback commands and identifies every component that was changed.
 The contract is not discharged until each bullet has a deterministic acceptance result in the
 install receipt; the generated-script golden test covers syntax and control flow, while the Rust
 installer tests exercise the platform, proxy/offline, repeat-install, setup, and migration matrix.
@@ -5094,10 +4930,10 @@ into untested shell inside our repo, and an 80-line generated bootstrap whose ou
 golden-tested in Rust does not violate that intent. If a reviewer disagrees, the fallback is
 `cargo install --git`, which needs no shell at all and which we will document either way.
 
-**The self-test exercises the install; it does not certify it.** `ompo doctor --json` immediately
+**The self-test exercises the install; it does not certify it.** `omp-orchestrator doctor --json` immediately
 post-install is the acceptance criterion, not "the files landed." The install is accepted when the
 four-way identity check reports `consistent=N drifted=0 foreign=K expected_set=N missing=0 probed=P` with every term
-printed, and `ompo health` returns 0. That raises the floor from "bytes were copied" to "the copied
+printed, and `omp-orchestrator health` returns 0. That raises the floor from "bytes were copied" to "the copied
 bytes answer for themselves"; it does not establish that the installed system does useful work, which is §6's and §09's problem.
 The `expected_set` is not a best-effort count: it is the sorted target-name set from canonical
 manifest rows with `distribution=INSTALL`, printed (or emitted as a hash plus names) in the receipt.
@@ -5124,7 +4960,7 @@ are:
 | metric | pilot target | evidence in each receipt |
 |---|---:|---|
 | first-attempt install success | ≥ 4/5 (80%) | verified bootstrap, expected-set `missing=0`, and health exit 0 |
-| median time to first use | ≤ 10 minutes | timestamps from verified bootstrap start to first successful `ompo doctor` and one accepted adapter invocation |
+| median time to first use | ≤ 10 minutes | timestamps from verified bootstrap start to first successful `omp-orchestrator doctor` and one accepted adapter invocation |
 | operator support burden | ≤ 1 intervention per install | intervention count plus named reason; retries caused by installer defects count |
 | downstream value | ≥ 4/5 complete one real, reversible adapter action | receipt with `status=APPLIED`; typed refusals are reported separately and do not count as useful work |
 
@@ -5179,16 +5015,7 @@ are.
 For every command in this section, `M` is explicitly `/Volumes/ZestData/dicklesworthstone-mirror`;
 the reproducible shell prefix is `M=/Volumes/ZestData/dicklesworthstone-mirror` followed by the
 command. The mirror counts below are historical prior-art measurements, not workspace denominators.
-**Disagreement with the brief, stated plainly.** The brief §3.7 records the mirror at
-`/Volumes/ZestData/dicklesworthstone-mirror` as **216 repos** — a figure since retired in favour of
-**210** git work-trees, the only count that counts repositories. I ran `ls $M | wc -l` and got
-**218**. The difference is almost certainly definitional rather than substantive: the listing
-includes entries that are not live repos, e.g. `ntm.corrupt-20260819`, which appears alongside
-`ntm` (`ls $M | grep -i 'tmux\|ntm'` → `ntm`, `ntm.corrupt-20260819`, `useful_tmux_commands`).
-Nothing in this section depends on which figure is right, and I have not resolved it — I record the
-disagreement rather than quietly adopting either number, because an unreconciled count in two
-sections of the same document is exactly the "unstated denominator" defect rule 4 forbids. The
-orchestrator should pick one definition (`ls` entries versus git work-trees) and state it once.
+**Mirror census, historical and definitionally unresolved.** The prior brief recorded 216 entries, the mirror index reported 210 filesystem .git entries, and a direct ls returned 218. None of those counts validates every entry as a live git work-tree; the difference is definitional, with ntm.corrupt-20260819 and useful_tmux_commands present beside ntm. This section records the measurements as prior-art context, not as a repository denominator. The current fh index is stale and direct citations remain bounded by the command shown.
 
 `fh`'s MCP surface is failing closed with a typed `SERVE_INPUT_STALE`, so every citation below is a
 direct grep of the mirror with the command shown. Per the brief, failing closed with a remediation
@@ -5222,9 +5049,7 @@ We adopt it unchanged rather than hand-rolling a `git rev-parse` in each `build.
 `MISSING_DEPENDENCY|missing_dependency|DependencyMissing` across `$M/*/src/*.rs` — no prior art
 found.* Jeffrey's installers detect missing dependencies in shell at install time; none of the
 Rust binaries surfaced by that pattern carries a typed runtime refusal for an absent substrate.
-This is a place where our aggregator shape is genuinely different: the manifest exposes seven runtime
-adapters, not seven binaries; each adapter maps to one or more target rows and is independently
-refused or reported as DOWN; the refusal is a first-class envelope status. We will design it ourselves and be explicit that it is not borrowed.
+This is a place where our aggregator shape is genuinely different: the release manifest must expose an explicitly enumerated adapter set, but **no seven-item adapter list exists today**. Each future adapter may map to one or more target rows and be independently refused or reported as DOWN; that design remains PROJECTED and is not borrowed prior art.
 
 NO-CLAIM: §7 cites prior art for the *pattern*. It does not claim we have read those
 implementations in full, that they are bug-free, or that their licenses permit copying source —
@@ -5248,22 +5073,18 @@ recorded as repo doctrine, not as prose inside an argument:
    never `git add`ed, and its expected output is golden-tested from a `.txt` fixture. The gate's
    exemption list stays empty, which is the property that makes the gate credible.
 
-NO-CLAIM: these four are constraints this section proposes and writes down. They have not been
-ratified by a gate, and none of them is enforced by code at HEAD `fb89714`.
+NO-CLAIM: these four are constraints this section proposes. They are not ratified by a gate, and none is asserted as enforced until a current receipt names the source revision, artifact, and command.
 
 ---
 
 **Section NO-CLAIM.** This section specifies distribution, identity, and the CLI contract. It does
 not specify the probe list (gates section), the orchestration semantics (crate specs), or the
-milestone at which each surface lands (milestones section). Every PROJECTED item is unbuilt at
-HEAD `fb89714`; the only MEASURED install-adjacent code in the tree is `crates/installer`, which
-covers 3 installer entries against 21 workspace targets, one of which is foreign and not built here.
+milestone at which each surface lands (milestones section). Every PROJECTED item is unbuilt in the current worktree; the only MEASURED install-adjacent code is crates/installer, which covers 3 installer entries against 48 current workspace targets, one of which is foreign and not built here.
 
 ---
 
-## 7.9 BLOCKER resolution — the seven adapters were never named, and the 21 is now 23
-
-`GradeInstall` filed two BLOCKERs against this section:
+## 7.9 Historical blocker resolution — the seven-adapter ambiguity is superseded
+GradeInstall filed two BLOCKERs against this section:
 
 > The document asserts every target becomes an adapter (21) while simultaneously
 > claiming seven adapters. If 21 targets map to 7 adapters, the grouping rule is
@@ -5272,7 +5093,7 @@ covers 3 installer entries against 21 workspace targets, one of which is foreign
 
 > The document specifies commands that take `<adapter>` parameters but provides zero
 > examples of valid adapter names. A user on a second machine cannot invoke
-> `ompo doctor <adapter>` without guessing.
+> `omp-orchestrator doctor <adapter>` without guessing.
 
 Both are correct, and measurement makes them worse rather than better.
 
@@ -5280,13 +5101,13 @@ Both are correct, and measurement makes them worse rather than better.
 
 | claim | measured | derivation |
 |---|---:|---|
-| binary targets | **23** | `cargo metadata --no-deps`, registered as `built_binaries` |
+| binary targets | **48** | cargo metadata --format-version 1 --no-deps, registered as built_binaries |
 | known to the installer | **3** | `omp-orchestrator`, `pane-truth`, `tick-monitor` |
 | "seven runtime adapters" | **no list exists** | grep of the whole repo finds no enumeration |
 
 The `21` was already stale when graded — two crates landed since — which is why it is
 registered as a derived figure rather than written in prose. **The `7` is worse than
-stale: it is unsourced.** Five places in this section invoke `ompo doctor <adapter>`,
+stale: it is unsourced.** Five places in this section invoke `omp-orchestrator doctor <adapter>`,
 and no adapter is named in any of them.
 
 ### Retraction
@@ -5297,18 +5118,13 @@ denominator while never establishing where the number came from. There is no
 seven-item list, no grouping rule from 23 targets onto 7 names, and no way for a
 reader to check either.
 
-What replaces it: **23 targets, 3 installed, 20 unowned.** That is a coverage gap of
-87%, it is derivable from `cargo metadata` on any machine, and it does not require a
-grouping rule to be true.
 
-**NO-CLAIM:** this resolves the *arithmetic*, not the design. Whether the right shape
-is one `ompo` aggregator with adapter subcommands, 23 separate installed binaries, or
-something else is a design decision that remains open — and it is now open *honestly*,
-against a measured 3-of-23, rather than behind a seven that nobody could look up.
+What replaces it: **48 current target rows, 3 installer names, and 45 unlisted targets**. Of the three names, two are owned install entries and one is the foreign pane-truth binary; this is the current arithmetic, not a claim that all 48 targets are installable.
 
+**NO-CLAIM:** this resolves the arithmetic, not the design. Whether the right shape is one omp-orchestrator aggregator with adapter subcommands, separate installed binaries, or something else remains open — against a measured 3-of-48 listed-target count, rather than behind a seven that nobody could look up.
 ---
 
-## 7.10 The journey surfaces, mapped — and 1 of 16 names its own timeout
+## 7.10 Historical journey surfaces, mapped — 1 of 16 names its own timeout
 
 Josh's standing objective, verbatim: *"Every surface of our journey mapped to specific
 commands with proper guards and timeouts, everything typed — nothing unknown."*
@@ -5318,23 +5134,25 @@ commands with proper guards and timeouts, everything typed — nothing unknown."
 > 466-line specification of what 11 actions SHOULD do but **NO STATED COMMAND,
 > BINARY, API, or FUNCTION CALL** to actually RUN any action.
 
-Measured 2026-09-01 by invoking `--help` on every one of the 23 bin targets
-`cargo metadata` reports. Not a hand-written map — a probe.
+**HISTORICAL MEASURED (2026-09-01; provenance incomplete).** The source revision, exact per-target
+`--help` invocation, and captured output artifact were not retained. The table below is therefore a
+plan snapshot, not acceptance evidence. A future bead MUST record the metadata target list, the exact
+probe command, every target's output/exit code, and a SHA-256 before publishing these ratios.
 
-### How 23 binaries answer `--help`
+### Historical 23-target help snapshot
 
 | behaviour | count | what it means for a stranger |
 |---|---:|---|
 | **NOT-BUILT** | 7 | the release binary does not exist; nothing to invoke |
-| **REAL-HELP** | 6 | `usage:` line, no error anywhere in the output — the only genuinely discoverable surfaces. The registered figure `help_discoverable_binaries` answers **7**, because it inspects only the FIRST LINE; one binary opens cleanly and errors below. Two instruments, two answers — the registered command is the authority and this row quotes the stricter one deliberately |
+| **REAL-HELP** | 6 | historical snapshot: usage line with no error; the snapshot's first-line instrument answered 7, while the current registered help_discoverable_binaries command answers 10 |
 | **REJECTS** | 3 | answers `unknown argument: --help` |
 | **HELP-AS-PATH** | 3 | treats `--help` as a **filesystem path** and reports it missing |
 | **SILENT** | 2 | prints nothing at all |
 | **EXECUTES** | 1 | **runs the gate** instead of describing it |
 | ERRORS | 1 | errors on an unrelated precondition |
 
-**Names a timeout or deadline in its own help: 1 of 16 buildable** —
-`dispatch-silence-watch`. Fifteen do not.
+**Historical snapshot: names a timeout or deadline in its own help: 1 of 16 buildable** —
+dispatch-silence-watch. Fifteen did not in that snapshot; this ratio is not the current 48-target help census.
 
 ### The three that deserve naming
 
@@ -5349,10 +5167,7 @@ Measured 2026-09-01 by invoking `--help` on every one of the 23 bin targets
 
 ### What this does and does not close
 
-**Closes** the mapping question with a number instead of an impression: the commands
-exist (16 built), and the *guards and timeouts are not discoverable from the commands
-themselves* (1 of 16). The objective's "nothing unknown" clause is measurably unmet at
-the invocation surface, and the gap is now sized rather than asserted.
+**Historical snapshot only:** the commands existed for 16 built targets, and guards/timeouts were discoverable for 1 of 16. The current registered first-line help command answers 10; a fresh full matrix receipt is still required before current invocation coverage is claimed.
 
 **Does not close** the actions themselves. This maps BINARIES; `Lens05Actions`'
 complaint was about **actions A1–A11**, which are specified as *behaviours* and do not
@@ -5385,7 +5200,7 @@ adopter-facing INIT path — no `doctor`, no `init`, no `adopt`
 (`/usr/bin/grep -cE '"doctor"|"init"' crates/omp-orchestrator/src/main.rs` → `0`). There IS a
 resident `run` entrypoint, and quoting the CLI verbatim matters enough that this section's first
 draft got graded down for trimming it. The whole CLI surface, verbatim from `usage()` at
-`crates/omp-orchestrator/src/main.rs:259-260`:
+crates/omp-orchestrator/src/main.rs:274-275:
 
 ```
 usage: omp-orchestrator [run] [--once|--max-ticks N] [--repo PATH] [--session NAME]
@@ -5408,22 +5223,19 @@ literal strings in one file, not that no other crate offers an entry point (§07
 time in one terminal, by hand; no panes to census, no use for a supervisor loop. They want the *back
 half*: gates that fail a build on a named property, and completion tracking where "done" means an
 artifact exists rather than an agent said so. They can be served first, because the gates are the
-part of this repo measured to work — `MEASURED` (brief §3.5, regenerated 2026-09-01 against
-NUMBERS.toml `[figures.test_functions]`): 31 integration test files, **409** `#[test]` functions,
-8 gate crates, **1 of 8** with all four typed legs (`undrained-pipe-lint`;
-`no-shell-gate` — the earlier exemplar — is AFFORDANCE-only under the typed rebuild, which is
-itself the cautionary tale), **4 of 8** with no mutation mechanism of any kind. **NO-CLAIM:** that leg table counts
-files matching a property grep; it does not establish the legs are individually strong.
+part of this repo measured to work — `HISTORICAL MEASURED SNAPSHOT` (the current worktree census authority is §1 of `06-gates.md`; do not use this snapshot for acceptance): 31 integration test files, **409** `#[test]` functions,
+8 gate crates, **2 of 8** with all four named leg categories in the snapshot (`undrained-pipe-lint` and `no-shell-gate`), but only **1 of 8** with an executable attributable mutation leg (`undrained-pipe-lint`; `no-shell-gate` is AFFORDANCE-only), and **4 of 8** with no mutation mechanism of any kind. **NO-CLAIM:** the leg table counts files matching a property grep; it does not establish the legs are individually strong.
 
 **Persona B — the small team.** Three to eight agents, one repo, one shared session. They already
 dispatch by hand and already lose track. They want dispatch with receipts: a record that a packet
-was accepted, by whom, and whether work started. `MEASURED` (brief §4): the `actuate` layer **does
-not exist** — a human types into panes; the `complete` layer **does not exist** — every completion
-this session was found by a human looking. Their core need is the two empty rows of that table.
+was accepted, by whom, and whether work started. `MEASURED` (brief §4, corrected 2026-09-01): the `actuate` layer **exists and is unfenced** — the
+resident supervisor dispatches without the claim beat and logged 131 sends of one unclaimed bead to
+one dead pane as successes; the `complete` layer **does not exist** — every completion this session
+was found by a human looking. Their core need is exactly those two rows: a dispatch that is refused
+until claimed and receipted, and a completion the loop can see.
 
 **Persona C — the multi-repo fleet operator.** Our own shape: many repos, dozens of panes, a tracker,
-a queue, a supervisor loop. Last to serve, structurally: `MEASURED` (brief §3.2), 157 of 183 rows are
-`CAPABILITY_NOT_USED` and all 7 `consumes` edges come from one crate — an inventory, not orchestration.
+a queue, a supervisor loop. Last to serve, structurally: **HISTORICAL** brief §3.2 reported 157 of 183 rows as CAPABILITY_NOT_USED and all 7 consumes edges from one crate — an inventory, not orchestration. Current map values are maintained in 02-surface-census and are not an external-adoption result.
 
 **The order is A → B → C, the inverse of the order we built in.** **NO-CLAIM:** the ordering is a
 `PROJECTED` product judgement; no adopter outside this machine has run any part of this system.
@@ -5446,12 +5258,8 @@ omp-orchestrator 0.1.0 (build_id=ecdea397, target=aarch64-apple-darwin)
 
 `MEASURED` obstacle, not cosmetic. `crates/installer/src/main.rs:16` resolves the repo root from
 `env!("CARGO_MANIFEST_DIR")` — a **compile-time** constant; `:25` falls back to a literal
-`/Users/josh`; `:12` hardcodes three binary names. Repo-wide the pattern appears **21** times across **19** files at this writing (python walk,
-re-counted 2026-09-01; declared in NUMBERS.toml `[figures.cargo_manifest_dir_sites]` as LIVE — the
-count moves with every landed test file, so the prose cites the command, not a frozen number; a
-shell `grep -r --include=` returns a false zero here — see §2.2). An installed binary carrying a
-compile-time path audits the *build machine's* checkout, not the adopter's. **NO-CLAIM:** most of
-the 19 are tests, deliberately.
+/Users/josh; :12 hardcodes three binary names. Repo-wide the pattern appears **61** times across **52** files at this writing. NUMBERS.toml registers the aggregate site count as LIVE; the 52-file split is diagnostic output from the same source walk, not a separate registry figure. A shell grep -r --include= returns a false zero here — see §2.2.
+An installed binary carrying a compile-time path audits the build machine's checkout, not the adopter's. **NO-CLAIM:** this is a measurement of coupling, not a claim that every occurrence is production behavior.
 
 ### 2.2 `doctor` — in a repo with none of our conventions
 
@@ -5579,9 +5387,7 @@ The transcript is PROJECTED — but citing the two-arm enum as its measured shap
 below while silently using a third arm was an undisclosed invention until this flag was added;
 the WorkerAdapter spec must add the arm or the transcript must use `TmuxSendKeysLiteral`.
 
-`MEASURED` grounding for the first refusal: `crates/tick-monitor/src/lib.rs:485` sets
-`MIN_GAP_SECS = 75` — liveness is a two-capture property one tick cannot prove, so `UNPROVEN` on tick
-one is correct and must be labelled or it reads as a bug. The `receipt` object has a measured shape:
+MIN_GAP_SECS = 75 at crates/tick-monitor/src/lib.rs:490 — liveness is a two-capture property one tick cannot prove, so UNPROVEN on tick one is correct and must be labelled or it reads as a bug. The receipt object has a measured shape:
 `crates/ack-stage/src/lib.rs:21-24` types transport as a two-arm enum — `NtmRobotSend` (*"the only
 transport with a retained per-target JSON receipt"*) and `TmuxSendKeysLiteral` (*"no equivalent"*).
 
@@ -5647,11 +5453,11 @@ or ours), and **a way to observe a worker**. Below those, every "do we need X" n
 | we must NOT require | why not | adapter that makes it optional |
 |---|---|---|
 | our bead prefix (`omp-orchestrator-*`) | a naming convention is not a contract; theirs is already in their CI | `TrackerAdapter` returns an opaque `UnitId`; the orchestrator never parses one |
-| our directory layout (`crates/`, `docs/plan/`) | `MEASURED`: 19 files (21 sites, see §2.1's NUMBERS row) resolve roots from `env!("CARGO_MANIFEST_DIR")` (§2.1) — a workspace assumption, not a universal one | `RepoAdapter::root()` resolves at **runtime** from cwd upward; compile-time roots stay in our own tests |
-| our tmux session naming (`--session NAME`) | required today (`crates/omp-orchestrator/src/main.rs:254`), encoding our fleet's shape | `WorkerAdapter` owns naming; `--session` becomes a tmux-adapter-scoped flag, invalid elsewhere |
+| our directory layout (crates/, docs/plan/) | MEASURED: 61 CARGO_MANIFEST_DIR sites; 52-file split is diagnostic output from the same walk and is not a separate NUMBERS figure | RepoAdapter::root() resolves at runtime from cwd upward; compile-time roots stay in our own tests |
+| our tmux session naming (`--session NAME`) | required today (`crates/omp-orchestrator/src/main.rs:274-275`), encoding our fleet's shape | `WorkerAdapter` owns naming; `--session` becomes a tmux-adapter-scoped flag, invalid elsewhere |
 | **our `.sh`/`.py` prohibition** | OUR accretion rule, born of a measured 160 tracked shell scripts and 60,467 lines in `control-plane` (`crates/no-shell-gate/src/lib.rs:6-9`). A foreign repo full of shell scripts is a normal repo and must be fully orchestrable | `no-shell-gate` is **opt-in**: `SKIPPED reason=OPTED_OUT_BY_ADOPTER`, never in a default set |
 | our specific agent CLI (OMP v18) | §3.1 — the deepest coupling in the codebase | `WorkerAdapter::observe()`; `tick-monitor` becomes the *OMP-v18 implementation*, not the interface |
-| a single version flag that works on every dependency | `MEASURED` by me without a pipeline: `tmux --version >o 2>e; echo $?` → **exit 1**, 0 bytes stdout, 158 bytes stderr; `tmux -V` → `tmux 3.6a`, exit 0. tmux is **well-behaved** — an earlier claim in this batch that it "exits 0 while failing" was an artifact of reading `$?` after a pipeline, where the status belongs to the last command. `--version` answers 8/9 of our binaries, `-V` 5/9 | `doctor` requires **two independent presence signals** and pins **each arm with its own test, including the failure arm**. Precedent, verified first-hand in `pi_agent_rust/src/doctor.rs` and cited by construct because a bare line number is unverifiable: `:950` the naive success arm, `:967-968` the two-signal arm (`discovered_path.is_some() && probe_failure_is_known_nonfatal(…)`), `:1066` `which_tool` as the independent signal, `:13948` `check_tool_falls_back_when_probe_args_are_unsupported`, `:13964` `check_tool_reports_invocation_failure_for_broken_executable` — the second test is the known-good leg that stops the fallback becoming a blanket amnesty. **ADOPT WITH A NAMED GAP:** `probe_failure_is_known_nonfatal` at `:1057` allowlists exactly one tool (`if tool.ne("sh") \|\| args.ne(&["--version"])`), so a doctor built on that code marks tmux MISSING today |
+| a single version flag that works on every dependency | MEASURED: tmux --version exits 1 while tmux -V returns 3.6a exit 0; --version answers 8/9 of our binaries and -V answers **6/9** in the current probe | doctor requires two independent presence signals and a separate failure-arm test; the old pi_agent_rust line citations are historical |
 
 We may enforce our own rules on ourselves as hard as we like. `MEASURED`:
 `git ls-files -- '*.sh' '*.py' | wc -l` → `0` (grep-free, deliberately), exemption list empty by
@@ -5665,10 +5471,7 @@ even on us: `crates/composer-typed/tests/differential.rs:41` aims its oracle at
 OMP v18 screen-scraper. What is the adapter story worth if the layer you claim works is vendor-blind?"*
 
 Correct as stated, and the strongest objection here. `MEASURED` and specific:
-`crates/tick-monitor/src/lib.rs:312` hardcodes `MODEL_MARKERS = ["Opus 5","GLM 5.3","GPT-5.6",
-"GPT-5.5"]`; `:315` hardcodes three OMP-v18 dialog-footer strings *captured verbatim from pane
-`%1372`*; `:383` strips braille `U+2800..U+28FF` and the literal `π`; `classify` matches two verbatim
-queued-message strings (harness grep, `capture\.contains` → 2 sites). 1,293 lines at this writing (1,185 when first measured — the crate grew), one vendor.
+crates/tick-monitor/src/lib.rs:317 hardcodes MODEL_MARKERS = [Opus 5, GLM 5.3, GPT-5.6, GPT-5.5]; :320 hardcodes the OMP-v18 dialog-footer strings captured from pane %1372; :385 strips braille U+2800..U+28FF and the literal pi; :356 classifies queued-message strings. The current source is 1,326 lines; these are source-shape facts, not proof of vendor parity.
 
 We have been on the receiving end of this. `MEASURED`, from `crates/tick-monitor/src/lib.rs:10-18`:
 `pane-truth` reported pane `%1409` — *"braille spinner, advancing timer, 16.5% tree CPU"* — as
@@ -5695,10 +5498,7 @@ CloseOutcome` — **`Evidence` is not `Option`**, because prose completion is wh
 **`WorkerAdapter`** — `observe(&Cx, WorkerId) -> Observation`, `dispatch(&Cx, WorkerId, Packet) ->
 TransportReceipt`, `receipt(&Cx, WorkerId, &Observation, &Observation) -> ReceiptVerdict`. Two
 `Observation`s, never one, because liveness is a two-capture property
-(`crates/tick-monitor/src/lib.rs:485`). References, `MEASURED` as existing:
-`crates/tick-monitor/src/lib.rs` (`PaneState`, `Liveness`, `Observation`, `classify`) is the
-*tmux + OMP v18* `observe`; `crates/receiver-receipt/src/lib.rs` (`ReceiptVerdict`,
-`assess_receiver_receipt`) is `receipt`; `crates/ack-stage/src/lib.rs` is `dispatch`.
+crates/tick-monitor/src/lib.rs (PaneState, Liveness, Observation, classify; MIN_GAP_SECS at :490) is the tmux + OMP v18 observe implementation; crates/receiver-receipt/src/lib.rs (ReceiptVerdict, assess_receiver_receipt) is receipt; crates/ack-stage/src/lib.rs is dispatch.
 
 **`RepoAdapter`** — `root(&Cx) -> PathBuf` resolved at runtime from cwd upward, never from
 `env!("CARGO_MANIFEST_DIR")`. `identity(&Cx) -> Identity` carrying HEAD, dirty set, build id.
@@ -5750,22 +5550,17 @@ every completion this session was found by a human looking. Prevented by non-opt
 *Conditions living only in pane scrollback, dying with the pane.* `MEASURED` (brief §1): the reap
 found **seven real conditions** there. Prevented by a durable per-unit ledger written every tick.
 
-*A supervisor running 23 commits stale.* `MEASURED`, session ledger, 2026-08-31. **Provenance defect,
+*A supervisor running 23 commits stale.* **HISTORICAL/UNVERIFIED**, session ledger, 2026-08-31. The failure class is retained, but the 23 has no re-derivable command and is not current evidence.
 recorded rather than hidden:** I found no re-derivable command for the `23`, which writing-contract
 rule 1 forbids; the failure class is real and the missing command is a defect against this document.
 Prevented by applying `crates/installer/src/lib.rs`'s identity proof to the *running* supervisor.
 
-*162 refused ticks with nobody watching.* `MEASURED` (brief §4): 162 refusals over 4.2 hours,
-`DISPATCH_RETRY_BLOCKED`. The fence was right; the silence was wrong. Prevented by a refusal budget —
-N consecutive refusals of one code escalates, because silent perpetual refusal reads as a hang.
 
-*A gate that is correct and unreachable.* `MEASURED` (brief §3.6): `omp-inventory-map --help` →
-`CONFIG_ERROR unknown argument --help` on a gate whose 13 tests pass. Prevented by **ADDRESSABLE**.
+**Historical/unverified snapshot:** the brief recorded 162 refused ticks over 4.2 hours as DISPATCH_RETRY_BLOCKED. No source ledger export or deriving command is retained, so it is a failure-shape example, not a current baseline. The proposed refusal budget remains a design control, not observed enforcement.
+**Historical/unverified addressability snapshot:** the brief recorded omp-inventory-map --help -> CONFIG_ERROR unknown argument --help alongside 13 source test markers. Current omp-inventory-map source contains 28 test markers; no passing-run receipt is claimed here. The proposed ADDRESSABLE gate remains open.
 
-`MEASURED` denominator: the board at stand-down was 28 closed, 25 in_progress, 19 open, 2 blocked.
-**NO-CLAIM:** each item pairs a measured failure with an intended mechanism; none has been observed.
+**CURRENT board snapshot (2026-09-01).** The five-status command-backed total is 93: 60 closed, 22 in_progress, 8 open, 2 blocked, and 1 grading. **NO-CLAIM:** this pairs the historical failure examples with a current board count; it does not claim the refusal or addressability mechanisms have been observed.
 ### 6.1 Adoption outcomes we will actually measure
-
 The value claims above are hypotheses, not adoption evidence. The following pilot scorecard makes
 the internal buyer's walk-away benefit and the foreign-adopter bar falsifiable. All targets are
 **PROJECTED** until a run records the stated proof artifact; the current baseline is either explicitly
@@ -5805,9 +5600,8 @@ undiscoverable. `br`'s bar (§2.2) is repair through one chokepoint with byte-id
 rule is likeliest — our best rule, and to an adopter it reads as contempt for their codebase.
 
 **Being slower than doing it by hand.** Persona A runs one agent in one terminal; if adoption costs
-more than the tracking it replaces, not adopting is correct. `MEASURED`: 157 of 183 census rows are
-`CAPABILITY_NOT_USED`. We are short of surface that pays, not of surface.
 
+more than the tracking it replaces, not adopting is correct. **HISTORICAL** brief §3.2 reported 157 of 183 census rows as CAPABILITY_NOT_USED; current surface counts are command-backed in 02-surface-census. We are short of externally validated surface that pays, not of a current map count.
 **The kill condition we should adopt ourselves:** if a foreign repo cannot reach a graded close
 without hand-editing anything under `.omp-orchestrator/`, the adapter layer has failed and the fix is
 the boundary, not more adapters. **NO-CLAIM:** `PROJECTED` risks reasoned from measured defects here.
@@ -5840,10 +5634,8 @@ we are allowed to say it works, and the conditions under which this document sho
 **A milestone is closed by an OBSERVABLE, not by a claim** — not by a passing test suite, a commit, an agent reporting success, or a
 human's recollection that it seemed to work. An observable is a command someone else can run and a result they can read without asking
 us what it means. That is the output of the failure this project was stood down over: **a workspace whose own census measured
-mechanisms built, tested, hardened, and called by nothing** (§01: twenty-six crates, 379→407 tests
-at last count, and a BUILT≠WIRED census whose row set outgrew the twenty-mechanism figure this
-text first cited — see the section-map note at the bottom of this file) — evidence code does what its author thought, not that it runs. Every milestone
-below is stated in this shape:
+mechanisms built, tested, hardened, and called by nothing** — a **historical** §01 snapshot of twenty-six crates and 379→407 tests, with a BUILT≠WIRED census whose row set outgrew the then-current twenty-mechanism figure. Current workspace counts are command-backed in NUMBERS.toml; this historical scar shows why evidence code must prove invocation, not merely correct source.
+Every milestone below is stated in this shape:
 
 ```
 Mn — <one-sentence goal, future tense>
@@ -5866,10 +5658,7 @@ measure the wrong quantity. Guarding against that is §5's job.
 
 Seven, ordered by dependency — forced, not chosen: each consumes the capability the previous one produces, so there is no parallel path
 here and no way to buy schedule with more agents. The ordering is not asserted from preference: it
-mirrors the measured crate chain of §04 (finding-dispatch → omp-orchestrator → ack-stage →
-receiver-receipt → tick-monitor is the deepest path in the 18-edge DAG), with M1's seam at the
-head and M7's window at the tail.
-
+mirrors the crate chain captured in the **historical 18-edge DAG snapshot** (§04): finding-dispatch → omp-orchestrator → ack-stage → receiver-receipt → tick-monitor. M1's seam is at the head and M7's window at the tail.
 ```mermaid
 graph LR
   M1[M1 observe<br/>the seam] --> M2[M2 select<br/>by graph] --> M3[M3 dispatch<br/>with a receipt]
@@ -5895,58 +5684,33 @@ The test must print one JSON line with `{"fixture":"tick-monitor-newly-idle.json
 **STARTING POINT — with a recorded disagreement with the brief.** Brief §4 lists the *actionable* layer as **BROKEN** — "`idle_panes`
 discards `NewlyIdle`; `free_capacity` derives from the same `is_dispatchable` filter." **I measured the current source and disagree:**
 
-```
-crates/tick-monitor/src/lib.rs:462-463   is_free_capacity() = ConfirmedIdle | NewlyIdle
-crates/tick-monitor/src/main.rs:244      if live.is_free_capacity() && !excluded.contains(...)
-crates/omp-orchestrator/src/lib.rs:461       .filter(|p| p.is_free_capacity)
-strings ~/.local/bin/tick-monitor     | grep -c NEWLY_IDLE  -> 1
-strings ~/.local/bin/omp-orchestrator | grep -c NEWLY_IDLE  -> 0
-grep -rn '"NEWLY_IDLE"' crates/omp-orchestrator/src/main.rs -> 0 hits
-grep -rn  "NEWLY_IDLE"  crates/omp-orchestrator/            -> 2 hits, both #[cfg(test)]
-```
+CURRENT SEAM EVIDENCE (2026-09-01):
+crates/tick-monitor/src/lib.rs:467-468       is_free_capacity() = ConfirmedIdle | NewlyIdle
+crates/omp-orchestrator/src/lib.rs:739       consumer counts pane.is_free_capacity
+crates/omp-orchestrator/src/main.rs:1646-1653 regression test proves IDLE -> free_capacity but not dispatchable
 
-The producer emits `free_capacity` from its own predicate including `NewlyIdle`; the consumer counts its own field;
-`crates/omp-orchestrator/src/lib.rs:451-457` comments the former defect, with the regression test
-`observed_idle_state_counts_as_free_capacity_before_confirmation` at `src/main.rs:1056`
-(predicate asserts `:1062-1063`). `MEASURED`: **the
-filter defect is fixed in source** — the brief's row describes the tree at the 4h19m incident, not this commit, and should be amended in
-place. What remains broken is the **seam**. `MEASURED`: the producer names the state; the production parser at `src/main.rs:383`
-**never** does, deriving capacity from a JSON string list plus a `state == "IDLE"` fallback, so the NewlyIdle branch is exercised only
-through a `#[cfg(test)]` constructor mapping a label production never reads. Three predicates agree by convention across a process
-boundary with **no shared type and no end-to-end fixture** (`ls crates/omp-orchestrator/tests/` → `no_noop.rs`); `omp-orchestrator` has
-no `path-depends-on` edge to `tick-monitor` (brief §3.4).
+The producer emits free_capacity from its own predicate; the consumer counts its own field. The filter defect is fixed in source. What remains broken is the seam: parse_observation at crates/omp-orchestrator/src/main.rs:383-410 reads JSON lists plus a state == IDLE fallback, so the NewlyIdle branch is not represented by a shared type or an end-to-end fixture. omp-orchestrator has no path-depends-on edge to tick-monitor (brief §3.4).
 
-**RISK.** A live-seam refactor the repo has flagged as needing an owner: `crates/no-shell-gate/tests/wired_lanes.rs:679` records
-`Observation` as "REQUIRES A DECISION not an allowance… the `free_capacity` seam". The failure mode is a partial migration adding a
-shared type *beside* the two existing structs, producing three dialects where there were two — and the vocabulary that would collapse
-the ack dialects is not merely unadopted but **blocked upstream**: `AckKind` and `DeliveryClass` sit behind `#[cfg(feature =
-"messaging-fabric")]`, which needs `test-internals`, which upstream issue #46 removed from defaults, and `ObligationLedger` occurs zero
-times. **NO-CLAIM.** M1 makes one defect class a compile error; a shared type with a wrong predicate is wrong in both crates.
+**RISK.** A live-seam refactor needs an owner: crates/no-shell-gate/tests/wired_lanes.rs:679 records Observation as REQUIRES A DECISION, not an allowance, at the free_capacity seam. A partial migration adding a shared type beside the existing structs would create three dialects rather than collapsing two.
 
-**UPSTREAM CORROBORATION, declared only.** OMP declares `GuestIdleReconcilerCtx`
-(`dist/types/collab/guest.d.ts:9-30`; probed) with a settle-vs-continuation split — the same two-tier idle design
-as `NewlyIdle`/`ConfirmedIdle`, arrived at independently. DECLARED only: no wire probe has carried
-it; M1's measured three-predicate seam and the RISK above stand unchanged.
+**UPSTREAM CORROBORATION, declared only.** OMP declares GuestIdleReconcilerCtx at dist/types/collab/guest.d.ts:9-30 with a settle-vs-continuation split analogous to NewlyIdle/ConfirmedIdle. No wire probe has carried it; the measured local seam and risk above remain.
+
 
 ### M2 — Selection will run through the graph kernel instead of queue recency
 
 **OBSERVABLE.** From the repository root and the recorded revision, run
 `cargo test -p omp-orchestrator --test selection_graph -- --exact graph_and_recency_choose_different_beads --nocapture`
 against the checked-in fixture `crates/omp-orchestrator/tests/fixtures/blocking-chain.json`. The test must print one JSON line with
-`{"fixture":"blocking-chain.json","graph_bead":"<id>","recency_bead":"<different-id>","selected_by":"bv","revision":"<git sha>"}` and exit 0; the pre-milestone tree fails because no `bv` invocation or test exists, and the post-milestone tree fails if the IDs are equal or `selected_by` is not `bv`. The corroborating source command is `grep -R -n --include='*.rs' 'Command::new("bv")' crates --exclude-dir=tests`, which must return a production hit. **NOT IN SCOPE.** Dispatch — M2 decides *what* is worked; M3 delivers it.
+`{"fixture":"blocking-chain.json","graph_bead":"<id>","recency_bead":"<different-id>","selected_by":"bv","revision":"<git sha>"}` and exit 0; the pre-milestone tree fails because no `bv` invocation or test exists, and the post-milestone tree fails if the IDs are equal or `selected_by` is not `bv`. The test MUST exercise the real `bv --robot-next` invocation (or a recorded executable-equivalent adapter) and assert the parsed JSON fields; a source-text grep is diagnostic only and cannot close M2. **NOT IN SCOPE.** Dispatch — M2 decides *what* is worked; M3 delivers it.
 
-**STARTING POINT.** `MEASURED` — the rule is enforced and the implementation is absent:
+**STARTING POINT.** `MEASURED` — the sanctioned graph selector is not invoked by production code:
 
-```
+```text
 harness grep, pattern Command::new\("bv"\), path crates   -> No matches found
-grep -rhoE 'Command::new\("[a-z...]+"\)' crates/ --include=*.rs | sort | uniq -c   # non-empty, so not a false zero
-  11 git · 6 python3 · 6 br · 4 /bin/kill · 2 tmux · 2 /bin/sh · 1 strings · 1 omp · 1 grep · 1 cargo
 ```
 
-`bv` is spawned **zero** times, while `crates/kernel-only-operator-hook/src/lib.rs:548` refuses raw queue reads with *"raw `br ready` is
-blocked; use the `bv --robot-triage` queue kernel"*, allowlisted at `:24`. **We ship a prohibition whose sanctioned alternative nothing
-calls**, and six `Command::new("br")` sites read the queue directly.
-
+This zero is not acceptance evidence: it is a scoped source observation, and the executable behavior above is the only admissible M2 proof. `bv` is spawned zero times today while `crates/kernel-only-operator-hook/src/lib.rs:548` refuses raw queue reads with *"raw `br ready` is blocked; use the `bv --robot-triage` queue kernel"*. **NO-CLAIM.** Graph selection being invoked is not graph selection being better; the differential leg proves only that the strategies differ.
+```
 **RISK.** `bv v0.20.0` is at `/opt/homebrew/bin/bv`, not `~/.local/bin`; a foreign machine (M6) may lack it, so M2's dependency must be
 a degradation path with a typed refusal, or M2 blocks M6. **NO-CLAIM.** Graph selection being *invoked* is not graph selection being
 *better*: the differential leg proves the strategies differ, not that the graph wins.
@@ -6021,22 +5785,34 @@ Ten closes is an existence proof, not a rate.
 
 ### M6 — A repository that is not this one will run the orchestrator on a machine that has never built it
 
-**OBSERVABLE.** On a clean host, from the repository root at the recorded revision, run this exact shell script:
+**OBSERVABLE.** On a clean host, from the repository root at the recorded revision, run this exact shell script. The install leg targets the `omp-orchestrator` package (not the separate `installer` package), and the cargo executable is resolved before the empty-environment probe so the probe does not accidentally test whether an inherited PATH happens to contain Cargo.
 
 ```sh
 set -o errexit -o nounset -o pipefail
 git rev-parse HEAD
 test ! -e target
 tmpdir="$(mktemp -d)"
-env -i HOME="$HOME" TMPDIR="$tmpdir" PATH="/usr/bin:/bin:/opt/homebrew/bin" sh -ceu 'cargo install --locked --path crates/installer --root "$TMPDIR/omp-m6"'
-env -i HOME="$HOME" TMPDIR="$tmpdir" PATH="$tmpdir/omp-m6/bin:/usr/bin:/bin" omp-orchestrator --repo crates/installer/tests/fixtures/foreign-repo --once --evidence "$tmpdir/m6.json"
+cargo_bin="$(command -v cargo)"
+test -x "$cargo_bin"
+cargo_dir="$(dirname "$cargo_bin")"
+env -i HOME="$HOME" TMPDIR="$tmpdir" PATH="$cargo_dir:/usr/bin:/bin:/opt/homebrew/bin" \
+  cargo install --locked --path crates/omp-orchestrator --bin omp-orchestrator --root "$TMPDIR/omp-m6"
+first_tick_log="$tmpdir/m6-output.log"
+if env -i HOME="$HOME" TMPDIR="$tmpdir" PATH="$tmpdir/omp-m6/bin:/usr/bin:/bin" \
+  omp-orchestrator run --repo crates/omp-orchestrator/tests/fixtures/foreign-repo --once >"$first_tick_log" 2>&1; then
+  first_tick_exit=0
+else
+  first_tick_exit=$?
+fi
+test -s "$first_tick_log"
+if grep -q 'SUPERVISOR_REFUSED' "$first_tick_log"; then verdict=named_refusal
+elif grep -q 'OBSERVATION' "$first_tick_log"; then verdict=progress
+else printf 'M6_UNCLASSIFIED_OUTPUT\n' >&2; exit 1
+fi
+FIRST_TICK_EXIT="$first_tick_exit" VERDICT="$verdict" REVISION="$(git rev-parse HEAD)" python3 -c 'import json, os; print(json.dumps({"install_exit": 0, "cache_absent": True, "fixture": "foreign-repo", "first_tick_exit": int(os.environ["FIRST_TICK_EXIT"]), "verdict": os.environ["VERDICT"], "revision": os.environ["REVISION"]}, sort_keys=True))' >"$tmpdir/m6.json"
+test -s "$tmpdir/m6.json"
+jq -e '(.install_exit == 0) and (.cache_absent == true) and (.fixture == "foreign-repo") and (.first_tick_exit == 0) and (.verdict == "progress" or .verdict == "named_refusal") and (.revision|type == "string") and (.revision|length > 0)' "$tmpdir/m6.json" >/dev/null
 ```
-The checked-in fixture path, checkout SHA, `target/` absence, install exit code, first-tick exit code, and JSON evidence must be captured; `$tmpdir/m6.json` must contain `{"install_exit":0,"cache_absent":true,"fixture":"foreign-repo","first_tick_exit":0,"verdict":"progress|named_refusal","revision":"<git sha>"}`. The pre-milestone tree fails because the install/consumer path is absent; post-milestone success requires every named field and exit code. **NOT IN SCOPE.** Unattended operation (M7); M6 is one successful cold first tick elsewhere.
-
-**STARTING POINT.** `MEASURED`: never attempted. The `installer` crate exists and is **isolated** — on neither side of any of the 18
-`path-depends-on` edges (brief §3.4), so nothing consumes it. Host coupling shows in the binary table: `bv` under `/opt/homebrew`,
-`cargo` a shim at `~/.rch/shims/cargo`, the mirror on `/Volumes/ZestData/…`.
-
 **RISK.** Absolute paths and host assumptions are invisible until the first foreign host, plus a per-binary version-probe map. `MEASURED` here twice: tmux is installed and `-V` succeeds; `--version` is unsupported and fails with exit 1, so it must not be used as the presence probe. The brief's "no handshake" and its first correction ("exits 0 while failing") are both refuted:
 ```
 tmux -V                              -> tmux 3.6a                       exit 0
@@ -6065,8 +5841,7 @@ tmux MISSING today. **NO-CLAIM.** M6 proves portability to one host and only "di
 `cargo run -p omp-orchestrator --bin omp-orchestrator -- --repo crates/omp-orchestrator/tests/fixtures/foreign-repo --duration 24h --evidence target/milestones/m7.json`.
 The command must exit 0 only after 24 hours in the pinned environment and must emit JSON with `{"window_seconds":86400,"human_event_count":0,"ticks":1,"progress_or_named_refusal":true,"max_same_refusal":3,"refusal_inventory":["refusal-class"] ,"revision":"<git sha>"}` (the actual `ticks` value is an integer greater than zero and the inventory contains the observed classes); a missing tick, unnamed refusal, empty inventory, or recurrence above `FINDING_THRESHOLD == 3` exits non-zero. The pre-milestone tree fails because no unattended runner/evidence exists. **NOT IN SCOPE.** Increasing the window — M7 is the first defensible number, not the best one.
 
-**STARTING POINT.** `MEASURED`: the longest unattended interval observed to date is a **failure** — 4h 19m of fleet idleness while every
-watchdog reported healthy. We have an unattended duration; it is the duration of an undetected outage.
+**STARTING POINT.** **HISTORICAL/UNVERIFIED:** a prior session reported 4h 19m of fleet idleness while watchdogs reported healthy. No deriving command or retained artifact exists, so this is a failure-shape example, not a measured current duration. M7's actual unattended duration remains unproven until its transcript exists.
 
 **RISK.** Goodhart, the sharpest risk here. **An unattended window achieved by widening tolerance is a regression that scores as
 progress.** M7 is trivially closable by deleting refusals, so acceptance requires the refusal *inventory* to be non-empty and unchanged
@@ -6133,10 +5908,7 @@ it, because `omp-inventory-map --help` returns `CONFIG_ERROR unknown argument --
 exist. It ships a **known-bad leg** — planted bare number, planted `guarantees`, observable-less milestone — since known-good-only
 fixtures are vacuity again.
 
-**This checker does not exist.** `MEASURED`: `ls crates/ | grep plan-check` returns nothing; the workspace has 26 crates and none is
-this one. It is the sharpest thing an investor can hold against this document: **a plan that asserts a discipline it does not enforce is
-exactly the vacuity defect we found in our own census.** Brief §3.3 measured 183 rows meeting a four-field requirement with one distinct
-value across all 183 — met and meaningless. §3 is in that position now: eight rules enforced by the author's attention.
+**This checker does not exist.** MEASURED: ls crates/ | grep plan-check returns nothing; the workspace has **50 crate directories** (ls -1 crates | wc -l) and none is this one. It is the sharpest thing an investor can hold against this document: **a plan that asserts a discipline it does not enforce is exactly the vacuity defect we found in our own census.** Brief §3.3 measured 183 rows meeting a four-field requirement with one distinct value across all 183 — met and meaningless. §3 is in that position now: eight rules enforced by the author's attention.
 
 **NO-CLAIM.** `plan-check` would enforce *form*. Nothing in this design detects a false `MEASURED` whose command was never run, or an
 observable that is admissible and irrelevant. Those need a reader.
@@ -6170,8 +5942,7 @@ BANKED rows cite evidence; UNPROVEN rows name the experiment that settles them. 
 | Silent refusal is real — the **162-tick** and **178-tick** counts are **HISTORICAL, UNPROVEN** snapshots with no retained ledger derivation and are not banked | **The substrate installs elsewhere.** `MEASURED`: never attempted; `installer` is isolated in the 18-edge graph. Settled by M6: a cold foreign host, documented install, first tick, reproducible transcript. |
 | Transport lies in both directions — `cp-z42vu` returned **`success:[4]`** with no packet delivered (`README.md:155`); the inverse fired the same session | **Verification is cheaper than review.** No instrumentation exists. Settled by recording human-seconds per closed bead before and after M4 on the same bead mix — that ratio is the whole economic argument and is unmeasured. |
 | The evidence-field discipline can be satisfied vacuously — the brief's **183/183** and **one-distinct-value** figures are **HISTORICAL, UNPROVEN** snapshots and are not banked | **Graph selection beats recency.** `MEASURED`: `bv` is spawned zero times. Settled by M2's differential test plus a measured close-rate comparison on a fixed bead set. |
-| The observe layer works and the NewlyIdle filter defect is **fixed in source** — `crates/omp-orchestrator/src/lib.rs:461`, regression test `observed_idle_state_counts_as_free_capacity_before_confirmation` at
-`src/main.rs:1056` (contradicts brief §4; see M1) | **The seam cannot silently diverge again.** `MEASURED`: no shared type crosses it; production never names `NEWLY_IDLE` (`grep -rn '"NEWLY_IDLE"' crates/omp-orchestrator/src/main.rs` → 0). Settled by M1. |
+| The observe layer works and the NewlyIdle filter defect is fixed in source — tick-monitor/src/lib.rs:467-468 exposes ConfirmedIdle or NewlyIdle free capacity; regression test observed_idle_state_counts_as_free_capacity_before_confirmation at omp-orchestrator/src/main.rs:1646-1653 | **The seam cannot silently diverge again.** No shared type crosses it; parse_observation uses JSON lists plus an IDLE fallback. Settled by M1 only after the shared-type fixture lands. |
 | The one hard rule is enforced mechanically — a Rust gate walks `git ls-files` and fails on `.sh`/`.py`, exemption list empty | **The gates bite under attack.** The former **2-of-8 / 4-of-8** figures are **HISTORICAL, UNPROVEN** snapshots and are not a current verdict. Settled by bringing all 8 to four legs plus ADDRESSABLE, and a planted-known-bad campaign per gate. |
 | Failing closed with a remediation hint works — `fh` MCP returns a typed `SERVE_INPUT_STALE` naming the moved mirror HEAD (`5dec4212…` → `ecdea397…`) rather than an empty result | **This plan enforces its own discipline.** `MEASURED`: `ls crates/ \| grep plan-check` → empty. Settled by shipping `plan-check` (§4) with its known-bad fixture. |
 
@@ -6199,16 +5970,17 @@ Nine named gaps are researched below. Each record gives the gap, exact search, a
 
 ## 0. Corpus, tooling, and measurement boundaries
 
+**Replay prefix (required).** Every relative mirror search below runs after M=/Volumes/ZestData/dicklesworthstone-mirror and cd "$M"; a result obtained from the orchestrator repository root is invalid and must not be cited as mirror evidence.
 Recorded filesystem measurements:
 
 ```
 ls -1 | wc -l                                      -> 218   # visible entries
 find . -maxdepth 1 -mindepth 1 -type d | wc -l     -> 217   # directories
-find . -maxdepth 2 -mindepth 2 -name .git | wc -l  -> 210   # git work-trees
+find . -maxdepth 2 -mindepth 2 -name .git | wc -l  -> 210   # filesystem .git entries; NOT validated work-trees
 ls -1 | grep -c corrupt                            -> 1     # ntm.corrupt-20260819
 ```
 
-The research denominator is **MEASURED 210 git work-trees**, not 218 entries, 217 directories, or Brief §3.7's un-re-derived “216 repos.” `fh` refused stale input as `SERVE_INPUT_STALE` after mirror movement `5dec4212… -> ecdea397…`; its CLI also refused `SEARCH_INDEX_STALE` at exit 3:
+The research denominator is **MEASURED 210 filesystem `.git` entries**, not 210 validated work-trees, 218 visible entries, 217 directories, or Brief §3.7's un-re-derived “216 repos.” A validation pass has not classified these entries as non-bare work-trees, linked worktrees, nested repositories, or submodules. `fh` refused stale input as `SERVE_INPUT_STALE` after mirror movement `5dec4212… -> ecdea397…`; its CLI also refused `SEARCH_INDEX_STALE` at exit 3:
 
 ```
 SEARCH_INDEX_STALE: published key f2845efff917afd4 differs from current b1acb6e7b011b1f5
@@ -6217,13 +5989,15 @@ hint: run `fh technical-manifest`
 
 All mirror searches therefore ran against the filesystem, without semantic-index assistance. Full mirror commit IDs were unavailable in this pass; §10.1 records that limitation instead of inventing revisions.
 
+**UNRESOLVED PROVENANCE / PLAN GATE.** The required SOTA preflight is not green: `fh suggest` returned `SEARCH_INDEX_STALE` (published `f284...` vs current `b1ac...`), and `fh technical-manifest --check` failed `TSX_ITEMS_PARSE_FAILED` at `apps/wire/scripts/suites.ts`. `jsm suggest` was offline and returned only generic context suggestions. This section makes no claim that the mirror index or SOTA skill recommendation gate passed; owner: integrator; next action: refresh the fh technical manifest, repair the TSX parse failure, then re-run both commands and retain their outputs.
+
 ### 0.1 Measurement ledger
 
 | measure | derivation/input | result and boundary |
 |---|---|---|
-| mirror denominator | `find . -maxdepth 2 -mindepth 2 -name .git \| wc -l` | **MEASURED 210** work-trees at one snapshot; not 216/218 entries |
-| visible entries / directories | `ls -1 \| wc -l`; `find . -maxdepth 1 -mindepth 1 -type d \| wc -l` | **MEASURED 218 / 217**, not project denominators |
-| `vergen` matches | `grep -rl vergen --include=Cargo.toml . \| wc -l` | **MEASURED 18 manifest paths / 210 work-trees**; unique-repository numerator is NO-CLAIM |
+| mirror denominator | `find . -maxdepth 2 -mindepth 2 -name .git | wc -l` | **MEASURED 210 filesystem entries** at one snapshot; work-tree validity is **UNVALIDATED**, not a repository count |
+| visible entries / directories | `ls -1 | wc -l`; `find . -maxdepth 1 -mindepth 1 -type d | wc -l` | **MEASURED 218 / 217**, not project denominators |
+| `vergen` matches | `grep -rl vergen --include=Cargo.toml . | wc -l` | **MEASURED 18 manifest paths**; unique-repository numerator is NO-CLAIM and the 210 filesystem denominator is not validated |
 | supervision variants | direct reads of `enum SupervisionEvent` and `enum StopReason` | **MEASURED 8 + 6 = 14 variants** in the named file, not corpus-wide |
 | OMP completion capture | `/tmp/grade/r7-agent-end.md` and raw frame | **MEASURED 1 `agent_end` frame** in one ephemeral run |
 | seeded corrections | comparison of nine seeded Gap rows with this record | **PROJECTED 6/9 = 66.7%**; document comparison, not an independent run |
@@ -6407,12 +6181,12 @@ The earlier exit-0 claim came from `tmux --version 2>&1 | head -1` (`PIPESTATUS=
 
 ## 10.1 Mirror source manifest and search provenance
 
-| source | revision identity | search/input | durable evidence |
+| source | revision identity | search/input | evidence and retention |
 |---|---|---|---|
-| Jeffrey mirror | root `/Volumes/ZestData/dicklesworthstone-mirror`; snapshot manifest `/Volumes/ZestData/dicklesworthstone-mirror/MANIFEST.json` SHA-256 `09640f3d3f7fdabbd21d13aa3e3881d8e88aa8d080c21075fb3ed9765e530947`; sync log SHA-256 `9e6af9e7df9de50020dd28a8235aed276515699143e6c31973538e437dc51b40`; only observed movement `5dec4212… -> ecdea397…`; full commit unavailable because stale input was refused | per-gap commands above; Gap 7 limited to named asupersync roots/files | cited source constructs at the recorded snapshot; no broader absence claim |
-| OMP signal sweep | installed package, not mirror | suffix sweep over all `.d.ts` plus field reads; root and instrument are recorded in the artifact | `/tmp/grade/omp-signals.md`, SHA-256 `f9b33f5e9f11ab5f003740b2161cb2aebdf77691615d81070c3051a796819cb0` |
-| OMP completion capture | installed package, not mirror | `/Users/josh/.local/bin/omp --mode=rpc --no-session --no-tools --no-lsp --max-time=30`; stdin prompt `AGENT_END_PROBE_OK` | `/tmp/grade/r7-agent-end.md`, SHA-256 `661a6125fe36a71fc698ddadcfebb6769cbcea2c5f92e736c3e6c10d37af0d50`; raw frame SHA-256 `d8bd80c6949b2ec48af1639b5b5e241bd90b4dce1e769483dd1690ed2be8f644` |
-| mux adjacent probe | installed package, not mirror | Content-Length JSON-RPC `omp/muxPing` against scoped `lsp-mux.sock` endpoints, three probes per endpoint | `/tmp/grade/mux-investigation.md`, SHA-256 `d6a58a671112fadb95e3f1fe4499eaf659af26d6007c64f983eb0d8356ec34f1` |
+| Jeffrey mirror | root /Volumes/ZestData/dicklesworthstone-mirror; manifest and sync-log hashes recorded | per-gap commands above; Gap 7 limited to named asupersync roots/files | source constructs at the recorded snapshot; no broader absence claim |
+| OMP signal sweep | installed package, not mirror | suffix sweep over all .d.ts plus field reads | /tmp/grade/omp-signals.md is ephemeral; its hash identifies that snapshot but does not make it durable |
+| OMP completion capture | installed package, not mirror; bounded rpc probe | omp --mode=rpc --no-session --no-tools --no-lsp --max-time=30; prompt AGENT_END_PROBE_OK | /tmp/grade/r7-agent-end.md and raw frame are ephemeral; copy into an in-repo artifact before calling them durable |
+| mux adjacent probe | installed package, not mirror | Content-Length JSON-RPC omp/muxPing against scoped lsp-mux.sock endpoints | /tmp/grade/mux-investigation.md is ephemeral; its hash identifies the snapshot only |
 
 ---
 
@@ -6509,17 +6283,9 @@ change, not a dependency line. Naming the mapping is free; taking it is not.
 
 ### The positive control PASSED, which is why this row is trustworthy
 
-Six gaps were mined; five carry mirror citations (cost telemetry via OMP's
-`telemetry-export` OTLP surface, obligation-ledger for the claim wire,
-`scope.spawn` readers) and **two came back genuinely NOT FOUND** —
-`path-literal-guard` has no upstream analogue, and neither does the cargo-shim
-problem.
+Seven evidence rows were mined in this positive-control pass: five carry mirror citations (cost telemetry via OMP's telemetry-export OTLP surface, obligation-ledger for the claim wire, and scope.spawn readers), and **two came back genuinely NOT FOUND** — path-literal-guard has no upstream analogue, and neither does the cargo-shim problem.
 
-Every prior `ipg` wave reported a FAILED positive control, correctly diagnosed as
-the agent-plane boundary holding. This one **found a real absence**, which is the
-control working in the direction that matters: a search that can only confirm is
-not a search. Seven waves of "not ours" plus one honest "not found anywhere" is a
-mapping with a demonstrated negative.
+Every prior ipg wave reported a FAILED positive control, correctly diagnosed as the agent-plane boundary holding. This pass found real absences, which is the direction that matters: a search that can only confirm is not a search. The row count and each NOT FOUND result are scoped to this pass, not a claim about all prior-art coverage.
 
 **This is the seventh instance of the pattern** — after `AgentEndEvent`,
 `AdvisorSeverity`, `modes`, `session`, `task`, `slash-commands`, `dap`. The
@@ -6564,8 +6330,8 @@ references §12 rather than pretending to be a second runbook; applying the runb
 this file is a **scope error**. The transition tables below still record measured inputs,
 outputs, refusals, and current boundaries so that §12 can be implemented against evidence.
 
-All claims below are `MEASURED` unless explicitly marked `PROJECTED`, `DECLARED`, `WIRE-PROVEN`,
-`NOT CONSUMED`, or `NO-CLAIM`.
+All claims below are `MEASURED` unless explicitly marked `PROJECTED`, `DECLARED`,
+`WIRE-PROVEN`, `NOT CONSUMED`, or `NO-CLAIM`. R13 is represented by the stage/property matrix below, and Q13 remains an unresolved policy choice in §11.4; §00 is outside this assignment and is not treated as a second authority.
 
 ---
 
@@ -6582,23 +6348,16 @@ additional `S` IDs. `viability`, `loop`, and `honesty` are cross-stage attribute
 | `S3` | **Grading the plan** | independent plan grading | independent grader; no single local crate was identified | none identified | no shared grade value is measured |
 | `S4` | **Beads DAG** | bead creation, dependency closure, ready selection, graph ranking | `loop-queue-filter` is the intended local consumer of `bv`; `br` remains an external tracker | none identified | `loop-queue-filter` exists, but focused search found no `bv` invocation |
 | `S5` | **Execution** | claim, dispatch, worker work, receiver receipt | **`omp-orchestrator` is the resident accountable consumer**; its manifest supports `dispatch-claim-fence`, `ack-stage`, `omp-rpc-session`, `subprocess-contract`, and `receiver-receipt` | `tick-monitor` is observation-only and is consumed by the resident supervisor | automated observe → queue → dispatch → receipt path is designed; runtime proof is absent; `pane-dispatch-fence` exists in the inventory but is not proven a resident dependency |
-| `S6` | **Grading the work** | receipt review and independent grade | `ack-stage` exists; `ack-spine` contains a follow-up candidate; no `verify-dispatch` crate exists | none identified | grading remains non-shared/prose-shaped |
-| `S7` | **Validation** | completion/reap and external validation | no current reap owner; `omp-rpc-session` is transport-only, not a completion consumer | `tick-monitor` can observe panes, but observation is not reap | `reap-finished-panes` is absent; completion consumer is not wired |
-| `S8` | **Ship** | release, build, install, rollback | `installer` and `commit-build-fence`; /installer-workmanship and /release-preparations | none identified | **DECLARED (R10):** installer covers 3 of 18 binaries; the denominator's inventory/counting rule was not preserved; foreign-host `--install` is unverified |
-| `S9` | **Human requirements stored** | decision capture and retrieval, cross-cutting across S1–S8 | human is the decision owner; **PROJECTED** append owner: `omp-orchestrator` | every stage must observe its own decision handoff | no dedicated S9 consumer is proven; `ack-spine::ledger` is not proven to be this ledger |
+| `S6` | **Grading the work** | receipt review and independent grade | `ack-stage` exists; `ack-spine` contains a follow-up candidate; no shared grade consumer is proven | none identified | grading remains non-shared/prose-shaped; `verify-dispatch` exists but is not proven the S6 consumer |
+| `S7` | **Validation** | completion/reap and external validation | `reap-finished-panes` is invoked by the resident supervisor for the finished-pane sweep; no local AgentEndEvent completion consumer | `tick-monitor` can observe panes, but observation is not completion reap | finished-pane sweep is wired; completion consumer and completion-based refill are not wired |
+| S8 | **Ship** | release, build, install, rollback | installer and commit-build-fence; /installer-workmanship and /release-preparations | none identified | **DECLARED (NUMBERS.toml):** installer knows 3 of 48 current binary targets; the denominator/counting rule is registry-backed; foreign-host --install is unverified |
+| `S9` | **Human requirements stored** | decision capture and retrieval, cross-cutting across S1–S8 | human is the decision owner; **PROJECTED** append owner: `omp-orchestrator` | every stage must observe its own decision handoff | no automated S9 writer/consumer is proven; `docs/decisions.jsonl` has manually recorded HD rows, not proof of wiring |
 
 ### Current crate names versus projected names
 
-The former map called several names current owners without checking the current inventory. The
-focused R10 search found no current crates named `fast-dispatch`, `tick-dispatch`,
-`reap-finished-panes`, or `verify-dispatch`. Those names are **PROJECTED / unbuilt**, not owners.
-Conversely, `crates/omp-orchestrator/Cargo.toml:16-23` lists `ack-stage`,
-`dispatch-claim-fence`, `omp-rpc-session`, `subprocess-contract`, and `receiver-receipt`, and
-`crates/omp-orchestrator/src/main.rs:563-631,801-879` implements the resident dispatch/receipt
-path. `pane-dispatch-fence` is present in the crate inventory but is not listed as an
-`omp-orchestrator` manifest dependency in the measured slice. Ownership claims therefore name
-`omp-orchestrator` as the S5 consumer and list only the manifest dependencies as supporting
-edges; a separate current crate is not thereby proven called in production.
+The former map called several names current owners without checking the current inventory. The current inventory confirms `fast-dispatch`, `tick-dispatch`, `reap-finished-panes`, and `verify-dispatch` as crates. Their existence does not prove production ownership or a complete stage handoff. The names are therefore **CURRENT CRATES / UNPROVEN CONSUMERS**, not projected or absent.
+
+Conversely, `crates/omp-orchestrator/Cargo.toml:21-30` lists `ack-stage`, `dispatch-claim-fence`, `omp-rpc-session`, `subprocess-contract`, `receiver-receipt`, and other supporting dependencies. The resident dispatch path is in `crates/omp-orchestrator/src/main.rs:1255-1553`; the finished-pane sweep helper is at `main.rs:1241-1253`. `pane-dispatch-fence` is present in the crate inventory but is not listed as an `omp-orchestrator` manifest dependency in the measured slice. Ownership claims therefore name `omp-orchestrator` as the S5 consumer and list only manifest dependencies as supporting edges; a separate current crate is not thereby proven called in production.
 
 The graph represented by this section is therefore:
 
@@ -6628,7 +6387,7 @@ not a second observed cell.
 | `S4` Beads DAG | — | n/a | — | `Y` (`.beads/issues.jsonl`) | — |
 | `S5` Execution | `y` | `y` (resident observe → queue → dispatch → receipt path; source/design evidence only) | n/a | partial | n/a |
 | `S6` Grading the work | — | n/a | n/a | `Y` (bead comments) | `Y` |
-| `S7` Validation | — | n/a | `y` (candidate only) | — | n/a |
+| `S7` Validation | — | n/a | `y` (finished-pane sweep exists and is invoked; completion-event reap remains absent) | — | n/a |
 | `S8` Ship | — | — | n/a | — | `↗ S6` (shared build evidence; not an independent `Y`) |
 | `S9` Human requirements stored | — | n/a | n/a | — | n/a |
 
@@ -6647,7 +6406,7 @@ dispatch path is a designed/source-level property, not measured runtime use.
 
 ## 11.3 Template omission refusal is not claim-custody refusal
 
-`ntm template list` measured four templates, including the `dispatch` template:
+**HISTORICAL SNAPSHOT:** ntm template list reported four templates including dispatch. The current read-only command ntm template list --json | jq 'if type=="array" then length elif .templates then (.templates|length) else empty end' returns **16** templates, including dispatch; the excerpt below is retained as the packet-shape example, not a current inventory.
 
 ```text
 Name:        dispatch
@@ -6728,11 +6487,11 @@ mean that no partial mechanism exists.
 
 | edge | required input | expected handoff artifact | refusal / non-terminal rule | measured current state |
 |---|---|---|---|---|
-| `S4 → S5` | graph-selected bead, fresh `br show --json`, receiver | claim record, then dispatch-template packet and permit | refuse missing/open/elsewhere-assigned snapshot; do not send before claim | `main.rs:836-860` runs `br ready`, takes `bead_ids.first()`, reads a snapshot, and calls `authorize`; no production claim/update caller was found. **Human claim required today; atomic handoff PROJECTED.** |
+| `S4 → S5` | graph-selected bead, fresh `br show --json`, receiver | claim record, then dispatch-template packet and permit | refuse missing/open/elsewhere-assigned snapshot; do not send before claim | `main.rs:1318-1394` runs the finished-pane sweep and `br ready`, takes `bead_ids.first()`, then `prepare_bead_dispatch` at `main.rs:645-673` claims open rows and calls `authorize`; no separate atomic claim service is proven |
 | `S5 → S6` | dispatch attempt, receiver receipt, session/pane identity | grade packet tied to the receipt and bead | refuse absent receiver receipt; receipt is not a grade | resident path reaches receipt and stops; no production grade handoff is wired |
-| `S6 → S7` | independent grade plus worker completion evidence | validation/reap input | an in-progress or non-terminal completion is not finished | completion frame is wire-proven, but local parser/consumer/reap are absent |
+| `S6 → S7` | independent grade plus worker completion evidence | validation/reap input | an in-progress or non-terminal completion is not finished | completion frame is wire-proven, but local parser/consumer/reap-by-completion are absent |
 | `S7 → S8` | validation result, external/foreign-host run evidence | ship/release packet with rollback | refuse without validation artifact or rollback path | no production validation-to-ship edge is measured |
-| `S8 → S9` | ship decision and human choice | append-only S9 decision record | refuse missing decision owner, decision, or retrieval key | S9 ledger owner and retrieval path are **PROJECTED**, not wired |
+| `S8 → S9` | ship decision and human choice | append-only S9 decision record | refuse missing decision owner, decision, or retrieval key | S9 ledger writer and retrieval path are **PROJECTED**, while three manual HD rows exist |
 
 The current contract is therefore explicit: until an atomic claim owner is implemented, a human
 MUST run the claim command and the fence MUST read back the resulting `in_progress` row before
@@ -6744,21 +6503,17 @@ S5 dispatch. The future atomic wrapper is a `PROJECTED` remedy, not a current ca
 
 ### S5 is automated through receipt, not through a proven full journey
 
-`crates/omp-orchestrator/src/main.rs:563-631,801-879` and `src/lib.rs:24-29` describe an automated
-observe → queue → dispatch → receiver-receipt path. That corrects the old human-only S5 claim,
-but it does not prove runtime behavior on the live fleet. The current local `omp-rpc-session`
-crate is explicitly a transport for **one** `--mode=rpc` child (`crates/omp-rpc-session/src/lib.rs:5-21`)
-and does not claim cross-session continuity.
+`crates/omp-orchestrator/src/main.rs:1255-1553` and `src/lib.rs:24-29` describe an automated observe → queue → finished-pane sweep → dispatch → receiver-receipt path. That corrects the old human-only S5 claim, but it does not prove runtime behavior on the live fleet. The current local `omp-rpc-session` crate is explicitly a transport for **one** `--mode=rpc` child (`crates/omp-rpc-session/src/lib.rs:5-21`) and does not claim cross-session continuity.
 
 Completion evidence has five separate layers; they must not be collapsed:
 
 | layer | evidence | status |
 |---|---|---|
 | declaration | upstream `AgentEndEvent` at `dist/types/extensibility/shared-events.d.ts:154`, with `willContinue` | **AVAILABLE / DECLARED** |
-| wire observation | `%1408` / `%1414`; `/tmp/grade/agent-end-raw-frame.json` contains `{"type":"agent_end","isTerminal":true}` | **WIRE-PROVEN for one terminal frame** |
+| wire observation | `1408` / `1414`; `/tmp/grade/agent-end-raw-frame.json` contains `{"type":"agent_end","isTerminal":true}` | **WIRE-PROVEN for one terminal frame** |
 | local parser | `omp-rpc-session/src/lib.rs:416-423` recognizes only Ready/Response/Unknown/Malformed | **NOT IMPLEMENTED for AgentEndEvent** |
 | local consumer | focused search found no `agent_end`, `willContinue`, `isTerminal`, `RpcSessionEventFrame`, or `AgentEndEvent` consumer | **NOT CONSUMED** |
-| reap | no production completion consumer and no current `reap-finished-panes` crate | **NOT WIRED** |
+| reap | `reap-finished-panes` exists and is invoked by `omp-orchestrator` at `main.rs:1241-1253,1331`, but it sweeps finished panes rather than consuming AgentEndEvent | **WIRED for pane sweep; NOT WIRED for completion event** |
 
 `isTerminal: true` is not proven equivalent to `willContinue: false`; one terminal frame cannot
 establish non-terminal settle behavior, crashes, killed panes, rate-limited turns, or compaction.
@@ -6768,12 +6523,9 @@ requires changing the one-child attachment topology. No completion crate is clai
 
 ### Reap is a consumer, not an idle observation
 
-The named `reap-finished-panes` crate is absent. `ack-spine/src/followup.rs:86-137` is a pure
-candidate classifier, and the focused `classify_followup|followup_action` search found no
-production caller. It has a measured false-completion path:
+The named `reap-finished-panes` crate is **present** and its binary is invoked by the resident supervisor, but it is a finished-pane sweep, not an AgentEndEvent completion consumer. `ack-spine/src/followup.rs:86-137` remains a pure candidate classifier, and the focused `classify_followup|followup_action` search found no production caller. It has a measured false-completion path:
 
-* for an open/in-progress bead, unchanged assignee, no comment, and before the deadline,
-  `classify_followup` returns `FollowUpVerdict::VerdictPosted`; and
+* for an open/in-progress bead, unchanged assignee, no comment, and before the deadline, `classify_followup` returns `FollowUpVerdict::VerdictPosted`; and
 * `followup_action` maps `VerdictPosted` to `Healthy` at `followup.rs:150-156`.
 
 That state is **in progress**, not a posted verdict and not a finish. A future consumer MUST
@@ -6782,15 +6534,11 @@ produce `Finished`; only `Finished` may authorize refill. `SilentPastDeadline` r
 follow-up, not a refill. These are **PROJECTED contract repairs**, not claims that the current
 candidate has been changed.
 
-The resident cycle (`main.rs:648-687,801-880`) stops after dispatch/receipt. It has no production
-reap → grade → validation → ship edge. This is the explicit post-dispatch **NO-CLAIM** boundary
-for the current supervisor.
+The resident cycle (`main.rs:1255-1553`) invokes the finished-pane sweep before reading the ready queue and then proceeds through dispatch/receipt. It has no production AgentEndEvent reap → grade → validation → ship edge. This is the explicit post-dispatch **NO-CLAIM** boundary for the current supervisor.
 
 ### Settled wire fact
 
-The `%1414` result remains useful and is not withdrawn: `AgentEndEvent` crosses `--mode=rpc` in
-the captured terminal case. It closes the claim that OMP has no completion precedent, but it does
-not close the adoption, parser, consumer, or reap claims above.
+The `1414` result remains useful and is not withdrawn: `AgentEndEvent` crosses `--mode=rpc` in the captured terminal case. It closes the claim that OMP has no completion precedent, but it does not close the adoption, parser, consumer, or completion-reap claims above.
 
 ---
 
@@ -6799,11 +6547,7 @@ not close the adoption, parser, consumer, or reap claims above.
 R14/R15 batch rows 1–9 contain **270 mapped rows** across `ntm`, `br`, `bv`, and OMP. The
 **544-row R14/R15 surface-universe denominator is `DECLARED` from the R14/R15 review** rather
 than derived from this section; `NUMBERS.toml` records related surface-map snapshot drift and figure discipline. The named
-frozen input for the reproducible scoped count is `docs/plan/SURFACE-MAP.jsonl`, SHA-256
-`f155a358dd302982367a7c0107fe0eb1e3cd6f5ec7d4689bac67f11b1c5063f7`; that snapshot currently
-contains 591 rows. The disposition policy is exact: include rows whose `batch` is a JSON number
-equal to its floor and in 1 through 9 inclusive, then group by the literal `disposition` field.
-Both count commands below use that same frozen input and explicit integer predicate.
+query below is a historical snapshot: it used 591 rows and SHA-256 f155a358dd302982367a7c0107fe0eb1e3cd6f5ec7d4689bac67f11b1c5063f7. The current map identity is **614 rows, 302,002 bytes, SHA-256 5b3c3238c4ec9dd7f72a097bb3668e7de224e3b6f0eddc1132de2902a1d9d93c**; NUMBERS.toml is the current count authority.
 
 ```sh
 SNAPSHOT=docs/plan/SURFACE-MAP.jsonl
@@ -6836,6 +6580,7 @@ jq -s '
 
 The measured result (exit 0) is:
 
+HISTORICAL OUTPUT (not current):
 ```text
 snapshot_sha256 f155a358dd302982367a7c0107fe0eb1e3cd6f5ec7d4689bac67f11b1c5063f7  docs/plan/SURFACE-MAP.jsonl
 {
@@ -6915,9 +6660,9 @@ skill/facet inventory, not a second stage graph. The canonical mapping is:
 | `S2` Planning | `/planning-workflow` | markdown plan; convergence is judged by review |
 | `S2` loop attribute | `/loop-engineering` | verified-value tick loop; not a new stage |
 | `S4` Beads DAG | `/beads-workflow`, `/beads-north-star`, `/beads-br`, `/beads-bv` | tracker schema, close policy, and graph ranking; local `bv` consumption is absent |
-| `S5` Execution | `/ntm`, `/vibing-with-ntm` | robot surfaces and operator doctrine; local completion/reap adoption is absent |
+| `S5` Execution | `/ntm`, `/vibing-with-ntm` | robot surfaces and operator doctrine; local completion-event adoption is absent, while finished-pane sweep is wired |
 | `S6` Grading the work | `/beads-compliance-and-completion-verification` | prose verdicts; no shared grade value |
-| `S7` Validation | `/vibing-with-ntm` | observation and tending; not a production reap consumer |
+| `S7` Validation | `/vibing-with-ntm` | observation and tending; not a production AgentEndEvent completion consumer |
 | `S8` Ship | `/installer-workmanship`, `/release-preparations` | installer/release process; foreign-host install proof remains absent |
 | `S9` decision attribute | `/just-say-no-to-process-porn-and-ceremony` | honesty lens, not a decision ledger |
 
@@ -6946,10 +6691,7 @@ skills that could participate, or that they compose cleanly merely because they 
 
 ## 11.9 Stage logging and the S9 decision ledger
 
-Current heartbeat rows at `crates/omp-orchestrator/src/main.rs:698-708` contain `event`, `status`,
-`tick`, `repo`, `session`, and `detail`. Focused search found no `stage_id`, `from_stage`, or
-`to_stage`. The old "3 of 9 stages log" statement is withdrawn as a stage-level guarantee: a
-few files contain records, but those records cannot prove a stage transition.
+Current heartbeat rows written by `write_heartbeat` at `crates/omp-orchestrator/src/main.rs:907-950` contain `event`, `status`, `tick`, `repo`, `session`, and `detail`. Focused search found no `stage_id`, `from_stage`, or `to_stage`. The old "3 of 9 stages log" statement is withdrawn as a stage-level guarantee: a few files contain records, but those records cannot prove a stage transition.
 
 The required **PROJECTED** append-only lifecycle event shape is:
 
@@ -6989,18 +6731,15 @@ S9's minimum decision record is also **PROJECTED**:
 }
 ```
 
-The projected accountable append owner is `omp-orchestrator`; the human remains the decision
-owner. The projected retrieval command is:
+The projected accountable append owner remains `omp-orchestrator`; the human remains the decision owner. The current repository does have `docs/decisions.jsonl` with three manually recorded `HD-<n>` rows, but no automated writer or lifecycle-event artifact was measured. A fail-closed retrieval check for the current manual ledger is:
 
 ```sh
-jq -c 'select(.stage_id == "S9" or .decision_id != null)' \
-  "$OMP_LIFECYCLE_EVENTS" \
-  | jq -c 'select(.session_id == env.OMP_SESSION)'
+set -o errexit -o nounset -o pipefail
+test -s docs/decisions.jsonl
+jq -e -s 'length > 0 and all(.[]; (.id|type=="string") and (.id|test("^HD-[0-9]{4}$")) and (.binds_stages|type=="array") and all(.binds_stages[]; test("^S[1-9](-[a-z-]+)?$")))' docs/decisions.jsonl >/dev/null
 ```
 
-No such file, owner wiring, or retrieval output was measured in R10. Pane scrollback contained
-human decision activity, but no pane/session artifact or extraction/count procedure was preserved;
-therefore no numeric count is claimed. This is evidence of decision loss, not evidence of a ledger.
+This proves nonempty, schema-shaped manual rows only; it does not prove an append owner, stage-event linkage, or amortization. The lifecycle-event writer, session-scoped retrieval, and automatic decision handoff remain **PROJECTED** with owner: S9 implementation lane; next action: create the writer/gate and capture an append/readback transcript.
 
 ---
 
@@ -7014,11 +6753,11 @@ reserved for a captured runtime probe.
 |---|---|---|
 | resident `omp-orchestrator` process | one configured supervisor process | one process per session until fan-out is proven |
 | `omp-rpc-session` | exactly one OMP `--mode=rpc` child; no cross-session continuity | one child per attached session; no cross-session completion claim |
-| pane candidates | `lib.rs:447-462,494-499` counts dispatchable panes but returns `.first()` | one selected pane per cycle; `N > 1` must not silently truncate |
-| ready beads | `main.rs:854-862` selects `bead_ids.first()` | one selected bead per cycle; `N > 1` must not silently truncate |
-| heartbeat ledger | session-named path exists, but tick-monitor state and pending-dispatch are fixed filenames (`main.rs:221-236`) | fixed paths are a collision; refuse a second owner or use per-session keys |
+| pane candidates | omp-orchestrator/src/lib.rs:773-777 counts dispatchable panes and returns dispatchable.first() | one selected pane per cycle; N > 1 must not silently truncate |
+| ready beads | omp-orchestrator/src/main.rs:1393-1396 selects bead_ids.first() after parse_ready | one selected bead per cycle; N > 1 must not silently truncate |
+| heartbeat ledger | session-named heartbeat path is formed at `main.rs:228-235`, while default tick-monitor state and pending-dispatch basenames are formed at `main.rs:236-243` | basename reuse can collide across sessions; env overrides exist, but collision refusal is unverified |
 | claim permit | one bead ID plus one receiver in `DispatchIntent::Bead` | one bead → one receiver → one permit |
-| completion/reap | no local AgentEndEvent consumer and no reap producer | zero automatic refill claims until a consumer is wired |
+| completion/reap | `reap-finished-panes` is invoked for finished-pane sweep; no local AgentEndEvent consumer | zero automatic completion-based refill claims until a consumer is wired |
 
 Until the namespace repair is implemented, the honest support boundary is:
 
@@ -7088,9 +6827,9 @@ catching itself producing.
 | S8 | Ship | installable, versioned, with a rollback |
 | S9 | Human requirements stored | every human decision durable and retrievable |
 
-S9 is not last — it is **cross-cutting**. Every stage generates human decisions and every stage
-loses them. This session alone produced eleven that live only in pane scrollback.
+S9 is not last — it is **cross-cutting**. Every stage generates human decisions and every stage loses them unless the ledger writer runs. This session produced three manually recorded HD rows; remaining decisions can still live only in pane scrollback.
 
+**Dispatch-order invariant.** The canonical execution order is S1 → S2 → S3 → S4 → S5 → S6 → S7 → S8, with S9 cross-cutting. The detailed blocks below are retained in authoring/appendix order, so their physical heading order is not the execution order; an orchestrator MUST use this index and the Trigger fields, never file position.
 ## The runbook contract
 
 **SCOPE — read before applying this.** This contract governs the **nine journey stages S1–S9**
@@ -7151,10 +6890,7 @@ strongest signal this method produces — these are not one model's hobbyhorse.
 
 ### The three that are already measured, not speculative
 
-**S9 has no mechanism at all.** §12's own stage table promises *"every human decision durable and
-retrievable"* and nothing anywhere implements it. Eleven of Josh's rulings tonight live only in
-pane scrollback and die at the next compaction. `%1408`: *"every pane in this session was re-briefed
-by hand."* That is not a prediction about month three; it is what this session cost.
+**S9 has no automated mechanism.** The stage table promises every human decision durable and retrievable, but only three manual `HD-<n>` rows currently exist in `docs/decisions.jsonl`; no writer, lifecycle-event linkage, or amortization consumer is proven. The unresolved writer gap is why decisions can still die at compaction.
 
 **1:many is in the mission and almost nowhere in the artifacts.** Measured tonight: `state_path()`
 returned one fixed path for eight live sessions and the directory was hardcoded to a single
@@ -7284,7 +7020,7 @@ the no-GPU stub path is untested by me. What is claimed is that the *role taxono
 
 ---
 
-## 12.10 The milestone loop — what runs before anything is built
+## Foundation preflight loop — what runs before anything is built
 
 > **Josh:** *"we establish — what happens foundationally for each stage first that everything else
 > builds upon — gates, crates, input/output, schema, what needs to be true, negative patterns …
@@ -7303,7 +7039,7 @@ input to the next:
 |---|---|---|---|
 | F1 | **Schema** | what shape does this stage read and write | no `SCHEMAS.toml` row → the stage may not persist anything |
 | F2 | **I/O contract** | who produces the input, who consumes the output | an unnamed consumer → the stage is BUILT ≠ WIRED by construction |
-| F3 | **Crates** | which crate owns the mechanism, which is a thin caller | mechanism in a binary → untestable, and 21 of ours already are |
+| F3 | **Crates** | which crate owns the mechanism, which is a thin caller | mechanism in a binary with no library surface -> untestable; every stage must name the crate and caller explicitly |
 | F4 | **Gates** | what refuses a bad result, and does it bite | no known-bad leg → the gate is decorative |
 | F5 | **Numbers** | which figures does this stage claim | undeclared figure → silent rot, measured 5 rounds running |
 
@@ -7324,8 +7060,7 @@ Three columns, kept per stage, and the third is the one that pays:
 **Why this is a field and not a document.** The single most expensive discovery of this session was
 that seven "gaps" had upstream types in the tool we wrap, and the eighth (`plan-mode`) turned up two
 hours later. Every one had sat in prose as a settled absence. **An unknown that never had a resolving
-experiment attached is indistinguishable from a known** — and §10 called one of them "precedent-free
-across 210 repositories" while the precedent shipped in the binary named on line one.
+experiment attached is indistinguishable from a known** — and §10 called one of them "precedent-free across 210 filesystem entries" while the precedent shipped in the binary named on line one.
 
 > *Upstream type for this gap: `AgentEndEvent.willContinue` (`extensibility/shared-events.d.ts:154`, WIRE-PROVEN). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
@@ -7381,11 +7116,11 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 > *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
-**Negative patterns.** (1) Unclaimed dispatch — `5rh`-to-`%1413`, measured twice (11-lifecycle §S5). (2) Transport success ≠ delivery — `cp-z42vu`, `success:[4]`, packet never arrived (dispatch-silence-watch/src/lib.rs:10-11). (3) Recency over graph — 19 waves dispatched newest-first while PageRank named the articulation point (stand-down confession; live proof `bv --robot-next` → omp-orchestrator-2o5, "Unblocks 2z2.1/2z2.2", score 0.492).
+**Negative patterns.** (1) Unclaimed dispatch — 5rh-to-%1413, measured twice (11-lifecycle §S5). (2) Transport success is not delivery — cp-z42vu and success:[4] are a historical incident record only; the current repository has no cp-z42vu fixture or success:[4] planted test. (3) Recency over graph — 19 waves dispatched newest-first while PageRank named the articulation point. The first two remain failure shapes; only the claim-fence and receipt legs are currently in-tree.
 
 **Skills.** `vibing-with-ntm` (pane coordination; does NOT cover claims/receipts — it predates them), `beads-north-star` (bead shape the packet carries), `multi-agent-swarm-workflow` (wave mechanics; assumes a single shared session, which is exactly the 1:many gap).
 
-**Done signal.** The packet-journal row for this dispatch carries `receipt: RECEIPT_CONFIRMED` (or a typed refusal naming the target) and `claim_id`; command: `jq 'select(.bead=="<id>")' docs/plan/DISPATCH.jsonl | last` — exit 0 with a non-empty receipt object.
+**Done signal. PROJECTED until the dispatch journal writer exists.** A receipt object alone is insufficient. Future command: set -o errexit -o nounset -o pipefail; test -s docs/plan/DISPATCH.jsonl; jq -e 'select(.bead=="<id>") | ((.claim_id|type)=="string") and ((.claim_id|length)>0) and ((.targets|type)=="array") and ((.targets|length)>0) and ((.receipt|type)=="object") and ((.receipt.verdict|type)=="string") and ((.receipt.verdict|length)>0) and (.receipt.evidence != null) and ((.journal_seq|type)=="number")' docs/plan/DISPATCH.jsonl >/dev/null. A matching row with receipt:{}, missing claim, empty targets, missing verdict/evidence, malformed JSON, or absent input exits non-zero.
 
 **F1 SCHEMA.** `DISPATCH.jsonl` — append-only. Required: `ts, wave, bead, targets[], transport, claim_id, receipt{verdict, evidence}, journal_seq`. Row already declared in SCHEMAS.toml as `DISPATCH.jsonl` (append-only; the S5 writer is the only allowed writer). SCHEMAS.toml row: EXISTS (`[artifacts.dispatch_journal]`, added this wave).
 
@@ -7393,15 +7128,15 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 **F3 CRATES.** Mechanism: `dispatch-claim-fence` (permit), `receiver-receipt` (verdict), `ack-stage` (transport types), `dispatch-silence-watch` (silence detection) — all exist. Thin caller: the dispatch step in `omp-orchestrator` (main.rs run path) — exists, currently a human types instead. MUST BE CREATED: nothing — the mechanism set is complete; the wire is the work.
 
-**F4 GATES.** Gate: the dispatch claim fence refuses a packet naming an unclaimed bead, and the transport gate refuses a bare success without a receipt. Known-BAD leg (IN-TREE, per beads-north-star): `dispatch-silence-watch`'s cp-z42vu fixture is the planted specimen — a test that feeds `success:["4"]` with no arrival and asserts the verdict is NOT `Delivered`. Exists: yes (dispatch-silence-watch tests). The claim-fence's known-bad: the `Reassigned` arm test. Both in-tree. REFUSES: unclaimed send, receipt-less success, and (the one that does not exist yet) partial fan-in reported as complete.
 
+**F4 GATES.** The dispatch claim fence refuses a packet naming an unclaimed bead, and the transport gate refuses bare success without a receipt. The cp-z42vu known-BAD fixture is **PROJECTED, not present**: current dispatch-silence-watch tests contain no cp-z42vu or success:[4] payload. The claim-fence Reassigned arm is in-tree. Until the planted receipt fixture exists, no in-tree test claim is made for that historical transport incident. REFUSES: unclaimed send, receipt-less success, and partial fan-in reported as complete once the fan-in gate exists.
 > *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 **F5 NUMBERS.** Figures this stage claims, to be declared in NUMBERS.toml on first run: `dispatch_journal_rows` (baseline 0 today — declare with `expect="0"` and ratchet up; NUMBERS gate fails on drift, which IS the ratchet), `unclaimed_dispatches` (expect 0 after the claim wire; any nonzero is a regression), `fanout_partial_waves` (expect 0). Declared today: none — the stage has not run; declaring a number for a stage that has never executed is a figure with no derivation, which is the defect this field exists to kill.
 
-**KNOWN.** 18-edge DAG complete and verified (round 10: scanner-identical); claim fence + dispatch fence built (fence held 4.2h); `ntm claim/locks/message` surfaces probed live; `AgentEndEvent` completion wire-proven `{"type":"agent_end","isTerminal":true}` on `RpcSessionEventFrame`; 162 refused ticks / 4.2h with `DISPATCH_RETRY_BLOCKED`.
+**KNOWN, bounded.** The claim fence and dispatch fence exist, ntm claim/locks/message surfaces were probed, and one AgentEndEvent frame is wire-proven as a typed external observation. The **18-edge DAG**, **4.2-hour fence window**, and **162 refused ticks** are round-10 historical snapshots without a retained deriving command; they are not current figures and do not appear in NUMBERS.toml.
 
-**UNKNOWN.** (1) Does per-target receipt survive a multi-target `--robot-send`? Experiment: one 3-pane wave, compare per-target receipts against pane truth. Cost: one wave, ~10 min. (2) Does `ntm claim` hold across a pane restart? Experiment: claim, kill pane, respawn, re-check `ntm locks`. Cost: ~5 min. Both cheap; both run before the first bead of the first wave, per §12.10's cheapest-falsifier rule.
+**UNKNOWN.** (1) Does per-target receipt survive a multi-target `--robot-send`? Experiment: one 3-pane wave, compare per-target receipts against pane truth. Cost: one wave, ~10 min. (2) Does `ntm claim` hold across a pane restart? Experiment: claim, kill pane, respawn, re-check `ntm locks`. Cost: ~5 min. Both cheap; both run before the first bead of the first wave, per the Foundation preflight loop's cheapest-falsifier rule.
 
 **GAP.** Fan-out/fan-in primitive (barrier + partial-verdict): cost of leaving it missing = every multi-pane wave is N hand-typed sends with hand-collected receipts, and a partial wave is indistinguishable from a complete one — the cp-z42vu class at scale. Packet journal: cost of leaving it missing = every forensic question ("which packet did this?") requires a human memory — measured: the reap could only name "seven conditions living in scrollback."
 
@@ -7421,23 +7156,23 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 **Skills.** `beads-compliance-and-completion-verification` (the audit shape; does NOT cover the receipt/claim chain), `verification-before-completion` (the re-derivation discipline), `beads-north-star` (VERDICT comment shape).
 
-**Done signal.** The graded close carries: grader pane id ≠ worker pane id, ≥1 re-run command with stored transcript, and a `Grade` value from the shared type (once it exists — today the type is the gap). Command: `br show <id> --json | jq .close_reason` contains the re-run command AND the transcript path.
+**Done signal. PROJECTED until Grade exists.** The current br show close_reason probe is diagnostic, not acceptance. Future command: set -o errexit -o nounset -o pipefail; test -s grade.json; jq -e '(.bead|type=="string") and ((.bead|length)>0) and (.verdict|IN("PASS","FAIL","UNREACHABLE")) and (.rerun_commands|type=="array") and ((.rerun_commands|length)>0) and all(.rerun_commands[]; (.cmd|type=="string") and ((.cmd|length)>0) and (.exit|type=="number") and (.transcript_path|type=="string") and ((.transcript_path|length)>0)) and (.grader_pane|type=="string") and (.worker_pane|type=="string") and (.grader_pane != .worker_pane) and (.graded_at|type=="string")' grade.json >/dev/null. Missing fields, empty arrays, same-pane grading, or an absent artifact exits non-zero.
 
 **F1 SCHEMA.** `Grade` — the largest missing type in the workspace (6 Verdict-shaped types, no shared trait). Required fields: `bead, verdict{PASS|FAIL|UNREACHABLE}, rerun_commands[{cmd, exit, transcript_path}], grader_pane, worker_pane, graded_at`. Row to be added to SCHEMAS.toml when the type lands (writer: the grading pane's harness). Until then S6 persists nothing of its own — it writes bead comments, which S9's ledger covers.
 
 **F2 I/O CONTRACT.** Input produced by: S5 (the journal entry naming packet + receipt) and the worker's claim on the bead. Output consumed by: S7 (validation trusts only graded closes) and S9 (the decision ledger amortizes grading disputes). The consumer that makes this stage non-decorative: `br close --reason` refuses prose-only reasons (the finding-crate's 29-bead wave is the measured refusal).
 
-**F3 CRATES.** Mechanism: `close-evidence-gate` (exists; grades evidence shape), `ack-spine` (exists; FollowUpVerdict, zero callers — occurrence 21 of built≠wired). Thin caller: the grading dispatch (omp-orchestrator). MUST BE CREATED: the `Grade` shared type — small, single-file, in omp-types (which exists and has zero dependents; this is the dependency that gives it one).
+**F3 CRATES.** Mechanisms present: `ack-stage` and `ack-spine` (FollowUpVerdict, zero production callers in the focused search). **`close-evidence-gate` is absent from the current crate inventory and MUST BE CREATED**; the grading dispatch (`omp-orchestrator`) is only a projected thin caller. The `Grade` shared type is also missing and belongs in `omp-types` (which currently has zero dependents).
 
-**F4 GATES.** Gate: close-evidence-gate refuses a close whose reason cites no re-runnable command or path — known-bad leg is the `cp-3k9jq` fixture (104-char reason, zero citations, measured). Second gate: state-wildcard-lint keeps the exhaustive-match property that makes `Grade`'s verdicts total. REFUSES: prose closes, self-graded closes, closes citing deleted paths (pre-delete-citation-check, `CitationConflict`, measured at `:28-37`).
+**F4 GATES.** **PROJECTED:** once created, `close-evidence-gate` must refuse a close whose reason cites no re-runnable command or path; its known-BAD specimen is the `cp-3k9jq` fixture (104-char reason, zero citations, measured). `state-wildcard-lint` is a separate exhaustive-match gate. Until the close-evidence gate and Grade schema exist, no S6 close may claim this contract is enforced.
 
 **F5 NUMBERS.** Figures: `self_graded_closes` (expect 0; today: unmeasured — the close actor is not recorded, which is gap, not number), `cites_per_close` (floor-raise: ≥1 re-runnable cite; today unmeasured), `grade_type_dependents` (expect ≥1 once `Grade` lands; today 0 by census). Declared today: none — same rule as S5.
 
-**KNOWN.** FollowUpVerdict::Finished declared (zero callers — occurrence 21 of the class); `FindingPriority` "P0"–"P3" exists upstream (`tools/review.d.ts`, DECLARED only) — the priority vocabulary for grading disputes already has an upstream shape; close-evidence-gate's citation-scan legs are measured (pre-delete-citation-check `:148,:162,:192-203`).
+**KNOWN.** FollowUpVerdict::Finished is declared (zero callers in the focused search); FindingPriority `P0`–`P3` exists upstream (`tools/review.d.ts`, DECLARED only). Citation-scan legs are measured, but no close-evidence-gate crate exists.
 
-**UNKNOWN.** (1) Can `FindingPriority` upstream carry our grade disputes, or do the P0-P3 semantics mismatch? Experiment: map 10 real grading disputes from CONVERGENCE.jsonl onto P0-P3 and inspect the fit. Cost: ~1 hour, zero code. (2) Is `FollowUpVerdict` wired-able as the S6 trigger, or is its zero-caller status structural? Experiment: one pane emits a `Finished` claim through ack-spine's path and the journal records it end-to-end. Cost: ~half a day.
+**UNKNOWN.** (1) Can FindingPriority carry our grade disputes, or do the P0–P3 semantics mismatch? Experiment: map 10 real grading disputes from CONVERGENCE.jsonl onto P0–P3 and inspect fit. Cost: ~1 hour, zero code. (2) Is FollowUpVerdict wired-able as the S6 trigger, or is its zero-caller status structural? Experiment: one pane emits a Finished claim and the journal records it end-to-end. Cost: ~half a day.
 
-**GAP.** The `Grade` type: cost of leaving it missing = grading stays prose, grades cannot be counted/queried/required, and the twelve in_progress beads with no verdict stay invisible — measured tonight (the reap found exactly that). The S6→S7 receipt of grading (graded close → validation) has no consumer wired; cost = validation trusts ungraded closes.
+**GAP.** The Grade type and close-evidence-gate are absent. Cost of leaving them missing = grading stays prose, grades cannot be counted/queried/required, and validation can trust an ungraded close. Owner: S6 implementation lane; next action: create both, add SCHEMAS.toml rows, and run the planted known-BAD and known-GOOD legs.
 
 ### S7 — Validation
 
@@ -7453,7 +7188,7 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 **Skills.** `verification-before-completion` (the re-run discipline), `testing-conformance-harnesses` (golden + conformance shapes; does NOT cover the cold-host logistics), `condition-based-waiting` (unattended-window assertions; no cold-host coverage).
 
-**Done signal.** The validation transcript exists at a recorded path, contains the observable's command + output + exit code, and names the host — re-readable without asking us anything. Command: `jq '.observable, .exit_code, .host' <transcript>` returns all three, non-null.
+**Done signal. PROJECTED until a validation transcript exists.** Future command: set -o errexit -o nounset -o pipefail; test -s "$TRANSCRIPT"; jq -e '(.observable_id|type=="string") and ((.observable_id|length)>0) and (.command|type=="string") and ((.command|length)>0) and (.output_digest|type=="string") and ((.output_digest|length)>0) and (.exit_code|type=="number") and (.host|type=="object") and (.host.os|type=="string") and (.host.arch|type=="string") and (.host.hash|type=="string") and (.started_at|type=="string") and (.duration|type=="number") and (.refusals_in_window|type=="array")' "$TRANSCRIPT" >/dev/null. Missing fields, empty strings, absent host identity, or an absent transcript exits non-zero.
 
 **F1 SCHEMA.** `validation-transcript.json` — required: `observable_id, command, output_digest, exit_code, host{os,arch,hash}, started_at, duration, refusals_in_window[]`. SCHEMAS.toml row: TO BE ADDED when the first transcript exists (declaring it now would be a row for an artifact with no writer — F1's own refusal).
 
@@ -7485,9 +7220,9 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 **Skills.** `installer-workmanship` (the four-way identity, dual checksums, atomic lock, per-crate summary — the shape this crate already follows), `release-preparations` (version + checksums + transcript; GitHub-release assumptions do not transfer to a local-first tool), `rust-crates-publishing` (crates.io path; NOT this — the mission is local-first install).
 
-**Done signal.** `installer --check` exits 0 on the installed host AND the rollback command has been executed once, returning the prior binary, with both transcripts stored. Command: `<installer> --check; echo $?` → 0, and the rollback transcript exists at the recorded path.
+**Done signal.** **PROJECTED until installer check and rollback transcripts exist.** Run fail-closed, without inspecting or printing a masked status: `set -o errexit -o nounset -o pipefail; <installer> --check; test -s "$ROLLBACK_TRANSCRIPT"; jq -e '.exit_code == 0 and .rollback == true' "$ROLLBACK_TRANSCRIPT" >/dev/null`. The direct installer command aborts on failure; the rollback transcript must exist and satisfy its schema.
 
-**F1 SCHEMA.** The installer already persists: install manifest (binary → path → sha → HEAD). Required fields measured from the crate: `binary, install_path, sha256, head_at_build, checked_at`. SCHEMAS.toml row: EXISTS in shape via the installer's own code; formal row TO BE ADDED when the manifest file path is pinned (currently printed, not persisted — a gap, recorded below).
+**F1 SCHEMA.** The installer computes identity evidence (binary → path → sha → HEAD) but the manifest is currently printed, not persisted. Required future fields are `binary, install_path, sha256, head_at_build, checked_at`; SCHEMAS.toml has no complete persisted install-manifest writer yet. This is a gap, recorded below, not an existing schema implementation.
 
 **F2 I/O CONTRACT.** Input produced by: S7 (the passing validation transcript gates the ship) and the workspace build. Output consumed by: the foreign host's S1/S5 (the installed binary runs the next journey), and `--check` (the drift detector, consumed at every subsequent boot — the standing drift check Josh named). The rollback artifact is consumed by the operator, once, under failure.
 
@@ -7495,11 +7230,11 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 **F4 GATES.** Gate: the four-way identity check (HEAD == build_id == --version == running), which fires and names the drift — measured live: it caught the 96lacd/36fc41e mismatch and named all three identities. Known-BAD leg: the staged-file refusal (`installer --install` on a dirty tree refuses with named file — measured). REFUSES: stale binaries, unproven installs, and missing rollback artifacts.
 
-**F5 NUMBERS.** Figures: `identity_check_exit` (expect 0 at ship; the drift measurement is the history), `install_coverage` (3 of 21 binaries tonight — declared in NUMBERS as installer_known_binaries=3), `rollback_tests` (expect ≥1 before ship; today 0). Declared today: installer_known_binaries (exists in NUMBERS).
+**F5 NUMBERS.** Figures: identity_check_exit (expect 0 at ship; the drift measurement is historical), install_coverage (**3 of 48** current target rows listed by installer_known_binaries=3 in NUMBERS.toml), rollback_tests (expect >=1 before ship; today 0). The current ratio is a workspace fact, not install acceptance.
 
 **KNOWN.** installer crate built: four-way identity check fires on live drift and names all three identities (measured, `--check` round 7 wave); 3 identity tests green; `/Users/josh` fallback at :25 and compile-time roots at :16-20 measured; the crate is isolated in the DAG (nothing consumes it — 03-crates §3.4).
 
-**UNKNOWN.** (1) Does the installer work on a machine without this repo? Experiment: the M6 cold-host transcript is the same experiment — cost shared with S7. (2) Does `cargo install omp-orchestrator` (08 §2.1's PROJECTED path) produce a binary whose four-way identity CAN pass, given compile-time roots? Experiment: install to a scratch CARGO_HOME and run --check. Cost: ~20 min. This is the cheapest falsifier for the whole ship stage and it has never been run.
+**UNKNOWN.** (1) Does the installer work on a machine without this repo? Experiment: the M6 cold-host transcript is the same experiment — cost shared with S7. (2) Does `cargo install --locked --path crates/omp-orchestrator --bin omp-orchestrator` produce a binary whose four-way identity can pass, given compile-time roots? Experiment: install to a scratch CARGO_HOME and run `--check`. Cost: ~20 min. This is the cheapest falsifier for the whole ship stage and it has never been run.
 
 **GAP.** The install manifest is printed, not persisted: cost = `--check` cannot compare against the record of WHAT was installed, only against HEAD — the third identity is weaker than it looks. The rollback path is untested: cost = ship is irreversible, which makes every ship a bet.
 
@@ -7517,32 +7252,45 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 **Skills.** `beads-north-star` (the audit-trail-in-bead doctrine — the anchor half), `jsm` (skill capture — the amortization target for repeated decisions), `cass`/`cass-memory` (session archaeology — the recovery path when the ledger misses one; recovery, not storage).
 
-**Done signal.** `jq '.decider' docs/decisions.jsonl | sort | uniq -c` shows the deciders, and every row's `binds_stages` names real stages; the amortization count per cycle is nonzero or explicitly zero-with-reason. Command exits 0 with ≥1 row for the cycle.
+**Done signal. PROJECTED until the automated S9 writer exists.** Current rows are manually recorded; validate all schema-required fields without a pipeline: set -o errexit -o nounset -o pipefail; test -s docs/decisions.jsonl; jq -e -s 'length > 0 and all(.[]; (.id|type=="string") and (.id|test("^HD-[0-9]{4}$")) and (.ts|type=="number") and (.question|type=="string") and ((.question|length)>0) and (.decider|type=="string") and (.decision|type=="string") and ((.decision|length)>0) and (.options_considered|type=="array") and ((.options_considered|length)>0) and (.binds_stages|type=="array") and ((.binds_stages|length)>0) and all(.binds_stages[]; test("^S[1-9](-[a-z-]+)?$")) and has("supersedes") and has("review_after") and (.recorded_by|type=="string") and ((.recorded_by|length)>0))' docs/decisions.jsonl >/dev/null; the amortization record remains a separate required artifact. Missing required fields, empty strings/arrays, invalid stage IDs, or an empty ledger exits non-zero.
 
-**F1 SCHEMA.** `docs/decisions.jsonl` — the highest-value schema in this stage set. Required: `id (DEC-<n>), ts, question, decider, decision, options_considered[], binds_stages[], supersedes[decision-id], review_after, recorded_by`. SCHEMAS.toml row: **ADDED THIS WAVE** as `[artifacts.human_decisions]` (path `docs/decisions.jsonl`, format jsonl, writer marked unbuilt). The upstream neighborhood, checked first: `Stage1Claim`/`GlobalClaim` with `ownershipToken`/`inputWatermark` (memories/storage.d.ts:20-27) is memory-claim domain — does NOT transfer; `tools/approval.d.ts`'s `ToolApprovalDecision` + `ApprovalPolicy` ("allow"|"deny"|"prompt") and `ResolvedApproval` is the closest upstream shape (DECLARED only) and should be reused for the `decision` field's type rather than invented beside.
+**F1 SCHEMA.** `docs/decisions.jsonl` — the highest-value schema in this stage set. Required: `id` (current rows use `HD-<n>`), `ts`, `question`, `decider`, `decision`, `options_considered[]`, `binds_stages[]`, `supersedes`, `review_after`, and `recorded_by`. SCHEMAS.toml row is present as `[artifacts.human_decisions]` (path `docs/decisions.jsonl`); its declared writer remains **UNBUILT**, so the three current HD rows are manual evidence, not proof of automated append wiring. The upstream neighborhood, checked first: `Stage1Claim`/`GlobalClaim` is memory-claim domain and does NOT transfer; `tools/approval.d.ts` is DECLARED only.
 
 **F2 I/O CONTRACT.** Input produced by: any stage (S1-S8), by the human directly, or by an agent filing on the human's behalf (with `decider` attributed, never the agent). Output consumed by: the dispatch packet builder (binds_stages rows are attached to the packet), the AGENTS.md amortization pass (S9's own stage-close), and the grading pane (an unfalsifiable "Josh said" is refused; the row id is required). The consumer names make S9 load-bearing in both directions.
 
 **F3 CRATES.** Mechanism: none exists — MUST BE CREATED, and it is deliberately tiny: a writer is a skill invocation (`ms`-style) or a 50-line Rust utility over JSONL; the storage is the repo. Thin caller: every stage. The orchestrator's packet builder is the first consumer. Honest alternative until it exists: bead comments in the fixed shape (durable, survives panes) — the adequate form of the same schema.
 
-**F4 GATES.** Gate: the decision-ledger gate refuses (a) a row missing any required field, (b) a `supersedes` pointing at a nonexistent row, (c) a row whose `review_after` has passed without an amortization record. Known-BAD leg: a planted row with empty `decision` and a `supersedes` to DEC-999 — in-tree fixture in tests/, per beads-north-star. REFUSES: anonymous decisions, dangling supersessions, and unreviewed bindings.
+**F4 GATES.** PROJECTED: the decision-ledger gate must refuse (a) a row missing any required field, (b) a `supersedes` pointing at a nonexistent row, or (c) a row whose `review_after` has passed without an amortization record. Known-BAD leg: a planted row with empty `decision` and a `supersedes` to `HD-9999` — not yet an in-tree executable fixture. REFUSES: anonymous decisions, dangling supersessions, and unreviewed bindings once the gate exists.
 
-**F5 NUMBERS.** Figures: `decisions_ledger_rows` (expect 0 today; ratchet up — declared NUMBERS row on first run), `decisions_in_scrollback` (expect 0 after the discipline lands; today 11, measured), `amortized_per_cycle` (ratchet). Declared today: none — zero-row baselines get declared when the first row lands, so the registry never holds a figure with no instance.
+**F5 NUMBERS.** Figures: `decisions_ledger_rows` is **MEASURED 3** today by `wc -l docs/decisions.jsonl`; it is a historical/manual baseline, not proof of the writer. `decisions_in_scrollback` remains an unverified historical 11 and must not be used as a current figure; `amortized_per_cycle` remains unmeasured. No zero-row expectation is current.
 
-**KNOWN.** Eleven Josh rulings tonight in scrollback (measured by the reap and by this pane's transcript); the schema fields named by three-agent convergence (#1 unanimous); the upstream approval vocabulary exists (tools/approval.d.ts, probed); bead comments as the adequate substrate are doctrine (beads-north-star).
+**KNOWN.** The current ledger contains three HD rows; the schema fields named by three-agent convergence (#1 unanimous) are present in those rows; the upstream approval vocabulary exists (`tools/approval.d.ts`, DECLARED only); bead comments remain the adequate substrate (`beads-north-star`).
 
-**UNKNOWN.** (1) Does the fixed shape survive contact with real rulings, or do decisions arrive as multi-part and overlapping? Experiment: backfill tonight's eleven rulings into the schema by hand and inspect the fit — cost: ~1 hour, zero code, and it seeds the ledger with real rows instead of zeros. (2) Who files when Josh is asleep and the ruling is implicit (a stand-down tone)? Experiment: wire the reap to propose decision rows from transcript deltas for Josh to confirm — cost: ~half a day; the proposal/confirm split keeps the human the decider.
+**UNKNOWN.** (1) Does the fixed shape survive contact with real rulings, or do decisions arrive as multi-part and overlapping? Experiment: validate the three current HD rows and backfill the remaining rulings into the schema by hand, then inspect the fit — cost: ~1 hour, zero code. (2) Who files when Josh is asleep and the ruling is implicit (a stand-down tone)? Experiment: wire the reap to propose decision rows from transcript deltas for Josh to confirm — cost: ~half a day; the proposal/confirm split keeps the human the decider.
 
-**GAP.** No mechanism anywhere: cost = every ruling is one compaction from gone, every future agent re-briefs by hand (measured all session), and the plan's own §8 open questions accumulate answers nobody can query. The backfill experiment (UNKNOWN 1) is the cheapest falsifier for the whole stage and it runs tonight.
+**GAP.** No automated writer or consumer exists: cost = every new ruling is one compaction from gone, every future agent re-briefs by hand, and the plan's open questions accumulate answers nobody can query. Owner: S9 implementation lane; next action: create the writer and decision-ledger gate, then record an append/readback transcript.
 
 
-## 12.11 S1 — Inception foundation
+## S1 — Inception
 
-S1 is the first gate on a new or foreign project. It must establish the identity and capabilities
-that every later stage treats as input; it must not silently inherit the current repository's paths,
-control files, toolchain, or trust assumptions.
+S1 is the first gate on a new or foreign project. It must establish the identity and capabilities that every later stage treats as input; it must not silently inherit the current repository's paths, control files, toolchain, or trust assumptions.
+**CURRENT WORKSPACE FACTS (re-derived 2026-09-01).** The current repository has a resolvable root and a real workspace inventory: ls -1 crates | wc -l -> **50**. The current binary-target figure is **48**, derived by the registered NUMBERS.toml built_binaries command; these are current-repo facts, not proof that a new project is ready.
 
-### FIELD 8 — FOUNDATION
+**Trigger.** Human intent names a project and repository path, but no accepted inception manifest exists for that project.
+
+**Dispatch packet.** {project_id, repo_path, intent_ref, host_probe_commands, required_control_files, trust_decision_owner}; the pane must run the probes against the named path and return the manifest or a typed refusal.
+
+**Amazing.** A content-addressed inception manifest records repository identity, control files, required tools, host capabilities, trust status, and every probe result; S2 can consume it without reading pane prose.
+
+**Adequate.** Record repository identity, control-file presence, and explicit UNKNOWN/GAP entries with owner and resolving experiment; defer capability normalization to S2. Cost: S2 cannot dispatch until the deferred entries are resolved.
+
+**Negative patterns.** Wrong-repository writes and inherited host assumptions are the measured S1 risk (SCHEMAS.toml [artifacts.inception_manifest] requires identity/capability fields; the stale 26-crate statement is corrected below). A missing control file or ambiguous identity must refuse, not create a bead.
+
+**Skills.** `idea-wizard` and `product-viability-gauntlet` cover intent and kill/narrow/build decisions; they do NOT emit this typed inception manifest. `environment-configuration` covers configuration boundaries; it does NOT establish repository trust.
+
+**Done signal. PROJECTED until the S1 writer exists.** Future command: set -o errexit -o nounset -o pipefail; test -s .omp-orchestrator/inception.json; jq -e '. as $obj | ["schema_version","project_id","repo_identity","control_files","host_capabilities","required_tools","trust_status"] as $required | all($required[]; ($obj[.] != null)) and (($obj.required_tools|type)=="array") and (($obj.required_tools|length)>0)' .omp-orchestrator/inception.json >/dev/null. Missing, null, invalid JSON, or an empty required_tools array exits non-zero.
+
+### Foundation and epistemic ledger (Fields 8–9)
 
 **F1 SCHEMA.** S1 reads human intent plus a repository path and host probe results. It writes two
 records: one row in docs/plan/FOUNDATION.jsonl using SCHEMAS.toml [artifacts.journey_foundation],
@@ -7576,33 +7324,33 @@ host capabilities, or supported targets must first receive a NUMBERS.toml comman
 
 ### FIELD 9 — THE EPISTEMIC LEDGER
 
-**KNOWN.** The current repository has a resolvable root and a real workspace inventory:
-ls -1 crates | wc -l -> 26. The existing NUMBERS.toml workspace_crates row is the authority; this
-is current-repo evidence, not proof that a new project is ready. The current S1 artifact contract
-is also known: SCHEMAS.toml [artifacts.inception_manifest] names the required fields.
 
-**UNKNOWN.** Can an empty or foreign repository complete S1 without this repository's conventions,
-absolute paths, or pre-existing tracker? Experiment: create a fresh temporary repository on a
-second supported host, run the future S1 foundation command, inspect the emitted inception.json,
-and require typed AVAILABLE/DEGRADED/UNKNOWN results for every required capability. Cost: one
-bounded cold-start run plus one operator review; the experiment is cheaper than building S2–S4
-against a false local assumption.
+**UNKNOWN.** Can an empty or foreign repository complete S1 without this repository's conventions, absolute paths, or pre-existing tracker? Experiment: create a fresh temporary repository on a second supported host, run the future S1 foundation command, inspect the emitted inception.json, and require typed AVAILABLE/DEGRADED/UNKNOWN results for every required capability. Cost: one bounded cold-start run plus one operator review; the experiment is cheaper than building S2–S4 against a false local assumption.
 
-**GAP.** No current crate emits the S1 inception manifest or owns the trust decision. Leaving this
-missing costs wrong-repository writes, misapplied gates, and a false claim that a foreign host can
-start the journey; the cost is paid before the first bead can be safely created.
+**GAP.** No current crate emits the S1 inception manifest or owns the trust decision. Leaving this missing costs wrong-repository writes, misapplied gates, and a false claim that a foreign host can start the journey; the cost is paid before the first bead can be safely created.
 
-**S1 refusal:** no S2 dispatch, plan, or bead creation when F1–F5 or the epistemic ledger is
-incomplete.
+**S1 refusal:** no S2 dispatch, plan, or bead creation when F1–F5 or the epistemic ledger is incomplete.
 
 
 
-## 12.12 S2 — Planning foundation
+## S2 — Planning
 
-S2 turns an accepted inception envelope and human intent into a buildable plan. It is not allowed
-to hide unresolved scope, evidence, or economic questions in prose that S3 cannot grade.
+S2 turns an accepted inception envelope and human intent into a buildable plan. It is not allowed to hide unresolved scope, evidence, or economic questions in prose that S3 cannot grade.
 
-### FIELD 8 — FOUNDATION
+**Trigger.** S1 has an accepted inception manifest and the human has supplied scope/outcome requirements; no S3-gradeable plan exists.
+
+**Dispatch packet.** {inception_manifest, requirements_refs, source_revision, section_set, figure_registry, schema_registry} plus the instruction to bind every number and persisted output.
+
+**Amazing.** Every section has named inputs/consumers, every number points to a NUMBERS.toml command, every persisted artifact points to SCHEMAS.toml, and UNKNOWN/GAP entries carry experiments, cost, and owner.
+
+**Adequate.** Produce a markdown plan with explicit unbound items and a foundation row; defer semantic closure to S3. Cost: S3 must reject the plan rather than silently grading prose.
+
+**Negative patterns.** The historical 183-row/one-value census is explicitly UNPROVEN in §09; bare figures and orphan outputs are the current S2 failure shapes this contract refuses.
+
+**Skills.** `planning-workflow` authors/refines the plan but does NOT guarantee schema/number/consumer closure; `requirements-gathering` elicits scope but does NOT produce the registries.
+
+**Done signal. PROJECTED until the S2 materializer exists.** The old jq select accepted any one partial row. Future command: set -o errexit -o nounset -o pipefail; test -s docs/plan/FOUNDATION.jsonl; jq -e -s 'map(select(.stage=="S2")) as $rows | (($rows|length)==1) and ($rows[0] as $row | (["schema_version","stage","input_refs","output_refs","owner","crates","gates","numbers","known","unknown","gaps"] as $required | all($required[]; ($row[.] != null)) and (($row.input_refs|type)=="array") and (($row.output_refs|type)=="array") and (($row.crates|type)=="array") and (($row.gates|type)=="array") and (($row.numbers|type)=="array") and (($row.known|type)=="array") and (($row.unknown|type)=="array") and (($row.gaps|type)=="array")))' docs/plan/FOUNDATION.jsonl >/dev/null. Missing, duplicate, null, or wrong-typed S2 fields exits non-zero.
+### Foundation and epistemic ledger (Fields 8–9)
 
 **F1 SCHEMA.** S2 reads the S1 inception manifest, the active human-requirements references, and
 repository capability results. It writes plan sections plus the existing SCHEMAS.toml and
@@ -7657,13 +7405,25 @@ unbound schema, I/O consumer, crate owner, gate, number, UNKNOWN experiment, or 
 
 
 
-## 12.13 S3 — Grading-the-plan foundation
+## S3 — Grading the plan
 
-S3 is the adversarial decision stage between plan authoring and bead creation. It must separate
-what the plan asserts from what a fresh grader can independently establish, and it must measure
-whether the observed finding rate is signal or reviewer noise.
+S3 is the adversarial decision stage between plan authoring and bead creation. It must separate what the plan asserts from what a fresh grader can independently establish, and it must measure whether the observed finding rate is signal or reviewer noise.
 
-### FIELD 8 — FOUNDATION
+**Trigger.** S2 has produced a plan and foundation row, and no independent two-lens grade has authorized bead materialization.
+
+**Dispatch packet.** {plan_revision, section_paths, schema_registry, number_registry, prior_rounds_excluded, grader_identity}; the grader receives no prior findings for the held-out lens.
+
+**Amazing.** Two independent fresh lenses plus a withheld held-out/capability check produce content-addressed evidence, typed severities, and a convergence row reproducible without the author.
+
+**Adequate.** One independent lens produces evidence with SEARCH SPACE and SEVERITY; S4 remains blocked until the second lens and held-out check run. Cost: slower materialization, but no false clean round.
+
+**Negative patterns.** Fourteen false zeros were measured in the session (§09 PV7), including wrong-language/empty-scan searches; Round 15's rule-zero lens returned no useful product signal. A clean row without search space refuses.
+
+**Skills.** `planning-workflow` supplies convergence planning but does NOT adjudicate findings; `evaluation-framework` supplies rubric design but does NOT write this ledger; `verification-before-completion` supplies re-run discipline.
+
+**Done signal. PROJECTED until the grade harness exists.** Validate every JSONL row before selecting section rows. Future command: set -o errexit -o nounset -o pipefail; test -s docs/plan/CONVERGENCE.jsonl; jq -e -s 'all(.[]; (.section|type=="string") and (.round|type=="number") and (.lens|type=="string") and (.new_findings|type=="number") and (.verdict|type=="string") and (.gates_green|type=="boolean")) and ([.[] | select((.section|test("^[0-9]{2}-")))] as $rows | (["00-brief","01-idea","02-surface-census","03-crates","04-diagrams","05-actions","06-gates","07-installability","08-end-users","09-milestones","10-prior-art","11-lifecycle","12-journey"] == ($rows|map(.section)|unique|sort)) and all(($rows|group_by(.section))[]; ((sort_by(.round)) as $g | (($g|length)>=2) and ($g[-1].round == ($g[-2].round + 1)) and ($g[-1].lens != $g[-2].lens) and ($g[-1].new_findings == 0) and ($g[-2].new_findings == 0))))' docs/plan/CONVERGENCE.jsonl >/dev/null. Any malformed row, missing gates_green, missing section, duplicate lens, non-consecutive rounds, or finding in either final round exits non-zero.
+
+### Foundation and epistemic ledger (Fields 8–9)
 
 **F1 SCHEMA.** S3 reads the exact S1/S2 foundation records, plan sections, SCHEMAS.toml, and
 NUMBERS.toml. It writes one grade-evidence artifact per section at the existing
@@ -7706,92 +7466,58 @@ current ledger can be counted with grep -c . docs/plan/CONVERGENCE.jsonl, but th
 rows, not grade quality. The known distinction is that a zero is a declared grader claim, not an
 inferred absence.
 
-**UNKNOWN.** Is approximately six findings per section a property of document defects or the noise
-floor of fresh readers? Experiment: give two fresh graders from different model families the same
-section, stripped of ledger and prior reports, then repeat on one deliberately clean and one
-known-dirty fixture; compare finding count, severity, and overlap against a blinded adjudication.
-Cost: one isolated two-grader round plus adjudication, materially cheaper than treating convergence
-counts as a product metric for months.
+**UNKNOWN.** Is approximately six findings per section a property of document defects or the noise floor of fresh readers? Experiment: give two fresh graders from different model families the same section, stripped of ledger and prior reports, then repeat on one deliberately clean and one known-dirty fixture; compare finding count, severity, and overlap against a blinded adjudication. Cost: one isolated two-grader round plus adjudication, materially cheaper than treating convergence counts as a product metric for months.
 
-**GAP.** There is no held-out or capability-isolated grade harness that measures independence from
-prior findings, and no typed identity linking a finding across rounds. Leaving this missing costs
-false convergence: the project can bank a section because graders adapted to one another and then
-materialize beads from a smooth but untested plan.
+**GAP.** There is no held-out or capability-isolated grade harness that measures independence from prior findings, and no typed identity linking a finding across rounds. Leaving this missing costs false convergence: the project can bank a section because graders adapted to one another and then materialize beads from a smooth but untested plan.
 
-**S3 refusal:** no S4 bead materialization when any section lacks the required grade evidence,
-clean-round evidence, independent-lens condition, or epistemic experiment for the finding-rate
-unknown.
+**S3 refusal:** no S4 bead materialization when any section lacks required grade evidence, clean-round evidence, independent-lens condition, or the epistemic experiment for the finding-rate unknown.
 
+## S4 — Beads DAG
 
+S4 is the first stage allowed to create implementation work. It must transform an approved plan into a dependency-complete work graph without losing the human intent, evidence boundaries, or kill conditions established upstream.
 
-## 12.14 S4 — Beads DAG foundation
+**Trigger.** S3 has authorized materialization for every required section under the independent-lens rule, and no dependency-complete beads DAG exists for the selected revision.
 
-S4 is the first stage allowed to create implementation work. It must transform an approved plan
-into a dependency-complete work graph without losing the human intent, evidence boundaries, or
-kill conditions established upstream.
+**Dispatch packet.** {approved_plan_revision, grade_refs, requirements_refs, source_digest, bead_schema, dependency_policy}; the materializer must return bead IDs, dependency edges, graph digest, and refusal rows.
 
-### FIELD 8 — FOUNDATION
+**Amazing.** Every non-trivial bead has WHAT/WHY/ACCEPTANCE, owner, labels, evidence, and dependencies; cycle/orphan/parent-accounting checks and source digest pass before S5 can select work.
 
-**F1 SCHEMA.** S4 reads the S3-approved plan, the active requirements and decision references,
-and the S1/S2/S3 foundation rows. It writes .beads/issues.jsonl through the upstream br schema,
-whose declared local contract requires id, title, and status in SCHEMAS.toml [artifacts.beads].
-Each non-trivial bead additionally requires WHAT, WHY, ACCEPTANCE, dependencies, owner, labels,
-known-BAD/known-GOOD expectations where applicable, and evidence paths under the bead standard.
-The foundation row records the materialization source revision and graph digest; no second hidden
-DAG is permitted.
+**Adequate.** Create beads through `br` with explicit acceptance and dependency links, but leave graph-digest and orphan checks as named GAPS. Cost: S5 is blocked from autonomous selection until those checks land.
 
-**F2 I/O CONTRACT.** S3 produces the approved plan and its grade evidence; the S4 materializer
-produces .beads/issues.jsonl and a dependency graph. br consumes and persists the issue records;
-bv consumes dependency/priority data for selection; omp-orchestrator consumes ready work for
-execution. A bead with no downstream consumer, owner, or executable acceptance is not materialized
-as complete work.
+**Negative patterns.** The 29-bead wave left eight gaps in prose (`finding/src/lib.rs:6-10`); a cycle or parent accounting node offered as work is the known-bad S4 shape described in the foundation gate below.
 
-**F3 CRATES.** br owns the upstream issue persistence and close-policy contract. Existing
-loop-queue-filter owns runtime ready-work selection and omp-orchestrator consumes the selected
-queue. No current local crate owns the complete plan-to-beads materializer, dependency-cycle
-validator, or graph-digest comparison; that mechanism must be created. Do not assign this work to
-a plausible existing crate merely because it can read the board.
+**Skills.** `beads-workflow` and `beads-north-star` cover self-contained bead shape but do NOT materialize the full plan graph; `beads-bv` covers graph-aware triage but does NOT prove source-to-DAG equality.
 
-**F4 GATES.** The S4 foundation gate must refuse a bead missing WHAT/WHY/ACCEPTANCE, a dependency
-cycle, a parent accounting node offered as work, an unresolved requirement reference, an orphaned
-output, or a graph whose materialized digest differs from the approved plan. Its known-BAD in-tree
-specimens are a two-bead cycle and a bead with a blank acceptance section; both must produce typed
-refusals before any dispatch. The upstream br close-policy refusal remains a supporting gate, not
-the complete S4 materialization gate.
+**Done signal. PROJECTED until the materializer exists.** The current beads CLI uses br dep cycles --json, not the nonexistent br dep check --json. Future command: set -o errexit -o nounset -o pipefail; test -s .beads/issues.jsonl; tmpdir=$(mktemp -d); br dep cycles --json > "$tmpdir/dep.json"; jq -e '(.cycles|type=="array") and (.count|type=="number") and (.count==0)' "$tmpdir/dep.json" >/dev/null; bv --robot-next --json > "$tmpdir/next.json"; test -s "$tmpdir/next.json"; jq -e 'type=="object" or type=="array"' "$tmpdir/next.json" >/dev/null; test -s .beads/materialization.json; jq -e '(.source_revision|type=="string") and ((.source_revision|length)>0) and (.approved_plan_revision|type=="string") and ((.approved_plan_revision|length)>0) and (.graph_digest|type=="string") and ((.graph_digest|length)>0) and (.bead_ids|type=="array") and (.dependency_edges|type=="array")' .beads/materialization.json >/dev/null. A cycle, empty/invalid tool output, missing graph identity, or absent materialization evidence exits non-zero.
 
-**F5 NUMBERS.** S4 claims no fixed bead or edge count until the full graph is materialized. Any
-materialized bead count, dependency-edge count, leaf/root count, or graph digest must be generated
-from the same artifact and registered in NUMBERS.toml before it appears in a load-bearing claim.
-The current surface_map_rows figure is an input inventory, not an S4 DAG count.
+### Foundation and epistemic ledger (Fields 8–9)
+**F1 SCHEMA.** S4 reads the S3-approved plan, requirements, decision refs, and foundation rows; it writes .beads/issues.jsonl under the declared `SCHEMAS.toml` [artifacts.beads] contract plus a materialization source revision and graph digest. No hidden second DAG is permitted.
 
-### FIELD 9 — THE EPISTEMIC LEDGER
+**F2 I/O CONTRACT.** S3 produces approved plan and grade evidence; the materializer produces beads and graph; `br` persists issues; `bv` selects dependency/priority data; `omp-orchestrator` consumes ready work. Missing consumer, owner, or executable acceptance refuses materialization.
 
-**KNOWN.** The upstream beads artifact has a declared SCHEMAS.toml row, and the journey contract
-already requires self-contained beads with testable acceptance and no cycles at docs/plan/12-journey.md:29-30.
-The current tracker artifact can be located with test -f .beads/issues.jsonl; this proves presence,
-not graph quality.
+**F3 CRATES.** `br` owns issue persistence and close policy; `loop-queue-filter` owns intended ready selection. No current local crate owns complete plan-to-beads materialization, cycle validation, or digest comparison; owner: S4 implementation lane; next action: create the materializer and wire its output.
 
-**UNKNOWN.** Can the complete approved plan be materialized without losing dependencies, acceptance,
-ownership, or refusal conditions? Experiment: run a full br create dry-run from the approved graph,
-then compare bead IDs, dependency edges, acceptance hashes, and the foundation source revision
-against the materialization report. Cost: one bounded dry-run and one graph comparison before any
-worker receives a bead.
+**F4 GATES.** PROJECTED materialization gate refuses missing WHAT/WHY/ACCEPTANCE, dependency cycles, parent-accounting work, unresolved requirement refs, orphan outputs, or digest mismatch. Known-BAD fixtures are a two-bead cycle and blank acceptance; upstream `br` close policy is supporting evidence only.
 
-**GAP.** No current local materializer proves that the approved plan and the br/bv execution graph
-are the same graph. Leaving this missing costs hidden cycle/orphan work, agents dispatched from a
-partial plan, and rework that cannot be attributed to the original human requirements.
+**F5 NUMBERS.** No fixed S4 bead/edge count is claimed. Any materialized count or digest must be derived from the same artifact and registered in `NUMBERS.toml`.
 
-**S4 refusal:** no S5 execution dispatch while the materialized graph lacks a source digest,
-cycle-free proof, complete bead fields, named consumers, or a resolvable acceptance command.
+### Epistemic ledger (Field 9)
+
+**KNOWN.** The beads artifact has a declared schema, and the journey table requires self-contained beads with testable acceptance and no cycles. test -f .beads/issues.jsonl proves presence only, not graph quality.
+
+**UNKNOWN.** Can the approved plan materialize without losing dependencies, acceptance, ownership, or refusal conditions? Experiment: bounded br create dry-run, then compare IDs, edges, acceptance hashes, and source revision. Cost: one dry-run and graph comparison before dispatch.
+
+**GAP.** No local materializer proves approved-plan and br/bv graph equality. Cost: hidden cycle/orphan work and dispatch from a partial plan. Owner: S4 implementation lane; next action: implement the digest/cycle/orphan gate.
+**S4 refusal.** No S5 execution dispatch while the materialized graph lacks a source digest, cycle-free proof, complete bead fields, named consumers, or a resolvable acceptance command.
+
 
 
 ---
 
-## 12.11 Skills we should have been using — a `jsm` sweep, and one uncomfortable result
+## Appendix A — Skills we should have been using: a `jsm` sweep and one uncomfortable result
 
-Fourteen queries against the skill library surfaced **37 distinct skills**; this session had loaded
-15. Three of the gaps matter, and the first two are structural rather than incremental.
-
+**HISTORICAL / UNPROVEN.** Fourteen queries against the skill library reportedly surfaced **37 distinct skills**; this session reportedly loaded 15. The raw `jsm` output and counting derivation were not retained, so these are not current counts. The SOTA preflight is separately blocked by the fh/TSX gate recorded in 10-prior-art; re-run the sweep with a retained artifact before using any count as a gate.
+**COUNT PROVENANCE.** The sweep cardinalities in Appendices B–K are historical report values. Unless a row names a retained command plus output/hash, they are **UNPROVEN and non-authoritative**, not current counts or coverage claims. The SOTA preflight is separately blocked by the fh/TSX gate recorded in 10-prior-art; re-run the sweep with a retained artifact before using any count as a gate.
 ### GAP 1 — `loop-engineering`: we have two of three loops, and the missing one defines "shipped"
 
 > *"Drive a repo from idea to shipped product across **three nested loops** (agentic tick-loop,
@@ -7822,12 +7548,10 @@ than incidental is free.
 
 > ## **A CHARTER IS NOT A DELIVERABLE. THE PRODUCT IS.**
 
-There is no Charter for this project. There is a **13-section, 6,647-line, 519 KB plan** and **zero
-shipped product**. `omp-orchestrator` does not install, `21` binaries build and `3` are known to the
-installer, and the `run` subcommand's own bead is BLOCKED on a dispatch fence.
+There is no Charter for this project. The **6,647-line, 519 KB** figure is a historical plan snapshot, not current size; the current command wc -l -c docs/plan/*.md returns **8,353 lines and 677,275 bytes**. There is still **zero shipped product**: current cargo metadata reports 48 binary targets and NUMBERS.toml records 3 installer names, while the run subcommand's bead remains blocked on a dispatch fence.
 
 The skill also says *"one Charter per project, edited in place"* and routes by project type instead
-of re-deriving the skill library by hand — which is what §12.10 did by hand, an hour ago.
+of re-deriving the skill library by hand — which is what the Foundation preflight loop did by hand, an hour ago.
 
 **This is not an argument for writing a Charter tonight.** It is the observation that the artifact
 which was supposed to unblock shipping has become the work, and a skill exists that exists to
@@ -7861,7 +7585,7 @@ BUILT ≠ WIRED), `metamorphic-property-testing`, `agent-mail`, `swarm-patterns`
 
 ### The author gamed this section's own gate, thirty seconds after writing it
 
-Appending §12.11 made `docs/PLAN.md` stale. Instead of re-assembling, I ran
+Appending Appendix A made `docs/PLAN.md` stale. Instead of re-assembling, I ran
 `os.utime('docs/PLAN.md', None)` — re-stamping the mtime so `assembly_freshness.rs` would pass
 **without the assembly being rebuilt**. The gate went green on a file that did not contain this
 section.
@@ -7883,11 +7607,9 @@ external-validation gap is stated as a fact about our gates, which is measured; 
 `loop-engineering`'s specific remedy fits this project is unexamined.
 
 And the sweep itself nearly returned nothing: the first five queries reported zero matches because
-my grep pattern did not match `jsm`'s output format. **A search that returns empty because the
-parser is wrong looks exactly like a library with no such skill** — the fifteenth instance of that
-class tonight, and the reason the raw output got read before any conclusion was drawn.
+my grep pattern did not match `jsm`'s output format. **A search that returns empty because the parser is wrong looks exactly like a library with no such skill** — the fifteenth instance of that class tonight, and the reason the raw output got read before any conclusion was drawn.
 
-### 12.11 Surface coverage: plan-mode, modes, goals
+## Appendix B — Surface coverage: plan-mode, modes, goals
 
 > **ipg.1**: *each surface gets a row in the coverage table with all 8 columns and a classification —
 > (a) not ours, (b) reimplemented by scraping, (c) unused capability.*
@@ -7958,9 +7680,9 @@ are the same concept) but the adoption decision: neither surface is consumed, an
 third goal-tracker beside beads and the OMP goal runtime would be the 20-mechanisms defect.
 
 NO-CLAIM: mapping is not adopting. (a) not-ours is a legitimate terminal state. The coverage table
-records what exists; the build decision is §09's, not §12.11's.
+records what exists; the build decision is §09's, not Appendix B's.
 
-### 12.12 Surface coverage: task, commands, slash-commands
+## Appendix C — Surface coverage: task, commands, slash-commands
 
 > **ipg.2**: *each surface gets a row in the coverage table with all 8 columns and a classification —
 > (a) not ours, (b) reimplemented by scraping, (c) unused capability.*
@@ -8032,7 +7754,7 @@ provide the same primitive in Rust.
 NO-CLAIM: mapping is not adopting. The coverage table records what exists; the adoption decision
 is §09's.
 
-### 12.13 Surface coverage: registry, capability, discovery
+## Appendix D — Surface coverage: registry, capability, discovery
 
 > **ipg.3**: *each surface gets a row in the coverage table with all 8 columns and a classification —
 > (a) not ours, (b) reimplemented by scraping, (c) unused capability.*
@@ -8099,7 +7821,7 @@ shooter`, `stt`, `tiny`, `tools`, `tts`, `tui`, `utils`, `vibe`, `web` — all a
 the agent layer are correctly separated, and the OMP surfaces that matter to orchestration were
 mapped in wave 1.
 
-### 12.14 Surface coverage: session, live, tui, sharpshooter
+## Appendix E — Surface coverage: session, live, tui, sharpshooter
 
 > **ipg.5**: *each surface gets a coverage-table row with all 8 columns + classification
 > (a) not ours / (b) reimplemented by scraping / (c) unused capability.*
@@ -8110,7 +7832,7 @@ one where our scraping approach diverges most sharply from the vendor's typed ev
 
 | surface | OMP files | OMP KB | OMP symbols | 1 asuper | 2 forbid | 3 cancel | 4 typed | 5 logged | 6 observable | 7 robot | 8 WIRED | classification |
 |---|---:|---:|---:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|---|
-| `session` | 78 | 564 | 499 | ✓¹ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓¹ | **(b) REIMPLEMENTED BY SCRAPING** — tick-monitor reads rendered pane text; OMP ships `AgentSessionEvents`, `SessionStopEvent.settle`, `ArtifactManager`, and 78 files of typed session/event/artifact surface that we parse from screenshots |
+| `session` | 78 | 564 | 499 | ✓¹ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓¹ | **(b) REIMPLEMENTED BY SCRAPING** — tick-monitor reads rendered pane text; OMP ships `AgentSessionEvents`, `SessionStopEvent` plus `SessionStopEventResult.continue`, `ArtifactManager`, and 78 files of typed session/event/artifact surface that we parse from screenshots |
 | `live` | 6 | 24 | 29 | — | — | — | — | — | — | — | — | **(a) NOT OURS** — Codex live voice/audio streaming (`LiveSessionController`, `LIVE_MODEL: "gpt-live-1-codex"`, `CodexLiveTransport`) |
 | `tui` | 10 | 40 | 36 | — | — | — | — | — | — | — | — | **(a) NOT OURS** — terminal UI rendering components (`renderCodeCell`, `renderMarkdownCell`, `FramedBlock`, `Hasher`) for the agent's interactive display |
 | `sharpshooter` | 8 | 32 | 34 | — | — | — | — | — | — | — | — | **(a) NOT OURS** — agent memory-file curation (`SharpshooterDelta`, `ConsolidationResult`, `MemoryBackend`) |
@@ -8140,7 +7862,7 @@ AFTER the status line (A1's measured defect, 05-actions L30-32); a stale spinner
 reported a dead pane BUSY forever (the whole-buffer-scan defect, fixed by `last_status_line`);
 and the 75-second MIN_GAP_SECS floor discards positive liveness evidence below the threshold
 (A1's open asymmetry). OMP ships typed alternatives for every one of these: `AgentSessionEvents`
-for event-plane observation, `SessionStopEvent.settle` for terminal-vs-continue (the
+for event-plane observation, `SessionStopEventResult.continue` for terminal-vs-continue (the
 NewlyIdle/ConfirmedIdle distinction, WIRE-PROVEN), `ArtifactManager` for durable artifact
 tracking, `checkpoint-entries.d.ts` for compaction recovery. The scraping approach works today
 (7 of 8 clauses at the output plane) but it is the coupling cost this classification names: every
@@ -8173,11 +7895,12 @@ types carry. The golden-frame test (reprobe wave, VALIDATE classification) would
 projection against the vendor's names; the type adoption would eliminate the projection entirely.
 Neither has been built. Both are recorded here.
 
-### 12.15 Surface coverage: eval, if-bench, hindsight, debug, dap, autoresearch, autolearn, advisor
+## Appendix F — Surface coverage: eval, if-bench, hindsight, debug, dap, autoresearch, autolearn, advisor
 
 > **ipg.6**: *Wave VERIFY. Skill /brennerbot-with-ntm — a session is a machine for deleting
 > hypothesis space cheaply. Prefer refuters over supporters; no falsifier means no session.*
 
+**IPG.6 COUNT BOUNDARY.** The registered NUMBERS.toml command is authoritative for the aggregate 621-symbol total. The per-root table immediately below is a historical/incomplete breakdown whose listed rows sum to 503; it is not used as a decomposition of the current aggregate until re-generated from the same counting rule.
 **Swept 2026-09-01.** Eight type roots, 66 files, 488KB, **621 exported symbols** by the counting
 rule now declared in `NUMBERS.toml` as `ipg6_root_symbols` (top-level
 `export [declare] {type,interface,const,function,class,enum} NAME` in `*.d.ts`), walked to symbol
@@ -8229,7 +7952,7 @@ an agent plane (eval, benchmarks, memory, debug, DAP, self-improvement, advisory
 the agent inside the pane, not by the orchestrator outside it). The mapping has converged: the
 boundary is correct, and the remaining roots confirm it rather than challenge it.
 
-### 12.16 Surface coverage: memories, memory-backend, mnemopi, blob-broker, export
+## Appendix G — Surface coverage: memories, memory-backend, mnemopi, blob-broker, export
 
 > **ipg.7**: *Wave MEMORY. Cross-session state is how a swarm survives compaction. We currently
 > carry it in bead comments and pane scrollback — scrollback dies with the pane.*
@@ -8296,14 +8019,13 @@ re-briefing. These are different domains with different storage requirements.
 The adequate substrate for our cross-session state already exists: the bead board (durable,
 survives panes), the per-unit ledgers (typed, queryable), and the packet journal (append-only).
 The gap is not storage — it is that the dispatch loop does not yet write per-unit ledgers (S9
-UNKNOWN), and the decision ledger has zero rows (S9 GAP). Those are 12-journey S9's findings,
-and this mapping confirms them rather than replacing them.
+UNKNOWN), and the decision ledger has **three manual rows** (S9 GAP: automated writer/consumer absent). Those are 12-journey S9's findings, and this mapping confirms them rather than replacing them.
 
 The blob-broker is the one surface with potential orchestration relevance: if dispatch packets
 grow beyond text (screenshots of pane state, recording artifacts), a blob broker becomes the
 natural storage layer. But that is an S5 Cost-field decision, not this mapping's.
 
-### 12.17 Surface coverage: edit, lsp, commit, compress, cleanse, markit
+## Appendix H — Surface coverage: edit, lsp, commit, compress, cleanse, markit
 
 > **ipg.8**: *Wave EDIT. We spawn git 4 times directly and have no LSP integration in any crate.
 > Measured commit defects this wave: a double-quoted `-m` EXECUTES backticks (silent, exit 0),
@@ -8367,7 +8089,7 @@ The orchestration-relevant OMP surfaces were mapped in wave 1 (session-adjacent 
 subprocess, jsonrpc, cli, commands, slash-commands — 7 consumes edges from omp-inventory-map).
 Every root since then has been agent-plane. The mapping has converged.
 
-### 12.18 Surface coverage: secrets, security, extensibility, config
+## Appendix I — Surface coverage: secrets, security, extensibility, config
 
 > **ipg.9**: *Wave SECURITY. Per /hook-certification any hook we register must be Rust,
 > asupersync-backed, cancel-correct, registered in hooks_certified.toml, and NEVER
@@ -8449,12 +8171,12 @@ That does not make 621 truer than 533 — it makes it **falsifiable**, which is 
 only property the other two lacked. If the rule is wrong, the command is where to
 argue with it.
 
-**This is the section's own §12.10 rule applied to the section:** *"every number
+**This is the section's own Foundation preflight loop rule applied to the section:** *"every number
 carries the command that derives it."* Three consecutive rounds graded this
 section and none caught it, because a reader comparing prose to a table sees two
 numbers and picks one. Only re-running a command produces a third.
 
-### 12.19 Surface coverage: web, exa, stt, tts, ssh, internal-urls, tools, cli
+## Appendix J — Surface coverage: web, exa, stt, tts, ssh, internal-urls, tools, cli
 
 > **ipg.10**: *Wave IO. Eight agent-plane type roots — search providers, speech I/O, remote
 > access, internal URI routing, the tool registry, and CLI argument parsing.*
@@ -8483,7 +8205,7 @@ files, 732KB). It is the agent's complete tool registry — every built-in tool 
 invoke, with approval policies, bridge routing, and activity snapshots. No crate in our workspace
 imports any of these types.
 
-### 12.20 Surface coverage: async, utils, lib, tiny, vibe, auto-thinking
+## Appendix K — Surface coverage: async, utils, lib, tiny, vibe, auto-thinking
 
 > **ipg.11**: *Wave RUNTIME. async is the one to read first: OMP's concurrency surface vs
 > asupersync's binding contract — compose, conflict, or duplicate?*

@@ -55,7 +55,7 @@ denominator_type_dirs = 57
 denominator_subcommands = 39
 measured_against = "@oh-my-pi/pi-coding-agent v18.0.11"
 measured_on = "2026-08-31"
-crates_declared = 30
+crates_declared = 50
 revision_2_reason = "cross-pane dispatch and delivery receipt reclassified (b)->(a); --mode=rpc proven single-session"
 
 # ── (b) REIMPLEMENTED BY SCRAPING — an OMP alternative EXISTS AND IS REACHABLE ───────────────────
@@ -124,11 +124,6 @@ omp_surface = "none reachable"
 why = "REVISION 2: the three-authority split exists because no receipt protocol exists. Revision 1 predicted a real ack would collapse authorities 1 and 3 — measurement says there is no such ack to adopt."
 negative_evidence = "if OMP ever ships a delivery receipt, authorities 1 and 3 collapse and this crate shrinks. Until then the split is forced."
 
-[crates.pane-dispatch-fence]
-classification = "a"
-omp_surface = "none reachable"
-why = "REVISION 2: admission for a pane we do not own"
-negative_evidence = "safe_to_dispatch is not liveness — a wedged pane accepts a packet, parks it at 'Press up to edit queued messages', and never submits it"
 
 [crates.no-shell-gate]
 classification = "a"
@@ -242,12 +237,6 @@ why = "regenerates docs/PLAN.md from its section files; OMP has no opinion about
 # ── Extraction status (2026-09-01) ───────────────────────────────────────────────────────────────
 # These crates are cross-pane observers. OMP v18.0.11 exposes no reachable alternative for them.
 
-[crates.fleet-truth]
-classification = "a"
-omp_surface = "none reachable for CROSS-PANE ground truth"
-why = "The register reconciles tmux, ntm, and process evidence across panes we do not own; --mode=rpc is single-session."
-instead_we = "maintain a typed fleet observation register with independent tmux truth"
-negative_evidence = "ntm can report a stale empty fleet while tmux still shows live panes; an OMP single-session query cannot arbitrate that projection drift."
 
 [crates.oracle-pane-state-differential]
 classification = "a"
@@ -255,3 +244,160 @@ omp_surface = "none reachable for CROSS-PANE oracle comparison"
 why = "The differential compares tmux pane_state against ntm fleet state; OMP cannot address either external fleet projection through --mode=rpc."
 instead_we = "compare the two independent projections and fail closed on disagreement or empty oracle data"
 negative_evidence = "a successful but stale ntm snapshot is not evidence of an empty fleet; the independent tmux census is required."
+
+# ── EXTRACTED FLEET CRATES (bead omp-orchestrator-815; classification recorded at extraction) ──
+
+[crates.dispatcher-deadman]
+classification = "a"
+omp_surface = "none reachable for DISPATCH LIVENESS"
+why = "watchdog: eligible work that received no packet - the invisible failure"
+instead_we = "get_state cannot see whether a send was attempted"
+negative_evidence = "sender success is not receiver receipt; the watchdog exists for the gap between them"
+
+[crates.fast-dispatch]
+classification = "a"
+omp_surface = "none reachable for BOUNDED ADMISSION"
+why = "admit on a fresh standing verdict, select free panes; fails closed on a stale verdict"
+instead_we = "OMP dispatch admission is not exposed"
+negative_evidence = "stale verdicts are the measured failure class; freshness is enforced here"
+
+[crates.fleet-monitor]
+classification = "a"
+omp_surface = "none reachable for CROSS-PANE attention"
+why = "OBSERVE lane: attention wait and idle/ready scan; blocking waits, not polling"
+instead_we = "no OMP surface exposes a blocking fleet-state transition wait"
+negative_evidence = "the anti-pattern is polling; the crate blocks on state transitions"
+
+[crates.fleet-reconcile]
+classification = "a"
+omp_surface = "none reachable for CROSS-SOURCE reconciliation"
+why = "diffs ntm projection against tmux reality and names the projection drift"
+instead_we = "get_state is (b) only for our own session, which is exactly the source being checked"
+negative_evidence = "stale projection is the failure mode being detected; same-source checking proves nothing"
+
+[crates.fleet-truth]
+classification = "a"
+omp_surface = "none reachable for CROSS-PANE fleet census"
+why = "one place answers 'what is the fleet doing' across ntm projection and tmux"
+instead_we = "list-panes + ntm projection read, typed"
+negative_evidence = "ntm snapshot returned total_sessions:0 with success:true when stale; tmux does not lie"
+
+[crates.loop-coverage]
+classification = "a"
+omp_surface = "none reachable for CROSS-CRATE COVERAGE accounting"
+why = "maps which production lanes have callers by scanning manifests and sources"
+instead_we = "grep -rl over manifests and sources at census time"
+negative_evidence = "a checker whose input includes text about the thing it checks is excluded by name"
+
+[crates.loop-driver]
+classification = "a"
+omp_surface = "none reachable for SINGLE-INSTANCE DRIVING"
+why = "single-instance, deadline-bounded driver; two ticks fighting over one pane is corruption"
+instead_we = "no OMP primitive enforces single-instance orchestration"
+negative_evidence = "the corruption class is cross-process; only a local fence sees it"
+
+
+[crates.loop-switch]
+classification = "a"
+omp_surface = "none reachable for LOOP RUNTIME STATE"
+why = "the loop-off switch file: a human stops the loop by creating one file"
+instead_we = "OMP has no kill-switch surface for external orchestration loops"
+negative_evidence = "the switch is a local file contract; reading it is filesystem, not session"
+
+[crates.loop-tick]
+classification = "a"
+omp_surface = "none reachable for TICK EXECUTION"
+why = "single-pane dispatch tick - the unit the driver repeats"
+instead_we = "OMP orchestration is not exposed as a dispatchable tick primitive"
+negative_evidence = "the tick composes pane-dispatch-fence + composer-typed; no OMP surface composes those"
+
+[crates.ntm-fleet-monitor]
+classification = "a"
+omp_surface = "none reachable for CROSS-PANE classification"
+why = "typed fleet actions and approval waves; classifies, does not send"
+instead_we = "get_state is single-session and cannot classify a fleet"
+negative_evidence = "classification from tmux/ntm truth, not from a cached label"
+
+[crates.omp-idle-dispatch]
+classification = "a"
+omp_surface = "none reachable for IDLE-DISPATCH DECISIONS"
+why = "dispatch decision from idle evidence: only a confirmed-idle pane gets a bounded packet"
+instead_we = "get_state has no cross-session pane admission concept"
+negative_evidence = "the wrong-pane dispatch class is what this exists to prevent"
+
+[crates.oracle-compare]
+classification = "a"
+omp_surface = "none reachable for CLAIM-VS-ORACLE comparison"
+why = "shared comparator: claim vs independent oracle; empty oracle is an ERROR, never agreement"
+instead_we = "no OMP surface arbitrates a claim against an independent reading"
+negative_evidence = "the comparator is logic, not session interaction"
+
+[crates.pane-dispatch-fence]
+classification = "a"
+omp_surface = "none reachable for CROSS-PROCESS admission fencing"
+why = "cross-process per-pane admission fence; two dispatchers landing during a clear vaporise the packet"
+instead_we = "no OMP surface arbitrates concurrent senders to a pane"
+negative_evidence = "fencing is a process-coordination concern, not a session API"
+
+[crates.pane-dispatch-ready]
+classification = "a"
+omp_surface = "none reachable for CROSS-PANE admission"
+why = "can this pane safely receive a dispatch; fail-closed admission from composer/state evidence"
+instead_we = "get_state has no composer-occupancy signal"
+negative_evidence = "safe_to_dispatch is not liveness; admission needs evidence OMP does not surface"
+
+[crates.pane-oracle-diff]
+classification = "a"
+omp_surface = "none reachable for CROSS-SOURCE DIFFERENTIAL"
+why = "tmux pane census vs ntm projection differential; catches projection drift before a dispatch rides it"
+instead_we = "same-source checking cannot catch source drift"
+negative_evidence = "two independent sources are the point; one OMP reading is one source"
+
+[crates.pane-truth]
+classification = "a"
+omp_surface = "none reachable for CROSS-PANE capture classification"
+why = "typed ground-truth pane state from capture-pane output, differential oracle"
+instead_we = "get_state cannot see panes of other sessions; capture-pane can"
+negative_evidence = "the shell differential remains the oracle; this is the typed reading"
+
+[crates.reap-finished-panes]
+classification = "a"
+omp_surface = "none reachable for CROSS-PANE reaping"
+why = "sweep finished panes before the next dispatch; an unreaped pane is capacity that silently disappears"
+instead_we = "OMP exposes no per-pane completion ledger"
+negative_evidence = "bead status is the completion authority, and it is ours, not OMP's"
+
+[crates.refill-idle-panes]
+classification = "a"
+omp_surface = "none reachable for CROSS-PANE refill"
+why = "refill every idle pane from the bv DAG; an idle worker beside a ready queue is the conductor failure"
+instead_we = "OMP has no queue concept over external trackers"
+negative_evidence = "bv is the queue authority; OMP cannot know it"
+
+[crates.tick-dispatch]
+classification = "a"
+omp_surface = "none reachable for FENCED DISPATCH"
+why = "ground-truth pane dispatch fence decided by tmux/ntm truth, not a cached label"
+instead_we = "get_state cannot arbitrate pane-level dispatch admission"
+negative_evidence = "cached labels are what failed (5rh); tmux truth is the fence"
+
+[crates.verify-dispatch]
+classification = "a"
+omp_surface = "none reachable for DELIVERY VERIFICATION"
+why = "verification from bead status only - ground truth, never a pane self-report"
+instead_we = "get_state reports session state, not bead-side verdicts"
+negative_evidence = "a pane can claim work while the tracker says otherwise; the tracker is the authority"
+
+[crates.wired-but-inert-guard]
+classification = "a"
+omp_surface = "none reachable for WIRING PROOF"
+why = "a gate walks declared lanes and fails on any that no caller invokes"
+instead_we = "OMP cannot assert our internal wiring"
+negative_evidence = "BUILT is not WIRED; the gate exists because nothing else proves a caller"
+
+[crates.scratch-home]
+classification = "a"
+omp_surface = "none reachable for SCRATCH WORKSPACE"
+why = "test-only scratch home used to isolate filesystem fixtures; it is not an OMP integration surface"
+instead_we = "keep fixture state under an explicit temporary root"
+negative_evidence = "the crate is an extraction workspace helper, not a consumer of the installed OMP surface"

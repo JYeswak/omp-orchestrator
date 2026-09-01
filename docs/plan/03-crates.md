@@ -7,6 +7,7 @@ the brief" below.*
 
 ## How to read this section
 
+**HISTORICAL INVENTORY BOUNDARY.** The 183-row envelope and 26-crate split in the next paragraphs are the retained pre-extraction snapshot. Current cargo metadata re-derives 50 workspace packages; the old scanner denominator is not current acceptance evidence.
 The workspace ships a built census, `omp-inventory-map`, that emits 183 rows in a versioned
 envelope. Every row carries the four mandatory fields — `inputs`, `outputs`, `must_be_true`,
 `negative_evidence` — with zero missing. That census is **not** the source for this section, and
@@ -57,8 +58,7 @@ grep -c 'unsafe_code = "forbid"' crates/*/Cargo.toml         # manifest lint
 grep -rlF 'forbid(unsafe_code)' --include=lib.rs --include=main.rs crates/  # inner attr
 ```
 
-Twenty-six crates. `no unsafe` is **yes** for all 26, but by two different mechanisms — see the
-note below the table.
+**The table below is a 2026-08-31 historical snapshot of twenty-six crates.** The current workspace has a different package denominator after subsequent extraction; re-run cargo metadata before treating this table as current.
 
 | crate | role | inputs (real) | outputs (real) | key public types | path-deps | no unsafe |
 |---|---|---|---|---|---|---|
@@ -89,19 +89,7 @@ note below the table.
 | `tick-monitor` | three monitors behind one loop-enforcement choke point | pane capture, git state, `Tick` | `Outcome`, `PaneState`, `Liveness`, `CapacityEscalationReceipt` | `Outcome`, `PaneState`, `Liveness`, `Observation`, `Reject`, `Tick`, `State`, `CapacityAlarm`, `CapacityAlarmEvent`, `CapacityEscalationReceipt`, `RepoError` | — | yes |
 | `undrained-pipe-lint` | fail on both-pipes-piped + `try_wait` poll + no concurrent drain | source text; workspace root | `LintReport` (`Vec<Violation>`) | `Violation`, `LintReport` | — | yes |
 
-**The unsafe-forbid split, MEASURED — regenerated 2026-09-01 after the manifest lints moved.**
-All **26 of 26** crates now forbid unsafe in the manifest (`grep -l 'unsafe_code = "forbid"'
-crates/*/Cargo.toml | wc -l` → 26; six crates — `composer-typed`, `dispatch-silence-watch`,
-`loop-queue-filter`, `no-shell-gate`, `pane-dispatch-fence`, `subprocess-contract` — gained the
-lint after this section was first written, which is why earlier drafts say 20). **25 of 26**
-forbid it with an inner `#![forbid(unsafe_code)]` attribute (`grep -rlF 'forbid(unsafe_code)'
-crates/*/src/lib.rs crates/*/src/main.rs | cut -d/ -f2 | sort -u | wc -l` → 25). **25 carry
-both**; `tick-monitor` is manifest-only; **zero are attribute-only**. The union is still 26 —
-every crate covered — but the finding upgrades rather than dies: coverage moved from *two habits
-with no single enforcement point* to *one habit, uniformly adopted, still with no enforcement
-point*. Nothing fails the build if crate 27 keeps the attribute and forgets the manifest line. An
-investor should read that as: the property holds by adoption, and the one-file lint below is what
-makes it hold by construction.
+**The unsafe-forbid split, MEASURED — current command-backed census (2026-09-01).** All **50 of 50** crate manifests carry unsafe_code = "forbid". **49 of 50** crate source trees carry an inner forbid(unsafe_code) attribute, and **49 carry both**; tick-monitor is the one manifest-only straggler. **Zero are attribute-only; the union is 50 of 50.** Earlier 26/25/26 values are dated snapshots and remain historical. The property holds by adoption today; the one-file lint below is still required to make it hold by construction for crate 51.
 **PROJECTED.** A one-file lint asserting *manifest-and-attribute for every workspace member* turns
 that coincidence into an invariant. It is the cheapest gate in the plan and it is not written yet.
 
@@ -109,6 +97,8 @@ that coincidence into an invariant. It is the cheapest gate in the plan and it i
 
 ## The dependency graph in prose
 
+**HISTORICAL GRAPH SNAPSHOT (pre-extraction, 2026-09-01).** The 18-edge list, 17/26 leaf ratio, 22/26 non-routed ratio, and 29 spawn-site inventory below describe the earlier 26-crate graph. Current workspace package and path-edge counts must be re-derived from cargo metadata; these historical values are not current acceptance denominators.
+**CURRENT GRAPH RECHECK (integration).** `cargo metadata --format-version 1 --no-deps` with path-dependency filtering returns **50 packages, 34 path edges, 30 leaves, and 20 non-leaves**. This is the current graph denominator; the explicit edge list and 18/17/26/22/26 ratios below remain historical.
 **MEASURED** — 18 `path-depends-on` edges, complete, from the census:
 
 ```
@@ -345,14 +335,7 @@ the consequential disagreement: the half of the vocabulary that would collapse t
 dialects is **blocked on an upstream feature boundary**, not merely unadopted, so any schedule that
 assumes it is available today is wrong.
 
-**2. The unsafe-forbid denominator.** The brief §3.7 states "16 of 22 forbid unsafe". Commands:
-`grep -c 'unsafe_code = "forbid"' crates/*/Cargo.toml` → **20 of 26**;
-`grep -rlF 'forbid(unsafe_code)' --include=lib.rs --include=main.rs crates/ | cut -d/ -f2 | sort -u | wc -l`
-→ **25 of 26**; union → **26 of 26**. The brief's figure appears to come from the 22-crate spawn-site
-scan and counts one mechanism only. Both denominators (22 vs 26) and both mechanisms need stating —
-this is exactly writing-contract rule 4. The *substantive* finding survives either way and is
-arguably worse than the brief's: coverage is complete today, but by two habits with no single
-enforcement point.
+**2. The unsafe-forbid denominator.** The brief's 16 of 22 and the earlier 20/26 values are historical snapshots. The current command-backed census is **50 of 50** manifests with unsafe_code = "forbid", **49 of 50** source trees with an inner forbid(unsafe_code) attribute, **49 of 50** carrying both, and a **50 of 50** union. tick-monitor is the sole manifest-only straggler. The substantive gap remains: no single gate yet refuses a new crate that keeps only one mechanism.
 
 **3. The type-inventory scope.** The brief §3.7 gives 51 enums / 79 structs across 22 of 24 crates.
 `grep -rhoE '^pub enum …' --include=*.rs crates/ | wc -l` → **59**, and the struct form → **91**.
@@ -371,19 +354,10 @@ unverified here.
 
 R11 exists because a requirement living only in chat dies with the conversation. Three constraints
 surfaced while deriving the table above that were not previously written anywhere:
-1. **Unsafe-forbid must be single-mechanism.** Today all 26 crates carry the manifest lint
-   (regenerated 2026-09-01; six crates adopted it after the first draft said 20) and 25 of 26
-   also carry the inner attribute — `tick-monitor` is the one manifest-only straggler, and zero
-   crates are attribute-only. The gap is no longer the union; it is the *straggler*: nothing
-   fails the build if crate 27 keeps one mechanism and drops the other. A one-file lint asserting
-   *manifest **and** attribute for every workspace member* is the cheapest gate in the plan.
+1. **Unsafe-forbid must be single-mechanism.** The current command-backed census is 50 of 50 manifests, 49 of 50 source trees with the inner attribute, 49 of 50 carrying both, and a 50 of 50 union; tick-monitor is the manifest-only straggler. Earlier 26/25/26 values are historical. Nothing yet fails the build if a future crate keeps one mechanism and drops the other, so the one-file lint remains the required floor-raise.
 2. **A crate that spawns must depend on `subprocess-contract`.** Two leaves — `omp-rpc-session` and
-   `omp-inventory-map` — spawn processes today with no path-dep on the boundary crate. The rule is
-   stated here so it is checkable, not remembered.
-3. **`pane-dispatch-fence` has no library surface.** It is the only workspace member with no
-   `src/lib.rs` and zero `pub` items (`ls crates/pane-dispatch-fence/src` → `main.rs`). Its contract
-   is `UNDECLARED` and therefore untestable from outside the binary. Any crate whose behaviour other
-   crates must rely on needs a library surface; that is a constraint, and it is now written down.
+omp-inventory-map — spawn processes today with no path-dep on the boundary crate. The rule is stated here so it is checkable, not remembered.
+3. **pane-dispatch-fence has no library surface.** It is the only workspace member with no src/lib.rs and zero pub items (ls crates/pane-dispatch-fence/src -> main.rs). Its contract is UNDECLARED and therefore untestable from outside the binary. Any crate whose behaviour other crates must rely on needs a library surface; that is a constraint, and it is now written down.
 
 **NO-CLAIM.** This section states each crate's contract as its source declares it, and states the
 adoption path we intend. It does **not** claim any of the following: that the derived contracts are
@@ -402,8 +376,8 @@ entirely.
 Josh: *"any missing crates could be in control-plane that we have to move over — this should be
 mentioned in docs."* He is right, it was not mentioned anywhere as a number, and the number is large.
 
-**20 of the 20 crates `AGENTS.md` marks `CONTROL-PLANE` are NOT extracted. 28,779 LOC still live
-upstream. Zero have moved.**
+**PRE-EXTRACTION SNAPSHOT (measured before a277097, 2026-09-01):** 20 of the 20 crates marked
+CONTROL-PLANE in the then-current AGENTS.md table were not extracted; 28,779 LOC remained upstream.
 
 | crate | LOC | upstream |
 |---|---:|---|
@@ -429,27 +403,25 @@ upstream. Zero have moved.**
 | `oracle-compare` | 449 | present |
 
 Every one verified present at `/Users/josh/Developer/control-plane/crates/<name>` at measurement
-time. None is missing upstream; none is here.
+time. At that pre-extraction measurement time, none was missing upstream; none was here.
 
-### What this means about the 26 crates that ARE here
 
+### Historical interpretation of the 26-crate snapshot
 They are **all new work built during this session** — gates, registries, the tick loop, the
 supervisor, the schema and number and convergence machinery. That is not a criticism of them; it is
 a correction to any reading of this section that assumes the workspace is the extraction landing
-zone. It is not. **The extraction has not started**, and bead `omp-orchestrator-815` is still open.
+zone. At that snapshot time, extraction had not started; bead omp-orchestrator-815 was still open.
 
 ### How this surfaced, and what it says about the census
 
-`census_gates()` in `crates/omp-orchestrator/src/lib.rs` hardcodes a 14-crate list. Three of those
-names — `fleet-truth`, `oracle-compare`, `oracle-pane-state-differential` — are **not on disk**, so
-the supervisor reported them `Unreachable` and refused to tick. The refusal was correct and its
-reason was wrong: they are not unwired, they are **unextracted**, and those two states have
-completely different remedies. Fifteen crates that DO exist were not in the list at all.
 
+At the pre-extraction snapshot, census_gates() hardcoded a 14-crate list. Three names were not on disk then, so the supervisor correctly classified them as unextracted rather than unwired; this paragraph records that historical refusal, not current presence.
 So the census was a frozen snapshot of a *planned* workspace naming 3 of the 20 missing crates
 arbitrarily. Dropping them would have been the wrong fix — it would have erased real debt to make a
 gate go green. **Naming all twenty is the right fix**, and `NUMBERS.toml` now carries the count so it
 cannot quietly drift as extraction proceeds.
+
+**CURRENT STATUS (re-derived 2026-09-01):** the 20 named control-plane crate directories are now present under crates/ in this working tree, while their commit state is governed by the path-scoped extraction commits. The current workspace denominator is 50 packages; the pre-extraction 26-crate and 20-unextracted figures above are historical.
 
 ### NO-CLAIM
 
@@ -463,6 +435,7 @@ checkout, and a move under those conditions is how work is lost.
 
 ## 3.10 The extraction workstream and its bead DAG
 
+**HISTORICAL EXTRACTION-PLANNING NARRATIVE.** The bead, graph, leaf, and LOC claims in the following subsection describe the pre-a277097 tree. Current target presence and current missing-source total are stated above and in NUMBERS.toml; the historical 29,512 LOC is not current extraction debt.
 Josh: *"our plan needs to include all unextracted stuff — that has to be part of our bead dag."*
 Bead `omp-orchestrator-815` is currently **one bead for 29,512 LOC across 20 crates**, which cannot
 be worked — it can only be adjudicated. Under `beads-north-star` a bead needs testable acceptance,
@@ -536,12 +509,7 @@ conditions is how work is lost. That contract is a prerequisite of all 20, not a
 
 ### NO-CLAIM
 
-The dependency shape is **intra-set `path =` deps only**. A crate may also depend on a control-plane
-crate that is NOT in this 20 — those edges are unmeasured, and any one of them turns a leaf into a
-blocked node or an extraction into a larger cut than planned. Nothing here has been extracted, so
-none of these acceptance commands has ever run. The LOC total measured now is **29,512**, against
-**28,779** summed from `AGENTS.md`'s own table — a 733-line discrepancy, unreconciled, and a further
-instance of the counted-vs-stated gap this document keeps producing.
+This is an **unexecuted historical decomposition**, not a current extraction-status claim. The 20 named directories are present in the current worktree as stated in §3.9, but this subsection's acceptance commands have not been run and no claim is made that the proposed 20-child bead DAG exists. The 29,512 LOC total and 28,779 comparison are historical size snapshots; current ownership and bead state must be re-derived from the current tree and `br`.
 
 ---
 
@@ -556,29 +524,13 @@ every number involved is TRUE and they measure different things.
 
 | reading | value | what it measures |
 |---|---:|---|
-| manifests declaring `[lints.rust] unsafe_code = "forbid"` | **26 of 26** | the lint is configured |
-| source roots carrying `#![forbid(unsafe_code)]` | **25 of 26** | the attribute is in the code |
-| **union — AUTHORITATIVE** | **26 of 26** | *does this workspace forbid unsafe* |
+| manifests declaring [lints.rust] unsafe_code = "forbid" | **50 of 50** | current manifest lint count |
+| source roots carrying #![forbid(unsafe_code)] | **49 of 50** | current inner-attribute count |
+| **union — AUTHORITATIVE** | **50 of 50** | current union; tick-monitor is manifest-only |
 
-One crate carries the lint in its manifest alone; that is why 25 and 26 both
-appear and neither is wrong. `NUMBERS.toml` now declares
-`forbid_unsafe_authoritative` with the union command, so the figure re-derives.
+The earlier 26/25/26 table was a dated snapshot. NUMBERS.toml now declares the union command, and the current counts above are re-derived from the shared checkout.
 
-The figures this section previously carried — the brief's `16 of 22` and an
-earlier draft's `20 of 26` — are **stale, not contradictory**: both were measured
-before six crates adopted the lint. `grep -l` and `grep -c` now agree at 26.
-
-**A REVIEWER ERROR, on the record, because it is the more useful half.** Checking
-the `25 of 26` claim I ran the agent harness's grep for `forbid(unsafe_code)` and
-got **zero**, and came within one commit of filing a BLOCKER saying this section
-was false. The section was right. That grep is a Rust regex engine: `(` and `)`
-are grouping metacharacters, so the pattern matches the literal string
-`forbidunsafe_code`, which exists nowhere. It returned zero and exited zero.
-
-Scope, corrected after measuring both engines: shell `grep` through `sh -c` — the
-path every `NUMBERS.toml` figure uses — treats `(` as a literal and answers
-correctly. A planted figure with the unescaped pattern returned 64, not 0. **The
-registry was never exposed. The reviewer was.**
+**A REVIEWER ERROR, on the record, because it is the more useful half.** The initial agent-harness grep used grouping syntax and returned zero; the shell command registered in NUMBERS.toml and the current table above use the correct literal pattern. The registry was not exposed. The reviewer was.
 
 ### Extraction debt
 

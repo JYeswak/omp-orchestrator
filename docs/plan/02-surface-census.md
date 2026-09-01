@@ -7,37 +7,22 @@ worker observations; those observations are explicitly marked `HISTORICAL`,
 made measured by repeating it. The primary inventory artifact is the built scanner
 `omp-inventory-map`, run as
 
-```
-/Volumes/BuildShared/cargo-targets/debug/omp-inventory-map > /tmp/inv.txt   # 544697 bytes, exit 2
-```
+`/Volumes/BuildShared/cargo-targets/debug/omp-inventory-map` was run against installed `omp/18.0.11` on 2026-08-31 from repo `/Users/josh/Developer/omp-orchestrator`. The retained historical capture is `.flywheel/inventory-artifacts/inv.txt.gz`; it decompresses to 544,697 bytes, raw SHA-256 `86491732a5581a6d2e342d0db59bdf20e5f47f6da93150ae78bd2649562f5081`, and exit 2. The compressed artifact SHA-256 is `8f62893e6a4a04a9b4e8922781a5f8a687f73ca84f5c4ea9d69c5f8998ae0561`.
 
-against installed `omp/18.0.11` on 2026-08-31 from repo
-`/Users/josh/Developer/omp-orchestrator`. The captured inventory snapshot is
-544,697 bytes, SHA-256
-`86491732a5581a6d2e342d0db59bdf20e5f47f6da93150ae78bd2649562f5081`, exit 2.
-The snapshot is ephemeral; the hash, generator, tool version, repo, input, and exit
-status identify exactly what §§1–5 mean. Every derived count in those sections is a
-`python3` query over that file, and the query is printed next to the number it
-produces. Later sections do not inherit this provenance boundary.
+The snapshot is historical and revision-unpinned; it is not current workspace evidence. Every derived count in §§1–5 must carry this artifact boundary, and later sections do not inherit it.
 
-**Provenance register.** `INV-2026-08-31` is the scanner output above. The current
-map artifact is `docs/plan/SURFACE-MAP.jsonl`, generated/maintained by the census
-workers; its captured identity is 591 non-empty JSONL rows, 295,754 bytes, SHA-256
-`f155a358dd302982367a7c0107fe0eb1e3cd6f5ec7d4689bac67f11b1c5063f7`. The map is from repo `/Users/josh/Developer/omp-orchestrator`; its generator/tool version and source revision were not retained, so later claims are limited to this hashed file and named queries.
-Map counts below are derived by the exact NUMBERS.toml commands:
-`grep -c . docs/plan/SURFACE-MAP.jsonl` and the `surface_engaged_pct` Python
-query. Sections 6–11 also cite their exact `--help`/grep probes where retained;
-where a worker observation has no retained command/output/revision, it is historical
-context rather than a current measurement.
+**Provenance register.** INV-2026-08-31 is the retained historical scanner output above. The current map artifact is `docs/plan/SURFACE-MAP.jsonl`, with **614 non-empty JSONL rows, 302,002 bytes, SHA-256 5b3c3238c4ec9dd7f72a097bb3668e7de224e3b6f0eddc1132de2902a1d9d93c**. Its generator/tool version and source revision were not retained, so later claims are limited to this hash-anchored file and named queries.
+Map counts below are derived by the exact NUMBERS.toml commands; worker observations without retained command/output/revision remain historical context, not current measurement.
 
 ### 1. The census, in one table
 
 The scanner emits a versioned envelope,
 `{"schema_version":"omp-inventory-map/v1","command":"doctor","status":"UNKNOWN","data":{…}}`,
-carrying 184 nodes, 207 edges, and **183 rows**. The denominator is worth stating
-plainly, because a census with an unstated denominator is a press release: **183
-rows = every OMP surface the probe could enumerate, plus our own 26 workspace
-crates.** It is not 183 OMP features. It is 157 OMP surfaces and 26 things we built.
+carrying 184 nodes, 207 edges, and 183 rows. The denominator is worth stating plainly, because a census with an unstated denominator is a press release: 183 rows = every OMP surface the probe could enumerate, plus our 26-crate snapshot recorded on 2026-08-31. It is not 183 OMP features. It is 157 OMP surfaces and 26 things built in that historical snapshot.
+
+**SNAPSHOT BOUNDARY.** The 183-row denominator and all ratios below are dated inventory results, not current workspace counts; re-run cargo metadata and regenerate this section after extraction.
+
+**CURRENT-STATE BOUNDARY (2026-09-01):** the 183-row artifact and 26-crate denominator above are pre-extraction historical data. Current cargo metadata reports 50 packages and 48 binary targets; regenerate the scanner artifact before using any §§1–5 count as current. The historical artifact remains retained for provenance, not closure.
 
 `MEASURED` — `python3 -c "import json,collections; d=json.load(open('/tmp/inv.txt'))['data']; print(collections.Counter(r['kind'] for r in d['rows']))"`
 
@@ -73,6 +58,7 @@ CAPABILITY_NOT_USED             157
 SCRAPED_OR_OBSERVED_ALTERNATIVE  18
 MAPPED_BY_DIRECT_PROBE            8
 ```
+**HISTORICAL DIRECT-PROBE RATIO SNAPSHOT.** The 8/183, 7/157, and related ratios below belong to the retained pre-extraction artifact; they are not current workspace coverage.
 - direct-probe coverage = 8 / 183 = **4.37%** of the all-census rows (8 ÷ 183 = 0.043715…);
 - OMP-only direct-probe coverage = 7 / 157 = **4.46%** (the eighth direct row is the workspace crate `omp-inventory-map`);
 - alternative-path coverage = 18 / 183 = **9.84%** and unconsumed capability = 157 / 183 = **85.79%**;
@@ -93,9 +79,7 @@ enumerate OMP surface. Twenty-five of twenty-six crates consume none.
 
 An investor should read that as the project's **central open question, not its
 verdict**. Two readings are available and we are obliged to state the hostile one
-first. *Hostile reading:* an orchestrator built on OMP that touches 4.46% of OMP
-surfaces (7/157) is not an orchestrator, it is a census with ambitions, and the 25
-workspace crates are gates and lints that would work identically if OMP did not exist.
+**Historical hostile reading.** The retained pre-extraction snapshot touched 4.46% of OMP surfaces (7/157); its 25 workspace crates were gates and lints that would work identically if OMP did not exist. Do not apply that denominator to the current 50-crate worktree.
 *Our reading:* the map is honest, which is the hard part and the part usually skipped
 — most projects at this stage cannot tell you their consumption ratio at all, because
 nobody enumerated the denominator. The all-census figure is 4.37% (8/183); the
@@ -652,7 +636,7 @@ RETIRE with no validating command: 144 (31% of the 469 historical retires)
 The displayed categories total 544 rows. On the all-listed-row denominator, the historical
 RETIRE rate is 469/544 = **86.2%**. If and only if the 42 unmapped rows are excluded, the
 dispositioned-row denominator is 502 and the rate is 469/502 = **93.4%** (rounded 93%).
-Neither rate describes the current 591-row map below.
+Neither rate describes the current 614-row map below; both are historical pre-correction ratios.
 
 ### 8.1 Fifteen retired surfaces are named for this session's own defects
 In that HISTORICAL snapshot, filtering rows with `validated_by: null` yielded the
@@ -704,25 +688,14 @@ remains unproven rather than silently upgraded.
 
 ## 9. The corrected census — and how far wrong §6 was
 
-Two corrections, both forced by Josh, moved every number in §6. The current map is
-`docs/plan/SURFACE-MAP.jsonl`, with **591 non-empty rows** in snapshot
-`f155a358dd302982367a7c0107fe0eb1e3cd6f5ec7d4689bac67f11b1c5063f7`. In this section,
-**unmapped** means `maps_to_crate == null`, not “missing from the file.” The exact map query
-`python3 -c "import json; m=[json.loads(l) for l in open('docs/plan/SURFACE-MAP.jsonl') if l.strip()]; print(len(m),sum(x.get('maps_to_crate') is None for x in m),sum(x.get('validated_by') is None for x in m))"`
-returns `591 478 0`: 478 rows are unmapped by crate, while all 591 have non-null
-`validated_by`. The field is non-null on all 591 rows, but it is not structured RETIRE proof;
-the current map therefore does not establish RETIRE validation.
-
-```
-CONSUMED  32     WIRE  67     VALIDATE  30     RETIRE  453     UNPROBEABLE-PENDING  9
-engaged (CONSUMED+WIRE+VALIDATE)  129 / 591  =  21.8 %      [current MAP snapshot; exact command in NUMBERS.toml]
-```
+The current map is docs/plan/SURFACE-MAP.jsonl with **614 non-empty rows**, SHA-256 **5b3c3238c4ec9dd7f72a097bb3668e7de224e3b6f0eddc1132de2902a1d9d93c**. In this section, **unmapped** means maps_to_crate == null, not missing from the file. The exact map query returns **614 479 0**: 479 rows are unmapped by crate, while all 614 have non-null validated_by. The field is non-null on all 614 rows, but it is not structured RETIRE proof; the current map therefore does not establish RETIRE validation.
+CONSUMED 52     WIRE 67     VALIDATE 33     RETIRE 453     UNPROBEABLE-PENDING 9
+engaged (CONSUMED+WIRE+VALIDATE) 152 / 614 = 24.8% [current map; exact command in NUMBERS.toml]
 
 **Reconciliation (round 11).** The current values above are derived from the map snapshot and
 the exact commands in `NUMBERS.toml` (`grep -c . docs/plan/SURFACE-MAP.jsonl` and
 the `surface_engaged_pct` Python query). Superseded earlier snapshots are HISTORICAL and retained only in `NUMBERS.toml`'s audit trail; they are not quoted as current status and their prior identities are not the current hash.
-Current engagement is **129/591 = 21.8%**, and current WIRE count is **67**. The “ee … 123 surfaces” figure is the
-historical help-text count; the current map carries **111** ee rows (109 RETIRE, 2 WIRE).
+Current engagement is **152/614 = 24.8%**, and current WIRE count is **67**. The “ee … 123 surfaces” figure is the historical help-text count; the current map carries **111** ee rows (109 RETIRE, 2 WIRE).
 The bv rows below are the LIVE split over all 76, not 47 alone.
 
 ### 9.1 What the two corrections did
@@ -730,7 +703,7 @@ The bv rows below are the LIVE split over all 76, not 47 alone.
 | | §6 as published | after correction |
 | `bv` surfaces | 29 (scrape artifacts) | **76 mapped: 29 original rows retained + 47 real `--robot-*` rows appended** |
 | `bv` disposition | 0 consumed, retire all | **30 WIRE · 18 VALIDATE · 27 RETIRE · 1 UNPROBEABLE across all 76** |
-| engagement | "6.2 %" | **21.8 % (129/591), live** |
+| engagement | "6.2 %" | **24.8 % (152/614), current** |
 
 **`bv` inverts completely.** The tool §6 reported at *zero consumption, retire everything* is, once
 its real surface is mapped, **the most under-adopted tool in the system: 48 of 76 mapped surfaces
@@ -766,13 +739,7 @@ The correction did not come from a gate or a re-read. It came from Josh saying *
 naming a lot retired without fully testing them"* and *"we're retiring most of the surfaces"* —
 twice, because the first time I recorded the finding and did not act on it.
 
-**NO-CLAIM.** Superseded historical engagement and WIRE values are excluded from current-status prose; their snapshot identities are not the current map hash. The live, declared figure is **21.8%**
-engagement (**129/591**) and the live WIRE count is **67**. Fourteen binaries (`rch`, `fh`,
-`cargo`, `git`, `tmux`, `cass`, `ubs`, `caut`, `dcg`, `ru`, `pt`,
-`sbh`, `slb`, `gh`) still have no surface count, so the external-tool denominator is
-unknown. WIRE is a proposal, not proof of implementation, and non-null `validated_by` is not
-structured RETIRE evidence. A probe establishes that someone ran a surface; it does not establish
-that the resulting judgement is right.
+**NO-CLAIM.** Superseded historical engagement and WIRE values are excluded from current-status prose. The live declared figure is **24.8% engagement (152/614)** and current WIRE count is **67**. Fourteen external binaries still have no surface count, so that denominator is unknown. WIRE is a proposal, not proof of implementation, and non-null validated_by is not structured RETIRE evidence. A probe establishes that someone ran a surface; it does not establish that the resulting judgement is right.
 ---
 
 ## 10. Evidence inherited from a vacuous source is not evidence
@@ -826,10 +793,10 @@ Both are nulls. Only one is evidence. The policy requires each current RETIRE to
 
 | | count | meaning |
 |---|---:|---|
-| engaged | **129** | CONSUMED + WIRE + VALIDATE — **21.8%** (129/591; `NUMBERS.toml` command) |
+| engaged | **152** | CONSUMED + WIRE + VALIDATE — **24.8%** (152/614; NUMBERS.toml command) |
+| unmapped by crate | **479** | maps_to_crate == null; overlaps the disposition rows and is not missing rows |
 | honestly unknown | **9** | UNPROBEABLE-PENDING — 3 mux + 6 thin-reason; this is a disposition count |
 | retired | **453** | rows with disposition `RETIRE`; structured probe backing is not proven by the map schema |
-| unmapped by crate | **478** | `maps_to_crate == null`; overlaps the disposition rows and is not “missing rows” |
 
 **The honestly-unknown column is the most valuable in the table.** It did not exist three waves
 ago, when those same rows read `RETIRE` and the census claimed to know something it did not. It
@@ -901,6 +868,7 @@ again. Only 54 of the 63 are refuted here.
 
 ---
 
+**HISTORICAL SWEEP BOUNDARY (2026-08-31).** Sections 2.12–2.14 retain the type-surface sweep and its failure examples. Their fixed file, symbol, byte, and coverage counts are snapshot facts from the cited revision; they are not current workspace counts unless a paragraph explicitly supplies a current command and result.
 ## 2.12 Three dispositions from the `plan-mode` / `modes` / `goals` sweep
 
 `%1408`, bead `ipg.1`, coverage table at `29958a3`. Three type roots, three genuinely different

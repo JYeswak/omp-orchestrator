@@ -73,8 +73,14 @@ process requirement about how requirements themselves are handled. It is now doc
 > unanswered — **they were unaskable from inside the requirement set**. R12 and §8 close that.
 > A requirement the graders had to invent is the strongest evidence this round was worth running.
 
-### 1.5 Glossary — the jargon R1–R12 use without defining
+> **R13 — the full idea-to-shipped lifecycle.** "part of our plan needs to be intimately aware of the entire
+> lifecycle of an idea to a finished project then walk the list down the crates and our skills to
+> ensure that throughout dispatch we have proper templates, proper dispatch, proper reap, proper
+> logging, proper build grading, etc."
+> Added by Josh mid-grading; §11 maps the spine and §12 owns the dispatchable S1–S9 runbook.
 
+
+### 1.5 Glossary — the jargon R1–R13 use without defining
 `%1408` filed this in round 1 and I skipped it twice. The requirements are quoted **verbatim**, which
 is correct and non-negotiable, and the cost is that they carry fleet jargon an outside reader cannot
 resolve. An investor reading R1 hits "bead dag" in the first sentence.
@@ -115,16 +121,17 @@ A requirement that cannot be checked is a wish. Each row states the observable t
 |---|---|---|
 | R1 | A-to-Z journey: gates, crates, schema, types, validation, per-milestone done | §09 exists and every milestone carries an OBSERVABLE |
 | R2 | Reap before refill; repo hygiene; doc structure | **NOT CLOSED — a past event is not a closure.** The reap happened once (28/25/19/2). Closing this needs a *standing* check; the §7.3 staleness predicate is the candidate and is not built |
-| R3 | One document, investor-attackable, future-tense on what we build | **PARTIAL — assembly exists, but closure requires the §7.3 freshness/identity check (every section hash covered and reassembly verified); the current assembled artifact is stale** |
-| R4 | Every crate, every schema I/O, every typed interface, interactions, diagrams | §03 has one row per workspace crate; §04 has ≥6 generated diagrams |
-| R5 | Every OMP surface | **PARTIAL — fresh hash-anchored census records 980 discovered rows + 1 synthetic transport sentinel = 981 row records, with slash_commands=799 versus expected=136 still unresolved; the historical round-10 181 + 2 sentinel shape is retained in §3.2 as non-authoritative evidence** |
+| R3 | One document, investor-attackable, future-tense on what we build | **PARTIAL — `target/debug/plan-assemble` just regenerated docs/PLAN.md (13 sections; 8,235 lines; 652 KB), but the §7.3 freshness/identity gate is not built, so assembly success is not a durable freshness proof.** |
+| R4 | Every crate, every schema I/O, every typed interface, interactions, diagrams | **PARTIAL — §03's 26-row table is a historical pre-extraction snapshot; current cargo metadata reports 50 packages, and no current one-row-per-package contract census is recorded. §04 has ≥6 diagrams, also snapshot-bound.** |
+| R5 | Every OMP surface | **PARTIAL — pre-extraction scanner artifact records 980 discovered rows + 1 synthetic transport sentinel = 981 row records, with slash_commands=799 versus expected=136 still unresolved; current workspace metadata and scanner regeneration remain required before closure** |
 | R6 | The testing/validation/gating frameworks | **OPEN — §06's gate matrix must produce a named G1–G8 proof artifact with known-bad, known-good, mutation, anti-vacuity, and ADDRESSABLE results; no such all-legs PASS artifact is recorded** |
 | R7 | Mirror prior art at every gap | §10 gives a search command + verbatim quote or explicit not-found per gap |
 | R8 | Installability + canonical CLI scoping | **OPEN — §07 must attach a clean-machine install receipt proving doctor/health/repair + validate/audit/why, with no hard-coded /Users/josh fallback; no receipt is recorded** |
 | R9 | End users orchestrating their own projects | **OPEN — §08 must attach a second-machine/clean-repo first-tick receipt naming the adapter and delivery receipt; no external-repo receipt is recorded** |
 | R10 | Idea → why → binaries → actions+negatives → map → design specs at SOTA | **OPEN — §09 must attach a rubric artifact with every SOTA dimension scored ≥4/5 and no missing action/negative mapping; no thresholded score artifact is recorded** |
 | R11 | Requirements written down before dispatch | **this file** |
-| R12 | Economic and risk questions are registered, owned, and answerable | §8 — twelve registered questions (ten `OPEN`, Q9 `ANSWER MOVED`, Q10 `PARTIAL`) and five kill criteria |
+| R12 | Economic and risk questions are registered, owned, and answerable | §8 — thirteen registered questions (eleven OPEN, Q9 ANSWER MOVED, Q10 PARTIAL) and five kill criteria |
+| R13 | Full idea-to-shipped lifecycle mapped through skills, crates, gates, and dispatch | §11 lifecycle evidence map plus §12 S1–S9 runbook; every stage must carry the seven-field dispatch contract |
 
 > *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
@@ -213,10 +220,11 @@ Fresh recapture on 2026-08-31 from the exact invocation cd /Users/josh/Developer
 The fresh artifact is the only hash-anchored scanner output in this brief. Its summary is recorded below; the older 181/183/184 arithmetic is retained only as a labelled round-10 historical snapshot.
 - **Historical round-10 node/row shape:** the seven discovered count fields summed to **181** source rows. The reported **183 rows** therefore included two synthetic records: one transport sentinel and one slash_command expectation sentinel. The slash_commands=0 field was the discovered command count; the slash_command 1 row was the synthetic mismatch sentinel, not an enumerated command. The **184 nodes** were those 183 row records plus one scanner root/envelope node. No synthetic record was counted as discovered coverage.
 - **Historical arithmetic:** 181 discovered rows + 2 synthetic sentinel rows = 183 row records; 183 row records + 1 root/envelope node = 184 nodes. Do not treat these round-10 values as the current census.
-- **Fresh hash-anchored summary:** 981 row records, 982 nodes, and 1,803 edges. Counts: cli_commands=39, type_roots=57, declarations=14, rpc_handlers=42, slash_commands=799, omp_methods=3, workspace_crates=26; expected_slash_commands=136, so the scanner remains UNKNOWN with exit 2.
-- **Fresh row kinds:** cli_command 39 · type_root 57 · rpc_handler 42 · workspace_crate 26 · declaration 14 · omp_method 3 · slash_command 799 · transport 1. The transport row is the one synthetic transport sentinel; the 799 slash-command rows are discovered records, not the old expectation sentinel.
+- **Pre-extraction hash-anchored summary (historical):** 981 row records, 982 nodes, and 1,803 edges. Counts: cli_commands=39, type_roots=57, declarations=14, rpc_handlers=42, slash_commands=799, omp_methods=3, workspace_crates=26; expected_slash_commands=136, so the scanner remains UNKNOWN with exit 2.
+- **Pre-extraction row kinds (historical):** cli_command 39 · type_root 57 · rpc_handler 42 · workspace_crate 26 · declaration 14 · omp_method 3 · slash_command 799 · transport 1. The transport row is the one synthetic transport sentinel; the 799 slash-command rows are discovered records, not the old expectation sentinel.
 - **Historical round-10 counts (non-authoritative):** cli_commands=39, type_roots=57, declarations=14, rpc_handlers=42, slash_commands=0, omp_methods=3, workspace_crates=26. The old row-kind line's transport 1 and slash_command 1 were synthetic sentinels, as classified above.
 - **Historical round-10 scanner hole:** every count had an expected_* twin; slash_commands=0 differed from expected_slash_commands=136, which made that envelope UNKNOWN and exit 2. The old claim that 136 slash commands were unmapped is not a current count; the fresh artifact finds 799 slash-command records against the same expected value and still requires reconciliation.
+**Current workspace boundary (re-derived 2026-09-01):** the scanner snapshot above predates the extraction wave and remains historical. Direct cargo metadata --format-version 1 --no-deps reports 50 packages and 48 binary targets at /Users/josh/Developer/omp-orchestrator/target; regenerate the inventory artifact before treating any scanner count as current.
 - **Historical round-10 classification (non-authoritative):** CAPABILITY_NOT_USED 157 · SCRAPED_OR_OBSERVED_ALTERNATIVE 18 · MAPPED_BY_DIRECT_PROBE 8.
 - **Historical round-10 edge relations (non-authoritative):** provides 157 · map-to-none 25 · path-depends-on 18 · consumes 7. All 7 consumes edges originated from omp-inventory-map; 25 of 26 crates consumed zero OMP surface.
 
@@ -438,11 +446,7 @@ reason, or the rule gets its first exemption. *Recorded under R11 — not previo
  "data":null,"error":"CONFIG_ERROR unknown argument --help"}
 ```
 
-The gate is **built, correct, and undiscoverable**: 23 tests pass (per the §3.5 table; an earlier
-draft of this line said "13", an unreconciled subset figure — corrected in round 11) and
-`crates/omp-inventory-map/src/types_inventory.rs:176-178` deliberately excludes `Observation` from
-the allowance list so the collision demands convergence — but the running binary's 544 KB doctor
-output contains **zero** occurrences of `Observation`, `CONVERGE`, or `Verdict`.
+**HISTORICAL ADDRESSABILITY SNAPSHOT.** The gate was built and its old snapshot reported 23 source tests plus 544,697 bytes of doctor output and an unknown-argument --help refusal. Current omp-inventory-map contains 28 test markers; the current debug binary emits 158 help bytes and exits 1. No current ADDRESSABLE pass artifact is claimed until a retained command/output/revision receipt exists.
 
 Not built-vs-wired. **Wired-but-unaddressable.** It adds a sixth required gate property:
 **ADDRESSABLE** — one documented command runs it, and `--help` names that command.
@@ -513,47 +517,29 @@ The denominator is now stated in the heading, which is the whole point: *five st
 
 | layer | mechanism | measured state |
 |---|---|---|
-| observe | `tick-monitor` | **WORKS, WITH A MEASURED ASYMMETRY DEFECT** — see below |
-| actionable | `idle_panes` | **BROKEN** — discards `NewlyIdle`; `free_capacity` derives from the same `is_dispatchable` filter, which requires *Confirmed* Idle, so a pane at `t=0` is excluded from **both** lists. OMP declares `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts:9-30`) with the analogous settle/continuation split, but it is DECLARED ONLY and not wired here |
-| consume — selection | `decide()` picks work | **UNVERIFIED** — no evidence separated from the two rows below; `%1414` MAJOR 1 |
-| consume — admission | dispatch fence | **FENCED** — 162 refused ticks over 4.2 hours, `DISPATCH_RETRY_BLOCKED` |
-| consume — transport | packet delivery | **UNVERIFIED** — transport returned `success:[N]` with no packet (`cp-z42vu`); OMP also declares `IrcDeliveryReceipt` + `AsyncJobDeliverySink` (`tools/hub/types.d.ts:8,84`), but no wire path has been measured |
-| actuate | dispatch | **DOES NOT EXIST** — a human types into panes |
-| complete | worker says done | **AVAILABLE, NOT WIRED** — `AgentEndEvent.willContinue` crossed `--mode=rpc` as a raw `agent_end` frame with `isTerminal:true`; the signal exists and is reachable, but the supervisor does not consume it |
+| observe | tick-monitor | **WORKS, bounded by two captures** — current positive timer/hash motion is checked before the 75-second no-change floor; see below |
+| actionable | idle_panes | **SEAM OPEN** — the producer has typed NewlyIdle/ConfirmedIdle predicates, while parse_observation consumes JSON lists plus a state == IDLE fallback; no shared type crosses the process seam |
+| consume — selection | decide() picks work | **UNVERIFIED** — no independent selection receipt is recorded |
+| consume — admission | dispatch fence | **FENCED** — the 162 refused-tick/4.2-hour value is historical and unverified; no current refusal-rate figure is claimed |
+| consume — transport | packet delivery | **UNVERIFIED** — cp-z42vu is a historical incident only; the current repository has no planted fixture or receipt payload |
+| actuate | dispatch | **EXISTS AND IS UNFENCED IN THE INSTALLED BINARY** — the resident supervisor sends via `ntm --robot-send`; the "a human types into panes" reading is historical (pre-`kxe`). MEASURED 2026-09-01: build `9a61acd` (208 commits behind HEAD) re-sent bead `815` to `%1408` **131 times in 247 minutes** (11:45–15:53 MDT, one per tick) while the bead stayed `open`/unassigned and the pane was dead on HTTP 402; every row logged `DISPATCHED … RECEIVER_RECEIPT=ntm_robot_send`. Command: `jq -r 'select(.pid==70561 and .status=="DISPATCHED") \| .detail' ~/.local/state/flywheel/omp-orchestrator.heartbeat.jsonl \| sort \| uniq -c`. The claim fence (`dispatch-claim-fence`) exists in the working tree and is called from no committed or installed `main.rs` |
+| complete | worker says done | **AVAILABLE, NOT WIRED** — one raw agent_end frame carried isTerminal=true; AgentEndEvent.willContinue is declared upstream, and the supervisor does not consume it |
 
-**The observe row was downgraded by `ActionsNegative`, and the defect is in the one layer this brief
-called working.** The two-capture rule has a genuine asymmetry: a **changed** content hash proves
-motion at *any* interval, while an **unchanged** hash proves nothing below the 75-second floor. The
-floor should therefore gate only the *idle* direction. It gates both:
+**The observe row was re-checked against current source after the Round 21 finding.** The current two-capture implementation compares positive timer or stable-hash motion at tick-monitor/src/lib.rs:564-572 before applying the 75-second floor at :574-577. A changed Working pair is Live; an unchanged short-gap pair is Unproven. The earlier block claiming the floor ran first was a historical description, not current behavior.
 
-```rust
-// crates/tick-monitor/src/lib.rs:541-545  — the early return
-let gap = now.at.saturating_sub(prev.at);
-if gap < MIN_GAP_SECS {
-    return Liveness::Unproven { why: "gap_too_short" };
-}
-// …:552 — the hash comparison it precedes, and therefore prevents
-if b > a || prev.hash != now.hash { Liveness::Live } else { Liveness::Frozen }
-```
+The admission row remains **FENCED**, but the old 162-refusal/4.2-hour number had no retained derivation. It is retained only as a historical failure-shape example; no current refusal-rate figure is claimed in this brief. The transport row likewise records cp-z42vu as a historical incident only; the current repository has no planted fixture or receipt payload for it.
 
-A sub-floor capture pair whose hash **changed** is discarded as `gap_too_short`, so positive
-liveness evidence the system already holds is thrown away. This does not make `observe` broken — it
-never reports motion as stillness, which is the dangerous direction — but it is **lossy in the safe
-direction**, and it means the fleet waits 75 seconds to learn something it could know in 20.
+The completion row is bounded: one raw agent_end frame carried isTerminal=true, while AgentEndEvent.willContinue is a declared upstream field. That is wire evidence for one external frame, not proof of local supervisor consumption or repeatability.
 
-Two things make this worth the space it takes. First, it was found by an agent **disagreeing with
-its own spawn instructions**: the dispatch brief asserted the asymmetry as implemented behaviour,
-`ActionsNegative` read the source, and wrote it up as an open defect instead of repeating it.
-Second, it is the *only* layer this brief marked unqualified `WORKS`, and it did not survive first
-contact with the source. **The five-stage table now has zero unqualified working rows.**
+**The actuate row was corrected 2026-09-01 by the guardian pass, and the correction is worse than the row it replaced.** "DOES NOT EXIST" was true when written and false by the time it was graded: the `kxe` supervisor has been launchd-resident since 2026-08-31 12:21 and dispatches on its own. What the live ledger shows is the actuate layer running **without the claim beat** — 131 sends of one unclaimed bead to one dead pane, each one recorded as a success. A layer that does not exist cannot mis-dispatch; this one did, for four hours, in the product's own log, and no reader noticed until a human asked. The mechanical fix (install the committed claim fence; classify a 402-dead pane as attention, not capacity) is filed as two P0 beads labelled `guardian`. **NO-CLAIM:** the 131 figure is one pid on one machine on one day; it is a failure shape, not a rate.
 *Recorded under R11.*
 
 ---
 
 ## 5. Section map — who owns what
 
-Ten companion section files (01 through 10), disjoint by construction so that parallel authorship cannot collide, plus this brief (00) make **eleven plan files total**. The assembled docs/PLAN.md is built from these; the section files are the source of truth.
 
+Twelve companion section files (01 through 12), disjoint by construction so that parallel authorship cannot collide, plus this brief (00) make **thirteen plan files total**. The assembled docs/PLAN.md is built from these; the section files are the source of truth.
 | file | section | requirement served |
 |---|---|---|
 | `00-brief.md` | **this file** — requirements, measured facts, section map | R11 |
@@ -567,6 +553,8 @@ Ten companion section files (01 through 10), disjoint by construction so that pa
 | `08-end-users.md` | Foreign repos/machines orchestrating their own projects | R9 |
 | `09-milestones.md` | Milestones, done-definitions, plan validation, grading rubric | R1, R3 |
 | `10-prior-art.md` | Mirror mining: what would Jeffrey do, per gap | R7 |
+| `11-lifecycle.md` | Lifecycle evidence map from idea to shipped | R13 |
+| `12-journey.md` | Dispatchable S1–S9 journey runbook | R13, R9 |
 
 ---
 
@@ -707,7 +695,7 @@ artifact diverging from its source, in the document whose subject is derived art
 from their sources.** It is the same shape as the 23-commit supervisor drift in §07 and the
 `.corrupt-` mirror copies — a stale copy that answers questions as though it were current.
 
-R3 is **PARTIAL** here. Closure is a freshness/identity check, not file existence: every one of the eleven plan source files must be covered by the assembled manifest with its path and hash, no source mtime may be newer than docs/PLAN.md, and a reassembly must reproduce the recorded output hash. The measured 132-second drift and absent phrase prove the current artifact fails that predicate.
+R3 is **PARTIAL** here. Closure is a freshness/identity check, not file existence: every one of the thirteen plan source files must be covered by the assembled manifest with its path and hash, no source mtime may be newer than docs/PLAN.md, and a reassembly must reproduce the recorded output hash. The measured 132-second drift and absent phrase prove the current artifact fails that predicate.
 The predicate is the four-way identity check from 07-installability.md applied to a document instead of a binary, and **it is not built**. Until a named gate runs it and emits PASS, “re-assemble after editing” is only a habit; §7.2 measured what habits are worth.
 *Recorded under R11. The assembled artifact must be regenerated before R3 can move from PARTIAL to CLOSED.*
 
@@ -760,7 +748,7 @@ conductor.*
 **This section exists because all four graders independently found its absence, and one of them
 found it structurally.** `%1408` (negative-space lens) made the argument that matters: §2's
 checkability table is the *sole* mechanism by which a requirement becomes answerable, so a question
-never registered as a requirement **can never be discharged by any of the eleven sections**. The
+never registered as a requirement **can never be discharged by any of the thirteen sections**. The
 plan could execute flawlessly and still have no answer. That is a defect in the requirement set,
 not a missing paragraph, and it is filed as **R12** below.
 
@@ -777,31 +765,32 @@ establish a problem worth paying for"* and *"does not say what happens if this w
 
 Every row is OPEN unless marked. None of these had a home in the document before this round.
 
-**Open-question census recipe:** scope is exactly the files selected by docs/plan/[0-9][0-9]-*.md, then filtered to prefixes 01 through 10 (ten companion files; 00-brief.md is intentionally excluded), with case-insensitive matching and no grader artifacts. This exact command counts occurrences per file and prints totals; no result is asserted until it is run against those files:
 
+**Open-question census recipe:** scope is exactly the files selected by docs/plan/[0-9][0-9]-*.md, then filtered to prefixes 01 through 12 (twelve companion files; 00-brief.md is intentionally excluded), with case-insensitive matching and no grader artifacts. This exact command counts occurrences per file and prints totals; no result is asserted until it is run against those files:
     python3 - <<'PY'
     from pathlib import Path
     files = sorted(Path("docs/plan").glob("[0-9][0-9]-*.md"))
-    files = [p for p in files if p.name != "00-brief.md" and 1 <= int(p.name[:2]) <= 10]
+    files = [p for p in files if p.name != "00-brief.md" and 1 <= int(p.name[:2]) <= 12]
     for term in ("security", "secret", "credential", "token", "licens"):
         hits = [(str(p), p.read_text(errors="replace").casefold().count(term)) for p in files]
         print(term, "files", len(files), "occurrences", sum(n for _, n in hits), "by_file", hits)
-    assert [p.name[:2] for p in files] == [f"{n:02d}" for n in range(1, 11)]
+    assert [p.name[:2] for p in files] == [f"{n:02d}" for n in range(1, 13)]
     PY
 
 | # | question | status | owner |
 |---|---|---|---|
-| Q1 | Who pays for this, and what is their current workaround? | **OPEN** — no buyer named anywhere in eleven sections | Josh |
+| Q1 | Who pays for this, and what is their current workaround? | **OPEN** — no buyer named anywhere in thirteen sections | Josh |
 | Q2 | What does the current workaround cost, measurably? | **OPEN** — the only cost figure in the brief is the phrase *"cost real time"* | Josh |
 | Q3 | What is the outcome if this works, in customer terms with a baseline and a target? | **OPEN** — the plan describes mechanism end-to-end and outcome nowhere | Josh |
 | Q4 | How long, and with how many people? | **OPEN** — no timeline, no headcount, in any section | Josh |
 | Q5 | Buy, adopt, or build? What existing tool was evaluated and rejected, and why? | **OPEN** — §10 mines the mirror for *patterns*, never for a *substitute* | orchestrator |
-| Q6 | What happens when OMP changes under us? | **OPEN** — we pin `omp/18.0.11` and have no compatibility policy; 136 slash commands are already unmapped | orchestrator |
-| Q7 | What is the security posture — secrets, tokens, the blast radius of a dispatch? | **OPEN** — no numerical corpus claim is made here; the census recipe below intentionally excludes this brief and scans exactly the ten companion files (01–10), case-insensitively | orchestrator |
-| Q8 | Licensing, for us and for what we vendor? | **OPEN** — no numerical corpus claim is made here; the same ten-file, case-insensitive census recipe below is the source of any future count | Josh |
+| Q6 | What happens when OMP changes under us? | **OPEN** — we pin omp/18.0.11 and have no compatibility policy; the pre-extraction scanner recorded 799 slash-command rows versus expected 136 and remained UNKNOWN | orchestrator |
+| Q7 | What is the security posture — secrets, tokens, the blast radius of a dispatch? | **OPEN** — no numerical corpus claim is made here; the census recipe below scans all twelve companion files (01–12), case-insensitively | orchestrator |
+| Q8 | Licensing, for us and for what we vendor? | **OPEN** — no numerical corpus claim is made here; the same twelve-file, case-insensitive census recipe below is the source of any future count | Josh |
 | Q9 | Is any of this novel, and does novelty matter here? | **ANSWER MOVED** — the completion protocol’s precedent-free claim is REFUTED: AgentEndEvent.willContinue is WIRE-PROVEN on RpcSessionEventFrame via --mode=rpc; the novelty question remains open for the other six DECLARED ONLY types and their adoption path | orchestrator |
 | Q11 | Who owns the composer-typed policy decision — oracle outside the tree, retire the lane, or the rule's first exemption? | **OPEN** — orchestrator owns the decision, but §3.5 records the trilemma without a deadline or decision receipt; %1408 flagged the missing closure twice | orchestrator |
 | Q12 | Who owns the pi_agent_rust tmux-missing defect we inherit if we adopt its two-signal probe? | **OPEN** — orchestrator owns the decision, but the adoption/exception choice and its evidence are not recorded; adopting the pattern adopts the bug | orchestrator |
+| Q13 | Should the `.git/hooks/commit-msg-verification-level.sh` policy be registered, rewritten, or retired? | **OPEN** — the hook decision is not recorded with a chosen option, owner deadline, or durable decision receipt | Josh |
 | Q10 | **What kills this?** | **PARTIAL** — Josh owns the decision; §09 carries technical kill conditions, but no economic criterion or decision receipt is recorded | Josh |
 
 ### 8.3 The kill criteria, stated so they can fire
@@ -829,8 +818,7 @@ That is why this section exists at all, and why it took a lens explicitly assign
 find it. The fix is R12 plus the per-subsection expected-contents list `%1408` proposed, which is
 **not built**.
 
-**NO-CLAIM.** This section registers twelve open questions (ten `OPEN`; Q9 `ANSWER MOVED`; Q10
-`PARTIAL`) and five kill criteria. It **answers none of them**. Registering a question is not
+**NO-CLAIM.** This section registers thirteen questions (eleven OPEN; Q9 ANSWER MOVED; Q10 PARTIAL) and five kill criteria. It **answers none of them**. Registering a question is not
 progress on it; it makes the gap visible and assignable, which is strictly less than knowing the
 answer and strictly more than the previous state, where the question could not be asked from
 inside the requirement set.
@@ -860,11 +848,10 @@ derives it"*, and this section's board counts never did. The history:
 | stand-down snapshot prose | 75 | none |
 | its own four counts | 28+25+19+2 = **74** | none |
 | corrected fresh count | 30+23+23+3 = **79** | none |
-| per-status enumeration, 2026-09-01 | **80** | `board_total` (declared `LIVE` — the board moves hourly, so it is deliberately unpinned) |
+| per-status enumeration, re-derived during this integration | **95** | exact command: for s in closed in_progress open blocked grading; do br list --status "$s" --json | jq -r 'if type == "array" then length elif .issues then (.issues | length) else error("unexpected br JSON shape") end'; done → 61 closed + 21 in_progress + 10 open + 2 blocked + 1 grading |
 
-Four values, none previously re-derivable. The mechanism behind the drift is now
-visible: the fresh count enumerated **four** statuses, and the tracker carries
-**five** — `open` 12, `in_progress` 23, `blocked` 3, `closed` 41, and `grading` 1.
+This 95-row value is a dated integration snapshot, not a pinned constant. `board_total` remains LIVE and must be re-run before quoting it; the 75/74/79/93 values above are historical snapshots.
+
 A status nobody thought to count cannot appear in a hand-summed total, and its
 absence is invisible in exactly the way a missing row always is.
 
