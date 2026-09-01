@@ -97,3 +97,30 @@ note      = "OWNED UPSTREAM. Listed for completeness; we do not define this and 
 # heartbeat.jsonl,
 # tick-ledger.jsonl,
 # omp-build-registration.json
+
+[artifacts.journey_foundation]
+path      = "docs/plan/FOUNDATION.jsonl"
+format    = "jsonl"
+required  = ["schema_version", "stage", "input_refs", "output_refs", "owner", "crates", "gates", "numbers", "known", "unknown", "gaps"]
+optional  = ["evidence", "status"]
+writer    = "journey foundation panes"
+reader    = "plan materializer and stage gates"
+note      = "One row per stage. Every KNOWN has a command/result or a NUMBERS.toml key; every UNKNOWN has an owner, resolving experiment, and cost; every GAP has a cost if left open. No blank epistemic cells."
+
+[artifacts.dispatch_journal]
+path      = "docs/plan/DISPATCH.jsonl"
+format    = "jsonl"
+required  = ["ts", "wave", "bead", "targets", "transport", "claim_id", "receipt", "journal_seq"]
+optional  = ["refusals", "fan_in_verdict"]
+writer    = "S5 dispatch path (unbuilt — the wire is the work, 12-journey S5 F3)"
+reader    = "S6 grading (packet/receipt pair), reap path (silence detection), post-mortems"
+note      = "append-only; declared 2026-09-01 by 12-journey S5 F1. Zero rows today: the stage has not run. The file is created by the first journaled dispatch."
+
+[artifacts.human_decisions]
+path      = "docs/decisions.jsonl"
+format    = "jsonl"
+required  = ["id", "ts", "question", "decider", "decision", "options_considered", "binds_stages", "supersedes", "review_after", "recorded_by"]
+optional  = ["transcript_ref", "promoted_to"]
+writer    = "S9 mechanism (unbuilt — adequate substrate until it exists: bead comments in the same shape)"
+reader    = "dispatch packet builder (binds_stages), AGENTS.md amortization pass, grading pane (unfalsifiable Josh-said refusal)"
+note      = "declared 2026-09-01 by 12-journey S9 F1 — the unanimous #1 gap of the dueling ideation wave. Eleven rulings tonight live only in pane scrollback. Zero rows today; the backfill experiment (12-journey S9 UNKNOWN 1) seeds the first real ones."
