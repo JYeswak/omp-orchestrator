@@ -147,6 +147,23 @@ fn declared_ids(row: &Value) -> Result<Vec<String>, String> {
     Ok(ids)
 }
 
+fn has_explicit_ids(row: &Value) -> bool {
+    row.get("finding_ids")
+        .and_then(Value::as_array)
+        .is_some_and(|ids| {
+            ids.iter()
+                .any(|id| id.as_str().is_some_and(|value| !value.trim().is_empty()))
+        })
+        || row
+            .get("findings")
+            .and_then(Value::as_array)
+            .is_some_and(|findings| {
+                findings
+                    .iter()
+                    .any(|finding| string_field(finding, &["finding_id", "id"]).is_some())
+            })
+}
+
 fn source_rows(repo: &Path) -> Result<Vec<Value>, String> {
     let plan = repo.join("docs/plan");
     let convergence_path = plan.join("CONVERGENCE.jsonl");
@@ -189,15 +206,16 @@ fn source_rows(repo: &Path) -> Result<Vec<Value>, String> {
     Ok(rows)
 }
 
-fn validate_finding_row(row: &Value) -> Result<(String, u64, bool), String> {
+fn validate_finding_row(row: &Value) -> Result<(String, u64, bool, String), String> {
     let id = string_field(row, &["finding_id", "id"])
         .ok_or_else(|| "FINDINGS_ROW_MISSING_ID".to_owned())?;
     let round = row
         .get("round")
         .and_then(Value::as_u64)
         .ok_or_else(|| format!("FINDINGS_ROW_MISSING_ROUND id={id}"))?;
-    let _section = string_field(row, &["section"])
-        .ok_or_else(|| format!("FINDINGS_ROW_MISSING_SECTION id={id}"))?;
+    let section = string_field(row, &["section"])
+        .ok_or_else(|| format!("FINDINGS_ROW_MISSING_SECTION id={id}"))?
+        .to_owned();
     let _summary = string_field(row, &["summary", "finding"])
         .ok_or_else(|| format!("FINDINGS_ROW_MISSING_SUMMARY id={id}"))?;
     let _verified_by = string_field(row, &["verified_by", "graded_by"])
@@ -213,7 +231,7 @@ fn validate_finding_row(row: &Value) -> Result<(String, u64, bool), String> {
         if round < FUTURE_VOID_ROUND || reason.is_empty() {
             return Err(format!("FINDINGS_VOID_INVALID id={id}"));
         }
-        return Ok((id.to_owned(), round, true));
+        return Ok((id.to_owned(), round, true, section));
     }
 
     if !matches!(status.as_str(), "FIXED" | "RETRACTED" | "DEFERRED" | "OPEN") {
@@ -255,7 +273,7 @@ fn validate_finding_row(row: &Value) -> Result<(String, u64, bool), String> {
         }
         _ => {}
     }
-    Ok((id.to_owned(), round, false))
+    Ok((id.to_owned(), round, false, section))
 }
 
 fn validate_serial_rule(
@@ -286,28 +304,35 @@ fn validate_serial_rule(
 fn validate_findings_ledger(repo: &Path) -> Result<GateReport, String> {
     let declared_rows = source_rows(repo)?;
     let mut declared = BTreeMap::<String, DeclaredFinding>::new();
+    let mut count_only = BTreeMap::<(u64, String), usize>::new();
     for row in &declared_rows {
         let round =
             round_field(row).ok_or_else(|| "FINDINGS_SOURCE_ROW_MISSING_ROUND".to_owned())?;
         let section = string_field(row, &["section"])
             .ok_or_else(|| "FINDINGS_SOURCE_ROW_MISSING_SECTION".to_owned())?
             .to_owned();
-        for id in declared_ids(row)? {
-            if declared
-                .insert(
-                    id.clone(),
-                    DeclaredFinding {
-                        round,
-                        section: section.clone(),
-                    },
-                )
-                .is_some()
-            {
-                return Err(format!("FINDINGS_SOURCE_DUPLICATE_ID id={id}"));
+        let ids = declared_ids(row)?;
+        if has_explicit_ids(row) {
+            for id in ids {
+                if declared
+                    .insert(
+                        id.clone(),
+                        DeclaredFinding {
+                            round,
+                            section: section.clone(),
+                        },
+                    )
+                    .is_some()
+                {
+                    return Err(format!("FINDINGS_SOURCE_DUPLICATE_ID id={id}"));
+                }
             }
+        } else {
+            *count_only.entry((round, section)).or_default() += ids.len();
         }
     }
-    if declared.is_empty() {
+    let declared_total = declared.len() + count_only.values().sum::<usize>();
+    if declared_total == 0 {
         return Err("FINDINGS_SOURCE_EMPTY no declared findings".to_owned());
     }
 
@@ -336,16 +361,16 @@ fn validate_findings_ledger(repo: &Path) -> Result<GateReport, String> {
         ));
     }
     let finding_rows = read_jsonl(&findings_path, "FINDINGS_LEDGER")?;
-    let mut actual = BTreeMap::<String, (u64, bool, String)>::new();
+    let mut actual = BTreeMap::<String, (u64, String)>::new();
     let mut serial_rows = Vec::new();
     for row in &finding_rows {
-        let (id, round, is_void) = validate_finding_row(row)?;
+        let (id, round, is_void, section) = validate_finding_row(row)?;
         let status = string_field(row, &["status", "disposition"])
             .unwrap_or("OPEN")
             .to_ascii_uppercase();
         if !is_void
             && actual
-                .insert(id.clone(), (round, false, status.clone()))
+                .insert(id.clone(), (round, section.clone()))
                 .is_some()
         {
             return Err(format!("FINDINGS_LEDGER_DUPLICATE_ID id={id}"));
@@ -354,19 +379,32 @@ fn validate_findings_ledger(repo: &Path) -> Result<GateReport, String> {
     }
 
     for (id, expected) in &declared {
-        let Some((round, is_void, _status)) = actual.get(id) else {
+        let Some((round, _section)) = actual.get(id) else {
             return Err(format!(
                 "FINDINGS_LEDGER_COVERAGE_MISSING id={id} round={} section={}",
                 expected.round, expected.section
             ));
         };
-        if *is_void || *round != expected.round {
+        if *round != expected.round {
             return Err(format!("FINDINGS_LEDGER_COVERAGE_INVALID id={id}"));
+        }
+    }
+    for ((round, section), expected_count) in &count_only {
+        let observed_count = actual
+            .values()
+            .filter(|(actual_round, actual_section)| {
+                actual_round == round && actual_section == section
+            })
+            .count();
+        if observed_count < *expected_count {
+            return Err(format!(
+                "FINDINGS_LEDGER_COVERAGE_MISSING round={round} section={section} expected={expected_count} observed={observed_count}"
+            ));
         }
     }
     validate_serial_rule(&convergence, &serial_rows)?;
     Ok(GateReport {
-        declared: declared.len(),
+        declared: declared_total,
         reconciled: actual.len(),
         void_rows,
     })
