@@ -206,7 +206,7 @@ superseding artifact"* and comments on each affected bead
 down because R11 makes an unwritten requirement a dropped one.
 **Upstream receipt vocabulary**: typed delivery receipts exist in the substrate —
 `IrcDeliveryReceipt` (`dist/types/tools/hub/types.d.ts:8`) and `AsyncJobDeliverySink` /
-`AsyncJobDeliveryState` (`dist/types/extensibility/async.d.ts`) — on the IRC-bus and
+`AsyncJobDeliveryState` (`dist/types/async/job-manager.d.ts:38,52`) — on the IRC-bus and
 background-job planes. This rule STANDS: those are DECLARED types on transports we do not
 ride, not a receipt for `tmux send-keys` or `ntm --robot-send`. What changes is the
 long-term answer: the gap is a transport CHOICE, not an impossibility — a receipt-capable
@@ -225,7 +225,7 @@ proves what the transport reported. Per `cp-z42vu` it proves **nothing** about a
 EmptyPaneList | Missing` (`receiver-receipt/src/lib.rs:24-34`).
 
 **Outputs.** `ReceiptVerdict` = `ReceiptConfirmed | NoReceipt | Dead | Indeterminate` (`:118-139`)
-over 15 named reasons (`:37-71`); the binary maps them to exit codes 0 / 1 / 1 / 2
+over 14 named reasons (`:37-71`; round-12 recount — the earlier "15" was never derived); the binary maps them to exit codes 0 / 1 / 1 / 2
 (`src/bin/receiver-receipt.rs:61-64`).
 
 **Must be true before.** `pre_send.pane_id == pane_id` (`:194-202`). Confirmation is keyed on the
@@ -346,9 +346,11 @@ while the watchdogs reported healthy"* (`omp-orchestrator/src/lib.rs:451-462`, w
 records the fix). **What would Jeffrey do:** `rg -li --type rust -e
 'reap(ed|ing)?_pane|pane_reap|kill-pane' --glob '!target' .` in the mirror — the extension filter is
 sound here only because the subjects are Rust, the hazard A8(b) names — → 7 files, load-bearing
-`frankenterm/crates/frankenterm-core/src/orphan_reaper.rs`, whose module doc refuses: *"A
-command-line match is not proof that FrankenTerm created the process, and a PID can be recycled
-between discovery and signalling"* (`:1-14`), so it ships **inert** rather than unsound. We adopt
+`frankenterm/crates/frankenterm-core/src/orphan_reaper.rs`, whose module doc refuses name-based
+reaping outright — a command-line match is not proof of ownership, and PIDs can be recycled
+between discovery and signalling, so the reaper ships **inert** (allowlisted to proxy processes)
+rather than unsound. **Round-12 retraction: an earlier draft quoted that doc verbatim; the quote
+does not appear in the file and was a fabricated scar — the substance stands as paraphrase.** We adopt
 it: **reap only what you own, keyed on immutable identity, never on a name match**. §10 carries it.
 Upstream answers the same hazard with a reconciler, not a filter — `GuestIdleReconcilerCtx`
 (`dist/types/collab/guest.d.ts`) — and with `AgentEndEvent.willContinue`
@@ -451,10 +453,11 @@ down rather than said.
 `free_capacity` filter defect as current; the cited lines now hold the fix comment. The defect is
 history and the section states it in the present tense.
 
-**A8 and A10 specify completion-by-inference as if no vendor signal existed.** They describe
-inferring completion from pane state because nothing reports it. That premise is refuted:
-`AgentEndEvent.willContinue` (`dist/types/extensibility/shared-events.d.ts:154`) and
-`SessionStopEvent.settle` both exist, on `RpcSessionEventFrame`. Inference remains the *fallback*
+`AgentEndEvent.willContinue` (`dist/types/extensibility/shared-events.d.ts:154`, WIRE-PROVEN) and
+`SessionStopEventResult.continue` (`shared-events.d.ts:325-331`, the actual continuation knob —
+round-12 correction: the earlier fix cited a nonexistent `SessionStopEvent.settle` member, and
+SessionStopEvent's membership in RpcSessionEventFrame is UNVERIFIABLE from the installed types).
+Inference remains the *fallback*
 for panes that are not OMP sessions; it is no longer the *only* mechanism, and A8/A10 should carry
 the typed path as primary.
 
