@@ -63,6 +63,12 @@ Tracked as epic `omp-orchestrator-omp-coverage-mission-ipg`, eleven lifecycle wa
 4. Before building anything: `mcp__socraticode__codebase_search` by meaning, then
    `fh suggest "<the thing>"`. We own 56 crates and a 180-repo mirror.
 
+## Scratch homes
+
+Work that outlives the command that created it belongs in the session-scoped
+`ZS_SCRATCH` path, not `/private/tmp` or `$TMPDIR`. The `scratch-home` crate owns
+the layout and refuses to auto-reap anything without matching owner metadata.
+
 ---
 
 ## Skills to load, and when
