@@ -10,3 +10,6 @@
 {"section":"06-gates","round":8,"lens":"absence","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rA-06-gates.md"}
 {"section":"07-installability","round":8,"lens":"absence","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rA-07-installability.md"}
 {"section":"08-end-users","round":8,"lens":"absence","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rA-08-end-users.md"}
+{"section":"03-crates","round":9,"lens":"investor","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rB-03.md"}
+{"section":"04-diagrams","round":9,"lens":"investor","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rB-04.md"}
+{"section":"05-actions","round":9,"lens":"investor","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rB-05.md"}
