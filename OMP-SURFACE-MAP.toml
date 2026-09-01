@@ -55,7 +55,7 @@ denominator_type_dirs = 57
 denominator_subcommands = 39
 measured_against = "@oh-my-pi/pi-coding-agent v18.0.11"
 measured_on = "2026-08-31"
-crates_declared = 27
+crates_declared = 30
 revision_2_reason = "cross-pane dispatch and delivery receipt reclassified (b)->(a); --mode=rpc proven single-session"
 
 # ── (b) REIMPLEMENTED BY SCRAPING — an OMP alternative EXISTS AND IS REACHABLE ───────────────────
@@ -238,3 +238,20 @@ instead_we = "run one candidate-scoped gate instead of treating a copied crate o
 classification = "a"
 omp_surface = "none"
 why = "regenerates docs/PLAN.md from its section files; OMP has no opinion about how we assemble our own documentation. Exists because the prior assembler was 3,297 bytes of Python in /tmp while assembly_freshness demanded the 651 KB artifact be current — a gate whose remedy did not exist. Ported to Rust because the repo forbids .py, and accepted on byte-identical output (sha 56881bf3c2cd3958)."
+
+# ── Extraction status (2026-09-01) ───────────────────────────────────────────────────────────────
+# These crates are cross-pane observers. OMP v18.0.11 exposes no reachable alternative for them.
+
+[crates.fleet-truth]
+classification = "a"
+omp_surface = "none reachable for CROSS-PANE ground truth"
+why = "The register reconciles tmux, ntm, and process evidence across panes we do not own; --mode=rpc is single-session."
+instead_we = "maintain a typed fleet observation register with independent tmux truth"
+negative_evidence = "ntm can report a stale empty fleet while tmux still shows live panes; an OMP single-session query cannot arbitrate that projection drift."
+
+[crates.oracle-pane-state-differential]
+classification = "a"
+omp_surface = "none reachable for CROSS-PANE oracle comparison"
+why = "The differential compares tmux pane_state against ntm fleet state; OMP cannot address either external fleet projection through --mode=rpc."
+instead_we = "compare the two independent projections and fail closed on disagreement or empty oracle data"
+negative_evidence = "a successful but stale ntm snapshot is not evidence of an empty fleet; the independent tmux census is required."
