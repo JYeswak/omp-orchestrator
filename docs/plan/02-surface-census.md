@@ -795,3 +795,63 @@ same rows read `RETIRE` and the census claimed to know something it did not.
 finding is that the second class needs its own sweep — the reclassification caught the 54 it could
 identify, not necessarily all of them. No count exists yet for how many of the 407 rest on inherited
 scanner classification. That sweep is unrun and unowned.
+
+---
+
+## 11. `UNPROBEABLE-PENDING` became the new shrug within one wave
+
+Josh: *"why are they unprobeable, lets test this on pane 0."*
+
+Tested. **They are not unprobeable.** Measured:
+
+```
+dist/types/cli/       54 files   352 KB   ->  359 exported symbols
+dist/types/session/   78 files   564 KB   ->  acp-permission-gate.d.ts,
+                                              agent-session-events.d.ts,
+                                              artifacts.d.ts, …
+dist/types/commands/  42 files   176 KB
+dist/types/jsonrpc/    1 file      4 KB
+```
+
+Of the 63 rows reclassified in §10, **54 are `type_root` and every one is a directory of TypeScript
+declarations that can be read right now.** `type_root:cli` exports **359 symbols**.
+
+### 11.1 The category error
+
+The re-probe rule said *"run the surface read-only."* For a `subcommand` that means invoking it. For
+a **type surface** it means **reading the declarations** — and nobody tried, because the rule was
+written with CLI verbs in mind and the type rows inherited a probe shape that does not fit them.
+
+**"Cannot be invoked" was read as "cannot be probed."** Those are different, and the map recorded
+the second while only the first was true.
+
+So the sequence across three waves is:
+
+| wave | classification | what it actually meant |
+|---|---|---|
+| 1 | `RETIRE` | nobody looked |
+| 2 | `RETIRE` + probe rule | nobody looked *at CLI verbs* |
+| 3 | `UNPROBEABLE-PENDING` | nobody looked *with the right instrument* |
+
+Each correction was real and each left a residue in the same shape. The failure is not the
+classification, it is that **every wave defined "probe" as the instrument that happened to be in
+hand**, and a surface unreachable by that instrument was recorded as unreachable in principle.
+
+### 11.2 The per-kind probe, which should have been specified in wave 1
+
+| kind | the probe |
+|---|---|
+| `subcommand` | invoke `<tool> <sub> --help` read-only; *unknown command* is a positive null |
+| `type_root` | list `dist/types/<root>/`, count files, extract exported symbols |
+| `rpc_handler` | locate the handler in `dist/`, name what it accepts and returns |
+| `omp_method` | probe against a live session, and **name which broker answered** |
+| `declaration` | read the `.d.ts` at the top level |
+
+Only the first row was ever written down. Four kinds were probed with a verb-shaped instrument, or
+not at all, and then classified on the result.
+
+**NO-CLAIM.** This establishes the 54 `type_root` rows are readable and therefore mis-classified. It
+does **not** re-classify them — reading a directory proves a probe exists, not what the disposition
+should be. The 3 `omp_method` rows remain genuinely pending on the six-mux ambiguity, and the 6
+`subcommand` rows were withdrawn by their author for thin reasoning, which is a different defect
+again. Only 54 of the 63 are refuted here.

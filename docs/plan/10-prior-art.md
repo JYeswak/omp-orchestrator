@@ -507,3 +507,76 @@ mechanisms, and the second-hand Gap 6, Gap 8 and Gap 9 citations were re-opened 
 one has re-derived these
 searches independently of this author, which on this session's record is precisely the condition under
 which a false absence survives.
+
+---
+
+## Gap 7 is REFUTED — the completion signal ships in the tool we wrap
+
+This section's headline result was that a typed worker→supervisor completion signal is
+**precedent-free across 210 mirror work-trees** — `SupervisionEvent` has 8 variants, `StopReason`
+has 6, and none of the 14 means *"the worker finished."* That was stated as the single most
+consequential finding in the plan, and as the strongest argument the gap was real.
+
+**It is wrong, and it is wrong for the reason this document keeps recording: the search space
+excluded the obvious place.** `%1408`, probing `type_root:extensibility` with the per-kind
+instrument, found:
+
+```typescript
+// dist/types/extensibility/shared-events.d.ts:154
+export interface AgentEndEvent {
+    type: "agent_end";
+    messages: AgentMessage[];
+    /**
+     * When true, the session has already scheduled an automatic continuation
+     * (auto-retry, empty/unexpected-stop retry, etc.). Subscribers must not
+     * treat this as a user-visible terminal settle.
+     */
+    willContinue?: boolean;
+}
+```
+
+That is a **typed worker-completion event**, and it is better than the one we would have designed.
+`willContinue` distinguishes *"terminal settle"* from *"a continuation is already scheduled"* —
+which is precisely the `NewlyIdle` versus `ConfirmedIdle` distinction §00 §4 records as broken in
+our own `idle_panes` filter. The tool we wrap solved our hardest problem and typed the edge case we
+have not yet handled.
+
+### The receipt gap is a design choice, not an impossibility
+
+Same pass, same instrument:
+
+```
+dist/types/tools/hub/types.d.ts:8    import type { IrcDeliveryReceipt }
+dist/types/tools/hub/types.d.ts:84   receipts?: IrcDeliveryReceipt[]
+```
+
+`cp-z42vu` — transport reporting `success:[N]` with no packet delivered — is recorded throughout
+this plan as a missing receipt *type*. The type exists. As `%1408` put it: **"the receipt and
+cross-session mechanisms EXIST in the substrate on planes we do not ride; the receipt gap is a
+design choice, not an impossibility."**
+
+### And `muxPing` was never broken
+
+`%1414`, Task A: **six mux workers, all with live broker parents, stable pong on all 18 correct
+socket probes.** The null that retired `omp/muxPing` was an **endpoint/protocol mismatch**, not
+evidence about the surface and not explained by the mux count either. Third instance in one wave of
+*the probe was wrong, not the surface*.
+
+### Why the mirror search missed it
+
+Gap 7 searched **210 mirror work-trees** for prior art and never searched **the binary we depend
+on**. The search was real, the command was recorded, the result was honest — and the space was
+chosen to exclude the single most likely location. That is the fourth distinct false-zero mechanism
+this session, and the most expensive: it declared our largest architectural gap unprecedented while
+the precedent shipped in the tool named on line one of the plan.
+
+**What survives.** The mirror finding stands as stated — *Jeffrey's repos* contain no typed
+completion protocol, and that remains true and interesting. What does not survive is the
+**conclusion** drawn from it: that we would be building without precedent. We would be **adopting**,
+from OMP, on a plane we do not currently ride.
+
+**NO-CLAIM.** `AgentEndEvent` exists as a declared type in the installed `dist/types`. It is
+**not established** that it reaches the `--mode=rpc` frame plane, which is the only place our
+orchestrator could consume it — `%1408` specified the test (one live-session frame capture) and it
+is **unrun**. Until it runs, this refutes *"no precedent exists"* and does **not** establish *"we
+can consume it today."* Those are different claims and only the first is measured.
