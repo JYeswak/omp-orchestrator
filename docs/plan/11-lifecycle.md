@@ -83,6 +83,11 @@ refuses on a missing required variable.
 beat — and `target` is a required variable pairing the path *with the bead ID*, which is where a
 claim check belongs. And the `omp-coverage-mission-ipg.4` packet was sent without the claim written
 first, for the same reason.
+UPSTREAM VOCABULARY NOTE: OMP declares its own claim family — `Stage1Claim`/`GlobalClaim` with
+
+`ownershipToken`/`inputWatermark` (memories/storage.d.ts:20-27) — but that is memory-claim domain,
+not bead custody; it does not transfer. The claim wire for S5 remains `ntm claim` plus
+`dispatch-claim-fence` (L1/L2 above).
 
 That is the sharpest instance of `BUILT ≠ WIRED` in the lifecycle: not a mechanism nobody built,
 but **a mechanism already built, already correct, and never invoked by the person who most needed
@@ -138,6 +143,8 @@ graph disagreed: the top-3 PageRank items sat unclaimed.
 that this is precedent-free across 210 mirror work-trees — **since REFUTED: OMP itself ships `AgentEndEvent`; the mirror search never searched the binary we wrap**. Original text: — `SupervisionEvent` has 8 variants and
 `StopReason` 6, and not one of the 14 means *"the worker finished."* Every completion tonight was
 found by a human looking.
+OMP independently declares `GuestIdleReconcilerCtx` with the same settle-vs-continuation split
+(DECLARED only) — two tools, one distinction, and ours is the one with the measured defect.
 
 **S8, grade, has no template and no type.** Grading produced four long prose documents this
 session. `omp-types` exists to fix exactly this and has **zero dependents**, and the half of the
@@ -153,7 +160,7 @@ is not merely unadopted — it is unreachable at our pinned rev.
 |---|---|---|
 | L1 | every dispatch goes through the `dispatch` template, not a hand-rolled file | **not adopted** — template exists, unused |
 | L2 | selection calls the graph | **not wired** — zero `bv` invocations in the workspace |
-| L3 | a worker can signal completion in a typed way | **precedent-free**; the largest gap in the plan |
+| L3 | a worker can signal completion in a typed way | **WIRE-PROVEN adoptable** — `AgentEndEvent` crosses `--mode=rpc` as `{"type":"agent_end","isTerminal":true}`; the largest gap became the largest adoption |
 | L4 | a grade is a value, not a document | **blocked upstream** at the feature boundary |
 | L5 | reap runs before refill, mechanically | **hand-run once**; `reap-finished-panes` exists uncalled |
 | L6 | every stage writes a durable record | **3 of 9 stages log anything** |
@@ -241,7 +248,7 @@ nothing composes them.** Found via `jsm search`:
 | S2.5 loop | `loop-engineering` | **partly** — tick-loop with a verified-value bar |
 | S3 bead | `beads-workflow`, `beads-north-star`, `beads-br` | **yes** — `br` schema, typed close policy |
 | S4 select | `beads-bv` | **yes** — PageRank over a typed DAG |
-| S5 dispatch | `ntm`, `vibing-with-ntm` | **partly** — `--robot-*` JSON, no receipt type |
+| S5 dispatch | `ntm`, `vibing-with-ntm` | **partly** — `--robot-*` JSON; no receipt type consumed (upstream declares `IrcDeliveryReceipt`, tools/hub/types.d.ts:8 — DECLARED only) |
 | S6 work | `vibing-with-ntm` | **no** |
 | S7 reap | `vibing-with-ntm` | **no** |
 | S8 grade | `beads-compliance-and-completion-verification` | **no** — prose verdicts |
@@ -259,10 +266,13 @@ in this plan:
 
 - **S8 has no grade type**, so grading produces four-page documents. §03 measured the cause:
   **6 Verdict-shaped types with no shared trait**, so a grade cannot be a value, only an essay.
-- **S5 has no receipt type**, so `success:[N]` from the transport was read as delivery (`cp-z42vu`)
-  and a packet vanished.
-- **S7 has no completion type**, and §10 Gap 7 found that gap is **precedent-free across 210 mirror
-  work-trees** — 14 supervision variants, none meaning *"the worker finished."*
+- **S5 consumes no receipt type** — upstream declares one (`IrcDeliveryReceipt`,
+  `tools/hub/types.d.ts:8`; `AsyncJobDeliverySink`, `:84`; DECLARED only, never wire-proven) — so
+  `success:[N]` from the transport was read as delivery (`cp-z42vu`) and a packet vanished.
+- **S7's completion gap** was filed as precedent-free across 210 mirror work-trees — 14
+  supervision variants, none meaning *"the worker finished"* — and **REFUTED**: `AgentEndEvent`
+  ships in OMP itself (`extensibility/shared-events.d.ts:154`) and crosses the wire (S6→S7 above).
+  The residue is the adoption work, not an absence.
 
 ### The composition nobody wrote
 

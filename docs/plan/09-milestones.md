@@ -79,6 +79,11 @@ the ack dialects is not merely unadopted but **blocked upstream**: `AckKind` and
 "messaging-fabric")]`, which needs `test-internals`, which upstream issue #46 removed from defaults, and `ObligationLedger` occurs zero
 times. **NO-CLAIM.** M1 makes one defect class a compile error; a shared type with a wrong predicate is wrong in both crates.
 
+**UPSTREAM CORROBORATION, declared only.** OMP declares `GuestIdleReconcilerCtx`
+(dist/types/session family) with a settle-vs-continuation split — the same two-tier idle design
+as `NewlyIdle`/`ConfirmedIdle`, arrived at independently. DECLARED only: no wire probe has carried
+it; M1's measured three-predicate seam and the RISK above stand unchanged.
+
 ### M2 — Selection will run through the graph kernel instead of queue recency
 
 **OBSERVABLE.** A harness grep for `Command::new\("bv"\)` over `crates` (no extension filter — PV7) returns a hit outside `tests/`, plus
@@ -115,6 +120,11 @@ the inverse fired the same session.
 (`crates/receiver-receipt/src/bin/receiver-receipt.rs:19`), and reading a rendering is not a protocol. `ntm --robot-send` already
 refuses codex panes with *"cod composer not visible"* (`cp-nq2s9`, `README.md:152`) — a screen-state guard misreporting as a delivery
 error, a class a rendering-based ack inherits. **NO-CLAIM.** An ack proves *arrival*, not that the agent read or accepted it.
+**UPSTREAM TYPE, at its true strength.** OMP declares a typed receipt family — `IrcDeliveryReceipt`
+(`tools/hub/types.d.ts:8`) and `AsyncJobDeliverySink` (`:84`). This is **DECLARED only**: no wire
+probe has carried one, so it does not close M3; it means the receipt shape we would adopt already
+has an upstream vocabulary, and cp-z42vu stands as the measured reason M3's planted-known-bad
+observable is unchanged.
 
 ### M4 — Completion will be detected by the loop, not by a human looking
 

@@ -32,7 +32,10 @@ const GAPS: &[(&str, &str, &[&str])] = &[
 /// prevent, committed by its author minutes after writing it.
 ///
 /// Ratchet DOWN only. Raising it requires a measurement in the same commit.
-const BASELINE: usize = 13;
+/// 13 (written) -> 6: SilverWolf (%1409) cleared all five pairs in 09-milestones.md and
+/// 11-lifecycle.md (receipts/idle/claims named their upstream types at true strength),
+/// MEASURED_BY_THIS_DETECTOR=6 at commit time; remaining six pairs are 00/01/05 (other panes).
+const BASELINE: usize = 6;
 
 fn plan_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
