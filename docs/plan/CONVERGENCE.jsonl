@@ -22,3 +22,6 @@
 {"section":"09-milestones","round":9,"lens":"absence","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rB-09-milestones.md"}
 {"section":"10-prior-art","round":9,"lens":"absence","new_findings":1,"verdict":"FAIL","evidence":"/tmp/grade/rB-10-prior-art.md"}
 {"section":"11-lifecycle","round":9,"lens":"absence","new_findings":1,"verdict":"FAIL","evidence":"/tmp/grade/rB-11-lifecycle.md"}
+{"section":"06-gates","round":10,"lens":"investor","role":"capability","new_findings":4,"verdict":"FAIL","evidence":"/tmp/grade/r10-06-gates.md"}
+{"section":"07-installability","round":10,"lens":"investor","role":"hillclimb","new_findings":8,"verdict":"FAIL","evidence":"/tmp/grade/r10-07-installability.md"}
+{"section":"08-end-users","round":10,"lens":"investor","role":"hillclimb","new_findings":5,"verdict":"FAIL","evidence":"/tmp/grade/r10-08-end-users.md"}
