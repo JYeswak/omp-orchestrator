@@ -53,6 +53,12 @@ const PRESERVED: &[(&str, &str, &str)] = &[
         "04-diagrams.md — the 16:50 capture the diagrams are actually built from",
     ),
     (
+        "agent-end-raw-frame.json.gz",
+        "d8bd80c6949b2ec4",
+        "01-idea.md — the ONLY wire proof in the entire plan. Everything else in that \
+         table is DECLARED ONLY. It lived in /tmp until 2026-09-01",
+    ),
+    (
         "omp-inventory-map-2026-08-31.json.gz",
         "876809f0779a81b3",
         "00-brief.md §3.2 — the 23:01 capture, 981 census rows",

@@ -96,7 +96,7 @@ The upstream sweep changes the strength of the absence claims without pretending
 
 | gap | upstream type and source | true strength | effect on the idea
 |---|---|---|
-| completion | AgentEndEvent.willContinue + SessionStopEvent (extensibility/shared-events.d.ts:83-93,154-162), on RpcSessionEventFrame (modes/rpc/rpc-types.d.ts:589) | **WIRE-PROVEN for one observed frame only** — exact raw receipt at /tmp/grade/agent-end-raw-frame.json; capture command /Users/josh/.local/bin/omp --mode=rpc --no-session --no-tools --no-lsp --max-time=30; artifact mtime/retrieval observed 2026-08-31T19:52:26-0600; SHA-256 d8bd80c6949b2ec48af1639b5b5e241bd90b4dce1e769483dd1690ed2be8f644 | the frame's session-specific isTerminal=true was observed; shared willContinue was absent; repeatability, semantic fit, and supervisor consumption remain UNKNOWN
+| completion | **`isTerminal` on RpcSessionEventFrame** (modes/rpc/rpc-types.d.ts:589) is what was OBSERVED. `AgentEndEvent.willContinue` and `SessionStopEvent` (extensibility/shared-events.d.ts:83-93,154-162) are DECLARED ONLY — see §1.2.3 | **WIRE-PROVEN for one observed frame, and for `isTerminal` only** — exact raw receipt at /tmp/grade/agent-end-raw-frame.json; capture command /Users/josh/.local/bin/omp --mode=rpc --no-session --no-tools --no-lsp --max-time=30; artifact mtime/retrieval observed 2026-08-31T19:52:26-0600; SHA-256 d8bd80c6949b2ec48af1639b5b5e241bd90b4dce1e769483dd1690ed2be8f644 | the frame's session-specific isTerminal=true was observed; shared willContinue was absent; repeatability, semantic fit, and supervisor consumption remain UNKNOWN
 | receipts | IrcDeliveryReceipt + AsyncJobDeliverySink (tools/hub/types.d.ts:8,84) | DECLARED ONLY — no wire path measured | the cp-z42vu transport/receipt gap remains; type existence does not replace receiver proof
 | claims | Stage1Claim / GlobalClaim with ownershipToken + inputWatermark (memories/storage.d.ts:20-27) | DECLARED ONLY — no wire path measured | local claim/ownership gap remains until reachability and semantics are proven
 | idle | GuestIdleReconcilerCtx (dist/types/collab/guest.d.ts:9-30) | DECLARED ONLY — no wire path measured | the local NewlyIdle/ConfirmedIdle defect remains; the upstream split is corroboration, not a fix
@@ -509,3 +509,62 @@ conversation:
 **NO-CLAIM:** nothing here commits to a schedule, a cost, or an architecture validated by execution.
 This section establishes a scoped hypothesis, local observations, dependency-contract floor, risks, and
 explicit discovery gates. It does not imply product viability, PILOT, or BUILD.
+
+---
+
+## 1.2.3 BLOCKER resolution — the row was named after a field the frame does not contain
+
+`GradeIdea` filed:
+
+> Section 1.2.1 claims the completion gap is "WIRE-PROVEN" in the table but then
+> immediately walks back the claim in the NO-CLAIM subsection. The claim's strength is
+> undefined until both subsections are read in sequence, and they contradict each
+> other's headline.
+
+Half right, and measurement found the sharper problem underneath.
+
+### The citation is honest; the row LABEL was not
+
+The artifact is real and checkable — that part of the section is in good order:
+
+| | |
+|---|---|
+| path | `/tmp/grade/agent-end-raw-frame.json`, 4,772 bytes |
+| cited SHA-256 | `d8bd80c6949b2ec4…` |
+| **re-derived 2026-09-01** | `d8bd80c6949b2ec4…` — **exact match** |
+
+But the frame's top-level keys are `['type', 'messages', 'isTerminal']`.
+**`willContinue` does not appear in it at all.**
+
+So the row was titled `AgentEndEvent.willContinue + SessionStopEvent` and marked
+`WIRE-PROVEN`, while what the wire actually produced was **`isTerminal`**. The effect
+column already said *"shared `willContinue` was absent"* — so the section knew, and the
+label contradicted the section's own evidence one column to its left.
+
+That is worse than the contradiction the grader described. A reader skimming the table
+takes away "`willContinue` is wire-proven", which is exactly false, and the correction
+sits in prose they may not reach.
+
+**Corrected:** the row now names `isTerminal` as the observed field and moves
+`willContinue` and `SessionStopEvent` to DECLARED ONLY, where the other six gaps
+already sit.
+
+### The plan's only wire proof was living in /tmp
+
+Every other row in that table is DECLARED ONLY. This one frame is **the sole
+wire-level evidence in the entire plan**, and it sat in `/tmp/grade/` — clearable on
+reboot, after which the strongest evidence claim in the document would have been
+uncheckable by anyone including its author.
+
+Preserved at `.flywheel/inventory-artifacts/agent-end-raw-frame.json.gz` (4,772 → 1,985
+bytes) and added to the `artifact_provenance` gate, which decompresses and re-hashes it.
+Same defect class as §4.7's diagrams, and sharper here because of what the single
+artifact carries.
+
+### NO-CLAIM, unchanged and still binding
+
+One frame is not repeatability. `isTerminal` being observed does not establish that it
+is semantically equivalent to `willContinue=false`, that a supervisor consumes it, or
+that it survives crashes, killed panes, rate limits or compaction. Section 10 already
+records the cost of overreading this surface: it claimed a worker-completion signal was
+precedent-free across 210 repositories while `AgentEndEvent` shipped in the dependency.
