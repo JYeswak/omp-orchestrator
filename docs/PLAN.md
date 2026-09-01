@@ -151,7 +151,7 @@ resolve. An investor reading R1 hits "bead dag" in the first sentence.
 | **anti-vacuity** | the rule that an empty scan set is an ERROR, never a pass |
 | **BUILT ≠ WIRED** | a mechanism that exists, is correct, tested — and is invoked by nothing |
 | **GHOST** | an installed binary whose source is not in the tree we read. **Historical unverified count: four; the instance list, source-tree result, comparison command, and date were not retained, so this is non-authoritative.** |
-| **OMP** | Oh My Pi, the agent CLI this orchestrator wraps; `omp/18.0.11` |
+| **OMP** | Oh My Pi, the agent CLI this orchestrator wraps; current host recheck: `omp/18.1.2` (the retained scanner snapshots target `omp/18.0.11`) |
 | **`br` / `bv`** | the bead tracker CLI, and its graph-triage companion |
 | **`ntm`** | the tmux fleet manager that owns sessions and panes |
 | **`fh`** | franken-harvest, the queryable index over measured doctrine and the mirror |
@@ -200,7 +200,7 @@ session. Sections must use these figures and must not re-derive them differently
 
 | binary | version | path |
 |---|---|---|
-| `omp` | `omp/18.0.11` | `/Users/josh/.local/bin/omp` |
+| `omp` | `omp/18.1.2` (host recheck; scanner snapshots remain `omp/18.0.11`) | `/Users/josh/.local/bin/omp` |
 | `ntm` | `ntm version v1.30.0-1-gda270719` | `/Users/josh/.local/bin/ntm` |
 | `br` | `br 0.4.1` | `/Users/josh/.local/bin/br` |
 | `bv` | `bv v0.20.0` | `/opt/homebrew/bin/bv` |
@@ -834,7 +834,7 @@ Every row is OPEN unless marked. None of these had a home in the document before
 | Q3 | What is the outcome if this works, in customer terms with a baseline and a target? | **OPEN** — the plan describes mechanism end-to-end and outcome nowhere | Josh |
 | Q4 | How long, and with how many people? | **OPEN** — no timeline, no headcount, in any section | Josh |
 | Q5 | Buy, adopt, or build? What existing tool was evaluated and rejected, and why? | **OPEN** — §10 mines the mirror for *patterns*, never for a *substitute* | orchestrator |
-| Q6 | What happens when OMP changes under us? | **OPEN** — we pin omp/18.0.11 and have no compatibility policy; the pre-extraction scanner recorded 799 slash-command rows versus expected 136 and remained UNKNOWN | orchestrator |
+| Q6 | What happens when OMP changes under us? | **OPEN** — the host now reports `omp/18.1.2`; the retained scanner snapshots target `omp/18.0.11`, and no compatibility policy governs upgrades. The pre-extraction scanner's 799-versus-136 slash-command mismatch remains historical. | orchestrator |
 | Q7 | What is the security posture — secrets, tokens, the blast radius of a dispatch? | **OPEN** — no numerical corpus claim is made here; the census recipe below scans all twelve companion files (01–12), case-insensitively | orchestrator |
 | Q8 | Licensing, for us and for what we vendor? | **OPEN** — no numerical corpus claim is made here; the same twelve-file, case-insensitive census recipe below is the source of any future count | Josh |
 | Q9 | Is any of this novel, and does novelty matter here? | **ANSWER MOVED** — the completion protocol’s precedent-free claim is REFUTED: AgentEndEvent.willContinue is WIRE-PROVEN on RpcSessionEventFrame via --mode=rpc; the novelty question remains open for the other six DECLARED ONLY types and their adoption path | orchestrator |
@@ -1525,6 +1525,7 @@ not earn a verdict. A timeout is not a verdict; neither is an empty probe.
 
 ### 2. The coverage headline
 
+**Tooling warning.** This host's `grep` is a regex engine: metacharacters can produce false zeros unless escaped. Re-run with literal-safe tools or escaped patterns; on this map, `grep -c '^{' docs/plan/SURFACE-MAP.jsonl` returns 0 while an escaped brace returns 614. The same warning applies to parentheses and braces in every census query.
 `MEASURED` — `python3 -c "import json,collections; print(collections.Counter(r['classification'] for r in json.load(open('/tmp/inv.txt'))['data']['rows']))"`
 
 ```
@@ -1565,17 +1566,7 @@ wires named handlers, but this document makes no forecast of a target percentage
 because a coverage target would immediately become a metric to game: wiring a
 handler nobody calls raises the ratio and lowers the truth.
 
-There is a structural reason for the ratio, and it is recorded in the brief's
-five-stage control loop (formerly "five-stage" — renamed, the table has five stages and seven rows) table rather than discovered here: of the five layers
-(observe / actionable / consume / actuate / complete), exactly one — `observe`,
-via `tick-monitor` — is `MEASURED` as WORKS. `actuate` **does not exist**; a human
-types into panes. A project whose actuation layer does not exist cannot consume an
-actuation surface, so the 157 `CAPABILITY_NOT_USED` rows are not 157 independent
-oversights. They are largely one missing layer, counted 157 times. That reframing
-makes the number smaller *and* the fix harder: it is one hard thing, not 157 easy
-ones. `NO-CLAIM:` this attributes the ratio to the missing actuation layer as an
-explanation, not as a measurement — no experiment here isolates how many of the
-157 rows would flip once actuation exists.
+There is a structural reason for the historical ratio, and it is recorded in the brief's five-stage control loop table rather than discovered here: the retained scanner snapshot predates the current actuator. The current source contains `send_and_verify` at `crates/omp-orchestrator/src/main.rs:714` and its tick call at `:1461`, but transport and receiver receipts remain unverified. The 157 `CAPABILITY_NOT_USED` rows therefore remain historical classifications, not a current proof that actuation is absent.
 
 ### 3. The surface, enumerated by kind
 
@@ -2676,25 +2667,12 @@ output verdict."* That is the repo's hardest-won rule, **a timeout is not a verd
 as a type instead of remembered separately in every call site. Anything that spawns should route
 through it precisely so that rule cannot be re-litigated per crate.
 
-**MEASURED: 22 of 26 crates do not route through it.** Four depend on it. Independently measured
-across 29 raw spawn sites, 4 crates use `subprocess-contract` and 12 of 14 async fns take `cx`
-first. The gap is not an abstraction preference — it means at least 25 spawn sites can still leak a
-process group, deadlock on an undrained pipe, or convert a timeout into a fabricated verdict, and
-the only thing standing between us and that is `undrained-pipe-lint`, which catches one of the
-three failure modes by pattern-matching source text.
+**HISTORICAL PROCESS-CONTRACT SNAPSHOT.** The 22-of-26, four-dependent, 29-spawn-site, and 12-of-14 async-function figures below belong to the pre-extraction graph. They are retained to explain the risk, not as current denominators.
 
-**What Jeffrey would do.** Searched the mirror at `/Volumes/ZestData/dicklesworthstone-mirror` for
-this exact shape; `asupersync` itself is the prior art and it is already our dependency —
-`process::Command` with `ProcessGroupMode`, `ProcessSignalTarget` and `output_async` exists
-upstream precisely so a caller never hand-rolls the group/drain pair. The correct move is not to
-invent a wrapper policy but to make the existing wrapper the only reachable door.
+**CURRENT GATE STATE.** `crates/no-shell-gate/tests/spawn_contract.rs` now exists as the source-aware conformance gate for spawns outside `subprocess-contract`. Current dependency and spawn counts are owned by the registry and must be re-derived there; no current 22/26 claim is made.
+**What Jeffrey would do.** Searched the mirror at `/Volumes/ZestData/dicklesworthstone-mirror` for this exact shape; `asupersync` itself is the prior art and is already our dependency. `process::Command` with `ProcessGroupMode`, `ProcessSignalTarget`, and `output_async` exists upstream so callers do not hand-roll the group/drain pair. The correct move remains to make the existing wrapper the only reachable door.
 
-**PROJECTED.** A gate that fails any crate constructing `std::process::Command` or
-`asupersync::process::Command` outside `subprocess-contract` raises the floor: the 22 crates that
-currently *may* hand-roll a spawn would have to be edited deliberately, in the open, to do so. It
-does not guarantee correct spawning — a crate could route through `subprocess-contract` and still
-mishandle the result — it removes accidental divergence, which is the failure mode we measured.
-That gate does not exist today.
+**PROJECTED.** A gate that fails any crate constructing `std::process::Command` or `asupersync::process::Command` outside `subprocess-contract` raises the floor. It does not guarantee correct spawning after routing; it removes accidental divergence. The source-aware gate now exists, while its current invocation and coverage remain registry-owned.
 
 ---
 
@@ -2975,6 +2953,7 @@ the first wave is 14-wide parallel with no ordering constraint between its membe
 `verify-dispatch` 1291 · `pane-truth` 1247 · `reap-finished-panes` 1189 · `loop-coverage` 926 ·
 `dispatcher-deadman` 883 · `oracle-compare` 561
 
+The historical plan asked that `omp-orchestrator-815` become an epic with 20 children plus a contract bead. **CURRENT TRACKER RECHECK:** parent 815 is still `open`; its 21 child records are `tombstone`, not active completed children. The proposed decomposition is therefore not a current completion proof; the extraction landing and readback remain separate work.
 **WAVE 2 — one hop, blocked on a wave-1 member**
 
 | crate | LOC | blocked on |

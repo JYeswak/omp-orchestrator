@@ -62,7 +62,7 @@ note     = "13 numbered plan sections are in docs/plan/00 through 12; convergenc
 [figures.test_files]
 
 command  = "find crates -type f -path '*/tests/*.rs' | wc -l"
-expect   = "92"
+expect   = "93"
 note     = "Recursive source-file count; the prior top-level glob undercounted nested fixture tests and is historical."
 [figures.board_total]
 command  = "for s in closed in_progress open blocked grading; do br list --status $s --json | jq '.issues | length'; done | awk '{s += $1} END {print s}'"
@@ -73,14 +73,14 @@ note     = "not a fixed figure — the board moves hourly. Declared so any prose
 [figures.test_functions]
 command  = "grep -RhoF '#[test]' crates --include='*.rs' | wc -l"
 note     = "Recursive annotation count across all Rust sources; current re-derived value is 987; earlier 962/983/984 values are dated snapshots."
-expect   = "987"
+expect   = "998"
 appears  = ["docs/plan/01-idea.md", "docs/plan/06-gates.md", "docs/plan/00-brief.md"]
 
 [figures.no_claim_blocks]
 command  = "grep -rc '^\\*\\*NO-CLAIM' docs/plan/*.md 2>/dev/null | awk -F: '{s+=$2} END{print s}'"
-expect   = "48"
+expect   = "49"
 appears  = ["docs/PLAN.md"]
-note     = "the header quantifies the plan's own hedging; it is generated at assembly but never checked against the sections after they are edited."
+note     = "the header quantifies the plan's own hedging; it is generated at assembly but never checked against the sections after they are edited. 48 -> 49 on 2026-09-01: the HD-0005 rule in CONVERGENCE.md added one NO-CLAIM block (command re-run by RubyCreek, output 49); the gate caught it on the next full suite, which is the registry doing its job."
 
 [figures.surface_engaged_pct]
 command  = "python3 -c \"import json;r=[json.loads(l) for l in open('docs/plan/SURFACE-MAP.jsonl') if l.strip()];e=sum(1 for x in r if x.get('disposition') in ('CONSUMED','WIRE','VALIDATE'));print(f'{100*e/len(r):.1f}')\""
