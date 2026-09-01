@@ -280,6 +280,25 @@ pub struct GateCensusRow {
 pub struct GateCensus {
     pub rows: Vec<GateCensusRow>,
 }
+/// Crates emitted by the eleven OMP coverage waves and watched by the
+/// supervisor. This list is intentionally explicit: a new wave output must
+/// add a census row before it can be treated as wired.
+///
+/// The census row is a trigger-presence check, not an implementation oracle.
+/// Wave-specific correctness remains each crate's own responsibility.
+pub const COVERAGE_WAVE_OUTPUT_CRATES: &[&str] = &[
+    "dispatch-silence-watch",
+    "finding-dispatch",
+    "fleet-composite",
+    "installer",
+    "kernel-bypass-gate",
+    "kernel-only-operator-hook",
+    "loop-queue-filter",
+    "omp-orchestrator",
+    "omp-types",
+    "pane-dispatch-fence",
+    "tick-monitor",
+];
 
 impl GateCensus {
     /// The positive control: this gate MUST be reachable, or the census itself
@@ -372,6 +391,23 @@ fn configured_upstream_crate(repo_root: &Path, gate: &str) -> String {
         source.display().to_string()
     } else {
         format!("{} (unavailable)", source.display())
+    }
+}
+/// The supervisor's coverage step: an output crate is wired when its declared
+/// workspace target exists and therefore has a row the decision loop can see.
+/// Missing output is restrictive; it must reach `GateUnwired`, not disappear
+/// from the census.
+fn coverage_output_reachability(repo_root: &Path, crate_name: &str) -> GateReachability {
+    if repo_root
+        .join("crates")
+        .join(crate_name)
+        .join("Cargo.toml")
+        .is_file() {
+        GateReachability::Reachable {
+            trigger: format!("supervisor:coverage-output-census -> crates/{crate_name}"),
+        }
+    } else {
+        GateReachability::NotInstalled
     }
 }
 
@@ -469,6 +505,18 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
         });
     }
 
+    // OMP-COVERAGE-WIRING: every output named by the coverage mission gets a
+    // first-class row. This is deliberately a supervisor trigger-presence check,
+    // not a claim that the output crate's behavior is correct.
+    for crate_name in COVERAGE_WAVE_OUTPUT_CRATES {
+        if *crate_name == "kernel-bypass-gate" {
+            continue;
+        }
+        rows.push(GateCensusRow {
+            gate: (*crate_name).into(),
+            reachability: coverage_output_reachability(repo_root, crate_name),
+        });
+    }
     // All other workspace crates: they are LIBRARIES (not standalone gates),
     // so their reachability is measured through the manifest caller count.
     // A lib with no manifest caller is DEAD — the conductor routes by work
@@ -482,6 +530,9 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
          "receiver-receipt",
         "subprocess-contract", "tick-monitor",
     ] {
+        if COVERAGE_WAVE_OUTPUT_CRATES.contains(&crate_name) {
+            continue;
+        }
         let has_caller = std::process::Command::new("grep")
             .args(["-rl", crate_name, "--include=*.toml", "--include=*.rs", "."])
             .current_dir(repo_root)
