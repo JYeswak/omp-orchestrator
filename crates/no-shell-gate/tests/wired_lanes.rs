@@ -689,7 +689,8 @@ const COLLISION_ALLOWANCE: &[(&str, &str)] = &[
     ("Finding", "finding and finding-dispatch both model a scan result; unification is -232 scope, not this gate"),
     ("LintReport", "state-wildcard-lint and path-literal-guard predate the shared crate; same -232 scope"),
     ("Violation", "three gate crates declare it; aliasing to a shared type is a cross-crate refactor owned by the integrator"),
-    ("Observation", "REQUIRES A DECISION not an allowance: tick-monitor produces what omp-orchestrator consumes and each declares an incompatible struct — the free_capacity seam"),
+    ("Observation", "REQUIRES A DECISION not an allowance: tick-monitor produces what omp-orchestrator consumes and each declares an incompatible struct — the free_capacity seam (filter FIXED -oco; seam still open, 09 M1)"),
+    ("DispatchIntent", "dispatch-claim-fence declares an enum (Bead/Broadcast/Correction) for the fence; ack-spine declares a struct (bead_id/pane_id/session) for the ledger — different domains, same name. Dies when omp-types provides the shared vocabulary"),
 ];
 
 #[test]
