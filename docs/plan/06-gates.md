@@ -258,7 +258,7 @@ forbidden to do; the one measured value is `omp-inventory-map`, which FAILS.
 | `omp-inventory-map` | N | Y | Y | Y | **Y** | **N** |
 | `undrained-pipe-lint` | Y | Y | Y | Y | **N** | — |
 | `commit-build-fence` | N | Y | N | N | **N** | — |
-| `state-wildcard-lint` | Y | Y | Y | N | **N** | — |
+| `state-wildcard-lint` | Y | Y | Y | **Y** (was `N` — corrected 2026-09-01) | **N** | — |
 | `kernel-bypass-gate` | Y | Y | N | N | **N** | — |
 | `pre-delete-citation-check` | Y | Y | N | N | **N** | — |
 | `path-literal-guard` | Y | **N** | N | Y | **Y** | — |
@@ -445,3 +445,59 @@ paths cleared it.
 AGENTS.md already requires `git commit -- <explicit paths>`, never `-A`. The
 measured consequence of ignoring it in a live shared checkout is a refusal whose
 message points at someone else's fixture, three crates from anything you touched.
+
+---
+
+## 6.6 BLOCKER resolution — the matrix now cites, and one of its cells was wrong
+
+`GradeGates` filed the strongest form of this BLOCKER: *"a gate that claims to
+enforce something mechanically while failing all six properties is making an
+unsupported claim."* The matrix in §3.1 was hand-assessed prose, so every "Y" in it
+was an assertion no reader could check.
+
+### Keyword derivation was tried and does not work — measured, both directions
+
+The obvious fix is to grep each gate crate for property markers. It is wrong twice:
+
+- **False negative.** `state-wildcard-lint` is documented `Y` for known-good. A grep
+  for `known.good` finds **zero**. It has two — `wildcard_on_integer_and_string_passes`
+  and `wildcard_on_non_state_enum_passes` — known-good legs that never use the phrase.
+  I came within one commit of filing the document as wrong on the strength of that
+  grep.
+- **A wrong cell the grep agreed with.** Both the grep and the table say
+  `state-wildcard-lint` has no anti-vacuity. **Both are wrong.**
+  `empty_or_unreadable_workspace_is_an_error` is precisely that leg. The table's `N`
+  is corrected above.
+
+A property is a *semantic* claim about what a test does. No keyword scan settles it,
+and the two errors point in opposite directions, so no amount of pattern-tuning
+converges.
+
+### What replaced it
+
+`crates/no-shell-gate/tests/gate_properties.rs` — a registry where each claim is a
+**citation**, not a letter:
+
+```rust
+("state-wildcard-lint", "anti-vacuity", Some("empty_or_unreadable_workspace_is_an_error")),
+("path-literal-guard",  "known-good",   None),   // a DECLARED absence
+```
+
+Three legs: every citation must name a function that exists; a declared absence must
+remain recorded rather than blanked; no property may be claimed twice for one crate.
+`None` is first-class — six rows carry it, and those six are the reason "zero gates
+satisfy all six" is true. If that count ever reaches zero, the gate fails and forces
+this sentence to be rewritten in the same commit.
+
+**Mutation-verified twice, once by accident.** It fired on its first run against
+citations I had *guessed* rather than read (`test_this_repo_is_clean` does not
+exist), and again deliberately when a cited test was renamed —
+`wildcard_on_integer_and_string_passes` → `renamed_away_by_a_refactor` produced a
+RED naming the crate, the property and the missing function. Restore byte-identical
+both times.
+
+**NO-CLAIM:** it cannot verify that a cited test *provides* the property. A function
+named `known_good_leg` asserting nothing satisfies this gate — the same residual
+§3.1 already records about mutation legs (*"a file named `mutation.rs` that mutates
+nothing counts here as a mutation leg"*). The floor moves from **a letter nobody can
+check** to **a named function that must exist**. Strictly better; well short of proof.
