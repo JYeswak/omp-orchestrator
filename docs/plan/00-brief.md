@@ -132,6 +132,7 @@ A requirement that cannot be checked is a wish. Each row states the observable t
 | R11 | Requirements written down before dispatch | **this file** |
 | R12 | Economic and risk questions are registered, owned, and answerable | §8 — thirteen registered questions (eleven OPEN, Q9 ANSWER MOVED, Q10 PARTIAL) and five kill criteria |
 | R13 | Full idea-to-shipped lifecycle mapped through skills, crates, gates, and dispatch | §11 lifecycle evidence map plus §12 S1–S9 runbook; every stage must carry the seven-field dispatch contract |
+> **Upstream type for the receipts gap:** `IrcDeliveryReceipt` + `AsyncJobDeliverySink` (`tools/hub/types.d.ts:8,84`) already ship. The demand above is DECLARED ONLY — no wire path measured — not precedent-free, and this row must not be read as "nothing exists upstream".
 
 > *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
@@ -524,6 +525,7 @@ The denominator is now stated in the heading, which is the whole point: *five st
 | consume — transport | packet delivery | **UNVERIFIED** — cp-z42vu is a historical incident only; the current repository has no planted fixture or receipt payload |
 | actuate | dispatch | **AVAILABLE, NOT VERIFIED** — `send_and_verify` exists at `crates/omp-orchestrator/src/main.rs:714` and is called at `:1461`; the installed 402-dead-pane incident proves an unsafe runtime path, not successful delivery |
 | complete | worker says done | **AVAILABLE, NOT WIRED** — one raw agent_end frame carried isTerminal=true; AgentEndEvent.willContinue is declared upstream, and the supervisor does not consume it |
+> **Upstream type for the idle gap:** `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts:9-30`) declares the NewlyIdle/ConfirmedIdle distinction this layer re-derives by hand. DECLARED ONLY: the type exists, no local consumer reads it.
 
 **The observe row was re-checked against current source after the Round 21 finding.** The current two-capture implementation compares positive timer or stable-hash motion at tick-monitor/src/lib.rs:564-572 before applying the 75-second floor at :574-577. A changed Working pair is Live; an unchanged short-gap pair is Unproven. The earlier block claiming the floor ran first was a historical description, not current behavior.
 
