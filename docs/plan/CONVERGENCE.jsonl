@@ -13,3 +13,6 @@
 {"section":"03-crates","round":9,"lens":"investor","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rB-03.md"}
 {"section":"04-diagrams","round":9,"lens":"investor","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rB-04.md"}
 {"section":"05-actions","round":9,"lens":"investor","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rB-05.md"}
+{"section":"00-brief","round":9,"lens":"evidence","new_findings":4,"verdict":"FAIL","evidence":"/tmp/grade/rB-00.md"}
+{"section":"01-idea","round":9,"lens":"evidence","new_findings":3,"verdict":"FAIL","evidence":"/tmp/grade/rB-01.md"}
+{"section":"02-surface-census","round":9,"lens":"evidence","new_findings":2,"verdict":"FAIL","evidence":"/tmp/grade/rB-02.md"}
