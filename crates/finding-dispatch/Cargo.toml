@@ -1,0 +1,13 @@
+[package]
+name = "finding-dispatch"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Turn recurring supervisor decisions into complete, named findings"
+
+[dependencies]
+finding = { path = "../finding" }
+omp-orchestrator = { path = "../omp-orchestrator" }
+
+[lints.rust]
+unsafe_code = "forbid"

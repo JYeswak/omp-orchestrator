@@ -10,3 +10,6 @@ asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", rev = "f
 
 [dev-dependencies]
 futures-lite = "2"
+
+[lints.rust]
+unsafe_code = "forbid"

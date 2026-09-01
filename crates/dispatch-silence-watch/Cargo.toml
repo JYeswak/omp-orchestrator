@@ -12,3 +12,6 @@ serde_json = "1"
 [[bin]]
 name = "dispatch-silence-watch"
 path = "src/main.rs"
+
+[lints.rust]
+unsafe_code = "forbid"

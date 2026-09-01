@@ -14,3 +14,6 @@ path = "src/lib.rs"
 
 [dependencies]
 regex = "1"
+
+[lints.rust]
+unsafe_code = "forbid"

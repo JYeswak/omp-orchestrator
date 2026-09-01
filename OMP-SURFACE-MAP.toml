@@ -218,3 +218,9 @@ negative_evidence = "the crate is a workspace type boundary and has no OMP proce
 
 # ── (c) UNUSED CAPABILITY WE SHOULD ADOPT ────────────────────────────────────────────────────────
 # Survivors of revision 2, from SilverWolf's per-surface pass on wave .4.
+
+[crates.dispatch-claim-fence]
+classification = "a"
+omp_surface = "none reachable"
+why = "REVISION 3: refuses a packet naming an unclaimed bead. Landed at 02b5f25 and was undeclared here until the surface gate caught it — the gate's first catch of a crate it did not already know about."
+negative_evidence = "A DispatchPermit authorizes from a point-in-time `br show --json` projection and explicitly does NOT attest that transport occurred; the dispatch ledger remains the authority for that separate claim. This is the same claim/receipt split that ntm conflates — sender success is not receiver receipt — and the reason the crate exists is that this session dispatched packets naming unclaimed beads twice."

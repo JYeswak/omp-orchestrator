@@ -17,28 +17,17 @@ use std::path::{Path, PathBuf};
 /// MAINTENANCE CONTRACT: rows are checked against the DERIVED lane set at every run.
 /// Stale rows are refused ("allowance names undeclared lane ...") — which fired live
 /// when extraction removed two members mid-grade. Rows come out as wiring lands (-kxe).
-const UNWIRED_LANE_ALLOWANCE: &[(&str, &str)] = &[
-    (
-        "composer-typed",
-        "wiring lands with -kxe (conductor lifecycle binary); extraction in flight",
-    ),
-    (
-        "fleet-composite",
-        "wiring lands with -kxe (conductor lifecycle binary); extraction in flight",
-    ),
-    (
-        "loop-queue-filter",
-        "wiring lands with -kxe (conductor lifecycle binary); extraction in flight",
-    ),
-    (
-        "pane-dispatch-fence",
-        "wiring lands with -kxe (conductor lifecycle binary); extraction in flight",
-    ),
-    (
-        "tick-monitor",
-        "wiring lands with -kxe (conductor lifecycle binary); extraction in flight",
-    ),
-];
+/// Lanes that exist and are correct but are deliberately not yet wired.
+///
+/// **Empty, and now truthfully so.** It carried five rows — `composer-typed`,
+/// `fleet-composite`, `loop-queue-filter`, `pane-dispatch-fence`, `tick-monitor` —
+/// each reading "wiring lands with -kxe; extraction in flight". All five acquired
+/// production callers while that text sat unchanged, and the gate caught the drift
+/// by accounting rather than by any row failing: 26 hits against 21 expected.
+///
+/// An allowance that outlives its reason is worse than no allowance, because it
+/// reads as a considered exception when it is only an un-revisited one.
+const UNWIRED_LANE_ALLOWANCE: &[(&str, &str)] = &[];
 
 /// A workspace lane: one member crate, derived — NEVER hand-listed. A hand-listed
 /// expectation set is the same defect control-plane carries (check.sh EXPECTED_GATES

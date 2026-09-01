@@ -227,7 +227,10 @@ fn is_content_hash(chars: &[char], start: usize, end: usize) -> bool {
     }
     // 1. a `sha256` label shortly before it.
     let lo = start.saturating_sub(24);
-    let prefix: String = chars[lo..start].iter().collect::<String>().to_ascii_lowercase();
+    let prefix: String = chars[lo..start]
+        .iter()
+        .collect::<String>()
+        .to_ascii_lowercase();
     prefix.contains("sha256") || prefix.contains("sha-256") || prefix.contains("sha 256")
 }
 
@@ -279,10 +282,7 @@ fn in_citation_position(chars: &[char], start: usize) -> bool {
     // Whitespace is normalised first because `br` wraps long comment lines, so a marker can
     // be separated from its SHA by a newline plus indentation and still be adjacent in
     // meaning.
-    let normalised = prefix
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
+    let normalised = prefix.split_whitespace().collect::<Vec<_>>().join(" ");
     let normalised = if prefix.ends_with(char::is_whitespace) {
         format!("{normalised} ")
     } else {
@@ -352,9 +352,7 @@ pub fn has_verdict_marker(text: &str) -> bool {
 /// /brennerbot: a bead whose hypothesis was falsified rather than delivered.
 pub fn has_refutation_marker(text: &str) -> bool {
     let upper = text.to_ascii_uppercase();
-    upper.contains("REFUTED")
-        || upper.contains("HYPOTHESIS FALSIFIED")
-        || upper.contains("WONTFIX")
+    upper.contains("REFUTED") || upper.contains("HYPOTHESIS FALSIFIED") || upper.contains("WONTFIX")
 }
 
 // ---------------------------------------------------------------------------
@@ -486,7 +484,10 @@ pub fn collect(repos: &[String]) -> Result<Report, String> {
                 ))
             }
         };
-        let assignee = scan_opt_field(chunk, "assignee").into_iter().flatten().next();
+        let assignee = scan_opt_field(chunk, "assignee")
+            .into_iter()
+            .flatten()
+            .next();
 
         let comments = br(&["br", "comments", "list", &id], 45);
         let shown = br(&["br", "show", &id], 45);
@@ -560,7 +561,9 @@ pub const ROSTER: [(&str, &str); 5] = [
 /// what got done, where we are, where grading dispatches, what the repo owes.
 pub fn render(report: &Report) -> String {
     let mut o = String::new();
-    o.push_str("OMP LIFECYCLE -- planning-workflow -> beads-workflow -> vibing-with-ntm -> brennerbot\n");
+    o.push_str(
+        "OMP LIFECYCLE -- planning-workflow -> beads-workflow -> vibing-with-ntm -> brennerbot\n",
+    );
     o.push_str(&format!(
         "denominator: {} beads parsed from `br list --json`\n\n",
         report.units.len()
@@ -617,7 +620,11 @@ pub fn render(report: &Report) -> String {
         dc.len()
     ));
     for u in &dc {
-        o.push_str(&format!("      {:<50} {}\n", u.bead, u.dangling_shas.join(",")));
+        o.push_str(&format!(
+            "      {:<50} {}\n",
+            u.bead,
+            u.dangling_shas.join(",")
+        ));
     }
     o
 }
@@ -694,7 +701,10 @@ mod tests {
             refuted: false,
         };
         let g = u.eligible_graders(&roster);
-        assert!(!g.contains(&"%1409"), "the implementer's pane must be excluded");
+        assert!(
+            !g.contains(&"%1409"),
+            "the implementer's pane must be excluded"
+        );
         assert!(g.contains(&"%1408"));
         assert!(g.contains(&"%1397"));
     }

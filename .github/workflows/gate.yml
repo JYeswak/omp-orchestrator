@@ -55,3 +55,38 @@ jobs:
       - run: cargo test -p state-wildcard-lint
       - name: Reject wildcard arms on state-like enums
         run: cargo run --quiet -p state-wildcard-lint -- .
+  installer:
+    # WIRING: the installer was BUILT, tested and hardened this session and was
+    # invoked by nothing — caught by wired_lanes, not by a human. `--check`
+    # compares the binaries the workspace declares against what is installed and
+    # exits nonzero on drift, so it is a real gate rather than a smoke run.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo test -p installer
+      - name: installer --check must agree with the workspace
+        run: cargo run --quiet -p installer -- --check
+  omp-inventory-map:
+    # WIRING: this is one of the eight gates §06 is built around and CI did not
+    # invoke it. Caught by wired_lanes, not by a human. the only gate that mutates a real filesystem tree (TREE leg); it was never run by CI.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo test -p omp-inventory-map
+      - run: cargo run --quiet -p omp-inventory-map -- .
+  pre-delete-citation-check:
+    # WIRING: this is one of the eight gates §06 is built around and CI did not
+    # invoke it. Caught by wired_lanes, not by a human. refuses a delete whose citation is unresolved; never run by CI.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo test -p pre-delete-citation-check
+      - run: cargo run --quiet -p pre-delete-citation-check -- .
+  commit-build-fence:
+    # WIRING: this is one of the eight gates §06 is built around and CI did not
+    # invoke it. Caught by wired_lanes, not by a human. refuses a commit that does not build; never run by CI.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo test -p commit-build-fence
+      - run: cargo run --quiet -p commit-build-fence -- .

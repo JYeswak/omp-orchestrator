@@ -382,11 +382,10 @@ fn observe(args: &[String]) -> i32 {
 /// repo has no `.sh` and a detached shell loop would be exactly the untracked process the
 /// substrate is meant to eliminate.
 ///
-/// ESCALATION, mirroring /loop-enforcement's tick-budget rule: consecutive ticks that
-/// observe NO commits, NO lifecycle transitions and NO free capacity are no-value ticks.
-/// At the configured threshold the loop prints a STALL line naming the count. It does NOT
-/// dispatch, notify, or mutate a bead -- a monitor that acts is a second conductor, and
-/// this one is deliberately observation-only.
+/// ESCALATION, mirroring /loop-enforcement's tick-budget rule: consecutive ticks with
+/// dispatchable capacity are an operator failure when nobody refills them. At the configured
+/// threshold the loop emits a macOS notification and writes URGENT_JOSH.md. It does NOT
+/// dispatch work or mutate a bead -- this monitor remains observation-only.
 fn watch(args: &[String]) -> i32 {
     let interval: u64 = flag(args, "--interval")
         .and_then(|s| s.parse().ok())
@@ -398,12 +397,12 @@ fn watch(args: &[String]) -> i32 {
     let stall_after: u32 = flag(args, "--stall-after")
         .and_then(|s| s.parse().ok())
         .unwrap_or(3);
-    // Two ticks of persistent free capacity is the alarm. One tick is normal -- a worker
-    // finishing is the healthy case, and NewlyIdle needs a second capture to confirm
-    // anyway. Two means nobody refilled it.
+    // Three ticks of persistent free capacity are the alarm. One tick is normal -- a worker
+    // finishing is the healthy case, and NewlyIdle needs a second capture to confirm.
+    // A fully occupied fleet resets the independent alarm streak and cannot notify.
     let capacity_alarm_after: u32 = flag(args, "--capacity-alarm-after")
         .and_then(|s| s.parse().ok())
-        .unwrap_or(2);
+        .unwrap_or(3);
     let state_file = flag(args, "--state")
         .map(PathBuf::from)
         .unwrap_or_else(state_path);
@@ -428,7 +427,7 @@ fn watch(args: &[String]) -> i32 {
 
     let mut ticks: u64 = 0;
     let mut no_value: u32 = 0;
-    let mut free_streak: u32 = 0;
+    let mut capacity_alarm = CapacityAlarm::new(capacity_alarm_after);
     loop {
         ticks += 1;
         let line = match observe_core(args) {
@@ -465,11 +464,8 @@ fn watch(args: &[String]) -> i32 {
         // reporting healthy the whole time, because "a worker freed up" reads as motion.
         //
         // Idle capacity is the EXPENSIVE state, not the quiet one. It gets its own streak.
-        if has_free {
-            free_streak += 1;
-        } else {
-            free_streak = 0;
-        }
+        let alarm_event = capacity_alarm.observe(has_free);
+        let free_streak = capacity_alarm.consecutive_free_ticks();
 
         let record = format!(
             "{{\"tick\":{},\"no_value_streak\":{},\"free_capacity_streak\":{},\"observation\":{}}}",
@@ -509,6 +505,20 @@ fn watch(args: &[String]) -> i32 {
         if free_streak >= capacity_alarm_after {
             // Loud on stdout too, so `hub logs` shows it without parsing JSON.
             print!("{msg}");
+        }
+        if let CapacityAlarmEvent::Fire { consecutive_ticks } = alarm_event {
+            let urgent = attention.with_file_name("URGENT_JOSH.md");
+            match escalate_idle_capacity(&urgent, ticks, consecutive_ticks, &line) {
+                Ok(receipt) => println!(
+                    "{{\"capacity_alarm\":true,\"urgent_path\":\"{}\",\"notification_observed\":{}}}",
+                    esc(&receipt.urgent_path.display().to_string()),
+                    receipt.notification_observed
+                ),
+                Err(error) => {
+                    eprintln!("ALARM_ESCALATION_FAILED tick={ticks}: {error}");
+                    return 1;
+                }
+            }
         }
 
         if max_ticks > 0 && ticks >= max_ticks {
