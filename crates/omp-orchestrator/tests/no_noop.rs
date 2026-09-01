@@ -23,3 +23,23 @@ fn missing_repository_is_not_a_successful_supervisor_run() {
         "failure must name the missing repository boundary: {output_text}"
     );
 }
+
+#[test]
+fn conductor_invokes_silence_watch_after_dispatch() {
+    let manifest = include_str!("../Cargo.toml");
+    assert!(
+        manifest.contains("dispatch-silence-watch"),
+        "conductor manifest must depend on the silence-watch lane"
+    );
+
+    let source = include_str!("../src/main.rs");
+    let dispatch = source
+        .find("SupervisorDecision::Dispatch")
+        .expect("dispatch branch must exist");
+    let after_dispatch = &source[dispatch..];
+    assert!(
+        after_dispatch.contains("dispatch-silence-watch")
+            || after_dispatch.contains("silence_watch"),
+        "the cron'd dispatch lane must invoke dispatch-silence-watch"
+    );
+}

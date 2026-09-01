@@ -965,6 +965,7 @@ dependencies = [
  "ack-stage",
  "asupersync",
  "dispatch-claim-fence",
+ "dispatch-silence-watch",
  "omp-rpc-session",
  "receiver-receipt",
  "serde_json",
