@@ -184,7 +184,7 @@ graph LR
     CMP["5 · COMPLETE<br/>worker to conductor<br/>DOES NOT EXIST"]
 
     OBS -->|pane state observed| ACT
-    ACT -.->|"NewlyIdle discarded;<br/>is_dispatchable requires Confirmed Idle;<br/>pane at t=0 in neither list"| CON
+    ACT -.->|"Local path: NewlyIdle discarded;<br/>is_dispatchable requires Confirmed Idle;<br/>upstream GuestIdleReconcilerCtx (dist/types/collab/guest.d.ts:9-30) provides guest idle settle reconciliation but is not wired into this local filter"| CON
     CON -.->|"162 refused ticks over 4.2h<br/>DISPATCH_RETRY_BLOCKED"| ACU
     ACU -.->|"a human types into the pane"| CMP
     CMP -.->|"no path back"| OBS
@@ -201,12 +201,8 @@ graph LR
     linkStyle 4 stroke:#c04040,stroke-width:3px
 ```
 
-**MEASURED.** Source: layer 1 from the `tick-monitor` crate's live operation; layer 2
-from reading `idle_panes` and `free_capacity`, which both derive from the same
-`is_dispatchable` filter requiring `Confirmed Idle`, so a pane at t=0 is excluded from
-both; layer 3 from the tick ledger — **162 refused ticks across 4.2 hours, every one
-carrying `DISPATCH_RETRY_BLOCKED`**; layers 4 and 5 are recorded as absent because no
-crate in Diagram 1 emits into a pane and no crate receives a completion.
+**MEASURED.** Source: layer 1 from the `tick-monitor` crate's live operation; layer 2 from the local `idle_panes` and `free_capacity` producer/consumer path, which currently derives both from the `is_dispatchable` filter requiring `Confirmed Idle`, so a pane at t=0 is excluded from both. OMP supplies `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts:9-30`) for guest host-idle reconciliation and settle handling, but this declared type has no measured path into the local filter. Layer 3 is from the tick ledger — **162 refused ticks across 4.2 hours, every one carrying `DISPATCH_RETRY_BLOCKED`**; layers 4 and 5 are recorded as absent because no crate in Diagram 1 emits into a pane and no crate receives a completion.
+
 
 Read left to right, exactly one of five links is solid. The loop is not slow, it is
 open. Four consecutive dashed links is the honest shape of the system: we observe
@@ -300,7 +296,7 @@ graph TD
     C -->|PASS| D["orchestrator health<br/>ntm · br · bv · tmux · git reachable"]
     D --> E["board read · br + bv"]
     E --> F["tick: observe panes"]
-    F --> G["actionable set<br/>NewlyIdle admitted"]
+    F --> G["actionable set<br/>NewlyIdle admitted<br/>GuestIdleReconcilerCtx exists upstream; local wiring pending"]
     G --> H["claim fence<br/>one claim per bead"]
     H --> I["actuate · typed send"]
     I --> J["receiver receipt<br/>ack within budget"]
@@ -320,6 +316,8 @@ or from any command. It is the target shape only. Mapping it against Diagram 3: 
 `F` (observe) exists today; `G`, `H` exist but answer "no" or "refuse"; `I`, `J`, `L`
 do not exist in any crate; `M` exists at 1-of-8 leg coverage. The install path `B`
 through `D` is unbuilt — `installer` is one of the 9 orphan crates in Diagram 1.
+
+The projected NewlyIdle admitted target is not an implementation claim. OMP declares GuestIdleReconcilerCtx at dist/types/collab/guest.d.ts:9-30 for guest host-idle reconciliation and settle handling, but no evidence connects that context to this local tick-monitor filter.
 
 The single hardest link in this diagram is `J -> H`: the no-ack retry. It is the link
 that turns a fire-and-forget send into a delivery contract, and it is the link that

@@ -649,6 +649,8 @@ Set against the measured failures of the same session:
 | `ntm:conflicts` | `SilverWolf` and pane 3 both editing the same three ported crates with no advisory lock |
 | `ntm:agents` | the roster was re-derived by hand from `tmux list-panes` every tick |
 
+The upstream OMP memory vocabulary does not close this NTM/bead claim gap. memories/storage.d.ts:18-29 declares Stage1Claim and GlobalClaim with ownershipToken and inputWatermark, but those fields govern memory-storage work ownership and watermarks, not bead assignment or pane dispatch. This is a type-level weakening of the “no claim vocabulary” absence, not a consumed dispatch contract: no caller maps either type to ntm:claim here, so the local file→CLAIM→dispatch gap remains unclosed.
+
 **Every one was retired without running it.** A `RETIRE` carrying `validated_by: null` is an
 assertion that a surface is irrelevant, made without touching the surface — which is the same shape
 as every other defect this document records: a claim nobody re-derived.

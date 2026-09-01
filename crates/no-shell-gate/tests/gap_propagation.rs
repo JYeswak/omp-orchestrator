@@ -32,10 +32,10 @@ const GAPS: &[(&str, &str, &[&str])] = &[
 /// prevent, committed by its author minutes after writing it.
 ///
 /// Ratchet DOWN only. Raising it requires a measurement in the same commit.
-/// 13 (written) -> 6: SilverWolf (%1409) cleared all five pairs in 09-milestones.md and
-/// 11-lifecycle.md (receipts/idle/claims named their upstream types at true strength),
-/// MEASURED_BY_THIS_DETECTOR=6 at commit time; remaining six pairs are 00/01/05 (other panes).
-const BASELINE: usize = 13;
+/// 13 -> 9: this repair propagated ownershipToken/inputWatermark into 02-surface-census
+/// and GuestIdleReconcilerCtx into 04-diagrams; the detector measured 9 remaining pairs
+/// in 00/01/05/09/10. Baseline is a regression ceiling, not a claim that the backlog is clear.
+const BASELINE: usize = 9;
 
 // ── WHAT THIS NUMBER IS AND IS NOT ──────────────────────────────────────────
 // It has been 24 -> 13 -> 6 -> 15 -> 13 in one session. Every move was a real
