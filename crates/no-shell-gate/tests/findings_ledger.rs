@@ -288,6 +288,17 @@ fn validate_finding_row(row: &Value) -> Result<(String, u64, bool, String), Stri
     Ok((id.to_owned(), round, false, section))
 }
 
+fn actual_finding_row(row: &Value) -> Result<Option<(String, u64, String, String)>, String> {
+    let (id, round, is_void, section) = validate_finding_row(row)?;
+    let status = string_field(row, &["status", "disposition"])
+        .unwrap_or("OPEN")
+        .to_ascii_uppercase();
+    if is_void {
+        return Ok(None);
+    }
+    Ok(Some((id, round, section, status)))
+}
+
 fn validate_serial_rule(
     convergence: &[Value],
     findings: &[(String, u64, bool, String)],
@@ -360,34 +371,22 @@ fn validate_findings_ledger(repo: &Path) -> Result<GateReport, String> {
         .count();
 
     let findings_path = repo.join("docs/plan/FINDINGS.jsonl");
-    let findings_text = fs::read_to_string(&findings_path).map_err(|error| {
-        format!(
-            "FINDINGS_LEDGER_MISSING path={} error={error}",
-            findings_path.display()
-        )
-    })?;
-    if findings_text.trim().is_empty() {
-        return Err(format!(
-            "FINDINGS_LEDGER_EMPTY path={}",
-            findings_path.display()
-        ));
-    }
     let finding_rows = read_jsonl(&findings_path, "FINDINGS_LEDGER")?;
     let mut actual = BTreeMap::<String, (u64, String)>::new();
     let mut serial_rows = Vec::new();
     for row in &finding_rows {
-        let (id, round, is_void, section) = validate_finding_row(row)?;
-        let status = string_field(row, &["status", "disposition"])
-            .unwrap_or("OPEN")
-            .to_ascii_uppercase();
-        if !is_void
-            && actual
-                .insert(id.clone(), (round, section.clone()))
-                .is_some()
-        {
+        let Some((id, round, section, status)) = actual_finding_row(row)? else {
+            let (id, round, _is_void, _section) = validate_finding_row(row)?;
+            let status = string_field(row, &["status", "disposition"])
+                .unwrap_or("OPEN")
+                .to_ascii_uppercase();
+            serial_rows.push((id, round, true, status));
+            continue;
+        };
+        if actual.insert(id.clone(), (round, section)).is_some() {
             return Err(format!("FINDINGS_LEDGER_DUPLICATE_ID id={id}"));
         }
-        serial_rows.push((id, round, is_void, status));
+        serial_rows.push((id, round, false, status));
     }
 
     for (id, expected) in &declared {
@@ -466,6 +465,44 @@ fn known_good_reconciliation_has_exact_coverage() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[test]
+fn count_only_coverage_rejects_a_short_ledger() {
+    let root = fixture_root("count-only");
+    write_fixture(
+        &root,
+        r#"{"finding_id":"R21-00-001","round":21,"section":"00-brief","summary":"one","status":"RETRACTED","reason":"wrong","evidence":".flywheel/grade-evidence/evidence.gz","verified_by":"BlueLantern"}
+"#,
+        r#"{"section":"00-brief","round":21,"new_findings":2,"lens":"fresh","graded_by":"FreshEye"}
+"#,
+        r#"{"section":"00-brief","round":21,"new_findings":2,"gates_green":true}
+"#,
+    );
+
+    let error = validate_findings_ledger(&root).expect_err("count-only short ledger must refuse");
+    assert!(error.contains("expected=2 observed=1"), "{error}");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn void_finding_rows_are_excluded_from_coverage_map() {
+    let row = serde_json::json!({
+        "finding_id": "R22-00-001",
+        "round": 22,
+        "section": "00-brief",
+        "summary": "void",
+        "status": "DEFERRED",
+        "bead": "omp-orchestrator-kxe.3",
+        "evidence": ".flywheel/grade-evidence/evidence.gz",
+        "verified_by": "BlueLantern",
+        "void": true,
+        "void_reason": "round was not pinned",
+    });
+
+    assert!(
+        actual_finding_row(&row).expect("void row shape").is_none(),
+        "void rows must not enter the reconciled coverage map"
+    );
+}
 #[test]
 fn serial_rule_rejects_open_prior_to_pinned_round() {
     let convergence = vec![serde_json::json!({"round":22,"pin":"abc123"})];
