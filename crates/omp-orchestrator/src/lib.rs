@@ -215,11 +215,56 @@ pub enum GateReachability {
     Unreachable { reason: String },
     /// The gate has no trigger of any kind.
     NotInstalled,
+    /// The crate is not in this workspace yet — it still lives upstream.
+    ///
+    /// # Why this is a distinct variant and not an `Unreachable` reason string
+    ///
+    /// Measured 2026-09-01: the supervisor refused with
+    /// `GATE_UNWIRED unwired=["fleet-truth"] next_action=repair-gate-trigger`.
+    /// Every word of that is defensible and the **remedy is wrong**. `fleet-truth`
+    /// is not unwired — it is one of 20 crates still in `control-plane`
+    /// (29,512 LOC, zero extracted), so no amount of trigger repair can satisfy
+    /// it. An operator following `repair-gate-trigger` looks for a hook to fix and
+    /// finds nothing to fix.
+    ///
+    /// A guard that names the wrong next action is worse than no guard: it costs
+    /// the operator a search down a path that cannot terminate. Josh made the same
+    /// correction from the other direction — my instinct was to DROP these names
+    /// from the census so the gate would go green, which would have erased
+    /// measured extraction debt to manufacture a pass.
+    NotExtracted { upstream: String, loc: u32 },
 }
 
 impl GateReachability {
     pub fn is_reachable(&self) -> bool {
         matches!(self, GateReachability::Reachable { .. })
+    }
+
+    /// The action that can actually satisfy this state.
+    ///
+    /// Exists so a refusal message cannot drift from the variant it describes:
+    /// adding a variant without a remedy is a COMPILE ERROR, not a stale string.
+    /// The supervisor printed `next_action=repair-gate-trigger` for an unextracted
+    /// crate because the action was a literal in the format string, three hundred
+    /// lines from the state that produced it.
+    pub fn next_action(&self) -> &'static str {
+        match self {
+            Self::Reachable { .. } => "none",
+            Self::Unreachable { .. } => "repair-gate-trigger",
+            Self::NotInstalled => "install-gate",
+            Self::NotExtracted { .. } => "extract-crate-from-control-plane",
+        }
+    }
+
+    /// A short label for the refusal line, so the operator sees the CLASS before
+    /// the detail.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Reachable { .. } => "REACHABLE",
+            Self::Unreachable { .. } => "UNWIRED",
+            Self::NotInstalled => "NOT_INSTALLED",
+            Self::NotExtracted { .. } => "NOT_EXTRACTED",
+        }
     }
 }
 
@@ -362,6 +407,26 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
     // repository keeps finding — a hand-maintained list masquerading as a probe.
     // These now measure the same two triggers every other gate is measured on:
     // the installed hook, and a workflow that a remote could actually run.
+    // The three crates named in the census that are NOT ON DISK are unextracted,
+    // not unwired. Upstream LOC measured 2026-09-01; see docs/plan/03-crates.md 3.9.
+    const UNEXTRACTED: &[(&str, u32)] = &[
+        ("fleet-truth", 1621),
+        ("oracle-compare", 561),
+        ("oracle-pane-state-differential", 613),
+    ];
+    for (gate, loc) in UNEXTRACTED {
+        if repo_root.join("crates").join(gate).is_dir() {
+            continue; // it landed — fall through to the normal measurement below
+        }
+        rows.push(GateCensusRow {
+            gate: (*gate).into(),
+            reachability: GateReachability::NotExtracted {
+                upstream: format!("/Users/josh/Developer/control-plane/crates/{gate}"),
+                loc: *loc,
+            },
+        });
+    }
+
     for gate in ["kernel-bypass-gate", "pre-delete-citation-check"] {
         let in_hook = hook_invokes(&hook_path, gate);
         let in_workflow = workflow_invokes(repo_root, gate);
@@ -392,9 +457,9 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
     // expected), but they must be VISIBLE.
     for crate_name in [
         "ack-spine", "ack-stage", "composer-typed", "dispatch-silence-watch",
-        "finding", "finding-dispatch", "fleet-composite", "fleet-truth",
-        "kernel-only-operator-hook", "oracle-compare",
-        "oracle-pane-state-differential", "receiver-receipt",
+        "finding", "finding-dispatch", "fleet-composite", 
+        "kernel-only-operator-hook", 
+         "receiver-receipt",
         "subprocess-contract", "tick-monitor",
     ] {
         let has_caller = std::process::Command::new("grep")

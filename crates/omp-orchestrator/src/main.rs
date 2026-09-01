@@ -1063,7 +1063,23 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             );
         }
         SupervisorDecision::GateUnwired { unwired } => {
-            let detail = format!("unwired={unwired:?} owner=josh next_action=repair-gate-trigger");
+            // The remedy comes from the VARIANT, never from a literal here. The
+            // supervisor printed next_action=repair-gate-trigger for an unextracted
+            // crate because this string was hardcoded three hundred lines from the
+            // state that produced it, and an operator following it would look for a
+            // hook to fix and find nothing.
+            let census = crate::census_gates(&config.repo);
+            let mut parts = Vec::new();
+            for name in &unwired {
+                let action = census
+                    .rows
+                    .iter()
+                    .find(|r| &r.gate == name)
+                    .map(|r| (r.reachability.label(), r.reachability.next_action()))
+                    .unwrap_or(("UNKNOWN", "investigate-census"));
+                parts.push(format!("{name}[{}→{}]", action.0, action.1));
+            }
+            let detail = format!("unwired={} owner=josh", parts.join(" "));
             write_heartbeat(config, tick, "GATE_UNWIRED", &detail)?;
             return Err(format!("GATE_UNWIRED {detail}"));
         }
