@@ -140,16 +140,22 @@ impl Config {
                 }
                 "--command-timeout-secs" => {
                     index += 1;
-                    command_timeout = Duration::from_secs(
-                        args.get(index)
-                            .ok_or_else(|| {
-                                "CONFIG_REFUSED --command-timeout-secs requires seconds".to_owned()
-                            })?
-                            .parse::<u64>()
-                            .map_err(|_| {
-                                "CONFIG_REFUSED --command-timeout-secs is not an integer".to_owned()
-                            })?,
-                    );
+                    let timeout_secs = args
+                        .get(index)
+                        .ok_or_else(|| {
+                            "CONFIG_REFUSED --command-timeout-secs requires seconds".to_owned()
+                        })?
+                        .parse::<u64>()
+                        .map_err(|_| {
+                            "CONFIG_REFUSED --command-timeout-secs is not an integer".to_owned()
+                        })?;
+                    if timeout_secs == 0 {
+                        return Err(
+                            "CONFIG_REFUSED --command-timeout-secs must be greater than zero"
+                                .to_owned(),
+                        );
+                    }
+                    command_timeout = Duration::from_secs(timeout_secs);
                 }
                 "--max-ticks" => {
                     index += 1;
@@ -1717,6 +1723,16 @@ mod tests {
         assert_eq!(help, usage());
         assert!(help.contains("[run]"), "usage must advertise the run subcommand");
     }
+    #[test]
+    fn zero_command_timeout_is_refused() {
+        let error = Config::from_args(&["--command-timeout-secs".to_owned(), "0".to_owned()])
+            .expect_err("zero timeout cannot bound a child process");
+        assert!(
+            error.contains("--command-timeout-secs must be greater than zero"),
+            "{error}"
+        );
+    }
+
     #[test]
     fn finished_pane_reaper_receives_the_same_repository() {
         let config = fixture_config(PathBuf::from("/tmp/omp-orchestrator-reaper-heartbeat.jsonl"));
