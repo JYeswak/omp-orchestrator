@@ -31,3 +31,6 @@
 {"section":"09-milestones","round":10,"lens":"adversarial","role":"hillclimb","new_findings":16,"verdict":"FAIL","evidence":"/tmp/grade/r10-09-milestones.md"}
 {"section":"10-prior-art","round":10,"lens":"adversarial","role":"hillclimb","new_findings":13,"verdict":"FAIL","evidence":"/tmp/grade/r10-10-prior-art.md"}
 {"section":"11-lifecycle","round":10,"lens":"adversarial","role":"hillclimb","new_findings":10,"verdict":"FAIL","evidence":"/tmp/grade/r10-11-lifecycle.md"}
+{"section":"03-crates","round":10,"lens":"evidence","role":"capability","new_findings":1,"verdict":"UN-CONVERGED","evidence":"/tmp/grade/r10-03.md"}
+{"section":"04-diagrams","round":10,"lens":"evidence","role":"hillclimb","new_findings":5,"verdict":"FAIL","evidence":"/tmp/grade/r10-04.md"}
+{"section":"05-actions","round":10,"lens":"evidence","role":"capability","new_findings":1,"verdict":"UN-CONVERGED","evidence":"/tmp/grade/r10-05.md"}
