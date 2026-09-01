@@ -394,3 +394,151 @@ feature boundary we have not yet cleared; or that a tmux pane which has never he
 can produce an `Accepted`. That last one is **UNMEASURED**, and because `--mode=rpc` is
 single-session and cannot address a third-party pane, the receipt gap may survive the vocabulary
 entirely.
+
+---
+
+## 3.9 EXTRACTION DEBT — measured 2026-09-01, and it is the largest gap in this project
+
+Josh: *"any missing crates could be in control-plane that we have to move over — this should be
+mentioned in docs."* He is right, it was not mentioned anywhere as a number, and the number is large.
+
+**20 of the 20 crates `AGENTS.md` marks `CONTROL-PLANE` are NOT extracted. 28,779 LOC still live
+upstream. Zero have moved.**
+
+| crate | LOC | upstream |
+|---|---:|---|
+| `ntm-fleet-monitor` | 3122 | present |
+| `fleet-monitor` | 2569 | present |
+| `loop-driver` | 2484 | present |
+| `fast-dispatch` | 2292 | present |
+| `omp-idle-dispatch` | 1667 | present |
+| `fleet-truth` | 1621 | present |
+| `pane-dispatch-ready` | 1555 | present |
+| `loop-tick` | 1480 | present |
+| `fleet-reconcile` | 1424 | present |
+| `wired-but-inert-guard` | 1394 | present |
+| `verify-dispatch` | 1291 | present |
+| `pane-truth` | 1247 | present |
+| `reap-finished-panes` | 1189 | present |
+| `tick-dispatch` | 990 | present |
+| `loop-coverage` | 926 | present |
+| `dispatcher-deadman` | 883 | present |
+| `refill-idle-panes` | 842 | present |
+| `pane-oracle-diff` | 741 | present |
+| `oracle-pane-state-differential` | 613 | present |
+| `oracle-compare` | 449 | present |
+
+Every one verified present at `/Users/josh/Developer/control-plane/crates/<name>` at measurement
+time. None is missing upstream; none is here.
+
+### What this means about the 26 crates that ARE here
+
+They are **all new work built during this session** — gates, registries, the tick loop, the
+supervisor, the schema and number and convergence machinery. That is not a criticism of them; it is
+a correction to any reading of this section that assumes the workspace is the extraction landing
+zone. It is not. **The extraction has not started**, and bead `omp-orchestrator-815` is still open.
+
+### How this surfaced, and what it says about the census
+
+`census_gates()` in `crates/omp-orchestrator/src/lib.rs` hardcodes a 14-crate list. Three of those
+names — `fleet-truth`, `oracle-compare`, `oracle-pane-state-differential` — are **not on disk**, so
+the supervisor reported them `Unreachable` and refused to tick. The refusal was correct and its
+reason was wrong: they are not unwired, they are **unextracted**, and those two states have
+completely different remedies. Fifteen crates that DO exist were not in the list at all.
+
+So the census was a frozen snapshot of a *planned* workspace naming 3 of the 20 missing crates
+arbitrarily. Dropping them would have been the wrong fix — it would have erased real debt to make a
+gate go green. **Naming all twenty is the right fix**, and `NUMBERS.toml` now carries the count so it
+cannot quietly drift as extraction proceeds.
+
+### NO-CLAIM
+
+LOC figures are `wc -l` over `*.rs` in each upstream crate directory, which counts comments and
+blank lines and is a size proxy, not an effort estimate. "Present upstream" means the directory
+exists — it does **not** mean the crate builds there, that its tests pass, or that it will compile
+once moved. `AGENTS.md` itself notes the three newest of these are uncommitted work in a shared
+checkout, and a move under those conditions is how work is lost.
+
+---
+
+## 3.10 The extraction workstream and its bead DAG
+
+Josh: *"our plan needs to include all unextracted stuff — that has to be part of our bead dag."*
+Bead `omp-orchestrator-815` is currently **one bead for 29,512 LOC across 20 crates**, which cannot
+be worked — it can only be adjudicated. Under `beads-north-star` a bead needs testable acceptance,
+and "extract 20 crates" has none. It is an epic with no children.
+
+### The measured dependency shape
+
+Intra-set `path =` dependencies read from each upstream `Cargo.toml`. **14 of 20 are leaves**, so
+the first wave is 14-wide parallel with no ordering constraint between its members.
+
+**WAVE 1 — leaves, 20,530 LOC, parallelisable 14-wide**
+
+`loop-driver` 2484 · `fast-dispatch` 2292 · `omp-idle-dispatch` 2183 · `fleet-truth` 1621 ·
+`pane-dispatch-ready` 1555 · `loop-tick` 1480 · `fleet-reconcile` 1424 · `wired-but-inert-guard` 1394 ·
+`verify-dispatch` 1291 · `pane-truth` 1247 · `reap-finished-panes` 1189 · `loop-coverage` 926 ·
+`dispatcher-deadman` 883 · `oracle-compare` 561
+
+**WAVE 2 — one hop, blocked on a wave-1 member**
+
+| crate | LOC | blocked on |
+|---|---:|---|
+| `ntm-fleet-monitor` | 3122 | `loop-coverage` |
+| `tick-dispatch` | 990 | `oracle-compare` |
+| `refill-idle-panes` | 947 | `fleet-reconcile` |
+| `pane-oracle-diff` | 741 | `oracle-compare` |
+| `oracle-pane-state-differential` | 613 | `oracle-compare` |
+
+**WAVE 3 — two hops**
+
+| crate | LOC | blocked on |
+|---|---:|---|
+| `fleet-monitor` | 2569 | `ntm-fleet-monitor` → `loop-coverage` |
+
+### `oracle-compare` is the articulation point
+
+**Three crates block on it and it is the smallest leaf in the set at 561 LOC.** By
+`beads-bv`'s PageRank ordering it should be extracted first, not by size but by unblocking power —
+and by `beads-north-star`'s cost rule, *"the cheapest falsifier should kill the branch first."* If
+`oracle-compare` cannot be moved cleanly, three downstream extractions are invalid and we want to
+know that for 561 lines rather than after 20,000.
+
+`loop-coverage` (926 LOC) is second: it gates the deepest chain, `ntm-fleet-monitor` → `fleet-monitor`,
+which is 5,691 LOC of the total.
+
+### The bead decomposition this requires
+
+`-815` becomes an epic with **20 children plus a contract bead**, not one task:
+
+```
+-815 (epic)
+ ├── 815.contract   the extraction contract: how a crate moves without losing work
+ ├── 815.oracle-compare          P0  articulation point, unblocks 3
+ ├── 815.loop-coverage           P0  gates the deepest chain
+ ├── 815.<11 other leaves>       P1  parallel, no inter-dependencies
+ ├── 815.tick-dispatch           blocked-by 815.oracle-compare
+ ├── 815.pane-oracle-diff        blocked-by 815.oracle-compare
+ ├── 815.oracle-pane-state-diff  blocked-by 815.oracle-compare
+ ├── 815.refill-idle-panes       blocked-by 815.fleet-reconcile
+ ├── 815.ntm-fleet-monitor       blocked-by 815.loop-coverage
+ └── 815.fleet-monitor           blocked-by 815.ntm-fleet-monitor
+```
+
+**Every child needs runnable acceptance**, and for an extraction that is the same three commands
+each time: the crate builds in this workspace, its own tests pass here, and it appears in
+`OMP-SURFACE-MAP.toml` with a `[crates.x]` block — the last because `wired_lanes.rs` already fails
+on an undeclared crate, so the gate that catches a botched extraction is **already installed**.
+
+`815.contract` exists because the move itself has a measured hazard: `AGENTS.md` records that the
+three newest of these crates are **uncommitted work in a shared checkout**, and a move under those
+conditions is how work is lost. That contract is a prerequisite of all 20, not advice.
+
+### NO-CLAIM
+
+The dependency shape is **intra-set `path =` deps only**. A crate may also depend on a control-plane
+crate that is NOT in this 20 — those edges are unmeasured, and any one of them turns a leaf into a
+blocked node or an extraction into a larger cut than planned. Nothing here has been extracted, so
+none of these acceptance commands has ever run. The LOC total measured now is **29,512**, against
+**28,779** summed from `AGENTS.md`'s own table — a 733-line discrepancy, unreconciled, and a further
+instance of the counted-vs-stated gap this document keeps producing.

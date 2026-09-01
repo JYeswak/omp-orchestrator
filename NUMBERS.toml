@@ -61,7 +61,7 @@ note     = "12 analysis sections + 12-journey. The convergence gate hardcodes 12
 #    than correcting one, because a correction lasts until the next commit.
 [figures.test_files]
 command  = "for d in crates/*/tests; do ls $d/*.rs 2>/dev/null; done | wc -l"
-expect   = "32"
+expect   = "34"
 appears  = ["docs/plan/00-brief.md", "docs/plan/01-idea.md", "docs/plan/06-gates.md"]
 note     = "was 26 when the brief measured it, 30 by round 10, 31 at the round-11 fix — five meta-gate test files landed during grading. 01-idea's 370/379 and 06-gates' transcribed copies all drift from this one quantity."
 
@@ -73,7 +73,7 @@ note     = "not a fixed figure — the board moves hourly. Declared so any prose
 
 [figures.test_functions]
 command  = "grep -rhc '#\\[test\\]' crates/*/src/*.rs crates/*/tests/*.rs 2>/dev/null | awk '{s+=$1} END{print s}'"
-expect   = "413"
+expect   = "424"
 appears  = ["docs/plan/01-idea.md", "docs/plan/06-gates.md", "docs/plan/00-brief.md"]
 note     = "THE WORST OFFENDER, and it drifted WHILE THIS ROW WAS BEING WRITTEN. Three live values for one quantity — 370, 379, 402 — found in one round, in three sections. Measured 406, and by the time the parser was fixed it was 407, because writing the unescaper test added five functions. The gate caught drift caused by the commit that created it. Corrected by hand four times tonight and drifted again each time, because every new crate adds tests."
 
@@ -91,7 +91,7 @@ note     = "published as 6.2% first, then 17.1%, then 21.8%. Round 10 found THRE
 
 [figures.convergence_rows]
 command  = "grep -c . docs/plan/CONVERGENCE.jsonl"
-expect   = "36"
+expect   = "45"
 appears  = ["docs/plan/CONVERGENCE.md"]
 note     = "3 rounds x 12 sections. A round that reports 11 rows is a pane that silently dropped a section, which has happened twice."
 
@@ -111,3 +111,19 @@ command  = "jq -s '[.[] | select(.maps_to_crate == null)] | length' docs/plan/SU
 expect   = "478"
 appears  = ["docs/plan/02-surface-census.md"]
 note     = "maps_to_crate == null is the explicit unmapped-by-crate metric; it is distinct from non-null validated_by and from missing rows."
+
+# ── EXTRACTION DEBT. Declared because 03-crates §3.9 claims this registry carries
+#    it, and a doc claiming a gate exists when it does not is the unearned field
+#    this file was built to prevent.
+
+[figures.unextracted_crates]
+command  = "python3 -c \"import re,pathlib;t=pathlib.Path('AGENTS.md').read_text();rows=re.findall(r'\\|\\s*.([a-z][a-z0-9-]+).\\s*\\|\\s*\\*\\*CONTROL-PLANE\\*\\*',t);here={p.name for p in pathlib.Path('crates').iterdir() if p.is_dir()};print(len([n for n in rows if n not in here]))\""
+expect   = "20"
+appears  = ["docs/plan/03-crates.md", "AGENTS.md"]
+note     = "20 of 20 marked CONTROL-PLANE are still upstream; ZERO extracted. Every crate in this workspace is new session work, not an extraction landing. This figure goes DOWN as bead -815 proceeds and must never silently go up."
+
+[figures.workspace_crates_on_disk]
+command  = "ls -1 crates | wc -l"
+expect   = "26"
+appears  = ["docs/plan/03-crates.md", "AGENTS.md", "docs/PLAN.md"]
+note     = "duplicate of workspace_crates by design: 03-crates §3.9 reasons about the RELATIONSHIP between this and unextracted_crates, so both must be pinned or the ratio silently rots."
