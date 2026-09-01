@@ -602,13 +602,46 @@ fn authorize_bead_dispatch(
         .map(|_| receiver_agent)
         .map_err(|error| error.to_string())
 }
+fn agent_for_pane(config: &Config, pane: &str) -> Option<String> {
+    let contract = config.repo.join(".flywheel/AUTONOMOUS-WAVE.md");
+    let text = std::fs::read_to_string(contract).ok()?;
+    let pane_marker = format!("`{pane}`");
+    text.lines().find_map(|line| {
+        let columns: Vec<&str> = line.split('|').map(str::trim).collect();
+        if columns.get(1).copied() != Some(pane_marker.as_str()) {
+            return None;
+        }
+        let agent = columns.get(2)?.trim_matches('*').trim();
+        (!agent.is_empty()).then(|| agent.to_owned())
+    })
+}
+
+fn validate_receiver_pane(
+    config: &Config,
+    pane: &str,
+    bead: &str,
+    receiver_agent: &str,
+) -> Result<(), String> {
+    match agent_for_pane(config, pane) {
+        Some(mapped) if mapped != receiver_agent => Err(format!(
+            "DISPATCH_BLOCKED bead={bead} pane={pane} receiver_agent={receiver_agent} mapped_agent={mapped} owner=josh next_action=select-matching-pane"
+        )),
+        Some(_) => Ok(()),
+        None if config.receiver_agent.trim().is_empty() => Err(format!(
+            "DISPATCH_BLOCKED bead={bead} pane={pane} receiver_agent={receiver_agent} owner=josh next_action=configure-pane-agent-map"
+        )),
+        None => Ok(()),
+    }
+}
 async fn prepare_bead_dispatch(
     cx: &Cx,
     config: &Config,
+    pane: &str,
     bead: &str,
 ) -> Result<(BeadSnapshot, String), String> {
     let mut snapshot = load_bead_snapshot(cx, config, bead).await?;
     let receiver_agent = receiver_agent_for_dispatch(config, bead, &snapshot)?;
+    validate_receiver_pane(config, pane, bead, &receiver_agent)?;
 
     if snapshot.status_label() == "open" {
         let claim_args = vec![
@@ -1321,7 +1354,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             let bead = bead_ids.first().ok_or_else(|| {
                 "QUEUE_UNREADABLE ready count changed before bead selection".to_owned()
             })?;
-            let (snapshot, receiver_agent) = prepare_bead_dispatch(cx, config, bead).await?;
+            let (snapshot, receiver_agent) = prepare_bead_dispatch(cx, config, &pane, bead).await?;
             let dispatch_epoch = now_unix() as i64;
             write_dispatch_intent(config, &pane, bead)?;
             let before = capture_pane(cx, config, &pane).await?;
@@ -1651,6 +1684,28 @@ mod tests {
         )
         .expect("an assigned bead should supply the receiver agent when config is unset");
         assert_eq!(receiver_agent, "SilverWolf");
+    }
+    #[test]
+    fn dispatch_refuses_a_pane_owned_by_another_agent() {
+        let temp = tempfile::tempdir().expect("mapping fixture");
+        std::fs::create_dir_all(temp.path().join(".flywheel")).expect("contract directory");
+        std::fs::write(
+            temp.path().join(".flywheel/AUTONOMOUS-WAVE.md"),
+            "| `%1408` | **AmberGate** | gates |\n",
+        )
+        .expect("mapping contract");
+        let mut config = fixture_config(temp.path().join("heartbeat.jsonl"));
+        config.repo = temp.path().to_owned();
+
+        let error = validate_receiver_pane(
+            &config,
+            "%1408",
+            "receiver-assignment-test",
+            "SilverWolf",
+        )
+        .expect_err("a pane mapped to another agent must not receive this bead");
+        assert!(error.contains("mapped_agent=AmberGate"), "{error}");
+        assert!(error.contains("next_action=select-matching-pane"), "{error}");
     }
 
 
