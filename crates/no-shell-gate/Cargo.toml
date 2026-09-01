@@ -15,3 +15,6 @@ subprocess-contract = { path = "../subprocess-contract" }
 
 [lints.rust]
 unsafe_code = "forbid"
+
+[dev-dependencies]
+serde_json = "1"
