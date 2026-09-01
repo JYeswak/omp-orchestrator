@@ -255,7 +255,7 @@ fn empty_scan_set_is_an_error_not_a_pass() {
         std::process::id(),
         FIXTURE_SEQ.fetch_add(1, Ordering::SeqCst)
     ));
-    std::fs::create_dir_all(&dir).expect("create empty fixture dir");
+    std::fs::create_dir_all(dir.join("crates/empty/src")).expect("create empty fixture workspace");
     let report = undrained_pipe_lint::lint_workspace(&dir);
     assert!(
         report.scanned.is_empty(),
@@ -270,5 +270,34 @@ fn empty_scan_set_is_an_error_not_a_pass() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// The CLI must expose the library's anti-vacuity result as its typed exit
+/// status, not silently treat a workspace with no Rust files as clean.
+#[test]
+fn cli_empty_scan_set_exits_three() {
+    let dir = std::env::temp_dir().join(format!(
+        "undrained-pipe-cli-empty-{}-{}",
+        std::process::id(),
+        FIXTURE_SEQ.fetch_add(1, Ordering::SeqCst)
+    ));
+    std::fs::create_dir_all(dir.join("crates/empty/src")).expect("create empty fixture workspace");
+
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_undrained-pipe-lint"))
+        .arg(&dir)
+        .output()
+        .expect("run undrained-pipe-lint binary");
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "empty scan set must exit 3, stdout={:?}, stderr={:?}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("UNDRAINED-PIPE-LINT ERROR: empty scan set"),
+        "exit 3 must carry the typed empty-scan error"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
 use std::sync::atomic::{AtomicU32, Ordering};
 static FIXTURE_SEQ: AtomicU32 = AtomicU32::new(0);

@@ -26,7 +26,7 @@
 
 use std::fmt;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// A detected undrained-pipe site.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -207,12 +207,26 @@ fn drains_before_poll(code: &[String], start: usize, poll: usize) -> bool {
     let mut stderr_taken = false;
     let mut read_to_end = 0;
     let mut spawned_reader = false;
-    for line in code.iter().take(poll + 1).skip(start) {
-        stdout_taken |= line.contains("stdout.take");
-        stderr_taken |= line.contains("stderr.take");
-        read_to_end += usize::from(line.contains("read_to_end"));
-        spawned_reader |= line.contains("thread::spawn");
-        if line.contains("wait_with_output(") || line.contains("output_async(") {
+    // Depth of the try_wait() line: a drain nested DEEPER than the poll and
+    // appearing after it sits inside a match arm that only runs after the child
+    // has exited (e.g. `Ok(Some(_)) => child.wait_with_output()`). Such a drain
+    // cannot prevent the deadlock — the child is already blocked in write() and
+    // never exits — so it must not count. Measured miss:
+    // control-plane wired-but-inert-guard/src/main.rs:58-60.
+    let poll_depth = code[poll].len() - code[poll].trim_start().len();
+    for (offset, line) in code.iter().enumerate().take(poll + 1).skip(start) {
+        let line_depth = line.len() - line.trim_start().len();
+        let inside_poll_arms = offset >= poll && line_depth > poll_depth;
+        stdout_taken |= line.contains("stdout.take") && !inside_poll_arms;
+        stderr_taken |= line.contains("stderr.take") && !inside_poll_arms;
+        if !inside_poll_arms {
+            read_to_end += usize::from(line.contains("read_to_end"));
+            spawned_reader |= line.contains("thread::spawn");
+        }
+        if line.contains("wait_with_output(") && !inside_poll_arms {
+            return true;
+        }
+        if line.contains("output_async(") && !inside_poll_arms {
             return true;
         }
     }
@@ -241,6 +255,41 @@ pub fn find_detailed_violations_in_source(source: &str) -> Vec<(usize, usize, us
                 if !drains_before_poll(&code, callee.start, poll) {
                     violations.push((stdout_line + 1, stderr_line + 1, poll + 1));
                 }
+            }
+        }
+    }
+    violations.sort_unstable();
+    violations.dedup();
+    // FILE-LEVEL FALLBACK. The per-region pass above follows named callees, but a
+    // real defect can connect across THREE functions — a constructor pipes the
+    // pair and RETURNS the command, a caller passes it onward, and a third fn
+    // polls try_wait with the drain sitting only inside the exited-arm (measured:
+    // control-plane wired-but-inert-guard/src/main.rs:28/:55/:58-60). No local
+    // region contains both facts, so region scope misses it. When the per-region
+    // pass found NOTHING but the file as a whole has a piped pair and a try_wait
+    // poll with no qualifying file-level drain, flag at file scope naming the
+    // first piped line, the stderr line, and the poll line. Limits: one hit per
+    // file, best-effort line attribution, stated in the gate output.
+    if violations.is_empty() {
+        let code_vec: Vec<String> = code.to_vec();
+        let mut stdout_line = None;
+        let mut stderr_line = None;
+        let mut poll_line = None;
+        for (idx, line) in code_vec.iter().enumerate() {
+            if stdout_line.is_none() && line.contains(".stdout(Stdio::piped())") {
+                stdout_line = Some(idx);
+            }
+            if stderr_line.is_none() && line.contains(".stderr(Stdio::piped())") {
+                stderr_line = Some(idx);
+            }
+            if poll_line.is_none() && line.contains(".try_wait()") {
+                poll_line = Some(idx);
+            }
+        }
+        if let (Some(so), Some(se), Some(po)) = (stdout_line, stderr_line, poll_line) {
+            let drains = drains_before_poll(&code_vec, 0, po);
+            if !drains {
+                violations.push((so + 1, se + 1, po + 1));
             }
         }
     }
