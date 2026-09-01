@@ -3,10 +3,56 @@
 > **Josh, 2026-08-31:** *"we need to ensure every section of the plan has 2 rounds of no new
 > findings — once all sections are done"* → then, and only then, the plan becomes a `br`/`bv` DAG.
 
+## MEASURED 2026-08-31: rounds 8 and 9 measured the graders, not the plan
+
+Round 10 ran with **fresh eyes** — panes dispatched subagents that had never read the ledger, rather
+than grading from three rounds of accumulated context. One variable changed. The result:
+
+| round | protocol | findings | converged |
+|---|---|---:|---:|
+| 8 | four lenses, panes grade directly | ~14 | 6 sections clean |
+| 9 | same lenses rotated, panes grade directly | 9 | **3 CONVERGED** |
+| 10 | same lenses, **fresh subagents, zero shared context** | **77** | **0** |
+
+**All three banked sections fell.** Not one, not two — three of three:
+
+```
+03-crates    r8:0 (adversarial) -> r9:0 (investor)    -> r10:1  UN-CONVERGED
+05-actions   r8:0 (adversarial) -> r9:0 (investor)    -> r10:1  UN-CONVERGED
+06-gates     r8:0 (absence)     -> r9:0 (adversarial) -> r10:3  REGRESSED
+```
+
+`09-milestones` went from 1 finding to **16**. `10-prior-art` to 13. `11-lifecycle` to 10.
+
+**Two consecutive zeros under two different lenses turned out to be worth nothing**, because both
+lenses were carried by agents who had read every prior finding in this ledger. The rule was written
+to prevent one lens going blind and it did not survive contact with the actual failure mode: *all
+four lenses going blind together, in the same direction, for the same reason.*
+
+### What this costs and what it buys
+
+Rounds 8 and 9 are not deleted — the fixes they produced were real, and several were load-bearing.
+What is retracted is the **convergence claim**. Those rounds measured a property of the graders.
+
+The clock is at **0/12** and the standard is now fresh eyes. It is 3–5× slower per round: `%1413`
+finished in ~10 minutes; the others took 26–50. That is the price of a reader who was not here.
+
+### The un-conversions were honest, and that matters more than the count
+
+`%1409` held `03-crates` and `05-actions` — sections **it had itself graded clean in round 9** — and
+un-converged both rather than protect the number. `%1413` did the same to `06-gates`. Every one was
+re-derived by the pane before recording. A floor that only fires on someone else's work is not a
+floor.
+
 ## The rule
 
 A section is **CONVERGED** when it has **two consecutive graded rounds with zero new findings,
-under two different lenses.**
+under two different lenses, both graded by readers with no prior exposure to this ledger.**
+
+The third clause was added after round 10 refuted the first two. Two lenses is necessary and was
+never sufficient: a lens is a *question*, and four different questions asked by four agents who have
+all read the same findings converge on the same blind spot. **Fresh eyes is not an optimisation of
+this protocol — it is the load-bearing term.**
 
 Two lenses, not one, because a single lens returning clean twice proves the lens stopped looking,
 not that the section is sound. Every lens in this session has had a blind spot another lens caught:
