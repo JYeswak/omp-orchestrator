@@ -1,5 +1,6 @@
 use ack_spine::authorities::{
-    AckAuthority, AckEvidence, AckSummary, DeliveryAuthority, TransportAuthority,
+    AckAuthority, AckEvidence, AckSummary, DeliveryAuthority, ReceiverReceipt,
+    TransportAuthority,
 };
 
 fn success() -> TransportAuthority {
@@ -9,10 +10,26 @@ fn success() -> TransportAuthority {
 }
 
 fn observed() -> DeliveryAuthority {
-    DeliveryAuthority::Observed {
-        pane_id: "%1408".to_owned(),
-        evidence: "idle_to_working timer_reset_plus_hash_change".to_owned(),
-    }
+    let receipt = ReceiverReceipt::idle_to_working(
+        "%1408",
+        1,
+        "spinner-stripped-before",
+        "spinner-stripped-after",
+    )
+    .expect("fixture must satisfy the receiver-receipt shape");
+    DeliveryAuthority::Observed { receipt }
+}
+
+fn observed_timer_reset() -> DeliveryAuthority {
+    let receipt = ReceiverReceipt::timer_reset_with_hash_change(
+        "%1408",
+        58,
+        1,
+        "spinner-stripped-before",
+        "spinner-stripped-after",
+    )
+    .expect("fixture must satisfy the receiver-receipt shape");
+    DeliveryAuthority::Observed { receipt }
 }
 
 fn read_back() -> AckAuthority {
@@ -27,7 +44,7 @@ fn transport_success_without_observation_is_no_delivery() {
     let evidence = AckEvidence::new(
         success(),
         DeliveryAuthority::NotObserved {
-            reason: "post-send capture unchanged".to_owned(),
+            reason: "receiver receipt absent: post-send capture unchanged".to_owned(),
         },
         AckAuthority::NotReadBack {
             reason: "no tracker comment".to_owned(),
@@ -45,7 +62,7 @@ fn observation_without_bead_comment_is_no_ack() {
         success(),
         observed(),
         AckAuthority::NotReadBack {
-            reason: "br comments list has no matching author".to_owned(),
+            reason: "br comments list has no matching marker".to_owned(),
         },
     );
     assert!(evidence.transport_succeeded());
@@ -69,11 +86,25 @@ fn live_shape_requires_all_three_citations_separately() {
 }
 
 #[test]
+fn observational_delivery_is_only_a_receiver_receipt() {
+    let evidence = AckEvidence::new(
+        success(),
+        observed_timer_reset(),
+        AckAuthority::NotReadBack {
+            reason: "read-back not attempted".to_owned(),
+        },
+    );
+    assert!(evidence.delivery_observed());
+    assert!(!evidence.acknowledgement_read_back());
+    assert!(!evidence.fully_acknowledged());
+}
+
+#[test]
 fn mutation_collapsing_any_authority_goes_red() {
     let transport_only = AckEvidence::new(
         success(),
         DeliveryAuthority::NotObserved {
-            reason: "missing observation".to_owned(),
+            reason: "missing receiver receipt".to_owned(),
         },
         AckAuthority::NotReadBack {
             reason: "missing comment".to_owned(),

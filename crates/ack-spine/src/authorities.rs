@@ -12,10 +12,120 @@ pub enum TransportAuthority {
     Failed { detail: String },
 }
 
+/// The two receiver-receipt observations that can establish delivery.
+///
+/// This shape mirrors receiver-receipt: delivery is observational only and
+/// requires both a receiver transition and a changed spinner-stripped hash.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReceiverReceiptBasis {
+    IdleToWorking,
+    TimerResetWithHashChange,
+}
+
+/// A validated receiver-side receipt. It contains no sender result.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReceiverReceipt {
+    pane_id: String,
+    basis: ReceiverReceiptBasis,
+    timer_before_secs: Option<u64>,
+    timer_after_secs: u64,
+    spinner_stripped_hash_before: String,
+    spinner_stripped_hash_after: String,
+}
+
+impl ReceiverReceipt {
+    /// Construct the IDLE -> WORKING receiver-receipt shape.
+    ///
+    /// The receiver-receipt classifier caps the new timer at 30 seconds and
+    /// requires a changed spinner-stripped content hash.
+    pub fn idle_to_working(
+        pane_id: impl Into<String>,
+        timer_after_secs: u64,
+        spinner_stripped_hash_before: impl Into<String>,
+        spinner_stripped_hash_after: impl Into<String>,
+    ) -> Option<Self> {
+        let pane_id = pane_id.into();
+        let before = spinner_stripped_hash_before.into();
+        let after = spinner_stripped_hash_after.into();
+        if pane_id.is_empty()
+            || timer_after_secs > 30
+            || before.is_empty()
+            || after.is_empty()
+            || before == after
+        {
+            return None;
+        }
+        Some(Self {
+            pane_id,
+            basis: ReceiverReceiptBasis::IdleToWorking,
+            timer_before_secs: None,
+            timer_after_secs,
+            spinner_stripped_hash_before: before,
+            spinner_stripped_hash_after: after,
+        })
+    }
+
+    /// Construct the WORKING -> WORKING timer-reset receiver-receipt shape.
+    pub fn timer_reset_with_hash_change(
+        pane_id: impl Into<String>,
+        timer_before_secs: u64,
+        timer_after_secs: u64,
+        spinner_stripped_hash_before: impl Into<String>,
+        spinner_stripped_hash_after: impl Into<String>,
+    ) -> Option<Self> {
+        let pane_id = pane_id.into();
+        let before = spinner_stripped_hash_before.into();
+        let after = spinner_stripped_hash_after.into();
+        if pane_id.is_empty()
+            || timer_after_secs >= timer_before_secs
+            || before.is_empty()
+            || after.is_empty()
+            || before == after
+        {
+            return None;
+        }
+        Some(Self {
+            pane_id,
+            basis: ReceiverReceiptBasis::TimerResetWithHashChange,
+            timer_before_secs: Some(timer_before_secs),
+            timer_after_secs,
+            spinner_stripped_hash_before: before,
+            spinner_stripped_hash_after: after,
+        })
+    }
+
+    pub fn pane_id(&self) -> &str {
+        &self.pane_id
+    }
+
+    pub const fn basis(&self) -> ReceiverReceiptBasis {
+        self.basis
+    }
+
+    pub const fn timer_before_secs(&self) -> Option<u64> {
+        self.timer_before_secs
+    }
+
+    pub const fn timer_after_secs(&self) -> u64 {
+        self.timer_after_secs
+    }
+
+    pub fn spinner_stripped_hash_before(&self) -> &str {
+        &self.spinner_stripped_hash_before
+    }
+
+    pub fn spinner_stripped_hash_after(&self) -> &str {
+        &self.spinner_stripped_hash_after
+    }
+}
+
 /// Evidence from an independent post-send receiver observation only.
+///
+/// Observed is deliberately coupled to ReceiverReceipt. A transport success,
+/// pane capture, timer, or arbitrary text cannot be called delivery.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DeliveryAuthority {
-    Observed { pane_id: String, evidence: String },
+    Observed { receipt: ReceiverReceipt },
     NotObserved { reason: String },
 }
 
@@ -97,16 +207,23 @@ mod tests {
         }
     }
 
+    fn receipt() -> ReceiverReceipt {
+        ReceiverReceipt::idle_to_working(
+            "%1408",
+            1,
+            "spinner-stripped-before",
+            "spinner-stripped-after",
+        )
+        .expect("fixture must satisfy receiver-receipt shape")
+    }
+
     fn delivery_observed() -> DeliveryAuthority {
-        DeliveryAuthority::Observed {
-            pane_id: "%1408".to_owned(),
-            evidence: "idle_to_working timer_reset hash_changed".to_owned(),
-        }
+        DeliveryAuthority::Observed { receipt: receipt() }
     }
 
     fn delivery_missing() -> DeliveryAuthority {
         DeliveryAuthority::NotObserved {
-            reason: "post-send capture unchanged".to_owned(),
+            reason: "receiver receipt absent: post-send capture unchanged".to_owned(),
         }
     }
 
@@ -119,7 +236,7 @@ mod tests {
 
     fn ack_missing() -> AckAuthority {
         AckAuthority::NotReadBack {
-            reason: "br comments list has no matching author".to_owned(),
+            reason: "br comments list has no matching marker".to_owned(),
         }
     }
 
@@ -154,6 +271,19 @@ mod tests {
                 acknowledgement_read_back: true,
                 fully_acknowledged: true,
             }
+        );
+    }
+
+    #[test]
+    fn invalid_receiver_receipt_shapes_are_rejected() {
+        assert!(ReceiverReceipt::idle_to_working("%1408", 31, "a", "b").is_none());
+        assert!(ReceiverReceipt::idle_to_working("%1408", 1, "same", "same").is_none());
+        assert!(
+            ReceiverReceipt::timer_reset_with_hash_change("%1408", 1, 1, "a", "b").is_none()
+        );
+        assert!(
+            ReceiverReceipt::timer_reset_with_hash_change("%1408", 58, 1, "same", "same")
+                .is_none()
         );
     }
 

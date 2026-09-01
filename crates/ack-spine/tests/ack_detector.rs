@@ -31,11 +31,40 @@ fn singular_verb_trap_produces_missing_ack() {
     assert!(!trap.comment_landed);
     assert!(trap.stderr.contains("unexpected argument"));
 
-    let verdict =
-        classify_ack_readback(FIXTURE_BEAD, TRAP_MARKER, Some(0), empty_comment_list(), "");
+    let verdict = classify_ack_readback(
+        FIXTURE_BEAD,
+        TRAP_MARKER,
+        trap.exit_code,
+        empty_comment_list(),
+        &trap.stderr,
+    );
     assert!(
         matches!(verdict, AckVerdict::Missing { .. }),
         "the singular-verb trap must produce Missing, got {verdict:?}"
+    );
+}
+
+#[test]
+fn missing_or_multiple_markers_are_refused() {
+    let missing = classify_ack_readback(
+        FIXTURE_BEAD,
+        GOOD_MARKER,
+        Some(0),
+        empty_comment_list(),
+        "",
+    );
+    assert!(matches!(missing, AckVerdict::Missing { .. }));
+
+    let multiple = classify_ack_readback(
+        FIXTURE_BEAD,
+        GOOD_MARKER,
+        Some(0),
+        "Comments for fixture-bead:\nACK-GOOD-FIXTURE\nACK-GOOD-FIXTURE\n",
+        "",
+    );
+    assert!(
+        matches!(multiple, AckVerdict::Unverifiable { .. }),
+        "a non-singular marker must be refused, got {multiple:?}"
     );
 }
 
@@ -104,5 +133,20 @@ fn read_back_distinguishes_trap_from_good() {
     assert_ne!(
         trap_verdict, good_verdict,
         "read-back must distinguish the two"
+    );
+}
+
+#[test]
+fn empty_marker_is_refused_even_when_read_back_succeeds() {
+    let verdict = classify_ack_readback(
+        FIXTURE_BEAD,
+        "",
+        Some(0),
+        "Comments for fixture-bead:\n",
+        "",
+    );
+    assert!(
+        matches!(verdict, AckVerdict::Unverifiable { .. }),
+        "an empty marker cannot establish a singular comment ACK: {verdict:?}"
     );
 }

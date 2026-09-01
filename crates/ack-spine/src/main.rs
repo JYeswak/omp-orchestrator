@@ -5,7 +5,9 @@
 
 #![forbid(unsafe_code)]
 
-use ack_spine::{StepKind, StepLedger};
+use ack_spine::{step, StepKind, StepLedger};
+use asupersync::runtime::RuntimeBuilder;
+use asupersync::Cx;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
@@ -15,71 +17,147 @@ fn main() -> ExitCode {
         return ExitCode::from(2);
     }
 
-    match args[0].as_str() {
-        "--demo" => {
-            // Run a simulated dispatch sequence and print the ledger.
-            let mut ledger = StepLedger::new();
-            let bead = "cp-example";
-            let pane = "%5";
-            let session = "omp-orchestrator";
-
-            ledger.record_step(
-                StepKind::BeadSelected,
-                bead,
-                pane,
-                session,
-                "br ready selected",
-            );
-            ledger.record_step(
-                StepKind::PacketRendered,
-                bead,
-                pane,
-                session,
-                "template rendered",
-            );
-            ledger.record_step(
-                StepKind::FenceChecked,
-                bead,
-                pane,
-                session,
-                "fence admitted",
-            );
-            ledger.record_step(StepKind::PacketSent, bead, pane, session, "ntm robot-send");
-            ledger.record_step(
-                StepKind::ReceiverVerified,
-                bead,
-                pane,
-                session,
-                "bead id in capture",
-            );
-
-            ledger.assert_step_count().expect("step count assertion");
-            ledger.assert_non_empty().expect("anti-vacuity");
-
-            println!("{}", ledger.to_jsonl());
-            println!(
-                "# steps_taken={} rows={} consistent={}",
-                ledger.steps_taken(),
-                ledger.rows().len(),
-                ledger.is_consistent()
-            );
-            ExitCode::SUCCESS
+    let runtime = match RuntimeBuilder::current_thread().build() {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            eprintln!("ACK_SPINE_ERROR reason=runtime_build detail={error}");
+            return ExitCode::from(2);
         }
-        "--selftest" => {
-            let mut ledger = StepLedger::new();
-            ledger.record_step(StepKind::BeadSelected, "cp-selftest", "%5", "s", "test");
-            ledger
-                .assert_step_count()
-                .expect("selftest: step count assertion");
-            ledger.assert_non_empty().expect("selftest: anti-vacuity");
-            println!(
-                "SELFTEST PASS ack-spine (ledger assertions, anti-vacuity, cancel-consistency)"
-            );
-            ExitCode::SUCCESS
-        }
-        _ => {
-            eprintln!("usage error: unknown command {}", args[0]);
-            ExitCode::from(2)
+    };
+    let result = runtime.block_on(async move {
+        let cx = Cx::current().ok_or_else(|| "ACK_SPINE_ERROR reason=no_runtime_context".to_owned())?;
+        run(&cx, &args).await
+    });
+    match result {
+        Ok(code) => code,
+        Err(error) => {
+            eprintln!("{error}");
+            ExitCode::from(1)
         }
     }
+}
+
+async fn run(cx: &Cx, args: &[String]) -> Result<ExitCode, String> {
+    cx.checkpoint()
+        .map_err(|_| "ACK_SPINE_ERROR reason=cancelled".to_owned())?;
+    match args.first().map(String::as_str) {
+        Some("--demo") => {
+            demo(cx).await?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Some("--selftest") => {
+            selftest(cx).await?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Some(command) => Err(format!("usage error: unknown command {command}")),
+        None => Err("usage: ack-spine --demo | --selftest".to_owned()),
+    }
+}
+
+async fn demo(cx: &Cx) -> Result<(), String> {
+    let mut ledger = StepLedger::new();
+    let bead = "cp-example";
+    let pane = "%5";
+    let session = "omp-orchestrator";
+
+    step(
+        cx,
+        &mut ledger,
+        StepKind::BeadSelected,
+        bead,
+        pane,
+        session,
+        "br ready selected",
+        |_| async {},
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    step(
+        cx,
+        &mut ledger,
+        StepKind::PacketRendered,
+        bead,
+        pane,
+        session,
+        "template rendered",
+        |_| async {},
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    step(
+        cx,
+        &mut ledger,
+        StepKind::FenceChecked,
+        bead,
+        pane,
+        session,
+        "fence admitted",
+        |_| async {},
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    step(
+        cx,
+        &mut ledger,
+        StepKind::PacketSent,
+        bead,
+        pane,
+        session,
+        "ntm robot-send",
+        |_| async {},
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    step(
+        cx,
+        &mut ledger,
+        StepKind::ReceiverVerified,
+        bead,
+        pane,
+        session,
+        "bead id in capture",
+        |_| async {},
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+
+    ledger
+        .assert_step_count()
+        .map_err(|error| error.to_string())?;
+    ledger
+        .assert_non_empty()
+        .map_err(|error| error.to_string())?;
+
+    println!("{}", ledger.to_jsonl());
+    println!(
+        "# steps_taken={} rows={} consistent={}",
+        ledger.steps_taken(),
+        ledger.rows().len(),
+        ledger.is_consistent()
+    );
+    Ok(())
+}
+
+async fn selftest(cx: &Cx) -> Result<(), String> {
+    let mut ledger = StepLedger::new();
+    step(
+        cx,
+        &mut ledger,
+        StepKind::BeadSelected,
+        "cp-selftest",
+        "%5",
+        "s",
+        "test",
+        |_| async {},
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    ledger
+        .assert_step_count()
+        .map_err(|error| error.to_string())?;
+    ledger
+        .assert_non_empty()
+        .map_err(|error| error.to_string())?;
+    println!("SELFTEST PASS ack-spine (ledger assertions, anti-vacuity, cancel-consistency)");
+    Ok(())
 }
