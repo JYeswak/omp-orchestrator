@@ -3,9 +3,9 @@
  "preserved_utc": "2026-09-01T22:40:38.070997Z",
  "source_root": "/tmp/grade",
  "why": "/tmp is cleared on reboot. These 237 files are the ONLY evidence behind 219 findings from rounds 15-21, and every reconciliation row in docs/plan/FINDINGS.jsonl will cite them. A citation to a path a reboot deletes is unverifiable the moment the machine restarts - the same clearable-provenance defect already fixed twice for the inventory captures and the wire-proof frame.",
- "file_count": 237,
- "raw_bytes": 2170954,
- "gz_bytes": 742566,
+ "file_count": 238,
+ "raw_bytes": 2197039,
+ "gz_bytes": 748637,
  "verify": "gunzip -c <preserved> | shasum -a256  -> must equal sha256",
  "files": [
   {
@@ -1666,6 +1666,14 @@
    "sha256": "43915160b81fc849790d887217cb54fffbdea5a216c9fb0386209d08f373aaf9",
    "bytes": 733,
    "gz_bytes": 432
+  },
+  {
+   "source": "docs/plan/CONVERGENCE.jsonl (round==15 rows, extracted 2026-09-01 by bead omp-orchestrator-5by)",
+   "preserved": ".flywheel/grade-evidence/r15-convergence-rows.jsonl.gz",
+   "sha256": "b4e585ec39b01c3913b78b2d2b39146f07f222c582a0ea52113c4bf3781bc510",
+   "bytes": 26085,
+   "gz_bytes": 6071,
+   "note": "Round 15 declared 20 findings and retained NO grading evidence file: all 13 of its CONVERGENCE.jsonl rows carry evidence=null, and the original 237 preserved files contain no r15 capture. These 13 rows ARE the only evidence that exists for those 20 findings, so they are preserved here to make the FINDINGS.jsonl citations retained and hash-verifiable rather than pointing at a mutable working file."
   }
  ]
 }
