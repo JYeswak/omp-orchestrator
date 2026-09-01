@@ -7,7 +7,7 @@
 //!     reconstruction;
 //!   * leg 5 as a REAL-FILE disk mutation with byte-identical restore and digests;
 //!   * leg 4 as a measured coverage run over the control-plane universe (#[ignore]:
-//!     the 23-file corpus lives in the sibling repo, not in CI).
+//!     the inherited 28-site corpus lives in the sibling repo, not in CI).
 
 use std::path::Path;
 
