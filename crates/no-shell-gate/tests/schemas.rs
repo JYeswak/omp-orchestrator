@@ -87,6 +87,57 @@ fn every_declared_artifact_on_disk_carries_its_required_fields() {
     assert!(problems.is_empty(), "schema violations:\n  {}", problems.join("\n  "));
 }
 
+/// Grade evidence must carry SEVERITY, or rounds cannot be compared.
+///
+/// Round 10 tagged 3 BLOCKER / 11 MAJOR / 3 MINOR on sections 06/07/08. Round 12
+/// graded the same three, found 20 things, and tagged NONE of them. The counts
+/// read 17 -> 20 and mean nothing: a transposed digit and a refuted premise both
+/// count as one. "Did the fixes help" became unanswerable, and the answer is the
+/// only reason the rounds are run.
+///
+/// RATCHET: enforced on the newest round only. Retrofitting severity onto every
+/// past evidence file is archaeology, and the point is that the NEXT round is
+/// comparable.
+#[test]
+fn the_newest_round_of_grade_evidence_carries_severity() {
+    let dir = std::path::Path::new("/tmp/grade");
+    let Ok(entries) = fs::read_dir(dir) else {
+        eprintln!("SKIP: /tmp/grade absent — evidence does not survive a reboot, which is \
+                   itself the hazard recorded in SCHEMAS.toml");
+        return;
+    };
+    // newest round number present
+    let mut newest = 0u32;
+    let mut files: Vec<(u32, PathBuf)> = Vec::new();
+    for e in entries.flatten() {
+        let p = e.path();
+        let Some(name) = p.file_name().and_then(|s| s.to_str()) else { continue };
+        let Some(rest) = name.strip_prefix('r') else { continue };
+        let Some((num, _)) = rest.split_once('-') else { continue };
+        let Ok(n) = num.parse::<u32>() else { continue };
+        if !name.ends_with(".md") { continue }
+        newest = newest.max(n);
+        files.push((n, p));
+    }
+    if newest == 0 {
+        eprintln!("SKIP: no round evidence files found");
+        return;
+    }
+    let current: Vec<&PathBuf> = files.iter().filter(|(n, _)| *n == newest).map(|(_, p)| p).collect();
+    let mut untagged = Vec::new();
+    for p in &current {
+        let Ok(t) = fs::read_to_string(p) else { continue };
+        let tagged = ["BLOCKER", "MAJOR", "MINOR", "SEVERITY"].iter().any(|k| t.contains(k));
+        if !tagged {
+            untagged.push(p.file_name().unwrap().to_string_lossy().to_string());
+        }
+    }
+    assert!(untagged.is_empty(),
+        "round {newest} evidence carries no severity tag, so it cannot be compared with any \
+         other round:\n  {}\nA count alone cannot tell a transposed digit from a refuted \
+         premise, and both were filed this session.", untagged.join("\n  "));
+}
+
 #[test]
 fn the_validator_rejects_a_row_missing_a_required_field() {
     // KNOWN-BAD leg, in-memory: the check is `line contains "field"`, so prove it discriminates.

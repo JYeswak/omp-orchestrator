@@ -63,6 +63,15 @@ writer    = "crates/tick-monitor watch"
 reader    = "the orchestrator, by eye"
 note      = "UNGATED CONSUMER: nothing parses this programmatically, so a field rename breaks nobody and is noticed by nobody."
 
+[artifacts.grade_evidence]
+path      = "/tmp/grade/r<N>-<section>.md"
+format    = "markdown-sections"
+required  = ["SEVERITY", "SEARCH SPACE"]
+optional  = ["DEFERRED", "RETRACTED", "UNVERIFIABLE"]
+writer    = "grading panes"
+reader    = "the orchestrator, comparing rounds"
+note      = "SEVERITY is required because a COUNT cannot distinguish a transposed digit from a refuted premise. Round 10 tagged 3 BLOCKER / 11 MAJOR / 3 MINOR; round 12 tagged nothing, so the two rounds cannot be compared and 'did the fixes help' has no answer. SEARCH SPACE is required because a zero that cannot describe what it looked at is a silence — fourteen false zeros this session. Lives in /tmp: it does not survive a reboot, which is a known and unfixed hazard."
+
 [artifacts.beads]
 path      = ".beads/issues.jsonl"
 format    = "jsonl"
@@ -78,8 +87,12 @@ note      = "OWNED UPSTREAM. Listed for completeness; we do not define this and 
 #                     machine-readable, none replayable, none auditable. `ntm`
 #                     ships a `dispatch` template with required objective/target
 #                     variables and it was used zero times.
-# grade evidence      /tmp/grade/*.md — free-form. The ledger row is structured;
-#                     the reasoning behind it is not, and it lives in /tmp.
+# grade evidence      NOW DECLARED — see [artifacts.grade_evidence]. It was listed
+#                     here as undeclared and the cost landed within hours: round 12
+#                     used no severity tags at all, so BLOCKER/MAJOR/MINOR counts
+#                     across rounds 10 and 12 are 3/11/3 versus 0/0/0 — not an
+#                     improvement, an instrument change. The question "is the plan
+#                     getting better" became unanswerable.
 # cooldown.json,      written by crates but never read back by a test.
 # heartbeat.jsonl,
 # tick-ledger.jsonl,
