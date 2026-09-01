@@ -1,8 +1,6 @@
-use std::io::Read;
 use std::path::PathBuf;
 use std::process::{Command, ExitCode, Stdio};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 const ORACLE_TIMEOUT: Duration = Duration::from_secs(120);
 const DIAGNOSTIC_VERBS: [&str; 4] = ["status", "why", "capabilities", "robot-docs"];
@@ -31,71 +29,33 @@ fn oracle_output() -> Result<String, String> {
     command
         .arg(oracle)
         .arg("--check")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    #[cfg(unix)]
-    std::os::unix::process::CommandExt::process_group(&mut command, 0);
-    let mut child = command.spawn().map_err(|e| format!("spawn oracle: {e}"))?;
-    let stdout = child.stdout.take().ok_or_else(|| "oracle stdout pipe unavailable".to_owned())?;
-    let stderr = child.stderr.take().ok_or_else(|| "oracle stderr pipe unavailable".to_owned())?;
-    let stdout_reader = thread::spawn(move || {
-        let mut bytes = Vec::new();
-        stdout.read_to_end(&mut bytes).map(|_| bytes)
-    });
-    let stderr_reader = thread::spawn(move || {
-        let mut bytes = Vec::new();
-        stderr.read_to_end(&mut bytes).map(|_| bytes)
-    });
-    let deadline = Instant::now() + ORACLE_TIMEOUT;
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                let stdout = stdout_reader
-                    .join()
-                    .map_err(|_| "oracle stdout reader panicked".to_owned())?
-                    .map_err(|e| format!("read oracle stdout: {e}"))?;
-                let stderr = stderr_reader
-                    .join()
-                    .map_err(|_| "oracle stderr reader panicked".to_owned())?
-                    .map_err(|e| format!("read oracle stderr: {e}"))?;
-                let stdout = String::from_utf8_lossy(&stdout).into_owned();
-                let stderr = String::from_utf8_lossy(&stderr).trim().to_owned();
-                if stdout.trim().is_empty() {
-                    return Err(format!(
-                        "oracle produced no output (rc={:?}{})",
-                        status.code(),
-                        if stderr.is_empty() {
-                            String::new()
-                        } else {
-                            format!(", stderr={stderr}")
-                        }
-                    ));
-                }
-                return Ok(stdout);
-            }
-            Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(25)),
-            Ok(None) => {
-                let _ = Command::new("/bin/kill")
-                    .args(["-TERM", &format!("-{}", child.id())])
-                    .status();
-                let _ = child.wait();
-                let _ = stdout_reader.join();
-                let _ = stderr_reader.join();
+        .stdin(Stdio::null());
+
+    // Use the shared bounded runner: it drains both pipes concurrently, kills the
+    // entire process group on deadline, and keeps timeout distinct from output.
+    match subprocess_contract::bounded_output(&mut command, ORACLE_TIMEOUT) {
+        subprocess_contract::BoundedOutcome::Completed(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+            if stdout.trim().is_empty() {
                 return Err(format!(
-                    "oracle timeout after {}s",
-                    ORACLE_TIMEOUT.as_secs()
+                    "oracle produced no output (rc={:?}{})",
+                    output.status.code(),
+                    if stderr.is_empty() {
+                        String::new()
+                    } else {
+                        format!(", stderr={stderr}")
+                    }
                 ));
             }
-            Err(e) => {
-                let _ = Command::new("/bin/kill")
-                    .args(["-TERM", &format!("-{}", child.id())])
-                    .status();
-                let _ = child.wait();
-                let _ = stdout_reader.join();
-                let _ = stderr_reader.join();
-                return Err(format!("wait oracle: {e}"));
-            }
+            Ok(stdout)
+        }
+        subprocess_contract::BoundedOutcome::TimedOut => Err(format!(
+            "oracle timeout after {}s (process group signalled; no output verdict)",
+            ORACLE_TIMEOUT.as_secs()
+        )),
+        subprocess_contract::BoundedOutcome::Unspawned(error) => {
+            Err(format!("spawn oracle: {error}"))
         }
     }
 }

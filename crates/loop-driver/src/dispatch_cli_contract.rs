@@ -37,8 +37,13 @@ fn oracle_output() -> Result<String, String> {
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut command, 0);
     let mut child = command.spawn().map_err(|e| format!("spawn oracle: {e}"))?;
-    let stdout = child.stdout.take().ok_or_else(|| "oracle stdout pipe unavailable".to_owned())?;
-    let stderr = child.stderr.take().ok_or_else(|| "oracle stderr pipe unavailable".to_owned())?;
+    // `mut` is required: read_to_end takes &mut self, and these are moved into the
+    // drainer threads below. Unlike fleet-monitor's version, this one DOES drain both
+    // pipes concurrently rather than polling try_wait() against undrained pipes -- the
+    // handroll is still redundant with subprocess-contract::bounded_output, but it is
+    // not the ~64 KiB deadlock, so this is left as a follow-up rather than widened here.
+    let mut stdout = child.stdout.take().ok_or_else(|| "oracle stdout pipe unavailable".to_owned())?;
+    let mut stderr = child.stderr.take().ok_or_else(|| "oracle stderr pipe unavailable".to_owned())?;
     let stdout_reader = thread::spawn(move || {
         let mut bytes = Vec::new();
         stdout.read_to_end(&mut bytes).map(|_| bytes)

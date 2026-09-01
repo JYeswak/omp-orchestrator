@@ -36,8 +36,8 @@ fn oracle_output() -> Result<String, String> {
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut command, 0);
     let mut child = command.spawn().map_err(|e| format!("spawn oracle: {e}"))?;
-    let stdout = child.stdout.take().ok_or_else(|| "oracle stdout pipe unavailable".to_owned())?;
-    let stderr = child.stderr.take().ok_or_else(|| "oracle stderr pipe unavailable".to_owned())?;
+    let mut stdout = child.stdout.take().ok_or_else(|| "oracle stdout pipe unavailable".to_owned())?;
+    let mut stderr = child.stderr.take().ok_or_else(|| "oracle stderr pipe unavailable".to_owned())?;
     let stdout_reader = thread::spawn(move || {
         let mut bytes = Vec::new();
         stdout.read_to_end(&mut bytes).map(|_| bytes)
@@ -98,6 +98,7 @@ fn oracle_output() -> Result<String, String> {
         }
     }
 }
+#[derive(Default)]
 struct Fields {
     verdict: String,
     load: String,
