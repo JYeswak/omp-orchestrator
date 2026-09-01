@@ -381,7 +381,7 @@ fn validate_findings_ledger(repo: &Path) -> Result<GateReport, String> {
     for (id, expected) in &declared {
         let Some((round, _section)) = actual.get(id) else {
             return Err(format!(
-                "FINDINGS_LEDGER_COVERAGE_MISSING id={id} round={} section={}",
+                "FINDINGS_LEDGER_COVERAGE_MISSING id={id} round={} section={} void_rows={void_rows}",
                 expected.round, expected.section
             ));
         };
@@ -398,7 +398,7 @@ fn validate_findings_ledger(repo: &Path) -> Result<GateReport, String> {
             .count();
         if observed_count < *expected_count {
             return Err(format!(
-                "FINDINGS_LEDGER_COVERAGE_MISSING round={round} section={section} expected={expected_count} observed={observed_count}"
+                "FINDINGS_LEDGER_COVERAGE_MISSING round={round} section={section} expected={expected_count} observed={observed_count} void_rows={void_rows}"
             ));
         }
     }
