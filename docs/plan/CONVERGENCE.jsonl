@@ -19,3 +19,6 @@
 {"section":"06-gates","round":9,"lens":"adversarial","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rB-06-gates.md"}
 {"section":"07-installability","round":9,"lens":"adversarial","new_findings":1,"verdict":"PASS-WITH-FIXES","evidence":"/tmp/grade/rB-07-installability.md"}
 {"section":"08-end-users","round":9,"lens":"adversarial","new_findings":1,"verdict":"PASS-WITH-FIXES","evidence":"/tmp/grade/rB-08-end-users.md"}
+{"section":"09-milestones","round":9,"lens":"absence","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rB-09-milestones.md"}
+{"section":"10-prior-art","round":9,"lens":"absence","new_findings":1,"verdict":"FAIL","evidence":"/tmp/grade/rB-10-prior-art.md"}
+{"section":"11-lifecycle","round":9,"lens":"absence","new_findings":1,"verdict":"FAIL","evidence":"/tmp/grade/rB-11-lifecycle.md"}
