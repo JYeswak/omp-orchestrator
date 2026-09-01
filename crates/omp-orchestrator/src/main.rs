@@ -1092,24 +1092,6 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         return Ok(());
     }
 
-    // DISK PRESSURE. Checked BEFORE observation because every downstream step in
-    // this tick spawns a build, and a build on a full volume fails as a LINKER
-    // error that reads like a code defect.
-    //
-    // Measured 2026-09-01, while executing the objective that asks for "proper
-    // guards": /Volumes/BuildShared reached 99% (98MiB free) and every gate in the
-    // repository stopped with `No space left on device (os error 28)`. The volume
-    // had been observed at 84% hours earlier and recorded as an item needing a
-    // decision. It was the only item on that list that could halt the fleet.
-    //
-    // A guard that observes and does not refuse is a note. This refuses.
-    if let Some(why) = disk_pressure(config)? {
-        write_heartbeat(config, tick, "DISK_PRESSURE", &why)?;
-        println!(
-            "DISK_PRESSURE owner=josh next_action=cargo-clean-or-grow-volume detail={why}"
-        );
-        return Ok(());
-    }
     let mut monitor_args = vec![
         "observe".to_owned(),
         "--session".to_owned(),
@@ -1134,6 +1116,30 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             .iter()
             .any(|excluded| excluded == &pane.pane_id)
     });
+    let pane_states = observation
+        .panes
+        .iter()
+        .map(|pane| format!("{}={}", pane.pane_id, pane.state))
+        .collect::<Vec<_>>()
+        .join(",");
+    let free_capacity_count = observation
+        .panes
+        .iter()
+        .filter(|pane| pane.is_free_capacity)
+        .count();
+    let dispatchable_count = observation
+        .panes
+        .iter()
+        .filter(|pane| pane.is_dispatchable)
+        .count();
+    println!(
+        "OBSERVATION tick={tick} session={} panes={} states={} free_capacity={} dispatchable={}",
+        config.session,
+        observation.panes.len(),
+        pane_states,
+        free_capacity_count,
+        dispatchable_count
+    );
     let ready_args = vec!["ready".to_owned(), "--json".to_owned()];
     let ready_output = invoke(cx, config, &config.br, &ready_args).await?;
     let ready = require_success(&config.br, ready_output).map_err(|error| {
@@ -1144,6 +1150,22 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         ready_count: bead_ids.len(),
         readable: true,
     };
+    // DISK PRESSURE. Checked after observation and queue read, before any dispatch
+    // step can write. A full build volume fails as a LINKER error that reads like a
+    // code defect, but this gate must not suppress read-only pane observation.
+    //
+    // Measured 2026-09-01: /Volumes/BuildShared reached 99% and every gate stopped
+    // with No space left on device (os error 28). The protection and 8% free / 1 GiB
+    // threshold remain unchanged; only placement is different.
+    //
+    // A guard that observes and does not refuse is a note. This refuses before dispatch.
+    if let Some(why) = disk_pressure(config)? {
+        write_heartbeat(config, tick, "DISK_PRESSURE", &why)?;
+        println!(
+            "DISK_PRESSURE owner=josh next_action=cargo-clean-or-grow-volume detail={why}"
+        );
+        return Ok(());
+    }
     let authorization = applicable(
         read_idle_authorization(&config.repo, now_unix()),
         &config.session,
