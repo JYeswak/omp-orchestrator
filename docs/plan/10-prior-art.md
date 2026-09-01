@@ -580,3 +580,52 @@ from OMP, on a plane we do not currently ride.
 orchestrator could consume it — `%1408` specified the test (one live-session frame capture) and it
 is **unrun**. Until it runs, this refutes *"no precedent exists"* and does **not** establish *"we
 can consume it today."* Those are different claims and only the first is measured.
+
+---
+
+## Every named gap in this plan has an existing typed mechanism upstream
+
+`%1408`'s signal sweep — same symbol-level instrument, applied to the whole `dist/types` tree —
+found that **the refutation of Gap 7 was not an isolated miss**. It was the first of seven.
+
+| gap this plan names | upstream type that closes it |
+|---|---|
+| worker completion (S6→S7) | `AgentEndEvent.willContinue` + `SessionStopEvent.settle`, carried on `RpcSessionEventFrame` |
+| dispatch receipts (`cp-z42vu`) | `IrcDeliveryReceipt` + `AsyncJobDeliverySink` |
+| claim / ownership | `Stage1Claim` / `GlobalClaim` with `ownershipToken` + `inputWatermark` |
+| idle vs newly-idle | `GuestIdleReconcilerCtx` — the settle-vs-continuation split, done upstream |
+| roster | `HubRosterCounts`, a five-tally schema |
+| cost measurement (Q2) | `PerplexityCost` / `SearchUsage` / `ContextUsage` |
+| **context compaction loss** | `SessionBefore` / `CompactEvent` pair |
+
+Verified at the file level: `modes/rpc/rpc-types.d.ts:589` declares
+`RpcSessionEventFrame = AgentSessionEvent | RpcSubagentFrame`;
+`memories/storage.d.ts:20-27` carries `ownershipToken` and `inputWatermark`;
+`extensibility/shared-events.d.ts:27,43,54` carries the session/compact event family.
+
+### This changes the architecture from build to adopt
+
+`RpcSessionEventFrame` is the decisive one. **The `--mode=rpc` wire has a dedicated event-frame
+channel** — so the completion signal has a defined path to a consumer, and the open question
+narrows from *"can we get a completion signal"* to *"does `agent_end` appear on a channel that
+already exists for exactly this."* `%1408`'s read: **adoption, not bridge.**
+
+The last row is the one to sit with. `SessionBefore` / `CompactEvent` is **a typed hook at exactly
+the boundary where `%1413` lost its entire grading task tonight** — context hit 85 %, compacted, the
+task vanished, and the recovery was a hand-written re-dispatch plus an invented file-output rule.
+A typed pre-compaction event was available the whole time.
+
+### The pattern, stated plainly
+
+This plan documented seven architectural gaps, searched 210 repositories for prior art on one of
+them, and **never searched the tool it wraps**. All seven have upstream types. The plan's central
+technical claim — that we must build a completion protocol, a receipt type, a claim vocabulary and
+an idle discriminator — is now **"we must adopt seven types from a dependency we already ship
+against."** That is a materially different project: smaller, faster, and lower-risk.
+
+**NO-CLAIM.** Seven types are *declared* in the installed `dist/types`. For **one** of them
+(`AgentEndEvent`) a consuming channel is identified but the frame capture proving it crosses the
+wire is **still unrun** — `%1414` has it now. For the other six, nothing establishes they are
+reachable from `--mode=rpc`, that their semantics match our need, or that adopting them is cheaper
+than building. What is established is narrower and still decisive: **"no precedent exists" is false
+for all seven**, and every design decision this plan made on that premise needs re-examination.
