@@ -227,3 +227,86 @@ This section maps the AAR shape onto ours from its `README.md` and `generic_aar/
 harness has not been run here** — it targets Linux + CUDA and this is an Apple Silicon Mac, so even
 the no-GPU stub path is untested by me. What is claimed is that the *role taxonomy* and the
 *isolation discipline* are transplantable, and that we are measurably missing two of three roles.
+
+---
+
+## 12.10 The milestone loop — what runs before anything is built
+
+> **Josh:** *"we establish — what happens foundationally for each stage first that everything else
+> builds upon — gates, crates, input/output, schema, what needs to be true, negative patterns …
+> we need to ensure we have all knowns, all unknowns, and gaps ahead of build."*
+
+The seven-field runbook contract above says how to **dispatch** a stage. It does not say what must
+be **true before the stage can be dispatched at all**, and it has no place to record what we do not
+know. Two fields were missing, and they are the ones that run first.
+
+### Field 8 — FOUNDATION (runs before any bead in the stage is created)
+
+A stage cannot be worked until its substrate exists. Enumerate, in this order, because each is the
+input to the next:
+
+| # | foundation element | the question it answers | refusal if absent |
+|---|---|---|---|
+| F1 | **Schema** | what shape does this stage read and write | no `SCHEMAS.toml` row → the stage may not persist anything |
+| F2 | **I/O contract** | who produces the input, who consumes the output | an unnamed consumer → the stage is BUILT ≠ WIRED by construction |
+| F3 | **Crates** | which crate owns the mechanism, which is a thin caller | mechanism in a binary → untestable, and 21 of ours already are |
+| F4 | **Gates** | what refuses a bad result, and does it bite | no known-bad leg → the gate is decorative |
+| F5 | **Numbers** | which figures does this stage claim | undeclared figure → silent rot, measured 5 rounds running |
+
+**Order is not stylistic.** A gate written before its schema gates a shape that will change; a crate
+written before its I/O contract acquires the wrong seam. Every foundation inversion this repo has
+suffered was one of those two.
+
+### Field 9 — THE EPISTEMIC LEDGER (knowns, unknowns, gaps)
+
+Three columns, kept per stage, and the third is the one that pays:
+
+- **KNOWN** — measured, with the command. Goes in `NUMBERS.toml` if it is a figure.
+- **UNKNOWN** — named, with *the experiment that would resolve it and its cost*. An unknown without
+  a resolving experiment is a worry, not an unknown.
+- **GAP** — we know the thing is missing and we know what it costs to leave it missing. A gap with
+  no cost is a preference.
+
+**Why this is a field and not a document.** The single most expensive discovery of this session was
+that seven "gaps" had upstream types in the tool we wrap, and the eighth (`plan-mode`) turned up two
+hours later. Every one had sat in prose as a settled absence. **An unknown that never had a resolving
+experiment attached is indistinguishable from a known** — and §10 called one of them "precedent-free
+across 210 repositories" while the precedent shipped in the binary named on line one.
+
+### The loop, per milestone
+
+```
+  F1..F5 foundation      -> if any refuses, the stage is not dispatchable. Stop.
+  epistemic ledger       -> every UNKNOWN gets a resolving experiment + cost
+  cheapest falsifier     -> run the experiment that could kill the stage first
+  beads                  -> WHAT / WHY / ACCEPTANCE, labelled, in the DAG, runnable
+  dispatch               -> fresh eyes; the grader has never read the ledger
+  grade + fix            -> same round, not the next one
+  capability re-check    -> every previously-banked stage, or the bank is a fiction
+```
+
+**The cheapest falsifier runs before the beads exist.** Ordering independent checks by cost is
+`beads-north-star`'s DAG rule, and it applies to the stage as a whole: the experiment that could
+kill the milestone is worth more than the twenty beads that assume it survives.
+
+### What is enforcing this today
+
+Honestly: **three of nine fields, and the bead standard.**
+
+| enforced | by | since |
+|---|---|---|
+| F1 schema | `schemas.rs` + `SCHEMAS.toml` | this session |
+| F4 gates bite | `no-shell-gate` mutation legs | this session |
+| F5 numbers | `numbers.rs` + `NUMBERS.toml`, 13 figures | this session |
+| bead shape | `bead_standard.rs` — **plan-derived beads have no ratchet** | this session |
+| F2, F3, field 9 | **nothing** | — |
+
+`bead_standard.rs` splits the board in two: legacy beads get a ratchet from their measured floor
+(4 of 50 met the full standard, 17 isolated, 54% with no runnable acceptance), and **plan-derived
+beads are held to the whole standard from the first one**. It currently reports that zero exist —
+which is exactly when a standard is cheapest to install, and is the difference between a gate and a
+cleanup project.
+
+**NO-CLAIM.** F2 and F3 have no mechanism; a stage can still declare an unconsumed output or put its
+logic in a binary and nothing objects. The epistemic ledger has no schema, no gate, and no instance —
+it is a specification for a field that does not yet exist anywhere in this plan.
