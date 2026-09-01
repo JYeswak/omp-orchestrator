@@ -7,3 +7,6 @@
 {"section":"00-brief","round":8,"lens":"investor","new_findings":1,"verdict":"FAIL","evidence":"/tmp/grade/rA-00.md"}
 {"section":"01-idea","round":8,"lens":"investor","new_findings":2,"verdict":"FAIL","evidence":"/tmp/grade/rA-01.md"}
 {"section":"02-surface-census","round":8,"lens":"investor","new_findings":3,"verdict":"FAIL","evidence":"/tmp/grade/rA-02.md"}
+{"section":"06-gates","round":8,"lens":"absence","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rA-06-gates.md"}
+{"section":"07-installability","round":8,"lens":"absence","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rA-07-installability.md"}
+{"section":"08-end-users","round":8,"lens":"absence","new_findings":0,"verdict":"PASS","evidence":"/tmp/grade/rA-08-end-users.md"}
