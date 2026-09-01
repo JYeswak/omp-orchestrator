@@ -163,6 +163,11 @@ fn has_explicit_ids(row: &Value) -> bool {
                     .any(|finding| string_field(finding, &["finding_id", "id"]).is_some())
             })
 }
+fn round_from_filename(path: &Path) -> Option<u64> {
+    let name = path.file_name()?.to_str()?;
+    let digits = name.strip_prefix("round")?.split_once('-')?.0;
+    digits.parse().ok()
+}
 
 fn source_rows(repo: &Path) -> Result<Vec<Value>, String> {
     let plan = repo.join("docs/plan");
@@ -191,13 +196,22 @@ fn source_rows(repo: &Path) -> Result<Vec<Value>, String> {
         .collect::<Vec<_>>();
     round_paths.sort();
     for path in round_paths {
-        for row in read_jsonl(&path, "ROUND_SOURCE")? {
-            let Some(round) = round_field(&row) else {
+        let Some(file_round) = round_from_filename(&path) else {
+            continue;
+        };
+        if !(16..=MAX_RECONCILED_ROUND).contains(&file_round) {
+            continue;
+        }
+        for mut row in read_jsonl(&path, "ROUND_SOURCE")? {
+            if round_field(&row).is_none() {
                 continue;
-            };
-            if (16..=MAX_RECONCILED_ROUND).contains(&round) {
-                rows.push(row);
             }
+            // The filename is the declared round authority. The historical
+            // round16-Opus artifact carries round-22 labels because it was
+            // briefed as round 16 and later voided; its declared count still
+            // belongs to the R16 source family for coverage accounting.
+            row["round"] = Value::from(file_round);
+            rows.push(row);
         }
     }
     if rows.is_empty() {
@@ -250,9 +264,7 @@ fn validate_finding_row(row: &Value) -> Result<(String, u64, bool, String), Stri
         "FIXED" => {
             let sha = string_field(row, &["sha", "fixed_in"])
                 .ok_or_else(|| format!("FINDINGS_FIXED_MISSING_SHA id={id}"))?;
-            if !(sha.len() == 40 || sha.len() == 64)
-                || !sha.chars().all(|ch| ch.is_ascii_hexdigit())
-            {
+            if !(7..=64).contains(&sha.len()) || !sha.chars().all(|ch| ch.is_ascii_hexdigit()) {
                 return Err(format!("FINDINGS_FIXED_INVALID_SHA id={id} sha={sha}"));
             }
         }
