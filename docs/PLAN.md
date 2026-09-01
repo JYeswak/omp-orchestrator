@@ -6,17 +6,25 @@ across a fleet of agents, refusing every step it cannot prove.**
 Assembled from `docs/plan/`. **The section files are the source of truth**; this document is their
 concatenation. Edit a section, then re-assemble — never edit here.
 
-> **9 measured claims here were refuted while this was being written**, each caught by an agent
+> ## The largest question in this plan is now settled, and the answer changes the project
+
+> §10 claimed a typed worker-completion signal was **precedent-free across 210 repositories** and
+> called it the most consequential finding here. It ships in the tool we wrap, and it crosses the
+> wire: `AgentEndEvent`, `type:"agent_end"`, `isTerminal:true`, captured live on `--mode=rpc`.
+> Six more named gaps — receipts, claims, idle-discrimination, roster, cost telemetry, and a
+> pre-compaction hook — have upstream types too.
+
+> **The central task changes from *build a protocol* to *attach to a plane that already carries
+> one*.** The mirror search covered 210 repositories and never searched the binary named on line
+> one. Carried in 5 of 12 sections.
+
+> 9 measured claims here were refuted while this was being written, each caught by an agent
 > re-deriving rather than reading. They are kept as labelled retractions.
 
-> **The plan's own headline finding is among them, and it was the first of seven.** §10 claimed a
-> typed worker-completion signal was precedent-free across 210 repositories. It ships in the tool
-> we wrap. So do typed receipts, claims, idle-discrimination, roster, cost telemetry, and a
-> pre-compaction hook. **The central task changes from build to adopt.** Carried in 5 of 12 sections.
-
-> §8 carries **12 open questions** and **5 kill criteria**. The surface map covers **591 surfaces**:
-> 32 consumed, 67 wire, 30 validate, 453 retired,
-> 9 honestly unknown — **21.8% engaged**, from a first-published 6.2%.
+> §8 carries **12 open questions** and **5 kill criteria** — one of which (K1) is now void.
+> The surface map covers **591 surfaces**: 32 consumed, 67 wire,
+> 30 validate, 453 retired, 9 honestly unknown —
+> **21.8% engaged**, from a first-published 6.2%.
 
 ---
 
@@ -552,7 +560,7 @@ The denominator is now stated in the heading, which is the whole point: *five st
 | consume — admission | dispatch fence | **FENCED** — 162 refused ticks over 4.2 hours, `DISPATCH_RETRY_BLOCKED` |
 | consume — transport | packet delivery | **UNVERIFIED** — transport returned `success:[N]` with no packet (`cp-z42vu`); never separately measured |
 | actuate | dispatch | **DOES NOT EXIST** — a human types into panes |
-| complete | worker says done | **NOT WIRED** — every completion this session was found by a human looking. *Corrected: the row said DOES NOT EXIST until `%1408` found `AgentEndEvent` in OMP's own `dist/types/extensibility/shared-events.d.ts:154`. The signal exists; we do not ride the plane it travels on.* |
+| complete | worker says done | **AVAILABLE, NOT WIRED** — `AgentEndEvent` verified crossing `--mode=rpc` with `isTerminal:true` (raw frame captured). The signal exists and is reachable; we do not attach to the plane that carries it|
 
 **The observe row was downgraded by `ActionsNegative`, and the defect is in the one layer this brief
 called working.** The two-capture rule has a genuine asymmetry: a **changed** content hash proves
@@ -5772,6 +5780,55 @@ exists, or that any of them would compose cleanly if typed — three of the four
 returned useful results and one (`"planning workflow beads dispatch"`) returned **No skills found**,
 so the search space is not exhausted. The typed/untyped column is a judgement from each skill's
 description and this repo's measurements, not from reading all twelve skills end to end.
+
+---
+
+## 11.9 SETTLED — the completion signal crosses the wire, and S6→S7 closes by adoption
+
+The test `%1408` specified and `%1414` ran. **`AgentEndEvent` crosses `--mode=rpc`.** Raw frame
+captured at `/tmp/grade/agent-end-raw-frame.json`, 4,772 bytes, verified independently:
+
+```json
+{ "type": "agent_end",
+  "messages": [ … full assistant turn, thinking + text + providerPayload … ],
+  "isTerminal": true }
+```
+
+`isTerminal: true` is the wire form of the terminal/continuation distinction that
+`AgentEndEvent.willContinue` declares in the type. The channel is `RpcSessionEventFrame`
+(`modes/rpc/rpc-types.d.ts:589`), which exists for exactly this.
+
+### What this decides
+
+**The severed S6→S7 link closes by adoption.** `%1414`'s verdict: *"architecture should adapt the
+existing event plane, not invent a completion protocol."*
+
+| plan artifact | status now |
+|---|---|
+| §10 Gap 7 "precedent-free across 210 work-trees" | **refuted, and the precedent is reachable** |
+| §11.5 "S6→S7 severed, no completion path" | **closes by consuming an existing frame** |
+| §09 M4 "completion detected by the loop, not a human" | **scope collapses** from build-a-protocol to consume-a-frame |
+| §08 K1 "we stop if the completion protocol cannot be built" | **void** — it need not be built |
+| a completion crate | **unnecessary** |
+
+This was the single largest open question in the plan and the largest claimed risk. It cost one
+frame capture, and the answer was available from the first hour: the type was declared in
+`dist/types`, the channel was declared in `modes/rpc`, and the plan searched 210 other repositories
+instead.
+
+### The honest size of what remains
+
+Adoption is not free. `tick-monitor` reads panes through tmux; consuming `RpcSessionEventFrame`
+means holding an rpc session per worker, which is a different process topology from the one every
+crate in §03 assumes. **The work moved from "invent a protocol" to "change how we attach to
+workers"** — smaller, but not nothing, and no crate does it today.
+
+**NO-CLAIM.** One frame, from one session, driven to one `agent_end`. This establishes the event
+crosses the wire and carries `isTerminal`. It does **not** establish behaviour under the cases that
+actually break loops: a crashed worker, a killed pane, a rate-limited turn, or a worker that
+compacts mid-task. `willContinue` exists in the type to mark a scheduled continuation and **did not
+appear in this frame** — whether it appears on a non-terminal settle is untested. The `18/18` mux
+pong result is a separate finding and is not evidence about this channel.
 
 
 ---

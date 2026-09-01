@@ -511,7 +511,7 @@ The denominator is now stated in the heading, which is the whole point: *five st
 | consume — admission | dispatch fence | **FENCED** — 162 refused ticks over 4.2 hours, `DISPATCH_RETRY_BLOCKED` |
 | consume — transport | packet delivery | **UNVERIFIED** — transport returned `success:[N]` with no packet (`cp-z42vu`); never separately measured |
 | actuate | dispatch | **DOES NOT EXIST** — a human types into panes |
-| complete | worker says done | **NOT WIRED** — every completion this session was found by a human looking. *Corrected: the row said DOES NOT EXIST until `%1408` found `AgentEndEvent` in OMP's own `dist/types/extensibility/shared-events.d.ts:154`. The signal exists; we do not ride the plane it travels on.* |
+| complete | worker says done | **AVAILABLE, NOT WIRED** — `AgentEndEvent` verified crossing `--mode=rpc` with `isTerminal:true` (raw frame captured). The signal exists and is reachable; we do not attach to the plane that carries it|
 
 **The observe row was downgraded by `ActionsNegative`, and the defect is in the one layer this brief
 called working.** The two-capture rule has a genuine asymmetry: a **changed** content hash proves

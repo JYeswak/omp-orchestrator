@@ -281,3 +281,52 @@ exists, or that any of them would compose cleanly if typed — three of the four
 returned useful results and one (`"planning workflow beads dispatch"`) returned **No skills found**,
 so the search space is not exhausted. The typed/untyped column is a judgement from each skill's
 description and this repo's measurements, not from reading all twelve skills end to end.
+
+---
+
+## 11.9 SETTLED — the completion signal crosses the wire, and S6→S7 closes by adoption
+
+The test `%1408` specified and `%1414` ran. **`AgentEndEvent` crosses `--mode=rpc`.** Raw frame
+captured at `/tmp/grade/agent-end-raw-frame.json`, 4,772 bytes, verified independently:
+
+```json
+{ "type": "agent_end",
+  "messages": [ … full assistant turn, thinking + text + providerPayload … ],
+  "isTerminal": true }
+```
+
+`isTerminal: true` is the wire form of the terminal/continuation distinction that
+`AgentEndEvent.willContinue` declares in the type. The channel is `RpcSessionEventFrame`
+(`modes/rpc/rpc-types.d.ts:589`), which exists for exactly this.
+
+### What this decides
+
+**The severed S6→S7 link closes by adoption.** `%1414`'s verdict: *"architecture should adapt the
+existing event plane, not invent a completion protocol."*
+
+| plan artifact | status now |
+|---|---|
+| §10 Gap 7 "precedent-free across 210 work-trees" | **refuted, and the precedent is reachable** |
+| §11.5 "S6→S7 severed, no completion path" | **closes by consuming an existing frame** |
+| §09 M4 "completion detected by the loop, not a human" | **scope collapses** from build-a-protocol to consume-a-frame |
+| §08 K1 "we stop if the completion protocol cannot be built" | **void** — it need not be built |
+| a completion crate | **unnecessary** |
+
+This was the single largest open question in the plan and the largest claimed risk. It cost one
+frame capture, and the answer was available from the first hour: the type was declared in
+`dist/types`, the channel was declared in `modes/rpc`, and the plan searched 210 other repositories
+instead.
+
+### The honest size of what remains
+
+Adoption is not free. `tick-monitor` reads panes through tmux; consuming `RpcSessionEventFrame`
+means holding an rpc session per worker, which is a different process topology from the one every
+crate in §03 assumes. **The work moved from "invent a protocol" to "change how we attach to
+workers"** — smaller, but not nothing, and no crate does it today.
+
+**NO-CLAIM.** One frame, from one session, driven to one `agent_end`. This establishes the event
+crosses the wire and carries `isTerminal`. It does **not** establish behaviour under the cases that
+actually break loops: a crashed worker, a killed pane, a rate-limited turn, or a worker that
+compacts mid-task. `willContinue` exists in the type to mark a scheduled continuation and **did not
+appear in this frame** — whether it appears on a non-terminal settle is untested. The `18/18` mux
+pong result is a separate finding and is not evidence about this channel.
