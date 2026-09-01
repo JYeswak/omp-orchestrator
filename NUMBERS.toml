@@ -1,0 +1,57 @@
+# NUMBERS.toml — load-bearing figures in the plan, each with the command that derives it.
+#
+# WHY. Five grading rounds have now produced the same defect class, and round 10's
+# fresh-eyes pass produced almost nothing else: a number that was CORRECT WHEN
+# WRITTEN and is wrong now, because the repo moved under it.
+#
+#   00-brief   board headline sums to 74 not 75, AND is live-stale (30/23/23/3 now)
+#   00-brief   unsafe figures stated 20/19; manifest says 26/26, attributes 25/26
+#   00-brief   R12 says "ten questions" over twelve rows
+#   01-idea    379 vs 370 vs 402 test counts, three values one quantity
+#   02-census  three unreconciled final-table snapshots: 101, 121, live 129
+#   07-install "18 binaries" from `grep fn main`; cargo says 21
+#
+# §00 already demands "every number carries the command that derives it". That is a
+# rule with no enforcement, so the numbers rot silently between rounds and a human
+# has to notice. Grading cannot keep up with drift — the interval between rounds is
+# hours and the drift is continuous.
+#
+# THE RULE: a load-bearing figure gets a row here. `numbers.rs` RE-RUNS the command
+# and fails when the answer no longer matches. A number without a runnable command
+# is not measured, it is remembered.
+
+[figures.workspace_crates]
+command  = "ls -1 crates | wc -l"
+expect   = "26"
+appears  = ["docs/plan/03-crates.md", "AGENTS.md"]
+note     = "was 20 at inception, then 23, now 26. Cited in four documents."
+
+[figures.built_binaries]
+command  = "cargo metadata --format-version 1 --no-deps 2>/dev/null | python3 -c \"import sys,json;m=json.load(sys.stdin);print(len([t for p in m['packages'] for t in p['targets'] if 'bin' in t['kind']]))\""
+expect   = "21"
+appears  = ["docs/plan/07-installability.md"]
+note     = "cargo metadata, NOT cargo build: build emits artifacts only for crates it actually recompiles, so an up-to-date workspace answers 0. The gate caught that on its first run. This is the instrument that answers 'binaries the workspace builds'. grep fn main says 17, [[bin]] says 16."
+
+[figures.crates_forbidding_unsafe]
+command  = "grep -l 'unsafe_code' crates/*/Cargo.toml | wc -l"
+expect   = "26"
+appears  = ["docs/plan/00-brief.md", "AGENTS.md"]
+note     = "AGENTS.md still says 2 of 20. Round 10 found 20/19 stated against 26/26 measured."
+
+[figures.installer_known_binaries]
+command  = "grep -o '\"[a-z-]*\"' crates/installer/src/main.rs | head -3 | wc -l"
+expect   = "3"
+appears  = ["docs/plan/07-installability.md"]
+note     = "3 of 21 = 14% install coverage."
+
+[figures.surface_map_rows]
+command  = "grep -c . docs/plan/SURFACE-MAP.jsonl"
+expect   = "591"
+appears  = ["docs/plan/02-surface-census.md", "docs/PLAN.md"]
+note     = "round 10 found THREE unreconciled snapshots of this: 101, 121, and live."
+
+[figures.plan_sections]
+command  = "ls -1 docs/plan/[0-9][0-9]-*.md | wc -l"
+expect   = "13"
+appears  = ["docs/PLAN.md", "docs/plan/CONVERGENCE.md"]
+note     = "12 analysis sections + 12-journey. The convergence gate hardcodes 12 SECTIONS and does NOT include 12-journey — deliberate, and it is why this figure is 13 while that list is 12."
