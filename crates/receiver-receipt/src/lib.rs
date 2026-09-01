@@ -184,6 +184,84 @@ pub fn observe_capture(pane_id: impl Into<String>, capture: &str, at: u64) -> Ob
 ///
 /// A non-empty `tmux list-panes` census must be represented by `Absent` before this
 /// function may report `DEAD`; `EmptyPaneList` deliberately yields `INDETERMINATE`.
+/// What the composer discriminator (`composer_typed::is_typed`) said about the
+/// same post-send capture that produced the receiver verdict.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComposerEvidence {
+    /// The composer holds bright operator text: a packet arrived but was never
+    /// submitted, or an operator is mid-typing.
+    Typed,
+    /// The composer is empty (or a greyed autosuggestion only).
+    Free,
+}
+
+/// The escalation a non-delivery obliges, given the receiver state and the
+/// composer evidence from the same capture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NonDeliveryEscalation {
+    /// Idle pane + FREE composer after a send that claimed success: positive
+    /// evidence the packet never landed. Re-send through the direct pane
+    /// transport instead of polling a sender report that was never receipt.
+    ResendDirect,
+    /// Idle pane + TYPED composer: the packet arrived but sits unsubmitted.
+    /// Send the Enter key - the documented parked-packet recovery.
+    SubmitParked,
+    /// The existing receipt machinery owns this state (working, dialog, wedged,
+    /// unproven): keep polling.
+    KeepPolling,
+}
+
+impl NonDeliveryEscalation {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::ResendDirect => "RESEND_DIRECT",
+            Self::SubmitParked => "SUBMIT_PARKED",
+            Self::KeepPolling => "KEEP_POLLING",
+        }
+    }
+}
+
+/// Decide the escalation for a `NO_RECEIPT` poll whose sender report claimed
+/// success. Keyed on the SAME capture that produced the receiver verdict, so a
+/// misread composer can never contradict a state the pane visibly holds.
+///
+/// A killed, empty, or unreadable capture never reaches this function as
+/// `ComposerEvidence::Free`: the caller maps missing observations to
+/// `PostSendObservation::Missing`, which classifies `INDETERMINATE` upstream.
+/// NO-CLAIM: this decides send-vs-receipt only. A pane that accepts text can
+/// still refuse the work; receipt-vs-comprehension is out of scope here.
+pub fn escalate_non_delivery(
+    post_state: &tick_monitor::PaneState,
+    composer: ComposerEvidence,
+) -> NonDeliveryEscalation {
+    match (post_state, composer) {
+        // The measured 6q5 defect: sender claimed success, the pane stayed
+        // idle, and the composer was empty. A packet that had landed and been
+        // submitted flips the pane to WORKING; a packet parked unsubmitted
+        // leaves text in the composer. Neither evidence exists here, so the
+        // packet demonstrably never reached the pane.
+        (PaneState::Idle, ComposerEvidence::Free) => NonDeliveryEscalation::ResendDirect,
+        // Text is present on an idle pane: the packet arrived but was never
+        // submitted. The Enter key is the documented parked-packet recovery.
+        (PaneState::Idle, ComposerEvidence::Typed) => NonDeliveryEscalation::SubmitParked,
+        // Working, Dialog, Wedged, and Unproven carry their own verdicts and
+        // actions in `assess_receiver_receipt`; escalation must not fire there.
+        _ => NonDeliveryEscalation::KeepPolling,
+    }
+}
+
+/// Classify receiver evidence after an external transport send.
+///
+/// The function performs no send and does not inspect sender return values. Confirmation
+/// is keyed by the pre-send state:
+///
+/// * IDLE -> WORKING confirms only when the new timer is small and the stable hash changes;
+/// * WORKING -> WORKING confirms only when the timer resets and stable content changes;
+/// * IDLE -> IDLE and a non-resetting WORKING pane produce NO_RECEIPT;
+/// * dialogs, absent panes, empty pane lists, and unreadable states remain named.
+///
+/// A non-empty `tmux list-panes` census must be represented by `Absent` before this
+/// function may report `DEAD`; `EmptyPaneList` deliberately yields `INDETERMINATE`.
 pub fn assess_receiver_receipt(
     pane_id: &str,
     pre_send: &Observation,
@@ -322,6 +400,43 @@ pub fn assess_receiver_receipt(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn idle_with_free_composer_after_sender_success_obliges_resend() {
+        // The measured 6q5 failure: ntm reported 3 delivery signals, the pane
+        // stayed idle, and the Enter nudge proved the composer was EMPTY.
+        let verdict = escalate_non_delivery(&PaneState::Idle, ComposerEvidence::Free);
+        assert_eq!(verdict, NonDeliveryEscalation::ResendDirect);
+    }
+
+    #[test]
+    fn idle_with_typed_composer_obliges_enter_not_resend() {
+        let verdict = escalate_non_delivery(&PaneState::Idle, ComposerEvidence::Typed);
+        assert_eq!(verdict, NonDeliveryEscalation::SubmitParked);
+    }
+
+    #[test]
+    fn non_idle_states_stay_with_existing_machinery() {
+        // Working panes already produce RECEIPT_CONFIRMED paths; wedged and
+        // dialog states already carry their own actions. Escalation must not
+        // fire there - the scan is over three states, never empty.
+        let working = PaneState::Working { timer_secs: 5 };
+        assert_eq!(
+            escalate_non_delivery(&working, ComposerEvidence::Free),
+            NonDeliveryEscalation::KeepPolling
+        );
+        assert_eq!(
+            escalate_non_delivery(&PaneState::Wedged, ComposerEvidence::Free),
+            NonDeliveryEscalation::KeepPolling
+        );
+    }
+
+    #[test]
+    fn escalation_labels_are_stable() {
+        assert_eq!(NonDeliveryEscalation::ResendDirect.label(), "RESEND_DIRECT");
+        assert_eq!(NonDeliveryEscalation::SubmitParked.label(), "SUBMIT_PARKED");
+        assert_eq!(NonDeliveryEscalation::KeepPolling.label(), "KEEP_POLLING");
+    }
 
     fn working(pane: &str, timer: u64, body: &str, spinner: char, at: u64) -> Observation {
         observe_capture(
