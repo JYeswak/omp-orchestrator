@@ -174,10 +174,42 @@ not — and the rate fell 9.9 → 5.3 in the same round severity became mandator
 consistent with graders having to justify each finding's class rather than list
 everything they noticed.
 
-### The proposed amendment — NOT ADOPTED, requires Josh
+### The amendment — ADOPTED by Josh 2026-09-01 (HD-0005), superseding the literal-zero rule
 
-A section banks when **two consecutive rounds produce zero BLOCKER and zero MAJOR
-under fresh eyes with gates green.** MINORs are recorded and do not block.
+**Why the literal-zero rule could not be met, measured on round 21.** Of 38 findings, ~33 were
+*tree drift* — a line number, count, or label true when written and rotted since (`:560`→`:593`,
+"26 crates"→50, "3/23"→3/48, "-V 5/9"→6/9, "4 templates"→17) — and ~5 were *build-relevant*
+(a done-signal `jq` that accepts `receipt:{}`, an `S3` `jq` that filters malformed rows before
+validating, an `S4` done signal calling a `br dep check` that does not exist, an
+`artifact_provenance` gate cited and absent). The plan carries **321 `file:line` citations and 105
+bare tree counts** in prose against a tree committing ~2/min. Grading the live tree re-measures
+them every round; convergence on that shape is unreachable by construction, and lowering the bar
+would mean building from a plan nobody has agreed on. Command: `grep -ohE
+'\b[A-Za-z0-9_./-]+\.(rs|md|toml|ts|go|jsonl):[0-9]+' docs/plan/[0-9]*.md | wc -l`.
+
+**The rule, in five clauses:**
+
+1. **A round grades a PIN, not the tree.** Every `CONVERGENCE.jsonl` row from round 22 on carries
+   `pin: "<git sha>"`; the grader is dispatched with that sha and reads nothing newer. A fact true
+   at the pin is not a finding. Drift after the pin is a re-pin, never a defect.
+2. **One round at a time.** Round N+1 is not dispatched until round N's findings are fixed in
+   place, the section files are committed, and the integrator (`%1397`) cuts the next pin. The
+   pin is a commit; there is no "current" plan between pins.
+3. **The drift class is killed once, mechanically, not re-graded.** `file:line` citations become
+   construct names (PV8); bare tree counts route through `NUMBERS.toml` keys; a lint refuses new
+   bare `:NNN` citations in plan prose, with fixtures in both directions.
+4. **The convergence target is the build, not the prose.** `docs/plan/FOUNDATION.jsonl` (one row
+   per stage S1–S9, per `SCHEMAS.toml [artifacts.journey_foundation]`, materialized from
+   12-journey's existing F1–F5 + KNOWN/UNKNOWN/GAP blocks) plus the seven milestone OBSERVABLE
+   blocks in 09-milestones §2 — **16 units** — are what must converge: two consecutive fresh-eyes
+   rounds, two model families, **zero BLOCKER and zero MAJOR** against those 16. MINORs are
+   recorded and do not block. Prose sections are re-checked only where a unit cites them.
+5. **Then S4.** Beads materialize from FOUNDATION.jsonl under the S4 contract with the graph
+   digest recorded, and every bead's ACCEPTANCE is one of the 16 units' done signals, verbatim.
+
+**NO-CLAIM, unchanged:** severity is still a judgement by the graders; `graded_by` attribution
+makes a downgrade attributable, not impossible. Convergence on 16 units proves the build is
+*agreed*, not that it is *right* — M5 is still the milestone whose failure invalidates the thesis.
 
 Rationale: on a 573 KB, 13-section technical document, a fresh reader will always
 find *something* — prose that could be sharper, a figure that wants a citation. The

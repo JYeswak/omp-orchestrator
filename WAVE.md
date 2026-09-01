@@ -19,11 +19,14 @@ tmux list-panes -a -F '#{pane_id} #{session_name}:#{window_index}.#{pane_index} 
 | tmux id | Idx | Agent | Model | Mail identity | Role |
 |---|---:|---|---|---|---|
 | `%1396` | 0 | — | shell | — | Operator scratch. Not an agent. Never dispatch here. |
-| `%1397` | 1 | `omp-claude` | Opus 5 (anthropic, OAuth) | — (registration blocked, `-ygc`) | **Orchestrator / integrator.** Cross-crate decisions, verification, the only closer. |
-| `%1413` | 2 | `omp-codex` | GPT-5.6-Luna (OAuth) | `GreenFrog` | **Extraction owner.** |
-| `%1414` | 3 | `omp-codex` | GPT-5.6-Luna (OAuth) | `BlueLantern` | **Safety + conformance owner.** |
-| `%1408` | 4 | `omp-glm` | GLM 5.3 (openrouter, 1.3M) | `AmberGate` | **Gate owner.** |
-| `%1409` | 5 | `omp-glm` | GLM 5.3 (openrouter, 1.3M) | `GoldLark` | **Portability owner.** |
+| `%1424` | 1 | `claude-code` | Fable 5.1 | `RubyCreek` | **Guardian / plan-keeper** (Josh, 2026-09-01): keeps panes on the biggest items, files gaps as beads, edits the plan in place. Does not close beads. |
+| `%1397` | 2 | `omp-claude` | Opus 5 (anthropic, OAuth) | — (registration blocked, `-ygc`) | **Orchestrator / integrator.** Cross-crate decisions, verification, the only closer. |
+| `%1413` | 3 | `omp-codex` | GPT-5.6-Luna (OAuth) | `GreenFrog` / `FoggyJay` | **Extraction owner.** |
+| `%1414` | 4 | `omp-codex` | GPT-5.6-Luna (OAuth) | `BlueLantern` | **Safety + conformance owner.** |
+| `%1408` | 5 | `omp-claude` (pane title still says `omp-glm_1`) | Opus 5 — **respawned 2026-09-01 ~16:35 MDT** after the GLM worker died on HTTP 402 (HD-0004) | — (re-register) | **Gate owner** (inherits `AmberGate`'s beads; re-claim them). |
+| `%1409` | 6 | `omp-codex` (pane title still says `omp-glm_2`) | Codex — **respawned 2026-09-01 ~16:35 MDT** after the GLM worker died on HTTP 402 (HD-0004) | — (re-register) | **Portability owner** (inherits `GoldLark`/`SilverWolf`'s beads; re-claim them). |
+
+**Idx re-measured 2026-09-01 ~16:40 MDT** with the command above; the guardian pane at index 1 shifted every index below it by one. `pane_id` is still the only stable handle.
 
 **Roster names are not pane ids, and the mapping is not guessable.** `GoldLark` is the mail
 identity reserving `-7ai`'s files; the prose roster calls the same worker `SilverWolf`. Treat the
