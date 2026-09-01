@@ -575,11 +575,12 @@ completion protocol, and that remains true and interesting. What does not surviv
 **conclusion** drawn from it: that we would be building without precedent. We would be **adopting**,
 from OMP, on a plane we do not currently ride.
 
-**NO-CLAIM.** `AgentEndEvent` exists as a declared type in the installed `dist/types`. It is
-**not established** that it reaches the `--mode=rpc` frame plane, which is the only place our
-orchestrator could consume it — `%1408` specified the test (one live-session frame capture) and it
-is **unrun**. Until it runs, this refutes *"no precedent exists"* and does **not** establish *"we
-can consume it today."* Those are different claims and only the first is measured.
+**NO-CLAIM — HALF DISCHARGED 2026-08-31, `7f7e0f6`.** Seven types are *declared* in the
+installed `dist/types`. For **one** — `AgentEndEvent` — the frame capture ran and the claim
+is SETTLED (§11.9). **The other six remain declared only.** Nothing establishes that
+`IrcDeliveryReceipt`, `Stage1Claim`, `GuestIdleReconcilerCtx`, `HubRosterCounts`,
+`ContextUsage` or `CompactEvent` are reachable from a process we run. Each needs its own
+capture; none has one.
 
 ---
 
@@ -623,9 +624,9 @@ technical claim — that we must build a completion protocol, a receipt type, a 
 an idle discriminator — is now **"we must adopt seven types from a dependency we already ship
 against."** That is a materially different project: smaller, faster, and lower-risk.
 
-**NO-CLAIM.** Seven types are *declared* in the installed `dist/types`. For **one** of them
-(`AgentEndEvent`) a consuming channel is identified but the frame capture proving it crosses the
-wire is **still unrun** — `%1414` has it now. For the other six, nothing establishes they are
-reachable from `--mode=rpc`, that their semantics match our need, or that adopting them is cheaper
-than building. What is established is narrower and still decisive: **"no precedent exists" is false
-for all seven**, and every design decision this plan made on that premise needs re-examination.
+**NO-CLAIM — HALF DISCHARGED 2026-08-31, `7f7e0f6`.** Seven types are *declared* in the
+installed `dist/types`. For **one** — `AgentEndEvent` — the frame capture ran and the claim
+is SETTLED (§11.9). **The other six remain declared only.** Nothing establishes that
+`IrcDeliveryReceipt`, `Stage1Claim`, `GuestIdleReconcilerCtx`, `HubRosterCounts`,
+`ContextUsage` or `CompactEvent` are reachable from a process we run. Each needs its own
+capture; none has one.

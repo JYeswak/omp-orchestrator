@@ -59,6 +59,28 @@ const BASELINE: usize = 9;
 // further starts fitting the detector to one file, which is how a gate stops
 // measuring and starts agreeing.
 
+/// Claims this session DISCHARGED, paired with the evidence a live paragraph must
+/// name. Distinct from [`RETRACTION`]: these paragraphs are stale precisely
+/// *because* they name the type — the needle suppression fires and hides them.
+///
+/// Found by `%1408` in round 9: two NO-CLAIM blocks in `10-prior-art` asserted the
+/// frame capture was "unrun" long after `7f7e0f6` captured it, and both mentioned
+/// `AgentEndEvent`, so paragraph-grain suppression treated them as informed. The
+/// file-grained hole `%1409` found had simply moved down one level. A needle that
+/// asks "does this text mention the type" cannot tell *naming it to refute* from
+/// *naming it while still asserting the absence*.
+/// Each row is (ALL of these must appear, ANY of these discharges it).
+///
+/// The needle is COMPOUND on purpose. A first cut keyed on the bare word "unrun"
+/// and immediately flagged `02-surface-census`, where "that sweep is unrun and
+/// unowned" is an honest NO-CLAIM about an unfinished scanner sweep and has
+/// nothing to do with the frame capture. A single broad word is not a claim —
+/// this file has now produced that error twice, in two different detectors.
+const DISCHARGED: &[(&[&str], &[&str])] = &[
+    (&["unrun", "frame capture"], &["SETTLED", "DISCHARGED", "isTerminal", "7f7e0f6"]),
+    (&["not established that it reaches"], &["SETTLED", "DISCHARGED", "isTerminal"]),
+];
+
 /// A paragraph carrying one of these is *discussing* a dead claim, not making it.
 ///
 /// Without this, `10-prior-art` — the section whose entire job is state-then-refute —
@@ -146,6 +168,55 @@ fn the_discriminator_separates_assertion_from_retraction() {
     let ok3 = ["intro", "nothing relevant here", "x"];
     assert!(!paragraph_is_stale(&ok3, 1, gap_needle, &gap_stale),
         "must not flag a paragraph that makes no such claim");
+}
+
+/// Stale discharged claims, independent of the gap needles.
+fn stale_discharged() -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for e in std::fs::read_dir(plan_dir()).expect("docs/plan must exist") {
+        let p = e.unwrap().path();
+        let name = p.file_name().unwrap().to_string_lossy().to_string();
+        if !name.ends_with(".md") || !name.chars().next().unwrap().is_ascii_digit() { continue; }
+        let t = std::fs::read_to_string(&p).unwrap();
+        for para in t.split("\n\n") {
+            for (dead, evidence) in DISCHARGED {
+                if dead.iter().all(|d| para.contains(d))
+                    && !evidence.iter().any(|e| para.contains(e))
+                {
+                    out.push((name.clone(), dead.join(" + ")));
+                }
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn no_discharged_claim_survives_unmarked() {
+    let stale = stale_discharged();
+    assert!(stale.is_empty(),
+        "a claim this session DISCHARGED is still asserted, and the gap needle cannot see it \
+         because the paragraph names the type:\n  {}",
+        stale.iter().map(|(f, d)| format!("{f}: {d:?}")).collect::<Vec<_>>().join("\n  "));
+}
+
+#[test]
+fn the_discharged_detector_fires_on_a_planted_claim() {
+    // KNOWN-BAD: asserts unrun, names the type, no settlement evidence.
+    let hits = |s: &str| DISCHARGED.iter().any(|(d, ev)| {
+        d.iter().all(|x| s.contains(x)) && !ev.iter().any(|e| s.contains(e))
+    });
+    // KNOWN-BAD: names the type, still asserts the dead claim, no settlement.
+    assert!(hits("AgentEndEvent declared; the frame capture is unrun."),
+        "must flag a type-naming paragraph that still asserts the dead claim");
+    // KNOWN-GOOD 1: same claim, settlement named.
+    assert!(!hits("the frame capture was unrun; SETTLED at 7f7e0f6, isTerminal:true"),
+        "a paragraph naming its own settlement must not be flagged");
+    // KNOWN-GOOD 2: an unrelated use of the same word. This is the false positive
+    // the compound needle exists to prevent — 02-surface-census says "that sweep
+    // is unrun and unowned" about a scanner sweep, and it is honest.
+    assert!(!hits("That scanner sweep is unrun and unowned."),
+        "a bare keyword match on an unrelated sentence is a false finding");
 }
 
 #[test]
