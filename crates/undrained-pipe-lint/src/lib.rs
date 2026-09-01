@@ -221,7 +221,9 @@ fn drains_before_poll(code: &[String], start: usize, poll: usize) -> bool {
         stderr_taken |= line.contains("stderr.take") && !inside_poll_arms;
         if !inside_poll_arms {
             read_to_end += usize::from(line.contains("read_to_end"));
-            spawned_reader |= line.contains("thread::spawn");
+            spawned_reader |= line.contains("thread::spawn")
+                || line.contains("scope.spawn")
+                || line.contains("thread::scope");
         }
         if line.contains("wait_with_output(") && !inside_poll_arms {
             return true;
