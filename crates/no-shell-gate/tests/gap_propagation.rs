@@ -35,11 +35,54 @@ const GAPS: &[(&str, &str, &[&str])] = &[
 /// 13 (written) -> 6: SilverWolf (%1409) cleared all five pairs in 09-milestones.md and
 /// 11-lifecycle.md (receipts/idle/claims named their upstream types at true strength),
 /// MEASURED_BY_THIS_DETECTOR=6 at commit time; remaining six pairs are 00/01/05 (other panes).
-const BASELINE: usize = 6;
+const BASELINE: usize = 13;
+
+// ── WHAT THIS NUMBER IS AND IS NOT ──────────────────────────────────────────
+// It has been 24 -> 13 -> 6 -> 15 -> 13 in one session. Every move was a real
+// measurement and every move came from changing the INSTRUMENT, not the docs:
+//
+//   24  a python scan's count, carried across (vacuous: 11-pair slack)
+//   13  re-derived by this detector, file-grained suppression
+//    6  %1409 cleared five pairs and re-measured in-commit (correct)
+//   15  suppression narrowed to paragraph-local, exposing claims a
+//       file-grained needle hid — including 11-lifecycle asserting
+//       "precedent-free" past its own correction
+//   13  retraction markers added so state-then-refute prose is not flagged
+//
+// THEREFORE: the absolute value is instrument-dependent and is NOT a count of
+// defects in the world. This gate is a smoke alarm — it refuses regression
+// under a FIXED instrument. Any commit changing GAPS, RETRACTION, or the window
+// MUST re-derive BASELINE in the same commit and append a line above.
+//
+// The four 10-prior-art rows are known imprecision: that section states each
+// dead claim in a table cell whose refutation is >2 paragraphs away. Tightening
+// further starts fitting the detector to one file, which is how a gate stops
+// measuring and starts agreeing.
+
+/// A paragraph carrying one of these is *discussing* a dead claim, not making it.
+///
+/// Without this, `10-prior-art` — the section whose entire job is state-then-refute —
+/// is flagged for all seven gaps it documents. Same principle the retired-figure gate
+/// uses: a retraction names itself, and quoting a corpse is not reanimating it.
+const RETRACTION: &[&str] = &[
+    "REFUTED", "refuted", "retracted", "RETRACTED", "no longer", "was wrong",
+    "corrected", "CORRECTED", "SETTLED", "WIRE-PROVEN", "superseded", "VOID",
+];
 
 fn plan_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
         .parent().unwrap().join("docs/plan")
+}
+
+/// The discriminator, isolated so it can be tested on known inputs rather than
+/// on production files whose state I would then have to keep constant.
+fn paragraph_is_stale(paras: &[&str], i: usize, needle: &str, stale: &[&str]) -> bool {
+    let para = paras[i];
+    if !stale.iter().any(|s| para.contains(s)) { return false; }
+    if RETRACTION.iter().any(|m| para.contains(m)) { return false; }
+    let lo = i.saturating_sub(2);
+    let hi = (i + 3).min(paras.len());
+    !paras[lo..hi].iter().any(|p| p.contains(needle))
 }
 
 fn stale_pairs() -> Vec<(String, &'static str)> {
@@ -52,12 +95,19 @@ fn stale_pairs() -> Vec<(String, &'static str)> {
         if !name.ends_with(".md") || !name.chars().next().unwrap().is_ascii_digit() { continue; }
         sections += 1;
         let t = fs::read_to_string(&p).unwrap();
+        // PARAGRAPH-GRAINED, not file-grained. A file mentioning AgentEndEvent once was
+        // previously treated as knowing everything, so `11-lifecycle` kept a row asserting
+        // "precedent-free" past its own S6->S7 correction and this gate could not see it
+        // (%1409, wave 8). Suppression must be local to the claim, not global to the file.
+        let paras: Vec<&str> = t.split("\n\n").collect();
         for (gap, needle, stale) in GAPS {
-            if t.contains(needle) { continue; }
-            if stale.iter().any(|s| t.contains(s)) { out.push((name.clone(), *gap)); }
+            for i in 0..paras.len() {
+                if !paragraph_is_stale(&paras, i, needle, stale) { continue; }
+                out.push((name.clone(), *gap));
+                break; // one pair per (file, gap)
+            }
         }
     }
-    // ANTI-VACUITY: an empty scan set is an ERROR, never a pass.
     assert!(sections >= 10, "scanned {sections} sections; the plan has 12 — scan set collapsed");
     out
 }
@@ -73,14 +123,35 @@ fn gap_propagation_does_not_regress() {
 }
 
 #[test]
-fn the_detector_finds_the_known_stale_pairs() {
-    // KNOWN-BAD leg: 10-prior-art carries every type, so it must NEVER appear.
-    // If it does, the needle matching is broken rather than the docs.
-    let stale = stale_pairs();
-    assert!(!stale.iter().any(|(f, _)| f.starts_with("10-")),
-        "10-prior-art names all seven types and must never be flagged — detector is broken");
-    assert!(!stale.is_empty(),
-        "zero stale pairs while BASELINE is {BASELINE} — either the work is done \
+fn the_discriminator_separates_assertion_from_retraction() {
+    let (gap_needle, gap_stale) = ("AgentEndEvent", ["precedent-free"]);
+
+    // KNOWN-BAD: asserts the absence, type nowhere near it.
+    let bad = ["intro", "the signal is precedent-free across the corpus", "unrelated"];
+    assert!(paragraph_is_stale(&bad, 1, gap_needle, &gap_stale),
+        "must flag a bare assertion of the absence");
+
+    // KNOWN-GOOD 1: the type is named in the adjacent paragraph.
+    let ok1 = ["intro", "the signal is precedent-free across the corpus",
+               "AgentEndEvent closes it"];
+    assert!(!paragraph_is_stale(&ok1, 1, gap_needle, &gap_stale),
+        "must not flag a claim whose type is named next door");
+
+    // KNOWN-GOOD 2: the paragraph is quoting the claim to refute it.
+    let ok2 = ["intro", "we said precedent-free; that is REFUTED", "x"];
+    assert!(!paragraph_is_stale(&ok2, 1, gap_needle, &gap_stale),
+        "must not flag prose that retracts the claim it quotes");
+
+    // KNOWN-GOOD 3: silence is not a finding.
+    let ok3 = ["intro", "nothing relevant here", "x"];
+    assert!(!paragraph_is_stale(&ok3, 1, gap_needle, &gap_stale),
+        "must not flag a paragraph that makes no such claim");
+}
+
+#[test]
+fn the_scan_is_not_vacuous() {
+    assert!(!stale_pairs().is_empty(),
+        "zero pairs while BASELINE is {BASELINE} — either the work is done \
          (lower BASELINE in the same commit) or the needles stopped matching");
 }
 

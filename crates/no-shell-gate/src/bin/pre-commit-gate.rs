@@ -168,25 +168,46 @@ fn get_staged_deletions() -> Vec<String> {
 }
 
 /// Round-trip check: the commit message must be byte-identical to what the
-/// author staged at .git/MSG_SRC. Catches ANY corruption between the author's
-/// write and git's receipt — not just the backtick family. Composes with the
-/// standing rule: always `git commit -F .git/MSG_SRC`, never `-m "string"`.
+/// author staged. Catches ANY corruption between the author's write and git's
+/// receipt — not just the backtick family.
 ///
 /// Runs at COMMIT-MSG time (git passes COMMIT_EDITMSG as argv[1]), after the
 /// message is written but before the commit is finalized.
+///
+/// # Shared-checkout hazard, measured 2026-08-31
+///
+/// This hardcoded `.git/MSG_SRC` and refused anything else. In a checkout with
+/// five agents that is actively harmful, twice over:
+///
+/// 1. **Cross-pane false refusal.** `%1409` was refused because a *different*
+///    pane's stale `MSG_SRC` was present — the gate compared their message to
+///    someone else's file.
+/// 2. **It forbade the remedy.** Writing to a private `mktemp` file and using
+///    `git commit -F "$M"` is the correct way to dodge (1), and the gate
+///    refused that too. A gate that forbids the fix for its own failure mode
+///    drives authors to `-m`, which is the thing it exists to prevent.
+///
+/// Two changes: `OMP_MSG_SRC` may name a private source, and the file is
+/// **consumed on success** so a stale one cannot outlive its commit.
 fn round_trip_check(editmsg_path: &std::path::Path) -> Option<String> {
     let repo_root = std::env::current_dir().ok()?;
-    let msg_src = repo_root.join(".git").join("MSG_SRC");
+    let msg_src = match std::env::var_os("OMP_MSG_SRC") {
+        Some(p) => std::path::PathBuf::from(p),
+        None => repo_root.join(".git").join("MSG_SRC"),
+    };
 
     if !msg_src.exists() {
-        return Some(format!(
-            "round-trip: .git/MSG_SRC not found — write the message to .git/MSG_SRC, then `git commit -F .git/MSG_SRC`. `-m \"...\"` lets the shell expand backticks, $(), and $VAR before git sees them."
-        ));
+        return Some(
+            "round-trip: no message source found — write the message to a file, then \
+             `git commit -F <file>` with OMP_MSG_SRC=<file> (or use .git/MSG_SRC). \
+             `-m \"...\"` lets the shell expand backticks, $(), and $VAR before git sees them."
+                .to_owned(),
+        );
     }
 
     let src = match std::fs::read(&msg_src) {
         Ok(bytes) => bytes,
-        Err(e) => return Some(format!("round-trip: cannot read MSG_SRC: {e}")),
+        Err(e) => return Some(format!("round-trip: cannot read message source: {e}")),
     };
     let recv = match std::fs::read(editmsg_path) {
         Ok(bytes) => bytes,
@@ -195,10 +216,17 @@ fn round_trip_check(editmsg_path: &std::path::Path) -> Option<String> {
 
     if src != recv {
         return Some(format!(
-            "round-trip: MESSAGE CORRUPTION — .git/MSG_SRC ({} bytes) differs from COMMIT_EDITMSG ({} bytes). The shell expanded something. Use `git commit -F .git/MSG_SRC`.",
+            "round-trip: MESSAGE MISMATCH — {} ({} bytes) differs from COMMIT_EDITMSG ({} bytes).\n\
+             Either the shell expanded something, or this source belongs to ANOTHER PANE in \
+             this shared checkout. Write your own file and set OMP_MSG_SRC to it.",
+            msg_src.display(),
             src.len(),
             recv.len()
         ));
     }
+
+    // CONSUME ON SUCCESS: a source that outlives its commit is the stale file that
+    // false-refused %1409. Best-effort — failing to remove it must not fail the commit.
+    let _ = std::fs::remove_file(&msg_src);
     None
 }
