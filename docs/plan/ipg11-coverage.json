@@ -1,16 +1,189 @@
 {
-"batch": "ipg.11-WAVE-RUNTIME",
-"tool_scope": ["async", "utils", "lib", "tiny", "vibe", "auto-thinking"],
-"method": "per-kind probe (ls dist/types/<root>/, file counts, exported-symbol extraction), cross-checked against asupersync's concurrency surface and our crates' actual async/Cx usage on disk",
-"positive_control": "async (3 files): the ONLY root where OMP's surface and OUR binding dependency (asupersync) address the same concern (concurrency/cancellation). Fully mapped: every exported type examined, every interaction with asupersync assessed. If this root is not fully covered, the wave's first question is unanswered.",
-"anti_vacuity": "6 roots enumerated with file counts and export symbols; zero-surface enumeration impossible",
-"rows": [
- {"surface":"async","omp_kind":"type_root","files":3,"maps_to_crate":"subprocess-contract","disposition":"VALIDATE","classification":"(b) reimplemented","omp_alternative":"AsyncJobManager/AsyncJob/AsyncJobDeliverySink/AsyncJobFilter — OMP's background-job manager with delivery-state tracking and reaping. OUR asupersync contract covers the same ground: Cx cancellation (cx.cancel_with), checkpoint-in-loops, region-owned tasks (no detached spawns), and the timeout-is-not-a-verdict rule. The two models are COMPATIBLE but different: asupersync uses &Cx first + obligation ledger; omp uses an owned manager with filter/reap. We depend on omp's async runtime running correctly (every pane session uses it), tested by the RPC probe reaching agent_end on the wire (§11.9).","refusal":null},
- {"surface":"utils","omp_kind":"type_root","files":43,"maps_to_crate":null,"disposition":"RETIRE","classification":"(a) not ours","omp_alternative":"CpuProfile/CpuProfileCallFrame/ChangelogEntry/BlockContextSource — OMP's internal utilities (profiling, changelog, block context). No crate's job is to consume omp's internal utility types","refusal":"no consumer; these are product-internal helpers"},
- {"surface":"lib","omp_kind":"type_root","files":1,"maps_to_crate":null,"disposition":"RETIRE","classification":"(a) not ours","omp_alternative":"XAICredentials (provider: xai-oauth|xai, apiKey, baseURL) — model provider credential config for xAI. Product-internal credential wiring; our credentials are managed separately","refusal":"no consumer; credential management is our own concern"},
- {"surface":"tiny","omp_kind":"type_root","files":9,"maps_to_crate":null,"disposition":"RETIRE","classification":"(c) unused capability","omp_alternative":"TinyTitleLocalModelSpec, ONLINE_TINY_TITLE_MODEL_KEY, DEFAULT_TINY_TITLE_LOCAL_MODEL_KEY — omp's on-device session-title model (lfm2-700m, q4 dtype). Session titles are the agent's internal concern; no crate consumes them","refusal":"no consumer"},
- {"surface":"vibe","omp_kind":"type_root","files":3,"maps_to_crate":null,"disposition":"RETIRE","classification":"(c) unused capability","omp_alternative":"VibeModeState (enabled: boolean) — omp's vibe mode session state, mirroring plan-mode state. No crate reads or sets vibe mode","refusal":"no consumer"},
- {"surface":"auto-thinking","omp_kind":"type_root","files":1,"maps_to_crate":null,"disposition":"RETIRE","classification":"(c) unused capability","omp_alternative":"classifyDifficulty — per-prompt difficulty classifier for the auto thinking level (maps prompts to low/medium/high/xhigh effort). The agent's internal model selection; the orchestrator does not classify prompt difficulty","refusal":"no consumer"}
-],
-"first_question_answered": "async COMPOSES with asupersync, does not conflict. OMP's AsyncJobManager runs INSIDE each omp session (managing that session's background jobs). Our asupersync Cx runs OUTSIDE in the orchestrator (managing the supervisor's subprocess lifecycle). They never touch: omp's internal async is invisible to us, and our subprocess management is invisible to omp. The seam is the rpc transport (omp-rpc-session), which uses OUR Cx for the SSH/child-process side and sends JSON-RPC over the wire. No duplication detected."
+  "schema_version": "omp-runtime-coverage/v1",
+  "batch": "ipg.11-WAVE-RUNTIME",
+  "tool": "omp",
+  "omp_version": "18.0.11",
+  "socraticode_queries": 10,
+  "counting_rule": {
+    "files_and_kb": "du -ck /Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/<root>/*.d.ts; KB is allocated disk KB",
+    "symbols": "top-level declarations matching ^export [declare] {type,interface,const,function,class,enum} NAME in *.d.ts"
+  },
+  "contract_columns": [
+    "contract_1_asupersync_native",
+    "contract_2_unsafe_code_forbid",
+    "contract_3_cancel_correct",
+    "contract_4_typed_exhaustive",
+    "contract_5_logged_typed_rows",
+    "contract_6_observable_own_predicates",
+    "contract_7_robot_reachable",
+    "contract_8_wired_with_empty_unwired_allowance"
+  ],
+  "positive_control": {
+    "surface": "async",
+    "coverage": "FULLY COVERED",
+    "meaning": "The mapping row is complete; this does not claim capability adoption."
+  },
+  "anti_vacuity": {
+    "surfaces_enumerated": 6,
+    "files_enumerated": 60,
+    "symbols_enumerated": 316,
+    "zero_surfaces": "ERROR"
+  },
+  "rows": [
+    {
+      "surface": "async",
+      "omp_root": "dist/types/async",
+      "omp_files": 3,
+      "omp_kb": 20,
+      "omp_symbols": 15,
+      "contract_1_asupersync_native": "COMPOSES_AT_BOUNDARY \u2014 OMP TypeScript job scheduling is separate from omp-rpc-session's Rust asupersync Cx contract",
+      "contract_2_unsafe_code_forbid": "N/A \u2014 agent-plane TypeScript surface; no local Rust owner",
+      "contract_3_cancel_correct": "N/A \u2014 OMP AsyncJobManager is not a local cancellation owner",
+      "contract_4_typed_exhaustive": "N/A \u2014 no local Rust mapping of OMP async types",
+      "contract_5_logged_typed_rows": "N/A \u2014 no local OMP async event consumer",
+      "contract_6_observable_own_predicates": "N/A \u2014 no local OMP async state projection",
+      "contract_7_robot_reachable": "N/A \u2014 no local robot command owns OMP async",
+      "contract_8_wired_with_empty_unwired_allowance": "N/A \u2014 no local caller; not an unwired local lane",
+      "classification": "a",
+      "classification_note": "a \u2014 not ours: OMP schedules in-process bash/task/eval jobs inside the agent process",
+      "omp_alternative": "AsyncJobManager, formatBackgroundNotice, and raceJobSettlement",
+      "coverage": "FULLY COVERED",
+      "evidence": [
+        "installed OMP v18.0.11 dist/types/async/auto-background.d.ts: DEFAULT_AUTO_BACKGROUND_THRESHOLD_MS, formatBackgroundNotice, raceJobSettlement",
+        "installed OMP v18.0.11 dist/types/async/job-manager.d.ts: AsyncJobManager, AsyncJobType, AbortSignal, delivery and owner filters",
+        "crates/omp-rpc-session/src/lib.rs:1-16,23-46,135-163: independent asupersync Cx/process-group/bounded-pipe owner",
+        "crates contains no AsyncJobManager or OMP async declaration import"
+      ],
+      "disposition": "N/A-NOT-OURS"
+    },
+    {
+      "surface": "utils",
+      "omp_root": "dist/types/utils",
+      "omp_files": 43,
+      "omp_kb": 176,
+      "omp_symbols": 185,
+      "contract_1_asupersync_native": "N/A \u2014 agent-plane utility declarations; no local Rust owner",
+      "contract_2_unsafe_code_forbid": "N/A \u2014 no local Rust owner",
+      "contract_3_cancel_correct": "N/A \u2014 no local caller",
+      "contract_4_typed_exhaustive": "N/A \u2014 no local mapping",
+      "contract_5_logged_typed_rows": "N/A \u2014 no local utility event consumer",
+      "contract_6_observable_own_predicates": "N/A \u2014 no local utility projection",
+      "contract_7_robot_reachable": "N/A \u2014 no local robot command owns OMP utilities",
+      "contract_8_wired_with_empty_unwired_allowance": "N/A \u2014 no local caller; not an unwired local lane",
+      "classification": "a",
+      "classification_note": "a \u2014 not ours: OMP shared helpers remain inside the agent process",
+      "omp_alternative": "ActiveRepoContext, resolveActiveRepoContext, getToolPath, and ensureTool",
+      "coverage": "MAPPED_NOT_ADOPTED",
+      "evidence": [
+        "installed OMP v18.0.11 dist/types/utils/*.d.ts: 43 files and 185 exported declarations",
+        "installed OMP v18.0.11 dist/types/utils/active-repo-context.d.ts: ActiveRepoContext and repo resolution",
+        "installed OMP v18.0.11 dist/types/utils/tools-manager.d.ts: tool-path and download helpers",
+        "crates contains no ActiveRepoContext or OMP utility declaration import"
+      ],
+      "disposition": "N/A-NOT-OURS"
+    },
+    {
+      "surface": "lib",
+      "omp_root": "dist/types/lib",
+      "omp_files": 1,
+      "omp_kb": 4,
+      "omp_symbols": 4,
+      "contract_1_asupersync_native": "N/A \u2014 xAI provider transport is agent-plane TypeScript",
+      "contract_2_unsafe_code_forbid": "N/A \u2014 no local Rust owner",
+      "contract_3_cancel_correct": "N/A \u2014 no local caller",
+      "contract_4_typed_exhaustive": "N/A \u2014 no local mapping",
+      "contract_5_logged_typed_rows": "N/A \u2014 no local transport event consumer",
+      "contract_6_observable_own_predicates": "N/A \u2014 no local transport projection",
+      "contract_7_robot_reachable": "N/A \u2014 no local robot command owns xAI HTTP transport",
+      "contract_8_wired_with_empty_unwired_allowance": "N/A \u2014 no local caller; not an unwired local lane",
+      "classification": "a",
+      "classification_note": "a \u2014 not ours: this misnamed root is OMP's xAI credential and HTTP transport layer",
+      "omp_alternative": "XAIHttpTransport, resolveXAIHttpTransport, and resolveXAIHttpCredentials",
+      "coverage": "MAPPED_NOT_ADOPTED",
+      "evidence": [
+        "installed OMP v18.0.11 dist/types/lib/xai-http.d.ts: XAIHttpProvider and XAIHttpTransport",
+        "installed OMP v18.0.11 dist/types/lib/xai-http.d.ts: resolveXAIHttpCredentials",
+        "crates contains no XAIHttpTransport or OMP lib declaration import"
+      ],
+      "disposition": "N/A-NOT-OURS"
+    },
+    {
+      "surface": "tiny",
+      "omp_root": "dist/types/tiny",
+      "omp_files": 9,
+      "omp_kb": 48,
+      "omp_symbols": 83,
+      "contract_1_asupersync_native": "N/A \u2014 tiny-model inference is agent-plane TypeScript",
+      "contract_2_unsafe_code_forbid": "N/A \u2014 no local Rust owner",
+      "contract_3_cancel_correct": "N/A \u2014 no local caller",
+      "contract_4_typed_exhaustive": "N/A \u2014 no local mapping",
+      "contract_5_logged_typed_rows": "N/A \u2014 no local inference event consumer",
+      "contract_6_observable_own_predicates": "N/A \u2014 no local model-state projection",
+      "contract_7_robot_reachable": "N/A \u2014 no local robot command owns tiny inference",
+      "contract_8_wired_with_empty_unwired_allowance": "N/A \u2014 no local caller; not an unwired local lane",
+      "classification": "a",
+      "classification_note": "a \u2014 not ours: OMP owns tiny title/memory model registries and local inference",
+      "omp_alternative": "TinyModelDevice, TinyModelDtype, TextGenerationPipeline, and buildCompletionPrompt",
+      "coverage": "MAPPED_NOT_ADOPTED",
+      "evidence": [
+        "installed OMP v18.0.11 dist/types/tiny/*.d.ts: 9 files and 83 exported declarations",
+        "installed OMP v18.0.11 dist/types/tiny/models.d.ts: online/local title and memory model registries",
+        "installed OMP v18.0.11 dist/types/tiny/worker.d.ts: TextGenerationPipeline and stopping criteria",
+        "crates contains no TinyModelDevice or OMP tiny declaration import"
+      ],
+      "disposition": "N/A-NOT-OURS"
+    },
+    {
+      "surface": "vibe",
+      "omp_root": "dist/types/vibe",
+      "omp_files": 3,
+      "omp_kb": 16,
+      "omp_symbols": 25,
+      "contract_1_asupersync_native": "N/A \u2014 Vibe session lifecycle is agent-plane TypeScript",
+      "contract_2_unsafe_code_forbid": "N/A \u2014 no local Rust owner",
+      "contract_3_cancel_correct": "N/A \u2014 no local caller",
+      "contract_4_typed_exhaustive": "N/A \u2014 no local mapping",
+      "contract_5_logged_typed_rows": "N/A \u2014 no local Vibe lifecycle consumer",
+      "contract_6_observable_own_predicates": "N/A \u2014 no local Vibe state projection",
+      "contract_7_robot_reachable": "N/A \u2014 no local robot command owns Vibe mode",
+      "contract_8_wired_with_empty_unwired_allowance": "N/A \u2014 no local caller; not an unwired local lane",
+      "classification": "a",
+      "classification_note": "a \u2014 not ours: Vibe worker sessions and persisted lifecycle events remain inside OMP",
+      "omp_alternative": "VibeSessionRegistry, VibeScreenSnapshot, and VibeLifecycleEvent",
+      "coverage": "MAPPED_NOT_ADOPTED",
+      "evidence": [
+        "installed OMP v18.0.11 dist/types/vibe/{runtime,state,lifecycle}.d.ts: 3 files and 25 exported declarations",
+        "installed OMP v18.0.11 dist/types/vibe/runtime.d.ts: AsyncJobManager and SessionManager imports",
+        "installed OMP v18.0.11 dist/types/vibe/lifecycle.d.ts: persisted lifecycle schema and parser",
+        "crates contains no VibeSessionRegistry or OMP Vibe declaration import"
+      ],
+      "disposition": "N/A-NOT-OURS"
+    },
+    {
+      "surface": "auto-thinking",
+      "omp_root": "dist/types/auto-thinking",
+      "omp_files": 1,
+      "omp_kb": 4,
+      "omp_symbols": 4,
+      "contract_1_asupersync_native": "N/A \u2014 difficulty classification is agent-plane TypeScript",
+      "contract_2_unsafe_code_forbid": "N/A \u2014 no local Rust owner",
+      "contract_3_cancel_correct": "N/A \u2014 no local caller",
+      "contract_4_typed_exhaustive": "N/A \u2014 no local mapping",
+      "contract_5_logged_typed_rows": "N/A \u2014 no local classifier event consumer",
+      "contract_6_observable_own_predicates": "N/A \u2014 no local effort projection",
+      "contract_7_robot_reachable": "N/A \u2014 no local robot command owns auto-thinking",
+      "contract_8_wired_with_empty_unwired_allowance": "N/A \u2014 no local caller; not an unwired local lane",
+      "classification": "a",
+      "classification_note": "a \u2014 not ours: OMP maps prompt difficulty to model effort inside the agent runtime",
+      "omp_alternative": "classifyDifficulty, parseDifficultyLevel, and parseDifficultyBucket",
+      "coverage": "MAPPED_NOT_ADOPTED",
+      "evidence": [
+        "installed OMP v18.0.11 dist/types/auto-thinking/classifier.d.ts: ClassifyDifficultyDeps and classifyDifficulty",
+        "installed OMP v18.0.11 dist/types/auto-thinking/classifier.d.ts: online four-way and local three-way mappings",
+        "crates contains no classifyDifficulty or OMP auto-thinking declaration import"
+      ],
+      "disposition": "N/A-NOT-OURS"
+    }
+  ],
+  "no_claim": "Mapping is not adoption. A not-ours is a legitimate terminal state. This artifact does not claim these surfaces are correct, nor that any OMP type is consumed by this Rust repository."
 }
