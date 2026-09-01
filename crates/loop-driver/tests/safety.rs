@@ -29,7 +29,7 @@ fn start_holder(lock: &Path, seconds: u64) -> Child {
         .spawn()
         .expect("spawn Rust lock holder");
     let line = {
-        let stdout = child.stdout.take().expect("holder stdout");
+        let mut stdout = child.stdout.take().expect("holder stdout");
         let mut reader = BufReader::new(stdout);
         let mut line = String::new();
         reader.read_line(&mut line).expect("read holder receipt");

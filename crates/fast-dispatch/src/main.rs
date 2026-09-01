@@ -123,8 +123,8 @@ fn run_timeout(mut cmd: Command, timeout: Duration) -> Option<std::process::Outp
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     let mut child = cmd.spawn().ok()?;
-    let stdout = child.stdout.take()?;
-    let stderr = child.stderr.take()?;
+    let mut stdout = child.stdout.take()?;
+    let mut stderr = child.stderr.take()?;
     let stdout_reader = std::thread::spawn(move || {
         let mut bytes = Vec::new();
         stdout.read_to_end(&mut bytes).map(|_| bytes)

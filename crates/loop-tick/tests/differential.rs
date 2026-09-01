@@ -16,8 +16,8 @@ fn run(path: PathBuf, arg: &str) -> Output {
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut command, 0);
     let mut child = command.spawn().expect("run differential side");
-    let stdout = child.stdout.take().expect("differential stdout pipe");
-    let stderr = child.stderr.take().expect("differential stderr pipe");
+    let mut stdout = child.stdout.take().expect("differential stdout pipe");
+    let mut stderr = child.stderr.take().expect("differential stderr pipe");
     let stdout_reader = thread::spawn(move || {
         let mut bytes = Vec::new();
         stdout.read_to_end(&mut bytes).map(|_| bytes)
