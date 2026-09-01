@@ -75,6 +75,24 @@ const RETIRED: &[Retired] = &[
         replacement: "blocked",
         reason: "omp-types does not re-export it; zero occurrences, blocked behind messaging-fabric",
     },
+    Retired {
+        // Added after `%1409` found the gate green while its own header named five corpses and
+        // this list enforced three. A gate that declares more than it checks is the anti-vacuity
+        // defect wearing the gate's own uniform: green meant nothing for the two it skipped.
+        needle: "51 public enums",
+        replacement: "59",
+        reason: "scope-dependent; 51/79 excludes test+bin sources, 59/91 includes them — publish the pair",
+    },
+    Retired {
+        needle: "four-layer",
+        replacement: "five stages",
+        reason: "the table has five stages and seven rows; 'four-layer' had no stable denominator",
+    },
+    Retired {
+        needle: "5 of 9",
+        replacement: "6 of 9",
+        reason: "tmux answers -V, so six of nine binaries do; the row excluded it while the prose above included it",
+    },
 ];
 
 /// A mention is retracted when the same line, or the two lines around it, name the retraction.

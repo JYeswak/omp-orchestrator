@@ -454,7 +454,7 @@ reported in Gap 8's `DEPENDENCY_MISSING` vocabulary.
 | 8 | per-adapter scoping / typed missing-dependency | **ADOPT** | `ntm/internal/bv/bv.go:31`; `robot-action-handoff-contract.md:379`; `bugs.go:85`; `generator.go:383`; `robot_registry_conformance_test.go:15` |
 | 9 | tool probe not trusting exit codes | **ADOPT + NAMED GAP** | `doctor.rs:967` (two-signal arm), `:13948`/`:13964` (both tests); gap at `:1057`; brief §3.1 tmux measurement refuted |
 
-**Seeded-verdict correction rate: 5 of 9 — more than half the verdicts handed to this section were
+**Seeded-verdict correction rate: 6 of 9 (the earlier "5 of 9" excluded tmux and is retired) — more than half the verdicts handed to this section were
 wrong, and Gaps 6, 8 and 9 were each corrected twice.** Gaps 3, 5, 6 and 8 were seeded
 `no prior art found` and all four have prior art — Gap 6 emphatically, and it was the row flagged
 CRITICAL. Gap 1 was seeded ADOPT and is ADAPT. Gap 9's measurement was inverted, and its verdict then

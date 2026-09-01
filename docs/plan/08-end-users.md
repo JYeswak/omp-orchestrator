@@ -29,7 +29,7 @@ time in one terminal, by hand; no panes to census, no use for a supervisor loop.
 half*: gates that fail a build on a named property, and completion tracking where "done" means an
 artifact exists rather than an agent said so. They can be served first, because the gates are the
 part of this repo measured to work — `MEASURED` (brief §3.5, recomputed): 26 integration test files,
-370 `#[test]` functions, 8 gate crates, **2 of 8** with all four legs (`no-shell-gate` 4/3/2/6 and
+379 `#[test]` functions, 8 gate crates, **2 of 8** with all four legs (`no-shell-gate` 4/3/2/6 and
 `undrained-pipe-lint` 1/1/1/3), **4 of 8** with no mutation leg. **NO-CLAIM:** that leg table counts
 files matching a property grep; it does not establish the legs are individually strong.
 

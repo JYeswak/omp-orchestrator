@@ -38,7 +38,7 @@ which commit produced it. Across the workspace, only 5 of 18 binaries mention `-
 `installer`, `kernel-only-operator-hook`, `omp-inventory-map`, `omp-orchestrator`,
 `omp-rpc-session`).
 
-That is not an incidental omission. The brief's four-layer reality table (§4) records exactly one
+That is not an incidental omission. The brief's five-stage control loop (formerly "five-stage" — renamed, the table has five stages and seven rows) table (§4) records exactly one
 layer as **WORKS**: *observe*, and its mechanism is `tick-monitor`. The single working layer of the
 system is carried by the one binary in the install set whose provenance cannot be established from
 the artifact. If observation is the only thing we can currently trust, we cannot currently prove

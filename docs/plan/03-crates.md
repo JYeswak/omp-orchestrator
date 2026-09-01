@@ -192,7 +192,7 @@ grep -rhoE '^pub enum [A-Za-z_0-9]+'   --include=*.rs crates/ | wc -l   -> 59
 grep -rhoE '^pub struct [A-Za-z_0-9]+' --include=*.rs crates/ | wc -l   -> 91
 ```
 
-An earlier scan scoped to library surfaces reported **51 public enums and 79 public structs across
+An earlier scan scoped to library surfaces reported **51 public enums (excluding test+bin sources; 59 including them — publish the pair) and 79 public structs across
 22 of 24 crates**. Both numbers are real; they differ because the grep above includes test modules
 and binary sources. We publish both rather than pick the flattering one — the delta *is* the
 measurement's error bar.
@@ -206,7 +206,7 @@ grep -rhoE '^pub (enum|struct) [A-Za-z_0-9]+' --include=*.rs crates/ \
 ```
 
 One of those four is structural rather than cosmetic, and it is the direct cause of the single
-worst row in the brief's four-layer reality table (§4). `tick-monitor` produces the `Observation`
+worst row in the brief's five-stage control loop (formerly "five-stage" — renamed, the table has five stages and seven rows) table (§4). `tick-monitor` produces the `Observation`
 that `omp-orchestrator` consumes, and **each declares its own incompatible struct**. That is the
 seam where `free_capacity` was derived from the same `is_dispatchable` filter that requires a
 *Confirmed* Idle pane, so a pane at `t=0` fell out of the `idle_panes` list **and** out of the

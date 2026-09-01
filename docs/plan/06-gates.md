@@ -21,7 +21,7 @@ python3 -c "import pathlib,re; c=pathlib.Path('crates');
 
 Two independent sources agree: this walk, and the brief's own `find`/`grep -rc` measurement (§3.5), which was taken without the `--include=` flag the tooling warning below indicts.
 
-26 integration test files, 370 `#[test]` functions. Per-gate leg inventory (MEASURED, `grep -rli <property>` per gate crate), verbatim from the brief:
+26 integration test files, 379 `#[test]` functions. Per-gate leg inventory (MEASURED, `grep -rli <property>` per gate crate), verbatim from the brief:
 
 | crate | tests | known_bad | known_good | mutation | anti_vacuity |
 |---|---:|---:|---:|---:|---:|
@@ -58,7 +58,7 @@ The objection, stated before it is answered: *you have 370 tests and two complet
 
 **The second instance is ours, and an earlier draft of this section got it backwards.** That draft asserted `tmux --version` "prints an error and exits 0 — it fails while reporting success." REFUTED: `tmux --version` exits **1** with empty stdout and 158 bytes on stderr, which is correct, well-behaved failure. The "exits 0" came from a probe reading `$?` after a pipeline, where the status belongs to the last stage — `PIPESTATUS=(1 0)`. **The instrument laundered a clean failure into a success and then reported it as the binary's defect.** tmux is not the offender; our measurement harness is. Retained rather than deleted, because a probe that misattributes its own bug to the thing it measures is a worse failure than the one first alleged, and deleting it would erase the only case in this section where the instrument manufactured the defect it reported.
 
-**And the corrected hazard is inverted, which matters for gate design.** The real risk with a version probe is not exit 0 laundering a failure; it is a probe treating **non-zero as ABSENT** and recording a present binary as missing. `tmux -V` returns `tmux 3.6a` at exit 0, so tmux is present and healthy, while `tmux --version` exits 1 — and no single flag covers our nine binaries (`--version` answers 8 of 9, `-V` answers 5 of 9). A doctor that probes with one flag and reads only the exit status will mark a healthy binary missing.
+**And the corrected hazard is inverted, which matters for gate design.** The real risk with a version probe is not exit 0 laundering a failure; it is a probe treating **non-zero as ABSENT** and recording a present binary as missing. `tmux -V` returns `tmux 3.6a` at exit 0, so tmux is present and healthy, while `tmux --version` exits 1 — and no single flag covers our nine binaries (`--version` answers 8 of 9, `-V` answers 6 of 9). A doctor that probes with one flag and reads only the exit status will mark a healthy binary missing.
 
 **What would Jeffrey do — the precedent carries its own remediation AND its own tests.** All citations below name the CONSTRUCT, not just the line, because three of us independently cited this same precedent at three different line numbers and all three were partly right: we were each naming a different construct on adjacent lines. A line number without a construct is unverifiable and does not survive a reformat.
 

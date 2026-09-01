@@ -43,7 +43,7 @@ That is not a thesis, it is a reap. From the stand-down of one real session on t
 ### The mechanism behind the 162
 
 The 162 is the symptom with a named cause, and the cause is the whole argument for typed
-supervision. From the four-layer reality table (`00-brief.md` §4, MEASURED):
+supervision. From the five-stage control loop (formerly "five-stage" — renamed, the table has five stages and seven rows) table (`00-brief.md` §4, MEASURED):
 
 | layer | mechanism | measured state |
 |---|---|---|
@@ -284,7 +284,7 @@ Matching a bar is a floor-raise, never a guarantee.
 
 ## 1.5 The honest position
 
-**What is genuinely built (MEASURED).** Twenty-six workspace crates. **370 `#[test]` functions across
+**What is genuinely built (MEASURED).** Twenty-six workspace crates. **379 `#[test]` functions across
 26 integration test files** (`find crates -name '*.rs' -path '*/tests/*' | wc -l` → 26;
 `grep -rc '#\[test\]'` → 370). A working census: **184 nodes, 207 edges, 183 rows**, 544,697 bytes,
 including a complete 18-edge dependency graph in which `subprocess-contract` is correctly the
@@ -342,7 +342,7 @@ gate still reports green.
 
 `omp-types` — the crate holding the canonical vocabulary — has **zero dependents**. The vocabulary is
 defined and unused. That is not a tidy-up item; it is the direct cause of the type inventory
-measuring **51 public enums and 79 structs across 22 of 24 crates**, with **6 distinct Verdict-shaped
+measuring **51 public enums (excluding test+bin sources; 59 including them — publish the pair) and 79 structs across 22 of 24 crates**, with **6 distinct Verdict-shaped
 types sharing no trait**, **17 ack/receipt types in 3 incompatible dialects**, and **4 colliding type
 names**. Six ways to say "verdict" and three ways to say "acknowledged" is exactly how a fleet ends a
 session unable to state what it finished. The vocabulary problem and the accounting problem in §1.2

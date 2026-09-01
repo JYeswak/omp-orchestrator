@@ -164,7 +164,7 @@ considerably sharper, because there is **no single version flag that covers the 
 Only `ntm`, `br`, `cargo`, `fh`, `jsm` answer **both**; `tmux` answers `-V` alone. So a uniform
 probe loop must try more than one spelling or it will record a present binary as absent.
 
-> **The `-V` row said "5 of 9" until `%1409` (evidence lens) refuted it.** Re-derived by looping all
+> **The `-V` row said "6 of 9 (the earlier "5 of 9" excluded tmux and is retired)" until `%1409` (evidence lens) refuted it.** Re-derived by looping all
 > nine: `ntm`, `br`, `tmux`, `cargo`, `fh`, `jsm` answer `-V` — **six**. The table excluded `tmux`
 > from the `-V` count while the sentence directly above it says `tmux -V` returns `tmux 3.6a` at
 > exit 0. A table contradicting its own caption, inside the subsection *about* getting this binary
@@ -286,7 +286,7 @@ through it.
 
 ```
 find crates -name '*.rs' -path '*/tests/*' | wc -l   ->  26 integration test files
-grep -rc '#\[test\]' …                                -> 370 #[test] fns
+grep -rc '#\[test\]' …                                -> 379 #[test] fns
 ```
 
 | crate | tests | known_bad | known_good | **mutation — what it acts on** | anti_vacuity |
@@ -357,13 +357,22 @@ different gate`**. The honest table needed a typed value, not a bigger count, an
 exemplar changed hands: `undrained-pipe-lint` qualifies and `no-shell-gate` does not.
 *Recorded under R11.*
 
-**1 of 8 gates has all four legs with an AUTOMATED mutation test** — `undrained-pipe-lint`
-(1/1/AUTOMATED/3). **4 of 8 have no mutation mechanism of any kind** — `commit-build-fence`,
-`kernel-bypass-gate`, `pre-delete-citation-check`, `path-literal-guard`. 3 of 8 have an automated
-mutation test; 1 has only an affordance. 2 of 8 have no known-bad. 1 of 8 —
-`path-literal-guard` — has **no known-good leg**, which makes it the highest-risk gate in the set:
-an attack-only suite ships an over-strict gate, and an over-strict gate gets routed around, which is
-a slower death than no gate at all.
+**0 of 8 gates mutate production source through the real hook** — the only definition that means
+anything, and the count the rebuilt table above supports. **1 of 8 reaches a real filesystem tree**
+(`omp-inventory-map`, `TREE`). **2 of 8 mutate a fixture string** (`undrained-pipe-lint`,
+`state-wildcard-lint`), which `fh` row `C38` says certifies nothing. **1 of 8 has an affordance
+nobody flips** (`no-shell-gate`). **4 of 8 have no mutation mechanism at all** —
+`commit-build-fence`, `kernel-bypass-gate`, `pre-delete-citation-check`, `path-literal-guard`.
+2 of 8 have no known-bad. 1 of 8 — `path-literal-guard` — has **no known-good leg**, which makes it
+the highest-risk gate in the set: an attack-only suite ships an over-strict gate, and an
+over-strict gate gets routed around, which is a slower death than no gate at all.
+
+> **This paragraph contradicted the table 38 lines above it, and `%1409` caught it.** It asserted
+> *"1 of 8 gates has all four legs with an AUTOMATED mutation test — `undrained-pipe-lint`
+> (1/1/AUTOMATED/3)"* while the rebuilt column classifies `undrained-pipe-lint` as **FIXTURE**, and
+> `AUTOMATED` is vocabulary the same subsection had already retracted. I rebuilt the table and left
+> the headline standing. **A retraction that does not sweep its own conclusions is half a
+> retraction**, and the half that survives is the half a reader quotes.
 
 > **The first draft of this headline said "1 of 8" and "5 of 8," and both were wrong against the
 > table printed directly above them.** `GateFrameworks` recomputed from the table and caught it.
@@ -398,7 +407,7 @@ test needs.
 
 This is not the vacuity defect — the skip is typed and loud, which is exactly right. It is a
 different and less obvious failure: **a test that is permanently unable to run is indistinguishable
-from a passing one in any aggregate count**, and it sits inside the 370 `#[test]` figure quoted
+from a passing one in any aggregate count**, and it sits inside the 379 `#[test]` figure quoted
 above. The fix is a policy decision the plan must make rather than dodge: either the oracle lives
 outside the tracked tree as a release artifact, or the differential lane is retired with a named
 reason, or the rule gets its first exemption. *Recorded under R11 — not previously written down.*
@@ -453,7 +462,7 @@ Not built-vs-wired. **Wired-but-unaddressable.** It adds a sixth required gate p
   migration schedule assuming `AckKind` is available today is wrong. The crate still has **zero
   dependents**.
 - Type inventory — two scopes, published as an error bar rather than one figure. Excluding test
-  modules and bin sources: **51 public enums, 79 structs** across 22 of 24 crates. Including them
+  modules and bin sources: **51 public enums (excluding test+bin sources; 59 including them — publish the pair), 79 structs** across 22 of 24 crates. Including them
   (`grep -rhoE` over all `*.rs`): **59 enums, 91 structs**. Both scopes agree exactly on the figures
   that matter: **4 colliding type names** (`Finding`, `LintReport`, `Observation`, `Violation`),
   **6 Verdict-shaped types with no shared trait** (`AckVerdict`, `FenceVerdict`, `FollowUpVerdict`,
@@ -485,7 +494,7 @@ Not built-vs-wired. **Wired-but-unaddressable.** It adds a sixth required gate p
 
 This is the spine of the whole plan. **No row works unqualified.**
 
-It was called "the four-layer reality" until `%1414` counted the rows and found **five**, so
+It was called "the five-stage control loop (formerly "five-stage" — renamed, the table has five stages and seven rows)" until `%1414` counted the rows and found **five**, so
 "exactly one row works" had no stable denominator. Correcting that exposed a second problem it
 raised as MAJOR 1: `consume` was one row carrying **three separable claims** — selection,
 admission, and transport — with a single verdict covering all three, so a `FENCED` admission was
@@ -528,7 +537,7 @@ Two things make this worth the space it takes. First, it was found by an agent *
 its own spawn instructions**: the dispatch brief asserted the asymmetry as implemented behaviour,
 `ActionsNegative` read the source, and wrote it up as an open defect instead of repeating it.
 Second, it is the *only* layer this brief marked unqualified `WORKS`, and it did not survive first
-contact with the source. **The four-layer table now has zero unqualified working rows.**
+contact with the source. **The five-stage table now has zero unqualified working rows.**
 *Recorded under R11.*
 
 ---
@@ -603,7 +612,7 @@ single refutation came from an agent **re-deriving rather than reading**.
 | 6 | "no prior art for binary identity" | `PriorArtWriter` | a not-found published with **no recorded search at all** |
 | 7 | "no prior art for mutation via a real hook" | `PriorArtWriter` | same — seeded as absent, never searched; `franken_lean` drives real `git commit` against the real hook |
 | 8 | "`ff-merge local->origin` will reconcile `rch`" | the conductor | `ahead 3` makes `--ff-only` **refuse**; stated as one command, is a rebase across 1,813 commits |
-| 9 | "`-V` answers 5 of 9" | `%1409` (evidence lens) | the table excluded `tmux` from the `-V` column while the sentence above it says `tmux -V` works — a table contradicting its own caption |
+| 9 | "`-V` answers 6 of 9" | `%1409` (evidence lens) | the table excluded `tmux` from the `-V` column while the sentence above it says `tmux -V` works — a table contradicting its own caption |
 
 **Three distinct false-zero mechanisms**, none of which look like failure at the call site: a shell
 `grep --include=` that returns empty at exit 0; an extension filter pointed at the wrong language;

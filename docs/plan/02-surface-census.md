@@ -89,7 +89,7 @@ because a coverage target would immediately become a metric to game: wiring a
 handler nobody calls raises the ratio and lowers the truth.
 
 There is a structural reason for the ratio, and it is recorded in the brief's
-four-layer reality table rather than discovered here: of the five layers
+five-stage control loop (formerly "five-stage" — renamed, the table has five stages and seven rows) table rather than discovered here: of the five layers
 (observe / actionable / consume / actuate / complete), exactly one — `observe`,
 via `tick-monitor` — is `MEASURED` as WORKS. `actuate` **does not exist**; a human
 types into panes. A project whose actuation layer does not exist cannot consume an
@@ -410,3 +410,60 @@ adequate substitutes for the OMP surfaces they stand in for; four of them
 **not** claim the coverage percentages will move, or should move to any particular
 figure. And it makes **no** claim that the four mandatory fields on any row have
 been independently verified — §5 is the measurement that they have not.
+
+---
+
+## 6. Every surface this system relies on — not just OMP
+
+**R14, added by Josh:** *"mining of dicklesworthstone-mirror projects, ntm surfaces, br surfaces, bv
+surfaces, and any surfaces that this system relies on."*
+
+§1–§5 census **one** dependency. The orchestrator sits on four, and the other three were never
+counted. Measured 2026-08-31 by enumerating each tool's subcommand surface from `--help` and
+grepping `crates/` plus `docs/plan/` for a reference to each:
+
+| surface | total | consumed | share |
+|---|---:|---:|---:|
+| OMP | 183 | 7 | **3.8 %** |
+| `ntm` | 114 | 6 | **5.3 %** |
+| `br` | 46 | 10 | **21.7 %** |
+| `bv` | 29 | **0** | **0.0 %** |
+| **total** | **372** | **23** | **6.2 %** |
+
+**The system named `omp-orchestrator` consumes 6.2 % of the surfaces it orchestrates through.**
+
+### 6.1 `bv` is zero, and that is the load-bearing number
+
+Not "rarely used" — **zero**. No crate invokes it (`grep -rn 'Command::new("bv")' crates/` → `0`,
+§11.5) and no plan section names one of its 29 subcommands. `bv` is the graph-triage tool whose
+entire purpose is answering *what should be worked next*, which is stage **S4** of the lifecycle,
+and S4 is one of the three severed links in §11.5.
+
+The consequence is measurable rather than theoretical: selection this session was done by the
+conductor picking work by recency of his own discovery, and when the graph was finally consulted,
+**the top-three PageRank items were unclaimed while hand-picked items were in flight.** The tool
+that would have prevented that was installed, working, and never called.
+
+`bv` also ships `capabilities`, `insights`, `decision-relevant`, `exit-codes` and
+`dependency` surfaces — the self-describing contract §07 specifies as our own bar — and we have
+adopted none of it while writing a section arguing that every CLI should have it.
+
+### 6.2 What the shares mean, read honestly
+
+`br` at 21.7 % is the only tool we use like a dependency rather than a shell. That is unsurprising:
+beads are the unit of work, so the surface gets exercised. It is also the tool whose *close policy*
+we describe as convention rather than code (§11.1, S3), so even here the consumption is shallow —
+we call `create`/`update`/`close`/`comments` and inherit the policy without asserting on it.
+
+`ntm` at 5.3 % of 114 is the sharpest gap after `bv`. This session hand-rolled roughly thirty
+dispatch packets while `ntm template` — a surface we *do* reference — ships a `dispatch` template
+with fail-closed required variables (§11.3).
+
+**NO-CLAIM.** These shares measure *reference*, not *correct use*: a `grep` hit means the name
+appears in a crate or a doc, not that we invoke it correctly or at all. The counts come from
+`--help` subcommand extraction, which under-counts flags and over-counts alias lines; `ntm`'s 114
+and `bv`'s 29 are subcommand-level figures and the flag surface beneath them is unmeasured. A low
+share is **not automatically a defect** — most of `ntm`'s 114 surfaces are irrelevant to
+orchestration, and adopting a surface because it exists is the opposite of the discipline this plan
+argues for. The defensible claim is narrower and it is about **one** tool: `bv` at zero, for the
+stage the plan names as broken, is a gap with a measured cost.

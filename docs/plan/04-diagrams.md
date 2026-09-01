@@ -17,7 +17,7 @@ The source of truth for Diagrams 1, 2 and 6's node set is the built scanner at
 `/Volumes/BuildShared/cargo-targets/debug/omp-inventory-map`, whose output was
 captured once at `/tmp/inv.txt` (544,697 bytes, exit 2, envelope
 `{"schema_version":"omp-inventory-map/v1","command":"doctor","status":"UNKNOWN",…}`).
-Diagrams 3 and 4 are generated from the four-layer reality table and gate-leg table
+Diagrams 3 and 4 are generated from the five-stage control loop (formerly "five-stage" — renamed, the table has five stages and seven rows) table and gate-leg table
 in §00 (`docs/plan/00-brief.md` §3.5, §4); the `find`/`grep` invocations behind those
 tables are reproduced under each diagram rather than re-derived.
 
@@ -173,7 +173,7 @@ Deciding which subset is worth wiring is a design act this diagram cannot perfor
 
 ---
 
-## Diagram 3 — The four-layer control loop, per-layer status (MEASURED)
+## Diagram 3 — The five-stage control loop, per-layer status (MEASURED)
 
 ```mermaid
 graph LR
@@ -254,7 +254,7 @@ graph TD
 ```
 
 **MEASURED.** Source: `find crates -name '*.rs' -path '*/tests/*' | wc -l` → 26
-integration test files; `grep -rc '#\[test\]'` across those → 370 `#[test]` functions;
+integration test files; `grep -rc '#\[test\]'` across those → 379 `#[test]` functions;
 per-leg presence from `grep -rli` for each of `known_bad`, `known_good`, `mutation`,
 `anti_vacuity` per gate crate. Counts in each node are that grep's file count, not a
 quality judgement.
@@ -357,7 +357,7 @@ DAG of Diagram 1 — `receiver-receipt` exists as a crate and is depended on by
 version from `tmux` at `/opt/homebrew/bin/tmux` (which rejects `--version` with
 `tmux: unknown option -- -`, hence the shell-reported `3.6a`); `br 0.4.1` from
 `br --version`; the 17-ack-types-in-3-dialects figure from the type inventory
-(51 public enums, 79 structs, 22 of 24 crates, 4 colliding names).
+(51 public enums (excluding test+bin sources; 59 including them — publish the pair), 79 structs, 22 of 24 crates, 4 colliding names).
 
 Step 4 is the receiver-verification gap, drawn as a dashed unanswered arrow because
 that is literally what it is: a message we assume and never observe. Every ack type we
