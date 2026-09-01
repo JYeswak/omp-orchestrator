@@ -32,7 +32,7 @@ instruments, three answers, re-measured at commit time:
 
 | instrument | answer | what it actually counts |
 |---|---:|---|
-| `grep -rl 'fn main' --include=main.rs` | 17 | crates having a `main.rs` — a **source shape**, not an artifact |
+| `grep -rl 'fn main' --include=main.rs` | 18 | crates having a `main.rs` — a **source shape**, not an artifact (re-measured 2026-09-01 at both fb89714 and be012d9; the 17 figure and the NUMBERS.toml note were one behind) |
 | `grep -c '^\[\[bin\]\]' crates/*/Cargo.toml` | 16 | **explicitly declared** targets; misses every implicit `src/main.rs` |
 | `cargo metadata --format-version 1 --no-deps` (targets with `bin` kind) | **21** | the workspace's declared binary targets; this is the canonical denominator |
 
@@ -99,18 +99,14 @@ unbuilt; two of the five layers it would need to install are unbuilt. A second m
 perfect installer today would receive a working observer, a broken actionable filter, a fenced
 consumer, and two absent layers. Every PROJECTED item below is contingent on those layers landing,
 and §09 owns that sequencing.
-
-**MEASURED — the drift denominator defect is still in the tree.**
-`grep -n 'owned' crates/installer/src/main.rs` shows `let mut owned = 0usize;` at line 68 and
-`let owned = BINARIES.len() - foreign;` at line 87. The second binding shadows the first; the
-first is never incremented and never read. The DRIFT message at line 91 prints
-`{mismatches}/{owned}` and the OK message at line 101 prints `{owned}/{owned}`. The current
-arithmetic is right, but it is right by shadowing, and a dead `mut` counter sitting three lines
-above a load-bearing denominator is exactly how the earlier `2/2 → 2/0` regression happened. **An
-unstated or accidentally-derived denominator is unverifiable.** This is the same failure class as
-the retired "81 JSON-RPC methods, 17 used" figure: a ratio nobody could re-derive from a named
-command. We will not ship a ratio whose denominator is not printed alongside the numerator with a
-named source.
+**CORRECTED 2026-09-01 — the defect described here is gone at HEAD, and the description below
+matched code at neither of the two commits we checked.** An earlier revision of
+`crates/installer/src/main.rs` derived `owned` as `BINARIES.len() - foreign`; at snapshot fb89714
+and at HEAD be012d9 the code instead counts `owned` explicitly in the loop (`:74`), with a comment
+(`:69-71`) explaining that the derived form is avoided so the OK line prints the same variable it
+decremented. What survives is the lesson, which is why the paragraph stays: the OK line and the
+DRIFT line must print counts from the SAME variable, or a mismatch between them is undetectable.
+The current code satisfies that; the paragraph is now a regression note, not a live defect.
 
 **MEASURED — the false-green class is real and recent.** Earlier in this session the installer's
 `main()` printed `installer: not yet wired to the live fleet` and returned SUCCESS. A no-op that
@@ -452,8 +448,8 @@ median, and intervention total, and any target miss remains a release-blocking f
 cause is classified. This measures internal buyer value without pretending that an external customer
 or useful-work result already exists.
 
-**Becomes config.** `crates/installer/src/main.rs:28` falls back to
-`PathBuf::from("/Users/josh")` when `HOME` is unset, and line 113 defaults `CARGO` to
+**Becomes config.** `crates/installer/src/main.rs:25` falls back to
+`PathBuf::from("/Users/josh")` when `HOME` is unset, and lines 118-119 default `CARGO` to
 `~/.cargo/bin/cargo` — a deliberate bypass of the RCH shim measured at
 `/Users/josh/.rch/shims/cargo`. Both are correct behaviours for this machine and wrong as
 defaults. They become a config file at `$XDG_CONFIG_HOME/omp-orchestrator/config.toml` with

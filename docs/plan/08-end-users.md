@@ -7,14 +7,21 @@ orchestrate their projects."*
 path is `PROJECTED` end to end; the measurements are of *our own repo today* — evidence the failures
 are real, and the exact obstacles between us and a foreign adopter.
 
-`MEASURED` 2026-08-31, and it frames everything below: there is no adopter-facing entry point at all.
-`/usr/bin/grep -cE '"doctor"|"init"' crates/omp-orchestrator/src/main.rs` → `0`. The whole CLI
-surface, verbatim from `crates/omp-orchestrator/src/main.rs:254`:
+`MEASURED` 2026-08-31, corrected 2026-09-01, and it frames everything below: there is no
+adopter-facing INIT path — no `doctor`, no `init`, no `adopt`
+(`/usr/bin/grep -cE '"doctor"|"init"' crates/omp-orchestrator/src/main.rs` → `0`). There IS a
+resident `run` entrypoint, and quoting the CLI verbatim matters enough that this section's first
+draft got graded down for trimming it. The whole CLI surface, verbatim from `usage()` at
+`crates/omp-orchestrator/src/main.rs:259-260`:
 
 ```
-usage: omp-orchestrator [--once|--max-ticks N] [--repo PATH] [--session NAME]
+usage: omp-orchestrator [run] [--once|--max-ticks N] [--repo PATH] [--session NAME]
                         [--interval-secs N] [--receiver-agent NAME] [--omp-quick] [--omp-binary PATH]
+       `run` is the explicit resident lifecycle entrypoint (observe -> ready queue -> dispatch -> receiver receipt); the flag-only form is unchanged for launchd
 ```
+
+`run` requires our fleet's `--session`/`--receiver-agent` — it is an entry point for OUR operator,
+not an adoption path; the missing pieces are still the three verbs below.
 
 No `doctor`, no `init`, no `adopt`. `--session NAME` and `--receiver-agent NAME` are facts about
 *our* fleet a stranger cannot supply correctly. **NO-CLAIM:** that grep establishes the absence of two
@@ -28,9 +35,11 @@ literal strings in one file, not that no other crate offers an entry point (§07
 time in one terminal, by hand; no panes to census, no use for a supervisor loop. They want the *back
 half*: gates that fail a build on a named property, and completion tracking where "done" means an
 artifact exists rather than an agent said so. They can be served first, because the gates are the
-part of this repo measured to work — `MEASURED` (brief §3.5, recomputed): 26 integration test files,
-379 `#[test]` functions, 8 gate crates, **2 of 8** with all four legs (`no-shell-gate` 4/3/2/6 and
-`undrained-pipe-lint` 1/1/1/3), **4 of 8** with no mutation leg. **NO-CLAIM:** that leg table counts
+part of this repo measured to work — `MEASURED` (brief §3.5, regenerated 2026-09-01 against
+NUMBERS.toml `[figures.test_functions]`): 31 integration test files, **409** `#[test]` functions,
+8 gate crates, **1 of 8** with all four typed legs (`undrained-pipe-lint`;
+`no-shell-gate` — the earlier exemplar — is AFFORDANCE-only under the typed rebuild, which is
+itself the cautionary tale), **4 of 8** with no mutation mechanism of any kind. **NO-CLAIM:** that leg table counts
 files matching a property grep; it does not establish the legs are individually strong.
 
 **Persona B — the small team.** Three to eight agents, one repo, one shared session. They already
@@ -64,10 +73,12 @@ omp-orchestrator 0.1.0 (build_id=ecdea397, target=aarch64-apple-darwin)
 
 `MEASURED` obstacle, not cosmetic. `crates/installer/src/main.rs:16` resolves the repo root from
 `env!("CARGO_MANIFEST_DIR")` — a **compile-time** constant; `:25` falls back to a literal
-`/Users/josh`; `:12` hardcodes three binary names. Repo-wide the pattern appears **16** times across
-**14** files (harness grep for `CARGO_MANIFEST_DIR` under `crates/`; a shell `grep -r --include=`
-returns a false zero here — see §2.2). An installed binary carrying a compile-time path audits the
-*build machine's* checkout, not the adopter's. **NO-CLAIM:** most of the 14 are tests, deliberately.
+`/Users/josh`; `:12` hardcodes three binary names. Repo-wide the pattern appears **21** times across **19** files at this writing (python walk,
+re-counted 2026-09-01; declared in NUMBERS.toml `[figures.cargo_manifest_dir_sites]` as LIVE — the
+count moves with every landed test file, so the prose cites the command, not a frozen number; a
+shell `grep -r --include=` returns a false zero here — see §2.2). An installed binary carrying a
+compile-time path audits the *build machine's* checkout, not the adopter's. **NO-CLAIM:** most of
+the 19 are tests, deliberately.
 
 ### 2.2 `doctor` — in a repo with none of our conventions
 
@@ -188,6 +199,13 @@ $ omp-orchestrator tick --once --json                               # PROJECTED,
   "graded":[],"refusals":[]}}
 ```
 
+**NEW-WORK FLAG on the transcript above.** The tick-2 `"transport":"OneshotSpawn"` names a
+transport that exists in NO crate: `ack-stage::TransportKind` has exactly two arms
+(`NtmRobotSend`, `TmuxSendKeysLiteral`), and `OneshotSpawn` occurs in zero files under crates/.
+The transcript is PROJECTED — but citing the two-arm enum as its measured shape one paragraph
+below while silently using a third arm was an undisclosed invention until this flag was added;
+the WorkerAdapter spec must add the arm or the transcript must use `TmuxSendKeysLiteral`.
+
 `MEASURED` grounding for the first refusal: `crates/tick-monitor/src/lib.rs:485` sets
 `MIN_GAP_SECS = 75` — liveness is a two-capture property one tick cannot prove, so `UNPROVEN` on tick
 one is correct and must be labelled or it reads as a bug. The `receipt` object has a measured shape:
@@ -254,7 +272,7 @@ or ours), and **a way to observe a worker**. Below those, every "do we need X" n
 | we must NOT require | why not | adapter that makes it optional |
 |---|---|---|
 | our bead prefix (`omp-orchestrator-*`) | a naming convention is not a contract; theirs is already in their CI | `TrackerAdapter` returns an opaque `UnitId`; the orchestrator never parses one |
-| our directory layout (`crates/`, `docs/plan/`) | `MEASURED`: 14 files resolve roots from `env!("CARGO_MANIFEST_DIR")` (§2.1) — a workspace assumption, not a universal one | `RepoAdapter::root()` resolves at **runtime** from cwd upward; compile-time roots stay in our own tests |
+| our directory layout (`crates/`, `docs/plan/`) | `MEASURED`: 19 files (21 sites, see §2.1's NUMBERS row) resolve roots from `env!("CARGO_MANIFEST_DIR")` (§2.1) — a workspace assumption, not a universal one | `RepoAdapter::root()` resolves at **runtime** from cwd upward; compile-time roots stay in our own tests |
 | our tmux session naming (`--session NAME`) | required today (`crates/omp-orchestrator/src/main.rs:254`), encoding our fleet's shape | `WorkerAdapter` owns naming; `--session` becomes a tmux-adapter-scoped flag, invalid elsewhere |
 | **our `.sh`/`.py` prohibition** | OUR accretion rule, born of a measured 160 tracked shell scripts and 60,467 lines in `control-plane` (`crates/no-shell-gate/src/lib.rs:6-9`). A foreign repo full of shell scripts is a normal repo and must be fully orchestrable | `no-shell-gate` is **opt-in**: `SKIPPED reason=OPTED_OUT_BY_ADOPTER`, never in a default set |
 | our specific agent CLI (OMP v18) | §3.1 — the deepest coupling in the codebase | `WorkerAdapter::observe()`; `tick-monitor` becomes the *OMP-v18 implementation*, not the interface |
@@ -275,7 +293,7 @@ Correct as stated, and the strongest objection here. `MEASURED` and specific:
 `crates/tick-monitor/src/lib.rs:312` hardcodes `MODEL_MARKERS = ["Opus 5","GLM 5.3","GPT-5.6",
 "GPT-5.5"]`; `:315` hardcodes three OMP-v18 dialog-footer strings *captured verbatim from pane
 `%1372`*; `:383` strips braille `U+2800..U+28FF` and the literal `π`; `classify` matches two verbatim
-queued-message strings (harness grep, `capture\.contains` → 2 sites). 1,185 lines, one vendor.
+queued-message strings (harness grep, `capture\.contains` → 2 sites). 1,293 lines at this writing (1,185 when first measured — the crate grew), one vendor.
 
 We have been on the receiving end of this. `MEASURED`, from `crates/tick-monitor/src/lib.rs:10-18`:
 `pane-truth` reported pane `%1409` — *"braille spinner, advancing timer, 16.5% tree CPU"* — as

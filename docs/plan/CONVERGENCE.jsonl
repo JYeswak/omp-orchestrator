@@ -34,3 +34,6 @@
 {"section":"03-crates","round":10,"lens":"evidence","role":"capability","new_findings":1,"verdict":"UN-CONVERGED","evidence":"/tmp/grade/r10-03.md"}
 {"section":"04-diagrams","round":10,"lens":"evidence","role":"hillclimb","new_findings":5,"verdict":"FAIL","evidence":"/tmp/grade/r10-04.md"}
 {"section":"05-actions","round":10,"lens":"evidence","role":"capability","new_findings":1,"verdict":"UN-CONVERGED","evidence":"/tmp/grade/r10-05.md"}
+{"section":"06-gates","round":12,"lens":"evidence","role":"hillclimb","new_findings":6,"verdict":"FAIL","evidence":"/tmp/grade/r12-06.md"}
+{"section":"07-installability","round":12,"lens":"evidence","role":"hillclimb","new_findings":8,"verdict":"FAIL","evidence":"/tmp/grade/r12-07.md"}
+{"section":"08-end-users","round":12,"lens":"evidence","role":"hillclimb","new_findings":6,"verdict":"FAIL","evidence":"/tmp/grade/r12-08.md"}

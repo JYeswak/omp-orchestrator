@@ -100,3 +100,9 @@ command  = "python3 -c \"import pathlib,re;m=[re.search(r'unsafe_code\\s*=\\s*.f
 expect   = "25"
 appears  = ["docs/plan/03-crates.md"]
 note     = "the both-mechanisms count moved 19 -> 25 in one round when six crates adopted the manifest lint. The triple (manifest/both/attribute-only) is the highest-rotation statistic in the plan; both-mechanisms is the one the gate text depends on."
+
+[figures.cargo_manifest_dir_sites]
+command  = "python3 -c \"import pathlib;print(sum(p.read_text(errors='ignore').count('CARGO_MANIFEST_DIR') for p in pathlib.Path('crates').rglob('*.rs')))\""
+expect   = "LIVE"
+appears  = ["docs/plan/08-end-users.md"]
+note     = "moves with every landed test file (tests cite CARGO_MANIFEST_DIR for fixture paths); LIVE mode requires the command to run and produce output, and obliges the prose to cite the command rather than a frozen count."
