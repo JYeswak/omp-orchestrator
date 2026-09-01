@@ -99,6 +99,20 @@ pub struct Unit {
     /// SHAs cited but NOT found in the object store. A citation that does not resolve is a
     /// defect, not evidence -- surfaced rather than dropped.
     pub dangling_shas: Vec<String>,
+    /// SHAs that exist in git AND are cited by this bead, but whose COMMIT MESSAGE
+    /// does not name this bead. These are CITATIONS OF SOMEONE ELSE'S WORK.
+    ///
+    /// Measured 2026-08-31: `omp-orchestrator-2lo` was reported `landed=3f821d4`
+    /// while `git log --all --grep=2lo` was EMPTY — `3f821d4` is `4ak`'s gate work,
+    /// present in `2lo`'s comments as a hand-written cross-reference. The bead earned
+    /// a LANDED_UNGRADED promotion for citing another bead's commit, and the grading
+    /// queue filled with beads where nothing was built.
+    ///
+    /// Kept as its own field rather than merged into `dangling_shas`: a dangling SHA
+    /// is a BROKEN citation, this is a VALID citation of work that is not yours. The
+    /// remedies differ — fix the reference versus stop claiming the credit — so
+    /// collapsing them would hide which one an operator is looking at.
+    pub cited_only_shas: Vec<String>,
     pub has_verdict: bool,
     pub closed_by_author: bool,
     pub refuted: bool,
@@ -191,6 +205,16 @@ impl Report {
     pub fn self_closed(&self) -> Vec<&Unit> {
         self.units.iter().filter(|u| u.closed_by_author).collect()
     }
+    /// Beads citing real commits that DO NOT name them — credit taken for another
+    /// bead's work. Surfaced because this is the honest-credit failure the fleet is
+    /// most exposed to: it promotes a bead to the grading queue with nothing built.
+    pub fn borrowed_credit(&self) -> Vec<&Unit> {
+        self.units
+            .iter()
+            .filter(|u| !u.cited_only_shas.is_empty())
+            .collect()
+    }
+
     pub fn dangling_citations(&self) -> Vec<&Unit> {
         self.units
             .iter()
@@ -414,6 +438,82 @@ fn sha_exists(repo: &str, sha: &str) -> bool {
     )
 }
 
+
+/// Which bucket a cited SHA belongs in. A PURE function of two facts, extracted so
+/// the decision is testable without a git repository.
+///
+/// # Why extraction was necessary
+///
+/// My first two tests for this fix set `cited_only_shas` by hand on a `Unit` literal
+/// and asserted the accessor and render. Then I mutation-tested by reverting the
+/// attribution check to `if true` — the exact pre-fix behaviour — and **ZERO suites
+/// failed**. The tests exercised the REPORTING and never the DECISION, so they could
+/// not fail for the reason they existed.
+///
+/// That is a fooled certificate, and it is the defect class this repo keeps finding
+/// in its own work. The fix is not a better assertion on the same shape: it is to
+/// make the decision a thing a test can call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CitationClass {
+    /// Exists in git AND the commit names this bead. A real landing.
+    Landed,
+    /// Exists in git, but the commit does NOT name this bead — a citation of
+    /// someone else's work. Measured: `2lo` cited `4ak`'s `3f821d4`.
+    BorrowedCredit,
+    /// Does not resolve in any repo. A broken reference, not evidence.
+    Dangling,
+}
+
+/// Classify one cited SHA. `exists` and `names_bead` are the only inputs, so both
+/// failure directions are reachable from a test.
+pub fn classify_citation(exists: bool, names_bead: bool) -> CitationClass {
+    match (exists, names_bead) {
+        (false, _) => CitationClass::Dangling,
+        (true, true) => CitationClass::Landed,
+        (true, false) => CitationClass::BorrowedCredit,
+    }
+}
+
+/// Does the COMMIT name the bead? The only direction that proves authorship.
+///
+/// # Why this exists
+///
+/// `sha_exists` answers "is this a real commit", which is necessary and nowhere near
+/// sufficient. A bead's prose can cite any real commit in the repository, including
+/// another bead's work, and the lifecycle reader previously treated every such
+/// citation as a landing.
+///
+/// Reads the commit's own subject and body and looks for the bead id. Deliberately
+/// NOT `git log --grep` across all refs: that would match a commit mentioning the
+/// bead in passing anywhere in history, which is the same over-broad matching one
+/// level out. This asks one specific commit whether it claims one specific bead.
+///
+/// # What it cannot do
+///
+/// A commit can name a bead it did not implement — the message is written by the
+/// same hand as the citation. This raises the floor from "anyone may credit
+/// themselves with anyone's commit" to "the commit must claim the bead", which is
+/// the difference between an accident and a lie.
+fn commit_references_bead(repos: &[String], sha: &str, bead_id: &str) -> bool {
+    // Match the bare suffix too: commits in this repo write `[cp-79am1]` and
+    // `omp-orchestrator-4ak` interchangeably, and requiring the full prefix would
+    // reject genuine landings — a false negative that empties the grading queue
+    // instead of filling it wrongly. Both failure directions are real.
+    let short = bead_id.rsplit('-').next().unwrap_or(bead_id);
+    for repo in repos {
+        let out = crate::run(
+            &["git", "-C", repo, "log", "-1", "--format=%s%n%b", sha],
+            std::time::Duration::from_secs(20),
+        );
+        if let crate::Outcome::Completed { code: Some(0), stdout, .. } = out {
+            if stdout.contains(bead_id) || (short.len() >= 3 && stdout.contains(short)) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 fn br(args: &[&str], secs: u64) -> String {
     match crate::run(args, std::time::Duration::from_secs(secs)) {
         crate::Outcome::Completed { stdout, .. } => stdout,
@@ -496,11 +596,27 @@ pub fn collect(repos: &[String]) -> Result<Report, String> {
 
         let mut verified = Vec::new();
         let mut dangling = Vec::new();
+        let mut cited_only = Vec::new();
         for sha in sha_candidates(&corpus) {
-            if repos.iter().any(|r| sha_exists(r, &sha)) {
-                verified.push(sha);
-            } else {
-                dangling.push(sha);
+            let exists = repos.iter().any(|r| sha_exists(r, &sha));
+            // ATTRIBUTION RUNS COMMIT -> BEAD, NOT BEAD -> COMMIT.
+            //
+            // Measured 2026-08-31 (bead lifecycle-phantom-landing-ma1): the corpus
+            // above is the bead's OWN PROSE (its comments plus `br show`), so any SHA
+            // mentioned anywhere in it became a "landing". `omp-orchestrator-2lo` was
+            // reported landed=3f821d4 while `git log --all --grep=2lo` was EMPTY and
+            // 3f821d4 is 4ak's gate work — present in 2lo's comments as a
+            // CROSS-REFERENCE somebody wrote by hand.
+            //
+            // So the grading queue filled with beads where nothing was built, and a
+            // bead earned credit for CITING another bead's commit. Honest credit
+            // requires the COMMIT to name the bead; a bead naming a commit is a
+            // citation and proves nothing about authorship.
+            let names = exists && commit_references_bead(&repos, &sha, &id);
+            match classify_citation(exists, names) {
+                CitationClass::Landed => verified.push(sha),
+                CitationClass::BorrowedCredit => cited_only.push(sha),
+                CitationClass::Dangling => dangling.push(sha),
             }
         }
 
@@ -529,6 +645,7 @@ pub fn collect(repos: &[String]) -> Result<Report, String> {
             in_degree: 0, // filled in the second pass below
             verified_shas: verified,
             dangling_shas: dangling,
+            cited_only_shas: cited_only,
             has_verdict: graded && !closed,
             // A close carrying no independent-grade marker is author-closed UNTIL PROVEN
             // OTHERWISE. Fail toward "needs regrading": the cost of a spurious regrade is
@@ -568,6 +685,22 @@ pub fn render(report: &Report) -> String {
         "denominator: {} beads parsed from `br list --json`\n\n",
         report.units.len()
     ));
+
+    let borrowed = report.borrowed_credit();
+    if !borrowed.is_empty() {
+        o.push_str("BORROWED CREDIT -- cites a real commit that does NOT name this bead\n");
+        for u in &borrowed {
+            o.push_str(&format!(
+                "  {:<44} cites {}\n",
+                u.bead,
+                u.cited_only_shas.join(",")
+            ));
+        }
+        o.push_str(
+            "  A bead citing another bead's commit is a CITATION, not a landing. \
+             Attribution runs commit -> bead.\n\n",
+        );
+    }
 
     o.push_str("WHERE WE ARE (stage x bead), and WHAT GOT DONE (verified SHAs)\n");
     for (stage, units) in report.by_stage() {
@@ -663,7 +796,138 @@ mod tests {
         assert!(got.is_empty(), "embedded hex is not a citation: {got:?}");
     }
 
+        /// The DECISION, exercised directly. All four input combinations.
+    ///
+    /// This test is the reason `classify_citation` exists as a pure function: the
+    /// earlier fixture-only tests passed while the attribution check was reverted to
+    /// `if true`, so they proved nothing about the fix.
     #[test]
+    fn classify_citation_covers_every_input_combination() {
+        // The measured case: 3f821d4 exists, names 4ak, cited by 2lo.
+        assert_eq!(
+            classify_citation(true, false),
+            CitationClass::BorrowedCredit,
+            "a real commit that does not name the bead is BORROWED CREDIT, not a landing"
+        );
+        assert_eq!(
+            classify_citation(true, true),
+            CitationClass::Landed,
+            "a real commit that names the bead is a landing"
+        );
+        assert_eq!(
+            classify_citation(false, false),
+            CitationClass::Dangling,
+            "an unresolvable SHA is a broken reference"
+        );
+        // Nonsense input: cannot name a bead if it does not exist. Dangling wins,
+        // because existence is the precondition and a gate must fail on the
+        // precondition rather than on the richer claim.
+        assert_eq!(
+            classify_citation(false, true),
+            CitationClass::Dangling,
+            "non-existence dominates: a missing commit cannot be a landing"
+        );
+    }
+
+    /// FIRES-ON-KNOWN-BAD for the PRE-FIX behaviour.
+    ///
+    /// Before this fix every existing SHA was treated as verified regardless of what
+    /// its commit said. That is `classify_citation(true, _) -> Landed`, and this
+    /// asserts it is NOT what happens.
+    #[test]
+    fn the_pre_fix_behaviour_is_now_impossible() {
+        let pre_fix_verdict = CitationClass::Landed;
+        assert_ne!(
+            classify_citation(true, false),
+            pre_fix_verdict,
+            "the pre-fix code promoted ANY existing cited SHA to landed; 2lo was \
+             reported landed=3f821d4 while `git log --all --grep=2lo` was EMPTY"
+        );
+    }
+
+    /// Build a Unit with every field explicit — mirrors the literal the sibling tests
+    /// use, so a fixture cannot drift from the struct without a compile error.
+    fn test_unit(bead: &str, status: &str) -> Unit {
+        Unit {
+            bead: bead.into(),
+            status: status.into(),
+            assignee: None,
+            dep_count: 0,
+            in_degree: 0,
+            verified_shas: vec![],
+            dangling_shas: vec![],
+            cited_only_shas: vec![],
+            has_verdict: false,
+            closed_by_author: false,
+            refuted: false,
+        }
+    }
+
+    /// A bead citing ANOTHER bead's commit must not be promoted as landed.
+    ///
+    /// # The measured case, reproduced exactly
+    ///
+    /// 2026-08-31, bead `lifecycle-phantom-landing-ma1`, found by a grader disputing
+    /// my premise rather than by me:
+    ///
+    /// ```text
+    /// tick-monitor lifecycle -> omp-orchestrator-2lo  landed=3f821d4
+    /// git log --all --grep=2lo -> EMPTY. No commit references 2lo at all.
+    /// git log -1 3f821d4       -> "gate: no-shell-gate ..." which is 4ak's work
+    /// 3f821d4 in 2lo comments  -> present, as a CITATION I wrote myself
+    /// ```
+    ///
+    /// The tool read a cross-reference to a different bead's commit and reported it
+    /// as this bead's implementation, so the grading queue filled with beads where
+    /// nothing was built.
+    #[test]
+    fn a_cited_commit_that_does_not_name_the_bead_is_not_a_landing() {
+        let mut u = test_unit("omp-orchestrator-2lo", "open");
+        // The corpus resolved: the SHA is real, so it is NOT dangling.
+        u.dangling_shas = vec![];
+        // But the commit's message names 4ak, not 2lo.
+        u.cited_only_shas = vec!["3f821d4".to_owned()];
+        u.verified_shas = vec![];
+        let report = Report { units: vec![u], repo_updates: vec![] };
+
+        assert_eq!(
+            report.borrowed_credit().len(),
+            1,
+            "a bead citing a commit that does not name it must be surfaced as borrowed credit"
+        );
+        let rendered = render(&report);
+        assert!(
+            rendered.contains("BORROWED CREDIT"),
+            "the operator must SEE it; a field nobody renders is not wired.\n{rendered}"
+        );
+        assert!(
+            rendered.contains("3f821d4"),
+            "and the render must name the SHA so it can be checked.\n{rendered}"
+        );
+    }
+
+    /// KNOWN-GOOD leg: a commit that DOES name the bead is a real landing.
+    ///
+    /// Without this the fix is over-strict in the direction that empties the grading
+    /// queue instead of filling it wrongly — both failure directions are real, and an
+    /// over-strict gate gets routed around.
+    #[test]
+    fn a_commit_that_names_the_bead_is_a_real_landing_and_not_borrowed() {
+        let mut u = test_unit("omp-orchestrator-4ak", "closed");
+        u.verified_shas = vec!["3f821d4".to_owned()];
+        u.cited_only_shas = vec![];
+        let report = Report { units: vec![u], repo_updates: vec![] };
+        assert!(
+            report.borrowed_credit().is_empty(),
+            "a bead whose commit names it must NOT be flagged as borrowing credit"
+        );
+        assert!(
+            !render(&report).contains("BORROWED CREDIT"),
+            "and the borrowed-credit section must not appear when nothing is borrowed"
+        );
+    }
+
+#[test]
     fn landed_but_unclosed_is_the_grading_queue() {
         let u = Unit {
             bead: "x".into(),
@@ -673,6 +937,7 @@ mod tests {
             in_degree: 0,
             verified_shas: vec!["abc1234".into()],
             dangling_shas: vec![],
+            cited_only_shas: vec![],
             has_verdict: false,
             closed_by_author: false,
             refuted: false,
@@ -696,6 +961,7 @@ mod tests {
             in_degree: 0,
             verified_shas: vec!["f9f4e37".into()],
             dangling_shas: vec![],
+            cited_only_shas: vec![],
             has_verdict: false,
             closed_by_author: false,
             refuted: false,
@@ -719,6 +985,7 @@ mod tests {
             in_degree: 0,
             verified_shas: vec![],
             dangling_shas: vec![],
+            cited_only_shas: vec![],
             has_verdict: false,
             closed_by_author: false,
             refuted: false,
@@ -740,6 +1007,7 @@ mod tests {
             in_degree: 0,
             verified_shas: vec![],
             dangling_shas: vec![],
+            cited_only_shas: vec![],
             has_verdict: false,
             closed_by_author: false,
             refuted: true,
@@ -860,6 +1128,7 @@ mod orphan_tests {
             in_degree,
             verified_shas: vec![],
             dangling_shas: vec![],
+            cited_only_shas: vec![],
             has_verdict: false,
             closed_by_author: false,
             refuted: false,
