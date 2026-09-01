@@ -198,3 +198,69 @@ in `NUMBERS.toml` is automatically MAJOR.
 panes' current assignments. This amendment is a proposal recorded in the plan, not a
 change to the contract — the contract still says zero findings, and by that contract
 the board is **0/12 banked after 12 rounds**.
+
+---
+
+## Round 14 — the held-out lens, and it settles the stop-condition question
+
+The withheld lens ran once across all 12 sections, per the rule reserved at round 10:
+*"a task needs a held-out leg on a different distribution, to test that a fix
+GENERALISES rather than fitting the graders."* Twelve fresh scouts, zero shared
+context, one question each:
+
+> It is 3am. An alarm woke you. You have never seen this project. You have ONE
+> section and nothing else. **Can you ACT?**
+
+Not *is it true* — that was graded thirteen times. **Can a stranger under pressure
+do something.**
+
+### Result
+
+| lens | question asked | findings |
+|---|---|---|
+| rounds 1–13 (hillclimb + capability) | is this document CORRECT? | 15 BLOCKER, 40 MAJOR |
+| **round 14 (held out)** | can an operator ACT? | **net 20 BLOCKED, 49 gaps** |
+| verified false positives | — | 3, all one artifact class |
+
+**Thirteen rounds of correctness grading left twenty net blocking actionability
+defects, because no round asked.** That is what a held-out lens is for, and it is the
+first time this plan has been measured on a distribution its graders never saw.
+
+### The answer to the stop condition
+
+Under the current contract — *"2 rounds of zero new findings"* — the correctness
+lens was the only lens. Had it ever reached zero, this plan would have been
+certified while a 3am operator could not invoke a single one of actions A1–A11,
+could not name a valid `<adapter>` for a documented command, and could not locate
+the artifact behind the plan's sole wire-level proof.
+
+Convergence on one lens is not convergence. **The stop condition needs a lens
+requirement, not only a count requirement** — and that is a change to the contract,
+so it is Josh's to make, not mine.
+
+### Three findings the lens produced that correctness could not
+
+1. **`/tmp` provenance is plan-wide, not local.** `Lens10PriorArt` independently
+   found nine Gap verdicts grounded on `/tmp/grade/` artifacts — the same clearable-
+   provenance class already fixed in §1.2.3 and §4.7. Three sections, one defect,
+   found only by someone asking "could I retrieve this at 3am".
+2. **A dead citation I created an hour earlier.** `Lens01Idea`: the §1.2.1 table
+   still pointed at `/tmp/grade/agent-end-raw-frame.json` while the durable path
+   lived only in the §1.2.3 subsection *"I might skip, thinking it's already
+   resolved."* Corrected in the same tick.
+3. **`br comment` exits 2 and drops the comment.** The section claimed it, and the
+   lens flagged it as an unverifiable operational claim. Measured directly:
+   `br comment` → exit 2, comment absent; `br comments add` → exit 0, comment
+   present. The plan was right and the operator would have been silently wrong.
+
+### NO-CLAIM, and it is load-bearing
+
+**The lens has a systematic false-positive mode.** Three BLOCKED findings claimed
+truncated sentences; all three were **line-wrap artifacts** in the agents' reader —
+a multi-line shell one-liner in §09 and a wrapped criterion in §06, both complete in
+the file. I verified each rather than recording it, and the rows carry
+`false_positives_verified` so the raw and net counts are both visible.
+
+A held-out lens is a *different* reader, not a *better* one. Its output needs the
+same verification as any worker report — which is exactly the discipline the rest of
+this document already demands, applied to the newest instrument.

@@ -91,7 +91,7 @@ note     = "published as 6.2% first, then 17.1%, then 21.8%. Round 10 found THRE
 
 [figures.convergence_rows]
 command  = "grep -c . docs/plan/CONVERGENCE.jsonl"
-expect   = "58"
+expect   = "70"
 appears  = ["docs/plan/CONVERGENCE.md"]
 note     = "3 rounds x 12 sections. A round that reports 11 rows is a pane that silently dropped a section, which has happened twice."
 
