@@ -18,6 +18,7 @@ path = "src/lib.rs"
 ack-stage = { path = "../ack-stage" }
 asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", rev = "fa3c01aec" }
 dispatch-claim-fence = { path = "../dispatch-claim-fence" }
+dispatch-silence-watch = { path = "../dispatch-silence-watch" }
 omp-rpc-session = { path = "../omp-rpc-session" }
 subprocess-contract = { path = "../subprocess-contract" }
 receiver-receipt = { path = "../receiver-receipt" }

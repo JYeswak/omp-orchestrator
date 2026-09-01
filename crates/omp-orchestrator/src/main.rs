@@ -14,6 +14,7 @@ use asupersync::runtime::RuntimeBuilder;
 use asupersync::time::{sleep, timeout};
 use asupersync::Cx;
 use dispatch_claim_fence::{authorize, parse_br_show_json, BeadSnapshot, DispatchIntent};
+use dispatch_silence_watch::SilenceVerdict;
 use omp_orchestrator::{
     applicable, census_gates, decide, read_idle_authorization, GateCensus, Observation,
     PaneObservation, QueueState, SupervisorDecision,
@@ -36,6 +37,7 @@ const DEFAULT_INTERVAL: Duration = Duration::from_secs(90);
 const DEFAULT_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const RECEIPT_TIMEOUT: Duration = Duration::from_secs(30);
 const RECEIPT_POLL: Duration = Duration::from_millis(250);
+const SILENCE_WATCH: &str = "dispatch-silence-watch";
 const BUILD_ID: &str = match option_env!("OMP_BUILD_ID") {
     Some(value) => value,
     None => "unversioned",
@@ -560,6 +562,38 @@ fn authorize_bead_dispatch(
         .map_err(|error| error.to_string())
 }
 
+async fn run_silence_watch(
+    cx: &Cx,
+    config: &Config,
+    bead: &str,
+    dispatch_epoch: i64,
+) -> Result<SilenceVerdict, String> {
+    let args = vec![
+        bead.to_owned(),
+        config.session.clone(),
+        config.receiver_agent.clone(),
+        dispatch_epoch.to_string(),
+        config.interval.as_secs().max(1).to_string(),
+    ];
+    let output = require_success(
+        SILENCE_WATCH,
+        invoke(cx, config, SILENCE_WATCH, &args).await?,
+    )?;
+    let text = String::from_utf8_lossy(&output);
+    let detector = text
+        .lines()
+        .find_map(|line| line.strip_prefix("bead=")?.split("detector=").nth(1))
+        .map(str::trim)
+        .ok_or_else(|| "DISPATCH_SILENCE_WATCH malformed verdict output".to_owned())?;
+    match detector {
+        "VERDICT_POSTED" => Ok(SilenceVerdict::VerdictPosted),
+        "SILENT_PAST_DEADLINE" => Ok(SilenceVerdict::SilentPastDeadline),
+        "REASSIGNED" => Ok(SilenceVerdict::Reassigned),
+        "TRACKER_ERROR" => Ok(SilenceVerdict::TrackerError),
+        other => Err(format!("DISPATCH_SILENCE_WATCH unknown verdict={other}")),
+    }
+}
+
 async fn send_and_verify(
     cx: &Cx,
     config: &Config,
@@ -1041,26 +1075,44 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             })?;
             let snapshot = load_bead_snapshot(cx, config, bead).await?;
             authorize_bead_dispatch(config, bead, &snapshot)?;
+            let dispatch_epoch = now_unix() as i64;
             write_dispatch_intent(config, &pane, bead)?;
             let before = capture_pane(cx, config, &pane).await?;
             let stage = send_and_verify(cx, config, &pane, bead, &snapshot, &before, tick).await?;
+            let silence = run_silence_watch(cx, config, bead, dispatch_epoch).await?;
             write_heartbeat(
                 config,
                 tick,
-                "DISPATCHED",
-                &format!(
-                    "pane={pane} bead={bead} receiver={} ack_action={}",
-                    stage.transport.kind().label(),
-                    stage.action.label(),
-                ),
+                "DISPATCH_SILENCE_WATCH",
+                &format!("pane={pane} bead={bead} verdict={silence}"),
             )?;
-            clear_dispatch_intent(config)?;
-            println!(
-                "DISPATCHED tick={tick} session={} pane={pane} bead={bead} RECEIVER_RECEIPT={} ACK_ACTION={}",
-                config.session,
-                stage.transport.kind().label(),
-                stage.action.label()
-            );
+            match silence {
+                SilenceVerdict::VerdictPosted => {
+                    write_heartbeat(
+                        config,
+                        tick,
+                        "DISPATCHED",
+                        &format!(
+                            "pane={pane} bead={bead} receiver={} ack_action={}",
+                            stage.transport.kind().label(),
+                            stage.action.label(),
+                        ),
+                    )?;
+                    clear_dispatch_intent(config)?;
+                    println!(
+                        "DISPATCHED tick={tick} session={} pane={pane} bead={bead} RECEIVER_RECEIPT={} ACK_ACTION={} SILENCE_VERDICT={silence}",
+                        config.session,
+                        stage.transport.kind().label(),
+                        stage.action.label()
+                    );
+                }
+                other => {
+                    println!(
+                        "DISPATCH_SILENCE tick={tick} session={} pane={pane} bead={bead} verdict={other} next_action=inspect-or-resolve-pending",
+                        config.session
+                    );
+                }
+            }
         }
         SupervisorDecision::GateUnwired { unwired } => {
             // The remedy comes from the VARIANT, never from a literal here. The
