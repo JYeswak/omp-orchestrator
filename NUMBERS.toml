@@ -79,7 +79,7 @@ note     = "THE WORST OFFENDER, and it drifted WHILE THIS ROW WAS BEING WRITTEN.
 
 [figures.no_claim_blocks]
 command  = "grep -rc '^\\*\\*NO-CLAIM' docs/plan/*.md 2>/dev/null | awk -F: '{s+=$2} END{print s}'"
-expect   = "47"
+expect   = "48"
 appears  = ["docs/PLAN.md"]
 note     = "the header quantifies the plan's own hedging; it is generated at assembly but never checked against the sections after they are edited."
 

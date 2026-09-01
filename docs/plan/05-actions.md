@@ -464,3 +464,66 @@ the typed path as primary.
 **NO-CLAIM:** this records the refutation against the two actions that depend on it. The eleven
 action specs are otherwise unchanged and have not been re-derived against upstream types — the
 signal sweep found seven, and only completion is traced here.
+
+---
+
+## 5.13 The dispatch ledger already existed, and it recorded a 12.3-hour stall nobody read
+
+The `Log every dispatch through our own crates` objective turned out to be already
+satisfied — and measuring it produced a worse finding than the gap it was checking.
+
+### What is there
+
+`~/.local/state/flywheel/omp-orchestrator.heartbeat.jsonl`, 486 KB, opened
+`.append(true)`, written by `write_heartbeat`. Every row carries
+`ts_unix / event / build_id / status / tick / pid / repo / session / detail`.
+
+**1,323 rows:**
+
+| status | count |
+|---|---:|
+| `CYCLE_STARTED` | 659 |
+| **`DISPATCH_RETRY_BLOCKED`** | **489** |
+| `DISPATCHED` | 56 |
+| `IDLE_UNAUTHORIZED` | 53 |
+| `SUPERVISED_WORKING` | 53 |
+| `SUPERVISOR_REFUSED` | 11 |
+| `QUEUE_EMPTY_NEEDS_JOSH` | 2 |
+
+So loop dispatches ARE logged through our own crates. The objective is met for the
+product's dispatch path.
+
+### The ratio nobody looked at
+
+**8.7 refusals per successful dispatch.** And 469 of the 489 share a *single* cause:
+one `dispatch_intent` marker from `pid=92834`, `build_id=b7c2d4e`, spanning
+**08-31 11:43 → 09-01 00:01 = 12.3 hours**.
+
+That is the stale-fence stall cleared as `HD-0001`. The loop refused **every tick for
+half a day** on a marker whose owning process no longer existed — and wrote a row
+about it 469 times.
+
+**The evidence was in the product's own output the whole time. The stall was found
+when a human asked, not when the ledger was read.** That is precisely the failure
+class this project exists to remove, appearing in the project.
+
+`fh C112` named the mechanism months earlier: *an ownership claim must name something
+that dies with the thing it owns.* A pid in a marker file does not, so the marker
+outlived `pid=92834` by twelve hours.
+
+### What this changes about the objective
+
+The gap is not logging. It is that **nothing consumes the log**. Two things follow:
+
+1. `dispatcher-deadman` — a watchdog for eligible work that received no packet — is
+   one of the 20 crates still unextracted (883 LOC, §3.9). It is the consumer this
+   ledger needed and did not have.
+2. The remaining unlogged dispatches are **operator handrolls**: every `tmux
+   send-keys` and `task` dispatch this session bypassed the binary entirely and
+   appears in no ledger. That is exactly what `kernel-only-operator-hook` exists to
+   refuse, and it is blocked on `cp-nq2s9` (§7 of the hook packet) because the kernel
+   it names cannot reach codex panes.
+
+**NO-CLAIM:** an append-only ledger with no reader is not observability, and adding a
+reader is not in this section. What is established is the count, the cause, and the
+duration — 469 rows, one dead pid, 12.3 hours.
