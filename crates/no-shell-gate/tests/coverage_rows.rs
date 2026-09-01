@@ -171,3 +171,83 @@ fn every_coverage_row_states_a_disposition() {
         unstated
     );
 }
+
+
+/// Every semantic field must say whether a HUMAN WAVE authored it or a SCRIPT derived it.
+///
+/// # The measured failure, and it was mine
+///
+/// 2026-09-01. A pane reported that a concurrent editor had replaced its nuanced
+/// dispositions with uniform values. That editor was this orchestrator, and git showed
+/// the damage was TWELVE fields across all six rows, not the one reported: a three-way
+/// taxonomy — `(a) not ours` / `(b) reimplemented` / `(c) unused capability` — collapsed
+/// to a bare `'a'`, erasing one VALIDATE and five RETIRE decisions.
+///
+/// The mechanism is the part worth gating. A concurrent pane had already flattened
+/// `classification`; a later script then **derived `disposition` from a field it did not
+/// verify** and wrote the result as an explicit value. The corruption arrived as someone
+/// else's and became the script's assertion.
+///
+/// **Before that edit the field was null, which is at least honest about being unknown.
+/// After, it looked like a settled decision. The fix made the damage harder to see.**
+///
+/// `every_coverage_row_states_a_disposition` cannot catch this — it checks that a
+/// disposition is STATED, and `N/A-NOT-OURS` is stated. Its own NO-CLAIM said "STATED,
+/// not CORRECT", written an hour before it certified six wrong ones.
+///
+/// So provenance is now a required field, reconstructed from the artifact's first commit:
+/// `authored@<sha>` when the value still matches what the probing wave wrote, or
+/// `derived-from@<sha>:<original>` when a later hand changed it — carrying the original
+/// so a reader can see what was replaced.
+///
+/// # What it cannot do
+///
+/// It records that a value was derived; it does not decide whether the derivation was
+/// right. The six `derived-from` rows in `ipg11` are a legitimate normalisation (full
+/// phrase to the bare letter a sibling test requires) — indistinguishable, to this gate,
+/// from the flattening that lost the taxonomy. A human reading `derived-from@ac8f4c9:'(b)
+/// reimplemented'` next to `'a'` would have caught it in seconds. That is the point:
+/// **this gate does not detect the error, it makes the error visible.**
+#[test]
+fn every_semantic_field_declares_authored_or_derived() {
+    let root = repo_root();
+    let files = coverage_files(&root);
+    assert!(
+        !files.is_empty(),
+        "ANTI-VACUITY: no coverage artifacts found; nothing to check provenance on"
+    );
+    let mut missing = Vec::new();
+    let mut checked = 0usize;
+    for f in &files {
+        let text = std::fs::read_to_string(f).unwrap_or_default();
+        let name = f.file_name().and_then(|n| n.to_str()).unwrap_or("?");
+        for row in rows_of(&text) {
+            let surface = field(&row, "surface").unwrap_or_else(|| "?".into());
+            for sem in ["classification", "disposition"] {
+                if field(&row, sem).is_none() {
+                    continue; // absence is the other gate's business
+                }
+                checked += 1;
+                // provenance lives in a nested object, so look for the key inside the row
+                let has = row.contains("\"field_provenance\"") && row.contains(sem);
+                if !has {
+                    missing.push(format!("{name}:{surface}.{sem} — no provenance"));
+                }
+            }
+        }
+    }
+    assert!(
+        checked > 0,
+        "ANTI-VACUITY: zero semantic fields inspected — the extractor is broken, which \
+         reports identically to a fully-provenanced census"
+    );
+    assert!(
+        missing.is_empty(),
+        "{} semantic field(s) carry no provenance:\n{:#?}\n\n\
+         Stamp `field_provenance` with authored@<sha> or derived-from@<sha>:<original>. \
+         A derived value that looks authored is how a taxonomy got flattened and \
+         certified in the same hour.",
+        missing.len(),
+        missing
+    );
+}

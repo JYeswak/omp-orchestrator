@@ -55,7 +55,11 @@
         "crates contains no AsyncJobManager or OMP async declaration import"
       ],
       "disposition": "VALIDATE",
-      "classification_phrase": "(b) reimplemented"
+      "classification_phrase": "(b) reimplemented",
+      "field_provenance": {
+        "classification": "derived-from@ac8f4c9:'(b) reimplemented'",
+        "disposition": "authored@ac8f4c9"
+      }
     },
     {
       "surface": "utils",
@@ -82,7 +86,11 @@
         "crates contains no ActiveRepoContext or OMP utility declaration import"
       ],
       "disposition": "RETIRE",
-      "classification_phrase": "(a) not ours"
+      "classification_phrase": "(a) not ours",
+      "field_provenance": {
+        "classification": "derived-from@ac8f4c9:'(a) not ours'",
+        "disposition": "authored@ac8f4c9"
+      }
     },
     {
       "surface": "lib",
@@ -108,7 +116,11 @@
         "crates contains no XAIHttpTransport or OMP lib declaration import"
       ],
       "disposition": "RETIRE",
-      "classification_phrase": "(a) not ours"
+      "classification_phrase": "(a) not ours",
+      "field_provenance": {
+        "classification": "derived-from@ac8f4c9:'(a) not ours'",
+        "disposition": "authored@ac8f4c9"
+      }
     },
     {
       "surface": "tiny",
@@ -135,7 +147,11 @@
         "crates contains no TinyModelDevice or OMP tiny declaration import"
       ],
       "disposition": "RETIRE",
-      "classification_phrase": "(c) unused capability"
+      "classification_phrase": "(c) unused capability",
+      "field_provenance": {
+        "classification": "derived-from@ac8f4c9:'(c) unused capability'",
+        "disposition": "authored@ac8f4c9"
+      }
     },
     {
       "surface": "vibe",
@@ -162,7 +178,11 @@
         "crates contains no VibeSessionRegistry or OMP Vibe declaration import"
       ],
       "disposition": "RETIRE",
-      "classification_phrase": "(c) unused capability"
+      "classification_phrase": "(c) unused capability",
+      "field_provenance": {
+        "classification": "derived-from@ac8f4c9:'(c) unused capability'",
+        "disposition": "authored@ac8f4c9"
+      }
     },
     {
       "surface": "auto-thinking",
@@ -188,7 +208,11 @@
         "crates contains no classifyDifficulty or OMP auto-thinking declaration import"
       ],
       "disposition": "RETIRE",
-      "classification_phrase": "(c) unused capability"
+      "classification_phrase": "(c) unused capability",
+      "field_provenance": {
+        "classification": "derived-from@ac8f4c9:'(c) unused capability'",
+        "disposition": "authored@ac8f4c9"
+      }
     }
   ],
   "no_claim": "Mapping is not adoption. A not-ours is a legitimate terminal state. This artifact does not claim these surfaces are correct, nor that any OMP type is consumed by this Rust repository."

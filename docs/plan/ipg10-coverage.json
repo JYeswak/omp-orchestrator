@@ -1,17 +1,128 @@
 {
-"batch": "ipg.10-WAVE-IO",
-"tool_scope": ["web", "exa", "stt", "tts", "ssh", "internal-urls", "tools", "cli"],
-"method": "per-kind probe (ls dist/types/<root>/, file counts, exported-symbol extraction), re-derivation of our crates' consumption against crates/ on disk",
-"positive_control": "cli (75 files + cli.d.ts + cli-commands.d.ts): the 39 CLI subcommands enumerated in §00 §3.2 are THIS surface. Every one was counted, classified, and mapped. If cli is not fully covered, the census is broken.",
-"anti_vacuity": "8 roots enumerated with file counts and export symbols; zero-surface enumeration impossible",
-"rows": [
- {"surface":"web","omp_kind":"type_root","files":114,"maps_to_crate":null,"disposition":"RETIRE","classification":"(a) not ours","omp_alternative":"KagiSearchData/KagiSearchOptions/KagiErrorResponse — OMP's built-in web search (Kagi + Perplexity). The orchestrator does not search the web; it orchestrates panes","refusal":"no crate's job is web search; the agent inside each pane has its own web access"},
- {"surface":"exa","omp_kind":"type_root","files":3,"maps_to_crate":null,"disposition":"RETIRE","classification":"(c) unused capability","omp_alternative":"ExaSearchResponse/MCPToolWrapperConfig — MCP-wrapped Exa search; same refusal as web","refusal":"no consumer"},
- {"surface":"stt","omp_kind":"type_root","files":10,"maps_to_crate":null,"disposition":"RETIRE","classification":"(c) unused capability","omp_alternative":"STTController/EndpointerConfig/DownloadProgress — speech-to-text for voice input; no crate consumes speech","refusal":"no consumer"},
- {"surface":"tts","omp_kind":"type_root","files":12,"maps_to_crate":null,"disposition":"RETIRE","classification":"(c) unused capability","omp_alternative":"StreamingAudioPlayer/SpeechEnhancer/SpeakableStream — text-to-speech output; no crate produces audio","refusal":"no consumer"},
- {"surface":"ssh","omp_kind":"type_root","files":5,"maps_to_crate":"subprocess-contract","disposition":"VALIDATE","classification":"(b) reimplemented","omp_alternative":"RemoteDirEntry/RemoteFileReadOptions/RemotePathKind — OMP's SSH file-transfer types. Our rch dependency owns SSH transport (rchd daemon + SSH prober); subprocess-contract owns process-group/drain semantics. The VALIDATE disposition means: we depend on SSH being available without consuming OMP's SSH types, tested by rch workers probe (proven live: ✓ OK 40ms)"},
- {"surface":"internal-urls","omp_kind":"type_root","files":22,"maps_to_crate":null,"disposition":"VALIDATE","classification":"(b) reimplemented","omp_alternative":"InternalUrl extends URL, AgentProtocolHandler, ArtifactProtocolHandler, HistoryProtocolHandler — the scheme resolver for omp://, artifact://, memory://, skill://, agent://. Every pane session uses these URLs; we parse them informally in strings. Test: pin the scheme grammar as a golden fixture when M1 lands (omp-orchestrator compiles against omp-types)","refusal":null},
- {"surface":"tools","omp_kind":"type_root","files":131,"maps_to_crate":null,"disposition":"RETIRE","classification":"(a) not ours","omp_alternative":"The 29 built-in tools (AskTool, BashToolCallEvent, EditToolCallEvent, GlobToolCallEvent, GrepToolCallEvent, ReadToolCallEvent, etc.) plus 3 hidden. These are the AGENT's tool surface inside each pane — the agent uses them, not the orchestrator. The orchestrator dispatches WORK to panes; what the agent does inside the pane is S6 (§11.1: 'the agent's own business; we observe only')","refusal":"no crate's job is to consume the agent's internal tool calls; observing them is tick-monitor's job via pane capture"},
- {"surface":"cli","omp_kind":"type_root","files":75,"maps_to_crate":"omp-orchestrator","disposition":"CONSUMED","classification":"(b) reimplemented","omp_alternative":"ResolvedCliArgv + 39 CLI subcommands (acp, agents, auth-broker, bench, browser-relay, cleanse, commit, completions, compress, config, dry-balance, gallery, gc...). We consume omp --mode=rpc (omp-rpc-session lib.rs:99) and probe omp --help (omp-inventory-map census). The CLI surface IS the one we wrap most directly"}
-]
+  "batch": "ipg.10-WAVE-IO",
+  "tool_scope": [
+    "web",
+    "exa",
+    "stt",
+    "tts",
+    "ssh",
+    "internal-urls",
+    "tools",
+    "cli"
+  ],
+  "method": "per-kind probe (ls dist/types/<root>/, file counts, exported-symbol extraction), re-derivation of our crates' consumption against crates/ on disk",
+  "positive_control": "cli (75 files + cli.d.ts + cli-commands.d.ts): the 39 CLI subcommands enumerated in \u00a700 \u00a73.2 are THIS surface. Every one was counted, classified, and mapped. If cli is not fully covered, the census is broken.",
+  "anti_vacuity": "8 roots enumerated with file counts and export symbols; zero-surface enumeration impossible",
+  "rows": [
+    {
+      "surface": "web",
+      "omp_kind": "type_root",
+      "files": 114,
+      "maps_to_crate": null,
+      "disposition": "RETIRE",
+      "classification": "(a) not ours",
+      "omp_alternative": "KagiSearchData/KagiSearchOptions/KagiErrorResponse \u2014 OMP's built-in web search (Kagi + Perplexity). The orchestrator does not search the web; it orchestrates panes",
+      "refusal": "no crate's job is web search; the agent inside each pane has its own web access",
+      "field_provenance": {
+        "classification": "authored@a94b7b8",
+        "disposition": "authored@a94b7b8"
+      }
+    },
+    {
+      "surface": "exa",
+      "omp_kind": "type_root",
+      "files": 3,
+      "maps_to_crate": null,
+      "disposition": "RETIRE",
+      "classification": "(c) unused capability",
+      "omp_alternative": "ExaSearchResponse/MCPToolWrapperConfig \u2014 MCP-wrapped Exa search; same refusal as web",
+      "refusal": "no consumer",
+      "field_provenance": {
+        "classification": "authored@a94b7b8",
+        "disposition": "authored@a94b7b8"
+      }
+    },
+    {
+      "surface": "stt",
+      "omp_kind": "type_root",
+      "files": 10,
+      "maps_to_crate": null,
+      "disposition": "RETIRE",
+      "classification": "(c) unused capability",
+      "omp_alternative": "STTController/EndpointerConfig/DownloadProgress \u2014 speech-to-text for voice input; no crate consumes speech",
+      "refusal": "no consumer",
+      "field_provenance": {
+        "classification": "authored@a94b7b8",
+        "disposition": "authored@a94b7b8"
+      }
+    },
+    {
+      "surface": "tts",
+      "omp_kind": "type_root",
+      "files": 12,
+      "maps_to_crate": null,
+      "disposition": "RETIRE",
+      "classification": "(c) unused capability",
+      "omp_alternative": "StreamingAudioPlayer/SpeechEnhancer/SpeakableStream \u2014 text-to-speech output; no crate produces audio",
+      "refusal": "no consumer",
+      "field_provenance": {
+        "classification": "authored@a94b7b8",
+        "disposition": "authored@a94b7b8"
+      }
+    },
+    {
+      "surface": "ssh",
+      "omp_kind": "type_root",
+      "files": 5,
+      "maps_to_crate": "subprocess-contract",
+      "disposition": "VALIDATE",
+      "classification": "(b) reimplemented",
+      "omp_alternative": "RemoteDirEntry/RemoteFileReadOptions/RemotePathKind \u2014 OMP's SSH file-transfer types. Our rch dependency owns SSH transport (rchd daemon + SSH prober); subprocess-contract owns process-group/drain semantics. The VALIDATE disposition means: we depend on SSH being available without consuming OMP's SSH types, tested by rch workers probe (proven live: \u2713 OK 40ms)",
+      "field_provenance": {
+        "classification": "authored@a94b7b8",
+        "disposition": "authored@a94b7b8"
+      }
+    },
+    {
+      "surface": "internal-urls",
+      "omp_kind": "type_root",
+      "files": 22,
+      "maps_to_crate": null,
+      "disposition": "VALIDATE",
+      "classification": "(b) reimplemented",
+      "omp_alternative": "InternalUrl extends URL, AgentProtocolHandler, ArtifactProtocolHandler, HistoryProtocolHandler \u2014 the scheme resolver for omp://, artifact://, memory://, skill://, agent://. Every pane session uses these URLs; we parse them informally in strings. Test: pin the scheme grammar as a golden fixture when M1 lands (omp-orchestrator compiles against omp-types)",
+      "refusal": null,
+      "field_provenance": {
+        "classification": "authored@a94b7b8",
+        "disposition": "authored@a94b7b8"
+      }
+    },
+    {
+      "surface": "tools",
+      "omp_kind": "type_root",
+      "files": 131,
+      "maps_to_crate": null,
+      "disposition": "RETIRE",
+      "classification": "(a) not ours",
+      "omp_alternative": "The 29 built-in tools (AskTool, BashToolCallEvent, EditToolCallEvent, GlobToolCallEvent, GrepToolCallEvent, ReadToolCallEvent, etc.) plus 3 hidden. These are the AGENT's tool surface inside each pane \u2014 the agent uses them, not the orchestrator. The orchestrator dispatches WORK to panes; what the agent does inside the pane is S6 (\u00a711.1: 'the agent's own business; we observe only')",
+      "refusal": "no crate's job is to consume the agent's internal tool calls; observing them is tick-monitor's job via pane capture",
+      "field_provenance": {
+        "classification": "authored@a94b7b8",
+        "disposition": "authored@a94b7b8"
+      }
+    },
+    {
+      "surface": "cli",
+      "omp_kind": "type_root",
+      "files": 75,
+      "maps_to_crate": "omp-orchestrator",
+      "disposition": "CONSUMED",
+      "classification": "(b) reimplemented",
+      "omp_alternative": "ResolvedCliArgv + 39 CLI subcommands (acp, agents, auth-broker, bench, browser-relay, cleanse, commit, completions, compress, config, dry-balance, gallery, gc...). We consume omp --mode=rpc (omp-rpc-session lib.rs:99) and probe omp --help (omp-inventory-map census). The CLI surface IS the one we wrap most directly",
+      "field_provenance": {
+        "classification": "authored@a94b7b8",
+        "disposition": "authored@a94b7b8"
+      }
+    }
+  ]
 }
