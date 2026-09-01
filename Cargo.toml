@@ -4,3 +4,14 @@
 [workspace]
 resolver = "2"
 members = ["crates/*"]
+
+# Shared package metadata. Every member inherits this with `license.workspace = true`
+# so a new crate cannot land unlabelled — which is the state all 26 were in when the
+# publishability bar was first run (2026-09-01): a LICENSE file at the root and not
+# one manifest declaring it. Unlabelled crates are all-rights-reserved to a reader
+# and `cargo publish` refuses them outright.
+[workspace.package]
+license = "MIT"
+edition = "2021"
+repository = "https://github.com/JYeswak/omp-orchestrator"
+authors = ["Joshua Nowak"]

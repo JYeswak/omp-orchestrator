@@ -1,4 +1,5 @@
 [package]
+license.workspace = true
 name = "composer-typed"
 version = "0.1.0"
 edition = "2021"
