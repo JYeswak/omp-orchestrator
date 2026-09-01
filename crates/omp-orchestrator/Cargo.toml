@@ -10,6 +10,10 @@ description = "Resident supervisor: observe -> dispatch -> receiver receipt -> e
 name = "omp-orchestrator"
 path = "src/main.rs"
 
+[[bin]]
+name = "omp-target-dir"
+path = "src/bin/omp-target-dir.rs"
+
 [lib]
 name = "omp_orchestrator"
 path = "src/lib.rs"

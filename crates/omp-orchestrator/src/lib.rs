@@ -30,6 +30,7 @@
 
 use std::fmt;
 use std::path::{Path, PathBuf};
+pub mod target_directory;
 
 // ── IDLE_AUTHORIZATION ─────────────────────────────────────────────────────────
 

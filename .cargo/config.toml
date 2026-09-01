@@ -1,5 +1,7 @@
 [build]
-# Repo-owned target directory. This overrides the global ~/.cargo/config.toml
-# and prevents cargo from writing to /tmp or an unowned path. The explicit
-# CARGO_TARGET_DIR env var still overrides this file (cargo precedence).
+# Repo-owned default target. The build script rejects an explicit target
+# outside the repository or the registered RCH roots before package compile.
 target-dir = "target"
+
+[env]
+OMP_CARGO_TARGET_POLICY = { value = "REPO_OWNED_TARGET", force = true }
