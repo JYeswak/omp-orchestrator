@@ -16,10 +16,13 @@ use serde_json::Value;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-/// The default heartbeat path: the acceptance names it explicitly so a third
-/// party can find it without asking the implementer.
+/// The default heartbeat path is resolved from runtime environment configuration.
+///
+/// It is represented as a relative suffix so this public constant contains no machine-specific path.
+///
+/// The actual default is resolved from XDG_STATE_HOME or HOME at runtime.
 pub const DEFAULT_HEARTBEAT_PATH: &str =
-    "/Users/josh/.local/state/omp-orchestrator/heartbeat.json";
+    ".local/state/omp-orchestrator/heartbeat.json";
 
 /// One heartbeat row: the supervisor's liveness proof.
 ///
@@ -120,8 +123,18 @@ pub fn read_heartbeat(path: &Path, now_unix: u64, max_age_secs: u64) -> Result<H
 /// Default heartbeat path, overridable via OMP_ORCHESTRATOR_HEARTBEAT_PATH.
 pub fn heartbeat_path() -> PathBuf {
     std::env::var_os("OMP_ORCHESTRATOR_HEARTBEAT_PATH")
-        .filter(|v| !v.is_empty())
+        .filter(|value| !value.is_empty())
         .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("XDG_STATE_HOME")
+                .filter(|value| !value.is_empty())
+                .map(|state_home| PathBuf::from(state_home).join("omp-orchestrator/heartbeat.json"))
+        })
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .filter(|value| !value.is_empty())
+                .map(|home| PathBuf::from(home).join(DEFAULT_HEARTBEAT_PATH))
+        })
         .unwrap_or_else(|| PathBuf::from(DEFAULT_HEARTBEAT_PATH))
 }
 
@@ -138,7 +151,7 @@ mod tests {
             build_id: TEST_BUILD_ID.to_owned(),
             pid: TEST_PID,
             session: TEST_SESSION.to_owned(),
-            repo: "/Users/josh/Developer/omp-orchestrator".to_owned(),
+            repo: "test-repo".to_owned(),
             decision: "Dispatch".to_owned(),
             ts,
         }

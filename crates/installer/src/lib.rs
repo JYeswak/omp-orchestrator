@@ -87,7 +87,7 @@ pub struct IdentityCheck {
 
 impl fmt::Display for IdentityCheck {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let status = match &self.repo_ownership {
+        match &self.repo_ownership {
             RepoOwnership::Foreign { repo } => {
                 return write!(
                     formatter,
@@ -95,8 +95,15 @@ impl fmt::Display for IdentityCheck {
                     self.binary_name
                 );
             }
-            _ => {}
-        };
+            RepoOwnership::Unknown => {
+                return write!(
+                    formatter,
+                    "{}: UNKNOWN (source ownership unavailable) — excluded from drift denominator",
+                    self.binary_name
+                );
+            }
+            RepoOwnership::ThisRepo => {}
+        }
         write!(
             formatter,
             "{}: HEAD={} build_id={} version={} {}",
@@ -109,8 +116,16 @@ impl fmt::Display for IdentityCheck {
     }
 }
 
-/// Sibling repos known to this fleet, checked in order.
-const SIBLING_REPOS: &[&str] = &["/Users/josh/Developer/control-plane"];
+/// Resolve the optional sibling repository from runtime configuration.
+///
+/// A missing configuration is deliberately treated as unavailable rather than
+/// guessed from the machine that built the installer.
+fn configured_sibling_repo(this_root: &Path) -> Option<PathBuf> {
+    std::env::var_os("CONTROL_PLANE_REPO")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .map(|path| if path.is_absolute() { path } else { this_root.join(path) })
+}
 
 /// Determine which repository owns a binary by checking whether its crate
 /// directory exists in this workspace or a known sibling.
@@ -119,11 +134,11 @@ pub fn resolve_repo_ownership(this_root: &Path, binary_name: &str) -> RepoOwners
     if this_crate.is_dir() {
         return RepoOwnership::ThisRepo;
     }
-    for sibling in SIBLING_REPOS {
-        let sibling_crate = Path::new(sibling).join("crates").join(binary_name);
+    if let Some(sibling) = configured_sibling_repo(this_root) {
+        let sibling_crate = sibling.join("crates").join(binary_name);
         if sibling_crate.is_dir() {
             return RepoOwnership::Foreign {
-                repo: sibling.to_string(),
+                repo: sibling.display().to_string(),
             };
         }
     }

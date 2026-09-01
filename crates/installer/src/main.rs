@@ -19,11 +19,14 @@ fn main() -> ExitCode {
         .expect("crate lives two levels below repo root")
         .to_path_buf();
 
-    let bin_dir = std::env::var("INSTALL_BIN_DIR")
+    let bin_dir = std::env::var_os("INSTALL_BIN_DIR")
+        .filter(|value| !value.is_empty())
         .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            dirs_home().unwrap_or_else(|| PathBuf::from("/Users/josh")).join(".local/bin")
-        });
+        .or_else(|| dirs_home().map(|home| home.join(".local/bin")));
+    let Some(bin_dir) = bin_dir else {
+        eprintln!("INSTALLER ERROR: INSTALL_BIN_DIR or HOME must be set; install destination is unavailable");
+        return ExitCode::from(2);
+    };
 
     match args.first().map(String::as_str) {
         Some("--check") => run_check(&repo_root, &bin_dir),
@@ -50,9 +53,10 @@ fn usage() {
 }
 
 fn dirs_home() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(PathBuf::from)
+    std::env::var_os("HOME")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
 }
-
 fn run_check(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
     let head = match installer::git_head(repo_root) {
         Ok(sha) => sha,
@@ -66,8 +70,9 @@ fn run_check(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
 
     let mut mismatches = 0usize;
     let mut foreign = 0usize;
+    let mut unavailable = 0usize;
     // Counted explicitly, never derived. `BINARIES.len() - foreign` looks equivalent and is not:
-    // a binary that is NOT INSTALLED hits the `continue` below without touching either counter,
+    // a binary that is NOT INSTALLED hits the `continue` below without touching the counters,
     // yet still sits in `BINARIES.len()`, so it would silently inflate the "owned" denominator.
     // A ratio whose denominator includes rows it never examined is unverifiable — the same defect
     // class as the retired "81 JSON-RPC methods, 17 used" figure.
@@ -84,6 +89,7 @@ fn run_check(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
         println!("  {check}");
         match (&ownership, check.consistent) {
             (RepoOwnership::Foreign { .. }, _) => foreign += 1,
+            (RepoOwnership::Unknown, _) => unavailable += 1,
             _ if check.consistent => owned += 1,
             _ => {
                 owned += 1;
@@ -101,6 +107,11 @@ fn run_check(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
     if foreign > 0 {
         println!(
             "INSTALLER: {foreign} foreign artifact(s) named — excluded from drift denominator"
+        );
+    }
+    if unavailable > 0 {
+        println!(
+            "INSTALLER: {unavailable} artifact(s) have unavailable source ownership — excluded from drift denominator"
         );
     }
     println!(

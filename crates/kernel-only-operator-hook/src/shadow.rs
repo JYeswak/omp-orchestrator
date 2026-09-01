@@ -19,8 +19,11 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use subprocess_contract::{run_output, RunError};
 
+/// Relative default ledger path under the runtime state directory.
+///
+/// The actual default is resolved from XDG_STATE_HOME or HOME at runtime.
 pub const DEFAULT_LEDGER_PATH: &str =
-    "/Users/josh/.local/state/flywheel/kernel-only-operator-hook-shadow-verdicts.jsonl";
+    ".local/state/flywheel/kernel-only-operator-hook-shadow-verdicts.jsonl";
 const SCHEMA_VERSION: &str = "kernel-only-operator-hook-shadow.v1";
 const EVENT: &str = "PreToolUse";
 const HOOK_ID: &str = "kernel-only-operator-hook";
@@ -179,7 +182,7 @@ fn append_verdict_mode(
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     line.push(b'\n');
 
-    let path = ledger_path();
+    let path = ledger_path()?;
     if let Some(parent) = path
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
@@ -399,11 +402,29 @@ fn sanitize_tool_name(tool_name: &str) -> String {
     sanitize_metadata(tool_name)
 }
 
-fn ledger_path() -> PathBuf {
+fn ledger_path() -> io::Result<PathBuf> {
     std::env::var_os("KERNEL_ONLY_HOOK_SHADOW_LEDGER")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(DEFAULT_LEDGER_PATH))
+        .or_else(|| {
+            std::env::var_os("XDG_STATE_HOME")
+                .filter(|value| !value.is_empty())
+                .map(|state_home| {
+                    PathBuf::from(state_home)
+                        .join("flywheel/kernel-only-operator-hook-shadow-verdicts.jsonl")
+                })
+        })
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .filter(|value| !value.is_empty())
+                .map(|home| PathBuf::from(home).join(DEFAULT_LEDGER_PATH))
+        })
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                "shadow ledger path unavailable: set KERNEL_ONLY_HOOK_SHADOW_LEDGER, XDG_STATE_HOME, or HOME",
+            )
+        })
 }
 
 fn permission_name(permission: Permission) -> &'static str {

@@ -54,7 +54,7 @@ fn main() -> ExitCode {
         ));
     }
 
-    // ── GATE 2: path-literal-guard (refuse /Users/josh in crates/*/src) ───
+    // ── GATE 2: path-literal-guard (refuse author-machine home paths) ─────
     // Scans the whole tree: a staged edit can reintroduce a literal into an
     // existing file.
     let pl_report = path_literal_guard::scan(&repo_root);

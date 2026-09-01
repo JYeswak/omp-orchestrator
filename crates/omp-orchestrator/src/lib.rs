@@ -29,7 +29,7 @@
 //! the DispatchReceipt type models both but neither is proven here.
 
 use std::fmt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 // ── IDLE_AUTHORIZATION ─────────────────────────────────────────────────────────
 
@@ -355,6 +355,26 @@ fn workflow_invokes(repo_root: &Path, gate: &str) -> bool {
 /// trigger when there is no remote to run the workflow on. This repository has
 /// **zero git remotes** (measured 2026-09-01), which is why three CI-only gates
 /// report Unreachable — correctly. A workflow nothing can run is not a gate.
+/// Resolve the upstream source location from runtime configuration. Never infer
+/// an author-machine path: an unset or unusable setting is reported as
+/// unavailable so the census does not make an unsupported provenance claim.
+fn configured_upstream_crate(repo_root: &Path, gate: &str) -> String {
+    let Some(root) = std::env::var_os("CONTROL_PLANE_REPO")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+    else {
+        return format!("unavailable (set CONTROL_PLANE_REPO for crates/{gate})");
+    };
+
+    let root = if root.is_absolute() { root } else { repo_root.join(root) };
+    let source = root.join("crates").join(gate);
+    if source.is_dir() {
+        source.display().to_string()
+    } else {
+        format!("{} (unavailable)", source.display())
+    }
+}
+
 pub fn census_gates(repo_root: &Path) -> GateCensus {
     let hook_path = repo_root.join(".git/hooks/pre-commit");
     let has_remote = std::process::Command::new("git")
@@ -421,7 +441,7 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
         rows.push(GateCensusRow {
             gate: (*gate).into(),
             reachability: GateReachability::NotExtracted {
-                upstream: format!("/Users/josh/Developer/control-plane/crates/{gate}"),
+                upstream: configured_upstream_crate(repo_root, gate),
                 loc: *loc,
             },
         });

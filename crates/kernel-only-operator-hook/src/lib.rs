@@ -657,7 +657,7 @@ mod tests {
         assert_eq!(
             classify(&event(
                 "Bash",
-                "/Users/josh/.local/bin/tick-monitor observe --session omp-orchestrator"
+                "tick-monitor observe --session omp-orchestrator"
             ))
             .permission,
             Permission::Allow
@@ -676,7 +676,7 @@ mod tests {
 
     #[test]
     fn allowlist_mutation_turns_kernel_good_leg_red() {
-        let command = "/Users/josh/.local/bin/tick-monitor observe --session omp-orchestrator";
+        let command = "tick-monitor observe --session omp-orchestrator";
         assert_eq!(
             classify_bash_with_allowlist(command, &["omp-orchestrator"]).permission,
             Permission::Deny
