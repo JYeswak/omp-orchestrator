@@ -1,0 +1,1671 @@
+{
+ "bead": "omp-orchestrator-12d",
+ "preserved_utc": "2026-09-01T22:40:38.070997Z",
+ "source_root": "/tmp/grade",
+ "why": "/tmp is cleared on reboot. These 237 files are the ONLY evidence behind 219 findings from rounds 15-21, and every reconciliation row in docs/plan/FINDINGS.jsonl will cite them. A citation to a path a reboot deletes is unverifiable the moment the machine restarts - the same clearable-provenance defect already fixed twice for the inventory captures and the wire-proof frame.",
+ "file_count": 237,
+ "raw_bytes": 2170954,
+ "gz_bytes": 742566,
+ "verify": "gunzip -c <preserved> | shasum -a256  -> must equal sha256",
+ "files": [
+  {
+   "source": "/tmp/grade/2z2-1-final-receipt.md",
+   "preserved": ".flywheel/grade-evidence/2z2-1-final-receipt.md.gz",
+   "sha256": "5d0c2ba8f1dde28d37181c2b0a025a40f265bf4044d39df9363884d1ee96a3be",
+   "bytes": 4445,
+   "gz_bytes": 2201
+  },
+  {
+   "source": "/tmp/grade/2z2-1-round2-receipt.md",
+   "preserved": ".flywheel/grade-evidence/2z2-1-round2-receipt.md.gz",
+   "sha256": "4f7a5802d3b5cfd08803ee3b183ed6f5a546443385048f7e6607395ebce4558f",
+   "bytes": 4591,
+   "gz_bytes": 2239
+  },
+  {
+   "source": "/tmp/grade/2z2-2-closeout.md",
+   "preserved": ".flywheel/grade-evidence/2z2-2-closeout.md.gz",
+   "sha256": "55a2eda033b011ddb925b01e1df4f7939c5f9dca974813dbef2922f5faba306f",
+   "bytes": 2915,
+   "gz_bytes": 1496
+  },
+  {
+   "source": "/tmp/grade/REPROBE-TYPES.jsonl",
+   "preserved": ".flywheel/grade-evidence/REPROBE-TYPES.jsonl.gz",
+   "sha256": "eee45d5773ebc6c884870847cb659292aba19431198e3832f8981834e77f65e9",
+   "bytes": 32361,
+   "gz_bytes": 1226
+  },
+  {
+   "source": "/tmp/grade/REPROBE.jsonl",
+   "preserved": ".flywheel/grade-evidence/REPROBE.jsonl.gz",
+   "sha256": "0dde55251564886ee97bdcaf97970711aa90c18130f50ab48f2ddf5aad2c589c",
+   "bytes": 25931,
+   "gz_bytes": 1088
+  },
+  {
+   "source": "/tmp/grade/WIZARD_FLEET.md",
+   "preserved": ".flywheel/grade-evidence/WIZARD_FLEET.md.gz",
+   "sha256": "198c9a093ad125eed8085d61b0e4dae10e060b66e0300aa4155007f11d4b10fe",
+   "bytes": 32909,
+   "gz_bytes": 11661
+  },
+  {
+   "source": "/tmp/grade/WIZARD_IDEAS_1408.md",
+   "preserved": ".flywheel/grade-evidence/WIZARD_IDEAS_1408.md.gz",
+   "sha256": "cea34484b0f71436a74a4d589b324a31562f662d315fc373e79f9aa2813ef0e1",
+   "bytes": 10328,
+   "gz_bytes": 4989
+  },
+  {
+   "source": "/tmp/grade/WIZARD_IDEAS_1409.md",
+   "preserved": ".flywheel/grade-evidence/WIZARD_IDEAS_1409.md.gz",
+   "sha256": "807f93a46b9108ce5d04de0c3b36dee21be1373312fe633cadbc8f8d95275db0",
+   "bytes": 16932,
+   "gz_bytes": 7640
+  },
+  {
+   "source": "/tmp/grade/WIZARD_IDEAS_1413.md",
+   "preserved": ".flywheel/grade-evidence/WIZARD_IDEAS_1413.md.gz",
+   "sha256": "09e18370589cf85935bee26eee2de88e5b1b291e26881816089889ba728420a9",
+   "bytes": 31343,
+   "gz_bytes": 10986
+  },
+  {
+   "source": "/tmp/grade/WIZARD_IDEAS_1414.md",
+   "preserved": ".flywheel/grade-evidence/WIZARD_IDEAS_1414.md.gz",
+   "sha256": "b8e479061e435846fb0ad2786d9cfb331cdb6b631bc70fe409fbcb0cab7312bf",
+   "bytes": 37111,
+   "gz_bytes": 13152
+  },
+  {
+   "source": "/tmp/grade/WIZARD_INCEPTION.md",
+   "preserved": ".flywheel/grade-evidence/WIZARD_INCEPTION.md.gz",
+   "sha256": "63e561e283841cb8d853c96bb217cdcee82775d6dab56c87e62634f8eb72447d",
+   "bytes": 44639,
+   "gz_bytes": 15819
+  },
+  {
+   "source": "/tmp/grade/WIZARD_JUDGE_PRODUCT.md",
+   "preserved": ".flywheel/grade-evidence/WIZARD_JUDGE_PRODUCT.md.gz",
+   "sha256": "4d33ef8a86deed55e773aa260714fe5d9d3ce9d3b57790d5291493c26ad87470",
+   "bytes": 22283,
+   "gz_bytes": 8812
+  },
+  {
+   "source": "/tmp/grade/WIZARD_JUDGE_RELIABILITY.md",
+   "preserved": ".flywheel/grade-evidence/WIZARD_JUDGE_RELIABILITY.md.gz",
+   "sha256": "0b5fbce35d745ba83da1ee24a2b5b52dcd78bc822efb0e1c1702a6f3d423d640",
+   "bytes": 31097,
+   "gz_bytes": 11393
+  },
+  {
+   "source": "/tmp/grade/WIZARD_REUSE.md",
+   "preserved": ".flywheel/grade-evidence/WIZARD_REUSE.md.gz",
+   "sha256": "a672b931233e06efe54cac29dadfc6a914dd645cc5247aa8c6a627a63ef9b9b2",
+   "bytes": 37003,
+   "gz_bytes": 13381
+  },
+  {
+   "source": "/tmp/grade/actuation-retirement-upi.md",
+   "preserved": ".flywheel/grade-evidence/actuation-retirement-upi.md.gz",
+   "sha256": "2d04e68908f843f59e55c3318e2e77b331628fb2ea014188a75fb627d7b32181",
+   "bytes": 2693,
+   "gz_bytes": 1289
+  },
+  {
+   "source": "/tmp/grade/agent-end-frames.ndjson",
+   "preserved": ".flywheel/grade-evidence/agent-end-frames.ndjson.gz",
+   "sha256": "b2537209dc80e1d8e5cbc4119ad3478008173353b2a3d769f366a927320f65db",
+   "bytes": 650747,
+   "gz_bytes": 184923
+  },
+  {
+   "source": "/tmp/grade/agent-end-raw-frame.json",
+   "preserved": ".flywheel/grade-evidence/agent-end-raw-frame.json.gz",
+   "sha256": "d8bd80c6949b2ec48af1639b5b5e241bd90b4dce1e769483dd1690ed2be8f644",
+   "bytes": 4772,
+   "gz_bytes": 1960
+  },
+  {
+   "source": "/tmp/grade/agent-end-stderr.txt",
+   "preserved": ".flywheel/grade-evidence/agent-end-stderr.txt.gz",
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "bytes": 0,
+   "gz_bytes": 20
+  },
+  {
+   "source": "/tmp/grade/batch-1-grade-by-g-ntm.md",
+   "preserved": ".flywheel/grade-evidence/batch-1-grade-by-g-ntm.md.gz",
+   "sha256": "00fe3f314be843146338e2c02f6267d80310c2c4e33e45d8e8e779eb2667bab0",
+   "bytes": 2849,
+   "gz_bytes": 1355
+  },
+  {
+   "source": "/tmp/grade/batch-1-notes.md",
+   "preserved": ".flywheel/grade-evidence/batch-1-notes.md.gz",
+   "sha256": "ca6ca0c98227d3548edee4daa74d0cd5d69e23c588af262005b2863ed580cae9",
+   "bytes": 1772,
+   "gz_bytes": 976
+  },
+  {
+   "source": "/tmp/grade/batch-1.jsonl",
+   "preserved": ".flywheel/grade-evidence/batch-1.jsonl.gz",
+   "sha256": "1d1e2b2a5c6f4e133759f1855b9cdb7ec91db5bb4a16198ce49b8785ea9612a5",
+   "bytes": 4807,
+   "gz_bytes": 412
+  },
+  {
+   "source": "/tmp/grade/batch-10-grade-by-g-omp.md",
+   "preserved": ".flywheel/grade-evidence/batch-10-grade-by-g-omp.md.gz",
+   "sha256": "239d6088e15da13a548f487f8d948bd0134d7d9c21900636c3fd44b3db5ca0ed",
+   "bytes": 1849,
+   "gz_bytes": 985
+  },
+  {
+   "source": "/tmp/grade/batch-10-notes.md",
+   "preserved": ".flywheel/grade-evidence/batch-10-notes.md.gz",
+   "sha256": "a653498d26cb0e3fe9311fdbd2d0adf6f5d91eba30ddb9cebd719a8d95a42717",
+   "bytes": 1623,
+   "gz_bytes": 858
+  },
+  {
+   "source": "/tmp/grade/batch-10.jsonl",
+   "preserved": ".flywheel/grade-evidence/batch-10.jsonl.gz",
+   "sha256": "793717d511e052ca0bbd30fb3a1c4681c506fd5a3f3bcb305fbeee073a71e1c4",
+   "bytes": 5287,
+   "gz_bytes": 367
+  },
+  {
+   "source": "/tmp/grade/batch-11-grade-by-BlueLantern.md",
+   "preserved": ".flywheel/grade-evidence/batch-11-grade-by-BlueLantern.md.gz",
+   "sha256": "654825a68eab8f291426f63dc76b0c41613755ec0f48161382382107f4cf785c",
+   "bytes": 2013,
+   "gz_bytes": 1002
+  },
+  {
+   "source": "/tmp/grade/batch-11-grade-by-g-omp.md",
+   "preserved": ".flywheel/grade-evidence/batch-11-grade-by-g-omp.md.gz",
+   "sha256": "67da3aabffe1763a2f85a8d344ddb77df887356d2362d4b753e0d8cdb7535f5b",
+   "bytes": 1660,
+   "gz_bytes": 858
+  },
+  {
+   "source": "/tmp/grade/batch-11-notes.md",
+   "preserved": ".flywheel/grade-evidence/batch-11-notes.md.gz",
+   "sha256": "ba4dd1e17ee309fdda0ead73792aa60e87c4f5dda9589b2e9a993fb94cd758eb",
+   "bytes": 1599,
+   "gz_bytes": 856
+  },
+  {
+   "source": "/tmp/grade/batch-11.jsonl",
+   "preserved": ".flywheel/grade-evidence/batch-11.jsonl.gz",
+   "sha256": "8243372796b05c6a7b151238e00cd908cb8b1f16ef78fefe923b7141e2a6dde8",
+   "bytes": 5907,
+   "gz_bytes": 502
+  },
+  {
+   "source": "/tmp/grade/batch-12-13-notes.md",
+   "preserved": ".flywheel/grade-evidence/batch-12-13-notes.md.gz",
+   "sha256": "284b4a7ca4d46517a2a1bbf77e71540f332d8d35cddf03b233e8ce399a520e9a",
+   "bytes": 3724,
+   "gz_bytes": 2011
+  },
+  {
+   "source": "/tmp/grade/batch-12.jsonl",
+   "preserved": ".flywheel/grade-evidence/batch-12.jsonl.gz",
+   "sha256": "ed7067f7f538717c036745e7517fba42ebf1d921d82f387f875198e606bfb336",
+   "bytes": 11294,
+   "gz_bytes": 2243
+  },
+  {
+   "source": "/tmp/grade/batch-13.jsonl",
+   "preserved": ".flywheel/grade-evidence/batch-13.jsonl.gz",
+   "sha256": "d88003af2fdf71684a614d2fb10c9220cb82beaa296dd2b1dc3185cd8d4adbcf",
+   "bytes": 4318,
+   "gz_bytes": 1307
+  },
+  {
+   "source": "/tmp/grade/batch-14-16-notes.md",
+   "preserved": ".flywheel/grade-evidence/batch-14-16-notes.md.gz",
+   "sha256": "0822b7b73c51147ad791446d13a28312b9d8257ed7cd668ac9cbf48c0c6fbb88",
+   "bytes": 2885,
+   "gz_bytes": 1622
+  },
+  {
+   "source": "/tmp/grade/batch-14.jsonl",
+   "preserved": ".flywheel/grade-evidence/batch-14.jsonl.gz",
+   "sha256": "2a6b08e2c1cd643c4d08d59ff3808d5ab461aa7bb32840aed69480d6fed88c36",
+   "bytes": 11133,
+   "gz_bytes": 1476
+  },
+  {
+   "source": "/tmp/grade/batch-15.jsonl",
+   "preserved": ".flywheel/grade-evidence/batch-15.jsonl.gz",
+   "sha256": "71e1f7249398ac1be55a8dbba3f42f584d2bd2f9e510d62f471ee4ee2b3b4e40",
+   "bytes": 10839,
+   "gz_bytes": 1351
+  },
+  {
+   "source": "/tmp/grade/batch-16-grade-by-SilverWolf.md",
+   "preserved": ".flywheel/grade-evidence/batch-16-grade-by-SilverWolf.md.gz",
+   "sha256": "9f699656b29e80c196272ea6295ba0eefa85c2290a4cb2a9f7970cb88ad4e250",
+   "bytes": 2688,
+   "gz_bytes": 1466
+  },
+  {
+   "source": "/tmp/grade/batch-16.jsonl",
+   "preserved": ".flywheel/grade-evidence/batch-16.jsonl.gz",
+   "sha256": "71fb7ea927b4d52610e26515e9f1197ff6ca9044b3ada78ed286c836d62f78ad",
+   "bytes": 11455,
+   "gz_bytes": 1642
+  },
+  {
+   "source": "/tmp/grade/batch-17-notes.md",
+   "preserved": ".flywheel/grade-evidence/batch-17-notes.md.gz",
+   "sha256": "8980606c15a164643656187924a2274118a60f53faa3b538066bc79d25b1910b",
+   "bytes": 2443,
+   "gz_bytes": 1379
+  },
+  {
+   "source": "/tmp/grade/batch-17.jsonl",
+   "preserved": ".flywheel/grade-evidence/batch-17.jsonl.gz",
+   "sha256": "e7dcc25485cdf46a7889a3c65d4528c534fb0768ce2f18e50ef749826939f7c6",
+   "bytes": 12781,
+   "gz_bytes": 1537
+  },
+  {
+   "source": "/tmp/grade/batch-18-notes.md",
+   "preserved": ".flywheel/grade-evidence/batch-18-notes.md.gz",
+   "sha256": "bc92b02ed2f762d4d077c57435a7f1aee0c5fd1e104089da5e5fe74bb91a6eab",
+   "bytes": 1591,
+   "gz_bytes": 972
+  },
+  {
+   "source": "/tmp/grade/batch-18.jsonl",
+   "preserved": ".flywheel/grade-evidence/batch-18.jsonl.gz",
+   "sha256": "e5c940573acd5a7494b2b49fed29bdf3bc4f8039f4d2ed9c2b54a23d2aabe9c0",
+   "bytes": 12511,
+   "gz_bytes": 1342
+  },
+  {
+   "source": "/tmp/grade/batch-19-notes.md",
+   "preserved": ".flywheel/grade-evidence/batch-19-notes.md.gz",
+   "sha256": "e28ae5a0ed8fc68ede0ec6084012e7053a89072419892cc6e39063f93f16a103",
+   "bytes": 1432,
+   "gz_bytes": 883
+  },
+  {
+   "source": "/tmp/grade/batch-19.jsonl",
+   "preserved": ".flywheel/grade-evidence/batch-19.jsonl.gz",
+   "sha256": "e91e8fac9be3571e72e37f0dc6f036a09d71e00d9c3e7a0bbefa49df08420816",
+   "bytes": 9323,
+   "gz_bytes": 1105
+  },
+  {
+   "source": "/tmp/grade/batch-2-grade-by-g-ntm.md",
+   "preserved": ".flywheel/grade-evidence/batch-2-grade-by-g-ntm.md.gz",
+   "sha256": "f08f5dfea9ce001408a464fd64c0198903844a262e9bc41d3d86773721b702bb",
+   "bytes": 2841,
+   "gz_bytes": 1368
+  },
+  {
+   "source": "/tmp/grade/batch-2-notes.md",
+   "preserved": ".flywheel/grade-evidence/batch-2-notes.md.gz",
+   "sha256": "29a64f0b7d06ed468f1799493465b94a17c7dc1c2e5db185f57824f84f4e2c42",
+   "bytes": 1523,
+   "gz_bytes": 872
+  },
+  {
+   "source": "/tmp/grade/batch-2.jsonl",
+   "preserved": ".flywheel/grade-evidence/batch-2.jsonl.gz",
+   "sha256": "96dff7c7a9b6ebbfebe33fe8f5b0a703c6d68eb645ee3f5af30571f15ad78d9f",
+   "bytes": 4680,
+   "gz_bytes": 301
+  },
+  {
+   "source": "/tmp/grade/batch-3-grade-by-g-ntm.md",
+   "preserved": ".flywheel/grade-evidence/batch-3-grade-by-g-ntm.md.gz",
+   "sha256": "ecf23ba50670fd71d3b92bbaf6b2554ae0374a226508f777071c33db18a06be6",
+   "bytes": 2706,
+   "gz_bytes": 1309
+  },
+  {
+   "source": "/tmp/grade/batch-3-notes.md",
+   "preserved": ".flywheel/grade-evidence/batch-3-notes.md.gz",
+   "sha256": "667140f91eb48b81a418de8d6b2c75b5700b08565609639857c24998b2d3b50b",
+   "bytes": 1489,
+   "gz_bytes": 839
+  },
+  {
+   "source": "/tmp/grade/batch-3.jsonl",
+   "preserved": ".flywheel/grade-evidence/batch-3.jsonl.gz",
+   "sha256": "0711019d5e30e7c2d56f08d31dea81b7b6bfdc4d4da8aa2f7db574ddcec56f0d",
+   "bytes": 4852,
+   "gz_bytes": 436
+  },
+  {
+   "source": "/tmp/grade/batch-4-notes.md",
+   "preserved": ".flywheel/grade-evidence/batch-4-notes.md.gz",
+   "sha256": "784645541c344ab3b55edd51d4bce509002fe3cb72f63c4c7a8d2abe9f0382f8",
+   "bytes": 1528,
+   "gz_bytes": 925
+  },
+  {
+   "source": "/tmp/grade/batch-4.jsonl",
+   "preserved": ".flywheel/grade-evidence/batch-4.jsonl.gz",
+   "sha256": "52c60cf835036172dee73018b6c4907b9e307895bd3328423b9efc823664d341",
+   "bytes": 7198,
+   "gz_bytes": 1415
+  },
+  {
+   "source": "/tmp/grade/batch-5-grade-by-SilverWolf.md",
+   "preserved": ".flywheel/grade-evidence/batch-5-grade-by-SilverWolf.md.gz",
+   "sha256": "071987fad3b89ede05ae4560b412f5c36c7b9453dd8ff4ac6f07784cd1baa613",
+   "bytes": 3759,
+   "gz_bytes": 2092
+  },
+  {
+   "source": "/tmp/grade/batch-5-notes.md",
+   "preserved": ".flywheel/grade-evidence/batch-5-notes.md.gz",
+   "sha256": "920da108c6e42c4e8fcc7597ee6da6bef41828fcc25070d4e54dc130e20d15aa",
+   "bytes": 1244,
+   "gz_bytes": 772
+  },
+  {
+   "source": "/tmp/grade/batch-5.jsonl",
+   "preserved": ".flywheel/grade-evidence/batch-5.jsonl.gz",
+   "sha256": "9285e8ab2675a741a967cf69ab96457ecaed0150b5c97d290c30d1450862c79b",
+   "bytes": 7517,
+   "gz_bytes": 1642
+  },
+  {
+   "source": "/tmp/grade/batch-6-notes.md",
+   "preserved": ".flywheel/grade-evidence/batch-6-notes.md.gz",
+   "sha256": "5bcfe012b3603eb2bd5ca3961ed76fe7c9fc9036555b6982c2dc523503edd1f8",
+   "bytes": 1406,
+   "gz_bytes": 859
+  },
+  {
+   "source": "/tmp/grade/batch-6.jsonl",
+   "preserved": ".flywheel/grade-evidence/batch-6.jsonl.gz",
+   "sha256": "08b5e01a7af7f1283cec5d7dd5e298c8d121d1155f761491ee3e1cd340561e7f",
+   "bytes": 7160,
+   "gz_bytes": 1543
+  },
+  {
+   "source": "/tmp/grade/batch-7-notes.md",
+   "preserved": ".flywheel/grade-evidence/batch-7-notes.md.gz",
+   "sha256": "19158651a6375ed1a716b68d7c59aca9a774715a6c0764c53099674e1fb58298",
+   "bytes": 5449,
+   "gz_bytes": 2547
+  },
+  {
+   "source": "/tmp/grade/batch-7.jsonl",
+   "preserved": ".flywheel/grade-evidence/batch-7.jsonl.gz",
+   "sha256": "8970b9e3f20d61613b70322aa0104efaa38e6f5b88b7ed3b51de20fd008514ca",
+   "bytes": 11825,
+   "gz_bytes": 809
+  },
+  {
+   "source": "/tmp/grade/batch-8-notes.md",
+   "preserved": ".flywheel/grade-evidence/batch-8-notes.md.gz",
+   "sha256": "b38064ff91d938a22489557d45d8f8220296dcafa2767170b5289c7546215017",
+   "bytes": 3981,
+   "gz_bytes": 1870
+  },
+  {
+   "source": "/tmp/grade/batch-8.jsonl",
+   "preserved": ".flywheel/grade-evidence/batch-8.jsonl.gz",
+   "sha256": "f7392a915d45bd08e4ffdee047d673bfb30e885bfc518238d7bc991b36c459af",
+   "bytes": 12733,
+   "gz_bytes": 952
+  },
+  {
+   "source": "/tmp/grade/batch-9-notes.md",
+   "preserved": ".flywheel/grade-evidence/batch-9-notes.md.gz",
+   "sha256": "494ca5f526f5237c74393de618ea082917e46212dfd9385ba078b49a731b2107",
+   "bytes": 3907,
+   "gz_bytes": 1735
+  },
+  {
+   "source": "/tmp/grade/batch-9.jsonl",
+   "preserved": ".flywheel/grade-evidence/batch-9.jsonl.gz",
+   "sha256": "157e950a406ae47930f8c438c1a5d8b642acb151e93c15a66973c6955b689807",
+   "bytes": 13092,
+   "gz_bytes": 897
+  },
+  {
+   "source": "/tmp/grade/batch-frame.txt",
+   "preserved": ".flywheel/grade-evidence/batch-frame.txt.gz",
+   "sha256": "ffe9b579fe8b8a02541af7c16829cdd005f8430b449d6b65cbfe42d09886af0e",
+   "bytes": 3090,
+   "gz_bytes": 1592
+  },
+  {
+   "source": "/tmp/grade/bv-real-surface.jsonl",
+   "preserved": ".flywheel/grade-evidence/bv-real-surface.jsonl.gz",
+   "sha256": "ec1db4b2c0286993aa2193fa92264e85b12297ea295f9feaa2fb6ecb205d9825",
+   "bytes": 15498,
+   "gz_bytes": 961
+  },
+  {
+   "source": "/tmp/grade/bv-robot-flags.txt",
+   "preserved": ".flywheel/grade-evidence/bv-robot-flags.txt.gz",
+   "sha256": "641cc9d89995d684eee0ecd58cf4c456e44f06d3082df3d52017c46dc5ce3fd7",
+   "bytes": 890,
+   "gz_bytes": 317
+  },
+  {
+   "source": "/tmp/grade/common.txt",
+   "preserved": ".flywheel/grade-evidence/common.txt.gz",
+   "sha256": "c05cc9d3ef159ba9463eede6b68d4cafdf1521e6541c6e983e84079fb77458cf",
+   "bytes": 1987,
+   "gz_bytes": 1132
+  },
+  {
+   "source": "/tmp/grade/convergence-ours.patch",
+   "preserved": ".flywheel/grade-evidence/convergence-ours.patch.gz",
+   "sha256": "2ab38138cafe9fff18848b221ba081fb6abe05a5a1bb01dababd8c3c18336daa",
+   "bytes": 954,
+   "gz_bytes": 294
+  },
+  {
+   "source": "/tmp/grade/duel-1408.txt",
+   "preserved": ".flywheel/grade-evidence/duel-1408.txt.gz",
+   "sha256": "846a3f544ad9a6b492e40c5f20b4f1b8a6943144b21e3d64e1b3703eb4ae4d66",
+   "bytes": 3150,
+   "gz_bytes": 1658
+  },
+  {
+   "source": "/tmp/grade/duel-1409.txt",
+   "preserved": ".flywheel/grade-evidence/duel-1409.txt.gz",
+   "sha256": "60e4f9f91d7bf1bf5acee60fd2a59804d5777a4936a0ed66fa7322eab3d2baaa",
+   "bytes": 3150,
+   "gz_bytes": 1658
+  },
+  {
+   "source": "/tmp/grade/duel-1413.txt",
+   "preserved": ".flywheel/grade-evidence/duel-1413.txt.gz",
+   "sha256": "7debf0c3bec0c2bb7862aafc73ac0abe0c8b0ae240fdfb99144501ab7e934cdb",
+   "bytes": 3150,
+   "gz_bytes": 1654
+  },
+  {
+   "source": "/tmp/grade/duel-1414.txt",
+   "preserved": ".flywheel/grade-evidence/duel-1414.txt.gz",
+   "sha256": "3ec707b89035533d593524a1169fe6025ba11d57a4a7ae9455d5f147aac9afa2",
+   "bytes": 3150,
+   "gz_bytes": 1657
+  },
+  {
+   "source": "/tmp/grade/duel-ideate.txt",
+   "preserved": ".flywheel/grade-evidence/duel-ideate.txt.gz",
+   "sha256": "659c5d9ab29aca3ca551b4d634370ae2bd8b108e9efab4034638fa51d8b7d793",
+   "bytes": 3156,
+   "gz_bytes": 1667
+  },
+  {
+   "source": "/tmp/grade/duel-score.txt",
+   "preserved": ".flywheel/grade-evidence/duel-score.txt.gz",
+   "sha256": "6ecb024f799d27e8b5287ebc5d4a6616d72222a78bfc59cde201c00956d55cfb",
+   "bytes": 2830,
+   "gz_bytes": 1628
+  },
+  {
+   "source": "/tmp/grade/g-absence.md",
+   "preserved": ".flywheel/grade-evidence/g-absence.md.gz",
+   "sha256": "e35be3aeda6f0b9b28a4b79e24821856fa9fa527ab402e87dc44035d3dc9dec3",
+   "bytes": 5325,
+   "gz_bytes": 2806
+  },
+  {
+   "source": "/tmp/grade/g-adversarial.md",
+   "preserved": ".flywheel/grade-evidence/g-adversarial.md.gz",
+   "sha256": "152cbdaaacdcd8c6fbe55a366e1a49ab8bd2dcc3d9acf2bf019daac3f181892f",
+   "bytes": 5606,
+   "gz_bytes": 2510
+  },
+  {
+   "source": "/tmp/grade/g-evidence.md",
+   "preserved": ".flywheel/grade-evidence/g-evidence.md.gz",
+   "sha256": "7ee4717d501b100fe996564e5c3ed8a368a53d371cefecbb87f3f7e3ad1deb7b",
+   "bytes": 7337,
+   "gz_bytes": 3872
+  },
+  {
+   "source": "/tmp/grade/g-investor.md",
+   "preserved": ".flywheel/grade-evidence/g-investor.md.gz",
+   "sha256": "e802b2de26b32922d992ece2650d43c00684369d7569622a2bf1455df1883b53",
+   "bytes": 6561,
+   "gz_bytes": 2978
+  },
+  {
+   "source": "/tmp/grade/gate-wiring-wave1-wbu.md",
+   "preserved": ".flywheel/grade-evidence/gate-wiring-wave1-wbu.md.gz",
+   "sha256": "cdc8d6ea5f73b524e0d87eb5354f596789d75cd5829f9655476e0277d3daed1f",
+   "bytes": 2451,
+   "gz_bytes": 1247
+  },
+  {
+   "source": "/tmp/grade/gate-wiring-wave3-xvf.md",
+   "preserved": ".flywheel/grade-evidence/gate-wiring-wave3-xvf.md.gz",
+   "sha256": "7f72a6a0eddc728ea85d98b08b1002a622a293a4efa286d28e5ba64bac9493ba",
+   "bytes": 1636,
+   "gz_bytes": 907
+  },
+  {
+   "source": "/tmp/grade/ipg10-wave-io-coverage.json",
+   "preserved": ".flywheel/grade-evidence/ipg10-wave-io-coverage.json.gz",
+   "sha256": "19ca1021eacfd0e830537f173cf5ab28cc3e0d484e8c165ab18a3eff65a8de42",
+   "bytes": 4116,
+   "gz_bytes": 1724
+  },
+  {
+   "source": "/tmp/grade/ipg11-wave-runtime-coverage.json",
+   "preserved": ".flywheel/grade-evidence/ipg11-wave-runtime-coverage.json.gz",
+   "sha256": "3aa02d2960271dd01d437eefc4b46b7b98e57f65460574832609560c790042db",
+   "bytes": 4022,
+   "gz_bytes": 1761
+  },
+  {
+   "source": "/tmp/grade/ipg14-mining.md",
+   "preserved": ".flywheel/grade-evidence/ipg14-mining.md.gz",
+   "sha256": "b9e5dab8768dfa6f91514563eba3a1bf62f61eb9b64396ab020e3d4537ebb9a8",
+   "bytes": 6988,
+   "gz_bytes": 3161
+  },
+  {
+   "source": "/tmp/grade/ipg8-edit-coverage.json",
+   "preserved": ".flywheel/grade-evidence/ipg8-edit-coverage.json.gz",
+   "sha256": "a0381af9e6e476925aef945710bcd5009e318f8f32f395f461ec7f1ab011fdb2",
+   "bytes": 5604,
+   "gz_bytes": 2286
+  },
+  {
+   "source": "/tmp/grade/mux-investigation.md",
+   "preserved": ".flywheel/grade-evidence/mux-investigation.md.gz",
+   "sha256": "b298e8a45063d040b0b520f5543dcc97a2bfc090643d368833b631b65e566d4c",
+   "bytes": 4986,
+   "gz_bytes": 2362
+  },
+  {
+   "source": "/tmp/grade/mux.txt",
+   "preserved": ".flywheel/grade-evidence/mux.txt.gz",
+   "sha256": "4258ed5d738e59acd1dcb5fe2f52410a5802e41af1bbadef350ba9bd0528dfe5",
+   "bytes": 3228,
+   "gz_bytes": 1750
+  },
+  {
+   "source": "/tmp/grade/omp-orchestrator-2o5-current.md",
+   "preserved": ".flywheel/grade-evidence/omp-orchestrator-2o5-current.md.gz",
+   "sha256": "bd02a31dfe633ed8d1f6c984abe2d489a1e8f6e8126e48459587d50a1cab9d80",
+   "bytes": 2737,
+   "gz_bytes": 1371
+  },
+  {
+   "source": "/tmp/grade/omp-signals.md",
+   "preserved": ".flywheel/grade-evidence/omp-signals.md.gz",
+   "sha256": "f9b33f5e9f11ab5f003740b2161cb2aebdf77691615d81070c3051a796819cb0",
+   "bytes": 5630,
+   "gz_bytes": 2859
+  },
+  {
+   "source": "/tmp/grade/p1408.txt",
+   "preserved": ".flywheel/grade-evidence/p1408.txt.gz",
+   "sha256": "493b38894a2d11f88750e54f9ef88903db5eb81412982c901c1f44a47fa55f10",
+   "bytes": 3481,
+   "gz_bytes": 1850
+  },
+  {
+   "source": "/tmp/grade/p1409.txt",
+   "preserved": ".flywheel/grade-evidence/p1409.txt.gz",
+   "sha256": "7d38e4a2339ce1bf25662ca8ee02f2b294ac4ac8f6507b7762280ef7815089fd",
+   "bytes": 3379,
+   "gz_bytes": 1814
+  },
+  {
+   "source": "/tmp/grade/p1413-retry.txt",
+   "preserved": ".flywheel/grade-evidence/p1413-retry.txt.gz",
+   "sha256": "cb7f5ec6537af1684ee1e7bcc33b3c9364dd48f0740ab23142f431cf652d7286",
+   "bytes": 1755,
+   "gz_bytes": 1053
+  },
+  {
+   "source": "/tmp/grade/p1413.txt",
+   "preserved": ".flywheel/grade-evidence/p1413.txt.gz",
+   "sha256": "fbe1299ccd06dbdac9dbd05a4d2e8eb4a0cd73782b1a0b92845cb32637363393",
+   "bytes": 3226,
+   "gz_bytes": 1718
+  },
+  {
+   "source": "/tmp/grade/p1414.txt",
+   "preserved": ".flywheel/grade-evidence/p1414.txt.gz",
+   "sha256": "e0ef813644a9e858d8bd9326507cb4204cf0631c2c3ffc46f0025f918358c959",
+   "bytes": 3222,
+   "gz_bytes": 1766
+  },
+  {
+   "source": "/tmp/grade/pending-00-brief.md",
+   "preserved": ".flywheel/grade-evidence/pending-00-brief.md.gz",
+   "sha256": "8f5f74319c49033ebc82abbb4d76bab5c04f0cf44422658a9db3ac8f13fe4c11",
+   "bytes": 5014,
+   "gz_bytes": 2530
+  },
+  {
+   "source": "/tmp/grade/protocol-delta.txt",
+   "preserved": ".flywheel/grade-evidence/protocol-delta.txt.gz",
+   "sha256": "9d6f3c49add6c02f0e2eb9fcac352eff10f9bb29a4af0db0673a44f82a0f1e9a",
+   "bytes": 3460,
+   "gz_bytes": 1733
+  },
+  {
+   "source": "/tmp/grade/quiesce.txt",
+   "preserved": ".flywheel/grade-evidence/quiesce.txt.gz",
+   "sha256": "6eee4cfe5108dfc9bc88666aa3ed0d94a3b4b2f9451a7a1501dc97d017ca0068",
+   "bytes": 2357,
+   "gz_bytes": 1310
+  },
+  {
+   "source": "/tmp/grade/r10-00-brief.md",
+   "preserved": ".flywheel/grade-evidence/r10-00-brief.md.gz",
+   "sha256": "39f9e235bde30fdbbda355ba1506a72b1761bd1ce9781dc37ed9b01e63c18c00",
+   "bytes": 2309,
+   "gz_bytes": 1360
+  },
+  {
+   "source": "/tmp/grade/r10-01-idea.md",
+   "preserved": ".flywheel/grade-evidence/r10-01-idea.md.gz",
+   "sha256": "42ed7c882c4ffb568bd790d8d400feb636e3d6f32eb7ac91e6cbf77b443c3460",
+   "bytes": 2733,
+   "gz_bytes": 1510
+  },
+  {
+   "source": "/tmp/grade/r10-02-surface-census.md",
+   "preserved": ".flywheel/grade-evidence/r10-02-surface-census.md.gz",
+   "sha256": "602f6c8acd08345166126d7f1cc87590143f79b3e0afcc6e8d9d7c7df6945577",
+   "bytes": 2639,
+   "gz_bytes": 1479
+  },
+  {
+   "source": "/tmp/grade/r10-03.md",
+   "preserved": ".flywheel/grade-evidence/r10-03.md.gz",
+   "sha256": "27cd1264cc889c176d220ab113d6936e5bb794565e5df4edd75fd8de861f59d9",
+   "bytes": 2708,
+   "gz_bytes": 1500
+  },
+  {
+   "source": "/tmp/grade/r10-04.md",
+   "preserved": ".flywheel/grade-evidence/r10-04.md.gz",
+   "sha256": "c23baf9f480744fbf7c146902acb9b12b6386c7fcf0bba531368f5e0c149f501",
+   "bytes": 3282,
+   "gz_bytes": 1822
+  },
+  {
+   "source": "/tmp/grade/r10-05.md",
+   "preserved": ".flywheel/grade-evidence/r10-05.md.gz",
+   "sha256": "1f0db57fc9bc249d7a73b3ee0cfc33e2354370b0c8c0528952748dc3684dcfc3",
+   "bytes": 3155,
+   "gz_bytes": 1782
+  },
+  {
+   "source": "/tmp/grade/r10-06-gates.md",
+   "preserved": ".flywheel/grade-evidence/r10-06-gates.md.gz",
+   "sha256": "c2c1eb06eb854b672198220e2cf3aabf0ab81e832b30dd8cdee786a7c894365b",
+   "bytes": 1999,
+   "gz_bytes": 1107
+  },
+  {
+   "source": "/tmp/grade/r10-07-installability.md",
+   "preserved": ".flywheel/grade-evidence/r10-07-installability.md.gz",
+   "sha256": "45fc4fca3eab5ba1b474778b451813d40a9842397f280ae271a8676698bd5070",
+   "bytes": 3436,
+   "gz_bytes": 1705
+  },
+  {
+   "source": "/tmp/grade/r10-08-end-users.md",
+   "preserved": ".flywheel/grade-evidence/r10-08-end-users.md.gz",
+   "sha256": "1e57577f1d670a936a61f794c61d5867b2d058854e91dc8faec7e44819e53fe2",
+   "bytes": 2666,
+   "gz_bytes": 1393
+  },
+  {
+   "source": "/tmp/grade/r10-09-milestones.md",
+   "preserved": ".flywheel/grade-evidence/r10-09-milestones.md.gz",
+   "sha256": "eabe061545028441d5421a86796916c7da9017d8b8473d4b11245f813c87e3a1",
+   "bytes": 11264,
+   "gz_bytes": 5020
+  },
+  {
+   "source": "/tmp/grade/r10-10-prior-art.md",
+   "preserved": ".flywheel/grade-evidence/r10-10-prior-art.md.gz",
+   "sha256": "be5828e38971f6b00e66c0f782509f46f1faf64c59e63821f0aefbd20ffc5d9b",
+   "bytes": 9123,
+   "gz_bytes": 4179
+  },
+  {
+   "source": "/tmp/grade/r10-11-lifecycle.md",
+   "preserved": ".flywheel/grade-evidence/r10-11-lifecycle.md.gz",
+   "sha256": "85cc4881b9e4bbe600fa8050f0761200e1872384c5bd8f9d768ca7b9e2275655",
+   "bytes": 9568,
+   "gz_bytes": 4250
+  },
+  {
+   "source": "/tmp/grade/r10-1408.txt",
+   "preserved": ".flywheel/grade-evidence/r10-1408.txt.gz",
+   "sha256": "1923463ced571dbea5baf28cebd6a4961704bd0336287362679e9a3103d3030b",
+   "bytes": 2800,
+   "gz_bytes": 1574
+  },
+  {
+   "source": "/tmp/grade/r10-1409.txt",
+   "preserved": ".flywheel/grade-evidence/r10-1409.txt.gz",
+   "sha256": "6979f9e705913e048f9bd9ea4f2a25a7e8cb9c020f9158bc8a981b928007705d",
+   "bytes": 2799,
+   "gz_bytes": 1564
+  },
+  {
+   "source": "/tmp/grade/r10-1413.txt",
+   "preserved": ".flywheel/grade-evidence/r10-1413.txt.gz",
+   "sha256": "9362c459e5c699ccb4a833522699b0793bd805a369121b5467873b68081cb12a",
+   "bytes": 2806,
+   "gz_bytes": 1577
+  },
+  {
+   "source": "/tmp/grade/r10-1414.txt",
+   "preserved": ".flywheel/grade-evidence/r10-1414.txt.gz",
+   "sha256": "90a50eb114c74fe1957b8a1c561b2ed7e1d3d7ab64035614ec7fe192e3034bda",
+   "bytes": 2809,
+   "gz_bytes": 1579
+  },
+  {
+   "source": "/tmp/grade/r10-agent-09.json",
+   "preserved": ".flywheel/grade-evidence/r10-agent-09.json.gz",
+   "sha256": "4d2a2905c951020f57e9e3df15867a0caf25eb03369fa5058141449b89d80734",
+   "bytes": 18072,
+   "gz_bytes": 7047
+  },
+  {
+   "source": "/tmp/grade/r10-agent-10.json",
+   "preserved": ".flywheel/grade-evidence/r10-agent-10.json.gz",
+   "sha256": "1d34a6d5f99436134bbd40e1948cf16a0be780383870fb4f2d84055db66d0414",
+   "bytes": 12130,
+   "gz_bytes": 4932
+  },
+  {
+   "source": "/tmp/grade/r10-agent-11.json",
+   "preserved": ".flywheel/grade-evidence/r10-agent-11.json.gz",
+   "sha256": "43c295de895976093301d44cc18da353b450a7b36ce8cec67678ecc76de2bb7a",
+   "bytes": 13409,
+   "gz_bytes": 5323
+  },
+  {
+   "source": "/tmp/grade/r10-common.txt",
+   "preserved": ".flywheel/grade-evidence/r10-common.txt.gz",
+   "sha256": "f96789bb691b3dddb8628f6ee75f858f7190de6f853f973c0b5f1c31fb72bd2b",
+   "bytes": 2721,
+   "gz_bytes": 1528
+  },
+  {
+   "source": "/tmp/grade/r11-03-crates.md",
+   "preserved": ".flywheel/grade-evidence/r11-03-crates.md.gz",
+   "sha256": "4c62a158e518265b330d0398a1d06f25e7757f640d1d1d02d6ffa05337305b09",
+   "bytes": 1869,
+   "gz_bytes": 1074
+  },
+  {
+   "source": "/tmp/grade/r11-04-diagrams.md",
+   "preserved": ".flywheel/grade-evidence/r11-04-diagrams.md.gz",
+   "sha256": "decb606ecf95a027beebceb85b14b28fcca4188247f3e8e2e0cef31515bba196",
+   "bytes": 3847,
+   "gz_bytes": 2078
+  },
+  {
+   "source": "/tmp/grade/r11-05-actions.md",
+   "preserved": ".flywheel/grade-evidence/r11-05-actions.md.gz",
+   "sha256": "5a48cbacdd0afcc4008c2674bd4059a54a8c5c78f5ecace5e91d1862442fbb51",
+   "bytes": 2010,
+   "gz_bytes": 1126
+  },
+  {
+   "source": "/tmp/grade/r11-06-gates.md",
+   "preserved": ".flywheel/grade-evidence/r11-06-gates.md.gz",
+   "sha256": "abd390448b0e58fc91aa094e5af1de698ed31cdba497e622ac8b85d2f8359d20",
+   "bytes": 2882,
+   "gz_bytes": 1506
+  },
+  {
+   "source": "/tmp/grade/r11-07-installability.md",
+   "preserved": ".flywheel/grade-evidence/r11-07-installability.md.gz",
+   "sha256": "97f955c8bf5888e71c2bd5581990cd4bd9323b96e40378c03bdef186d9cf673e",
+   "bytes": 4393,
+   "gz_bytes": 2169
+  },
+  {
+   "source": "/tmp/grade/r11-08-end-users.md",
+   "preserved": ".flywheel/grade-evidence/r11-08-end-users.md.gz",
+   "sha256": "485d182cffd04f0abab5a874b7a61938a5dab400cc404fe964ae71a1cb5e31ce",
+   "bytes": 2881,
+   "gz_bytes": 1522
+  },
+  {
+   "source": "/tmp/grade/r11-09-milestones.md",
+   "preserved": ".flywheel/grade-evidence/r11-09-milestones.md.gz",
+   "sha256": "98b5ac195add0bbbced3204b79d27f8e11ddcd456d0b9f782a1d0c6615dc8f04",
+   "bytes": 6034,
+   "gz_bytes": 3126
+  },
+  {
+   "source": "/tmp/grade/r11-10-prior-art.md",
+   "preserved": ".flywheel/grade-evidence/r11-10-prior-art.md.gz",
+   "sha256": "b9ef4a35b43455599a49ad7b9c07f63954b55365bae44f58bd8a02c173dc068d",
+   "bytes": 5035,
+   "gz_bytes": 2432
+  },
+  {
+   "source": "/tmp/grade/r11-11-lifecycle.md",
+   "preserved": ".flywheel/grade-evidence/r11-11-lifecycle.md.gz",
+   "sha256": "083bc4bb685ee4ae0997f297805a905b09940250d22cb50812e573909942d04a",
+   "bytes": 5455,
+   "gz_bytes": 2679
+  },
+  {
+   "source": "/tmp/grade/r11-1408.txt",
+   "preserved": ".flywheel/grade-evidence/r11-1408.txt.gz",
+   "sha256": "fdf85bd1f2211264198d0a4ff72b19a08287368f4ac2a50c0df7809d2f22f769",
+   "bytes": 2775,
+   "gz_bytes": 1471
+  },
+  {
+   "source": "/tmp/grade/r11-1409.txt",
+   "preserved": ".flywheel/grade-evidence/r11-1409.txt.gz",
+   "sha256": "bfa6969227548243d20d9807e0c3f268e0e7d6253fd5396a08895375d6ad79ec",
+   "bytes": 2787,
+   "gz_bytes": 1470
+  },
+  {
+   "source": "/tmp/grade/r11-1413.txt",
+   "preserved": ".flywheel/grade-evidence/r11-1413.txt.gz",
+   "sha256": "9b137045a67a47ae8c00288928ead427d520e94a99ccda4d3dfdca0fb7478fbe",
+   "bytes": 2780,
+   "gz_bytes": 1471
+  },
+  {
+   "source": "/tmp/grade/r11-1414.txt",
+   "preserved": ".flywheel/grade-evidence/r11-1414.txt.gz",
+   "sha256": "df2ca8516d0f3d11a25072dacd8f4267dd9f2345e21411069a6d74b852306d54",
+   "bytes": 2766,
+   "gz_bytes": 1464
+  },
+  {
+   "source": "/tmp/grade/r11-common.txt",
+   "preserved": ".flywheel/grade-evidence/r11-common.txt.gz",
+   "sha256": "5bf80dad432a85fc869cecb12abb3f870505c166612362e8aa237ed5f7769819",
+   "bytes": 2717,
+   "gz_bytes": 1435
+  },
+  {
+   "source": "/tmp/grade/r12-00-brief.md",
+   "preserved": ".flywheel/grade-evidence/r12-00-brief.md.gz",
+   "sha256": "23942568f35e811c5834fcafd960ef9fed4abe786cc2e61e032ae941c08190ac",
+   "bytes": 5475,
+   "gz_bytes": 2586
+  },
+  {
+   "source": "/tmp/grade/r12-01-idea.md",
+   "preserved": ".flywheel/grade-evidence/r12-01-idea.md.gz",
+   "sha256": "e9b22b67d5a57ff8dadccb8fe301009512317328f9c6b2c3e189cbc841b9313a",
+   "bytes": 6582,
+   "gz_bytes": 3117
+  },
+  {
+   "source": "/tmp/grade/r12-02-surface-census.md",
+   "preserved": ".flywheel/grade-evidence/r12-02-surface-census.md.gz",
+   "sha256": "ca73410b837a747491aadbbaa9a779e5b9244ec02cc6674113802eaa8b5fb89c",
+   "bytes": 4788,
+   "gz_bytes": 2358
+  },
+  {
+   "source": "/tmp/grade/r12-03-crates.md",
+   "preserved": ".flywheel/grade-evidence/r12-03-crates.md.gz",
+   "sha256": "e339e8436479bece79251d32eb424fb4e2e1b028cf248d15fe56591cf9957a16",
+   "bytes": 4686,
+   "gz_bytes": 2427
+  },
+  {
+   "source": "/tmp/grade/r12-04-diagrams.md",
+   "preserved": ".flywheel/grade-evidence/r12-04-diagrams.md.gz",
+   "sha256": "7f1acbdb48e673d0ce8d95eafebd1e712da7721b614cf4170e036f7d6142ae05",
+   "bytes": 4632,
+   "gz_bytes": 2296
+  },
+  {
+   "source": "/tmp/grade/r12-05-actions.md",
+   "preserved": ".flywheel/grade-evidence/r12-05-actions.md.gz",
+   "sha256": "59648459117a7915134797da7def725326fdd30c9c6dcc811be94be233cf3510",
+   "bytes": 4632,
+   "gz_bytes": 2314
+  },
+  {
+   "source": "/tmp/grade/r12-06.md",
+   "preserved": ".flywheel/grade-evidence/r12-06.md.gz",
+   "sha256": "be39087400ba3b1e05cb00f22b0093b0217e9424ca41b9e5c44cc63de2bf8167",
+   "bytes": 3354,
+   "gz_bytes": 1879
+  },
+  {
+   "source": "/tmp/grade/r12-07.md",
+   "preserved": ".flywheel/grade-evidence/r12-07.md.gz",
+   "sha256": "4502ffbbe112f90b5e84814ba6194e3f81557c5b6f5a3069318e659da42ec124",
+   "bytes": 3302,
+   "gz_bytes": 1844
+  },
+  {
+   "source": "/tmp/grade/r12-08.md",
+   "preserved": ".flywheel/grade-evidence/r12-08.md.gz",
+   "sha256": "d00d61699029e5630bcc25391130bb2a6bad53ca1807072e3474d02f8e292ea7",
+   "bytes": 3541,
+   "gz_bytes": 2006
+  },
+  {
+   "source": "/tmp/grade/r12-09-milestones.md",
+   "preserved": ".flywheel/grade-evidence/r12-09-milestones.md.gz",
+   "sha256": "b97afee0c1ec61524ff669ca25c7764b6f8d67677f282285cef9080cd08e3d18",
+   "bytes": 3678,
+   "gz_bytes": 1747
+  },
+  {
+   "source": "/tmp/grade/r12-10-prior-art.md",
+   "preserved": ".flywheel/grade-evidence/r12-10-prior-art.md.gz",
+   "sha256": "a9d852cc1b2c032f094ec8a0956910021aaa9a12b510e573b53da3a382795a76",
+   "bytes": 2631,
+   "gz_bytes": 1316
+  },
+  {
+   "source": "/tmp/grade/r12-11-lifecycle.md",
+   "preserved": ".flywheel/grade-evidence/r12-11-lifecycle.md.gz",
+   "sha256": "d4a3f791f7b7edc031866a9bfb5a1b4548fb7e53ec618df3438aeac003aac53a",
+   "bytes": 6010,
+   "gz_bytes": 2457
+  },
+  {
+   "source": "/tmp/grade/r12-1408.txt",
+   "preserved": ".flywheel/grade-evidence/r12-1408.txt.gz",
+   "sha256": "253e313b887c83070031d1f901bcf8dc3a1fb3deabe8fd273195f0ad1be21504",
+   "bytes": 3475,
+   "gz_bytes": 1876
+  },
+  {
+   "source": "/tmp/grade/r12-1409.txt",
+   "preserved": ".flywheel/grade-evidence/r12-1409.txt.gz",
+   "sha256": "f00ab2c18cb20e9baf778b8194134cce6cffd0f94efaae5b63199131bb61d702",
+   "bytes": 3483,
+   "gz_bytes": 1876
+  },
+  {
+   "source": "/tmp/grade/r12-1413.txt",
+   "preserved": ".flywheel/grade-evidence/r12-1413.txt.gz",
+   "sha256": "a81248c05258be8d29734f1b06e89d5e52928587f9b90fe70ffa65b6e863ddb3",
+   "bytes": 3483,
+   "gz_bytes": 1884
+  },
+  {
+   "source": "/tmp/grade/r12-1414.txt",
+   "preserved": ".flywheel/grade-evidence/r12-1414.txt.gz",
+   "sha256": "65a2cd796e263255e479b794f62c64d366faeede7101877a3aa950ecfb1551f0",
+   "bytes": 3481,
+   "gz_bytes": 1878
+  },
+  {
+   "source": "/tmp/grade/r12-agent-00.json",
+   "preserved": ".flywheel/grade-evidence/r12-agent-00.json.gz",
+   "sha256": "e383ba171ca821b98ef49be50a76881bd51822915f9ee0e22e81a324fbb932fc",
+   "bytes": 14430,
+   "gz_bytes": 5542
+  },
+  {
+   "source": "/tmp/grade/r12-agent-01.json",
+   "preserved": ".flywheel/grade-evidence/r12-agent-01.json.gz",
+   "sha256": "8ca54efd8f1ea73e5e91ae306d781799b8cb37a7641394ce0704a3b14ba5c4d1",
+   "bytes": 18508,
+   "gz_bytes": 6917
+  },
+  {
+   "source": "/tmp/grade/r12-agent-02.json",
+   "preserved": ".flywheel/grade-evidence/r12-agent-02.json.gz",
+   "sha256": "576e979f0e9ce46564218f3376b089cb61450b99c07eb02a839ec93f25dc74b5",
+   "bytes": 8350,
+   "gz_bytes": 3330
+  },
+  {
+   "source": "/tmp/grade/r12-common.txt",
+   "preserved": ".flywheel/grade-evidence/r12-common.txt.gz",
+   "sha256": "bf9d1155901d6ba9de13e5d080127e12187c8740c48bd195274b163907b00283",
+   "bytes": 3398,
+   "gz_bytes": 1828
+  },
+  {
+   "source": "/tmp/grade/r13-06-gates.md",
+   "preserved": ".flywheel/grade-evidence/r13-06-gates.md.gz",
+   "sha256": "db863b374d9ac91947c4fb1f3de87c09acee0126055efa4ab0dd016b4b120484",
+   "bytes": 7091,
+   "gz_bytes": 3238
+  },
+  {
+   "source": "/tmp/grade/r13-08-end-users.md",
+   "preserved": ".flywheel/grade-evidence/r13-08-end-users.md.gz",
+   "sha256": "a64112570932d1cfa90c358daa4825d4423b9541fccb52c561eb0453cc0735be",
+   "bytes": 4749,
+   "gz_bytes": 2291
+  },
+  {
+   "source": "/tmp/grade/r13-09-milestones.md",
+   "preserved": ".flywheel/grade-evidence/r13-09-milestones.md.gz",
+   "sha256": "1b6a4f068710927c2da953017646b678554bf23f2238d9120b7c5a1e4db3bb15",
+   "bytes": 3858,
+   "gz_bytes": 1834
+  },
+  {
+   "source": "/tmp/grade/r13-10-prior-art.md",
+   "preserved": ".flywheel/grade-evidence/r13-10-prior-art.md.gz",
+   "sha256": "55be04a0ff431295493985854335d1118da0f705be7fe4469949ececd9fabbd1",
+   "bytes": 5850,
+   "gz_bytes": 2658
+  },
+  {
+   "source": "/tmp/grade/r13-11-lifecycle.md",
+   "preserved": ".flywheel/grade-evidence/r13-11-lifecycle.md.gz",
+   "sha256": "e60ebc45af3305d816a223c9defaf86f0510d2bd52658d1e1d30ab6c9c498f8b",
+   "bytes": 4737,
+   "gz_bytes": 2050
+  },
+  {
+   "source": "/tmp/grade/r19-consistency.md",
+   "preserved": ".flywheel/grade-evidence/r19-consistency.md.gz",
+   "sha256": "8bda499b6e54b759421ade79443dc0ab6b1dab8fb539ec787e5a151559fdcfe7",
+   "bytes": 1990,
+   "gz_bytes": 1087
+  },
+  {
+   "source": "/tmp/grade/r2-absence.md",
+   "preserved": ".flywheel/grade-evidence/r2-absence.md.gz",
+   "sha256": "119947a667be97bd1fc7e3f680feae6c0150f6d88b425eb6cb41d46e90888f52",
+   "bytes": 8316,
+   "gz_bytes": 3915
+  },
+  {
+   "source": "/tmp/grade/r2-adversarial.md",
+   "preserved": ".flywheel/grade-evidence/r2-adversarial.md.gz",
+   "sha256": "bb33e606dfeb7ed3d2148ec97963013bd9f1fbe262975f7bec77bfbb0eec6152",
+   "bytes": 7289,
+   "gz_bytes": 3249
+  },
+  {
+   "source": "/tmp/grade/r2-common.txt",
+   "preserved": ".flywheel/grade-evidence/r2-common.txt.gz",
+   "sha256": "a348a531093242e19f8af5b950a6a6ec76d4bfa661b449815091e513c8cadde1",
+   "bytes": 3081,
+   "gz_bytes": 1734
+  },
+  {
+   "source": "/tmp/grade/r2-evidence.md",
+   "preserved": ".flywheel/grade-evidence/r2-evidence.md.gz",
+   "sha256": "9f33bc2adfc09d80ba7f45e622718605172e6fcb3502db01cd008cde2fb571a9",
+   "bytes": 9969,
+   "gz_bytes": 4650
+  },
+  {
+   "source": "/tmp/grade/r2-investor.md",
+   "preserved": ".flywheel/grade-evidence/r2-investor.md.gz",
+   "sha256": "4d7f774066febc098edaa56824f4f403ba041f1fe877b63f03c205f9b1856dcd",
+   "bytes": 3673,
+   "gz_bytes": 1839
+  },
+  {
+   "source": "/tmp/grade/r3-01-idea.md",
+   "preserved": ".flywheel/grade-evidence/r3-01-idea.md.gz",
+   "sha256": "31a19c961fff76eefab5a97d27408edbcc212f3cbb2098d1734dc3e29e00ba0d",
+   "bytes": 11393,
+   "gz_bytes": 5001
+  },
+  {
+   "source": "/tmp/grade/r3-02-surface-census.md",
+   "preserved": ".flywheel/grade-evidence/r3-02-surface-census.md.gz",
+   "sha256": "697ef3f5d5c7392876b1ee7c6725d1ad863620bd224d685a80935e8568ae747c",
+   "bytes": 11888,
+   "gz_bytes": 5031
+  },
+  {
+   "source": "/tmp/grade/r3-03-crates.md",
+   "preserved": ".flywheel/grade-evidence/r3-03-crates.md.gz",
+   "sha256": "c11e8bf6fdc64ed1cc11f475ab1470d1f6745898d90b5bfdb19df4546911f7e1",
+   "bytes": 11355,
+   "gz_bytes": 5375
+  },
+  {
+   "source": "/tmp/grade/r3-04-diagrams.md",
+   "preserved": ".flywheel/grade-evidence/r3-04-diagrams.md.gz",
+   "sha256": "ccd01bc5c8adabcd7fb454850207299c48ff8a522544c780038038f7ce984916",
+   "bytes": 9563,
+   "gz_bytes": 4688
+  },
+  {
+   "source": "/tmp/grade/r3-frame.txt",
+   "preserved": ".flywheel/grade-evidence/r3-frame.txt.gz",
+   "sha256": "58512e8e2b19d3a4afab1b36c1eec9ea1a0b18e1c194e40f64267c8a00b6c043",
+   "bytes": 3508,
+   "gz_bytes": 1871
+  },
+  {
+   "source": "/tmp/grade/r4-05-actions.md",
+   "preserved": ".flywheel/grade-evidence/r4-05-actions.md.gz",
+   "sha256": "11c4b98acdd128851fead9d2d01f5afc9de0d5b9fa2df1d27bd9879a70071649",
+   "bytes": 9009,
+   "gz_bytes": 4063
+  },
+  {
+   "source": "/tmp/grade/r4-06-gates.md",
+   "preserved": ".flywheel/grade-evidence/r4-06-gates.md.gz",
+   "sha256": "bd319e3ce6166791d7950e957b044775facd20d9913d2d63330d56454fd9e1fd",
+   "bytes": 10002,
+   "gz_bytes": 4429
+  },
+  {
+   "source": "/tmp/grade/r4-07-installability.md",
+   "preserved": ".flywheel/grade-evidence/r4-07-installability.md.gz",
+   "sha256": "2924fe3a3ea737f9d1bea0ecde35e32f323261b3962c6038eaae3561eed04e47",
+   "bytes": 10787,
+   "gz_bytes": 5140
+  },
+  {
+   "source": "/tmp/grade/r4-08-end-users.md",
+   "preserved": ".flywheel/grade-evidence/r4-08-end-users.md.gz",
+   "sha256": "2ba4f3e24495c043962431c3993be20170da253c9193d1eff6af3a4195f9a275",
+   "bytes": 10252,
+   "gz_bytes": 5135
+  },
+  {
+   "source": "/tmp/grade/r5-00-brief.md",
+   "preserved": ".flywheel/grade-evidence/r5-00-brief.md.gz",
+   "sha256": "e998584ff9c45c2a245e14557897fa903544b430a86258c18e88e2c5873d933c",
+   "bytes": 7822,
+   "gz_bytes": 3886
+  },
+  {
+   "source": "/tmp/grade/r5-09-milestones.md",
+   "preserved": ".flywheel/grade-evidence/r5-09-milestones.md.gz",
+   "sha256": "1a10e94617af0dddcd7e2dae0eeed70a87c32de985a4132b583012b36427b0d3",
+   "bytes": 13663,
+   "gz_bytes": 5594
+  },
+  {
+   "source": "/tmp/grade/r5-10-prior-art.md",
+   "preserved": ".flywheel/grade-evidence/r5-10-prior-art.md.gz",
+   "sha256": "cbf7ff14e912d39590d370a9f9cb2160d86b14af4558db4bc905b6d5a9ced982",
+   "bytes": 11849,
+   "gz_bytes": 4901
+  },
+  {
+   "source": "/tmp/grade/r5-11-lifecycle.md",
+   "preserved": ".flywheel/grade-evidence/r5-11-lifecycle.md.gz",
+   "sha256": "905788161e8019f8ebcaed3c93ce495e6ab011de705bc0e4792896916e402c22",
+   "bytes": 8450,
+   "gz_bytes": 4153
+  },
+  {
+   "source": "/tmp/grade/r7-05.md",
+   "preserved": ".flywheel/grade-evidence/r7-05.md.gz",
+   "sha256": "99fe1015b151415ea400aac738c1def526463fade9e27428e427601e0f14712f",
+   "bytes": 4394,
+   "gz_bytes": 2427
+  },
+  {
+   "source": "/tmp/grade/r7-06.md",
+   "preserved": ".flywheel/grade-evidence/r7-06.md.gz",
+   "sha256": "b71d83300f271e430f93e65e3cf1b567c60f8291e8d09d86776ebddd8e9d0c4e",
+   "bytes": 4322,
+   "gz_bytes": 2330
+  },
+  {
+   "source": "/tmp/grade/r7-agent-end.md",
+   "preserved": ".flywheel/grade-evidence/r7-agent-end.md.gz",
+   "sha256": "661a6125fe36a71fc698ddadcfebb6769cbcea2c5f92e736c3e6c10d37af0d50",
+   "bytes": 3202,
+   "gz_bytes": 1489
+  },
+  {
+   "source": "/tmp/grade/rA-00.md",
+   "preserved": ".flywheel/grade-evidence/rA-00.md.gz",
+   "sha256": "0c97ed84c568c14a8721b2ef89c617fff295b365b0ca4b31aa7ac1ca8e729185",
+   "bytes": 1356,
+   "gz_bytes": 774
+  },
+  {
+   "source": "/tmp/grade/rA-01.md",
+   "preserved": ".flywheel/grade-evidence/rA-01.md.gz",
+   "sha256": "dd67db6f407157d71662383ceac56c2a5bea4942a1a3668356f27aa1e7bd79a5",
+   "bytes": 2164,
+   "gz_bytes": 1140
+  },
+  {
+   "source": "/tmp/grade/rA-02.md",
+   "preserved": ".flywheel/grade-evidence/rA-02.md.gz",
+   "sha256": "d063d15cdb8602719269deb9b89358fe619b5da2033146753c88dd085a1bf281",
+   "bytes": 2752,
+   "gz_bytes": 1407
+  },
+  {
+   "source": "/tmp/grade/rA-03-crates.md",
+   "preserved": ".flywheel/grade-evidence/rA-03-crates.md.gz",
+   "sha256": "66301167993a8134dc5d04acf92e3783514abc8c9094b6b2e2c15e3911fcc74c",
+   "bytes": 1315,
+   "gz_bytes": 719
+  },
+  {
+   "source": "/tmp/grade/rA-04-diagrams.md",
+   "preserved": ".flywheel/grade-evidence/rA-04-diagrams.md.gz",
+   "sha256": "0ccbd9e928c78b82bba34e8863f8039e1d2e6ddc4a8736ddc6001aac23108174",
+   "bytes": 1782,
+   "gz_bytes": 974
+  },
+  {
+   "source": "/tmp/grade/rA-05-actions.md",
+   "preserved": ".flywheel/grade-evidence/rA-05-actions.md.gz",
+   "sha256": "37f3abfd5fc4527c64671c2fa85e7a722615af7ff351a67fae1482f05dcef111",
+   "bytes": 1496,
+   "gz_bytes": 807
+  },
+  {
+   "source": "/tmp/grade/rA-06-gates.md",
+   "preserved": ".flywheel/grade-evidence/rA-06-gates.md.gz",
+   "sha256": "5dd546cf817ceecff61f75ed5ae4b531428c154dc096f7271cb227f7c585a547",
+   "bytes": 3171,
+   "gz_bytes": 1600
+  },
+  {
+   "source": "/tmp/grade/rA-07-installability.md",
+   "preserved": ".flywheel/grade-evidence/rA-07-installability.md.gz",
+   "sha256": "74a1b0e22c8d670db66fc37b9b822116c4e789eb8c6fbeec22c8e79d65597fe5",
+   "bytes": 2062,
+   "gz_bytes": 1193
+  },
+  {
+   "source": "/tmp/grade/rA-08-end-users.md",
+   "preserved": ".flywheel/grade-evidence/rA-08-end-users.md.gz",
+   "sha256": "a12f2871d281d781a3798eaa19c0ef3ca3b554630b1ea13604588d7da58b11f9",
+   "bytes": 2506,
+   "gz_bytes": 1356
+  },
+  {
+   "source": "/tmp/grade/rA-09.md",
+   "preserved": ".flywheel/grade-evidence/rA-09.md.gz",
+   "sha256": "b4652f1c9bc8eb75c069a5b454266cb1fa4517a916f9f65a26a935123b2f9554",
+   "bytes": 2404,
+   "gz_bytes": 1460
+  },
+  {
+   "source": "/tmp/grade/rA-10.md",
+   "preserved": ".flywheel/grade-evidence/rA-10.md.gz",
+   "sha256": "8b1b44bcc464f3a72cd622e531197ddf9fe1c8ed5c0576a2dd961f282648e545",
+   "bytes": 2345,
+   "gz_bytes": 1244
+  },
+  {
+   "source": "/tmp/grade/rA-11.md",
+   "preserved": ".flywheel/grade-evidence/rA-11.md.gz",
+   "sha256": "0fa0da76e7d43cec176acb759c2105f2d940a6e8bf6a1479f59b8c38b5361d11",
+   "bytes": 2087,
+   "gz_bytes": 1258
+  },
+  {
+   "source": "/tmp/grade/rA-1408.txt",
+   "preserved": ".flywheel/grade-evidence/rA-1408.txt.gz",
+   "sha256": "dc82b8a2e95661d0488f67165371f2384c8ef054a3700dfb0f40a5c3da1a78a9",
+   "bytes": 2990,
+   "gz_bytes": 1644
+  },
+  {
+   "source": "/tmp/grade/rA-1409.txt",
+   "preserved": ".flywheel/grade-evidence/rA-1409.txt.gz",
+   "sha256": "75c736e6bfc6afcef69154e56a032984636afb8c4f9e908370aa0a8c178f18f0",
+   "bytes": 2991,
+   "gz_bytes": 1646
+  },
+  {
+   "source": "/tmp/grade/rA-1413.txt",
+   "preserved": ".flywheel/grade-evidence/rA-1413.txt.gz",
+   "sha256": "d743acf482b7a6e7f23ea756a205f24eac3356bcc5cebd694004ff0536733887",
+   "bytes": 2986,
+   "gz_bytes": 1647
+  },
+  {
+   "source": "/tmp/grade/rA-1414.txt",
+   "preserved": ".flywheel/grade-evidence/rA-1414.txt.gz",
+   "sha256": "fe4e8257ed8efe6b4651e9924e88c0c3bb74f6e1b6820312f0be9e420e737010",
+   "bytes": 2987,
+   "gz_bytes": 1644
+  },
+  {
+   "source": "/tmp/grade/rA-common.txt",
+   "preserved": ".flywheel/grade-evidence/rA-common.txt.gz",
+   "sha256": "8bf6b7b1825bce89d705007ffb8451d013ce5bfb88f55045c178be8d240f6c04",
+   "bytes": 2907,
+   "gz_bytes": 1596
+  },
+  {
+   "source": "/tmp/grade/rB-00.md",
+   "preserved": ".flywheel/grade-evidence/rB-00.md.gz",
+   "sha256": "bdfc0e01ec748f66b0db2d8988a1066304a9769a7f272136686d9ab39aad72d7",
+   "bytes": 2381,
+   "gz_bytes": 1326
+  },
+  {
+   "source": "/tmp/grade/rB-01.md",
+   "preserved": ".flywheel/grade-evidence/rB-01.md.gz",
+   "sha256": "346d96ce96e3ed9691b34029411e60441b15467e289f0eb0371f69c448886e85",
+   "bytes": 2151,
+   "gz_bytes": 1203
+  },
+  {
+   "source": "/tmp/grade/rB-02.md",
+   "preserved": ".flywheel/grade-evidence/rB-02.md.gz",
+   "sha256": "d440ebbe8fef49ee3f632b3bcf3fbff83bd0a5eb0f6004a68ffd31aea998b7fb",
+   "bytes": 2483,
+   "gz_bytes": 1297
+  },
+  {
+   "source": "/tmp/grade/rB-03.md",
+   "preserved": ".flywheel/grade-evidence/rB-03.md.gz",
+   "sha256": "e3a50dd989164e99b5c098f80a1dcf9793fb27bd26ebbbde62090324ba0e30e5",
+   "bytes": 790,
+   "gz_bytes": 516
+  },
+  {
+   "source": "/tmp/grade/rB-04.md",
+   "preserved": ".flywheel/grade-evidence/rB-04.md.gz",
+   "sha256": "e9f4af2e5f0dcf672633a76dda994bb96f282a31addb8270fd49e6cd4f74c024",
+   "bytes": 914,
+   "gz_bytes": 555
+  },
+  {
+   "source": "/tmp/grade/rB-05.md",
+   "preserved": ".flywheel/grade-evidence/rB-05.md.gz",
+   "sha256": "cea3e23d2a71b39d0779e9343ab6476ca91bedf0bda0843617613acce189b64a",
+   "bytes": 874,
+   "gz_bytes": 561
+  },
+  {
+   "source": "/tmp/grade/rB-06-gates.md",
+   "preserved": ".flywheel/grade-evidence/rB-06-gates.md.gz",
+   "sha256": "8d4e6de3268e37edbd80521aa1a222f1604ee366997c26aa8d7c860ded76b12d",
+   "bytes": 1376,
+   "gz_bytes": 793
+  },
+  {
+   "source": "/tmp/grade/rB-07-installability.md",
+   "preserved": ".flywheel/grade-evidence/rB-07-installability.md.gz",
+   "sha256": "a24471753a7ee6bdc445c2152c6c2e55eeac803999a84b48de37e33a41d9bc8a",
+   "bytes": 2577,
+   "gz_bytes": 1344
+  },
+  {
+   "source": "/tmp/grade/rB-08-end-users.md",
+   "preserved": ".flywheel/grade-evidence/rB-08-end-users.md.gz",
+   "sha256": "9481864e7dffa874257d4b0667d770d547855db81ab65171dbf3add144d674b7",
+   "bytes": 2691,
+   "gz_bytes": 1419
+  },
+  {
+   "source": "/tmp/grade/rB-09-milestones.md",
+   "preserved": ".flywheel/grade-evidence/rB-09-milestones.md.gz",
+   "sha256": "e2409ed94dd720d221efe82fa35df73ba9a03acf9618767ac6e450fbfd368f5f",
+   "bytes": 3181,
+   "gz_bytes": 1724
+  },
+  {
+   "source": "/tmp/grade/rB-10-prior-art.md",
+   "preserved": ".flywheel/grade-evidence/rB-10-prior-art.md.gz",
+   "sha256": "c215cfb9aa06c96da5ed89ca9a3d86d1e54166f661532cd9e42690a8003d54d8",
+   "bytes": 3177,
+   "gz_bytes": 1703
+  },
+  {
+   "source": "/tmp/grade/rB-11-lifecycle.md",
+   "preserved": ".flywheel/grade-evidence/rB-11-lifecycle.md.gz",
+   "sha256": "0e1dc5b5f391a64d7057260f4ca04f527261b0d4202aecd6db6592a9618b7b52",
+   "bytes": 4379,
+   "gz_bytes": 2257
+  },
+  {
+   "source": "/tmp/grade/rB-1408.txt",
+   "preserved": ".flywheel/grade-evidence/rB-1408.txt.gz",
+   "sha256": "5cd8984cdfc06444a841692a350451c973b5d34fd27ce9d80fb95e5f8eec1392",
+   "bytes": 3121,
+   "gz_bytes": 1671
+  },
+  {
+   "source": "/tmp/grade/rB-1409.txt",
+   "preserved": ".flywheel/grade-evidence/rB-1409.txt.gz",
+   "sha256": "1054fcbb5bb1381eb7bbb336534d39d252affb745d7613b98a70c9919669774b",
+   "bytes": 3117,
+   "gz_bytes": 1669
+  },
+  {
+   "source": "/tmp/grade/rB-1413.txt",
+   "preserved": ".flywheel/grade-evidence/rB-1413.txt.gz",
+   "sha256": "b15539bcc9fab36531f383f4f052cd890b79cc088f6a445227791f2958bce6df",
+   "bytes": 3115,
+   "gz_bytes": 1670
+  },
+  {
+   "source": "/tmp/grade/rB-1414.txt",
+   "preserved": ".flywheel/grade-evidence/rB-1414.txt.gz",
+   "sha256": "6ce71b312ff1362770891e24c55c3efd6c3393298e79429270b10d60440bc8bb",
+   "bytes": 3125,
+   "gz_bytes": 1672
+  },
+  {
+   "source": "/tmp/grade/rB-common.txt",
+   "preserved": ".flywheel/grade-evidence/rB-common.txt.gz",
+   "sha256": "2cdba759c00d78dbeded66cabbc7d8dec103aa9a2c08f711dbd2c4b917efbb86",
+   "bytes": 3016,
+   "gz_bytes": 1626
+  },
+  {
+   "source": "/tmp/grade/reprobe-frame.txt",
+   "preserved": ".flywheel/grade-evidence/reprobe-frame.txt.gz",
+   "sha256": "50ab6fb3474e0fd5a0f0ccbc6a5cbe6fbc00d1ee28889a0d51b15cc548c3254a",
+   "bytes": 2726,
+   "gz_bytes": 1518
+  },
+  {
+   "source": "/tmp/grade/reprobe-ntm-notes.md",
+   "preserved": ".flywheel/grade-evidence/reprobe-ntm-notes.md.gz",
+   "sha256": "c148c02a3b5f22a7dfb7a213c86375297eac487039edbcd40527c243f584ceea",
+   "bytes": 3310,
+   "gz_bytes": 1609
+  },
+  {
+   "source": "/tmp/grade/reprobe-ntm.jsonl",
+   "preserved": ".flywheel/grade-evidence/reprobe-ntm.jsonl.gz",
+   "sha256": "de39285995a4a7ee6fb184ce228fde21b250e4bc208375431d8378b84d8b8ca2",
+   "bytes": 98984,
+   "gz_bytes": 21440
+  },
+  {
+   "source": "/tmp/grade/reprobe-omp-notes.md",
+   "preserved": ".flywheel/grade-evidence/reprobe-omp-notes.md.gz",
+   "sha256": "c23a8c0683fed3e1ff2a8a4bc53199aefed96561f305299b9512542a1bbe4438",
+   "bytes": 3430,
+   "gz_bytes": 1852
+  },
+  {
+   "source": "/tmp/grade/reprobe-omp.jsonl",
+   "preserved": ".flywheel/grade-evidence/reprobe-omp.jsonl.gz",
+   "sha256": "c316dc613cc0229688424ce2bfdc28066d3e0b2896e88adeb9467e617890b7b6",
+   "bytes": 28188,
+   "gz_bytes": 3242
+  },
+  {
+   "source": "/tmp/grade/role-fix.txt",
+   "preserved": ".flywheel/grade-evidence/role-fix.txt.gz",
+   "sha256": "b37a2b6b7137d6b373d6752d27839d8875e7cd3332d6f4506982621e81584b8d",
+   "bytes": 1339,
+   "gz_bytes": 762
+  },
+  {
+   "source": "/tmp/grade/severity-req.txt",
+   "preserved": ".flywheel/grade-evidence/severity-req.txt.gz",
+   "sha256": "14d622106e4c2870df9b0bdda5cc3539a91840e70ece52be9991f33aef424994",
+   "bytes": 2375,
+   "gz_bytes": 1275
+  },
+  {
+   "source": "/tmp/grade/sf-1409.txt",
+   "preserved": ".flywheel/grade-evidence/sf-1409.txt.gz",
+   "sha256": "4b4c8c87ab77c8df7143cd66910ea5fee1505602a9d68056c0e330898fe16596",
+   "bytes": 4217,
+   "gz_bytes": 2200
+  },
+  {
+   "source": "/tmp/grade/sf-1413.txt",
+   "preserved": ".flywheel/grade-evidence/sf-1413.txt.gz",
+   "sha256": "e87d805d24cc7ad15d31748452bd8b6f979aaf10a731c2cc8b30b1b163f89fbd",
+   "bytes": 4257,
+   "gz_bytes": 2198
+  },
+  {
+   "source": "/tmp/grade/spawn-audit-1408.md",
+   "preserved": ".flywheel/grade-evidence/spawn-audit-1408.md.gz",
+   "sha256": "b7a57ef077c7f66991a17c4491619d84d51c224df96f0bba1a5633405ea9e6b3",
+   "bytes": 4616,
+   "gz_bytes": 1915
+  },
+  {
+   "source": "/tmp/grade/stage-foundation.txt",
+   "preserved": ".flywheel/grade-evidence/stage-foundation.txt.gz",
+   "sha256": "0d47482dd0cd8bfc948ebc351dd5ae73cb60124512452aac8d995d9a6ab7c637",
+   "bytes": 3826,
+   "gz_bytes": 1987
+  },
+  {
+   "source": "/tmp/grade/types-4-notes.md",
+   "preserved": ".flywheel/grade-evidence/types-4-notes.md.gz",
+   "sha256": "8741b30c309807baab6e41a96110cc5481779675e3d7dda2f298ffd625f54b5e",
+   "bytes": 3224,
+   "gz_bytes": 1805
+  },
+  {
+   "source": "/tmp/grade/types-4.jsonl",
+   "preserved": ".flywheel/grade-evidence/types-4.jsonl.gz",
+   "sha256": "676ccc6142b7fa62005e6b52d3f37c696c50bcb7b1e8012c3a2195bbf43c35a8",
+   "bytes": 14253,
+   "gz_bytes": 4227
+  },
+  {
+   "source": "/tmp/grade/types-pane5-notes.md",
+   "preserved": ".flywheel/grade-evidence/types-pane5-notes.md.gz",
+   "sha256": "b78f4dcbcbdcbf36cda278bdbdc2bcac1a41d7578cd99cdc69eeca4e39ae3d16",
+   "bytes": 1722,
+   "gz_bytes": 1055
+  },
+  {
+   "source": "/tmp/grade/types-pane5.jsonl",
+   "preserved": ".flywheel/grade-evidence/types-pane5.jsonl.gz",
+   "sha256": "d74cf7cdb0e676b2ebe99455268b8917ff29640f3b1644cc5b8df3b20f2d8bf7",
+   "bytes": 15435,
+   "gz_bytes": 2806
+  },
+  {
+   "source": "/tmp/grade/unprobeable-notes.md",
+   "preserved": ".flywheel/grade-evidence/unprobeable-notes.md.gz",
+   "sha256": "32a70cd50833db29dc5e9d7196e9d34e6eaf7dd171ca5678a9efd581450dd129",
+   "bytes": 3255,
+   "gz_bytes": 1754
+  },
+  {
+   "source": "/tmp/grade/unprobeable.jsonl",
+   "preserved": ".flywheel/grade-evidence/unprobeable.jsonl.gz",
+   "sha256": "a09af93b98106cb238642720f2927139f9a5ad37a2943873a0ed853e1c224002",
+   "bytes": 38818,
+   "gz_bytes": 2123
+  },
+  {
+   "source": "/tmp/grade/w7.txt",
+   "preserved": ".flywheel/grade-evidence/w7.txt.gz",
+   "sha256": "09dccac1b757c79c2c4ad36ff3d20585ad25363f2bad662b6e02a469a83dfbdd",
+   "bytes": 2734,
+   "gz_bytes": 1554
+  },
+  {
+   "source": "/tmp/grade/w8-1408.txt",
+   "preserved": ".flywheel/grade-evidence/w8-1408.txt.gz",
+   "sha256": "af35867b90599302c74217fb5e7eb53f06813447dbdd8c8b0cc0fcb863757ded",
+   "bytes": 2561,
+   "gz_bytes": 1440
+  },
+  {
+   "source": "/tmp/grade/w8-1409.md",
+   "preserved": ".flywheel/grade-evidence/w8-1409.md.gz",
+   "sha256": "0e5e1445b0c37441011fbdd22628e8c992fbb76610d8ca4670bdb90cf5c7166c",
+   "bytes": 3963,
+   "gz_bytes": 2102
+  },
+  {
+   "source": "/tmp/grade/w8-1409.txt",
+   "preserved": ".flywheel/grade-evidence/w8-1409.txt.gz",
+   "sha256": "4b09efc7b1a2648dc3174362b80dddb6585b2c70e6b437272afa6a3a3a30b4e5",
+   "bytes": 2580,
+   "gz_bytes": 1454
+  },
+  {
+   "source": "/tmp/grade/w8-1413.txt",
+   "preserved": ".flywheel/grade-evidence/w8-1413.txt.gz",
+   "sha256": "5a0343da446909ec51858835d825e9e113419e84122c64e8a449ca5780fdb18b",
+   "bytes": 2570,
+   "gz_bytes": 1448
+  },
+  {
+   "source": "/tmp/grade/w8-1414.txt",
+   "preserved": ".flywheel/grade-evidence/w8-1414.txt.gz",
+   "sha256": "427d842952a698c4e70c19971b2af503372a11c2c4055ec625d887ed120a8371",
+   "bytes": 2583,
+   "gz_bytes": 1457
+  },
+  {
+   "source": "/tmp/grade/w8-common.txt",
+   "preserved": ".flywheel/grade-evidence/w8-common.txt.gz",
+   "sha256": "d21cacd459a1ae6c51012b5c04d04ca4b0e772bd93be0ad5c359de6b33fd800a",
+   "bytes": 2494,
+   "gz_bytes": 1397
+  },
+  {
+   "source": "/tmp/grade/wave-next.txt",
+   "preserved": ".flywheel/grade-evidence/wave-next.txt.gz",
+   "sha256": "fcfbc2afaded054af1b565fec224437e1ad76657d96bdd6c137d6f38d837b629",
+   "bytes": 2440,
+   "gz_bytes": 1431
+  },
+  {
+   "source": "/tmp/grade/wave14-batch-header.md",
+   "preserved": ".flywheel/grade-evidence/wave14-batch-header.md.gz",
+   "sha256": "a0d8c901ffc51d92b529249734d103eea96b882c9fd3ca92a19c796114e742d1",
+   "bytes": 69,
+   "gz_bytes": 83
+  },
+  {
+   "source": "/tmp/grade/wire-ranking.md",
+   "preserved": ".flywheel/grade-evidence/wire-ranking.md.gz",
+   "sha256": "56318d8a35c19509d75c7be0130e1fbd3bf4dfb962861fa91f76db07efe35102",
+   "bytes": 4944,
+   "gz_bytes": 2544
+  },
+  {
+   "source": "/tmp/grade/wiring_proof.rs",
+   "preserved": ".flywheel/grade-evidence/wiring_proof.rs.gz",
+   "sha256": "43915160b81fc849790d887217cb54fffbdea5a216c9fb0386209d08f373aaf9",
+   "bytes": 733,
+   "gz_bytes": 432
+  }
+ ]
+}
