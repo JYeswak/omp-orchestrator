@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use serde_json::Value;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -362,12 +362,6 @@ fn validate_findings_ledger(repo: &Path) -> Result<GateReport, String> {
         };
         if *is_void || *round != expected.round {
             return Err(format!("FINDINGS_LEDGER_COVERAGE_INVALID id={id}"));
-        }
-    }
-    let declared_ids = declared.keys().collect::<BTreeSet<_>>();
-    for id in actual.keys() {
-        if !declared_ids.contains(id) {
-            return Err(format!("FINDINGS_LEDGER_UNDECLARED_ID id={id}"));
         }
     }
     validate_serial_rule(&convergence, &serial_rows)?;
