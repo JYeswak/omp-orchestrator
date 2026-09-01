@@ -273,6 +273,8 @@ hours later. Every one had sat in prose as a settled absence. **An unknown that 
 experiment attached is indistinguishable from a known** — and §10 called one of them "precedent-free
 across 210 repositories" while the precedent shipped in the binary named on line one.
 
+> *Upstream type for this gap: `AgentEndEvent.willContinue` (`extensibility/shared-events.d.ts:154`, WIRE-PROVEN). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+
 ### The loop, per milestone
 
 ```
@@ -315,11 +317,15 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 **Trigger.** The beads DAG (S4) contains a ready, unclaimed, non-epic bead, and a pane is ConfirmedIdle.
 
+> *Upstream type for this gap: `GuestIdleReconcilerCtx` (DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+
 **Dispatch packet.** Bead id + WHAT/WHY/ACCEPTANCE verbatim from the bead body + the file reservation list (`ntm locks`) + the stage's packet-journal append. Dispatched only after `ntm claim <id>` succeeds — an unclaimed send is the `5rh`-to-`%1413` defect (11-lifecycle), measured twice.
 
 **Amazing.** Every dispatch in the wave has: a claim row, a file reservation, a per-target receipt, and a packet-journal record — zero exceptions across a 10-dispatch wave, counted from the journal, not from memory.
 
 **Adequate.** 1:1 dispatch with claim + receipt; fan-out to N panes done as N sequential 1:1 sends with the receipts collected by hand. Costs later: the fan-in barrier does not exist, so a partial wave reads as complete until a human notices (the cp-z42vu class at N scale).
+
+> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 **Negative patterns.** (1) Unclaimed dispatch — `5rh`-to-`%1413`, measured twice (11-lifecycle §S5). (2) Transport success ≠ delivery — `cp-z42vu`, `success:[4]`, packet never arrived (dispatch-silence-watch/src/lib.rs:10-11). (3) Recency over graph — 19 waves dispatched newest-first while PageRank named the articulation point (stand-down confession; live proof `bv --robot-next` → omp-orchestrator-2o5, "Unblocks 2z2.1/2z2.2", score 0.492).
 
@@ -335,6 +341,8 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 **F4 GATES.** Gate: the dispatch claim fence refuses a packet naming an unclaimed bead, and the transport gate refuses a bare success without a receipt. Known-BAD leg (IN-TREE, per beads-north-star): `dispatch-silence-watch`'s cp-z42vu fixture is the planted specimen — a test that feeds `success:["4"]` with no arrival and asserts the verdict is NOT `Delivered`. Exists: yes (dispatch-silence-watch tests). The claim-fence's known-bad: the `Reassigned` arm test. Both in-tree. REFUSES: unclaimed send, receipt-less success, and (the one that does not exist yet) partial fan-in reported as complete.
 
+> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+
 **F5 NUMBERS.** Figures this stage claims, to be declared in NUMBERS.toml on first run: `dispatch_journal_rows` (baseline 0 today — declare with `expect="0"` and ratchet up; NUMBERS gate fails on drift, which IS the ratchet), `unclaimed_dispatches` (expect 0 after the claim wire; any nonzero is a regression), `fanout_partial_waves` (expect 0). Declared today: none — the stage has not run; declaring a number for a stage that has never executed is a figure with no derivation, which is the defect this field exists to kill.
 
 **KNOWN.** 18-edge DAG complete and verified (round 10: scanner-identical); claim fence + dispatch fence built (fence held 4.2h); `ntm claim/locks/message` surfaces probed live; `AgentEndEvent` completion wire-proven `{"type":"agent_end","isTerminal":true}` on `RpcSessionEventFrame`; 162 refused ticks / 4.2h with `DISPATCH_RETRY_BLOCKED`.
@@ -342,6 +350,8 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 **UNKNOWN.** (1) Does per-target receipt survive a multi-target `--robot-send`? Experiment: one 3-pane wave, compare per-target receipts against pane truth. Cost: one wave, ~10 min. (2) Does `ntm claim` hold across a pane restart? Experiment: claim, kill pane, respawn, re-check `ntm locks`. Cost: ~5 min. Both cheap; both run before the first bead of the first wave, per §12.10's cheapest-falsifier rule.
 
 **GAP.** Fan-out/fan-in primitive (barrier + partial-verdict): cost of leaving it missing = every multi-pane wave is N hand-typed sends with hand-collected receipts, and a partial wave is indistinguishable from a complete one — the cp-z42vu class at scale. Packet journal: cost of leaving it missing = every forensic question ("which packet did this?") requires a human memory — measured: the reap could only name "seven conditions living in scrollback."
+
+> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 ### S6 — Grading the work
 
@@ -822,3 +832,76 @@ And the sweep itself nearly returned nothing: the first five queries reported ze
 my grep pattern did not match `jsm`'s output format. **A search that returns empty because the
 parser is wrong looks exactly like a library with no such skill** — the fifteenth instance of that
 class tonight, and the reason the raw output got read before any conclusion was drawn.
+
+### 12.11 Surface coverage: plan-mode, modes, goals
+
+> **ipg.1**: *each surface gets a row in the coverage table with all 8 columns and a classification —
+> (a) not ours, (b) reimplemented by scraping, (c) unused capability.*
+
+**Swept 2026-09-01.** Three type roots, 214 files total, walked to symbol level. The per-crate
+contract's eight clauses are assessed against our crates, not OMP's — the question is *which clauses
+does our ecosystem satisfy for this surface*, not which clauses OMP's own code satisfies.
+
+| surface | OMP files | OMP symbols | 1 asuper | 2 forbid | 3 cancel | 4 typed | 5 logged | 6 observable | 7 robot | 8 WIRED | classification |
+|---|---:|---:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|---|
+| `plan-mode` | 6 | 16 | — | — | — | — | — | — | — | — | **(a) NOT OURS** — thin types (file path + title), our plan system is markdown + beads + CONVERGENCE.jsonl |
+| `modes` | 204 | 843 | ✓¹ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓¹ | **(b) REIMPLEMENTED BY SCRAPING** — tick-monitor reads the rendered output these modes produce |
+| `goals` | 4 | ~30 | — | — | — | ✗ | — | ✗ | ✗ | ✗ | **(c) UNUSED CAPABILITY** — typed goal runtime with token budgets + prompt rendering; we track goals in bead prose |
+
+¹ The ✓s on `modes` are tick-monitor's clauses, not a modes-adopting crate's: tick-monitor
+scrapes the pane text that `modes` renders, satisfying observable/logged/typed/robot-reachable at
+the output level. No crate adopts the `modes` types themselves. The surface is covered at the
+output plane, not at the type plane — and that distinction is the difference between scraping
+(which this classification names) and adoption (which none of these surfaces achieves).
+
+** Positive control: FAILED — zero of three surfaces is FULLY COVERED.** This is the honest result,
+not a broken scan: all three are agent-plane features (plan approval UX, terminal interaction modes,
+goal runtime) and our orchestration layer consumes their *output* (tick-monitor) or *side effect*
+(bead prose) without adopting their *types*. The next wave's surfaces should include at least one
+we fully cover (e.g. `subprocess-contract`, `receiver-receipt`, or `dispatch-claim-fence` — crates
+that exist and are wired), which would satisfy the positive control.
+
+**Anti-vacuity: PASSED** — 3 surfaces enumerated, 214 files walked to symbol level, 0 is not the
+count.
+
+#### Per-surface detail
+
+**`plan-mode` — (a) NOT OURS.** The 16 exported symbols offer `PlanApprovalDetails` (file path +
+title), `ResolvedApprovedPlan` (file path + content + title), `PlanModelTransition`, `PlanProtection`,
+`PlanHandoff`, and plan-file management. 12-journey's own sweep records the honest downgrade:
+*"that is a plan reference and an approval flag … it does not supply the grading or convergence
+protocol S3 actually needs — which this repo had to build from scratch as CONVERGENCE.jsonl and
+convergence.rs."* Our plan system (beads with ACCEPTANCE + CONVERGENCE.jsonl two-lens protocol) is
+strictly more capable than a file-path-and-title pair.
+
+**`modes` — (b) REIMPLEMENTED BY SCRAPING.** The 843 exported symbols are the agent's interaction
+machinery: composer, autocomplete, orchestrate-keyword detection (`containsOrchestrate`),
+workflow-notice rendering (`WORKFLOW_NOTICE`), ultrathink (`ULTRATHINK_NOTICE`), session observer,
+skill commands, markdown prose, terminal UI components. tick-monitor reads the pane text that
+these modes render — the output, not the types. The scraping approach works (the two-capture rule,
+stable-hash stripping, and the exhaustive `classify` match are measured and passing) but it means
+every modes rendering change is a potential tick-monitor defect, which is the coupling cost this
+classification names.
+
+**`goals` — (c) UNUSED CAPABILITY.** The 4 files offer a typed goal runtime: `GoalRuntimeHost`,
+`GoalTurnSnapshot`, `GoalWallClockSnapshot`, `GoalRuntimeSnapshot`, `GoalPromptKind`
+(`"active" | "continuation" | "budget-limit"`), `remainingTokens(goal)`, `goalTokenDelta(current,
+baseline)`, `renderGoalPrompt(kind, goal)`, `renderTrustedObjective(objective)`. The two features
+our ecosystem lacks and OMP provides: **token budgeting** (per-goal token deltas against a baseline,
+which would ground §8.2 Q2's cost question) and **prompt-kind-aware rendering** (active /
+continuation / budget-limit prompts, which would make the dispatch packet builder type-safe). We
+track goals in bead prose; OMP tracks them with typed runtime snapshots and wall-clock budgets.
+The gap is real and the surface is adoptable — but adoption is a decision for the S5 Cost field,
+not this mapping.
+
+#### What would Jeffrey do
+
+`goals` is the one surface where the mirror has prior art: `asupersync`'s obligation-ledger pattern
+(`src/obligation/crdt.rs`, `CrdtObligationLedger`) types the same shape — a long-running objective
+with budget constraints and periodic checkpoints. We already depend on asupersync; the obligation
+types are one `use` away. The gap is not the vocabulary (OMP's `goals` and asupersync's `obligation`
+are the same concept) but the adoption decision: neither surface is consumed, and building a
+third goal-tracker beside beads and the OMP goal runtime would be the 20-mechanisms defect.
+
+NO-CLAIM: mapping is not adopting. (a) not-ours is a legitimate terminal state. The coverage table
+records what exists; the build decision is §09's, not §12.11's.
