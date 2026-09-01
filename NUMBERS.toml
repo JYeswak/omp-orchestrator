@@ -73,13 +73,13 @@ note     = "not a fixed figure — the board moves hourly. Declared so any prose
 
 [figures.test_functions]
 command  = "grep -rhc '#\\[test\\]' crates/*/src/*.rs crates/*/tests/*.rs 2>/dev/null | awk '{s+=$1} END{print s}'"
-expect   = "439"
+expect   = "440"
 appears  = ["docs/plan/01-idea.md", "docs/plan/06-gates.md", "docs/plan/00-brief.md"]
 note     = "THE WORST OFFENDER, and it drifted WHILE THIS ROW WAS BEING WRITTEN. Three live values for one quantity — 370, 379, 402 — found in one round, in three sections. Measured 406, and by the time the parser was fixed it was 407, because writing the unescaper test added five functions. The gate caught drift caused by the commit that created it. Corrected by hand four times tonight and drifted again each time, because every new crate adds tests."
 
 [figures.no_claim_blocks]
 command  = "grep -rc '^\\*\\*NO-CLAIM' docs/plan/*.md 2>/dev/null | awk -F: '{s+=$2} END{print s}'"
-expect   = "44"
+expect   = "45"
 appears  = ["docs/PLAN.md"]
 note     = "the header quantifies the plan's own hedging; it is generated at assembly but never checked against the sections after they are edited."
 

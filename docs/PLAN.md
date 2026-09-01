@@ -2434,6 +2434,68 @@ Adopting any of this means holding a session per worker rather than reading a pa
 change §11.9 already prices as the real cost of the completion-signal adoption. **Nothing here has
 been adopted.** The finding is that we built a scraper where a typed surface existed, three times.
 
+---
+
+## 2.14 Sixth instance, and this one is an hour old
+
+`%1408`, `ipg.5` (`6d3b102`) and `ipg.6`. Two more waves, both all-(a) — the
+orchestration/agent-plane boundary is holding — but two named findings land inside
+our own work.
+
+### `session`: the largest root in the workspace, scraped
+
+78 files, 395 KB, **499 symbols** — bigger than `modes` (843 symbols across 204
+files, but a third of the bytes). `tick-monitor` covers **7 of 8 clauses at the
+output plane and zero at the type plane**: no crate imports any of the 78 session
+`.d.ts` files.
+
+The orchestrator's primary sensor scrapes the surface that types exactly what it
+reads. Running total of typed surface consumed as text: **`modes` 843 + `session`
+499 + `task` (full subagent lifecycle) + `slash-commands` (0 of 136 enumerated) +
+`dap` (a complete DAP client we reimplement with print statements)**.
+
+### `AdvisorSeverity` — the finding that indicts this session
+
+OMP ships, in `dist/types/advisor/advise-tool.d.ts`:
+
+```typescript
+export type AdvisorSeverity = "nit" | "concern" | "blocker";
+export interface AdvisorNote { note: string; severity?: AdvisorSeverity; advisor?: string; }
+export interface AdvisorMessageDetails { notes: AdvisorNote[]; }
+```
+
+A three-level severity **with the grader attributed**. One hour before this was
+found, this session invented `BLOCKER / MAJOR / MINOR` and wrote a NO-CLAIM stating:
+
+> *nothing yet prevents a grader from downgrading a real defect to MINOR to make a
+> section bank … Two candidate defences exist and neither is built.*
+
+`advisor?: string` is one of those defences, shipped in the dependency we already
+depend on. Not analogous — **the same field, for the same reason**.
+
+This is the sixth instance of one pattern: §10 claimed a worker-completion signal
+was precedent-free across 210 repositories while `AgentEndEvent` shipped; `modes`,
+`session`, `task`, `slash-commands` and `dap` are reimplemented from rendered text.
+The distinguishing feature of this instance is **latency**: the other five predate
+tonight. This one was invented, gated, committed, and refuted inside ninety minutes.
+
+### What was adopted, and what was not
+
+**Adopted:** `graded_by` is now a required field on every severity row, with
+`AdvisorNote.advisor` cited as the precedent in `SCHEMAS.toml`. A new gate,
+`every_severity_row_names_its_grader`, fails the build on an unattributed row —
+mutation-verified (strip one row's attribution → RED naming the line; restore →
+byte-identical, green) with anti-vacuity so an empty scan is an error.
+
+**Not adopted:** the level names. Renaming `BLOCKER/MAJOR/MINOR` →
+`blocker/concern/nit` is cosmetic alignment; attribution is the substantive half and
+it is the half we omitted. Importing the type rather than paralleling it is the
+topology change §11.9 prices, still unpaid.
+
+**NO-CLAIM:** attribution does not make severity honest. It makes dishonesty
+*attributable*, which is the most a schema can enforce. The second defence — any
+MINOR touching a `NUMBERS.toml` figure is automatically MAJOR — is still not built.
+
 
 ---
 
@@ -7571,6 +7633,60 @@ plan calls WORKS — but the information it extracts is a lossy projection of wh
 types carry. The golden-frame test (reprobe wave, VALIDATE classification) would pin the
 projection against the vendor's names; the type adoption would eliminate the projection entirely.
 Neither has been built. Both are recorded here.
+
+### 12.15 Surface coverage: eval, if-bench, hindsight, debug, dap, autoresearch, autolearn, advisor
+
+> **ipg.6**: *Wave VERIFY. Skill /brennerbot-with-ntm — a session is a machine for deleting
+> hypothesis space cheaply. Prefer refuters over supporters; no falsifier means no session.*
+
+**Swept 2026-09-01.** Eight type roots, 66 files, 488KB, 533 exported symbols, walked to symbol
+level. All eight are agent-plane quality-improvement or debugging features: eval kernels,
+instruction-following benchmarks, memory retrieval, debug UIs, a full DAP client, self-improvement
+research, self-learning, and an advisory review panel. None crosses the process boundary into our
+orchestration layer.
+
+| surface | OMP files | OMP KB | OMP symbols | 1-8 clauses | classification |
+|---|---:|---:|---:|:-:|---|
+| `eval` | 17 | 216 | 95 | — — — — — — — — | **(a) NOT OURS** — kernel-session eval system: agent bridges, budget/completion/concurrency bridges, runner cache, runtime env, probe |
+| `if-bench` | 5 | 20 | 30 | — — — — — — — — | **(a) NOT OURS** — instruction-following benchmark (glyph array actions, cat-sound directives) |
+| `hindsight` | 9 | 52 | 81 | — — — — — — — — | **(a) NOT OURS** — memory retrieval (MentalModels, RecallTagsMatch, BankScope, HindsightApi, Budget "low"/"mid"/"high") |
+| `debug` | 11 | 44 | 55 | — — — — — — — — | **(a) NOT OURS** — agent debug UI (DebugSelectorComponent, OverlayPanel, formatDebugLogLine) |
+| `dap` | 5 | 40 | 93 | — — — — — — — — | **(a) NOT OURS** — full DAP client (DapClient, waitForTcpServerListening, DapAdapterConfig, resolveAdapter, LaunchAdapterSelection); a typed debugger we reimplement with print statements |
+| `autoresearch` | 7 | 52 | 83 | — — — — — — — — | **(a) NOT OURS** — self-improvement research loop (DashboardController, AutoresearchRuntime, EnsureAutoresearchBranch) |
+| `autolearn` | 2 | 8 | 13 | — — — — — — — — | **(a) NOT OURS** — agent self-learning (AutoLearnController, buildAutoLearnInstructions) |
+| `advisor` | 10 | 56 | 53 | — — — — — — — — | **(a) NOT OURS** — advisory review panel (AdviseParams, AdvisorSeverity "nit"/"concern"/"blocker", AdviseDetails) |
+
+**Positive control: FAILED — 0 of 8 FULLY COVERED.** Fifth consecutive wave. The pattern is now
+exhaustive: every OMP type root splits into orchestration-plane (consumed in wave 1: session-
+adjacent output, subprocess, jsonrpc, cli, commands, slash-commands — 7 consumes edges) and
+agent-plane (not adopted). Eight more agent-plane surfaces confirmed.
+
+**Anti-vacuity: PASSED** — 8 surfaces enumerated, 66 files walked to symbol level, 0 is not the
+count.
+
+#### The two surfaces worth naming
+
+**`dap`** is a full Debug Adapter Protocol client — `DapClient`, `waitForTcpServerListening`,
+`connectSocket`, `getAdapterConfigs`, `resolveAdapter`, `getAvailableAdapters`,
+`LaunchAdapterSelection` — and the bead's own briefing names it: *"a typed debugger surface we
+reimplement with print statements."* When a dispatch goes wrong tonight, the forensic trail is
+`println!` and scrollback. The DAP client exists in the tool we wrap, DECLARED only. Adoption
+would be a debugging-infrastructure decision, not an orchestration change.
+
+**`advisor`** has `AdvisorSeverity: "nit" | "concern" | "blocker"` — a typed severity taxonomy
+that directly parallels our convergence-lens severity tags (BLOCKER/MAJOR/MINOR). The prior art
+is the same shape: a reviewer classifying findings by severity so downstream work can prioritize.
+The vocabulary is one `use` away; the gap is that neither surface is consumed by a crate.
+
+#### Why all eight are (a), and the convergence is complete
+
+Five consecutive waves (ipg.1 through ipg.5, plus this ipg.6) have mapped 20+ OMP type roots and
+every one outside the original 7-consumes-edge set is (a) NOT OURS. The pattern is structural:
+the OMP type roots split into an orchestration plane (session-adjacent output, subprocess,
+jsonrpc, cli, commands, slash-commands — consumed by omp-inventory-map and omp-rpc-session) and
+an agent plane (eval, benchmarks, memory, debug, DAP, self-improvement, advisory — consumed by
+the agent inside the pane, not by the orchestrator outside it). The mapping has converged: the
+boundary is correct, and the remaining roots confirm it rather than challenge it.
 
 
 ---

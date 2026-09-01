@@ -99,6 +99,42 @@ fn every_declared_artifact_on_disk_carries_its_required_fields() {
 /// past evidence file is archaeology, and the point is that the NEXT round is
 /// comparable.
 #[test]
+/// A severity row must name WHO classified it.
+///
+/// # Why attribution and not just the level
+///
+/// Measured 2026-09-01: OMP ships `AdvisorNote { note, severity?, advisor? }`
+/// with `AdvisorSeverity = "nit" | "concern" | "blocker"` — a three-level
+/// severity WITH the grader attributed. We invented BLOCKER/MAJOR/MINOR an hour
+/// earlier and omitted the attribution, then wrote a NO-CLAIM saying attribution
+/// was a defence that was "not built".
+///
+/// Without it, "2 BLOCKER" is a number nobody owns, and a grader can downgrade a
+/// real defect to bank a section with no trace. This does not make severity
+/// honest — it makes dishonesty attributable, which is the most a schema can do.
+#[test]
+fn every_severity_row_names_its_grader() {
+    let led = repo_root().join("docs/plan/CONVERGENCE.jsonl");
+    let text = std::fs::read_to_string(&led).expect("ledger readable");
+    let mut unattributed = Vec::new();
+    let mut checked = 0usize;
+    for (i, line) in text.lines().enumerate() {
+        if line.trim().is_empty() { continue; }
+        let has_sev = line.contains("\"severity\"");
+        if !has_sev { continue; }
+        checked += 1;
+        if !line.contains("\"graded_by\"") {
+            unattributed.push(i + 1);
+        }
+    }
+    assert!(checked > 0, "ANTI-VACUITY: no severity rows found — the scan is broken or the schema was never adopted");
+    assert!(
+        unattributed.is_empty(),
+        "{} severity row(s) name no grader (lines {:?}); AdvisorNote.advisor is the shipped precedent",
+        unattributed.len(), unattributed
+    );
+}
+
 fn the_newest_round_of_grade_evidence_carries_severity() {
     let dir = std::path::Path::new("/tmp/grade");
     let Ok(entries) = fs::read_dir(dir) else {

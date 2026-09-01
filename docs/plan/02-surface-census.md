@@ -1009,3 +1009,65 @@ like. Nothing in either bead distinguishes those two worlds beyond the argument 
 Adopting any of this means holding a session per worker rather than reading a pane — the topology
 change §11.9 already prices as the real cost of the completion-signal adoption. **Nothing here has
 been adopted.** The finding is that we built a scraper where a typed surface existed, three times.
+
+---
+
+## 2.14 Sixth instance, and this one is an hour old
+
+`%1408`, `ipg.5` (`6d3b102`) and `ipg.6`. Two more waves, both all-(a) — the
+orchestration/agent-plane boundary is holding — but two named findings land inside
+our own work.
+
+### `session`: the largest root in the workspace, scraped
+
+78 files, 395 KB, **499 symbols** — bigger than `modes` (843 symbols across 204
+files, but a third of the bytes). `tick-monitor` covers **7 of 8 clauses at the
+output plane and zero at the type plane**: no crate imports any of the 78 session
+`.d.ts` files.
+
+The orchestrator's primary sensor scrapes the surface that types exactly what it
+reads. Running total of typed surface consumed as text: **`modes` 843 + `session`
+499 + `task` (full subagent lifecycle) + `slash-commands` (0 of 136 enumerated) +
+`dap` (a complete DAP client we reimplement with print statements)**.
+
+### `AdvisorSeverity` — the finding that indicts this session
+
+OMP ships, in `dist/types/advisor/advise-tool.d.ts`:
+
+```typescript
+export type AdvisorSeverity = "nit" | "concern" | "blocker";
+export interface AdvisorNote { note: string; severity?: AdvisorSeverity; advisor?: string; }
+export interface AdvisorMessageDetails { notes: AdvisorNote[]; }
+```
+
+A three-level severity **with the grader attributed**. One hour before this was
+found, this session invented `BLOCKER / MAJOR / MINOR` and wrote a NO-CLAIM stating:
+
+> *nothing yet prevents a grader from downgrading a real defect to MINOR to make a
+> section bank … Two candidate defences exist and neither is built.*
+
+`advisor?: string` is one of those defences, shipped in the dependency we already
+depend on. Not analogous — **the same field, for the same reason**.
+
+This is the sixth instance of one pattern: §10 claimed a worker-completion signal
+was precedent-free across 210 repositories while `AgentEndEvent` shipped; `modes`,
+`session`, `task`, `slash-commands` and `dap` are reimplemented from rendered text.
+The distinguishing feature of this instance is **latency**: the other five predate
+tonight. This one was invented, gated, committed, and refuted inside ninety minutes.
+
+### What was adopted, and what was not
+
+**Adopted:** `graded_by` is now a required field on every severity row, with
+`AdvisorNote.advisor` cited as the precedent in `SCHEMAS.toml`. A new gate,
+`every_severity_row_names_its_grader`, fails the build on an unattributed row —
+mutation-verified (strip one row's attribution → RED naming the line; restore →
+byte-identical, green) with anti-vacuity so an empty scan is an error.
+
+**Not adopted:** the level names. Renaming `BLOCKER/MAJOR/MINOR` →
+`blocker/concern/nit` is cosmetic alignment; attribution is the substantive half and
+it is the half we omitted. Importing the type rather than paralleling it is the
+topology change §11.9 prices, still unpaid.
+
+**NO-CLAIM:** attribution does not make severity honest. It makes dishonesty
+*attributable*, which is the most a schema can enforce. The second defence — any
+MINOR touching a `NUMBERS.toml` figure is automatically MAJOR — is still not built.

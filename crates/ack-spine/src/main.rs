@@ -5,6 +5,8 @@
 
 #![forbid(unsafe_code)]
 
+use ack_spine::authorities::{AckAuthority, DeliveryAuthority, ReceiverReceipt, TransportAuthority};
+use ack_spine::spine::{AckSpine, DispatchIntent};
 use ack_spine::{step, StepKind, StepLedger};
 use asupersync::runtime::RuntimeBuilder;
 use asupersync::Cx;
@@ -13,7 +15,7 @@ use std::process::ExitCode;
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() {
-        eprintln!("usage: ack-spine --demo | --selftest");
+        eprintln!("usage: ack-spine --demo | --spine-demo | --selftest");
         return ExitCode::from(2);
     }
 
@@ -45,12 +47,16 @@ async fn run(cx: &Cx, args: &[String]) -> Result<ExitCode, String> {
             demo(cx).await?;
             Ok(ExitCode::SUCCESS)
         }
+        Some("--spine-demo") => {
+            spine_demo(cx).await?;
+            Ok(ExitCode::SUCCESS)
+        }
         Some("--selftest") => {
             selftest(cx).await?;
             Ok(ExitCode::SUCCESS)
         }
         Some(command) => Err(format!("usage error: unknown command {command}")),
-        None => Err("usage: ack-spine --demo | --selftest".to_owned()),
+        None => Err("usage: ack-spine --demo | --spine-demo | --selftest".to_owned()),
     }
 }
 
@@ -159,5 +165,60 @@ async fn selftest(cx: &Cx) -> Result<(), String> {
         .assert_non_empty()
         .map_err(|error| error.to_string())?;
     println!("SELFTEST PASS ack-spine (ledger assertions, anti-vacuity, cancel-consistency)");
+    Ok(())
+}
+
+async fn spine_demo(cx: &Cx) -> Result<(), String> {
+    let pending_path = std::env::temp_dir().join(format!("ack-spine-demo-{}", std::process::id()));
+    let mut spine = AckSpine::new(
+        DispatchIntent::new("cp-spine-demo", "%1409", "omp-orchestrator"),
+        pending_path,
+    );
+    spine.begin(cx).await.map_err(|error| error.to_string())?;
+    spine
+        .packet_rendered(cx)
+        .await
+        .map_err(|error| error.to_string())?;
+    spine
+        .record_transport(
+            cx,
+            TransportAuthority::Succeeded {
+                receipt: "demo-transport-success".to_owned(),
+            },
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    let receipt = ReceiverReceipt::idle_to_working(
+        "%1409",
+        1,
+        "demo-before",
+        "demo-after",
+    )
+    .ok_or_else(|| "invalid demo receiver receipt".to_owned())?;
+    spine
+        .record_delivery(cx, DeliveryAuthority::Observed { receipt })
+        .await
+        .map_err(|error| error.to_string())?;
+    spine
+        .record_ack(
+            cx,
+            AckAuthority::ReadBack {
+                bead_id: "cp-spine-demo".to_owned(),
+                comment_id: "demo-read-back".to_owned(),
+            },
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    let evidence = spine.finish(cx).await.map_err(|error| error.to_string())?;
+    println!("{}", spine.ledger().to_jsonl());
+    println!(
+        "# steps_taken={} rows={} transport={} delivery={} ack={} fully_acknowledged={}",
+        spine.ledger().steps_taken(),
+        spine.ledger().rows().len(),
+        evidence.transport_succeeded(),
+        evidence.delivery_observed(),
+        evidence.acknowledgement_read_back(),
+        evidence.fully_acknowledged()
+    );
     Ok(())
 }
