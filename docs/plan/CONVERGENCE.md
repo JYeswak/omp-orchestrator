@@ -192,9 +192,17 @@ would mean building from a plan nobody has agreed on. Command: `grep -ohE
 1. **A round grades a PIN, not the tree.** Every `CONVERGENCE.jsonl` row from round 22 on carries
    `pin: "<git sha>"`; the grader is dispatched with that sha and reads nothing newer. A fact true
    at the pin is not a finding. Drift after the pin is a re-pin, never a defect.
-2. **One round at a time.** Round N+1 is not dispatched until round N's findings are fixed in
-   place, the section files are committed, and the integrator (`%1397`) cuts the next pin. The
-   pin is a commit; there is no "current" plan between pins.
+2. **One round at a time, and no new round until the backlog is reconciled.** Round N+1 is not
+   dispatched until round N's findings are fixed in place, the section files are committed, and the
+   integrator (`%1397`) cuts the next pin. The pin is a commit; there is no "current" plan between
+   pins. **Tightened by Josh 2026-09-01 (HD-0006):** *no* new round is dispatched until **every
+   declared finding from rounds 15–21** — 219 by count: R15 20 (`CONVERGENCE.jsonl`), R16 89
+   (`round16-*.jsonl`, six eyes), R19 47, R20 25, R21 38 — has a row in
+   `docs/plan/FINDINGS.jsonl` with disposition `FIXED` (commit sha + section), `RETRACTED`
+   (reason, who), or `DEFERRED` (bead id). An `OPEN` row blocks the next round. The four round-22
+   rows written to `CONVERGENCE.jsonl` before this rule (`GreenFrog`, lens
+   `extraction-truth-replayability`, no `pin`) are **VOID** and do not count toward anything; they
+   stay in the file as the record of a round that started under the old rule.
 3. **The drift class is killed once, mechanically, not re-graded.** `file:line` citations become
    construct names (PV8); bare tree counts route through `NUMBERS.toml` keys; a lint refuses new
    bare `:NNN` citations in plan prose, with fixtures in both directions.
