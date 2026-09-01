@@ -189,3 +189,54 @@ fn the_validator_rejects_a_row_missing_a_required_field() {
         "KNOWN LIMIT: substring matching accepts a field name appearing as a value. \
          This assertion documents the weakness rather than pretending it is absent.");
 }
+
+/// A `gates_green` claim must name the SCOPE it was measured at.
+///
+/// # The measured failure
+///
+/// 2026-09-01. Every `gates_green: true` written this session was measured with
+/// `cargo test -p no-shell-gate` — **19 of 118 workspace suites**. At that moment
+/// the full workspace was RED: `porting-gate` did not compile, the porting gate
+/// failed open on a missing subject, and two crates pinned the same collision set
+/// with different values.
+///
+/// So the boolean was true and useless. It read as "the gates pass" and meant "one
+/// sixth of them pass". Thirteen sections were certified against it.
+///
+/// A boolean whose denominator is unstated is the same defect as a figure without
+/// its command — and this repo already has a gate for that one.
+///
+/// # What this cannot do
+///
+/// It checks that a scope is NAMED, not that the named scope was actually run. A
+/// row claiming `workspace` while its author ran a package is undetectable here.
+/// Deriving the claim instead of recording it is the real fix and is unbuilt: it
+/// needs the loop to run the suite itself rather than trust the ledger.
+#[test]
+fn every_gates_green_claim_names_its_scope() {
+    let led = repo_root().join("docs/plan/CONVERGENCE.jsonl");
+    let text = std::fs::read_to_string(&led).expect("ledger readable");
+    let mut checked = 0usize;
+    let mut unscoped = Vec::new();
+    for (i, line) in text.lines().enumerate() {
+        if line.trim().is_empty() || !line.contains("\"gates_green\"") {
+            continue;
+        }
+        checked += 1;
+        if !line.contains("\"gates_scope\"") {
+            unscoped.push(i + 1);
+        }
+    }
+    assert!(
+        checked > 0,
+        "ANTI-VACUITY: no gates_green claims found — the scan is broken or the field \
+         was removed; both are findings, neither is a pass"
+    );
+    assert!(
+        unscoped.is_empty(),
+        "{} row(s) claim gates_green with no gates_scope (lines {:?}).\n\
+         `-p no-shell-gate` is 19 of 118 suites. State which was measured.",
+        unscoped.len(),
+        unscoped
+    );
+}
