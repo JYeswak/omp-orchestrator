@@ -572,7 +572,7 @@ The denominator is now stated in the heading, which is the whole point: *five st
 | consume — selection | decide() picks work | **UNVERIFIED** — no independent selection receipt is recorded |
 | consume — admission | dispatch fence | **FENCED** — the 162 refused-tick/4.2-hour value is historical and unverified; no current refusal-rate figure is claimed |
 | consume — transport | packet delivery | **UNVERIFIED** — cp-z42vu is a historical incident only; the current repository has no planted fixture or receipt payload |
-| actuate | dispatch | **EXISTS AND IS UNFENCED IN THE INSTALLED BINARY** — the resident supervisor sends via `ntm --robot-send`; the "a human types into panes" reading is historical (pre-`kxe`). MEASURED 2026-09-01: build `9a61acd` (208 commits behind HEAD) re-sent bead `815` to `%1408` **131 times in 247 minutes** (11:45–15:53 MDT, one per tick) while the bead stayed `open`/unassigned and the pane was dead on HTTP 402; every row logged `DISPATCHED … RECEIVER_RECEIPT=ntm_robot_send`. Command: `jq -r 'select(.pid==70561 and .status=="DISPATCHED") \| .detail' ~/.local/state/flywheel/omp-orchestrator.heartbeat.jsonl \| sort \| uniq -c`. The claim fence (`dispatch-claim-fence`) exists in the working tree and is called from no committed or installed `main.rs` |
+| actuate | dispatch | **AVAILABLE, NOT VERIFIED** — `send_and_verify` exists at `crates/omp-orchestrator/src/main.rs:714` and is called at `:1461`; the installed 402-dead-pane incident proves an unsafe runtime path, not successful delivery |
 | complete | worker says done | **AVAILABLE, NOT WIRED** — one raw agent_end frame carried isTerminal=true; AgentEndEvent.willContinue is declared upstream, and the supervisor does not consume it |
 
 **The observe row was re-checked against current source after the Round 21 finding.** The current two-capture implementation compares positive timer or stable-hash motion at tick-monitor/src/lib.rs:564-572 before applying the 75-second floor at :574-577. A changed Working pair is Live; an unchanged short-gap pair is Unproven. The earlier block claiming the floor ran first was a historical description, not current behavior.
@@ -992,7 +992,7 @@ are **zero unqualified WORKS rows**:
 | consume | selection | **UNVERIFIED** — no durable receipt here proves the selected work was consumed |
 | consume | transport | **UNVERIFIED** — no durable receipt here proves delivery to the intended worker |
 | consume | admission (decide()) | **FENCED** — the cited report is DISPATCH_RETRY_BLOCKED |
-| actuate | dispatch | **EXISTS, UNFENCED** (corrected 2026-09-01; "does not exist" was the pre-`kxe` reading) — the installed supervisor dispatches via `ntm --robot-send` and, per 00-brief §4, re-sent one unclaimed bead to one 402-dead pane 131 times in 247 minutes |
+| actuate | dispatch | **AVAILABLE, NOT VERIFIED** — `send_and_verify` exists at `crates/omp-orchestrator/src/main.rs:714` and is called at `:1461`; transport and receiver receipt remain unproven |
 | complete | worker says done | **AVAILABLE, NOT WIRED** — OMP exposes AgentEndEvent.willContinue on RpcSessionEventFrame; the local loop does not consume it |
 
 > *Upstream type for this gap: `GuestIdleReconcilerCtx` (DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
@@ -7088,7 +7088,7 @@ Honestly: **three of nine fields, and the bead standard.**
 |---|---|---|
 | F1 schema | `schemas.rs` + `SCHEMAS.toml` | this session |
 | F4 gates bite | `no-shell-gate` mutation legs | this session |
-| F5 numbers | `numbers.rs` + `NUMBERS.toml`, 13 figures | this session |
+| F5 numbers | numbers.rs + NUMBERS.toml, 22 figures | this session |
 | bead shape | `bead_standard.rs` — **plan-derived beads have no ratchet** | this session |
 | F2, F3, field 9 | **nothing** | — |
 
