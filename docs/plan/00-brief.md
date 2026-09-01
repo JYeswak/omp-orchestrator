@@ -511,7 +511,7 @@ The denominator is now stated in the heading, which is the whole point: *five st
 | consume — admission | dispatch fence | **FENCED** — 162 refused ticks over 4.2 hours, `DISPATCH_RETRY_BLOCKED` |
 | consume — transport | packet delivery | **UNVERIFIED** — transport returned `success:[N]` with no packet (`cp-z42vu`); never separately measured |
 | actuate | dispatch | **DOES NOT EXIST** — a human types into panes |
-| complete | worker says done | **DOES NOT EXIST** — every completion this session was found by a human looking |
+| complete | worker says done | **NOT WIRED** — every completion this session was found by a human looking. *Corrected: the row said DOES NOT EXIST until `%1408` found `AgentEndEvent` in OMP's own `dist/types/extensibility/shared-events.d.ts:154`. The signal exists; we do not ride the plane it travels on.* |
 
 **The observe row was downgraded by `ActionsNegative`, and the defect is in the one layer this brief
 called working.** The two-capture rule has a genuine asymmetry: a **changed** content hash proves
@@ -783,7 +783,7 @@ Every row is `OPEN` unless marked. None of these had a home in the document befo
 | Q6 | What happens when OMP changes under us? | **OPEN** — we pin `omp/18.0.11` and have no compatibility policy; 136 slash commands are already unmapped | orchestrator |
 | Q7 | What is the security posture — secrets, tokens, the blast radius of a dispatch? | **OPEN** — `security\|secret\|credential\|token` appears **0 times** in this brief | orchestrator |
 | Q8 | Licensing, for us and for what we vendor? | **OPEN** — `licens` appears **once** across all eleven sections | Josh |
-| Q9 | Is any of this novel, and does novelty matter here? | **OPEN** — §10 found the completion protocol precedent-free across 210 repos, which is the strongest available answer and is not framed as one | orchestrator |
+| Q9 | Is any of this novel, and does novelty matter here? | **ANSWER MOVED** — the strongest novelty claim was §10's completion protocol precedent-free across 210 repos, which is the strongest available answer and is not framed as one | orchestrator |
 | Q11 | Who owns the `composer-typed` policy decision — oracle outside the tree, retire the lane, or the rule's first exemption? | **OPEN** — §3.5 states the trilemma and assigns it to nobody; `%1408` flagged it ownerless twice | orchestrator |
 | Q12 | Who owns the `pi_agent_rust` tmux-missing defect we inherit if we adopt its two-signal probe? | **OPEN** — cited in §3.1 as precedent, never assigned; adopting the pattern adopts the bug | orchestrator |
 | Q10 | **What kills this?** | **PARTIAL** — §09 carries technical kill conditions; none is economic, and no one owns the decision | Josh |
@@ -794,7 +794,7 @@ A kill criterion nobody can evaluate is decoration. Each names its observable.
 
 | # | we stop if… | observable |
 |---|---|---|
-| K1 | the completion protocol cannot be built | §10 Gap 7: precedent-free across 210 work-trees. If two attempts fail, the loop cannot close and the product is a monitor |
+| K1 | the completion protocol cannot be built | **WEAKENED** — §10 Gap 7 is REFUTED: OMP ships `AgentEndEvent` with `willContinue` (`dist/types/extensibility/shared-events.d.ts:154`). Not precedent-free; the open question is whether it reaches the `--mode=rpc` plane. If two attempts fail, the loop cannot close and the product is a monitor |
 | K2 | verification costs more than the review it replaces | no instrumentation exists to detect this — **building the measurement is itself unowned** |
 | K3 | a second machine cannot run it | §07: never attempted; installer hardcodes `/Users/josh` as its fallback home |
 | K4 | the gates get routed around | measurable as: any commit landing with a gate disabled and no named allowance row |

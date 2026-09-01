@@ -134,8 +134,8 @@ workspace ever invokes the ranking tool. Selection this session was the conducto
 recency of his own discovery, which `/beads-bv` names as the cherry-picking pathology, and the
 graph disagreed: the top-3 PageRank items sat unclaimed.
 
-**S6 → S7, work to reap.** There is no worker→conductor completion path at all. §10 Gap 7 measured
-that this is **precedent-free across 210 mirror work-trees** — `SupervisionEvent` has 8 variants and
+**S6 → S7, work to reap.** There is no worker→conductor completion path *wired*. **The type exists** — `AgentEndEvent` at `dist/types/extensibility/shared-events.d.ts:154`, carrying `willContinue` to separate a terminal settle from a scheduled continuation, which is the exact `NewlyIdle`/`ConfirmedIdle` distinction our own filter gets wrong. The gap is adoption, not invention. §10 Gap 7 measured
+that this is precedent-free across 210 mirror work-trees — **since REFUTED: OMP itself ships `AgentEndEvent`; the mirror search never searched the binary we wrap**. Original text: — `SupervisionEvent` has 8 variants and
 `StopReason` 6, and not one of the 14 means *"the worker finished."* Every completion tonight was
 found by a human looking.
 

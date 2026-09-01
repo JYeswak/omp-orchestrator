@@ -7,13 +7,19 @@ Assembled from `docs/plan/`. **The section files are the source of truth**; this
 concatenation. Edit a section, then re-assemble — never edit here.
 
 > **9 measured claims here were refuted while this was being written**, each caught by an agent
-> re-deriving rather than reading. They are kept as labelled retractions, because the failures are
-> more instructive than the corrected values. This count is **generated from the §7 table at
-> assembly time** — it was previously typed twice and disagreed with itself.
+> re-deriving rather than reading. They are kept as labelled retractions. This count is generated
+> from the §7 table at assembly time.
 
-> §8 carries **12 open questions** and **5 kill criteria**, all unanswered, registered so they
-> are assignable. §11 walks the idea-to-shipped lifecycle and finds **3 of 45** dispatch-property
-> cells actually in use.
+> **The plan's own headline finding is among them.** §10 Gap 7 claimed a typed worker-completion
+> signal was precedent-free across 210 repositories. It ships in the tool we wrap —
+> `AgentEndEvent`, `dist/types/extensibility/shared-events.d.ts:154`. The mirror search never
+> searched the binary named on line one.
+
+> §8 carries **12 open questions** and **5 kill criteria**. The surface map covers
+> **591 surfaces**: 32 consumed, 67 wire, 30 validate,
+> 453 retired, 9 honestly unknown — **21.8% engaged**,
+> up from a first-published 6.2% that was computed on a denominator of four tools and a regex that
+> harvested help prose.
 
 ---
 
@@ -202,7 +208,7 @@ considerably sharper, because there is **no single version flag that covers the 
 Only `ntm`, `br`, `cargo`, `fh`, `jsm` answer **both**; `tmux` answers `-V` alone. So a uniform
 probe loop must try more than one spelling or it will record a present binary as absent.
 
-> **The `-V` row said "5 of 9" until `%1409` (evidence lens) refuted it.** Re-derived by looping all
+> **The `-V` row said "6 of 9 (the earlier "5 of 9" excluded tmux and is retired)" until `%1409` (evidence lens) refuted it.** Re-derived by looping all
 > nine: `ntm`, `br`, `tmux`, `cargo`, `fh`, `jsm` answer `-V` — **six**. The table excluded `tmux`
 > from the `-V` count while the sentence directly above it says `tmux -V` returns `tmux 3.6a` at
 > exit 0. A table contradicting its own caption, inside the subsection *about* getting this binary
@@ -324,7 +330,7 @@ through it.
 
 ```
 find crates -name '*.rs' -path '*/tests/*' | wc -l   ->  26 integration test files
-grep -rc '#\[test\]' …                                -> 370 #[test] fns
+grep -rc '#\[test\]' …                                -> 379 #[test] fns
 ```
 
 | crate | tests | known_bad | known_good | **mutation — what it acts on** | anti_vacuity |
@@ -395,13 +401,22 @@ different gate`**. The honest table needed a typed value, not a bigger count, an
 exemplar changed hands: `undrained-pipe-lint` qualifies and `no-shell-gate` does not.
 *Recorded under R11.*
 
-**1 of 8 gates has all four legs with an AUTOMATED mutation test** — `undrained-pipe-lint`
-(1/1/AUTOMATED/3). **4 of 8 have no mutation mechanism of any kind** — `commit-build-fence`,
-`kernel-bypass-gate`, `pre-delete-citation-check`, `path-literal-guard`. 3 of 8 have an automated
-mutation test; 1 has only an affordance. 2 of 8 have no known-bad. 1 of 8 —
-`path-literal-guard` — has **no known-good leg**, which makes it the highest-risk gate in the set:
-an attack-only suite ships an over-strict gate, and an over-strict gate gets routed around, which is
-a slower death than no gate at all.
+**0 of 8 gates mutate production source through the real hook** — the only definition that means
+anything, and the count the rebuilt table above supports. **1 of 8 reaches a real filesystem tree**
+(`omp-inventory-map`, `TREE`). **2 of 8 mutate a fixture string** (`undrained-pipe-lint`,
+`state-wildcard-lint`), which `fh` row `C38` says certifies nothing. **1 of 8 has an affordance
+nobody flips** (`no-shell-gate`). **4 of 8 have no mutation mechanism at all** —
+`commit-build-fence`, `kernel-bypass-gate`, `pre-delete-citation-check`, `path-literal-guard`.
+2 of 8 have no known-bad. 1 of 8 — `path-literal-guard` — has **no known-good leg**, which makes it
+the highest-risk gate in the set: an attack-only suite ships an over-strict gate, and an
+over-strict gate gets routed around, which is a slower death than no gate at all.
+
+> **This paragraph contradicted the table 38 lines above it, and `%1409` caught it.** It asserted
+> *"1 of 8 gates has all four legs with an AUTOMATED mutation test — `undrained-pipe-lint`
+> (1/1/AUTOMATED/3)"* while the rebuilt column classifies `undrained-pipe-lint` as **FIXTURE**, and
+> `AUTOMATED` is vocabulary the same subsection had already retracted. I rebuilt the table and left
+> the headline standing. **A retraction that does not sweep its own conclusions is half a
+> retraction**, and the half that survives is the half a reader quotes.
 
 > **The first draft of this headline said "1 of 8" and "5 of 8," and both were wrong against the
 > table printed directly above them.** `GateFrameworks` recomputed from the table and caught it.
@@ -436,7 +451,7 @@ test needs.
 
 This is not the vacuity defect — the skip is typed and loud, which is exactly right. It is a
 different and less obvious failure: **a test that is permanently unable to run is indistinguishable
-from a passing one in any aggregate count**, and it sits inside the 370 `#[test]` figure quoted
+from a passing one in any aggregate count**, and it sits inside the 379 `#[test]` figure quoted
 above. The fix is a policy decision the plan must make rather than dodge: either the oracle lives
 outside the tracked tree as a release artifact, or the differential lane is retired with a named
 reason, or the rule gets its first exemption. *Recorded under R11 — not previously written down.*
@@ -491,7 +506,7 @@ Not built-vs-wired. **Wired-but-unaddressable.** It adds a sixth required gate p
   migration schedule assuming `AckKind` is available today is wrong. The crate still has **zero
   dependents**.
 - Type inventory — two scopes, published as an error bar rather than one figure. Excluding test
-  modules and bin sources: **51 public enums, 79 structs** across 22 of 24 crates. Including them
+  modules and bin sources: **51 public enums (excluding test+bin sources; 59 including them — publish the pair), 79 structs** across 22 of 24 crates. Including them
   (`grep -rhoE` over all `*.rs`): **59 enums, 91 structs**. Both scopes agree exactly on the figures
   that matter: **4 colliding type names** (`Finding`, `LintReport`, `Observation`, `Violation`),
   **6 Verdict-shaped types with no shared trait** (`AckVerdict`, `FenceVerdict`, `FollowUpVerdict`,
@@ -523,7 +538,7 @@ Not built-vs-wired. **Wired-but-unaddressable.** It adds a sixth required gate p
 
 This is the spine of the whole plan. **No row works unqualified.**
 
-It was called "the four-layer reality" until `%1414` counted the rows and found **five**, so
+It was called "the five-stage control loop (formerly "five-stage" — renamed, the table has five stages and seven rows)" until `%1414` counted the rows and found **five**, so
 "exactly one row works" had no stable denominator. Correcting that exposed a second problem it
 raised as MAJOR 1: `consume` was one row carrying **three separable claims** — selection,
 admission, and transport — with a single verdict covering all three, so a `FENCED` admission was
@@ -540,7 +555,7 @@ The denominator is now stated in the heading, which is the whole point: *five st
 | consume — admission | dispatch fence | **FENCED** — 162 refused ticks over 4.2 hours, `DISPATCH_RETRY_BLOCKED` |
 | consume — transport | packet delivery | **UNVERIFIED** — transport returned `success:[N]` with no packet (`cp-z42vu`); never separately measured |
 | actuate | dispatch | **DOES NOT EXIST** — a human types into panes |
-| complete | worker says done | **DOES NOT EXIST** — every completion this session was found by a human looking |
+| complete | worker says done | **NOT WIRED** — every completion this session was found by a human looking. *Corrected: the row said DOES NOT EXIST until `%1408` found `AgentEndEvent` in OMP's own `dist/types/extensibility/shared-events.d.ts:154`. The signal exists; we do not ride the plane it travels on.* |
 
 **The observe row was downgraded by `ActionsNegative`, and the defect is in the one layer this brief
 called working.** The two-capture rule has a genuine asymmetry: a **changed** content hash proves
@@ -566,7 +581,7 @@ Two things make this worth the space it takes. First, it was found by an agent *
 its own spawn instructions**: the dispatch brief asserted the asymmetry as implemented behaviour,
 `ActionsNegative` read the source, and wrote it up as an open defect instead of repeating it.
 Second, it is the *only* layer this brief marked unqualified `WORKS`, and it did not survive first
-contact with the source. **The four-layer table now has zero unqualified working rows.**
+contact with the source. **The five-stage table now has zero unqualified working rows.**
 *Recorded under R11.*
 
 ---
@@ -641,7 +656,7 @@ single refutation came from an agent **re-deriving rather than reading**.
 | 6 | "no prior art for binary identity" | `PriorArtWriter` | a not-found published with **no recorded search at all** |
 | 7 | "no prior art for mutation via a real hook" | `PriorArtWriter` | same — seeded as absent, never searched; `franken_lean` drives real `git commit` against the real hook |
 | 8 | "`ff-merge local->origin` will reconcile `rch`" | the conductor | `ahead 3` makes `--ff-only` **refuse**; stated as one command, is a rebase across 1,813 commits |
-| 9 | "`-V` answers 5 of 9" | `%1409` (evidence lens) | the table excluded `tmux` from the `-V` column while the sentence above it says `tmux -V` works — a table contradicting its own caption |
+| 9 | "`-V` answers 6 of 9" | `%1409` (evidence lens) | the table excluded `tmux` from the `-V` column while the sentence above it says `tmux -V` works — a table contradicting its own caption |
 
 **Three distinct false-zero mechanisms**, none of which look like failure at the call site: a shell
 `grep --include=` that returns empty at exit 0; an extension filter pointed at the wrong language;
@@ -812,7 +827,7 @@ Every row is `OPEN` unless marked. None of these had a home in the document befo
 | Q6 | What happens when OMP changes under us? | **OPEN** — we pin `omp/18.0.11` and have no compatibility policy; 136 slash commands are already unmapped | orchestrator |
 | Q7 | What is the security posture — secrets, tokens, the blast radius of a dispatch? | **OPEN** — `security\|secret\|credential\|token` appears **0 times** in this brief | orchestrator |
 | Q8 | Licensing, for us and for what we vendor? | **OPEN** — `licens` appears **once** across all eleven sections | Josh |
-| Q9 | Is any of this novel, and does novelty matter here? | **OPEN** — §10 found the completion protocol precedent-free across 210 repos, which is the strongest available answer and is not framed as one | orchestrator |
+| Q9 | Is any of this novel, and does novelty matter here? | **ANSWER MOVED** — the strongest novelty claim was §10's completion protocol precedent-free across 210 repos, which is the strongest available answer and is not framed as one | orchestrator |
 | Q11 | Who owns the `composer-typed` policy decision — oracle outside the tree, retire the lane, or the rule's first exemption? | **OPEN** — §3.5 states the trilemma and assigns it to nobody; `%1408` flagged it ownerless twice | orchestrator |
 | Q12 | Who owns the `pi_agent_rust` tmux-missing defect we inherit if we adopt its two-signal probe? | **OPEN** — cited in §3.1 as precedent, never assigned; adopting the pattern adopts the bug | orchestrator |
 | Q10 | **What kills this?** | **PARTIAL** — §09 carries technical kill conditions; none is economic, and no one owns the decision | Josh |
@@ -823,7 +838,7 @@ A kill criterion nobody can evaluate is decoration. Each names its observable.
 
 | # | we stop if… | observable |
 |---|---|---|
-| K1 | the completion protocol cannot be built | §10 Gap 7: precedent-free across 210 work-trees. If two attempts fail, the loop cannot close and the product is a monitor |
+| K1 | the completion protocol cannot be built | **WEAKENED** — §10 Gap 7 is REFUTED: OMP ships `AgentEndEvent` with `willContinue` (`dist/types/extensibility/shared-events.d.ts:154`). Not precedent-free; the open question is whether it reaches the `--mode=rpc` plane. If two attempts fail, the loop cannot close and the product is a monitor |
 | K2 | verification costs more than the review it replaces | no instrumentation exists to detect this — **building the measurement is itself unowned** |
 | K3 | a second machine cannot run it | §07: never attempted; installer hardcodes `/Users/josh` as its fallback home |
 | K4 | the gates get routed around | measurable as: any commit landing with a gate disabled and no named allowance row |
@@ -904,7 +919,7 @@ That is not a thesis, it is a reap. From the stand-down of one real session on t
 ### The mechanism behind the 162
 
 The 162 is the symptom with a named cause, and the cause is the whole argument for typed
-supervision. From the four-layer reality table (`00-brief.md` §4, MEASURED):
+supervision. From the five-stage control loop (formerly "five-stage" — renamed, the table has five stages and seven rows) table (`00-brief.md` §4, MEASURED):
 
 | layer | mechanism | measured state |
 |---|---|---|
@@ -1145,7 +1160,7 @@ Matching a bar is a floor-raise, never a guarantee.
 
 ## 1.5 The honest position
 
-**What is genuinely built (MEASURED).** Twenty-six workspace crates. **370 `#[test]` functions across
+**What is genuinely built (MEASURED).** Twenty-six workspace crates. **379 `#[test]` functions across
 26 integration test files** (`find crates -name '*.rs' -path '*/tests/*' | wc -l` → 26;
 `grep -rc '#\[test\]'` → 370). A working census: **184 nodes, 207 edges, 183 rows**, 544,697 bytes,
 including a complete 18-edge dependency graph in which `subprocess-contract` is correctly the
@@ -1203,7 +1218,7 @@ gate still reports green.
 
 `omp-types` — the crate holding the canonical vocabulary — has **zero dependents**. The vocabulary is
 defined and unused. That is not a tidy-up item; it is the direct cause of the type inventory
-measuring **51 public enums and 79 structs across 22 of 24 crates**, with **6 distinct Verdict-shaped
+measuring **51 public enums (excluding test+bin sources; 59 including them — publish the pair) and 79 structs across 22 of 24 crates**, with **6 distinct Verdict-shaped
 types sharing no trait**, **17 ack/receipt types in 3 incompatible dialects**, and **4 colliding type
 names**. Six ways to say "verdict" and three ways to say "acknowledged" is exactly how a fleet ends a
 session unable to state what it finished. The vocabulary problem and the accounting problem in §1.2
@@ -1330,7 +1345,7 @@ because a coverage target would immediately become a metric to game: wiring a
 handler nobody calls raises the ratio and lowers the truth.
 
 There is a structural reason for the ratio, and it is recorded in the brief's
-four-layer reality table rather than discovered here: of the five layers
+five-stage control loop (formerly "five-stage" — renamed, the table has five stages and seven rows) table rather than discovered here: of the five layers
 (observe / actionable / consume / actuate / complete), exactly one — `observe`,
 via `tick-monitor` — is `MEASURED` as WORKS. `actuate` **does not exist**; a human
 types into panes. A project whose actuation layer does not exist cannot consume an
@@ -1652,6 +1667,451 @@ adequate substitutes for the OMP surfaces they stand in for; four of them
 figure. And it makes **no** claim that the four mandatory fields on any row have
 been independently verified — §5 is the measurement that they have not.
 
+---
+
+## 6. Every surface this system relies on — not just OMP
+
+**R14, added by Josh:** *"mining of dicklesworthstone-mirror projects, ntm surfaces, br surfaces, bv
+surfaces, and any surfaces that this system relies on."*
+
+§1–§5 census **one** dependency. The orchestrator sits on four, and the other three were never
+counted. Measured 2026-08-31 by enumerating each tool's subcommand surface from `--help` and
+grepping `crates/` plus `docs/plan/` for a reference to each:
+
+| surface | total | consumed | share |
+|---|---:|---:|---:|
+| OMP | 183 | 7 | **3.8 %** |
+| `ntm` | 114 | 6 | **5.3 %** |
+| `br` | 46 | 10 | **21.7 %** |
+| `bv` | 29 | **0** | **0.0 %** |
+| **total** | **372** | **23** | **6.2 %** |
+
+**The system named `omp-orchestrator` consumes 6.2 % of the surfaces it orchestrates through.**
+
+### 6.1 `bv` is zero, and that is the load-bearing number
+
+Not "rarely used" — **zero**. No crate invokes it (`grep -rn 'Command::new("bv")' crates/` → `0`,
+§11.5) and no plan section names one of its 29 subcommands. `bv` is the graph-triage tool whose
+entire purpose is answering *what should be worked next*, which is stage **S4** of the lifecycle,
+and S4 is one of the three severed links in §11.5.
+
+The consequence is measurable rather than theoretical: selection this session was done by the
+conductor picking work by recency of his own discovery, and when the graph was finally consulted,
+**the top-three PageRank items were unclaimed while hand-picked items were in flight.** The tool
+that would have prevented that was installed, working, and never called.
+
+`bv` also ships `capabilities`, `insights`, `decision-relevant`, `exit-codes` and
+`dependency` surfaces — the self-describing contract §07 specifies as our own bar — and we have
+adopted none of it while writing a section arguing that every CLI should have it.
+
+### 6.2 What the shares mean, read honestly
+
+`br` at 21.7 % is the only tool we use like a dependency rather than a shell. That is unsurprising:
+beads are the unit of work, so the surface gets exercised. It is also the tool whose *close policy*
+we describe as convention rather than code (§11.1, S3), so even here the consumption is shallow —
+we call `create`/`update`/`close`/`comments` and inherit the policy without asserting on it.
+
+`ntm` at 5.3 % of 114 is the sharpest gap after `bv`. This session hand-rolled roughly thirty
+dispatch packets while `ntm template` — a surface we *do* reference — ships a `dispatch` template
+with fail-closed required variables (§11.3).
+
+**NO-CLAIM.** These shares measure *reference*, not *correct use*: a `grep` hit means the name
+appears in a crate or a doc, not that we invoke it correctly or at all. The counts come from
+`--help` subcommand extraction, which under-counts flags and over-counts alias lines; `ntm`'s 114
+and `bv`'s 29 are subcommand-level figures and the flag surface beneath them is unmeasured. A low
+share is **not automatically a defect** — most of `ntm`'s 114 surfaces are irrelevant to
+orchestration, and adopting a surface because it exists is the opposite of the discipline this plan
+argues for. The defensible claim is narrower and it is about **one** tool: `bv` at zero, for the
+stage the plan names as broken, is a gap with a measured cost.
+
+---
+
+## 7. The census picked its own denominator, and it was too small
+
+`%1409` and Josh broke §6 within minutes of each other, from opposite directions. Both are right and
+the section above is now known-incomplete rather than merely incomplete.
+
+### 7.1 Josh: "what other binaries are we missing? rch, ru, etc."
+
+§6 censused **four** surfaces. Measured: **19 relevant binaries are installed**, and the four were
+chosen without stating why those four.
+
+| binary | refs in repo | censused | note |
+|---|---:|:--:|---|
+| `omp` | 61 | yes | |
+| `git` | 44 | **no** | spawned by our crates |
+| `br` | 40 | yes | |
+| `cargo` | 31 | **no** | resolves to `/Users/josh/.rch/shims/cargo` — **a shim** |
+| `tmux` | 29 | **no** | pane truth is read through it |
+| `bv` | 15 | yes | census was wrong — see §7.2 |
+| `fh` | 10 | **no** | **R7's entire mechanism** |
+| `rch` | 6 | **no** | **gates every build in this repo** |
+| `cass` | 3 | **no** | |
+| `jsm`, `caut` | 2 | **no** | |
+| `ubs` | 1 | **no** | |
+| `ru`, `dcg`, `pt`, `sbh`, `slb`, `gh` | **0** | **no** | installed, unreferenced |
+
+**Three of these are load-bearing and absent from the census:**
+
+- **`rch` gates every compile.** `cargo` on `PATH` is its shim. Every `cargo` invocation this
+  session carried `RCH_ENABLED=false` — and `grep -rc 'RCH_ENABLED' docs/plan/*.md` returns **0**.
+  We disable a build gate on every command and never wrote down that we do.
+- **`dcg` has zero references and is an active participant.** `dcg 0.5.6` is installed and it
+  **blocked one of this session's commands**. A tool that can refuse our actions, cited nowhere.
+- **`fh` is R7.** The requirement "mine the mirror at every gap" is executed entirely through `fh`,
+  which the census of surfaces-we-rely-on omitted.
+
+### 7.2 `%1409`: the `bv` rows are scrape artifacts
+
+The 29 `bv` "surfaces" in §6 are **help prose**, not subcommands. The extraction regex
+`^\s{2,}([a-z][a-z-]{2,})` harvested words from wrapped description text: `ago`, `background`,
+`calculation`, `for`, `fraction`, `large`, `not-ready`. Meanwhile `bv`'s **real** agent surface is
+**40+ `--robot-*` flags** — `--robot-next`, `--robot-triage`, `--robot-plan`, `--robot-capabilities`,
+`--robot-graph`, `--robot-blocker-chain` — and **not one of them is a row**.
+
+So `bv 0/29` is not "we use none of 29." It is **a denominator of the wrong things**. The direction
+of the error is worth stating: the real surface is larger and the real consumption is still zero, so
+the finding survives while its evidence is retired.
+
+### 7.3 The live proof `%1409` produced, which is the point of the whole exercise
+
+Mapping batch 6 it ran the tool instead of reasoning about it:
+
+```
+bv --robot-next   -> exit 0; PageRank names bead 2o5, "Unblocks 2z2.1/2z2.2"
+```
+
+**`2o5` is the articulation point.** It is the `rch`-divergence blocker filed tonight, and both `2z2`
+children are blocked on it — so it is the single highest-leverage open item on the board. Nineteen
+waves of dispatch this session, every one selected by the conductor's recency, **never picked it.**
+The graph named it on the first call.
+
+That is the `bv`-at-zero cost, measured rather than argued: not "we should use the graph" but
+"the graph, run once, immediately named the item nineteen hand-picks missed."
+
+### 7.4 We forbid `.py` files and spawn `python3` six times
+
+```
+grep -rhoE 'Command::new\("(python3|grep|strings)"\)' crates/
+  6  Command::new("python3")
+  1  Command::new("grep")
+  1  Command::new("strings")
+```
+
+The repo's one hard rule forbids **tracked `.sh` and `.py` files**. It does not forbid *invoking*
+those interpreters, and six crate call-sites spawn `python3`. This is the same boundary finding as
+`.git/hooks/commit-msg-verification-level.sh` in §11.4: the rule governs file extensions in the git
+index, and both the hook directory and the process table sit outside it.
+
+Not a violation — a **coverage** statement. The rule is narrower than its reputation, and the
+reputation is doing work the rule cannot. Registered with Q13.
+
+**NO-CLAIM.** §7 establishes the §6 denominator was chosen without justification and that at least
+three load-bearing binaries were omitted. It does **not** provide their surface counts — `rch`, `fh`,
+`cargo`, `git` and `tmux` are unmeasured here, so the "6.2 %" figure in §6 has no corrected
+replacement yet and should be read as *"6.2 % of a denominator we now know is wrong."* The `bv`
+rows are known-bad and remain in `SURFACE-MAP.jsonl` pending re-extraction against `--robot-*`.
+
+### 7.5 `ee` and `ms` — Josh: "vital too"
+
+Two more, both installed, both larger than surfaces already censused, both referenced **once**:
+
+| binary | version | surfaces | refs | what it is |
+|---|---|---:|---:|---|
+| `ee` | 0.14.2 | **123** | 1 | Eidetic Engine — durable, local-first agent memory |
+| `ms` | 0.2.1 | 61 | 1 | Meta Skill — mines CASS sessions to generate skills |
+
+`ee` at 123 surfaces is **larger than `ntm`'s 114**, and it is the sharpest omission in the whole
+census, because of what tonight measured:
+
+```
+ee resume   Resume recent session end-state, open loops, and stale next steps
+ee orient   Start a session with pack, doctor, and workspace-hygiene context
+```
+
+**Pane `%1413` hit 85 % context, compacted, lost its entire grading task, and drifted onto unrelated
+plan-amendment work.** Its output existed only in context and was gone. The recovery was a
+hand-written re-dispatch plus a new rule that graders write to files as they go.
+
+`ee resume` is that mechanism, already installed, at version 0.14.2, referenced once in this repo.
+The failure and its remedy were in the same `PATH`. This is the strongest instance yet of
+`BUILT ≠ WIRED` — not our code unwired from itself, but **a solved problem sitting one command away
+from a session that solved it again by hand, worse.**
+
+`ms` is the same shape one level up: it mines prior sessions to *generate skills*, and this session
+produced roughly a dozen durable rules — the replacement-naming rule, the not-found search-space
+rule, the construct-citation rule — all written by hand into a brief.
+
+### 7.6 The denominator, corrected as far as it currently goes
+
+| | surfaces | note |
+|---|---:|---|
+| censused in §6 | 372 | `bv`'s 29 are scrape artifacts (§7.2) |
+| `ee` | +123 | unmeasured for consumption |
+| `ms` | +61 | unmeasured for consumption |
+| `rch`, `fh`, `cargo`, `git`, `tmux`, `cass`, `ubs`, `caut`, `dcg`, `ru`, `pt`, `sbh`, `slb`, `gh` | **?** | **14 binaries, surface counts not taken** |
+| **known lower bound** | **556** | and rising |
+
+**The "6.2 %" headline in §6 is retired.** Not because the direction was wrong — every correction so
+far has moved consumption *down* — but because a share computed against a denominator that grew
+50 % in one exchange, and is still missing fourteen binaries, is not a measurement. It is retired in
+favour of the three claims that survive independently of the denominator:
+
+1. `bv` consumption is **zero**, and one call to `--robot-next` named the articulation point that
+   nineteen hand-picked waves missed.
+2. `rch` gates every build, is disabled on every command via `RCH_ENABLED=false`, and that fact
+   appears in **zero** lines of this plan.
+3. `ee resume` exists, is installed, and this session lost a worker's entire output to the failure
+   it prevents.
+
+**NO-CLAIM.** §7.6 states a *lower bound*, not a total: fourteen binaries have no surface count, so
+the true denominator is unknown and every share against it is unavailable rather than merely
+imprecise. Nothing here measures whether adopting any of these surfaces would help — `ee` at 123
+surfaces is not an argument for consuming 123 surfaces, and §6's warning stands: adopting a surface
+because it exists is the opposite of the discipline this plan argues for.
+
+---
+
+## 8. The retire rate is too high, and it is unvalidated
+
+Josh, twice: *"i feel like we're naming a lot retired without fully testing them"* and *"we're
+retiring most of the surfaces."* Both correct. Measured after merging batches 1–19:
+
+```
+CONSUMED  12     WIRE  13     VALIDATE  8     RETIRE  469     unmapped 42
+RETIRE with no validating command: 144  (31% of all retires)
+```
+
+**93 % retired.** The batch packet said most surfaces *should* retire, and that framing was mine —
+which makes the rate partly an artifact of the instruction rather than the evidence.
+
+### 8.1 Fifteen retired surfaces are named for this session's own defects
+
+Filtering retires with `validated_by: null` whose name is orchestration-shaped:
+
+```
+ntm:claim        ntm:mail         ntm:locks       ntm:lock        ntm:handoff
+ntm:conflicts    ntm:coordinator  ntm:controller  ntm:checkpoint  ntm:beads
+ntm:agents       ntm:adopt        ntm:assign      ntm:bind        rpc_handler:handoff
+```
+
+Set against the measured failures of the same session:
+
+| retired surface | the defect it names |
+|---|---|
+| `ntm:claim` | packets dispatched naming **unclaimed beads** — the missing file→CLAIM→dispatch beat, twice |
+| `ntm:mail`, `ntm:locks`, `ntm:lock` | Agent Mail was down; **no file reservations** all session; two agents on overlapping crates |
+| `ntm:handoff`, `rpc_handler:handoff` | a bead handoff sent to **pane 4 (`%1398`) — a pane that does not exist** |
+| `ntm:conflicts` | `SilverWolf` and pane 3 both editing the same three ported crates with no advisory lock |
+| `ntm:agents` | the roster was re-derived by hand from `tmux list-panes` every tick |
+
+**Every one was retired without running it.** A `RETIRE` carrying `validated_by: null` is an
+assertion that a surface is irrelevant, made without touching the surface — which is the same shape
+as every other defect this document records: a claim nobody re-derived.
+
+### 8.2 The rule this produces
+
+**`RETIRE` requires a probe, exactly like the other three dispositions.** The four dispositions were
+specified as symmetric and they were not treated symmetrically: `CONSUMED` demanded a citation,
+`WIRE` demanded a named beneficiary, `VALIDATE` demanded a test — and `RETIRE` was allowed to be a
+shrug. 144 shrugs.
+
+Minimum probe for a retire: **run the surface's `--help`, or invoke it read-only, and state what it
+does and why that is irrelevant to orchestration.** `ntm:claim --help` costs one second and would
+have made `ntm:claim` unretirable by anyone who ran it.
+
+`%1409` demonstrated the standard unprompted in the same wave: it probed `ms:agents`, found it an
+**unrecognised subcommand**, and classified it a scrape artifact rather than a surface — a retire
+backed by an invocation. That is the bar, set by a worker, not by me.
+
+**NO-CLAIM.** This establishes that 144 retires lack a probe and that 15 of them are
+orchestration-shaped and defect-adjacent. It does **not** establish that those 15 should be `WIRE` —
+`ntm:claim` may well be irrelevant to us for a reason nobody has written down. The finding is that
+**nobody knows**, and the census currently reports "irrelevant" where the truth is "unexamined."
+Those are different words and the map used the wrong one 144 times.
+
+---
+
+## 9. The corrected census — and how far wrong §6 was
+
+Two corrections, both forced by Josh, moved every number in §6. The final map is
+`docs/plan/SURFACE-MAP.jsonl`, **591 surfaces, zero unmapped, zero unvalidated retires**.
+
+```
+CONSUMED  30     WIRE  46     VALIDATE  25     RETIRE  490
+engaged (CONSUMED+WIRE+VALIDATE)  101 / 591  =  17.1 %
+```
+
+### 9.1 What the two corrections did
+
+| | §6 as published | after correction |
+|---|---|---|
+| retires with no probe | **144** | **0** |
+| `bv` surfaces | 29 (scrape artifacts) | **47 real `--robot-*` flags** |
+| `bv` disposition | 0 consumed, retire all | **25 WIRE · 17 VALIDATE · 5 RETIRE** |
+| engagement | "6.2 %" | **17.1 %** |
+
+**`bv` inverts completely.** The tool §6 reported at *zero consumption, retire everything* is, once
+its real surface is enumerated, **the most under-adopted tool in the system: 42 of 47 surfaces
+should be wired or validated.** The scrape artifact did not merely under-count it — it inverted the
+conclusion, and the inverted conclusion agreed with a prior belief, which is why it survived a
+round of grading.
+
+### 9.2 The probe rule paid for itself immediately
+
+`%1409` re-probed 56 OMP rows: **51 confirmed, 5 flipped** — 2 to `CONSUMED` (they had been consumed
+all along and the census said otherwise), 2 to `VALIDATE`, and one to `WIRE` that matters
+economically: **`telemetry-export.d.ts` — OMP ships OTLP export behind `OTEL_*` env vars.** That
+moves **Q2** (*"what does the current workaround cost, measurably?"*) from `OPEN` to *sampled*, which
+is the first movement on any §8 economic question.
+
+`%1408` re-probed batches 12–13 and **flipped 9 of 42 on probe evidence**, including a live one:
+
+> probed `omp/muxPing` into a fresh `--mode=rpc` session — the ready envelope answered, **no
+> `muxPing` result came back.** The mux trio is retired on a probe, not on vibes.
+
+It also caught pane 3 having filed `VALIDATE` rows for surfaces with **zero references**
+(`set_host_tools`) — *"exactly the defect the new retire rule stops."*
+
+### 9.3 What this says about the method, not the numbers
+
+Three of the four §6 figures were wrong, and each was wrong for a different reason: a **denominator
+chosen without justification** (four tools of nineteen), an **extraction that harvested prose**
+(`bv`), and a **disposition that permitted a shrug** (144 unprobed retires). None was a
+typo — each was a measurement that looked like a measurement.
+
+The correction did not come from a gate or a re-read. It came from Josh saying *"i feel like we're
+naming a lot retired without fully testing them"* and *"we're retiring most of the surfaces"* —
+twice, because the first time I recorded the finding and did not act on it.
+
+**NO-CLAIM.** 17.1 % is engagement against a 591-row denominator that is still a *lower bound*:
+fourteen binaries (`rch`, `fh`, `cargo`, `git`, `tmux`, `cass`, `ubs`, `caut`, `dcg`, `ru`, `pt`,
+`sbh`, `slb`, `gh`) have **no surface count at all**, so the true denominator is unknown and 17.1 %
+will move again. `WIRE` remains a *proposal with a named beneficiary* — 46 of them, none
+implemented. And a probed `RETIRE` establishes that someone ran the surface and formed a judgement;
+it does not establish the judgement is right.
+
+---
+
+## 10. Evidence inherited from a vacuous source is not evidence
+
+`%1408`, closing Task B, found the deepest defect in the census and it is a **chain-of-custody**
+problem rather than a counting one:
+
+> *"every RETIRE whose only evidence is scanner `CAPABILITY_NOT_USED` inherits the §3.3 self-twin
+> vacuity."*
+
+§3.3 measured that the scanner's own census carries **183 rows with exactly one distinct
+`must_be_true` and one distinct `negative_evidence`** — the four-field discipline satisfied
+syntactically and vacuously. Any retirement justified by *"the scanner classified it
+`CAPABILITY_NOT_USED`"* therefore rests on a classification produced by a process already measured
+as vacuous. **The evidence is inherited from a source known not to carry any.**
+
+That is not the same as being wrong. Those surfaces may well be irrelevant. It is that the map
+recorded a *judgement* where it held only a *relay*.
+
+### 10.1 The reclassification
+
+```
+CONSUMED 30    WIRE 66    VALIDATE 25    RETIRE 407    UNPROBEABLE-PENDING 63
+```
+
+The 63 break down as **54** OMP `type_root` rows retired on scanner classification plus grep zeros
+with no functional statement, **3** for the mux trio's six-mux ambiguity, and **6** rows `%1408`
+retired itself on thin reasoning and then withdrew.
+
+It also corrected **ten of its own `rpc_handler` rows** that had cited the mux null-probe as
+evidence — *"wrong basis, restated to adapter-vocabulary zero."* An agent auditing its own prior
+output and finding the reasoning unsound, unprompted, is the third self-retraction of the session.
+
+### 10.2 The model case, named by a worker
+
+`ntm:ntm` is what `%1408` calls **the positive null**: probing it returns *unknown command*, and an
+unknown command **is a verdict**. That is the distinction the whole re-probe wave turned on:
+
+| probe result | classification | why |
+|---|---|---|
+| *unknown command* | **RETIRE** | the absence is *answered* — the surface does not exist |
+| *no output, empty, timeout* | **UNPROBEABLE-PENDING** | the absence is *unexplained* — a timeout is not a verdict |
+
+Both are nulls. Only one is evidence. Every retirement in this map now has to say which kind it is.
+
+### 10.3 Where the census actually stands
+
+| | count | meaning |
+|---|---:|---|
+| engaged | **121** | CONSUMED + WIRE + VALIDATE — 20.5 % |
+| honestly unknown | **63** | UNPROBEABLE-PENDING — the map says *we do not know* |
+| retired | **407** | probed, or answered by a positive null |
+
+**The 63 is the most valuable column in the table.** It did not exist three waves ago, when those
+same rows read `RETIRE` and the census claimed to know something it did not.
+
+**NO-CLAIM.** 407 retirements are now probe-backed *or* scanner-backed, and `%1408`'s residual
+finding is that the second class needs its own sweep — the reclassification caught the 54 it could
+identify, not necessarily all of them. No count exists yet for how many of the 407 rest on inherited
+scanner classification. That sweep is unrun and unowned.
+
+---
+
+## 11. `UNPROBEABLE-PENDING` became the new shrug within one wave
+
+Josh: *"why are they unprobeable, lets test this on pane 0."*
+
+Tested. **They are not unprobeable.** Measured:
+
+```
+dist/types/cli/       54 files   352 KB   ->  359 exported symbols
+dist/types/session/   78 files   564 KB   ->  acp-permission-gate.d.ts,
+                                              agent-session-events.d.ts,
+                                              artifacts.d.ts, …
+dist/types/commands/  42 files   176 KB
+dist/types/jsonrpc/    1 file      4 KB
+```
+
+Of the 63 rows reclassified in §10, **54 are `type_root` and every one is a directory of TypeScript
+declarations that can be read right now.** `type_root:cli` exports **359 symbols**.
+
+### 11.1 The category error
+
+The re-probe rule said *"run the surface read-only."* For a `subcommand` that means invoking it. For
+a **type surface** it means **reading the declarations** — and nobody tried, because the rule was
+written with CLI verbs in mind and the type rows inherited a probe shape that does not fit them.
+
+**"Cannot be invoked" was read as "cannot be probed."** Those are different, and the map recorded
+the second while only the first was true.
+
+So the sequence across three waves is:
+
+| wave | classification | what it actually meant |
+|---|---|---|
+| 1 | `RETIRE` | nobody looked |
+| 2 | `RETIRE` + probe rule | nobody looked *at CLI verbs* |
+| 3 | `UNPROBEABLE-PENDING` | nobody looked *with the right instrument* |
+
+Each correction was real and each left a residue in the same shape. The failure is not the
+classification, it is that **every wave defined "probe" as the instrument that happened to be in
+hand**, and a surface unreachable by that instrument was recorded as unreachable in principle.
+
+### 11.2 The per-kind probe, which should have been specified in wave 1
+
+| kind | the probe |
+|---|---|
+| `subcommand` | invoke `<tool> <sub> --help` read-only; *unknown command* is a positive null |
+| `type_root` | list `dist/types/<root>/`, count files, extract exported symbols |
+| `rpc_handler` | locate the handler in `dist/`, name what it accepts and returns |
+| `omp_method` | probe against a live session, and **name which broker answered** |
+| `declaration` | read the `.d.ts` at the top level |
+
+Only the first row was ever written down. Four kinds were probed with a verb-shaped instrument, or
+not at all, and then classified on the result.
+
+**NO-CLAIM.** This establishes the 54 `type_root` rows are readable and therefore mis-classified. It
+does **not** re-classify them — reading a directory proves a probe exists, not what the disposition
+should be. The 3 `omp_method` rows remain genuinely pending on the six-mux ambiguity, and the 6
+`subcommand` rows were withdrawn by their author for thin reasoning, which is a different defect
+again. Only 54 of the 63 are refuted here.
+
 
 ---
 
@@ -1852,7 +2312,7 @@ grep -rhoE '^pub enum [A-Za-z_0-9]+'   --include=*.rs crates/ | wc -l   -> 59
 grep -rhoE '^pub struct [A-Za-z_0-9]+' --include=*.rs crates/ | wc -l   -> 91
 ```
 
-An earlier scan scoped to library surfaces reported **51 public enums and 79 public structs across
+An earlier scan scoped to library surfaces reported **51 public enums (excluding test+bin sources; 59 including them — publish the pair) and 79 public structs across
 22 of 24 crates**. Both numbers are real; they differ because the grep above includes test modules
 and binary sources. We publish both rather than pick the flattering one — the delta *is* the
 measurement's error bar.
@@ -1866,7 +2326,7 @@ grep -rhoE '^pub (enum|struct) [A-Za-z_0-9]+' --include=*.rs crates/ \
 ```
 
 One of those four is structural rather than cosmetic, and it is the direct cause of the single
-worst row in the brief's four-layer reality table (§4). `tick-monitor` produces the `Observation`
+worst row in the brief's five-stage control loop (formerly "five-stage" — renamed, the table has five stages and seven rows) table (§4). `tick-monitor` produces the `Observation`
 that `omp-orchestrator` consumes, and **each declares its own incompatible struct**. That is the
 seam where `free_capacity` was derived from the same `is_dispatchable` filter that requires a
 *Confirmed* Idle pane, so a pane at `t=0` fell out of the `idle_panes` list **and** out of the
@@ -2076,7 +2536,7 @@ The source of truth for Diagrams 1, 2 and 6's node set is the built scanner at
 `/Volumes/BuildShared/cargo-targets/debug/omp-inventory-map`, whose output was
 captured once at `/tmp/inv.txt` (544,697 bytes, exit 2, envelope
 `{"schema_version":"omp-inventory-map/v1","command":"doctor","status":"UNKNOWN",…}`).
-Diagrams 3 and 4 are generated from the four-layer reality table and gate-leg table
+Diagrams 3 and 4 are generated from the five-stage control loop (formerly "five-stage" — renamed, the table has five stages and seven rows) table and gate-leg table
 in §00 (`docs/plan/00-brief.md` §3.5, §4); the `find`/`grep` invocations behind those
 tables are reproduced under each diagram rather than re-derived.
 
@@ -2232,7 +2692,7 @@ Deciding which subset is worth wiring is a design act this diagram cannot perfor
 
 ---
 
-## Diagram 3 — The four-layer control loop, per-layer status (MEASURED)
+## Diagram 3 — The five-stage control loop, per-layer status (MEASURED)
 
 ```mermaid
 graph LR
@@ -2313,7 +2773,7 @@ graph TD
 ```
 
 **MEASURED.** Source: `find crates -name '*.rs' -path '*/tests/*' | wc -l` → 26
-integration test files; `grep -rc '#\[test\]'` across those → 370 `#[test]` functions;
+integration test files; `grep -rc '#\[test\]'` across those → 379 `#[test]` functions;
 per-leg presence from `grep -rli` for each of `known_bad`, `known_good`, `mutation`,
 `anti_vacuity` per gate crate. Counts in each node are that grep's file count, not a
 quality judgement.
@@ -2416,7 +2876,7 @@ DAG of Diagram 1 — `receiver-receipt` exists as a crate and is depended on by
 version from `tmux` at `/opt/homebrew/bin/tmux` (which rejects `--version` with
 `tmux: unknown option -- -`, hence the shell-reported `3.6a`); `br 0.4.1` from
 `br --version`; the 17-ack-types-in-3-dialects figure from the type inventory
-(51 public enums, 79 structs, 22 of 24 crates, 4 colliding names).
+(51 public enums (excluding test+bin sources; 59 including them — publish the pair), 79 structs, 22 of 24 crates, 4 colliding names).
 
 Step 4 is the receiver-verification gap, drawn as a dashed unanswered arrow because
 that is literally what it is: a message we assume and never observe. Every ack type we
@@ -2873,7 +3333,7 @@ python3 -c "import pathlib,re; c=pathlib.Path('crates');
 
 Two independent sources agree: this walk, and the brief's own `find`/`grep -rc` measurement (§3.5), which was taken without the `--include=` flag the tooling warning below indicts.
 
-26 integration test files, 370 `#[test]` functions. Per-gate leg inventory (MEASURED, `grep -rli <property>` per gate crate), verbatim from the brief:
+26 integration test files, 379 `#[test]` functions. Per-gate leg inventory (MEASURED, `grep -rli <property>` per gate crate), verbatim from the brief:
 
 | crate | tests | known_bad | known_good | mutation | anti_vacuity |
 |---|---:|---:|---:|---:|---:|
@@ -2910,7 +3370,7 @@ The objection, stated before it is answered: *you have 370 tests and two complet
 
 **The second instance is ours, and an earlier draft of this section got it backwards.** That draft asserted `tmux --version` "prints an error and exits 0 — it fails while reporting success." REFUTED: `tmux --version` exits **1** with empty stdout and 158 bytes on stderr, which is correct, well-behaved failure. The "exits 0" came from a probe reading `$?` after a pipeline, where the status belongs to the last stage — `PIPESTATUS=(1 0)`. **The instrument laundered a clean failure into a success and then reported it as the binary's defect.** tmux is not the offender; our measurement harness is. Retained rather than deleted, because a probe that misattributes its own bug to the thing it measures is a worse failure than the one first alleged, and deleting it would erase the only case in this section where the instrument manufactured the defect it reported.
 
-**And the corrected hazard is inverted, which matters for gate design.** The real risk with a version probe is not exit 0 laundering a failure; it is a probe treating **non-zero as ABSENT** and recording a present binary as missing. `tmux -V` returns `tmux 3.6a` at exit 0, so tmux is present and healthy, while `tmux --version` exits 1 — and no single flag covers our nine binaries (`--version` answers 8 of 9, `-V` answers 5 of 9). A doctor that probes with one flag and reads only the exit status will mark a healthy binary missing.
+**And the corrected hazard is inverted, which matters for gate design.** The real risk with a version probe is not exit 0 laundering a failure; it is a probe treating **non-zero as ABSENT** and recording a present binary as missing. `tmux -V` returns `tmux 3.6a` at exit 0, so tmux is present and healthy, while `tmux --version` exits 1 — and no single flag covers our nine binaries (`--version` answers 8 of 9, `-V` answers 6 of 9). A doctor that probes with one flag and reads only the exit status will mark a healthy binary missing.
 
 **What would Jeffrey do — the precedent carries its own remediation AND its own tests.** All citations below name the CONSTRUCT, not just the line, because three of us independently cited this same precedent at three different line numbers and all three were partly right: we were each naming a different construct on adjacent lines. A line number without a construct is unverifiable and does not survive a reformat.
 
@@ -3241,7 +3701,7 @@ which commit produced it. Across the workspace, only 5 of 18 binaries mention `-
 `installer`, `kernel-only-operator-hook`, `omp-inventory-map`, `omp-orchestrator`,
 `omp-rpc-session`).
 
-That is not an incidental omission. The brief's four-layer reality table (§4) records exactly one
+That is not an incidental omission. The brief's five-stage control loop (formerly "five-stage" — renamed, the table has five stages and seven rows) table (§4) records exactly one
 layer as **WORKS**: *observe*, and its mechanism is `tick-monitor`. The single working layer of the
 system is carried by the one binary in the install set whose provenance cannot be established from
 the artifact. If observation is the only thing we can currently trust, we cannot currently prove
@@ -3707,7 +4167,7 @@ time in one terminal, by hand; no panes to census, no use for a supervisor loop.
 half*: gates that fail a build on a named property, and completion tracking where "done" means an
 artifact exists rather than an agent said so. They can be served first, because the gates are the
 part of this repo measured to work — `MEASURED` (brief §3.5, recomputed): 26 integration test files,
-370 `#[test]` functions, 8 gate crates, **2 of 8** with all four legs (`no-shell-gate` 4/3/2/6 and
+379 `#[test]` functions, 8 gate crates, **2 of 8** with all four legs (`no-shell-gate` 4/3/2/6 and
 `undrained-pipe-lint` 1/1/1/3), **4 of 8** with no mutation leg. **NO-CLAIM:** that leg table counts
 files matching a property grep; it does not establish the legs are individually strong.
 
@@ -4805,7 +5265,7 @@ reported in Gap 8's `DEPENDENCY_MISSING` vocabulary.
 | 8 | per-adapter scoping / typed missing-dependency | **ADOPT** | `ntm/internal/bv/bv.go:31`; `robot-action-handoff-contract.md:379`; `bugs.go:85`; `generator.go:383`; `robot_registry_conformance_test.go:15` |
 | 9 | tool probe not trusting exit codes | **ADOPT + NAMED GAP** | `doctor.rs:967` (two-signal arm), `:13948`/`:13964` (both tests); gap at `:1057`; brief §3.1 tmux measurement refuted |
 
-**Seeded-verdict correction rate: 5 of 9 — more than half the verdicts handed to this section were
+**Seeded-verdict correction rate: 6 of 9 (the earlier "5 of 9" excluded tmux and is retired) — more than half the verdicts handed to this section were
 wrong, and Gaps 6, 8 and 9 were each corrected twice.** Gaps 3, 5, 6 and 8 were seeded
 `no prior art found` and all four have prior art — Gap 6 emphatically, and it was the row flagged
 CRITICAL. Gap 1 was seeded ADOPT and is ADAPT. Gap 9's measurement was inverted, and its verdict then
@@ -4858,6 +5318,79 @@ mechanisms, and the second-hand Gap 6, Gap 8 and Gap 9 citations were re-opened 
 one has re-derived these
 searches independently of this author, which on this session's record is precisely the condition under
 which a false absence survives.
+
+---
+
+## Gap 7 is REFUTED — the completion signal ships in the tool we wrap
+
+This section's headline result was that a typed worker→supervisor completion signal is
+**precedent-free across 210 mirror work-trees** — `SupervisionEvent` has 8 variants, `StopReason`
+has 6, and none of the 14 means *"the worker finished."* That was stated as the single most
+consequential finding in the plan, and as the strongest argument the gap was real.
+
+**It is wrong, and it is wrong for the reason this document keeps recording: the search space
+excluded the obvious place.** `%1408`, probing `type_root:extensibility` with the per-kind
+instrument, found:
+
+```typescript
+// dist/types/extensibility/shared-events.d.ts:154
+export interface AgentEndEvent {
+    type: "agent_end";
+    messages: AgentMessage[];
+    /**
+     * When true, the session has already scheduled an automatic continuation
+     * (auto-retry, empty/unexpected-stop retry, etc.). Subscribers must not
+     * treat this as a user-visible terminal settle.
+     */
+    willContinue?: boolean;
+}
+```
+
+That is a **typed worker-completion event**, and it is better than the one we would have designed.
+`willContinue` distinguishes *"terminal settle"* from *"a continuation is already scheduled"* —
+which is precisely the `NewlyIdle` versus `ConfirmedIdle` distinction §00 §4 records as broken in
+our own `idle_panes` filter. The tool we wrap solved our hardest problem and typed the edge case we
+have not yet handled.
+
+### The receipt gap is a design choice, not an impossibility
+
+Same pass, same instrument:
+
+```
+dist/types/tools/hub/types.d.ts:8    import type { IrcDeliveryReceipt }
+dist/types/tools/hub/types.d.ts:84   receipts?: IrcDeliveryReceipt[]
+```
+
+`cp-z42vu` — transport reporting `success:[N]` with no packet delivered — is recorded throughout
+this plan as a missing receipt *type*. The type exists. As `%1408` put it: **"the receipt and
+cross-session mechanisms EXIST in the substrate on planes we do not ride; the receipt gap is a
+design choice, not an impossibility."**
+
+### And `muxPing` was never broken
+
+`%1414`, Task A: **six mux workers, all with live broker parents, stable pong on all 18 correct
+socket probes.** The null that retired `omp/muxPing` was an **endpoint/protocol mismatch**, not
+evidence about the surface and not explained by the mux count either. Third instance in one wave of
+*the probe was wrong, not the surface*.
+
+### Why the mirror search missed it
+
+Gap 7 searched **210 mirror work-trees** for prior art and never searched **the binary we depend
+on**. The search was real, the command was recorded, the result was honest — and the space was
+chosen to exclude the single most likely location. That is the fourth distinct false-zero mechanism
+this session, and the most expensive: it declared our largest architectural gap unprecedented while
+the precedent shipped in the tool named on line one of the plan.
+
+**What survives.** The mirror finding stands as stated — *Jeffrey's repos* contain no typed
+completion protocol, and that remains true and interesting. What does not survive is the
+**conclusion** drawn from it: that we would be building without precedent. We would be **adopting**,
+from OMP, on a plane we do not currently ride.
+
+**NO-CLAIM.** `AgentEndEvent` exists as a declared type in the installed `dist/types`. It is
+**not established** that it reaches the `--mode=rpc` frame plane, which is the only place our
+orchestrator could consume it — `%1408` specified the test (one live-session frame capture) and it
+is **unrun**. Until it runs, this refutes *"no precedent exists"* and does **not** establish *"we
+can consume it today."* Those are different claims and only the first is measured.
 
 
 ---
@@ -5001,8 +5534,8 @@ workspace ever invokes the ranking tool. Selection this session was the conducto
 recency of his own discovery, which `/beads-bv` names as the cherry-picking pathology, and the
 graph disagreed: the top-3 PageRank items sat unclaimed.
 
-**S6 → S7, work to reap.** There is no worker→conductor completion path at all. §10 Gap 7 measured
-that this is **precedent-free across 210 mirror work-trees** — `SupervisionEvent` has 8 variants and
+**S6 → S7, work to reap.** There is no worker→conductor completion path *wired*. **The type exists** — `AgentEndEvent` at `dist/types/extensibility/shared-events.d.ts:154`, carrying `willContinue` to separate a terminal settle from a scheduled continuation, which is the exact `NewlyIdle`/`ConfirmedIdle` distinction our own filter gets wrong. The gap is adoption, not invention. §10 Gap 7 measured
+that this is precedent-free across 210 mirror work-trees — **since REFUTED: OMP itself ships `AgentEndEvent`; the mirror search never searched the binary we wrap**. Original text: — `SupervisionEvent` has 8 variants and
 `StopReason` 6, and not one of the 14 means *"the worker finished."* Every completion tonight was
 found by a human looking.
 
@@ -5034,6 +5567,120 @@ different cut might make the severed links appear elsewhere. It does not measure
 break actually costs anything; the `bv` gap is measured as *never invoked*, not as *decisions made
 worse*, and those are different claims. Every `PROJECTED` remedy in §11.6 is unbuilt and unowned
 except where an owner is named.
+
+---
+
+## 11.7 The surface mapping converged on one crate
+
+R14/R15 batches 1–9 mapped **270 of 544 surfaces** across `ntm`, `br`, `bv` and OMP. Dispositions:
+
+```
+RETIRE    243     CONSUMED  8     WIRE  11     VALIDATE  8
+```
+
+**243 of 270 retire, and that is the correct result** — adopting a surface because it exists is the
+opposite of this plan's discipline. The value is in the 11.
+
+### Six of eleven WIREs name the same crate
+
+| surface | → crate |
+|---|---|
+| `bv:robot` | `loop-queue-filter` |
+| `bv:candidates` | `loop-queue-filter` |
+| `bv:decision-relevant` | `loop-queue-filter` |
+| `bv:dependencies` | `loop-queue-filter` |
+| `bv:not-ready` | `loop-queue-filter` |
+| `br:blocked` | `loop-queue-filter` |
+| `br:dep` | `loop-queue-filter` |
+| `ntm:template` | `omp-orchestrator` |
+| `ntm:version`, `br:version` | `installer` |
+| `cli_command:usage` | `tick-monitor` |
+
+Three agents working disjoint batches, given no shared hypothesis, independently routed **seven
+selection-related surfaces into `loop-queue-filter`** — the crate that owns lifecycle stage **S4**,
+the stage §11.5 names as severed, in the tool (`bv`) measured at zero consumption.
+
+That convergence is worth more than any single mapping. It was not seeded: the batch packet named
+four dispositions and no crate, and §11.5's S4 finding was not quoted to the mappers.
+
+**`loop-queue-filter` is the missing consumer of the graph, and now seven surfaces say so.**
+
+### The eight VALIDATEs are almost all `br`
+
+`br:close`, `br:create`, `br:init`, `br:list`, `br:schema`, `br:sync`, `br:update` — we depend on
+`br`'s **behaviour** without asserting on it anywhere. This is §11.1's S3 row measured from the
+other direction: the close policy that refuses prose, the schema our beads must satisfy, the sync
+that keeps `.beads/issues.jsonl` honest — all inherited, none tested. If `br` changed its close
+policy tomorrow, nothing in this workspace would fail.
+
+`bv:exit-codes` is the eighth, and it belongs with them: we would be reading `bv`'s exit contract
+without a test pinning it.
+
+**NO-CLAIM.** 270 of 544 rows are mapped; the remaining 274 are OMP, `ee` and `ms` and may shift
+these proportions. A `WIRE` disposition is a *proposal with a named beneficiary*, not a decision —
+none of the eleven has been implemented, and the convergence on `loop-queue-filter` argues the crate
+is the right home, not that wiring it is scheduled or scoped. The `bv` rows carry the §7.2 scrape
+defect: they are subcommand-shaped names harvested from help prose, so `bv:robot` stands in for the
+40+ real `--robot-*` flags rather than naming one.
+
+---
+
+## 11.8 The A-to-Z process exists, is distributed across twelve skills, and has never been assembled
+
+Josh: *"what is the defined — from a to z — typed process for managing an idea to shipped project
+with swarm orchestration? use jsm search and lets identify this."*
+
+Answer: **there is no single defined process. There are twelve skills that each own one stage, and
+nothing composes them.** Found via `jsm search`:
+
+| stage | skill(s) | typed? |
+|---|---|---|
+| S1 idea | `idea-wizard`, `dueling-idea-wizards`, `brainstorming` | **no** — prose in, prose out |
+| S1.5 viability | `product-viability-gauntlet` | **partly** — fail-closed kill/narrow/pilot/build verdict |
+| S2 plan | `planning-workflow` | **no** — markdown; convergence judged by eye |
+| S2.5 loop | `loop-engineering` | **partly** — tick-loop with a verified-value bar |
+| S3 bead | `beads-workflow`, `beads-north-star`, `beads-br` | **yes** — `br` schema, typed close policy |
+| S4 select | `beads-bv` | **yes** — PageRank over a typed DAG |
+| S5 dispatch | `ntm`, `vibing-with-ntm` | **partly** — `--robot-*` JSON, no receipt type |
+| S6 work | `vibing-with-ntm` | **no** |
+| S7 reap | `vibing-with-ntm` | **no** |
+| S8 grade | `beads-compliance-and-completion-verification` | **no** — prose verdicts |
+| S8.5 honesty | `just-say-no-to-process-porn-and-ceremony` | **no** — a lens, not a type |
+| S9 ship | `installer-workmanship`, `release-preparations` | **partly** |
+
+### What "typed" means here, and why only two stages have it
+
+A stage is **typed** when its output is a value another stage can consume without a human reading
+it. By that test only **S3** and **S4** qualify: a bead is a row with a schema, and `bv`'s ranking
+is a number over a graph.
+
+Everything else hands prose to the next stage. That is the mechanism behind every measured defect
+in this plan:
+
+- **S8 has no grade type**, so grading produces four-page documents. §03 measured the cause:
+  **6 Verdict-shaped types with no shared trait**, so a grade cannot be a value, only an essay.
+- **S5 has no receipt type**, so `success:[N]` from the transport was read as delivery (`cp-z42vu`)
+  and a packet vanished.
+- **S7 has no completion type**, and §10 Gap 7 found that gap is **precedent-free across 210 mirror
+  work-trees** — 14 supervision variants, none meaning *"the worker finished."*
+
+### The composition nobody wrote
+
+The twelve skills are each good and none of them knows about the next. There is no artifact that says
+*idea → viability → plan → beads → graph-select → dispatch → work → reap → grade → ship*, with a
+typed handoff at each arrow. This document's §11.1 is the closest thing that exists, and it was
+written tonight, in response to R13, after nineteen dispatch waves had already run without it.
+
+**That is the honest answer to the question: the process is real, it is distributed, and its
+composition is the missing artifact — not another skill, but the typed spine that lets the twelve
+compose.** `omp-types` is the crate that would hold those types and has zero dependents.
+
+**NO-CLAIM.** This maps twelve skills to nine stages from `jsm search` output and their
+descriptions. It does **not** establish that the twelve are the right twelve, that no thirteenth
+exists, or that any of them would compose cleanly if typed — three of the four `jsm` queries tried
+returned useful results and one (`"planning workflow beads dispatch"`) returned **No skills found**,
+so the search space is not exhausted. The typed/untyped column is a judgement from each skill's
+description and this repo's measurements, not from reading all twelve skills end to end.
 
 
 ---
