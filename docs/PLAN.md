@@ -15,8 +15,8 @@ mtime to satisfy the freshness gate (§12.11 records the author doing exactly th
 > more named gaps have upstream types; an eighth root (`dist/types/plan-mode/`) surfaced later.
 
 > **2. Convergence has been retracted once.** Rounds 8–9 banked 3 sections under a two-lens rule.
-> Round 10 graded with readers who had never seen the ledger and all three fell — 268 findings
-> across 5 rounds. Rounds 8–9 measured the graders. Fresh eyes is now a clause of the rule.
+> Round 10 graded with readers who had never seen the ledger and all three fell — 340 findings
+> across 6 rounds. Rounds 8–9 measured the graders. Fresh eyes is now a clause of the rule.
 
 > **3. There is no external-validation loop.** Every gate suite here is internal — us checking us.
 > `loop-engineering` names that as insufficient for "shipped"; §12.11 records the gap.
@@ -1033,7 +1033,7 @@ The upstream sweep changes the strength of the absence claims without pretending
 
 | gap | upstream type and source | true strength | effect on the idea
 |---|---|---|
-| completion | AgentEndEvent.willContinue + SessionStopEvent (extensibility/shared-events.d.ts:83-93,154-162), on RpcSessionEventFrame (modes/rpc/rpc-types.d.ts:589) | **WIRE-PROVEN for one observed frame only** — exact raw receipt at /tmp/grade/agent-end-raw-frame.json; capture command /Users/josh/.local/bin/omp --mode=rpc --no-session --no-tools --no-lsp --max-time=30; artifact mtime/retrieval observed 2026-08-31T19:52:26-0600; SHA-256 d8bd80c6949b2ec48af1639b5b5e241bd90b4dce1e769483dd1690ed2be8f644 | the frame's session-specific isTerminal=true was observed; shared willContinue was absent; repeatability, semantic fit, and supervisor consumption remain UNKNOWN
+| completion | **`isTerminal` on RpcSessionEventFrame** (modes/rpc/rpc-types.d.ts:589) is what was OBSERVED. `AgentEndEvent.willContinue` and `SessionStopEvent` (extensibility/shared-events.d.ts:83-93,154-162) are DECLARED ONLY — see §1.2.3 | **WIRE-PROVEN for one observed frame, and for `isTerminal` only** — exact raw receipt PRESERVED IN-REPO at `.flywheel/inventory-artifacts/agent-end-raw-frame.json.gz` (hash-gated by `artifact_provenance`; the original `/tmp/grade/agent-end-raw-frame.json` is reboot-volatile and must not be cited); capture command /Users/josh/.local/bin/omp --mode=rpc --no-session --no-tools --no-lsp --max-time=30; artifact mtime/retrieval observed 2026-08-31T19:52:26-0600; SHA-256 d8bd80c6949b2ec48af1639b5b5e241bd90b4dce1e769483dd1690ed2be8f644 | the frame's session-specific isTerminal=true was observed; shared willContinue was absent; repeatability, semantic fit, and supervisor consumption remain UNKNOWN
 | receipts | IrcDeliveryReceipt + AsyncJobDeliverySink (tools/hub/types.d.ts:8,84) | DECLARED ONLY — no wire path measured | the cp-z42vu transport/receipt gap remains; type existence does not replace receiver proof
 | claims | Stage1Claim / GlobalClaim with ownershipToken + inputWatermark (memories/storage.d.ts:20-27) | DECLARED ONLY — no wire path measured | local claim/ownership gap remains until reachability and semantics are proven
 | idle | GuestIdleReconcilerCtx (dist/types/collab/guest.d.ts:9-30) | DECLARED ONLY — no wire path measured | the local NewlyIdle/ConfirmedIdle defect remains; the upstream split is corroboration, not a fix
@@ -1446,6 +1446,65 @@ conversation:
 **NO-CLAIM:** nothing here commits to a schedule, a cost, or an architecture validated by execution.
 This section establishes a scoped hypothesis, local observations, dependency-contract floor, risks, and
 explicit discovery gates. It does not imply product viability, PILOT, or BUILD.
+
+---
+
+## 1.2.3 BLOCKER resolution — the row was named after a field the frame does not contain
+
+`GradeIdea` filed:
+
+> Section 1.2.1 claims the completion gap is "WIRE-PROVEN" in the table but then
+> immediately walks back the claim in the NO-CLAIM subsection. The claim's strength is
+> undefined until both subsections are read in sequence, and they contradict each
+> other's headline.
+
+Half right, and measurement found the sharper problem underneath.
+
+### The citation is honest; the row LABEL was not
+
+The artifact is real and checkable — that part of the section is in good order:
+
+| | |
+|---|---|
+| path | `/tmp/grade/agent-end-raw-frame.json`, 4,772 bytes |
+| cited SHA-256 | `d8bd80c6949b2ec4…` |
+| **re-derived 2026-09-01** | `d8bd80c6949b2ec4…` — **exact match** |
+
+But the frame's top-level keys are `['type', 'messages', 'isTerminal']`.
+**`willContinue` does not appear in it at all.**
+
+So the row was titled `AgentEndEvent.willContinue + SessionStopEvent` and marked
+`WIRE-PROVEN`, while what the wire actually produced was **`isTerminal`**. The effect
+column already said *"shared `willContinue` was absent"* — so the section knew, and the
+label contradicted the section's own evidence one column to its left.
+
+That is worse than the contradiction the grader described. A reader skimming the table
+takes away "`willContinue` is wire-proven", which is exactly false, and the correction
+sits in prose they may not reach.
+
+**Corrected:** the row now names `isTerminal` as the observed field and moves
+`willContinue` and `SessionStopEvent` to DECLARED ONLY, where the other six gaps
+already sit.
+
+### The plan's only wire proof was living in /tmp
+
+Every other row in that table is DECLARED ONLY. This one frame is **the sole
+wire-level evidence in the entire plan**, and it sat in `/tmp/grade/` — clearable on
+reboot, after which the strongest evidence claim in the document would have been
+uncheckable by anyone including its author.
+
+Preserved at `.flywheel/inventory-artifacts/agent-end-raw-frame.json.gz` (4,772 → 1,985
+bytes) and added to the `artifact_provenance` gate, which decompresses and re-hashes it.
+Same defect class as §4.7's diagrams, and sharper here because of what the single
+artifact carries.
+
+### NO-CLAIM, unchanged and still binding
+
+One frame is not repeatability. `isTerminal` being observed does not establish that it
+is semantically equivalent to `willContinue=false`, that a supervisor consumes it, or
+that it survives crashes, killed panes, rate limits or compaction. Section 10 already
+records the cost of overreading this surface: it claimed a worker-completion signal was
+precedent-free across 210 repositories while `AgentEndEvent` shipped in the dependency.
 
 
 ---
@@ -3522,6 +3581,56 @@ Diagram 2), the absence is inferred from an empty result set, and an empty resul
 proves only that the scanner and the greps named above found nothing — not that
 nothing exists outside their reach.
 
+---
+
+## 4.7 BLOCKER resolution — the provenance was clearable, which is worse than stale
+
+`GradeDiagrams` filed:
+
+> The brief documents a fresh 2026-08-31 capture at
+> `/tmp/omp-inventory-map-2026-08-31.json` (3,032,388 bytes), but the diagrams
+> section cites sources from `/tmp/inv.txt` (544,697 bytes, round-10 historical). A
+> diagram cannot be dated 2026-08-31 while sourced from data predating that capture.
+
+Measured. Both artifacts exist, **and both are dated 2026-08-31** — so the date claim
+is technically true and still misleading:
+
+| artifact | size | mtime | sha256 (16) |
+|---|---:|---|---|
+| `/tmp/inv.txt` — **what the diagrams use, 5 citations** | 544,697 | 16:50 | `86491732a5581a6d` |
+| `/tmp/omp-inventory-map-2026-08-31.json` — what the brief cites | 3,032,388 | 23:01 | `876809f0779a81b3` |
+
+Six hours and 5.6× apart. The diagrams are built from the **earlier, smaller** capture
+while the brief cites the later one, and nothing in either document says so.
+
+### The finding the grade did not reach
+
+**Both artifacts live in `/tmp`.** Every diagram's provenance in this section rests on
+files that a reboot deletes. The date was never the real defect — the defect is that
+after the next restart, none of the five citations could be checked by anyone,
+including their author, and the diagrams would become exactly the *"hand-drawn diagram
+with better provenance"* this section's own §R4 note warns about.
+
+Preserved, compressed, and hashed at
+`.flywheel/inventory-artifacts/` — 3.5 MB of provenance in 120 KB (22× and 32×). A
+citation to a `/tmp` path is a citation to nothing in a week; a citation to a
+content-hashed in-repo artifact survives.
+
+### What is corrected and what is not
+
+**Corrected:** the diagrams are hereby labelled as sourced from the **16:50 capture**,
+not the 23:01 one, with size and hash recorded above so the claim is checkable.
+
+**NOT corrected:** the diagrams are not regenerated from the fresh capture. §R4 of
+this section already records why — *"Nothing in this repo currently regenerates these
+diagrams … that command does not exist today"* — and building it is a separate piece
+of work. So the honest state is: **the diagrams reflect a 16:50 snapshot, which is
+labelled, hashed, and preserved, and they are not current.** Row counts in Diagram 2
+(176 census rows) are from that capture; the 23:01 capture holds 981 rows.
+
+That gap is now stated in the document rather than discoverable only by diffing two
+`/tmp` files that will not exist next week.
+
 
 ---
 
@@ -3995,6 +4104,69 @@ the typed path as primary.
 action specs are otherwise unchanged and have not been re-derived against upstream types — the
 signal sweep found seven, and only completion is traced here.
 
+---
+
+## 5.13 The dispatch ledger already existed, and it recorded a 12.3-hour stall nobody read
+
+The `Log every dispatch through our own crates` objective turned out to be already
+satisfied — and measuring it produced a worse finding than the gap it was checking.
+
+### What is there
+
+`~/.local/state/flywheel/omp-orchestrator.heartbeat.jsonl`, 486 KB, opened
+`.append(true)`, written by `write_heartbeat`. Every row carries
+`ts_unix / event / build_id / status / tick / pid / repo / session / detail`.
+
+**1,323 rows:**
+
+| status | count |
+|---|---:|
+| `CYCLE_STARTED` | 659 |
+| **`DISPATCH_RETRY_BLOCKED`** | **489** |
+| `DISPATCHED` | 56 |
+| `IDLE_UNAUTHORIZED` | 53 |
+| `SUPERVISED_WORKING` | 53 |
+| `SUPERVISOR_REFUSED` | 11 |
+| `QUEUE_EMPTY_NEEDS_JOSH` | 2 |
+
+So loop dispatches ARE logged through our own crates. The objective is met for the
+product's dispatch path.
+
+### The ratio nobody looked at
+
+**8.7 refusals per successful dispatch.** And 469 of the 489 share a *single* cause:
+one `dispatch_intent` marker from `pid=92834`, `build_id=b7c2d4e`, spanning
+**08-31 11:43 → 09-01 00:01 = 12.3 hours**.
+
+That is the stale-fence stall cleared as `HD-0001`. The loop refused **every tick for
+half a day** on a marker whose owning process no longer existed — and wrote a row
+about it 469 times.
+
+**The evidence was in the product's own output the whole time. The stall was found
+when a human asked, not when the ledger was read.** That is precisely the failure
+class this project exists to remove, appearing in the project.
+
+`fh C112` named the mechanism months earlier: *an ownership claim must name something
+that dies with the thing it owns.* A pid in a marker file does not, so the marker
+outlived `pid=92834` by twelve hours.
+
+### What this changes about the objective
+
+The gap is not logging. It is that **nothing consumes the log**. Two things follow:
+
+1. `dispatcher-deadman` — a watchdog for eligible work that received no packet — is
+   one of the 20 crates still unextracted (883 LOC, §3.9). It is the consumer this
+   ledger needed and did not have.
+2. The remaining unlogged dispatches are **operator handrolls**: every `tmux
+   send-keys` and `task` dispatch this session bypassed the binary entirely and
+   appears in no ledger. That is exactly what `kernel-only-operator-hook` exists to
+   refuse, and it is blocked on `cp-nq2s9` (§7 of the hook packet) because the kernel
+   it names cannot reach codex panes.
+
+**NO-CLAIM:** an append-only ledger with no reader is not observability, and adding a
+reader is not in this section. What is established is the count, the cause, and the
+duration — 469 rows, one dead pid, 12.3 hours.
+
 
 ---
 
@@ -4261,7 +4433,7 @@ forbidden to do; the one measured value is `omp-inventory-map`, which FAILS.
 | `omp-inventory-map` | N | Y | Y | Y | **Y** | **N** |
 | `undrained-pipe-lint` | Y | Y | Y | Y | **N** | — |
 | `commit-build-fence` | N | Y | N | N | **N** | — |
-| `state-wildcard-lint` | Y | Y | Y | N | **N** | — |
+| `state-wildcard-lint` | Y | Y | Y | **Y** (was `N` — corrected 2026-09-01) | **N** | — |
 | `kernel-bypass-gate` | Y | Y | N | N | **N** | — |
 | `pre-delete-citation-check` | Y | Y | N | N | **N** | — |
 | `path-literal-guard` | Y | **N** | N | Y | **Y** | — |
@@ -4369,6 +4541,142 @@ gate was green on this file throughout.
 re-derive its nine framework specs against the refutation, and at least one — the mutation framework
 in §2.3 — argues from a scarcity of upstream prior art that the signal sweep has now partly refuted.
 
+---
+
+## 6.5 Two gate-wiring defects, both found by being blocked
+
+Measured 2026-09-01 while trying to land a commit. Neither is about a gate's
+*logic*; both are about the gap between a gate's source and the artifact that runs.
+
+### 6.5.1 `state-wildcard-lint` was 89% false positives and blocked every commit
+
+The pre-commit chain refused with `state-wildcard-lint: 9 finding(s)`. Read
+individually, **8 of the 9 were wildcards the compiler requires**:
+
+| site | scrutinee | why `_` is mandatory |
+|---|---|---|
+| `omp-inventory-map` ×5 | `Option<T>` with a **guarded** `Some(x) if …` arm | a guarded arm does not cover `Some` |
+| `tick-monitor:1034` | `&[&str]` slice patterns | slice space is unbounded |
+| `tick-monitor:1042` | `&str` literal match | string space is unbounded |
+| `tick-monitor:99` | **`Outcome`, a real 3-variant enum** | **genuine — now enumerated** |
+
+**Root cause:** `type_for_match` inferred the scrutinee's type from any `Enum::`
+appearing anywhere in the match **body** — including the *result* arms:
+
+```rust
+match value {                          // scrutinee: Option<Vec<_>>
+    Some(items) if !items.is_empty() => ProbeState::Known,
+    _ => ProbeState::Unknown,          // <- ProbeState is the OUTPUT
+}
+```
+
+Seeing `ProbeState::`, the lint concluded the scrutinee was `ProbeState` and
+demanded exhaustive arms for an `Option` match. Resolution now requires **pattern
+position** — left of the fat arrow, or the `match` header itself.
+
+Result: 9 → 0 findings, with a positive control in both directions (restore the
+wildcard on `Outcome` → 1 finding naming `scrutinee="self", type=Outcome`;
+byte-identical restore → 0).
+
+This is the AGENTS.md failure mode reached in practice: *"an over-strict gate gets
+routed around — a slower death than no gate."* It was blocking **every pane's
+commits**, which is the strongest possible pressure to bypass it.
+
+### 6.5.2 The hook is a compiled artifact, and nothing rebuilds it
+
+Fixing the library changed nothing, because `.git/hooks/pre-commit` is a **Mach-O
+binary** that links `state-wildcard-lint` as a *library* — it never shells out. So
+the live gate was a **third artifact**, distinct from both the source and the
+binaries I rebuilt:
+
+| artifact | timestamp | findings |
+|---|---|---|
+| `release/state-wildcard-lint` | 12:11:41 (**13h stale**) | 8 |
+| `debug/state-wildcard-lint` | 01:27:06 (fresh) | 0 |
+| `.git/hooks/pre-commit` | 01:21:59 (1.9 MB, another pane's debug build) | 8 |
+
+I measured my own fix with the 13-hour-old release binary — `find … | head -1`
+returned whichever path sorted first — and read "8 findings" as the fix having
+failed. **Fourth instrument error of the session, same class as the other three.**
+
+**BUILT ≠ WIRED, aimed at the enforcement layer itself.** A stale hook silently
+enforces yesterday's rules, and there is no gate on the freshness of the gate.
+The repair was manual: rebuild `--bin pre-commit-gate`, copy over
+`.git/hooks/pre-commit`, verify exit 0.
+
+**NOT BUILT:** a check that the installed hook's hash matches a build of current
+`HEAD`. Without it, every lint change needs a human to remember two extra steps,
+and forgetting them is invisible — the hook keeps passing or failing for reasons
+that no longer exist in the source.
+
+### 6.5.3 A broad `git add` swept four other panes' files
+
+`git add -- crates/` staged modified files in `ack-spine`, `installer`, and
+`kernel-only-operator-hook` — none mine — and the hook then refused on a
+**deliberate known-bad fixture** in `undrained-pipe-lint/tests/`, which is a
+specimen the lint that flags it is *supposed* to catch. Re-staging four explicit
+paths cleared it.
+
+AGENTS.md already requires `git commit -- <explicit paths>`, never `-A`. The
+measured consequence of ignoring it in a live shared checkout is a refusal whose
+message points at someone else's fixture, three crates from anything you touched.
+
+---
+
+## 6.6 BLOCKER resolution — the matrix now cites, and one of its cells was wrong
+
+`GradeGates` filed the strongest form of this BLOCKER: *"a gate that claims to
+enforce something mechanically while failing all six properties is making an
+unsupported claim."* The matrix in §3.1 was hand-assessed prose, so every "Y" in it
+was an assertion no reader could check.
+
+### Keyword derivation was tried and does not work — measured, both directions
+
+The obvious fix is to grep each gate crate for property markers. It is wrong twice:
+
+- **False negative.** `state-wildcard-lint` is documented `Y` for known-good. A grep
+  for `known.good` finds **zero**. It has two — `wildcard_on_integer_and_string_passes`
+  and `wildcard_on_non_state_enum_passes` — known-good legs that never use the phrase.
+  I came within one commit of filing the document as wrong on the strength of that
+  grep.
+- **A wrong cell the grep agreed with.** Both the grep and the table say
+  `state-wildcard-lint` has no anti-vacuity. **Both are wrong.**
+  `empty_or_unreadable_workspace_is_an_error` is precisely that leg. The table's `N`
+  is corrected above.
+
+A property is a *semantic* claim about what a test does. No keyword scan settles it,
+and the two errors point in opposite directions, so no amount of pattern-tuning
+converges.
+
+### What replaced it
+
+`crates/no-shell-gate/tests/gate_properties.rs` — a registry where each claim is a
+**citation**, not a letter:
+
+```rust
+("state-wildcard-lint", "anti-vacuity", Some("empty_or_unreadable_workspace_is_an_error")),
+("path-literal-guard",  "known-good",   None),   // a DECLARED absence
+```
+
+Three legs: every citation must name a function that exists; a declared absence must
+remain recorded rather than blanked; no property may be claimed twice for one crate.
+`None` is first-class — six rows carry it, and those six are the reason "zero gates
+satisfy all six" is true. If that count ever reaches zero, the gate fails and forces
+this sentence to be rewritten in the same commit.
+
+**Mutation-verified twice, once by accident.** It fired on its first run against
+citations I had *guessed* rather than read (`test_this_repo_is_clean` does not
+exist), and again deliberately when a cited test was renamed —
+`wildcard_on_integer_and_string_passes` → `renamed_away_by_a_refactor` produced a
+RED naming the crate, the property and the missing function. Restore byte-identical
+both times.
+
+**NO-CLAIM:** it cannot verify that a cited test *provides* the property. A function
+named `known_good_leg` asserting nothing satisfies this gate — the same residual
+§3.1 already records about mutation legs (*"a file named `mutation.rs` that mutates
+nothing counts here as a mutation leg"*). The floor moves from **a letter nobody can
+check** to **a named function that must exist**. Strictly better; well short of proof.
+
 
 ---
 
@@ -4436,7 +4744,7 @@ It has one row per target and the fields `target`, `owner`, `distribution` (`INS
 post-install expected set MUST all be projections of this manifest; none may maintain a second-
 hand count. At this HEAD the manifest denominator is `workspace_targets=21`; the current installer
 list is `installer_entries=3`, of which `foreign=1` (`pane-truth`) and `owned_entries=2`.
-The seven runtime adapters are a projected manifest field, not a second denominator. The expected
+~~The seven runtime adapters are a projected manifest field, not a second denominator.~~ **RETRACTED 2026-09-01 — see §7.9: no seven-item list exists anywhere in the repo.** The expected
 install set is exactly the rows with `distribution=INSTALL`, so a foreign or unreleased row can
 never be mistaken for a missing artifact.
 
@@ -4950,6 +5258,112 @@ not specify the probe list (gates section), the orchestration semantics (crate s
 milestone at which each surface lands (milestones section). Every PROJECTED item is unbuilt at
 HEAD `fb89714`; the only MEASURED install-adjacent code in the tree is `crates/installer`, which
 covers 3 installer entries against 21 workspace targets, one of which is foreign and not built here.
+
+---
+
+## 7.9 BLOCKER resolution — the seven adapters were never named, and the 21 is now 23
+
+`GradeInstall` filed two BLOCKERs against this section:
+
+> The document asserts every target becomes an adapter (21) while simultaneously
+> claiming seven adapters. If 21 targets map to 7 adapters, the grouping rule is
+> absent — which targets belong in which adapter is unspecified, making the CLI
+> contract unexecutable.
+
+> The document specifies commands that take `<adapter>` parameters but provides zero
+> examples of valid adapter names. A user on a second machine cannot invoke
+> `ompo doctor <adapter>` without guessing.
+
+Both are correct, and measurement makes them worse rather than better.
+
+### What is actually true, 2026-09-01
+
+| claim | measured | derivation |
+|---|---:|---|
+| binary targets | **23** | `cargo metadata --no-deps`, registered as `built_binaries` |
+| known to the installer | **3** | `omp-orchestrator`, `pane-truth`, `tick-monitor` |
+| "seven runtime adapters" | **no list exists** | grep of the whole repo finds no enumeration |
+
+The `21` was already stale when graded — two crates landed since — which is why it is
+registered as a derived figure rather than written in prose. **The `7` is worse than
+stale: it is unsourced.** Five places in this section invoke `ompo doctor <adapter>`,
+and no adapter is named in any of them.
+
+### Retraction
+
+The sentence *"the seven runtime adapters are a projected manifest field, not a second
+denominator"* is **retracted**. It defended a number against being read as a
+denominator while never establishing where the number came from. There is no
+seven-item list, no grouping rule from 23 targets onto 7 names, and no way for a
+reader to check either.
+
+What replaces it: **23 targets, 3 installed, 20 unowned.** That is a coverage gap of
+87%, it is derivable from `cargo metadata` on any machine, and it does not require a
+grouping rule to be true.
+
+**NO-CLAIM:** this resolves the *arithmetic*, not the design. Whether the right shape
+is one `ompo` aggregator with adapter subcommands, 23 separate installed binaries, or
+something else is a design decision that remains open — and it is now open *honestly*,
+against a measured 3-of-23, rather than behind a seven that nobody could look up.
+
+---
+
+## 7.10 The journey surfaces, mapped — and 1 of 16 names its own timeout
+
+Josh's standing objective, verbatim: *"Every surface of our journey mapped to specific
+commands with proper guards and timeouts, everything typed — nothing unknown."*
+
+`Lens05Actions`, the held-out operator-at-3am lens, filed the BLOCKED form of this:
+
+> 466-line specification of what 11 actions SHOULD do but **NO STATED COMMAND,
+> BINARY, API, or FUNCTION CALL** to actually RUN any action.
+
+Measured 2026-09-01 by invoking `--help` on every one of the 23 bin targets
+`cargo metadata` reports. Not a hand-written map — a probe.
+
+### How 23 binaries answer `--help`
+
+| behaviour | count | what it means for a stranger |
+|---|---:|---|
+| **NOT-BUILT** | 7 | the release binary does not exist; nothing to invoke |
+| **REAL-HELP** | 6 | `usage:` line, no error anywhere in the output — the only genuinely discoverable surfaces. The registered figure `help_discoverable_binaries` answers **7**, because it inspects only the FIRST LINE; one binary opens cleanly and errors below. Two instruments, two answers — the registered command is the authority and this row quotes the stricter one deliberately |
+| **REJECTS** | 3 | answers `unknown argument: --help` |
+| **HELP-AS-PATH** | 3 | treats `--help` as a **filesystem path** and reports it missing |
+| **SILENT** | 2 | prints nothing at all |
+| **EXECUTES** | 1 | **runs the gate** instead of describing it |
+| ERRORS | 1 | errors on an unrelated precondition |
+
+**Names a timeout or deadline in its own help: 1 of 16 buildable** —
+`dispatch-silence-watch`. Fifteen do not.
+
+### The three that deserve naming
+
+- **`no-shell-gate`, `state-wildcard-lint`, `undrained-pipe-lint`** treat `--help` as a
+  path: *"cannot read --help"*, *"repo root --help: No such file or directory"*. An
+  operator asking a gate what it does is told their file is missing.
+- **`pre-commit-gate` EXECUTES.** Asking it for help runs the gate — output
+  `MULTI-GATE: no staged files to check`. On a dirty tree that is a real gate run with
+  real refusals, produced by a request for documentation.
+- **`loop-queue-filter` and `pre-delete-citation-check` are silent.** No usage, no
+  error, exit and nothing. Indistinguishable from a binary that does nothing.
+
+### What this does and does not close
+
+**Closes** the mapping question with a number instead of an impression: the commands
+exist (16 built), and the *guards and timeouts are not discoverable from the commands
+themselves* (1 of 16). The objective's "nothing unknown" clause is measurably unmet at
+the invocation surface, and the gap is now sized rather than asserted.
+
+**Does not close** the actions themselves. This maps BINARIES; `Lens05Actions`'
+complaint was about **actions A1–A11**, which are specified as *behaviours* and do not
+correspond one-to-one with bin targets. Several actions are functions inside
+`omp-orchestrator` with no independent entry point, so no `--help` probe can find them.
+Mapping action → binary → subcommand is a further step and is **not built**.
+
+**NO-CLAIM:** `--help` answering is a proxy for discoverability, not a measure of it.
+A binary with perfect help can still be undiscoverable if nothing tells an operator it
+exists — which is §2's `ADDRESSABLE` property, satisfied by **zero of eight gates**.
+This probe measures the second gate of two, and the first is still shut.
 
 
 ---
@@ -8039,6 +8453,61 @@ argue with it.
 carries the command that derives it."* Three consecutive rounds graded this
 section and none caught it, because a reader comparing prose to a table sees two
 numbers and picks one. Only re-running a command produces a third.
+
+### 12.19 Surface coverage: web, exa, stt, tts, ssh, internal-urls, tools, cli
+
+> **ipg.10**: *Wave IO. Eight agent-plane type roots — search providers, speech I/O, remote
+> access, internal URI routing, the tool registry, and CLI argument parsing.*
+
+**Swept 2026-09-01.** Eight type roots, 171 files, ~1,800 exported symbols, walked to symbol
+level. All eight are agent-plane features. None crosses the process boundary.
+
+| surface | OMP files | OMP KB | OMP symbols | 1-8 clauses | classification |
+|---|---:|---:|---:|:-:|---|
+| `web` | 4 | 488 | 29 | — — — — — — — — | **(a) NOT OURS** — web-search provider types (KagiSearchRequest/Result, AnthropicProvider) |
+| `exa` | 3 | 12 | 17 | — — — — — — — — | **(a) NOT OURS** — Exa search integration (ExaSearchResponse, findApiKey) |
+| `stt` | 10 | 44 | 50 | — — — — — — — — | **(a) NOT OURS** — speech-to-text (STTController, EndpointerConfig, STT_MODELS) |
+| `tts` | 12 | 52 | 54 | — — — — — — — — | **(a) NOT OURS** — text-to-speech (TtsDownloadProgress, KOKORO_VOICES) |
+| `ssh` | 5 | 32 | 57 | — — — — — — — — | **(a) NOT OURS** — SSH config/host management for the agent (SSHHostConfig, RemoteFileRead/WriteOptions) |
+| `internal-urls` | 22 | 100 | 68 | — — — — — — — — | **(a) NOT OURS** — internal URI scheme resolver (AgentProtocolHandler, ResolvedArtifactFile) |
+| `tools` | 94 | 732 | 860 | — — — — — — — — | **(a) NOT OURS** — agent tool registry (shouldRouteWriteThroughBridge, ApprovalPolicy) — LARGEST by symbols in the workspace |
+| `cli` | 51 | 352 | 361 | — — — — — — — — | **(a) NOT OURS** — CLI argument parsing (AgentsAction, ResolvedCliArgv) |
+
+**Positive control: FAILED — 0 of 8 FULLY COVERED.** Ninth consecutive wave. The pattern is
+exhaustive: every OMP type root is either orchestration-plane or agent-plane.
+
+**Anti-vacuity: PASSED** — 8 surfaces enumerated, 171 files walked to symbol level.
+
+**`tools`** is the largest by symbol count in the entire workspace (860 exported symbols, 94
+files, 732KB). It is the agent's complete tool registry — every built-in tool the agent can
+invoke, with approval policies, bridge routing, and activity snapshots. No crate in our workspace
+imports any of these types.
+
+### 12.20 Surface coverage: async, utils, lib, tiny, vibe, auto-thinking
+
+> **ipg.11**: *Wave RUNTIME. async is the one to read first: OMP's concurrency surface vs
+> asupersync's binding contract — compose, conflict, or duplicate?*
+
+**Swept 2026-09-01.** Six type roots, 60 files, 268KB on disk, 316 exported declarations, walked to symbol level. Exported declarations use the rule ^export [declare] {type,interface,const,function,class,enum} NAME in *.d.ts; file sizes use du -ck. All six are agent-plane runtime features. None crosses the process boundary.
+
+| surface | OMP files | OMP KB | OMP symbols | 1 asupersync | 2 unsafe | 3 cancel | 4 typed | 5 logged | 6 observable | 7 robot | 8 WIRED | coverage | classification |
+|---|---:|---:|---:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|---|---|
+| async | 3 | 20 | 15 | —¹ | — | — | — | — | — | — | — | FULLY COVERED | **(a) NOT OURS** — OMP job scheduling (AsyncJobManager, raceJobSettlement) |
+| utils | 43 | 176 | 185 | — | — | — | — | — | — | — | — | MAPPED_NOT_ADOPTED | **(a) NOT OURS** — OMP utility layer (ActiveRepoContext, resolveActiveRepoContext) |
+| lib | 1 | 4 | 4 | — | — | — | — | — | — | — | — | MAPPED_NOT_ADOPTED | **(a) NOT OURS** — xAI HTTP credential transport (XAIHttpTransport, resolveXAIHttpCredentials) |
+| tiny | 9 | 48 | 83 | — | — | — | — | — | — | — | — | MAPPED_NOT_ADOPTED | **(a) NOT OURS** — local/online tiny-model completion (TinyModelDevice, TextGenerationPipeline) |
+| vibe | 3 | 16 | 25 | — | — | — | — | — | — | — | — | MAPPED_NOT_ADOPTED | **(a) NOT OURS** — Vibe worker lifecycle (VibeSessionRegistry, VibeLifecycleEvent) |
+| auto-thinking | 1 | 4 | 4 | — | — | — | — | — | — | — | — | MAPPED_NOT_ADOPTED | **(a) NOT OURS** — prompt-difficulty classification (classifyDifficulty, parseDifficultyLevel) |
+
+**Positive control: PASS — 1 of 6 FULLY COVERED (async).** FULLY COVERED means the surface map row is complete; it does not mean the capability is adopted.
+
+**Anti-vacuity: PASSED** — 6 surfaces, 60 files, and 316 exported declarations were enumerated. A zero-surface or zero-file result is an ERROR.
+
+**The async question answered:** OMP's async root composes with asupersync at a boundary but does not duplicate it. OMP's AsyncJobManager schedules in-process agent tool jobs (bash, task, eval) and races settlement against steering/abort; omp-rpc-session uses asupersync Cx, process groups, bounded phase deadlines, and both-pipe draining for the orchestrator's one OMP child. No Rust crate imports OMP's async declarations, so there is no direct binding conflict or duplicate shared implementation.
+
+¹ The async/asupersync relationship is a measured composition result, not a local contract claim: the OMP declaration is TypeScript agent-plane code, while the Rust binding is omp-rpc-session/src/lib.rs:1-16,23-46,135-163.
+
+**No category (b) rows:** every enumerated root is (a) not ours. Therefore no row requires a category-(b) OMP alternative; the OMP alternatives above name the existing declarations for auditability.
 
 
 ---
