@@ -388,7 +388,8 @@ are.
 ### 7. What Jeffrey would do
 
 **Disagreement with the brief, stated plainly.** The brief §3.7 records the mirror at
-`/Volumes/ZestData/dicklesworthstone-mirror` as **216 repos**. I ran `ls $M | wc -l` and got
+`/Volumes/ZestData/dicklesworthstone-mirror` as **216 repos** — a figure since retired in favour of
+**210** git work-trees, the only count that counts repositories. I ran `ls $M | wc -l` and got
 **218**. The difference is almost certainly definitional rather than substantive: the listing
 includes entries that are not live repos, e.g. `ntm.corrupt-20260819`, which appears alongside
 `ntm` (`ls $M | grep -i 'tmux\|ntm'` → `ntm`, `ntm.corrupt-20260819`, `useful_tmux_commands`).

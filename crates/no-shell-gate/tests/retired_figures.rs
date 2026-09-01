@@ -38,27 +38,41 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// A figure that has been refuted or superseded, with the marker that licenses mentioning it.
+/// A figure that has been refuted or superseded, with what licenses mentioning it.
 struct Retired {
-    /// The literal text that must not appear unretracted.
+    /// The literal claim that must not appear unretracted. Prefer the ASSERTION over the noun:
+    /// matching a bare type name fired on three correct usages before this was tightened.
     needle: &'static str,
-    /// Why it died. Empty is rejected by `allowance_reasons_are_non_empty`.
+    /// The value or word that supersedes it. A mention is excused when this appears nearby —
+    /// because **a retraction names its replacement**, and that is a stronger, more honest signal
+    /// than a vocabulary of apology words like "corrected" or "no longer". A site that says
+    /// "216 repos" while also saying "210" is doing history; a site that says only "216 repos" is
+    /// answering a question with a dead number.
+    replacement: &'static str,
+    /// Why it died. Empty is rejected by `retired_rows_carry_non_empty_reasons`.
     reason: &'static str,
 }
-
 /// Every figure this project has retired. Adding a row here is how a correction becomes enforced
 /// rather than merely written down.
 const RETIRED: &[Retired] = &[
     Retired {
         needle: "81 JSON-RPC methods",
-        reason: "not re-derivable from the installed source; measured surface is 39 CLI + 3 omp/* methods",
+        replacement: "39",
+        reason: "not re-derivable from installed source; measured surface is 39 CLI + 3 omp/* methods",
     },
     Retired {
         needle: "216 repos",
+        replacement: "210",
         reason: "matched none of four measured counts; 210 git work-trees is the only repo count",
     },
     Retired {
-        needle: "ObligationLedger",
+        // The CLAIM, not the type name. A first cut matched bare `ObligationLedger` and fired on
+        // three legitimate sites: the retraction row in the brief's own §7 table, a correct
+        // reference to the upstream type, and a passage explaining why it is blocked. An
+        // over-strict gate gets routed around — a slower death than no gate — so the needle is
+        // the assertion, not the noun.
+        needle: "re-exports the ack vocabulary",
+        replacement: "blocked",
         reason: "omp-types does not re-export it; zero occurrences, blocked behind messaging-fabric",
     },
 ];
@@ -93,12 +107,12 @@ fn sections() -> Vec<PathBuf> {
 }
 
 /// Is the mention at `idx` covered by a retraction marker on it or its neighbours?
-fn is_retracted(lines: &[&str], idx: usize) -> bool {
+fn is_retracted(lines: &[&str], idx: usize, replacement: &str) -> bool {
     let lo = idx.saturating_sub(2);
     let hi = (idx + 3).min(lines.len());
-    lines[lo..hi]
-        .iter()
-        .any(|l| RETRACTION_MARKERS.iter().any(|m| l.contains(m)))
+    lines[lo..hi].iter().any(|l| {
+        RETRACTION_MARKERS.iter().any(|m| l.contains(m)) || l.contains(replacement)
+    })
 }
 
 /// ANTI-VACUITY. An empty scan set is an ERROR, never a pass. Without this the gate is green on a
@@ -153,12 +167,12 @@ fn a_live_figure_is_not_flagged() {
 fn planted_retired_figure_is_detected() {
     let planted = ["intro", "we consume 81 JSON-RPC methods today", "outro"];
     assert!(
-        !is_retracted(&planted, 1),
+        !is_retracted(&planted, 1, "39"),
         "the detector must flag an unretracted mention"
     );
     let excused = ["intro", "the 81 JSON-RPC methods figure is RETIRED", "outro"];
     assert!(
-        is_retracted(&excused, 1),
+        is_retracted(&excused, 1, "39"),
         "the detector must excuse a mention that names its own retraction"
     );
 }
@@ -179,7 +193,7 @@ fn no_section_carries_a_retired_figure_unretracted() {
 
         for (idx, line) in lines.iter().enumerate() {
             for r in RETIRED {
-                if line.contains(r.needle) && !is_retracted(&lines, idx) {
+                if line.contains(r.needle) && !is_retracted(&lines, idx, r.replacement) {
                     offenders
                         .entry(name.clone())
                         .or_default()

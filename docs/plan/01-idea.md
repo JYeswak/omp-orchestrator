@@ -138,7 +138,7 @@ to "cargo" without qualification. **Every crate-metadata claim inherits whatever
 we have not measured what it does.** Open item, recorded here rather than left in chat (R11).
 
 **1.3.7 `fh` — evidence, failing closed.** We call it for retrieval against the dicklesworthstone
-mirror — 216 repositories at `/Volumes/ZestData/dicklesworthstone-mirror` — which is how R7 gets
+mirror — 210 git work-trees at `/Volumes/ZestData/dicklesworthstone-mirror` — which is how R7 gets
 answered with a citation instead of a memory. *Contract depended on:* `fh` **fails closed with a
 type**. As of this session its MCP surface returns `SERVE_INPUT_STALE` because the mirror HEAD moved
 (`5dec4212…` → `ecdea397…`); direct grep still works, and this section's citations were taken that
@@ -290,7 +290,7 @@ Matching a bar is a floor-raise, never a guarantee.
 including a complete 18-edge dependency graph in which `subprocess-contract` is correctly the
 most-depended-on crate at 4 dependents — the right shape, since it is the asupersync process-group /
 drain-both-pipes boundary and everything that spawns should route through it. An `omp-types` crate
-correctly re-exporting the canonical async vocabulary (`AckKind`, `DeliveryClass`, `ObligationLedger`,
+correctly re-exporting the reachable part of the canonical async vocabulary (`Budget`, `Outcome`; **not** `AckKind`/`DeliveryClass`/`ObligationLedger`, which are blocked upstream — corrected, see brief §3.7),
 `Budget`, `Outcome`) from asupersync at pinned rev `fa3c01aec`. A hard no-`.sh`/no-`.py` rule enforced
 by a Rust gate over `git ls-files` with an empty exemption list. This is not a prototype.
 

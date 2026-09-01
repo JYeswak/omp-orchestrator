@@ -97,7 +97,7 @@ Degrees, from the same file via
   `composer-typed`, `dispatch-silence-watch`, `fleet-composite`, `installer`,
   `kernel-bypass-gate`, `loop-queue-filter`, `omp-inventory-map`, `omp-types`. That
   `omp-types` — the crate that exists specifically to be the shared vocabulary,
-  re-exporting `AckKind`, `DeliveryClass`, `ObligationLedger`, `Budget`, `Outcome`
+  re-exporting `Budget` and `Outcome` only — the `AckKind`/`DeliveryClass`/`ObligationLedger` half is blocked upstream (corrected, brief §3.7)
   from asupersync at pinned rev `fa3c01aec` — has **zero dependents** is the single
   most damaging fact this diagram contains. The convergence crate is not converged
   onto. That is why the type inventory still measures 6 distinct Verdict-shaped types
@@ -278,7 +278,7 @@ rather than tolerating it. It is correct and it is undiscoverable. A gate nobody
 invoke has a real-world firing rate of zero regardless of its test count.
 
 **What would Jeffrey do.** Searched the mirror at
-`/Volumes/ZestData/dicklesworthstone-mirror` (216 repos) for diagram-generation and
+`/Volumes/ZestData/dicklesworthstone-mirror` (210 git work-trees; the earlier "216 repos" figure is retired) for diagram-generation and
 contract-test prior art: `grep -rl "mermaid" --include=*.rs` surfaces
 `franken_markdown/src/pdf.rs` and `franken_markdown/tests/cli_contract.rs`, i.e. a
 *renderer* for mermaid plus a CLI-contract test harness — the useful borrow is the
