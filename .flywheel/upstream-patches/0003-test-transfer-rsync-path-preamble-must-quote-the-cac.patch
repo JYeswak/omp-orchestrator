@@ -1,0 +1,71 @@
+From e3ab4c8ffb84df06c751a3d113ccc1207fd6e3ec Mon Sep 17 00:00:00 2001
+From: Josh <joshua@zeststream.ai>
+Date: Tue, 1 Sep 2026 03:13:07 -0600
+Subject: [PATCH 3/3] test(transfer): rsync-path preamble must quote the cache
+ glob for zsh workers [test]
+
+The rch-cargo-cache glob in the worker_cache_prune rsync-path prefix must
+carry single quotes so zsh workers do not expand it as a fatal unmatched-
+glob error on first-time syncs. Verified live: unquoted pattern on zsh
+with no matching files returns exit 1 (glob error); quoted pattern
+returns exit 0 (find runs, finds nothing).
+
+NO-CLAIM: proves quoting is present in the generated string. Does not
+prove the quoting survives the full rsync-to-ssh-to-zsh pipeline (that
+was not the failure mode in the latest binary).
+---
+ rch/src/transfer.rs | 41 +++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 41 insertions(+)
+
+diff --git a/rch/src/transfer.rs b/rch/src/transfer.rs
+index de2c566..6b42f30 100644
+--- a/rch/src/transfer.rs
++++ b/rch/src/transfer.rs
+@@ -11079,3 +11079,44 @@ Total file size: 123 bytes";
+         // TEST PASS: absolute CARGO_TARGET_DIR case
+     }
+ }
++
++/// 2yf FIRES-ON-KNOWN-BAD: the rsync-path preamble must carry SINGLE QUOTES
++/// around the `rch-cargo-cache-*` glob so zsh workers do not expand it as a
++/// fatal unmatched-glob error before `find` ever runs.
++///
++/// Before the quoting was added, the unquoted pattern reached the worker's
++/// zsh login shell and killed the transfer with
++/// `zsh:1: no matches found: rch-cargo-cache-*` on first-time syncs where no
++/// cache directory existed yet.
++#[test]
++fn rsync_path_preamble_quotes_the_cache_glob() {
++    let prefix = worker_cache_prune_rsync_path_prefix(
++        "/tmp/fake-project",
++        0, // no pooled target prune
++        None,
++    );
++    // BOTH find invocations must have the pattern single-quoted.
++    assert!(
++        prefix.contains("! -name 'rch-cargo-cache-*'"),
++        "the tmp prune must quote the cache glob for zsh workers — got: {prefix}"
++    );
++    assert!(
++        prefix.contains("-name 'rch-cargo-cache-*'"),
++        "the durable prune must quote the cache glob for zsh workers — got: {prefix}"
++    );
++    // Neither invocation may have the pattern UNQUOTED (the defect).
++    assert!(
++        !prefix.contains("! -name rch-cargo-cache-*"),
++        "the tmp prune must NOT contain the UNQUOTED cache glob"
++    );
++    // The pooled-target sweep must also be quoted.
++    let prefix_pooled = worker_cache_prune_rsync_path_prefix(
++        "/tmp/fake-project",
++        168, // pooled target prune enabled
++        None,
++    );
++    assert!(
++        prefix_pooled.contains("-name '.rch-target-*-pool-*'"),
++        "the pooled-target sweep must quote its glob for zsh workers"
++    );
++}
+-- 
+2.50.1 (Apple Git-155)
+

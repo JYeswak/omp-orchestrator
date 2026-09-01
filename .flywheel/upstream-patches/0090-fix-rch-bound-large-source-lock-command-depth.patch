@@ -1,0 +1,76 @@
+From e9b9e7ea81cbffd18ad5f4873a526b8c13db37bc Mon Sep 17 00:00:00 2001
+From: Josh <joshua@zeststream.ai>
+Date: Tue, 1 Sep 2026 00:30:37 -0600
+Subject: [PATCH] fix(rch): bound large source lock command depth
+
+---
+ rch/src/hook/ssh.rs | 32 +++++++++++++++++++++++++++++++-
+ 1 file changed, 31 insertions(+), 1 deletion(-)
+
+diff --git a/rch/src/hook/ssh.rs b/rch/src/hook/ssh.rs
+index 0d63718d..d70a007e 100644
+--- a/rch/src/hook/ssh.rs
++++ b/rch/src/hook/ssh.rs
+@@ -36,6 +36,12 @@ use super::*;
+ 
+ const MAX_OFFLOAD_SSH_OUTPUT_BYTES: usize = 32 * 1024 * 1024;
+ const REMOTE_SOURCE_AUTHORITY_LOCK_DIR: &str = "/tmp/rch-source-authority-locks";
++// macOS shells abort on very deep nested exec chains. Large Cargo closures
++// can contain hundreds of mutable roots, so serialize those rare invocations
++// behind one worker-local lock rather than constructing an unbounded process
++// chain. The coarse lock preserves correctness; it only reduces concurrency
++// between large closures on the same worker.
++const MAX_NESTED_SOURCE_AUTHORITY_LOCKS: usize = 128;
+ 
+ /// Keeps the worker-side advisory locks for a mutable Cargo source closure alive.
+ ///
+@@ -148,6 +154,13 @@ fn build_remote_source_authority_lock_cmd(
+     if lock_paths.is_empty() {
+         anyhow::bail!("remote source-authority lock set must not be empty");
+     }
++    let coarse_lock;
++    let effective_lock_paths: &[String] = if lock_paths.len() > MAX_NESTED_SOURCE_AUTHORITY_LOCKS {
++        coarse_lock = format!("{lock_dir}/coarse.lock");
++        std::slice::from_ref(&coarse_lock)
++    } else {
++        lock_paths
++    };
+     let mut nested = format!(
+         "sh -c {}",
+         shell_escape::escape(
+@@ -158,7 +171,7 @@ fn build_remote_source_authority_lock_cmd(
+             .into()
+         )
+     );
+-    for path in lock_paths.iter().rev() {
++    for path in effective_lock_paths.iter().rev() {
+         nested = format!(
+             "flock -x {} {nested}",
+             shell_escape::escape(path.as_str().into())
+@@ -772,6 +785,23 @@ mod tests {
+         );
+     }
+ 
++    #[test]
++    fn large_source_authority_lock_sets_use_a_bounded_coarse_lock() {
++        let _guard = test_guard!();
++        let roots: Vec<String> = (0..(MAX_NESTED_SOURCE_AUTHORITY_LOCKS + 1))
++            .map(|index| format!("/data/projects/root-{index}"))
++            .collect();
++        let command = build_remote_source_authority_lock_cmd("/tmp/locks", &roots, "READY")
++            .expect("build coarse source lock command");
++
++        assert!(command.contains("flock -x /tmp/locks/coarse.lock"));
++        assert_eq!(
++            command.matches("flock -x ").count(),
++            1,
++            "large closures must not create deeply nested flock processes"
++        );
++    }
++
+     #[cfg(target_os = "linux")]
+     fn spawn_local_source_lock(
+         lock_path: &str,
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,49 +1,60 @@
 # Upstream patches — preserved, not published
 
 Work committed against `Dicklesworthstone/remote_compilation_helper` (a **third-party**
-repo) in a `/tmp` checkout. Preserved here because `/tmp` is clearable and the commits
-are unpushed. **Publishing them is Josh's decision** via the jeff-issue-chain process;
-nothing here has been pushed.
+repo) and never pushed. Preserved here because one source checkout is in `/tmp` and
+therefore clearable. **Publishing is Josh's decision** via the jeff-issue-chain
+process; nothing here has been pushed, verified below.
 
-Source checkout at capture time: `/tmp/rch-fresh`, `origin/main..HEAD` = 2 commits.
+## TWO DIVERGENT UNPUSHED CHECKOUTS, and neither contains the other's work
 
-## The patch filenames are misleading, and that is the point
+Measured 2026-09-01:
 
-Both commits carry a **verbatim identical** message:
+| checkout | HEAD | unpushed | risk |
+|---|---|---:|---|
+| `/tmp/rch-fresh` | `e3ab4c8` | **3** | **`/tmp` is clearable** |
+| `~/Developer/jeff-corpus/remote_compilation_helper` | `e9b9e7ea` | 1 | durable |
 
-```
-test(disk_pressure): threshold/status agreement at real disk ratios [test]
-```
+`e3ab4c8` is **absent** from the jeff-corpus tree; `e9b9e7ea` is absent from
+`/tmp/rch-fresh`. Four commits of real work exist in two trees that have diverged, and
+a `/tmp` clear would silently delete three of them. That is why all four are captured
+here as patches rather than left in place.
 
-`git format-patch` derives filenames from messages, so both patches are named almost
-identically — and **only one of them is about disk pressure**.
+## Which patch is which — the filenames actively mislead
 
-| patch | commit | what it ACTUALLY changes | bead |
-|---|---|---|---|
-| `0001-test-disk_pressure-…` | `6a4c219` | `rchd/src/disk_pressure.rs` (+60) — threshold/status tests. **Message is accurate.** | `2z2.1` |
-| `0002-test-disk_pressure-…` | `feb3107` | `rch/src/hook.rs` (+24), `rch/src/hook/tests.rs` (+48) — **`is_regenerable_registry_root()`, the registry-mirroring fix.** Message is WRONG. | `2z2.2` |
+`git format-patch` derives filenames from commit messages, and two of these commits
+carry a **verbatim identical** message. Read this table, not the filenames.
 
-## Why this index exists
+| patch | commit | what it ACTUALLY changes | message accurate? | bead |
+|---|---|---|:--:|---|
+| `0001-test-disk_pressure-…` | `6a4c219` | `rchd/src/disk_pressure.rs` +60 — threshold/status tests | **yes** | `2z2.1` |
+| `0002-test-disk_pressure-…` | `feb3107` | `rch/src/hook.rs` +24, `hook/tests.rs` +48 — **`is_regenerable_registry_root()`, the registry-mirroring fix** | **NO** | `2z2.2` |
+| `0003-test-transfer-rsync-path-…` | `e3ab4c8` | `rch/src/transfer.rs` +41 — asserts the rsync-path preamble quotes the cache glob for zsh workers | yes | `2yf` |
+| `0090-fix-rch-bound-large-source-…` | `e9b9e7ea` | Josh's own fix, from the **jeff-corpus** checkout | yes | — |
+
+Numbered `0090` deliberately: it comes from a different tree than 0001–0003 and must
+not be applied as if it were sequential with them.
+
+## The lesson that cost a colleague a wrong answer
 
 Two panes reported on `2z2.2` and **contradicted each other**: one said the fix was
-committed as `feb3107`, the other closed the bead as `MINED-AND-LOCATED / NOT
-committed`. Measurement settles it — the fix **is** committed, 12 occurrences of
-`is_regenerable_registry_root` are in the tree, and `feb3107` carries them.
+committed as `feb3107`, the other closed the bead `MINED-AND-LOCATED / NOT committed`.
+Measurement settles it — the fix **is** committed, with 12 occurrences of
+`is_regenerable_registry_root` in the tree.
 
-The second pane was not careless. **`git log` genuinely shows two identical
-`disk_pressure` commits**, so a reader checking whether the registry work landed sees
-nothing about registries and reasonably concludes it did not. The misleading message
-manufactured a false negative in a colleague's review.
+The pane that said otherwise was **not careless**. `git log` genuinely shows two
+identical `disk_pressure` commits, so a reviewer checking whether the registry work
+landed sees nothing about registries and reasonably concludes it did not.
 
-That is the durable lesson: a commit message that misdescribes its diff does not just
-lose information, it actively produces wrong answers in anyone who trusts it. This
-repo's own `commit-msg` hook enforces a verification-level tag; it does not check that
-the subject matches the diff, and nothing does.
+**A commit message that misdescribes its diff does not merely lose information — it
+produces a wrong answer in anyone who trusts it.** This repo's `commit-msg` hook
+enforces a verification-level tag; nothing checks that the subject matches the diff,
+and nothing does.
 
 ## Verified, so nobody re-derives it
 
-- `feb3107` is **NOT** an ancestor of `origin/main` — nothing was pushed to a third
-  party. Checked with `git merge-base --is-ancestor`.
-- `6a4c219` is likewise unpushed.
-- Applying either patch requires a fresh clone of the upstream repo; the `/tmp`
-  checkout they came from may already be gone.
+- None of the four commits is an ancestor of `origin/main`. Checked per-commit with
+  `git merge-base --is-ancestor`. **No third-party publish occurred.**
+- Applying any of these needs a fresh clone of the upstream repo. The `/tmp` checkout
+  they came from may already be gone by the time you read this.
+- `2yf`'s underlying fix was already upstream (single quotes present since `54e6b95`,
+  Aug 28) and is in the installed `rch 1.0.62`. `0003` adds the **test**, not the fix.

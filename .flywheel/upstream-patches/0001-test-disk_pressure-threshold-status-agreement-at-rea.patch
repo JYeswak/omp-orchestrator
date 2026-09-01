@@ -1,7 +1,7 @@
 From 6a4c2191a8044c32893b548041f87768ca8d3fbc Mon Sep 17 00:00:00 2001
 From: Josh <joshua@zeststream.ai>
 Date: Tue, 1 Sep 2026 02:30:30 -0600
-Subject: [PATCH 1/2] test(disk_pressure): threshold/status agreement at real
+Subject: [PATCH 1/3] test(disk_pressure): threshold/status agreement at real
  disk ratios [test]
 
 Three new tests proving the policy is correct and the surfaces agree:
