@@ -336,10 +336,14 @@ boundary instead of deriving both from one predicate.
 unreaped, because an unreaped pane is capacity that silently disappears.* **MEASURED**: the
 `NewlyIdle` arm exists only because *"The operator spotted a freed worker my classifier had hidden"*
 — that transition previously fell through a `_ => Live` catch-all (`:409-419`). The `actionable`
-layer is still **BROKEN** for the same reason: `free_capacity` derived from the `is_dispatchable`
-filter, excluding a pane at `t=0` from **both** lists (brief §4) — *"the exact shape that let the
-fleet sit idle for hours while the watchdogs reported healthy"*
-(`omp-orchestrator/src/lib.rs:451-462`). **What would Jeffrey do:** `rg -li --type rust -e
+filter defect itself is **FIXED** (commit `-oco`; `is_free_capacity` is now its own field at
+`omp-orchestrator/src/lib.rs:162-175`, with the regression test
+`observed_idle_state_counts_as_free_capacity_before_confirmation` at `main.rs:1056`) — what
+remains broken is the SEAM: the producer's field and the consumer's parser agree by convention
+across a process boundary with no shared type, so a future filter change is invisible again
+(09 M1). The scar quote stands as history: *"the exact shape that let the fleet sit idle for hours
+while the watchdogs reported healthy"* (`omp-orchestrator/src/lib.rs:451-462`, whose comment now
+records the fix). **What would Jeffrey do:** `rg -li --type rust -e
 'reap(ed|ing)?_pane|pane_reap|kill-pane' --glob '!target' .` in the mirror — the extension filter is
 sound here only because the subjects are Rust, the hazard A8(b) names — → 7 files, load-bearing
 `frankenterm/crates/frankenterm-core/src/orphan_reaper.rs`, whose module doc refuses: *"A
@@ -377,7 +381,7 @@ standing exemplars are ours**: the `installer` printed *"not yet wired to the li
 returned SUCCESS (§07), and shell `grep -r … --include='*.rs'` returns **empty at exit 0** (brief
 §3.5). **Two candidates were REFUTED on re-measurement, and that is the sharper finding.** `br
 comment <id> <text>`, which our own doc comment at `dispatch-silence-watch/src/lib.rs:13-17` records
-as exiting 0, **exits 2** against `br 0.4.1` — a clean refusal, stdout empty. The prefix-match to
+as exiting 0, **exits 2** against `br 0.4.1` — refusal on stderr, stdout empty (precision, re-measured: the 2 is a clap usage refusal — the argument was rejected before any comment logic ran — so the exit code refutes the exit-0 story, and the wording above no longer claims the comment path itself answered). The prefix-match to
 `br comments` is real; the exit-0 half is false. **So the negative is not "a tool that lies about
 its exit code" but a defect claim recorded in a doc comment, never re-derived, and inherited as fact
 by every later reader — including this plan, which cited it as MEASURED because the source presented

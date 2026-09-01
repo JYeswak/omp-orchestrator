@@ -104,8 +104,9 @@ Degrees, from the same file via
   with no shared trait and 17 ack/receipt types in 3 incompatible dialects.
 - **Hub:** `subprocess-contract`, in-degree 4 (`finding`, `omp-orchestrator`,
   `kernel-only-operator-hook`, `pane-dispatch-fence`). It is the correct hub — the
-  process-boundary contract is what should be universal — but only 4 of 26 crates
-  reach it, against 29 raw spawn sites measured in the repo.
+  process-boundary contract is what should be universal — but only 4 of 26 crates depend on it
+  directly (6 reach it transitively; 22 do not route through it at all), against 29 raw spawn
+  sites measured in the repo.
 - **8 leaves** (out-degree 0): `dispatch-claim-fence`, `omp-rpc-session`,
   `path-literal-guard`, `pre-delete-citation-check`, `state-wildcard-lint`,
   `subprocess-contract`, `tick-monitor`, `undrained-pipe-lint`.
@@ -178,13 +179,13 @@ Deciding which subset is worth wiring is a design act this diagram cannot perfor
 ```mermaid
 graph LR
     OBS["1 · OBSERVE<br/>tick-monitor<br/>WORKS"]
-    ACT["2 · ACTIONABLE<br/>idle_panes / free_capacity<br/>BROKEN"]
+    ACT["2 · ACTIONABLE<br/>idle_panes / free_capacity<br/>FILTER FIXED (-oco); SEAM OPEN — no shared type"]
     CON["3 · CONSUME<br/>dispatch-claim-fence<br/>FENCED"]
     ACU["4 · ACTUATE<br/>send to pane<br/>DOES NOT EXIST"]
     CMP["5 · COMPLETE<br/>worker to conductor<br/>DOES NOT EXIST"]
 
     OBS -->|pane state observed| ACT
-    ACT -.->|"Local path: NewlyIdle discarded;<br/>is_dispatchable requires Confirmed Idle;<br/>upstream GuestIdleReconcilerCtx (dist/types/collab/guest.d.ts:9-30) provides guest idle settle reconciliation but is not wired into this local filter"| CON
+    ACT -.->|"Local path: filter fixed (-oco); the SEAM remains —<br/>the production parser derives capacity from its own<br/>JSON string, never the producer's NewlyIdle field;<br/>upstream GuestIdleReconcilerCtx (collab/guest.d.ts:9-30)<br/>is DECLARED only"| CON
     CON -.->|"162 refused ticks over 4.2h<br/>DISPATCH_RETRY_BLOCKED"| ACU
     ACU -.->|"a human types into the pane"| CMP
     CMP -.->|"no path back"| OBS
@@ -201,7 +202,7 @@ graph LR
     linkStyle 4 stroke:#c04040,stroke-width:3px
 ```
 
-**MEASURED.** Source: layer 1 from the `tick-monitor` crate's live operation; layer 2 from the local `idle_panes` and `free_capacity` producer/consumer path, which currently derives both from the `is_dispatchable` filter requiring `Confirmed Idle`, so a pane at t=0 is excluded from both. OMP supplies `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts:9-30`) for guest host-idle reconciliation and settle handling, but this declared type has no measured path into the local filter. Layer 3 is from the tick ledger — **162 refused ticks across 4.2 hours, every one carrying `DISPATCH_RETRY_BLOCKED`**; layers 4 and 5 are recorded as absent because no crate in Diagram 1 emits into a pane and no crate receives a completion.
+**MEASURED.** Source: layer 1 from the `tick-monitor` crate's live operation; layer 2 from the local `idle_panes`/`free_capacity` producer-consumer path. State, corrected 2026-09-01: the filter defect is FIXED (commit -oco; `is_free_capacity` is now its own field and `NewlyIdle` is included), and what remains broken is the SEAM — the producer's field and the consumer's parser agree by convention across a process boundary with no shared type (09 M1). OMP supplies `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts:9-30`) for guest host-idle reconciliation and settle handling, but this declared type has no measured path into the local filter. Layer 3 is from the tick ledger — **162 refused ticks across 4.2 hours, every one carrying `DISPATCH_RETRY_BLOCKED`**; layers 4 and 5 are recorded as absent because no crate in Diagram 1 emits into a pane and no crate receives a completion.
 
 
 Read left to right, exactly one of five links is solid. The loop is not slow, it is
@@ -228,13 +229,13 @@ under a fixed layer 2.
 ```mermaid
 graph TD
     subgraph COMPLETE["4 of 4 legs — 1 gate"]
-        g1["no-shell-gate<br/>34 tests<br/>known_bad 4 · known_good 3<br/>mutation 2 · anti_vacuity 6"]
+        g1["no-shell-gate<br/>57 tests (was 34; four test files landed since)<br/>known_bad 4 · known_good 3<br/>mutation 2 · anti_vacuity 6"]
     end
 
     subgraph PARTIAL["partial — 4 gates"]
         g2["omp-inventory-map<br/>23 tests<br/>known_bad 0 · known_good 2<br/>mutation 1 · anti_vacuity 1"]
         g3["undrained-pipe-lint<br/>10 tests<br/>known_bad 1 · known_good 1<br/>mutation 1 · anti_vacuity 3"]
-        g4["state-wildcard-lint<br/>9 tests<br/>known_bad 1 · known_good 1<br/>mutation 1 · anti_vacuity 0"]
+        g4["state-wildcard-lint<br/>9 tests<br/>known_bad 1 · known_good 0<br/>mutation 1 · anti_vacuity 0"]
         g5["path-literal-guard<br/>3 tests<br/>known_bad 1 · known_good 0<br/>mutation 0 · anti_vacuity 2"]
     end
 
@@ -249,8 +250,8 @@ graph TD
     style THIN fill:#4a1010,color:#fff
 ```
 
-**MEASURED.** Source: `find crates -name '*.rs' -path '*/tests/*' | wc -l` → 26
-integration test files; `grep -rc '#\[test\]'` across those → 379 `#[test]` functions;
+**MEASURED.** Source: `find crates -name '*.rs' -path '*/tests/*' | wc -l` → 31
+integration test files; `grep -rhc '#\[test\]'` over crates/*/src/*.rs crates/*/tests/*.rs → 407 `#[test]` functions (regenerated 2026-09-01; this figure drifts with every landing test and is now tracked in NUMBERS.toml `[figures.test_functions]`);
 per-leg presence from `grep -rli` for each of `known_bad`, `known_good`, `mutation`,
 `anti_vacuity` per gate crate. Counts in each node are that grep's file count, not a
 quality judgement.
@@ -258,9 +259,10 @@ quality judgement.
 **2 of 8 gates have all four legs** — `no-shell-gate` and `undrained-pipe-lint`. **4 of 8 have no
 mutation leg** — meaning for four gates we have never demonstrated that breaking the
 thing under test makes the test fail. 2 of 8 have no known-bad, i.e. no proof they
-fire at all. The one gate with no
-known-good leg is `path-literal-guard`, and per §00 §3.5 that makes it the
-highest-risk gate in the set rather than merely the thinnest: an attack-only suite
+fire at all. **Two gates have no known-good leg** — `path-literal-guard` and
+`state-wildcard-lint` (regenerated 2026-09-01: zero known-good occurrences in that crate's tests,
+correcting this diagram's earlier kg=1 cell) — and per §00 §3.5 that makes both the
+highest-risk gates in the set rather than merely the thinnest: an attack-only suite
 ships an over-strict gate, an over-strict gate gets routed around, and a routed-around
 gate is a slower death than no gate at all. Note also what a full four-leg row buys —
 it raises the floor on a class of defect; it never guarantees the class is absent.
@@ -279,9 +281,16 @@ contract-test prior art: `grep -rl "mermaid" --include=*.rs` surfaces
 `franken_markdown/src/pdf.rs` and `franken_markdown/tests/cli_contract.rs`, i.e. a
 *renderer* for mermaid plus a CLI-contract test harness — the useful borrow is the
 `cli_contract.rs` shape, a test that asserts the CLI's own advertised surface, which
-is exactly the missing ADDRESSABLE leg. Searched for a generated-architecture-diagram
-gate specifically: no prior art found in the mirror for emitting mermaid *from* a
-dependency census as a CI artifact. That one we build.
+   is exactly the missing ADDRESSABLE leg. Searched for a generated-architecture-diagram
+gate specifically: **RETRACTED as a false zero, 2026-09-01.** The original scan globbed
+`*/*.rs` and `*/src/**/*.rs` and never descended into crate subdirectories; a full recursive walk
+finds **293 mirror `.rs` files containing `mermaid`**, topped by an entire **`frankenmermaid`
+monorepo (190 files: fm-parser, fm-render-*, fm-cli)** — mermaid generation with parsers,
+renderers, and a CLI — plus `beads_rust`'s `br dep --format mermaid`
+(`src/cli/commands/dep.rs:1654`, `render_dep_tree_mermaid`, with e2e contract tests) emitting
+mermaid directly from a dependency graph, and ftui-extras renderers. What remains ours to build
+is the DELTA none of them ships: regenerating Diagram 1 from the live census inside CI and
+failing the diff when the crate DAG moves — the generator-as-gate, not the generator.
 
 ---
 
@@ -355,7 +364,9 @@ DAG of Diagram 1 — `receiver-receipt` exists as a crate and is depended on by
 version from `tmux` at `/opt/homebrew/bin/tmux` (which rejects `--version` with
 `tmux: unknown option -- -`, hence the shell-reported `3.6a`); `br 0.4.1` from
 `br --version`; the 17-ack-types-in-3-dialects figure from the type inventory
-(51 public enums (excluding test+bin sources; 59 including them — publish the pair), 79 structs, 22 of 24 crates, 4 colliding names).
+(regenerated 2026-09-01, two scopes published as an error bar: 59 public enums / 91 structs
+across 24 of 26 crates including test modules and bin sources; 59 / 88 for
+src-only-minus-bins-minus-test-modules), plus 4 colliding names.
 
 Step 4 is the receiver-verification gap, drawn as a dashed unanswered arrow because
 that is literally what it is: a message we assume and never observe. Every ack type we

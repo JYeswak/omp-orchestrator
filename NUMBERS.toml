@@ -56,9 +56,27 @@ expect   = "13"
 appears  = ["docs/PLAN.md", "docs/plan/CONVERGENCE.md"]
 note     = "12 analysis sections + 12-journey. The convergence gate hardcodes 12 SECTIONS and does NOT include 12-journey — deliberate, and it is why this figure is 13 while that list is 12."
 
+[figures.board_total]
+command  = "for s in closed in_progress open blocked; do br list --status $s | grep -c .; done | python3 -c 'import sys;print(sum(int(l) for l in sys.stdin))'"
+expect   = "LIVE"
+appears  = ["docs/plan/00-brief.md", "docs/plan/09-milestones.md"]
+note     = "not a fixed figure — the board moves hourly. Declared so any prose quoting a board total without 'as of' + command is measurable drift. Snapshot quotes must carry their timestamp."
+note     = "12 analysis sections + 12-journey. The convergence gate hardcodes 12 SECTIONS and does NOT include 12-journey — deliberate, and it is why this figure is 13 while that list is 12."
+
 # ── The high-drift figures round 10 named. Added by the orchestrator, leading by
 #    example on the instruction given to the fix round: declaring one is worth more
 #    than correcting one, because a correction lasts until the next commit.
+[figures.test_files]
+command  = "for d in crates/*/tests; do ls $d/*.rs 2>/dev/null; done | wc -l"
+expect   = "31"
+appears  = ["docs/plan/00-brief.md", "docs/plan/01-idea.md", "docs/plan/06-gates.md"]
+note     = "was 26 when the brief measured it, 30 by round 10, 31 at the round-11 fix — five meta-gate test files landed during grading. 01-idea's 370/379 and 06-gates' transcribed copies all drift from this one quantity."
+
+[figures.board_total]
+command  = "for s in closed in_progress open blocked; do br list --status $s | grep -c .; done | python3 -c 'import sys;print(sum(int(l) for l in sys.stdin))'"
+expect   = "LIVE"
+appears  = ["docs/plan/00-brief.md", "docs/plan/09-milestones.md"]
+note     = "not a fixed figure — the board moves hourly. Declared so any prose quoting a board total without 'as of' + command is measurable drift. Snapshot quotes must carry their timestamp. (The orchestrator also added a refutation_count row; if it was lost in a concurrent edit, the prose rule stands: name the §7 table as the source, never a bare count.)"
 
 [figures.test_functions]
 command  = "grep -rhc '#\\[test\\]' crates/*/src/*.rs crates/*/tests/*.rs 2>/dev/null | awk '{s+=$1} END{print s}'"
@@ -83,3 +101,9 @@ command  = "grep -c . docs/plan/CONVERGENCE.jsonl"
 expect   = "36"
 appears  = ["docs/plan/CONVERGENCE.md"]
 note     = "3 rounds x 12 sections. A round that reports 11 rows is a pane that silently dropped a section, which has happened twice."
+
+[figures.unsafe_both_mechanisms]
+command  = "python3 -c \"import pathlib,re;m=[re.search(r'unsafe_code\\s*=\\s*.forbid.',p.read_text()) for p in pathlib.Path('crates').glob('*/Cargo.toml')];i=[any(re.search(r'^#!\\[forbid\\(unsafe_code\\)\\]',x.read_text(errors='ignore'),re.M) for x in p.parent.glob('src/**/*.rs')) for p in pathlib.Path('crates').glob('*/Cargo.toml')];print(sum(1 for a,b in zip(m,i) if a and b))\""
+expect   = "25"
+appears  = ["docs/plan/03-crates.md"]
+note     = "the both-mechanisms count moved 19 -> 25 in one round when six crates adopted the manifest lint. The triple (manifest/both/attribute-only) is the highest-rotation statistic in the plan; both-mechanisms is the one the gate text depends on."

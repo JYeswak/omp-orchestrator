@@ -8,8 +8,10 @@ we are allowed to say it works, and the conditions under which this document sho
 
 **A milestone is closed by an OBSERVABLE, not by a claim** — not by a passing test suite, a commit, an agent reporting success, or a
 human's recollection that it seemed to work. An observable is a command someone else can run and a result they can read without asking
-us what it means. That is the output of the failure this project was stood down over: **20 mechanisms built, tested, hardened, and
-called by nothing** (§01), every one with a green suite — evidence code does what its author thought, not that it runs. Every milestone
+us what it means. That is the output of the failure this project was stood down over: **a workspace whose own census measured
+mechanisms built, tested, hardened, and called by nothing** (§01: twenty-six crates, 379→407 tests
+at last count, and a BUILT≠WIRED census whose row set outgrew the twenty-mechanism figure this
+text first cited — see the section-map note at the bottom of this file) — evidence code does what its author thought, not that it runs. Every milestone
 below is stated in this shape:
 
 ```
@@ -33,7 +35,10 @@ measure the wrong quantity. Guarding against that is §5's job.
 ## 2. The milestones
 
 Seven, ordered by dependency — forced, not chosen: each consumes the capability the previous one produces, so there is no parallel path
-here and no way to buy schedule with more agents.
+here and no way to buy schedule with more agents. The ordering is not asserted from preference: it
+mirrors the measured crate chain of §04 (finding-dispatch → omp-orchestrator → ack-stage →
+receiver-receipt → tick-monitor is the deepest path in the 18-edge DAG), with M1's seam at the
+head and M7's window at the tail.
 
 ```mermaid
 graph LR
@@ -45,8 +50,12 @@ graph LR
 
 ### M1 — One shared pane-state type will cross the observe→decide seam, so a filter change breaks the consumer at compile time
 
-**OBSERVABLE.** `grep -rn "omp-types\|omp_types" crates/*/Cargo.toml | grep -v "^crates/omp-types/"` returns a non-empty result naming
-both `tick-monitor` and `omp-orchestrator` — empty today. Second leg: a test feeding **real `tick-monitor` stdout** into the
+**OBSERVABLE.** (a) `grep -rn "omp-types\|omp_types" crates/*/Cargo.toml | grep -v "^crates/omp-types/"` names both `tick-monitor` and
+`omp-orchestrator` — empty today; AND (b) a NAMED shared pane-state type (the omp-types
+observation struct, not a re-export shim) appears in both crates' public parse/emit signatures —
+grep the type name, not the crate name, because adding an unused manifest line would satisfy (a)
+alone — plus the second leg below (a real stdout fixture compiled through it). Both legs fail
+today. Second leg: a test feeding **real `tick-monitor` stdout** into the
 `omp-orchestrator` parser, asserting a just-finished pane is visible as capacity. **NOT IN SCOPE.** Selection, dispatch, ack — M1
 changes what the loop *sees*.
 
@@ -64,7 +73,9 @@ grep -rn  "NEWLY_IDLE"  crates/omp-orchestrator/            -> 2 hits, both #[cf
 ```
 
 The producer emits `free_capacity` from its own predicate including `NewlyIdle`; the consumer counts its own field;
-`crates/omp-orchestrator/src/lib.rs:451-457` comments the former defect, with a regression test at `src/main.rs:1049`. `MEASURED`: **the
+`crates/omp-orchestrator/src/lib.rs:451-457` comments the former defect, with the regression test
+`observed_idle_state_counts_as_free_capacity_before_confirmation` at `src/main.rs:1056`
+(predicate asserts `:1062-1063`). `MEASURED`: **the
 filter defect is fixed in source** — the brief's row describes the tree at the 4h19m incident, not this commit, and should be amended in
 place. What remains broken is the **seam**. `MEASURED`: the producer names the state; the production parser at `src/main.rs:383`
 **never** does, deriving capacity from a JSON string list plus a `state == "IDLE"` fallback, so the NewlyIdle branch is exercised only
@@ -80,7 +91,7 @@ the ack dialects is not merely unadopted but **blocked upstream**: `AckKind` and
 times. **NO-CLAIM.** M1 makes one defect class a compile error; a shared type with a wrong predicate is wrong in both crates.
 
 **UPSTREAM CORROBORATION, declared only.** OMP declares `GuestIdleReconcilerCtx`
-(dist/types/session family) with a settle-vs-continuation split — the same two-tier idle design
+(`dist/types/collab/guest.d.ts:9-30`; probed) with a settle-vs-continuation split — the same two-tier idle design
 as `NewlyIdle`/`ConfirmedIdle`, arrived at independently. DECLARED only: no wire probe has carried
 it; M1's measured three-predicate seam and the RISK above stand unchanged.
 
@@ -109,12 +120,19 @@ a degradation path with a typed refusal, or M2 blocks M6. **NO-CLAIM.** Graph se
 ### M3 — Dispatch will return an acknowledgement or a typed refusal, never a bare success
 
 **OBSERVABLE.** A planted-known-bad fixture in which the transport reports success while no packet arrives, and the dispatcher's verdict
-is a refusal rather than `Delivered` — closed when that test exists and fails when the ack check is removed (mutation leg).
+is a refusal rather than `ReceiptConfirmed` — closed when that test exists and fails when the ack check is removed (mutation leg).
+The verdict is receiver-side screen evidence (timer reset + content change), NOT packet arrival:
+the honest name for what M3 proves is "the receiver's screen changed in packet-shaped ways." The
+stronger form — a packet-correlated receipt carrying an id the receiver echoes — is the
+`IrcDeliveryReceipt`-shaped upgrade (DECLARED only upstream) and is not required for M3.
 **NOT IN SCOPE.** Detecting whether the worker *finished* (M4); M3 ends at "the packet provably arrived".
 
 **STARTING POINT.** `MEASURED` — brief §4 lists actuate as **DOES NOT EXIST**: a human types into panes. Both polarities have fired.
 `cp-z42vu` (`README.md:155`, `dispatch-silence-watch/src/lib.rs:10`): a send returned **`success:[4]` while the packet never arrived**;
-the inverse fired the same session.
+the inverse fired the same session. Evidence caveat, recorded rather than hidden: both incidents
+predate the packet journal (11-lifecycle F), so their record is narrative copies, not an immutable
+capture — M3's own observable must therefore be demonstrated on a JOURNALED dispatch, one whose
+packet and receipt exist as records.
 
 **RISK.** The available ack is *terminal inspection*: `receiver-receipt` spawns `tmux`
 (`crates/receiver-receipt/src/bin/receiver-receipt.rs:19`), and reading a rendering is not a protocol. `ntm --robot-send` already
@@ -129,7 +147,10 @@ observable is unchanged.
 ### M4 — Completion will be detected by the loop, not by a human looking
 
 **OBSERVABLE.** A stored trace in which a bead moves to closed with **zero** human-originated events — `human_touch_count == 0`,
-re-readable. **NOT IN SCOPE.** Whether the work is *good* (the verify gate), and autonomy end to end (M5).
+re-readable — AND the close actor is not the dispatched worker identity: `ack-spine`'s own
+taxonomy classifies worker-asserted `Finished` as a *claim* (followup.rs), so M4 requires the
+close to originate from the verification/grader side (A8), never from the worker that reported
+done. A worker closing its own bead satisfies `human_touch_count == 0` and proves nothing. **NOT IN SCOPE.** Whether the work is *good* (the verify gate), and autonomy end to end (M5).
 
 **STARTING POINT.** `MEASURED` — the vocabulary exists, nothing reaches it, and brief §4 records that every completion this session was
 found by a human looking.
@@ -149,13 +170,20 @@ eliminate. **NO-CLAIM.** M4 delivers *detection*; detection without verification
 
 ### M5 — The loop will close a bead end to end with no human in the trace
 
-**OBSERVABLE.** The plan's headline claim, **never observed once**: ten consecutive closes from one recorded run where the union of
-human-originated events is empty, every refusal in the window is accounted for by a named verdict, and the beads are independently
-confirmable via `br list --status closed --json`. **NOT IN SCOPE.** Duration (M7) and portability (M6) — M5 is one closed loop, once,
+**OBSERVABLE.** The plan's headline claim, **never observed once**: ten consecutive closes from one recorded run — each of the ten bead
+IDs bound to that run in the dispatch record (packet journal entry or claim row naming worker and
+packet), with the union of human-originated events empty, every refusal in the window accounted
+for by a named verdict, and the beads independently confirmable via
+`br show <id> --json` per bead. A global `br list --status closed` count alone proves nothing
+about which run closed them. **NOT IN SCOPE.** Duration (M7) and portability (M6) — M5 is one closed loop, once,
 ten times.
 
-**STARTING POINT.** `MEASURED`: three of five layers in brief §4 are non-functional (actionable BROKEN, actuate and complete DO NOT
-EXIST), and consume produced **162 consecutive refused ticks over 4.2 hours** (`DISPATCH_RETRY_BLOCKED`). Board right now:
+**STARTING POINT.** `MEASURED` against the current seven-row control loop (brief §4): observe WORKS-with-defect; actionable's filter is
+FIXED (-oco) with the seam still open; consume FENCED with **162 consecutive refused ticks over
+4.2 hours** (`DISPATCH_RETRY_BLOCKED`; incident count from the tick ledger — §00 §4 carries this
+figure as a named evidence gap with no deriving command, which is itself recorded); actuate DOES
+NOT EXIST; and complete is AVAILABLE-NOT-WIRED — the upstream completion type is wire-proven, the
+local consumer is not built (Gap 7, refuted and adopted). Board right now:
 
 ```
 for s in open in_progress blocked closed; do printf "%s " "$s"; br list --status $s | grep -c .; done
@@ -171,8 +199,12 @@ Ten closes is an existence proof, not a rate.
 
 ### M6 — A repository that is not this one will run the orchestrator on a machine that has never built it
 
-**OBSERVABLE.** On a host with no build cache for this workspace, a documented install command followed by a first tick against a
-foreign repo producing a readable verdict — closed by a transcript from that host that a third party can reproduce. **NOT IN SCOPE.**
+**OBSERVABLE.** On a host with no build cache for this workspace (`cargo clean -p` evidence or a
+fresh checkout at an unpinned path), run the documented install command, then a first tick against
+a foreign fixture repo, producing a readable verdict — closed by a transcript naming (1) the
+install command and its exit code, (2) the proof of cache absence (`ls target/` empty or fresh
+clone hash), (3) the fixture repo path, (4) the first-tick command, and (5) the verdict JSON —
+reproducible by a third party from the transcript alone. **NOT IN SCOPE.**
 Unattended operation (M7); M6 is one successful cold first tick elsewhere.
 
 **STARTING POINT.** `MEASURED`: never attempted. The `installer` crate exists and is **isolated** — on neither side of any of the 18
@@ -190,7 +222,8 @@ tmux --version 2>&1 | head -1        -> $?=0, PIPESTATUS=(1 0)    <- head's stat
 ```
 
 tmux fails, says so on stderr, writes nothing to stdout, returns 1. The "exits 0" was a probe reading `$?` after a pipeline; **the exit
-code that lied was our harness, not the subject.** The hazard inverts: `--version` answers 8/9 of our binaries and `-V` answers 5/9, so
+code that lied was our harness, not the subject.** The hazard inverts: `--version` answers 8/9 of our binaries and `-V` answers 6 of 9 (`ntm`, `br`,
+`tmux`, `cargo`, `fh`, `jsm`; fails `omp`, `bv`, `git`), so
 a probe treating non-zero as ABSENT records tmux — present, working, 3.6a — as MISSING, a false negative on the one binary through which
 we read pane truth. Verified precedent, in `dicklesworthstone-mirror/pi_agent_rust/src/doctor.rs`, cited by **construct** because a bare
 line number is unverifiable across checkouts — these constructs sit one line earlier in `~/Developer/pi_agent_rust` and its tests 22
@@ -205,9 +238,12 @@ tmux MISSING today. **NO-CLAIM.** M6 proves portability to one host and only "di
 
 ### M7 — The fleet will run unattended for a defined window with every refusal accounted for
 
-**OBSERVABLE.** A window of stated length in which human-originated events are zero, every tick produced either progress or a named
-refusal, and no refusal class recurs beyond its escalation threshold (`FINDING_THRESHOLD == 3`,
-`crates/finding-dispatch/tests/recurrence.rs:83`). **NOT IN SCOPE.** Increasing the window — M7 is the first defensible number, not the
+**OBSERVABLE.** A 24-hour window — the first defensible number, chosen because the measured
+failure (4h 19m of undetected fleet idleness) fits inside it five times — in which
+human-originated events are zero, every tick produced either progress or a named refusal, and no
+refusal class recurs beyond `FINDING_THRESHOLD == 3`
+(`crates/finding-dispatch/src/lib.rs:15`, consumed by the escalation path
+`finding-dispatch/src/lib.rs:23` — the production consumer of the threshold, not the test). **NOT IN SCOPE.** Increasing the window — M7 is the first defensible number, not the
 best one.
 
 **STARTING POINT.** `MEASURED`: the longest unattended interval observed to date is a **failure** — 4h 19m of fleet idleness while every
@@ -241,7 +277,10 @@ R3 wants a document an investor can pass or fail, so it must be checkable, not m
   structural absence was read as semantic absence; re-derived without the filter it is 93+ files, and the "no prior art" verdict it
   produced was false. (c) A pipeline launders a failure into a success: `tmux --version 2>&1 | head -1` yields `$?=0` with
   `PIPESTATUS=(1 0)`. So **"I grepped and got nothing" is not a finding** — a publishable not-found names the exact command *and* why
-  that search space was the right one. Every zero in this section was re-derived with the harness grep (M2, M4, M6). The pattern is the
+  that search space was the right one. The M2 and M4 zeros were re-derived with the harness grep; M1's zeros were re-derived with
+`strings`/`grep` on built binaries (the object there is a compiled artifact, where the harness
+grep does not apply), and M6's are redirect-separated exit probes. Every zero names its
+instrument; none was accepted from a prior round. The pattern is the
   finding: **four false-zero or mis-transcribed measurements in one session, three of them the conductor's, and every one caught by a
   sibling re-deriving rather than reading.** Re-derivation, not review, is what caught them — which is an argument for the loop this
   plan proposes.
@@ -318,7 +357,8 @@ BANKED rows cite evidence; UNPROVEN rows name the experiment that settles them. 
 | Silent refusal is real — **162 consecutive refused ticks over 4.2h** (`DISPATCH_RETRY_BLOCKED`), and **178 ticks** of an idle-capacity alarm written to a file with one writer and zero readers | **The substrate installs elsewhere.** `MEASURED`: never attempted; `installer` is isolated in the 18-edge graph. Settled by M6: a cold foreign host, documented install, first tick, reproducible transcript. |
 | Transport lies in both directions — `cp-z42vu` returned **`success:[4]`** with no packet delivered (`README.md:155`); the inverse fired the same session | **Verification is cheaper than review.** No instrumentation exists. Settled by recording human-seconds per closed bead before and after M4 on the same bead mix — that ratio is the whole economic argument and is unmeasured. |
 | The evidence-field discipline can be satisfied vacuously — **183/183 rows complete, 1 distinct `must_be_true`** (brief §3.3) | **Graph selection beats recency.** `MEASURED`: `bv` is spawned zero times. Settled by M2's differential test plus a measured close-rate comparison on a fixed bead set. |
-| The observe layer works and the NewlyIdle filter defect is **fixed in source** — `crates/omp-orchestrator/src/lib.rs:461`, regression test at `src/main.rs:1049` (contradicts brief §4; see M1) | **The seam cannot silently diverge again.** `MEASURED`: no shared type crosses it; production never names `NEWLY_IDLE` (`grep -rn '"NEWLY_IDLE"' crates/omp-orchestrator/src/main.rs` → 0). Settled by M1. |
+| The observe layer works and the NewlyIdle filter defect is **fixed in source** — `crates/omp-orchestrator/src/lib.rs:461`, regression test `observed_idle_state_counts_as_free_capacity_before_confirmation` at
+`src/main.rs:1056` (contradicts brief §4; see M1) | **The seam cannot silently diverge again.** `MEASURED`: no shared type crosses it; production never names `NEWLY_IDLE` (`grep -rn '"NEWLY_IDLE"' crates/omp-orchestrator/src/main.rs` → 0). Settled by M1. |
 | The one hard rule is enforced mechanically — a Rust gate walks `git ls-files` and fails on `.sh`/`.py`, exemption list empty | **The gates bite under attack.** `MEASURED`: 2 of 8 gates have four legs, 4 of 8 have no mutation leg. Settled by bringing all 8 to four legs plus ADDRESSABLE, and a planted-known-bad campaign per gate. |
 | Failing closed with a remediation hint works — `fh` MCP returns a typed `SERVE_INPUT_STALE` naming the moved mirror HEAD (`5dec4212…` → `ecdea397…`) rather than an empty result | **This plan enforces its own discipline.** `MEASURED`: `ls crates/ \| grep plan-check` → empty. Settled by shipping `plan-check` (§4) with its known-bad fixture. |
 

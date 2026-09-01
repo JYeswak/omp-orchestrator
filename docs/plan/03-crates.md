@@ -89,16 +89,19 @@ note below the table.
 | `tick-monitor` | three monitors behind one loop-enforcement choke point | pane capture, git state, `Tick` | `Outcome`, `PaneState`, `Liveness`, `CapacityEscalationReceipt` | `Outcome`, `PaneState`, `Liveness`, `Observation`, `Reject`, `Tick`, `State`, `CapacityAlarm`, `CapacityAlarmEvent`, `CapacityEscalationReceipt`, `RepoError` | — | yes |
 | `undrained-pipe-lint` | fail on both-pipes-piped + `try_wait` poll + no concurrent drain | source text; workspace root | `LintReport` (`Vec<Violation>`) | `Violation`, `LintReport` | — | yes |
 
-**The unsafe-forbid split, MEASURED.** Twenty of 26 crates forbid unsafe in the manifest
-(`grep -c 'unsafe_code = "forbid"' crates/*/Cargo.toml` → 20). Twenty-five of 26 forbid it with an
-inner `#![forbid(unsafe_code)]` attribute (`grep -rlF 'forbid(unsafe_code)' --include=lib.rs
---include=main.rs crates/ | cut -d/ -f2 | sort -u | wc -l` → 25). Nineteen do both. The union is
-26 — every crate is covered — but by **two mechanisms with no single enforcement point**:
-`tick-monitor` is manifest-only; `composer-typed`, `dispatch-silence-watch`, `loop-queue-filter`,
-`no-shell-gate`, `pane-dispatch-fence` and `subprocess-contract` are attribute-only. An investor
-should read that as: the property holds today by coincidence of two habits, and nothing fails the
-build if crate 27 adopts neither.
-
+**The unsafe-forbid split, MEASURED — regenerated 2026-09-01 after the manifest lints moved.**
+All **26 of 26** crates now forbid unsafe in the manifest (`grep -l 'unsafe_code = "forbid"'
+crates/*/Cargo.toml | wc -l` → 26; six crates — `composer-typed`, `dispatch-silence-watch`,
+`loop-queue-filter`, `no-shell-gate`, `pane-dispatch-fence`, `subprocess-contract` — gained the
+lint after this section was first written, which is why earlier drafts say 20). **25 of 26**
+forbid it with an inner `#![forbid(unsafe_code)]` attribute (`grep -rlF 'forbid(unsafe_code)'
+crates/*/src/lib.rs crates/*/src/main.rs | cut -d/ -f2 | sort -u | wc -l` → 25). **25 carry
+both**; `tick-monitor` is manifest-only; **zero are attribute-only**. The union is still 26 —
+every crate covered — but the finding upgrades rather than dies: coverage moved from *two habits
+with no single enforcement point* to *one habit, uniformly adopted, still with no enforcement
+point*. Nothing fails the build if crate 27 keeps the attribute and forgets the manifest line. An
+investor should read that as: the property holds by adoption, and the one-file lint below is what
+makes it hold by construction.
 **PROJECTED.** A one-file lint asserting *manifest-and-attribute for every workspace member* turns
 that coincidence into an invariant. It is the cheapest gate in the plan and it is not written yet.
 
@@ -368,10 +371,11 @@ unverified here.
 
 R11 exists because a requirement living only in chat dies with the conversation. Three constraints
 surfaced while deriving the table above that were not previously written anywhere:
-
-1. **Unsafe-forbid must be single-mechanism.** Today the property holds across all 26 crates by the
-   union of a manifest lint and an inner attribute, with 19 crates carrying both, 1 manifest-only
-   and 6 attribute-only. Nothing fails if crate 27 adopts neither. A one-file lint asserting
+1. **Unsafe-forbid must be single-mechanism.** Today all 26 crates carry the manifest lint
+   (regenerated 2026-09-01; six crates adopted it after the first draft said 20) and 25 of 26
+   also carry the inner attribute — `tick-monitor` is the one manifest-only straggler, and zero
+   crates are attribute-only. The gap is no longer the union; it is the *straggler*: nothing
+   fails the build if crate 27 keeps one mechanism and drops the other. A one-file lint asserting
    *manifest **and** attribute for every workspace member* is the cheapest gate in the plan.
 2. **A crate that spawns must depend on `subprocess-contract`.** Two leaves — `omp-rpc-session` and
    `omp-inventory-map` — spawn processes today with no path-dep on the boundary crate. The rule is
