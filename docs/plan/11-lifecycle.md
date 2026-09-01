@@ -167,3 +167,58 @@ different cut might make the severed links appear elsewhere. It does not measure
 break actually costs anything; the `bv` gap is measured as *never invoked*, not as *decisions made
 worse*, and those are different claims. Every `PROJECTED` remedy in §11.6 is unbuilt and unowned
 except where an owner is named.
+
+---
+
+## 11.7 The surface mapping converged on one crate
+
+R14/R15 batches 1–9 mapped **270 of 544 surfaces** across `ntm`, `br`, `bv` and OMP. Dispositions:
+
+```
+RETIRE    243     CONSUMED  8     WIRE  11     VALIDATE  8
+```
+
+**243 of 270 retire, and that is the correct result** — adopting a surface because it exists is the
+opposite of this plan's discipline. The value is in the 11.
+
+### Six of eleven WIREs name the same crate
+
+| surface | → crate |
+|---|---|
+| `bv:robot` | `loop-queue-filter` |
+| `bv:candidates` | `loop-queue-filter` |
+| `bv:decision-relevant` | `loop-queue-filter` |
+| `bv:dependencies` | `loop-queue-filter` |
+| `bv:not-ready` | `loop-queue-filter` |
+| `br:blocked` | `loop-queue-filter` |
+| `br:dep` | `loop-queue-filter` |
+| `ntm:template` | `omp-orchestrator` |
+| `ntm:version`, `br:version` | `installer` |
+| `cli_command:usage` | `tick-monitor` |
+
+Three agents working disjoint batches, given no shared hypothesis, independently routed **seven
+selection-related surfaces into `loop-queue-filter`** — the crate that owns lifecycle stage **S4**,
+the stage §11.5 names as severed, in the tool (`bv`) measured at zero consumption.
+
+That convergence is worth more than any single mapping. It was not seeded: the batch packet named
+four dispositions and no crate, and §11.5's S4 finding was not quoted to the mappers.
+
+**`loop-queue-filter` is the missing consumer of the graph, and now seven surfaces say so.**
+
+### The eight VALIDATEs are almost all `br`
+
+`br:close`, `br:create`, `br:init`, `br:list`, `br:schema`, `br:sync`, `br:update` — we depend on
+`br`'s **behaviour** without asserting on it anywhere. This is §11.1's S3 row measured from the
+other direction: the close policy that refuses prose, the schema our beads must satisfy, the sync
+that keeps `.beads/issues.jsonl` honest — all inherited, none tested. If `br` changed its close
+policy tomorrow, nothing in this workspace would fail.
+
+`bv:exit-codes` is the eighth, and it belongs with them: we would be reading `bv`'s exit contract
+without a test pinning it.
+
+**NO-CLAIM.** 270 of 544 rows are mapped; the remaining 274 are OMP, `ee` and `ms` and may shift
+these proportions. A `WIRE` disposition is a *proposal with a named beneficiary*, not a decision —
+none of the eleven has been implemented, and the convergence on `loop-queue-filter` argues the crate
+is the right home, not that wiring it is scheduled or scoped. The `bv` rows carry the §7.2 scrape
+defect: they are subcommand-shaped names harvested from help prose, so `bv:robot` stands in for the
+40+ real `--robot-*` flags rather than naming one.

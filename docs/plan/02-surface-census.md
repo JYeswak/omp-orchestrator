@@ -467,3 +467,149 @@ share is **not automatically a defect** — most of `ntm`'s 114 surfaces are irr
 orchestration, and adopting a surface because it exists is the opposite of the discipline this plan
 argues for. The defensible claim is narrower and it is about **one** tool: `bv` at zero, for the
 stage the plan names as broken, is a gap with a measured cost.
+
+---
+
+## 7. The census picked its own denominator, and it was too small
+
+`%1409` and Josh broke §6 within minutes of each other, from opposite directions. Both are right and
+the section above is now known-incomplete rather than merely incomplete.
+
+### 7.1 Josh: "what other binaries are we missing? rch, ru, etc."
+
+§6 censused **four** surfaces. Measured: **19 relevant binaries are installed**, and the four were
+chosen without stating why those four.
+
+| binary | refs in repo | censused | note |
+|---|---:|:--:|---|
+| `omp` | 61 | yes | |
+| `git` | 44 | **no** | spawned by our crates |
+| `br` | 40 | yes | |
+| `cargo` | 31 | **no** | resolves to `/Users/josh/.rch/shims/cargo` — **a shim** |
+| `tmux` | 29 | **no** | pane truth is read through it |
+| `bv` | 15 | yes | census was wrong — see §7.2 |
+| `fh` | 10 | **no** | **R7's entire mechanism** |
+| `rch` | 6 | **no** | **gates every build in this repo** |
+| `cass` | 3 | **no** | |
+| `jsm`, `caut` | 2 | **no** | |
+| `ubs` | 1 | **no** | |
+| `ru`, `dcg`, `pt`, `sbh`, `slb`, `gh` | **0** | **no** | installed, unreferenced |
+
+**Three of these are load-bearing and absent from the census:**
+
+- **`rch` gates every compile.** `cargo` on `PATH` is its shim. Every `cargo` invocation this
+  session carried `RCH_ENABLED=false` — and `grep -rc 'RCH_ENABLED' docs/plan/*.md` returns **0**.
+  We disable a build gate on every command and never wrote down that we do.
+- **`dcg` has zero references and is an active participant.** `dcg 0.5.6` is installed and it
+  **blocked one of this session's commands**. A tool that can refuse our actions, cited nowhere.
+- **`fh` is R7.** The requirement "mine the mirror at every gap" is executed entirely through `fh`,
+  which the census of surfaces-we-rely-on omitted.
+
+### 7.2 `%1409`: the `bv` rows are scrape artifacts
+
+The 29 `bv` "surfaces" in §6 are **help prose**, not subcommands. The extraction regex
+`^\s{2,}([a-z][a-z-]{2,})` harvested words from wrapped description text: `ago`, `background`,
+`calculation`, `for`, `fraction`, `large`, `not-ready`. Meanwhile `bv`'s **real** agent surface is
+**40+ `--robot-*` flags** — `--robot-next`, `--robot-triage`, `--robot-plan`, `--robot-capabilities`,
+`--robot-graph`, `--robot-blocker-chain` — and **not one of them is a row**.
+
+So `bv 0/29` is not "we use none of 29." It is **a denominator of the wrong things**. The direction
+of the error is worth stating: the real surface is larger and the real consumption is still zero, so
+the finding survives while its evidence is retired.
+
+### 7.3 The live proof `%1409` produced, which is the point of the whole exercise
+
+Mapping batch 6 it ran the tool instead of reasoning about it:
+
+```
+bv --robot-next   -> exit 0; PageRank names bead 2o5, "Unblocks 2z2.1/2z2.2"
+```
+
+**`2o5` is the articulation point.** It is the `rch`-divergence blocker filed tonight, and both `2z2`
+children are blocked on it — so it is the single highest-leverage open item on the board. Nineteen
+waves of dispatch this session, every one selected by the conductor's recency, **never picked it.**
+The graph named it on the first call.
+
+That is the `bv`-at-zero cost, measured rather than argued: not "we should use the graph" but
+"the graph, run once, immediately named the item nineteen hand-picks missed."
+
+### 7.4 We forbid `.py` files and spawn `python3` six times
+
+```
+grep -rhoE 'Command::new\("(python3|grep|strings)"\)' crates/
+  6  Command::new("python3")
+  1  Command::new("grep")
+  1  Command::new("strings")
+```
+
+The repo's one hard rule forbids **tracked `.sh` and `.py` files**. It does not forbid *invoking*
+those interpreters, and six crate call-sites spawn `python3`. This is the same boundary finding as
+`.git/hooks/commit-msg-verification-level.sh` in §11.4: the rule governs file extensions in the git
+index, and both the hook directory and the process table sit outside it.
+
+Not a violation — a **coverage** statement. The rule is narrower than its reputation, and the
+reputation is doing work the rule cannot. Registered with Q13.
+
+**NO-CLAIM.** §7 establishes the §6 denominator was chosen without justification and that at least
+three load-bearing binaries were omitted. It does **not** provide their surface counts — `rch`, `fh`,
+`cargo`, `git` and `tmux` are unmeasured here, so the "6.2 %" figure in §6 has no corrected
+replacement yet and should be read as *"6.2 % of a denominator we now know is wrong."* The `bv`
+rows are known-bad and remain in `SURFACE-MAP.jsonl` pending re-extraction against `--robot-*`.
+
+### 7.5 `ee` and `ms` — Josh: "vital too"
+
+Two more, both installed, both larger than surfaces already censused, both referenced **once**:
+
+| binary | version | surfaces | refs | what it is |
+|---|---|---:|---:|---|
+| `ee` | 0.14.2 | **123** | 1 | Eidetic Engine — durable, local-first agent memory |
+| `ms` | 0.2.1 | 61 | 1 | Meta Skill — mines CASS sessions to generate skills |
+
+`ee` at 123 surfaces is **larger than `ntm`'s 114**, and it is the sharpest omission in the whole
+census, because of what tonight measured:
+
+```
+ee resume   Resume recent session end-state, open loops, and stale next steps
+ee orient   Start a session with pack, doctor, and workspace-hygiene context
+```
+
+**Pane `%1413` hit 85 % context, compacted, lost its entire grading task, and drifted onto unrelated
+plan-amendment work.** Its output existed only in context and was gone. The recovery was a
+hand-written re-dispatch plus a new rule that graders write to files as they go.
+
+`ee resume` is that mechanism, already installed, at version 0.14.2, referenced once in this repo.
+The failure and its remedy were in the same `PATH`. This is the strongest instance yet of
+`BUILT ≠ WIRED` — not our code unwired from itself, but **a solved problem sitting one command away
+from a session that solved it again by hand, worse.**
+
+`ms` is the same shape one level up: it mines prior sessions to *generate skills*, and this session
+produced roughly a dozen durable rules — the replacement-naming rule, the not-found search-space
+rule, the construct-citation rule — all written by hand into a brief.
+
+### 7.6 The denominator, corrected as far as it currently goes
+
+| | surfaces | note |
+|---|---:|---|
+| censused in §6 | 372 | `bv`'s 29 are scrape artifacts (§7.2) |
+| `ee` | +123 | unmeasured for consumption |
+| `ms` | +61 | unmeasured for consumption |
+| `rch`, `fh`, `cargo`, `git`, `tmux`, `cass`, `ubs`, `caut`, `dcg`, `ru`, `pt`, `sbh`, `slb`, `gh` | **?** | **14 binaries, surface counts not taken** |
+| **known lower bound** | **556** | and rising |
+
+**The "6.2 %" headline in §6 is retired.** Not because the direction was wrong — every correction so
+far has moved consumption *down* — but because a share computed against a denominator that grew
+50 % in one exchange, and is still missing fourteen binaries, is not a measurement. It is retired in
+favour of the three claims that survive independently of the denominator:
+
+1. `bv` consumption is **zero**, and one call to `--robot-next` named the articulation point that
+   nineteen hand-picked waves missed.
+2. `rch` gates every build, is disabled on every command via `RCH_ENABLED=false`, and that fact
+   appears in **zero** lines of this plan.
+3. `ee resume` exists, is installed, and this session lost a worker's entire output to the failure
+   it prevents.
+
+**NO-CLAIM.** §7.6 states a *lower bound*, not a total: fourteen binaries have no surface count, so
+the true denominator is unknown and every share against it is unavailable rather than merely
+imprecise. Nothing here measures whether adopting any of these surfaces would help — `ee` at 123
+surfaces is not an argument for consuming 123 surfaces, and §6's warning stands: adopting a surface
+because it exists is the opposite of the discipline this plan argues for.
