@@ -20,6 +20,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 finding = { path = "../finding" }
 subprocess-contract = { path = "../subprocess-contract" }
+receiver-receipt = { path = "../receiver-receipt" }
 
 [dev-dependencies]
 sha2 = "0.11"

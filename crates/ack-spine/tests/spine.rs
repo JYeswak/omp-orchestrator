@@ -1,7 +1,6 @@
 use ack_spine::ack::{classify_ack_readback, AckVerdict};
-use ack_spine::authorities::{
-    AckAuthority, AckEvidence, DeliveryAuthority, ReceiverReceipt, TransportAuthority,
-};
+use ack_spine::authorities::{AckAuthority, AckEvidence, DeliveryAuthority, TransportAuthority};
+use receiver_receipt::ReceiptVerdict;
 use ack_spine::spine::{AckSpine, DispatchIntent, PendingDispatchStore};
 use asupersync::runtime::RuntimeBuilder;
 use asupersync::types::CancelKind;
@@ -18,14 +17,13 @@ fn marker_path(label: &str) -> std::path::PathBuf {
     ))
 }
 
-fn observed_receipt() -> ReceiverReceipt {
-    ReceiverReceipt::idle_to_working(
-        "%1409",
-        1,
-        "spinner-stripped-before",
-        "spinner-stripped-after",
-    )
-    .expect("valid receiver receipt")
+fn observed_receipt() -> ReceiptVerdict {
+    ReceiptVerdict::ReceiptConfirmed {
+        pane_id: "%1409".to_owned(),
+        timer_before_secs: None,
+        timer_after_secs: 1,
+        stable_content_changed: true,
+    }
 }
 
 fn sha256(bytes: &[u8]) -> String {

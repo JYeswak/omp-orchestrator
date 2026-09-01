@@ -1,7 +1,5 @@
-use ack_spine::authorities::{
-    AckAuthority, AckEvidence, AckSummary, DeliveryAuthority, ReceiverReceipt,
-    TransportAuthority,
-};
+use ack_spine::authorities::{AckAuthority, AckEvidence, AckSummary, DeliveryAuthority, TransportAuthority};
+use receiver_receipt::{ReceiptReason, ReceiptVerdict};
 
 fn success() -> TransportAuthority {
     TransportAuthority::Succeeded {
@@ -10,26 +8,25 @@ fn success() -> TransportAuthority {
 }
 
 fn observed() -> DeliveryAuthority {
-    let receipt = ReceiverReceipt::idle_to_working(
-        "%1408",
-        1,
-        "spinner-stripped-before",
-        "spinner-stripped-after",
-    )
-    .expect("fixture must satisfy the receiver-receipt shape");
-    DeliveryAuthority::Observed { receipt }
+    DeliveryAuthority::Observed {
+        receipt: ReceiptVerdict::ReceiptConfirmed {
+            pane_id: "%1408".to_owned(),
+            timer_before_secs: None,
+            timer_after_secs: 1,
+            stable_content_changed: true,
+        },
+    }
 }
 
 fn observed_timer_reset() -> DeliveryAuthority {
-    let receipt = ReceiverReceipt::timer_reset_with_hash_change(
-        "%1408",
-        58,
-        1,
-        "spinner-stripped-before",
-        "spinner-stripped-after",
-    )
-    .expect("fixture must satisfy the receiver-receipt shape");
-    DeliveryAuthority::Observed { receipt }
+    DeliveryAuthority::Observed {
+        receipt: ReceiptVerdict::ReceiptConfirmed {
+            pane_id: "%1408".to_owned(),
+            timer_before_secs: Some(58),
+            timer_after_secs: 1,
+            stable_content_changed: true,
+        },
+    }
 }
 
 fn read_back() -> AckAuthority {
@@ -97,6 +94,31 @@ fn observational_delivery_is_only_a_receiver_receipt() {
     assert!(evidence.delivery_observed());
     assert!(!evidence.acknowledgement_read_back());
     assert!(!evidence.fully_acknowledged());
+}
+
+#[test]
+fn canonical_non_confirmed_verdicts_are_not_delivery() {
+    for receipt in [
+        ReceiptVerdict::NoReceipt {
+            pane_id: "%1408".to_owned(),
+            reason: ReceiptReason::IdleUnchanged,
+        },
+        ReceiptVerdict::Dead {
+            pane_id: "%1408".to_owned(),
+        },
+        ReceiptVerdict::Indeterminate {
+            pane_id: "%1408".to_owned(),
+            reason: ReceiptReason::MissingPostObservation,
+        },
+    ] {
+        let evidence = AckEvidence::new(
+            success(),
+            DeliveryAuthority::Observed { receipt },
+            read_back(),
+        );
+        assert!(!evidence.delivery_observed());
+        assert!(!evidence.fully_acknowledged());
+    }
 }
 
 #[test]

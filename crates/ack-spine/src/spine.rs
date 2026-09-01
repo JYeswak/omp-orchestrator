@@ -16,6 +16,7 @@
 use crate::ack::{detect_ack, AckVerdict};
 use crate::authorities::{AckAuthority, AckEvidence, DeliveryAuthority, TransportAuthority};
 use crate::ledger::{self, StepError, StepKind, StepLedger};
+use receiver_receipt::ReceiptVerdict;
 use asupersync::Cx;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -299,15 +300,36 @@ impl AckSpine {
         authority: DeliveryAuthority,
     ) -> Result<(), SpineError> {
         let (kind, detail) = match &authority {
-            DeliveryAuthority::Observed { receipt } => (
+            DeliveryAuthority::Observed {
+                receipt: ReceiptVerdict::ReceiptConfirmed {
+                    pane_id,
+                    timer_before_secs,
+                    timer_after_secs,
+                    stable_content_changed,
+                },
+            } => (
                 StepKind::ReceiverVerified,
                 format!(
-                    "delivery observed pane={} basis={:?} hash_before={} hash_after={}",
-                    receipt.pane_id(),
-                    receipt.basis(),
-                    receipt.spinner_stripped_hash_before(),
-                    receipt.spinner_stripped_hash_after()
+                    "delivery receipt confirmed pane={pane_id} timer_before_secs={timer_before_secs:?} timer_after_secs={timer_after_secs} stable_content_changed={stable_content_changed}"
                 ),
+            ),
+            DeliveryAuthority::Observed {
+                receipt: ReceiptVerdict::NoReceipt { pane_id, reason },
+            } => (
+                StepKind::ReceiverTimedOut,
+                format!("delivery no receipt pane={pane_id} reason={reason}"),
+            ),
+            DeliveryAuthority::Observed {
+                receipt: ReceiptVerdict::Dead { pane_id },
+            } => (
+                StepKind::ReceiverTimedOut,
+                format!("delivery dead pane={pane_id}"),
+            ),
+            DeliveryAuthority::Observed {
+                receipt: ReceiptVerdict::Indeterminate { pane_id, reason },
+            } => (
+                StepKind::ReceiverTimedOut,
+                format!("delivery indeterminate pane={pane_id} reason={reason}"),
             ),
             DeliveryAuthority::NotObserved { reason } => {
                 (StepKind::ReceiverTimedOut, format!("delivery absent: {reason}"))

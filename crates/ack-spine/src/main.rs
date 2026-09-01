@@ -5,7 +5,7 @@
 
 #![forbid(unsafe_code)]
 
-use ack_spine::authorities::{AckAuthority, DeliveryAuthority, ReceiverReceipt, TransportAuthority};
+use ack_spine::authorities::{AckAuthority, DeliveryAuthority, ReceiptVerdict, TransportAuthority};
 use ack_spine::spine::{AckSpine, DispatchIntent};
 use ack_spine::{step, StepKind, StepLedger};
 use asupersync::runtime::RuntimeBuilder;
@@ -188,13 +188,12 @@ async fn spine_demo(cx: &Cx) -> Result<(), String> {
         )
         .await
         .map_err(|error| error.to_string())?;
-    let receipt = ReceiverReceipt::idle_to_working(
-        "%1409",
-        1,
-        "demo-before",
-        "demo-after",
-    )
-    .ok_or_else(|| "invalid demo receiver receipt".to_owned())?;
+    let receipt = ReceiptVerdict::ReceiptConfirmed {
+        pane_id: "%1409".to_owned(),
+        timer_before_secs: None,
+        timer_after_secs: 1,
+        stable_content_changed: true,
+    };
     spine
         .record_delivery(cx, DeliveryAuthority::Observed { receipt })
         .await
