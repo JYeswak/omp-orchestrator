@@ -154,25 +154,12 @@ output verdict."* That is the repo's hardest-won rule, **a timeout is not a verd
 as a type instead of remembered separately in every call site. Anything that spawns should route
 through it precisely so that rule cannot be re-litigated per crate.
 
-**MEASURED: 22 of 26 crates do not route through it.** Four depend on it. Independently measured
-across 29 raw spawn sites, 4 crates use `subprocess-contract` and 12 of 14 async fns take `cx`
-first. The gap is not an abstraction preference — it means at least 25 spawn sites can still leak a
-process group, deadlock on an undrained pipe, or convert a timeout into a fabricated verdict, and
-the only thing standing between us and that is `undrained-pipe-lint`, which catches one of the
-three failure modes by pattern-matching source text.
+**HISTORICAL PROCESS-CONTRACT SNAPSHOT.** The 22-of-26, four-dependent, 29-spawn-site, and 12-of-14 async-function figures below belong to the pre-extraction graph. They are retained to explain the risk, not as current denominators.
 
-**What Jeffrey would do.** Searched the mirror at `/Volumes/ZestData/dicklesworthstone-mirror` for
-this exact shape; `asupersync` itself is the prior art and it is already our dependency —
-`process::Command` with `ProcessGroupMode`, `ProcessSignalTarget` and `output_async` exists
-upstream precisely so a caller never hand-rolls the group/drain pair. The correct move is not to
-invent a wrapper policy but to make the existing wrapper the only reachable door.
+**CURRENT GATE STATE.** `crates/no-shell-gate/tests/spawn_contract.rs` now exists as the source-aware conformance gate for spawns outside `subprocess-contract`. Current dependency and spawn counts are owned by the registry and must be re-derived there; no current 22/26 claim is made.
+**What Jeffrey would do.** Searched the mirror at `/Volumes/ZestData/dicklesworthstone-mirror` for this exact shape; `asupersync` itself is the prior art and is already our dependency. `process::Command` with `ProcessGroupMode`, `ProcessSignalTarget`, and `output_async` exists upstream so callers do not hand-roll the group/drain pair. The correct move remains to make the existing wrapper the only reachable door.
 
-**PROJECTED.** A gate that fails any crate constructing `std::process::Command` or
-`asupersync::process::Command` outside `subprocess-contract` raises the floor: the 22 crates that
-currently *may* hand-roll a spawn would have to be edited deliberately, in the open, to do so. It
-does not guarantee correct spawning — a crate could route through `subprocess-contract` and still
-mishandle the result — it removes accidental divergence, which is the failure mode we measured.
-That gate does not exist today.
+**PROJECTED.** A gate that fails any crate constructing `std::process::Command` or `asupersync::process::Command` outside `subprocess-contract` raises the floor. It does not guarantee correct spawning after routing; it removes accidental divergence. The source-aware gate now exists, while its current invocation and coverage remain registry-owned.
 
 ---
 
@@ -453,6 +440,7 @@ the first wave is 14-wide parallel with no ordering constraint between its membe
 `verify-dispatch` 1291 · `pane-truth` 1247 · `reap-finished-panes` 1189 · `loop-coverage` 926 ·
 `dispatcher-deadman` 883 · `oracle-compare` 561
 
+The historical plan asked that `omp-orchestrator-815` become an epic with 20 children plus a contract bead. **CURRENT TRACKER RECHECK:** parent 815 is still `open`; its 21 child records are `tombstone`, not active completed children. The proposed decomposition is therefore not a current completion proof; the extraction landing and readback remain separate work.
 **WAVE 2 — one hop, blocked on a wave-1 member**
 
 | crate | LOC | blocked on |
