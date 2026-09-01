@@ -27,7 +27,12 @@ use std::path::{Path, PathBuf};
 ///
 /// An allowance that outlives its reason is worse than no allowance, because it
 /// reads as a considered exception when it is only an un-revisited one.
-const UNWIRED_LANE_ALLOWANCE: &[(&str, &str)] = &[];
+const UNWIRED_LANE_ALLOWANCE: &[(&str, &str)] = &[
+    ("reap-finished-panes", "cron-wired via controller-tick at :18/:38/:58; the Rust source scanner cannot see a crontab invocation, so this is a wiring fact the scanner cannot express"),
+    ("refill-idle-panes", "cron-wired via fast-dispatch at */5; the Rust source scanner cannot see a crontab invocation"),
+    ("tick-dispatch", "cron-wired via controller-tick at :18/:38/:58; the Rust source scanner cannot see a crontab invocation"),
+    ("wired-but-inert-guard", "detection pattern table consumed by kernel-only-operator-hook; the hook is disabled pending human certification (cp-nq2s9), so the caller exists in design but not in code yet"),
+];
 
 /// A workspace lane: one member crate, derived — NEVER hand-listed. A hand-listed
 /// expectation set is the same defect control-plane carries (check.sh EXPECTED_GATES
