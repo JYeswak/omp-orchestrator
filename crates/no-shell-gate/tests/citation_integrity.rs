@@ -135,46 +135,50 @@ fn every_cited_symbol_appears_in_the_file_it_names() {
         return;
     };
     let text = plan_text();
-    // Match the citation shape the plan actually uses:  `Symbol` (`dist/types/x.d.ts`)
-    // Deliberately narrow: a loose scan would sweep prose words into symbol
-    // position and produce false failures, which is worse than a smaller gate.
+    // ANCHOR ON THE PATH, NOT ON BACKTICKS.
+    //
+    // The first version matched only `` `Symbol` (`dist/types/x.d.ts`) `` — symbol in
+    // backticks, open paren immediately followed by a backtick. The plan does not write
+    // that. It writes, in §4 of 00-brief and 31 other places:
+    //
+    //     | idle | GuestIdleReconcilerCtx (dist/types/collab/guest.d.ts:9-30) | **DE...
+    //
+    // No backticks anywhere. So the parser matched ZERO of 32 real citations and the
+    // anti-vacuity leg fired — correctly, and it is the only reason this was caught:
+    // without it the gate would have reported a serene green over a plan it never read.
+    // That is the third reader-scoped-to-a-guess defect in this session (a `^??` grep
+    // where `?` is a quantifier so it matched every line; a sweep restricted to files
+    // NAMED dispatch_cli_contract.rs while the same code sat in main.rs).
+    //
+    // The original comment's caution is RIGHT and is preserved: "a loose scan would
+    // sweep prose words into symbol position and produce false failures, which is worse
+    // than a smaller gate." So rather than loosening the symbol side, this anchors on
+    // the one unambiguous token — `dist/types/` inside parentheses — and walks BACKWARD
+    // for the symbol, keeping the same plausibility filter. Both the backticked and the
+    // bare form are accepted because both appear in the plan and both are legitimate.
     let mut pairs: Vec<(String, String)> = Vec::new();
-    let bytes: Vec<char> = text.chars().collect();
-    let mut i = 0usize;
-    while i < bytes.len() {
-        if bytes[i] == '`' {
-            // read symbol
-            let start = i + 1;
-            let mut j = start;
-            while j < bytes.len() && bytes[j] != '`' { j += 1; }
-            if j >= bytes.len() { break; }
-            let sym: String = bytes[start..j].iter().collect();
-            // look ahead for  (`dist/types/....d.ts`  within a short window
-            let tail: String = bytes[j..(j + 90).min(bytes.len())].iter().collect();
-            if let Some(k) = tail.find("(`dist/types/") {
-                let after = &tail[k + 2..];
-                if let Some(e) = after.find(".d.ts") {
-                    let path = &after[..e + 5];
-                    // Keep the MEMBER if the citation carries one. Stripping it is
-                    // how the first version of this gate failed its own known-bad:
-                    // tonight's real fabrication was `SessionStopEvent.settle`,
-                    // where the TYPE exists and the MEMBER does not. A gate that
-                    // only checks the type name reports green on exactly the
-                    // citation class that was retracted.
-                    let raw = sym.split(&['<', '('][..]).next().unwrap_or("").trim();
-                    let clean_sym = raw.to_owned();
-                    let plausible = !clean_sym.is_empty()
-                        && clean_sym.chars().next().is_some_and(|c| c.is_ascii_uppercase())
-                        && clean_sym.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.');
-                    if plausible {
-                        pairs.push((clean_sym, path.to_owned()));
-                    }
-                }
-            }
-            i = j + 1;
-            continue;
+    for (idx, _) in text.match_indices("(dist/types/").chain(text.match_indices("(`dist/types/")) {
+        let after = &text[idx..];
+        let Some(e) = after.find(".d.ts") else { continue };
+        let path = after[1..e + 5].trim_start_matches('`').to_owned();
+
+        // Walk back over the space(s) before '(' and take the preceding token.
+        let before = &text[..idx];
+        let trimmed = before.trim_end_matches([' ', '\t', '`']);
+        let sym_raw = trimmed
+            .rsplit(|c: char| c.is_whitespace() || c == '|' || c == '`')
+            .next()
+            .unwrap_or("");
+        let clean_sym = sym_raw.split(['<', '(']).next().unwrap_or("").trim().to_owned();
+
+        // Unchanged from the original: an uppercase-initial identifier-shaped token.
+        // This is what stops a prose word landing in symbol position.
+        let plausible = !clean_sym.is_empty()
+            && clean_sym.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+            && clean_sym.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.');
+        if plausible {
+            pairs.push((clean_sym, path));
         }
-        i += 1;
     }
     pairs.sort();
     pairs.dedup();
