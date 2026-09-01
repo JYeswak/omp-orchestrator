@@ -55,7 +55,7 @@ denominator_type_dirs = 57
 denominator_subcommands = 39
 measured_against = "@oh-my-pi/pi-coding-agent v18.0.11"
 measured_on = "2026-08-31"
-crates_declared = 25
+crates_declared = 27
 revision_2_reason = "cross-pane dispatch and delivery receipt reclassified (b)->(a); --mode=rpc proven single-session"
 
 # ── (b) REIMPLEMENTED BY SCRAPING — an OMP alternative EXISTS AND IS REACHABLE ───────────────────
@@ -224,3 +224,12 @@ classification = "a"
 omp_surface = "none reachable"
 why = "REVISION 3: refuses a packet naming an unclaimed bead. Landed at 02b5f25 and was undeclared here until the surface gate caught it — the gate's first catch of a crate it did not already know about."
 negative_evidence = "A DispatchPermit authorizes from a point-in-time `br show --json` projection and explicitly does NOT attest that transport occurred; the dispatch ledger remains the authority for that separate claim. This is the same claim/receipt split that ntm conflates — sender success is not receiver receipt — and the reason the crate exists is that this session dispatched packets naming unclaimed beads twice."
+
+[crates.porting-gate]
+classification = "a"
+omp_surface = "none"
+inputs = "candidate crate path, Cargo metadata, OMP-SURFACE-MAP.toml, ASUPERSYNC-CONFORMANCE.md, and repository HEAD"
+outputs = "versioned JSON gate report with six clause results and a refusal code"
+what_must_be_true = "all six porting clauses pass in one archived repository state before a crate arrival is accepted"
+negative_evidence = "missing caller, declaration, conformance row, archive-green result, shell/python file, or inventory field refuses the candidate; zero candidates is an anti-vacuity error"
+instead_we = "run one candidate-scoped gate instead of treating a copied crate or installed binary as an arrival"

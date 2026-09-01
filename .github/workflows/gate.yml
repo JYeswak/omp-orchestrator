@@ -90,3 +90,12 @@ jobs:
       - uses: actions/checkout@v4
       - run: cargo test -p commit-build-fence
       - run: cargo run --quiet -p commit-build-fence -- .
+
+  porting-gate:
+    # WIRING: a candidate must pass all six arrival clauses from the same archive state.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo test -p porting-gate
+      - name: Gate candidate porting-gate from clean archive
+        run: cargo run --quiet -p porting-gate -- --repo . --crate porting-gate

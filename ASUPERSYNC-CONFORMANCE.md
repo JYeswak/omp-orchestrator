@@ -59,10 +59,11 @@ state-wildcard-lint          Y    .    .   0    0    0     0    -
 subprocess-contract          .    Y    Y   2    2    1     2    -
 tick-monitor                 Y    .    .   0    0    0     3    -
 undrained-pipe-lint          Y    .    .   0    0    0     0    -
+porting-gate                 Y    Y    Y   2    2    2     4    -
 
-crates=22  forbid_unsafe=16  dep_asupersync=6
-async_fns=14  cx_first=12  checkpoints=10
-raw Command::new sites=29  crates_with_forbidden_dep=0
+crates=23  forbid_unsafe=17  dep_asupersync=7
+async_fns=16  cx_first=14  checkpoints=12
+raw Command::new sites=33  crates_with_forbidden_dep=0
 ```
 
 ## What the numbers say

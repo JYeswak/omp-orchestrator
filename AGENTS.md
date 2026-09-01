@@ -450,25 +450,50 @@ theories could only agree with themselves.
 
 ## The crate extraction target list — what each one is, and **which repository it is actually in**
 
-**Read the STATUS column before you reason about any row.** Of the 24 rows below, **4 exist in
-`/Users/josh/Developer/omp-orchestrator/crates` and 20 do not.** The 20 marked `CONTROL-PLANE` live
-only in `/Users/josh/Developer/control-plane/crates`; there is no such directory in this repo.
-Scoped to the 20 rows of the pre-audit table, the split is **3 `HERE` / 17 `CONTROL-PLANE`**.
+**Read the STATUS column before you reason about any row.** The legacy extraction-target table below has 24 rows. The current workspace has 27 Cargo packages; the 24 rows are a historical target list, not the complete package inventory.
 
-This table was written as an inventory and read as a manifest. Every agent that opened it before
-2026-08-31 was reasoning about **another repository's code** — planning against crates it could not
-open, citing LOC it could not `wc`, and treating an unported name as an available dependency. The
-rows are still worth keeping: they are the **extraction target list**, of which 4 have landed. They
-are not a description of this workspace.
+The current source-directory measurement is **27 crates here**, **59 control-plane crate directories**, and **4 names in both** (composer-typed, fleet-composite, loop-queue-filter, pane-dispatch-fence). Therefore 55 control-plane source directories are absent here. Cargo loads 57 control-plane packages because two source directories are standalone or excluded workspace manifests. The 24-row legacy table is retained for extraction history; its scoped split is **3 HERE / 17 CONTROL-PLANE**.
 
-Measured 2026-08-31 by directory existence under each `crates/` root, not by grep over this file:
+This table was corrected from the original false impression. Every row below names its repository. A row marked CONTROL-PLANE is not an available local dependency and must not be cited as present.
 
-| | Count | Names |
+Measured by cargo metadata --no-deps and directory existence under each crates/ root, not by grep over this file:
+
+| | Count | Names / authority |
 |---|---:|---|
-| Crates in this repo | 24 | 20 of them **built fresh here**, never ported |
-| Crates in control-plane (Cargo-loaded members) | 57 | `cargo metadata --no-deps` |
-| Names existing in **both** | 4 | `composer-typed`, `fleet-composite`, `loop-queue-filter`, `pane-dispatch-fence` |
+| Current workspace Cargo packages | 27 | cargo metadata --no-deps --format-version 1 |
+| Control-plane source crate directories | 59 | printf '%s\n' crates/*/ in /Users/josh/Developer/control-plane |
+| Names existing in both | 4 | composer-typed, fleet-composite, loop-queue-filter, pane-dispatch-fence |
+| Control-plane-only source directories | 55 | 59 minus the 4-name intersection |
 
+### Current workspace packages outside the legacy extraction table
+
+These are HERE, but were not part of the 24-row extraction target list:
+
+| Crate | STATUS |
+|---|---|
+| ack-spine | **HERE** |
+| ack-stage | **HERE** |
+| commit-build-fence | **HERE** |
+| dispatch-claim-fence | **HERE** |
+| dispatch-silence-watch | **HERE** |
+| finding | **HERE** |
+| finding-dispatch | **HERE** |
+| installer | **HERE** |
+| kernel-bypass-gate | **HERE** |
+| kernel-only-operator-hook | **HERE** |
+| no-shell-gate | **HERE** |
+| omp-inventory-map | **HERE** |
+| omp-orchestrator | **HERE** |
+| omp-rpc-session | **HERE** |
+| omp-types | **HERE** |
+| path-literal-guard | **HERE** |
+| porting-gate | **HERE** |
+| pre-delete-citation-check | **HERE** |
+| receiver-receipt | **HERE** |
+| state-wildcard-lint | **HERE** |
+| subprocess-contract | **HERE** |
+| tick-monitor | **HERE** |
+| undrained-pipe-lint | **HERE** |
 LOC and `tests/` counts on every `CONTROL-PLANE` row are read from the control-plane working tree.
 They describe source you do not have here. Grouped by the lifecycle stage they serve.
 
