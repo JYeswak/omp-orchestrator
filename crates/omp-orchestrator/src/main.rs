@@ -7,7 +7,8 @@
 //! idle only with a bound Josh authorization token.
 
 use ack_stage::{
-    assess as assess_ack_stage, AckReadback, AckStageInput, AckStageResult, TransportReceipt,
+    assess as assess_ack_stage, AckAction, AckReadback, AckStageInput, AckStageResult,
+    TransportReceipt,
 };
 use asupersync::process::{Command, Output};
 use asupersync::runtime::RuntimeBuilder;
@@ -23,7 +24,10 @@ use omp_rpc_session::{
     run_session, OmpCommand, RpcError, RpcSessionConfig, NO_CLAIM_BOUNDARY, OMP_RPC_SCHEMA_VERSION,
     OMP_SURFACE,
 };
-use receiver_receipt::{observe_capture, PostSendObservation, ReceiptVerdict};
+use receiver_receipt::{
+    escalate_non_delivery, observe_capture, ComposerEvidence, NonDeliveryEscalation,
+    PostSendObservation, ReceiptReason, ReceiptVerdict,
+};
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
 use std::env;
@@ -473,7 +477,11 @@ async fn receiver_is_codex(cx: &Cx, config: &Config, pane: &str) -> Result<bool,
     Ok(title.contains("__cod_") || title.contains("codex"))
 }
 
-async fn post_send_observation(cx: &Cx, config: &Config, pane: &str) -> PostSendObservation {
+async fn post_send_observation(
+    cx: &Cx,
+    config: &Config,
+    pane: &str,
+) -> (PostSendObservation, Option<String>) {
     let list_args = vec![
         "list-panes".to_owned(),
         "-t".to_owned(),
@@ -485,14 +493,14 @@ async fn post_send_observation(cx: &Cx, config: &Config, pane: &str) -> PostSend
         Ok(output) => output,
         Err(error) => {
             eprintln!("RECEIVER_OBSERVATION_MISSING pane={pane} phase=list error={error}");
-            return PostSendObservation::Missing;
+            return (PostSendObservation::Missing, None);
         }
     };
     let list_bytes = match require_success("tmux list-panes", list_output) {
         Ok(bytes) => bytes,
         Err(error) => {
             eprintln!("RECEIVER_OBSERVATION_MISSING pane={pane} phase=list error={error}");
-            return PostSendObservation::Missing;
+            return (PostSendObservation::Missing, None);
         }
     };
     let list_text = String::from_utf8_lossy(&list_bytes);
@@ -502,20 +510,23 @@ async fn post_send_observation(cx: &Cx, config: &Config, pane: &str) -> PostSend
         .filter(|id| !id.is_empty())
         .collect();
     if pane_ids.is_empty() {
-        return PostSendObservation::EmptyPaneList;
+        return (PostSendObservation::EmptyPaneList, None);
     }
     if !pane_ids.iter().any(|observed| *observed == pane) {
-        return PostSendObservation::Absent;
+        return (PostSendObservation::Absent, None);
     }
     let capture = match capture_pane(cx, config, pane).await {
         Ok(capture) => capture,
         Err(error) => {
             eprintln!("RECEIVER_OBSERVATION_MISSING pane={pane} phase=capture error={error}");
-            return PostSendObservation::Missing;
+            return (PostSendObservation::Missing, None);
         }
     };
-    let text = String::from_utf8_lossy(&capture);
-    PostSendObservation::Present(observe_capture(pane, &text, now_unix()))
+    let text = String::from_utf8_lossy(&capture).into_owned();
+    (
+        PostSendObservation::Present(observe_capture(pane, &text, now_unix())),
+        Some(text),
+    )
 }
 
 async fn read_ack_readback(
@@ -723,50 +734,104 @@ async fn send_and_verify(
     write_transport_receipt(config, tick, pane, bead, &transport)?;
 
     let deadline = Instant::now() + RECEIPT_TIMEOUT;
+    let mut attempts_so_far = 0u32;
+    let composer_rules = composer_typed::Rules::default();
     loop {
         cx.checkpoint()
             .map_err(|_| "CANCELLED while verifying receiver receipt".to_owned())?;
-        let post_send = post_send_observation(cx, config, pane).await;
+        let (post_send, pane_capture) = post_send_observation(cx, config, pane).await;
         let ack = read_ack_readback(cx, config, bead, pane).await?;
         let stage = assess_ack_stage(&AckStageInput {
             bead_id: bead.to_owned(),
             pane_id: pane.to_owned(),
             transport: transport.clone(),
             pre_send: pre_observation.clone(),
-            post_send,
+            post_send: post_send.clone(),
             ack,
-            attempts_so_far: 0,
+            attempts_so_far,
         });
         if stage.is_confirmed() {
             return Ok(stage);
         }
-        // composer-typed receipt check: the pane's captured content must hold
-        // typed operator text. An empty composer means the packet never
-        // arrived, even if ntm reported delivery signals. This check fires
-        // AFTER the ack stage so a confirmed ack still wins, and BEFORE the
-        // deadline check so an empty composer is named in the final error.
-        let pane_capture = capture_pane(cx, config, pane).await?;
-        let pane_text = String::from_utf8_lossy(&pane_capture);
-        let rules = composer_typed::Rules::default();
-        if !composer_typed::is_typed(&pane_text, &rules) {
-            if Instant::now() >= deadline {
-                return Err(format!(
-                    "COMPOSER_EMPTY pane={pane} bead={bead} — ntm reported delivery but the composer holds no typed text; \
-                     the packet never arrived (sender exit is not a receipt)"
-                ));
+
+        let recovery = match (
+            &stage.delivery,
+            &post_send,
+            pane_capture.as_deref(),
+        ) {
+            (
+                ReceiptVerdict::NoReceipt {
+                    reason: ReceiptReason::IdleUnchanged,
+                    ..
+                },
+                PostSendObservation::Present(post),
+                Some(capture),
+            ) => {
+                let composer = if composer_typed::is_typed(capture, &composer_rules) {
+                    ComposerEvidence::Typed
+                } else {
+                    ComposerEvidence::Free
+                };
+                Some(escalate_non_delivery(&post.state, composer))
             }
-            // First few polls may race the terminal renderer; retry.
-            sleep(cx.now_for_observability(), RECEIPT_POLL).await;
-            continue;
+            _ => None,
+        };
+
+        if stage.action.is_retry() {
+            match recovery {
+                Some(NonDeliveryEscalation::ResendDirect) => {
+                    let resend_args = vec![
+                        "send-keys".to_owned(),
+                        "-t".to_owned(),
+                        pane.to_owned(),
+                        "-l".to_owned(),
+                        packet.clone(),
+                    ];
+                    require_success("tmux resend send-keys -l", invoke(cx, config, "tmux", &resend_args).await?)?;
+                    let enter_args = vec![
+                        "send-keys".to_owned(),
+                        "-t".to_owned(),
+                        pane.to_owned(),
+                        "Enter".to_owned(),
+                    ];
+                    require_success("tmux resend Enter", invoke(cx, config, "tmux", &enter_args).await?)?;
+                    write_heartbeat(
+                        config,
+                        tick,
+                        "RECEIVER_RECOVERY",
+                        &format!("pane={pane} bead={bead} action=RESEND_DIRECT attempts={}", attempts_so_far + 1),
+                    )?;
+                    attempts_so_far += 1;
+                }
+                Some(NonDeliveryEscalation::SubmitParked) => {
+                    let enter_args = vec![
+                        "send-keys".to_owned(),
+                        "-t".to_owned(),
+                        pane.to_owned(),
+                        "Enter".to_owned(),
+                    ];
+                    require_success("tmux recovery Enter", invoke(cx, config, "tmux", &enter_args).await?)?;
+                    write_heartbeat(
+                        config,
+                        tick,
+                        "RECEIVER_RECOVERY",
+                        &format!("pane={pane} bead={bead} action=SUBMIT_PARKED attempts={}", attempts_so_far + 1),
+                    )?;
+                    attempts_so_far += 1;
+                }
+                Some(NonDeliveryEscalation::KeepPolling) | None => {}
+            }
         }
+
         let awaiting_ack = matches!(
-            stage.delivery,
+            &stage.delivery,
             ReceiptVerdict::Indeterminate {
-                reason: receiver_receipt::ReceiptReason::AckReadbackMissing,
+                reason: ReceiptReason::AckReadbackMissing,
                 ..
             }
         );
-        if !stage.action.is_retry() && !awaiting_ack {
+        let retry_exhausted = matches!(&stage.action, AckAction::RetryExhausted { .. });
+        if !stage.action.is_retry() && !retry_exhausted && !awaiting_ack {
             let reason = stage
                 .delivery
                 .reason()
@@ -780,7 +845,7 @@ async fn send_and_verify(
                 transport.kind().label(),
             ));
         }
-        if Instant::now() >= deadline {
+        if retry_exhausted || Instant::now() >= deadline {
             let reason = stage
                 .delivery
                 .reason()
