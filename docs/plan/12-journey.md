@@ -1172,3 +1172,77 @@ jsonrpc, cli, commands, slash-commands — consumed by omp-inventory-map and omp
 an agent plane (eval, benchmarks, memory, debug, DAP, self-improvement, advisory — consumed by
 the agent inside the pane, not by the orchestrator outside it). The mapping has converged: the
 boundary is correct, and the remaining roots confirm it rather than challenge it.
+
+### 12.16 Surface coverage: memories, memory-backend, mnemopi, blob-broker, export
+
+> **ipg.7**: *Wave MEMORY. Cross-session state is how a swarm survives compaction. We currently
+> carry it in bead comments and pane scrollback — scrollback dies with the pane.*
+
+**Swept 2026-09-01.** Five type roots, 46 files, 284KB, 243 exported symbols, walked to symbol
+level. All five are agent-plane memory/export features: memory instruction pipelines, pluggable
+memory backends, mnemonic embedding engines, blob storage brokers, and session sharing. None
+crosses the process boundary into our orchestration layer.
+
+| surface | OMP files | OMP KB | OMP symbols | 1-8 clauses | classification |
+|---|---:|---:|---:|:-:|---|
+| `memories` | 2 | 8 | 26 | — — — — — — — — | **(a) NOT OURS** — memory-instruction pipeline (Stage1Claim, MemoryThread, buildMemoryToolDeveloperInstructions) |
+| `memory-backend` | 8 | 36 | 18 | — — — — — — — — | **(a) NOT OURS** — pluggable memory-backend interface (MemoryBackend, localBackend, re-exports MnemopiBackendConfig) |
+| `mnemopi` | 7 | 36 | 42 | — — — — — — — — | **(a) NOT OURS** — mnemonic embedding engine (MnemopiEmbedClient, MnemopiBankScope, MnemopiEmbedWorkerHandle, resolveMemoryCompletionInput) |
+| `blob-broker` | 26 | 180 | 141 | — — — — — — — — | **(a) NOT OURS** — blob storage/routing broker (BlobBackend, BlobDestinationId, ExposureKind, UploaderKind); largest surface in this wave |
+| `export` | 3 | 24 | 16 | — — — — — — — — | **(a) NOT OURS** — session export/sharing (CustomShareResult, CustomShareFn, LoadedCustomShare) |
+
+**Positive control: FAILED — 0 of 5 FULLY COVERED.** Sixth consecutive wave. The pattern is
+exhaustive and structural: the OMP type roots split into an orchestration plane (consumed in
+wave 1: 7 consumes edges from omp-inventory-map) and an agent plane (not adopted). The mapping
+has converged: every remaining root is agent-plane, and the boundary is correct.
+
+**Anti-vacuity: PASSED** — 5 surfaces enumerated, 46 files walked to symbol level, 0 is not the
+count.
+
+#### Per-surface detail
+
+**`memories` — (a) NOT OURS.** `Stage1Claim`, `MemoryThread`,
+`buildMemoryToolDeveloperInstructions`, `startMemoryStartupTask` — the agent's memory-instruction
+pipeline. The `Stage1Claim` name echoes the claims vocabulary we assessed in ipg.1 (non-
+transferable to bead custody), and `MemoryThread` is agent-session memory threading, not
+orchestration state.
+
+**`memory-backend` — (a) NOT OURS.** `MemoryBackend`, `MemoryBackendSaveInput/Result/SearchItem/
+Options`, `localBackend`, re-exports of `MnemopiBackendConfig` — the pluggable backend interface
+that `mnemopi` and `sharpshooter` implement. The interface is well-designed (save/search/expire
+operations over a pluggable store) but our durable state is the bead board + per-unit ledgers,
+not an agent memory backend.
+
+**`mnemopi` — (a) NOT OURS.** `MnemopiEmbedClient`, `MnemopiEmbedWorkerHandle`, `MnemopiBankScope`,
+`MemoryCompletionInput`, `resolveMemoryCompletionInput` — an LLM-powered memory embedding engine
+(embed workers, bank scoping, completion resolution). The embedding infrastructure is real but
+the orchestrator does not embed memories.
+
+**`blob-broker` — (a) NOT OURS.** 26 files, 180KB, 141 symbols — the largest surface in this
+wave. `BlobBackend`, `BlobDestinationId`, `ExposureKind` (serve vs upload), `UploaderKind`, and
+destination-specific modules. A blob storage/routing broker for agent session artifacts (screenshots,
+exports, uploads). Our orchestrator writes bead comments and per-unit ledgers; it does not route
+session blobs.
+
+**`export` — (a) NOT OURS.** `CustomShareResult`, `CustomShareFn`, `LoadedCustomShare` — session
+export/sharing via encrypted links and HTML rendering. The 08-end-users bead already assessed the
+agent's share command as (a) NOT OURS.
+
+#### Why all five are (a), and what the cross-session gap actually is
+
+The bead's framing is correct: *"cross-session state is how a swarm survives compaction."* But
+the OMP memory surfaces answer a different question than ours. OMP's memory backends store
+*agent-session context* (what the agent was thinking, what files it read, what the user said) so
+the agent can resume with context. Our cross-session state is *orchestration state* (which bead,
+which pane, what receipt, what verdict, what decision) so the supervisor can resume without
+re-briefing. These are different domains with different storage requirements.
+
+The adequate substrate for our cross-session state already exists: the bead board (durable,
+survives panes), the per-unit ledgers (typed, queryable), and the packet journal (append-only).
+The gap is not storage — it is that the dispatch loop does not yet write per-unit ledgers (S9
+UNKNOWN), and the decision ledger has zero rows (S9 GAP). Those are 12-journey S9's findings,
+and this mapping confirms them rather than replacing them.
+
+The blob-broker is the one surface with potential orchestration relevance: if dispatch packets
+grow beyond text (screenshots of pane state, recording artifacts), a blob broker becomes the
+natural storage layer. But that is an S5 Cost-field decision, not this mapping's.
