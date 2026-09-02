@@ -1,3 +1,72 @@
+# RETRACTION FIRST — §1's headline was wrong, and Josh caught it
+
+**Retracted claim:** *"The corpus does not start with a plan document — `PLAN.md` 0 repos,
+`CHARTER.md` 0 repos. Zero planning documents. One hundred fifty bead DAGs."*
+
+Josh, 2026-09-01: *"the thing is — jeff puts a lot of time into planning — when he starts his
+bead dag he already knows what hes planning and building."* He is right and the measurement
+that produced my claim was badly shaped: I searched **four filenames at depth 2** and reported
+their absence as the absence of planning.
+
+**What is actually there, measured:**
+
+| | asupersync | ours |
+|---|---:|---:|
+| `docs/**.md` | **581 files, 6.78 MB** | 19 files, 1.41 MB |
+| repo-wide `*.md` | **1,043 files, 9.50 MB** | — |
+| `*_contract.md` | **99** | 0 |
+| `docs/adr/` | **13 ADRs** (15 repos corpus-wide) | 0 |
+| mean doc size | **11.7 KB** | **74 KB** |
+| docs over 50 KB | **8 of 581 (1%)** | **5 of 19 (26%)** |
+
+**He has ~5x our planning documentation by bytes and 30x by file count.** The opposite of my
+claim.
+
+## Where the planning actually lives: `docs/plans/`
+
+```
+128141  proposal_to_integrate_ideas_from_nats_into_asupersync__after_feedback.md
+ 96524  proposal_to_integrate_ideas_from_nats_into_asupersync.md
+ 69758  plan_to_build_asupersync_in_wasm_for_use_in_browsers.md
+ 30870  wasm_api_surface_census.md
+ 12468  wasm_size_perf_budgets.md
+  4868  plan_to_port_quic_http3_to_rust.md
+```
+
+Three structural facts, and they are the actual SOTA lesson:
+
+**1. One plan per UNDERTAKING, never one plan for the project.** `plan_to_port_quic_http3_to_rust`,
+`plan_to_build_asupersync_in_wasm_for_use_in_browsers`. The filename is a verb phrase naming a
+specific thing to do. There is no document called "the plan", which is exactly why my filename
+search found nothing.
+
+**2. Convergence produces a NEW NAMED ARTIFACT.** `proposal_to_integrate_ideas_from_nats` at
+96 KB, then `..._after_feedback` at 128 KB — a second document, +33% content, with the review
+state IN THE FILENAME. He does not grade one file twenty-three times; he writes the proposal,
+takes feedback, and writes the converged one beside it. Both survive, so the delta is readable.
+
+**3. Ninety-nine `*_contract.md`, mean 11.7 KB.** `failure_domain_contract.md`,
+`crash_only_region_contract.md`, `wasm_abi_compatibility_policy.md`. One contract per concern,
+named for the concern. This is where the types and invariants get pinned — and it is why bead #4
+can say *"Budget type with product semiring semantics"* on day one without ambiguity. **The DAG
+references contracts that already exist.**
+
+## So what the day-one phase arc actually proves
+
+§2-§3 below stand as measurements — bead #1 IS a phase epic, the six phases WERE created in one
+sitting, formal methods ARE last. But my reading of them inverts. Naming
+*"Outcome type with severity lattice"* and *"Budget type with product semiring semantics"* as
+beads #2 and #4, minutes apart, is not evidence that planning was skipped. **It is evidence that
+planning was finished.** You cannot write those titles without having already settled the
+algebra. The DAG opens at the moment the design stops being uncertain.
+
+**The real contrast is shape, not volume.** He writes many small named contracts plus a few
+large per-undertaking plans, and converges by writing a successor. We write 19 documents at a
+74 KB mean, one of which is a monolith now on its 23rd grading round — 26% of our docs are over
+50 KB against his 1%.
+
+---
+
 # Round 24 · L1 — where the projects started and how they arced
 
 Josh, 2026-09-01: *"i want you looking at the beads graph — the actual beads — where did the
