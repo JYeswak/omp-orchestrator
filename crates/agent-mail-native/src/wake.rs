@@ -131,7 +131,8 @@ pub struct WakeRequest {
     pub condition: WakeCondition,
     /// Where in the attention feed to wait from.
     pub attention_cursor: Option<AttentionCursor>,
-    /// How long to block. **Mandatory**: the no-flag path never returns.
+    /// How long to block. Mandatory: the wrapper owns this latency ceiling;
+    /// omitting the CLI flag would inherit NTM's documented five-minute default.
     pub timeout: Duration,
 }
 
@@ -374,13 +375,15 @@ mod tests {
 
     #[test]
     fn argv_always_carries_an_explicit_timeout() {
-        // The single most important assertion in this module: the unbounded
-        // path must be unreachable through this type.
+        // The single most important assertion in this module: the wrapper's
+        // explicit ceiling must be unforgeable, because NTM's no-flag default
+        // is too long for a dispatch loop and external cancellation loses the
+        // resume cursor.
         let request = WakeRequest::mail_pending("omp-orchestrator", Duration::from_secs(30));
         let argv = request.argv();
         assert!(
             argv.iter().any(|arg| arg.starts_with("--timeout=")),
-            "a request without --timeout never returns: {argv:?}"
+            "the wrapper must never omit its caller-owned timeout: {argv:?}"
         );
         assert!(argv.contains(&"--timeout=30s".to_owned()), "{argv:?}");
         assert!(
