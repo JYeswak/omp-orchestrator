@@ -1,0 +1,23 @@
+[package]
+name = "omp-surface-consumption"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Derive OMP's inbound RPC command set from the installed bundle and map each method to the crate that consumes it"
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "omp_surface_consumption"
+path = "src/lib.rs"
+
+[[bin]]
+name = "omp-surface-consumption"
+path = "src/main.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+subprocess-contract = { path = "../subprocess-contract" }
