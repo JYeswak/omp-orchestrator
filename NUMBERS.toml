@@ -73,7 +73,7 @@ note     = "not a fixed figure — the board moves hourly. Declared so any prose
 
 [figures.test_functions]
 command  = "grep -RhoF '#[test]' crates --include='*.rs' | wc -l"
-note     = "LIVE recursive annotation count across all Rust sources; earlier counts are dated snapshots."
+note     = "LIVE recursive annotation count across all Rust sources; earlier counts are dated snapshots. THREE DISTINCT QUANTITIES WEAR THE WORD 'tests' AND THIS ROW IS ONLY THE FIRST: (1) this figure counts #[test] ATTRIBUTES THAT EXIST, repo-wide; (2) a PACKAGE AGGREGATE sums every `test result` line from `cargo test -p <crate>` -- lib + each integration target + doc-tests; (3) a LIB SUITE is `cargo test -p <crate> --lib` alone. Measured 2026-09-02 on ack-spine: aggregate 46 (lib 22 + main 0 + ack_detector 6 + authorities 6 + followup 6 + spine 6 + doc 0), lib suite 22. Two agents reported 46 and 22 for the same command and NEITHER was wrong -- the denominator was unstated, the same defect class as the retired '81 JSON-RPC methods, 17 used' pair. RULE: any prose quoting a cargo test figure MUST say `--lib` or `package aggregate`, and a shared `target/` makes a bare 0/0 aggregation indistinguishable from a suite that ran and passed nothing, so pin the tree AND check the arity."
 expect   = "LIVE"
 appears  = ["docs/plan/01-idea.md", "docs/plan/06-gates.md", "docs/plan/00-brief.md"]
 
