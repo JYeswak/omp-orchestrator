@@ -191,6 +191,24 @@ fn composer_path() -> String {
             std::process::exit(64);
         }
     };
+    // Prefer the ported Rust discriminator, falling back to the legacy `.py` only if it
+    // is still present. The `.py` was deleted when composer-typed became a crate, so the
+    // old unconditional path made composer_rc return 99 and fail-closed EVERY pane to
+    // BUSY -- a silent fleet-wide starve that needed no config to trigger.
+    // Ordered by trust: an explicit sibling install, then the repo's own build output.
+    for candidate in [
+        std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.join("composer-typed"))),
+        Some(PathBuf::from(format!("{cp}/target/release/composer-typed"))),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if candidate.is_file() {
+            return candidate.display().to_string();
+        }
+    }
     format!("{cp}/bin/composer-typed.py")
 }
 
