@@ -8,8 +8,8 @@
 
 use std::fs;
 use std::path::Path;
-use std::io::Read;
-use std::process::{Command, Output, Stdio};
+use std::process::Command;
+use subprocess_contract::{bounded_output, BoundedOutcome};
 use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -61,7 +61,9 @@ impl DispatcherDeadmanRules {
         };
         match rule {
             DispatcherDeadmanRule::ConsecutiveThreshold => self.consecutive_threshold = false,
-            DispatcherDeadmanRule::ReadyWithoutDeliveryCounts => self.ready_without_delivery_counts = false,
+            DispatcherDeadmanRule::ReadyWithoutDeliveryCounts => {
+                self.ready_without_delivery_counts = false
+            }
             DispatcherDeadmanRule::DeliveryResets => self.delivery_resets = false,
         }
         true
@@ -100,7 +102,11 @@ pub fn read_consecutive(text: &str) -> u64 {
     0
 }
 
-pub fn apply_record(prev: u64, rec: &Record, rules: &DispatcherDeadmanRules) -> (u64, DispatcherDeadmanVerdict) {
+pub fn apply_record(
+    prev: u64,
+    rec: &Record,
+    rules: &DispatcherDeadmanRules,
+) -> (u64, DispatcherDeadmanVerdict) {
     let stall = rec.ready_count > 0 && rec.delivered_count == 0;
     let consecutive = if stall && rules.ready_without_delivery_counts {
         prev + 1
@@ -162,50 +168,8 @@ pub fn write_state_atomic(path: &Path, body: &str) -> Result<(), i32> {
     })
 }
 
-pub fn spawn_timeout(mut cmd: Command, timeout: Duration) -> Option<Output> {
-    cmd.stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = cmd.spawn().ok()?;
-    // DRAIN THE PIPES ON DEDICATED THREADS.  `try_wait` in a poll loop CANNOT be paired with
-    // undrained pipes: a child that writes more than the OS pipe buffer (~64 KiB, and stdout and
-    // stderr each have their own) blocks in `write` forever, so it never exits, so `try_wait`
-    // never returns Some, and the call burns its entire timeout at 0% CPU before being killed.
-    //
-    // MEASURED 2026-08-27: `git -C <repo> log --since "24 hours ago" --oneline` completes in
-    // 0.6-0.9s from a shell, and sat at 0.0% CPU for 104s as a child here -- reproduced exactly by
-    // polling `try_wait` without reading the pipes.  Six crates shared this shape; fixing only the
-    // one that fired would have left five live.
-    let out = child.stdout.take().map(|mut r| {
-        std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            let _ = r.read_to_end(&mut buf);
-            buf
-        })
-    });
-    let err = child.stderr.take().map(|mut r| {
-        std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            let _ = r.read_to_end(&mut buf);
-            buf
-        })
-    });
-    let start = Instant::now();
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(s)) => break s,
-            Ok(None) if start.elapsed() >= timeout => {
-                let _ = child.kill();
-                break child.wait().ok()?;
-            }
-            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
-            Err(_) => return None,
-        }
-    };
-    // The readers end when the child's fds close, which the kill above guarantees.
-    let stdout = out.and_then(|h| h.join().ok()).unwrap_or_default();
-    let stderr = err.and_then(|h| h.join().ok()).unwrap_or_default();
-    Some(Output { status, stdout, stderr })
+pub fn spawn_timeout(mut cmd: Command, timeout: Duration) -> BoundedOutcome {
+    bounded_output(&mut cmd, timeout)
 }
 
 #[cfg(test)]
@@ -280,7 +244,7 @@ mod tests {
             start.elapsed() < Duration::from_secs(3),
             "rule bounded_waits"
         );
-        assert!(out.is_some());
+        assert!(matches!(out, BoundedOutcome::TimedOut));
     }
 
     #[test]
@@ -294,8 +258,13 @@ mod tests {
         let mut cmd = Command::new("/bin/sh");
         cmd.args(["-c", "exec 3<>/dev/fd/$CHECK_FD"])
             .env("CHECK_FD", fd.to_string());
-        let out = spawn_timeout(cmd, Duration::from_secs(2)).expect("sh");
-        assert!(!out.status.success(), "rule lock_not_inheritable");
+        match spawn_timeout(cmd, Duration::from_secs(2)) {
+            BoundedOutcome::Completed(output) => {
+                assert!(!output.status.success(), "rule lock_not_inheritable");
+            }
+            BoundedOutcome::TimedOut => panic!("fd probe must complete before its deadline"),
+            BoundedOutcome::Unspawned(error) => panic!("fd probe must spawn: {error}"),
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -4,13 +4,27 @@
 
 use dispatcher_deadman::{
     apply_record, emit_json, nonnegative, read_consecutive, spawn_timeout, state_body,
-    write_state_atomic, Record, DispatcherDeadmanRules,
+    write_state_atomic, DispatcherDeadmanRules, Record,
 };
 use std::fs;
 use std::path::PathBuf;
-use std::process::{Command, ExitCode};
+use std::process::{Command, ExitCode, Output};
 use std::time::Duration;
+use subprocess_contract::BoundedOutcome;
 
+fn completed_output(label: &str, outcome: BoundedOutcome) -> Option<Output> {
+    match outcome {
+        BoundedOutcome::Completed(output) => Some(output),
+        BoundedOutcome::TimedOut => {
+            eprintln!("{label} timed out before its deadline");
+            None
+        }
+        BoundedOutcome::Unspawned(error) => {
+            eprintln!("{label} could not spawn: {error}");
+            None
+        }
+    }
+}
 fn emit_unproven(rec: Option<&Record>, consecutive: u64, threshold: u64) {
     let (ready, delivered, tick, reason) = match rec {
         Some(r) => (
@@ -33,8 +47,14 @@ fn main() -> ExitCode {
     let mut disabled: Vec<String> = Vec::new();
     let mut state_file = match std::env::var("DISPATCH_DEADMAN_STATE_FILE") {
         Ok(path) => path,
-        Err(_) => match std::env::var_os("HOME").filter(|v| !v.is_empty()).map(std::path::PathBuf::from) {
-            Some(home) => format!("{}/.local/state/flywheel/dispatcher-deadman.state", home.display()),
+        Err(_) => match std::env::var_os("HOME")
+            .filter(|v| !v.is_empty())
+            .map(std::path::PathBuf::from)
+        {
+            Some(home) => format!(
+                "{}/.local/state/flywheel/dispatcher-deadman.state",
+                home.display()
+            ),
             None => {
                 eprintln!("dispatch-deadman: HOME is unset; cannot resolve the default state file; set DISPATCH_DEADMAN_STATE_FILE");
                 return ExitCode::from(64);
@@ -186,7 +206,7 @@ fn run_selftest() -> ExitCode {
             "--state-file",
         ])
         .arg(&state);
-        spawn_timeout(cmd, Duration::from_secs(5))
+        completed_output("dispatcher-deadman selftest", spawn_timeout(cmd, Duration::from_secs(5)))
     };
     let mut fail = 0;
     let h = run("0", "0", "healthy", "no_work");
