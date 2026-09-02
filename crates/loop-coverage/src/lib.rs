@@ -514,6 +514,270 @@ where
         .collect()
 }
 
+/// External authorities this map cites that THIS repository does not contain, each with
+/// the reason and the condition that KILLS the row.
+///
+/// # Why a registry rather than five `println!`s
+///
+/// Five checks in this crate were red on 2026-08-31 and are green today, because each
+/// grew an early return that prints `DIFFERENTIAL DID NOT RUN: ...`. The intent was
+/// right and the line is genuinely typed -- it names the test, a reason, and the exact
+/// missing path. **The typing is unreachable in the surface anyone reads.** Measured
+/// 2026-09-02:
+///
+/// ```text
+/// cargo test -p loop-coverage --lib               -> 19 passed; 0 failed; 0 ignored
+///   grep -c 'DIFFERENTIAL DID NOT RUN'            -> 0
+/// cargo test -p loop-coverage --lib -- --nocapture
+///   grep -c 'DIFFERENTIAL DID NOT RUN'            -> 5
+/// ```
+///
+/// `libtest` captures stdout of a PASSING test, and its own skip counter reads
+/// `0 ignored`. So nothing in the default verdict distinguishes *19 checks ran* from
+/// *14 ran and 5 were skipped over absent authorities*. A skip that announces itself
+/// only under a flag nobody passes is the vacuity defect wearing a reason string.
+///
+/// # The three reason classes are NOT the same fact, and collapsing them is the bug
+///
+/// * `pending-extraction:` -- absent because the crate has not been copied here yet.
+///   **This row dies when the authority lands**, and the hard assertion comes back.
+///   Waiting is the correct behaviour.
+/// * `shell-forbidden:` -- the authority is a `.sh`, and this repository's first rule
+///   forbids `.sh`. **This row can NEVER be satisfied by waiting.**
+/// * `python-forbidden:` -- same rule, other half: *"No `.sh`. No `.py`."*
+///
+/// The bead's acceptance 3 asked for a decision on the SHELL citations. There are also
+/// **two Python ones** -- `bin/charter-align.py` and `bin/verify-dispatch.py` -- and the
+/// bead did not know, because no instrument had ever enumerated the set. Both are
+/// structurally unresolvable here for the same reason, so the class is
+/// *forbidden-extension*, not *shell*.
+///
+/// # The five printed lines undercounted the truth by nine
+///
+/// Measured 2026-09-02: the absent set is **19**, and the early returns reported **5**.
+///
+/// * `precursor_docs_exist` uses `.find()` -- it reports the FIRST missing doc and
+///   returns, so `.flywheel/CHARTER.md` was absent and invisible behind
+///   `crates/controller-tick/src/lib.rs`.
+/// * `every_cited_proof_artifact_exists_on_disk` prints one lumped list once, so seven
+///   `controller-tick/tests/*.rs` citations and two `arc-*` crates arrived as one line.
+///
+/// A fail-fast reporter shows the head of the chain. Nine of nineteen were behind it --
+/// the same shadowing shape that hid `reap-finished-panes` behind `DOCS_STALE` for six
+/// hours tonight.
+pub const EXTERNAL_AUTHORITY_ALLOWANCE: &[(&str, &str)] = &[
+    // --- pending-extraction: controller-tick, which is not in the 23-crate set at all
+    (
+        "crates/controller-tick/src/lib.rs",
+        "pending-extraction: owns OutcomeClass and budget_outcome, which this matrix \
+         asserts must not fork",
+    ),
+    (
+        "crates/controller-tick/tests/observer_timeout_is_not_a_verdict.rs",
+        "pending-extraction: the timeout-is-not-a-verdict proof for the observe layer",
+    ),
+    (
+        "crates/controller-tick/tests/budget_unknown_is_not_a_refusal.rs",
+        "pending-extraction: the unknown-vs-refusal proof",
+    ),
+    (
+        "crates/controller-tick/tests/dispatch_packet_contract.rs",
+        "pending-extraction: the dispatch-packet contract proof",
+    ),
+    (
+        "crates/controller-tick/tests/every_outcome_is_typed.rs",
+        "pending-extraction: the typed-outcome proof",
+    ),
+    (
+        "crates/controller-tick/tests/fence_contract.rs",
+        "pending-extraction: the fence contract proof",
+    ),
+    (
+        "crates/controller-tick/tests/pane_liveness.rs",
+        "pending-extraction: the pane-liveness proof",
+    ),
+    (
+        "crates/controller-tick/tests/publisher_and_reader_agree.rs",
+        "pending-extraction: the publisher/reader agreement proof",
+    ),
+    // --- pending-extraction: other crates outside the set
+    (
+        "crates/arc-checkin/src/lib.rs",
+        "pending-extraction: arc-checkin is not in the extraction set",
+    ),
+    (
+        "crates/arc-keepalive/src/lib.rs",
+        "pending-extraction: arc-keepalive is not in the extraction set",
+    ),
+    // --- pending-extraction: generated or authored documents
+    (
+        "docs/LOOP_COVERAGE_MATRIX.md",
+        "pending-extraction: generated artifact; `loop-coverage --markdown` produces it \
+         and nothing has committed the render here yet",
+    ),
+    (
+        ".flywheel/CHARTER.md",
+        "pending-extraction: PRECURSOR_DOCS[1]; this repo's .flywheel carries \
+         AUTONOMOUS-WAVE.md instead. It was absent and unreported behind controller-tick \
+         because precursor_docs_exist stops at the first miss",
+    ),
+    // --- shell-forbidden: can never exist here; rule 1 of this repository
+    (
+        "bin/check.sh",
+        "shell-forbidden: the map asserts it is NOT wired into control-plane's check.sh; \
+         that file can never exist here, so the negative can never be tested here",
+    ),
+    (
+        "bin/loop-conformance.sh",
+        "shell-forbidden: cited as a proof artifact; a .sh can never exist in this repo",
+    ),
+    (
+        "bin/lib/session-repo.sh",
+        "shell-forbidden: cited as a proof artifact; a .sh can never exist in this repo",
+    ),
+    (
+        "bin/arc-checkin.sh",
+        "shell-forbidden: cited as a proof artifact; a .sh can never exist in this repo",
+    ),
+    (
+        "bin/arc-keepalive.sh",
+        "shell-forbidden: cited as a proof artifact; a .sh can never exist in this repo",
+    ),
+    // --- python-forbidden: the half of rule 1 the bead's acceptance 3 did not name
+    (
+        "bin/charter-align.py",
+        "python-forbidden: cited as a proof artifact AND as closure_evidence \
+         (`python3 bin/charter-align.py <repo>`); a .py can never exist in this repo",
+    ),
+    (
+        "bin/verify-dispatch.py",
+        "python-forbidden: cited as a proof artifact AND as closure_evidence; a .py can \
+         never exist in this repo",
+    ),
+];
+
+/// The number of cited external authorities expected to be absent right now.
+///
+/// A ratchet, and it moves in BOTH directions. Per-row liveness below catches an
+/// authority that lands; this catches the opposite attack -- a NEW dangling citation
+/// smuggled in together with an allowance row that permits it. Widening the allowlist
+/// then requires editing this number, which is a one-line diff a reviewer cannot miss.
+///
+/// Measured 2026-09-02, not asserted: 19.
+pub const EXPECTED_ABSENT_AUTHORITIES: usize = 19;
+
+/// A check that did not run, and the declared row that permits it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SkippedCheck {
+    pub authority: String,
+    pub reason: &'static str,
+}
+
+/// Why an allowance audit refuses.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AllowanceError {
+    /// A cited authority is absent and NO row permits it. This is the real regression
+    /// the five early returns stopped being able to report.
+    UndeclaredSkip { authority: String },
+    /// A row permits an authority that is PRESENT. For `pending-extraction:` this is the
+    /// dies-when firing -- delete the row and restore the hard assertion. A row matching
+    /// nothing is an ERROR, never a pass.
+    StaleAllowanceRow {
+        authority: String,
+        reason: &'static str,
+    },
+    /// The reason does not declare its class, so nobody can tell "waiting" from "never".
+    MalformedReason {
+        authority: String,
+        reason: &'static str,
+    },
+    /// Nothing was scanned. A deliverable that was never checked reports identically to
+    /// one that passed.
+    EmptyScanSet,
+}
+
+/// Every external authority this map cites, from the map itself -- never hand-listed.
+///
+/// A hand-listed expectation set is the defect `check.sh`'s `EXPECTED_GATES` carries:
+/// the list drifts while the suite reports vacuously green.
+pub fn cited_external_authorities() -> Vec<&'static str> {
+    let mut out: Vec<&'static str> = Vec::new();
+    for row in LOOP_COVERAGE {
+        out.extend(row.proof_artifacts.iter().copied());
+    }
+    out.extend(PRECURSOR_DOCS.iter().copied());
+    out.extend(REUSED_TYPE_AUTHORITIES.iter().map(|(_, path)| *path));
+    // The one authority no row names: the negative this map asserts about check.sh.
+    out.push("bin/check.sh");
+    out.push("docs/LOOP_COVERAGE_MATRIX.md");
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
+/// Classify every cited authority against the registry.
+///
+/// `exists` is caller-supplied so a test can plant a missing path without touching the
+/// filesystem -- this crate stays side-effect free, as its header promises.
+pub fn audit_external_authorities<F>(
+    cited: &[&'static str],
+    mut exists: F,
+) -> Result<Vec<SkippedCheck>, Vec<AllowanceError>>
+where
+    F: FnMut(&str) -> bool,
+{
+    if cited.is_empty() {
+        return Err(vec![AllowanceError::EmptyScanSet]);
+    }
+    let mut errors = Vec::new();
+    let mut skipped = Vec::new();
+
+    for (authority, reason) in EXTERNAL_AUTHORITY_ALLOWANCE {
+        const CLASSES: [&str; 3] = [
+            "pending-extraction:",
+            "shell-forbidden:",
+            "python-forbidden:",
+        ];
+        if !CLASSES.iter().any(|c| reason.starts_with(c)) {
+            errors.push(AllowanceError::MalformedReason {
+                authority: (*authority).to_string(),
+                reason,
+            });
+        }
+        if exists(authority) {
+            errors.push(AllowanceError::StaleAllowanceRow {
+                authority: (*authority).to_string(),
+                reason,
+            });
+        }
+    }
+
+    for path in cited {
+        if exists(path) {
+            continue;
+        }
+        match EXTERNAL_AUTHORITY_ALLOWANCE
+            .iter()
+            .find(|(authority, _)| authority == path)
+        {
+            Some((authority, reason)) => skipped.push(SkippedCheck {
+                authority: (*authority).to_string(),
+                reason,
+            }),
+            None => errors.push(AllowanceError::UndeclaredSkip {
+                authority: (*path).to_string(),
+            }),
+        }
+    }
+
+    if errors.is_empty() {
+        skipped.sort_by(|a, b| a.authority.cmp(&b.authority));
+        Ok(skipped)
+    } else {
+        Err(errors)
+    }
+}
+
 /// Structural closeout over [`LOOP_COVERAGE`].
 pub fn matrix_gaps() -> Vec<CoverageGap> {
     matrix_gaps_of(LOOP_COVERAGE)
@@ -740,16 +1004,28 @@ mod tests {
         }
     }
 
+    /// The clippy `needless_return` on the old body was the tell, and it was pointing at
+    /// something worse than style: **nothing followed the `return`**, so the success path
+    /// asserted nothing either. The test passed whether the precursors existed or not --
+    /// vacuous in BOTH branches. Now each doc must exist, or name a declared row.
     #[test]
-    fn precursor_docs_exist() {
+    fn precursor_docs_exist_or_are_declared_absent() {
         let root = repo_root();
-        let missing = PRECURSOR_DOCS
-            .iter()
-            .map(|doc| root.join(doc))
-            .find(|path| !path.exists());
-        if let Some(path) = missing {
-            println!("DIFFERENTIAL DID NOT RUN: test=precursor_docs_exist reason=missing_external_authority detail={}", path.display());
-            return;
+        assert!(
+            !PRECURSOR_DOCS.is_empty(),
+            "an empty precursor list makes this leg vacuous"
+        );
+        for doc in PRECURSOR_DOCS {
+            if root.join(doc).exists() {
+                continue;
+            }
+            assert!(
+                EXTERNAL_AUTHORITY_ALLOWANCE
+                    .iter()
+                    .any(|(authority, _)| authority == doc),
+                "precursor {doc} is absent and undeclared; add a row to \
+                 EXTERNAL_AUTHORITY_ALLOWANCE with its class and its dies-when, or land it"
+            );
         }
     }
 
@@ -917,5 +1193,117 @@ mod tests {
     fn no_claim_boundary_is_in_the_json_report() {
         let json = render_json();
         assert!(json.contains("does not prove the dispatch loop is correct"));
+    }
+
+    // ---------------------------------------------------------------------------
+    // Allowance legs (bead omp-orchestrator-content-citation-ordering-r3h).
+    //
+    // The five early returns above announce a skip on stdout that `libtest`
+    // captures. These legs make the same skip GOVERNED: it must be declared, and
+    // its declaration must still be true. An undeclared or stale skip is RED.
+    // ---------------------------------------------------------------------------
+
+    fn on_disk(root: &Path) -> impl FnMut(&str) -> bool + '_ {
+        move |p: &str| root.join(p).is_file() || root.join(p).is_dir()
+    }
+
+    /// THE LEG THAT WAS LOST. Before the early returns, a dangling citation failed
+    /// the suite. After them, every absent authority is silently tolerated. This
+    /// restores the property for anything NOT declared.
+    #[test]
+    fn every_absent_authority_names_a_declared_allowance_row() {
+        let root = repo_root();
+        let cited = cited_external_authorities();
+        let skipped = audit_external_authorities(&cited, on_disk(&root))
+            .expect("every absent cited authority must be declared, and every row still absent");
+        assert_eq!(
+            skipped.len(),
+            EXPECTED_ABSENT_AUTHORITIES,
+            "the absent-authority count moved; update EXPECTED_ABSENT_AUTHORITIES deliberately: {skipped:?}"
+        );
+    }
+
+    /// ANTI-VACUITY. An empty scan set must be an ERROR. A map that cites nothing
+    /// audits clean, and reads exactly like one whose citations all resolved.
+    #[test]
+    fn an_empty_scan_set_is_an_error_not_a_pass() {
+        let err = audit_external_authorities(&[], |_| true)
+            .expect_err("auditing nothing must refuse");
+        assert_eq!(err, vec![AllowanceError::EmptyScanSet]);
+        assert!(
+            !cited_external_authorities().is_empty(),
+            "the real scan set must be non-empty or the leg above is vacuous"
+        );
+    }
+
+    /// FIRES-ON-KNOWN-BAD, undeclared direction: acceptance 4 of the bead. A new
+    /// dangling citation is exactly what the early returns stopped reporting.
+    #[test]
+    fn an_undeclared_absent_authority_is_refused() {
+        let cited = vec!["crates/loop-coverage/src/lib.rs", "crates/nonexistent/src/lib.rs"];
+        let root = repo_root();
+        let err = audit_external_authorities(&cited, on_disk(&root))
+            .expect_err("an undeclared absent authority must refuse");
+        assert_eq!(
+            err,
+            vec![AllowanceError::UndeclaredSkip {
+                authority: "crates/nonexistent/src/lib.rs".to_string()
+            }]
+        );
+    }
+
+    /// FIRES-ON-KNOWN-BAD, stale direction -- the DIES-WHEN. When controller-tick
+    /// lands, its row must be deleted and the hard assertion restored. A row that
+    /// matches nothing is an error, never a pass, so a skip cannot outlive its cause.
+    #[test]
+    fn an_allowance_row_dies_when_its_authority_lands() {
+        let cited = cited_external_authorities();
+        let err = audit_external_authorities(&cited, |_| true)
+            .expect_err("with every authority present, every row must be reported stale");
+        let stale: Vec<&AllowanceError> = err
+            .iter()
+            .filter(|e| matches!(e, AllowanceError::StaleAllowanceRow { .. }))
+            .collect();
+        assert_eq!(
+            stale.len(),
+            EXTERNAL_AUTHORITY_ALLOWANCE.len(),
+            "every declared row must die when its authority appears: {err:?}"
+        );
+    }
+
+    /// The two classes must stay distinguishable. `pending-extraction:` is answered by
+    /// waiting; `shell-forbidden:` never is, and conflating them is how a permanent hole
+    /// gets filed as a temporary one.
+    #[test]
+    fn every_allowance_reason_declares_which_class_it_is() {
+        let mut pending = 0usize;
+        let mut shell = 0usize;
+        let mut python = 0usize;
+        for (authority, reason) in EXTERNAL_AUTHORITY_ALLOWANCE {
+            if reason.starts_with("pending-extraction:") {
+                pending += 1;
+            } else if reason.starts_with("shell-forbidden:") {
+                shell += 1;
+                assert!(
+                    authority.ends_with(".sh"),
+                    "{authority} claims shell-forbidden but is not a .sh"
+                );
+            } else if reason.starts_with("python-forbidden:") {
+                python += 1;
+                assert!(
+                    authority.ends_with(".py"),
+                    "{authority} claims python-forbidden but is not a .py"
+                );
+            } else {
+                panic!("{authority} reason declares no class: {reason}");
+            }
+        }
+        // Every class is live today. A zero here means either a row was retired without
+        // updating this leg, or the class was never real -- both are worth a RED.
+        assert_eq!(
+            (pending, shell, python),
+            (12, 5, 2),
+            "class counts moved; the registry changed and this leg must be re-read"
+        );
     }
 }
