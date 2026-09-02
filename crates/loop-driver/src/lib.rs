@@ -11,9 +11,9 @@ use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Stdio};
+use std::process::{Command, ExitStatus, Output, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-
+use subprocess_contract::{bounded_output, BoundedOutcome};
 pub const EXIT_CONCURRENT: i32 = 75;
 pub const EXIT_DEADLINE: i32 = 124;
 pub const SCHEDULE_INTERVAL_SECONDS: u64 = 1_200;
@@ -41,6 +41,20 @@ fn cron_path() -> String {
     }
 }
 const OS_PROBE_BUDGET: Duration = Duration::from_secs(1);
+
+fn os_output(command: &mut Command) -> Option<Output> {
+    match bounded_output(command, OS_PROBE_BUDGET) {
+        BoundedOutcome::Completed(output) => Some(output),
+        BoundedOutcome::TimedOut | BoundedOutcome::Unspawned(_) => None,
+    }
+}
+
+fn os_status(command: &mut Command) -> Option<ExitStatus> {
+    match subprocess_contract::bounded_status(command, OS_PROBE_BUDGET) {
+        BoundedOutcome::Completed(output) => Some(output.status),
+        BoundedOutcome::TimedOut | BoundedOutcome::Unspawned(_) => None,
+    }
+}
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct LoopDriverRunOutput {
@@ -98,7 +112,10 @@ impl LoopDriverConfig {
                 let mut current = std::env::current_dir()
                     .map_err(|error| format!("cannot read the current directory: {error}"))?;
                 loop {
-                    if [".git", ".beads"].iter().any(|marker| current.join(marker).exists()) {
+                    if [".git", ".beads"]
+                        .iter()
+                        .any(|marker| current.join(marker).exists())
+                    {
                         break;
                     }
                     let Some(parent) = current.parent() else {
@@ -436,14 +453,12 @@ fn lock_holder_pids(path: &Path) -> Vec<u32> {
             .filter(|pid| *pid != me)
             .collect()
     };
-    // Direct output() — the bounded run_command path was dropping lsof pids
-    // on this box (WouldBlock with empty lsof). lsof of one file is instant.
     // -nP skips DNS/port names; FAR uses the same pair on this box.
     for bin in ["/usr/sbin/lsof", "/usr/bin/lsof"] {
         for args in [vec!["-nP", "-t"], vec!["-t"]] {
             let mut cmd = Command::new(bin);
             cmd.args(&args).arg(path);
-            if let Ok(output) = cmd.output() {
+            if let Some(output) = os_output(&mut cmd) {
                 let pids = parse(&output.stdout);
                 if !pids.is_empty() {
                     return pids;
@@ -455,10 +470,9 @@ fn lock_holder_pids(path: &Path) -> Vec<u32> {
 }
 
 fn pgrep_children(pid: u32) -> Vec<u32> {
-    let output = Command::new("/usr/bin/pgrep")
-        .args(["-P", &pid.to_string()])
-        .output();
-    let Ok(output) = output else {
+    let mut command = Command::new("/usr/bin/pgrep");
+    command.args(["-P", &pid.to_string()]);
+    let Some(output) = os_output(&mut command) else {
         return Vec::new();
     };
     String::from_utf8_lossy(&output.stdout)
@@ -479,18 +493,17 @@ fn parse_ps_line(line: &str) -> Option<ProcessRow> {
 }
 
 fn ps_row_for(pid: u32) -> Option<ProcessRow> {
-    // Darwin `ps` has `etime` ([[dd-]hh:]mm:ss), not Linux `etimes` (integer
-    // seconds). Asking for etimes= here used to fail the whole snapshot, so
-    // every holder looked like 0% CPU and was labelled WEDGED.
-    let output = Command::new("/bin/ps")
-        .args([
-            "-p",
-            &pid.to_string(),
-            "-o",
-            "pid=,ppid=,etime=,%cpu=,time=",
-        ])
-        .output()
-        .ok()?;
+    // Darwin ps has etime ([[dd-]hh:]mm:ss), not Linux etimes (integer seconds).
+    // Asking for etimes= here used to fail the whole snapshot, so every holder
+    // looked like 0% CPU and was labelled WEDGED.
+    let mut command = Command::new("/bin/ps");
+    command.args([
+        "-p",
+        &pid.to_string(),
+        "-o",
+        "pid=,ppid=,etime=,%cpu=,time=",
+    ]);
+    let output = os_output(&mut command)?;
     if !output.status.success() {
         return None;
     }
@@ -498,10 +511,9 @@ fn ps_row_for(pid: u32) -> Option<ProcessRow> {
 }
 
 fn process_table() -> Vec<ProcessRow> {
-    let output = Command::new("/bin/ps")
-        .args(["-axo", "pid=,ppid=,etime=,%cpu=,time="])
-        .output();
-    let Ok(output) = output else {
+    let mut command = Command::new("/bin/ps");
+    command.args(["-axo", "pid=,ppid=,etime=,%cpu=,time="]);
+    let Some(output) = os_output(&mut command) else {
         return Vec::new();
     };
     String::from_utf8_lossy(&output.stdout)
@@ -509,6 +521,7 @@ fn process_table() -> Vec<ProcessRow> {
         .filter_map(parse_ps_line)
         .collect()
 }
+
 
 /// Darwin `etime` is [[dd-]hh:]mm:ss — never a raw second count.
 fn parse_etime(raw: &str) -> u64 {
@@ -730,19 +743,13 @@ fn terminate_process_tree(pid: u32) {
     if killing_self {
         return;
     }
-    let _ = Command::new("/bin/kill")
-        .args(["-TERM", &pid.to_string()])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
+    let mut term = Command::new("/bin/kill");
+    term.args(["-TERM", &pid.to_string()]);
+    let _ = os_status(&mut term);
     std::thread::sleep(Duration::from_millis(50));
-    let _ = Command::new("/bin/kill")
-        .args(["-KILL", &pid.to_string()])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
+    let mut kill = Command::new("/bin/kill");
+    kill.args(["-KILL", &pid.to_string()]);
+    let _ = os_status(&mut kill);
 }
 
 pub fn wall_bound_line(bound: Duration, lock: &Path) -> String {
@@ -884,8 +891,9 @@ impl Deadline {
     }
 }
 
+#[derive(Debug)]
 struct ChildResult {
-    status: ExitStatus,
+    status: Option<ExitStatus>,
     stdout: Vec<u8>,
     stderr: Vec<u8>,
     timed_out: bool,
@@ -896,7 +904,7 @@ impl ChildResult {
         if self.timed_out {
             EXIT_DEADLINE
         } else {
-            self.status.code().unwrap_or(1)
+            self.status.as_ref().and_then(ExitStatus::code).unwrap_or(1)
         }
     }
 
@@ -908,40 +916,21 @@ impl ChildResult {
 }
 
 fn run_command(mut command: Command, deadline: Deadline) -> Result<ChildResult, std::io::Error> {
-    command
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = command.spawn()?;
-    let mut stdout = child.stdout.take().expect("stdout is piped");
-    let mut stderr = child.stderr.take().expect("stderr is piped");
-    let stdout_reader = std::thread::spawn(move || {
-        let mut bytes = Vec::new();
-        let _ = stdout.read_to_end(&mut bytes);
-        bytes
-    });
-    let stderr_reader = std::thread::spawn(move || {
-        let mut bytes = Vec::new();
-        let _ = stderr.read_to_end(&mut bytes);
-        bytes
-    });
-
-    let (status, timed_out) = loop {
-        if let Some(status) = child.try_wait()? {
-            break (status, false);
-        }
-        if deadline.expired() {
-            let _ = child.kill();
-            break (child.wait()?, true);
-        }
-        std::thread::sleep(Duration::from_millis(10));
-    };
-    Ok(ChildResult {
-        status,
-        stdout: stdout_reader.join().unwrap_or_default(),
-        stderr: stderr_reader.join().unwrap_or_default(),
-        timed_out,
-    })
+    match bounded_output(&mut command, deadline.budget) {
+        BoundedOutcome::Completed(output) => Ok(ChildResult {
+            status: Some(output.status),
+            stdout: output.stdout,
+            stderr: output.stderr,
+            timed_out: false,
+        }),
+        BoundedOutcome::TimedOut => Ok(ChildResult {
+            status: None,
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+            timed_out: true,
+        }),
+        BoundedOutcome::Unspawned(error) => Err(error),
+    }
 }
 
 fn deadline_output(deadline: Deadline, phase: &str) -> LoopDriverRunOutput {
@@ -1046,7 +1035,10 @@ fn ps_row(
     }
 }
 
-fn detect_invocation(config: &LoopDriverConfig, deadline: Deadline) -> Result<Invocation, LoopDriverRunOutput> {
+fn detect_invocation(
+    config: &LoopDriverConfig,
+    deadline: Deadline,
+) -> Result<Invocation, LoopDriverRunOutput> {
     let current = ps_row(std::process::id(), config, deadline)?;
     let parent_pid = current.as_ref().map_or(0, |(_, ppid, _)| *ppid);
     let mut pid = parent_pid;
@@ -1108,7 +1100,10 @@ fn run_helper(
     }
 }
 
-fn session_visible(config: &LoopDriverConfig, deadline: Deadline) -> Result<bool, LoopDriverRunOutput> {
+fn session_visible(
+    config: &LoopDriverConfig,
+    deadline: Deadline,
+) -> Result<bool, LoopDriverRunOutput> {
     for attempt in 1..=3 {
         let mut command = Command::new("ntm");
         command.arg("list");
@@ -1781,5 +1776,58 @@ mod tests {
         );
         assert!(output.contains("cargo-lane-budget measurement unavailable"));
         assert!(!output.contains("talking to nobody"));
+    }
+    #[test]
+    fn deadline_kills_process_group_and_next_attempt_succeeds() {
+        let marker = std::env::temp_dir().join(format!(
+            "loop-driver-grandchild-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock")
+                .as_nanos()
+        ));
+        let started = marker.with_extension("started");
+        let script = format!(
+            "nohup /bin/sh -c 'touch {}; sleep 1; touch {}' >/dev/null 2>&1 & sleep 30",
+            started.display(),
+            marker.display()
+        );
+        let mut command = Command::new("/bin/sh");
+        command.args(["-c", &script]);
+        let result = run_command(command, Deadline::new(Duration::from_millis(200)))
+            .expect("grandchild fixture must spawn");
+        assert!(
+            result.timed_out,
+            "fixture must exercise the restrictive timeout"
+        );
+
+        let started_deadline = Instant::now() + Duration::from_secs(1);
+        while !started.exists() && Instant::now() < started_deadline {
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        assert!(
+            started.exists(),
+            "grandchild fixture never started; survival assertion is vacuous"
+        );
+        let wait_deadline = Instant::now() + Duration::from_secs(2);
+        while !marker.exists() && Instant::now() < wait_deadline {
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        assert!(
+            !marker.exists(),
+            "a pid-only timeout leaves the grandchild alive and the marker appears"
+        );
+
+        let next = run_command(
+            Command::new("true"),
+            Deadline::new(Duration::from_secs(1)),
+        )
+        .expect("next attempt must spawn");
+        assert!(
+            !next.timed_out && next.code() == 0,
+            "next attempt: {next:?}"
+        );
+        let _ = std::fs::remove_file(marker);
     }
 }

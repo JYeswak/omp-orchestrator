@@ -2,9 +2,10 @@
 
 use std::path::PathBuf;
 use std::process::Command;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+use subprocess_contract::{bounded_status, BoundedOutcome};
 
-
+const TELEMETRY_TIMEOUT: Duration = Duration::from_secs(5);
 /// Records one scheduled invocation when the owning process exits.
 ///
 /// This is intentionally a small, dependency-free bridge shared by the Rust lanes. The helper
@@ -28,10 +29,18 @@ impl Drop for Run {
         let elapsed = self.started.elapsed().as_secs().to_string();
         let helper = std::env::var_os("SCHEDULED_LANE_TELEMETRY_HELPER")
             .map(PathBuf::from)
-            .or_else(|| std::env::var_os("CONTROL_PLANE_REPO").map(|root| PathBuf::from(root).join("bin/lib/scheduled-lane-telemetry.sh")));
-        let Some(helper) = helper else { return; };
-        let _ = Command::new(helper)
-            .args(["--record", self.lane, &elapsed, "0"])
-            .status();
+            .or_else(|| {
+                std::env::var_os("CONTROL_PLANE_REPO")
+                    .map(|root| PathBuf::from(root).join("bin/lib/scheduled-lane-telemetry.sh"))
+            });
+        let Some(helper) = helper else {
+            return;
+        };
+        let mut command = Command::new(helper);
+        command.args(["--record", self.lane, &elapsed, "0"]);
+        let _ = match bounded_status(&mut command, TELEMETRY_TIMEOUT) {
+            BoundedOutcome::Completed(output) => Some(output.status),
+            BoundedOutcome::TimedOut | BoundedOutcome::Unspawned(_) => None,
+        };
     }
 }
