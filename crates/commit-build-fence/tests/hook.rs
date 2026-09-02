@@ -197,6 +197,79 @@ fn real_hook_treats_missing_store_as_error() {
     );
 }
 #[test]
+fn ci_shaped_init_then_check_clears_and_active_registration_refuses() {
+    let dir = fresh_repo("ci-shaped");
+    let repo = dir.canonicalize().expect("canonical repo");
+    let repo_arg = repo.display().to_string();
+
+    let init = run_fence(&["init".to_owned(), "--repo".to_owned(), repo_arg.clone()]);
+    assert!(
+        init.status.success(),
+        "fresh-checkout init failed: {}",
+        String::from_utf8_lossy(&init.stderr)
+    );
+    assert!(
+        store_for(&dir).is_file(),
+        "init must create the default store"
+    );
+
+    let clear = run_fence(&[
+        "check".to_owned(),
+        "--repo".to_owned(),
+        repo_arg.clone(),
+        "--head".to_owned(),
+        "ci-head".to_owned(),
+        "--now".to_owned(),
+        "200".to_owned(),
+    ]);
+    assert!(
+        clear.status.success(),
+        "initialized clean checkout must clear: {}",
+        String::from_utf8_lossy(&clear.stderr)
+    );
+
+    let store_path = store_for(&dir);
+    let mut store = RegistrationStore::load(&store_path).expect("load initialized store");
+    store
+        .register(BuildRegistration {
+            build_id: "build-ci-shaped".to_owned(),
+            repo: repo_arg.clone(),
+            head: "registered-head".to_owned(),
+            holder: "ci-test".to_owned(),
+            started_at_unix: 100,
+            expires_at_unix: 500,
+        })
+        .expect("register active build");
+    store
+        .save_atomic(&store_path)
+        .expect("save active registration");
+
+    let fenced = run_fence(&[
+        "check".to_owned(),
+        "--repo".to_owned(),
+        repo_arg,
+        "--head".to_owned(),
+        "ci-head".to_owned(),
+        "--now".to_owned(),
+        "200".to_owned(),
+    ]);
+    let stderr = String::from_utf8_lossy(&fenced.stderr);
+    assert_eq!(
+        fenced.status.code(),
+        Some(1),
+        "active fence must refuse: {stderr}"
+    );
+    assert!(
+        stderr.contains("COMMIT_FENCE_REFUSED"),
+        "missing fence verdict: {stderr}"
+    );
+    assert!(
+        stderr.contains("build-ci-shaped"),
+        "missing build identity: {stderr}"
+    );
+}
+
+#[test]
 fn cli_registration_expiry_and_release_are_durable() {
     let dir = fresh_repo("cli");
     let repo = dir.canonicalize().expect("canonical repo");

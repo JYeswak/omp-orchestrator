@@ -170,8 +170,8 @@ jobs:
       - run: cargo test -p pre-delete-citation-check
       - run: cargo run --quiet -p pre-delete-citation-check -- .
   commit-build-fence:
-    # WIRING: this is one of the eight gates §06 is built around and CI did not
-    # invoke it. Caught by wired_lanes, not by a human. refuses a commit that does not build; never run by CI.
+    # WIRING: this is one of the eight gates §06 is built around. CI must
+    # initialize the checkout-local store before asking check for a verdict.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -182,7 +182,10 @@ jobs:
           cargo --version
           rustc --version
       - run: cargo test -p commit-build-fence
-      - run: cargo run --quiet -p commit-build-fence -- .
+      - name: Initialize commit fence store for fresh checkout
+        run: cargo run --quiet -p commit-build-fence -- init --repo .
+      - name: Check commit fence on clean checkout
+        run: cargo run --quiet -p commit-build-fence -- check --repo .
 
   porting-gate:
     # WIRING: a candidate must pass all six arrival clauses from the same archive state.

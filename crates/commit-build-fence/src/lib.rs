@@ -243,7 +243,8 @@ impl FenceVerdict {
 
 /// Check one repo against the explicit registration store at one clock value.
 /// Missing and malformed stores return errors; only a valid empty/expired store
-/// permits the commit to continue.
+/// permits the commit to continue. `check` never creates the store: a fresh
+/// checkout caller, including CI, must invoke `init` before requesting a verdict.
 pub fn check(
     store_path: &Path,
     repo: &str,
