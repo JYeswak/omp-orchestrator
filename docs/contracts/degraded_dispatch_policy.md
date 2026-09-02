@@ -85,7 +85,7 @@ Fail-fast status is deliberately non-transitive: `RED → UNRUN` for downstream 
 Paste from the repository root to run the current invariant suite that contains the existing typed-degradation tests:
 
 ```bash
-cargo test -p omp-orchestrator --lib -- --nocapture
+cargo test -p omp-orchestrator --bin omp-orchestrator -- --nocapture
 ```
 
 ## Cross-References
