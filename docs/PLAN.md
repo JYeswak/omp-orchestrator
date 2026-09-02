@@ -7,7 +7,7 @@ Assembled from docs/plan/. The section files and round ledgers are the source of
 Edit a section or round ledger, then re-assemble — never edit here, and never re-stamp this file's
 mtime to satisfy the freshness gate (§12.11 records the author doing exactly that).
 
-<!-- PLAN_STAMP {"schema":"plan-stamp/v1","generator":"plan-assemble","round_range":"15-21","required_rounds":[15,16,17,18,19,20,21],"sections":13,"round_files":["round16-AdversaryEye.jsonl","round16-DeltaEye.jsonl","round16-GreenFrog.jsonl","round16-SchemaEye.jsonl","round16-TraceEye.jsonl","round17-GreenFrog.jsonl","round18-GreenFrog.jsonl","round19-GreenFrog.jsonl","round20-GreenFrog.jsonl","round21-GreenFrog.jsonl"],"excluded_round_files":["round16-Opus.jsonl"],"ledgers":["FINDINGS.jsonl","CONVERGENCE.jsonl"],"source_fingerprint":"fnv1a64:ab81203d55c2665f"} -->
+<!-- PLAN_STAMP {"schema":"plan-stamp/v1","generator":"plan-assemble","round_range":"15-23 (22 void)","required_rounds":[15,16,17,18,19,20,21,23],"sections":13,"round_files":["round16-AdversaryEye.jsonl","round16-DeltaEye.jsonl","round16-GreenFrog.jsonl","round16-SchemaEye.jsonl","round16-TraceEye.jsonl","round17-GreenFrog.jsonl","round18-GreenFrog.jsonl","round19-GreenFrog.jsonl","round20-GreenFrog.jsonl","round21-GreenFrog.jsonl","round23-AmberGate.jsonl","round23-BlueLantern.jsonl","round23-GreenFrog.jsonl","round23-SilverWolf.jsonl"],"excluded_round_files":["round22-Opus.jsonl"],"ledgers":["FINDINGS.jsonl","CONVERGENCE.jsonl"],"source_fingerprint":"fnv1a64:35f671c0fa30be62"} -->
 > ## Three things a reader should know before the contents
 
 > **1. The headline finding was refuted, and it was the first of eight.** §10 claimed a typed
@@ -173,7 +173,7 @@ A requirement that cannot be checked is a wish. Each row states the observable t
 | R1 | A-to-Z journey: gates, crates, schema, types, validation, per-milestone done | §09 exists and every milestone carries an OBSERVABLE |
 | R2 | Reap before refill; repo hygiene; doc structure | **NOT CLOSED — a past event is not a closure.** The reap happened once (28/25/19/2). Closing this needs a *standing* check; the §7.3 staleness predicate is the candidate and is not built |
 | R3 | One document, investor-attackable, future-tense on what we build | **PARTIAL — `target/debug/plan-assemble` just regenerated docs/PLAN.md (13 sections; 8,235 lines; 652 KB), but the §7.3 freshness/identity gate is not built, so assembly success is not a durable freshness proof.** |
-| R4 | Every crate, every schema I/O, every typed interface, interactions, diagrams | **PARTIAL — §03's 26-row table is a historical pre-extraction snapshot; current cargo metadata reports 50 packages, and no current one-row-per-package contract census is recorded. §04 has ≥6 diagrams, also snapshot-bound.** |
+| R4 | Every crate, every schema I/O, every typed interface, interactions, diagrams | **PARTIAL — §03's 26-row table is a historical pre-extraction snapshot; the current package count is the live `[figures.workspace_crates]` result in NUMBERS.toml, and no current one-row-per-package contract census is recorded. §04 has ≥6 diagrams, also snapshot-bound.** |
 | R5 | Every OMP surface | **PARTIAL — pre-extraction scanner artifact records 980 discovered rows + 1 synthetic transport sentinel = 981 row records, with slash_commands=799 versus expected=136 still unresolved; current workspace metadata and scanner regeneration remain required before closure** |
 | R6 | The testing/validation/gating frameworks | **OPEN — §06's gate matrix must produce a named G1–G8 proof artifact with known-bad, known-good, mutation, anti-vacuity, and ADDRESSABLE results; no such all-legs PASS artifact is recorded** |
 | R7 | Mirror prior art at every gap | §10 gives a search command + verbatim quote or explicit not-found per gap |
@@ -277,7 +277,7 @@ The fresh artifact is the only hash-anchored scanner output in this brief. Its s
 - **Pre-extraction row kinds (historical):** cli_command 39 · type_root 57 · rpc_handler 42 · workspace_crate 26 · declaration 14 · omp_method 3 · slash_command 799 · transport 1. The transport row is the one synthetic transport sentinel; the 799 slash-command rows are discovered records, not the old expectation sentinel.
 - **Historical round-10 counts (non-authoritative):** cli_commands=39, type_roots=57, declarations=14, rpc_handlers=42, slash_commands=0, omp_methods=3, workspace_crates=26. The old row-kind line's transport 1 and slash_command 1 were synthetic sentinels, as classified above.
 - **Historical round-10 scanner hole:** every count had an expected_* twin; slash_commands=0 differed from expected_slash_commands=136, which made that envelope UNKNOWN and exit 2. The old claim that 136 slash commands were unmapped is not a current count; the fresh artifact finds 799 slash-command records against the same expected value and still requires reconciliation.
-**Current workspace boundary (re-derived 2026-09-01):** the scanner snapshot above predates the extraction wave and remains historical. Direct cargo metadata --format-version 1 --no-deps reports 50 packages and 48 binary targets at /Users/josh/Developer/omp-orchestrator/target; regenerate the inventory artifact before treating any scanner count as current.
+**Current workspace boundary (re-derived 2026-09-01):** the scanner snapshot above predates the extraction wave and remains historical. Direct `cargo metadata --format-version 1 --no-deps` is the live source for the package and binary-target counts, owned by NUMBERS.toml keys `[figures.workspace_crates]` and `[figures.built_binaries]`; this paragraph deliberately freezes no integer. Regenerate the inventory artifact before treating any scanner count as current.
 - **Historical round-10 classification (non-authoritative):** CAPABILITY_NOT_USED 157 · SCRAPED_OR_OBSERVED_ALTERNATIVE 18 · MAPPED_BY_DIRECT_PROBE 8.
 - **Historical round-10 edge relations (non-authoritative):** provides 157 · map-to-none 25 · path-depends-on 18 · consumes 7. All 7 consumes edges originated from omp-inventory-map; 25 of 26 crates consumed zero OMP surface.
 
@@ -575,7 +575,7 @@ The denominator is now stated in the heading, which is the whole point: *five st
 | consume — selection | decide() picks work | **UNVERIFIED** — no independent selection receipt is recorded |
 | consume — admission | dispatch fence | **FENCED** — the 162 refused-tick/4.2-hour value is historical and unverified; no current refusal-rate figure is claimed |
 | consume — transport | packet delivery | **UNVERIFIED** — cp-z42vu is a historical incident only; the current repository has no planted fixture or receipt payload |
-| actuate | dispatch | **AVAILABLE, NOT VERIFIED** — `send_and_verify` exists at `crates/omp-orchestrator/src/main.rs:714` and is called at `:1461`; the installed 402-dead-pane incident proves an unsafe runtime path, not successful delivery |
+| actuate | dispatch | **AVAILABLE, NOT VERIFIED** — the current source exposes the grep-addressable `send_and_verify` symbol in `crates/omp-orchestrator/src/main.rs` and the tick path invokes it; the installed 402-dead-pane incident proves an unsafe runtime path, not successful delivery |
 | complete | worker says done | **AVAILABLE, NOT WIRED** — one raw agent_end frame carried isTerminal=true; AgentEndEvent.willContinue is declared upstream, and the supervisor does not consume it |
 > **Upstream type for the idle gap:** `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts:9-30`) declares the NewlyIdle/ConfirmedIdle distinction this layer re-derives by hand. DECLARED ONLY: the type exists, no local consumer reads it.
 > **Receipts:** `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`) exists upstream. `cp-z42vu` names a defect in what WE consume — a send reporting success while the packet never landed — not an absent upstream type.
@@ -997,7 +997,7 @@ are **zero unqualified WORKS rows**:
 | consume | selection | **UNVERIFIED** — no durable receipt here proves the selected work was consumed |
 | consume | transport | **UNVERIFIED** — no durable receipt here proves delivery to the intended worker |
 | consume | admission (decide()) | **FENCED** — the cited report is DISPATCH_RETRY_BLOCKED |
-| actuate | dispatch | **AVAILABLE, NOT VERIFIED** — `send_and_verify` exists at `crates/omp-orchestrator/src/main.rs:714` and is called at `:1461`; transport and receiver receipt remain unproven |
+| actuate | dispatch | **AVAILABLE, NOT VERIFIED** — the current source exposes the grep-addressable `send_and_verify` symbol in `crates/omp-orchestrator/src/main.rs` and the tick path invokes it; transport and receiver receipt remain unproven |
 | complete | worker says done | **AVAILABLE, NOT WIRED** — OMP exposes AgentEndEvent.willContinue on RpcSessionEventFrame; the local loop does not consume it |
 
 > *Upstream type for this gap: `GuestIdleReconcilerCtx` (DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
@@ -1256,7 +1256,7 @@ Matching a bar is a floor-raise, never a guarantee.
 
 ## 1.5 The honest position
 
-**What is genuinely built (re-derived during this integration).** Historical 26-crate/413-test-function/31-file values stay labelled as snapshots; current workspace authority is **50 crates, 987 test functions, and 92 integration test files**, from the recursive NUMBERS.toml commands. These are workspace facts, not product-completion evidence.
+**What is genuinely built (re-derived during this integration).** Historical 26-crate/413-test-function/31-file values stay labelled as snapshots; current workspace authority is the LIVE output of `[figures.workspace_crates]`, `[figures.test_functions]`, and `[figures.test_files]` in NUMBERS.toml. These are workspace facts, not product-completion evidence.
 
 The omp-types crate re-exports Outcome, OutcomeError, PanicPayload, Severity, and join_outcomes; Budget,
 CapabilityBudget, CapabilityBudgetDimension, CapabilityBudgetRefusal, CapabilityBudgetRequirements, and
@@ -1274,7 +1274,7 @@ this row."* The scanner consumes OMP because the scanner's job is to look at OMP
 
 ### The three objections an investor should raise
 
-**HISTORICAL DENOMINATOR NOTE.** The 26-crate and 25-of-26 figures in the following objection and type snapshot are pre-extraction values. Current workspace authority is 50 packages; the old figures are retained only as the historical argument being answered.
+**HISTORICAL DENOMINATOR NOTE.** The 26-crate and 25-of-26 figures in the following objection and type snapshot are pre-extraction values. Current workspace authority is the LIVE `[figures.workspace_crates]` result; the old figures are retained only as the historical argument being answered.
 **Objection 1 — "You have built 26 crates of scaffolding around a hole. The one integration that justifies the name does not exist."** *Partly conceded, with a narrower truth.* The completion signal is now WIRE-PROVEN upstream, but the supervisory integration that would consume it still does not exist. The 25-of-26 measurement is ours, not a reviewer's. The partial answer is that the layer census shows `observe` WORKS and failure is
 concentrated in actionable/consume/actuate — and the seven-row table above records **zero unqualified WORKS rows**. We will not use the qualified observe result as a rebuttal. What we do not concede is that the crates are therefore waste: the
 gates operate on the repository and the process boundary, not on OMP, and they run today. The
@@ -1389,7 +1389,7 @@ The current number registry and corrected brief win over every copied value.
 | 162 and 4.2 hours | UNVERIFIED REPORTED VALUE in 00-brief.md §4 line 526; command receipt not retained in this section; cited as of 2026-08-31, not independently reproducible or a market-frequency claim |
 | 28/25/19/2 and 74 total | board snapshot reported in 00-brief.md §3.7 lines 485–486, as of 2026-08-31; command receipt not retained; corrected arithmetic, not live-board truth |
 | 23 scanner tests | source-count FACT as of 2026-08-31: 13 markers in types_inventory.rs and 10 in tests/inventory.rs; not a pass count |
-| 26 crates, 413 test functions, 31 test files | historical snapshot as of 2026-08-31; current re-derived values are 50 crates, 987 test functions, and 92 test files from the recursive NUMBERS.toml commands |
+| 26 crates, 413 test functions, 31 test files | historical snapshot as of 2026-08-31; current workspace authority is the LIVE output of `[figures.workspace_crates]`, `[figures.test_functions]`, and `[figures.test_files]` in NUMBERS.toml |
 | 184/207/183, 544,697, 18, 4 | historical inventory snapshot from 00-brief.md §3.2 lines 212-219 as of 2026-08-31; command receipt not retained here; not product completion evidence |
 | 8 gates and gate-leg counts | reported corrected snapshot from 00-brief.md §3.5 as of 2026-08-31; grep naming counts are not semantic coverage |
 | 51/59 enums, 79/91 structs, 6/17/4 collisions | reported type-inventory snapshot as of 2026-08-31; library-only versus all-source scopes are intentionally distinct |
@@ -1501,7 +1501,7 @@ carrying 184 nodes, 207 edges, and 183 rows. The denominator is worth stating pl
 
 **SNAPSHOT BOUNDARY.** The 183-row denominator and all ratios below are dated inventory results, not current workspace counts; re-run cargo metadata and regenerate this section after extraction.
 
-**CURRENT-STATE BOUNDARY (2026-09-01):** the 183-row artifact and 26-crate denominator above are pre-extraction historical data. Current cargo metadata reports 50 packages and 48 binary targets; regenerate the scanner artifact before using any §§1–5 count as current. The historical artifact remains retained for provenance, not closure.
+**CURRENT-STATE BOUNDARY (2026-09-01):** the 183-row artifact and 26-crate denominator above are pre-extraction historical data. Current cargo metadata is the live source for package and binary-target counts, owned by NUMBERS.toml keys `[figures.workspace_crates]` and `[figures.built_binaries]`; this paragraph deliberately freezes no integer. Regenerate the scanner artifact before using any §§1–5 count as current. The historical artifact remains retained for provenance, not closure.
 
 `MEASURED` — `python3 -c "import json,collections; d=json.load(open('/tmp/inv.txt'))['data']; print(collections.Counter(r['kind'] for r in d['rows']))"`
 
@@ -1571,7 +1571,7 @@ wires named handlers, but this document makes no forecast of a target percentage
 because a coverage target would immediately become a metric to game: wiring a
 handler nobody calls raises the ratio and lowers the truth.
 
-There is a structural reason for the historical ratio, and it is recorded in the brief's five-stage control loop table rather than discovered here: the retained scanner snapshot predates the current actuator. The current source contains `send_and_verify` at `crates/omp-orchestrator/src/main.rs:714` and its tick call at `:1461`, but transport and receiver receipts remain unverified. The 157 `CAPABILITY_NOT_USED` rows therefore remain historical classifications, not a current proof that actuation is absent.
+There is a structural reason for the historical ratio, and it is recorded in the brief's five-stage control loop table rather than discovered here: the retained scanner snapshot predates the current actuator. The current source contains the grep-addressable `send_and_verify` symbol in `crates/omp-orchestrator/src/main.rs` and its tick path invokes it, but transport and receiver receipts remain unverified. The 157 `CAPABILITY_NOT_USED` rows therefore remain historical classifications, not a current proof that actuation is absent.
 
 ### 3. The surface, enumerated by kind
 
@@ -1750,12 +1750,9 @@ validation receipt; until then it is a proposal, not bead-backed disposition.
 - **RETIRE / NAMED_REASON** — a proposed non-consumption decision. It is not validated merely
 because `validated_by` is non-null; a current RETIRE proof requires structured
 read-only probe evidence (command, exit/result, timestamp, and artifact identity).
-"Not yet triaged" is not a disposition. `MEASURED` — 175 rows currently sit at
-`NAMED_REASON` and 8 at `WIRE`, so 175 ÷ 183 = **95.63%** of the census is
-currently answered with a reason rather than a plan. `PROJECTED` — the plan's
-first milestone converts a named subset of those reasons into WIRE beads; this
-document does not pre-commit the size of that subset, because a number chosen
-before the triage is a number chosen to look good.
+"Not yet triaged" is not a disposition. `MEASURED` — the current map disposition counts are command-backed by NUMBERS.toml and re-derived by the numbers gate:
+The current disposition counts are owned by NUMBERS.toml keys `[figures.surface_map_consumed]`, `[figures.surface_map_wire]`, `[figures.surface_map_validate]`, `[figures.surface_map_retire]`, and `[figures.surface_map_unprobeable_pending]`; this prose does not hand-type their volatile values.
+The engaged numerator and percentage are owned by NUMBERS.toml keys `[figures.surface_map_engaged_rows]`, `[figures.surface_map_rows]`, and `[figures.surface_engaged_pct]`; this paragraph deliberately freezes no integer. `PROJECTED` — the plan's first milestone converts a named subset of those reasons into WIRE beads; this document does not pre-commit the size of that subset, because a number chosen before the triage is a number chosen to look good.
 
 ### 5. The vacuity finding, stated against ourselves
 
@@ -2607,7 +2604,7 @@ grep -rlF 'forbid(unsafe_code)' --include=lib.rs --include=main.rs crates/  # in
 | `tick-monitor` | three monitors behind one loop-enforcement choke point | pane capture, git state, `Tick` | `Outcome`, `PaneState`, `Liveness`, `CapacityEscalationReceipt` | `Outcome`, `PaneState`, `Liveness`, `Observation`, `Reject`, `Tick`, `State`, `CapacityAlarm`, `CapacityAlarmEvent`, `CapacityEscalationReceipt`, `RepoError` | — | yes |
 | `undrained-pipe-lint` | fail on both-pipes-piped + `try_wait` poll + no concurrent drain | source text; workspace root | `LintReport` (`Vec<Violation>`) | `Violation`, `LintReport` | — | yes |
 
-**The unsafe-forbid split, MEASURED — current command-backed census (2026-09-01).** All **50 of 50** crate manifests carry unsafe_code = "forbid". **49 of 50** crate source trees carry an inner forbid(unsafe_code) attribute, and **49 carry both**; tick-monitor is the one manifest-only straggler. **Zero are attribute-only; the union is 50 of 50.** Earlier 26/25/26 values are dated snapshots and remain historical. The property holds by adoption today; the one-file lint below is still required to make it hold by construction for crate 51.
+**The unsafe-forbid split, MEASURED — current command-backed census (2026-09-01).** The manifest, source-attribute, both-mechanisms, and union results are owned by NUMBERS.toml keys `[figures.crates_forbidding_unsafe]`, `[figures.unsafe_source_attributes]`, `[figures.unsafe_both_mechanisms]`, and `[figures.forbid_unsafe_authoritative]`; this paragraph deliberately freezes no denominator. Earlier 26/25/26 values are dated snapshots and remain historical. The property holds by adoption today; the one-file lint below is still required to make it hold by construction for crate 51.
 **PROJECTED.** A one-file lint asserting *manifest-and-attribute for every workspace member* turns
 that coincidence into an invariant. It is the cheapest gate in the plan and it is not written yet.
 
@@ -2616,8 +2613,8 @@ that coincidence into an invariant. It is the cheapest gate in the plan and it i
 ## The dependency graph in prose
 
 **HISTORICAL GRAPH SNAPSHOT (pre-extraction, 2026-09-01).** The 18-edge list, 17/26 leaf ratio, 22/26 non-routed ratio, and 29 spawn-site inventory below describe the earlier 26-crate graph. Current workspace package and path-edge counts must be re-derived from cargo metadata; these historical values are not current acceptance denominators.
-**CURRENT GRAPH RECHECK (integration).** `cargo metadata --format-version 1 --no-deps` with path-dependency filtering returns **50 packages, 34 path edges, 30 leaves, and 20 non-leaves**. This is the current graph denominator; the explicit edge list and 18/17/26/22/26 ratios below remain historical.
-**MEASURED** — 18 `path-depends-on` edges, complete, from the census:
+**CURRENT GRAPH RECHECK (integration).** The current package denominator is owned by NUMBERS.toml `[figures.workspace_crates]`. The path-edge count is deliberately `LIVE` under `[figures.path_dependency_edges]` because adding a dependency changes it during an edit; this paragraph makes no pinned edge, leaf, or non-leaf claim. The explicit edge list and its ratios below remain historical.
+**HISTORICAL MEASURED** — 18 `path-depends-on` edges, complete, from the pre-extraction census:
 
 ```
 ack-spine -> finding                     finding -> subprocess-contract
@@ -2686,8 +2683,8 @@ through it precisely so that rule cannot be re-litigated per crate.
 **MEASURED**, by direct grep over `crates/`:
 
 ```
-grep -rhoE '^pub enum [A-Za-z_0-9]+'   --include=*.rs crates/ | wc -l   -> 59
-grep -rhoE '^pub struct [A-Za-z_0-9]+' --include=*.rs crates/ | wc -l   -> 91
+grep -rhoE '^pub enum [A-Za-z_0-9]+'   --include=*.rs crates/ | wc -l   -> `LIVE` output from NUMBERS.toml `[figures.public_enums]`
+grep -rhoE '^pub struct [A-Za-z_0-9]+' --include=*.rs crates/ | wc -l   -> `LIVE` output from NUMBERS.toml `[figures.public_structs]`
 ```
 
 An earlier scan scoped to library surfaces reported **51 public enums (excluding test+bin sources; 59 including them — publish the pair) and 79 public structs across
@@ -2695,15 +2692,15 @@ An earlier scan scoped to library surfaces reported **51 public enums (excluding
 and binary sources. We publish both rather than pick the flattering one — the delta *is* the
 measurement's error bar.
 
-**Four colliding type names**, exact:
+**Colliding public type names are registry-backed**, with the current count owned by NUMBERS.toml `[figures.colliding_type_names]`:
 
 ```
 grep -rhoE '^pub (enum|struct) [A-Za-z_0-9]+' --include=*.rs crates/ \
-  | awk '{print $3}' | sort | uniq -d
-  -> Finding  LintReport  Observation  Violation
+  | awk '{print $3}' | sort | uniq -d | wc -l
+  -> `LIVE` output from NUMBERS.toml `[figures.colliding_type_names]`; the current names remain discoverable by the same command.
 ```
 
-One of those four is structural rather than cosmetic, and it is the direct cause of the single
+One of the colliding names is structural rather than cosmetic, and it is the direct cause of the single
 worst row in the brief's five-stage control loop (formerly "five-stage" — renamed, the table has five stages and seven rows) table (§4). `tick-monitor` produces the `Observation`
 that `omp-orchestrator` consumes, and **each declares its own incompatible struct**. That is the
 seam where `free_capacity` was derived from the same `is_dispatchable` filter that requires a
@@ -2712,11 +2709,11 @@ capacity count — the `actionable: BROKEN` row. Had one type crossed the bounda
 re-declared on each side, the mismatch would have been a compile error instead of a silent
 arithmetic error observed only after 162 refused ticks.
 
-**Six Verdict-shaped types with no shared trait**, exact:
+**Verdict-shaped public types are registry-backed**, with the current count owned by NUMBERS.toml `[figures.verdict_types]`:
 
 ```
-grep -rhoE '^pub enum [A-Za-z_0-9]*Verdict' --include=*.rs crates/ | sort -u
-  -> AckVerdict  FenceVerdict  FollowUpVerdict  ReceiptVerdict  SilenceVerdict  Verdict
+grep -RhoE '^pub enum [A-Za-z_0-9]*Verdict' --include=*.rs crates/ | sort -u | wc -l
+  -> `LIVE` output from NUMBERS.toml `[figures.verdict_types]`; the current names remain discoverable by the same command.
 ```
 
 Six independent answers to "what happened". No trait, no `From`, no common discriminant. The
@@ -2768,7 +2765,7 @@ not merely unadopted. Any migration schedule that assumes `AckKind` is available
 
 **PROJECTED** throughout this subsection. Nothing below is measured; it is what we will build.
 
-**Collapsing the six Verdicts.** We will define one trait in `omp-types`, over the asupersync
+**Collapsing the Verdict-shaped types.** We will define one trait in `omp-types`, over the asupersync
 `Outcome` shape rather than a new enum:
 
 ```
@@ -2840,13 +2837,13 @@ the consequential disagreement: the half of the vocabulary that would collapse t
 dialects is **blocked on an upstream feature boundary**, not merely unadopted, so any schedule that
 assumes it is available today is wrong.
 
-**2. The unsafe-forbid denominator.** The brief's 16 of 22 and the earlier 20/26 values are historical snapshots. The current command-backed census is **50 of 50** manifests with unsafe_code = "forbid", **49 of 50** source trees with an inner forbid(unsafe_code) attribute, **49 of 50** carrying both, and a **50 of 50** union. tick-monitor is the sole manifest-only straggler. The substantive gap remains: no single gate yet refuses a new crate that keeps only one mechanism.
+**2. The unsafe-forbid denominator.** The brief's 16 of 22 and the earlier 20/26 values are historical snapshots. The current mechanism split is command-backed by NUMBERS.toml keys `[figures.crates_forbidding_unsafe]`, `[figures.unsafe_source_attributes]`, `[figures.unsafe_both_mechanisms]`, and `[figures.forbid_unsafe_authoritative]`; this paragraph deliberately freezes no denominator. The sole-mechanism gap remains: no single gate yet refuses a new crate that keeps only one mechanism.
 
-**3. The type-inventory scope.** The brief §3.7 gives 51 enums / 79 structs across 22 of 24 crates.
-`grep -rhoE '^pub enum …' --include=*.rs crates/ | wc -l` → **59**, and the struct form → **91**.
+**3. The type-inventory scope.** The brief's 51 enums / 79 structs across 22 of 24 crates are an earlier library-scope snapshot.
+The current all-source counts are owned by NUMBERS.toml `[figures.public_enums]` and `[figures.public_structs]`; this section deliberately freezes no type-inventory integer.
 Not a contradiction — a scope difference (the greps above include test modules and binary sources).
-Published as an error bar rather than resolved to the flattering number. The collision count (4) and
-the Verdict count (6) are **identical** under both scopes, which is the part that matters.
+Published as current registry-backed figures rather than a hand-typed error bar. The collision and Verdict counts are re-derived by the commands named above.
+The current collision and Verdict counts are owned by NUMBERS.toml `[figures.colliding_type_names]` and `[figures.verdict_types]`; they are not static claims about scope equivalence.
 
 **NO-CLAIM:** these three are the disagreements this section found while deriving crate contracts
 from source. They are not an audit of the brief. Facts in §3 that this section did not need — the
@@ -2859,7 +2856,7 @@ unverified here.
 
 R11 exists because a requirement living only in chat dies with the conversation. Three constraints
 surfaced while deriving the table above that were not previously written anywhere:
-1. **Unsafe-forbid must be single-mechanism.** The current command-backed census is 50 of 50 manifests, 49 of 50 source trees with the inner attribute, 49 of 50 carrying both, and a 50 of 50 union; tick-monitor is the manifest-only straggler. Earlier 26/25/26 values are historical. Nothing yet fails the build if a future crate keeps one mechanism and drops the other, so the one-file lint remains the required floor-raise.
+1. **Unsafe-forbid must be single-mechanism.** The current command-backed census is owned by NUMBERS.toml keys `[figures.crates_forbidding_unsafe]`, `[figures.unsafe_source_attributes]`, `[figures.unsafe_both_mechanisms]`, and `[figures.forbid_unsafe_authoritative]`; this paragraph deliberately freezes no denominator. Earlier 26/25/26 values are historical. Nothing yet fails the build if a future crate keeps one mechanism and drops the other, so the one-file lint remains the required floor-raise.
 2. **A crate that spawns must depend on `subprocess-contract`.** Two leaves — `omp-rpc-session` and
 omp-inventory-map — spawn processes today with no path-dep on the boundary crate. The rule is stated here so it is checkable, not remembered.
 3. **pane-dispatch-fence has no library surface.** It is the only workspace member with no src/lib.rs and zero pub items (ls crates/pane-dispatch-fence/src -> main.rs). Its contract is UNDECLARED and therefore untestable from outside the binary. Any crate whose behaviour other crates must rely on needs a library surface; that is a constraint, and it is now written down.
@@ -2926,7 +2923,7 @@ arbitrarily. Dropping them would have been the wrong fix — it would have erase
 gate go green. **Naming all twenty is the right fix**, and `NUMBERS.toml` now carries the count so it
 cannot quietly drift as extraction proceeds.
 
-**CURRENT STATUS (re-derived 2026-09-01):** the 20 named control-plane crate directories are now present under crates/ in this working tree, while their commit state is governed by the path-scoped extraction commits. The current workspace denominator is 50 packages; the pre-extraction 26-crate and 20-unextracted figures above are historical.
+**CURRENT STATUS (re-derived 2026-09-01):** the 20 named control-plane crate directories are now present under crates/ in this working tree, while their commit state is governed by the path-scoped extraction commits. The current workspace denominator is the LIVE `[figures.workspace_crates]` result; the pre-extraction 26-crate and 20-unextracted figures above are historical.
 
 ### NO-CLAIM
 
@@ -3030,11 +3027,11 @@ every number involved is TRUE and they measure different things.
 
 | reading | value | what it measures |
 |---|---:|---|
-| manifests declaring [lints.rust] unsafe_code = "forbid" | **50 of 50** | current manifest lint count |
-| source roots carrying #![forbid(unsafe_code)] | **49 of 50** | current inner-attribute count |
-| **union — AUTHORITATIVE** | **50 of 50** | current union; tick-monitor is manifest-only |
+| manifests declaring [lints.rust] unsafe_code = "forbid" | `LIVE` | `[figures.crates_forbidding_unsafe]` current manifest command |
+| source roots carrying #![forbid(unsafe_code)] | `LIVE` | `[figures.unsafe_source_attributes]` current inner-attribute command |
+| **union — AUTHORITATIVE** | `LIVE` | `[figures.forbid_unsafe_authoritative]` current union command |
 
-The earlier 26/25/26 table was a dated snapshot. NUMBERS.toml now declares the union command, and the current counts above are re-derived from the shared checkout.
+The earlier 26/25/26 table was a dated snapshot. NUMBERS.toml now declares the component commands `[figures.crates_forbidding_unsafe]`, `[figures.unsafe_source_attributes]`, and `[figures.unsafe_both_mechanisms]`, plus the authoritative union command; the current counts above are re-derived from the shared checkout.
 
 **A REVIEWER ERROR, on the record, because it is the more useful half.** The initial agent-harness grep used grouping syntax and returned zero; the shell command registered in NUMBERS.toml and the current table above use the correct literal pattern. The registry was not exposed. The reviewer was.
 
@@ -4262,6 +4259,71 @@ crates returns headers in exactly three of them — `no-shell-gate/src/lib.rs:11
 of eight, because establishing it requires running each binary, which this section is
 forbidden to do; the one measured value is `omp-inventory-map`, which FAILS.
 
+#### 3.1.0 The membership rule, and why the denominator is TEN — not eight, not nine, not sixteen
+
+**A denominator without a membership rule is not a measurement.** This subsection existed for
+several rounds publishing "of 8" with no stated rule for what counts, and that omission produced
+three different answers from three readers in one evening. The rule comes first now; the number
+is derived from it.
+
+**THE RULE.** A crate is a member of the gate inventory when all three hold:
+
+1. it is a **cargo workspace package** with a directory under `crates/` — a bin target living
+   inside another crate is **not** a member, because it cannot be graded independently of its
+   parent; and
+2. it has **at least one tracked file** — an untracked crate does not exist in the repository,
+   only on one disk; and
+3. it is **invoked as a refusal by a reachable trigger** — a job step in
+   `.github/workflows/gate.yml`, or the installed pre-commit binary. Existence without a trigger
+   is a crate, not a gate.
+
+**THE ANSWER, measured 2026-09-02 by deriving all three clauses rather than reading any table:**
+
+| | count | crates |
+|---|---:|---|
+| **MEMBERS** | **10** | `commit-build-fence` `installer` `kernel-bypass-gate` `no-shell-gate` `omp-inventory-map` `path-literal-guard` `porting-gate` `pre-delete-citation-check` `state-wildcard-lint` `undrained-pipe-lint` |
+| excluded — clause 3, no reachable trigger | 3 | `dispatch-claim-fence` `pane-dispatch-fence` `wired-but-inert-guard` |
+| excluded — clause 1, not a package | 1 | `pre-commit-gate` |
+
+The membership set is **exactly the ten jobs in `gate.yml`**, which is the check on the rule: a
+rule that produced a set disagreeing with the only reachable trigger surface would be describing
+something other than this repo's gates.
+
+**`pre-commit-gate` IS NOT A GATE — it is the binary that HOSTS three of them**, and it is named
+here because the next reader with a grep will land on it exactly as one did. `cargo metadata`
+reports **zero** packages by that name; it is a bin target of `no-shell-gate` at
+`crates/no-shell-gate/src/bin/pre-commit-gate.rs`, and it runs three member gates in-process —
+`no_shell_gate::violation_for` (`:11`), `undrained_pipe_lint::find_detailed_violations_in_source`
+(`:80`), `state_wildcard_lint::lint_workspace` (`:91`). Counting it would double-count its own
+parent crate. It appears in neither table below and is mentioned once in this section, at §6.5.2,
+in prose about rebuilding the hook.
+
+**RETRACTED: "the matrix has 16 rows and double-counts."** It does not. A stopping reader — one
+that halts at the first non-pipe line — reports **8 data rows / 8 unique gates** for the §3.1
+matrix at `:256` and **8 / 8** for the §1 leg table at `:29`, the same eight crates in both. The
+16 was one reader scanning backticked-crate rows across the *whole file* and summing two
+different tables; a non-stopping variant of the same reader answered 19 and 29. Three readings,
+three answers, one instrument defect — and the retraction is recorded rather than deleted because
+**a row count is only as good as where the reader stops**, which is the same class as every other
+false zero this section carries.
+
+**WHAT THE TWO TABLES BELOW THEREFORE COVER: 8 of the 10 members.** `installer` and
+`porting-gate` are members with reachable CI triggers and **no row in either table**. Every cell
+that is published is honest for the eight it grades; the headline **"Zero gates satisfy all six"
+is a statement about those eight and not about the inventory**, and until the two missing rows
+land, any count of the form "N of 8" understates the denominator by two.
+
+**The replacement mechanism inherits the gap and is narrower still.** §6.6 replaced the
+hand-assessed letters with citations in `crates/no-shell-gate/tests/gate_properties.rs`, which is
+strictly better per claim — but `GATE_PROPERTIES` at `:67` is a hand-listed `const` covering
+**six** crates, and all three of its tests iterate that const (`:129`, `:160`, `:176`) with no
+derivation from disk; its single `read_dir` at `:105` reads a crate's own `tests/` directory, not
+the gate set. So it grades 6 of 10 and omits two crates this matrix itself grades
+(`commit-build-fence`, `omp-inventory-map`). **A new gate crate is out of scope the moment it
+exists** — which is precisely the `check.sh EXPECTED_GATES` defect §2.8 names as the thing this
+repo avoids: *"the list drifts and the suite reports vacuously green while most lanes are
+unexamined."* Deriving `GATE_PROPERTIES` from the three clauses above is the fix; it is not done.
+
 | gate | 1 known-bad | 2 known-good | 3 mutation | 4 anti-vacuity | 5 claim | 6 addressable |
 |---|:--:|:--:|:--:|:--:|:--:|:--:|
 | `no-shell-gate` | Y | Y | Y | Y | **Y** | — |
@@ -4287,8 +4349,13 @@ enforces. PROJECTED: the co-occurrence has one cause — a gate written to close
 incident, shipped the moment it went red on that incident, and never revisited to ask what
 else it now claims or what it would report against an empty scan set.
 
-NO-CLAIM: column 6 is seven-eighths unmeasured, so this matrix understates nothing and may
-overstate the addressability of every gate but `omp-inventory-map`.
+NO-CLAIM, on TWO axes, because for several rounds only the first was disclosed and that omission
+is what let the denominator drift. **Column:** column 6 is seven-eighths unmeasured, so this
+matrix understates nothing on that axis and may overstate the addressability of every gate but
+`omp-inventory-map`. **Row set:** the eight rows are **8 of the 10 inventory members** derived in
+§3.1.0 — `installer` and `porting-gate` have reachable CI triggers and no row here — so
+"Zero gates satisfy all six" is a claim about these eight and **not** about the gate inventory,
+and any "N of 8" in this section carries a denominator two short of the measured membership.
 
 **HISTORICAL ADDRESSABILITY SNAPSHOT.** An earlier inventory run reported omp-inventory-map --help -> CONFIG_ERROR unknown argument --help, 13 source tests, and 544,697 bytes. Current source has 28 test markers and the current debug binary's --help emits 158 bytes at exit 1. No current ADDRESSABLE pass artifact is claimed until command, output, and revision are retained; the property remains projected in the gate matrix.
 
@@ -8378,6 +8445,55 @@ Every tracked round record, plus the findings and convergence ledgers, is embedd
 
 
 
+<!-- ===== round23-AmberGate.jsonl ===== -->
+
+### round23-AmberGate.jsonl
+
+~~~jsonl
+{"section": "04-diagrams", "round": 23, "lens": "disposition-truth", "role": "fresh_eyes", "graded_by": "AmberGate", "new_findings": 1, "finding_ids": ["R23-04-diagrams-disposition-truth-1"], "severity": {"blocker": 0, "major": 1, "minor": 0}, "verdict": "MAJOR_OPEN", "false_positives_verified": 0, "gates_green": true, "gates_scope": "package:no-shell-gate --test findings_ledger (10 passed, incl. real_findings_ledger_is_strictly_valid) + convergence-stamp --check ROUND ADMITTED", "evidence": ".flywheel/grade-evidence/r23-AmberGate-evidence.md.gz", "note": "MAJOR R23-04-diagrams-disposition-truth-1: the ONE row in FINDINGS.jsonl dispositioned FIXED for this section cites a commit that never touched it. R21-04-mirror-entry-mislabel carries fixed_in=506351316df7af0883a267543e87e740b2511ec8; that commit is 'fix(findings): restore the 21 round-15 rows that 2866798 overwrote' and its file list is exactly one path, docs/plan/FINDINGS.jsonl. Grepping that file list for 04-diagrams.md -> 0, positive control (all files in the commit) -> 1. THE FIX ITSELF IS REAL: 04-diagrams.md is clean, HEAD's blob contains 'not validated as git work-trees' (count 1, positive control 'mirror' -> 3), and the pickaxe finds the actual landing commit -> 07de72b 'docs(plan): reconcile owned denominators'. So the disposition is TRUE and its evidence pointer is FALSE: a reader auditing the fix at 5063513 finds a ledger-maintenance commit and cannot verify anything. THE MECHANISM, which is the more valuable half: findings_ledger.rs:264-269 validates fixed_in by SHAPE ONLY -- 7..=64 chars, all ascii hexdigits -- so fixed_in = 'deadbeef' would pass. It never checks the commit EXISTS, let alone that it touched the named section, and bead 5by's own acceptance text asked for exactly that check. NOT FIXED HERE: this is a grading pass; disposition routed later. NO-CLAIM: I verified the single FIXED row exhaustively; the 4 DEFERRED rows naming this section were not individually re-checked against the section text."}
+{"section": "05-actions", "round": 23, "lens": "disposition-truth", "role": "fresh_eyes", "graded_by": "AmberGate", "new_findings": 0, "finding_ids": [], "severity": {"blocker": 0, "major": 0, "minor": 0}, "verdict": "ACTIONABLE", "false_positives_verified": 0, "gates_green": true, "gates_scope": "package:no-shell-gate --test findings_ledger (10 passed, incl. real_findings_ledger_is_strictly_valid) + convergence-stamp --check ROUND ADMITTED", "evidence": ".flywheel/grade-evidence/r23-AmberGate-evidence.md.gz", "note": "ZERO NEW FINDINGS, and here is exactly what that zero rests on so it can be attacked. CONSTRUCT-EXISTENCE CENSUS (names, not line numbers -- line-cite drift is bead omp-orchestrator-d1n's scope and is deliberately not re-filed): all 17 constructs this section names exist in tracked source -- PaneState::Unproven 13, last_status_line 9, MIN_GAP_SECS 15, stable_hash 11, Obscured 5, WEDGED_UNSUBMITTED 2, QueueUnreadable 6, QueueEmptyNeedsJosh 8, EXIT_BUSY 2, EXIT_NOT_FREE 3, EXIT_CONFIG 10, is_dispatchable 34, is_free_capacity 18, needs_answer 3, needs_attention 6, QUEUE_WANT 4, epic_exclusion_rule_never_selects_parent 1. Positive control 'PaneState' -> 120; NEGATIVE control 'ZZZ_NOT_A_REAL_SYMBOL' -> 0, so the instrument discriminates in both directions. VALUES the section asserts, all confirmed against tracked source: MIN_GAP_SECS = 75 at crates/tick-monitor/src/lib.rs:490; 'QUEUE_WANT must be between 1 and 20' at crates/loop-queue-filter/src/lib.rs:139; EXIT_BUSY 75 / EXIT_NOT_FREE 76 / EXIT_CONFIG 78 at crates/pane-dispatch-fence/src/main.rs:16-18; and Grade genuinely does NOT exist (pub enum|struct Grade -> 0, positive control 'pub enum ' -> 131), which is what 05-actions:261 claims. CROSS-SECTION: 04-diagrams:263, 05-actions:391 and 06-gates all use the SAME 'of 8' gate denominator, so there is no contradiction BETWEEN the sections; the denominator itself is filed under 06-gates. NO-CLAIM: this zero is a construct/value census plus a cross-section consistency check, NOT a line-by-line re-verification of all 499 lines, and the 11 DEFERRED rows naming this section were not individually re-checked. Both dispatched first readers aborted before writing their candidate files (sandbox write restriction), so no independent reader corroborates this zero."}
+{"section": "06-gates", "round": 23, "lens": "disposition-truth", "role": "fresh_eyes", "graded_by": "AmberGate", "new_findings": 1, "finding_ids": ["R23-06-gates-disposition-truth-1"], "severity": {"blocker": 0, "major": 1, "minor": 0}, "verdict": "MAJOR_OPEN", "false_positives_verified": 2, "gates_green": true, "gates_scope": "package:no-shell-gate --test findings_ledger (10 passed, incl. real_findings_ledger_is_strictly_valid) + convergence-stamp --check ROUND ADMITTED + --test config_parses (7 passed)", "evidence": ".flywheel/grade-evidence/r23-AmberGate-evidence.md.gz", "note": "MAJOR R23-06-gates-disposition-truth-1: the gate-inventory DENOMINATOR is undisclosed, and the mechanism section 6.6 installed to replace the hand-assessed matrix inherits the same hole. Section 3.1's six-by-eight matrix names 8 gates (16 table rows, 8 unique, extracted by a python scan of the backticked first cell). Live: the yaml parser reports 10 CI jobs in .github/workflows/gate.yml, of which the matrix omits installer and porting-gate; and 12 gate-shaped crates are TRACKED (name matches gate|lint|guard|fence|check|inventory AND at least one tracked file), of which the matrix omits dispatch-claim-fence, pane-dispatch-fence, porting-gate, wired-but-inert-guard. Section 6.6 says the letters were replaced by citations in crates/no-shell-gate/tests/gate_properties.rs -- but GATE_PROPERTIES at :67 is a hand-listed const covering only SIX crates (kernel-bypass-gate, no-shell-gate, path-literal-guard, pre-delete-citation-check, state-wildcard-lint, undrained-pipe-lint), and all three of its tests iterate that const (:129, :160, :176) with no derivation from disk -- the one read_dir at :105 reads a crate's own tests directory, not the gate set. So the replacement covers FEWER gates than the table it replaced, and omits two crates the matrix itself grades (commit-build-fence, omp-inventory-map). A new gate crate is out of scope the moment it exists. THIS IS THE SECTION'S OWN NAMED DEFECT, quoted from 06-gates.md:196: control-plane's check.sh 'hand-lists EXPECTED_GATES while the verdict claims completeness, so the list drifts and the suite reports vacuously green while most lanes are unexamined.' DISCLOSURE CHECK, because a disclosed gap is not a finding: the NO-CLAIM at :281 disclaims COLUMN 6 only ('column 6 is seven-eighths unmeasured'), and the NO-CLAIM at :341 disclaims SUFFICIENCY ('does not claim the eight gates are sufficient'). NEITHER discloses that the ROW SET is 8 of 12 tracked gate crates and 8 of 10 CI jobs, so the headline 'Zero gates satisfy all six' and the repeated phrase 'the existing eight' read as the repo's gate inventory. Major and not blocker: every cell the matrix does publish is honest for the 8 it covers. NOT FIXED HERE; disposition routed later. FALSE POSITIVES VERIFIED (2): (a) a first reader reported UNWIRED_LANE_ALLOWANCE has 2 rows -- three readers agree it is 4 (python regex over the const block, awk marker scan, sed range), and the 5-vs-4 discrepancy is already a taken round-22 finding so it is NOT re-filed; (b) a first reader proposed :60's grep false-zero as a finding -- the section discloses it itself as a 'Historical tooling observation (not current acceptance)'. NO-CLAIM: 17 DEFERRED rows name this section and were not individually re-checked."}
+~~~
+
+
+
+<!-- ===== round23-BlueLantern.jsonl ===== -->
+
+### round23-BlueLantern.jsonl
+
+~~~jsonl
+{"section":"07-installability","round":23,"lens":"fresh-eyes-currentness","role":"fresh_eyes","graded_by":"BlueLantern","new_findings":0,"severity":{"blocker":0,"major":0,"minor":0},"verdict":"ZERO_NEW","finding_ids":[],"evidence":".flywheel/grade-evidence/round23-BlueLantern-07-09.md.gz","note":"Independent read and metadata probe completed. The 48-versus-current-49 target denominator, historical help ratios, installed-binary identity, and projected manifest claims are either explicitly bounded or already represented by R16/R20/R21 findings; no distinct unrepresented finding was minted."}
+{"section":"08-end-users","round":23,"lens":"fresh-eyes-currentness","role":"fresh_eyes","graded_by":"BlueLantern","new_findings":0,"severity":{"blocker":0,"major":0,"minor":0},"verdict":"ZERO_NEW","finding_ids":[],"evidence":".flywheel/grade-evidence/round23-BlueLantern-07-09.md.gz","note":"Independent read completed. The compile-time path, version-denominator, adoption-contract, and projected doctor/init claims were checked against current source and prior R16/R20/R21 dispositions; no distinct unrepresented finding was observed."}
+{"section":"09-milestones","round":23,"lens":"fresh-eyes-currentness","role":"fresh_eyes","graded_by":"BlueLantern","new_findings":0,"severity":{"blocker":0,"major":0,"minor":0},"verdict":"ZERO_NEW","finding_ids":[],"evidence":".flywheel/grade-evidence/round23-BlueLantern-07-09.md.gz","note":"Independent read completed. Historical denominators, seam claims, milestone counts, and currentness labels were checked against the stamped plan and prior R16/R20/R21 findings; no distinct unrepresented finding was minted."}
+~~~
+
+
+
+<!-- ===== round23-GreenFrog.jsonl ===== -->
+
+### round23-GreenFrog.jsonl
+
+~~~jsonl
+{"section":"00-brief","round":23,"lens":"independent-reader-cross-section-currentness","role":"fresh_eyes","graded_by":"GreenFrog","new_findings":2,"severity":{"blocker":0,"major":1,"minor":1},"verdict":"UN-CONVERGED","finding_ids":["R23-00-001","R23-00-002"],"findings":[{"finding_id":"R23-00-001","severity":"major","summary":"The section's current workspace boundary says 50 packages and 48 binary targets, while the current cargo metadata probe returns 51 packages and 49 binary targets.","evidence":".flywheel/grade-evidence/round23-GreenFrog-00-03.txt.gz","required_change":"Re-derive or mark the current boundary historical before the next stamp."},{"finding_id":"R23-00-002","severity":"minor","summary":"The current actuate row cites send_and_verify at line 714 and its call at line 1461, while the current source places them at lines 728 and 1504.","evidence":".flywheel/grade-evidence/round23-GreenFrog-00-03.txt.gz","required_change":"Route the moved line references through the tree-drift disposition; do not hand-fix in this grading pass."}],"gates_green":false,"gates_scope":"00-03 currentness probes only; no section edits","checked_files":["docs/plan/00-brief.md","crates/omp-orchestrator/src/main.rs","NUMBERS.toml"],"commands_run":["cargo metadata --format-version 1 --no-deps --offline -> 51 packages / 49 binary targets","grep -nF send_and_verify crates/omp-orchestrator/src/main.rs -> current definition and call lines 728/1504","shasum -a 256 docs/plan/00-brief.md"],"evidence_raw_sha256":"38ef24525faaf0a7ba5e757af5984c113630e734010a1268e70ac66576479755","evidence_compressed_sha256":"74d7bd3de817ce1f7708fb3652018f446c2e31f2997952db6ad14d1225cdc815","no_section_edits":true}
+{"section":"01-idea","round":23,"lens":"independent-reader-cross-section-currentness","role":"fresh_eyes","graded_by":"GreenFrog","new_findings":2,"severity":{"blocker":0,"major":1,"minor":1},"verdict":"UN-CONVERGED","finding_ids":["R23-01-001","R23-01-002"],"findings":[{"finding_id":"R23-01-001","severity":"major","summary":"The section's current workspace snapshot says 50 crates, 987 test functions, and 92 integration test files, while current probes return 51 crates, 1041 test markers, and 99 test files.","evidence":".flywheel/grade-evidence/round23-GreenFrog-00-03.txt.gz","required_change":"Re-derive the current registry-backed figures before the next stamp."},{"finding_id":"R23-01-002","severity":"minor","summary":"The actuator citation in the idea table uses moved source lines 714 and 1461; current grep locates the definition at 728 and the tick call at 1504.","evidence":".flywheel/grade-evidence/round23-GreenFrog-00-03.txt.gz","required_change":"Route the moved line references through tree-drift reconciliation."}],"gates_green":false,"gates_scope":"00-03 currentness probes only; no section edits","checked_files":["docs/plan/01-idea.md","crates/omp-orchestrator/src/main.rs","NUMBERS.toml"],"commands_run":["grep -RhoF '#[test]' crates --include='*.rs' -> 1041","find crates -type f -path '*/tests/*.rs' -> 99","find crates -mindepth 1 -maxdepth 1 -type d -> 51","grep -nF send_and_verify crates/omp-orchestrator/src/main.rs -> current definition and call lines 728/1504"],"evidence_raw_sha256":"38ef24525faaf0a7ba5e757af5984c113630e734010a1268e70ac66576479755","evidence_compressed_sha256":"74d7bd3de817ce1f7708fb3652018f446c2e31f2997952db6ad14d1225cdc815","no_section_edits":true}
+{"section":"02-surface-census","round":23,"lens":"independent-reader-cross-section-currentness","role":"fresh_eyes","graded_by":"GreenFrog","new_findings":3,"severity":{"blocker":0,"major":1,"minor":2},"verdict":"UN-CONVERGED","finding_ids":["R23-02-001","R23-02-002","R23-02-003"],"findings":[{"finding_id":"R23-02-001","severity":"major","summary":"The current-state boundary says 50 packages and 48 binary targets, while current cargo metadata returns 51 packages and 49 binary targets.","evidence":".flywheel/grade-evidence/round23-GreenFrog-00-03.txt.gz","required_change":"Re-derive or mark the current-state boundary historical."},{"finding_id":"R23-02-002","severity":"minor","summary":"The disposition paragraph labels 175 rows NAMED_REASON and 8 WIRE, but the current map has 52 CONSUMED, 67 WIRE, 33 VALIDATE, 453 RETIRE, and 9 UNPROBEABLE-PENDING, with 152 engaged.","evidence":".flywheel/grade-evidence/round23-GreenFrog-00-03.txt.gz","required_change":"Replace the unlabelled disposition snapshot with a current command-backed result or historical marker."},{"finding_id":"R23-02-003","severity":"minor","summary":"The current actuator citation uses moved source lines 714 and 1461; current grep locates send_and_verify at 728 and its tick call at 1504.","evidence":".flywheel/grade-evidence/round23-GreenFrog-00-03.txt.gz","required_change":"Route the moved line references through tree-drift reconciliation."}],"gates_green":false,"gates_scope":"00-03 currentness probes only; no section edits","checked_files":["docs/plan/02-surface-census.md","docs/plan/SURFACE-MAP.jsonl","crates/omp-orchestrator/src/main.rs"],"commands_run":["grep -c . docs/plan/SURFACE-MAP.jsonl -> 614","jq -s '[.[]|select(.maps_to_crate==null)]|length' docs/plan/SURFACE-MAP.jsonl -> 479","jq -s group_by(.disposition) docs/plan/SURFACE-MAP.jsonl -> 52/453/9/33/67; engaged 152","cargo metadata --format-version 1 --no-deps --offline -> 51 packages / 49 binary targets"],"evidence_raw_sha256":"38ef24525faaf0a7ba5e757af5984c113630e734010a1268e70ac66576479755","evidence_compressed_sha256":"74d7bd3de817ce1f7708fb3652018f446c2e31f2997952db6ad14d1225cdc815","no_section_edits":true}
+{"section":"03-crates","round":23,"lens":"independent-reader-cross-section-currentness","role":"fresh_eyes","graded_by":"GreenFrog","new_findings":3,"severity":{"blocker":0,"major":1,"minor":2},"verdict":"UN-CONVERGED","finding_ids":["R23-03-001","R23-03-002","R23-03-003"],"findings":[{"finding_id":"R23-03-001","severity":"major","summary":"The current graph recheck says 50 packages and 34 path edges, while current cargo metadata returns 51 packages and 39 path edges.","evidence":".flywheel/grade-evidence/round23-GreenFrog-00-03.txt.gz","required_change":"Re-derive the graph denominator or mark the displayed result historical."},{"finding_id":"R23-03-002","severity":"minor","summary":"The current unsafe split says 50 manifests, 49 source attributes, and 49 both, while the current tree returns 51, 50, and 50.","evidence":".flywheel/grade-evidence/round23-GreenFrog-00-03.txt.gz","required_change":"Route the moved live figures through the registry before making a current claim."},{"finding_id":"R23-03-003","severity":"minor","summary":"The type section publishes 59 public enums, 91 public structs, four colliding names, and six Verdict types, while current probes return 128, 190, 11, and 10.","evidence":".flywheel/grade-evidence/round23-GreenFrog-00-03.txt.gz","required_change":"Re-derive or explicitly bound the type-inventory snapshot."}],"gates_green":false,"gates_scope":"00-03 currentness probes only; no section edits","checked_files":["docs/plan/03-crates.md","Cargo.toml","NUMBERS.toml","crates/omp-inventory-map/src/types_inventory.rs"],"commands_run":["cargo metadata --format-version 1 --no-deps --offline -> 51 packages / 39 path edges / 29 leaves / 22 non-leaves","python3 unsafe split probe -> 51 manifests / 50 source roots / 50 both","grep public enum/struct and collision probes -> 128 / 190 / 11 / 10"],"evidence_raw_sha256":"38ef24525faaf0a7ba5e757af5984c113630e734010a1268e70ac66576479755","evidence_compressed_sha256":"74d7bd3de817ce1f7708fb3652018f446c2e31f2997952db6ad14d1225cdc815","no_section_edits":true}
+~~~
+
+
+
+<!-- ===== round23-SilverWolf.jsonl ===== -->
+
+### round23-SilverWolf.jsonl
+
+~~~jsonl
+{"section":"10-prior-art","round":23,"lens":"fresh-eyes","role":"fresh_eyes","graded_by":"SilverWolf","new_findings":0,"severity":{"blocker":0,"major":0,"minor":0},"verdict":"ZERO_NEW","finding_ids":[],"note":"Full independent read completed. Mirror-scope, declaration-versus-runtime, typed-adapter, and tool-probe claims are explicitly bounded. Evidence-retention language and mirror counts were checked against the preserved manifest; the remaining stale-retention concern is already represented by prior R20-10 findings, so no new finding is minted."}
+{"section":"11-lifecycle","round":23,"lens":"fresh-eyes","role":"fresh_eyes","graded_by":"SilverWolf","new_findings":0,"severity":{"blocker":0,"major":0,"minor":0},"verdict":"ZERO_NEW","finding_ids":[],"note":"Full independent read completed. Stage ownership, dispatch/reap boundaries, surface-map scope, template count, decision-ledger claims, and one-to-many limits were checked against current read-only probes. Existing denominator, citation, template, and decision-ledger defects are already represented by prior findings; no new finding is recorded."}
+{"section":"12-journey","round":23,"lens":"fresh-eyes","role":"fresh_eyes","graded_by":"SilverWolf","new_findings":0,"severity":{"blocker":0,"major":0,"minor":0},"verdict":"ZERO_NEW","finding_ids":[],"note":"Full independent read completed. S1-S9 runbook structure, seven-field contract, projected versus measured boundaries, and appendices were checked. Existing heading, done-signal, decision-ledger, and citation issues are already represented by prior R16/R19/R21 findings; no new finding is recorded. Round 22 was not read as a grading source."}
+~~~
+
+
+
 <!-- ===== FINDINGS.jsonl ===== -->
 
 ### FINDINGS.jsonl
@@ -8603,6 +8719,18 @@ Every tracked round record, plus the findings and convergence ledgers, is embedd
 {"id":"R19-12-s6-gate-absent","round":19,"section":"cross-section-more","graded_by":"round19-fresh-eyes","severity":{"blocker":4,"major":8,"minor":0},"finding":"The held-out reader then verified more issues: 04 board arithmetic is 74 not 75 and its generator has no owner or executable acceptance; 05 dispatcher-deadman extraction state is stale; 06 per-gate cells drift and its inventory claims an exact match that is false; 07 help counts lack retained proof and doctor DOWN exit semantics conflict with all-green exit 0; 09 M2 grep is vacuous; 11 has main.rs","disposition":"DEFERRED","deferred_to":"omp-orchestrator-d1n","evidence":".flywheel/grade-evidence/r19-consistency.md.gz","dispositioned_by":"orchestrator-pane-1 (class routing, unverified)"}
 {"id":"R19-12-current-crate-denominator","round":19,"section":"cross-section-more","graded_by":"round19-fresh-eyes","severity":{"blocker":4,"major":8,"minor":0},"finding":"The held-out reader then verified more issues: 04 board arithmetic is 74 not 75 and its generator has no owner or executable acceptance; 05 dispatcher-deadman extraction state is stale; 06 per-gate cells drift and its inventory claims an exact match that is false; 07 help counts lack retained proof and doctor DOWN exit semantics conflict with all-green exit 0; 09 M2 grep is vacuous; 11 has main.rs","disposition":"DEFERRED","deferred_to":"omp-orchestrator-d1n","evidence":".flywheel/grade-evidence/r19-consistency.md.gz","dispositioned_by":"orchestrator-pane-1 (class routing, unverified)"}
 {"id":"R19-12-s9-schema-ids","round":19,"section":"cross-section-more","graded_by":"round19-fresh-eyes","severity":{"blocker":4,"major":8,"minor":0},"finding":"The held-out reader then verified more issues: 04 board arithmetic is 74 not 75 and its generator has no owner or executable acceptance; 05 dispatcher-deadman extraction state is stale; 06 per-gate cells drift and its inventory claims an exact match that is false; 07 help counts lack retained proof and doctor DOWN exit semantics conflict with all-green exit 0; 09 M2 grep is vacuous; 11 has main.rs","disposition":"DEFERRED","deferred_to":"omp-orchestrator-d1n","evidence":".flywheel/grade-evidence/r19-consistency.md.gz","dispositioned_by":"orchestrator-pane-1 (class routing, unverified)"}
+{"id":"R23-00-001","round":23,"section":"00-brief","graded_by":"round23-fresh-eyes","severity":{"blocker":0,"major":1,"minor":0},"finding":"Current workspace package and binary-target figures are stale relative to the current cargo metadata probe.","disposition":"DEFERRED","deferred_to":"omp-orchestrator-kxe.3","evidence":".flywheel/grade-evidence/round23-GreenFrog-00-03.txt.gz","dispositioned_by":"BlueLantern (class-routed to denominator/provenance bead)"}
+{"id":"R23-00-002","round":23,"section":"00-brief","graded_by":"round23-fresh-eyes","severity":{"blocker":0,"major":0,"minor":1},"finding":"The actuate source line references moved under current source and require tree-drift reconciliation.","disposition":"DEFERRED","deferred_to":"omp-orchestrator-d1n","evidence":".flywheel/grade-evidence/round23-GreenFrog-00-03.txt.gz","dispositioned_by":"BlueLantern (class-routed to tree-drift bead)"}
+{"id":"R23-01-001","round":23,"section":"01-idea","graded_by":"round23-fresh-eyes","severity":{"blocker":0,"major":1,"minor":0},"finding":"Current workspace, test-function, and integration-test figures are stale relative to current probes.","disposition":"DEFERRED","deferred_to":"omp-orchestrator-kxe.3","evidence":".flywheel/grade-evidence/round23-GreenFrog-00-03.txt.gz","dispositioned_by":"BlueLantern (class-routed to denominator/provenance bead)"}
+{"id":"R23-01-002","round":23,"section":"01-idea","graded_by":"round23-fresh-eyes","severity":{"blocker":0,"major":0,"minor":1},"finding":"The actuator source line references moved under current source and require tree-drift reconciliation.","disposition":"DEFERRED","deferred_to":"omp-orchestrator-d1n","evidence":".flywheel/grade-evidence/round23-GreenFrog-00-03.txt.gz","dispositioned_by":"BlueLantern (class-routed to tree-drift bead)"}
+{"id":"R23-02-001","round":23,"section":"02-surface-census","graded_by":"round23-fresh-eyes","severity":{"blocker":0,"major":1,"minor":0},"finding":"The current-state package and binary-target figures are stale relative to current cargo metadata.","disposition":"DEFERRED","deferred_to":"omp-orchestrator-kxe.3","evidence":".flywheel/grade-evidence/round23-GreenFrog-00-03.txt.gz","dispositioned_by":"BlueLantern (class-routed to denominator/provenance bead)"}
+{"id":"R23-02-002","round":23,"section":"02-surface-census","graded_by":"round23-fresh-eyes","severity":{"blocker":0,"major":0,"minor":1},"finding":"The disposition snapshot disagrees with the current surface-map counts and engaged-row total.","disposition":"DEFERRED","deferred_to":"omp-orchestrator-kxe.3","evidence":".flywheel/grade-evidence/round23-GreenFrog-00-03.txt.gz","dispositioned_by":"BlueLantern (class-routed to denominator/provenance bead)"}
+{"id":"R23-02-003","round":23,"section":"02-surface-census","graded_by":"round23-fresh-eyes","severity":{"blocker":0,"major":0,"minor":1},"finding":"The current actuator source line references moved under current source and require tree-drift reconciliation.","disposition":"DEFERRED","deferred_to":"omp-orchestrator-d1n","evidence":".flywheel/grade-evidence/round23-GreenFrog-00-03.txt.gz","dispositioned_by":"BlueLantern (class-routed to tree-drift bead)"}
+{"id":"R23-03-001","round":23,"section":"03-crates","graded_by":"round23-fresh-eyes","severity":{"blocker":0,"major":1,"minor":0},"finding":"The current crate graph package and path-edge figures are stale relative to current cargo metadata.","disposition":"DEFERRED","deferred_to":"omp-orchestrator-kxe.3","evidence":".flywheel/grade-evidence/round23-GreenFrog-00-03.txt.gz","dispositioned_by":"BlueLantern (class-routed to denominator/provenance bead)"}
+{"id":"R23-03-002","round":23,"section":"03-crates","graded_by":"round23-fresh-eyes","severity":{"blocker":0,"major":0,"minor":1},"finding":"The current unsafe-split manifest and source-attribute figures are stale relative to the current tree.","disposition":"DEFERRED","deferred_to":"omp-orchestrator-kxe.3","evidence":".flywheel/grade-evidence/round23-GreenFrog-00-03.txt.gz","dispositioned_by":"BlueLantern (class-routed to denominator/provenance bead)"}
+{"id":"R23-03-003","round":23,"section":"03-crates","graded_by":"round23-fresh-eyes","severity":{"blocker":0,"major":0,"minor":1},"finding":"The published type-inventory snapshot is stale relative to the current probe output.","disposition":"DEFERRED","deferred_to":"omp-orchestrator-round22-drifted-figures-844","evidence":".flywheel/grade-evidence/round23-GreenFrog-00-03.txt.gz","dispositioned_by":"BlueLantern (class-routed to existing drifted-figures bead)"}
+{"id":"R23-04-diagrams-disposition-truth-1","round":23,"section":"04-diagrams","graded_by":"round23-fresh-eyes","severity":{"blocker":0,"major":1,"minor":0},"finding":"A prior FIXED row for 04-diagrams cites a commit that changed FINDINGS.jsonl rather than the named section.","disposition":"DEFERRED","deferred_to":"omp-orchestrator-kxe.5","evidence":".flywheel/grade-evidence/r23-AmberGate-evidence.md.gz","dispositioned_by":"BlueLantern (class-routed to cross-section authority bead)"}
+{"id":"R23-06-gates-disposition-truth-1","round":23,"section":"06-gates","graded_by":"round23-fresh-eyes","severity":{"blocker":0,"major":1,"minor":0},"finding":"The gate inventory and replacement mechanism omit a disclosed denominator and omit tracked gate-shaped crates.","disposition":"DEFERRED","deferred_to":"omp-orchestrator-kernel-gate-census-69i","evidence":".flywheel/grade-evidence/r23-AmberGate-evidence.md.gz","dispositioned_by":"BlueLantern (class-routed to gate-census bead)"}
 ~~~
 
 
@@ -8695,11 +8823,4 @@ Every tracked round record, plus the findings and convergence ledgers, is embedd
 {"section": "10-prior-art", "round": 15, "lens": "rule-zero", "role": "fresh_eyes", "graded_by": "SilverWolf", "new_findings": 2, "severity": {"blocker": 0, "major": 1, "minor": 1}, "verdict": "ACTIONABLE", "buyer_visible_change": "NONE directly; the section's ADOPT/ADAPT/REJECT verdicts for nine gaps feed the S5/S6 foundation fields which could produce buyer-visible dispatch receipts and completion consumption, but none has been built yet \u2014 the section is evidence for the builder, not the product.", "note": "Read all 337 lines. The section is prior-art mining: 9 gaps researched with mirror citations and ADOPT/ADAPT/REJECT verdicts. Rule Zero applied: the ADOPT verdicts name what should be built (AckKind, DeliveryClass, PublishPermit from asupersync; real-hook mutation; anti-vacuity) but NONE has been adopted into product code \u2014 ack-spine uses its own three-authority model, not asupersync's AckKind; the pending-dispatch fence is hand-rolled, not a PublishPermit. MAJOR: \u00a710.9 records the vocabulary mapping ('we invented worse') but the mapping has zero buyers \u2014 the S5 dispatch path still uses Command::new + ntm, not the asupersync fabric. MINOR: the section's own runbook contract (\u00a712 lines 276-293) is well-specified but the Done signal references an artifact that has never been written (immutable result artifact with SHA-256). Verified: mirror denominator 210 work-trees matches; fh SERVE_INPUT_STALE confirmed at exit 3; asupersync messaging/class.rs AckKind/DeliveryClass exist at the cited lines (verified in ipg.14). Key file:line: docs/plan/10-prior-art.md:47-59 (Gap 1 receipt), :141-153 (Gap 7 completion), :296-337 (\u00a710.9 payoff).", "gates_green": true, "gates_scope": "workspace (123 suites, 481 assertions) at dispatch time", "recorded_by": "orchestrator-pane-1 (claude-opus-5)", "lens_limitation": "RULE-ZERO LENS APPLIED TO PLAN PROSE. A plan section is prose and can never itself BE the product, so \"name the buyer-visible change\" returns NONE for every section by construction -- 13 of 13 here. Treat the 10 BLOCKERs as ONE finding about the SYSTEM, not 13 about the prose: the binary cannot actuate. Measured 2026-09-01 by running it: DISK_PRESSURE (mismeasured volume, since fixed) then SUPERVISOR_REFUSED GATE_UNWIRED naming fleet-truth, oracle-compare, oracle-pane-state-differential as NOT_EXTRACTED. This lens must NOT be used as a convergence gate -- it cannot bank a section and would run the loop forever at ~13 findings/round."}
 {"section": "11-lifecycle", "round": 15, "lens": "rule-zero", "role": "fresh_eyes", "graded_by": "SilverWolf", "new_findings": 1, "severity": {"blocker": 1, "major": 0, "minor": 0}, "verdict": "BLOCKED", "buyer_visible_change": "NONE \u2014 the lifecycle map documents that 3 of 45 R13 property cells are Y (S4 logging, S6 logging, S6 build grading) and the other 42 are either \u2014 or y; no stage completes end-to-end without a human actuating the dispatch and no S9 decision ledger has any rows.", "note": "Read all 512 lines. The section is an evidence map: it measures what exists (crate ownership, R13 property matrix at :88-98, surface-map counts at :262-367, 1:many cardinality contract at :472-498). Rule Zero applied: the section documents that the product CANNOT currently ship \u2014 the resident cycle stops after dispatch/receipt with no production reap\u2192grade\u2192validation\u2192ship edge (11.6 :250-252). The S9 decision ledger has zero rows (11.9 :466-468). The 1:many namespace contract is 1:1:1:1:1:1 (11.10 :490-492). BLOCKER: the section's own evidence proves no buyer-visible end-to-end change exists \u2014 the journey cannot complete, and the section is honest about that. The three Y cells (S4 logging via .beads/issues.jsonl, S6 logging via bead comments, S6 build grading) are real product artifacts but none constitutes a completed journey. Key file:line: docs/plan/11-lifecycle.md:100-104 (3-of-45 count), :194-200 (four sequential breaks), :218-226 (five-layer completion boundary), :490-492 (1:1 cardinality).", "gates_green": true, "gates_scope": "workspace (123 suites, 481 assertions) at dispatch time", "recorded_by": "orchestrator-pane-1 (claude-opus-5)", "lens_limitation": "RULE-ZERO LENS APPLIED TO PLAN PROSE. A plan section is prose and can never itself BE the product, so \"name the buyer-visible change\" returns NONE for every section by construction -- 13 of 13 here. Treat the 10 BLOCKERs as ONE finding about the SYSTEM, not 13 about the prose: the binary cannot actuate. Measured 2026-09-01 by running it: DISK_PRESSURE (mismeasured volume, since fixed) then SUPERVISOR_REFUSED GATE_UNWIRED naming fleet-truth, oracle-compare, oracle-pane-state-differential as NOT_EXTRACTED. This lens must NOT be used as a convergence gate -- it cannot bank a section and would run the loop forever at ~13 findings/round."}
 {"section": "12-journey", "round": 15, "lens": "rule-zero", "role": "fresh_eyes", "graded_by": "SilverWolf", "new_findings": 1, "severity": {"blocker": 0, "major": 1, "minor": 0}, "verdict": "MAJOR_OPEN", "buyer_visible_change": "NONE yet \u2014 the runbook specifies what to build (nine stage runbooks with F1-F5 foundation and F1-F5+epistemic ledger) but zero stages have been dispatched; the S5 packet journal (DISPATCH.jsonl) has zero rows and the S9 decision ledger (docs/decisions.jsonl) has 3 rows from one compaction event, none consumed by the supervisor.", "note": "Read the structure and the S5/S6/S9 runbooks in detail (1457 lines total; \u00a712.10 milestone loop at :233, S5-S9 runbooks at :316-484, S1-S4 foundation at :485-736, 12 surface-coverage waves at :836-1430). MAJOR: the nine-stage runbook is a SPECIFICATION, not a running system \u2014 S5's F3 says 'currently a human types instead' and F5 declares zero NUMBERS because the stage has never run; S9's decision ledger was written but the supervisor does not read it. The runbook's own test (\u00a712 opening: 'I have a free pane and this stage is next; what exactly do I send it, and how will I know it worked?') would be answered by reading \u00a712 \u2014 but the dispatching system that would act on that answer does not exist yet. Key file:line: docs/plan/12-journey.md:316-355 (S5 runbook, well-formed), :452-484 (S9 runbook, decision ledger declared but unwired), :233-313 (\u00a712.10 milestone loop with F1-F5 + epistemic ledger).", "gates_green": true, "gates_scope": "workspace (123 suites, 481 assertions) at dispatch time", "recorded_by": "orchestrator-pane-1 (claude-opus-5)", "lens_limitation": "RULE-ZERO LENS APPLIED TO PLAN PROSE. A plan section is prose and can never itself BE the product, so \"name the buyer-visible change\" returns NONE for every section by construction -- 13 of 13 here. Treat the 10 BLOCKERs as ONE finding about the SYSTEM, not 13 about the prose: the binary cannot actuate. Measured 2026-09-01 by running it: DISK_PRESSURE (mismeasured volume, since fixed) then SUPERVISOR_REFUSED GATE_UNWIRED naming fleet-truth, oracle-compare, oracle-pane-state-differential as NOT_EXTRACTED. This lens must NOT be used as a convergence gate -- it cannot bank a section and would run the loop forever at ~13 findings/round."}
-{"record_type": "fresh-lens-result", "section": "00-brief", "round": 22, "lens": "extraction-truth-replayability", "role": "fresh_eyes", "graded_by": "GreenFrog", "new_findings": 0, "finding_ids": [], "severity": {"blocker": 0, "major": 0, "minor": 0}, "verdict": "ZERO_NEW", "gates_green": true, "gates_scope": "owned sections and extraction registry", "commands_run": ["cargo metadata --format-version 1 --no-deps -> 50 packages / 48 binary targets", "find crates -mindepth 1 -maxdepth 1 -type d -> 50", "br list --status closed,in_progress,open,blocked,grading -> 61/21/10/2/1"], "note": "Fresh lens found no current 00 contradiction after rechecking R4, board, liveness, and assembly boundaries. Current board snapshot is dated and LIVE semantics remain explicit; no new finding.", "recorded_by": "GreenFrog integrator", "void": true, "void_reason": "VOID under HD-0005 (docs/decisions.jsonl). Written without a `pin`, and before prep beads d1n/7sd/uvo landed, so the sha these findings were graded against is unrecoverable. HD-0005 requires one round at a time: findings fixed in the docs -> commit -> PIN -> next round. A round with no pin cannot be reconciled against a tree state and cannot count toward the stop condition. Voided by orchestrator (pane 1) 2026-09-01 at the guardian's direction; the rows are retained rather than deleted so the attempt stays visible and is not re-run by accident."}
-{"record_type": "fresh-lens-result", "section": "01-idea", "round": 22, "lens": "extraction-truth-replayability", "role": "fresh_eyes", "graded_by": "GreenFrog", "new_findings": 0, "finding_ids": [], "severity": {"blocker": 0, "major": 0, "minor": 0}, "verdict": "ZERO_NEW", "gates_green": true, "gates_scope": "owned sections and extraction registry", "commands_run": ["grep -RhoF '#[test]' crates --include='*.rs' -> 987", "find crates -type f -path '*/tests/*.rs' -> 92", "gzip -dc .flywheel/inventory-artifacts/agent-end-raw-frame.json.gz | shasum -a 256 -> d8bd80c6949b2ec48af1639b5b5e241bd90b4dce1e769483dd1690ed2be8f644"], "note": "Fresh lens found no current 01 denominator or receipt-provenance contradiction. Historical 26/413/31 and /tmp paths are explicitly bounded; current 50/987/92 and the retained gzip agree.", "recorded_by": "GreenFrog integrator", "void": true, "void_reason": "VOID under HD-0005 (docs/decisions.jsonl). Written without a `pin`, and before prep beads d1n/7sd/uvo landed, so the sha these findings were graded against is unrecoverable. HD-0005 requires one round at a time: findings fixed in the docs -> commit -> PIN -> next round. A round with no pin cannot be reconciled against a tree state and cannot count toward the stop condition. Voided by orchestrator (pane 1) 2026-09-01 at the guardian's direction; the rows are retained rather than deleted so the attempt stays visible and is not re-run by accident."}
-{"record_type": "fresh-lens-result", "section": "02-surface-census", "round": 22, "lens": "extraction-truth-replayability", "role": "fresh_eyes", "graded_by": "GreenFrog", "new_findings": 0, "finding_ids": [], "severity": {"blocker": 0, "major": 0, "minor": 0}, "verdict": "ZERO_NEW", "gates_green": true, "gates_scope": "owned sections and extraction registry", "commands_run": ["grep -c . docs/plan/SURFACE-MAP.jsonl -> 614", "shasum -a 256 docs/plan/SURFACE-MAP.jsonl -> 5b3c3238c4ec9dd7f72a097bb3668e7de224e3b6f0eddc1132de2902a1d9d93c", "jq -s '[.[]|select(.maps_to_crate==null)]|length' docs/plan/SURFACE-MAP.jsonl -> 479", "grep -Fc '591-row' docs/plan/02-surface-census.md -> 0; HISTORICAL SWEEP BOUNDARY -> 1"], "note": "Fresh lens found no current map identity, cardinality, or late-sweep contradiction. Current map is 614/479 with the pinned hash; older 591/129/21.8 and 204/843/499 sweep values are bounded snapshots.", "recorded_by": "GreenFrog integrator", "void": true, "void_reason": "VOID under HD-0005 (docs/decisions.jsonl). Written without a `pin`, and before prep beads d1n/7sd/uvo landed, so the sha these findings were graded against is unrecoverable. HD-0005 requires one round at a time: findings fixed in the docs -> commit -> PIN -> next round. A round with no pin cannot be reconciled against a tree state and cannot count toward the stop condition. Voided by orchestrator (pane 1) 2026-09-01 at the guardian's direction; the rows are retained rather than deleted so the attempt stays visible and is not re-run by accident."}
-{"record_type": "fresh-lens-result", "section": "03-crates", "round": 22, "lens": "extraction-truth-replayability", "role": "fresh_eyes", "graded_by": "GreenFrog", "new_findings": 0, "finding_ids": [], "severity": {"blocker": 0, "major": 0, "minor": 0}, "verdict": "ZERO_NEW", "gates_green": true, "gates_scope": "owned sections and extraction registry", "commands_run": ["cargo metadata --format-version 1 --no-deps with path filtering -> 50 packages / 34 path edges / 30 leaves / 20 non-leaves", "OMP-SURFACE-MAP.toml -> 50 headers / 50 unique / 0 duplicates / 0 missing workspace dirs", "cargo test -p omp-inventory-map --lib -- --nocapture -> 13 passed"], "note": "Fresh lens found no current graph or extraction-state contradiction. The 18-edge/17-of-26 historical graph and 29,512-LOC decomposition are explicitly bounded; current directories, metadata, map coverage, and collision test agree.", "recorded_by": "GreenFrog integrator", "void": true, "void_reason": "VOID under HD-0005 (docs/decisions.jsonl). Written without a `pin`, and before prep beads d1n/7sd/uvo landed, so the sha these findings were graded against is unrecoverable. HD-0005 requires one round at a time: findings fixed in the docs -> commit -> PIN -> next round. A round with no pin cannot be reconciled against a tree state and cannot count toward the stop condition. Voided by orchestrator (pane 1) 2026-09-01 at the guardian's direction; the rows are retained rather than deleted so the attempt stays visible and is not re-run by accident."}
 ~~~
-
-
-<!-- PLAN_STAMP {"generator":"plan-assemble","source_fingerprint":"fnv1a64:eeea451999fb5ba9","sections":13,"ledgers":12} -->

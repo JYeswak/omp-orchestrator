@@ -175,6 +175,45 @@ fn round_numbers(path: &Path) -> Result<Vec<u64>, String> {
     Ok(rounds)
 }
 
+/// Return an audit ledger's embedded content, omitting halted round-22 rows from the
+/// canonical CONVERGENCE record while retaining the record marker itself.
+fn embedded_ledger_text(path: &Path) -> Result<String, String> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|error| format!("cannot read audit ledger {}: {error}", path.display()))?;
+    let is_convergence =
+        path.file_name().and_then(|name| name.to_str()) == Some("CONVERGENCE.jsonl");
+    if !is_convergence {
+        return Ok(text);
+    }
+    let mut filtered = String::new();
+    for line in text.lines() {
+        if field(line, "round").as_deref() == Some("22") {
+            continue;
+        }
+        filtered.push_str(line);
+        filtered.push('\n');
+    }
+    Ok(filtered)
+}
+
+fn guard_ledger_set(round_ledgers: usize, audit_ledgers: usize) -> Result<(), String> {
+    if round_ledgers == 0 || audit_ledgers == 0 {
+        Err("ledger set is empty; refusing a sections-only assembly".to_owned())
+    } else {
+        Ok(())
+    }
+}
+
+fn guard_output_size(previous_len: usize, output_len: usize) -> Result<(), String> {
+    if output_len < previous_len {
+        Err(format!(
+            "assembled body shrank from {previous_len} to {output_len} bytes; refusing truncation"
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 fn main() -> std::process::ExitCode {
     let root = repo_root();
     let dir = root.join("docs/plan");
@@ -238,7 +277,9 @@ fn main() -> std::process::ExitCode {
             .and_then(|value| value.to_str())
             .unwrap_or("?");
         if !rounds_in_file.is_empty()
-            && rounds_in_file.iter().all(|round| (15..=21).contains(round))
+            && rounds_in_file
+                .iter()
+                .all(|round| (15..=21).contains(round) || *round == 23)
         {
             allowed_round_files.push(path);
         } else {
@@ -269,6 +310,10 @@ fn main() -> std::process::ExitCode {
         }
         audit_ledgers.push(path);
     }
+    if let Err(error) = guard_ledger_set(round_files.len(), audit_ledgers.len()) {
+        eprintln!("PLAN_ASSEMBLE_ERROR {error}");
+        return std::process::ExitCode::from(2);
+    }
 
     let mut covered_rounds = Vec::new();
     for path in round_files.iter().chain(audit_ledgers.iter()) {
@@ -289,6 +334,21 @@ fn main() -> std::process::ExitCode {
             eprintln!("PLAN_ASSEMBLE_ERROR required convergence round {required} is absent from the embedded records");
             return std::process::ExitCode::from(2);
         }
+    }
+    let round23_files = round_files
+        .iter()
+        .filter_map(|path| round_numbers(path).ok())
+        .filter(|rounds| rounds.contains(&23))
+        .count();
+    if round23_files != 4 {
+        eprintln!("PLAN_ASSEMBLE_ERROR expected four round-23 ledgers, found {round23_files}");
+        return std::process::ExitCode::from(2);
+    }
+    if !covered_rounds.contains(&23) {
+        eprintln!(
+            "PLAN_ASSEMBLE_ERROR required convergence round 23 is absent from the embedded records"
+        );
+        return std::process::ExitCode::from(2);
     }
 
     let mut stamp_inputs = sections.clone();
@@ -319,7 +379,7 @@ fn main() -> std::process::ExitCode {
         .collect::<Vec<_>>()
         .join(",");
     let stamp = format!(
-        "<!-- PLAN_STAMP {{\"schema\":\"plan-stamp/v1\",\"generator\":\"plan-assemble\",\"round_range\":\"15-21\",\"required_rounds\":[15,16,17,18,19,20,21],\"sections\":{},\"round_files\":[{}],\"excluded_round_files\":[{}],\"ledgers\":[\"FINDINGS.jsonl\",\"CONVERGENCE.jsonl\"],\"source_fingerprint\":\"{}\"}} -->",
+        "<!-- PLAN_STAMP {{\"schema\":\"plan-stamp/v1\",\"generator\":\"plan-assemble\",\"round_range\":\"15-23 (22 void)\",\"required_rounds\":[15,16,17,18,19,20,21,23],\"sections\":{},\"round_files\":[{}],\"excluded_round_files\":[{}],\"ledgers\":[\"FINDINGS.jsonl\",\"CONVERGENCE.jsonl\"],\"source_fingerprint\":\"{}\"}} -->",
         sections.len(), round_manifest, excluded_manifest, fingerprint
     );
     if std::env::args().any(|arg| arg == "--check") {
@@ -334,6 +394,10 @@ fn main() -> std::process::ExitCode {
                 return std::process::ExitCode::from(1);
             }
         };
+        if plan.matches("<!-- PLAN_STAMP").count() != 1 {
+            eprintln!("PLAN_STAMP_REFUSED expected exactly one current PLAN_STAMP marker");
+            return std::process::ExitCode::from(1);
+        }
         if !plan.contains(&stamp) {
             eprintln!("PLAN_STAMP_REFUSED source fingerprint or manifest differs; run cargo run -p plan-assemble");
             return std::process::ExitCode::from(1);
@@ -342,7 +406,7 @@ fn main() -> std::process::ExitCode {
             .split("## Appendix — convergence and audit ledgers")
             .nth(1)
             .unwrap_or("");
-        for required in 15..=21 {
+        for required in (15..=21).chain(std::iter::once(23)) {
             let needle = format!("\"round\":{required}");
             if !appendix.contains(&needle) {
                 eprintln!("PLAN_STAMP_REFUSED embedded records do not cover round {required}");
@@ -475,43 +539,34 @@ fn main() -> std::process::ExitCode {
             .file_name()
             .and_then(|value| value.to_str())
             .unwrap_or("?");
-        let text = std::fs::read_to_string(path).unwrap_or_default();
+        let text = match embedded_ledger_text(path) {
+            Ok(text) => text,
+            Err(error) => {
+                eprintln!("PLAN_ASSEMBLE_ERROR {error}");
+                return std::process::ExitCode::from(2);
+            }
+        };
         body.push(format!(
             "\n\n<!-- ===== {name} ===== -->\n\n### {name}\n\n~~~jsonl\n{}\n~~~\n",
             text.trim_end()
         ));
     }
 
-    // THE STAMP. The appendix above already embeds every round record and both audit
-    // ledgers verbatim (another pane landed that half); what was missing is the fingerprint
-    // that lets a reader tell whether this document still matches the inputs that produced
-    // it, without re-running the assembler.
-    //
-    // Josh, 2026-09-01, verbatim: "no more rounds of convergence until we have a stamped doc
-    // with all rounds included in it." The appendix is "all rounds included"; this is
-    // "stamped".
-    //
-    // fnv1a64: small, dependency-free, and sufficient to detect drift. It is a FINGERPRINT,
-    // not a signature - it says the bytes changed, never who changed them or whether the
-    // change was right.
     let body_text = format!("{}{}", head.join("\n"), body.join("\n"));
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in body_text.bytes() {
-        hash ^= u64::from(byte);
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-    }
     let ledgers = round_files.len() + audit_ledgers.len();
-    if ledgers < 3 {
-        eprintln!("PLAN_ASSEMBLE_ERROR only {ledgers} ledgers embedded; the scan collapsed");
+    if ledgers == 0 {
+        eprintln!("PLAN_ASSEMBLE_ERROR ledger set is empty; refusing a sections-only assembly");
         return std::process::ExitCode::from(2);
     }
-    let stamp = format!(
-        "\n<!-- PLAN_STAMP {{\"generator\":\"plan-assemble\",\"source_fingerprint\":\"fnv1a64:{hash:016x}\",\"sections\":{},\"ledgers\":{ledgers}}} -->\n",
-        sections.len()
-    );
-
-    let out = format!("{body_text}\n{stamp}");
+    let embedded_records = sections.len() + ledgers;
     let target = root.join("docs/PLAN.md");
+    if let Ok(previous) = std::fs::read(&target) {
+        if let Err(error) = guard_output_size(previous.len(), body_text.len()) {
+            eprintln!("PLAN_ASSEMBLE_ERROR {error}");
+            return std::process::ExitCode::from(2);
+        }
+    }
+    let out = body_text;
     if let Err(e) = std::fs::write(&target, &out) {
         eprintln!("PLAN_ASSEMBLE_ERROR cannot write {}: {e}", target.display());
         return std::process::ExitCode::from(2);
@@ -523,10 +578,37 @@ fn main() -> std::process::ExitCode {
         out.len() / 1024,
         sections.len()
     );
+    println!(
+        "  embedded records: {} (sections={} ledgers={})",
+        embedded_records,
+        sections.len(),
+        ledgers
+    );
     let dupes = out.matches("<!-- ===== 00-brief.md ===== -->").count();
     println!("  duplicate-section check: 00-brief appears {dupes} time(s) — must be 1");
     if dupes != 1 {
         return std::process::ExitCode::from(1);
     }
     std::process::ExitCode::SUCCESS
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{guard_ledger_set, guard_output_size};
+
+    #[test]
+    fn empty_ledger_sets_refuse() {
+        let error = guard_ledger_set(0, 2).expect_err("round ledger absence must refuse");
+        assert!(error.contains("ledger set is empty"), "{error}");
+        let error = guard_ledger_set(2, 0).expect_err("audit ledger absence must refuse");
+        assert!(error.contains("ledger set is empty"), "{error}");
+    }
+
+    #[test]
+    fn output_shrink_refuses_and_growth_admits() {
+        let error = guard_output_size(100, 99).expect_err("smaller output must refuse");
+        assert!(error.contains("shrank"), "{error}");
+        guard_output_size(100, 100).expect("equal output is not truncation");
+        guard_output_size(100, 101).expect("larger output is admissible");
+    }
 }
