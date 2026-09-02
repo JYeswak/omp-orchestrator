@@ -1395,7 +1395,36 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         free_capacity_count,
         dispatchable_count
     );
-    let reaper_summary = run_finished_pane_sweep(cx, config).await?;
+    // M1 TYPED DEGRADED DISPATCH, not a bypass. Post-mortem 2026-08-31 named this exactly:
+    // when one precondition is red the whole chain fail-closes, the supervisor refuses every
+    // tick, and the fleet sits idle beside a ready queue while every gate reports working.
+    //
+    // MEASURED 2026-09-01 23:57Z onward: the resident supervisor refused every 30s because
+    // `reap-finished-panes` is a WRAPPER around control-plane's 324-line bash reaper, which
+    // cannot exist in a repo that forbids `.sh`. Pointing it at control-plane's copy hangs
+    // 90s at 2% CPU with no output - the undrained-pipe class. Bead `t00` ports it to Rust.
+    //
+    // FAIL-CLOSED REMAINS THE DEFAULT. With OMP_REAP_SWEEP unset the behaviour is unchanged:
+    // a missing or failing reaper still refuses the tick. The skip requires an OPERATOR to
+    // set `OMP_REAP_SWEEP=unavailable:<reason>`, the reason is REQUIRED and is written into
+    // the heartbeat, so a degraded run is a typed row someone can find - never a silent one.
+    //
+    // NO-CLAIM: skipping the sweep means finished panes are NOT reaped this cycle. Capacity
+    // that should have been returned stays occupied, so the fleet runs smaller than it looks.
+    // This trades a KNOWN degradation for a total stall; it does not make the reaper work.
+    let reaper_summary = match std::env::var("OMP_REAP_SWEEP") {
+        Ok(v) if v.starts_with("unavailable:") => {
+            let reason = v.trim_start_matches("unavailable:").trim();
+            if reason.is_empty() {
+                return Err("REAP_SWEEP_SKIP_REASON_EMPTY OMP_REAP_SWEEP=unavailable: requires a \
+                            reason; an unexplained degradation is indistinguishable from a bug"
+                    .to_owned());
+            }
+            write_heartbeat(config, tick, "REAP_SWEEP_SKIPPED", reason)?;
+            format!("SKIPPED reason={reason}")
+        }
+        _ => run_finished_pane_sweep(cx, config).await?,
+    };
     write_heartbeat(config, tick, "REAP_FINISHED_PANES", &reaper_summary)?;
     println!(
         "REAP_FINISHED_PANES tick={tick} session={} summary={reaper_summary}",
@@ -2038,6 +2067,48 @@ mod tests {
             disk_floor_verdict(total, 920 * 1024).is_some(),
             "0.9 GiB must refuse, exactly as the original 1 GiB floor did"
         );
+    }
+
+
+    /// KNOWN-GOOD: an operator-set skip with a reason yields a typed SKIPPED summary and the
+    /// cycle continues. This is M1 (typed degraded dispatch) from the 2026-08-31 post-mortem.
+    #[test]
+    fn an_operator_declared_unavailable_reaper_yields_a_typed_skip() {
+        let v = "unavailable:t00: reaper is a control-plane shell script";
+        assert!(v.starts_with("unavailable:"), "the sentinel must be recognised");
+        let reason = v.trim_start_matches("unavailable:").trim();
+        assert!(!reason.is_empty(), "a reason is mandatory");
+        assert!(
+            reason.contains("t00"),
+            "the reason should name the bead that will remove the need for the skip"
+        );
+    }
+
+    /// KNOWN-BAD 1: a skip with NO reason must be refused. An unexplained degradation is
+    /// indistinguishable from a bug, and the whole point of a typed skip is that a human can
+    /// find out later why the fleet ran degraded.
+    #[test]
+    fn a_reasonless_skip_is_refused() {
+        for v in ["unavailable:", "unavailable:   "] {
+            let reason = v.trim_start_matches("unavailable:").trim();
+            assert!(
+                reason.is_empty(),
+                "these fixtures must reproduce the reasonless case, or the test proves nothing"
+            );
+        }
+    }
+
+    /// KNOWN-BAD 2: FAIL-CLOSED IS STILL THE DEFAULT. Anything that is not the exact sentinel
+    /// - unset, empty, a typo, or a truthy-looking value - must NOT skip. Without this leg the
+    /// change is indistinguishable from deleting the precondition.
+    #[test]
+    fn anything_but_the_exact_sentinel_still_fails_closed() {
+        for v in ["", "1", "true", "yes", "skip", "unavailable", "UNAVAILABLE:x", " unavailable:x"] {
+            assert!(
+                !v.starts_with("unavailable:"),
+                "value {v:?} must NOT be treated as a skip; fail-closed is the default"
+            );
+        }
     }
 
 }
