@@ -68,7 +68,7 @@ are **zero unqualified WORKS rows**:
 | consume | selection | **UNVERIFIED** — no durable receipt here proves the selected work was consumed |
 | consume | transport | **UNVERIFIED** — no durable receipt here proves delivery to the intended worker |
 | consume | admission (decide()) | **FENCED** — the cited report is DISPATCH_RETRY_BLOCKED |
-| actuate | dispatch | **AVAILABLE, NOT VERIFIED** — `send_and_verify` exists at `crates/omp-orchestrator/src/main.rs:714` and is called at `:1461`; transport and receiver receipt remain unproven |
+| actuate | dispatch | **AVAILABLE, NOT VERIFIED** — the current source exposes the grep-addressable `send_and_verify` symbol in `crates/omp-orchestrator/src/main.rs` and the tick path invokes it; transport and receiver receipt remain unproven |
 | complete | worker says done | **AVAILABLE, NOT WIRED** — OMP exposes AgentEndEvent.willContinue on RpcSessionEventFrame; the local loop does not consume it |
 
 > *Upstream type for this gap: `GuestIdleReconcilerCtx` (DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
@@ -327,7 +327,7 @@ Matching a bar is a floor-raise, never a guarantee.
 
 ## 1.5 The honest position
 
-**What is genuinely built (re-derived during this integration).** Historical 26-crate/413-test-function/31-file values stay labelled as snapshots; current workspace authority is **50 crates, 987 test functions, and 92 integration test files**, from the recursive NUMBERS.toml commands. These are workspace facts, not product-completion evidence.
+**What is genuinely built (re-derived during this integration).** Historical 26-crate/413-test-function/31-file values stay labelled as snapshots; current workspace authority is the LIVE output of `[figures.workspace_crates]`, `[figures.test_functions]`, and `[figures.test_files]` in NUMBERS.toml. These are workspace facts, not product-completion evidence.
 
 The omp-types crate re-exports Outcome, OutcomeError, PanicPayload, Severity, and join_outcomes; Budget,
 CapabilityBudget, CapabilityBudgetDimension, CapabilityBudgetRefusal, CapabilityBudgetRequirements, and
@@ -345,7 +345,7 @@ this row."* The scanner consumes OMP because the scanner's job is to look at OMP
 
 ### The three objections an investor should raise
 
-**HISTORICAL DENOMINATOR NOTE.** The 26-crate and 25-of-26 figures in the following objection and type snapshot are pre-extraction values. Current workspace authority is 50 packages; the old figures are retained only as the historical argument being answered.
+**HISTORICAL DENOMINATOR NOTE.** The 26-crate and 25-of-26 figures in the following objection and type snapshot are pre-extraction values. Current workspace authority is the LIVE `[figures.workspace_crates]` result; the old figures are retained only as the historical argument being answered.
 **Objection 1 — "You have built 26 crates of scaffolding around a hole. The one integration that justifies the name does not exist."** *Partly conceded, with a narrower truth.* The completion signal is now WIRE-PROVEN upstream, but the supervisory integration that would consume it still does not exist. The 25-of-26 measurement is ours, not a reviewer's. The partial answer is that the layer census shows `observe` WORKS and failure is
 concentrated in actionable/consume/actuate — and the seven-row table above records **zero unqualified WORKS rows**. We will not use the qualified observe result as a rebuttal. What we do not concede is that the crates are therefore waste: the
 gates operate on the repository and the process boundary, not on OMP, and they run today. The
@@ -460,7 +460,7 @@ The current number registry and corrected brief win over every copied value.
 | 162 and 4.2 hours | UNVERIFIED REPORTED VALUE in 00-brief.md §4 line 526; command receipt not retained in this section; cited as of 2026-08-31, not independently reproducible or a market-frequency claim |
 | 28/25/19/2 and 74 total | board snapshot reported in 00-brief.md §3.7 lines 485–486, as of 2026-08-31; command receipt not retained; corrected arithmetic, not live-board truth |
 | 23 scanner tests | source-count FACT as of 2026-08-31: 13 markers in types_inventory.rs and 10 in tests/inventory.rs; not a pass count |
-| 26 crates, 413 test functions, 31 test files | historical snapshot as of 2026-08-31; current re-derived values are 50 crates, 987 test functions, and 92 test files from the recursive NUMBERS.toml commands |
+| 26 crates, 413 test functions, 31 test files | historical snapshot as of 2026-08-31; current workspace authority is the LIVE output of `[figures.workspace_crates]`, `[figures.test_functions]`, and `[figures.test_files]` in NUMBERS.toml |
 | 184/207/183, 544,697, 18, 4 | historical inventory snapshot from 00-brief.md §3.2 lines 212-219 as of 2026-08-31; command receipt not retained here; not product completion evidence |
 | 8 gates and gate-leg counts | reported corrected snapshot from 00-brief.md §3.5 as of 2026-08-31; grep naming counts are not semantic coverage |
 | 51/59 enums, 79/91 structs, 6/17/4 collisions | reported type-inventory snapshot as of 2026-08-31; library-only versus all-source scopes are intentionally distinct |
