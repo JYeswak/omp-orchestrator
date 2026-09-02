@@ -1428,7 +1428,6 @@ struct DurableNotice {
     persisted: bool,
     signaled: bool,
     cursor: u64,
-    oracle_skew: Option<i128>,
 }
 
 /// This orchestrator's own Agent Mail identity, for a signed FROM.
@@ -1516,21 +1515,29 @@ fn mail_failure_row(error: &MailError) -> &'static str {
 /// dispatch result's only durable trace was a local heartbeat row that no
 /// third party can query.
 ///
-/// Agent Mail answers it. The receipt separates `persisted` (the copy exists
-/// durably) from `signaled` (a message-id-bound signal receipt was appended)
-/// from `acknowledged`, so a delivered-but-unnotified message is VISIBLE
-/// instead of indistinguishable from a delivered one. Measured across three
-/// separate messages on 2026-09-02 (40786, 40810, 40826), Agent Mail reported
-/// `persisted=true signaled=false` every time, so that distinction is load
-/// bearing rather than theoretical.
+/// Agent Mail answers it, durably and queryably by a third party, which the
+/// heartbeat row is not.
 ///
-/// # Daemon primary, CLI as oracle
+/// CORRECTION, recorded because the original version of this comment asserted
+/// two things that are false. First, it presented `signaled: false` as a
+/// silent-delivery defect; it is DOCUMENTED debounce behaviour — only the
+/// append-only receipt ledger establishes `signaled`, so `signaled` is not a
+/// delivery oracle and `acknowledged` is. Second, it claimed the `am` CLI
+/// reads SQLite directly, making it an independent authority. It does not:
+/// the CLI calls the SAME daemon on an alternate route (`/api/` rather than
+/// `/mcp/`) with the same bearer token.
+///
+/// # Daemon only
 ///
 /// The write and the receipt read-back both go through the authenticated MCP
-/// daemon. The CLI is consulted ONLY to cross-check the cursor reading, and a
-/// daemon failure never falls back to it — a CLI fallback would silently paper
-/// over an auth failure with a direct SQLite read, which is exactly the
-/// fail-open that made `am agent start` report a running daemon as absent.
+/// daemon, and nothing here shells out. A CLI cross-check used to live here
+/// and was DELETED: with both routes reaching one daemon under one token it
+/// compared the daemon against itself through a process spawn, then reported
+/// the result in a field named `oracle_skew` that the next reader would take
+/// for independent corroboration. A decorative oracle is worse than none,
+/// because it launders self-consistency as agreement. A genuine oracle for
+/// this store would be a read-only SQL read of the store file — a different
+/// function with a different name.
 async fn notify_dispatch_result_durably(
     cx: &Cx,
     config: &Config,
@@ -1590,23 +1597,12 @@ async fn notify_dispatch_result_durably(
     .await
     .map_err(|error| format!("{} {error}", mail_failure_row(&error)))?;
 
-    // DIFFERENTIAL ORACLE, NEVER A FALLBACK: a CLI failure degrades the
-    // cross-check to `None` and leaves the daemon's reading authoritative. It
-    // is never substituted for the daemon's answer.
-    let oracle_skew = match agent_mail_native::oracle::cli_position_now(cx, &project, &recipient)
-        .await
-    {
-        Ok(cli) => Some(agent_mail_native::oracle::compare(&page, &cli).skew()),
-        Err(_) => None,
-    };
-
     Ok(DurableNotice {
         recipient: recipient.as_str().to_owned(),
         message_id: message_id.get(),
         persisted: delivery.persisted,
         signaled: recipient_row.is_some_and(|entry| entry.signaled),
         cursor: page.tail_cursor.get(),
-        oracle_skew,
     })
 }
 
@@ -1672,11 +1668,8 @@ async fn report_dispatch_result(
     // one with nothing to report.
     match notify_dispatch_result_durably(cx, config, pane, bead, result).await {
         Ok(notice) => {
-            let skew = notice
-                .oracle_skew
-                .map_or_else(|| "unavailable".to_owned(), |value| value.to_string());
             let summary = format!(
-                "recipient={} message_id={} persisted={} signaled={} cursor={} oracle_skew={skew}",
+                "recipient={} message_id={} persisted={} signaled={} cursor={}",
                 notice.recipient,
                 notice.message_id,
                 notice.persisted,

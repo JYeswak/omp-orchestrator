@@ -1,23 +1,44 @@
-//! The `am` CLI as a differential oracle for the daemon binding.
+//! ⛔ SLATED FOR DELETION. DO NOT ADOPT. NOT AN ORACLE.
 //!
-//! This is deliberately NOT a second implementation of the journey. It is one
-//! narrow read, used to cross-check the daemon binding against an independent
-//! reader.
+//! This module was built on a FALSE PREMISE and its central claim is retracted.
+//! It remains in the tree only because removing `pub mod oracle;` requires
+//! editing `lib.rs`, which is under another agent's exclusive reservation at
+//! the time of writing. The single caller has already been removed.
 //!
-//! The oracle is meaningful precisely because the two paths do not share code
-//! or transport. Measured 2026-09-02:
+//! # What this claimed
 //!
-//! - the **daemon** answers authenticated MCP JSON-RPC on `127.0.0.1:8765`;
-//! - the **CLI** carries no bearer token and reads `storage.sqlite3` directly.
+//! That the `am` CLI is an INDEPENDENT reader of the store — carrying no
+//! bearer token and reading `storage.sqlite3` directly — so agreement between
+//! it and the daemon was evidence about the STORE.
 //!
-//! So agreement between them is evidence about the STORE, not evidence that
-//! one layer is self-consistent. Their first measured agreement: recipient
-//! `GreenFrog` reported `tail_cursor` 5142 via both paths at the same instant.
+//! # Why that is false
 //!
-//! Keeping the CLI in this role rather than as a fallback matters. A fallback
-//! would silently paper over a daemon outage with a direct SQLite read, which
-//! is exactly the fail-open the CLI itself already does — and exactly how an
-//! auth failure came to be reported as absence.
+//! The CLI calls the SAME DAEMON. `check_inbox_should_use_daemon(direct,
+//! reachable) = !direct || reachable`, so without `--direct` the daemon is the
+//! unconditional path; the CLI reaches it on an ALTERNATE ROUTE (`/api/`
+//! rather than `/mcp/`) and authenticates with the same bearer token, which
+//! was present in the environment the whole time it was believed absent.
+//! Proven by pointing the CLI at a dead port: it fails CLOSED with
+//! `transport failure calling http://127.0.0.1:9999/api/`.
+//!
+//! So a comparison here puts one daemon against itself, through a process
+//! spawn, under one credential. It measures ROUTE SELF-CONSISTENCY, not
+//! corroboration. The observed `skew = 0` never had the meaning it was
+//! reported with.
+//!
+//! # Why that is worse than having nothing
+//!
+//! A decorative oracle LAUNDERS SELF-CONSISTENCY AS AGREEMENT. The name
+//! `oracle` and a field called `oracle_skew` will be read by the next agent as
+//! independent corroboration long after the exchange that debunked it has
+//! scrolled away — the same trap that made a documented debounce look like a
+//! silent delivery failure, one layer up.
+//!
+//! # What a real oracle would be
+//!
+//! A read-only SQL read of the store file itself. That is a different
+//! function with a different name, and it is what actually settled the
+//! ambiguous-agent-name question elsewhere in this effort.
 
 use crate::cursor::DeliveryCursor;
 use crate::error::MailError;
