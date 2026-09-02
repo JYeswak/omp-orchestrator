@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use subprocess_contract::{bounded_output, BoundedOutcome};
 
 const SCHEMA: &str = "silent-success-census";
 const VERSION: u32 = 1;
@@ -205,9 +206,9 @@ fn evaluate_positive_controls(candidates: &[Candidate]) -> Vec<PositiveControl> 
             file: file.to_owned(),
             line,
             predicate,
-            found: candidates
-                .iter()
-                .any(|candidate| candidate.file == file && candidate.line == line && candidate.predicate == predicate),
+            found: candidates.iter().any(|candidate| {
+                candidate.file == file && candidate.line == line && candidate.predicate == predicate
+            }),
         })
         .collect()
 }
@@ -243,17 +244,27 @@ fn relative_path(root: &Path, path: &Path) -> String {
 
 fn git_head(root: &Path) -> String {
     let root_text = root.to_string_lossy();
-    Command::new("git")
+    let mut command = Command::new("git");
+    command
         .arg("-C")
         .arg(root_text.as_ref())
-        .args(["rev-parse", "HEAD"])
-        .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .and_then(|output| String::from_utf8(output.stdout).ok())
-        .map(|head| head.trim().to_owned())
-        .filter(|head| !head.is_empty())
-        .unwrap_or_else(|| "unknown".to_owned())
+        .args(["rev-parse", "HEAD"]);
+    match bounded_output(&mut command, std::time::Duration::from_secs(5)) {
+        BoundedOutcome::Completed(output) if output.status.success() => String::from_utf8(output.stdout)
+            .ok()
+            .map(|head| head.trim().to_owned())
+            .filter(|head| !head.is_empty())
+            .unwrap_or_else(|| "unknown".to_owned()),
+        BoundedOutcome::Completed(_) => "unknown".to_owned(),
+        BoundedOutcome::TimedOut => {
+            eprintln!("silent-success-census: git head timed out before its deadline");
+            "unknown".to_owned()
+        }
+        BoundedOutcome::Unspawned(error) => {
+            eprintln!("silent-success-census: git head could not spawn: {error}");
+            "unknown".to_owned()
+        }
+    }
 }
 
 fn scan_source(
