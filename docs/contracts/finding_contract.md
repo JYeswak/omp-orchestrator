@@ -9,10 +9,10 @@ Defines the obligation lifecycle for `crates/finding`: a named gap becomes `File
 (`Finding`, `SpooledFinding`, `Filed`, `Waived`, `FindingError`), the spool-then-publish ordering
 that makes a cancelled file a DEFERRED finding rather than a lost one, and five laws —
 `FC-L1` filed-or-waived, `FC-L2` `Filed` names a bead id, `FC-L3` the spool row outlives the
-observer, `FC-L4` a finding reporting an absence names its replacement, `FC-L5` a waiver carries an
-expiry. **Three of the five are stated here and NOT enforced by the code**, each named with the
-bead that will change it, because a contract that claims a guarantee its type does not carry is
-worse than no contract. Documents what IS at the commit below; changes no crate source.
+observer, FC-L4 a finding reporting an absence names its replacement, FC-L5 a waiver carries an
+expiry. Three of the five laws remain stated here and NOT enforced by the code, each named with the
+bead that will change it. This contract records the production wiring in the finding and supervisor
+crates; it is no longer a source-free description.
 
 ## Contract Artifacts
 
@@ -21,46 +21,41 @@ worse than no contract. Documents what IS at the commit below; changes no crate 
    concern is a **spool row on disk** (`finding-<fnv1a64>.pending`, write-then-rename, retired to
    `.filed-<id>`), and its format is asserted by the suite rather than duplicated in a fixture.
 2. **Runner:** `cargo test -p finding --test finding_contract`
-3. **Invariant suite:** `crates/finding/tests/finding_contract.rs` — 12 legs, and it is **the
-   first caller of `Finding::file` in the workspace**. Legs are pinned defects that go RED when a
-   law becomes enforced, forcing this document to be updated in the same commit. **One has now
-   fired:** `l1_must_use_is_only_a_warning_and_does_not_survive_option` failed with
-   `unused_must_use is now denied in 1 manifest(s)` and was REPLACED by
-   `l1_unused_must_use_is_denied_and_the_producer_does_not_return_option`, which asserts the same
-   two facts in the direction that now holds. A pin left in place after its defect is fixed becomes
-   a test that fails forever and gets `#[ignore]`d — which is how a suite goes vacuously green.
-   Two pinned defects remain (`FC-L2`, `FC-L5`).
+3. **Invariant suite:** crates/finding/tests/finding_contract.rs — 12 legs exercising file() with
+   a test Publisher. The production route is covered separately by the supervisor binary test and
+   the real br Publisher integration test.
+4. **Production route:** the supervisor calls finding_dispatch::finding_for at the decision
+   threshold, files the returned Finding through BrPublisher, and invokes Finding::recover_pending
+   at the start of every cycle.
 
 > A contract naming no invariant suite is a DESCRIPTION. Item 3 is what makes the pinned defects
 > load-bearing instead of a to-do list.
 
 ## 1. The measured state of the crate
 
-Measured 2026-09-01 with `cargo metadata` (authoritative) and literal greps:
+Measured 2026-09-02 after ca9q wiring with cargo metadata and literal greps:
 
 | question | answer |
 |---|---|
-| `Finding::file` call sites, whole workspace including tests | **0** |
-| `Publisher` implementors | **0** — the trait had none, so `file()` was unreachable |
-| `Finding::waive` call sites outside the crate's own tests | **0** |
-| `pending()` production callers (the recovery sweep) | **0** |
-| crates depending on `finding` | **2** — `ack-spine`, `finding-dispatch` |
-| …of those, crates that IMPORT it | **1** — `finding-dispatch/src/lib.rs:10` |
-| `finding-dispatch` dependents | **0** |
-| callers of `finding_dispatch::finding_for` | **0** |
+| Finding::file call sites, whole workspace including tests | 7 total; 1 production caller outside crates/finding |
+| Publisher implementors | 2 — BrPublisher in production and TestPublisher in the contract suite |
+| Finding::waive call sites outside the crate's own tests | 0 |
+| pending recovery schedule | 1 — the supervisor calls recover_pending at the start of every cycle |
+| crates depending on finding | 2 — finding-dispatch, omp-orchestrator |
+| of those, crates that import it | 2 — both production crates use the API |
+| finding-dispatch dependents | 1 — omp-orchestrator |
+| callers of finding_dispatch::finding_for | 1 — the supervisor decision loop |
 
-**A correction to the standing account.** The repo says "ZERO production callers". That is wrong in
-one direction and understated in another: there ARE two dependency edges, and the law-bearing
-method had **zero exercises of any kind, including tests**, until this suite landed.
-`ack-spine/Cargo.toml:22` declares `finding = { path = "../finding" }` and never imports it — the
-edge that made the crate look wired is an unused dep. Owned by
-`omp-orchestrator-finding-crate-unrouted-ca9q`.
+The prior zero baseline is retired. The supervisor now owns one end-to-end route: it converts a
+recurring decision with finding_dispatch::finding_for, files the owed Finding through BrPublisher,
+and runs the pending recovery sweep on every cycle. The unused ack-spine edge was removed in
+separate commit 131d347.
 
 ```bash
 # re-derive; do not cite this table without running it
-cargo metadata --no-deps --format-version 1 | python3 -c "import json,sys; d=json.load(sys.stdin); print([p['name'] for p in d['packages'] for x in p['dependencies'] if x['name']=='finding'])"
-git grep -n --no-index -E '\.file\(|\.waive\(' -- 'crates/*/src/*'   # 0 outside crates/finding
-git grep -n --no-index -E 'impl .*Publisher' -- 'crates/*/src/*'     # 0
+cargo metadata --no-deps --format-version 1 | jq -r '[.packages[] as $p | $p.dependencies[] | select(.name=="finding") | $p.name] | unique | join(",")'
+git grep -c --no-index -F '.file(' -- 'crates/*/src/*'
+git grep -n --no-index -E '^impl Publisher for' -- 'crates/*/src/*' 'crates/*/tests/*'
 ```
 
 **INSTRUMENT NOTE.** The first pass at this table used `git grep -E 'finding\s*=\s*\{\s*path'` and

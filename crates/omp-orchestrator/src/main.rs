@@ -18,6 +18,8 @@ use asupersync::process::{Command, Output};
 use asupersync::runtime::RuntimeBuilder;
 use asupersync::time::{sleep, timeout};
 use asupersync::Cx;
+use finding::{BrPublisher, FindingError};
+use finding_dispatch::{MaybeFinding, NotYet};
 use dispatch_claim_fence::{authorize, parse_br_show_json, BeadSnapshot, DispatchIntent};
 use dispatch_silence_watch::SilenceVerdict;
 use ntm_fleet_monitor::parse_activity_json;
@@ -84,6 +86,7 @@ struct Config {
     heartbeat_ledger: PathBuf,
     tick_monitor_state: PathBuf,
     pending_dispatch: PathBuf,
+    finding_spool: PathBuf,
     receiver_agent: String,
     /// This supervisor's own Agent Mail identity, for a signed FROM on the
     /// durable dispatch-result notification.
@@ -280,6 +283,9 @@ impl Config {
             .unwrap_or_else(|| {
                 heartbeat_ledger.with_file_name("omp-orchestrator.pending-dispatch")
             });
+        let finding_spool = env::var_os("OMP_FINDING_SPOOL")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| heartbeat_ledger.with_file_name("omp-orchestrator.findings"));
         Ok(Self {
             repo,
             session,
@@ -296,6 +302,7 @@ impl Config {
             heartbeat_ledger,
             tick_monitor_state,
             pending_dispatch,
+            finding_spool,
             receiver_agent,
             mail_sender: MAIL_IDENTITY_VARS
                 .iter()
@@ -2461,6 +2468,7 @@ fn queue_empty_detail(free_capacity_count: usize) -> String {
 
 async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     write_heartbeat(config, tick, "CYCLE_STARTED", "phase=observe")?;
+    recover_pending_findings(cx, config, tick).await?;
     // MOVED HERE AFTER RUNNING IT, and the move is the finding. The first version
     // sat after `decide()`, which reads as "every cycle" and is not: MEASURED
     // 2026-09-02 against the current tree, the tick aborts at `reap-finished-panes`
@@ -2733,6 +2741,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         &observation.queue,
     );
     let decision = decide(&observation, &authorization);
+    file_supervisor_finding(cx, config, tick, &decision).await?;
 
     match decision {
         SupervisorDecision::AwaitingHuman { panes } => {
@@ -2996,6 +3005,114 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     Ok(())
 }
 
+fn finding_key(decision: &SupervisorDecision) -> Option<&'static str> {
+    match decision {
+        SupervisorDecision::AwaitingHuman { .. } => Some("awaiting-human"),
+        SupervisorDecision::EscalateIdleIncident { .. } => Some("idle-incident"),
+        SupervisorDecision::QueueEmptyNeedsJosh { .. } => Some("queue-empty"),
+        SupervisorDecision::MonitorBlind { .. } => Some("monitor-blind"),
+        SupervisorDecision::WorkspaceUnloaded { .. } => Some("workspace-unloaded"),
+        SupervisorDecision::GateUnwired { .. } => Some("gate-unwired"),
+        SupervisorDecision::Dispatch { .. }
+        | SupervisorDecision::QueueUnreadable { .. }
+        | SupervisorDecision::AuthorizedIdle { .. }
+        | SupervisorDecision::SupervisedWorking { .. } => None,
+    }
+}
+
+fn prior_finding_observations(config: &Config, key: &str) -> u32 {
+    let Ok(ledger) = fs::read_to_string(&config.heartbeat_ledger) else {
+        return 0;
+    };
+    ledger
+        .lines()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .filter(|row| row.get("status").and_then(Value::as_str) == Some("FINDING_OBSERVED"))
+        .filter(|row| {
+            row.get("detail")
+                .and_then(Value::as_str)
+                .is_some_and(|detail| {
+                    detail
+                        .split_whitespace()
+                        .any(|field| field.strip_prefix("key=") == Some(key))
+                })
+        })
+        .count()
+        .try_into()
+        .unwrap_or(u32::MAX)
+}
+
+async fn recover_pending_findings(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
+    fs::create_dir_all(&config.finding_spool).map_err(|error| {
+        format!(
+            "FINDING_RECOVERY_REFUSED spool={} error={error}",
+            config.finding_spool.display()
+        )
+    })?;
+    let publisher = BrPublisher::new(config.br.clone(), config.repo.clone());
+    match finding::Finding::recover_pending(cx, &config.finding_spool, &publisher).await {
+        Ok(filed) => {
+            let detail = format!("pending={} filed={filed}", filed);
+            write_heartbeat(config, tick, "FINDING_RECOVERY", &detail)?;
+            println!("FINDING_RECOVERY tick={tick} {detail}");
+            Ok(())
+        }
+        Err(FindingError::Cancelled { spool_path }) => {
+            let detail = format!("pending_path={} reason=cancelled", spool_path.display());
+            write_heartbeat(config, tick, "FINDING_RECOVERY_DEFERRED", &detail)?;
+            println!("FINDING_RECOVERY_DEFERRED tick={tick} {detail}");
+            Ok(())
+        }
+        Err(error) => {
+            let detail = format!("error={error}");
+            write_heartbeat(config, tick, "FINDING_RECOVERY_DEGRADED", &detail)?;
+            Err(format!("FINDING_RECOVERY_DEGRADED {detail}"))
+        }
+    }
+}
+
+async fn file_supervisor_finding(
+    cx: &Cx,
+    config: &Config,
+    tick: u64,
+    decision: &SupervisorDecision,
+) -> Result<(), String> {
+    let Some(key) = finding_key(decision) else {
+        return Ok(());
+    };
+    let seen = prior_finding_observations(config, key).saturating_add(1);
+    let observed = format!("key={key} seen={seen} decision={decision:?}");
+    write_heartbeat(config, tick, "FINDING_OBSERVED", &observed)?;
+    match finding_dispatch::finding_for(decision, seen) {
+        MaybeFinding::NotYet(NotYet::BelowThreshold { .. })
+        | MaybeFinding::NotYet(NotYet::AlreadyEmitted { .. })
+        | MaybeFinding::NotYet(NotYet::NotAFindableDecision) => Ok(()),
+        MaybeFinding::Owed(finding) => {
+            let publisher = BrPublisher::new(config.br.clone(), config.repo.clone());
+            match finding.file(cx, &config.finding_spool, &publisher).await {
+                Ok(filed) => {
+                    let detail = format!("key={key} seen={seen} bead_id={}", filed.id());
+                    write_heartbeat(config, tick, "FINDING_FILED", &detail)?;
+                    println!("FINDING_FILED tick={tick} {detail}");
+                    Ok(())
+                }
+                Err(FindingError::Cancelled { spool_path }) => {
+                    let detail =
+                        format!("key={key} seen={seen} spool_path={}", spool_path.display());
+                    write_heartbeat(config, tick, "FINDING_DEFERRED", &detail)?;
+                    println!("FINDING_DEFERRED tick={tick} {detail}");
+                    Ok(())
+                }
+                Err(error) => {
+                    let detail = format!("key={key} seen={seen} error={error}");
+                    write_heartbeat(config, tick, "FINDING_PUBLISH_FAILED", &detail)?;
+                    Err(format!("FINDING_PUBLISH_FAILED {detail}"))
+                }
+            }
+        }
+    }
+}
+
 async fn run_supervisor(cx: &Cx, config: Config) -> Result<(), String> {
     let mut tick = 0u64;
     loop {
@@ -3084,6 +3201,7 @@ mod tests {
             heartbeat_ledger,
             tick_monitor_state: root.join("state"),
             pending_dispatch: root.join("pending"),
+            finding_spool: root.join("findings"),
             receiver_agent: "BlueLantern".to_owned(),
             // EMPTY ON PURPOSE. A populated identity here would make every
             // test that reaches `report_dispatch_result` send REAL mail to the
@@ -4342,5 +4460,44 @@ exit 2
             !ledger.contains("DISPATCH_RESULT_MAIL_DEGRADED"),
             "the mail leg degraded when it should have succeeded: {ledger}"
         );
+    }
+
+    #[test]
+    fn supervisor_files_recurring_decision_through_finding_kernel() {
+        let temp = tempfile::tempdir().expect("supervisor finding fixture");
+        let heartbeat = temp.path().join("heartbeat.jsonl");
+        let config = fixture_config(heartbeat.clone());
+        let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
+        runtime.block_on(async {
+            let cx = Cx::current().expect("runtime context");
+            let mut init = Command::new("br");
+            init.args([
+                "init",
+                "--prefix",
+                "finding-supervisor",
+                "--no-daemon",
+                "--no-auto-flush",
+            ])
+            .current_dir(&config.repo);
+            let initialized = run_output(&cx, init).await.expect("br init");
+            assert!(
+                initialized.status.success(),
+                "br init failed: {initialized:?}"
+            );
+
+            let decision = SupervisorDecision::MonitorBlind {
+                detail: "monitor fixture unavailable".to_owned(),
+            };
+            for tick in 1..=3 {
+                file_supervisor_finding(&cx, &config, tick, &decision)
+                    .await
+                    .expect("supervisor finding route");
+            }
+
+            let ledger = std::fs::read_to_string(&heartbeat).expect("finding heartbeat ledger");
+            assert!(ledger.contains("FINDING_OBSERVED"));
+            assert!(ledger.contains("FINDING_FILED"));
+            assert!(ledger.contains("bead_id=finding-supervisor-"));
+        });
     }
 }

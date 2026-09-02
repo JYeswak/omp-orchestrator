@@ -1,4 +1,4 @@
-use finding_dispatch::{finding_for, MaybeFinding, NotYet, FINDING_THRESHOLD};
+use finding_dispatch::{finding_for, MaybeFinding, NotYet, SupervisorDecision, FINDING_THRESHOLD};
 
 /// UPDATED by `omp-orchestrator-finding-l1-bypassable-py3`. `finding_for` returned
 /// `Option<Finding>`, and `#[must_use]` does not propagate through `Option` -- so the
@@ -13,10 +13,12 @@ use finding_dispatch::{finding_for, MaybeFinding, NotYet, FINDING_THRESHOLD};
 fn expect_not_yet(outcome: MaybeFinding, expected: NotYet) {
     match outcome.expect_nothing_owed() {
         Ok(reason) => assert_eq!(reason, expected, "wrong NotYet reason"),
-        Err(finding) => panic!("expected {expected}, got an owed finding: {}", finding.body()),
+        Err(finding) => panic!(
+            "expected {expected}, got an owed finding: {}",
+            finding.body()
+        ),
     }
 }
-use omp_orchestrator::SupervisorDecision;
 
 fn recurring_decisions() -> [SupervisorDecision; 4] {
     [
@@ -39,8 +41,20 @@ fn recurring_decisions() -> [SupervisorDecision; 4] {
 #[test]
 fn first_occurrence_is_log_only_and_nth_occurrence_files() {
     for decision in recurring_decisions() {
-        expect_not_yet(finding_for(&decision, 1), NotYet::BelowThreshold { seen: 1, threshold: FINDING_THRESHOLD });
-        expect_not_yet(finding_for(&decision, 2), NotYet::BelowThreshold { seen: 2, threshold: FINDING_THRESHOLD });
+        expect_not_yet(
+            finding_for(&decision, 1),
+            NotYet::BelowThreshold {
+                seen: 1,
+                threshold: FINDING_THRESHOLD,
+            },
+        );
+        expect_not_yet(
+            finding_for(&decision, 2),
+            NotYet::BelowThreshold {
+                seen: 2,
+                threshold: FINDING_THRESHOLD,
+            },
+        );
         let finding = finding_for(&decision, FINDING_THRESHOLD)
             .into_owed()
             .expect("third occurrence files");
@@ -78,8 +92,14 @@ fn supervised_working_never_files_a_finding() {
     // makes this leg able to detect a mis-ordered guard.
     for count in [1, FINDING_THRESHOLD, 100] {
         let expected = match count {
-            n if n < FINDING_THRESHOLD => NotYet::BelowThreshold { seen: n, threshold: FINDING_THRESHOLD },
-            n if n > FINDING_THRESHOLD => NotYet::AlreadyEmitted { seen: n, threshold: FINDING_THRESHOLD },
+            n if n < FINDING_THRESHOLD => NotYet::BelowThreshold {
+                seen: n,
+                threshold: FINDING_THRESHOLD,
+            },
+            n if n > FINDING_THRESHOLD => NotYet::AlreadyEmitted {
+                seen: n,
+                threshold: FINDING_THRESHOLD,
+            },
             _ => NotYet::NotAFindableDecision,
         };
         expect_not_yet(finding_for(&decision, count), expected);
@@ -117,6 +137,12 @@ fn mutation_leg_threshold_change_would_fail_boundary() {
         free_capacity_count: 1,
     };
     assert_eq!(FINDING_THRESHOLD, 3);
-    expect_not_yet(finding_for(&decision, 2), NotYet::BelowThreshold { seen: 2, threshold: FINDING_THRESHOLD });
+    expect_not_yet(
+        finding_for(&decision, 2),
+        NotYet::BelowThreshold {
+            seen: 2,
+            threshold: FINDING_THRESHOLD,
+        },
+    );
     assert!(finding_for(&decision, 3).is_owed());
 }

@@ -2,13 +2,11 @@
 
 //! INVARIANT SUITE for `docs/contracts/finding_contract.md` — laws `FC-L1` … `FC-L5`.
 //!
-//! # This suite is the FIRST caller of `Finding::file` in the workspace
+//! # This suite exercises Finding::file with a test Publisher
 //!
-//! Measured 2026-09-01: `Finding::file` had **zero call sites anywhere**, including tests.
-//! The `Publisher` trait had **zero implementors**, so the entire spool-then-publish path —
-//! the crate's only law-bearing method, its cancellation point, `mark_published`, and the
-//! `pending` sweep's role in recovery — was unreachable and unexercised. A method that has
-//! never run is not a mechanism; it is a plan.
+//! The production caller is the supervisor route, which uses BrPublisher and is tested in
+//! the supervisor binary and br-publisher integration tests below the crate boundary.
+//! The contract tests continue to prove the spool ordering, cancellation, and recovery laws.
 //!
 //! # Three legs assert a law is NOT enforced, on purpose
 //!

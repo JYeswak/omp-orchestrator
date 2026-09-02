@@ -9,7 +9,36 @@
 
 use finding::Finding;
 use std::fmt;
-use omp_orchestrator::SupervisorDecision;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SupervisorDecision {
+    /// One or more gates lack a reachable trigger on this machine.
+    GateUnwired { unwired: Vec<String> },
+    /// A confirmed-idle pane and ready work coexist.
+    Dispatch { pane: String, bead_hint: String },
+    /// Free capacity plus ready work without authorization.
+    EscalateIdleIncident {
+        dispatchable_count: usize,
+        ready_count: usize,
+    },
+    /// The monitor could not observe.
+    MonitorBlind { detail: String },
+    /// The queue could not be read.
+    QueueUnreadable { detail: String },
+    /// One or more panes are alive and blocked on a human answer.
+    AwaitingHuman { panes: String },
+    /// The workspace-load gate refused.
+    WorkspaceUnloaded { detail: String },
+    /// Idleness has an unexpired authorization token.
+    AuthorizedIdle { pane_count: usize, expires_at: u64 },
+    /// Queue empty and free capacity exist without authorization.
+    QueueEmptyNeedsJosh { free_capacity_count: usize },
+    /// Every pane is genuinely working.
+    SupervisedWorking {
+        working_count: usize,
+        ready_count: usize,
+    },
+}
 
 /// The loop-enforcement threshold: two observations establish recurrence; the third
 /// creates durable work. A caller should persist its recurrence counter between ticks.

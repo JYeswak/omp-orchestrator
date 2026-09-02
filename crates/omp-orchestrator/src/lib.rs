@@ -1181,56 +1181,8 @@ pub fn crate_ships_a_bin(repo_root: &Path, crate_name: &str) -> bool {
         .unwrap_or(false)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SupervisorDecision {
-    /// One or more gates lack a reachable trigger on this machine. The
-    /// supervisor structurally refuses to report healthy: no branch may
-    /// return SupervisedWorking or AuthorizedIdle while any gate is
-    /// unwired. UNREACHABLE-AROUND: no code path may dispatch while a
-    /// gate that defines the repo's guarantees cannot fire.
-    GateUnwired { unwired: Vec<String> },
-    /// A CONFIRMED-idle pane and ready work coexist -> send.
-    Dispatch { pane: String, bead_hint: String },
-    /// Free capacity + ready work + UNAUTHORIZED -> escalate (an incident).
-    EscalateIdleIncident {
-        dispatchable_count: usize,
-        ready_count: usize,
-    },
-    /// The monitor could not observe — fail closed.
-    MonitorBlind { detail: String },
-    /// The queue could not be read — fail closed.
-    QueueUnreadable { detail: String },
-    /// One or more panes are ALIVE and blocked on a HUMAN answer.
-    ///
-    /// Distinct from every other variant because the loop cannot clear it by working:
-    /// no dispatch, no retry and no timeout resolves an unanswered approval dialog.
-    /// Measured 2026-08-31: 36 minutes on an install approval, invisible because the
-    /// pane's timer advances while it waits, so every classifier read it as healthy.
-    AwaitingHuman { panes: String },
-    /// The workspace-load gate refused — do not dispatch into a broken repo.
-    WorkspaceUnloaded { detail: String },
-    /// Idleness is covered by an unexpired, BOUND authorization token. Carries
-    /// the expiry so the decision names its own deadline.
-    AuthorizedIdle { pane_count: usize, expires_at: u64 },
-    /// Queue empty AND free capacity exists AND no authorization.
-    ///
-    /// NOT AuthorizedIdle: nothing authorized this. NOT an EscalateIdleIncident
-    /// either — there is no work to dispatch, so no worker is being starved. An
-    /// empty queue with idle capacity is a decision only Josh can make, so
-    /// queue-empty must remain SUPERVISED rather than silently tolerated.
-    QueueEmptyNeedsJosh { free_capacity_count: usize },
-    /// Every pane is genuinely working (`LIVE`). Healthy — and still REPORTED,
-    /// because a supervisor that prints nothing while busy is indistinguishable
-    /// from one that has died.
-    ///
-    /// This is deliberately NOT AuthorizedIdle: nothing is idle. Reporting a
-    /// healthy busy fleet as an incident trains the operator to ignore the alarm,
-    /// which is how a real one gets missed.
-    SupervisedWorking {
-        working_count: usize,
-        ready_count: usize,
-    },
-}
+pub use finding_dispatch::SupervisorDecision;
+
 
 /// The pure deciding function: given an observation and the authorization state,
 /// produce the supervisor's decision. This is where the three deciding legs are

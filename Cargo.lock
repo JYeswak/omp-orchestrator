@@ -7,7 +7,6 @@ name = "ack-spine"
 version = "0.1.0"
 dependencies = [
  "asupersync",
- "finding",
  "receiver-receipt",
  "scratch-home",
  "serde",
@@ -32,6 +31,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -163,6 +163,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "asupersync-conformance"
+version = "0.1.0"
+dependencies = [
+ "sha2 0.11.0",
+ "undrained-pipe-lint",
+]
+
+[[package]]
 name = "asupersync-macros"
 version = "0.4.9"
 source = "git+https://github.com/Dicklesworthstone/asupersync?rev=fa3c01aec#fa3c01aec6c77c6652c7a754e8e009287daa5323"
@@ -189,6 +197,17 @@ name = "base64ct"
 version = "1.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
+
+[[package]]
+name = "bead-availability"
+version = "0.1.0"
+dependencies = [
+ "asupersync",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "subprocess-contract",
+]
 
 [[package]]
 name = "bincode-next"
@@ -255,6 +274,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -409,6 +429,9 @@ dependencies = [
 [[package]]
 name = "crate-soundness-verify"
 version = "0.1.0"
+dependencies = [
+ "subprocess-contract",
+]
 
 [[package]]
 name = "crc32fast"
@@ -569,6 +592,9 @@ dependencies = [
 [[package]]
 name = "dispatcher-deadman"
 version = "0.1.0"
+dependencies = [
+ "subprocess-contract",
+]
 
 [[package]]
 name = "ed25519"
@@ -615,6 +641,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "extraction-roster"
+version = "0.1.0"
+dependencies = [
+ "asupersync",
+ "serde",
+ "serde_json",
+ "subprocess-contract",
+]
+
+[[package]]
 name = "fast-dispatch"
 version = "0.1.0"
 dependencies = [
@@ -622,6 +658,7 @@ dependencies = [
  "loop-switch",
  "serde",
  "serde_json",
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -656,7 +693,6 @@ name = "finding-dispatch"
 version = "0.1.0"
 dependencies = [
  "finding",
- "omp-orchestrator",
 ]
 
 [[package]]
@@ -683,6 +719,7 @@ name = "fleet-reconcile"
 version = "0.1.0"
 dependencies = [
  "serde_json",
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -691,6 +728,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "serde_json",
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -911,6 +949,7 @@ name = "installer"
 version = "0.1.0"
 dependencies = [
  "serde_json",
+ "staged-build-gate",
  "subprocess-contract",
 ]
 
@@ -997,6 +1036,7 @@ dependencies = [
  "loop-switch",
  "serde",
  "serde_json",
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -1071,10 +1111,14 @@ dependencies = [
 name = "no-shell-gate"
 version = "0.1.0"
 dependencies = [
+ "asupersync-conformance",
  "convergence-stamp",
+ "orchestration-tick-gate",
  "path-literal-guard",
  "pre-delete-citation-check",
+ "preregistration-gate",
  "serde_json",
+ "staged-build-gate",
  "state-wildcard-lint",
  "subprocess-contract",
  "undrained-pipe-lint",
@@ -1168,6 +1212,7 @@ name = "omp-idle-dispatch"
 version = "0.1.0"
 dependencies = [
  "serde_json",
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -1184,12 +1229,16 @@ dependencies = [
 name = "omp-orchestrator"
 version = "0.1.0"
 dependencies = [
+ "ack-spine",
  "ack-stage",
  "agent-mail-native",
  "asupersync",
  "composer-typed",
  "dispatch-claim-fence",
  "dispatch-silence-watch",
+ "finding",
+ "finding-dispatch",
+ "ntm-fleet-monitor",
  "omp-rpc-session",
  "receiver-receipt",
  "serde_json",
@@ -1203,6 +1252,13 @@ version = "0.1.0"
 dependencies = [
  "asupersync",
  "serde_json",
+]
+
+[[package]]
+name = "omp-surface-consumption"
+version = "0.1.0"
+dependencies = [
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -1222,12 +1278,23 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 [[package]]
 name = "oracle-compare"
 version = "0.1.0"
+dependencies = [
+ "subprocess-contract",
+]
 
 [[package]]
 name = "oracle-pane-state-differential"
 version = "0.1.0"
 dependencies = [
  "oracle-compare",
+ "serde_json",
+ "subprocess-contract",
+]
+
+[[package]]
+name = "orchestration-tick-gate"
+version = "0.1.0"
+dependencies = [
  "serde_json",
 ]
 
@@ -1247,6 +1314,8 @@ dependencies = [
  "regex",
  "serde_json",
  "sha2 0.11.0",
+ "subprocess-contract",
+ "tick-monitor",
 ]
 
 [[package]]
@@ -1256,6 +1325,7 @@ dependencies = [
  "oracle-compare",
  "regex",
  "serde_json",
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -1266,6 +1336,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -1355,6 +1426,10 @@ dependencies = [
 [[package]]
 name = "plan-assemble"
 version = "0.1.0"
+dependencies = [
+ "asupersync",
+ "preregistration-gate",
+]
 
 [[package]]
 name = "polling"
@@ -1415,6 +1490,16 @@ name = "pre-delete-citation-check"
 version = "0.1.0"
 dependencies = [
  "serde_json",
+]
+
+[[package]]
+name = "preregistration-gate"
+version = "0.1.0"
+dependencies = [
+ "asupersync",
+ "serde",
+ "serde_json",
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -1523,6 +1608,7 @@ dependencies = [
 name = "receiver-receipt"
 version = "0.1.0"
 dependencies = [
+ "pane-truth",
  "tick-monitor",
 ]
 
@@ -1542,6 +1628,7 @@ dependencies = [
  "fleet-reconcile",
  "oracle-compare",
  "serde_json",
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -1783,6 +1870,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -1815,6 +1903,13 @@ checksum = "d91ed6c858b01f942cd56b37a94b3e0a1798290327d1236e4d9cf4eaca44d29d"
 dependencies = [
  "base64ct",
  "der",
+]
+
+[[package]]
+name = "staged-build-gate"
+version = "0.1.0"
+dependencies = [
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -1911,6 +2006,7 @@ version = "0.1.0"
 dependencies = [
  "oracle-compare",
  "serde_json",
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -1983,6 +2079,7 @@ dependencies = [
  "chrono",
  "serde",
  "serde_json",
+ "subprocess-contract",
 ]
 
 [[package]]

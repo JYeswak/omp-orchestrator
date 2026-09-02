@@ -26,6 +26,8 @@ asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", rev = "f
 dispatch-claim-fence = { path = "../dispatch-claim-fence" }
 dispatch-silence-watch = { path = "../dispatch-silence-watch" }
 composer-typed = { path = "../composer-typed" }
+finding = { path = "../finding" }
+finding-dispatch = { path = "../finding-dispatch" }
 omp-rpc-session = { path = "../omp-rpc-session" }
 subprocess-contract = { path = "../subprocess-contract" }
 receiver-receipt = { path = "../receiver-receipt" }

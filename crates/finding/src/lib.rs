@@ -56,6 +56,8 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 use asupersync::Cx;
+use asupersync::process::Command;
+use subprocess_contract::run_output;
 
 /// Why a finding could not be constructed or filed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -162,6 +164,11 @@ impl Finding {
         self.priority
     }
 
+    /// The bead title derived from the WHAT field.
+    pub fn title(&self) -> &str {
+        &self.what
+    }
+
     /// STEP 1 of filing, and it is deliberately separable: a durable record
     /// written BEFORE any cancellable effect. Cancellation after this point
     /// leaves recoverable work.
@@ -222,6 +229,82 @@ impl Finding {
             id,
             body: self.body(),
         })
+    }
+
+    fn from_spooled(path: &Path) -> Result<Self, FindingError> {
+        let payload = std::fs::read_to_string(path)
+            .map_err(|error| FindingError::SpoolUnwritable(error.to_string()))?;
+        let (header, body) = payload.split_once("\n---\n").ok_or_else(|| {
+            FindingError::SpoolUnwritable(format!(
+                "malformed pending finding {}: missing header separator",
+                path.display()
+            ))
+        })?;
+        let mut header_lines = header.lines();
+        let priority = header_lines
+            .next()
+            .and_then(|line| line.strip_prefix("priority="))
+            .and_then(|value| value.parse::<u8>().ok())
+            .ok_or_else(|| {
+                FindingError::SpoolUnwritable(format!(
+                    "malformed pending finding {}: invalid priority",
+                    path.display()
+                ))
+            })?;
+        let labels = header_lines
+            .next()
+            .and_then(|line| line.strip_prefix("labels="))
+            .map(|value| value.split(',').map(ToOwned::to_owned).collect())
+            .ok_or_else(|| {
+                FindingError::SpoolUnwritable(format!(
+                    "malformed pending finding {}: missing labels",
+                    path.display()
+                ))
+            })?;
+        let body = body.strip_suffix('\n').unwrap_or(body);
+        let body = body.strip_prefix("WHAT: ").ok_or_else(|| {
+            FindingError::SpoolUnwritable(format!(
+                "malformed pending finding {}: missing WHAT",
+                path.display()
+            ))
+        })?;
+        let (what, body) = body.split_once("\nWHY: ").ok_or_else(|| {
+            FindingError::SpoolUnwritable(format!(
+                "malformed pending finding {}: missing WHY",
+                path.display()
+            ))
+        })?;
+        let (why, acceptance) = body.split_once("\nACCEPTANCE: ").ok_or_else(|| {
+            FindingError::SpoolUnwritable(format!(
+                "malformed pending finding {}: missing ACCEPTANCE",
+                path.display()
+            ))
+        })?;
+        Self::new(what, why, acceptance, labels, priority)
+            .map_err(|error| FindingError::SpoolUnwritable(error.to_string()))
+    }
+
+    /// Publish every durable pending row, preserving rows that fail or are cancelled.
+    ///
+    /// This is the scheduled recovery operation for the spool guarantee: the caller
+    /// invokes it once per supervisor cycle, and file() retires each row only after
+    /// the publisher confirms the bead id.
+    pub async fn recover_pending(
+        cx: &Cx,
+        spool_dir: &Path,
+        publisher: &impl Publisher,
+    ) -> Result<usize, FindingError> {
+        let paths = pending(spool_dir)?;
+        let mut recovered = 0;
+        for path in paths {
+            if cx.checkpoint().is_err() {
+                return Err(FindingError::Cancelled { spool_path: path });
+            }
+            let finding = Self::from_spooled(&path)?;
+            finding.file(cx, spool_dir, publisher).await?;
+            recovered += 1;
+        }
+        Ok(recovered)
     }
 }
 
@@ -306,6 +389,62 @@ pub trait Publisher {
     ) -> impl Future<Output = Result<String, FindingError>>;
 }
 
+/// Production publisher backed by the repository's br create command.
+///
+/// The command runs through subprocess-contract::run_output, which owns the
+/// process group, drains both pipes, and maps cancellation to a restrictive
+/// error instead of inventing a bead id.
+#[derive(Debug, Clone)]
+pub struct BrPublisher {
+    program: PathBuf,
+    repo: PathBuf,
+}
+
+impl BrPublisher {
+    pub fn new(program: impl Into<PathBuf>, repo: impl Into<PathBuf>) -> Self {
+        Self {
+            program: program.into(),
+            repo: repo.into(),
+        }
+    }
+}
+
+impl Publisher for BrPublisher {
+    async fn publish(&self, cx: &Cx, finding: &Finding) -> Result<String, FindingError> {
+        let priority = finding.priority().to_string();
+        let labels = finding.labels().join(",");
+        let mut command = Command::new(self.program.clone());
+        command
+            .args(["create", "--title"])
+            .arg(finding.title())
+            .args(["--description"])
+            .arg(finding.body())
+            .args(["--priority"])
+            .arg(priority)
+            .args(["--labels"])
+            .arg(labels)
+            .args(["--silent", "--no-daemon", "--no-color"])
+            .current_dir(self.repo.clone());
+        let output = run_output(cx, command)
+            .await
+            .map_err(|error| FindingError::PublishFailed(error.to_string()))?;
+        if !output.status.success() {
+            return Err(FindingError::PublishFailed(format!(
+                "br create exited {:?}: {}",
+                output.status.code(),
+                String::from_utf8_lossy(&output.stderr).trim()
+            )));
+        }
+        let id = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        if id.is_empty() {
+            return Err(FindingError::PublishFailed(
+                "br create returned success without an id".to_owned(),
+            ));
+        }
+        Ok(id)
+    }
+}
+
 fn stable_stem(text: &str) -> String {
     // Small, dependency-free, and only needs to be stable + collision-resistant
     // enough to make re-spooling idempotent.
@@ -319,7 +458,13 @@ fn stable_stem(text: &str) -> String {
 
 fn sanitize(id: &str) -> String {
     id.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 
@@ -392,7 +537,10 @@ mod tests {
             .waive("superseded by cp-g6sy8; same class, already owned")
             .expect("reasoned waiver");
         assert!(waived.reason().contains("superseded"));
-        assert!(waived.body().contains("WHAT:"), "the body survives the waiver");
+        assert!(
+            waived.body().contains("WHAT:"),
+            "the body survives the waiver"
+        );
     }
 
     #[test]
@@ -403,7 +551,11 @@ mod tests {
         let spooled = ok_finding().spool(&d).expect("spool");
         assert!(spooled.path().exists(), "the durable row must exist");
         let recoverable = pending(&d).expect("sweep");
-        assert_eq!(recoverable.len(), 1, "an unpublished finding must be sweepable");
+        assert_eq!(
+            recoverable.len(),
+            1,
+            "an unpublished finding must be sweepable"
+        );
         let _ = std::fs::remove_dir_all(&d);
     }
 
@@ -421,7 +573,9 @@ mod tests {
     fn a_published_row_leaves_the_pending_sweep() {
         let d = dir("pub");
         let spooled = ok_finding().spool(&d).expect("spool");
-        spooled.mark_published("omp-orchestrator-abc").expect("mark");
+        spooled
+            .mark_published("omp-orchestrator-abc")
+            .expect("mark");
         assert!(
             pending(&d).expect("sweep").is_empty(),
             "a filed finding must not be re-filed by the sweep"
