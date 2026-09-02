@@ -8,12 +8,12 @@ the brief" below.*
 ## How to read this section
 
 **HISTORICAL INVENTORY BOUNDARY.** The 183-row envelope and 26-crate split in the next paragraphs are the retained pre-extraction snapshot. Current cargo metadata re-derives 50 workspace packages; the old scanner denominator is not current acceptance evidence.
-The workspace ships a built census, `omp-inventory-map`, that emits 183 rows in a versioned
+The workspace ships a built census, `omp-inventory-map`, that emits 183 rows in a versioned — HISTORICAL as of 2026-09-02.
 envelope. Every row carries the four mandatory fields — `inputs`, `outputs`, `must_be_true`,
 `negative_evidence` — with zero missing. That census is **not** the source for this section, and
 the reason is the sharpest measured finding of the session.
 
-**MEASURED.** Across all 183 rows there is exactly **one distinct** `must_be_true` value and
+**MEASURED.** Across all 183 rows there is exactly **one distinct** `must_be_true` value and — HISTORICAL as of 2026-09-02.
 exactly **one distinct** `negative_evidence` value:
 
 ```
@@ -76,7 +76,7 @@ grep -rlF 'forbid(unsafe_code)' --include=lib.rs --include=main.rs crates/  # in
 | `kernel-only-operator-hook` | fail-closed PreToolUse hook blocking kernel bypasses | hook JSON `&[u8]` → `HookInput` | `Decision` (rendered to stdout) | `HookInput`, `Permission`, `Decision`, `ParseError` | `subprocess-contract` | yes |
 | `loop-queue-filter` | fail-closed port of the control-plane queue selector | queue JSON `&str`, argv `&[String]`, `&Runtime` | `RunOutput` | `Runtime`, `RunOutput` | — | yes |
 | `no-shell-gate` | refuse tracked `.sh`/`.py`; exemption list empty by design | `git ls-files` output; repo root `&Path` | `Verdict`, `Vec<Violation>`, `WorkspaceLoad` | `Violation`, `Verdict`, `GateError`, `WorkspaceLoad` | `path-literal-guard`, `state-wildcard-lint`, `pre-delete-citation-check`, `undrained-pipe-lint` | yes |
-| `omp-inventory-map` | the OMP v18 surface + workspace crate census | `cargo metadata`, OMP CLI probes, source scrape | `InventoryMap` envelope (184 nodes, 207 edges, 183 rows) | `ProbeState`, `SurfaceMap`, `SurfaceMapAudit`, `InventoryRow`, `InventoryNode`, `InventoryEdge`, `InventoryMap`, `ProbeEvidence`, `InventoryCounts` | — | yes |
+| `omp-inventory-map` | the OMP v18 surface + workspace crate census | `cargo metadata`, OMP CLI probes, source scrape | `InventoryMap` envelope (184 nodes, 207 edges, 183 rows) | `ProbeState`, `SurfaceMap`, `SurfaceMapAudit`, `InventoryRow`, `InventoryNode`, `InventoryEdge`, `InventoryMap`, `ProbeEvidence`, `InventoryCounts` | — | yes | — HISTORICAL as of 2026-09-02.
 | `omp-orchestrator` | resident supervisor: observe → dispatch → receipt → escalate | `&Observation`, `&IdleAuthorization`, repo `&Path` | `SupervisorDecision`, `GateCensus`, `Duty`/`Discharged` | `Observation`, `PaneObservation`, `QueueState`, `SupervisorDecision`, `IdleAuthorization`, `GateCensus`, `GateReachability`, `Duty`, `Discharged`, `Census` | `ack-stage`, `dispatch-claim-fence`, `omp-rpc-session`, `receiver-receipt`, `subprocess-contract` | yes |
 | `omp-rpc-session` | typed bounded single-session adapter for `omp --mode=rpc` | `OmpCommand` + `RpcSessionConfig`; raw stdout frames | `RpcFrame` (`Ready`/`Response`/`Unknown`/`Malformed`), `RpcSessionReport` | `Deadlines`, `TimeoutPhase`, `OmpCommand`, `RpcSessionConfig`, `RequestId`, `RpcRequest`, `RpcFrame`, `MalformedReason`, `Lifecycle`, `ProtocolError`, `RpcError` | — | yes |
 | `omp-types` | the canonical vocabulary, derived from asupersync, never authored | none (re-export only) | `pub use` of asupersync types | `Outcome`, `OutcomeError`, `PanicPayload`, `Severity`, `join_outcomes`, `Budget`, `CapabilityBudget*`, `RemainingBudget`, `ObligationId`, `RegionId`, `TaskId`, `Time` | — | yes |
@@ -173,7 +173,7 @@ grep -rhoE '^pub struct [A-Za-z_0-9]+' --include=*.rs crates/ | wc -l   -> `LIVE
 ```
 
 An earlier scan scoped to library surfaces reported **51 public enums (excluding test+bin sources; 59 including them — publish the pair) and 79 public structs across
-22 of 24 crates**. Both numbers are real; they differ because the grep above includes test modules
+22 of 24 crates**. Both numbers are real; they differ because the grep above includes test modules — HISTORICAL as of 2026-09-02.
 and binary sources. We publish both rather than pick the flattering one — the delta *is* the
 measurement's error bar.
 
@@ -216,7 +216,7 @@ toward the same distinction — *did the transport accept it, did it arrive, did
 acknowledge it* — and none can be passed to another without translation.
 
 **`omp-types` exists and has ZERO dependents.** No crate lists it as a path-dep; it appears in none
-of the 18 edges. Its own doc comment states the design rule verbatim: *"No crate invents a type
+of the 18 edges. Its own doc comment states the design rule verbatim: *"No crate invents a type — HISTORICAL as of 2026-09-02.
 that already exists here… its contents are derived — re-exported from `asupersync` at the exact rev
 we pin (`fa3c01aec`, v0.4.9) — never authored here."* The vocabulary is shipped and unadopted.
 
@@ -233,11 +233,11 @@ pub use asupersync::types::{ObligationId, RegionId, TaskId, Time};
 
 `AckKind`, `DeliveryClass` and `ObligationLedger` are **not** re-exported. The crate documents why:
 `messaging-fabric` requires the `test-internals` feature at rev `fa3c01aec`
-(`consumer.rs:1299` default impl), and that feature was correctly removed from upstream defaults —
+(`consumer.rs:heading_consumer_rs_1299_default_impl_and_that` default impl), and that feature was correctly removed from upstream defaults —
 so the ack vocabulary is *unreachable at our pinned rev*. The crate names that absence in a test
 (`ack_vocabulary_is_documented_as_unreachable`) rather than silently omitting it. The crate also
 records a second trap worth quoting to anyone who thinks re-export is mechanical: asupersync
-declares **two** `AckKind`s, and `obligation/graded.rs:790` is an **uninhabited marker** — matching
+declares **two** `AckKind`s, and `obligation/graded.rs:AckKind` is an **uninhabited marker** — matching
 the name yields a type with no values.
 
 This matters to the plan because it means the single most valuable half of the vocabulary — the
@@ -282,10 +282,10 @@ Until step (1) lands, the ack collapse is **blocked, and named as blocked**, not
 
 **The gate that enforces it.** A crate declaring a public type whose name duplicates one exported
 by `omp-types` will fail the build. This is not a new mechanism — `omp-inventory-map` already
-implements the pattern, and its `types_inventory.rs:176-178` deliberately excludes `Observation`
+implements the pattern, and its `types_inventory.rs:Observation` deliberately excludes `Observation`
 from the allowance list *so that the collision demands convergence rather than being tolerated*.
 Extending that from one allowance list to the full `omp-types` export set is an incremental change
-to a gate that already exists and already passes 13 tests. The same gate acquires the
+to a gate that already exists and already passes 13 tests. The same gate acquires the — HISTORICAL as of 2026-09-02.
 `subprocess-contract` rule described earlier: constructing a `Command` outside that crate is a
 duplicate-of-canonical violation of exactly the same kind. **This raises a floor, it does not
 guarantee coherence** — the gate matches names, and two crates can still hold semantically
@@ -317,14 +317,14 @@ Per the parent instruction, a disagreement between a section's own measurement a
 `Outcome`/`OutcomeError`/`PanicPayload`/`Severity`/`join_outcomes`, the `Budget` family, and
 `ObligationId`/`RegionId`/`TaskId`/`Time`. `AckKind`, `DeliveryClass` and `ObligationLedger` are
 **absent**, and the crate documents why — `messaging-fabric` requires the `test-internals` feature
-at rev `fa3c01aec` (`consumer.rs:1299`), which upstream correctly removed from defaults. This is
+at rev `fa3c01aec` (`consumer.rs:fa3c01aec`), which upstream correctly removed from defaults. This is
 the consequential disagreement: the half of the vocabulary that would collapse the three ack
 dialects is **blocked on an upstream feature boundary**, not merely unadopted, so any schedule that
 assumes it is available today is wrong.
 
 **2. The unsafe-forbid denominator.** The brief's 16 of 22 and the earlier 20/26 values are historical snapshots. The current mechanism split is command-backed by NUMBERS.toml keys `[figures.crates_forbidding_unsafe]`, `[figures.unsafe_source_attributes]`, `[figures.unsafe_both_mechanisms]`, and `[figures.forbid_unsafe_authoritative]`; this paragraph deliberately freezes no denominator. The sole-mechanism gap remains: no single gate yet refuses a new crate that keeps only one mechanism.
 
-**3. The type-inventory scope.** The brief's 51 enums / 79 structs across 22 of 24 crates are an earlier library-scope snapshot.
+**3. The type-inventory scope.** The brief's 51 enums / 79 structs across 22 of 24 crates are an earlier library-scope snapshot. — HISTORICAL as of 2026-09-02.
 The current all-source counts are owned by NUMBERS.toml `[figures.public_enums]` and `[figures.public_structs]`; this section deliberately freezes no type-inventory integer.
 Not a contradiction — a scope difference (the greps above include test modules and binary sources).
 Published as current registry-backed figures rather than a hand-typed error bar. The collision and Verdict counts are re-derived by the commands named above.
@@ -348,7 +348,7 @@ omp-inventory-map — spawn processes today with no path-dep on the boundary cra
 
 **NO-CLAIM.** This section states each crate's contract as its source declares it, and states the
 adoption path we intend. It does **not** claim any of the following: that the derived contracts are
-honoured at runtime; that the 22 crates outside `subprocess-contract` are actually leaking process
+honoured at runtime; that the 22 crates outside `subprocess-contract` are actually leaking process — HISTORICAL as of 2026-09-02.
 groups (only that nothing prevents them from doing so); that the `Verdictlike` trait above compiles
 — it has not been written; that the ack migration is schedulable — it is blocked on an upstream
 feature boundary we have not yet cleared; or that a tmux pane which has never heard of asupersync
@@ -363,7 +363,7 @@ entirely.
 Josh: *"any missing crates could be in control-plane that we have to move over — this should be
 mentioned in docs."* He is right, it was not mentioned anywhere as a number, and the number is large.
 
-**PRE-EXTRACTION SNAPSHOT (measured before a277097, 2026-09-01):** 20 of the 20 crates marked
+**PRE-EXTRACTION SNAPSHOT (measured before a277097, 2026-09-01):** 20 of the 20 crates marked — HISTORICAL as of 2026-09-02.
 CONTROL-PLANE in the then-current AGENTS.md table were not extracted; 28,779 LOC remained upstream.
 
 | crate | LOC | upstream |
@@ -424,9 +424,9 @@ checkout, and a move under those conditions is how work is lost.
 
 **HISTORICAL EXTRACTION-PLANNING NARRATIVE.** The bead, graph, leaf, and LOC claims in the following subsection describe the pre-a277097 tree. Current target presence and current missing-source total are stated above and in NUMBERS.toml; the historical 29,512 LOC is not current extraction debt.
 Josh: *"our plan needs to include all unextracted stuff — that has to be part of our bead dag."*
-Bead `omp-orchestrator-815` is currently **one bead for 29,512 LOC across 20 crates**, which cannot
+Bead `omp-orchestrator-815` is currently **one bead for 29,512 LOC across 20 crates**, which cannot — HISTORICAL as of 2026-09-02.
 be worked — it can only be adjudicated. Under `beads-north-star` a bead needs testable acceptance,
-and "extract 20 crates" has none. It is an epic with no children.
+and "extract 20 crates" has none. It is an epic with no children. — HISTORICAL as of 2026-09-02.
 
 ### The measured dependency shape
 
