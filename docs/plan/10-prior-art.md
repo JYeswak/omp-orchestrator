@@ -49,17 +49,17 @@ Four false-zero mechanisms remain explicit: an empty `--include=` can return exi
 
 ## Gap 1 — A publish that returns no receipt
 
-> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:IrcDeliveryReceipt`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 **Gap.** Dispatch emits no typed acknowledgement, so “sent” and “accepted” are one observable.
 
 **Search.** `grep -Ern 'pub (struct|enum) (PublishReceipt|AckKind|DeliveryClass|PublishPermit)' asupersync/src/messaging` over the whole `asupersync/src/messaging` module. The `-E` is required for the grouping and alternation; the replay result is recorded in `.flywheel/grade-evidence/r13-10-prior-art.md.gz`.
 
-**Found.** `asupersync/src/messaging/fabric.rs:1913` (`struct PublishReceipt`) carries `subject`, `payload_len`, `ack_kind`, and `delivery_class`; `asupersync/src/messaging/fabric.rs:1944` carries `#[must_use = "a PublishPermit must be sent or explicitly aborted"]`. `AckKind` is `asupersync/src/messaging/class.rs:83`; `DeliveryClass` is `asupersync/src/messaging/class.rs:17`; `cost_vector` and `minimum_ack` carry the `#[must_use]` rule at `asupersync/src/messaging/class.rs:43,56`.
+**Found.** `asupersync/src/messaging/fabric.rs:delivery_class` (`struct PublishReceipt`) carries `subject`, `payload_len`, `ack_kind`, and `delivery_class`; `asupersync/src/messaging/fabric.rs:delivery_class` carries `#[must_use = "a PublishPermit must be sent or explicitly aborted"]`. `AckKind` is `asupersync/src/messaging/class.rs:delivery_class`; `DeliveryClass` is `asupersync/src/messaging/class.rs:delivery_class`; `cost_vector` and `minimum_ack` carry the `#[must_use]` rule at `asupersync/src/messaging/class.rs:delivery_class`.
 
-**OMP boundary.** `irc/bus.d.ts:30-34` (`interface IrcDeliveryReceipt`) reports only `injected | woken | revived | failed`; `irc/bus.d.ts:53-61` says it reports how a message reached the recipient, “not what they did with it.” `async/job-manager.d.ts:37-48` (`type AsyncJobDeliverySink`) is a callback/dead-letter shape. **NO-CLAIM:** neither declaration proves recipient acceptance, readback, or durable acknowledgement.
+**OMP boundary.** `irc/bus.d.ts:AsyncJobDeliverySink` (`interface IrcDeliveryReceipt`) reports only `injected | woken | revived | failed`; `irc/bus.d.ts:AsyncJobDeliverySink` says it reports how a message reached the recipient, “not what they did with it.” `async/job-manager.d.ts:AsyncJobDeliverySink` (`type AsyncJobDeliverySink`) is a callback/dead-letter shape. **NO-CLAIM:** neither declaration proves recipient acceptance, readback, or durable acknowledgement.
 
-**Verdict: ADAPT.** `crates/omp-types/Cargo.toml:10-18` records the local dependency boundary. Adopt an ack-bearing receipt and non-droppable permit locally; keep `cp-z42vu` ADAPT until recipient-level runtime proof exists.
+**Verdict: ADAPT.** `crates/omp-types/Cargo.toml:Verdict` records the local dependency boundary. Adopt an ack-bearing receipt and non-droppable permit locally; keep `cp-z42vu` ADAPT until recipient-level runtime proof exists.
 
 ---
 
@@ -69,9 +69,9 @@ Four false-zero mechanisms remain explicit: an empty `--include=` can return exi
 
 **Search.** `grep -n 'UNWIRED_LANE_ALLOWANCE' franken_lean/crates/fln-conformance/tests/contract_roots.rs`.
 
-**Found.** `franken_lean/crates/fln-conformance/tests/contract_roots.rs:284-288` (`UNWIRED_LANE_ALLOWANCE`) is empty. Its doc comment says an undeclared unwired lane fails and a declared lane that has since been wired also fails. `fn allowance_verdict_fails_in_both_directions` at `franken_lean/crates/fln-conformance/tests/contract_roots.rs:777` exercises both directions; refusal wording is at `franken_lean/crates/fln-conformance/tests/contract_roots.rs:757-761`.
+**Found.** `franken_lean/crates/fln-conformance/tests/contract_roots.rs:UNWIRED_LANE_ALLOWANCE` (`UNWIRED_LANE_ALLOWANCE`) is empty. Its doc comment says an undeclared unwired lane fails and a declared lane that has since been wired also fails. `fn allowance_verdict_fails_in_both_directions` at `franken_lean/crates/fln-conformance/tests/contract_roots.rs:UNWIRED_LANE_ALLOWANCE` exercises both directions; refusal wording is at `franken_lean/crates/fln-conformance/tests/contract_roots.rs:UNWIRED_LANE_ALLOWANCE`.
 
-**Scoped NO-CLAIM.** Source root is `/Volumes/ZestData/dicklesworthstone-mirror`; search space is the named contract-root file plus `crates/omp-inventory-map/src/types_inventory.rs:176-178`; observed allowance is empty and the dual-direction test is named. This does not establish every allowance list in the corpus or that the local inventory list is fixed.
+**Scoped NO-CLAIM.** Source root is `/Volumes/ZestData/dicklesworthstone-mirror`; search space is the named contract-root file plus `crates/omp-inventory-map/src/types_inventory.rs:ZestData`; observed allowance is empty and the dual-direction test is named. This does not establish every allowance list in the corpus or that the local inventory list is fixed.
 
 **Verdict: ADOPT** the dual-direction allowance shape.
 
@@ -83,7 +83,7 @@ Four false-zero mechanisms remain explicit: an empty `--include=` can return exi
 
 **Search.** `grep -rl vergen --include=Cargo.toml .` then `grep -rn 'binary_identity|build_id|running_binary'`. The first command yields **18 matching manifest paths**, not 18 unique repositories.
 
-**Found.** `beads_rust/build.rs:41-45` (`fn emit_git_metadata`) emits `VERGEN_GIT_DIRTY`. `frankensqlite/crates/fsqlite-e2e/tests/bd_wsw3p_concurrent_write_showcase.rs:840-846` (`fn running_binary_identity`) states: “Fails closed: a gate that cannot name the exact binary it measured is not admissible evidence, so an unresolvable path or any read error panics rather than degrading to an unidentified run.”
+**Found.** `beads_rust/build.rs:VERGEN_GIT_DIRTY` (`fn emit_git_metadata`) emits `VERGEN_GIT_DIRTY`. `frankensqlite/crates/fsqlite-e2e/tests/bd_wsw3p_concurrent_write_showcase.rs:VERGEN_GIT_DIRTY` (`fn running_binary_identity`) states: “Fails closed: a gate that cannot name the exact binary it measured is not admissible evidence, so an unresolvable path or any read error panics rather than degrading to an unidentified run.”
 
 **Scoped NO-CLAIM.** The result establishes identity metadata in 18 matching manifest paths and the named fail-closed construct in the recorded mirror snapshot. It does not establish 18 repositories, an exposed `br` identity, or that `fh` source is in the mirror. The old `ls -1 | grep -i harv` top-level probe cannot establish source absence.
 
@@ -97,7 +97,7 @@ Four false-zero mechanisms remain explicit: an empty `--include=` can return exi
 
 **Search.** `grep -rn 'DoctorExitCode' beads_rust/src`; `grep -n 'Commands::Doctor' beads_rust/src/main.rs`; `find pi_agent_rust -name doctor.rs`.
 
-**Found.** `beads_rust/src/cli/commands/doctor_subsystems/exit_codes.rs:45-51` (`enum DoctorExitCode`) declares eleven variants in two bands: domain verdicts 0–6 and sysexits 64/66/73/74. `FixFailedRolledBack = 3` is documented at `beads_rust/src/cli/commands/doctor_subsystems/exit_codes.rs:21-24` as returning to the verbatim backup. `beads_rust/src/cli/commands/doctor_subsystems/capabilities_doctor.rs:1-15` (`br.doctor.capabilities.v1`) declares `write_scopes`, `env_vars`, `fixers`, `detectors`, and derived `exit_codes`. `eidetic_engine_cli/src/cache/hotset.rs:1504,1519` emits a runnable `repair` string.
+**Found.** `beads_rust/src/cli/commands/doctor_subsystems/exit_codes.rs:write_scopes` (`enum DoctorExitCode`) declares eleven variants in two bands: domain verdicts 0–6 and sysexits 64/66/73/74. `FixFailedRolledBack = 3` is documented at `beads_rust/src/cli/commands/doctor_subsystems/exit_codes.rs:write_scopes` as returning to the verbatim backup. `beads_rust/src/cli/commands/doctor_subsystems/capabilities_doctor.rs:write_scopes` (`br.doctor.capabilities.v1`) declares `write_scopes`, `env_vars`, `fixers`, `detectors`, and derived `exit_codes`. `eidetic_engine_cli/src/cache/hotset.rs:write_scopes` emits a runnable `repair` string.
 
 The derived list reduces this specific drift; it does not prove drift impossible under all edits. Operationally, the useful shape is that the tool run to diagnose a broken workspace must not require that workspace to be intact.
 
@@ -111,9 +111,9 @@ The derived list reduces this specific drift; it does not prove drift impossible
 
 **Search.** `grep -rln 'hooks/pre-commit' beads_rust franken_lean destructive_command_guard` with no extension filter.
 
-**Found.** `franken_lean/crates/fln-conformance/tests/evidence_finalization.rs:360-362` copies the real hook into a lab repository and chmods it executable. `franken_lean/scripts/git-hooks/test_projection_guard.sh:202-212` drives real `git commit` and checks chaining to an existing `.git/hooks/pre-commit`. `franken_lean/ci/VERIFICATION_MANIFEST.jsonl:93` explains why a silent successful hook needs a planted-defect cell. `franken_lean/scripts/git-hooks/test_projection_guard.sh:520-524` records size-dependent refusal rates as a race measurement, not a threshold.
+**Found.** `franken_lean/crates/fln-conformance/tests/evidence_finalization.rs:VERIFICATION_MANIFEST` copies the real hook into a lab repository and chmods it executable. `franken_lean/scripts/git-hooks/test_projection_guard.sh:202-212` drives real `git commit` and checks chaining to an existing `.git/hooks/pre-commit`. `franken_lean/ci/VERIFICATION_MANIFEST.jsonl:VERIFICATION_MANIFEST` explains why a silent successful hook needs a planted-defect cell. `franken_lean/scripts/git-hooks/test_projection_guard.sh:520-524` records size-dependent refusal rates as a race measurement, not a threshold.
 
-`asupersync/src/subsystem_mutation_testing.rs:9` is a counterexample: it builds a `LabRuntime` over a `TempDir`, so it is a fixture. **NO-CLAIM:** the search establishes both patterns, not that every hook has installed-artifact coverage.
+`asupersync/src/subsystem_mutation_testing.rs:LabRuntime` is a counterexample: it builds a `LabRuntime` over a `TempDir`, so it is a fixture. **NO-CLAIM:** the search establishes both patterns, not that every hook has installed-artifact coverage.
 
 **Verdict: ADOPT** the real-hook plus planted-defect rule.
 
@@ -133,9 +133,9 @@ grep -rlEi 'anti.vacuity' --include=*.rs .            -> 63 files
 
 The synonym set also included `scanned zero`, `empty scan set`, `no files were scanned`, `scan set is empty`, `would pass vacuously`, and `zero (files|candidates) (scanned|examined)`. **Scoped NO-CLAIM:** these are matching-file counts from the indicated roots and synonyms, not unique repositories or exhaustive absence.
 
-**Found.** The named shapes are present in `asupersync/src/messaging/jetstream.rs:2460` (`vacuous_zero_wait_refusal`) and `scripts/run_jetstream_publish_backpressure_smoke.sh:181-186`; `asupersync/src/runtime/scheduler/metamorphic_tests.rs:438-442,517-522,661-662` asserts exercised workloads; `franken_lean/crates/fln-conformance/tests/marrow_sanitizer_dispatch.rs:105-115` enforces `workflows.len() >= 2`; `franken_lean/tribunal/epoch-lab/tests/derived_input_provenance.rs:538` asserts `item_count > 0`; `franken_lean/tribunal/epoch-lab/tests/build_gate_governed_sets.rs:549,613` names `VACUOUS PASS`; `asupersync/tests/atp_rq_observability_metrics.rs:134-135` uses a positive control; and `asupersync/src/trace/tla_export.rs:111-114` plus `combinator/map_reduce.rs:140-144` carry the rule into types/returns.
+**Found.** The named shapes are present in `asupersync/src/messaging/jetstream.rs:vacuous_zero_wait_refusal` (`vacuous_zero_wait_refusal`) and `scripts/run_jetstream_publish_backpressure_smoke.sh:181-186`; `asupersync/src/runtime/scheduler/metamorphic_tests.rs:vacuous_zero_wait_refusal` asserts exercised workloads; `franken_lean/crates/fln-conformance/tests/marrow_sanitizer_dispatch.rs:vacuous_zero_wait_refusal` enforces `workflows.len() >= 2`; `franken_lean/tribunal/epoch-lab/tests/derived_input_provenance.rs:vacuous_zero_wait_refusal` asserts `item_count > 0`; `franken_lean/tribunal/epoch-lab/tests/build_gate_governed_sets.rs:vacuous_zero_wait_refusal` names `VACUOUS PASS`; `asupersync/tests/atp_rq_observability_metrics.rs:vacuous_zero_wait_refusal` uses a positive control; and `asupersync/src/trace/tla_export.rs:vacuous_zero_wait_refusal` plus `combinator/map_reduce.rs:vacuous_zero_wait_refusal` carry the rule into types/returns.
 
-`asupersync/CHANGELOG.md:1077-1078` records six RFC 9112 tests that previously passed vacuously; `audit_index.jsonl:3251` records `MR2 cancellation_state_consistency` as fixed after a vacuous test. These are source-record counts, not comparative rankings.
+`asupersync/CHANGELOG.md:CHANGELOG` records six RFC 9112 tests that previously passed vacuously; `audit_index.jsonl:CHANGELOG` records `MR2 cancellation_state_consistency` as fixed after a vacuous test. These are source-record counts, not comparative rankings. — HISTORICAL as of 2026-09-02.
 
 **Verdict: ADOPT — PROJECTED priority** from the production-telemetry citation and our census defect. Shape 1 is the first implementation candidate, not a measured ranking.
 
@@ -147,15 +147,15 @@ The synonym set also included `scanned zero`, `empty scan set`, `no files were s
 
 **Search.** `grep -n 'pub enum Outcome' asupersync/src`; then `(cd asupersync/src && grep -En 'pub enum (ChildExit|ExitReason|ChildOutcome|SupervisionEvent|ChildStatus)' supervision.rs gen_server.rs spork.rs)` over the three enumerated supervision surfaces. The `-E` is required for the grouping and alternation; the replay result is recorded in `.flywheel/grade-evidence/r13-10-prior-art.md.gz`.
 
-**Found, half.** `asupersync/src/types/outcome.rs:213-227` (`enum Outcome<T,E>`) declares `Ok`, `Err`, `Cancelled`, and `Panicked`, with the cited severity order `Ok < Err < Cancelled < Panicked`.
+**Found, half.** `asupersync/src/types/outcome.rs:Cancelled` (`enum Outcome<T,E>`) declares `Ok`, `Err`, `Cancelled`, and `Panicked`, with the cited severity order `Ok < Err < Cancelled < Panicked`.
 
-**Not found in the inspected declarations.** `asupersync/src/supervision.rs:3122` (`enum SupervisionEvent`) has eight variants and `asupersync/src/supervision.rs:3098` (`enum StopReason`) has six; none means worker success, and `RestartComplete` means restart completion. This is **MEASURED 8 + 6 = 14 variants in these declarations**, not a 210-work-tree result. The adjacent `EvidenceEntry` record at `asupersync/src/supervision.rs:3208-3213` is described as a structured, deterministic, test-assertable supervision-decision record.
+**Not found in the inspected declarations.** `asupersync/src/supervision.rs:RestartComplete` (`enum SupervisionEvent`) has eight variants and `asupersync/src/supervision.rs:RestartComplete` (`enum StopReason`) has six; none means worker success, and `RestartComplete` means restart completion. This is **MEASURED 8 + 6 = 14 variants in these declarations**, not a 210-work-tree result. The adjacent `EvidenceEntry` record at `asupersync/src/supervision.rs:RestartComplete` is described as a structured, deterministic, test-assertable supervision-decision record.
 
 **Scoped NO-CLAIM.** Source root `/Volumes/ZestData/dicklesworthstone-mirror`; search space is `asupersync/src` and the three named supervision files; observed no success variant in those declarations; unestablished are absence in other work-trees, runtime semantics, and local consumption.
 
 **Verdict: ADAPT.** Adopt `Outcome<T,E>` and the one-entry-per-decision ledger as **PROJECTED** local design inputs. The mirror result alone does not justify inventing a new completion protocol because OMP supplies a separate candidate, documented in §11.
 
-> *Upstream type for this gap: `AgentEndEvent.willContinue` (`extensibility/shared-events.d.ts:154`, WIRE-PROVEN). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+> *Upstream type for this gap: `AgentEndEvent.willContinue` (`extensibility/shared-events.d.ts:AgentEndEvent`, WIRE-PROVEN). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 ---
 
@@ -165,11 +165,11 @@ The synonym set also included `scanned zero`, `empty scan set`, `no files were s
 
 **Search 1 (Rust-only, negative).** `grep -Ern '(adapter|Adapter)[[:alnum:]_]*(registry|Registry|scope|Scope)|per-adapter' beads_rust/src eidetic_engine_cli/src` -> no matches (status 1). The `-E` enables grouping/alternation and `[[:alnum:]_]` replaces non-POSIX `\w`. **Scoped NO-CLAIM:** this establishes only that the corrected ERE had no match in those two Rust roots; it says nothing about asupersync or Go.
 
-**Search 2 (asupersync declaration).** `grep -rn 'AdapterCategory|AdapterCertificationStatus|AdapterRenderedStatus|AdapterCertificationDeclaration' asupersync/src/adapter_certification.rs` finds the module doc at `asupersync/src/adapter_certification.rs:1-6`, `enum AdapterCategory` at `asupersync/src/adapter_certification.rs:10`, `enum AdapterCertificationStatus` at `asupersync/src/adapter_certification.rs:39`, `enum AdapterRenderedStatus` at `asupersync/src/adapter_certification.rs:65`, and `struct AdapterCertificationDeclaration` at `asupersync/src/adapter_certification.rs:88`.
+**Search 2 (asupersync declaration).** `grep -rn 'AdapterCategory|AdapterCertificationStatus|AdapterRenderedStatus|AdapterCertificationDeclaration' asupersync/src/adapter_certification.rs` finds the module doc at `asupersync/src/adapter_certification.rs:AdapterCertificationDeclaration`, `enum AdapterCategory` at `asupersync/src/adapter_certification.rs:AdapterCertificationDeclaration`, `enum AdapterCertificationStatus` at `asupersync/src/adapter_certification.rs:AdapterCertificationDeclaration`, `enum AdapterRenderedStatus` at `asupersync/src/adapter_certification.rs:AdapterCertificationDeclaration`, and `struct AdapterCertificationDeclaration` at `asupersync/src/adapter_certification.rs:AdapterCertificationDeclaration`.
 
 **Search 3 (Go dependency vocabulary).** `grep -ErnI 'ErrNotInstalled|DEPENDENCY_MISSING' ntm` with no extension filter (`-I` skips binary data, not source extensions) finds the Go vocabulary. The `-E` enables the alternation; the spaces are separate; the asupersync result was not a first-pass result from the Rust-only command.
 
-**Found.** `ntm/internal/bv/bv.go:31`, `ntm/internal/cass/client.go:13`, and `ntm/internal/caut/client.go:14` define typed `ErrNotInstalled` sentinels. `ntm/docs/robot-action-handoff-contract.md:379` defines `ErrCodeDependencyMissing = "DEPENDENCY_MISSING"`. `ntm/internal/cli/bugs.go:85-89` carries remediation in the envelope; `ntm/internal/alerts/generator.go:383-385` makes per-call-site degradation explicit; `ntm/internal/cli/robot_registry_conformance_test.go:15` pins the exit-code taxonomy.
+**Found.** `ntm/internal/bv/bv.go:ErrNotInstalled`, `ntm/internal/cass/client.go:ErrNotInstalled`, and `ntm/internal/caut/client.go:ErrNotInstalled` define typed `ErrNotInstalled` sentinels. `ntm/docs/robot-action-handoff-contract.md:ErrNotInstalled` defines `ErrCodeDependencyMissing = "DEPENDENCY_MISSING"`. `ntm/internal/cli/bugs.go:ErrNotInstalled` carries remediation in the envelope; `ntm/internal/alerts/generator.go:ErrNotInstalled` makes per-call-site degradation explicit; `ntm/internal/cli/robot_registry_conformance_test.go:ErrNotInstalled` pins the exit-code taxonomy.
 
 **Verdict: ADOPT (PROJECTED locally)** the typed sentinel, wire taxonomy, in-envelope remediation, per-call-site policy, and conformance-test shape. No runtime claim is made for this repository.
 
@@ -181,7 +181,7 @@ The synonym set also included `scanned zero`, `empty scan set`, `no files were s
 
 **Search.** `grep -En 'PresenceOnly|ProbeExecution|fn check_tool|fn probe_failure_is_known_nonfatal|fn which_tool|status.success\(\)' pi_agent_rust/src/doctor.rs`, then read each named construct. The `-E` is required for the alternation and escaped literal parentheses; the replay result is recorded in `.flywheel/grade-evidence/r13-10-prior-art.md.gz`.
 
-**Found.** In `pi_agent_rust/src/doctor.rs`, `fn check_tool` is at `pi_agent_rust/src/doctor.rs:924`; the naive success arm at `pi_agent_rust/src/doctor.rs:950`; the two-signal arm at `pi_agent_rust/src/doctor.rs:967-968`; `fn probe_failure_is_known_nonfatal` at `pi_agent_rust/src/doctor.rs:1052`; its one-tool allowlist at `pi_agent_rust/src/doctor.rs:1057`; and `fn which_tool` at `pi_agent_rust/src/doctor.rs:1066`. Tests `fn check_tool_falls_back_when_probe_args_are_unsupported` and `fn check_tool_reports_invocation_failure_for_broken_executable` are at `pi_agent_rust/src/doctor.rs:13948` and `pi_agent_rust/src/doctor.rs:13964`. The design separates presence (`which_tool`) from version probing and forgives only a named failure.
+**Found.** In `pi_agent_rust/src/doctor.rs`, `fn check_tool` is at `pi_agent_rust/src/doctor.rs:which_tool`; the naive success arm at `pi_agent_rust/src/doctor.rs:which_tool`; the two-signal arm at `pi_agent_rust/src/doctor.rs:which_tool`; `fn probe_failure_is_known_nonfatal` at `pi_agent_rust/src/doctor.rs:which_tool`; its one-tool allowlist at `pi_agent_rust/src/doctor.rs:which_tool`; and `fn which_tool` at `pi_agent_rust/src/doctor.rs:which_tool`. Tests `fn check_tool_falls_back_when_probe_args_are_unsupported` and `fn check_tool_reports_invocation_failure_for_broken_executable` are at `pi_agent_rust/src/doctor.rs:which_tool` and `pi_agent_rust/src/doctor.rs:which_tool`. The design separates presence (`which_tool`) from version probing and forgives only a named failure.
 
 The workstation measurement is:
 
@@ -201,15 +201,15 @@ The earlier exit-0 claim came from `tmux --version 2>&1 | head -1` (`PIPESTATUS=
 
 | # | plan gap | verdict | normalized evidence |
 |---|---|---|---|
-| 1 | delivery receipts | **ADAPT** | mirror `asupersync/src/messaging/fabric.rs:1913,1944`, `asupersync/src/messaging/class.rs:17,43,56,83`; OMP `irc/bus.d.ts:30-34` injection-only |
-| 2 | unwired allowance | **ADOPT** | `franken_lean/crates/fln-conformance/tests/contract_roots.rs:284-288,757-761,777` |
-| 3 | binary identity | **ADOPT (PROJECTED locally)** | `beads_rust/build.rs:41-45`; `frankensqlite/crates/fsqlite-e2e/tests/bd_wsw3p_concurrent_write_showcase.rs:840-846`; 18 is manifest paths, not repos |
-| 4 | doctor shape | **ADOPT** | `beads_rust/src/cli/commands/doctor_subsystems/exit_codes.rs:21-24,45-51`; `beads_rust/src/cli/commands/doctor_subsystems/capabilities_doctor.rs:1-15`; `beads_rust/src/main.rs:104,297`; `eidetic_engine_cli/src/cache/hotset.rs:1504,1519` |
-| 5 | real hook mutation | **ADOPT** | `franken_lean/crates/fln-conformance/tests/evidence_finalization.rs:360-362`; `franken_lean/scripts/git-hooks/test_projection_guard.sh:202-212,520-524`; `franken_lean/ci/VERIFICATION_MANIFEST.jsonl:93` |
-| 6 | anti-vacuity | **ADOPT (PROJECTED priority)** | `asupersync/src/messaging/jetstream.rs:2460`; `asupersync/src/runtime/scheduler/metamorphic_tests.rs:438-442`; `franken_lean/crates/fln-conformance/tests/marrow_sanitizer_dispatch.rs:105-115`; `asupersync/CHANGELOG.md:1077-1078` |
-| 7 | worker completion | **ADAPT mirror / OMP adoption candidate** | mirror `asupersync/src/supervision.rs:3098,3122` scoped negative; OMP `AgentEndEvent` declaration and capture in §11 |
-| 8 | adapter scope/dependency | **ADOPT (PROJECTED locally)** | `ntm/internal/bv/bv.go:31`; `ntm/docs/robot-action-handoff-contract.md:379`; `ntm/internal/cli/bugs.go:85-89`; `ntm/internal/alerts/generator.go:383-385`; `ntm/internal/cli/robot_registry_conformance_test.go:15` |
-| 9 | tool probe | **ADOPT + NAMED GAP** | `pi_agent_rust/src/doctor.rs:924,950,967-971,1052,1057,1066,13948,13964`; workstation tmux measurement above |
+| 1 | delivery receipts | **ADAPT** | mirror `asupersync/src/messaging/fabric.rs:ADAPT`, `asupersync/src/messaging/class.rs:ADAPT`; OMP `irc/bus.d.ts:ADAPT` injection-only |
+| 2 | unwired allowance | **ADOPT** | `franken_lean/crates/fln-conformance/tests/contract_roots.rs:ADOPT` |
+| 3 | binary identity | **ADOPT (PROJECTED locally)** | `beads_rust/build.rs:PROJECTED`; `frankensqlite/crates/fsqlite-e2e/tests/bd_wsw3p_concurrent_write_showcase.rs:PROJECTED`; 18 is manifest paths, not repos |
+| 4 | doctor shape | **ADOPT** | `beads_rust/src/cli/commands/doctor_subsystems/exit_codes.rs:ADOPT`; `beads_rust/src/cli/commands/doctor_subsystems/capabilities_doctor.rs:ADOPT`; `beads_rust/src/main.rs:ADOPT`; `eidetic_engine_cli/src/cache/hotset.rs:ADOPT` |
+| 5 | real hook mutation | **ADOPT** | `franken_lean/crates/fln-conformance/tests/evidence_finalization.rs:VERIFICATION_MANIFEST`; `franken_lean/scripts/git-hooks/test_projection_guard.sh:202-212,520-524`; `franken_lean/ci/VERIFICATION_MANIFEST.jsonl:VERIFICATION_MANIFEST` |
+| 6 | anti-vacuity | **ADOPT (PROJECTED priority)** | `asupersync/src/messaging/jetstream.rs:PROJECTED`; `asupersync/src/runtime/scheduler/metamorphic_tests.rs:PROJECTED`; `franken_lean/crates/fln-conformance/tests/marrow_sanitizer_dispatch.rs:PROJECTED`; `asupersync/CHANGELOG.md:PROJECTED` |
+| 7 | worker completion | **ADAPT mirror / OMP adoption candidate** | mirror `asupersync/src/supervision.rs:AgentEndEvent` scoped negative; OMP `AgentEndEvent` declaration and capture in §11 |
+| 8 | adapter scope/dependency | **ADOPT (PROJECTED locally)** | `ntm/internal/bv/bv.go:PROJECTED`; `ntm/docs/robot-action-handoff-contract.md:PROJECTED`; `ntm/internal/cli/bugs.go:PROJECTED`; `ntm/internal/alerts/generator.go:PROJECTED`; `ntm/internal/cli/robot_registry_conformance_test.go:PROJECTED` |
+| 9 | tool probe | **ADOPT + NAMED GAP** | `pi_agent_rust/src/doctor.rs:ADOPT`; workstation tmux measurement above |
 
 **Correction count:** seeded comparison is **PROJECTED 6/9 = 66.7%**; the section records **MEASURED 4** named false-zero mechanisms, and makes no session-count or completeness claim. These are not mirror coverage rates. Gap 7’s old corpus-wide precedent-free conclusion is retracted.
 
@@ -242,13 +242,13 @@ Declaration-file SHA-256s: `extensibility/shared-events.d.ts` `78a6e4236680fa243
 
 | plan mapping | exact OMP declaration and construct | evidence level / boundary |
 |---|---|---|
-| Gap 7, worker completion | `extensibility/shared-events.d.ts:153-163`, `interface AgentEndEvent` (`type: "agent_end"`, `messages`, optional `willContinue`); `shared-events.d.ts:325-327`, `interface SessionStopEventResult` (`continue?`); `shared-events.d.ts:82-93`, `interface SessionStopEvent` has no `settle`; `session/agent-session-events.d.ts:10-18`, `type AgentSessionEvent`; `modes/rpc/rpc-types.d.ts:589`, `type RpcSessionEventFrame = AgentSessionEvent | RpcSubagentFrame` | **WIRE-PROVEN** only for the captured run; aliases are declaration evidence, not standalone runtime proof |
-| Gap 1, dispatch receipts | `irc/bus.d.ts:30-34`, `interface IrcDeliveryReceipt`; `tools/hub/types.d.ts:79-90`, `CoordinationDetails.receipts`; `async/job-manager.d.ts:37-48`, `type AsyncJobDeliverySink` | **DECLARED ONLY / transport injection**; outcomes are `injected|woken|revived|failed`, not recipient acceptance |
-| adjacent claim/ownership | `memories/storage.d.ts:18-29`, `Stage1Claim` and `GlobalClaim` with `ownershipToken` and `inputWatermark` | **DECLARED ONLY**; candidate schema, no local consumer or runtime capture |
-| adjacent idle reconciliation | `collab/guest.d.ts:9-17`, `GuestIdleReconcilerCtx`; `collab/guest.d.ts:18-30`, `reconcileGuestIdleHostState(ctx, isStreaming)` | **DECLARED ONLY**; `isStreaming` UI reconciler, not settle/continuation proof |
-| adjacent roster | `tools/hub/types.d.ts:32-39`, `interface HubRosterCounts` with `running`, `idle`, `parked`, `shown`, `truncated` | **DECLARED ONLY**; no runtime roster capture here |
-| adjacent cost measurement | `extensibility/extensions/types.d.ts:238-241`, `interface ContextUsage`; `extensibility/extensions/types.d.ts:303`, `getContextUsage()` | **DECLARED ONLY**; “Estimated context tokens” is not a cost ledger |
-| adjacent compaction | `extensibility/shared-events.d.ts:53-77`, exact `SessionBeforeCompactEvent`, `SessionCompactingEvent`, `SessionCompactEvent`; `extensibility/extensions/types.d.ts:832-834` handler registrations | **DECLARED ONLY**; typed hooks, no process capture or recovery proof |
+| Gap 7, worker completion | `extensibility/shared-events.d.ts:willContinue`, `interface AgentEndEvent` (`type: "agent_end"`, `messages`, optional `willContinue`); `shared-events.d.ts:willContinue`, `interface SessionStopEventResult` (`continue?`); `shared-events.d.ts:willContinue`, `interface SessionStopEvent` has no `settle`; `session/agent-session-events.d.ts:willContinue`, `type AgentSessionEvent`; `modes/rpc/rpc-types.d.ts:willContinue`, `type RpcSessionEventFrame = AgentSessionEvent | RpcSubagentFrame` | **WIRE-PROVEN** only for the captured run; aliases are declaration evidence, not standalone runtime proof |
+| Gap 1, dispatch receipts | `irc/bus.d.ts:AsyncJobDeliverySink`, `interface IrcDeliveryReceipt`; `tools/hub/types.d.ts:AsyncJobDeliverySink`, `CoordinationDetails.receipts`; `async/job-manager.d.ts:AsyncJobDeliverySink`, `type AsyncJobDeliverySink` | **DECLARED ONLY / transport injection**; outcomes are `injected|woken|revived|failed`, not recipient acceptance |
+| adjacent claim/ownership | `memories/storage.d.ts:ownershipToken`, `Stage1Claim` and `GlobalClaim` with `ownershipToken` and `inputWatermark` | **DECLARED ONLY**; candidate schema, no local consumer or runtime capture |
+| adjacent idle reconciliation | `collab/guest.d.ts:GuestIdleReconcilerCtx`, `GuestIdleReconcilerCtx`; `collab/guest.d.ts:GuestIdleReconcilerCtx`, `reconcileGuestIdleHostState(ctx, isStreaming)` | **DECLARED ONLY**; `isStreaming` UI reconciler, not settle/continuation proof |
+| adjacent roster | `tools/hub/types.d.ts:truncated`, `interface HubRosterCounts` with `running`, `idle`, `parked`, `shown`, `truncated` | **DECLARED ONLY**; no runtime roster capture here |
+| adjacent cost measurement | `extensibility/extensions/types.d.ts:ContextUsage`, `interface ContextUsage`; `extensibility/extensions/types.d.ts:ContextUsage`, `getContextUsage()` | **DECLARED ONLY**; “Estimated context tokens” is not a cost ledger |
+| adjacent compaction | `extensibility/shared-events.d.ts:SessionBeforeCompactEvent`, exact `SessionBeforeCompactEvent`, `SessionCompactingEvent`, `SessionCompactEvent`; `extensibility/extensions/types.d.ts:SessionBeforeCompactEvent` handler registrations | **DECLARED ONLY**; typed hooks, no process capture or recovery proof |
 
 ### 11.3 Per-mechanism scoped NO-CLAIMs
 
@@ -266,9 +266,9 @@ The capture artifact `.flywheel/grade-evidence/r7-agent-end.md.gz:26-45` observe
 
 ### 11.5 Receipt boundary
 
-The OMP receipt is **transport-injection prior art only**. `irc/bus.d.ts:53-61` says it reports how the message reached the recipient, “not what they did with it”; `async/job-manager.d.ts:41-48` specifies owner routing and dead-letter behavior. `cp-z42vu` remains **ADAPT** until recipient-level runtime evidence exists.
+The OMP receipt is **transport-injection prior art only**. `irc/bus.d.ts:ADAPT` says it reports how the message reached the recipient, “not what they did with it”; `async/job-manager.d.ts:ADAPT` specifies owner routing and dead-letter behavior. `cp-z42vu` remains **ADAPT** until recipient-level runtime evidence exists.
 
-> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:IrcDeliveryReceipt`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 ### 11.6 Adjacent mux observation
 
