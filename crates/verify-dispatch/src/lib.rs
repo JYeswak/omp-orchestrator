@@ -18,8 +18,9 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use subprocess_contract::{bounded_output, BoundedOutcome};
 
 const DEFAULT_LEDGER: &str = ".local/state/flywheel/controller-tick.jsonl";
 const DEFAULT_OUT: &str = ".local/state/flywheel/dispatch-verify.jsonl";
@@ -221,18 +222,18 @@ pub fn bead_status_via_br(repo_dir: &Path, bead: &str) -> Option<String> {
         .arg(bead)
         .arg("--json")
         .current_dir(repo_dir)
-        .env("RUST_LOG", "error")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let output = match cmd.output() {
-        Ok(o) => o,
-        Err(_) => return None,
+        .env("RUST_LOG", "error");
+    let output = match bounded_output(&mut cmd, BR_TIMEOUT) {
+        BoundedOutcome::Completed(output) => output,
+        BoundedOutcome::TimedOut => {
+            eprintln!("verify-dispatch: br status timed out before its deadline");
+            return None;
+        }
+        BoundedOutcome::Unspawned(error) => {
+            eprintln!("verify-dispatch: br status could not spawn: {error}");
+            return None;
+        }
     };
-    // A timeout is not expressible on Command::output without a helper thread;
-    // the live caller wraps the whole binary in `timeout 400`. A spawn failure
-    // or nonzero br is "not closed", matching the oracle's `return None`.
-    let _ = BR_TIMEOUT;
     if !output.status.success() {
         return None;
     }
@@ -302,7 +303,10 @@ fn is_legacy(d: &Value) -> bool {
     }
 }
 
-pub fn run(cfg: &VerifyDispatchConfig, status: &dyn Fn(&Path, &str) -> Option<String>) -> VerifyDispatchRunOutput {
+pub fn run(
+    cfg: &VerifyDispatchConfig,
+    status: &dyn Fn(&Path, &str) -> Option<String>,
+) -> VerifyDispatchRunOutput {
     let mut stdout = String::new();
     if !cfg.ledger.exists() {
         stdout.push_str(&format!(
@@ -332,7 +336,8 @@ pub fn run(cfg: &VerifyDispatchConfig, status: &dyn Fn(&Path, &str) -> Option<St
             Ok(v) => v,
             Err(_) => continue,
         };
-        if cfg.rules.event_is_dispatched && d.get("event").and_then(|e| e.as_str()) != Some("dispatched")
+        if cfg.rules.event_is_dispatched
+            && d.get("event").and_then(|e| e.as_str()) != Some("dispatched")
         {
             continue;
         }
@@ -348,10 +353,7 @@ pub fn run(cfg: &VerifyDispatchConfig, status: &dyn Fn(&Path, &str) -> Option<St
     }
 
     if dispatches.is_empty() {
-        stdout.push_str(&format!(
-            "no dispatches in the last {:.0}h\n",
-            cfg.window_h
-        ));
+        stdout.push_str(&format!("no dispatches in the last {:.0}h\n", cfg.window_h));
         return VerifyDispatchRunOutput { stdout, code: 0 };
     }
 
@@ -408,7 +410,11 @@ pub fn run(cfg: &VerifyDispatchConfig, status: &dyn Fn(&Path, &str) -> Option<St
             !beads.is_empty()
         };
 
-        let state = if all_closed { "VERIFIED" } else { "NO EVIDENCE" };
+        let state = if all_closed {
+            "VERIFIED"
+        } else {
+            "NO EVIDENCE"
+        };
         if all_closed {
             verified += 1;
         } else {
@@ -433,12 +439,8 @@ pub fn run(cfg: &VerifyDispatchConfig, status: &dyn Fn(&Path, &str) -> Option<St
             stdout.push_str(&format!("      closed: {b}\n"));
         }
         if state == "NO EVIDENCE" {
-            stdout.push_str(
-                "      -> dispatched set is not closed. Work may be in flight, the\n",
-            );
-            stdout.push_str(
-                "         packet may not have landed, or only part of it completed.\n",
-            );
+            stdout.push_str("      -> dispatched set is not closed. Work may be in flight, the\n");
+            stdout.push_str("         packet may not have landed, or only part of it completed.\n");
         }
 
         let row = OutRow {
@@ -476,9 +478,7 @@ pub fn run(cfg: &VerifyDispatchConfig, status: &dyn Fn(&Path, &str) -> Option<St
         stdout.push_str(
             "NO EVIDENCE is a real finding, not a failure — it separates 'dispatched' from 'landed',\n",
         );
-        stdout.push_str(
-            "which is exactly what 14 dispatches and 0 verifications could not do.\n",
-        );
+        stdout.push_str("which is exactly what 14 dispatches and 0 verifications could not do.\n");
     }
     VerifyDispatchRunOutput { stdout, code: 0 }
 }
@@ -491,6 +491,7 @@ pub fn run_live(cfg: &VerifyDispatchConfig) -> VerifyDispatchRunOutput {
 mod tests {
     use super::*;
     use std::fs;
+    use std::process::Stdio;
     use std::sync::Mutex;
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -527,11 +528,8 @@ mod tests {
     }
 
     fn tmp_paths(tag: &str) -> (PathBuf, PathBuf) {
-        let dir = std::env::temp_dir().join(format!(
-            "verify-dispatch-{}-{}",
-            tag,
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("verify-dispatch-{}-{}", tag, std::process::id()));
         let _ = fs::create_dir_all(&dir);
         (dir.join("ledger.jsonl"), dir.join("out.jsonl"))
     }
@@ -585,7 +583,10 @@ mod tests {
         let _ = fs::remove_file(&ledger);
         let c = cfg(ledger.clone(), out, 1_700_000_000.0);
         let r = run(&c, &status_map(&[]));
-        assert_eq!(r.code, 0, "rule exit_zero_always: missing ledger must not gate");
+        assert_eq!(
+            r.code, 0,
+            "rule exit_zero_always: missing ledger must not gate"
+        );
         assert!(
             r.stdout.starts_with("no controller-tick ledger at "),
             "rule stdout_verdict_column_0: missing-ledger verdict must start at column 0, got {:?}",
@@ -639,7 +640,10 @@ mod tests {
             "rule only_closed_status_counts: an OPEN bead must NOT count as closed, got {:?}",
             r.stdout
         );
-        assert_eq!(r.code, 0, "rule exit_zero_always: NO EVIDENCE is a finding, not a gate");
+        assert_eq!(
+            r.code, 0,
+            "rule exit_zero_always: NO EVIDENCE is a finding, not a gate"
+        );
         assert!(
             r.stdout.contains("NO EVIDENCE is a real finding"),
             "rule no_evidence_named: the finding must be on stdout at column 0"
