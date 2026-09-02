@@ -7,6 +7,7 @@ publish = false
 description = "Build gate: refuse tracked .sh/.py files; the exemption list is empty by design"
 
 [dependencies]
+convergence-stamp = { path = "../convergence-stamp" }
 path-literal-guard = { path = "../path-literal-guard" }
 state-wildcard-lint = { path = "../state-wildcard-lint" }
 pre-delete-citation-check = { path = "../pre-delete-citation-check" }

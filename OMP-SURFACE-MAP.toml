@@ -229,6 +229,11 @@ what_must_be_true = "all six porting clauses pass in one archived repository sta
 negative_evidence = "missing caller, declaration, conformance row, archive-green result, shell/python file, or inventory field refuses the candidate; zero candidates is an anti-vacuity error"
 instead_we = "run one candidate-scoped gate instead of treating a copied crate or installed binary as an arrival"
 
+[crates.convergence-stamp]
+classification = "a"
+omp_surface = "none"
+why = "consolidates every grading round into ONE stamped document (docs/plan/ROUNDS.md + docs/plan/STAMP.toml) and provides the predicate that refuses a new round until the stamp covers them all. OMP has no opinion about how we account for our own grading rounds. Exists because the round record was split across twelve files with two irreconcilable halves - CONVERGENCE.jsonl held rounds 8-15 and 22 while rounds 16-21 lived ONLY in eleven per-agent round*.jsonl files and had never reached the canonical ledger, and round 11 is absent from both. Measured 2026-09-01: 559 declared findings across 14 rounds, 220 dispositioned, and nothing could answer \"is every round represented\" from a single artifact. Rust because the repo forbids .sh/.py; sha256 is hand-written because the workspace carries no digest dependency and is verified against the FIPS 180-4 vectors and against shasum -a 256."
+
 [crates.plan-assemble]
 classification = "a"
 omp_surface = "none"

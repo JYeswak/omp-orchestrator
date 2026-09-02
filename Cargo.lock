@@ -9,6 +9,7 @@ dependencies = [
  "asupersync",
  "finding",
  "receiver-receipt",
+ "scratch-home",
  "serde",
  "serde_json",
  "sha2 0.11.0",
@@ -341,6 +342,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
 
 [[package]]
+name = "convergence-stamp"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -513,6 +521,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -634,6 +643,7 @@ dependencies = [
  "ntm-fleet-monitor",
  "regex",
  "serde_json",
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -860,6 +870,7 @@ name = "installer"
 version = "0.1.0"
 dependencies = [
  "serde_json",
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -1018,9 +1029,12 @@ dependencies = [
 name = "no-shell-gate"
 version = "0.1.0"
 dependencies = [
+ "convergence-stamp",
  "path-literal-guard",
  "pre-delete-citation-check",
+ "serde_json",
  "state-wildcard-lint",
+ "subprocess-contract",
  "undrained-pipe-lint",
 ]
 
@@ -1562,6 +1576,15 @@ name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
+
+[[package]]
+name = "scratch-home"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "subprocess-contract",
+]
 
 [[package]]
 name = "semver"
@@ -2124,6 +2147,9 @@ dependencies = [
 [[package]]
 name = "wired-but-inert-guard"
 version = "0.1.0"
+dependencies = [
+ "subprocess-contract",
+]
 
 [[package]]
 name = "xattr"

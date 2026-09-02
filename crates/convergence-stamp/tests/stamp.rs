@@ -318,3 +318,141 @@ fn a_stamp_with_no_sections_cannot_admit() {
     let refused = refusals(&c, Some(&empty));
     assert!(!refused.is_empty(), "an empty stamp must refuse: {refused:?}");
 }
+
+/// RULING 1 (Joshua, 2026-09-01): a void round is excluded from coverage in BOTH directions.
+///
+/// The failure this prevents is specific and was live before the ruling: round 22 appeared in
+/// the "Unreconciled" table as 13 declared / 0 dispositioned, which reads as OUTSTANDING WORK.
+/// A voided round is neither done nor outstanding — it is a record that an unpinned round was
+/// attempted, and its rows must stay so the attempt is not erased.
+#[test]
+fn a_void_round_counts_in_neither_direction_and_keeps_its_rows() {
+    let root = fixture("void");
+    fs::write(root.join("docs/plan/00-brief.md"), b"s\n").expect("section");
+    fs::write(
+        root.join("docs/plan/CONVERGENCE.jsonl"),
+        "{\"round\":20,\"section\":\"00-brief\",\"new_findings\":5}\n\
+         {\"round\":22,\"section\":\"00-brief\",\"new_findings\":13,\"void\":true,\
+         \"void_reason\":\"VOID under HD-0005: written without a pin\"}\n",
+    )
+    .expect("seed");
+    fs::write(
+        root.join("docs/plan/FINDINGS.jsonl"),
+        "{\"id\":\"R20-a-1\",\"round\":20,\"disposition\":\"FIXED\"}\n\
+         {\"id\":\"R22-a-1\",\"round\":22,\"disposition\":\"DEFERRED\",\"void\":true,\
+         \"void_reason\":\"round voided\"}\n",
+    )
+    .expect("seed findings");
+
+    let c = census(&root);
+    assert!(c.void_rounds.contains(&22), "round 22 must be classified VOID: {:?}", c.void_rounds);
+
+    // NOT as done
+    assert_eq!(
+        c.dispositioned_by_round.get(&22).copied().unwrap_or(0),
+        0,
+        "a voided disposition must not count as done"
+    );
+    assert!(
+        !c.dispositioned.contains("R22-a-1"),
+        "a voided finding id must not enter the dispositioned set"
+    );
+    // NOT as outstanding
+    assert!(!c.live_rounds().contains(&22), "a void round is not a live round");
+    assert_eq!(c.declared_live(), 5, "void declared must not inflate the denominator");
+    assert_eq!(c.dispositioned_live(), 1, "only the live round's disposition counts");
+
+    // and the ROW is still there — deleting it would erase the attempt
+    assert!(
+        c.rows.iter().any(|r| r.round == 22),
+        "the void round's row must be retained as the record of the attempt"
+    );
+
+    // the document must say VOID, and must NOT list it as unreconciled/outstanding
+    let doc = render_document(&c, "test");
+    assert!(doc.contains("VOID under HD-0005"), "the doc must name the void class:\n{doc}");
+    assert!(
+        doc.contains("| **22** | VOID |"),
+        "round 22 must be classed VOID in the per-round table"
+    );
+}
+
+/// RULING 3 (Joshua, 2026-09-01): rounds that predate per-finding identity are RECORDED and not
+/// dispositioned, and are excluded from coverage rather than mass-minted.
+#[test]
+fn a_pre_identity_round_is_recorded_and_excluded_not_counted_as_outstanding() {
+    let root = fixture("preid");
+    fs::write(root.join("docs/plan/00-brief.md"), b"s\n").expect("section");
+    fs::write(
+        root.join("docs/plan/CONVERGENCE.jsonl"),
+        "{\"round\":10,\"section\":\"00-brief\",\"new_findings\":77}\n\
+         {\"round\":20,\"section\":\"00-brief\",\"new_findings\":5}\n",
+    )
+    .expect("seed");
+    fs::write(
+        root.join("docs/plan/FINDINGS.jsonl"),
+        "{\"id\":\"R20-a-1\",\"round\":20,\"disposition\":\"FIXED\"}\n",
+    )
+    .expect("seed findings");
+
+    let c = census(&root);
+    assert!(
+        c.pre_identity_rounds.contains(&10),
+        "round 10 is below HD_0006_SCOPE_START with declared findings and no dispositions: {:?}",
+        c.pre_identity_rounds
+    );
+    assert_eq!(c.declared_live(), 5, "77 pre-identity findings must not inflate the denominator");
+    assert!(!c.live_rounds().contains(&10));
+
+    // a round INSIDE the scope with zero dispositions must NOT be reclassified as pre-identity —
+    // that would let a real reconciliation gap hide behind the ruling
+    assert!(
+        !c.pre_identity_rounds.contains(&20),
+        "an in-scope round must stay LIVE even with zero dispositions"
+    );
+
+    let doc = render_document(&c, "test");
+    assert!(doc.contains("PRE-IDENTITY"), "the doc must name the class");
+    assert!(
+        doc.contains("omp-orchestrator-mine-pre-identity-rounds-8-14-lfa"),
+        "the doc must cite the mining bead so the gap is owned, not merely noted"
+    );
+    assert!(
+        doc.contains("| **10** | PRE-IDENTITY |"),
+        "round 10 must be classed in the per-round table"
+    );
+}
+
+/// The real repo, against both rulings at once: round 22 VOID, rounds 8-14 PRE-IDENTITY, and
+/// the live denominator excludes both.
+#[test]
+fn the_real_census_applies_both_rulings() {
+    let c = census(&repo_root());
+    assert!(!c.rows.is_empty(), "ANTI-VACUITY: real census is empty");
+    assert!(
+        c.void_rounds.contains(&22),
+        "round 22 carries void=true rows in CONVERGENCE.jsonl: {:?}",
+        c.void_rounds
+    );
+    for round in [8u64, 9, 10, 12, 13, 14] {
+        assert!(
+            c.pre_identity_rounds.contains(&round),
+            "round {round} declared findings with zero dispositions below the HD-0006 scope; \
+             pre_identity={:?}",
+            c.pre_identity_rounds
+        );
+    }
+    // rounds 15-21 must all be LIVE — that is the set HD-0006 requires covered
+    for round in [15u64, 16, 19, 20, 21] {
+        assert!(
+            c.live_rounds().contains(&round),
+            "round {round} must be LIVE (in HD-0006 scope): live={:?}",
+            c.live_rounds()
+        );
+    }
+    assert!(
+        c.declared_live() < c.declared_by_round.values().sum::<u64>(),
+        "the live denominator must be strictly smaller than the all-rounds total, or the \
+         exclusions are not being applied"
+    );
+}

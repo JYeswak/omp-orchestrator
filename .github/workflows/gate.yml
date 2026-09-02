@@ -30,6 +30,11 @@ jobs:
         run: cargo run --quiet -p no-shell-gate
       - name: Gate tests — red/green legs and the real-tree leg
         run: cargo test -p no-shell-gate
+      # ROUND ADMISSION (Josh, 2026-09-01): one stamped doc must cover every grading round
+      # before another round may start. `--check` is the same command a human and the
+      # pre-commit hook run, so the refusal is not reachable only from `cargo test`.
+      - name: No new round until one stamped doc covers every round
+        run: cargo run --quiet -p convergence-stamp -- --repo . --check
   path-literal-guard:
     runs-on: ubuntu-latest
     steps:

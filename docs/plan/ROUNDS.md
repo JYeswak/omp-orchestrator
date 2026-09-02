@@ -13,35 +13,44 @@ This document is the answer, and `STAMP.toml` is its coverage claim. A new round
 
 | field | value |
 |---|---|
-| cut at | `epoch:1788307780` |
-| rounds covered | **14** |
+| cut at | `epoch:1788308504` |
+| rounds recorded | **14** |
 | round rows | **174** |
-| declared findings | **559** |
-| dispositioned in FINDINGS.jsonl | **220** |
+| declared findings, all rounds | **559** |
 | plan sections digested | **13** |
 
-**220 of 559 declared findings are dispositioned.** That ratio is the honest state of the plan, and a current stamp does not improve it — the stamp says the RECORD is complete, never that the work is.
+### Coverage, split three ways
+
+Joshua's rulings of 2026-09-01. A **void** round and a **pre-identity** round are excluded from BOTH the numerator and the denominator — the first because *"a resolution of a finding from a voided round must not appear as coverage in either direction, not as done and not as outstanding"*, the second because minting ids for rounds that never had them *"would manufacture a ledger that looks complete and cites nothing."*
+
+| class | rounds | declared | dispositioned | counts toward coverage |
+|---|---|---:|---:|---|
+| **LIVE** | 15, 16, 17, 18, 19, 20, 21 | **206** | **220** | yes |
+| PRE-IDENTITY | 8, 9, 10, 12, 13, 14 | 340 | 0 | no — recorded, never minted |
+| VOID (HD-0005) | 22 | 13 | 0 | no — record kept, coverage excluded |
+
+**220 of 206 declared findings are dispositioned on the live rounds.** That ratio is the honest state of the plan, and a current stamp does not improve it — the stamp says the RECORD is complete, never that the work is.
 
 ## Every round
 
-| round | rows | declared | dispositioned | sections graded | source files |
-|---:|---:|---:|---:|---:|---|
-| **8** | 12 | 9 | 0 | 12 | `docs/plan/CONVERGENCE.jsonl` |
-| **9** | 12 | 13 | 0 | 12 | `docs/plan/CONVERGENCE.jsonl` |
-| **10** | 12 | 77 | 0 | 12 | `docs/plan/CONVERGENCE.jsonl` |
-| **12** | 9 | 89 | 0 | 9 | `docs/plan/CONVERGENCE.jsonl` |
-| **13** | 13 | 80 | 0 | 13 | `docs/plan/CONVERGENCE.jsonl` |
-| **14** | 12 | 72 | 0 | 12 | `docs/plan/CONVERGENCE.jsonl` |
-| **15** | 13 | 20 | 21 | 13 | `docs/plan/CONVERGENCE.jsonl` |
-| **16** | 20 | 76 | 89 | 14 | `docs/plan/round16-AdversaryEye.jsonl`<br>`docs/plan/round16-DeltaEye.jsonl`<br>`docs/plan/round16-GreenFrog.jsonl`<br>`docs/plan/round16-SchemaEye.jsonl`<br>`docs/plan/round16-TraceEye.jsonl` |
-| **17** | 4 | 0 | 0 | 4 | `docs/plan/round17-GreenFrog.jsonl` |
-| **18** | 4 | 0 | 0 | 4 | `docs/plan/round18-GreenFrog.jsonl` |
-| **19** | 15 | 47 | 47 | 15 | `docs/plan/round19-GreenFrog.jsonl` |
-| **20** | 14 | 25 | 25 | 14 | `docs/plan/round20-GreenFrog.jsonl` |
-| **21** | 14 | 38 | 38 | 14 | `docs/plan/round21-GreenFrog.jsonl` |
-| **22** | 20 | 13 | 0 | 13 | `docs/plan/CONVERGENCE.jsonl`<br>`docs/plan/round16-Opus.jsonl` |
+| round | class | rows | declared | dispositioned | sections graded | source files |
+|---:|---|---:|---:|---:|---:|---|
+| **8** | PRE-IDENTITY | 12 | 9 | 0 | 12 | `docs/plan/CONVERGENCE.jsonl` |
+| **9** | PRE-IDENTITY | 12 | 13 | 0 | 12 | `docs/plan/CONVERGENCE.jsonl` |
+| **10** | PRE-IDENTITY | 12 | 77 | 0 | 12 | `docs/plan/CONVERGENCE.jsonl` |
+| **12** | PRE-IDENTITY | 9 | 89 | 0 | 9 | `docs/plan/CONVERGENCE.jsonl` |
+| **13** | PRE-IDENTITY | 13 | 80 | 0 | 13 | `docs/plan/CONVERGENCE.jsonl` |
+| **14** | PRE-IDENTITY | 12 | 72 | 0 | 12 | `docs/plan/CONVERGENCE.jsonl` |
+| **15** | LIVE | 13 | 20 | 21 | 13 | `docs/plan/CONVERGENCE.jsonl` |
+| **16** | LIVE | 20 | 76 | 89 | 14 | `docs/plan/round16-AdversaryEye.jsonl`<br>`docs/plan/round16-DeltaEye.jsonl`<br>`docs/plan/round16-GreenFrog.jsonl`<br>`docs/plan/round16-SchemaEye.jsonl`<br>`docs/plan/round16-TraceEye.jsonl` |
+| **17** | LIVE | 4 | 0 | 0 | 4 | `docs/plan/round17-GreenFrog.jsonl` |
+| **18** | LIVE | 4 | 0 | 0 | 4 | `docs/plan/round18-GreenFrog.jsonl` |
+| **19** | LIVE | 15 | 47 | 47 | 15 | `docs/plan/round19-GreenFrog.jsonl` |
+| **20** | LIVE | 14 | 25 | 25 | 14 | `docs/plan/round20-GreenFrog.jsonl` |
+| **21** | LIVE | 14 | 38 | 38 | 14 | `docs/plan/round21-GreenFrog.jsonl` |
+| **22** | VOID | 20 | 13 | 0 | 13 | `docs/plan/CONVERGENCE.jsonl`<br>`docs/plan/round16-Opus.jsonl` |
 
-### Unreconciled: 7 rounds, 353 declared findings, zero dispositioned
+### PRE-IDENTITY: 6 rounds, 340 declared findings, recorded and not dispositioned
 
 | round | declared | dispositioned |
 |---:|---:|---:|
@@ -51,9 +60,16 @@ This document is the answer, and `STAMP.toml` is its coverage claim. A new round
 | 12 | 89 | 0 |
 | 13 | 80 | 0 |
 | 14 | 72 | 0 |
-| 22 | 13 | 0 |
 
-HD-0006 scopes reconciliation to rounds 15-22. Any round above that is outside both the ruling and the ledger — it needs a ruling or a bead, not a silent pass.
+**Joshua's ruling, 2026-09-01 — a bead, not a blocker, and the reasoning is the load-bearing part:** *"Those rounds predate the finding-id discipline entirely — their rows carry no `finding_ids` field, so there is no per-finding identity to disposition against. Reconciling them means MINTING 340 ids that join back to nothing, which is precisely the defect I found in the R16 migration: 'the R16-00-001 ids were minted by the reconciling pane and do not join back.' Doing that 340 times would manufacture a ledger that looks complete and cites nothing."*
+
+Measured, and **broader than the ruling assumed**: `jq`-equivalent over `CONVERGENCE.jsonl` finds **zero** rows carrying `finding_ids` at ANY round — 0 of 70 below round 15 and 0 of 17 at 15 and above. So every id in `FINDINGS.jsonl` was minted by a reconciling pane, not by the grader who declared the finding. Below round 15 there is additionally no reconciliation bead, which is what separates "recorded" from "reconciled" here.
+
+HD-0006 scopes reconciliation to rounds 15-22 and that scope stands. Mining bead: `omp-orchestrator-mine-pre-identity-rounds-8-14-lfa`. If a real finding dies in this gap, the correct response is an example and a re-ruling — not a mass id mint.
+
+### VOID under HD-0005: 1 round(s), excluded from coverage in BOTH directions
+
+- **round 22** — 13 declared, rows retained. The rows are the RECORD that an unpinned round was attempted; deleting them would erase the attempt. Their dispositions do not count as done OR as outstanding.
 
 ## Every row
 

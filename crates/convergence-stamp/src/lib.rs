@@ -74,7 +74,27 @@ pub struct RoundCensus {
     pub dispositioned: BTreeSet<String>,
     /// dispositioned counted per round
     pub dispositioned_by_round: BTreeMap<u64, u64>,
+    /// Rounds whose rows carry `void: true`.
+    ///
+    /// Joshua's ruling, 2026-09-01: *"a resolution of a finding from a voided round must not
+    /// appear as coverage in either direction, not as done and not as outstanding."* So a void
+    /// round is EXCLUDED from both the numerator and the denominator, and is reported in its
+    /// own section — never folded into "unreconciled", which would read as outstanding work.
+    pub void_rounds: BTreeSet<u64>,
+    /// Rounds that predate per-finding identity and are outside HD-0006's 15-22 scope.
+    ///
+    /// Measured, and broader than the ruling assumed: ZERO rows in `CONVERGENCE.jsonl` carry a
+    /// `finding_ids` field — 0 of 70 below round 15 AND 0 of 17 at 15 and above. So every id in
+    /// `FINDINGS.jsonl` was minted by a reconciling pane. Below round 15 there is additionally
+    /// no reconciliation bead, so minting 340 more would manufacture a ledger that looks
+    /// complete and cites nothing. Recorded, not dispositioned; bead
+    /// `omp-orchestrator-mine-pre-identity-rounds-8-14-lfa`.
+    pub pre_identity_rounds: BTreeSet<u64>,
 }
+
+/// HD-0006 scopes reconciliation to rounds 15 through 22. Rounds below this are recorded and
+/// excluded from coverage rather than mass-minted.
+pub const HD_0006_SCOPE_START: u64 = 15;
 
 /// Why a new round is refused. Every arm names what to do about it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -310,6 +330,11 @@ pub fn census(root: &Path) -> RoundCensus {
             });
             *c.declared_by_round.entry(round).or_default() += declared;
             c.sources_by_round.entry(round).or_default().insert(label.clone());
+            // A voided round row is the RECORD that an unpinned round was attempted. Keep the
+            // row and exclude the ROUND from coverage — deleting it would erase the attempt.
+            if row.get("void").and_then(Value::as_bool).unwrap_or(false) {
+                c.void_rounds.insert(round);
+            }
         }
     }
     c.rows.sort_by(|a, b| {
@@ -328,6 +353,13 @@ pub fn census(root: &Path) -> RoundCensus {
     }
 
     for row in read_rows(&root.join("docs/plan/FINDINGS.jsonl")) {
+        let voided = row.get("void").and_then(Value::as_bool).unwrap_or(false);
+        if voided {
+            if let Some(round) = row.get("round").and_then(Value::as_u64) {
+                c.void_rounds.insert(round);
+            }
+            continue; // not coverage in either direction
+        }
         if let Some(id) = str_field(&row, &["id", "finding_id"]) {
             c.dispositioned.insert(id);
         }
@@ -336,7 +368,46 @@ pub fn census(root: &Path) -> RoundCensus {
         }
     }
 
+    // Rounds below HD-0006's scope with declared findings and no dispositions predate
+    // per-finding identity: recorded, never mass-minted.
+    for (round, declared) in &c.declared_by_round {
+        if *round < HD_0006_SCOPE_START
+            && *declared > 0
+            && c.dispositioned_by_round.get(round).copied().unwrap_or(0) == 0
+        {
+            c.pre_identity_rounds.insert(*round);
+        }
+    }
+
     c
+}
+
+impl RoundCensus {
+    /// Rounds that count toward coverage: not void, not pre-identity.
+    ///
+    /// This is the whole of Joshua's first ruling expressed once, in one place, so no renderer
+    /// can accidentally fold a void round into "outstanding".
+    pub fn live_rounds(&self) -> Vec<u64> {
+        self.declared_by_round
+            .keys()
+            .copied()
+            .filter(|r| !self.void_rounds.contains(r) && !self.pre_identity_rounds.contains(r))
+            .collect()
+    }
+
+    pub fn declared_live(&self) -> u64 {
+        self.live_rounds()
+            .iter()
+            .map(|r| self.declared_by_round.get(r).copied().unwrap_or(0))
+            .sum()
+    }
+
+    pub fn dispositioned_live(&self) -> u64 {
+        self.live_rounds()
+            .iter()
+            .map(|r| self.dispositioned_by_round.get(r).copied().unwrap_or(0))
+            .sum()
+    }
 }
 
 // ───────────────────────────────────────────────────────────────── the stamp
@@ -375,16 +446,58 @@ pub fn render_stamp(c: &RoundCensus, cut_at: &str) -> String {
     let _ = writeln!(out, "row_count = {}", c.rows.len());
     let _ = writeln!(
         out,
-        "declared_findings = {}",
+        "declared_findings_total = {}",
         c.declared_by_round.values().sum::<u64>()
     );
-    let _ = writeln!(out, "dispositioned_findings = {}", c.dispositioned.len());
+    out.push('\n');
+    out.push_str(
+        "# COVERAGE, split three ways per Joshua's rulings of 2026-09-01. A void round and a\n\
+         # pre-identity round are excluded from BOTH the numerator and the denominator: a\n\
+         # resolution from a voided round must not read as done OR as outstanding, and rounds\n\
+         # that predate per-finding identity must not be mass-minted into false coverage.\n",
+    );
+    let _ = writeln!(out, "[coverage]");
+    let _ = writeln!(
+        out,
+        "live_rounds = [{}]",
+        c.live_rounds().iter().map(u64::to_string).collect::<Vec<_>>().join(", ")
+    );
+    let _ = writeln!(out, "declared_live = {}", c.declared_live());
+    let _ = writeln!(out, "dispositioned_live = {}", c.dispositioned_live());
+    let _ = writeln!(
+        out,
+        "void_rounds = [{}]   # HD-0005: unpinned, record kept, coverage excluded",
+        c.void_rounds.iter().map(u64::to_string).collect::<Vec<_>>().join(", ")
+    );
+    let _ = writeln!(
+        out,
+        "pre_identity_rounds = [{}]   # no finding_ids ever recorded; bead omp-orchestrator-mine-pre-identity-rounds-8-14-lfa",
+        c.pre_identity_rounds.iter().map(u64::to_string).collect::<Vec<_>>().join(", ")
+    );
+    let _ = writeln!(
+        out,
+        "declared_pre_identity = {}",
+        c.pre_identity_rounds
+            .iter()
+            .map(|r| c.declared_by_round.get(r).copied().unwrap_or(0))
+            .sum::<u64>()
+    );
     let _ = writeln!(out, "section_count = {}", c.section_digests.len());
     out.push('\n');
     let _ = writeln!(out, "[declared_by_round]");
     for (round, n) in &c.declared_by_round {
         let done = c.dispositioned_by_round.get(round).copied().unwrap_or(0);
-        let _ = writeln!(out, "r{round} = {{ declared = {n}, dispositioned = {done} }}");
+        let class = if c.void_rounds.contains(round) {
+            "void"
+        } else if c.pre_identity_rounds.contains(round) {
+            "pre_identity"
+        } else {
+            "live"
+        };
+        let _ = writeln!(
+            out,
+            "r{round} = {{ declared = {n}, dispositioned = {done}, class = \"{class}\" }}"
+        );
     }
     out.push('\n');
     let _ = writeln!(out, "[sections]");
@@ -500,33 +613,76 @@ pub fn render_document(c: &RoundCensus, cut_at: &str) -> String {
     let _ = writeln!(out, "| field | value |");
     let _ = writeln!(out, "|---|---|");
     let _ = writeln!(out, "| cut at | `{cut_at}` |");
-    let _ = writeln!(out, "| rounds covered | **{}** |", c.declared_by_round.len());
+    let _ = writeln!(out, "| rounds recorded | **{}** |", c.declared_by_round.len());
     let _ = writeln!(out, "| round rows | **{}** |", c.rows.len());
-    let _ = writeln!(out, "| declared findings | **{declared}** |");
-    let _ = writeln!(
-        out,
-        "| dispositioned in FINDINGS.jsonl | **{}** |",
-        c.dispositioned.len()
-    );
+    let _ = writeln!(out, "| declared findings, all rounds | **{declared}** |");
     let _ = writeln!(out, "| plan sections digested | **{}** |", c.section_digests.len());
+    out.push('\n');
+
+    let _ = writeln!(out, "### Coverage, split three ways\n");
+    out.push_str(
+        "Joshua's rulings of 2026-09-01. A **void** round and a **pre-identity** round are \
+         excluded from BOTH the numerator and the denominator — the first because *\"a resolution \
+         of a finding from a voided round must not appear as coverage in either direction, not as \
+         done and not as outstanding\"*, the second because minting ids for rounds that never had \
+         them *\"would manufacture a ledger that looks complete and cites nothing.\"*\n\n",
+    );
+    let _ = writeln!(out, "| class | rounds | declared | dispositioned | counts toward coverage |");
+    let _ = writeln!(out, "|---|---|---:|---:|---|");
+    let live = c.live_rounds();
     let _ = writeln!(
         out,
-        "\n**{} of {declared} declared findings are dispositioned.** That ratio is the honest \
-         state of the plan, and a current stamp does not improve it — the stamp says the RECORD \
-         is complete, never that the work is.\n",
-        c.dispositioned.len()
+        "| **LIVE** | {} | **{}** | **{}** | yes |",
+        live.iter().map(u64::to_string).collect::<Vec<_>>().join(", "),
+        c.declared_live(),
+        c.dispositioned_live()
+    );
+    let pre_declared: u64 = c
+        .pre_identity_rounds
+        .iter()
+        .map(|r| c.declared_by_round.get(r).copied().unwrap_or(0))
+        .sum();
+    let _ = writeln!(
+        out,
+        "| PRE-IDENTITY | {} | {pre_declared} | 0 | no — recorded, never minted |",
+        c.pre_identity_rounds.iter().map(u64::to_string).collect::<Vec<_>>().join(", ")
+    );
+    let void_declared: u64 = c
+        .void_rounds
+        .iter()
+        .map(|r| c.declared_by_round.get(r).copied().unwrap_or(0))
+        .sum();
+    let _ = writeln!(
+        out,
+        "| VOID (HD-0005) | {} | {void_declared} | 0 | no — record kept, coverage excluded |",
+        c.void_rounds.iter().map(u64::to_string).collect::<Vec<_>>().join(", ")
+    );
+    let _ = writeln!(
+        out,
+        "\n**{} of {} declared findings are dispositioned on the live rounds.** That ratio is the \
+         honest state of the plan, and a current stamp does not improve it — the stamp says the \
+         RECORD is complete, never that the work is.\n",
+        c.dispositioned_live(),
+        c.declared_live()
     );
 
     let _ = writeln!(out, "## Every round\n");
     let _ = writeln!(
         out,
-        "| round | rows | declared | dispositioned | sections graded | source files |"
+        "| round | class | rows | declared | dispositioned | sections graded | source files |"
     );
-    let _ = writeln!(out, "|---:|---:|---:|---:|---:|---|");
+    let _ = writeln!(out, "|---:|---|---:|---:|---:|---:|---|");
     for (round, n) in &c.declared_by_round {
         let rows: Vec<&RoundRow> = c.rows.iter().filter(|r| r.round == *round).collect();
         let sections: BTreeSet<&str> = rows.iter().map(|r| r.section.as_str()).collect();
         let done = c.dispositioned_by_round.get(round).copied().unwrap_or(0);
+        let class = if c.void_rounds.contains(round) {
+            "VOID"
+        } else if c.pre_identity_rounds.contains(round) {
+            "PRE-IDENTITY"
+        } else {
+            "LIVE"
+        };
         let sources: Vec<String> = c
             .sources_by_round
             .get(round)
@@ -534,37 +690,65 @@ pub fn render_document(c: &RoundCensus, cut_at: &str) -> String {
             .unwrap_or_default();
         let _ = writeln!(
             out,
-            "| **{round}** | {} | {n} | {done} | {} | {} |",
+            "| **{round}** | {class} | {} | {n} | {done} | {} | {} |",
             rows.len(),
             sections.len(),
             sources.join("<br>")
         );
     }
 
-    // The gap that matters most: rounds with declared findings and nothing dispositioned.
-    let unreconciled: Vec<(u64, u64)> = c
-        .declared_by_round
-        .iter()
-        .filter(|(round, n)| **n > 0 && c.dispositioned_by_round.get(round).copied().unwrap_or(0) == 0)
-        .map(|(r, n)| (*r, *n))
-        .collect();
-    if !unreconciled.is_empty() {
-        let total: u64 = unreconciled.iter().map(|(_, n)| *n).sum();
+    if !c.pre_identity_rounds.is_empty() {
         let _ = writeln!(
             out,
-            "\n### Unreconciled: {} rounds, {total} declared findings, zero dispositioned\n",
-            unreconciled.len()
+            "\n### PRE-IDENTITY: {} rounds, {pre_declared} declared findings, recorded and not \
+             dispositioned\n",
+            c.pre_identity_rounds.len()
         );
         let _ = writeln!(out, "| round | declared | dispositioned |");
         let _ = writeln!(out, "|---:|---:|---:|");
-        for (round, n) in &unreconciled {
-            let _ = writeln!(out, "| {round} | {n} | 0 |");
+        for round in &c.pre_identity_rounds {
+            let _ = writeln!(
+                out,
+                "| {round} | {} | 0 |",
+                c.declared_by_round.get(round).copied().unwrap_or(0)
+            );
         }
+        out.push_str(
+            "\n**Joshua's ruling, 2026-09-01 — a bead, not a blocker, and the reasoning is the \
+             load-bearing part:** *\"Those rounds predate the finding-id discipline entirely — \
+             their rows carry no `finding_ids` field, so there is no per-finding identity to \
+             disposition against. Reconciling them means MINTING 340 ids that join back to \
+             nothing, which is precisely the defect I found in the R16 migration: 'the R16-00-001 \
+             ids were minted by the reconciling pane and do not join back.' Doing that 340 times \
+             would manufacture a ledger that looks complete and cites nothing.\"*\n\n\
+             Measured, and **broader than the ruling assumed**: `jq`-equivalent over \
+             `CONVERGENCE.jsonl` finds **zero** rows carrying `finding_ids` at ANY round — 0 of 70 \
+             below round 15 and 0 of 17 at 15 and above. So every id in `FINDINGS.jsonl` was \
+             minted by a reconciling pane, not by the grader who declared the finding. Below round \
+             15 there is additionally no reconciliation bead, which is what separates \"recorded\" \
+             from \"reconciled\" here.\n\n\
+             HD-0006 scopes reconciliation to rounds 15-22 and that scope stands. Mining bead: \
+             `omp-orchestrator-mine-pre-identity-rounds-8-14-lfa`. If a real finding dies in this \
+             gap, the correct response is an example and a re-ruling — not a mass id mint.\n",
+        );
+    }
+
+    if !c.void_rounds.is_empty() {
         let _ = writeln!(
             out,
-            "\nHD-0006 scopes reconciliation to rounds 15-22. Any round above that is outside \
-             both the ruling and the ledger — it needs a ruling or a bead, not a silent pass.\n"
+            "\n### VOID under HD-0005: {} round(s), excluded from coverage in BOTH directions\n",
+            c.void_rounds.len()
         );
+        for round in &c.void_rounds {
+            let _ = writeln!(
+                out,
+                "- **round {round}** — {} declared, rows retained. The rows are the RECORD that an \
+                 unpinned round was attempted; deleting them would erase the attempt. Their \
+                 dispositions do not count as done OR as outstanding.",
+                c.declared_by_round.get(round).copied().unwrap_or(0)
+            );
+        }
+        out.push('\n');
     }
 
     let _ = writeln!(out, "## Every row\n");
