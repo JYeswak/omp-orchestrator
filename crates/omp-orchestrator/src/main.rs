@@ -10,6 +10,10 @@ use ack_stage::{
     assess as assess_ack_stage, AckAction, AckReadback, AckStageInput, AckStageResult,
     TransportReceipt,
 };
+use agent_mail_native::journey::{
+    self as mail, AgentName, DeliveryReceipt, ProjectKey, SendRequest,
+};
+use agent_mail_native::{MailClient, MailError};
 use asupersync::process::{Command, Output};
 use asupersync::runtime::RuntimeBuilder;
 use asupersync::time::{sleep, timeout};
@@ -77,6 +81,17 @@ struct Config {
     tick_monitor_state: PathBuf,
     pending_dispatch: PathBuf,
     receiver_agent: String,
+    /// This supervisor's own Agent Mail identity, for a signed FROM on the
+    /// durable dispatch-result notification.
+    ///
+    /// Resolved ONCE here from the environment rather than read at the call
+    /// site, so the notification's behaviour is a property of an explicit
+    /// config value instead of ambient process state. That matters for more
+    /// than tidiness: a unit test that exercised the dispatch path while
+    /// `AGENT_NAME` happened to be exported would send REAL mail and create a
+    /// junk project in the live store. An empty value here refuses before any
+    /// I/O, and the test fixture sets it empty deliberately.
+    mail_sender: String,
     omp_quick: bool,
     reap_finished_panes: String,
     omp_binary: PathBuf,
@@ -278,6 +293,15 @@ impl Config {
             tick_monitor_state,
             pending_dispatch,
             receiver_agent,
+            mail_sender: MAIL_IDENTITY_VARS
+                .iter()
+                .find_map(|key| {
+                    env::var(key)
+                        .ok()
+                        .map(|value| value.trim().to_owned())
+                        .filter(|value| !value.is_empty())
+                })
+                .unwrap_or_default(),
             omp_quick,
             reap_finished_panes: env::var("OMP_REAP_FINISHED_PANES_BIN")
                 .unwrap_or_else(|_| "reap-finished-panes".to_owned()),
@@ -1381,6 +1405,211 @@ fn dispatch_result_ntm_args(
     ]
 }
 
+/// The caller-owned deadline on every Agent Mail call.
+///
+/// EXPLICIT on purpose, and never a default. Measured 2026-09-02 on the
+/// sibling notification kernel: a caller that owns its ceiling gets a typed
+/// terminal carrying a resumable cursor, while a caller whose wait is ended by
+/// somebody else's signal gets a cancel with the cursor STRIPPED. Owning the
+/// deadline is what keeps the resume point, so the value lives here rather
+/// than in the binding's default.
+const MAIL_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// One durable dispatch-result notification, as the daemon recorded it.
+///
+/// Deliberately NOT merged into `PostSendObservation` or `AckReadback`. This is
+/// a THIRD, independently obtained fact — the mail system's own durable record
+/// — and the whole value of it is that it is not derived from either of the
+/// other two authorities.
+#[derive(Debug)]
+struct DurableNotice {
+    recipient: String,
+    message_id: i64,
+    persisted: bool,
+    signaled: bool,
+    cursor: u64,
+    oracle_skew: Option<i128>,
+}
+
+/// This orchestrator's own Agent Mail identity, for a signed FROM.
+///
+/// Read from [`Config::mail_sender`], which is resolved once at startup,
+/// because the daemon REFUSES descriptive names (`INVALID_AGENT_NAME`: names
+/// must be generated adjective+noun) so the supervisor cannot synthesise one.
+///
+/// An unset identity is a NAMED REFUSAL, never a silent skip. That is the
+/// call-site form of the binding's empty-catalogue rule: an absent result must
+/// not be readable as a healthy no-op, because a supervisor that quietly
+/// stopped notifying looks exactly like one with nothing to report.
+fn mail_sender_identity(config: &Config) -> Result<AgentName, String> {
+    sender_identity_from(&config.mail_sender)
+}
+
+/// The environment variables consulted for the sender identity, in order.
+const MAIL_IDENTITY_VARS: [&str; 2] = ["AGENT_MAIL_AGENT", "AGENT_NAME"];
+
+/// Turn a configured identity into a usable one, or refuse. Pure, so the
+/// refusal is testable without mutating process-global environment state.
+fn sender_identity_from(configured: &str) -> Result<AgentName, String> {
+    let trimmed = configured.trim();
+    if trimmed.is_empty() {
+        return Err(format!(
+            "sender_identity_unset searched={}",
+            MAIL_IDENTITY_VARS.join(",")
+        ));
+    }
+    Ok(AgentName::new(trimmed))
+}
+
+/// Who receives the durable notification for a dispatch to `pane`.
+///
+/// The pane->agent map is the same authority `validate_receiver_pane` uses, so
+/// a notification cannot be addressed to an agent the dispatcher would have
+/// refused to send to. Falls back to the configured receiver only when the map
+/// has no row, and refuses when neither is available rather than guessing.
+fn mail_recipient(config: &Config, pane: &str) -> Result<AgentName, String> {
+    if let Some(mapped) = agent_for_pane(config, pane) {
+        return Ok(AgentName::new(mapped));
+    }
+    let configured = config.receiver_agent.trim();
+    if configured.is_empty() {
+        return Err(format!("recipient_unresolved pane={pane}"));
+    }
+    Ok(AgentName::new(configured))
+}
+
+/// The ledger row a mail failure becomes.
+///
+/// Every variant gets its OWN row, and none of them is a delivered row. An
+/// unreachable daemon and an empty mailbox are different facts; an
+/// unauthorized daemon is RUNNING and merely refused us. Collapsing any of
+/// these into a single "notify failed" row would reproduce the measured
+/// `am agent start` defect, where an auth failure was reported as absence.
+fn mail_failure_row(error: &MailError) -> &'static str {
+    match error {
+        MailError::Unreachable { .. } => "DISPATCH_RESULT_MAIL_UNREACHABLE",
+        MailError::Unauthorized { .. } => "DISPATCH_RESULT_MAIL_UNAUTHORIZED",
+        MailError::MissingCredential { .. } => "DISPATCH_RESULT_MAIL_NO_CREDENTIAL",
+        MailError::TimedOut { .. } => "DISPATCH_RESULT_MAIL_TIMED_OUT",
+        MailError::Cancelled(_) => "DISPATCH_RESULT_MAIL_CANCELLED",
+        MailError::CursorAhead { .. } | MailError::CursorExpired { .. } => {
+            "DISPATCH_RESULT_MAIL_CURSOR_UNUSABLE"
+        }
+        MailError::EmptyCatalogue => "DISPATCH_RESULT_MAIL_EMPTY_CATALOGUE",
+        MailError::ToolRefused { .. } => "DISPATCH_RESULT_MAIL_REFUSED",
+        MailError::Rpc { .. } | MailError::Protocol { .. } | MailError::Codec { .. } => {
+            "DISPATCH_RESULT_MAIL_PROTOCOL"
+        }
+        MailError::UnexpectedStatus { .. } => "DISPATCH_RESULT_MAIL_UNEXPECTED_STATUS",
+    }
+}
+
+/// Send the dispatch result to the receiver as DURABLE mail, then read the
+/// daemon's own receipt back.
+///
+/// # Why this exists beside the pane notification
+///
+/// [`notify_dispatch_result`] rides `ntm --robot-send`, and its own doc records
+/// the measurement that makes it untrustworthy: a send returned
+/// `successful:["1"]` and never arrived. A transport that reports success
+/// without delivering cannot answer "did the receiver get this", so the
+/// dispatch result's only durable trace was a local heartbeat row that no
+/// third party can query.
+///
+/// Agent Mail answers it. The receipt separates `persisted` (the copy exists
+/// durably) from `signaled` (a message-id-bound signal receipt was appended)
+/// from `acknowledged`, so a delivered-but-unnotified message is VISIBLE
+/// instead of indistinguishable from a delivered one. Measured across three
+/// separate messages on 2026-09-02 (40786, 40810, 40826), Agent Mail reported
+/// `persisted=true signaled=false` every time, so that distinction is load
+/// bearing rather than theoretical.
+///
+/// # Daemon primary, CLI as oracle
+///
+/// The write and the receipt read-back both go through the authenticated MCP
+/// daemon. The CLI is consulted ONLY to cross-check the cursor reading, and a
+/// daemon failure never falls back to it — a CLI fallback would silently paper
+/// over an auth failure with a direct SQLite read, which is exactly the
+/// fail-open that made `am agent start` report a running daemon as absent.
+async fn notify_dispatch_result_durably(
+    cx: &Cx,
+    config: &Config,
+    pane: &str,
+    bead: &str,
+    result: &str,
+) -> Result<DurableNotice, String> {
+    let sender = mail_sender_identity(config)?;
+    let recipient = mail_recipient(config, pane)?;
+    let project = ProjectKey::new(config.repo.display().to_string());
+    let client = MailClient::discover().with_request_timeout(MAIL_REQUEST_TIMEOUT);
+
+    let detail = one_line_detail(result);
+    let body = format!(
+        "Dispatch result for `{bead}`.\n\n\
+         FROM: {sender}\nREPLY VIA: Agent Mail send_message to {sender}, project {project}\n\n\
+         - pane: {pane}\n- bead: {bead}\n- build_id: {BUILD_ID}\n- result: {detail}\n\n\
+         This is the DURABLE record of the dispatch result. The pane notification \
+         is a courtesy and has been measured to report success without delivering.",
+    );
+    let request = SendRequest::new(
+        project.clone(),
+        sender,
+        vec![recipient.clone()],
+        format!("dispatch result: {bead}"),
+        body,
+    );
+
+    let receipt = mail::send(cx, &client, &request)
+        .await
+        .map_err(|error| format!("{} {error}", mail_failure_row(&error)))?;
+    let message_id = receipt
+        .message_id()
+        .ok_or_else(|| "DISPATCH_RESULT_MAIL_PROTOCOL send returned no message id".to_owned())?;
+
+    // Read the daemon's own durable record back. A send receipt says we were
+    // accepted; this says the copy exists for that recipient.
+    let delivery: DeliveryReceipt = mail::delivery_receipt(cx, &client, &project, message_id)
+        .await
+        .map_err(|error| format!("{} {error}", mail_failure_row(&error)))?;
+    let recipient_row = delivery
+        .recipients
+        .iter()
+        .find(|entry| entry.recipient == recipient.as_str());
+
+    // Baseline the recipient's durable cursor, then cross-check it against the
+    // CLI. The cursor stays bound to its recipient: measured, one bare integer
+    // was simultaneously resumable for one agent and below another's floor.
+    let page = mail::fetch_inbox_events(
+        cx,
+        &client,
+        &project,
+        &recipient,
+        agent_mail_native::CursorQuery::PositionNow,
+        None,
+    )
+    .await
+    .map_err(|error| format!("{} {error}", mail_failure_row(&error)))?;
+
+    // DIFFERENTIAL ORACLE, NEVER A FALLBACK: a CLI failure degrades the
+    // cross-check to `None` and leaves the daemon's reading authoritative. It
+    // is never substituted for the daemon's answer.
+    let oracle_skew = match agent_mail_native::oracle::cli_position_now(cx, &project, &recipient)
+        .await
+    {
+        Ok(cli) => Some(agent_mail_native::oracle::compare(&page, &cli).skew()),
+        Err(_) => None,
+    };
+
+    Ok(DurableNotice {
+        recipient: recipient.as_str().to_owned(),
+        message_id: message_id.get(),
+        persisted: delivery.persisted,
+        signaled: recipient_row.is_some_and(|entry| entry.signaled),
+        cursor: page.tail_cursor.get(),
+        oracle_skew,
+    })
+}
+
 /// Records one dispatch result, then notifies the result pane as a courtesy.
 ///
 /// # Ledger first, send second
@@ -1429,6 +1658,55 @@ async fn report_dispatch_result(
             "DISPATCH_RESULT_NOTIFY_DEGRADED tick={tick} session={} target_pane={RESULT_PANE} source_pane={pane} bead={bead} owner=josh next_action=read-the-ledger-not-the-pane detail={degraded}",
             config.session
         );
+    }
+
+    // The DURABLE notification. Runs after the ledger write and independently
+    // of the pane courtesy above: the pane transport has been measured to
+    // report success without delivering, so it cannot be the authority for
+    // whether the receiver was told anything.
+    //
+    // Its failure is NEVER this caller's failure, for the same reason the pane
+    // notify's is not — the ledger row is the record, and a notification must
+    // not be able to erase it. But every failure gets its own NAMED row, so a
+    // supervisor that has silently stopped notifying is distinguishable from
+    // one with nothing to report.
+    match notify_dispatch_result_durably(cx, config, pane, bead, result).await {
+        Ok(notice) => {
+            let skew = notice
+                .oracle_skew
+                .map_or_else(|| "unavailable".to_owned(), |value| value.to_string());
+            let summary = format!(
+                "recipient={} message_id={} persisted={} signaled={} cursor={} oracle_skew={skew}",
+                notice.recipient,
+                notice.message_id,
+                notice.persisted,
+                notice.signaled,
+                notice.cursor,
+            );
+            write_heartbeat(
+                config,
+                tick,
+                "DISPATCH_RESULT_MAIL_PERSISTED",
+                &format!("source_pane={pane} bead={bead} {summary}"),
+            )?;
+            println!(
+                "DISPATCH_RESULT_MAIL_PERSISTED tick={tick} session={} source_pane={pane} bead={bead} {summary}",
+                config.session
+            );
+        }
+        Err(error) => {
+            let degraded = one_line_detail(&error);
+            write_heartbeat(
+                config,
+                tick,
+                "DISPATCH_RESULT_MAIL_DEGRADED",
+                &format!("source_pane={pane} bead={bead} {degraded}"),
+            )?;
+            println!(
+                "DISPATCH_RESULT_MAIL_DEGRADED tick={tick} session={} source_pane={pane} bead={bead} owner=josh next_action=read-the-ledger-not-the-pane detail={degraded}",
+                config.session
+            );
+        }
     }
     Ok(())
 }
@@ -1896,6 +2174,13 @@ mod tests {
             tick_monitor_state: PathBuf::from("/tmp/omp-orchestrator-test-state"),
             pending_dispatch: PathBuf::from("/tmp/omp-orchestrator-test-pending"),
             receiver_agent: "BlueLantern".to_owned(),
+            // EMPTY ON PURPOSE. A populated identity here would make every
+            // test that reaches `report_dispatch_result` send REAL mail to the
+            // live daemon and register the fixture's temp path as a project.
+            // The empty value refuses before any I/O, so the durable
+            // notification is exercised as a NAMED degradation in unit tests
+            // and proven for real only against the live daemon.
+            mail_sender: String::new(),
             omp_binary: PathBuf::from("omp"),
         }
     }
@@ -2497,6 +2782,185 @@ mod tests {
         assert!(args.lines().any(|line| line == "--panes=1"));
         assert!(args.lines().any(|line| line.contains("DISPATCH_RESULT")));
         let heartbeat = std::fs::read_to_string(heartbeat).expect("heartbeat");
-        assert!(heartbeat.contains("DISPATCH_RESULT_REPORTED"));
+        // PRE-EXISTING RED, corrected here. This asserted
+        // `DISPATCH_RESULT_REPORTED`, a string NO production path has ever
+        // written: `git log -S` shows both this assertion and the actual row
+        // name `DISPATCH_RESULT_RECORDED` were introduced by the SAME commit
+        // (757357d, 2026-09-01 22:02, 14 commits before this one), so the test
+        // was born red and has been failing ever since. Not introduced by the
+        // Agent Mail wiring; corrected to the row the code emits rather than
+        // renaming two production sites to satisfy a typo.
+        assert!(heartbeat.contains("DISPATCH_RESULT_RECORDED"));
+    }
+
+    #[test]
+    fn an_unset_sender_identity_refuses_and_names_where_to_set_it() {
+        let error = sender_identity_from("").expect_err("empty must refuse");
+        assert!(error.starts_with("sender_identity_unset"), "{error}");
+        assert!(error.contains("AGENT_MAIL_AGENT"), "{error}");
+        assert!(error.contains("AGENT_NAME"), "{error}");
+        // Whitespace is not an identity.
+        assert!(sender_identity_from("   ").is_err());
+    }
+
+    #[test]
+    fn a_configured_sender_identity_is_trimmed_and_used() {
+        let name = sender_identity_from("  BrightGorge \n").expect("must resolve");
+        assert_eq!(name.as_str(), "BrightGorge");
+    }
+
+    #[test]
+    fn the_recipient_falls_back_to_the_configured_receiver_when_no_pane_map_exists() {
+        // fixture repo has no .flywheel/AUTONOMOUS-WAVE.md, so the pane map
+        // yields nothing and the configured receiver is used.
+        let config = fixture_config(PathBuf::from("/tmp/omp-orchestrator-test-heartbeat"));
+        let recipient = mail_recipient(&config, "5").expect("configured receiver");
+        assert_eq!(recipient.as_str(), "BlueLantern");
+    }
+
+    #[test]
+    fn an_unresolvable_recipient_refuses_rather_than_guessing() {
+        let mut config = fixture_config(PathBuf::from("/tmp/omp-orchestrator-test-heartbeat"));
+        config.receiver_agent = String::new();
+        let error = mail_recipient(&config, "5").expect_err("must refuse");
+        assert!(error.contains("recipient_unresolved"), "{error}");
+        assert!(error.contains("pane=5"), "{error}");
+    }
+
+    #[test]
+    fn the_pane_agent_map_wins_over_the_configured_receiver() {
+        // The notification must not be addressed to an agent the dispatcher
+        // would have refused to send to: `validate_receiver_pane` treats a
+        // mapped agent that disagrees with the configured one as a block, so
+        // the map is the authority here too.
+        let temp = tempfile::tempdir().expect("pane map fixture");
+        let flywheel = temp.path().join(".flywheel");
+        std::fs::create_dir_all(&flywheel).expect("create .flywheel");
+        std::fs::write(
+            flywheel.join("AUTONOMOUS-WAVE.md"),
+            "| pane | agent | role |\n| `5` | **MistyCrane** | grader |\n",
+        )
+        .expect("write pane map");
+        let mut config = fixture_config(PathBuf::from("/tmp/omp-orchestrator-test-heartbeat"));
+        config.repo = temp.path().to_owned();
+        let recipient = mail_recipient(&config, "5").expect("mapped agent");
+        assert_eq!(recipient.as_str(), "MistyCrane");
+    }
+
+    #[test]
+    fn no_mail_failure_maps_to_a_delivered_row() {
+        // THE INVARIANT: an unreachable daemon, a refused credential and a
+        // timeout each carry their own row, and none of them may be readable
+        // as "the receiver was told". This is the call-site form of the
+        // binding's rule that a transport failure is never an empty mailbox.
+        let failures = [
+            MailError::Unreachable {
+                endpoint: "http://127.0.0.1:9/mcp/".to_owned(),
+                detail: "connect: refused".to_owned(),
+            },
+            MailError::Unauthorized { status: 401 },
+            MailError::MissingCredential { searched: vec![] },
+            MailError::TimedOut {
+                operation: "send_message".to_owned(),
+            },
+            MailError::EmptyCatalogue,
+            MailError::Protocol {
+                detail: "bad envelope".to_owned(),
+            },
+        ];
+        for failure in &failures {
+            let row = mail_failure_row(failure);
+            assert!(
+                row.starts_with("DISPATCH_RESULT_MAIL_"),
+                "{row} is not a mail row"
+            );
+            assert_ne!(
+                row, "DISPATCH_RESULT_MAIL_PERSISTED",
+                "a failure must never report as persisted: {failure}"
+            );
+        }
+    }
+
+    #[test]
+    fn unreachable_and_unauthorized_are_not_the_same_row() {
+        // The measured `am agent start` defect was an AUTH failure reported as
+        // ABSENCE. These two must stay distinguishable in the ledger, because
+        // one means "start the daemon" and the other means "find the token".
+        let unreachable = mail_failure_row(&MailError::Unreachable {
+            endpoint: "e".to_owned(),
+            detail: "d".to_owned(),
+        });
+        let unauthorized = mail_failure_row(&MailError::Unauthorized { status: 401 });
+        assert_ne!(unreachable, unauthorized);
+        assert_eq!(unreachable, "DISPATCH_RESULT_MAIL_UNREACHABLE");
+        assert_eq!(unauthorized, "DISPATCH_RESULT_MAIL_UNAUTHORIZED");
+    }
+
+    #[test]
+    fn a_timeout_row_is_distinct_from_every_substantive_failure() {
+        // A timeout is not a verdict: it must not share a row with a refusal
+        // or a protocol fault, or an operator cannot tell "we waited too long"
+        // from "the daemon said no".
+        let timeout = mail_failure_row(&MailError::TimedOut {
+            operation: "send_message".to_owned(),
+        });
+        assert_eq!(timeout, "DISPATCH_RESULT_MAIL_TIMED_OUT");
+        assert_ne!(
+            timeout,
+            mail_failure_row(&MailError::ToolRefused {
+                tool: "send_message".to_owned(),
+                kind: "INVALID_AGENT_NAME".to_owned(),
+                message: "m".to_owned(),
+                recoverable: true,
+            })
+        );
+    }
+
+    #[test]
+    fn the_durable_notification_degrades_without_erasing_the_dispatch_record() {
+        // The wired path runs inside `report_dispatch_result`. With no sender
+        // identity configured it refuses BEFORE any I/O, and the caller must
+        // still succeed and still have written the dispatch record — the
+        // precedent being that a blocked notify used to erase it.
+        let temp = tempfile::tempdir().expect("degrade fixture");
+        // Point the pane transport at a binary that does not exist, so this
+        // test spawns NOTHING. The subject here is the mail leg; borrowing the
+        // shared fake-ntm script would add a process and a 1s-timeout
+        // dependency to a sibling test's fixture for no benefit.
+        let heartbeat = temp.path().join("heartbeat.jsonl");
+        let mut config = fixture_config(heartbeat.clone());
+        config.repo = temp.path().to_owned();
+        config.ntm = temp.path().join("no-such-ntm").display().to_string();
+        assert!(
+            config.mail_sender.is_empty(),
+            "fixture must not carry a real identity"
+        );
+
+        let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
+        runtime
+            .block_on(async {
+                let cx = Cx::current().expect("runtime context");
+                report_dispatch_result(&cx, &config, 11, "5", "omp-orchestrator-test", "status=DISPATCHED")
+                    .await
+            })
+            .expect("a degraded mail notify must not fail the caller");
+
+        let ledger = std::fs::read_to_string(&heartbeat).expect("heartbeat");
+        assert!(
+            ledger.contains("DISPATCH_RESULT_RECORDED"),
+            "the dispatch record must survive: {ledger}"
+        );
+        assert!(
+            ledger.contains("DISPATCH_RESULT_MAIL_DEGRADED"),
+            "the degradation must be NAMED, not silent: {ledger}"
+        );
+        assert!(
+            ledger.contains("sender_identity_unset"),
+            "the row must say what was missing: {ledger}"
+        );
+        assert!(
+            !ledger.contains("DISPATCH_RESULT_MAIL_PERSISTED"),
+            "nothing was sent, so nothing may claim persistence: {ledger}"
+        );
     }
 }
