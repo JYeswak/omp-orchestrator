@@ -5,7 +5,6 @@ use preregistration_gate::{SCHEMA_VERSION, collect_repository_inputs, validate_p
 use serde_json::{Value, json};
 use std::env;
 use std::path::PathBuf;
-use std::process::ExitCode;
 
 fn repo_from_args(args: impl IntoIterator<Item = String>) -> Result<PathBuf, String> {
     let mut values = args.into_iter();
@@ -31,7 +30,7 @@ fn repo_from_args(args: impl IntoIterator<Item = String>) -> Result<PathBuf, Str
     Ok(repo)
 }
 
-fn print_error(status: &str, error: impl Into<String>) -> ExitCode {
+fn print_error(status: &str, error: impl Into<String>) -> u8 {
     println!(
         "{}",
         json!({
@@ -41,15 +40,17 @@ fn print_error(status: &str, error: impl Into<String>) -> ExitCode {
             "error": error.into(),
         })
     );
-    if status == "REFUSED" {
-        ExitCode::from(1)
-    } else {
-        ExitCode::from(2)
-    }
+    if status == "REFUSED" { 1 } else { 2 }
 }
 
+
 #[asupersync::main]
-async fn main() -> ExitCode {
+async fn main() {
+    let code = run().await;
+    std::process::exit(i32::from(code));
+}
+
+async fn run() -> u8 {
     let repo = match repo_from_args(env::args().skip(1)) {
         Ok(repo) => repo,
         Err(error) => return print_error("ERROR", error),
@@ -79,7 +80,7 @@ async fn main() -> ExitCode {
                     "error": Value::Null,
                 })
             );
-            ExitCode::SUCCESS
+            0
         }
         Err(error) => print_error("REFUSED", error.to_string()),
     }

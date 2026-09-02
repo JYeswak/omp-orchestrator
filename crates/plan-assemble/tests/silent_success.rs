@@ -65,7 +65,7 @@ fn fixture() -> TempRepo {
     git(&root, &["config", "user.email", "fixture@example.invalid"]);
     git(&root, &["config", "user.name", "plan-assemble fixture"]);
     git(&root, &["add", "docs/plan"]);
-    git(&root, &["commit", "-qm", "fixture source"]);
+    git(&root, &["commit", "-qm", "fixture source [test]"]);
     let recorded_commit = git(&root, &["rev-parse", "HEAD"]).trim().to_owned();
     let committed_hypothesis = format!(
         r#"{{"id":"fixture-h1","prediction":"plan remains assembled","falsifier":"a missing section","evidence_scope":"docs/plan","recorded_commit":"{recorded_commit}","observed_result":null}}"#
@@ -76,7 +76,7 @@ fn fixture() -> TempRepo {
         &(committed_hypothesis + "\n"),
     );
     git(&root, &["add", "docs/plan/HYPOTHESES.jsonl"]);
-    git(&root, &["commit", "-qm", "fixture preregistration"]);
+    git(&root, &["commit", "-qm", "fixture preregistration [test]"]);
 
     TempRepo(root)
 }
@@ -181,8 +181,10 @@ fn mutating_required_section_refuses_then_byte_identical_restore_passes() {
         restored.status.success(),
         "byte-identical restore did not recover check: {restored:?}"
     );
-    #[test]
-    fn changed_evidence_without_prior_hypothesis_refuses_before_write() {
+}
+
+#[test]
+fn changed_evidence_without_prior_hypothesis_refuses_before_write() {
         let repo = fixture();
         let target = repo.0.join("docs/PLAN.md");
         fs::write(&target, b"sentinel prior output\n").expect("write sentinel output");
@@ -207,4 +209,3 @@ fn mutating_required_section_refuses_then_byte_identical_restore_passes() {
             b"sentinel prior output\n"
         );
     }
-}
