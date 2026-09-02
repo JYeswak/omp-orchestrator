@@ -17,9 +17,21 @@ use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 pub const BUSY_RE: &str = r"Working \([0-9]|esc to interrupt|Pursuing goal|Thinking…|Sautéed for|Infusing…|Warping…|Warping\.\.\.|Flummoxing…|Flummoxing\.\.\.|ctrl \+ t to view transcript";
-pub const AGENT_RE: &str = r"claude|codex|Opus|gpt-|bypass permissions|dangerously";
+// `(?i)` because a live Codex pane renders its model as "GPT-5.6-Luna" with a capital
+// GPT. The lowercase-only `gpt-` made every Codex pane in the fleet classify NO_AGENT,
+// so refill-idle-panes refused to dispatch to any of them while the ready queue sat
+// 425 deep (measured 2026-09-02, zeststream-cast: 2 CONFIRMED_IDLE panes, 0 dispatched).
+// Case-insensitivity is safe here: these are agent IDENTITY markers, not verdict
+// tokens, and the fixture in main.rs pins the real capitalised form.
+pub const AGENT_RE: &str = r"(?i)claude|codex|opus|gpt-|bypass permissions|dangerously";
 pub const QUOTA_RE: &str = r"You've hit your usage limit|hit usage limits|Weekly limit left: 0%|purchasing more credits|purchase more credits";
 pub const DEFAULT_BUSY_TAIL: usize = 6;
+/// Window for the PROMPT-PRESENT check only -- never for busy detection.
+/// Codex's footer (status line + box border + trailing blanks) puts its ready prompt
+/// 6-7 lines from the end, outside the 6-line busy tail. 12 clears the tallest footer
+/// measured on this fleet with margin, and cannot manufacture a BUSY->FREE flip: the
+/// busy markers are evaluated first and return early.
+pub const DEFAULT_PROMPT_TAIL: usize = 12;
 pub const DEFAULT_QUOTA_TAIL: usize = 8;
 pub const DEFAULT_MOTION_SECS: u64 = 10;
 
@@ -168,6 +180,28 @@ fn first_match(re: &Regex, text: &str) -> Option<String> {
 /// nothing after it is NOT a prompt (the shell requires a following space).
 /// Matching the oracle here is load-bearing: a more-permissive marker would
 /// admit panes the live callers currently refuse.
+/// Drop ANSI SGR sequences (`ESC [ … m`) so a glyph test can reach the glyph.
+/// Deliberately narrow: only CSI-with-final-`m`, which is all tmux `-e` emits for
+/// styling. Anything else is left in place rather than guessed at.
+fn strip_sgr(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut chars = line.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\u{1b}' && chars.peek() == Some(&'[') {
+            chars.next();
+            // Consume the parameter/intermediate bytes up to the final byte.
+            for f in chars.by_ref() {
+                if f.is_ascii_alphabetic() {
+                    break;
+                }
+            }
+            continue;
+        }
+        out.push(c);
+    }
+    out
+}
+
 fn has_prompt_marker(tail: &str) -> bool {
     for line in tail.lines() {
         if line.contains('❯') || line.contains('›') {
@@ -176,6 +210,27 @@ fn has_prompt_marker(tail: &str) -> bool {
         let t = line.trim_start_matches(|c: char| c.is_whitespace());
         if t.starts_with('>') || t.starts_with('$') {
             let rest = &t[1..];
+            if rest.starts_with(|c: char| c.is_whitespace()) {
+                return true;
+            }
+        }
+        // Codex renders its ready prompt as a STATUS LINE, not a leading glyph:
+        //     " π  > ◕ GPT-5.6-Luna > 📁 ~/Developer/… > ⑂ main *134 ?367 > S161 …"
+        // The `>` are mid-line separators, so the shell-oracle clauses above cannot
+        // see it and every idle Codex pane read BUSY "no prompt marker" forever
+        // (measured 2026-09-02: 2 CONFIRMED_IDLE panes, ready queue 425 deep).
+        //
+        // Anchored on the leading `π` idle glyph specifically. Codex swaps it for a
+        // spinner (⠙/⠼) plus an elapsed timer while working, so this clause cannot
+        // match a busy pane -- which is what keeps the fail-closed contract intact.
+        // The live callers capture with `tmux capture-pane -e`, so this line arrives
+        // as "\x1b[0m\x1b[48;2;…m \x1b[38;2;…mπ…" -- the glyph is preceded by SGR
+        // escapes that no whitespace trim can remove. Strip them for THIS clause only;
+        // the shell-oracle clauses above keep their exact byte-for-byte behaviour.
+        let bare = strip_sgr(line);
+        let b = bare.trim_start_matches(|c: char| c.is_whitespace());
+        if b.starts_with('π') {
+            let rest = b.trim_start_matches('π');
             if rest.starts_with(|c: char| c.is_whitespace()) {
                 return true;
             }
@@ -232,7 +287,18 @@ pub fn classify(text: &str, buffer_changed: bool, rules: &PaneDispatchReadyRules
             ),
         };
     }
-    if !has_prompt_marker(&tail) {
+    // The prompt check gets its OWN, wider window. The 6-line busy tail is deliberately
+    // tight so a stale spinner high in the scrollback cannot read as work-in-flight --
+    // widening it would weaken BUSY detection. But Codex draws a taller footer than
+    // Claude (status line, box border, then trailing blanks), so its ready prompt lands
+    // 6-7 lines from the end and fell outside the busy window entirely.
+    // Measured 2026-09-02 across this fleet: distance-from-end was 2, 6, 6 and 7 on the
+    // four agent panes -- straddling the boundary, so ANY single tight window mis-reads
+    // some panes. A wider window is safe HERE because this check only ever proves a
+    // prompt is PRESENT; the busy markers above have already had their say and return
+    // early, so nothing downstream can be talked out of BUSY by a wider look-back.
+    let prompt_tail = tail_lines(text, DEFAULT_PROMPT_TAIL);
+    if !has_prompt_marker(&prompt_tail) {
         return PaneDispatchReadyVerdict {
             state: PaneDispatchReadyState::Busy,
             reason: "no prompt marker in the live region — free-prompt not PROVEN (fail closed)"

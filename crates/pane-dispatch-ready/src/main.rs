@@ -19,9 +19,18 @@ fn composer_rc(tail: &str, path: &str) -> i32 {
     if !PathBuf::from(path).is_file() {
         return 99;
     }
-    let mut cmd = Command::new("python3");
-    cmd.arg(path)
-        .stdin(Stdio::piped())
+    // The discriminator was ported to Rust (crates/composer-typed) and the `.py` was
+    // removed, but this caller still shelled out to `python3 <path>` -- so it returned
+    // 99 and fail-closed EVERY pane in the fleet to BUSY. Built, ported, and never
+    // rewired. Dispatch by extension so both forms work and neither can silently rot.
+    let mut cmd = if path.ends_with(".py") {
+        let mut c = Command::new("python3");
+        c.arg(path);
+        c
+    } else {
+        Command::new(path)
+    };
+    cmd.stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     let mut child = match cmd.spawn() {
@@ -412,6 +421,46 @@ fn run_selftest(rules: &PaneDispatchReadyRules) -> ExitCode {
         "agent at empty prompt",
         "Opus 5 (1M context) │ bypass permissions\n❯ ",
         PaneDispatchReadyState::Free,
+        &mut fail,
+    );
+    // FIRES-ON-KNOWN-BAD: a live Codex pane renders its model as "GPT-5.6-Luna"
+    // (capital GPT). AGENT_RE matched only lowercase "gpt-", so every Codex pane in
+    // the fleet classified NO_AGENT and refill-idle-panes refused to dispatch to any
+    // of them. Measured 2026-09-02: 2 CONFIRMED_IDLE panes beside a 425-deep ready
+    // queue. Fixture is the verbatim status line from zeststream-cast:0.5.
+    chk(
+        "codex pane at empty prompt (capitalised model name)",
+        // WITH the SGR escapes, because the live callers capture with `-e`. A clean-text
+        // fixture passed while every real pane still failed -- the escapes sit between
+        // the line start and the glyph, so a whitespace trim can never reach it.
+        // WITH the real FOOTER GEOMETRY, not just the prompt line. Two earlier fixtures
+        // passed while every live pane still failed, because each modelled only the part
+        // I had already guessed at: first clean text (missing the SGR escapes), then a
+        // lone line (missing the trailing footer). The actual pane ends with the status
+        // line, the box border, then blanks -- putting the prompt 7 lines from the end,
+        // OUTSIDE the 6-line busy tail. That geometry IS the bug, so it belongs here.
+        concat!(
+            "\u{1b}[0m\u{1b}[48;2;15;18;22m \u{1b}[38;2;107;114;128m\u{3c0}\u{1b}[39m",
+            "  > \u{25d5} GPT-5.6-Luna > \u{1f4c1} ~/Developer/zeststream-cast > \u{2442} main *134 ?367\n",
+            "\u{2570}\u{2500} \n\n\n\n\n"
+        ),
+        PaneDispatchReadyState::Free,
+        &mut fail,
+    );
+    // The NEGATIVE half, and the one that keeps the clause above honest: a WORKING
+    // Codex pane carries the identical `>` separators and the same model name, and
+    // differs only in the leading glyph (spinner + elapsed timer instead of the idle
+    // `π`). If the prompt-marker clause ever widens to the separators themselves,
+    // this fixture goes RED before a busy pane can be overwritten mid-thought.
+    // Verbatim from zeststream-cast:0.3 while it was 16m into a task.
+    chk(
+        "codex pane MID-WORK must never read free (spinner, not idle glyph)",
+        concat!(
+            "\u{1b}[0m\u{1b}[48;2;15;18;22m \u{1b}[38;2;107;114;128m\u{2834}\u{1b}[39m",
+            " 16m  > \u{25d5} GPT-5.6-Luna > \u{1f4c1} ~/Developer/zeststream-cast > \u{2442} main *138 +4 ?367\n",
+            "\u{2570}\u{2500} \n\n\n\n\n"
+        ),
+        PaneDispatchReadyState::Busy,
         &mut fail,
     );
     say("");
