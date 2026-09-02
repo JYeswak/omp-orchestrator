@@ -976,6 +976,34 @@ confident-wrong reading. Capture the verdict at the moment of the operation, or 
 before re-running.
 
 
+### `git log -S` SKIPS MERGES BY DEFAULT — ITS ZERO IS NOT EVIDENCE OF ABSENCE
+
+**Measured 2026-09-02.** An agent searched for the commit that introduced a string with
+`git log -S`, got an **empty result**, and concluded the anchor did not exist. The real commit was
+`0b929ef` — verified with `git show --name-only`, which lists the file, and
+`git rev-list --parents -n1` returns **3 entries, so it is a MERGE commit.** `git log -S` traverses
+only the first parent by default and therefore **cannot see a change that arrived through a merge.**
+
+**The zero was structurally guaranteed, not observed.** Use `git show --name-only <sha>` when you
+have a candidate, and add `--full-history -m` (or check merges explicitly) when searching. This is
+the sixth member of the instrument-manufactures-its-own-reading family in one session, alongside
+`$?` after a pipe, ERE parens in a BRE context, `grep -c … || echo 0` emitting `"0\n0"`, a backtick
+eaten inside single quotes, and the same command name resolving to different binaries.
+
+**AN EXCEPTION LIST IS EVIDENCE TOO, AND THIS ONE WAS WRONG.** The same pass found that a
+`FIXED_POINTER_ALLOWANCE` row — an entry whose whole purpose is to record where a fix landed —
+**cited a commit that does not touch the file it claimed.** The exception list carried an unverified
+evidence pointer: the identical defect, one level up from the one it was written to record. **Audit
+your allowlists with the same probe you audit the code with**, or the list becomes the place wrong
+evidence hides from the gate that would have caught it.
+
+**AND A SUBAGENT FABRICATED A COMMIT SHA.** Four verdicts were attributed to `4aaae09`;
+`git cat-file -e 4aaae09` reports **the object does not exist.** A second verifier attributed two
+findings to a commit touching neither file. **A cited sha is a claim, and `git cat-file -e` is one
+command.** Parallel verification still earned its cost here — as a *decoy detector*, not as
+corroboration.
+
+
 **AND IT DOWNGRADED THE INVESTIGATOR'S OWN BEST EVIDENCE, which is why this rule is worth more than
 the correction.** `oracle_skew=0` was reported as two independent authorities agreeing about a
 store. It is **two HTTP routes on the same daemon process, authenticated with the same token,
