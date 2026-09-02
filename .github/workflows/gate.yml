@@ -30,6 +30,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # FULL HISTORY, not the default fetch-depth: 1. Measured on run
+          # 33583861505: `findings_ledger` went red in CI while green locally, at its
+          # OWN positive control -- "the reader cannot detect a known section touch;
+          # every verdict below is meaningless" -- because it runs
+          # `git show --name-only 07de72b` and a depth-1 clone does not have that
+          # object. That is a verdict about the CHECKOUT masquerading as a verdict
+          # about the code, which is the same false signal this workflow was dark
+          # with for 67 runs. Applied to every job rather than only the ones known
+          # to read history, because guessing which gate touches git is how the
+          # next one gets starved silently. Cost: a full clone per job -- negligible
+          # beside the ~12min asupersync git fetch each job already pays.
+          fetch-depth: 0
       # Was `rustup toolchain install stable --profile minimal`, which installed
       # the WRONG compiler explicitly and was the only job that said anything
       # about a toolchain at all — the other nine inherited the runner default.
@@ -60,6 +73,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history — see the no-shell-gate job for why
       - name: Rust toolchain (pinned by rust-toolchain.toml)
         run: |
           cargo --version
@@ -69,6 +84,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history — see the no-shell-gate job for why
       - name: Rust toolchain (pinned by rust-toolchain.toml)
         run: |
           cargo --version
@@ -80,6 +97,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history — see the no-shell-gate job for why
       - name: Rust toolchain (pinned by rust-toolchain.toml)
         run: |
           cargo --version
@@ -91,6 +110,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history — see the no-shell-gate job for why
       - name: Rust toolchain (pinned by rust-toolchain.toml)
         run: |
           cargo --version
@@ -106,6 +127,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history — see the no-shell-gate job for why
       - name: Rust toolchain (pinned by rust-toolchain.toml)
         run: |
           cargo --version
@@ -119,6 +142,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history — see the no-shell-gate job for why
       - name: Rust toolchain (pinned by rust-toolchain.toml)
         run: |
           cargo --version
@@ -131,6 +156,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history — see the no-shell-gate job for why
       - name: Rust toolchain (pinned by rust-toolchain.toml)
         run: |
           cargo --version
@@ -143,6 +170,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history — see the no-shell-gate job for why
       - name: Rust toolchain (pinned by rust-toolchain.toml)
         run: |
           cargo --version
@@ -155,6 +184,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history — see the no-shell-gate job for why
       - name: Rust toolchain (pinned by rust-toolchain.toml)
         run: |
           cargo --version
