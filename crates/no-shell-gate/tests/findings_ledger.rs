@@ -335,34 +335,27 @@ enum PointerVerdict {
 }
 
 /// Rows whose pointer is known-unverifiable, each with a reason and the condition that kills
-/// the row. Empty would be the ideal; four is the measured truth, and a named row with a reason
-/// is the repo's pattern for an exception (`UNWIRED_LANE_ALLOWANCE`) — never silence, and never
-/// a repo-wide RED that blocks every other pane over rows they did not write.
-const FIXED_POINTER_ALLOWANCE: &[(&str, &str)] = &[
-    (
-        "R21-04-mirror-entry-mislabel",
-        "cites 5063513 (a FINDINGS.jsonl-only commit); the real fix landed at 07de72b. Pointer \
-         correction blocked on BlueLantern's exclusive reservation of docs/plan/FINDINGS.jsonl. \
-         Dies when the row's fixed_in reads 07de72b.",
-    ),
-    (
-        "R21-07-pane-truth-ghost-obsolete",
-        "cites the same 5063513 ledger-only commit; found by the 69i sweep, not by the round-23 \
-         grade. True landing commit unidentified — owner must re-derive it. Dies when fixed_in \
-         names a commit that touched docs/plan/07-installability.md.",
-    ),
-    (
-        "R21-11-template-count-stale",
-        "cites the same 5063513 ledger-only commit; found by the 69i sweep. True landing commit \
-         unidentified. Dies when fixed_in names a commit that touched docs/plan/11-lifecycle.md.",
-    ),
-    (
-        "R21-X-wire-artifact-unregistered",
-        "cites the same 5063513 ledger-only commit AND carries section=cross-cutting, so it is \
-         already NotASection and would be skipped anyway; listed so the sweep's count of four is \
-         reproducible from this list. Dies when the row names a real section or a real commit.",
-    ),
-];
+/// the row. **EMPTY, and that is the measured truth as of `aa47d93`.**
+///
+/// It held four rows, all citing `5063513` (a `FINDINGS.jsonl`-only commit). Every one of their
+/// stated kill conditions has now been met by bead `omp-orchestrator-193`, so keeping them would
+/// EXCUSE a future bad pointer on those four ids instead of catching it:
+///
+/// | id | its stated kill condition | how it died |
+/// |---|---|---|
+/// | `R21-04-mirror-entry-mislabel` | "Dies when the row's `fixed_in` reads `07de72b`" | it reads **`0b929ef`** — and `07de72b` was WRONG: `git show --name-only 07de72b` does not list `docs/plan/04-diagrams.md`. The real fix is `0b929ef`, a MERGE commit, which is why `git log -S` could not find it. |
+/// | `R21-07-pane-truth-ghost-obsolete` | "Dies when `fixed_in` names a commit that touched `docs/plan/07-installability.md`" | `da2c147`, verified to add "Provenance boundary" and "CURRENT WORKTREE AUTHORITY … 48 binary targets" to that file. |
+/// | `R21-11-template-count-stale` | "Dies when `fixed_in` names a commit that touched `docs/plan/11-lifecycle.md`" | `da2c147`, verified to add "HISTORICAL SNAPSHOT: ntm template list reported four templates". |
+/// | `R21-X-wire-artifact-unregistered` | "Dies when the row names a real section or a real commit" | re-dispositioned **DEFERRED** to `omp-orchestrator-artifact-provenance-writer-absent-w1s9`: one clause is verifiably open — `SCHEMAS.toml:45` declares `writer = "artifact_provenance gate"` and no such writer exists under `crates/`. |
+///
+/// **The allowance's first row was itself an unverified pointer**, which is the same defect one
+/// level up: it asserted `07de72b` as the true fix without checking that the commit touched the
+/// section. An exception list is evidence too.
+///
+/// PRUNED RATHER THAN KEPT because an allowance that outlives its defect is a repaired gap still
+/// reading as broken — and worse, it silently suppresses the next real regression on those ids.
+/// Proven safe: emptying it leaves the suite at 16 passed / 0 failed.
+const FIXED_POINTER_ALLOWANCE: &[(&str, &str)] = &[];
 
 fn git_out(repo: &Path, args: &[&str]) -> Option<String> {
     let out = std::process::Command::new("git")
@@ -750,8 +743,24 @@ fn unpinned_future_convergence_rows_are_void_and_not_coverage() {
     let _ = fs::remove_dir_all(root);
 }
 
+/// THE ONLY LEG THAT VALIDATES THE REAL LEDGER'S DISPOSITIONS.
+///
+/// It was `#[ignore]`d with the reason "requires reconciled FINDINGS.jsonl from HD-0006
+/// reconciliation beads". **That precondition was satisfied at `aa47d93`** (bead
+/// `omp-orchestrator-193`): all 38 round-21 rows now carry a verified disposition, zero are
+/// `OPEN`, no row defers into a closed bead, and every FIXED pointer names a commit that
+/// touched its section.
+///
+/// Un-ignored because the ignore made the gate unable to fail on the artifact it governs.
+/// MEASURED before enabling: two mutations against the real `docs/plan/FINDINGS.jsonl` -- setting
+/// a row back to `OPEN`, and re-pointing a FIXED row at the ledger-only commit `5063513` -- both
+/// left the suite at **15 passed / 0 failed**, because every other leg reads a synthetic fixture.
+/// A gate whose only production-reading leg is skipped is `fh` row C38: a fixture drifted from
+/// production certifies nothing, and its green is indistinguishable from a working check.
+///
+/// NO-CLAIM: this proves the ledger is STRUCTURALLY valid -- coverage and non-OPEN -- not that any
+/// disposition is TRUE. A FIXED row still only asserts the finding was addressed.
 #[test]
-#[ignore = "requires reconciled FINDINGS.jsonl from HD-0006 reconciliation beads"]
 fn real_findings_ledger_is_strictly_valid() {
     let report = validate_findings_ledger(&repo_root()).expect("real findings ledger");
     assert!(report.declared > 0);
