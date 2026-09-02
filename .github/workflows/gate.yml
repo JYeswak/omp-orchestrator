@@ -64,6 +64,8 @@ jobs:
         run: cargo run --quiet -p no-shell-gate --bin no-shell-gate
       - name: Gate tests — red/green legs and the real-tree leg
         run: cargo test -p no-shell-gate
+      - name: Gate reachability census — machine-readable trigger report
+        run: mkdir -p .flywheel && cargo run --quiet -p no-shell-gate --bin gate-reachability -- --root . --out .flywheel/gate-reachability.json
       # ROUND ADMISSION (Josh, 2026-09-01): one stamped doc must cover every grading round
       # before another round may start. `--check` is the same command a human and the
       # pre-commit hook run, so the refusal is not reachable only from `cargo test`.
