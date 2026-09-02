@@ -1,15 +1,38 @@
 # claim_strength_contract
 
-Phase 0 · T1. **Written before the code**, per `plan_to_pin_the_orchestrator_type_algebra.md`: the
-contract precedes the type, the type precedes the bead, the bead precedes the code.
+Bead: `omp-orchestrator-phase0-claim-strength-j5r`
 
-One concern: **how strong is the evidence behind a claim, and may this evidence justify that
-claim?** Nothing else. Whether the claim is *true*, whether anyone *checked* it, and whether the
-system *obeys* the answer are three other concerns with three other owners.
+## Purpose
 
----
+Defines `ClaimStrength`: a six-level total order over **kinds of evidence** —
+`CS-BENCHMARK` < `CS-SLO` < `CS-STATISTICAL` < `CS-BOUNDED` < `CS-PROOF` < `CS-INVARIANT` — with
+`rank`, `justifies`, and `weakest_of` as its operations, and five laws (`CSL-TOTAL`,
+`CSL-ANTISYM`, `CSL-TRANS`, `CSL-JUSTIFY`, `CSL-NO-WIDEN`) binding them. It exists to make one
+sentence inexpressible rather than reviewable: **a weaker claim may never justify a stronger one**,
+`rank(justifier) >= rank(claim)`. That rule already governs this repo as prose at
+`~/.claude/CLAUDE.md:210-213` (THE ARTIFACT RIGOR STANDARD, layer L1, mined from
+`frankengraphdb`), where enforcing it costs a reviewer's attention on every claim, forever; as a
+type it costs a compile. This contract fixes the carrier, argues each of the five boundaries
+between the six levels, names what the type deliberately does not decide, and states why the
+carrier is authored here rather than re-exported from `asupersync`.
 
-## 1. The problem this type exists to remove
+## Contract Artifacts
+
+1. **Canonical artifact:** `crates/omp-types/src/claim_strength.rs` — `ClaimStrength::ALL`, the
+   whole carrier as a `const [ClaimStrength; 6]`. **There is deliberately no
+   `artifacts/*_v1.json`**, and the absence is stated rather than papered over with a path that
+   does not exist: the carrier is a closed six-element set with no serialized instances to pin, so
+   a JSON artifact would be a second source of truth for a type whose whole content is its
+   variants. The registry spelling (`as_str` / `FromStr`) is the serialization boundary, and
+   `CSL-NO-WIDEN`'s test round-trips it.
+2. **Runner:** `cargo test -p omp-types --test claim_strength_laws -- --nocapture`
+3. **Invariant suite:** `crates/omp-types/tests/claim_strength_laws.rs` — five tests, one per law,
+   with `CSL-TRANS` and `CSL-JUSTIFY` exhausting the carrier (216 triples, 36 pairs).
+
+> A contract naming no invariant suite is a DESCRIPTION. Item 3 is what makes this file
+> enforceable.
+
+## 1. The rule, and a citation correction
 
 The rule already exists in prose. `~/.claude/CLAUDE.md:210-213`, THE ARTIFACT RIGOR STANDARD,
 layer L1 — mined from `frankengraphdb`:
@@ -29,6 +52,7 @@ a sentence a reviewer must catch, every time, forever. This type makes that sent
 **inexpressible**.
 
 ---
+
 
 ## 2. Derivation position — why this carrier is authored and not re-exported
 
@@ -63,15 +87,17 @@ the **carrier set is authored here**, because neither upstream carrier is this c
 
 ---
 
+
 ## 3. The carrier set — six levels, and the argument for each boundary
 
 ```
-Invariant     6   holds by construction; a counterexample is a compile error or a type error
-Proof         5   a machine-checked derivation over a stated model
-BoundedModel  4   exhaustive check over a bounded domain; silent outside the bound
-Statistical   3   a sample with a stated test; true in distribution, not per-instance
-Slo           2   a budget declared and monitored; a breach is a signal, not a refutation
-Benchmark     1   one measurement, one machine, one moment
+ID              level         rank  meaning
+CS-INVARIANT    Invariant     6   holds by construction; a counterexample is a compile error or a type error
+CS-PROOF        Proof         5   a machine-checked derivation over a stated model
+CS-BOUNDED      BoundedModel  4   exhaustive check over a bounded domain; silent outside the bound
+CS-STATISTICAL  Statistical   3   a sample with a stated test; true in distribution, not per-instance
+CS-SLO          Slo           2   a budget declared and monitored; a breach is a signal, not a refutation
+CS-BENCHMARK    Benchmark     1   one measurement, one machine, one moment
 ```
 
 Six is not a round number chosen for symmetry. Each boundary answers a different question, and a
@@ -123,6 +149,7 @@ silent widening L5 forbids.
 
 ---
 
+
 ## 4. Operations
 
 | operation | signature | meaning |
@@ -142,28 +169,41 @@ stronger warrant than the better of them *for the compound claim* — it produce
 
 ---
 
-## 5. The laws
 
-**L1 · TOTAL ORDER.** Any two strengths are comparable: for all `a, b`, exactly one of `a < b`,
+### Rules
+
+- **CSR-ASSIGN-AT-CREATION**: strength is assigned once, from the evidence, at the point the
+  claim is created. There is no setter.
+- **CSR-MEET-ONLY**: a compound claim combines by `weakest_of`. `strongest_of` does not exist.
+- **CSR-DENSE-RANKS**: ranks are 1..=6 with no gaps; a new level may not be inserted by
+  renumbering an existing one.
+- **CSR-NAMED-REFUSAL**: an unrecognised registry spelling is refused by name, carrying the
+  offending input. There is no default strength.
+- **CSR-NO-PARTIAL**: a value that is not comparable to all six (human review, consensus) may
+  not be admitted to this carrier; it belongs to a separate, explicitly partial type.
+
+## 5. Laws
+
+**CSL-TOTAL** · L1 TOTAL ORDER. Any two strengths are comparable: for all `a, b`, exactly one of `a < b`,
 `a == b`, `a > b`. No incomparable pair exists. *Why it matters:* an incomparable pair makes
 `justifies` undecidable for that pair, and a gate that cannot decide fails open or fails closed
 arbitrarily.
 
-**L2 · ANTISYMMETRY.** `a >= b && b >= a` implies `a == b`. *Why it matters:* without it two
+**CSL-ANTISYM** · L2 ANTISYMMETRY. `a >= b && b >= a` implies `a == b`. *Why it matters:* without it two
 distinct levels could mutually justify each other, and the order would have a cycle — a benchmark
 could justify an invariant by a chain of two steps.
 
-**L3 · TRANSITIVITY.** `a >= b && b >= c` implies `a >= c`. **Tested over generated triples, not
+**CSL-TRANS** · L3 TRANSITIVITY. `a >= b && b >= c` implies `a >= c`. **Tested over generated triples, not
 examples.** *Why it matters:* justification chains are the normal case — a claim justified by a
 claim justified by evidence — and non-transitivity would make a chain's validity depend on the
 order it was assembled in.
 
-**L4 · JUSTIFICATION.** `justifies(j, c)` iff `rank(j) >= rank(c)`. **A `Benchmark` can never
+**CSL-JUSTIFY** · L4 JUSTIFICATION. `justifies(j, c)` iff `rank(j) >= rank(c)`. **A `Benchmark` can never
 justify an `Invariant`.** This is the law with teeth and the one prose cannot enforce. **Tested
 over all generated pairs**, and the negative direction is asserted explicitly: for every pair
 where `rank(j) < rank(c)`, `justifies(j, c)` must be `false`.
 
-**L5 · NO SILENT WIDENING.** There is no operation that raises a claim's strength. Strength is
+**CSL-NO-WIDEN** · L5 NO SILENT WIDENING. There is no operation that raises a claim's strength. Strength is
 assigned at creation from the evidence and is thereafter read-only. *Why it matters:* every
 overclaim this repo has measured took the shape of a value that started honest and was later read
 as stronger — a benchmark quoted as a guarantee, a fixture-green gate read as a wired one. L5 is
@@ -171,6 +211,17 @@ tested structurally: `weakest_of` never exceeds either input, and no public oper
 strength strictly greater than every input it received.
 
 ---
+
+
+Each law names the test that proves it — a law without a test is a comment:
+
+| law | *Test:* `crates/omp-types/tests/claim_strength_laws.rs` |
+|---|---|
+| `CSL-TOTAL` | `l1_the_order_is_total_so_no_incomparable_pair_exists` |
+| `CSL-ANTISYM` | `l2_mutual_justification_implies_equality` |
+| `CSL-TRANS` | `l3_justification_is_transitive_over_every_triple` |
+| `CSL-JUSTIFY` | `l4_justifies_holds_exactly_when_the_justifier_ranks_at_least_as_high` |
+| `CSL-NO-WIDEN` | `l5_no_operation_raises_a_strength` |
 
 ## 6. Relationship to the dialects already in the tree
 
@@ -195,7 +246,11 @@ and Phase 1's concerns.
 
 ---
 
-## 7. NON-COVERAGE — what this type deliberately does not decide
+
+## Non-Coverage
+
+What this type deliberately does not decide, so a reader stops looking here for it and the next
+contract knows what it inherits.
 
 1. **Whether a claim is TRUE.** `ClaimStrength` grades the warrant, never the proposition. An
    `Invariant`-strength claim can be false if the invariant was stated wrong; the type says only
@@ -220,7 +275,17 @@ and Phase 1's concerns.
 
 ---
 
-## 8. Acceptance
+
+## Validation
+
+One command. It exercises the invariant suite, not merely the build:
+
+```bash
+cargo test -p omp-types --test claim_strength_laws -- --nocapture
+```
+
+Expect **5 passed, 0 failed** — one test per law. What the run proves, and the strength of that
+proof in this type's own vocabulary:
 
 - Type in `crates/omp-types`, `#![forbid(unsafe_code)]`, compiling.
 - One property test per law, five total. **L3 and L4 exhaust the carrier set** — 36 ordered pairs
@@ -230,6 +295,25 @@ and Phase 1's concerns.
   contract's own vocabulary makes the difference statable.
 - A mutation that breaks L4 so a `Benchmark` justifies an `Invariant` turns the L4 property RED,
   followed by a byte-identical restore proven by `sha256`.
+
+
+## Cross-References
+
+- `crates/omp-types/src/claim_strength.rs` — the implementation
+- `crates/omp-types/src/lib.rs` — the re-export, and the crate rule §2 argues an exception to
+- `crates/omp-types/tests/claim_strength_laws.rs` — the invariant suite
+- `docs/plans/plan_to_pin_the_orchestrator_type_algebra.md` — Phase 0, T1..T4
+- `docs/plans/plan_to_write_the_document_corpus.md` — this is document #1 of 78
+- `docs/contracts/admission_contract.md` — T2, the meet-semilattice; the neighbouring boundary
+- `docs/contracts/pane_observation_contract.md` — T3, graded evidence about panes rather than
+  about claims
+- `docs/contracts/lifecycle_contract.md` — T4, restrictive terminals
+- `docs/contracts/asupersync_process_grade.md` — the recurring grade this document is scored by
+- `~/.claude/CLAUDE.md:210-213` — the L1 prose this type pins
+- `/Volumes/ZestData/dicklesworthstone-mirror/asupersync/src/lab/oracle/evidence.rs:36` — the near
+  miss surveyed in §2
+- `/Volumes/ZestData/dicklesworthstone-mirror/frankengraphdb/registries/architecture_decisions.toml:493`
+  — the same rule as a registry string plus a checker
 
 ## NO-CLAIM
 
