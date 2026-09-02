@@ -9,6 +9,9 @@ description = "Shared comparator: claimed state vs an independent oracle. Empty/
 blocking = false
 reason = "Library-only comparison support; it cannot emit or publish a merge-blocking verdict by itself."
 
+[dependencies]
+subprocess-contract = { path = "../subprocess-contract" }
+
 [lints.rust]
 unsafe_code = "forbid"
 

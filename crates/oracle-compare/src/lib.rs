@@ -10,9 +10,9 @@
 //! against a live oracle is DISAGREEMENT (ntm#254), not a quiet pass.
 
 use std::collections::BTreeSet;
-use std::io::{Read, Write};
-use std::process::{Command, Output, Stdio};
-use std::time::{Duration, Instant};
+use std::process::Command;
+use std::time::Duration;
+use subprocess_contract::{bounded_output, bounded_output_stdin, BoundedOutcome};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OracleCompareRule {
@@ -70,7 +70,9 @@ impl OracleCompareRules {
             OracleCompareRule::DisagreeIsFinding => self.disagree_is_finding = false,
             OracleCompareRule::EmptyOracleIsError => self.empty_oracle_is_error = false,
             OracleCompareRule::UnreadableIsError => self.unreadable_is_error = false,
-            OracleCompareRule::EmptyProductIsDisagreement => self.empty_product_is_disagreement = false,
+            OracleCompareRule::EmptyProductIsDisagreement => {
+                self.empty_product_is_disagreement = false
+            }
         }
         true
     }
@@ -150,7 +152,11 @@ pub fn compare_counts(
 }
 
 /// Set compare used by oracle-pane-state-differential (session:index, not %N, not busy labels).
-pub fn compare_sets(oracle: SetArm, product: SetArm, rules: &OracleCompareRules) -> OracleCompareVerdict {
+pub fn compare_sets(
+    oracle: SetArm,
+    product: SetArm,
+    rules: &OracleCompareRules,
+) -> OracleCompareVerdict {
     match (oracle, product) {
         (SetArm::Unreadable, _) | (_, SetArm::Unreadable) => {
             if rules.unreadable_is_error {
@@ -180,7 +186,9 @@ pub fn compare_sets(oracle: SetArm, product: SetArm, rules: &OracleCompareRules)
                 OracleCompareVerdict::Agree { n: o.len() as u64 }
             }
         }
-        (SetArm::Value(o), SetArm::Value(p)) if o == p => OracleCompareVerdict::Agree { n: o.len() as u64 },
+        (SetArm::Value(o), SetArm::Value(p)) if o == p => {
+            OracleCompareVerdict::Agree { n: o.len() as u64 }
+        }
         (SetArm::Value(o), SetArm::Value(p)) => {
             if rules.disagree_is_finding {
                 OracleCompareVerdict::Disagree {
@@ -213,7 +221,11 @@ pub fn harvest_expect(ready: u64) -> u64 {
 }
 
 /// Compare harvest ready-count against selected-count through the shared comparator.
-pub fn harvest_verdict(ready: u64, selected: u64, rules: &OracleCompareRules) -> OracleCompareVerdict {
+pub fn harvest_verdict(
+    ready: u64,
+    selected: u64,
+    rules: &OracleCompareRules,
+) -> OracleCompareVerdict {
     compare_counts(
         CountArm::Value(harvest_expect(ready)),
         CountArm::Value(selected),
@@ -223,146 +235,46 @@ pub fn harvest_verdict(ready: u64, selected: u64, rules: &OracleCompareRules) ->
 }
 
 #[cfg(unix)]
-fn configure_process_group(command: &mut Command) {
-    use std::os::unix::process::CommandExt;
-    command.process_group(0);
-}
-
-#[cfg(not(unix))]
-fn configure_process_group(_command: &mut Command) {}
-
-#[cfg(unix)]
-fn kill_process_group(child: &mut std::process::Child) {
-    let group = format!("-{}", child.id());
-    let killed_group = Command::new("/bin/kill")
-        .args(["-KILL", &group])
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false);
-    if !killed_group {
-        let _ = child.kill();
+fn child_cannot_open_fd(fd: i32, timeout: Duration) -> bool {
+    let mut cmd = Command::new("/bin/sh");
+    cmd.args(["-c", "exec 3<>/dev/fd/$CHECK_FD"])
+        .env("CHECK_FD", fd.to_string());
+    match spawn_timeout(cmd, timeout) {
+        BoundedOutcome::Completed(output) => !output.status.success(),
+        BoundedOutcome::TimedOut | BoundedOutcome::Unspawned(_) => true,
     }
 }
 
 #[cfg(not(unix))]
-fn kill_process_group(child: &mut std::process::Child) {
-    let _ = child.kill();
+fn child_cannot_open_fd(_fd: i32, _timeout: Duration) -> bool {
+    true
 }
 
-fn wait_deadline(
-    mut child: std::process::Child,
+pub fn spawn_timeout(mut cmd: Command, timeout: Duration) -> BoundedOutcome {
+    bounded_output(&mut cmd, timeout)
+}
+
+pub fn spawn_timeout_stdin(
+    mut cmd: Command,
     timeout: Duration,
-    stdin: Option<&[u8]>,
-) -> Option<Output> {
-    std::thread::scope(|scope| {
-        let stdout_reader = child.stdout.take().map(|mut stream| {
-            scope.spawn(move || {
-                let mut output = Vec::new();
-                stream.read_to_end(&mut output).ok().map(|_| output)
-            })
-        });
-        let stderr_reader = child.stderr.take().map(|mut stream| {
-            scope.spawn(move || {
-                let mut output = Vec::new();
-                stream.read_to_end(&mut output).ok().map(|_| output)
-            })
-        });
-        let stdin_writer = stdin.and_then(|bytes| {
-            child.stdin.take().map(|mut stream| {
-                scope.spawn(move || {
-                    let _ = stream.write_all(bytes);
-                })
-            })
-        });
-
-        let start = Instant::now();
-        let status = loop {
-            match child.try_wait() {
-                Ok(Some(exit_status)) => break Some(exit_status),
-                Ok(None) if start.elapsed() >= timeout => {
-                    kill_process_group(&mut child);
-                    break child.wait().ok();
-                }
-                Ok(None) => std::thread::sleep(Duration::from_millis(20)),
-                Err(_) => {
-                    kill_process_group(&mut child);
-                    break child.wait().ok();
-                }
-            }
-        };
-
-        let io_finished = || {
-            stdout_reader
-                .as_ref()
-                .is_none_or(|reader| reader.is_finished())
-                && stderr_reader
-                    .as_ref()
-                    .is_none_or(|reader| reader.is_finished())
-                && stdin_writer
-                    .as_ref()
-                    .is_none_or(|writer| writer.is_finished())
-        };
-        while !io_finished() {
-            if start.elapsed() >= timeout {
-                kill_process_group(&mut child);
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(20));
-        }
-
-        let stdout = match stdout_reader {
-            Some(reader) => reader.join().ok().flatten()?,
-            None => Vec::new(),
-        };
-        let stderr = match stderr_reader {
-            Some(reader) => reader.join().ok().flatten()?,
-            None => Vec::new(),
-        };
-        let status = status?;
-
-        Some(Output {
-            status,
-            stdout,
-            stderr,
-        })
-    })
-}
-
-/// Bounded spawn. Both output streams are drained concurrently before the child is observed.
-/// The control-plane workspace has no `subprocess-contract` crate; this preserves its synchronous
-/// `std::process::Command` API while applying that crate's dual-pipe/process-group contract here.
-pub fn spawn_timeout(mut cmd: Command, timeout: Duration) -> Option<Output> {
-    cmd.stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    configure_process_group(&mut cmd);
-    let child = cmd.spawn().ok()?;
-    wait_deadline(child, timeout, None)
-}
-
-/// Bounded spawn with stdin bytes (EOF after write). Used to drive loop-queue-filter.py.
-pub fn spawn_timeout_stdin(mut cmd: Command, timeout: Duration, stdin: &[u8]) -> Option<Output> {
-    cmd.stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    configure_process_group(&mut cmd);
-    let child = cmd.spawn().ok()?;
-    wait_deadline(child, timeout, Some(stdin))
-}
-
-/// Prove a File we hold is CLOEXEC: a child cannot open our raw fd.
-pub fn child_cannot_open_fd(fd: i32, timeout: Duration) -> bool {
-    let mut cmd = Command::new("/bin/sh");
-    cmd.args(["-c", "exec 3<>/dev/fd/$CHECK_FD"])
-        .env("CHECK_FD", fd.to_string());
-    spawn_timeout(cmd, timeout)
-        .map(|o| !o.status.success())
-        .unwrap_or(true)
+    stdin: &[u8],
+) -> BoundedOutcome {
+    bounded_output_stdin(&mut cmd, timeout, stdin)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Output;
+    use std::time::Instant;
+
+    fn completed(outcome: BoundedOutcome) -> Output {
+        match outcome {
+            BoundedOutcome::Completed(output) => output,
+            BoundedOutcome::TimedOut => panic!("test child timed out"),
+            BoundedOutcome::Unspawned(error) => panic!("test child was not spawned: {error}"),
+        }
+    }
 
     #[test]
     fn disagree_is_finding() {
@@ -473,7 +385,7 @@ mod tests {
     fn spawn_timeout_collects_stdout() {
         let mut cmd = Command::new("/bin/echo");
         cmd.arg("oracle-compare-hello");
-        let out = spawn_timeout(cmd, Duration::from_secs(2)).expect("echo");
+        let out = completed(spawn_timeout(cmd, Duration::from_secs(2)));
         assert!(out.status.success());
         assert!(
             String::from_utf8_lossy(&out.stdout).contains("oracle-compare-hello"),
@@ -493,8 +405,8 @@ mod tests {
             start.elapsed()
         );
         assert!(
-            out.is_some(),
-            "rule bounded_waits: timeout path must return"
+            matches!(out, BoundedOutcome::TimedOut),
+            "rule bounded_waits: timeout path must be typed"
         );
     }
 
@@ -524,13 +436,13 @@ mod tests {
             "descendant-held pipes must remain deadline-bounded, elapsed={:?}",
             start.elapsed()
         );
-        assert!(out.is_some(), "post-exit pipe cleanup must return output");
+        assert!(matches!(out, BoundedOutcome::Completed(_)), "post-exit pipe cleanup must return Completed");
     }
 
     #[test]
     fn spawn_timeout_stdin_roundtrip() {
         let cmd = Command::new("/bin/cat");
-        let out = spawn_timeout_stdin(cmd, Duration::from_secs(2), b"piped-body\n").expect("cat");
+        let out = completed(spawn_timeout_stdin(cmd, Duration::from_secs(2), b"piped-body\n"));
         assert_eq!(String::from_utf8_lossy(&out.stdout), "piped-body\n");
     }
 
@@ -541,7 +453,7 @@ mod tests {
             "-c",
             "/usr/bin/head -c 131072 /dev/zero & /usr/bin/head -c 131072 /dev/zero >&2 & wait",
         ]);
-        let out = spawn_timeout(cmd, Duration::from_secs(2)).expect("large dual-pipe child");
+        let out = completed(spawn_timeout(cmd, Duration::from_secs(2)));
         assert!(
             out.status.success(),
             "child must complete after both pipes are drained: {:?}",
