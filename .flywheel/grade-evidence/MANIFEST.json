@@ -3,9 +3,9 @@
  "preserved_utc": "2026-09-01T22:40:38.070997Z",
  "source_root": "/tmp/grade",
  "why": "/tmp is cleared on reboot. These 237 files are the ONLY evidence behind 219 findings from rounds 15-21, and every reconciliation row in docs/plan/FINDINGS.jsonl will cite them. A citation to a path a reboot deletes is unverifiable the moment the machine restarts - the same clearable-provenance defect already fixed twice for the inventory captures and the wire-proof frame.",
- "file_count": 238,
- "raw_bytes": 2197039,
- "gz_bytes": 748637,
+ "file_count": 241,
+ "raw_bytes": 2242916,
+ "gz_bytes": 765246,
  "verify": "gunzip -c <preserved> | shasum -a256  -> must equal sha256",
  "files": [
   {
@@ -1674,6 +1674,28 @@
    "bytes": 26085,
    "gz_bytes": 6071,
    "note": "Round 15 declared 20 findings and retained NO grading evidence file: all 13 of its CONVERGENCE.jsonl rows carry evidence=null, and the original 237 preserved files contain no r15 capture. These 13 rows ARE the only evidence that exists for those 20 findings, so they are preserved here to make the FINDINGS.jsonl citations retained and hash-verifiable rather than pointing at a mutable working file."
+  },
+  {
+   "source": "docs/plan/round16-Opus.jsonl (round-22 reproducibility lens, 16 rows; preserved by bead omp-orchestrator-5by follow-on)",
+   "preserved": ".flywheel/grade-evidence/r22-reproducibility-Opus.jsonl.gz",
+   "sha256": "3c28b28fc80fb7001ef620ec53e0478466100c552c227ec2e83f4878049c66ff",
+   "bytes": 27649,
+   "gz_bytes": 10389,
+   "note": "Round 22's own grade ledger, preserved so its FINDINGS.jsonl rows cite a retained artifact rather than a mutable working file."
+  },
+  {
+   "source": "docs/plan/round20-GreenFrog.jsonl (tracked source preserved for FINDINGS citations)",
+   "preserved": ".flywheel/grade-evidence/round20-GreenFrog.jsonl.gz",
+   "sha256": "395bfd1f83ca63c144e36960a253b3b9f5a998fbb86480e40fb1a468aa72bc67",
+   "bytes": 8206,
+   "gz_bytes": 2670
+  },
+  {
+   "source": "docs/plan/round21-GreenFrog.jsonl (tracked source preserved for FINDINGS citations)",
+   "preserved": ".flywheel/grade-evidence/round21-GreenFrog.jsonl.gz",
+   "sha256": "2d69996575b5fe7baecfeb74bea3bc7b4a48da80a2cc1eaa6977586feab695ce",
+   "bytes": 10022,
+   "gz_bytes": 3550
   }
  ]
 }

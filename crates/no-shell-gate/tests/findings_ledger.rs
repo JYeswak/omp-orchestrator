@@ -466,6 +466,26 @@ fn known_good_reconciliation_has_exact_coverage() {
 }
 
 #[test]
+fn supplemental_reconciliation_rows_are_allowed_after_exact_coverage() {
+    let root = fixture_root("supplemental");
+    write_fixture(
+        &root,
+        r#"{"finding_id":"R21-00-001","round":21,"section":"00-brief","summary":"fixed","status":"FIXED","sha":"0123456789012345678901234567890123456789","evidence":".flywheel/grade-evidence/evidence.gz","verified_by":"BlueLantern"}
+{"finding_id":"R21-supplemental","round":21,"section":"00-brief","summary":"additional disposition","status":"DEFERRED","bead":"omp-orchestrator-kxe.3","evidence":".flywheel/grade-evidence/evidence.gz","verified_by":"BlueLantern"}
+"#,
+        r#"{"section":"00-brief","round":21,"new_findings":1,"finding_ids":["R21-00-001"],"lens":"fresh","graded_by":"FreshEye"}
+"#,
+        r#"{"section":"00-brief","round":21,"new_findings":1,"gates_green":true}
+"#,
+    );
+
+    let report = validate_findings_ledger(&root).expect("supplemental fixture");
+    assert_eq!(report.declared, 1);
+    assert_eq!(report.reconciled, 2);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn count_only_coverage_rejects_a_short_ledger() {
     let root = fixture_root("count-only");
     write_fixture(
@@ -577,5 +597,10 @@ fn unpinned_future_convergence_rows_are_void_and_not_coverage() {
 fn real_findings_ledger_is_strictly_valid() {
     let report = validate_findings_ledger(&repo_root()).expect("real findings ledger");
     assert!(report.declared > 0);
-    assert_eq!(report.declared, report.reconciled);
+    assert!(
+        report.reconciled >= report.declared,
+        "ledger must cover every declaration; supplemental reconciliations are allowed: declared={} reconciled={}",
+        report.declared,
+        report.reconciled
+    );
 }
