@@ -934,8 +934,40 @@ pub fn read_to_string(path: &Path) -> io::Result<String> {
 }
 #[cfg(test)]
 mod tests {
-    use super::{assess_count, check, Config, Status};
+    use super::{assess_count, check, selftest, Config, Status};
     use std::{fs, path::PathBuf};
+
+    /// THE CLOSED CODE SPACE `XC-PT-SELFTEST` CLAIMS.
+    ///
+    /// `main.rs:24` forwards this function's return value as the process exit code
+    /// (`ExitCode::from(selftest() as u8)`), which the exit-code registry gate records as
+    /// a pass-through site. §6 declares its code space CLOSED at {0,1} rather than the
+    /// 0..=255-of-a-child default, on the grounds that the two `return` arms below are
+    /// literal `0` and literal `1` and the local `failures` counter is only interpolated
+    /// into the printed message. This test is what makes that a checked claim.
+    ///
+    /// **THE HAZARD THIS GUARDS, and it is not hypothetical.** `as u8` NARROWS an `i32`.
+    /// The obvious next edit is to return `failures` instead of `1` — the count is already
+    /// computed and already printed one line above the return. At `failures == 256` the
+    /// cast truncates to **0**, so `SELFTEST RED cargo-lane-budget failures=256` prints on
+    /// stdout while the process exits SUCCESS. That is a vacuous green arriving through a
+    /// cast rather than through a missing check, and this assertion fails the moment the
+    /// return value leaves {0,1}.
+    #[test]
+    fn selftest_returns_only_a_documented_exit_code() {
+        let code = selftest();
+        assert!(
+            code == 0 || code == 1,
+            "selftest() returned {code}, outside the {{0,1}} space XC-PT-SELFTEST declares. \
+             main.rs narrows this through `as u8`, so a value of 256 would exit SUCCESS \
+             while printing RED."
+        );
+        assert!(
+            u8::try_from(code).is_ok(),
+            "selftest() returned {code}, which `ExitCode::from(selftest() as u8)` at \
+             main.rs:24 would TRUNCATE rather than refuse"
+        );
+    }
 
     #[test]
     fn count_warn_band_has_both_edges() {

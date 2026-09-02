@@ -62,12 +62,27 @@ struct Emission {
     line: usize,
 }
 
-/// One pass-through site: a CHILD process's code forwarded as our own, so the code space at
-/// that site is 0..=255 of whatever ran underneath.
+/// One site that forwards a code it did not choose as its own.
+///
+/// The name says CHILD PROCESS and that is the case it was built for, but the recogniser
+/// cannot actually establish it. [`passthrough_chain`] accepts any bare identifier chain,
+/// so a local value reached through a field access (`outcome.code`) or a zero-argument
+/// call to our OWN function (`selftest()`) is indistinguishable here from `out.code`
+/// holding a child's status. Both are recorded, and the registry row is where the
+/// distinction is made explicit — §6 already carves out `XC-PT-VERDICT` and
+/// `XC-PT-EXITCODE` on exactly that ground. So read a row here as "this site forwards a
+/// code chosen elsewhere", and read its registry row for whether "elsewhere" is inside
+/// this workspace.
+///
+/// `file` and `line` are carried because the message is the deliverable. Without them a
+/// crate with four sites for one expression printed the same string four times, which
+/// tells a reader the count and nothing they can act on.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PassThrough {
     expression: String,
     crate_name: String,
+    file: String,
+    line: usize,
 }
 
 /// Every `.rs` file beneath `<root>/crates/*/src`, recursively.
@@ -108,6 +123,62 @@ fn walk_rs(dir: &Path, out: &mut Vec<PathBuf>) {
             out.push(p);
         }
     }
+}
+
+/// One line with `//` comments removed and string-literal CONTENTS blanked.
+///
+/// # Why this exists, measured 2026-09-02
+///
+/// The scanner ran the emission patterns over raw source, so it counted its own
+/// documentation. Adding a doc comment reading
+/// `` `ExitCode::from(selftest() as u8)` `` to `cargo-lane-budget` and an assertion
+/// message quoting the same call created TWO new pass-through "sites" out of prose, and
+/// the registry was then edited to cite `src/lib.rs:943,967` — documenting comments as
+/// emission sites. Tree-wide there were exactly two such hits and both were introduced
+/// by that one edit, which is why the blind spot survived until something wrote about
+/// the gate inside a file the gate reads.
+///
+/// The sharper case is worse than an inflated count: a comment reading
+/// `ExitCode::from(213)` would make `every_emitted_exit_code_is_documented` demand a
+/// registry row for a code nothing emits, and the only way to satisfy it would be to
+/// document a fiction. `a_code_that_appears_only_in_prose_is_not_an_emission` pins both
+/// directions.
+///
+/// Structure is preserved rather than deleted — quotes stay, contents go — so
+/// `call_argument`'s paren balancing still sees a well-formed line. Multi-line `/* */`
+/// blocks are NOT handled: no such block in `crates/*/src` contains an exit pattern
+/// (verified), and a stateful stripper would be a second parser to keep correct. If one
+/// ever appears, this is where it goes.
+fn code_only(line: &str) -> String {
+    let chars: Vec<char> = line.chars().collect();
+    let mut out = String::with_capacity(line.len());
+    let mut i = 0usize;
+    while i < chars.len() {
+        let c = chars[i];
+        if c == '/' && chars.get(i + 1) == Some(&'/') {
+            break;
+        }
+        if c == '"' {
+            out.push('"');
+            i += 1;
+            while i < chars.len() {
+                if chars[i] == '\\' {
+                    i += 2;
+                    continue;
+                }
+                if chars[i] == '"' {
+                    out.push('"');
+                    i += 1;
+                    break;
+                }
+                i += 1;
+            }
+            continue;
+        }
+        out.push(c);
+        i += 1;
+    }
+    out
 }
 
 /// Digits immediately following `needle`, when the call is `needle<digits>)`.
@@ -297,8 +368,11 @@ fn scan(root: &Path) -> Scan {
         for value in exit_code_body_values(&text) {
             emissions.push(Emission { code: value, file: rel.clone(), line: 0 });
         }
-        for (n, line) in text.lines().enumerate() {
+        for (n, raw_line) in text.lines().enumerate() {
             let lineno = n + 1;
+            // Prose is not an emission. See `code_only`.
+            let stripped = code_only(raw_line);
+            let line = stripped.as_str();
             for needle in ["ExitCode::from(", "process::exit("] {
                 for code in literal_after(line, needle) {
                     emissions.push(Emission { code, file: rel.clone(), line: lineno });
@@ -309,6 +383,8 @@ fn scan(root: &Path) -> Scan {
                     passthrough.push(PassThrough {
                         expression: chain,
                         crate_name: crate_name.clone(),
+                        file: rel.clone(),
+                        line: lineno,
                     });
                 }
             }
@@ -513,6 +589,60 @@ fn a_planted_documented_code_passes() {
     let _ = fs::remove_dir_all(&root);
 }
 
+/// FIRES ON KNOWN-BAD, both directions: prose is not an emission, and code still is.
+///
+/// The pair is the point. A leg that only asserted the comment is ignored would also pass
+/// if `code_only` deleted the whole line, and the gate would then see nothing at all —
+/// which is the vacuity this suite exists to refuse. So the SAME undocumented code is
+/// planted twice, once in a comment and once as a statement, and the verdicts must differ.
+///
+/// `213` is chosen because no `XC-*` row documents it, so a false positive is visible as a
+/// complaint rather than being absorbed by an existing row.
+#[test]
+fn a_code_that_appears_only_in_prose_is_not_an_emission() {
+    let doc = fs::read_to_string(registry_path(&repo_root())).expect("registry");
+
+    let prose = fixture(
+        "prose-only",
+        "/// Historically this returned `std::process::ExitCode::from(213)`.\n\
+         // and `process::exit(213)` before that\n\
+         fn main() -> std::process::ExitCode {\n    \
+             let note = \"we used to std::process::ExitCode::from(213) here\";\n    \
+             let _ = note;\n    \
+             std::process::ExitCode::from(2)\n\
+         }\n",
+    );
+    let s = scan(&prose);
+    assert_eq!(s.files, 1, "the fixture must actually be scanned");
+    let complaints = undocumented(&s, &doc).expect("fixture scan is not vacuous");
+    assert!(
+        complaints.is_empty(),
+        "a code named only in a comment or a string literal is NOT an emission, yet the \
+         scanner complained: {complaints:?}. A gate that reads its own documentation as \
+         source demands a registry row for a code nothing emits, and the only way to \
+         satisfy it is to document a fiction."
+    );
+    assert!(
+        s.passthrough.is_empty(),
+        "and prose must not manufacture pass-through sites either; got {:?}",
+        s.passthrough
+    );
+    let _ = fs::remove_dir_all(&prose);
+
+    let real = fixture(
+        "prose-control",
+        "fn main() -> std::process::ExitCode { std::process::ExitCode::from(213) }\n",
+    );
+    let s = scan(&real);
+    let complaints = undocumented(&s, &doc).expect("fixture scan is not vacuous");
+    assert!(
+        complaints.iter().any(|c| c.contains("code=213")),
+        "CONTROL FAILED: the same code as a STATEMENT must still be caught, or the \
+         stripper has blinded the scanner rather than narrowed it. Got {complaints:?}"
+    );
+    let _ = fs::remove_dir_all(&real);
+}
+
 #[test]
 fn every_row_carries_a_does_not_mean() {
     let doc = fs::read_to_string(registry_path(&repo_root())).expect("registry");
@@ -580,6 +710,29 @@ fn the_scan_floors_seeded_from_this_suites_own_measurement_hold() {
     );
 }
 
+/// Every site that forwards a code it did not choose must carry a registry row.
+///
+/// # The anti-vacuity clause is load-bearing, and it was ABSENT
+///
+/// MEASURED 2026-09-02 05:53Z: with [`passthrough_chain`] short-circuited to `None` and
+/// `PASSTHROUGH_FLOOR` relaxed to 0, this suite reported **7 passed, 0 failed**. The gate
+/// that exists to catch an undeclared pass-through went fully green over ZERO of them,
+/// because the loop below simply had nothing to iterate. A recogniser that stops matching
+/// reported identically to a workspace with every site declared.
+///
+/// `the_scan_floors_seeded_from_this_suites_own_measurement_hold` did cover the count, but
+/// a floor in a SIBLING leg is not this leg's guard: weaken or delete that leg and this
+/// one returns to reporting green on nothing. So the floor is asserted HERE, against the
+/// same scan this leg decides on. This is `calr`'s shape — the flagship pre-commit hook
+/// exiting 0 on an empty index — one gate over.
+///
+/// # Why the message carries `file:line`
+///
+/// The previous version deduplicated with `!missing.contains(&pt.expression)` while
+/// pushing the formatted `"{expr} (in {crate})"`, so the guard compared two different
+/// shapes and never fired. `refill-idle-panes` therefore printed `outcome.code (in
+/// refill-idle-panes)` four times: the count was right and the reader still had to go
+/// find the sites by hand.
 #[test]
 fn every_pass_through_site_is_declared() {
     let root = repo_root();
@@ -590,15 +743,70 @@ fn every_pass_through_site_is_declared() {
         "the registry declares no pass-through sites; §6 must not be empty"
     );
     let s = scan(&root);
-    let mut missing: Vec<String> = Vec::new();
-    for pt in &s.passthrough {
-        if !declared.contains(&pt.expression) && !missing.contains(&pt.expression) {
-            missing.push(format!("{} (in {})", pt.expression, pt.crate_name));
-        }
-    }
+    assert!(
+        s.passthrough.len() >= PASSTHROUGH_FLOOR,
+        "PASS_THROUGH_SCAN_EMPTY: derived {} pass-through site(s), floor {PASSTHROUGH_FLOOR}. \
+         An empty scan set is an ERROR, never a pass — this workspace forwards codes from \
+         children and from typed verdicts in at least {PASSTHROUGH_FLOOR} places, so a \
+         count below the floor means the recogniser stopped matching. Measured: blinding \
+         it made this whole suite report 7 passed.",
+        s.passthrough.len()
+    );
+    let missing: Vec<String> = s
+        .passthrough
+        .iter()
+        .filter(|pt| !declared.contains(&pt.expression))
+        .map(|pt| {
+            format!(
+                "{} at {}:{} (crate {})",
+                pt.expression, pt.file, pt.line, pt.crate_name
+            )
+        })
+        .collect();
     assert!(
         missing.is_empty(),
-        "undeclared pass-through site(s) — a foreign code can arrive wearing our name here: \
-         {missing:?}"
+        "{} undeclared pass-through site(s) — a code chosen elsewhere can arrive wearing \
+         our name here:\n{:#?}\n\n\
+         Add an `XC-PT-*` row to §6 of docs/error_codes/exit_code_registry.md. The gate \
+         keys on the EXPRESSION cell (cell index 1), not the crates cell: adding a crate \
+         name to an existing row changes nothing and the edit will look accepted.",
+        missing.len(),
+        missing
+    );
+}
+
+/// Every `XC-PT-*` row must actually declare an expression.
+///
+/// The expression cell is the only cell [`documented_passthrough`] reads, so a row with an
+/// empty or unbackticked cell 1 is a row that declares nothing while looking like a
+/// declaration. That is the failure mode a reader cannot see, and it is why a crate added
+/// to the CRATES cell of `XC-PT-EXITCODE` on 2026-09-02 changed no verdict.
+#[test]
+fn every_pass_through_row_declares_an_expression() {
+    let root = repo_root();
+    let doc = fs::read_to_string(registry_path(&root)).expect("registry");
+    let rows: Vec<_> = registry_rows(&doc)
+        .into_iter()
+        .filter(|r| r.id.starts_with("XC-PT-"))
+        .collect();
+    assert!(
+        !rows.is_empty(),
+        "ANTI-VACUITY: zero XC-PT-* rows parsed out of the registry"
+    );
+    let bad: Vec<String> = rows
+        .iter()
+        .filter(|r| {
+            let raw = r.cells.get(1).map_or("", String::as_str).trim();
+            let quoted = raw.starts_with('`') && raw.ends_with('`') && raw.len() > 2;
+            !quoted || raw.trim_matches('`').trim().is_empty()
+        })
+        .map(|r| format!("{}: expression cell = {:?}", r.id, r.cells.get(1)))
+        .collect();
+    assert!(
+        bad.is_empty(),
+        "{} XC-PT-* row(s) declare no usable expression in cell 1, the ONLY cell the gate \
+         reads:\n{:#?}",
+        bad.len(),
+        bad
     );
 }

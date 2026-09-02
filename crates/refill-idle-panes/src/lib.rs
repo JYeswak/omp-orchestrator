@@ -1287,6 +1287,88 @@ mod tests {
         assert_ne!(out[0].bead, out[1].bead, "two panes must not race one bead");
     }
 
+    /// THE CLOSED CODE SPACE `XC-PT-OUTCOME` CLAIMS.
+    ///
+    /// `main.rs` forwards `outcome.code` at four sites, which the exit-code registry gate
+    /// records as pass-through sites. §6 of the registry declares their code space CLOSED
+    /// at {0,1,2} rather than the 0..=255-of-a-child default, and this test is what makes
+    /// that a checked claim instead of a sentence.
+    ///
+    /// The enumeration is over the SHAPES `run_outcome` branches on, not over sampled
+    /// fixtures: each of conflicts / unconfirmed / unknowable / held / dispatchable is
+    /// varied empty-vs-nonempty, all 32 combinations, against both kernel verdicts. A
+    /// sampled test would pass while a new branch returned 3.
+    #[test]
+    fn run_outcome_only_ever_yields_a_documented_exit_code() {
+        const DOCUMENTED: [u8; 3] = [0, 1, 2];
+        let verdicts = [
+            OracleCompareVerdict::Agree { n: 0 },
+            OracleCompareVerdict::Disagree {
+                oracle_n: 2,
+                product_n: 1,
+            },
+            OracleCompareVerdict::Unmeasurable { why: "probe" },
+        ];
+        let mut seen: BTreeSet<u8> = BTreeSet::new();
+        let mut cases = 0usize;
+        for bits in 0u8..32 {
+            let pick = |slot: u8, name: &str| -> Vec<String> {
+                if bits & (1 << slot) == 0 {
+                    Vec::new()
+                } else {
+                    vec![name.to_string()]
+                }
+            };
+            let decision = Decision {
+                dispatchable: pick(0, "2"),
+                conflicts: pick(1, "3"),
+                unconfirmed: pick(2, "4"),
+                unknowable: pick(3, "5"),
+                held: pick(4, "6"),
+            };
+            for verdict in &verdicts {
+                let outcome = run_outcome(&decision, verdict);
+                cases += 1;
+                assert!(
+                    DOCUMENTED.contains(&outcome.code),
+                    "run_outcome yielded UNDOCUMENTED code {} for {decision:?} — every code \
+                     forwarded through outcome.code must have an XC-* row, and \
+                     XC-PT-OUTCOME declares the space closed at {DOCUMENTED:?}",
+                    outcome.code
+                );
+                seen.insert(outcome.code);
+            }
+        }
+        assert_eq!(cases, 96, "the enumeration must actually run all 32x3 shapes");
+        assert_eq!(
+            seen.iter().copied().collect::<Vec<u8>>(),
+            DOCUMENTED.to_vec(),
+            "ANTI-VACUITY: all three documented codes must be REACHABLE. A range test that \
+             only ever observes 0 would pass against a function that can no longer refuse."
+        );
+    }
+
+    /// The property `omp-orchestrator-oe2` established must survive the registry
+    /// declaration: a CONFIDENT two-surface contradiction exits NONZERO and names the
+    /// panes. A declaration that flattened this into a generic code would undo the fix it
+    /// was written to document.
+    #[test]
+    fn a_declared_pass_through_still_carries_the_typed_refusal() {
+        let (activity, oracle_view) = live_views();
+        let decision = decide(&activity, &oracle_view);
+        let outcome = run_outcome(&decision, &conflict_verdict(&activity, &oracle_view));
+        assert_ne!(outcome.code, 0, "a confident contradiction must exit NONZERO");
+        assert_eq!(outcome.code, 1);
+        for pane in ["1", "2", "3"] {
+            assert!(
+                outcome.message.contains(pane),
+                "the refusal must NAME pane {pane}: {}",
+                outcome.message
+            );
+        }
+        assert!(outcome.message.contains("SURFACE_CONFLICT"));
+    }
+
     #[test]
     fn an_undersized_packet_is_refused_and_a_full_one_accepted() {
         assert!(!packet_is_sendable(0));
