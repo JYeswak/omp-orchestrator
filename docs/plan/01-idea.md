@@ -68,7 +68,7 @@ are **zero unqualified WORKS rows**:
 | consume | selection | **UNVERIFIED** — no durable receipt here proves the selected work was consumed |
 | consume | transport | **UNVERIFIED** — no durable receipt here proves delivery to the intended worker |
 | consume | admission (decide()) | **FENCED** — the cited report is DISPATCH_RETRY_BLOCKED |
-| actuate | dispatch | **AVAILABLE, NOT VERIFIED** — the current source exposes the grep-addressable `send_and_verify` symbol in `crates/omp-orchestrator/src/main.rs` and the tick path invokes it; transport and receiver receipt remain unproven |
+| actuate | dispatch | **AVAILABLE, NOT VERIFIED** — `send_and_verify` exists at `crates/omp-orchestrator/src/main.rs:961` (the bead's pre-drift address was `:714`) and the tick calls it at `:2481` (pre-drift `:1461`); transport and receiver receipts remain unproven. The gap is runtime verification, not source existence |
 | complete | worker says done | **AVAILABLE, NOT WIRED** — OMP exposes AgentEndEvent.willContinue on RpcSessionEventFrame; the local loop does not consume it |
 
 > *Upstream type for this gap: `GuestIdleReconcilerCtx` (DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*

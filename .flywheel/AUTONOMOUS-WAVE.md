@@ -39,14 +39,13 @@ SUPERVISOR_REFUSED GATE_UNWIRED
   owner=josh
 ```
 
-**Three crates stand between this binary and its first autonomous dispatch.** Round 15 graded
-all 13 plan sections `BUYER_VISIBLE_CHANGE = NONE` — four graders, two models, unanimous — and
-every one of them landed on the plan's own line, `docs/plan/01-idea.md:§1.2`:
+**The actuator exists; first autonomous dispatch remains unverified.** Round 15's Rule-Zero wording was a category error, and the current plan corrects it:
 
-> `actuate | dispatch | DOES NOT EXIST — a human types into panes`
+> `actuate | dispatch | AVAILABLE, NOT VERIFIED — send_and_verify exists at crates/omp-orchestrator/src/main.rs:961 and is called at :2481; the earlier :714/:1461 addresses are pre-drift; transport and receiver receipts remain unproven`
 
-That is the product. Everything else is downstream of it. **When you are choosing between two
-tasks, pick the one that gets the loop closer to dispatching.**
+That is the product risk. Everything else is downstream of proving the existing actuator against a live, reversible target and retaining both transport and receiver receipts. **When choosing between two tasks, pick the one that produces that proof.**
+
+**Runnable verification acceptance — expectation before execution:** run `omp-orchestrator run --once --repo <repo>` against a reversible live pane. Expect either a transport receipt plus the receiver receipt retained by `send_and_verify`, or a typed refusal naming the admission blocker. Current source addresses are `send_and_verify` at `crates/omp-orchestrator/src/main.rs:961` and its tick call at `:2481`; line numbers in earlier reports drifted. Source existence alone is not delivery proof.
 
 ---
 
