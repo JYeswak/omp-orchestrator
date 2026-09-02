@@ -253,6 +253,71 @@ crates returns headers in exactly three of them — `no-shell-gate/src/lib.rs:11
 of eight, because establishing it requires running each binary, which this section is
 forbidden to do; the one measured value is `omp-inventory-map`, which FAILS.
 
+#### 3.1.0 The membership rule, and why the denominator is TEN — not eight, not nine, not sixteen
+
+**A denominator without a membership rule is not a measurement.** This subsection existed for
+several rounds publishing "of 8" with no stated rule for what counts, and that omission produced
+three different answers from three readers in one evening. The rule comes first now; the number
+is derived from it.
+
+**THE RULE.** A crate is a member of the gate inventory when all three hold:
+
+1. it is a **cargo workspace package** with a directory under `crates/` — a bin target living
+   inside another crate is **not** a member, because it cannot be graded independently of its
+   parent; and
+2. it has **at least one tracked file** — an untracked crate does not exist in the repository,
+   only on one disk; and
+3. it is **invoked as a refusal by a reachable trigger** — a job step in
+   `.github/workflows/gate.yml`, or the installed pre-commit binary. Existence without a trigger
+   is a crate, not a gate.
+
+**THE ANSWER, measured 2026-09-02 by deriving all three clauses rather than reading any table:**
+
+| | count | crates |
+|---|---:|---|
+| **MEMBERS** | **10** | `commit-build-fence` `installer` `kernel-bypass-gate` `no-shell-gate` `omp-inventory-map` `path-literal-guard` `porting-gate` `pre-delete-citation-check` `state-wildcard-lint` `undrained-pipe-lint` |
+| excluded — clause 3, no reachable trigger | 3 | `dispatch-claim-fence` `pane-dispatch-fence` `wired-but-inert-guard` |
+| excluded — clause 1, not a package | 1 | `pre-commit-gate` |
+
+The membership set is **exactly the ten jobs in `gate.yml`**, which is the check on the rule: a
+rule that produced a set disagreeing with the only reachable trigger surface would be describing
+something other than this repo's gates.
+
+**`pre-commit-gate` IS NOT A GATE — it is the binary that HOSTS three of them**, and it is named
+here because the next reader with a grep will land on it exactly as one did. `cargo metadata`
+reports **zero** packages by that name; it is a bin target of `no-shell-gate` at
+`crates/no-shell-gate/src/bin/pre-commit-gate.rs`, and it runs three member gates in-process —
+`no_shell_gate::violation_for` (`:11`), `undrained_pipe_lint::find_detailed_violations_in_source`
+(`:80`), `state_wildcard_lint::lint_workspace` (`:91`). Counting it would double-count its own
+parent crate. It appears in neither table below and is mentioned once in this section, at §6.5.2,
+in prose about rebuilding the hook.
+
+**RETRACTED: "the matrix has 16 rows and double-counts."** It does not. A stopping reader — one
+that halts at the first non-pipe line — reports **8 data rows / 8 unique gates** for the §3.1
+matrix at `:256` and **8 / 8** for the §1 leg table at `:29`, the same eight crates in both. The
+16 was one reader scanning backticked-crate rows across the *whole file* and summing two
+different tables; a non-stopping variant of the same reader answered 19 and 29. Three readings,
+three answers, one instrument defect — and the retraction is recorded rather than deleted because
+**a row count is only as good as where the reader stops**, which is the same class as every other
+false zero this section carries.
+
+**WHAT THE TWO TABLES BELOW THEREFORE COVER: 8 of the 10 members.** `installer` and
+`porting-gate` are members with reachable CI triggers and **no row in either table**. Every cell
+that is published is honest for the eight it grades; the headline **"Zero gates satisfy all six"
+is a statement about those eight and not about the inventory**, and until the two missing rows
+land, any count of the form "N of 8" understates the denominator by two.
+
+**The replacement mechanism inherits the gap and is narrower still.** §6.6 replaced the
+hand-assessed letters with citations in `crates/no-shell-gate/tests/gate_properties.rs`, which is
+strictly better per claim — but `GATE_PROPERTIES` at `:67` is a hand-listed `const` covering
+**six** crates, and all three of its tests iterate that const (`:129`, `:160`, `:176`) with no
+derivation from disk; its single `read_dir` at `:105` reads a crate's own `tests/` directory, not
+the gate set. So it grades 6 of 10 and omits two crates this matrix itself grades
+(`commit-build-fence`, `omp-inventory-map`). **A new gate crate is out of scope the moment it
+exists** — which is precisely the `check.sh EXPECTED_GATES` defect §2.8 names as the thing this
+repo avoids: *"the list drifts and the suite reports vacuously green while most lanes are
+unexamined."* Deriving `GATE_PROPERTIES` from the three clauses above is the fix; it is not done.
+
 | gate | 1 known-bad | 2 known-good | 3 mutation | 4 anti-vacuity | 5 claim | 6 addressable |
 |---|:--:|:--:|:--:|:--:|:--:|:--:|
 | `no-shell-gate` | Y | Y | Y | Y | **Y** | — |
@@ -278,8 +343,13 @@ enforces. PROJECTED: the co-occurrence has one cause — a gate written to close
 incident, shipped the moment it went red on that incident, and never revisited to ask what
 else it now claims or what it would report against an empty scan set.
 
-NO-CLAIM: column 6 is seven-eighths unmeasured, so this matrix understates nothing and may
-overstate the addressability of every gate but `omp-inventory-map`.
+NO-CLAIM, on TWO axes, because for several rounds only the first was disclosed and that omission
+is what let the denominator drift. **Column:** column 6 is seven-eighths unmeasured, so this
+matrix understates nothing on that axis and may overstate the addressability of every gate but
+`omp-inventory-map`. **Row set:** the eight rows are **8 of the 10 inventory members** derived in
+§3.1.0 — `installer` and `porting-gate` have reachable CI triggers and no row here — so
+"Zero gates satisfy all six" is a claim about these eight and **not** about the gate inventory,
+and any "N of 8" in this section carries a denominator two short of the measured membership.
 
 **HISTORICAL ADDRESSABILITY SNAPSHOT.** An earlier inventory run reported omp-inventory-map --help -> CONFIG_ERROR unknown argument --help, 13 source tests, and 544,697 bytes. Current source has 28 test markers and the current debug binary's --help emits 158 bytes at exit 1. No current ADDRESSABLE pass artifact is claimed until command, output, and revision are retained; the property remains projected in the gate matrix.
 
