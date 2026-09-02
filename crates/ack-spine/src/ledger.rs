@@ -87,8 +87,29 @@ pub enum StepKind {
     GradeRequested,
     /// The grade receipt was received (PASS or FIX).
     GradeReceived,
-    /// The bead was closed by the grader.
+    /// The bead was closed by the grader, with a reason the close policy admits.
     Closed,
+    /// The bead was closed with a reason the policy does NOT admit — so it closed
+    /// and it was never graded.
+    ///
+    /// # Why this is its own variant (`mcq2`, and it is a measurement)
+    ///
+    /// MEASURED 2026-09-02 across 102 closes: **18 carry a first token outside the
+    /// four documented prefixes** — `COMPLETE` ×11 (every one an `ipg.*`),
+    /// `PARTIALLY` ×1, `CONFIRMED`, and three `VERIFIED-*` variants. AGENTS.md
+    /// states the close policy REFUSES prose; for one close in five that is false,
+    /// and **a bead closed as `PARTIALLY`**.
+    ///
+    /// The first version of the classifier emitted a bare `Closed` for those, so an
+    /// ungraded close was distinguishable only by **the ABSENCE of a sibling
+    /// `GradeReceived` row**. Absence is not evidence: a reader cannot tell "closed
+    /// without a grade" from "the grade row was lost", and a query for ungraded
+    /// closes had to join rows and infer. The whole argument for typing over
+    /// substrings applies here at one more level — this is the sixth
+    /// missing-representation defect of the day, after `iis6` (busy/dead),
+    /// `leht` (unasked/nonexistent), `t784` (awaiting-grade/unstarted) and
+    /// `--claim` (actor/agent).
+    ClosedWithoutGrade,
     /// The bead was sent back for redispatch with a named fix.
     Redispatched,
     /// A bead-comment acknowledgement was confirmed by read-back.
@@ -107,6 +128,10 @@ impl StepKind {
             StepKind::GradeRequested => "grade_requested",
             StepKind::GradeReceived => "grade_received",
             StepKind::Closed => "closed",
+            // A DISTINCT wire string, deliberately. Reusing "closed" with a flag
+            // elsewhere would put the distinction back into a field a reader has to
+            // remember to check, which is the substring problem again.
+            StepKind::ClosedWithoutGrade => "closed_without_grade",
             StepKind::Redispatched => "redispatched",
             StepKind::AckReadBack => "ack_read_back",
         }
@@ -502,13 +527,15 @@ mod tests {
         // And the values must come back byte-for-byte, which is what proves the
         // escaping is real rather than lossy stripping.
         let line = jsonl.lines().next().expect("one row was emitted");
-        let parsed: serde_json::Value =
-            serde_json::from_str(line).unwrap_or_else(|error| {
-                panic!("emitted row must parse as JSON: {error}\nline: {line:?}")
-            });
+        let parsed: serde_json::Value = serde_json::from_str(line).unwrap_or_else(|error| {
+            panic!("emitted row must parse as JSON: {error}\nline: {line:?}")
+        });
         assert_eq!(parsed["detail"], serde_json::json!(HOSTILE));
         assert_eq!(parsed["bead"], serde_json::json!(format!("bead-{HOSTILE}")));
-        assert_eq!(parsed["pane"], serde_json::json!(format!("%1408-{HOSTILE}")));
+        assert_eq!(
+            parsed["pane"],
+            serde_json::json!(format!("%1408-{HOSTILE}"))
+        );
         assert_eq!(
             parsed["session"],
             serde_json::json!(format!("session-{HOSTILE}"))

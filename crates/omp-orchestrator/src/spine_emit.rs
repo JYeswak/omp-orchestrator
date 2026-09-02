@@ -94,7 +94,13 @@ pub fn completion_kinds(prior: &PriorDispatch) -> Vec<StepKind> {
         // the close is the effect.
         vec![StepKind::GradeReceived, StepKind::Closed]
     } else {
-        vec![StepKind::Closed]
+        // `mcq2` acceptance 6. This was a bare `Closed`, which made an ungraded
+        // close distinguishable only by the ABSENCE of a sibling `GradeReceived`
+        // row — and absence cannot separate "closed without a grade" from "the
+        // grade row was lost". MEASURED: 18 of 102 closes carry a first token
+        // outside the four documented prefixes, so this is 18% of the population,
+        // not an edge case.
+        vec![StepKind::ClosedWithoutGrade]
     }
 }
 
@@ -201,10 +207,24 @@ mod tests {
     /// A close with a PROSE reason is a close that was never graded. Collapsing the
     /// two would be the `iis6` coercion again: two distinct conditions, one value.
     #[test]
-    fn an_ungraded_close_owes_the_close_and_not_a_grade() {
+    fn an_ungraded_close_is_its_own_kind_not_a_bare_close() {
         let kinds = completion_kinds(&prior("closed", Some("looks good to me")));
-        assert_eq!(kinds, vec![StepKind::Closed]);
+        // `mcq2` acceptance 6: TYPED and DISTINCT. A bare `Closed` here would make
+        // an ungraded close readable only as the ABSENCE of a `GradeReceived`
+        // sibling, and absence cannot separate "never graded" from "row lost".
+        assert_eq!(kinds, vec![StepKind::ClosedWithoutGrade]);
         assert!(!kinds.contains(&StepKind::GradeReceived));
+        assert!(
+            !kinds.contains(&StepKind::Closed),
+            "an ungraded close must NOT also claim the graded-close kind: a reader \
+             counting `closed` rows would then count it as graded"
+        );
+        // The two kinds must be distinguishable ON THE WIRE, or the typing is
+        // decoration and a JSONL reader is back to inference.
+        assert_ne!(
+            StepKind::Closed.as_str(),
+            StepKind::ClosedWithoutGrade.as_str()
+        );
     }
 
     /// Every approved prefix must work, or the classifier silently downgrades a
@@ -223,7 +243,7 @@ mod tests {
         // reason that starts with it. This is the substring-matching defect the
         // heartbeat already has, and the reason for moving to typed kinds.
         let kinds = completion_kinds(&prior("closed", Some("this is DONE in spirit")));
-        assert_eq!(kinds, vec![StepKind::Closed]);
+        assert_eq!(kinds, vec![StepKind::ClosedWithoutGrade]);
     }
 
     /// An open bead owes nothing. Emitting `Closed` for live work would make the

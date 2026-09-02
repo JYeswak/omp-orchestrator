@@ -132,6 +132,21 @@ unwired. Four properties make it hold:
    all six gates because it grepped for gate names and *the census table names them all*. That is
    the self-referential checker — sixth instance in one session — where a checker's input contains
    text about the thing it checks.
+5. **STRIP COMMENTS BEFORE MATCHING — a doc comment warning about a needle contained the needle.**
+   Seventh instance, measured 2026-09-02 on `eg0m`. `ack-spine`'s census row keys on the emit site
+   `ack_spine::ledger::step(` appearing in another crate's source, and the needle is assembled from
+   parts so the checker's own code cannot contain it. Then the mutation that deletes the
+   supervisor's only emit site **left the census GREEN**: the needle was still matching inside the
+   doc comment two functions above, the one explaining why the needle is split. **The comment
+   defeated the mitigation it documented.**
+   Splitting the needle protects the checker from its own code; it does nothing about every OTHER
+   file's prose, and a peer's comment mentioning a primitive would register as a caller. The
+   general fix is to blank `//` and `/* */` before matching, exactly as `close-evidence-gate` blanks
+   fenced and inline code before harvesting paths. **Over-stripping is the safe direction** — it can
+   only report LESS reachability, and the failure this prevents is a false GREEN.
+   The lesson is not about comments. **A mutation that fails to bite is the most valuable result
+   available**: the suite was green, acceptance 4 was satisfied on paper, and only deleting the
+   subject showed the gate could not see it.
 
 **NO-CLAIM.** This makes an unwired gate **loud, not impossible**. Static reachability proves a
 trigger exists; it cannot prove the gate *ran* this cycle. `tick-monitor` had callers and starved
