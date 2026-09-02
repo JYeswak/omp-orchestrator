@@ -503,9 +503,9 @@ The artifact is real and checkable — that part of the section is in good order
 
 | | |
 |---|---|
-| path | `.flywheel/grade-evidence/agent-end-raw-frame.json.gz`, 4,772 bytes |
-| cited SHA-256 | `d8bd80c6949b2ec4…` |
-| **re-derived 2026-09-01** | `d8bd80c6949b2ec4…` — **exact match** |
+| path | `.flywheel/inventory-artifacts/agent-end-raw-frame.json.gz` |
+| cited SHA-256 (uncompressed) | `d8bd80c6949b2ec48af1639b5b5e241bd90b4dce1e769483dd1690ed2be8f644` |
+| re-derived 2026-09-02 | `d8bd80c6949b2ec48af1639b5b5e241bd90b4dce1e769483dd1690ed2be8f644` — exact match; `artifact_provenance` decompresses and hashes the preserved copy |
 
 But the frame's top-level keys are `['type', 'messages', 'isTerminal']`.
 **`willContinue` does not appear in it at all.**
