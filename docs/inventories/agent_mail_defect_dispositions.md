@@ -96,46 +96,70 @@ WHERE m.project_id = ? AND (m.subject LIKE ? ESCAPE '\' OR m.body_md LIKE ? ESCA
 ORDER BY m.created_ts DESC LIMIT ?
 ```
 
-**ANSWER TO THE QUESTION THE BEAD ASKS: neither. The engine is wrong.** Three independent legs:
+**ANSWER TO THE QUESTION THE BEAD ASKS: not the query, not the schema — and NOT the engine either.**
+Two legs hold; the third is **RETRACTED**, and the retraction is the most useful thing in this
+section.
 
 1. **The query is valid.** That exact SELECT/FROM/WHERE/ORDER BY, run against the live store under
-   **stock `sqlite3` 3.51.0**, returns rows — ids 40792, 40791, 40788. It is not rejected, it is
-   answered.
-2. **The alias is always bound.** The planner contains exactly **two** FROM clauses
-   (`grep -nE '"(messages|message_fts|messages_fts)[^"]*"\.to_string\(\)'` → lines 813, 823), both
-   `messages m ...`. The FTS branch cannot be the culprit: `PlanMethod::Empty | PlanMethod::TextMatch
-   => unreachable!()` at `search_planner.rs:826`. So the "unbound alias `m`" hypothesis — which
+   **stock `sqlite3` 3.51.0**, returns rows — ids 40792, 40791, 40788. Not rejected, answered.
+2. **The alias is always bound.** The planner contains exactly **two** FROM clauses (lines 813, 823),
+   both `messages m ...`, and the FTS branch cannot be the culprit: `PlanMethod::Empty |
+   PlanMethod::TextMatch => unreachable!()` at `search_planner.rs:826`. FTS5 SQL was removed
+   entirely in the Search V3 decommission (`:786`). So the "unbound alias `m`" hypothesis — which
    would have made this a query bug — is refuted.
-3. **The error originates inside the engine.** The string `column not found: m.topic` is not
-   Agent Mail's; it is `fsqlite-planner`'s `PlannerError::ColumnNotFound` at `lib.rs:172`. The
-   engine is **FrankenSQLite**, not stock SQLite: `git show v0.3.31:Cargo.toml` →
-   `fsqlite = "=0.3.11"`.
+3. **~~The error originates inside the engine.~~ RETRACTED — the engine is EXONERATED for this SQL.**
 
-**Upstream's own remedy corroborates the engine diagnosis.** Between `v0.3.31` and `origin/main` the
-search SQL is untouched — `git diff --stat v0.3.31 origin/main -- .../search_planner.rs` reports no
-change to that file — while the single commit matching `topic|search|fsqlite|fts` is `c7a7083f`
-*"deps: bump fsqlite =0.3.11 -> =0.3.14 (GH#399 corruption wave + GH#402 checkpoint watermark +
-**FTS5 stock-compat**)"*. Pin progression: `v0.3.31` `=0.3.11`, `v0.3.32` `=0.3.11`,
-`origin/main` `=0.3.14`. **The shipped 0.3.31 binary predates the fix, and the fix is a dependency
-bump, not a SQL change** — exactly what an engine bug looks like when it is repaired.
+**THE ENGINE EXONERATION, MEASURED AT THE PINNED VERSION.** My earlier engine claim rested on the
+error string living in `fsqlite-planner` plus my inability to test the pinned code — I flagged that
+as the NO-CLAIM gap and the named next step. **I closed the gap: `cargo install fsqlite-cli
+--version 0.3.11` (the exact pin) and ran the exact query.** It **succeeds** under every variation
+that distinguishes production from a toy:
 
-**What I could NOT prove, stated plainly.** I tried to reduce this to a minimal upstreamable repro
-against the engine and **failed to reproduce**. A synthetic two-table DB with the same shape,
-queried through `~/.cargo/bin/fsqlite`, returned the row correctly (`1 | 'hello' | 'Alice' | 1 |
-0.0 | NULL`). That is **not** evidence the engine is fine: the available CLI is `fsqlite 0.1.15`,
-a different version line from the pinned `=0.3.11` library, so it is not a valid test of the pinned
-code. A true minimal repro requires building `fsqlite 0.3.11` and is the named next step. Nothing in
-this document claims the minimal repro exists.
+| variation tested on fsqlite **0.3.11** | result |
+|---|---|
+| exact select list + `messages m LEFT JOIN agents a` + exact production DDL | **rows returned** |
+| `ORDER BY score ASC, m.id ASC` (the relevance path, ordering by the *alias*) | **rows returned** |
+| real constant `COALESCE(a.name, '[unknown sender]')` | **rows returned** |
+| escaped LIKE `'%OMP\_MSG\_SRC%' ESCAPE '\'` — the literal failing query | **clean, no error** |
+| DB authored by **stock sqlite3** | **rows returned** |
+| DB authored by **fsqlite itself**, with `topic` added via `ALTER TABLE` as `schema.rs:2294` does | **rows returned** |
+
+So `fsqlite 0.3.11` resolves `m.topic` correctly. **The engine is not the fault**, and my three-leg
+inference was wrong on its third leg.
+
+**AND THAT BREAKS THE (A) DISPOSITION.** The fsqlite planner diff `v0.3.11..v0.3.14` contains **no
+column-resolution change** — only `6fd828248` "feat(fts5): guarantee stock C SQLite compatibility on
+multi-leaf FTS5 index data (#404)", `33b5035b4` a VDBE perf change (GH#400), and version bumps. So
+`c7a7083f`'s bump is **unlikely to fix this defect**, and "adopt upstream" is no longer a supported
+remedy. Upstream bumping the pin was never evidence about *this* bug; I read a correlation as a
+remedy.
+
+**THE REMAINING SUSPECT IS THE ADAPTER, AND IT IS UNBUMPED.** The error chain is
+`SQLite error: ` + `Query error: ` + `internal error: column not found: m.topic`. The middle layer
+is neither Agent Mail's nor fsqlite's: `Query error` is emitted by
+**`sqlmodel-frankensqlite/src/connection.rs`**, pinned `sqlmodel-frankensqlite = "=0.4.0"` — and
+`c7a7083f` did **not** touch it. That adapter **infers result column names by PARSING SQL TEXT**
+rather than asking the engine: `infer_column_names` (`connection.rs:1186`) →
+`infer_select_columns` (`:1271`) → `extract_column_name` (`:1387`), with hand-rolled
+`split_at_depth_zero` / `find_keyword_at_depth_zero` scanners. `extract_column_name` *does* strip the
+qualifier correctly in isolation, so the specific mechanism is still unidentified — but a text-parsing
+column-name inference layer is the only component left unexplained, and it is a genuine
+architectural fragility regardless of whether it causes this row.
+
+**ADOPTION HAS A BLOCKER NOBODY HAD NAMED: `origin/main` DOES NOT BUILD STANDALONE.**
+`cargo install --git ... --branch main mcp-agent-mail-cli` fails at manifest load:
+`failed to read .../frankensearch-rel-0332/frankensearch/Cargo.toml — No such file or directory`.
+`origin/main` carries an **out-of-tree sibling path dependency** that is not in the git tree, so
+testing the bump requires reproducing a sibling constellation layout. The mirror has `frankensearch`
+but not under that name. **"Just build from main and re-run leg 4" is not a one-command action**, and
+that is the concrete blocker on closing this row.
 
 **CORRECTION TO AN ATTRIBUTION.** The orchestrator's 06:2xZ bead comment records #3 as *"the fault
 is the QUERY BUILDER'S ALIAS, not the schema (MailMining)"* and repeats that
 `grep -rlF 'm.topic'` returns 0 files in both local checkouts. **Neither half is this lane's
-finding.** The alias is not the fault — leg 3 refutes it, since both planner FROM clauses bind
-`m = messages` and stock sqlite3 executes the query — and the grep does find it, in 6 files at
-`v0.3.31` and 6 in the 0.3.32 mirror. This matters because *"query-builder alias"* and *"engine
-planner"* are the different-bugs-with-different-fixes fork the bead asks about: the first invites a
-patch to `search_planner.rs`, which would edit correct code, while the second is a dependency bump
-upstream already made. **Do not patch the alias.**
+finding.** The alias is not the fault — leg 3 refutes it, and the grep does find it, in 6 files at
+`v0.3.31` and 6 in the 0.3.32 mirror. **Do not patch `search_planner.rs`**: leg 1 and the 0.3.11
+matrix both show that SQL is correct, so editing it would change correct code.
 
 ## The disposition table
 
@@ -145,7 +169,7 @@ Non-zero (A) and non-zero (B), per the anti-vacuity condition.
 |---|---|---|---|
 | 1 | `register_agent` accepts `agent_name`, silently mints a new identity | **B** | typed `RegisterKeyRejected` + mandatory read-back |
 | 2 | `register_agent` accepts `pane_id` and discards it, success envelope | **B** | read-back assertion → typed `RegisterFieldNotPersisted` |
-| 3 | `am robot search` RED for the entire corpus | **A** | adopt upstream `c7a7083f` (fsqlite `=0.3.14`); + **B** `SearchUnavailable` so an error is never read as empty |
+| 3 | `am robot search` RED for the entire corpus | **C** + **B** | (A) WITHDRAWN — the pin bump is not the fix and `origin/main` does not build standalone. **C**: reproduction + engine exoneration + fault narrowed to the `sqlmodel-frankensqlite =0.4.0` adapter. **B** `SearchUnavailable` so an engine error is never read as empty |
 | 4 | ~~`--direct` SQLite fallback does not announce itself~~ | **REFUTED** | **NOT A DEFECT — byte-identical output is CORRECT: with the daemon reachable, both paths use the daemon. Nothing to announce.** |
 | 5 | `mail_pending` default path never terminates and drops the cursor | **B** | wrapper always supplies a ceiling; typed `WaitCanceledWithoutCursor` distinct from "no mail" |
 | 6 | `inbox-events` carries no read state | **B** | reconcile pair: `inbox-events` cursor + `read_ts` from the **daemon** surface (the CLI lacks it and exposes `priority` instead — see correction below) |
@@ -157,10 +181,28 @@ Non-zero (A) and non-zero (B), per the anti-vacuity condition.
 | 12 | "daemon 0 unread vs CLI 20 rows" — **NOT a read-state disagreement; it is agent-identity resolution** | **B** | typed `AgentNameAmbiguous`; every name lookup MUST carry a project scope |
 | 13 | `inbox_stats.ack_pending_count` drifts from ground truth (113 vs 46) | **C** | named finding; never read the cached aggregate as truth |
 
-Totals over thirteen rows: **(A) 1, (B) 6, (C) 4, REFUTED 3** — #3 carries an (A) plus a supporting
-(B). Anti-vacuity satisfied. **Three rows turned out not to be defects at all (#4, #8, #10) and a
-fourth was documented behaviour (#11) — all four dissolved by reading version-matched source rather
-than by measuring harder.** That ratio is the honest characterisation of this list.
+Totals over thirteen rows: **(A) 0, (B) 6, (C) 5, REFUTED 3**. **Four rows turned out not to be
+defects at all** — #4, #8 and #10 refuted outright, #11 documented behaviour — and a fifth (the
+proposed `--direct` inversion) was refuted before it was filed. All four dissolved by **reading
+version-matched source**, not by measuring harder. That ratio is the honest characterisation of this
+list.
+
+**ON THE ANTI-VACUITY CONDITION, STATED DIRECTLY BECAUSE (A) IS NOW ZERO.** The bead's condition is
+*"a disposition table with zero (A) **and** zero (B) rows is an ERROR"*. Six (B) rows means the
+condition is met — but the spirit of it deserves a straight answer rather than a technicality:
+
+**No defect in this list is fixable-at-source by us today, and that is a measured conclusion, not a
+shortfall of effort.** #3 was the only (A) candidate. Closing it required proving the engine at
+fault; I built the pinned `fsqlite 0.3.11` and **exonerated it** across six variations, then found
+that upstream's bump contains no column-resolution change, then found that `origin/main` **does not
+build standalone** (out-of-tree `frankensearch-rel-0332` path dependency). Every other row is either
+in a dependency we do not author, refuted, or already defended in `agent-mail-native`.
+
+So the hardening that actually reached the product is the **(B) column**: six typed refusals, each
+with the known-bad input it must fire on, one of them (#10's) already shipped and then correctly
+identified as over-strict and queued for deletion. **A withdrawn (A) backed by a reproduction and an
+exoneration is worth more than a patch to code that leg 1 proves is correct** — which is what the
+earlier (A) would have produced.
 
 ### Rows #4 and #8 — REFUTED BY ONE FUNCTION, and the doctrine built on #8 must be withdrawn
 
@@ -631,6 +673,36 @@ git show v0.3.31:crates/mcp-agent-mail-db/src/sync.rs \
   | sed -n '/pub struct InboxDeliveryEventPage/,/^}/p' | grep -qF 'global_oldest' \
   && echo "leg11 NOTE global_oldest is now exposed — a client guard becomes possible" \
   || echo "leg11 PASS global_oldest absent from the page: clients CANNOT decide expiry"
+
+# LEG 12 — #3 ENGINE EXONERATION at the pinned version. Requires a one-time build:
+#   cargo install fsqlite-cli --version 0.3.11 --root /tmp/fsq311
+# Skips loudly rather than passing vacuously if that binary is absent.
+FSQ=/tmp/fsq311/bin/fsqlite
+if [ ! -x "$FSQ" ]; then
+  echo "leg12 SKIP (not a pass): build it with 'cargo install fsqlite-cli --version 0.3.11 --root /tmp/fsq311'"
+else
+  test "$("$FSQ" --version | awk '{print $2}')" = "0.3.11" \
+    || { echo "FAIL leg12: wrong fsqlite version — the exoneration is version-specific"; exit 1; }
+  rm -f /tmp/mm_leg12.db
+  sqlite3 /tmp/mm_leg12.db "CREATE TABLE agents (id INTEGER PRIMARY KEY, project_id INTEGER, name TEXT);
+    CREATE TABLE messages (id INTEGER PRIMARY KEY, project_id INTEGER, sender_id INTEGER,
+      thread_id TEXT, topic TEXT COLLATE NOCASE, subject TEXT, body_md TEXT,
+      importance TEXT DEFAULT 'normal', ack_required INTEGER DEFAULT 0, created_ts INTEGER);
+    INSERT INTO agents VALUES(1,107,'Alice');
+    INSERT INTO messages(id,project_id,sender_id,subject,body_md,created_ts)
+      VALUES(1,107,1,'hello reservation','body reservation',1);"
+  OUT=$("$FSQ" /tmp/mm_leg12.db --command "SELECT m.id, m.subject, m.importance, m.ack_required,
+      m.created_ts, m.thread_id, COALESCE(a.name, '[unknown sender]') AS from_name,
+      a.id AS from_agent_id, m.body_md, m.project_id, 0.0 AS score, m.topic
+    FROM messages m LEFT JOIN agents a ON a.id = m.sender_id
+    WHERE m.project_id = 107 ORDER BY score ASC, m.id ASC LIMIT 50;" 2>&1)
+  printf '%s' "$OUT" | grep -qF 'column not found' \
+    && echo "leg12 NOTE the engine DOES reject m.topic at 0.3.11 — the exoneration is wrong, reopen the engine hypothesis" \
+    || echo "leg12 PASS fsqlite 0.3.11 resolves m.topic (engine exonerated; fault is above the engine)"
+  printf '%s' "$OUT" | grep -qF 'hello reservation' \
+    && echo "leg12 PASS and it returned the row, so the query really executed" \
+    || echo "FAIL leg12 vacuous: no error AND no row — the query did not run"
+fi
 ```
 
 All **twelve** legs run today, all PASS: leg0 `shipped=0.3.31 tag=v0.3.31 version=0.3.31`; leg1 `rows=5`
