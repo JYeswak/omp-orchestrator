@@ -9,7 +9,7 @@ we are allowed to say it works, and the conditions under which this document sho
 **A milestone is closed by an OBSERVABLE, not by a claim** — not by a passing test suite, a commit, an agent reporting success, or a
 human's recollection that it seemed to work. An observable is a command someone else can run and a result they can read without asking
 us what it means. That is the output of the failure this project was stood down over: **a workspace whose own census measured
-mechanisms built, tested, hardened, and called by nothing** — a **historical** §01 snapshot of twenty-six crates and 379→407 tests, with a BUILT≠WIRED census whose row set outgrew the then-current twenty-mechanism figure. Current workspace counts are command-backed in NUMBERS.toml; this historical scar shows why evidence code must prove invocation, not merely correct source.
+mechanisms built, tested, hardened, and called by nothing** — a **historical** §01 snapshot of twenty-six crates and 379→407 tests, with a BUILT≠WIRED census whose row set outgrew the then-current twenty-mechanism figure. Current workspace counts are command-backed in NUMBERS.toml; this historical scar shows why evidence code must prove invocation, not merely correct source. — HISTORICAL as of 2026-09-02.
 Every milestone below is stated in this shape:
 
 ```
@@ -53,7 +53,7 @@ Run exactly:
 
 The test must print one JSON line with `{"fixture":"tick-monitor-newly-idle.json","state":"NewlyIdle","free_capacity":true,"shared_type":"PaneObservation","revision":"<git sha>"}` and exit 0. It must compile the real fixture through the production parser and fail if either crate's public parse/emit signature does not use the same `omp-types::PaneObservation` type; the pre-milestone tree fails because the test, fixture, dependency edge, and shared signature are absent, while the post-milestone tree passes only with that JSON and exit 0. A separate source check is the exact command
 `grep -rn "omp-types\\|omp_types" crates/*/Cargo.toml | grep -v "^crates/omp-types/"`; its non-empty result must name both consumers. **NOT IN SCOPE.** Selection, dispatch, ack — M1 changes what the loop *sees*.
-> **Upstream type for the idle gap:** the fixture's `NewlyIdle` state corresponds to `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts:9-30`) upstream. The milestone asserts our own `PaneObservation` shape; it does not claim the distinction is precedent-free.
+> **Upstream type for the idle gap:** the fixture's `NewlyIdle` state corresponds to `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts:GuestIdleReconcilerCtx`) upstream. The milestone asserts our own `PaneObservation` shape; it does not claim the distinction is precedent-free.
 > **Completion vocabulary exists upstream:** `AgentEndEvent` carries the terminal signal this milestone re-derives from a fixture. The milestone asserts our own shape; it makes no precedent-free claim about the platform.
 
 > *Upstream type for this gap: `GuestIdleReconcilerCtx` (DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
@@ -62,15 +62,15 @@ The test must print one JSON line with `{"fixture":"tick-monitor-newly-idle.json
 discards `NewlyIdle`; `free_capacity` derives from the same `is_dispatchable` filter." **I measured the current source and disagree:**
 
 CURRENT SEAM EVIDENCE (2026-09-01):
-crates/tick-monitor/src/lib.rs:467-468       is_free_capacity() = ConfirmedIdle | NewlyIdle
-crates/omp-orchestrator/src/lib.rs:739       consumer counts pane.is_free_capacity
-crates/omp-orchestrator/src/main.rs:1646-1653 regression test proves IDLE -> free_capacity but not dispatchable
+crates/tick-monitor/src/lib.rs:ConfirmedIdle       is_free_capacity() = ConfirmedIdle | NewlyIdle
+crates/omp-orchestrator/src/lib.rs:heading_crates_omp_orchestrator_src_lib_rs_739       consumer counts pane.is_free_capacity
+crates/omp-orchestrator/src/main.rs:IDLE regression test proves IDLE -> free_capacity but not dispatchable
 
-The producer emits free_capacity from its own predicate; the consumer counts its own field. The filter defect is fixed in source. What remains broken is the seam: parse_observation at crates/omp-orchestrator/src/main.rs:383-410 reads JSON lists plus a state == IDLE fallback, so the NewlyIdle branch is not represented by a shared type or an end-to-end fixture. omp-orchestrator has no path-depends-on edge to tick-monitor (brief §3.4).
+The producer emits free_capacity from its own predicate; the consumer counts its own field. The filter defect is fixed in source. What remains broken is the seam: parse_observation at crates/omp-orchestrator/src/main.rs:NewlyIdle reads JSON lists plus a state == IDLE fallback, so the NewlyIdle branch is not represented by a shared type or an end-to-end fixture. omp-orchestrator has no path-depends-on edge to tick-monitor (brief §3.4).
 
-**RISK.** A live-seam refactor needs an owner: crates/no-shell-gate/tests/wired_lanes.rs:679 records Observation as REQUIRES A DECISION, not an allowance, at the free_capacity seam. A partial migration adding a shared type beside the existing structs would create three dialects rather than collapsing two.
+**RISK.** A live-seam refactor needs an owner: crates/no-shell-gate/tests/wired_lanes.rs:Observation records Observation as REQUIRES A DECISION, not an allowance, at the free_capacity seam. A partial migration adding a shared type beside the existing structs would create three dialects rather than collapsing two.
 
-**UPSTREAM CORROBORATION, declared only.** OMP declares GuestIdleReconcilerCtx at dist/types/collab/guest.d.ts:9-30 with a settle-vs-continuation split analogous to NewlyIdle/ConfirmedIdle. No wire probe has carried it; the measured local seam and risk above remain.
+**UPSTREAM CORROBORATION, declared only.** OMP declares GuestIdleReconcilerCtx at dist/types/collab/guest.d.ts:GuestIdleReconcilerCtx with a settle-vs-continuation split analogous to NewlyIdle/ConfirmedIdle. No wire probe has carried it; the measured local seam and risk above remain.
 
 
 ### M2 — Selection will run through the graph kernel instead of queue recency
@@ -86,7 +86,7 @@ against the checked-in fixture `crates/omp-orchestrator/tests/fixtures/blocking-
 harness grep, pattern Command::new\("bv"\), path crates   -> No matches found
 ```
 
-This zero is not acceptance evidence: it is a scoped source observation, and the executable behavior above is the only admissible M2 proof. `bv` is spawned zero times today while `crates/kernel-only-operator-hook/src/lib.rs:548` refuses raw queue reads with *"raw `br ready` is blocked; use the `bv --robot-triage` queue kernel"*. **NO-CLAIM.** Graph selection being invoked is not graph selection being better; the differential leg proves only that the strategies differ.
+This zero is not acceptance evidence: it is a scoped source observation, and the executable behavior above is the only admissible M2 proof. `bv` is spawned zero times today while `crates/kernel-only-operator-hook/src/lib.rs:bv` refuses raw queue reads with *"raw `br ready` is blocked; use the `bv --robot-triage` queue kernel"*. **NO-CLAIM.** Graph selection being invoked is not graph selection being better; the differential leg proves only that the strategies differ.
 ```
 **RISK.** `bv v0.20.0` is at `/opt/homebrew/bin/bv`, not `~/.local/bin`; a foreign machine (M6) may lack it, so M2's dependency must be
 a degradation path with a typed refusal, or M2 blocks M6. **NO-CLAIM.** Graph selection being *invoked* is not graph selection being
