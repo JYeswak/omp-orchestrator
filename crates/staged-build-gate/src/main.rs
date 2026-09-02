@@ -99,10 +99,19 @@ fn evaluate_crate(repo: &Path, name: &str) -> CrateVerdict {
     // wrong answer.
     let scope = format!("crates/{name}/");
     match git_lines(repo, &["diff", "--name-only", "--", &scope]) {
-        Ok(diverged) if !diverged.is_empty() => {
-            return CrateVerdict::Diverged { paths: diverged };
+        Ok(diverged) => {
+            // Scoped: only a divergence that can change what `cargo build -p X`
+            // compiles invalidates the build as evidence. A dirty integration test
+            // cannot, and refusing on it is the over-strictness that gets a
+            // commit-path gate routed around.
+            let relevant: Vec<String> = diverged
+                .into_iter()
+                .filter(|path| staged_build_gate::build_relevant(path))
+                .collect();
+            if !relevant.is_empty() {
+                return CrateVerdict::Diverged { paths: relevant };
+            }
         }
-        Ok(_) => {}
         Err(error) => {
             return CrateVerdict::Unspawned {
                 detail: format!("divergence check failed: {error}"),

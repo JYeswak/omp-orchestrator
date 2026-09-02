@@ -176,6 +176,46 @@ impl GateVerdict {
     }
 }
 
+/// Whether a diverged path can change what `cargo build -p <crate>` compiles.
+///
+/// # Why the divergence check must be scoped, and why the first version was wrong
+///
+/// The first version refused on ANY diverged path under `crates/<X>/`, which is
+/// **over-strict** — and acceptance 5 of this gate's own bead says an over-strict gate
+/// on the commit path gets routed around within a day, a slower death than no gate.
+///
+/// `cargo build -p X` builds the lib and bin targets. It **never reads** `tests/`,
+/// `benches/`, or `examples/` — those need `--tests`, `--benches`, `--examples`, or
+/// `--all-targets`. So a dirty integration test cannot change the build's answer, and
+/// refusing on it blocks a commit whose compiled sources are byte-identical to the
+/// index.
+///
+/// **Measured live, which is why this is a fix and not a hypothetical.** At `ed6d5b8`
+/// the only divergence in `crates/plan-assemble/` was
+/// `crates/plan-assemble/tests/silent_success.rs`, so the first version of this gate
+/// would have refused a `plan-assemble` commit whose `src/` matched the index exactly.
+/// It surfaced while re-deriving a peer's `worktree == HEAD` claim rather than
+/// accepting it — the claim was scoped to the crate directory and the build is not.
+///
+/// # The residual hole, named rather than hidden
+///
+/// A file under `tests/` reached by `include!` from `src/` IS build-relevant and this
+/// predicate calls it irrelevant. That is rare, and it is the deliberate trade against
+/// an over-strict gate: false-negative on an exotic layout, versus false-positive on
+/// every crate that has integration tests.
+pub fn build_relevant(path: &str) -> bool {
+    let Some(rest) = path.strip_prefix("crates/") else {
+        return false;
+    };
+    let Some((_, tail)) = rest.split_once('/') else {
+        return false;
+    };
+    // Only the FIRST segment after the crate name decides. A file named
+    // `src/tests/helper.rs` is build-relevant; `tests/src/helper.rs` is not.
+    let first = tail.split('/').next().unwrap_or("");
+    !matches!(first, "tests" | "benches" | "examples")
+}
+
 /// Which crate directories a staged path set touches.
 ///
 /// Only the segment immediately under `crates/` counts, and a bare `crates/` entry or
@@ -482,6 +522,59 @@ error: asupersync entry macros support only `()` or `Result<(), E>` return types
             assert_ne!(verdict.next_action(), "none", "{} owes a remedy", verdict.label());
         }
         assert!(CrateVerdict::Pass.admits());
+    }
+
+    /// THE OVER-STRICTNESS LEG. `cargo build -p X` builds lib and bin targets and
+    /// never reads `tests/`, `benches/`, or `examples/`, so a divergence there cannot
+    /// change the build's answer and must not refuse the commit.
+    ///
+    /// The live specimen is the first row: at `ed6d5b8` the only divergence in
+    /// `crates/plan-assemble/` was that test file, and the first version of this gate
+    /// would have refused a commit whose `src/` matched the index exactly.
+    #[test]
+    fn a_diverged_integration_test_cannot_change_what_the_build_compiles() {
+        for irrelevant in [
+            "crates/plan-assemble/tests/silent_success.rs",
+            "crates/x/benches/throughput.rs",
+            "crates/x/examples/demo.rs",
+        ] {
+            assert!(
+                !build_relevant(irrelevant),
+                "{irrelevant} cannot change `cargo build -p <crate>`"
+            );
+        }
+        for relevant in [
+            "crates/x/src/lib.rs",
+            "crates/x/src/main.rs",
+            "crates/x/Cargo.toml",
+            "crates/x/build.rs",
+            // Only the FIRST segment after the crate name decides: this one lives
+            // under `src/` and IS compiled, despite being named `tests`.
+            "crates/x/src/tests/helper.rs",
+        ] {
+            assert!(build_relevant(relevant), "{relevant} is compiled");
+        }
+        // A path outside `crates/` is not this gate's business at all, and a bare
+        // crate directory names no file.
+        assert!(!build_relevant("docs/plan/00-brief.md"));
+        assert!(!build_relevant("crates/x"));
+        assert!(!build_relevant(""));
+    }
+
+    /// ANTI-VACUITY for the predicate itself: a filter that excluded everything, or
+    /// nothing, would pass a one-sided test. Both classes must be non-empty over a
+    /// realistic path set, or the leg above proves only that the function returns.
+    #[test]
+    fn the_relevance_filter_partitions_a_real_path_set_both_ways() {
+        let paths = [
+            "crates/x/src/lib.rs",
+            "crates/x/tests/it.rs",
+            "crates/x/Cargo.toml",
+            "crates/x/benches/b.rs",
+        ];
+        let kept = paths.iter().filter(|p| build_relevant(p)).count();
+        let dropped = paths.len() - kept;
+        assert_eq!((kept, dropped), (2, 2), "the filter must cut both ways");
     }
 
     /// The divergence refusal is the evidence boundary: a worktree build says nothing
