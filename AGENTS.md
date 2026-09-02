@@ -174,6 +174,28 @@ still a silent pane; this rule only guarantees the follow-up stage has something
 The signal is *dispatched* and unclaimed, which means the dispatch ledger, not the bead, is the
 authority that closes this hole.
 
+### A DISPATCH-ONLY INSTRUCTION IS AN UNRECORDED REQUIREMENT
+
+**The same rule, one layer up, and measured on the orchestrator 2026-09-02.** A dispatch packet
+said: *"take that `NUMBERS.toml` row as part of this dispatch — it is directly in scope as a FIXED
+finding, not a side errand."* The implementer's report never mentioned it. The bead was then graded
+against **the bead's acceptance**, which never carried the item, and **closed.** Verified afterward:
+`grep -ciE 'aggregate|--lib|per-suite' NUMBERS.toml` → **0**. The row was never added.
+
+**The grader could not see the requirement — and the grader was the same agent that wrote it.** A
+packet is a transient message; the bead is the durable spec. Every acceptance check keys on the
+bead, so an item that exists only in a packet is invisible to verification by construction, no
+matter who verifies.
+
+**The mechanical form:** if a dispatch adds scope, it MUST be written into the bead's acceptance
+**before the packet is sent** — `br update --acceptance`, then read it back. A packet may explain,
+prioritise, warn, and name traps; it may NEVER be the sole record of something the work must do.
+
+**NO-CLAIM.** This makes an added requirement *checkable*, not *done*. A bead can carry a perfect
+acceptance list and still be closed by a grader who skips an item — which is what happened here, one
+level down. And the reverse failure is real too: an acceptance list edited after dispatch can move
+the target under a worker mid-flight, so the edit must precede the send, not follow the report.
+
 ---
 
 ## The fifth rule: the crates exist to orchestrate OMP, and today they scrape it
