@@ -645,6 +645,13 @@ impl RpcSessionReport {
             && self.responses.iter().all(|response| response.success)
     }
 
+    /// The exact native OMP methods this report's fixed sequence adopts.
+    /// Keeping this beside the wire sequence prevents a report from claiming
+    /// broader protocol coverage than the caller actually issues.
+    pub fn adopted_methods() -> [&'static str; 4] {
+        RpcRequest::sequence().map(RpcRequest::command)
+    }
+
     /// Versioned robot-facing JSON without relying on serde implementation details.
     pub fn to_json(&self) -> Value {
         json!({
@@ -657,6 +664,7 @@ impl RpcSessionReport {
                 "supportedProtocolVersions": self.ready.supported_protocol_versions.iter().map(|v| v.0).collect::<Vec<_>>()
             },
             "negotiated": self.negotiated.0,
+            "adoptedMethods": Self::adopted_methods(),
             "responseCount": self.responses.len(),
             "frameCount": self.frames.len(),
             "unknownFrames": self.frames.iter().filter(|frame| matches!(frame, RpcFrame::Unknown(_))).count(),

@@ -1,4 +1,6 @@
-use omp_rpc_session::{MalformedReason, ProtocolVersion, RpcFrame, RpcRequest, parse_frame};
+use omp_rpc_session::{
+    MalformedReason, ProtocolVersion, RpcFrame, RpcRequest, RpcSessionReport, parse_frame,
+};
 
 mod fixture {
     pub const READY: &str =
@@ -50,6 +52,18 @@ fn request_wire_contract_is_exact_and_bounded() {
         sequence
             .iter()
             .all(|request| request.to_frame().len() < 256)
+    );
+}
+#[test]
+fn report_names_only_the_native_omp_methods_it_adopts() {
+    assert_eq!(
+        RpcSessionReport::adopted_methods(),
+        [
+            "negotiate_protocol",
+            "get_state",
+            "get_session_stats",
+            "get_messages",
+        ]
     );
 }
 
