@@ -161,8 +161,13 @@ this document exists to replace.
 
 ## 6. Pass-through — where a foreign code becomes ours
 
-Seven sites forward a child process's code as their own, which is how a foreign integer arrives
-wearing one of our binaries' names. Every site must be listed here or the invariant suite fails.
+**25 sites across 9 expressions** forward a code they did not choose as their own, which is how
+an integer chosen elsewhere arrives wearing one of our binaries' names. Every site must be listed
+here or the invariant suite fails, and every row here must still describe a site — the suite
+checks both directions.
+
+The suite keys on the **expression** cell and reads no other column, so adding a crate name to an
+existing row declares nothing: it will look accepted and change no verdict (measured 2026-09-02).
 
 | ID | expression | crates |
 |---|---|---|
@@ -174,13 +179,40 @@ wearing one of our binaries' names. Every site must be listed here or the invari
 | `XC-PT-VERDICT` | `verdict.exit` | `dispatcher-deadman` |
 | `XC-PT-EXITCODE` | `v.exit_code()` | `pane-oracle-diff` |
 | `XC-PT-VERDICT-CODE` | `verdict.exit_code()` | `inbox-monitor` |
-| `XC-PT-SELFTEST` | `selftest()` | `cargo-lane-budget` (`src/lib.rs:943,967`, `src/main.rs:24`) |
+| ~~`XC-PT-SELFTEST`~~ | ~~`selftest()`~~ | **RETIRED 2026-09-02** — `dc617e2` replaced `cargo-lane-budget`'s `ExitCode::from(selftest() as u8)` with `ExitCode::from(selftest_exit_code(selftest()))`, where `selftest_exit_code` returns `u8` LITERALS. The code is now chosen in that crate by `SELFTEST_RED_EXIT`, so the site is no longer a pass-through under this section's own definition. Retired rather than repaired. |
 | `XC-PT-OUTCOME-CODE` | `outcome.code` | `refill-idle-panes` (`src/main.rs:186,209,226,276`) |
 
 A pass-through means **the code space at that site is not ours** — it is 0–255 of whatever ran
-underneath, including `XC-EXT-101` and every `XC-EXT-*` row above. `XC-PT-VERDICT` and
-`XC-PT-EXITCODE` are the two exceptions: they forward a code from a typed verdict inside this
-workspace, so their range is the `XC-*` table.
+underneath, including `XC-EXT-101` and every `XC-EXT-*` row above. Three rows are exceptions: they
+forward a code from a typed value inside this workspace, so their range is the `XC-*` table.
+
+Three of the rows above are exceptions, and each names what closes its space and what PINS that
+claim. **This is deliberately a list and not a table: `registry_rows` treats any markdown row
+whose first cell begins `XC-` as a declaration, so a second table reusing those ids is parsed as
+a second set of declarations. Writing that table broke the gate — the third time in this session
+that documenting a gate inside what the gate reads produced a false verdict.**
+
+- **`XC-PT-VERDICT`** and **`XC-PT-EXITCODE`** — forward a code from a typed verdict inside this
+  workspace, so their range is the `XC-*` table. Not separately pinned.
+- **`XC-PT-OUTCOME-CODE`** — space is `{0,1,2}`. Every `RefillOutcome.code` is constructed by
+  `refill_idle_panes::run_outcome`; emitters are
+  `crates/refill-idle-panes/src/main.rs:186,209,226,276`. PINNED BY
+  `run_outcome_only_ever_yields_a_documented_exit_code`, which enumerates all 32 `Decision`
+  shapes × 3 kernel verdicts, asserts every code has an `XC-*` row, and asserts all three codes
+  are REACHABLE — so a `run_outcome` that had lost the ability to refuse would fail it.
+
+**These are DECLARATIONS, not fixes.** The scanner cannot tell a forwarded child status from a
+local value reached through a field access or a zero-argument call — `passthrough_chain` accepts
+any bare identifier chain, so `out.code` holding a child's status and `outcome.code` holding our
+own `u8` are indistinguishable to it. The list above says which is which; the pin is what stops
+that being merely asserted. A row with no pin is a claim on trust.
+
+**A ROW CAN ALSO BE WRONG BY BEING UNMATCHED.** `no_declared_pass_through_row_outlives_its_site`
+refuses a declared expression that no scanned site occupies, because two different things look
+identical here: the site is gone (retire the row), or the site exists and the recogniser stopped
+seeing it. `passthrough_chain` rejects any argument still containing `(` or `&` after the
+trailing-`()` strip, so `f(g())` and `f(&x)` drop real sites out of the scan silently —
+`crates/pane-truth/src/main.rs:49,51` are live instances, undeclared AND unrecognised.
 
 ## Validation
 
@@ -188,10 +220,11 @@ workspace, so their range is the `XC-*` table.
 cargo test -p no-shell-gate --test exit_codes -- --nocapture
 ```
 
-Expect **7 passed**. The suite re-derives the emission set from all `.rs` files under
+Expect **10 passed**. The suite re-derives the emission set from all `.rs` files under
 `crates/*/src` and fails naming `file:line` for any code with no row here, refuses any row whose
-**does NOT mean** cell is empty, errors on an empty scan set rather than passing, and proves it
-fires by planting an undocumented code in a temporary fixture.
+**does NOT mean** cell is empty, refuses a pass-through row that matches no site, errors on an
+empty scan set rather than passing, ignores codes that appear only in comments or string literals,
+and proves it fires by planting an undocumented code in a temporary fixture.
 
 ## Cross-References
 

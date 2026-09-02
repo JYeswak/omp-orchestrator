@@ -810,3 +810,99 @@ fn every_pass_through_row_declares_an_expression() {
         bad
     );
 }
+
+/// Rows deliberately kept although no scanned site matches their expression, each with
+/// the reason. EMPTY BY DESIGN.
+///
+/// A row belongs here only when the site genuinely exists and the RECOGNISER cannot see
+/// it — not when the site is gone. If the site is gone the row must be deleted, which is
+/// what `no_declared_pass_through_row_outlives_its_site` enforces.
+const UNMATCHED_ROW_ALLOWANCE: &[(&str, &str)] = &[];
+
+/// A declared row must still describe a site. Checked in the direction nothing checked.
+///
+/// # The mirror defect, measured 2026-09-02
+///
+/// `every_pass_through_site_is_declared` asserts scanned ⊆ declared. Nothing asserted
+/// declared ⊆ scanned, so a row could outlive its site in silence — and one immediately
+/// did. `dc617e2` replaced `ExitCode::from(selftest() as u8)` with
+/// `ExitCode::from(selftest_exit_code(selftest()))`, which [`passthrough_chain`] rejects
+/// because the stripped argument still contains `(`. The site left the scan set,
+/// `XC-PT-SELFTEST`'s expression cell matched nothing, `PASSTHROUGH_FLOOR` was still met
+/// by the other rows, and the suite reported **9 passed, 0 failed** through a change that
+/// emptied a row. `grep -rn 'ExitCode::from(selftest()' crates/` returned five hits, all
+/// of them prose.
+///
+/// This is the exact mirror of the defect [`code_only`] fixed. There, the SCANNER invented
+/// a code nothing emits; here, the REGISTRY keeps a site nothing occupies. Same failure,
+/// opposite direction — and this direction had no leg at all.
+///
+/// The message names BOTH remedies because the gate cannot tell them apart: either the
+/// site is gone and the row must be retired, or the site still exists and the recogniser
+/// stopped seeing it. `crates/pane-truth/src/main.rs:49` is a live instance of the second
+/// case — `ExitCode::from(selftest(&rules) as u8)` is rejected on the `(` and the `&`, so
+/// it is undeclared AND unrecognised, and this gate never demanded a row for it.
+#[test]
+fn no_declared_pass_through_row_outlives_its_site() {
+    let root = repo_root();
+    let doc = fs::read_to_string(registry_path(&root)).expect("registry");
+    let declared = documented_passthrough(&doc);
+    assert_eq!(
+        declared.is_empty(),
+        false,
+        "ANTI-VACUITY: the registry declares no pass-through expressions, so this leg \
+         would compare an empty set against anything and pass"
+    );
+    let s = scan(&root);
+    assert!(
+        s.passthrough.len() >= PASSTHROUGH_FLOOR,
+        "PASS_THROUGH_SCAN_EMPTY: derived {} site(s), floor {PASSTHROUGH_FLOOR}. Without \
+         this the leg would report every row as orphaned the moment the walker broke.",
+        s.passthrough.len()
+    );
+    let occupied: BTreeSet<&str> = s.passthrough.iter().map(|pt| pt.expression.as_str()).collect();
+    let allowed: BTreeSet<&str> = UNMATCHED_ROW_ALLOWANCE.iter().map(|(e, _)| *e).collect();
+    let orphaned: Vec<&String> = declared
+        .iter()
+        .filter(|e| !occupied.contains(e.as_str()) && !allowed.contains(e.as_str()))
+        .collect();
+    assert!(
+        orphaned.is_empty(),
+        "{} declared pass-through expression(s) match NO scanned site: {:?}\n\n\
+         Two different things look like this and the gate cannot tell them apart:\n\
+         (a) THE SITE IS GONE — retire the row. A row that outlives its site is how the \
+         registry starts describing a workspace that no longer exists, and it is what \
+         stops §6 from shrinking.\n\
+         (b) THE SITE EXISTS AND THE RECOGNISER STOPPED SEEING IT — fix passthrough_chain, \
+         not the registry. It rejects any argument that still contains `(` or `&` after \
+         the trailing-`()` strip, so wrapping a call (`f(g())`) or passing a reference \
+         (`f(&x)`) drops a real site out of the scan silently.\n\n\
+         If a row must be kept because of (b), add it to UNMATCHED_ROW_ALLOWANCE with the \
+         reason rather than leaving it silent.",
+        orphaned.len(),
+        orphaned
+    );
+    let stale: Vec<&str> = UNMATCHED_ROW_ALLOWANCE
+        .iter()
+        .map(|(e, _)| *e)
+        .filter(|e| occupied.contains(e))
+        .collect();
+    assert!(
+        stale.is_empty(),
+        "{} allowance row(s) name an expression the scanner NOW matches: {:?}\n\
+         Delete them — an allowance that outlives its defect is how a repaired gap keeps \
+         reading as broken, and it is what stops this list from shrinking.",
+        stale.len(),
+        stale
+    );
+    let unreasoned: Vec<&str> = UNMATCHED_ROW_ALLOWANCE
+        .iter()
+        .filter(|(_, why)| why.trim().len() < 40)
+        .map(|(e, _)| *e)
+        .collect();
+    assert!(
+        unreasoned.is_empty(),
+        "{unreasoned:?} carry no usable reason; a row without a reason is silence with \
+         extra steps"
+    );
+}
