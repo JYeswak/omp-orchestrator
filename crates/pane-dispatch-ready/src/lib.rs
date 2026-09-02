@@ -121,16 +121,34 @@ impl PaneDispatchReadyRules {
 pub enum PaneDispatchReadyState {
     Free,
     Busy,
+    /// A packet ARRIVED and was parked unsubmitted. Deliberately not folded into `Busy`:
+    /// a wedged pane is not working, and the operator's action is to submit or clear the
+    /// queued message, not to wait. Folding it into `Busy` would tell a caller "come back
+    /// later" about a condition that never clears on its own.
+    Wedged,
     QuotaBlocked,
     NoAgent,
     Unreadable,
 }
 
 impl PaneDispatchReadyState {
+    /// The one hand-listed thing in this file. Kept honest behaviourally rather than by a
+    /// pinned integer: `state_registry_covers_every_state_the_classifier_emits` asserts
+    /// every state `classify` actually produces over the fixture corpus appears here.
+    pub const ALL: &'static [PaneDispatchReadyState] = &[
+        PaneDispatchReadyState::Free,
+        PaneDispatchReadyState::Busy,
+        PaneDispatchReadyState::Wedged,
+        PaneDispatchReadyState::QuotaBlocked,
+        PaneDispatchReadyState::NoAgent,
+        PaneDispatchReadyState::Unreadable,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             PaneDispatchReadyState::Free => "FREE",
             PaneDispatchReadyState::Busy => "BUSY",
+            PaneDispatchReadyState::Wedged => "WEDGED",
             PaneDispatchReadyState::QuotaBlocked => "QUOTA_BLOCKED",
             PaneDispatchReadyState::NoAgent => "NO_AGENT",
             PaneDispatchReadyState::Unreadable => "UNREADABLE",
@@ -140,6 +158,7 @@ impl PaneDispatchReadyState {
         match s {
             "FREE" => Some(PaneDispatchReadyState::Free),
             "BUSY" => Some(PaneDispatchReadyState::Busy),
+            "WEDGED" => Some(PaneDispatchReadyState::Wedged),
             "QUOTA_BLOCKED" => Some(PaneDispatchReadyState::QuotaBlocked),
             "NO_AGENT" => Some(PaneDispatchReadyState::NoAgent),
             "UNREADABLE" => Some(PaneDispatchReadyState::Unreadable),
@@ -276,6 +295,25 @@ pub fn classify(
                 ),
             };
         }
+    }
+    // PR-L1. CONSULT the existing authority; do NOT write a fourth detector. The marker was
+    // already recognised in three other crates while the classifier whose only job is "can
+    // this pane SAFELY receive a dispatch" did not ask, so the fix is a dependency edge, not
+    // a new regex. `tick_monitor::classify` is strictly richer than the single anchor: it
+    // recognises TWO parked-packet footers, and `receiver-receipt` -- whose contract forbids
+    // I/O -- already consumes it, so this is a precedented edge onto a pure classifier.
+    //
+    // ORDER: after quota (a spend problem outranks everything) and BEFORE busy, for the same
+    // reason tick-monitor checks Wedged before its own spinner branch -- a wedged pane can
+    // still render a live spinner, so a busy-first order scores it BUSY and tells the caller
+    // to come back later about a condition that never clears without an operator.
+    if tick_monitor::classify(text) == tick_monitor::PaneState::Wedged {
+        return PaneDispatchReadyVerdict {
+            state: PaneDispatchReadyState::Wedged,
+            reason: "a packet arrived and was PARKED unsubmitted — an operator must submit or \
+                     clear the queued message; waiting will not clear it"
+                .into(),
+        };
     }
     let tail = if rules.tail_only_busy {
         tail_lines(text, DEFAULT_BUSY_TAIL)

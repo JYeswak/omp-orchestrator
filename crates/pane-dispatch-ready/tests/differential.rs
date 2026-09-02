@@ -113,6 +113,74 @@ fn state_of(line: &str) -> &str {
     line.split('|').next().unwrap_or("")
 }
 
+/// DECLARED DIVERGENCES from the shell oracle — Rust behaviour the shell never had.
+///
+/// PR-L1 (bead `omp-orchestrator-readiness-l1-wedge-blind-46y7`) required either that the
+/// shell gain the same clause or that the divergence be declared here with a reason. The
+/// shell cannot gain it: `bin/` no longer exists in this repository (deleted at `45c613d`)
+/// and `AGENTS.md`'s first rule forbids re-adding a `.sh` file, so there is no oracle to
+/// extend. Every differential test above therefore ALREADY skips loudly with
+/// `reason=missing_script` and compares 0 cases.
+///
+/// A declaration that nothing checks is paperwork, so `declared_divergences_are_real` runs
+/// each row through the Rust binary and asserts the declared state. That half needs no
+/// shell and is a real gate; the "and the shell truly disagrees" half runs only when an
+/// oracle exists, and says so when it does not.
+const DECLARED_DIVERGENCES: &[(&str, &str, &str, &str)] = &[(
+    "wedged composer",
+    "some earlier output\nOpus 5 (1M context) | omp-orchestrator\nPress up to edit queued messages\n\u{3c0}  > claude-opus-5 > main\n",
+    "WEDGED",
+    "PR-L1: the shell classify() had no wedge branch and scored this FREE, identically to an \
+     idle pane. The Rust side consults tick_monitor::classify, which is the authority three \
+     other crates already use. The shell cannot be extended -- bin/ is deleted and .sh is \
+     forbidden -- so this divergence is permanent and intended.",
+)];
+
+#[test]
+fn declared_divergences_are_real() {
+    assert!(
+        !DECLARED_DIVERGENCES.is_empty(),
+        "ANTI-VACUITY: an empty declaration table would pass this test while declaring nothing"
+    );
+    for (name, capture, expected, reason) in DECLARED_DIVERGENCES {
+        // The Rust half is a GATE: no shell involved, so it cannot skip.
+        let got = eval_rust(capture, false, &[]);
+        assert_eq!(
+            state_of(&got),
+            *expected,
+            "declared divergence {name:?} claims {expected} but the binary answers {got:?} — \
+             the declaration has rotted and now describes behaviour that does not exist"
+        );
+        assert!(
+            reason.len() > 80 && reason.contains("PR-L"),
+            "divergence {name:?} must cite the law it diverges under and say WHY, not just that \
+             it does"
+        );
+    }
+
+    // The other half: is the divergence still a divergence? Only answerable with an oracle.
+    let status = oracle_status();
+    let OracleStatus::Ready = status else {
+        announce_skip("declared_divergences_are_real/shell_half", &status);
+        println!(
+            "  The Rust half above DID run and is a gate. Unverified here: that the shell still \
+             disagrees on {} declared row(s). With no oracle a declaration cannot be retired \
+             either -- it can only be shown to still describe this binary.",
+            DECLARED_DIVERGENCES.len()
+        );
+        return;
+    };
+    for (name, capture, expected, _) in DECLARED_DIVERGENCES {
+        let shell = eval_shell(capture, false);
+        assert_ne!(
+            state_of(&shell),
+            *expected,
+            "declared divergence {name:?} is STALE: the shell now agrees ({shell:?}). Delete the \
+             row and let the ordinary differential cover this case."
+        );
+    }
+}
+
 #[test]
 fn comparator_sees_manufactured_disagreement() {
     let status = oracle_status();

@@ -18,6 +18,7 @@ subprocess-contract = { path = "../subprocess-contract" }
 regex = "1"
 serde_json = "1"
 omp-types = { path = "../omp-types" }
+tick-monitor = { path = "../tick-monitor" }
 [dev-dependencies]
 sha2 = "0.11"
 

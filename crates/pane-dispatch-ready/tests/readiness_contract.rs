@@ -157,65 +157,143 @@ fn snapshot_rows() -> Vec<Row> {
 // ---------------------------------------------------------------------------------------
 
 #[test]
-fn l1_a_wedged_pane_still_classifies_free_in_this_crate() {
-    // PINNED DEFECT, bead omp-orchestrator-readiness-l1-wedge-blind-46y7.
-    //
-    // A wedged pane ACCEPTED a packet and parked it at "Press up to edit queued messages".
-    // Every surface this crate reads still says free: an agent is rendering, no busy marker
-    // is in the 6-line tail, the buffer is unchanged, and the `π` prompt is present. So
-    // `classify` returns FREE and a caller dispatches into a pane that will never submit.
+fn l1_a_wedged_pane_is_distinguishable_from_an_idle_one() {
+    // WAS a pinned defect (bead omp-orchestrator-readiness-l1-wedge-blind-46y7): a wedged
+    // pane and an idle pane produced a BYTE-IDENTICAL verdict line, so a caller that
+    // trusted readiness dispatched into a pane that had accepted a packet and would never
+    // submit it. Now the two are separable, and the leg asserts the separation rather than
+    // the blindness.
     let idle = classify(IDLE_CLAUDE, false, &rules());
     let wedged = classify(WEDGED_CLAUDE, false, &rules());
     assert_eq!(
-        idle.state,
-        PaneDispatchReadyState::Free,
-        "control: idle is FREE"
-    );
-    assert_eq!(
         wedged.state,
-        PaneDispatchReadyState::Free,
-        "PR-L1 may now be enforced: the wedge marker changed the verdict to {:?}. Update the \
-         contract's PR-L1 row and close the bead in the same commit.",
+        PaneDispatchReadyState::Wedged,
+        "a parked packet must not read as dispatchable, got {:?}",
         wedged.state
     );
-    // And the two verdicts are INDISTINGUISHABLE, which is the sharper statement.
+    // KNOWN-GOOD ARM, and the more important half: a detector that pins every pane non-free
+    // is a worse defect than the blindness it replaces.
     assert_eq!(
+        idle.state,
+        PaneDispatchReadyState::Free,
+        "control: an idle pane must still be FREE, got {:?}",
+        idle.state
+    );
+    assert_ne!(
         idle.pipe_line(),
         wedged.pipe_line(),
-        "a wedged pane and an idle pane must currently produce the same line"
+        "the two verdicts must now differ on the wire, not only in the enum"
+    );
+    // The reason must name the OPERATOR ACTION. `Busy` says "come back later"; this
+    // condition never clears without a human, so a caller reading only the reason string
+    // still learns the difference.
+    assert!(
+        wedged.reason.contains("submit or clear"),
+        "the wedged reason must name the operator action, got {:?}",
+        wedged.reason
     );
 }
 
 #[test]
-fn l1_the_wedge_marker_is_detected_by_three_other_crates() {
-    // The detection EXISTS; it just does not live in the readiness authority. Named here so
-    // the finding is "the classifier is blind", not "the fleet is blind" — a wrong scope
-    // would send someone to build a detector that already ships three times over.
+fn l1_the_wedge_authority_is_consulted_not_reimplemented() {
+    // The detection already existed THREE times over when this crate was blind, so the fix
+    // was a dependency edge, not a fourth regex. That makes the previous pin — a source-text
+    // search for the marker string in this crate — unable to signal: delegation leaves the
+    // string absent. This leg is keyed on BEHAVIOUR and on the dependency instead.
     const MARKER: &str = "Press up to edit queued messages";
-    let consumers = [
-        "crates/fast-dispatch/src/lib.rs",
-        "crates/fleet-monitor/src/lib.rs",
-        "crates/tick-monitor/src/lib.rs",
-    ];
-    for rel in consumers {
-        assert!(
-            read(rel).contains(MARKER),
-            "{rel} must carry the wedge marker; if this fails the contract's PR-L1 evidence \
-             is stale, not satisfied"
-        );
-    }
-    // The readiness authority itself does NOT.
+
+    // 1. The authority still recognises it. If this fails the delegation is broken upstream,
+    //    which is a different failure from this crate regressing.
+    assert_eq!(
+        tick_monitor::classify(WEDGED_CLAUDE),
+        tick_monitor::PaneState::Wedged,
+        "the consulted authority no longer recognises the parked-packet footer"
+    );
+
+    // 2. This crate AGREES with it, and does so without carrying its own copy of the marker.
+    assert_eq!(
+        classify(WEDGED_CLAUDE, false, &rules()).state,
+        PaneDispatchReadyState::Wedged
+    );
     let own = read("crates/pane-dispatch-ready/src/lib.rs");
     assert!(
-        !own.contains(MARKER),
-        "PR-L1 may now be enforced in the readiness crate. Update the contract and close the \
-         bead in the same commit."
+        !own.contains(&format!("\"{MARKER}\"")),
+        "a fourth copy of the marker landed here; consult the authority instead"
     );
-    // POSITIVE CONTROL on the same reader: a marker this crate DOES carry.
+    assert!(
+        own.contains("tick_monitor::PaneState::Wedged"),
+        "the delegation edge is gone — this crate must consult the authority, not guess"
+    );
+
+    // 3. The SECOND footer, which the single anchor in the bead would have missed. Reuse is
+    //    strictly richer than the regex that was proposed: this string appears nowhere in
+    //    this crate and is recognised anyway.
+    const SECOND: &str = "Messages to be submitted after next tool call";
+    let second = WEDGED_CLAUDE.replace(MARKER, SECOND);
+    assert_eq!(
+        classify(&second, false, &rules()).state,
+        PaneDispatchReadyState::Wedged,
+        "the authority recognises two parked-packet footers; delegation must inherit both"
+    );
+
+    // POSITIVE CONTROL on the same reader: a marker this crate DOES carry, so the negative
+    // assertion above is not the reader silently failing.
     assert!(
         own.contains("esc to interrupt"),
         "POSITIVE CONTROL FAILED: the reader cannot see a busy marker that is present, so its \
          absence result above proves nothing"
+    );
+}
+
+#[test]
+fn l1_state_registry_round_trips_and_covers_every_state_the_classifier_emits() {
+    // `ALL` is hand-listed and `as_str`/`parse` are matches, so a new variant is a compile
+    // error in `as_str` but could silently miss `parse` or `ALL`. Both halves are checked:
+    // the wire round-trip, and that every state the classifier can actually PRODUCE is
+    // registered — derived from behaviour, not from a pinned count.
+    for state in PaneDispatchReadyState::ALL {
+        assert_eq!(
+            PaneDispatchReadyState::parse(state.as_str()),
+            Some(*state),
+            "{} does not survive the wire round-trip",
+            state.as_str()
+        );
+    }
+    assert_eq!(PaneDispatchReadyState::parse("NOT_A_STATE"), None);
+
+    let corpus = [
+        ("", false),
+        ("bare shell, no agent\n$ ", false),
+        (IDLE_CLAUDE, false),
+        (IDLE_CLAUDE, true),
+        (WEDGED_CLAUDE, false),
+        ("π claude-opus-5\nWorking (12s) esc to interrupt\n", false),
+        ("π claude-opus-5\nWeekly limit left: 0%\n", false),
+    ];
+    // NO `assert!(!corpus.is_empty())` HERE. Clippy caught that exact line as
+    // "this expression always evaluates to false": `corpus` is a fixed-size array literal,
+    // so emptiness is decided at compile time and the guard can NEVER fire. An anti-vacuity
+    // check that is itself vacuous is worse than none — it reads as protection. The real
+    // guard is the distinct-state count at the end of this test, which is derived from
+    // classifier BEHAVIOUR and does fire (proven by mutation M2, which collapsed every row
+    // to WEDGED and turned this leg RED).
+    for (text, changed) in corpus {
+        let got = classify(text, changed, &rules()).state;
+        assert!(
+            PaneDispatchReadyState::ALL.contains(&got),
+            "classify emitted {got:?}, which is absent from PaneDispatchReadyState::ALL — the \
+             registry and the wire round-trip cannot see it"
+        );
+    }
+    // And the corpus is not vacuous in the other direction: it must exercise more than one
+    // state, or "every emitted state is registered" is satisfied by a single row.
+    let distinct: std::collections::BTreeSet<&str> = corpus
+        .iter()
+        .map(|(t, c)| classify(t, *c, &rules()).state.as_str())
+        .collect();
+    assert!(
+        distinct.len() >= 5,
+        "the corpus must exercise most of the registry, saw {distinct:?}"
     );
 }
 

@@ -5,13 +5,14 @@ Bead: `omp-orchestrator-pane-readiness-contract-n8c0`
 ## Purpose
 
 Defines dispatch readiness for one terminal pane: the five states `pane-dispatch-ready` can
-return (`FREE`, `BUSY`, `QUOTA_BLOCKED`, `NO_AGENT`, `UNREADABLE`), which of them are *claims*
+return (`FREE`, `BUSY`, `WEDGED`, `QUOTA_BLOCKED`, `NO_AGENT`, `UNREADABLE`), which of them are
+*claims*
 and which are *fail-closed non-answers*, and the five laws that separate readiness from liveness
 — `PR-L1` `safe_to_dispatch` is not liveness, `PR-L2` an UNKNOWN classification is not a busy
 claim, `PR-L3` a positive readiness read needs two captures ≥75s apart, `PR-L4` a confident busy
 claim beats a stale free read while an unknown one does not, `PR-L5` `NO_AGENT` is a bare shell
-and never dispatchable. **`PR-L1` and `PR-L3` are stated here and NOT enforced by this crate**,
-each named with the bead that will change it. Documents what IS at the commit below; changes no
+and never dispatchable. **`PR-L1` is enforced as of the commit below; `PR-L3` is stated here
+and NOT enforced by this crate**, named with the bead that will change it. Documents what IS at the commit below; changes no
 crate source.
 
 ## Contract Artifacts
@@ -52,7 +53,7 @@ overloading `docs/error_codes/exit_code_registry.md` records for exit 1.
 
 | ID | law | enforced by this crate? | evidence |
 |---|---|---|---|
-| `PR-L1` | `safe_to_dispatch` is NOT liveness — a wedged pane accepts a packet and parks it forever | **NO** | wedged and idle verdicts are byte-identical, §2.1 — `readiness-l1-wedge-blind-46y7` |
+| `PR-L1` | `safe_to_dispatch` is NOT liveness — a wedged pane accepts a packet and parks it forever | **PARTLY** | a parked packet returns `WEDGED`, not `FREE`; the two verdicts differ on the wire. One named blindness, not liveness — §2.1 |
 | `PR-L2` | an UNKNOWN classification is not a busy claim | **YES**, and the framing needed correcting | §2.2 |
 | `PR-L3` | a positive readiness read needs two captures ≥75s apart (`pane_observation_contract` `PO-L1`) | **NO** | 10s window against a 75s floor, §2.3 — `readiness-l3-motion-window-7523` |
 | `PR-L4` | a CONFIDENT busy claim beats a stale free read; an UNKNOWN one does not | **YES** | §2.4 |
@@ -69,25 +70,61 @@ overloading `docs/error_codes/exit_code_registry.md` records for exit 1.
 `l5_a_bare_shell_is_no_agent_even_with_a_perfect_prompt`,
 `l5_an_empty_capture_is_unreadable_not_no_agent`.
 
-### 2.1 `PR-L1` — the readiness authority is blind to the wedge, and three other crates are not
+### 2.1 `PR-L1` — the readiness authority now CONSULTS the wedge authority instead of guessing
 
 A wedged pane **accepted** the packet. It sits at `Press up to edit queued messages` and never
-submits. Every surface `classify` reads still says free: an agent is rendering, the marker is not
-in `BUSY_RE`, the buffer is unchanged, and the `π` prompt is on the last status line. So the
-wedged and idle captures produce the **same verdict line**, asserted equal by the pinned leg.
+submits. Every surface `classify` read still said free — an agent is rendering, the marker is not
+in `BUSY_RE`, the buffer is unchanged, and the `π` prompt is on the last status line — so the
+wedged and idle captures produced the **same verdict line**.
 
-The detection exists — three times, and naming where matters because a wrong reading of this
-finding sends someone to build a fourth detector:
+The detection already existed three times over, which is why the fix is a **dependency edge and
+not a fourth regex**:
 
-| crate | site |
-|---|---|
-| `fast-dispatch` | `src/lib.rs:321` |
-| `fleet-monitor` | `src/lib.rs:157` |
-| `tick-monitor` | `src/lib.rs:357` |
+| crate | detects | how |
+|---|---|---|
+| `fast-dispatch` | `src/lib.rs:325` | own `contains` |
+| `fleet-monitor` | `src/lib.rs:170` | own `contains` |
+| `tick-monitor` | `src/lib.rs:391` | own `contains` — **the authority** |
+| `pane-dispatch-ready` | `src/lib.rs` | **consults `tick_monitor::classify`** |
 
-**INSTRUMENT NOTE.** The scan that found those three printed a hardcoded
+`classify` now returns `PaneDispatchReadyState::Wedged` when
+`tick_monitor::classify(text) == PaneState::Wedged`. Three properties of that choice are
+load-bearing:
+
+1. **`Wedged` is its own state, not folded into `Busy`.** `Busy` means *come back later*; a parked
+   packet never clears without an operator. The reason string names the action — *"an operator must
+   submit or clear the queued message; waiting will not clear it"* — so a caller reading only the
+   line still learns the difference.
+2. **Delegation is strictly richer than the anchor the bead proposed.** `tick_monitor::classify`
+   recognises **two** parked-packet footers (`Press up to edit queued messages` and `Messages to be
+   submitted after next tool call`); adding the single marker to `BUSY_RE` would have caught one.
+   Neither string appears in this crate. `receiver-receipt`, whose own contract forbids I/O,
+   already consumes `tick_monitor::classify`, so this is a precedented edge onto a pure classifier.
+3. **Order: after quota, before busy.** `tick-monitor` checks `Wedged` before its own spinner
+   branch because a wedged pane can still render a live spinner; a busy-first order here would
+   score it `BUSY` and hide it behind *come back later*.
+
+**The second pinned leg did NOT fire, and that is the sharper finding.** It asserted
+`!own.contains("Press up to edit queued messages")` — a search of this crate's own source text.
+The correct fix leaves that string absent, so the pin stayed green through the very change it
+existed to catch. **A pin keyed on source text cannot see a fix implemented by delegation.** It has
+been replaced by `l1_the_wedge_authority_is_consulted_not_reimplemented`, which asserts the
+behaviour, the dependency edge, and the second footer.
+
+**Differential.** Acceptance 4 asked that the shell gain the same clause or the divergence be
+declared with a reason. The shell cannot gain it: `bin/` no longer exists in this repository and
+`AGENTS.md`'s first rule forbids re-adding a `.sh` file, so every differential test already skips
+with `reason=missing_script` and compares **0 cases**. The divergence is declared in
+`tests/differential.rs::DECLARED_DIVERGENCES` and checked in two halves —
+`declared_divergences_are_real` runs the row through the **Rust binary** with no shell involved and
+fails if the declaration stops describing this binary, and the *"the shell still disagrees"* half
+announces loudly that it did not run.
+
+**INSTRUMENT NOTE.** The scan that found the original three printed a hardcoded
 `"(empty above = no crate detects it)"` label beneath non-empty output. The label was written
-before the result and contradicted it. A label is not a measurement; the rows above are.
+before the result and contradicted it. A label is not a measurement; the rows above are. The line
+numbers in that table had also drifted by the time this fix landed (321/157/357 → 325/170/391),
+which is why they were re-derived by text search rather than trusted.
 
 ### 2.2 `PR-L2` — UNKNOWN is not a busy claim, and the derivation is not what it looks like
 
@@ -196,20 +233,29 @@ them would make a `capture-pane` failure look like an idle terminal.
 cargo test -p pane-dispatch-ready --test readiness_contract
 ```
 
-Expect **12 passed**. Two legs (`l1_a_wedged_pane_still_classifies_free_in_this_crate`,
-`l3_this_crates_motion_window_is_below_the_75_second_floor`) are **pinned defects**: they pass
-because the law is unenforced and go RED the moment it is enforced. Their failure is the signal
-that this document must be updated, not that the code broke. Both were proven to fire by mutation
-— `DEFAULT_MOTION_SECS` 10→75 turned leg 3 RED (10 passed / 1 failed), and appending the wedge
-marker to `BUSY_RE` turned both `l1_` legs RED (9 passed / 2 failed), each restored
-byte-identically to sha256
-`1409f2de20f241b4282544870633be5f57ff5fd643bc37921a47b07774ce8837`.
+Expect **13 passed**. One leg
+(`l3_this_crates_motion_window_is_below_the_75_second_floor`) remains a **pinned defect**: it
+passes because the law is unenforced and goes RED the moment it is enforced. Its failure is the
+signal that this document must be updated, not that the code broke. Proven to fire by mutation —
+`DEFAULT_MOTION_SECS` 10→75 turned it RED (10 passed / 1 failed), restored byte-identically to
+sha256 `1409f2de20f241b4282544870633be5f57ff5fd643bc37921a47b07774ce8837`.
+
+**The retired `PR-L1` pin carries a lesson worth more than the pin.** Its reachability was proven
+at authoring time by appending the wedge marker to `BUSY_RE`, which turned both `l1_` legs RED
+(9 passed / 2 failed). But that mutation is **the same shape as the fix the bead explicitly
+forbade** — *"consult one, do not write a fourth"* — because it put the marker string INTO this
+crate's source, which is the only thing the second leg looked at. When the fix actually landed as
+a delegation, leg 1 fired and **leg 2 stayed green**. A reachability proof only covers fixes shaped
+like the mutation that produced it.
 
 ## Cross-References
 
-- `crates/pane-dispatch-ready/src/lib.rs` — the implementation; `:36` the motion window, `:114`
-  the state enum, `:243` `classify`, `:343` `confirm_free`
-- `crates/pane-dispatch-ready/src/main.rs:304` — where the 10-second window is slept
+- `crates/pane-dispatch-ready/src/lib.rs` — the implementation; `:121` the state enum, `:269`
+  `classify` (the wedge clause at `:299`), `:396` `confirm_free`. Line numbers re-derived by
+  symbol search 2026-09-02; the previous four had all drifted.
+- `crates/pane-dispatch-ready/src/main.rs:332` — where the motion window is slept
+- `crates/tick-monitor/src/lib.rs:387` — `classify`, the consulted wedge authority
+- `crates/pane-dispatch-ready/tests/differential.rs` — `DECLARED_DIVERGENCES` and its two-half check
 - `crates/pane-dispatch-ready/tests/readiness_contract.rs` — the invariant suite
 - `crates/pane-dispatch-ready/tests/differential.rs` — the shell original as differential oracle
 - `crates/pane-truth/src/lib.rs:39` — `TWO_CAPTURE_MIN_SECS = 75`, the floor
@@ -227,7 +273,7 @@ byte-identically to sha256
 
 ## Non-Coverage
 
-- **Two laws are documented as UNENFORCED**, not fixed: `PR-L1` (`readiness-l1-wedge-blind-46y7`)
+- **One law is documented as UNENFORCED**, not fixed: `PR-L3`; `PR-L1` was closed by
   and `PR-L3` (`readiness-l3-motion-window-7523`). No `src/` file was changed.
 - **`crates/refill-idle-panes` is untouched** — another agent owns it — and so is
   `crates/omp-types`.
@@ -246,7 +292,7 @@ byte-identically to sha256
 
 **Readiness is not liveness, and this contract does not make it so.** `FREE` means every surface
 this crate can read says free at the moment of capture; it does not mean the pane will process
-work. Two of the five laws are stated and unenforced — a reader who takes `PR-L1` or `PR-L3` as a
+work. One of the five laws is stated and unenforced — a reader who takes `PR-L3` as a
 guarantee has misread the document, which is why each carries its bead id inline.
 
 `PR-L2`'s five-pane table is **one snapshot on one machine at one timestamp**, and §2.2.1
