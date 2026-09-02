@@ -22,8 +22,14 @@ worse than no contract. Documents what IS at the commit below; changes no crate 
    `.filed-<id>`), and its format is asserted by the suite rather than duplicated in a fixture.
 2. **Runner:** `cargo test -p finding --test finding_contract`
 3. **Invariant suite:** `crates/finding/tests/finding_contract.rs` — 12 legs, and it is **the
-   first caller of `Finding::file` in the workspace**. Three legs are pinned defects that go RED
-   when a law becomes enforced, forcing this document to be updated in the same commit.
+   first caller of `Finding::file` in the workspace**. Legs are pinned defects that go RED when a
+   law becomes enforced, forcing this document to be updated in the same commit. **One has now
+   fired:** `l1_must_use_is_only_a_warning_and_does_not_survive_option` failed with
+   `unused_must_use is now denied in 1 manifest(s)` and was REPLACED by
+   `l1_unused_must_use_is_denied_and_the_producer_does_not_return_option`, which asserts the same
+   two facts in the direction that now holds. A pin left in place after its defect is fixed becomes
+   a test that fails forever and gets `#[ignore]`d — which is how a suite goes vacuously green.
+   Two pinned defects remain (`FC-L2`, `FC-L5`).
 
 > A contract naming no invariant suite is a DESCRIPTION. Item 3 is what makes the pinned defects
 > load-bearing instead of a to-do list.
@@ -83,7 +89,7 @@ Each law states its enforcement level as measured, and names the test that prove
 
 | ID | law | enforced today? | evidence |
 |---|---|---|---|
-| `FC-L1` | a gap observed is a gap FILED — no path to discard without a `Waived` carrying a reason | **PARTLY** | `#[must_use]` + exactly two consuming methods; a blank reason is refused. But see §3.1 |
+| `FC-L1` | a gap observed is a gap FILED — no path to discard without a `Waived` carrying a reason | **YES for a dropped VALUE** | `unused_must_use = "deny"` at the workspace root; the producer returns `#[must_use] MaybeFinding`, not `Option<Finding>`. Dropping it is a **compile error**. Still not proof a gap was filed — §3.1 |
 | `FC-L2` | `Filed` must name the bead id; a Finding that cannot produce one is unconstructible | **NO** | `Filed { id }` takes the publisher's string verbatim, empty included — `finding-l2-unvalidated-id-3j8` |
 | `FC-L3` | `SpooledFinding` survives the process that saw it — durable before the observer exits | **YES** | proved by ordering, §3.2 |
 | `FC-L4` | a Finding names its REPLACEMENT when it reports something missing | **NO** | no such field exists — `finding-l4-no-replacement-jz2` |
@@ -95,27 +101,53 @@ Each law states its enforcement level as measured, and names the test that prove
 `l3_respooling_…`, `l3_an_unreadable_spool_dir_…`, `l4_a_finding_cannot_name_a_replacement_today`,
 `l5_a_waiver_carries_no_expiry_so_it_is_permanent_today`.
 
-### 3.1 `FC-L1` is a floor-raise, not an impossibility, and the measurement says why
+### 3.1 `FC-L1` is now a build error for a dropped value, and still not proof a gap was filed
 
-The crate's header claims the compiler is the enforcement: *"You cannot have a finding and drop it
-— the compiler objects."* Measured with `rustc` directly:
+**CLOSED 2026-09-02 by `omp-orchestrator-finding-l1-bypassable-py3`.** Two measured holes, both
+fixed; the honest statement of what is and is not guaranteed follows.
+
+**Hole 1 — `#[must_use]` did not survive the producer's wrapper.** Reproduced on
+`rustc 1.100.0-nightly` before changing anything:
 
 ```
-direct();          -> warning: unused `Finding` that must be used
-returns_option();  -> NO WARNING            (fn returns Option<Finding>)
+direct();            -> warning: unused `Finding` that must be used
+returns_option();    -> NO WARNING            (fn returns Option<Finding>)
+returns_result();    -> warning: unused `Result` that must be used
+returns_enum();      -> warning: unused `MaybeFinding` that must be used
 ```
 
-**`#[must_use]` does not propagate through `Option<Finding>` — which is exactly the signature of
-the crate's only producer**, `finding_dispatch::finding_for(…) -> Option<Finding>`
-(`crates/finding-dispatch/src/lib.rs:22`). The compiler does not object when its result is
-dropped. And `unused_must_use` is denied **nowhere**: there is no `[workspace.lints]` table and no
-manifest sets it, against a positive control of **51** manifests carrying
-`unsafe_code = "forbid"`. So even the case that fires is a warning.
+`#[must_use]` does not propagate through `Option`, and `Option<Finding>` was the signature of the
+crate's only producer — so the one mechanism protecting this law was bypassed by the one function
+that creates the obligation. `finding_for` now returns
+`#[must_use] MaybeFinding { Owed(Finding), NotYet(NotYet) }`. An enum rather than
+`Result<Finding, NotYet>`: `Result` is `#[must_use]` and the probe confirms it would work, but "no
+finding is owed" is not an error, and putting a healthy fleet in `Err` invites `unwrap()`,
+`?`-propagation out of a correct path, and an operator reading `Err` as a failure.
 
-`let _ = finding;` also silences it, which is a deliberate escape hatch in the language and not a
-defect here. The honest statement of `FC-L1` is therefore: **the two disposals are the only
-methods that consume a `Finding`, and dropping one is visible-but-not-fatal.** Owned by
-`omp-orchestrator-finding-l1-bypassable-py3`.
+`NotYet` also splits three conditions the old `None` collapsed — `BelowThreshold`,
+`AlreadyEmitted`, `NotAFindableDecision` — so a caller logging "nothing to file" can say WHICH
+nothing it saw.
+
+**Hole 2 — `unused_must_use` was denied nowhere.** No `[workspace.lints]` table existed and no
+manifest set it, against a positive control of 51 manifests carrying `unsafe_code = "forbid"`.
+`[workspace.lints.rust] unused_must_use = "deny"` now exists at the root, inherited by
+`crates/finding` and `crates/finding-dispatch` via `[lints] workspace = true`.
+`unsafe_code = "forbid"` is repeated in that table because a package cannot carry both
+`lints.workspace = true` and its own `[lints]` table — inheriting without it would silently RELAX
+the strongest lint in the repository while appearing to tighten one.
+
+**Proven to bite.** Planting `finding_for(decision, FINDING_THRESHOLD);` in `finding-dispatch`
+produces `error: unused MaybeFinding that must be used` and the crate does not compile. And the
+negative direction holds: a caller that disposes — `into_owed()` or `expect_nothing_owed()` —
+produces **no** warning, because an over-strict lint that fires on correct code gets `#[allow]`-ed
+and dies.
+
+**WHAT IS NOW GUARANTEED, precisely:** in this workspace, a `MaybeFinding` VALUE cannot be dropped
+without a compile error. **What is still NOT guaranteed:** `let _ = …` silences it, which is a
+deliberate language escape hatch; a downstream consumer outside this workspace can drop it freely;
+and **a warning-free build does not prove any gap was filed** — it proves no `Finding` value was
+dropped, which is strictly weaker than `FC-L1` as stated. Routing production code through this
+crate at all remains the unrouted-crate bead.
 
 ### 3.2 `FC-L3` is proved by ordering, not asserted by inspection
 

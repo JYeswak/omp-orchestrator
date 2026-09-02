@@ -163,23 +163,26 @@ fn l1_the_only_disposals_are_file_and_waive_and_a_reasonless_waiver_is_refused()
     }
 }
 
+/// The pin this leg used to carry, and why it is gone.
+///
+/// It was named `l1_must_use_is_only_a_warning_and_does_not_survive_option` and it
+/// asserted `denies == 0` — **a PINNED DEFECT whose failure was the signal that the fix
+/// landed.** It fired on `omp-orchestrator-finding-l1-bypassable-py3` with
+/// `unused_must_use is now denied in 1 manifest(s)`, and `docs/contracts/finding_contract.md`
+/// §FC-L1 was updated in the same commit as required.
+///
+/// It is replaced rather than deleted: the same two facts are still asserted, in the
+/// direction that now holds. A pin left in place after its defect is fixed becomes a
+/// test that fails forever and gets `#[ignore]`d, which is how a suite goes vacuously
+/// green.
 #[test]
-fn l1_must_use_is_only_a_warning_and_does_not_survive_option() {
-    // MEASURED 2026-09-01 with rustc directly: `#[must_use]` on a type fires for
-    // `direct();` and DOES NOT fire for `returns_option();` where the return type is
-    // `Option<Finding>`. That is exactly the signature of the crate's only producer,
-    // `finding_dispatch::finding_for(..) -> Option<Finding>`, so the compiler does not
-    // object when its result is dropped. FC-L1's enforcement stops at that boundary.
-    //
-    // This leg pins the two facts a reader would otherwise have to re-derive.
+fn l1_unused_must_use_is_denied_and_the_producer_does_not_return_option() {
     let src = source();
     assert!(
         src.contains("#[must_use"),
         "the type must carry #[must_use]; without it FC-L1 has no enforcement at all"
     );
 
-    // `unused_must_use` is denied NOWHERE, so even the case that does fire is a warning.
-    // Positive control on the same reader: `unsafe_code = "forbid"` IS found, 51 times.
     let mut manifests = vec![repo_root().join("Cargo.toml")];
     let crates_dir = repo_root().join("crates");
     if let Ok(entries) = std::fs::read_dir(&crates_dir) {
@@ -190,6 +193,7 @@ fn l1_must_use_is_only_a_warning_and_does_not_survive_option() {
             }
         }
     }
+    // ANTI-VACUITY, unchanged: an empty or tiny scan set is an ERROR, not a pass.
     assert!(
         manifests.len() > 40,
         "manifest scan set is {} — an empty or tiny scan set is an ERROR, not a pass",
@@ -199,22 +203,94 @@ fn l1_must_use_is_only_a_warning_and_does_not_survive_option() {
     let mut forbids_unsafe = 0usize;
     for m in &manifests {
         let text = std::fs::read_to_string(m).unwrap_or_default();
-        if text.contains("unused_must_use") {
+        if text.contains(r#"unused_must_use = "deny""#) {
             denies += 1;
         }
         if text.contains(r#"unsafe_code = "forbid""#) {
             forbids_unsafe += 1;
         }
     }
+    // POSITIVE CONTROL, retained: if the reader cannot find forbid(unsafe_code) it
+    // cannot be trusted about unused_must_use either.
     assert!(
         forbids_unsafe >= 40,
         "POSITIVE CONTROL FAILED: the reader found {forbids_unsafe} forbid(unsafe_code) \
-         manifests, so its zero for unused_must_use proves nothing"
+         manifests, so its count for unused_must_use proves nothing"
     );
-    assert_eq!(
-        denies, 0,
-        "unused_must_use is now denied in {denies} manifest(s) — FC-L1's strength changed; \
-         update docs/contracts/finding_contract.md §FC-L1 in the same commit"
+    assert!(
+        denies >= 1,
+        "unused_must_use is denied in {denies} manifest(s): FC-L1 is back to a warning a \
+         build can ignore"
+    );
+
+    // AND THE CRATE WHERE DROPPING HAPPENS MUST INHERIT IT. MEASURED: reverting the
+    // producer's manifest from `[lints] workspace = true` back to its own
+    // `[lints.rust] unsafe_code = "forbid"` left BOTH packages green -- the deny still
+    // existed at the root and applied to nobody who matters. A lint denied in a manifest
+    // no code inherits is the BUILT-vs-WIRED defect at the manifest layer.
+    for crate_name in ["finding", "finding-dispatch"] {
+        let manifest = std::fs::read_to_string(
+            repo_root().join("crates").join(crate_name).join("Cargo.toml"),
+        )
+        .unwrap_or_default();
+        assert!(
+            manifest.contains("[lints]") && manifest.contains("workspace = true"),
+            "crates/{crate_name} does not inherit workspace lints, so unused_must_use is \
+             not denied there"
+        );
+        // A local `[lints.rust]` table REPLACES the inherited set rather than adding to
+        // it, so its presence silently opts the crate out.
+        assert!(
+            !manifest.contains("[lints.rust]"),
+            "crates/{crate_name} declares its own [lints.rust] table, which REPLACES the \
+             workspace set and drops the deny"
+        );
+    }
+
+    // THE OPTION HOLE. `#[must_use]` does not propagate through `Option`, MEASURED with
+    // rustc 1.100.0-nightly on a two-line probe:
+    //
+    //   direct();          -> warning: unused `Finding` that must be used
+    //   returns_option();  -> NO WARNING
+    //   returns_enum();    -> warning: unused `MaybeFinding` that must be used
+    //
+    // So the producer's signature is load-bearing, and asserting the lint alone would
+    // leave the bypass in place.
+    let producer = std::fs::read_to_string(repo_root().join("crates/finding-dispatch/src/lib.rs"))
+        .expect("the producer must exist; it is the only function that builds a Finding");
+    assert!(
+        producer.contains("pub fn finding_for(decision: &SupervisorDecision, recurrence_count: u32) -> MaybeFinding"),
+        "the producer must return a #[must_use] type, not Option<Finding>"
+    );
+    // SCOPED TO THE PRODUCER'S OWN LINE, not the whole file. The first version asserted
+    // the string `-> Option<Finding>` was absent anywhere, and it failed on
+    // `MaybeFinding::into_owed(self) -> Option<Finding>` -- an accessor that SHOULD
+    // return an Option. Tenth instance today of a checker matching something legitimate
+    // that merely mentions the pattern; the cure is the same every time, which is to key
+    // on structure (this line) rather than on the file's text.
+    let producer_line = producer
+        .lines()
+        .find(|line| line.contains("pub fn finding_for"))
+        .expect("the producer's signature line");
+    assert!(
+        !producer_line.contains("Option<"),
+        "the producer returns an Option wrapper, which reopens the bypass -- must_use \
+         does not survive it: {producer_line}"
+    );
+    // And the outer type must actually carry the attribute, with a reason a caller reads.
+    //
+    // KEYED ON A LINE THAT STARTS WITH THE ATTRIBUTE, not on the first occurrence of the
+    // text. `find("#[must_use")` matched the DOC COMMENT above the attribute -- prose
+    // that names the attribute while explaining it. Eleventh instance today of a checker
+    // reading text ABOUT the thing instead of the thing, and the third in this one file.
+    let attr = producer
+        .lines()
+        .find(|line| line.trim_start().starts_with("#[must_use"))
+        .expect("MaybeFinding must carry a #[must_use] ATTRIBUTE, not a mention of one");
+    assert!(
+        attr.contains("filed or waived"),
+        "the #[must_use] reason must name the obligation, or a caller sees only \
+         'unused value': {attr}"
     );
 }
 

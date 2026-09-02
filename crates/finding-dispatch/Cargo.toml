@@ -10,5 +10,5 @@ description = "Turn recurring supervisor decisions into complete, named findings
 finding = { path = "../finding" }
 omp-orchestrator = { path = "../omp-orchestrator" }
 
-[lints.rust]
-unsafe_code = "forbid"
+[lints]
+workspace = true

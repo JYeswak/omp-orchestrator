@@ -1,4 +1,21 @@
-use finding_dispatch::{finding_for, FINDING_THRESHOLD};
+use finding_dispatch::{finding_for, MaybeFinding, NotYet, FINDING_THRESHOLD};
+
+/// UPDATED by `omp-orchestrator-finding-l1-bypassable-py3`. `finding_for` returned
+/// `Option<Finding>`, and `#[must_use]` does not propagate through `Option` -- so the
+/// compiler did not object when the only producer's result was dropped. It now returns
+/// `#[must_use] MaybeFinding`, and the compiler named all nine call sites in this file
+/// with `E0599`.
+///
+/// These assertions do NOT map mechanically back to an Option. They assert the TYPED
+/// reason, because splitting `None` into `BelowThreshold` / `AlreadyEmitted` /
+/// `NotAFindableDecision` is the point of the change: a caller logging "nothing to file"
+/// can now say WHICH nothing it saw.
+fn expect_not_yet(outcome: MaybeFinding, expected: NotYet) {
+    match outcome.expect_nothing_owed() {
+        Ok(reason) => assert_eq!(reason, expected, "wrong NotYet reason"),
+        Err(finding) => panic!("expected {expected}, got an owed finding: {}", finding.body()),
+    }
+}
 use omp_orchestrator::SupervisorDecision;
 
 fn recurring_decisions() -> [SupervisorDecision; 4] {
@@ -22,9 +39,11 @@ fn recurring_decisions() -> [SupervisorDecision; 4] {
 #[test]
 fn first_occurrence_is_log_only_and_nth_occurrence_files() {
     for decision in recurring_decisions() {
-        assert!(finding_for(&decision, 1).is_none());
-        assert!(finding_for(&decision, 2).is_none());
-        let finding = finding_for(&decision, FINDING_THRESHOLD).expect("third occurrence files");
+        expect_not_yet(finding_for(&decision, 1), NotYet::BelowThreshold { seen: 1, threshold: FINDING_THRESHOLD });
+        expect_not_yet(finding_for(&decision, 2), NotYet::BelowThreshold { seen: 2, threshold: FINDING_THRESHOLD });
+        let finding = finding_for(&decision, FINDING_THRESHOLD)
+            .into_owed()
+            .expect("third occurrence files");
         let body = finding.body();
         assert!(body.contains("WHAT:"));
         assert!(body.contains("WHY:"));
@@ -38,8 +57,14 @@ fn crossing_is_single_shot_not_a_duplicate_bead_stream() {
     let decision = SupervisorDecision::MonitorBlind {
         detail: "no readable census".to_owned(),
     };
-    assert!(finding_for(&decision, FINDING_THRESHOLD).is_some());
-    assert!(finding_for(&decision, FINDING_THRESHOLD + 1).is_none());
+    assert!(finding_for(&decision, FINDING_THRESHOLD).is_owed());
+    expect_not_yet(
+        finding_for(&decision, FINDING_THRESHOLD + 1),
+        NotYet::AlreadyEmitted {
+            seen: FINDING_THRESHOLD + 1,
+            threshold: FINDING_THRESHOLD,
+        },
+    );
 }
 
 #[test]
@@ -48,8 +73,16 @@ fn supervised_working_never_files_a_finding() {
         working_count: 6,
         ready_count: 4,
     };
+    // A healthy decision is NotAFindableDecision only AT the crossing; below and above
+    // it the threshold arms answer first. Asserting the exact reason per count is what
+    // makes this leg able to detect a mis-ordered guard.
     for count in [1, FINDING_THRESHOLD, 100] {
-        assert!(finding_for(&decision, count).is_none());
+        let expected = match count {
+            n if n < FINDING_THRESHOLD => NotYet::BelowThreshold { seen: n, threshold: FINDING_THRESHOLD },
+            n if n > FINDING_THRESHOLD => NotYet::AlreadyEmitted { seen: n, threshold: FINDING_THRESHOLD },
+            _ => NotYet::NotAFindableDecision,
+        };
+        expect_not_yet(finding_for(&decision, count), expected);
     }
 }
 
@@ -69,7 +102,10 @@ fn non_recurring_decisions_never_file_findings() {
         },
     ];
     for decision in decisions {
-        assert!(finding_for(&decision, FINDING_THRESHOLD).is_none());
+        expect_not_yet(
+            finding_for(&decision, FINDING_THRESHOLD),
+            NotYet::NotAFindableDecision,
+        );
     }
 }
 
@@ -81,6 +117,6 @@ fn mutation_leg_threshold_change_would_fail_boundary() {
         free_capacity_count: 1,
     };
     assert_eq!(FINDING_THRESHOLD, 3);
-    assert!(finding_for(&decision, 2).is_none());
-    assert!(finding_for(&decision, 3).is_some());
+    expect_not_yet(finding_for(&decision, 2), NotYet::BelowThreshold { seen: 2, threshold: FINDING_THRESHOLD });
+    assert!(finding_for(&decision, 3).is_owed());
 }

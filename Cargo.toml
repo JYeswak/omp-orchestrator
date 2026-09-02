@@ -15,3 +15,20 @@ license = "MIT"
 edition = "2021"
 repository = "https://github.com/JYeswak/omp-orchestrator"
 authors = ["Joshua Nowak"]
+
+# Shared lints, inherited with `lints.workspace = true`.
+#
+# WHY THIS TABLE EXISTS (`omp-orchestrator-finding-l1-bypassable-py3`). `FC-L1` — "a gap
+# observed is a gap filed" — rested on `#[must_use]` on `Finding`, and `unused_must_use`
+# was denied NOWHERE: no `[workspace.lints]` table existed and no crate manifest set it.
+# So even the case that did fire was a warning a build can ignore. Positive control on
+# the same reader at the time: `unsafe_code = "forbid"` appeared in 51 manifests.
+#
+# `unsafe_code` is repeated HERE rather than left in each crate because a package cannot
+# carry both `lints.workspace = true` and its own `[lints]` table — the workspace table
+# replaces it. Any crate that inherits must therefore find `forbid(unsafe_code)` here, or
+# inheriting would silently RELAX the strongest lint in the repository while appearing to
+# tighten one.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"

@@ -8,20 +8,125 @@
 //! a fully occupied fleet would turn a correct state into alarm fatigue.
 
 use finding::Finding;
+use std::fmt;
 use omp_orchestrator::SupervisorDecision;
 
 /// The loop-enforcement threshold: two observations establish recurrence; the third
 /// creates durable work. A caller should persist its recurrence counter between ticks.
 pub const FINDING_THRESHOLD: u32 = 3;
 
+/// Why no finding is owed yet. Three genuinely different conditions that
+/// `Option<Finding>` collapsed into one `None`.
+///
+/// A caller that wants to log "nothing to file" cannot say WHICH nothing it saw, and a
+/// reader of that log cannot tell a healthy fleet from a threshold that has not been
+/// reached from a crossing already filed. Same coercion this repository keeps finding:
+/// a real, distinct condition with no representation takes a neighbouring value and the
+/// coercion reads as normal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NotYet {
+    /// Below the threshold: recurrence has not been established.
+    BelowThreshold { seen: u32, threshold: u32 },
+    /// Past the exact crossing — the finding was already emitted once, and re-filing it
+    /// would duplicate the bead.
+    AlreadyEmitted { seen: u32, threshold: u32 },
+    /// A healthy or non-recurring decision. Filing for a fully occupied fleet would turn
+    /// a correct state into alarm fatigue.
+    NotAFindableDecision,
+}
+
+impl fmt::Display for NotYet {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::BelowThreshold { seen, threshold } => {
+                write!(f, "below threshold ({seen} of {threshold})")
+            }
+            Self::AlreadyEmitted { seen, threshold } => {
+                write!(f, "already emitted at the crossing ({seen} > {threshold})")
+            }
+            Self::NotAFindableDecision => write!(f, "healthy or non-recurring decision"),
+        }
+    }
+}
+
+/// The producer's return type. **`#[must_use]` on the OUTER type is the whole point.**
+///
+/// # Why this is not `Option<Finding>`
+///
+/// MEASURED with `rustc 1.100.0-nightly` on a two-line probe, reproducing the bead:
+///
+/// ```text
+/// direct();            -> warning: unused `Finding` that must be used
+/// returns_option();    -> NO WARNING
+/// returns_result();    -> warning: unused `Result` that must be used
+/// returns_enum();      -> warning: unused `MaybeFinding` that must be used
+/// ```
+///
+/// `#[must_use]` on `Finding` does **not** propagate through `Option`, and
+/// `Option<Finding>` was the signature of the crate's only producer — so the one
+/// mechanism protecting `FC-L1` was bypassed by the one function that creates the
+/// obligation. `#[must_use]` on the outer enum fires because the returned TYPE is the
+/// annotated one.
+///
+/// # Why an enum rather than `Result<Finding, NotYet>`
+///
+/// `Result` is `#[must_use]` in std and would also have worked — the probe confirms it.
+/// It was rejected because "no finding is owed" is not an error: putting a healthy fleet
+/// in `Err` invites `unwrap()`, `?`-propagation out of a correct path, and an operator
+/// reading `Err(NotAFindableDecision)` as a failure. The obligation is identical and the
+/// semantics are honest.
+#[must_use = "a Finding must be filed or waived; dropping this drops the obligation FC-L1 exists to enforce"]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MaybeFinding {
+    /// The threshold was crossed. This value carries an obligation.
+    Owed(Finding),
+    /// Nothing is owed, and the reason is named.
+    NotYet(NotYet),
+}
+
+impl MaybeFinding {
+    /// The finding, if one is owed. Named `into_owed` rather than `into_option` because
+    /// converting back to `Option` is exactly the hole this type closes; a caller that
+    /// wants the inner value must take it and then dispose of it.
+    pub fn into_owed(self) -> Option<Finding> {
+        match self {
+            Self::Owed(finding) => Some(finding),
+            Self::NotYet(_) => None,
+        }
+    }
+
+    pub fn is_owed(&self) -> bool {
+        matches!(self, Self::Owed(_))
+    }
+
+    /// Acknowledge that nothing is owed. **The only zero-obligation disposal**, and it
+    /// refuses to swallow a real finding: passing an `Owed` here is a programmer error,
+    /// not a silent drop.
+    pub fn expect_nothing_owed(self) -> Result<NotYet, Finding> {
+        match self {
+            Self::NotYet(reason) => Ok(reason),
+            Self::Owed(finding) => Err(finding),
+        }
+    }
+}
+
 /// Turn the threshold crossing for one supervisor decision into a complete finding.
 ///
-/// Returns None before the threshold, after the crossing has already been emitted, and
-/// for healthy/non-recurring decisions. The exact crossing avoids duplicate beads when a
-/// caller continues observing the same condition after filing it once.
-pub fn finding_for(decision: &SupervisorDecision, recurrence_count: u32) -> Option<Finding> {
-    if recurrence_count != FINDING_THRESHOLD {
-        return None;
+/// Returns a `#[must_use]` [`MaybeFinding`] rather than `Option<Finding>`: see that
+/// type's documentation for the measurement that forced the change. The exact crossing
+/// avoids duplicate beads when a caller keeps observing the same condition after filing.
+pub fn finding_for(decision: &SupervisorDecision, recurrence_count: u32) -> MaybeFinding {
+    if recurrence_count < FINDING_THRESHOLD {
+        return MaybeFinding::NotYet(NotYet::BelowThreshold {
+            seen: recurrence_count,
+            threshold: FINDING_THRESHOLD,
+        });
+    }
+    if recurrence_count > FINDING_THRESHOLD {
+        return MaybeFinding::NotYet(NotYet::AlreadyEmitted {
+            seen: recurrence_count,
+            threshold: FINDING_THRESHOLD,
+        });
     }
 
     let (what, why, acceptance, labels) = match decision {
@@ -117,12 +222,14 @@ pub fn finding_for(decision: &SupervisorDecision, recurrence_count: u32) -> Opti
         SupervisorDecision::SupervisedWorking { .. }
         | SupervisorDecision::Dispatch { .. }
         | SupervisorDecision::QueueUnreadable { .. }
-        | SupervisorDecision::AuthorizedIdle { .. } => return None,
+        | SupervisorDecision::AuthorizedIdle { .. } => {
+            return MaybeFinding::NotYet(NotYet::NotAFindableDecision)
+        }
     };
 
     // These values are literals assembled from a closed enum. Failure here is a programmer
     // invariant violation: silently returning None would recreate the finding leak.
-    Some(
+    MaybeFinding::Owed(
         Finding::new(what, why, acceptance, labels, 1)
             .expect("supervisor decision mapping must satisfy Finding's bead contract"),
     )
