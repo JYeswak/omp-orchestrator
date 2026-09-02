@@ -95,7 +95,12 @@ fn sha256_hex_prefix(bytes: &[u8], n: usize) -> String {
     for chunk in msg.chunks(64) {
         let mut w = [0u32; 64];
         for i in 0..16 {
-            w[i] = u32::from_be_bytes([chunk[4 * i], chunk[4 * i + 1], chunk[4 * i + 2], chunk[4 * i + 3]]);
+            w[i] = u32::from_be_bytes([
+                chunk[4 * i],
+                chunk[4 * i + 1],
+                chunk[4 * i + 2],
+                chunk[4 * i + 3],
+            ]);
         }
         for i in 16..64 {
             let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
@@ -153,6 +158,10 @@ fn gunzip(path: &Path) -> Option<Vec<u8>> {
     Some(v)
 }
 
+fn artifact_hash_prefix(path: &Path, n: usize) -> Option<String> {
+    gunzip(path).map(|bytes| sha256_hex_prefix(&bytes, n))
+}
+
 #[test]
 fn every_preserved_artifact_exists_and_matches_its_cited_hash() {
     let root = repo_root();
@@ -170,12 +179,11 @@ fn every_preserved_artifact_exists_and_matches_its_cited_hash() {
             problems.push(format!("{file} MISSING (cited by {cited_by})"));
             continue;
         }
-        let Some(bytes) = gunzip(&p) else {
+        let Some(got) = artifact_hash_prefix(&p, want.len()) else {
             problems.push(format!("{file} could not be decompressed"));
             continue;
         };
         checked += 1;
-        let got = sha256_hex_prefix(&bytes, want.len());
         if got != *want {
             problems.push(format!(
                 "{file} hash drift: cited {want}, got {got} (cited by {cited_by})"
@@ -195,4 +203,25 @@ fn every_preserved_artifact_exists_and_matches_its_cited_hash() {
         problems.len(),
         problems
     );
+}
+
+#[test]
+fn a_corrupted_copy_is_rejected_by_the_provenance_gate() {
+    let root = repo_root();
+    let source = root.join(".flywheel/inventory-artifacts/agent-end-raw-frame.json.gz");
+    let mutant = std::env::temp_dir().join(format!(
+        "omp-artifact-provenance-mutant-{}.json.gz",
+        std::process::id()
+    ));
+    let mut bytes = std::fs::read(&source).expect("preserved artifact exists");
+    let offset = bytes.len() / 2;
+    bytes[offset] ^= 0x01;
+    std::fs::write(&mutant, bytes).expect("write corrupted artifact copy");
+
+    assert_ne!(
+        artifact_hash_prefix(&mutant, "d8bd80c6949b2ec4".len()).as_deref(),
+        Some("d8bd80c6949b2ec4"),
+        "the known-bad corrupted copy must be rejected"
+    );
+    let _ = std::fs::remove_file(mutant);
 }
