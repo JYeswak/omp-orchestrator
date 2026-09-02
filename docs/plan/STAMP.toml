@@ -9,10 +9,10 @@
 # RECORD is complete and current. It does NOT say the plan is converged.
 
 [stamp]
-cut_at = "epoch:1788309662"
+cut_at = "epoch:1788310449"
 rounds = [8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
 round_count = 15
-row_count = 184
+row_count = 187
 declared_findings_total = 571
 
 # COVERAGE, split three ways per Joshua's rulings of 2026-09-01. A void round and a
@@ -22,7 +22,7 @@ declared_findings_total = 571
 [coverage]
 live_rounds = [15, 16, 17, 18, 19, 20, 21, 23]
 declared_live = 218
-dispositioned_live = 220
+dispositioned_live = 232
 void_rounds = [22]   # HD-0005: unpinned, record kept, coverage excluded
 pre_identity_rounds = [8, 9, 10, 12, 13, 14]   # no finding_ids ever recorded; bead omp-orchestrator-mine-pre-identity-rounds-8-14-lfa
 declared_pre_identity = 340
@@ -43,7 +43,7 @@ r19 = { declared = 47, dispositioned = 47, class = "live" }
 r20 = { declared = 25, dispositioned = 25, class = "live" }
 r21 = { declared = 38, dispositioned = 38, class = "live" }
 r22 = { declared = 13, dispositioned = 0, class = "void" }
-r23 = { declared = 12, dispositioned = 0, class = "live" }
+r23 = { declared = 12, dispositioned = 12, class = "live" }
 
 [sections]
 "00-brief.md" = "dec2ba3ca0542238fc59352755fb4b0ab560b5e8844d8327e51309af81f6bde4"

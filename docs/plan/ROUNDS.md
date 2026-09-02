@@ -13,9 +13,9 @@ This document is the answer, and `STAMP.toml` is its coverage claim. A new round
 
 | field | value |
 |---|---|
-| cut at | `epoch:1788309662` |
+| cut at | `epoch:1788310449` |
 | rounds recorded | **15** |
-| round rows | **184** |
+| round rows | **187** |
 | declared findings, all rounds | **571** |
 | plan sections digested | **13** |
 
@@ -25,11 +25,11 @@ Joshua's rulings of 2026-09-01. A **void** round and a **pre-identity** round ar
 
 | class | rounds | declared | dispositioned | counts toward coverage |
 |---|---|---:|---:|---|
-| **LIVE** | 15, 16, 17, 18, 19, 20, 21, 23 | **218** | **220** | yes |
+| **LIVE** | 15, 16, 17, 18, 19, 20, 21, 23 | **218** | **232** | yes |
 | PRE-IDENTITY | 8, 9, 10, 12, 13, 14 | 340 | 0 | no — recorded, never minted |
 | VOID (HD-0005) | 22 | 13 | 0 | no — record kept, coverage excluded |
 
-**220 of 218 declared findings are dispositioned on the live rounds.** That ratio is the honest state of the plan, and a current stamp does not improve it — the stamp says the RECORD is complete, never that the work is.
+**232 of 218 declared findings are dispositioned on the live rounds.** That ratio is the honest state of the plan, and a current stamp does not improve it — the stamp says the RECORD is complete, never that the work is.
 
 ## Every round
 
@@ -49,7 +49,7 @@ Joshua's rulings of 2026-09-01. A **void** round and a **pre-identity** round ar
 | **20** | LIVE | 14 | 25 | 25 | 14 | `docs/plan/round20-GreenFrog.jsonl` |
 | **21** | LIVE | 14 | 38 | 38 | 14 | `docs/plan/round21-GreenFrog.jsonl` |
 | **22** | VOID | 20 | 13 | 0 | 13 | `docs/plan/CONVERGENCE.jsonl`<br>`docs/plan/round16-Opus.jsonl` |
-| **23** | LIVE | 10 | 12 | 0 | 10 | `docs/plan/round23-AmberGate.jsonl`<br>`docs/plan/round23-GreenFrog.jsonl`<br>`docs/plan/round23-SilverWolf.jsonl` |
+| **23** | LIVE | 13 | 12 | 12 | 13 | `docs/plan/round23-AmberGate.jsonl`<br>`docs/plan/round23-BlueLantern.jsonl`<br>`docs/plan/round23-GreenFrog.jsonl`<br>`docs/plan/round23-SilverWolf.jsonl` |
 
 ### PRE-IDENTITY: 6 rounds, 340 declared findings, recorded and not dispositioned
 
@@ -257,6 +257,9 @@ HD-0006 scopes reconciliation to rounds 15-22 and that scope stands. Mining bead
 | 23 | `04-diagrams` | disposition-truth | AmberGate | 1 | MAJOR_OPEN | `docs/plan/round23-AmberGate.jsonl` |
 | 23 | `05-actions` | disposition-truth | AmberGate | 0 | ACTIONABLE | `docs/plan/round23-AmberGate.jsonl` |
 | 23 | `06-gates` | disposition-truth | AmberGate | 1 | MAJOR_OPEN | `docs/plan/round23-AmberGate.jsonl` |
+| 23 | `07-installability` | fresh-eyes-currentness | BlueLantern | 0 | ZERO_NEW | `docs/plan/round23-BlueLantern.jsonl` |
+| 23 | `08-end-users` | fresh-eyes-currentness | BlueLantern | 0 | ZERO_NEW | `docs/plan/round23-BlueLantern.jsonl` |
+| 23 | `09-milestones` | fresh-eyes-currentness | BlueLantern | 0 | ZERO_NEW | `docs/plan/round23-BlueLantern.jsonl` |
 | 23 | `10-prior-art` | fresh-eyes | SilverWolf | 0 | ZERO_NEW | `docs/plan/round23-SilverWolf.jsonl` |
 | 23 | `11-lifecycle` | fresh-eyes | SilverWolf | 0 | ZERO_NEW | `docs/plan/round23-SilverWolf.jsonl` |
 | 23 | `12-journey` | fresh-eyes | SilverWolf | 0 | ZERO_NEW | `docs/plan/round23-SilverWolf.jsonl` |

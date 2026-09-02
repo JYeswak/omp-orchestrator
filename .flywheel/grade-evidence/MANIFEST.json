@@ -3,9 +3,9 @@
  "preserved_utc": "2026-09-01T22:40:38.070997Z",
  "source_root": "/tmp/grade",
  "why": "/tmp is cleared on reboot. These 237 files are the ONLY evidence behind 219 findings from rounds 15-21, and every reconciliation row in docs/plan/FINDINGS.jsonl will cite them. A citation to a path a reboot deletes is unverifiable the moment the machine restarts - the same clearable-provenance defect already fixed twice for the inventory captures and the wire-proof frame.",
- "file_count": 242,
- "raw_bytes": 2249575,
- "gz_bytes": 768454,
+ "file_count": 244,
+ "raw_bytes": 2294364,
+ "gz_bytes": 787479,
  "verify": "gunzip -c <preserved> | shasum -a256  -> must equal sha256",
  "files": [
   {
@@ -1703,6 +1703,20 @@
    "sha256": "6301f6b16d4215663cdde84380fef43c81d884c1316870a758c5da15fb5f41a8",
    "bytes": 6659,
    "gz_bytes": 3208
+  },
+  {
+   "source": "docs/plan/round23-GreenFrog.jsonl (sections 00-03 fresh-eyes evidence)",
+   "preserved": ".flywheel/grade-evidence/round23-GreenFrog-00-03.txt.gz",
+   "sha256": "38ef24525faaf0a7ba5e757af5984c113630e734010a1268e70ac66576479755",
+   "bytes": 12177,
+   "gz_bytes": 5513
+  },
+  {
+   "source": "docs/plan/round23-BlueLantern.jsonl (sections 07-09 fresh-eyes evidence)",
+   "preserved": ".flywheel/grade-evidence/round23-BlueLantern-07-09.md.gz",
+   "sha256": "b7de1c3c4714af7b86749c5c9726d4ebb7ce8d764a2d0e0977febeff2e2f756d",
+   "bytes": 32612,
+   "gz_bytes": 13512
   }
  ]
 }
