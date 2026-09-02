@@ -793,10 +793,28 @@ async fn claim_bead_for_supervisor(
     claim_enabled: bool,
 ) -> Result<(BeadSnapshot, String), String> {
     let supervisor = supervisor_claim_identity();
-    let unclaimed_open = snapshot.status_label() == "open" && snapshot.assignee().is_none();
-    if !unclaimed_open {
-        let claim_owner = snapshot.assignee().unwrap_or("").to_owned();
-        return Ok((snapshot, claim_owner));
+    // TWO claimable shapes, and the second one is why the fleet stalled.
+    //
+    // (1) open + UNASSIGNED -> the supervisor claims it to its own actor.
+    // (2) open + ALREADY ASSIGNED TO THE RECEIVER -> the supervisor completes the
+    //     transition to `in_progress` KEEPING that assignee.
+    //
+    // (2) is not a forge. K9's defect was the dispatch path asserting a claim on
+    // the receiver's behalf when nobody owned the bead; here the receiver is
+    // ALREADY the recorded owner and only the status transition is missing.
+    //
+    // MEASURED 2026-09-02: `br update <bead> --assignee X` without
+    // `--status in_progress` leaves `open` + assigned -- a half-claim. Several
+    // beads were left that way by hand-claims earlier in the session, and every
+    // dispatch to them refused `CLAIM_REQUIRED status=open assignee=GreenFrog
+    // receiver_agent=GreenFrog`, printing the exact repair command while being
+    // unable to run it itself.
+    let assignee = snapshot.assignee().unwrap_or("").to_owned();
+    let open = snapshot.status_label() == "open";
+    let unclaimed_open = open && snapshot.assignee().is_none();
+    let half_claimed_by_receiver = open && assignee == receiver_agent && !assignee.is_empty();
+    if !unclaimed_open && !half_claimed_by_receiver {
+        return Ok((snapshot, assignee));
     }
     if !claim_enabled {
         return Err(format!(
@@ -804,13 +822,34 @@ async fn claim_bead_for_supervisor(
         ));
     }
 
-    let claim_args = vec![
-        "update".to_owned(),
-        bead.to_owned(),
-        "--claim".to_owned(),
-        "--actor".to_owned(),
-        supervisor.clone(),
-    ];
+    // The half-claimed shape keeps the RECEIVER as owner; only the unassigned
+    // shape claims to the supervisor actor. Two commands, two readbacks -- a
+    // single readback expecting `supervisor` would reject the very transition it
+    // just performed correctly.
+    let (claim_args, expected_assignee) = if half_claimed_by_receiver {
+        (
+            vec![
+                "update".to_owned(),
+                bead.to_owned(),
+                "--assignee".to_owned(),
+                receiver_agent.to_owned(),
+                "--status".to_owned(),
+                "in_progress".to_owned(),
+            ],
+            receiver_agent.to_owned(),
+        )
+    } else {
+        (
+            vec![
+                "update".to_owned(),
+                bead.to_owned(),
+                "--claim".to_owned(),
+                "--actor".to_owned(),
+                supervisor.clone(),
+            ],
+            supervisor.clone(),
+        )
+    };
     let command_output = invoke(cx, config, &config.br, &claim_args)
         .await
         .map_err(|error| {
@@ -824,10 +863,15 @@ async fn claim_bead_for_supervisor(
         )
     })?;
 
+    // READBACK IS STILL LOAD-BEARING. K9's defect was asserting the precondition
+    // instead of reading it; this reads the tracker after the write, for whichever
+    // owner the shape demanded.
     let claimed = load_bead_snapshot(cx, config, bead).await?;
-    if claimed.status_label() != "in_progress" || claimed.assignee() != Some(supervisor.as_str()) {
+    if claimed.status_label() != "in_progress"
+        || claimed.assignee() != Some(expected_assignee.as_str())
+    {
         return Err(format!(
-            "DISPATCH_BLOCKED bead={bead} pane={pane} reason=CLAIM_READBACK_FAILED status={} assignee={} receiver_agent={receiver_agent} expected_assignee={supervisor} owner=josh next_action=inspect-claim",
+            "DISPATCH_BLOCKED bead={bead} pane={pane} reason=CLAIM_READBACK_FAILED status={} assignee={} receiver_agent={receiver_agent} expected_assignee={expected_assignee} owner=josh next_action=inspect-claim",
             claimed.status_label(),
             claimed.assignee().unwrap_or("unassigned")
         ));
@@ -1621,7 +1665,9 @@ fn pending_dispatch_path(config: &Config, pane: &str) -> PathBuf {
 /// An unreadable directory is an ERROR, never an empty scan: "no markers" and
 /// "cannot tell" must not report identically, which is the anti-vacuity rule this
 /// repo applies to every gate.
-fn read_pending_dispatches(config: &Config) -> Result<Vec<(String, PendingDispatch)>, String> {
+fn read_pending_dispatches(
+    config: &Config,
+) -> Result<Vec<(String, PathBuf, PendingDispatch)>, String> {
     let base_name = config
         .pending_dispatch
         .file_name()
@@ -1653,6 +1699,18 @@ fn read_pending_dispatches(config: &Config) -> Result<Vec<(String, PendingDispat
         if name != base_name && !name.starts_with(&format!("{base_name}.")) {
             continue;
         }
+        // A QUARANTINED marker is deliberately set aside and is NOT a live fence.
+        //
+        // MEASURED 2026-09-02: `pending-dispatch.quarantined-1788274935.json`,
+        // written Sep 1 and 27 HOURS old, matched the sibling pattern above. The
+        // loop classified it `Expired` and cleared it EVERY CYCLE without ever
+        // removing it, because the clear recomputed a path from the payload's
+        // `pane` (`...pending-dispatch.1408`) which does not exist -- NotFound maps
+        // to Ok, so the clear silently succeeded on the wrong file. Two cycles per
+        // 90s spent re-expiring one immortal marker.
+        if name.contains("quarantined") {
+            continue;
+        }
         let text = match fs::read_to_string(entry.path()) {
             Ok(text) => text,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
@@ -1668,7 +1726,9 @@ fn read_pending_dispatches(config: &Config) -> Result<Vec<(String, PendingDispat
             .ok()
             .and_then(|value| value.get("pane").and_then(Value::as_str).map(str::to_owned))
             .unwrap_or_default();
-        found.push((pane, verdict));
+        // The DISCOVERED path travels with the row. Recomputing it from the pane
+        // is what let a clear target a file that was never there.
+        found.push((pane, entry.path(), verdict));
     }
     Ok(found)
 }
@@ -1720,7 +1780,15 @@ fn write_dispatch_intent(config: &Config, pane: &str, bead: &str) -> Result<(), 
 }
 
 fn clear_dispatch_intent(config: &Config, pane: &str) -> Result<(), String> {
-    let path = pending_dispatch_path(config, pane);
+    clear_dispatch_marker(&pending_dispatch_path(config, pane), pane)
+}
+
+/// Remove a marker at an EXPLICIT path.
+///
+/// The path must be the one the scan DISCOVERED. Recomputing it from the pane is
+/// what let an `Expired` clear silently target a file that never existed, so a
+/// 27-hour-old marker re-expired every cycle forever.
+fn clear_dispatch_marker(path: &Path, pane: &str) -> Result<(), String> {
     match fs::remove_file(&path) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -2129,7 +2197,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     // `Expired` still clears and CONTINUES (the y6v5 fix). `Undatable` still
     // fails closed to a human. Neither is weakened here; both are now per-pane.
     let mut marker_blocked_panes: Vec<String> = Vec::new();
-    for (pane, verdict) in read_pending_dispatches(config)? {
+    for (pane, marker_path, verdict) in read_pending_dispatches(config)? {
         match verdict {
             PendingDispatch::None => {}
             PendingDispatch::Live { detail, age_secs } => {
@@ -2137,7 +2205,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                 let remaining = PENDING_DISPATCH_MAX_AGE_SECS.saturating_sub(age_secs);
                 println!(
                     "DISPATCH_RETRY_BLOCKED age_secs={age_secs} expires_in_secs={remaining} owner=loop next_action=await-intent-expiry scope=pane blocked_pane={pane} marker={} detail={detail}",
-                    pending_dispatch_path(config, &pane).display()
+                    marker_path.display()
                 );
                 marker_blocked_panes.push(pane);
             }
@@ -2149,15 +2217,15 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                 write_heartbeat(config, tick, "DISPATCH_RETRY_BLOCKED", &detail)?;
                 println!(
                     "DISPATCH_RETRY_BLOCKED reason={reason} owner=josh next_action=inspect-or-clear-pending-dispatch scope=fleet marker={} detail={detail}",
-                    pending_dispatch_path(config, &pane).display()
+                    marker_path.display()
                 );
                 return Ok(());
             }
             PendingDispatch::Expired { detail, age_secs } => {
-                clear_dispatch_intent(config, &pane)?;
+                clear_dispatch_marker(&marker_path, &pane)?;
                 let expiry = format!(
                     "age_secs={age_secs} max_age_secs={PENDING_DISPATCH_MAX_AGE_SECS} pane={pane} marker={} detail={detail}",
-                    pending_dispatch_path(config, &pane).display()
+                    marker_path.display()
                 );
                 write_heartbeat(config, tick, "DISPATCH_INTENT_EXPIRED", &expiry)?;
                 println!(
@@ -2756,7 +2824,7 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
         let mut seen = read_pending_dispatches(&config)
             .unwrap()
             .into_iter()
-            .map(|(pane, verdict)| {
+            .map(|(pane, _path, verdict)| {
                 assert!(
                     matches!(verdict, PendingDispatch::Live { .. }),
                     "a marker written moments ago must classify Live for {pane}"
