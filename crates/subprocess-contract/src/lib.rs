@@ -144,15 +144,31 @@ fn join_reader(handle: std::thread::JoinHandle<Vec<u8>>) -> Vec<u8> {
 /// is std-stable and unsafe-free), so its pid IS the pgid and the group kill
 /// needs no libc. On deadline the group is TERMed, graced, then KILLed —
 /// grandchildren included, which is the measured admission-lock trap.
-pub fn bounded_output(
+fn join_writer(handle: std::thread::JoinHandle<()>) {
+    let deadline = std::time::Instant::now() + READER_JOIN_GRACE;
+    while std::time::Instant::now() < deadline {
+        if handle.is_finished() {
+            let _ = handle.join();
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
+
+fn bounded_output_with_stdin(
     command: &mut std::process::Command,
     deadline: std::time::Duration,
+    stdin: Option<&[u8]>,
 ) -> BoundedOutcome {
-    use std::io::Read;
-
+    use std::io::{Read, Write};
+    use std::os::unix::process::CommandExt as _;
+    if stdin.is_some() {
+        command.stdin(std::process::Stdio::piped());
+    } else {
+        command.stdin(std::process::Stdio::null());
+    }
     let mut child = match command
         .process_group(0)
-        .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
@@ -162,11 +178,6 @@ pub fn bounded_output(
     };
     let pid = child.id();
 
-    use std::os::unix::process::CommandExt as _;
-
-    // Dedicated readers own the pipes for the child's whole life: the wait
-    // loop below can poll as coarsely as it likes without ever letting a
-    // pipe buffer fill, so the ~64 KiB undrained-pipe deadlock cannot form.
     let stdout_pipe = child.stdout.take();
     let stderr_pipe = child.stderr.take();
     let stdout_reader = std::thread::spawn(move || {
@@ -183,6 +194,12 @@ pub fn bounded_output(
         }
         buf
     });
+    let stdin_writer = stdin.and_then(|bytes| child.stdin.take().map(|mut pipe| {
+        let bytes = bytes.to_owned();
+        std::thread::spawn(move || {
+            let _ = pipe.write_all(&bytes);
+        })
+    }));
 
     let started = std::time::Instant::now();
     let status = loop {
@@ -199,11 +216,12 @@ pub fn bounded_output(
 
     match status {
         Some(status) => {
-            // The child exited on its own. Reap (no-op after try_wait Some)
-            // and collect what the readers drained.
+            let stdout = join_reader(stdout_reader);
+            let stderr = join_reader(stderr_reader);
+            if let Some(writer) = stdin_writer {
+                join_writer(writer);
+            }
             let _ = child.wait();
-            let stdout = stdout_reader.join().unwrap_or_default();
-            let stderr = stderr_reader.join().unwrap_or_default();
             BoundedOutcome::Completed(std::process::Output {
                 status,
                 stdout,
@@ -211,9 +229,6 @@ pub fn bounded_output(
             })
         }
         None => {
-            // Deadline elapsed: signal the GROUP (-pid, the child is its own
-            // group leader), TERM then graced KILL, grandchildren included.
-            // TimedOut carries NO output: a killed read is not an answer.
             let group = format!("-{pid}");
             let _ = std::process::Command::new("/bin/kill")
                 .args(["-TERM", &group])
@@ -226,10 +241,6 @@ pub fn bounded_output(
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
                 .status();
-            // BOUNDED reap: after the group KILL the child is dead, but if a
-            // future mutation or regression drops the KILL leg, an unbounded
-            // wait here would hang the restrictive path itself - the adapter
-            // rule is that no wait, including shutdown, is unbounded.
             let reap_deadline = std::time::Instant::now() + READER_JOIN_GRACE;
             loop {
                 match child.try_wait() {
@@ -238,11 +249,29 @@ pub fn bounded_output(
                     Ok(None) => std::thread::sleep(std::time::Duration::from_millis(10)),
                 }
             }
-            let _ = join_reader(stdout_reader);
-            let _ = join_reader(stderr_reader);
+            join_reader(stdout_reader);
+            join_reader(stderr_reader);
+            if let Some(writer) = stdin_writer {
+                join_writer(writer);
+            }
             BoundedOutcome::TimedOut
         }
     }
+}
+
+pub fn bounded_output(
+    command: &mut std::process::Command,
+    deadline: std::time::Duration,
+) -> BoundedOutcome {
+    bounded_output_with_stdin(command, deadline, None)
+}
+
+pub fn bounded_output_stdin(
+    command: &mut std::process::Command,
+    deadline: std::time::Duration,
+    stdin: &[u8],
+) -> BoundedOutcome {
+    bounded_output_with_stdin(command, deadline, Some(stdin))
 }
 
 /// A bounded spawn that INHERITS stdio instead of capturing it.
@@ -362,7 +391,6 @@ pub enum BoundedOutcome {
     Unspawned(std::io::Error),
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -420,14 +448,24 @@ mod tests {
         }
     }
     #[test]
+    fn stdin_child_completes_with_roundtrip_output() {
+        let mut command = StdCommand::new("/bin/cat");
+        match bounded_output_stdin(&mut command, Duration::from_secs(5), b"piped-body\n") {
+            BoundedOutcome::Completed(output) => {
+                assert_eq!(output.stdout, b"piped-body\n");
+            }
+            BoundedOutcome::TimedOut => panic!("cat must complete within its deadline"),
+            BoundedOutcome::Unspawned(error) => panic!("/bin/cat must spawn: {error}"),
+        }
+    }
+
+    #[test]
     fn deadline_killed_child_is_reaped_not_orphaned() {
         // The child records its own pid; after bounded_output returns, the
         // group leader must be gone promptly. The measured admission-lock
         // trap was grandchildren that outlived every timeout.
-        let pid_file = std::env::temp_dir().join(format!(
-            "subprocess-contract-{}-pid",
-            std::process::id()
-        ));
+        let pid_file =
+            std::env::temp_dir().join(format!("subprocess-contract-{}-pid", std::process::id()));
         // The DIRECT child ignores TERM and runs a 30s loop: TERM kills its
         // transient sleep children but never the shell, so only the group
         // KILL can reap it. A mutation dropping the KILL leg leaves the pid
@@ -563,7 +601,11 @@ mod tests {
         c.args(["-c", "echo this-goes-to-the-terminal-not-a-pipe; exit 3"]);
         match bounded_status(&mut c, std::time::Duration::from_secs(10)) {
             BoundedOutcome::Completed(out) => {
-                assert_eq!(out.status.code(), Some(3), "the child's own exit code survives");
+                assert_eq!(
+                    out.status.code(),
+                    Some(3),
+                    "the child's own exit code survives"
+                );
                 assert!(
                     out.stdout.is_empty() && out.stderr.is_empty(),
                     "stdio is INHERITED, so Completed must carry no bytes - a caller \
@@ -600,8 +642,10 @@ mod tests {
     fn bounded_status_names_an_unspawnable_command() {
         let mut c = std::process::Command::new("/nonexistent/definitely-not-a-real-binary");
         assert!(
-            matches!(bounded_status(&mut c, std::time::Duration::from_secs(5)),
-                     BoundedOutcome::Unspawned(_)),
+            matches!(
+                bounded_status(&mut c, std::time::Duration::from_secs(5)),
+                BoundedOutcome::Unspawned(_)
+            ),
             "a missing binary is Unspawned, never TimedOut"
         );
     }
@@ -613,10 +657,7 @@ mod tests {
     fn bounded_status_signals_the_group_so_grandchildren_die_too() {
         let marker = std::env::temp_dir().join(format!("bs-grandchild-{}", std::process::id()));
         let _ = std::fs::remove_file(&marker);
-        let script = format!(
-            "( sleep 2; touch {} ) & sleep 30",
-            marker.display()
-        );
+        let script = format!("( sleep 2; touch {} ) & sleep 30", marker.display());
         let mut c = std::process::Command::new("/bin/sh");
         c.args(["-c", &script]);
         assert!(matches!(
@@ -634,5 +675,4 @@ mod tests {
         );
         let _ = std::fs::remove_file(&marker);
     }
-
 }
