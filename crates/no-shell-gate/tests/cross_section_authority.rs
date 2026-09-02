@@ -301,12 +301,18 @@ fn registry_text() -> String {
 fn authority_registry_is_nonempty_unique_and_schema_valid() {
     let rows = validate_registry(&registry_text()).expect("authority registry must validate");
     let evidence = repo_root().join(".flywheel/grade-evidence/kxe5-cross-section.md.gz");
+    let fresh_evidence = repo_root().join(".flywheel/grade-evidence/kxe5-fresh-reader.md.gz");
     assert!(
         evidence.is_file(),
         "retained kxe.5 evidence artifact is missing"
     );
     assert!(
-        fs::metadata(evidence).unwrap().len() > 0,
+        fresh_evidence.is_file(),
+        "retained fresh-reader evidence artifact is missing"
+    );
+    assert!(
+        fs::metadata(evidence).unwrap().len() > 0
+            && fs::metadata(fresh_evidence).unwrap().len() > 0,
         "retained evidence artifact is empty"
     );
     assert!(
