@@ -953,6 +953,29 @@ are transmitting, not verifying. The cheap fix is to open it — every one of th
 that investigation cost one `git show` against a version-matched tree.
 
 
+### RE-RUNNING THE HOOK AFTER A COMMIT IS A CATEGORY ERROR, NOT A RED FLAG
+
+**Measured 2026-09-02, and it is a trap laid by a correct fix.** Since the empty-index repair, a
+standalone `.git/hooks/pre-commit` run returns **3** with `NOTHING_TO_CHECK: no staged files to
+check` once the index is empty — which is exactly right, because after a successful commit **there
+is nothing staged to check**. The gate is answering the question it was asked.
+
+But the obvious way to double-check a hook — commit, then run the hook again to be sure — now
+produces a nonzero exit and a refusal-shaped message, and **reads as a failure that just landed**.
+Two agents walked into a version of this tonight, one of them the author of the fix.
+
+**Post-commit, the authoritative evidence is the commit-time `CLEAN: all staged files passed the
+multi-gate checks` line.** A later standalone run measures a *different input* — an empty index —
+and therefore cannot confirm or refute what the commit did. It is not a weaker check; it is a check
+of something else.
+
+**The general form, which is the reusable part:** a gate's verdict is only meaningful paired with
+the input it ran against. Re-running a gate against a *different* input and comparing verdicts is
+the same error as comparing two `git` figures taken from two trees — and it produces the same
+confident-wrong reading. Capture the verdict at the moment of the operation, or re-create the input
+before re-running.
+
+
 **AND IT DOWNGRADED THE INVESTIGATOR'S OWN BEST EVIDENCE, which is why this rule is worth more than
 the correction.** `oracle_skew=0` was reported as two independent authorities agreeing about a
 store. It is **two HTTP routes on the same daemon process, authenticated with the same token,
