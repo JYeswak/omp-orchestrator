@@ -2022,20 +2022,51 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     // THE CLEARING TRANSITION THE LOOP CAN TAKE ITSELF. Everything below the
     // `Expired` arm is the fix for `y6v5`: the loop retires a stale marker and
     // CONTINUES the cycle, instead of returning Ok(()) and waiting for a human.
+    // A LIVE MARKER BLOCKS THE PANE IT NAMES, NOT THE FLEET.
+    //
+    // MEASURED 2026-09-02: the marker is ONE global file
+    // (`omp-orchestrator.pending-dispatch`, no pane in the path) and the `Live`
+    // arm below used to `return Ok(())`, so a single pending dispatch to `%1409`
+    // refused every dispatch to every OTHER pane for up to
+    // PENDING_DISPATCH_MAX_AGE_SECS. Observed live: 3 panes IDLE, 76 beads ready,
+    // and the loop moving at most one bead per deadline while reporting
+    // `DISPATCH_RETRY_BLOCKED` on three consecutive cycles.
+    //
+    // The marker's own payload already carries `pane`, so the guard it was
+    // written for -- do not double-send to a pane whose dispatch is still in
+    // flight -- is expressible per-pane. The fleet-wide return was scope, not
+    // intent: this is a global mutex where a per-pane fence was meant.
+    let mut marker_blocked_pane: Option<String> = None;
     match read_pending_dispatch(config)? {
         PendingDispatch::None => {}
         PendingDispatch::Live { detail, age_secs } => {
             write_heartbeat(config, tick, "DISPATCH_RETRY_BLOCKED", &detail)?;
             let remaining = PENDING_DISPATCH_MAX_AGE_SECS.saturating_sub(age_secs);
+            // Parse the pane the marker names. A marker we cannot attribute is
+            // treated as blocking the FLEET -- fail closed -- because an
+            // unattributable in-flight dispatch could be to any pane, and
+            // double-sending is the harm this guard exists to prevent.
+            marker_blocked_pane = serde_json::from_str::<Value>(&detail)
+                .ok()
+                .and_then(|value| value.get("pane").and_then(Value::as_str).map(str::to_owned));
+            let scope = match marker_blocked_pane.as_deref() {
+                Some(pane) => format!("scope=pane blocked_pane={pane}"),
+                None => "scope=fleet blocked_pane=UNATTRIBUTABLE".to_owned(),
+            };
             // The remedy names a MACHINE path and when it fires. The old string
             // said only `owner=josh`, which is what made 15 consecutive refusals
             // read as a standing human obligation rather than a countdown.
             let line = format!(
-                "DISPATCH_RETRY_BLOCKED age_secs={age_secs} expires_in_secs={remaining} owner=loop next_action=await-intent-expiry marker={} detail={detail}",
+                "DISPATCH_RETRY_BLOCKED age_secs={age_secs} expires_in_secs={remaining} owner=loop next_action=await-intent-expiry {scope} marker={} detail={detail}",
                 config.pending_dispatch.display()
             );
             println!("{line}");
-            return Ok(());
+            if marker_blocked_pane.is_none() {
+                // Unattributable: preserve the original fleet-wide refusal.
+                return Ok(());
+            }
+            // Attributable: fall through. The named pane is excluded from
+            // selection below; every other pane stays dispatchable.
         }
         PendingDispatch::Undatable { detail, reason } => {
             // FAIL CLOSED. An age we cannot compute must not be retired as stale;
@@ -2102,6 +2133,20 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             .iter()
             .any(|excluded| excluded == &pane.pane_id)
     });
+    // The pane named by a LIVE pending-dispatch marker is withheld from THIS
+    // cycle's candidates, and only that pane. Same mechanism as
+    // `config.exclude_panes` above, scoped to one tick: the double-send guard is
+    // preserved for the in-flight pane while the rest of the fleet stays
+    // dispatchable. Before this, a marker naming one pane refused every pane.
+    if let Some(blocked) = marker_blocked_pane.as_deref() {
+        let before = observation.panes.len();
+        observation.panes.retain(|pane| pane.pane_id != blocked);
+        println!(
+            "MARKER_PANE_WITHHELD tick={tick} session={} pane={blocked} panes_before={before} panes_after={}",
+            config.session,
+            observation.panes.len()
+        );
+    }
     let pane_states = observation
         .panes
         .iter()
