@@ -89,7 +89,7 @@ grep -rlF 'forbid(unsafe_code)' --include=lib.rs --include=main.rs crates/  # in
 | `tick-monitor` | three monitors behind one loop-enforcement choke point | pane capture, git state, `Tick` | `Outcome`, `PaneState`, `Liveness`, `CapacityEscalationReceipt` | `Outcome`, `PaneState`, `Liveness`, `Observation`, `Reject`, `Tick`, `State`, `CapacityAlarm`, `CapacityAlarmEvent`, `CapacityEscalationReceipt`, `RepoError` | — | yes |
 | `undrained-pipe-lint` | fail on both-pipes-piped + `try_wait` poll + no concurrent drain | source text; workspace root | `LintReport` (`Vec<Violation>`) | `Violation`, `LintReport` | — | yes |
 
-**The unsafe-forbid split, MEASURED — current command-backed census (2026-09-01).** All **50 of 50** crate manifests carry unsafe_code = "forbid". **49 of 50** crate source trees carry an inner forbid(unsafe_code) attribute, and **49 carry both**; tick-monitor is the one manifest-only straggler. **Zero are attribute-only; the union is 50 of 50.** Earlier 26/25/26 values are dated snapshots and remain historical. The property holds by adoption today; the one-file lint below is still required to make it hold by construction for crate 51.
+**The unsafe-forbid split, MEASURED — current command-backed census (2026-09-01).** The manifest, source-attribute, both-mechanisms, and union results are owned by NUMBERS.toml keys `[figures.crates_forbidding_unsafe]`, `[figures.unsafe_source_attributes]`, `[figures.unsafe_both_mechanisms]`, and `[figures.forbid_unsafe_authoritative]`; this paragraph deliberately freezes no denominator. Earlier 26/25/26 values are dated snapshots and remain historical. The property holds by adoption today; the one-file lint below is still required to make it hold by construction for crate 51.
 **PROJECTED.** A one-file lint asserting *manifest-and-attribute for every workspace member* turns
 that coincidence into an invariant. It is the cheapest gate in the plan and it is not written yet.
 
@@ -98,8 +98,8 @@ that coincidence into an invariant. It is the cheapest gate in the plan and it i
 ## The dependency graph in prose
 
 **HISTORICAL GRAPH SNAPSHOT (pre-extraction, 2026-09-01).** The 18-edge list, 17/26 leaf ratio, 22/26 non-routed ratio, and 29 spawn-site inventory below describe the earlier 26-crate graph. Current workspace package and path-edge counts must be re-derived from cargo metadata; these historical values are not current acceptance denominators.
-**CURRENT GRAPH RECHECK (integration).** `cargo metadata --format-version 1 --no-deps` with path-dependency filtering returns **50 packages, 34 path edges, 30 leaves, and 20 non-leaves**. This is the current graph denominator; the explicit edge list and 18/17/26/22/26 ratios below remain historical.
-**MEASURED** — 18 `path-depends-on` edges, complete, from the census:
+**CURRENT GRAPH RECHECK (integration).** The current package denominator is owned by NUMBERS.toml `[figures.workspace_crates]`. The path-edge count is deliberately `LIVE` under `[figures.path_dependency_edges]` because adding a dependency changes it during an edit; this paragraph makes no pinned edge, leaf, or non-leaf claim. The explicit edge list and its ratios below remain historical.
+**HISTORICAL MEASURED** — 18 `path-depends-on` edges, complete, from the pre-extraction census:
 
 ```
 ack-spine -> finding                     finding -> subprocess-contract
@@ -168,8 +168,8 @@ through it precisely so that rule cannot be re-litigated per crate.
 **MEASURED**, by direct grep over `crates/`:
 
 ```
-grep -rhoE '^pub enum [A-Za-z_0-9]+'   --include=*.rs crates/ | wc -l   -> 59
-grep -rhoE '^pub struct [A-Za-z_0-9]+' --include=*.rs crates/ | wc -l   -> 91
+grep -rhoE '^pub enum [A-Za-z_0-9]+'   --include=*.rs crates/ | wc -l   -> `LIVE` output from NUMBERS.toml `[figures.public_enums]`
+grep -rhoE '^pub struct [A-Za-z_0-9]+' --include=*.rs crates/ | wc -l   -> `LIVE` output from NUMBERS.toml `[figures.public_structs]`
 ```
 
 An earlier scan scoped to library surfaces reported **51 public enums (excluding test+bin sources; 59 including them — publish the pair) and 79 public structs across
@@ -177,15 +177,15 @@ An earlier scan scoped to library surfaces reported **51 public enums (excluding
 and binary sources. We publish both rather than pick the flattering one — the delta *is* the
 measurement's error bar.
 
-**Four colliding type names**, exact:
+**Colliding public type names are registry-backed**, with the current count owned by NUMBERS.toml `[figures.colliding_type_names]`:
 
 ```
 grep -rhoE '^pub (enum|struct) [A-Za-z_0-9]+' --include=*.rs crates/ \
-  | awk '{print $3}' | sort | uniq -d
-  -> Finding  LintReport  Observation  Violation
+  | awk '{print $3}' | sort | uniq -d | wc -l
+  -> `LIVE` output from NUMBERS.toml `[figures.colliding_type_names]`; the current names remain discoverable by the same command.
 ```
 
-One of those four is structural rather than cosmetic, and it is the direct cause of the single
+One of the colliding names is structural rather than cosmetic, and it is the direct cause of the single
 worst row in the brief's five-stage control loop (formerly "five-stage" — renamed, the table has five stages and seven rows) table (§4). `tick-monitor` produces the `Observation`
 that `omp-orchestrator` consumes, and **each declares its own incompatible struct**. That is the
 seam where `free_capacity` was derived from the same `is_dispatchable` filter that requires a
@@ -194,11 +194,11 @@ capacity count — the `actionable: BROKEN` row. Had one type crossed the bounda
 re-declared on each side, the mismatch would have been a compile error instead of a silent
 arithmetic error observed only after 162 refused ticks.
 
-**Six Verdict-shaped types with no shared trait**, exact:
+**Verdict-shaped public types are registry-backed**, with the current count owned by NUMBERS.toml `[figures.verdict_types]`:
 
 ```
-grep -rhoE '^pub enum [A-Za-z_0-9]*Verdict' --include=*.rs crates/ | sort -u
-  -> AckVerdict  FenceVerdict  FollowUpVerdict  ReceiptVerdict  SilenceVerdict  Verdict
+grep -RhoE '^pub enum [A-Za-z_0-9]*Verdict' --include=*.rs crates/ | sort -u | wc -l
+  -> `LIVE` output from NUMBERS.toml `[figures.verdict_types]`; the current names remain discoverable by the same command.
 ```
 
 Six independent answers to "what happened". No trait, no `From`, no common discriminant. The
@@ -250,7 +250,7 @@ not merely unadopted. Any migration schedule that assumes `AckKind` is available
 
 **PROJECTED** throughout this subsection. Nothing below is measured; it is what we will build.
 
-**Collapsing the six Verdicts.** We will define one trait in `omp-types`, over the asupersync
+**Collapsing the Verdict-shaped types.** We will define one trait in `omp-types`, over the asupersync
 `Outcome` shape rather than a new enum:
 
 ```
@@ -322,13 +322,13 @@ the consequential disagreement: the half of the vocabulary that would collapse t
 dialects is **blocked on an upstream feature boundary**, not merely unadopted, so any schedule that
 assumes it is available today is wrong.
 
-**2. The unsafe-forbid denominator.** The brief's 16 of 22 and the earlier 20/26 values are historical snapshots. The current command-backed census is **50 of 50** manifests with unsafe_code = "forbid", **49 of 50** source trees with an inner forbid(unsafe_code) attribute, **49 of 50** carrying both, and a **50 of 50** union. tick-monitor is the sole manifest-only straggler. The substantive gap remains: no single gate yet refuses a new crate that keeps only one mechanism.
+**2. The unsafe-forbid denominator.** The brief's 16 of 22 and the earlier 20/26 values are historical snapshots. The current mechanism split is command-backed by NUMBERS.toml keys `[figures.crates_forbidding_unsafe]`, `[figures.unsafe_source_attributes]`, `[figures.unsafe_both_mechanisms]`, and `[figures.forbid_unsafe_authoritative]`; this paragraph deliberately freezes no denominator. The sole-mechanism gap remains: no single gate yet refuses a new crate that keeps only one mechanism.
 
-**3. The type-inventory scope.** The brief §3.7 gives 51 enums / 79 structs across 22 of 24 crates.
-`grep -rhoE '^pub enum …' --include=*.rs crates/ | wc -l` → **59**, and the struct form → **91**.
+**3. The type-inventory scope.** The brief's 51 enums / 79 structs across 22 of 24 crates are an earlier library-scope snapshot.
+The current all-source counts are owned by NUMBERS.toml `[figures.public_enums]` and `[figures.public_structs]`; this section deliberately freezes no type-inventory integer.
 Not a contradiction — a scope difference (the greps above include test modules and binary sources).
-Published as an error bar rather than resolved to the flattering number. The collision count (4) and
-the Verdict count (6) are **identical** under both scopes, which is the part that matters.
+Published as current registry-backed figures rather than a hand-typed error bar. The collision and Verdict counts are re-derived by the commands named above.
+The current collision and Verdict counts are owned by NUMBERS.toml `[figures.colliding_type_names]` and `[figures.verdict_types]`; they are not static claims about scope equivalence.
 
 **NO-CLAIM:** these three are the disagreements this section found while deriving crate contracts
 from source. They are not an audit of the brief. Facts in §3 that this section did not need — the
@@ -341,7 +341,7 @@ unverified here.
 
 R11 exists because a requirement living only in chat dies with the conversation. Three constraints
 surfaced while deriving the table above that were not previously written anywhere:
-1. **Unsafe-forbid must be single-mechanism.** The current command-backed census is 50 of 50 manifests, 49 of 50 source trees with the inner attribute, 49 of 50 carrying both, and a 50 of 50 union; tick-monitor is the manifest-only straggler. Earlier 26/25/26 values are historical. Nothing yet fails the build if a future crate keeps one mechanism and drops the other, so the one-file lint remains the required floor-raise.
+1. **Unsafe-forbid must be single-mechanism.** The current command-backed census is owned by NUMBERS.toml keys `[figures.crates_forbidding_unsafe]`, `[figures.unsafe_source_attributes]`, `[figures.unsafe_both_mechanisms]`, and `[figures.forbid_unsafe_authoritative]`; this paragraph deliberately freezes no denominator. Earlier 26/25/26 values are historical. Nothing yet fails the build if a future crate keeps one mechanism and drops the other, so the one-file lint remains the required floor-raise.
 2. **A crate that spawns must depend on `subprocess-contract`.** Two leaves — `omp-rpc-session` and
 omp-inventory-map — spawn processes today with no path-dep on the boundary crate. The rule is stated here so it is checkable, not remembered.
 3. **pane-dispatch-fence has no library surface.** It is the only workspace member with no src/lib.rs and zero pub items (ls crates/pane-dispatch-fence/src -> main.rs). Its contract is UNDECLARED and therefore untestable from outside the binary. Any crate whose behaviour other crates must rely on needs a library surface; that is a constraint, and it is now written down.
@@ -408,7 +408,7 @@ arbitrarily. Dropping them would have been the wrong fix — it would have erase
 gate go green. **Naming all twenty is the right fix**, and `NUMBERS.toml` now carries the count so it
 cannot quietly drift as extraction proceeds.
 
-**CURRENT STATUS (re-derived 2026-09-01):** the 20 named control-plane crate directories are now present under crates/ in this working tree, while their commit state is governed by the path-scoped extraction commits. The current workspace denominator is 50 packages; the pre-extraction 26-crate and 20-unextracted figures above are historical.
+**CURRENT STATUS (re-derived 2026-09-01):** the 20 named control-plane crate directories are now present under crates/ in this working tree, while their commit state is governed by the path-scoped extraction commits. The current workspace denominator is the LIVE `[figures.workspace_crates]` result; the pre-extraction 26-crate and 20-unextracted figures above are historical.
 
 ### NO-CLAIM
 
@@ -512,11 +512,11 @@ every number involved is TRUE and they measure different things.
 
 | reading | value | what it measures |
 |---|---:|---|
-| manifests declaring [lints.rust] unsafe_code = "forbid" | **50 of 50** | current manifest lint count |
-| source roots carrying #![forbid(unsafe_code)] | **49 of 50** | current inner-attribute count |
-| **union — AUTHORITATIVE** | **50 of 50** | current union; tick-monitor is manifest-only |
+| manifests declaring [lints.rust] unsafe_code = "forbid" | `LIVE` | `[figures.crates_forbidding_unsafe]` current manifest command |
+| source roots carrying #![forbid(unsafe_code)] | `LIVE` | `[figures.unsafe_source_attributes]` current inner-attribute command |
+| **union — AUTHORITATIVE** | `LIVE` | `[figures.forbid_unsafe_authoritative]` current union command |
 
-The earlier 26/25/26 table was a dated snapshot. NUMBERS.toml now declares the union command, and the current counts above are re-derived from the shared checkout.
+The earlier 26/25/26 table was a dated snapshot. NUMBERS.toml now declares the component commands `[figures.crates_forbidding_unsafe]`, `[figures.unsafe_source_attributes]`, and `[figures.unsafe_both_mechanisms]`, plus the authoritative union command; the current counts above are re-derived from the shared checkout.
 
 **A REVIEWER ERROR, on the record, because it is the more useful half.** The initial agent-harness grep used grouping syntax and returned zero; the shell command registered in NUMBERS.toml and the current table above use the correct literal pattern. The registry was not exposed. The reviewer was.
 
