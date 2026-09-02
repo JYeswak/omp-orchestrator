@@ -95,13 +95,13 @@ The upstream sweep changes the strength of the absence claims without pretending
 
 | gap | upstream type and source | true strength | effect on the idea
 |---|---|---|
-| completion | **`isTerminal` on RpcSessionEventFrame** (modes/rpc/rpc-types.d.ts:589) is what was OBSERVED. `AgentEndEvent.willContinue` and `SessionStopEvent` (extensibility/shared-events.d.ts:83-93,154-162) are DECLARED ONLY — see §1.2.3 | **WIRE-PROVEN for one observed frame, and for `isTerminal` only** — exact raw receipt PRESERVED IN-REPO at `.flywheel/inventory-artifacts/agent-end-raw-frame.json.gz` (hash-gated by `artifact_provenance`; the original `.flywheel/grade-evidence/agent-end-raw-frame.json.gz` is reboot-volatile and must not be cited); capture command /Users/josh/.local/bin/omp --mode=rpc --no-session --no-tools --no-lsp --max-time=30; artifact mtime/retrieval observed 2026-08-31T19:52:26-0600; SHA-256 d8bd80c6949b2ec48af1639b5b5e241bd90b4dce1e769483dd1690ed2be8f644 | the frame's session-specific isTerminal=true was observed; shared willContinue was absent; repeatability, semantic fit, and supervisor consumption remain UNKNOWN
-| receipts | IrcDeliveryReceipt + AsyncJobDeliverySink (tools/hub/types.d.ts:8,84) | DECLARED ONLY — no wire path measured | the cp-z42vu transport/receipt gap remains; type existence does not replace receiver proof
-| claims | Stage1Claim / GlobalClaim with ownershipToken + inputWatermark (memories/storage.d.ts:20-27) | DECLARED ONLY — no wire path measured | local claim/ownership gap remains until reachability and semantics are proven
-| idle | GuestIdleReconcilerCtx (dist/types/collab/guest.d.ts:9-30) | DECLARED ONLY — no wire path measured | the local NewlyIdle/ConfirmedIdle defect remains; the upstream split is corroboration, not a fix
-| roster | HubRosterCounts (dist/types/tools/hub/types.d.ts:33-90) | DECLARED ONLY — no wire path measured | hand-derived roster remains an unclosed observation gap
-| cost | SearchUsage (dist/types/web/search/types.d.ts:232-254), PerplexityCost (:510-527), ContextUsage (dist/types/extensibility/extensions/types.d.ts:238-240) | DECLARED ONLY — no wire path measured | cost telemetry remains unmeasured
-| compaction | SessionBeforeCompactEvent / SessionCompactEvent (dist/types/extensibility/shared-events.d.ts:54-75) | DECLARED ONLY — no wire path measured | context-loss recovery remains unproven; the type narrows adoption work but does not close it
+| completion | **`isTerminal` on RpcSessionEventFrame** (modes/rpc/rpc-types.d.ts:artifact_provenance) is what was OBSERVED. `AgentEndEvent.willContinue` and `SessionStopEvent` (extensibility/shared-events.d.ts:artifact_provenance) are DECLARED ONLY — see §1.2.3 | **WIRE-PROVEN for one observed frame, and for `isTerminal` only** — exact raw receipt PRESERVED IN-REPO at `.flywheel/inventory-artifacts/agent-end-raw-frame.json.gz` (hash-gated by `artifact_provenance`; the original `.flywheel/grade-evidence/agent-end-raw-frame.json.gz` is reboot-volatile and must not be cited); capture command /Users/josh/.local/bin/omp --mode=rpc --no-session --no-tools --no-lsp --max-time=30; artifact mtime/retrieval observed 2026-08-31T19:52:26-0600; SHA-256 d8bd80c6949b2ec48af1639b5b5e241bd90b4dce1e769483dd1690ed2be8f644 | the frame's session-specific isTerminal=true was observed; shared willContinue was absent; repeatability, semantic fit, and supervisor consumption remain UNKNOWN
+| receipts | IrcDeliveryReceipt + AsyncJobDeliverySink (tools/hub/types.d.ts:AsyncJobDeliverySink) | DECLARED ONLY — no wire path measured | the cp-z42vu transport/receipt gap remains; type existence does not replace receiver proof
+| claims | Stage1Claim / GlobalClaim with ownershipToken + inputWatermark (memories/storage.d.ts:Stage1Claim) | DECLARED ONLY — no wire path measured | local claim/ownership gap remains until reachability and semantics are proven
+| idle | GuestIdleReconcilerCtx (dist/types/collab/guest.d.ts:GuestIdleReconcilerCtx) | DECLARED ONLY — no wire path measured | the local NewlyIdle/ConfirmedIdle defect remains; the upstream split is corroboration, not a fix
+| roster | HubRosterCounts (dist/types/tools/hub/types.d.ts:HubRosterCounts) | DECLARED ONLY — no wire path measured | hand-derived roster remains an unclosed observation gap
+| cost | SearchUsage (dist/types/web/search/types.d.ts:PerplexityCost), PerplexityCost (:510-527), ContextUsage (dist/types/extensibility/extensions/types.d.ts:PerplexityCost) | DECLARED ONLY — no wire path measured | cost telemetry remains unmeasured
+| compaction | SessionBeforeCompactEvent / SessionCompactEvent (dist/types/extensibility/shared-events.d.ts:SessionBeforeCompactEvent) | DECLARED ONLY — no wire path measured | context-loss recovery remains unproven; the type narrows adoption work but does not close it
 
 **NO-CLAIM:** the durable receipt proves one raw wire frame, not supervisor consumption. In the declaration,
 willContinue is the shared AgentEndEvent field, while isTerminal is supplied by the session-specific
@@ -186,7 +186,7 @@ and becomes *invisible*, which is strictly worse.
 `--robot-triage` returning multiple ranked slices in one call rather than N round-trips. That is not
 ergonomics; it is what makes a supervisor tick cheap enough to run on a loop. *If it drifts* to
 one-slice-per-call, tick cost multiplies by slice count and cadence collapses. Jeffrey's own agent
-handbook states the same as a safety rule — `beads_rust/src/cli/commands/robot_docs.rs:59`: *"Avoid
+handbook states the same as a safety rule — `beads_rust/src/cli/commands/robot_docs.rs:Avoid`: *"Avoid
 bare `bv` in automated sessions; use `bv --robot-*` flags."* The robot surface is the contract; the
 human surface is not.
 
@@ -270,7 +270,7 @@ runs.
 
 **HISTORICAL SCANNER SNAPSHOT (2026-08-31).** The built scanner report described `omp-inventory-map/v1`, command `doctor`, status `UNKNOWN`, exit 2, and 544,697 bytes. The retained raw capture is `.flywheel/inventory-artifacts/inv.txt.gz` with SHA-256 `86491732a5581a6d2e342d0db59bdf20e5f47f6da93150ae78bd2649562f5081`; this is not current product or workspace evidence.
 
-**HISTORICAL ADDRESSABILITY SNAPSHOT (2026-08-31).** `omp-inventory-map --help` returned the typed `CONFIG_ERROR unknown argument --help` refusal; the source snapshot counted 23 functions and 544 KB of output, with no `Observation`, `CONVERGE`, or `Verdict` strings. The collision guard at `crates/omp-inventory-map/src/types_inventory.rs:176-178` remains the cited design evidence.
+**HISTORICAL ADDRESSABILITY SNAPSHOT (2026-08-31).** `omp-inventory-map --help` returned the typed `CONFIG_ERROR unknown argument --help` refusal; the source snapshot counted 23 functions and 544 KB of output, with no `Observation`, `CONVERGE`, or `Verdict` strings. The collision guard at `crates/omp-inventory-map/src/types_inventory.rs:Observation` remains the cited design evidence.
 
 **CURRENT RECHECK.** The current source has 28 test markers and the debug binary's `--help` probe emits 158 bytes and exits 1. No current ADDRESSABLE pass is claimed without a retained command/output/revision receipt; the gate remains a real system gap, not a buyer-visible result.
 
@@ -287,25 +287,25 @@ Searched the mirror for self-describing CLI surfaces (`robot-docs|robot_docs` an
 1. **Discoverability is a shipped command, not a flag.** `br robot-docs guide` is a top-level
    subcommand whose entire job is machine-readable self-documentation, carrying its own contract
    version: `const CONTRACT_VERSION: &str = "br.robot_docs.v1";`
-   (`beads_rust/src/cli/commands/robot_docs.rs:11`). The doctor subsystem ships its own,
-   `br.doctor.robot_docs.v1` (`.../doctor_subsystems/surface.rs:108`). Discoverability is versioned
+   (`beads_rust/src/cli/commands/robot_docs.rs:heading_beads_rust_src_cli_commands_robot_docs`). The doctor subsystem ships its own,
+   `br.doctor.robot_docs.v1` (`.../doctor_subsystems/surface.rs:Discoverability`). Discoverability is versioned
    like any other output.
 2. **CI enforces that discoverability keeps working.** `beads_rust/.github/workflows/doctor.yml:88-93`
    runs `br doctor robot-docs --format json` and asserts both
    `jq -e '.schema_version == "br.doctor.robot_docs.v1"'` and `jq -e '.line_count > 20'` — the second
    an anti-vacuity check on the docs themselves: present *and non-trivial*.
 3. **The help surface must not fail for the same reason the tool fails.**
-   `beads_rust/src/main.rs:3744-3747` asserts `!needs_write_lock(&robot_docs)` with the message
+   `beads_rust/src/main.rs:heading_beads_rust_src_main_rs_3744_3747` asserts `!needs_write_lock(&robot_docs)` with the message
    *"robot-docs is a pure help surface and must not depend on workspace lock health."* The deepest of
    the three, and we had not stated it: a discoverability surface that degrades when the workspace
    degrades is unavailable exactly when it is needed.
 4. **Contract drift is a P0 bug filed against the docs, not the code.** Bead `beads_rust-mbpq`
-   (`beads_rust/.beads/issues.jsonl:697`) was raised *because* `capabilities` and `robot-docs` claimed
+   (`beads_rust/.beads/issues.jsonl:capabilities`) was raised *because* `capabilities` and `robot-docs` claimed
    a concurrent `--repair` exits 5 on lock contention while the binary silently waited 30s and exited
    0 — filed *"P0 because it contradicts a documented contract."* The documented contract is normative
    over the implementation.
 5. **Exit codes are a dictionary, not a convention.** Bead `beads_rust-rw4u`
-   (`.../issues.jsonl:843`) specifies eleven variants: `0` healthy, `1` findings present, `2` fix
+   (`.../issues.jsonl:heading_issues_jsonl_843_specifies_eleven_variants_0`) specifies eleven variants: `0` healthy, `1` findings present, `2` fix
    partial, `3` fix failed and rolled back, `4` refused unsafe, `5` concurrency lost, `6` online
    required, `64` usage error, `66` no input, `73` cannot create output, `74` I/O error — and CI
    asserts `(.exit_codes | length) >= 11` (`doctor.yml:85`). Stated rationale: returning 0 with
@@ -346,7 +346,7 @@ this row."* The scanner consumes OMP because the scanner's job is to look at OMP
 ### The three objections an investor should raise
 
 **HISTORICAL DENOMINATOR NOTE.** The 26-crate and 25-of-26 figures in the following objection and type snapshot are pre-extraction values. Current workspace authority is the LIVE `[figures.workspace_crates]` result; the old figures are retained only as the historical argument being answered.
-**Objection 1 — "You have built 26 crates of scaffolding around a hole. The one integration that justifies the name does not exist."** *Partly conceded, with a narrower truth.* The completion signal is now WIRE-PROVEN upstream, but the supervisory integration that would consume it still does not exist. The 25-of-26 measurement is ours, not a reviewer's. The partial answer is that the layer census shows `observe` WORKS and failure is
+**Objection 1 — "You have built 26 crates of scaffolding around a hole. The one integration that justifies the name does not exist."** *Partly conceded, with a narrower truth.* The completion signal is now WIRE-PROVEN upstream, but the supervisory integration that would consume it still does not exist. The 25-of-26 measurement is ours, not a reviewer's. The partial answer is that the layer census shows `observe` WORKS and failure is — HISTORICAL as of 2026-09-02.
 concentrated in actionable/consume/actuate — and the seven-row table above records **zero unqualified WORKS rows**. We will not use the qualified observe result as a rebuttal. What we do not concede is that the crates are therefore waste: the
 gates operate on the repository and the process boundary, not on OMP, and they run today. The
 accurate statement is that the *supervisory* path is unbuilt while the *enforcement* path is built
@@ -385,14 +385,14 @@ omp-types — the crate holding the canonical vocabulary — has **zero dependen
 snapshot. The vocabulary is defined and unused. **INFERENCE:** this may contribute to the inventory's
 fragmentation; “direct cause” is not established. The measured type snapshot reports **51 public enums
 (excluding test+bin sources; 59 including them) and 79 structs** across library surfaces; including
-test modules and binaries it reports 59/91 over 26 crates. It also reports **6 distinct Verdict-shaped
+test modules and binaries it reports 59/91 over 26 crates. It also reports **6 distinct Verdict-shaped — HISTORICAL as of 2026-09-02.
 types sharing no trait, 17 ack/receipt types in 3 incompatible dialects, and 4 colliding type names**.
 These are inventory observations, not proof that vocabulary adoption alone solves completion accounting.
 The falsification test is the same typed-separation versus logging-only experiment named above, with a
 precommitted threshold for fewer false classifications and fewer operator minutes.
 
 **NO-CLAIM:** this reports one checkout on 2026-08-31. It does not claim the census is complete, that
-183 rows enumerate every OMP surface, that grep-derived leg counts classify test intent, or that type
+183 rows enumerate every OMP surface, that grep-derived leg counts classify test intent, or that type — HISTORICAL as of 2026-09-02.
 collision counts are exhaustive. A name match is not semantic coverage; re-derivation under a stricter
 method has not run.
 
