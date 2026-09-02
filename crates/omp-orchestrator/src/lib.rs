@@ -329,7 +329,10 @@ impl GateCensus {
     }
 
     pub fn unwired_gates(&self) -> Vec<&GateCensusRow> {
-        self.rows.iter().filter(|r| !r.reachability.is_reachable()).collect()
+        self.rows
+            .iter()
+            .filter(|r| !r.reachability.is_reachable())
+            .collect()
     }
 
     pub fn all_reachable(&self) -> bool {
@@ -358,11 +361,11 @@ impl GateCensus {
 /// which gate refuses — is what `no-shell-gate` does for itself and is unbuilt
 /// here.
 fn hook_invokes(hook_path: &Path, gate: &str) -> bool {
-    let Ok(bytes) = std::fs::read(hook_path) else { return false };
+    let Ok(bytes) = std::fs::read(hook_path) else {
+        return false;
+    };
     // Scan the raw bytes: the hook may be Mach-O, a script, or a shim.
-    bytes
-        .windows(gate.len())
-        .any(|w| w == gate.as_bytes())
+    bytes.windows(gate.len()).any(|w| w == gate.as_bytes())
 }
 
 /// Is this gate declared in a workflow that a remote could run?
@@ -373,7 +376,9 @@ fn hook_invokes(hook_path: &Path, gate: &str) -> bool {
 /// Those are different repository states and the operator needs to tell them apart.
 fn workflow_invokes(repo_root: &Path, gate: &str) -> bool {
     let dir = repo_root.join(".github/workflows");
-    let Ok(entries) = std::fs::read_dir(&dir) else { return false };
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return false;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.extension().and_then(|s| s.to_str()) != Some("yml") {
@@ -387,7 +392,6 @@ fn workflow_invokes(repo_root: &Path, gate: &str) -> bool {
     }
     false
 }
-
 
 /// Classify each known gate by whether its TRIGGER exists on this machine.
 ///
@@ -406,7 +410,11 @@ fn configured_upstream_crate(repo_root: &Path, gate: &str) -> String {
         return format!("unavailable (set CONTROL_PLANE_REPO for crates/{gate})");
     };
 
-    let root = if root.is_absolute() { root } else { repo_root.join(root) };
+    let root = if root.is_absolute() {
+        root
+    } else {
+        repo_root.join(root)
+    };
     let source = root.join("crates").join(gate);
     if source.is_dir() {
         source.display().to_string()
@@ -423,7 +431,8 @@ fn coverage_output_reachability(repo_root: &Path, crate_name: &str) -> GateReach
         .join("crates")
         .join(crate_name)
         .join("Cargo.toml")
-        .is_file() {
+        .is_file()
+    {
         GateReachability::Reachable {
             trigger: format!("supervisor:coverage-output-census -> crates/{crate_name}"),
         }
@@ -460,22 +469,34 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
     rows.push(GateCensusRow {
         gate: "no-shell-gate".into(),
         reachability: if nsg_reachable {
-            GateReachability::Reachable { trigger: ".git/hooks/pre-commit".into() }
+            GateReachability::Reachable {
+                trigger: ".git/hooks/pre-commit".into(),
+            }
         } else {
-            GateReachability::Unreachable { reason: ".git/hooks/pre-commit does not exist on this clone".into() }
+            GateReachability::Unreachable {
+                reason: ".git/hooks/pre-commit does not exist on this clone".into(),
+            }
         },
     });
 
     // path-literal-guard, state-wildcard-lint, undrained-pipe-lint:
     // their only invocation is .github/workflows/gate.yml, and there is no
     // remote to run it on.
-    for gate in ["path-literal-guard", "state-wildcard-lint", "undrained-pipe-lint"] {
+    for gate in [
+        "path-literal-guard",
+        "state-wildcard-lint",
+        "undrained-pipe-lint",
+    ] {
         rows.push(GateCensusRow {
             gate: gate.into(),
             reachability: if has_remote {
-                GateReachability::Reachable { trigger: ".github/workflows/gate.yml".into() }
+                GateReachability::Reachable {
+                    trigger: ".github/workflows/gate.yml".into(),
+                }
             } else {
-                GateReachability::Unreachable { reason: "no git remote: the CI workflow can never execute".into() }
+                GateReachability::Unreachable {
+                    reason: "no git remote: the CI workflow can never execute".into(),
+                }
             },
         });
     }
@@ -519,13 +540,18 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
         rows.push(GateCensusRow {
             gate: gate.into(),
             reachability: if in_hook {
-                GateReachability::Reachable { trigger: ".git/hooks/pre-commit".into() }
+                GateReachability::Reachable {
+                    trigger: ".git/hooks/pre-commit".into(),
+                }
             } else if in_workflow && has_remote {
-                GateReachability::Reachable { trigger: ".github/workflows/gate.yml".into() }
+                GateReachability::Reachable {
+                    trigger: ".github/workflows/gate.yml".into(),
+                }
             } else if in_workflow {
                 GateReachability::Unreachable {
-                    reason: "declared in gate.yml but no git remote: the workflow can never execute"
-                        .into(),
+                    reason:
+                        "declared in gate.yml but no git remote: the workflow can never execute"
+                            .into(),
                 }
             } else {
                 GateReachability::Unreachable {
@@ -554,50 +580,147 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
     // gate. These are NOT defects (bins without manifest callers are
     // expected), but they must be VISIBLE.
     for crate_name in [
-        "ack-spine", "ack-stage", "composer-typed", "dispatch-silence-watch",
-        "finding", "finding-dispatch", "fleet-composite", 
-        "kernel-only-operator-hook", 
-         "receiver-receipt",
-        "subprocess-contract", "tick-monitor",
+        "ack-spine",
+        "ack-stage",
+        "composer-typed",
+        "dispatch-silence-watch",
+        "finding",
+        "finding-dispatch",
+        "fleet-composite",
+        "kernel-only-operator-hook",
+        "receiver-receipt",
+        "subprocess-contract",
+        "tick-monitor",
     ] {
         if COVERAGE_WAVE_OUTPUT_CRATES.contains(&crate_name) {
             continue;
         }
-        // Same bounded census contract: a hung grep degrades to "no caller
-        // observed" instead of stalling the tick.
-        let has_caller = {
-            let mut grep_command = std::process::Command::new("grep");
-            grep_command.args(["-rl", crate_name, "--include=*.toml", "--include=*.rs", "."]);
-            grep_command.current_dir(repo_root);
-            match subprocess_contract::bounded_output(
-                &mut grep_command,
-                std::time::Duration::from_secs(CENSUS_SPAWN_DEADLINE_SECS),
-            ) {
-                subprocess_contract::BoundedOutcome::Completed(output) => {
-                    let hits = String::from_utf8_lossy(&output.stdout);
-                    // Exclude self-references: a checker whose input includes
-                    // text about the thing it checks is the self-referential
-                    // checker defect.
-                    hits.lines()
-                        .filter(|l| !l.contains(&format!("{crate_name}/src/")))
-                        .count()
-                        > 1
-                }
-                subprocess_contract::BoundedOutcome::TimedOut
-                | subprocess_contract::BoundedOutcome::Unspawned(_) => false,
-            }
-        };
+        // DETERMINISTIC MANIFEST READ, replacing a load-dependent grep.
+        //
+        // MEASURED 2026-09-02, build `7600dda`: the supervisor refused with
+        // `GATE_UNWIRED unwired=[ack-spine, ack-stage, composer-typed, finding,
+        // receiver-receipt]`. Re-running THIS FUNCTION'S OWN PROBE by hand returned
+        // REACHABLE for every one of them:
+        //
+        //   ack-spine 12   ack-stage 6   composer-typed 16
+        //   finding 375    receiver-receipt 11   (no-shell-gate 28, control)
+        //
+        // The probe was `grep -rl <name> --include=*.toml --include=*.rs .` under a
+        // 10s deadline. `--include` filters FILENAMES, not directories, so the walk
+        // still descends `target/` -- measured 7.0G -- and under the concurrent cargo
+        // builds that are this checkout's normal state it exceeds 10s. Then
+        // `BoundedOutcome::TimedOut` fell through to `has_caller = false`, which is
+        // `Unreachable`.
+        //
+        // **So the verdict was a function of machine load, not of the repository**,
+        // and `ack-stage` came back REACHABLE in the same run purely because its grep
+        // happened to finish. A gate census whose answer moves with system load is the
+        // nondeterministic-oracle defect, and it refused every dispatch for hours.
+        //
+        // The dependency graph is already on disk in the manifests. Reading it is
+        // exact, needs no subprocess, and cannot time out.
+        let callers = manifest_callers(repo_root, crate_name);
+        // A LIB and a BIN have different trigger classes, and measuring both by
+        // "does a manifest depend on it" sends the operator to add a dependency
+        // nobody should add.
+        //
+        // MEASURED 2026-09-02: `ack-spine` ships `bin:ack-spine` and has 0 manifest
+        // callers. The old probe reported `no manifest dependency references this
+        // crate` and `next_action=repair-gate-trigger`. Both are true and the remedy
+        // is wrong for the same reason `NotExtracted` had to become its own variant:
+        // **a binary's trigger is an INVOCATION SITE, not a dependency edge.** This
+        // file's own comment already said "bins without manifest callers are
+        // expected"; the code did not act on it.
+        let has_bin = crate_ships_a_bin(repo_root, crate_name);
         rows.push(GateCensusRow {
             gate: crate_name.into(),
-            reachability: if has_caller {
-                GateReachability::Reachable { trigger: "manifest dependency".into() }
+            reachability: if callers > 0 {
+                GateReachability::Reachable {
+                    trigger: format!("manifest dependency ({callers} caller(s))"),
+                }
+            } else if has_bin && hook_invokes(&hook_path, crate_name) {
+                GateReachability::Reachable {
+                    trigger: ".git/hooks/pre-commit".into(),
+                }
+            } else if has_bin && workflow_invokes(repo_root, crate_name) && has_remote {
+                GateReachability::Reachable {
+                    trigger: ".github/workflows/gate.yml".into(),
+                }
+            } else if has_bin {
+                GateReachability::Unreachable {
+                    reason: "binary with no invocation site: no manifest caller, not \
+                             invoked by the installed hook, not declared in gate.yml"
+                        .into(),
+                }
             } else {
-                GateReachability::Unreachable { reason: "no manifest dependency references this crate".into() }
+                GateReachability::Unreachable {
+                    reason: "library with no manifest dependency referencing it".into(),
+                }
             },
         });
     }
 
     GateCensus { rows }
+}
+
+/// How many OTHER workspace manifests declare a path dependency on `crate_name`.
+///
+/// Reads `crates/*/Cargo.toml` and counts `path = "../<crate_name>"`. Deterministic,
+/// bounded by the number of crates, and it never touches `target/` — the three
+/// properties the grep it replaced lacked.
+///
+/// # Self-exclusion is structural, not a filter
+///
+/// The crate's own manifest is skipped by NAME comparison, so a crate cannot vouch
+/// for itself. The grep it replaced excluded only paths containing `<name>/src/`,
+/// which left `crates/<name>/Cargo.toml` in the count — meaning **a crate with no
+/// dependents at all scored 1**, and the threshold had to be `> 1` to compensate. A
+/// threshold tuned around a self-hit is a self-referential checker with arithmetic
+/// on top; here the count is `> 0` because the self row is genuinely gone.
+pub fn manifest_callers(repo_root: &Path, crate_name: &str) -> usize {
+    let crates_dir = repo_root.join("crates");
+    let Ok(entries) = std::fs::read_dir(&crates_dir) else {
+        return 0;
+    };
+    let needle_slash = format!("path = \"../{crate_name}\"");
+    let needle_tight = format!("path=\"../{crate_name}\"");
+    let mut callers = 0usize;
+    for entry in entries.flatten() {
+        let dir = entry.path();
+        let Some(name) = dir.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if name == crate_name {
+            continue; // structural self-exclusion
+        }
+        let manifest = dir.join("Cargo.toml");
+        let Ok(text) = std::fs::read_to_string(&manifest) else {
+            continue;
+        };
+        // Both spellings, because a formatter that removes the spaces around `=`
+        // would otherwise silently drop every caller. The `^command = ` vs
+        // `command  = ` false zero in NUMBERS.toml is the same shape.
+        if text.contains(&needle_slash) || text.contains(&needle_tight) {
+            callers += 1;
+        }
+    }
+    callers
+}
+
+/// Whether the crate ships a binary target: an explicit `[[bin]]` or the implicit
+/// `src/main.rs`.
+///
+/// Both forms, because checking only `[[bin]]` misses every crate that relies on
+/// Cargo's implicit binary — measured across this workspace, `git grep -c '\[\[bin\]\]'`
+/// undercounts binary targets against `cargo metadata` for exactly that reason.
+pub fn crate_ships_a_bin(repo_root: &Path, crate_name: &str) -> bool {
+    let dir = repo_root.join("crates").join(crate_name);
+    if dir.join("src/main.rs").is_file() {
+        return true;
+    }
+    std::fs::read_to_string(dir.join("Cargo.toml"))
+        .map(|text| text.contains("[[bin]]"))
+        .unwrap_or(false)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -711,8 +834,11 @@ pub fn decide(observation: &Observation, authorization: &IdleAuthorization) -> S
     //
     // This is Rule Zero's shape: a blocker HALTS and surfaces ONE named decision,
     // rather than being routed around by dispatching elsewhere.
-    let awaiting: Vec<&PaneObservation> =
-        observation.panes.iter().filter(|p| p.awaits_human).collect();
+    let awaiting: Vec<&PaneObservation> = observation
+        .panes
+        .iter()
+        .filter(|p| p.awaits_human)
+        .collect();
     if !awaiting.is_empty() {
         let panes = awaiting
             .iter()
@@ -723,8 +849,11 @@ pub fn decide(observation: &Observation, authorization: &IdleAuthorization) -> S
     }
 
     // Count dispatchable panes (ConfirmedIdle only — one capture is not enough).
-    let dispatchable: Vec<&PaneObservation> =
-        observation.panes.iter().filter(|p| p.is_dispatchable).collect();
+    let dispatchable: Vec<&PaneObservation> = observation
+        .panes
+        .iter()
+        .filter(|p| p.is_dispatchable)
+        .collect();
 
     // Count free-capacity panes: ConfirmedIdle OR NewlyIdle. THIS MUST READ ITS
     // OWN FIELD. It previously filtered on `is_dispatchable`, which made it
@@ -830,7 +959,10 @@ mod tests {
     fn obs(panes: Vec<PaneObservation>, ready: usize, readable: bool) -> Observation {
         Observation {
             panes,
-            queue: QueueState { ready_count: ready, readable },
+            queue: QueueState {
+                ready_count: ready,
+                readable,
+            },
             gate_census: Some(passing_census()),
         }
     }
@@ -884,10 +1016,16 @@ mod tests {
     fn a_pane_on_a_dialog_escalates_to_a_human_and_does_not_read_as_working() {
         let observation = Observation {
             panes: vec![pane("%1372", "DIALOG", false)],
-            queue: QueueState { ready_count: 3, readable: true },
+            queue: QueueState {
+                ready_count: 3,
+                readable: true,
+            },
             gate_census: Some(passing_census()),
         };
-        let decision = decide(&observation, &IdleAuthorization::Unauthorized { why: "no_token" });
+        let decision = decide(
+            &observation,
+            &IdleAuthorization::Unauthorized { why: "no_token" },
+        );
         match decision {
             SupervisorDecision::AwaitingHuman { panes } => {
                 assert!(
@@ -911,10 +1049,16 @@ mod tests {
     fn a_working_pane_does_not_escalate_to_a_human() {
         let observation = Observation {
             panes: vec![pane("%1408", "WORKING", false)],
-            queue: QueueState { ready_count: 3, readable: true },
+            queue: QueueState {
+                ready_count: 3,
+                readable: true,
+            },
             gate_census: Some(passing_census()),
         };
-        let decision = decide(&observation, &IdleAuthorization::Unauthorized { why: "no_token" });
+        let decision = decide(
+            &observation,
+            &IdleAuthorization::Unauthorized { why: "no_token" },
+        );
         assert!(
             !matches!(decision, SupervisorDecision::AwaitingHuman { .. }),
             "a genuinely working pane must not page a human; got {decision:?}"
@@ -948,12 +1092,11 @@ mod tests {
         // A stubbed send that returns Ok without actually sending must be caught
         // by the Dispatch variant carrying the pane and bead — if the test can
         // assert on those fields, a stub that produces neither fails.
-        let observation = obs(
-            vec![pane("%1409", "IDLE", true)],
-            5,
-            true,
+        let observation = obs(vec![pane("%1409", "IDLE", true)], 5, true);
+        let decision = decide(
+            &observation,
+            &IdleAuthorization::Unauthorized { why: "test" },
         );
-        let decision = decide(&observation, &IdleAuthorization::Unauthorized { why: "test" });
         match &decision {
             SupervisorDecision::Dispatch { pane, .. } => {
                 assert_eq!(pane, "%1409", "the dispatchable pane must be named");
@@ -967,12 +1110,11 @@ mod tests {
     #[test]
     fn free_and_ready_must_dispatch_or_escalate() {
         // ConfirmedIdle pane + ready work -> Dispatch (the happy path).
-        let observation = obs(
-            vec![pane("%1413", "IDLE", true)],
-            10,
-            true,
+        let observation = obs(vec![pane("%1413", "IDLE", true)], 10, true);
+        let decision = decide(
+            &observation,
+            &IdleAuthorization::Unauthorized { why: "test" },
         );
-        let decision = decide(&observation, &IdleAuthorization::Unauthorized { why: "test" });
         assert!(
             matches!(decision, SupervisorDecision::Dispatch { .. }),
             "free + ready + authorized-ambient = dispatch, got {decision:?}"
@@ -985,14 +1127,16 @@ mod tests {
         // With ready work and no ConfirmedIdle panes, this must ESCALATE —
         // the conductor needs to know that a freed worker is visible but
         // not yet confirmed.
-        let observation = obs(
-            vec![pane("%1413", "NEWLY_IDLE", false)],
-            10,
-            true,
+        let observation = obs(vec![pane("%1413", "NEWLY_IDLE", false)], 10, true);
+        let decision = decide(
+            &observation,
+            &IdleAuthorization::Unauthorized { why: "test" },
         );
-        let decision = decide(&observation, &IdleAuthorization::Unauthorized { why: "test" });
         match &decision {
-            SupervisorDecision::EscalateIdleIncident { dispatchable_count, ready_count } => {
+            SupervisorDecision::EscalateIdleIncident {
+                dispatchable_count,
+                ready_count,
+            } => {
                 assert_eq!(*dispatchable_count, 0, "no confirmed-idle panes");
                 assert_eq!(*ready_count, 10, "ready count from the queue");
             }
@@ -1004,12 +1148,11 @@ mod tests {
     fn no_third_branch_free_and_ready() {
         // The three-outcome contract: dispatch, escalate, or authorized-idle.
         // There is no fourth outcome for free+ready.
-        let observation = obs(
-            vec![pane("%1409", "IDLE", true)],
-            3,
-            true,
+        let observation = obs(vec![pane("%1409", "IDLE", true)], 3, true);
+        let decision = decide(
+            &observation,
+            &IdleAuthorization::Unauthorized { why: "test" },
         );
-        let decision = decide(&observation, &IdleAuthorization::Unauthorized { why: "test" });
         assert!(
             matches!(decision, SupervisorDecision::Dispatch { .. }),
             "the only legal outcomes for free+ready are Dispatch or Escalate, got {decision:?}"
@@ -1027,7 +1170,10 @@ mod tests {
         // It still must NOT be silent: an empty queue is a decision only Josh can
         // make, so queue-empty stays SUPERVISED.
         let observation = obs(vec![pane("%1409", "IDLE", true)], 0, true);
-        let decision = decide(&observation, &IdleAuthorization::Unauthorized { why: "test" });
+        let decision = decide(
+            &observation,
+            &IdleAuthorization::Unauthorized { why: "test" },
+        );
         match &decision {
             SupervisorDecision::QueueEmptyNeedsJosh {
                 free_capacity_count,
@@ -1052,7 +1198,10 @@ mod tests {
             0,
             true,
         );
-        let decision = decide(&observation, &IdleAuthorization::Unauthorized { why: "test" });
+        let decision = decide(
+            &observation,
+            &IdleAuthorization::Unauthorized { why: "test" },
+        );
         match &decision {
             SupervisorDecision::SupervisedWorking { working_count, .. } => {
                 assert_eq!(*working_count, 2, "both working panes must be counted");
@@ -1070,7 +1219,10 @@ mod tests {
             4,
             true,
         );
-        let decision = decide(&observation, &IdleAuthorization::Unauthorized { why: "test" });
+        let decision = decide(
+            &observation,
+            &IdleAuthorization::Unauthorized { why: "test" },
+        );
         match &decision {
             SupervisorDecision::SupervisedWorking {
                 working_count,
@@ -1085,11 +1237,7 @@ mod tests {
 
     #[test]
     fn authorized_idle_with_empty_queue_is_tolerated() {
-        let observation = obs(
-            vec![pane("%1409", "IDLE", true)],
-            0,
-            true,
-        );
+        let observation = obs(vec![pane("%1409", "IDLE", true)], 0, true);
         let auth = IdleAuthorization::Authorized {
             reason: "Josh said stand down".to_owned(),
             session: "omp-orchestrator".to_owned(),
@@ -1207,10 +1355,16 @@ mod tests {
     #[test]
     fn monitor_blind_is_typed_not_silent() {
         let observation = obs(vec![], 5, true);
-        let decision = decide(&observation, &IdleAuthorization::Unauthorized { why: "test" });
+        let decision = decide(
+            &observation,
+            &IdleAuthorization::Unauthorized { why: "test" },
+        );
         match &decision {
             SupervisorDecision::MonitorBlind { detail } => {
-                assert!(detail.contains("blind"), "must name the blindness: {detail}");
+                assert!(
+                    detail.contains("blind"),
+                    "must name the blindness: {detail}"
+                );
             }
             other => panic!("expected MonitorBlind, got {other:?}"),
         }
@@ -1218,12 +1372,11 @@ mod tests {
 
     #[test]
     fn queue_unreadable_is_typed_not_silent() {
-        let observation = obs(
-            vec![pane("%1409", "IDLE", true)],
-            0,
-            false,
+        let observation = obs(vec![pane("%1409", "IDLE", true)], 0, false);
+        let decision = decide(
+            &observation,
+            &IdleAuthorization::Unauthorized { why: "test" },
         );
-        let decision = decide(&observation, &IdleAuthorization::Unauthorized { why: "test" });
         assert!(
             matches!(decision, SupervisorDecision::QueueUnreadable { .. }),
             "unreadable queue must be typed, got {decision:?}"
@@ -1357,7 +1510,11 @@ impl Discharged {
     /// Success requires NON-EMPTY evidence. Empty evidence is a no-op wearing a
     /// discharge, so it maps to a failure code rather than silently passing.
     pub fn exit_code(&self) -> u8 {
-        if self.evidence.trim().is_empty() { 70 } else { 0 }
+        if self.evidence.trim().is_empty() {
+            70
+        } else {
+            0
+        }
     }
 }
 
@@ -1372,7 +1529,8 @@ mod kernel_tests {
             liveness: "LIVE".to_owned(),
             is_dispatchable: false,
             is_free_capacity: false,
-            is_working: true, awaits_human: false,
+            is_working: true,
+            awaits_human: false,
         }
     }
     fn idle(id: &str) -> PaneObservation {
@@ -1382,11 +1540,15 @@ mod kernel_tests {
             liveness: "CONFIRMED_IDLE".to_owned(),
             is_dispatchable: true,
             is_free_capacity: true,
-            is_working: false, awaits_human: false,
+            is_working: false,
+            awaits_human: false,
         }
     }
     fn q(ready: usize) -> QueueState {
-        QueueState { ready_count: ready, readable: true }
+        QueueState {
+            ready_count: ready,
+            readable: true,
+        }
     }
     fn unauth() -> IdleAuthorization {
         IdleAuthorization::Unauthorized { why: "test" }
@@ -1404,10 +1566,10 @@ mod kernel_tests {
     fn observing_always_yields_a_duty_there_is_no_nothing_to_do() {
         // TOTALITY. Four shapes, none of which can produce "no obligation".
         let cases = vec![
-            (vec![idle("%1")], q(4)),   // free + ready
-            (vec![idle("%1")], q(0)),   // free, empty queue
-            (vec![working("%1")], q(4)),// saturated + ready
-            (vec![working("%1")], q(0)),// saturated, empty queue
+            (vec![idle("%1")], q(4)),    // free + ready
+            (vec![idle("%1")], q(0)),    // free, empty queue
+            (vec![working("%1")], q(4)), // saturated + ready
+            (vec![working("%1")], q(0)), // saturated, empty queue
         ];
         for (panes, queue) in cases {
             let census = Census::try_new(panes).expect("non-empty");
@@ -1444,7 +1606,11 @@ mod kernel_tests {
         // "I did something" with nothing to show is a no-op wearing a discharge.
         let census = Census::try_new(vec![idle("%1")]).expect("non-empty");
         let duty = Duty::observe(&census, &q(4), &unauth(), gates());
-        assert_eq!(duty.discharge("   ").exit_code(), 70, "empty evidence must fail");
+        assert_eq!(
+            duty.discharge("   ").exit_code(),
+            70,
+            "empty evidence must fail"
+        );
     }
 
     #[test]
@@ -1454,7 +1620,8 @@ mod kernel_tests {
         let census = Census::try_new(vec![idle("%1")]).expect("non-empty");
         let duty = Duty::observe(&census, &q(4), &unauth(), gates());
         assert_eq!(
-            duty.discharge("dispatched %1 bead=x receipt=IDLE_TO_WORKING").exit_code(),
+            duty.discharge("dispatched %1 bead=x receipt=IDLE_TO_WORKING")
+                .exit_code(),
             0
         );
     }
@@ -1613,11 +1780,15 @@ mod binding_tests {
             liveness: "CONFIRMED_IDLE".to_owned(),
             is_dispatchable: true,
             is_free_capacity: true,
-            is_working: false, awaits_human: false,
+            is_working: false,
+            awaits_human: false,
         }
     }
     fn q(n: usize) -> QueueState {
-        QueueState { ready_count: n, readable: true }
+        QueueState {
+            ready_count: n,
+            readable: true,
+        }
     }
     /// `tag` MUST be unique per test. Keying the temp dir on `session` alone made
     /// parallel tests clobber each other's token — shared mutable state with no
@@ -1662,7 +1833,9 @@ mod binding_tests {
         let auth = minted("session", "some-other-session", &panes, &q(0));
         assert_eq!(
             applicable(auth, "omp-orchestrator", &panes, &q(0)),
-            IdleAuthorization::Unauthorized { why: "token_session_mismatch" }
+            IdleAuthorization::Unauthorized {
+                why: "token_session_mismatch"
+            }
         );
     }
 
@@ -1673,7 +1846,9 @@ mod binding_tests {
         let now = vec![p("%1"), p("%2"), p("%3")];
         assert_eq!(
             applicable(auth, "omp-orchestrator", &now, &q(0)),
-            IdleAuthorization::Unauthorized { why: "token_pane_set_changed" }
+            IdleAuthorization::Unauthorized {
+                why: "token_pane_set_changed"
+            }
         );
     }
 
@@ -1685,7 +1860,9 @@ mod binding_tests {
         let auth = minted("grew", "omp-orchestrator", &panes, &q(0));
         assert_eq!(
             applicable(auth, "omp-orchestrator", &panes, &q(4)),
-            IdleAuthorization::Unauthorized { why: "token_queue_grew" }
+            IdleAuthorization::Unauthorized {
+                why: "token_queue_grew"
+            }
         );
     }
 
@@ -1810,6 +1987,161 @@ mod census_is_measured_not_frozen {
             census.rows.len()
         );
     }
+
+    /// THE DEFECT `kwo9` WAS FILED FOR, and the fix is not a trigger.
+    ///
+    /// The old probe was `grep -rl <name> --include=*.toml --include=*.rs .` under a
+    /// 10s deadline, and `BoundedOutcome::TimedOut` fell through to `has_caller =
+    /// false` — i.e. UNWIRED. `--include` filters FILENAMES, not directories, so the
+    /// walk still descends `target/` (measured 7.0G), and under the concurrent cargo
+    /// builds that are this checkout's normal state it exceeds the deadline.
+    ///
+    /// **The verdict was therefore a function of machine load.** In one live run
+    /// `ack-stage` came back REACHABLE and four siblings came back UNWIRED, from the
+    /// same repository state.
+    ///
+    /// A manifest read is exact, needs no subprocess, and cannot time out.
+    #[test]
+    fn the_reachability_probe_is_deterministic_and_ignores_target() {
+        let root = repo_root_for_test();
+        // Ten identical calls must agree. A load-dependent probe does not.
+        let first = manifest_callers(&root, "subprocess-contract");
+        for _ in 0..10 {
+            assert_eq!(
+                manifest_callers(&root, "subprocess-contract"),
+                first,
+                "the probe must not move under load"
+            );
+        }
+        // POSITIVE CONTROL: a crate the workspace demonstrably depends on widely.
+        assert!(
+            first >= 10,
+            "subprocess-contract must have many callers, got {first} -- a probe that \
+             finds none is broken, not a measurement"
+        );
+        // NEGATIVE CONTROL: a name no manifest can reference.
+        assert_eq!(manifest_callers(&root, "no-such-crate-anywhere"), 0);
+    }
+
+    /// SELF-EXCLUSION IS STRUCTURAL, and the old threshold was arithmetic on a
+    /// self-hit. `grep` excluded only paths containing `<name>/src/`, leaving
+    /// `crates/<name>/Cargo.toml` in the count — so a crate with NO dependents scored
+    /// 1, and the threshold had to be `> 1` to compensate. Here the self row is gone
+    /// and the threshold is `> 0`.
+    #[test]
+    fn a_crate_cannot_vouch_for_itself() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let lonely = root.join("crates/lonely");
+        std::fs::create_dir_all(&lonely).unwrap();
+        // Its own manifest names itself; that must not count.
+        std::fs::write(
+            lonely.join("Cargo.toml"),
+            "[package]\nname = \"lonely\"\n\n[dependencies]\nlonely = { path = \"../lonely\" }\n",
+        )
+        .unwrap();
+        assert_eq!(manifest_callers(root, "lonely"), 0);
+
+        // FIRES-ON-KNOWN-BAD: one real caller flips it, and BOTH spellings count, so a
+        // formatter that strips the spaces around `=` cannot silently drop every
+        // caller -- the `^command = ` vs `command  = ` false zero, in a new place.
+        for spelling in [
+            "[dependencies]\nlonely = { path = \"../lonely\" }\n",
+            "[dependencies]\nlonely={path=\"../lonely\"}\n",
+        ] {
+            let caller = root.join("crates/caller");
+            std::fs::create_dir_all(&caller).unwrap();
+            std::fs::write(
+                caller.join("Cargo.toml"),
+                format!("[package]\nname = \"caller\"\n\n{spelling}"),
+            )
+            .unwrap();
+            assert_eq!(
+                manifest_callers(root, "lonely"),
+                1,
+                "spelling not counted: {spelling:?}"
+            );
+        }
+    }
+
+    /// A BIN AND A LIB HAVE DIFFERENT TRIGGER CLASSES. `ack-spine` ships
+    /// `bin:ack-spine` and has 0 manifest callers; reporting `no manifest dependency
+    /// references this crate` with `repair-gate-trigger` sends an operator to add a
+    /// dependency nobody should add. Same correction `NotExtracted` needed.
+    #[test]
+    fn a_binary_with_no_invocation_site_is_named_as_one() {
+        let root = repo_root_for_test();
+        assert!(
+            crate_ships_a_bin(&root, "ack-spine"),
+            "ack-spine ships bin:ack-spine per cargo metadata"
+        );
+        assert!(
+            !crate_ships_a_bin(&root, "ack-stage"),
+            "ack-stage is lib-only per cargo metadata"
+        );
+        // The implicit form must count too: checking only `[[bin]]` undercounts.
+        let dir = tempfile::tempdir().unwrap();
+        let implicit = dir.path().join("crates/implicit/src");
+        std::fs::create_dir_all(&implicit).unwrap();
+        std::fs::write(implicit.join("main.rs"), "fn main() {}\n").unwrap();
+        std::fs::write(
+            dir.path().join("crates/implicit/Cargo.toml"),
+            "[package]\nname = \"implicit\"\n",
+        )
+        .unwrap();
+        assert!(crate_ships_a_bin(dir.path(), "implicit"));
+
+        // And the reason string must distinguish the two classes, or the remedy is
+        // wrong for one of them.
+        let census = census_gates(&root);
+        let reasons: Vec<&str> = census
+            .rows
+            .iter()
+            .filter_map(|r| match &r.reachability {
+                GateReachability::Unreachable { reason } => Some(reason.as_str()),
+                _ => None,
+            })
+            .collect();
+        // ANTI-VACUITY: if nothing is unreachable this leg proves nothing, and that
+        // must be stated rather than passing quietly.
+        if reasons.is_empty() {
+            panic!(
+                "no unreachable row in a live census: either the fleet is fully wired \
+                 (state it) or the probe collapsed"
+            );
+        }
+        // THE ASSERTION THIS LEG SHIPPED WITH WAS TOOTHLESS, and the mutation proved
+        // it: `any()` over a DISJUNCTION of the class strings still matched when a
+        // binary's reason was replaced by the library one, so the substitution the
+        // leg exists to catch went green. An `any` over alternatives cannot detect a
+        // substitution among those alternatives.
+        //
+        // Assert the SPECIFIC row instead. `ack-spine` ships a bin and has 0 manifest
+        // callers, so its reason must name the BINARY class or the remedy is wrong.
+        let ack_spine = census
+            .rows
+            .iter()
+            .find(|r| r.gate == "ack-spine")
+            .expect("ack-spine must have a census row");
+        match &ack_spine.reachability {
+            GateReachability::Unreachable { reason } => assert!(
+                reason.contains("binary with no invocation site"),
+                "ack-spine ships a bin; its refusal must name the binary class, got: {reason}"
+            ),
+            other => panic!(
+                "ack-spine had 0 manifest callers and no invocation site when measured; \
+                 if that changed, update this leg deliberately. Got {other:?}"
+            ),
+        }
+    }
+
+    fn repo_root_for_test() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("workspace root")
+            .to_path_buf()
+    }
 }
 
 #[cfg(test)]
@@ -1830,9 +2162,11 @@ mod disk_pressure_thresholds {
         // The exact state that stopped every gate on 2026-09-01:
         // 9.2GiB used, 98MiB available on a ~9.3GiB volume.
         let total = 9_752_866; // ~9.3 GiB in 1K blocks
-        let avail = 100_352;   // ~98 MiB
-        assert!(refuses(total, avail),
-            "the state that actually halted the fleet must refuse");
+        let avail = 100_352; // ~98 MiB
+        assert!(
+            refuses(total, avail),
+            "the state that actually halted the fleet must refuse"
+        );
     }
 
     #[test]
@@ -1843,15 +2177,20 @@ mod disk_pressure_thresholds {
         // warning state. It catches the halt, not the trend.
         let total = 9_752_866;
         let avail = 1_572_864; // 1.5 GiB
-        assert!(!refuses(total, avail),
+        assert!(
+            !refuses(total, avail),
             "1.5GiB/16% free passes — documenting that this guard catches the HALT, \
-             not the 84% warning I ignored. Trend detection is a separate, unbuilt thing.");
+             not the 84% warning I ignored. Trend detection is a separate, unbuilt thing."
+        );
     }
 
     #[test]
     fn a_healthy_volume_passes() {
         // Post-clean: 5.6GiB free of 9.3GiB = 60%.
-        assert!(!refuses(9_752_866, 5_872_025), "a 60%-free volume must not refuse");
+        assert!(
+            !refuses(9_752_866, 5_872_025),
+            "a 60%-free volume must not refuse"
+        );
     }
 
     #[test]
@@ -1859,14 +2198,19 @@ mod disk_pressure_thresholds {
         // A large volume can be percentage-healthy and still too small in absolute
         // terms for a 4GiB release rebuild. 10% free of 8GiB = 800MiB.
         let total = 8_388_608; // 8 GiB
-        let avail = 838_860;   // ~819 MiB, 10% free
-        assert!(refuses(total, avail),
+        let avail = 838_860; // ~819 MiB, 10% free
+        assert!(
+            refuses(total, avail),
             "10% free is above the percentage floor but under 1GiB — the absolute \
-             floor must bite, or a big volume passes while a rebuild cannot fit");
+             floor must bite, or a big volume passes while a rebuild cannot fit"
+        );
     }
 
     #[test]
     fn a_zero_size_volume_is_a_finding_not_a_pass() {
-        assert!(refuses(0, 0), "an unmeasurable volume must refuse, never pass");
+        assert!(
+            refuses(0, 0),
+            "an unmeasurable volume must refuse, never pass"
+        );
     }
 }

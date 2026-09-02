@@ -2499,18 +2499,51 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             // crate because this string was hardcoded three hundred lines from the
             // state that produced it, and an operator following it would look for a
             // hook to fix and find nothing.
+            // THE SECOND CENSUS IS A DIFFERENT MEASUREMENT, AND IT CAN DISAGREE.
+            //
+            // `unwired` was decided upstream from census #1; this line ran census #2
+            // seconds later purely to fetch labels. With the old load-dependent probe
+            // the two disagreed, and the disagreement printed as
+            // `ack-stage[REACHABLE→none]` INSIDE `unwired=` — a row labelled reachable
+            // inside the list of things that are not. An operator reading that looks
+            // for "a trigger that resolves to no action", which is not what happened.
+            //
+            // Measured 2026-09-02 in the live heartbeat, build `7600dda`. The probe is
+            // deterministic now, so the two censuses should agree — which is exactly
+            // why a residual disagreement must be LOUD rather than rendered as a
+            // contradictory label. A fact stated in two places will disagree in one.
             let census = crate::census_gates(&config.repo);
             let mut parts = Vec::new();
+            let mut disagreed = Vec::new();
             for name in &unwired {
-                let action = census
-                    .rows
-                    .iter()
-                    .find(|r| &r.gate == name)
-                    .map(|r| (r.reachability.label(), r.reachability.next_action()))
-                    .unwrap_or(("UNKNOWN", "investigate-census"));
-                parts.push(format!("{name}[{}→{}]", action.0, action.1));
+                match census.rows.iter().find(|r| &r.gate == name) {
+                    Some(row) if row.reachability.is_reachable() => {
+                        disagreed.push(format!(
+                            "{name}[now {}→{}]",
+                            row.reachability.label(),
+                            row.reachability.next_action()
+                        ));
+                    }
+                    Some(row) => parts.push(format!(
+                        "{name}[{}→{}]",
+                        row.reachability.label(),
+                        row.reachability.next_action()
+                    )),
+                    None => parts.push(format!("{name}[UNKNOWN→investigate-census]")),
+                }
             }
-            let detail = format!("unwired={} owner=josh", parts.join(" "));
+            let detail = if disagreed.is_empty() {
+                format!("unwired={} owner=josh", parts.join(" "))
+            } else {
+                format!(
+                    "unwired={} census_disagreed={} owner=josh next_action=investigate-census -- \
+                     these rows were UNWIRED at decision time and REACHABLE when relabelled \
+                     seconds later; the census is not stable and its verdict cannot be trusted \
+                     until it is",
+                    parts.join(" "),
+                    disagreed.join(" ")
+                )
+            };
             write_heartbeat(config, tick, "GATE_UNWIRED", &detail)?;
             return Err(format!("GATE_UNWIRED {detail}"));
         }
