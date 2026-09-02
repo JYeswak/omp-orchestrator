@@ -111,6 +111,7 @@ fn resolve(path: &str, tracked: &BTreeSet<String>) -> Option<String> {
 
 /// `path.ext:LINE` — the extensions the plan actually cites.
 fn cites(text: &str) -> Vec<(String, usize)> {
+    let text = strip_markdown_noise(text);
     let mut out = Vec::new();
     for (i, _) in text.match_indices(':') {
         let before = &text[..i];
@@ -151,6 +152,274 @@ fn cites(text: &str) -> Vec<(String, usize)> {
 }
 
 #[test]
+fn bare_figure_scan_strips_comments_and_code_fences() {
+    let files = vec![(
+        "fixture.md".to_owned(),
+        "<!-- 999 crates -->\n~~~text\n888 tests\n~~~\nCurrent 777 packages (NUMBERS.toml [figures.workspace_packages]).\nBare 666 edges.".to_owned(),
+    )];
+    let keys = BTreeSet::from(["workspace_packages".to_owned()]);
+    let unresolved = unresolved_bare_figures(&files, &keys).expect("non-empty scan");
+    assert_eq!(
+        unresolved.len(),
+        1,
+        "only the real bare figure should remain: {unresolved:?}"
+    );
+    assert!(unresolved[0].literal.contains("666 edges"));
+}
+
+#[test]
+fn bare_figure_known_good_key_and_exemption_pass() {
+    let files = vec![(
+        "fixture.md".to_owned(),
+        "Current 51 packages (NUMBERS.toml [figures.workspace_packages]).\nHistorical 49 rows TREE-FIGURE-EXEMPT: retained snapshot.".to_owned(),
+    )];
+    let keys = BTreeSet::from(["workspace_packages".to_owned()]);
+    let unresolved = unresolved_bare_figures(&files, &keys).expect("non-empty scan");
+    assert!(
+        unresolved.is_empty(),
+        "resolved figures must pass: {unresolved:?}"
+    );
+}
+
+#[test]
+fn bare_figure_mutation_is_visible_to_the_scan() {
+    let keys = BTreeSet::from(["workspace_packages".to_owned()]);
+    let base = vec![(
+        "fixture.md".to_owned(),
+        "Current 51 packages (NUMBERS.toml [figures.workspace_packages]).".to_owned(),
+    )];
+    let before = unresolved_bare_figures(&base, &keys).expect("non-empty scan");
+    let mut mutated = base.clone();
+    mutated[0].1.push_str("\nNew 52 edges.");
+    let after = unresolved_bare_figures(&mutated, &keys).expect("non-empty scan");
+    let red = bare_figure_ceiling_check(&after, before.len())
+        .expect_err("added bare figure must exceed the baseline ceiling");
+    assert_eq!(
+        red.len(),
+        1,
+        "the ceiling gate must report the added figure: {red:?}"
+    );
+    assert!(before.is_empty());
+    assert_eq!(
+        after.len(),
+        1,
+        "one added bare figure must be detected: {after:?}"
+    );
+    assert!(after[0].literal.contains("52 edges"));
+}
+
+#[test]
+fn bare_figure_empty_scan_is_an_error() {
+    let keys = BTreeSet::new();
+    let empty: Vec<(String, String)> = Vec::new();
+    let error = unresolved_bare_figures(&empty, &keys).expect_err("empty scan must refuse");
+    assert!(
+        error.contains("ANTI-VACUITY"),
+        "typed empty-scan refusal: {error}"
+    );
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BareFigure {
+    file: String,
+    line: usize,
+    literal: String,
+}
+
+const BARE_FIGURE_UNITS: &[&str] = &[
+    "test functions",
+    "binary targets",
+    "crates",
+    "tests",
+    "targets",
+    "packages",
+    "rows",
+    "edges",
+    "leaves",
+];
+
+/// Preserve line numbers while removing HTML comments and fenced code blocks.
+fn strip_markdown_noise(text: &str) -> String {
+    let mut output = String::new();
+    let mut in_fence = false;
+    let mut in_comment = false;
+    for line in text.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.as_bytes().starts_with(&[b'`'; 3]) || trimmed.as_bytes().starts_with(b"~~~") {
+            in_fence = !in_fence;
+            output.push('\n');
+            continue;
+        }
+        if in_fence {
+            output.push('\n');
+            continue;
+        }
+        let mut rest = line;
+        while !rest.is_empty() {
+            if in_comment {
+                let Some(end) = rest.find("-->") else {
+                    rest = "";
+                    continue;
+                };
+                in_comment = false;
+                rest = &rest[end + 3..];
+                continue;
+            }
+            let Some(start) = rest.find("<!--") else {
+                output.push_str(rest);
+                break;
+            };
+            output.push_str(&rest[..start]);
+            in_comment = true;
+            rest = &rest[start + 4..];
+        }
+        output.push('\n');
+    }
+    output
+}
+
+fn number_key_nearby(lines: &[&str], index: usize, keys: &BTreeSet<String>) -> bool {
+    let context = lines[index];
+    context.contains("NUMBERS.toml") && keys.iter().any(|key| context.contains(key))
+}
+
+fn explicit_figure_exemption_nearby(lines: &[&str], index: usize) -> bool {
+    let context = lines[index];
+    context
+        .split_once("TREE-FIGURE-EXEMPT:")
+        .is_some_and(|(_, reason)| !reason.trim().is_empty())
+}
+
+/// Return bare figures that are neither tied to a NUMBERS key nor exempted.
+fn unresolved_bare_figures(
+    files: &[(String, String)],
+    keys: &BTreeSet<String>,
+) -> Result<Vec<BareFigure>, String> {
+    if files.is_empty() {
+        return Err("ANTI-VACUITY: bare-figure scan received no files".to_owned());
+    }
+    let mut scanned = 0usize;
+    let mut unresolved = Vec::new();
+    for (file, text) in files {
+        let clean = strip_markdown_noise(text);
+        let lines: Vec<&str> = clean.lines().collect();
+        for (line_index, line) in lines.iter().enumerate() {
+            for unit in BARE_FIGURE_UNITS {
+                let mut search_from = 0usize;
+                while let Some(relative) = line[search_from..].find(unit) {
+                    let unit_start = search_from + relative;
+                    let mut number_end = unit_start;
+                    while number_end > 0 && line.as_bytes()[number_end - 1].is_ascii_whitespace() {
+                        number_end -= 1;
+                    }
+                    let mut digit_start = number_end;
+                    while digit_start > 0 && line.as_bytes()[digit_start - 1].is_ascii_digit() {
+                        digit_start -= 1;
+                    }
+                    if digit_start < number_end
+                        && (digit_start == 0
+                            || !line.as_bytes()[digit_start - 1].is_ascii_alphanumeric())
+                    {
+                        scanned += 1;
+                        let end = unit_start + unit.len();
+                        if !number_key_nearby(&lines, line_index, keys)
+                            && !explicit_figure_exemption_nearby(&lines, line_index)
+                        {
+                            unresolved.push(BareFigure {
+                                file: file.clone(),
+                                line: line_index + 1,
+                                literal: line[digit_start..end].to_owned(),
+                            });
+                        }
+                    }
+                    search_from = unit_start + unit.len();
+                    if search_from >= line.len() {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    if scanned == 0 {
+        return Err("ANTI-VACUITY: bare-figure scan found no candidate figures".to_owned());
+    }
+    Ok(unresolved)
+}
+
+fn bare_figure_ceiling_check(
+    unresolved: &[BareFigure],
+    ceiling: usize,
+) -> Result<(), Vec<BareFigure>> {
+    if unresolved.len() <= ceiling {
+        Ok(())
+    } else {
+        Err(unresolved.to_vec())
+    }
+}
+
+fn numbers_keys(root: &std::path::Path) -> BTreeSet<String> {
+    let text = std::fs::read_to_string(root.join("NUMBERS.toml")).unwrap_or_default();
+    text.lines()
+        .filter_map(|line| {
+            line.strip_prefix("[figures.")
+                .and_then(|rest| rest.strip_suffix(']'))
+        })
+        .map(str::to_owned)
+        .collect()
+}
+
+fn plan_markdown_files(root: &std::path::Path) -> Vec<(String, String)> {
+    let mut files = Vec::new();
+    let Ok(entries) = std::fs::read_dir(root.join("docs/plan")) else {
+        return files;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().is_some_and(|extension| extension == "md") {
+            let name = path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("?");
+            if let Ok(text) = std::fs::read_to_string(&path) {
+                files.push((name.to_owned(), text));
+            }
+        }
+    }
+    files.sort_by(|left, right| left.0.cmp(&right.0));
+    files
+}
+
+/// The ceiling is measured by this scanner, then ratcheted downward only when debt is removed.
+#[test]
+fn unresolved_bare_figures_do_not_exceed_the_self_seeded_ceiling() {
+    let Some(root) = repo_root() else {
+        eprintln!(
+            "SKIP unresolved_bare_figures_do_not_exceed_the_self_seeded_ceiling: no repo root"
+        );
+        return;
+    };
+    let files = plan_markdown_files(&root);
+    let keys = numbers_keys(&root);
+    let unresolved = unresolved_bare_figures(&files, &keys).expect("non-empty plan scan");
+    const UNRESOLVED_BARE_FIGURE_CEILING: usize = 76;
+    println!(
+        "D1N BARE_FIGURE_SCAN files={} unresolved={} ceiling={UNRESOLVED_BARE_FIGURE_CEILING}",
+        files.len(),
+        unresolved.len()
+    );
+    assert!(
+        unresolved.len() <= UNRESOLVED_BARE_FIGURE_CEILING,
+        "unresolved bare figures rose above the self-seeded ceiling: {unresolved:?}"
+    );
+}
+
+#[test]
+fn line_cite_scan_strips_comments_and_code_fences() {
+    let text = "<!-- src/lib.rs:999 -->\n~~~text\nsrc/lib.rs:998\n~~~\nsrc/lib.rs:1";
+    assert_eq!(cites(text), vec![("src/lib.rs".to_owned(), 1)]);
+}
+
+#[test]
 fn every_in_repo_line_cite_names_a_line_that_exists() {
     let Some(root) = repo_root() else {
         eprintln!("SKIP every_in_repo_line_cite_names_a_line_that_exists: no repo root");
@@ -180,8 +449,14 @@ fn every_in_repo_line_cite_names_a_line_that_exists() {
     mds.sort();
 
     for md in &mds {
-        let Ok(text) = std::fs::read_to_string(md) else { continue };
-        let name = md.file_name().and_then(|n| n.to_str()).unwrap_or("?").to_owned();
+        let Ok(text) = std::fs::read_to_string(md) else {
+            continue;
+        };
+        let name = md
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("?")
+            .to_owned();
         for (path, line) in cites(&text) {
             scanned += 1;
             match resolve(&path, &files) {
@@ -198,7 +473,10 @@ fn every_in_repo_line_cite_names_a_line_that_exists() {
                 None => {
                     let top = path.split('/').next().unwrap_or("").to_owned();
                     if !KNOWN_EXTERNAL_REPOS.iter().any(|(r, _)| *r == top) {
-                        unresolved.entry(top).or_default().push(format!("{name}: {path}:{line}"));
+                        unresolved
+                            .entry(top)
+                            .or_default()
+                            .push(format!("{name}: {path}:{line}"));
                     }
                 }
             }
