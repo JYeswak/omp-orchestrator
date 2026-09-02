@@ -48,21 +48,29 @@ mean**, not **means**.
 
 ## 2. Derivation — every figure below carries its command
 
-Pinned: the counts in this document were derived at commit `d48615c` on 2026-09-01. Re-derive
-before citing; the invariant suite re-derives on every run.
+Pinned, and deliberately MIXED VINTAGE rather than uniformly restated: the bulk of the counts below
+were derived at commit `d48615c` on 2026-09-01. Re-derived at commit `b403e3a` on 2026-09-02: every
+figure in this section's command block, `XC-003`'s emitters cell, and §6's `XC-PT-SELFTEST` and
+`XC-PT-OUTCOME-CODE` rows. Four of the six §2 figures had DRIFTED in one day — `ExitCode::from`
+284 -> 328, `.rs` files 123 -> 145, `ExitCode::(SUCCESS|FAILURE)` 151 -> 160, and `XC-003` 11
+crates/24 sites -> 14/26 — while `process::exit` held at 14, which is the positive control proving
+the re-reading instrument was the same shape as the original. Re-derive before citing. The invariant
+suite re-derives the EMISSION SET on every run and asserts only lower bounds nearby — `FILE_FLOOR`
+100, `CODE_FLOOR` 10, `PASSTHROUGH_FLOOR` 5 (`crates/no-shell-gate/tests/exit_codes.rs:37-39`) — so
+it catches a collapse to nothing and passes every one of the four drifts above.
 
 ```bash
 # emission sites, by mechanism
-git grep -c --no-index -E 'ExitCode::from'   -- 'crates/*/src/*'   # 284 lines
+git grep -c --no-index -E 'ExitCode::from'   -- 'crates/*/src/*'   # 328 lines (was 284 at d48615c)
 git grep -c --no-index -E 'process::exit'    -- 'crates/*/src/*'   #  14 lines
-git grep -c --no-index -E 'ExitCode::(SUCCESS|FAILURE)' -- 'crates/*/src/*'  # 151 lines
+git grep -c --no-index -E 'ExitCode::(SUCCESS|FAILURE)' -- 'crates/*/src/*'  # 160 lines (was 151)
 # distinct literal codes and their site counts
 git grep -ho --no-index -E 'ExitCode::from\([0-9]+\)' -- 'crates/*/src/*' \
   | grep -oE '[0-9]+' | sort -n | uniq -c
 # named constants, and any name bound to two values
 git grep -n --no-index -E '^\s*(pub )?const EXIT_[A-Z_]+' -- 'crates/*/src/*'
 # scan-set floor: .rs files under crates/*/src
-git ls-files --others --cached --exclude-standard -- 'crates/*/src/*' | grep -c '\.rs$'  # 123
+git ls-files --others --cached --exclude-standard -- 'crates/*/src/*' | grep -c '\.rs$'  # 145 (was 123)
 ```
 
 **INSTRUMENT NOTE, and it is the reason this section exists.** The first run of the literal-code
@@ -85,7 +93,7 @@ counts distinct emitting crates.
 | `XC-000` | 0 | all 51 bin targets | the process completed and made its claim | that work happened. `Discharged::exit_code()` (`crates/omp-orchestrator/src/lib.rs:1359`) returns 0 only for NON-EMPTY evidence, and a no-op tick, a `--dry-run`, and a real dispatch all exit 0 | read the emitted JSON, never the code alone |
 | `XC-001` | 1 | 32 crates, 89 sites | **overloaded, three ways**: a gate refused (a working gate), the tool itself broke, or the caller misused the CLI | any one of the three. `crates/no-shell-gate/src/bin/pre-push-gate.rs` emits 1 for `PRE_PUSH_GATE_REFUSED` at `:312,321,366,375,384,402,416,434` AND for `PRE_PUSH_GATE_ERROR` at `:287,303,340,427` | read the marker prefix on stderr; `REFUSED` = the gate worked, `ERROR` = the gate did not run. Filed as `omp-orchestrator-exit-1-overloaded-x1o` |
 | `XC-002` | 2 | 34 crates, 118 sites | dominantly a usage error (50 of 118 sites carry a `usage` message), also a runtime error, also "unmeasurable" | a usage error. `OracleCompareVerdict::Unmeasurable` maps to 2 (`crates/oracle-compare/src/lib.rs:103`) while `EXIT_USAGE = 2` in `crates/fleet-composite/src/main.rs:14`; `PLAN_ASSEMBLE_ERROR` also exits 2. **It also collides with the `cargo` wrapper's own 2** — see `XC-EXT-002` | check stderr for a `usage:` block before assuming operator error |
-| `XC-003` | 3 | 11 crates, 24 sites | a dependency the tool needs is unavailable or unreadable — `ORACLE_UNAVAILABLE`, `TRACKER_ERROR`, `PRODUCT_UNASKABLE`, lint `ERROR` | that the checked property is bad. 3 is "could not check", adjacent to `XC-077` | fix the dependency, then re-run; do not record a verdict |
+| `XC-003` | 3 | **14 crates, 26 sites** — was "11 crates, 24 sites", which had DRIFTED. Re-derived 2026-09-02 by three independently-shaped readers that agree: `git grep -c --no-index -F 'ExitCode::from(3)' -- 'crates/*/src/*'` summed to 26, a `git grep -l` roll-up to 14 distinct crates, and a python recursive walk of `crates/*/src/**.rs` to the same 14/26. No const-declared path exists for this code, so the literal scan is complete for it | **two meanings, and they are not interchangeable.** Dominantly a dependency the tool needs is unavailable or unreadable — `ORACLE_UNAVAILABLE`, `TRACKER_ERROR`, `PRODUCT_UNASKABLE`, lint `ERROR`. **AND, in the five-gate pre-commit family, `NOTHING_TO_CHECK` — the scan set was empty**: `crates/no-shell-gate/src/bin/pre-commit-gate.rs:28`, `crates/path-literal-guard/src/main.rs:77`, `crates/state-wildcard-lint/src/main.rs:82`, all three `Verdict::NothingToCheck => ExitCode::from(3)` | that the checked property is bad. 3 is "could not check", adjacent to `XC-077`. **And it does not mean one thing**: "a dependency is missing" is a fault to repair, while "nothing was eligible" is a healthy tree plus an empty scan set — the condition `omp-orchestrator-calr` exists to stop being read as a pass. Not renumbered, per §5. The `exit_codes` suite cannot catch either the stale count or the double meaning: it keys on the code cell alone and proves PRESENCE OF A ROW, never truth of one — its own disclosure at `crates/no-shell-gate/tests/exit_codes.rs:19-21` | read the marker prefix on stderr — `NOTHING_TO_CHECK` means nothing was scanned, anything else means fix the dependency and re-run. Record no verdict either way |
 | `XC-004` | 4 | `loop-switch` (3), `no-shell-gate` (1) | a state write or removal failed, including "removal reported success but the switch is still set" | a policy refusal. This is a filesystem-level failure of the tool's own state | inspect the state path named on stderr |
 | `XC-012` | 12 | `inbox-monitor` | **MAIL WAITING** — a human owes an answer to a named sender. Reachable only after BOTH surfaces read successfully, so it is a positive observation, not a silence | that the message is urgent — `importance` is a separate field on the row — and not that anyone has READ it. Folding this into 1 was refused: 1 already carries gate-refused, tool-broke and caller-misused, which would make the one actionable outcome indistinguishable from a crash | answer the named sender, or mark read; the ledger row names the resolved pane |
 | `XC-013` | 13 | `inbox-monitor` | **UNREACHABLE** — the monitor could not observe, so the verdict is ABSENT rather than negative. `subprocess-contract`'s `TimedOut`/`Unspawned` both map here | that there is no mail. A DIFFERENT number from 12 deliberately: "I could not look" is not the same fact as "you have mail". This is the exact false negative measured on 2026-09-02, when `am agent start` claimed no listener while `/health` returned `status: ready` | fix reachability, then re-run; record no verdict |
@@ -166,6 +174,8 @@ wearing one of our binaries' names. Every site must be listed here or the invari
 | `XC-PT-VERDICT` | `verdict.exit` | `dispatcher-deadman` |
 | `XC-PT-EXITCODE` | `v.exit_code()` | `pane-oracle-diff` |
 | `XC-PT-VERDICT-CODE` | `verdict.exit_code()` | `inbox-monitor` |
+| `XC-PT-SELFTEST` | `selftest()` | `cargo-lane-budget` (`src/lib.rs:943,967`, `src/main.rs:24`) |
+| `XC-PT-OUTCOME-CODE` | `outcome.code` | `refill-idle-panes` (`src/main.rs:186,209,226,276`) |
 
 A pass-through means **the code space at that site is not ours** — it is 0–255 of whatever ran
 underneath, including `XC-EXT-101` and every `XC-EXT-*` row above. `XC-PT-VERDICT` and
