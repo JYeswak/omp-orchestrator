@@ -1118,7 +1118,6 @@ mod tests {
 
 #[cfg(test)]
 mod escalation_tests {
-    use super::*;
     use crate::{escalate_non_delivery, ComposerEvidence, NonDeliveryEscalation};
     use tick_monitor::PaneState;
 
@@ -1170,7 +1169,7 @@ mod escalation_tests {
 #[cfg(test)]
 mod ack_wait_tests {
     use super::*;
-    use tick_monitor::{Observation, ObservationIdentity, PaneState};
+    use tick_monitor::{Observation, PaneState};
 
     fn obs(state: PaneState, at: u64) -> Observation {
         Observation {
@@ -1279,7 +1278,14 @@ mod ack_wait_tests {
 
         // 30s -- the OLD bound -- is below the floor, so the old window could not
         // have answered this question even in principle. That is the bead's thesis.
-        assert!(30 < OBSERVATION_WINDOW_MIN_SECS);
+        //
+        // Compile-time by design: this is a const-drift guard whose whole job is to
+        // fail the build when someone edits the floor, and a runtime assertion
+        // cannot do that job.
+        #[allow(clippy::assertions_on_constants)]
+        {
+            assert!(30 < OBSERVATION_WINDOW_MIN_SECS);
+        }
     }
 
     /// The two states the COMPILER named. A wildcard arm would have swallowed both,

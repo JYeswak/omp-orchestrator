@@ -18,6 +18,29 @@ Define what receiver-side evidence can establish after a transport send: two cap
 
 `receiver-receipt` is observational and never sends input. The caller performs the transport action, captures the pane before and after, and supplies `PostSendObservation` to `assess_receiver_receipt`. A sender return value is not a receipt.
 
+## Types
+
+Seven public types, named because the bead names them and because a contract that
+describes only its IDs cannot be checked against the source. The validator asserts
+each `pub enum` below exists and that the count still equals seven.
+
+| Type | Question it answers | Inhabited failure state |
+|---|---|---|
+| `PanePresence` | Was the named pane in the census? | `PaneListEmpty` — an empty census is not a death certificate. |
+| `PostSendObservation` | Was a post-send capture obtained at all? | `Missing` — no capture is not non-delivery. |
+| `ReceiptReason` | WHY a verdict is negative or unknown. | Every negative verdict carries one; a bare refusal has no constructor. |
+| `ReceiptVerdict` | Did the evidence support delivery? | `Indeterminate { reason }` — distinct from `NoReceipt`. |
+| `AckWaitVerdict` | Did an expired ACK wait see busy or unreachable? | `Indeterminate { reason }` — neither a busy finding nor a death claim. |
+| `ComposerEvidence` | Is there text in the composer? | `Typed` is arrival, never submission. |
+| `NonDeliveryEscalation` | What action does the evidence support? | `KeepPolling` — the default when nothing is proven. |
+
+**Every type has an inhabited unknown.** That is the shared design rule: a real,
+distinct condition with no representation gets coerced into a neighbouring value,
+and the coercion reads as normal. `AckWaitVerdict` exists because the supervisor
+previously reported `ack_readback_missing` for a busy worker and a dead one alike.
+
+## Evidence IDs
+
 | Value / ID | Meaning | Does not prove |
 |---|---|---|
 | `RR-PANE-PRESENT` | A named pane was found in a non-empty census. | That it accepted, submitted, or understood work. |
@@ -29,6 +52,9 @@ Define what receiver-side evidence can establish after a transport send: two cap
 | `RR-INDETERMINATE` | Evidence is missing, obscured, blocked, unreadable, or otherwise insufficient. | Idle, dead, delivered, or refused. |
 | `RR-COMPOSER-TYPED` | Text is present in the composer. | Submission or execution. |
 | `RR-COMPOSER-FREE` | The composer is empty or carries only a greyed suggestion. | That no packet ever arrived without the matching receiver state. |
+| `RR-ACK-WAIT-BUSY` | The pane's timer ADVANCED across the observation floor. | That the packet arrived, or that this pane is working on the named bead. |
+| `RR-ACK-WAIT-UNREACHABLE` | The pane is wedged, dialog-blocked, quota-halted, idle without an ack, or its timer did not advance across the floor. | Death, or that the packet was never received. |
+| `RR-ACK-WAIT-INDETERMINATE` | The window is below the floor, the captures are out of order, the pane ids differ, or the state is unproven. | Busy, unreachable, or delivered. |
 
 `ReceiptReason` carries the reason for `NoReceipt` or `Indeterminate`: missing observation, pane mismatch, dialog, wedged/unsubmitted composer, empty census, unreadable state, stable content, timer failure, unproven transport, or missing acknowledgement read-back. `NonDeliveryEscalation` is an action projection: `ResendDirect`, `SubmitParked`, or `KeepPolling`.
 
@@ -70,6 +96,29 @@ The two-capture `tick-monitor::Liveness` vocabulary names `Obscured` and `Unprov
 
 Last-line anchoring is mandatory. The status line is selected by `tick-monitor`; a stale task label in scrollback is not state. Timer parsing must use the status-line timer's unit: `1h` is not a turn timer merely because it appears near a turn, and goal-elapsed or spend counters are not receipt evidence. A whole-buffer spinner match is not admissible because it can report `WORKING` and `IDLE` simultaneously from scrollback and the current last line.
 
+### RR-L6-ACK-WAIT-DISCRIMINATES
+
+An expired ACK wait must say WHICH of busy or unreachable it observed. `AckWaitVerdict` has three arms and **exactly one may interrupt a human**: `Unreachable`. `BusyStillWorking` answers retry-next-tick; `Indeterminate` answers re-observe-past-the-floor.
+
+The discriminator is **timer advance across `OBSERVATION_WINDOW_MIN_SECS`**, not elapsed time. Measured pane timers sat at 120s, 1320s and 1440s inside a single tool call, so no fixed bound separates a busy worker from a wedged one; widening a window only moves where it guesses wrong. **The window decides when to re-check; it must not decide whether a human is called.** A pane that never acks therefore stays a human debt at every window, and a widening that makes the never-acking case pass is a regression wearing a fix.
+
+`RECEIPT_TIMEOUT` in the supervisor is 30 seconds, which is BELOW this contract's 75-second floor: the old bound could not answer this question even in principle. Landed `d4e8453`; bead `omp-orchestrator-iis6`.
+
+## Cross-Check Against `pane_observation_contract`
+
+Each law of this contract is stated against its counterpart. `pane_observation_contract` owns evidence GRADE; this contract owns delivery VERDICT semantics, so a divergence is a narrowing and never a contradiction.
+
+| This contract | `pane_observation_contract` | Relationship |
+|---|---|---|
+| `RR-L1-TWO-CAPTURE` | `PO-L1-TWO-CAPTURE-DOMINANCE` | **Stricter.** PO requires a changed timer **or** changed hash for dominance; `ReceiptConfirmed` requires the transition-appropriate timer evidence **and** changed stable content. Receipt confirmation is a subset of two-capture evidence. |
+| `RR-L4-ABSENCE-IS-UNKNOWN` | `PO-L2-UNKNOWN-INHABITED` | **Same law, receipt vocabulary.** PO forbids converting unreadable evidence to `Idle`; RR-L4 forbids converting a missing observation into `NoReceipt` or an escalation. Both make absence an inhabited state. |
+| `RR-L5-OBSCURED-UNPROVEN-INHABITED` | `PO-L3-LAST-LINE` | **Consumes it.** Last-line anchoring is PO's constructor rule; RR-L5 restates it as a receipt admissibility rule and adds the timer-unit and whole-buffer prohibitions. |
+| `RR-L2-FRESH-IDLE-TO-WORKING`, `RR-L6-ACK-WAIT-DISCRIMINATES` | `PO-L4-NO-CONTRADICTION` | **Inherits it.** One `PaneState` is exactly one value, so `Working ∧ Idle` has no constructor and neither a receipt nor an ack-wait verdict can claim both. RR-L6 adds the same property at the verdict layer: exactly one arm owes a human. |
+| `RR-L3-COMPOSER-ARRIVAL-NOT-DELIVERY` | `PO-L5-DISPATCH-SEPARATE` | **Same separation, other axis.** PO separates dispatch admissibility from liveness; RR-L3 separates composer arrival from delivery and forbids deriving `safe_to_dispatch` from composer evidence. |
+
+**Unmapped in both directions, stated rather than implied:** PO has no counterpart for `RR-L2`'s freshness bound (`MAX_IDLE_TO_WORKING_TIMER_SECS`), because a 30-second transition bound is a delivery-verdict rule and not an evidence grade. This contract has no counterpart for PO's evidence-ordering section, which it consumes rather than restates.
+
+
 ## Transition Rules
 
 | Pre-state | Post-state | Positive receipt condition | Otherwise |
@@ -88,45 +137,41 @@ Last-line anchoring is mandatory. The status line is selected by `tick-monitor`;
 
 ## Cross-References
 
-- `crates/receiver-receipt/src/lib.rs` — six public types, capture adapter, classifier, and invariant tests
+- `crates/receiver-receipt/src/lib.rs` — seven public types, capture adapter, classifier, and invariant tests
+- `crates/receiver-receipt/tests/receipt_contract.rs` — the validator for THIS document
 - `crates/receiver-receipt/src/bin/receiver-receipt.rs` — CLI surface
 - `crates/tick-monitor/src/lib.rs` — last-line selection, timer parsing, stable hash, `PaneState`, and `Liveness`
 - `crates/pane-truth/src/lib.rs` — separate terminal truth authority; no Phase 0 migration
 - `crates/omp-types/src/pane_observation.rs` — separate Phase 0 evidence algebra; do not edit in this task
-- `docs/contracts/pane_observation_contract.md` — `PO-L1-TWO-CAPTURE-DOMINANCE`
+- `docs/contracts/pane_observation_contract.md` — `PO-L1`..`PO-L5`, cross-checked above
 - `crates/ack-spine/src/authorities.rs` — `DeliveryAuthority` consumes `ReceiptVerdict`
 - `docs/contracts/ack_spine_contract.md` — transport/delivery/ack separation
-- `crates/receiver-receipt/src/lib.rs:464` — idle-to-working receipt test
-- `crates/receiver-receipt/src/lib.rs:504` — working timer-reset receipt test
-- `crates/receiver-receipt/src/lib.rs:537` — dialog indeterminate test
-- `crates/receiver-receipt/src/lib.rs:564` — missing/mismatched observation tests
+- `crates/omp-orchestrator/src/main.rs` — the supervisor's ACK wait consumes `AckWaitVerdict`
 
 ## Validation
 
-```bash
-python3 - <<'PY'
-from pathlib import Path
-import re
+One pasteable command. It is a Rust suite, not an interpreter payload: this
+repository's one rule is *"No `.sh`. No `.py`."*, the extension gate only sees files,
+and the previous version of this section was a `python3` heredoc — the same payload
+wearing a shape the gate cannot see.
 
-path = Path("docs/contracts/receiver_receipt_contract.md")
-text = path.read_text()
-checks = {
-    "size": len(text.encode()) <= 25_000,
-    "bead": bool(re.search(r"^Bead:", text, re.M)),
-    "purpose": bool(re.search(r"^## Purpose$", text, re.M)),
-    "artifacts": bool(re.search(r"^## Contract Artifacts$", text, re.M)),
-    "ids": len(set(re.findall(r"\b[A-Z]{2,6}-[A-Z0-9]{2,}(?:-[A-Z0-9]+)*\b", text))) >= 5,
-    "validation": bool(re.search(r"^## Validation$", text, re.M)),
-    "cross_references": bool(re.search(r"^## Cross-References$", text, re.M)),
-    "non_coverage": bool(re.search(r"^## Non-Coverage$", text, re.M)),
-    "no_claim": bool(re.search(r"^## NO-CLAIM$", text, re.M)),
-}
-print(f"RECEIVER_RECEIPT_CONTRACT_BYTES={len(text.encode())}")
-print(checks)
-if not all(checks.values()):
-    raise SystemExit(1)
-PY
+```bash
+cargo test -p receiver-receipt --test receipt_contract
 ```
+
+**It checks doc-to-SOURCE agreement, not only document shape.** The previous
+validator asserted nine structural facts and **passed while this document was
+wrong**: it said *"six public types"* when seven existed, because `AckWaitVerdict`
+landed the same day in `d4e8453`. A shape-only validator cannot see that — the shape
+did not change, only the world did. So the suite asserts every named enum exists in
+the source, that the stated count matches `pub enum` declarations, and that the two
+quoted constants still hold their quoted values.
+
+It also refused this section's own former contents, and finding that took one more
+instance of a familiar defect: `## Non-Coverage` appeared **inside the old python
+block** as a regex literal, so a section-slicing check matched the code block
+instead of the section. The self-referential checker again — a checker's input
+containing text about the thing it checks — this time inside the fix for it.
 
 ## Non-Coverage
 
