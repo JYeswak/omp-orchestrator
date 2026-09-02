@@ -132,10 +132,10 @@ A requirement that cannot be checked is a wish. Each row states the observable t
 | R11 | Requirements written down before dispatch | **this file** |
 | R12 | Economic and risk questions are registered, owned, and answerable | §8 — thirteen registered questions (eleven OPEN, Q9 ANSWER MOVED, Q10 PARTIAL) and five kill criteria |
 | R13 | Full idea-to-shipped lifecycle mapped through skills, crates, gates, and dispatch | §11 lifecycle evidence map plus §12 S1–S9 runbook; every stage must carry the seven-field dispatch contract |
-> **Upstream type for the receipts gap:** `IrcDeliveryReceipt` + `AsyncJobDeliverySink` (`tools/hub/types.d.ts:8,84`) already ship. The demand above is DECLARED ONLY — no wire path measured — not precedent-free, and this row must not be read as "nothing exists upstream".
+> **Upstream type for the receipts gap:** `IrcDeliveryReceipt` + `AsyncJobDeliverySink` (`tools/hub/types.d.ts:AsyncJobDeliverySink`) already ship. The demand above is DECLARED ONLY — no wire path measured — not precedent-free, and this row must not be read as "nothing exists upstream".
 > **Completion is not precedent-free.** `AgentEndEvent.willContinue` + `SessionStopEvent` ship on `RpcSessionEventFrame` and were observed crossing the wire. Any "precedent-free" language in this table is about OUR consumption, never about the platform's vocabulary.
 
-> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:IrcDeliveryReceipt`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 **NO-CLAIM:** this table records that a section is responsible for a requirement. It does not
 establish that the section discharges it well. Grading the sections is a separate pass, and §09
@@ -203,7 +203,7 @@ and to our `installer` binary, not to tmux.
 The corrected hazard points the **opposite way**, and it is the live one. A probe that treats
 non-zero as *absent* records tmux — present, working, `3.6a` on `-V` — as **MISSING**. That is a
 false negative on the presence of the one binary through which we read pane truth. It is not
-theoretical: `pi_agent_rust/src/doctor.rs:924` gates `check_tool` on `output.status.success()` and
+theoretical: `pi_agent_rust/src/doctor.rs:check_tool` gates `check_tool` on `output.status.success()` and
 only forgives a failure through `probe_failure_is_known_nonfatal` at `:1052`, which hard-codes
 `if tool.ne("sh")` — so tmux falls straight through to "invocation failed."
 
@@ -220,15 +220,15 @@ Produced by the built scanner: `/Volumes/BuildShared/cargo-targets/debug/omp-inv
 Round-10 capture: 544,697 bytes of JSON, exit 2, envelope status UNKNOWN; that byte count and its un-hashed output are historical/non-authoritative.
 Fresh recapture on 2026-08-31 from the exact invocation cd /Users/josh/Developer/omp-orchestrator && /Volumes/BuildShared/cargo-targets/debug/omp-inventory-map doctor > /tmp/omp-inventory-map-2026-08-31.json: exit 2, 3,032,388 bytes, SHA-256 876809f0779a81b31126564b2b166a7a883c4f5365b499561242013c7dd4c899. Input tree: that workspace working tree at capture time; OMP target: omp/18.0.11. No commit/source revision was recorded, so this is a hash-anchored artifact snapshot, not a revision-pinned source claim.
 The fresh artifact is the only hash-anchored scanner output in this brief. Its summary is recorded below; the older 181/183/184 arithmetic is retained only as a labelled round-10 historical snapshot.
-- **Historical round-10 node/row shape:** the seven discovered count fields summed to **181** source rows. The reported **183 rows** therefore included two synthetic records: one transport sentinel and one slash_command expectation sentinel. The slash_commands=0 field was the discovered command count; the slash_command 1 row was the synthetic mismatch sentinel, not an enumerated command. The **184 nodes** were those 183 row records plus one scanner root/envelope node. No synthetic record was counted as discovered coverage.
+- **Historical round-10 node/row shape:** the seven discovered count fields summed to **181** source rows. The reported **183 rows** therefore included two synthetic records: one transport sentinel and one slash_command expectation sentinel. The slash_commands=0 field was the discovered command count; the slash_command 1 row was the synthetic mismatch sentinel, not an enumerated command. The **184 nodes** were those 183 row records plus one scanner root/envelope node. No synthetic record was counted as discovered coverage. — HISTORICAL as of 2026-09-02.
 - **Historical arithmetic:** 181 discovered rows + 2 synthetic sentinel rows = 183 row records; 183 row records + 1 root/envelope node = 184 nodes. Do not treat these round-10 values as the current census.
-- **Pre-extraction hash-anchored summary (historical):** 981 row records, 982 nodes, and 1,803 edges. Counts: cli_commands=39, type_roots=57, declarations=14, rpc_handlers=42, slash_commands=799, omp_methods=3, workspace_crates=26; expected_slash_commands=136, so the scanner remains UNKNOWN with exit 2.
+- **Pre-extraction hash-anchored summary (historical):** 981 row records, 982 nodes, and 1,803 edges. Counts: cli_commands=39, type_roots=57, declarations=14, rpc_handlers=42, slash_commands=799, omp_methods=3, workspace_crates=26; expected_slash_commands=136, so the scanner remains UNKNOWN with exit 2. — HISTORICAL as of 2026-09-02.
 - **Pre-extraction row kinds (historical):** cli_command 39 · type_root 57 · rpc_handler 42 · workspace_crate 26 · declaration 14 · omp_method 3 · slash_command 799 · transport 1. The transport row is the one synthetic transport sentinel; the 799 slash-command rows are discovered records, not the old expectation sentinel.
 - **Historical round-10 counts (non-authoritative):** cli_commands=39, type_roots=57, declarations=14, rpc_handlers=42, slash_commands=0, omp_methods=3, workspace_crates=26. The old row-kind line's transport 1 and slash_command 1 were synthetic sentinels, as classified above.
 - **Historical round-10 scanner hole:** every count had an expected_* twin; slash_commands=0 differed from expected_slash_commands=136, which made that envelope UNKNOWN and exit 2. The old claim that 136 slash commands were unmapped is not a current count; the fresh artifact finds 799 slash-command records against the same expected value and still requires reconciliation.
 **Current workspace boundary (re-derived 2026-09-01):** the scanner snapshot above predates the extraction wave and remains historical. Direct `cargo metadata --format-version 1 --no-deps` is the live source for the package and binary-target counts, owned by NUMBERS.toml keys `[figures.workspace_crates]` and `[figures.built_binaries]`; this paragraph deliberately freezes no integer. Regenerate the inventory artifact before treating any scanner count as current.
 - **Historical round-10 classification (non-authoritative):** CAPABILITY_NOT_USED 157 · SCRAPED_OR_OBSERVED_ALTERNATIVE 18 · MAPPED_BY_DIRECT_PROBE 8.
-- **Historical round-10 edge relations (non-authoritative):** provides 157 · map-to-none 25 · path-depends-on 18 · consumes 7. All 7 consumes edges originated from omp-inventory-map; 25 of 26 crates consumed zero OMP surface.
+- **Historical round-10 edge relations (non-authoritative):** provides 157 · map-to-none 25 · path-depends-on 18 · consumes 7. All 7 consumes edges originated from omp-inventory-map; 25 of 26 crates consumed zero OMP surface. — HISTORICAL as of 2026-09-02.
 
 The previously-published figure **"81 JSON-RPC methods, 17 used" is RETIRED** — it was not
 re-derivable. The measured surface is 39 CLI subcommands, 71 type-surface entries (57 dirs + 14
@@ -347,7 +347,7 @@ was wrong is the transferable lesson: `AUTOMATED = a #[test] fn whose name conta
 read as a measurement and was a rename. Typing a proxy does not stop it being a proxy.
 
 > **Attribution, corrected — `%1409` caught me inflating this.** The first draft read *"`%1414`
-> demanded this rebuild as its BLOCKER 1"* and quoted it. The quote is real (`g-adversarial.md:10`,
+> demanded this rebuild as its BLOCKER 1"* and quoted it. The quote is real (`g-adversarial.md:BLOCKER`,
 > *"Retire this table and rebuild it with typed automated, manual, affordance, and none
 > statuses"*), and `%1409` was wrong to say it appears in no artifact. But it was right about the
 > thing underneath: **my own spawn prompt to `%1414` said *"should it be retired and rebuilt? Argue
@@ -361,9 +361,9 @@ reading the tests, the `mutation` column turns out to conflate **three different
 
 | kind | example | strength |
 |---|---|---|
-| an **automated** mutation test | `undrained-pipe-lint/tests/specimens.rs:205` `fn mutation_removing_stderr_pipe_retires_violation()` | strongest — the suite runs it |
-| a **documented manual** procedure | `no-shell-gate/tests/gate.rs:12-14` names the three tests that must go RED under mutation: *"A green mutation run would mean the legs are not attributable to the pattern and prove nothing"* | real, but a human must run it |
-| a **mutation affordance** | `no-shell-gate/tests/wired_lanes.rs:95-96` — *"The test-code stripping switch is deliberately named so its mutation is attributable"* over `const STRIP_TEST_CODE: bool = true;` | weakest — an invitation, not a leg |
+| an **automated** mutation test | `undrained-pipe-lint/tests/specimens.rs:heading_an_automated_mutation_test_undrained_pipe_lint` `fn mutation_removing_stderr_pipe_retires_violation()` | strongest — the suite runs it |
+| a **documented manual** procedure | `no-shell-gate/tests/gate.rs:heading_a_documented_manual_procedure_no_shell_gate` names the three tests that must go RED under mutation: *"A green mutation run would mean the legs are not attributable to the pattern and prove nothing"* | real, but a human must run it |
+| a **mutation affordance** | `no-shell-gate/tests/wired_lanes.rs:STRIP_TEST_CODE` — *"The test-code stripping switch is deliberately named so its mutation is attributable"* over `const STRIP_TEST_CODE: bool = true;` | weakest — an invitation, not a leg |
 
 So `no-shell-gate` — the gate this brief has called the exemplar throughout — has **no test function
 with `mutation` in its name at all**. Its mutation discipline is a documented procedure over named
@@ -460,14 +460,14 @@ Not built-vs-wired. **Wired-but-unaddressable.** It adds a sixth required gate p
 - **The async contract:** asupersync 0.4.9, pinned rev `fa3c01aec`. `&Cx` first; `cx.checkpoint()`
   in loops; region-owned tasks, no detached tasks; **kill the process GROUP, not the pid**; drain
   both pipes; **a timeout is not a verdict**.
-- **UNVERIFIED binding observations (not measured facts):** the working notes mention 29 raw spawn sites, 4 crates using subprocess-contract, and 12 of 14 async functions taking cx first. No exact command, input scope, exclusions, source revision, or captured output was retained for these figures, so they are not authoritative and MUST NOT drive closure. The async contract above is the design requirement; these observations do not prove conformance.
+- **UNVERIFIED binding observations (not measured facts):** the working notes mention 29 raw spawn sites, 4 crates using subprocess-contract, and 12 of 14 async functions taking cx first. No exact command, input scope, exclusions, source revision, or captured output was retained for these figures, so they are not authoritative and MUST NOT drive closure. The async contract above is the design requirement; these observations do not prove conformance. — HISTORICAL as of 2026-09-02.
 - **Unsafe — source-aware snapshot.** The false-zero experiment immediately above gives the complete roots and commands. Its explicit denominator is the 26 workspace Cargo.toml files; recorded output was 26/26 with the Cargo lint and 25/26 with the inner Rust attribute (pane-dispatch-fence is the binary-only exception, per §3.4). This is a dated snapshot, not a living count; re-run that command before treating it as current. Registered in NUMBERS.toml (crates_forbidding_unsafe).
 - **omp-types — corrected by CrateSpecs.** The first draft claimed it re-exports AckKind, DeliveryClass, ObligationLedger, Budget, and Outcome. **That is wrong.** Measured with grep -c against crates/omp-types/src/lib.rs: ObligationLedger occurs **zero** times, and AckKind/DeliveryClass occur only inside the doc comment that names them as blocked. What actually re-exports is the Outcome family, the Budget family, and ObligationId / RegionId / TaskId / Time.
 
-  The reason is documented in crates/omp-types/Cargo.toml:11-17: AckKind and DeliveryClass live behind cfg(feature = messaging-fabric), that feature transitively needs cfg(any(test, feature = test-internals)), and upstream issue #46 correctly removed test-internals from the default set — so enabling it here would **reintroduce the exact production leak #46 closed**.
+  The reason is documented in crates/omp-types/Cargo.toml:DeliveryClass: AckKind and DeliveryClass live behind cfg(feature = messaging-fabric), that feature transitively needs cfg(any(test, feature = test-internals)), and upstream issue #46 correctly removed test-internals from the default set — so enabling it here would **reintroduce the exact production leak #46 closed**.
 
   This changes the plan, not just the sentence: **the half of the vocabulary that would collapse the three ack dialects is blocked at an upstream feature boundary, not merely unadopted.** Any migration schedule assuming AckKind is available today is wrong. The crate still has **zero dependents**.
-- **UNVERIFIED type-inventory observation (not a measured fact):** working notes report, excluding test modules and bin sources, 51 public enums and 79 structs across 22 of 24 crates; including all Rust sources, 59 enums and 91 structs. They also report 4 colliding type names, 6 Verdict-shaped types with no shared trait, and 17 ack/receipt types in 3 dialects. The retained derivation is only grep -rhoE over all *.rs; its exact patterns, exclusions, source revision, and captured output were not retained. These figures are therefore historical/non-authoritative and MUST NOT drive closure until a parser/build-graph command records those fields and its output hash.
+- **UNVERIFIED type-inventory observation (not a measured fact):** working notes report, excluding test modules and bin sources, 51 public enums and 79 structs across 22 of 24 crates; including all Rust sources, 59 enums and 91 structs. They also report 4 colliding type names, 6 Verdict-shaped types with no shared trait, and 17 ack/receipt types in 3 dialects. The retained derivation is only grep -rhoE over all *.rs; its exact patterns, exclusions, source revision, and captured output were not retained. These figures are therefore historical/non-authoritative and MUST NOT drive closure until a parser/build-graph command records those fields and its output hash. — HISTORICAL as of 2026-09-02.
 - `fh` MCP is failing closed with a typed `SERVE_INPUT_STALE` (mirror HEAD moved `5dec4212…` →
   `ecdea397…`). Direct grep of the mirror at `/Volumes/ZestData/dicklesworthstone-mirror` still
   works. **Failing closed with a remediation hint is the model**, not a defect.
@@ -489,13 +489,13 @@ The prior-art sweep found an upstream type for every gap this plan had treated a
 
 | gap | upstream type and source | strength here | consequence for this plan |
 |---|---|---|---|
-| completion | AgentEndEvent.willContinue + SessionStopEvent (extensibility/shared-events.d.ts:83-93,154-162), carried by RpcSessionEventFrame (modes/rpc/rpc-types.d.ts:589) | **WIRE-PROVEN** — raw agent_end frame captured with isTerminal:true | adopt the existing event channel; the remaining gap is wiring it into the supervisor, not inventing a completion protocol |
-| receipts | IrcDeliveryReceipt + AsyncJobDeliverySink (tools/hub/types.d.ts:8,84) | **DECLARED ONLY** — no wire path measured | cp-z42vu and the local transport-receipt gap remain; prove reachability before replacing the local receipt contract |
-| claims | Stage1Claim / GlobalClaim with ownershipToken + inputWatermark (memories/storage.d.ts:20-27) | **DECLARED ONLY** — no wire path measured | the local claim fence remains necessary; adoption is an experiment, not a completed fix |
-| idle | GuestIdleReconcilerCtx (dist/types/collab/guest.d.ts:9-30) | **DECLARED ONLY** — settle-vs-continuation semantics found, no wire path | the local NewlyIdle/ConfirmedIdle seam remains broken until this repository consumes it |
-| roster | HubRosterCounts (dist/types/tools/hub/types.d.ts:33-90) | **DECLARED ONLY** — schema found, no wire path | hand-derived roster evidence remains unclosed |
-| cost | SearchUsage (dist/types/web/search/types.d.ts:232-254), PerplexityCost (:510-527), and ContextUsage (dist/types/extensibility/extensions/types.d.ts:238-240) | **DECLARED ONLY** — no wire path measured | Q2 remains an instrumentation question; do not claim cost telemetry exists |
-| compaction | SessionBeforeCompactEvent / SessionCompactEvent (dist/types/extensibility/shared-events.d.ts:54-75) | **DECLARED ONLY** — typed hook found, no wire path measured | context-loss recovery remains unproven; the type narrows the build, it does not close the operational gap |
+| completion | AgentEndEvent.willContinue + SessionStopEvent (extensibility/shared-events.d.ts:RpcSessionEventFrame), carried by RpcSessionEventFrame (modes/rpc/rpc-types.d.ts:RpcSessionEventFrame) | **WIRE-PROVEN** — raw agent_end frame captured with isTerminal:true | adopt the existing event channel; the remaining gap is wiring it into the supervisor, not inventing a completion protocol |
+| receipts | IrcDeliveryReceipt + AsyncJobDeliverySink (tools/hub/types.d.ts:AsyncJobDeliverySink) | **DECLARED ONLY** — no wire path measured | cp-z42vu and the local transport-receipt gap remain; prove reachability before replacing the local receipt contract |
+| claims | Stage1Claim / GlobalClaim with ownershipToken + inputWatermark (memories/storage.d.ts:Stage1Claim) | **DECLARED ONLY** — no wire path measured | the local claim fence remains necessary; adoption is an experiment, not a completed fix |
+| idle | GuestIdleReconcilerCtx (dist/types/collab/guest.d.ts:GuestIdleReconcilerCtx) | **DECLARED ONLY** — settle-vs-continuation semantics found, no wire path | the local NewlyIdle/ConfirmedIdle seam remains broken until this repository consumes it |
+| roster | HubRosterCounts (dist/types/tools/hub/types.d.ts:HubRosterCounts) | **DECLARED ONLY** — schema found, no wire path | hand-derived roster evidence remains unclosed |
+| cost | SearchUsage (dist/types/web/search/types.d.ts:PerplexityCost), PerplexityCost (:510-527), and ContextUsage (dist/types/extensibility/extensions/types.d.ts:PerplexityCost) | **DECLARED ONLY** — no wire path measured | Q2 remains an instrumentation question; do not claim cost telemetry exists |
+| compaction | SessionBeforeCompactEvent / SessionCompactEvent (dist/types/extensibility/shared-events.d.ts:SessionBeforeCompactEvent) | **DECLARED ONLY** — typed hook found, no wire path measured | context-loss recovery remains unproven; the type narrows the build, it does not close the operational gap |
 
 **NO-CLAIM:** “WIRE-PROVEN” means the completion frame crossed the observed OMP RPC wire. It does
 not mean omp-orchestrator consumes it, closes a bead from it, or that any of the other six types
@@ -526,10 +526,10 @@ The denominator is now stated in the heading, which is the whole point: *five st
 | consume — transport | packet delivery | **UNVERIFIED** — cp-z42vu is a historical incident only; the current repository has no planted fixture or receipt payload |
 | actuate | dispatch | **AVAILABLE, NOT VERIFIED** — the current source exposes the grep-addressable `send_and_verify` symbol in `crates/omp-orchestrator/src/main.rs` and the tick path invokes it; the installed 402-dead-pane incident proves an unsafe runtime path, not successful delivery |
 | complete | worker says done | **AVAILABLE, NOT WIRED** — one raw agent_end frame carried isTerminal=true; AgentEndEvent.willContinue is declared upstream, and the supervisor does not consume it |
-> **Upstream type for the idle gap:** `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts:9-30`) declares the NewlyIdle/ConfirmedIdle distinction this layer re-derives by hand. DECLARED ONLY: the type exists, no local consumer reads it.
-> **Receipts:** `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`) exists upstream. `cp-z42vu` names a defect in what WE consume — a send reporting success while the packet never landed — not an absent upstream type.
+> **Upstream type for the idle gap:** `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts:GuestIdleReconcilerCtx`) declares the NewlyIdle/ConfirmedIdle distinction this layer re-derives by hand. DECLARED ONLY: the type exists, no local consumer reads it.
+> **Receipts:** `IrcDeliveryReceipt` (`tools/hub/types.d.ts:IrcDeliveryReceipt`) exists upstream. `cp-z42vu` names a defect in what WE consume — a send reporting success while the packet never landed — not an absent upstream type.
 
-**The observe row was re-checked against current source after the Round 21 finding.** The current two-capture implementation compares positive timer or stable-hash motion at tick-monitor/src/lib.rs:564-572 before applying the 75-second floor at :574-577. A changed Working pair is Live; an unchanged short-gap pair is Unproven. The earlier block claiming the floor ran first was a historical description, not current behavior.
+**The observe row was re-checked against current source after the Round 21 finding.** The current two-capture implementation compares positive timer or stable-hash motion at tick-monitor/src/lib.rs:Unproven before applying the 75-second floor at :574-577. A changed Working pair is Live; an unchanged short-gap pair is Unproven. The earlier block claiming the floor ran first was a historical description, not current behavior.
 
 The admission row remains **FENCED**, but the old 162-refusal/4.2-hour number had no retained derivation. It is retained only as a historical failure-shape example; no current refusal-rate figure is claimed in this brief. The transport row likewise records cp-z42vu as a historical incident only; the current repository has no planted fixture or receipt payload for it.
 
@@ -623,7 +623,7 @@ AND argues that the search space could have contained the answer.** *"I grepped 
 not a finding. *"I grepped `*.rs` across a Go repo and got nothing"* is a bug.
 
 A fourth failure was purely editorial and produced its own rule. Three agents cited the same
-precedent as `doctor.rs:924`, `:949`, and `:950` — all partly right, because each named a **different
+precedent as `doctor.rs:heading_precedent_as_doctor_rs_924_949_and`, `:949`, and `:950` — all partly right, because each named a **different
 construct on adjacent lines** (the function, the gate, an off-by-one). **A citation must name the
 construct, not just the line**: a line number is unverifiable alone and does not survive a reformat.
 
@@ -706,7 +706,7 @@ The predicate is the four-way identity check from 07-installability.md applied t
 ### 7.4 I seeded three of the four findings I then cited as independent
 
 `%1409` filed this as a BLOCKER in round 2 and overstated it — it claimed the `%1414` quote
-"appears in NO artifact," and the quote is real at `g-adversarial.md:10`. Underneath the
+"appears in NO artifact," and the quote is real at `g-adversarial.md:Underneath`. Underneath the
 overstatement was the most damaging methodological finding of the exercise, and it is mine.
 
 Auditing my own round-1 spawn prompts against the findings I celebrated:
@@ -803,7 +803,7 @@ A kill criterion nobody can evaluate is decoration. Each names its observable.
 
 | # | we stop if… | observable |
 |---|---|---|
-| K1 | the completion signal cannot be consumed by the supervisor | **WIRE-PROVEN, ADOPTION REMAINS** — OMP ships `AgentEndEvent.willContinue` and `SessionStopEvent` (`dist/types/extensibility/shared-events.d.ts:83-93,154-162`), and a raw `agent_end` frame with `isTerminal:true` crossed `--mode=rpc` via `RpcSessionEventFrame` (`modes/rpc/rpc-types.d.ts:589`). The remaining kill condition is failed adoption into the supervisor, not inability to build a completion protocol |
+| K1 | the completion signal cannot be consumed by the supervisor | **WIRE-PROVEN, ADOPTION REMAINS** — OMP ships `AgentEndEvent.willContinue` and `SessionStopEvent` (`dist/types/extensibility/shared-events.d.ts:RpcSessionEventFrame`), and a raw `agent_end` frame with `isTerminal:true` crossed `--mode=rpc` via `RpcSessionEventFrame` (`modes/rpc/rpc-types.d.ts:RpcSessionEventFrame`). The remaining kill condition is failed adoption into the supervisor, not inability to build a completion protocol |
 | K2 | verification costs more than the review it replaces | **OPEN/UNVERIFIED — owner: Josh. For a 30-day pilot, numerator = verification minutes recorded in the tick/review ledger; denominator = review minutes demonstrably replaced; fire if numerator/denominator > 1.0 in two consecutive weekly windows. Source: timestamped tick ledger plus review log. Instrumentation and baseline are not yet built.** |
 | K3 | a second machine cannot run it | §07: never attempted; installer hardcodes `/Users/josh` as its fallback home |
 | K4 | the gates get routed around | measurable as: any commit landing with a gate disabled and no named allowance row |
