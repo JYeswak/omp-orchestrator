@@ -209,7 +209,7 @@ Completion evidence has five separate layers; they must not be collapsed:
 | layer | evidence | status |
 |---|---|---|
 | declaration | upstream `AgentEndEvent` at `dist/types/extensibility/shared-events.d.ts:AgentEndEvent`, with `willContinue` | **AVAILABLE / DECLARED** |
-| wire observation | `1408` / `1414`; `.flywheel/grade-evidence/agent-end-raw-frame.json.gz` contains `{"type":"agent_end","isTerminal":true}` | **WIRE-PROVEN for one terminal frame** |
+| wire observation | `1408` / `1414`; `.flywheel/inventory-artifacts/agent-end-raw-frame.json.gz` contains {"type":"agent_end","isTerminal":true}; uncompressed SHA-256 `d8bd80c6949b2ec48af1639b5b5e241bd90b4dce1e769483dd1690ed2be8f644` | **WIRE-PROVEN for one terminal frame; artifact bytes are checked by `artifact_provenance`** |
 | local parser | `omp-rpc-session/src/lib.rs:AgentEndEvent` recognizes only Ready/Response/Unknown/Malformed | **NOT IMPLEMENTED for AgentEndEvent** |
 | local consumer | focused search found no `agent_end`, `willContinue`, `isTerminal`, `RpcSessionEventFrame`, or `AgentEndEvent` consumer | **NOT CONSUMED** |
 | reap | `reap-finished-panes` exists and is invoked by `omp-orchestrator` at `main.rs:AgentEndEvent`, but it sweeps finished panes rather than consuming AgentEndEvent | **WIRED for pane sweep; NOT WIRED for completion event** |
