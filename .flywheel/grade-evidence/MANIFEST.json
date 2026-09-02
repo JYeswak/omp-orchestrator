@@ -3,9 +3,9 @@
  "preserved_utc": "2026-09-01T22:40:38.070997Z",
  "source_root": "/tmp/grade",
  "why": "/tmp is cleared on reboot. These 237 files are the ONLY evidence behind 219 findings from rounds 15-21, and every reconciliation row in docs/plan/FINDINGS.jsonl will cite them. A citation to a path a reboot deletes is unverifiable the moment the machine restarts - the same clearable-provenance defect already fixed twice for the inventory captures and the wire-proof frame.",
- "file_count": 241,
- "raw_bytes": 2242916,
- "gz_bytes": 765246,
+ "file_count": 242,
+ "raw_bytes": 2249575,
+ "gz_bytes": 768454,
  "verify": "gunzip -c <preserved> | shasum -a256  -> must equal sha256",
  "files": [
   {
@@ -1696,6 +1696,13 @@
    "sha256": "2d69996575b5fe7baecfeb74bea3bc7b4a48da80a2cc1eaa6977586feab695ce",
    "bytes": 10022,
    "gz_bytes": 3550
+  },
+  {
+   "source": "round 23 grading receipts, sections 04-06 (lens: disposition-truth + cross-section), authored by AmberGate/%1408",
+   "preserved": ".flywheel/grade-evidence/r23-AmberGate-evidence.md.gz",
+   "sha256": "6301f6b16d4215663cdde84380fef43c81d884c1316870a758c5da15fb5f41a8",
+   "bytes": 6659,
+   "gz_bytes": 3208
   }
  ]
 }
