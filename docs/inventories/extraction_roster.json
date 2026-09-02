@@ -1,0 +1,589 @@
+{
+  "schema_version": "omp.extraction-roster.v1",
+  "source_manifest": "/Users/josh/Developer/control-plane/Cargo.toml",
+  "target_manifest": "/Users/josh/Developer/omp-orchestrator/Cargo.toml",
+  "source_package_count": 59,
+  "target_package_count": 59,
+  "extraction_targets": [
+    "assignment-stuck-send-check",
+    "br-comment-form-check",
+    "cargo-git-reaper",
+    "check-publish",
+    "codex-fleet-recovery",
+    "coordinator-reservation-preflight",
+    "dispatch-chain-migration-check",
+    "docs-staleness-gate",
+    "gate-catalog-check",
+    "gate-chain",
+    "hooks-registry-check",
+    "mutation-verify",
+    "prune-cron",
+    "schedule-drift-check",
+    "scheduled-lane-migration-check",
+    "slb-guard-fail-closed",
+    "stack-drift",
+    "xtask"
+  ],
+  "port_candidates": [],
+  "terminal_crates": [
+    "apfs-wave-guard",
+    "arc-checkin",
+    "arc-keepalive",
+    "bughunt-tick",
+    "cfs-honesty-tick",
+    "close-evidence-differential",
+    "close-evidence-gate",
+    "controller-tick",
+    "fleet-arc-report",
+    "harvest-dispatch",
+    "harvest-triage",
+    "repo-hygiene-wired-proof",
+    "scheduled-lane-doctor",
+    "zestgraph-hook-substrates"
+  ],
+  "source_only": [
+    {
+      "name": "apfs-wave-guard",
+      "verdict": "TERMINAL_CANDIDATE",
+      "path_dependency_count": 0,
+      "foreign_repo_names": [
+        "control-plane"
+      ],
+      "script_literal_count": 1,
+      "target_consumers": 0
+    },
+    {
+      "name": "arc-checkin",
+      "verdict": "TERMINAL_CANDIDATE",
+      "path_dependency_count": 1,
+      "foreign_repo_names": [
+        "clutterfreespaces-ios",
+        "clutterfreespaces.ios",
+        "control-plane"
+      ],
+      "script_literal_count": 3,
+      "target_consumers": 0
+    },
+    {
+      "name": "arc-keepalive",
+      "verdict": "TERMINAL_CANDIDATE",
+      "path_dependency_count": 0,
+      "foreign_repo_names": [
+        "control-plane"
+      ],
+      "script_literal_count": 4,
+      "target_consumers": 0
+    },
+    {
+      "name": "assignment-stuck-send-check",
+      "verdict": "WRAPPER_CANDIDATE",
+      "path_dependency_count": 1,
+      "foreign_repo_names": [],
+      "script_literal_count": 2,
+      "target_consumers": 0
+    },
+    {
+      "name": "br-comment-form-check",
+      "verdict": "WRAPPER_CANDIDATE",
+      "path_dependency_count": 0,
+      "foreign_repo_names": [],
+      "script_literal_count": 1,
+      "target_consumers": 0
+    },
+    {
+      "name": "bughunt-tick",
+      "verdict": "TERMINAL_CANDIDATE",
+      "path_dependency_count": 0,
+      "foreign_repo_names": [
+        "__bughunt_stack_known_missing_control__",
+        "control-plane"
+      ],
+      "script_literal_count": 18,
+      "target_consumers": 0
+    },
+    {
+      "name": "cargo-git-reaper",
+      "verdict": "UNNEEDED_CANDIDATE",
+      "path_dependency_count": 1,
+      "foreign_repo_names": [],
+      "script_literal_count": 0,
+      "target_consumers": 0
+    },
+    {
+      "name": "cfs-honesty-tick",
+      "verdict": "TERMINAL_CANDIDATE",
+      "path_dependency_count": 1,
+      "foreign_repo_names": [
+        "clutterfreespaces.ios",
+        "control-plane"
+      ],
+      "script_literal_count": 3,
+      "target_consumers": 0
+    },
+    {
+      "name": "check-publish",
+      "verdict": "WRAPPER_CANDIDATE",
+      "path_dependency_count": 0,
+      "foreign_repo_names": [],
+      "script_literal_count": 32,
+      "target_consumers": 0
+    },
+    {
+      "name": "close-evidence-differential",
+      "verdict": "TERMINAL_CANDIDATE",
+      "path_dependency_count": 1,
+      "foreign_repo_names": [
+        "control-plane"
+      ],
+      "script_literal_count": 1,
+      "target_consumers": 0
+    },
+    {
+      "name": "close-evidence-gate",
+      "verdict": "TERMINAL_CANDIDATE",
+      "path_dependency_count": 0,
+      "foreign_repo_names": [
+        "control-plane",
+        "x"
+      ],
+      "script_literal_count": 6,
+      "target_consumers": 0
+    },
+    {
+      "name": "codex-fleet-recovery",
+      "verdict": "UNNEEDED_CANDIDATE",
+      "path_dependency_count": 1,
+      "foreign_repo_names": [],
+      "script_literal_count": 0,
+      "target_consumers": 0
+    },
+    {
+      "name": "controller-tick",
+      "verdict": "TERMINAL_CANDIDATE",
+      "path_dependency_count": 2,
+      "foreign_repo_names": [
+        "control-plane"
+      ],
+      "script_literal_count": 4,
+      "target_consumers": 0
+    },
+    {
+      "name": "coordinator-reservation-preflight",
+      "verdict": "WRAPPER_CANDIDATE",
+      "path_dependency_count": 0,
+      "foreign_repo_names": [],
+      "script_literal_count": 3,
+      "target_consumers": 0
+    },
+    {
+      "name": "dispatch-chain-migration-check",
+      "verdict": "WRAPPER_CANDIDATE",
+      "path_dependency_count": 0,
+      "foreign_repo_names": [],
+      "script_literal_count": 19,
+      "target_consumers": 0
+    },
+    {
+      "name": "docs-staleness-gate",
+      "verdict": "UNNEEDED_CANDIDATE",
+      "path_dependency_count": 1,
+      "foreign_repo_names": [],
+      "script_literal_count": 0,
+      "target_consumers": 0
+    },
+    {
+      "name": "fleet-arc-report",
+      "verdict": "TERMINAL_CANDIDATE",
+      "path_dependency_count": 1,
+      "foreign_repo_names": [
+        "clutterfreespaces",
+        "control-plane",
+        "franken-harvest",
+        "zeststream-cast"
+      ],
+      "script_literal_count": 0,
+      "target_consumers": 0
+    },
+    {
+      "name": "gate-catalog-check",
+      "verdict": "WRAPPER_CANDIDATE",
+      "path_dependency_count": 0,
+      "foreign_repo_names": [],
+      "script_literal_count": 5,
+      "target_consumers": 0
+    },
+    {
+      "name": "gate-chain",
+      "verdict": "WRAPPER_CANDIDATE",
+      "path_dependency_count": 0,
+      "foreign_repo_names": [],
+      "script_literal_count": 4,
+      "target_consumers": 0
+    },
+    {
+      "name": "harvest-dispatch",
+      "verdict": "TERMINAL_CANDIDATE",
+      "path_dependency_count": 1,
+      "foreign_repo_names": [
+        "control-plane"
+      ],
+      "script_literal_count": 1,
+      "target_consumers": 0
+    },
+    {
+      "name": "harvest-triage",
+      "verdict": "TERMINAL_CANDIDATE",
+      "path_dependency_count": 0,
+      "foreign_repo_names": [
+        "control-plane"
+      ],
+      "script_literal_count": 0,
+      "target_consumers": 0
+    },
+    {
+      "name": "hooks-registry-check",
+      "verdict": "WRAPPER_CANDIDATE",
+      "path_dependency_count": 1,
+      "foreign_repo_names": [],
+      "script_literal_count": 4,
+      "target_consumers": 0
+    },
+    {
+      "name": "mutation-verify",
+      "verdict": "WRAPPER_CANDIDATE",
+      "path_dependency_count": 1,
+      "foreign_repo_names": [],
+      "script_literal_count": 4,
+      "target_consumers": 0
+    },
+    {
+      "name": "prune-cron",
+      "verdict": "UNNEEDED_CANDIDATE",
+      "path_dependency_count": 1,
+      "foreign_repo_names": [],
+      "script_literal_count": 0,
+      "target_consumers": 0
+    },
+    {
+      "name": "repo-hygiene-wired-proof",
+      "verdict": "TERMINAL_CANDIDATE",
+      "path_dependency_count": 1,
+      "foreign_repo_names": [
+        "zesthooks"
+      ],
+      "script_literal_count": 0,
+      "target_consumers": 0
+    },
+    {
+      "name": "schedule-drift-check",
+      "verdict": "WRAPPER_CANDIDATE",
+      "path_dependency_count": 0,
+      "foreign_repo_names": [],
+      "script_literal_count": 17,
+      "target_consumers": 0
+    },
+    {
+      "name": "scheduled-lane-doctor",
+      "verdict": "TERMINAL_CANDIDATE",
+      "path_dependency_count": 0,
+      "foreign_repo_names": [
+        "control-plane"
+      ],
+      "script_literal_count": 7,
+      "target_consumers": 0
+    },
+    {
+      "name": "scheduled-lane-migration-check",
+      "verdict": "UNNEEDED_CANDIDATE",
+      "path_dependency_count": 1,
+      "foreign_repo_names": [],
+      "script_literal_count": 0,
+      "target_consumers": 0
+    },
+    {
+      "name": "slb-guard-fail-closed",
+      "verdict": "WRAPPER_CANDIDATE",
+      "path_dependency_count": 0,
+      "foreign_repo_names": [],
+      "script_literal_count": 6,
+      "target_consumers": 0
+    },
+    {
+      "name": "stack-drift",
+      "verdict": "WRAPPER_CANDIDATE",
+      "path_dependency_count": 0,
+      "foreign_repo_names": [],
+      "script_literal_count": 2,
+      "target_consumers": 0
+    },
+    {
+      "name": "xtask",
+      "verdict": "WRAPPER_CANDIDATE",
+      "path_dependency_count": 1,
+      "foreign_repo_names": [],
+      "script_literal_count": 4,
+      "target_consumers": 0
+    },
+    {
+      "name": "zestgraph-hook-substrates",
+      "verdict": "TERMINAL_CANDIDATE",
+      "path_dependency_count": 0,
+      "foreign_repo_names": [
+        "foundry"
+      ],
+      "script_literal_count": 10,
+      "target_consumers": 0
+    }
+  ],
+  "overlaps": [
+    {
+      "name": "admission-reason",
+      "byte_identical": false,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": []
+    },
+    {
+      "name": "cargo-lane-budget",
+      "byte_identical": false,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": []
+    },
+    {
+      "name": "composer-typed",
+      "byte_identical": true,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": []
+    },
+    {
+      "name": "crate-soundness-verify",
+      "byte_identical": true,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": []
+    },
+    {
+      "name": "dispatcher-deadman",
+      "byte_identical": false,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": []
+    },
+    {
+      "name": "fast-dispatch",
+      "byte_identical": false,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": []
+    },
+    {
+      "name": "fleet-composite",
+      "byte_identical": true,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": []
+    },
+    {
+      "name": "fleet-monitor",
+      "byte_identical": false,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": [
+        "subprocess-contract"
+      ]
+    },
+    {
+      "name": "fleet-reconcile",
+      "byte_identical": false,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": []
+    },
+    {
+      "name": "fleet-truth",
+      "byte_identical": false,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": []
+    },
+    {
+      "name": "loop-coverage",
+      "byte_identical": false,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": []
+    },
+    {
+      "name": "loop-driver",
+      "byte_identical": false,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": []
+    },
+    {
+      "name": "loop-queue-filter",
+      "byte_identical": true,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": []
+    },
+    {
+      "name": "loop-switch",
+      "byte_identical": false,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": []
+    },
+    {
+      "name": "ntm-fleet-monitor",
+      "byte_identical": true,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": []
+    },
+    {
+      "name": "omp-idle-dispatch",
+      "byte_identical": false,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": []
+    },
+    {
+      "name": "oracle-compare",
+      "byte_identical": false,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": []
+    },
+    {
+      "name": "oracle-pane-state-differential",
+      "byte_identical": false,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": []
+    },
+    {
+      "name": "pane-dispatch-fence",
+      "byte_identical": false,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": [
+        "subprocess-contract"
+      ]
+    },
+    {
+      "name": "pane-dispatch-ready",
+      "byte_identical": false,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": [
+        "omp-types"
+      ]
+    },
+    {
+      "name": "pane-oracle-diff",
+      "byte_identical": false,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": []
+    },
+    {
+      "name": "pane-truth",
+      "byte_identical": false,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": []
+    },
+    {
+      "name": "reap-finished-panes",
+      "byte_identical": false,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": [
+        "pane-dispatch-ready",
+        "subprocess-contract"
+      ]
+    },
+    {
+      "name": "refill-idle-panes",
+      "byte_identical": false,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": [
+        "oracle-compare"
+      ]
+    },
+    {
+      "name": "tick-dispatch",
+      "byte_identical": false,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": []
+    },
+    {
+      "name": "verify-dispatch",
+      "byte_identical": false,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": []
+    },
+    {
+      "name": "wired-but-inert-guard",
+      "byte_identical": false,
+      "recommended_authority": "target-workspace",
+      "target_only_path_dependencies": [
+        "subprocess-contract"
+      ]
+    }
+  ],
+  "target_only": [
+    "ack-spine",
+    "ack-stage",
+    "agent-mail-native",
+    "commit-build-fence",
+    "convergence-stamp",
+    "dispatch-claim-fence",
+    "dispatch-silence-watch",
+    "extraction-roster",
+    "finding",
+    "finding-dispatch",
+    "inbox-monitor",
+    "installer",
+    "kernel-bypass-gate",
+    "kernel-only-operator-hook",
+    "loop-tick",
+    "no-shell-gate",
+    "omp-inventory-map",
+    "omp-orchestrator",
+    "omp-rpc-session",
+    "omp-types",
+    "path-literal-guard",
+    "plan-assemble",
+    "porting-gate",
+    "pre-delete-citation-check",
+    "receiver-receipt",
+    "response-envelope-check",
+    "scratch-home",
+    "silent-success-census",
+    "state-wildcard-lint",
+    "subprocess-contract",
+    "tick-monitor",
+    "undrained-pipe-lint"
+  ],
+  "zero_path_dependency_crates": 35,
+  "path_dependency_edges": 25,
+  "leaf_names": [
+    "admission-reason",
+    "apfs-wave-guard",
+    "arc-keepalive",
+    "br-comment-form-check",
+    "bughunt-tick",
+    "cargo-lane-budget",
+    "check-publish",
+    "close-evidence-gate",
+    "composer-typed",
+    "coordinator-reservation-preflight",
+    "crate-soundness-verify",
+    "dispatch-chain-migration-check",
+    "dispatcher-deadman",
+    "fleet-composite",
+    "fleet-reconcile",
+    "fleet-truth",
+    "gate-catalog-check",
+    "gate-chain",
+    "harvest-triage",
+    "loop-coverage",
+    "loop-queue-filter",
+    "loop-switch",
+    "omp-idle-dispatch",
+    "oracle-compare",
+    "pane-dispatch-fence",
+    "pane-dispatch-ready",
+    "pane-truth",
+    "reap-finished-panes",
+    "schedule-drift-check",
+    "scheduled-lane-doctor",
+    "slb-guard-fail-closed",
+    "stack-drift",
+    "verify-dispatch",
+    "wired-but-inert-guard",
+    "zestgraph-hook-substrates"
+  ],
+  "scope_state": "HUMAN_DECISION_REQUIRED"
+}
