@@ -146,21 +146,81 @@ Non-zero (A) and non-zero (B), per the anti-vacuity condition.
 | 1 | `register_agent` accepts `agent_name`, silently mints a new identity | **B** | typed `RegisterKeyRejected` + mandatory read-back |
 | 2 | `register_agent` accepts `pane_id` and discards it, success envelope | **B** | read-back assertion → typed `RegisterFieldNotPersisted` |
 | 3 | `am robot search` RED for the entire corpus | **A** | adopt upstream `c7a7083f` (fsqlite `=0.3.14`); + **B** `SearchUnavailable` so an error is never read as empty |
-| 4 | `--direct` SQLite fallback does not announce itself | **B** | probe `/health` first; label source; typed `SourceAmbiguous` |
+| 4 | ~~`--direct` SQLite fallback does not announce itself~~ | **REFUTED** | **NOT A DEFECT — byte-identical output is CORRECT: with the daemon reachable, both paths use the daemon. Nothing to announce.** |
 | 5 | `mail_pending` default path never terminates and drops the cursor | **B** | wrapper always supplies a ceiling; typed `WaitCanceledWithoutCursor` distinct from "no mail" |
 | 6 | `inbox-events` carries no read state | **B** | reconcile pair: `inbox-events` cursor + `read_ts` from the **daemon** surface (the CLI lacks it and exposes `priority` instead — see correction below) |
 | 7 | `last_active` is registration recency wearing an activity name | **C** | named finding; never use as a work oracle |
-| 8 | the `am` CLI does not talk to the authenticated daemon | **C** | named finding; house pattern = daemon-primary, CLI-as-differential-oracle |
+| 8 | ~~the `am` CLI does not talk to the authenticated daemon~~ | **REFUTED** | **FALSE — the CLI calls the daemon BY DEFAULT, with a token, over `/api/` and `/mcp/`. Only `am health` is daemon-free. Doctrine built on this must be withdrawn.** |
 | 9 | every pane binding resolves `legacy-unverified` | **B** | typed `PaneBindingUnverified`; reap with existing `cleanup_pane_identities` |
 | 10 | ~~daemon documents `CURSOR_EXPIRED` but silently CLAMPS instead~~ | **REFUTED** | **NOT A DEFECT — resolved at source below. The clamp is correct and intended (GH#238); the guard built against it is over-strict.** |
 | 11 | `signaled=false` while `persisted=true` and `acknowledged=true` (AmNative) | **C** | **RESOLVED AT SOURCE below — documented behaviour, not a delivery gap. Do NOT defend against it.** |
 | 12 | "daemon 0 unread vs CLI 20 rows" — **NOT a read-state disagreement; it is agent-identity resolution** | **B** | typed `AgentNameAmbiguous`; every name lookup MUST carry a project scope |
 | 13 | `inbox_stats.ack_pending_count` drifts from ground truth (113 vs 46) | **C** | named finding; never read the cached aggregate as truth |
 
-Totals over thirteen rows: **(A) 1, (B) 7, (C) 5, REFUTED 1** — #3 carries an (A) plus a supporting
-(B). Anti-vacuity satisfied. **Two rows of the original nine-plus-four turned out not to be defects
-at all (#10, #11), and both were dissolved by reading version-matched source rather than by
-measuring harder.**
+Totals over thirteen rows: **(A) 1, (B) 6, (C) 4, REFUTED 3** — #3 carries an (A) plus a supporting
+(B). Anti-vacuity satisfied. **Three rows turned out not to be defects at all (#4, #8, #10) and a
+fourth was documented behaviour (#11) — all four dissolved by reading version-matched source rather
+than by measuring harder.** That ratio is the honest characterisation of this list.
+
+### Rows #4 and #8 — REFUTED BY ONE FUNCTION, and the doctrine built on #8 must be withdrawn
+
+AmNative retracted #8 after discovering its evidence was never measured: its one attempt to check
+the environment was `env | grep -i -E 'agent_mail|AM_'`, **dcg DENIED it**, and the denial was never
+retried. "The CLI carries no token" was then asserted as measured fact, and an architecture and a
+house pattern were built on it. **A DENIED PROBE IS NOT A NEGATIVE RESULT** — it is the same shape as
+the `am agent start` false negative #8 was invented to explain.
+
+Verified independently here at the shipped tag `v0.3.31`, not the 0.3.32 mirror:
+
+**The CLI routes through the daemon BY DEFAULT.** `crates/mcp-agent-mail-cli/src/lib.rs:8911`:
+
+```rust
+/// The default (non-`--direct`) path always prefers the daemon. `--direct` prefers
+/// the daemon only when it is reachable, falling back to a direct SQLite read when
+/// no daemon is listening — this avoids contending on the WAL with a running
+/// `serve-http` daemon's long-lived writer (GH#158).
+const fn check_inbox_should_use_daemon(direct: bool, daemon_reachable: bool) -> bool {
+    !direct || daemon_reachable
+}
+```
+
+with an explicit spec at `:42849-42856` — `(false,false)` and `(false,true)` both true, `(true,true)`
+true, `(true,false)` false. So **omitting `--direct` takes the daemon unconditionally with no
+fallback**, and the SQLite read is the exception.
+
+**It authenticates.** `HTTP_BEARER_TOKEN` and `AGENT_MAIL_TOKEN` are read by the CLI, and its own
+401 message at `:40179` is *"authentication failed (HTTP 401) while calling
+http://127.0.0.1:8765/mcp/; check AGENT_MAIL_TOKEN/HTTP_BEARER_TOKEN"* — a CLI that never called the
+daemon could not emit that. `/api/` and `/mcp/` are both real routes and are each other's
+alternates (`:9351-9352`).
+
+**So #8 is FALSE and every consequence drawn from it is withdrawn**, including the claim recorded in
+this document's earlier revisions that CLI-derived figures read `storage.sqlite3` rather than the
+daemon. They came from the daemon. Nobody's numbers need re-measuring — the *provenance story* was
+wrong, not the counts. What survives is narrow and correctly measured: **`am health` really does
+build a throwaway probe SQLite and never contacts the daemon.** The error was generalising `health`
+to the whole CLI.
+
+**#4 falls out of the same function.** #4 was filed because `--direct` with the daemon UP produced
+byte-identical output to the non-direct call, read as "the fallback does not announce itself". But
+with `daemon_reachable = true`, `!direct || daemon_reachable` is **true either way** — both paths use
+the daemon, so the source is the same and there is nothing to announce. Byte-identical output is the
+*correct* observation of *correct* behaviour. `--direct` only changes anything when the daemon is
+DOWN. Refuted.
+
+**A CORRECTION TO AmNative'S OWN REPLACEMENT ROW.** Its retraction proposes a new defect: that
+`--direct` is "inverted relative to its own help text". **It is not.** The shipped help text reads
+*"Allow a direct SQLite read only when no daemon is reachable"*, which is exactly what
+`!direct || daemon_reachable` implements — `--direct` **allows** the SQLite fallback; omitting it
+forbids it. Help text and code agree, and the doc comment names the reason (GH#158, WAL contention
+with the daemon's long-lived writer). Do not file the inversion row.
+
+**What this costs the differential oracle, stated because it downgrades acceptance evidence.**
+`oracle_skew=0` is not two independent authorities agreeing about a store; it is **two HTTP routes on
+one daemon process, authenticated with the same token, reading the same in-process state.** It
+proves one daemon is self-consistent across `/api/` and `/mcp/`. Real, but far weaker than
+"corroborated against the store". The genuinely independent oracle in this document is read-only SQL
+against the store file, which is why row #12 was settled that way and not by calling a surface.
 
 ### Row #10 — REFUTED AT SOURCE: the clamp is correct and the guard is over-strict
 
@@ -354,12 +414,18 @@ messaging.rs:1706   pub read_ts: Option<String>,
 messaging.rs:3871   read_ts: row.read_ts.map(micros_to_iso),
 ```
 
-So the correct statement is **#8's two-authorities split again, not a contradiction**: `read_ts`
-originates in the store as `message_recipients.read_ts` (`read_ts INTEGER, ack_ts INTEGER,
-PRIMARY KEY(message_id, agent_id)`), the **daemon surfaces it**, and the **CLI does not**. The store
-remains the arbiter — it is what settled #12 — and a monitor still needs both surfaces. AmNative's
-`InboxMessage::read_ts` and its reconciliation pair are therefore reading a field that genuinely
-exists on the path it uses.
+So the correct statement is a **response-shape difference between two commands, not two authorities
+over one store**: `read_ts` originates in the store as `message_recipients.read_ts` (`read_ts
+INTEGER, ack_ts INTEGER, PRIMARY KEY(message_id, agent_id)`), the **daemon's `fetch_inbox` surfaces
+it**, and the **CLI's `inbox` projection omits it** in favour of `priority`. Both commands reach the
+same daemon (see the #8 refutation) — so this is one authority projecting two different views, and
+a monitor needs both *views*, not both *authorities*. The store remains the arbiter; it is what
+settled #12. AmNative's `InboxMessage::read_ts` and its reconciliation pair are reading a field that
+genuinely exists on the path they use.
+
+**The section heading above is retained deliberately even though "two authorities" is now wrong**,
+because this row is where the phrase entered the document and a reader who saw it elsewhere needs to
+land here. The phrase was mine, adopted from #8, and #8 is refuted.
 
 ### (A) row — #3, the patch path
 
@@ -411,17 +477,26 @@ resolvable by name alone.
 
 ### (C) rows — reproductions
 
-**#8**, verified by this lane independently of AmNative's diagnosis:
+**What my `curl` probe actually measured — and what it does NOT establish.** I recorded this as
+"#8 verified by this lane independently of AmNative's diagnosis". **That label was wrong**, and it is
+worth keeping the correction visible because the measurement is sound while the inference was not:
 
 ```
 $ curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8765/health   → 200
 $ curl -s -w "%{http_code}" http://127.0.0.1:8765/mcp/                  → 401 {"detail":"Unauthorized"}
 ```
 
-An unauthenticated caller gets `ready` from `/health` and `401` from `/mcp/`. That is the
-**auth-failure-reported-as-absence** root: `am agent start` says "no listener" while the daemon is
-up. Consequence carried forward: every CLI-derived Agent Mail figure cited tonight read
-`storage.sqlite3` directly rather than the daemon.
+All this shows is that **an unauthenticated caller** reaches `/health` and is refused at `/mcp/`,
+which is `/mcp/` **working correctly** — it requires auth. The probe says nothing about the CLI,
+because the probe was `curl` with no token, not `am`. The CLI has `HTTP_BEARER_TOKEN` /
+`AGENT_MAIL_TOKEN` and authenticates fine. So this leg corroborated a *different* proposition than
+the one I attached it to: I verified "unauthenticated `/mcp/` returns 401" and labelled it
+"the CLI cannot reach the daemon". **The consequence I carried forward — that every CLI-derived
+figure read `storage.sqlite3` rather than the daemon — is withdrawn.**
+
+The residual true finding is narrow: **`am health` builds a throwaway probe SQLite and never
+contacts the daemon** (AmNative's measurement, correctly made). Whether `am agent start`'s "no
+listener" has some other cause is now **UNEXPLAINED and open**, not answered by #8.
 
 **#7**, from the live store — `last_active` equals the re-registration second, not the work second:
 `agents` id=69 `AmberGate` `last_active` = `2026-09-02 04:56:48`, one minute after phantom id=306
@@ -466,11 +541,26 @@ grep -qF 'column not found: m.topic' /tmp/amd_err.txt \
 test -s /tmp/amd_out.txt && echo "leg4 WARN stdout non-empty — silent-success risk" \
                          || echo "leg4 PASS stdout empty, failure not silent"
 
-# LEG 5 — #8 root: unauthenticated /health ready while /mcp/ refuses.
+# LEG 5 — what the unauthenticated probe ACTUALLY shows: /mcp/ requires auth. This is NOT
+# evidence about the CLI (see the withdrawn #8). Kept because the posture itself is worth watching.
 H=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/health)
 M=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/mcp/)
-test "$H" = "200" -a "$M" = "401" && echo "leg5 PASS #8 auth-as-absence reproduces (/health $H, /mcp/ $M)" \
-                                  || echo "leg5 NOTE posture changed (/health $H, /mcp/ $M)"
+test "$H" = "200" -a "$M" = "401" \
+  && echo "leg5 PASS unauthenticated posture: /health $H open, /mcp/ $M requires auth (correct)" \
+  || echo "leg5 NOTE posture changed (/health $H, /mcp/ $M)"
+
+# LEG 5b — #4 and #8 REFUTED: the CLI routes through the daemon by default and authenticates.
+CLI=$(git show v0.3.31:crates/mcp-agent-mail-cli/src/lib.rs)
+printf '%s' "$CLI" | grep -qF '!direct || daemon_reachable' \
+  && echo "leg5b PASS default path prefers the daemon (!direct || daemon_reachable)" \
+  || { echo "FAIL leg5b: routing predicate changed — re-read before trusting the #4/#8 refutations"; exit 1; }
+printf '%s' "$CLI" | grep -qF 'check AGENT_MAIL_TOKEN/HTTP_BEARER_TOKEN' \
+  && echo "leg5b PASS the CLI emits a 401-from-daemon message, so it does call the daemon" \
+  || echo "leg5b NOTE the auth error message moved"
+# and the help text AGREES with the code, so the proposed 'inversion' row is not a defect
+am inbox-events --help 2>&1 | grep -qF 'Allow a direct SQLite read only when no daemon is reachable' \
+  && echo "leg5b PASS help text matches !direct || daemon_reachable (no inversion defect)" \
+  || echo "leg5b NOTE help text changed — recheck the inversion claim"
 
 # LEG 6 — upstream's remedy is an engine bump, not a SQL change.
 git diff --quiet v0.3.31 origin/main -- crates/mcp-agent-mail-db/src/search_planner.rs \
@@ -543,10 +633,13 @@ git show v0.3.31:crates/mcp-agent-mail-db/src/sync.rs \
   || echo "leg11 PASS global_oldest absent from the page: clients CANNOT decide expiry"
 ```
 
-All **eleven** legs run today, all PASS: leg0 `shipped=0.3.31 tag=v0.3.31 version=0.3.31`; leg1 `rows=5`
+All **twelve** legs run today, all PASS: leg0 `shipped=0.3.31 tag=v0.3.31 version=0.3.31`; leg1 `rows=5`
 (stock sqlite3 answered the `m.topic` query); leg2 `messages.topic exists`; leg3 both planner FROM
 clauses bind `m=messages`; leg4 `rc=1`, engine error on stderr, **stdout empty**; leg5
-`/health 200, /mcp/ 401`; leg6 search SQL unchanged upstream with `origin/main` pinning
+`/health 200 open, /mcp/ 401 requires auth (correct, and NOT evidence about the CLI)`; leg5b the
+default path prefers the daemon, the CLI emits a 401-from-daemon message, and the help text matches
+the predicate — so #4, #8 and the proposed inversion row are all refuted; leg6 search SQL unchanged
+upstream with `origin/main` pinning
 `fsqlite = "=0.3.14"`; leg7 `AmberGate rows=2, colliding names=10`; leg8 cache drift
 `ground_truth=115 cached=47`; leg9 `signaled == receipt-existence` and the debounced case documented;
 leg10 `read_ts` declared and populated on the daemon surface, and `fetch_inbox` self-documents that
@@ -609,6 +702,21 @@ correctly**. Specifically:
   lands them. This document does not claim any defense currently refuses anything.
 - **The disposition letters are decisions, not outcomes.** Nothing here has yet changed the binary
   the fleet talks to, and leg 4 passing is the standing proof of that.
+- **Four of thirteen rows were not defects, and the list's own error rate is the finding.** #4, #8
+  and #10 are refuted outright and #11 was documented behaviour. #8 was the worst: its evidence was
+  never gathered at all, because the one probe that would have settled it (`env | grep ...`) was
+  **DENIED by dcg and never retried**, and absence-of-a-probe was then written down as
+  absence-of-a-token. **A denied or erroring probe yields UNKNOWN, never a negative result** — the
+  honest move is to retry differently (`printenv` was available the whole time) or to say unknown.
+  This document inherited that error and propagated it for several revisions.
+- **My own `curl` leg was mislabelled for those revisions**: it measured "unauthenticated `/mcp/`
+  returns 401" and was captioned "the CLI cannot reach the daemon". The probe never involved the
+  CLI. Corrected above and in leg 5.
+- **`oracle_skew=0` is weaker than earlier revisions claimed.** It compares two HTTP routes on one
+  daemon process under one token, so it evidences self-consistency, not corroboration against the
+  store. The only genuinely independent oracle used here is read-only SQL against the store file.
+- **`am agent start`'s "no listener" is now UNEXPLAINED.** #8 was invented to explain it; #8 is
+  false, so the contradiction is open again and nothing in this document accounts for it.
 
 ## Cross-References
 
