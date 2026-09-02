@@ -621,15 +621,33 @@ fn receiver_agent_for_dispatch(
     ))
 }
 
+/// Authorizes one bead packet immediately before construction.
+///
+/// The refusal names the PANE as well as the bead. Measured 2026-09-01: pid
+/// 70561 emitted 135 `DISPATCHED pane=%1408 bead=omp-orchestrator-815` rows in
+/// one afternoon while that bead was `open`; an operator reading a refusal has
+/// to know which pane to stop feeding, and the fence crate only knows tracker
+/// fields, so the pane is joined here at the transport boundary.
 fn authorize_bead_dispatch(
     config: &Config,
+    pane: &str,
     bead: &str,
     snapshot: &BeadSnapshot,
 ) -> Result<String, String> {
     let receiver_agent = receiver_agent_for_dispatch(config, bead, snapshot)?;
-    authorize(&DispatchIntent::bead(bead, &receiver_agent), Some(snapshot))
-        .map(|_| receiver_agent)
-        .map_err(|error| error.to_string())
+    match authorize(&DispatchIntent::bead(bead, &receiver_agent), Some(snapshot)) {
+        Ok(_) => Ok(receiver_agent),
+        Err(error) => Err(format!(
+            "DISPATCH_BLOCKED bead={bead} pane={pane} reason={} status={} assignee={} \
+             receiver_agent={receiver_agent} owner=josh next_action=claim-bead command=\"{}\"",
+            error.code(),
+            snapshot.status_label(),
+            snapshot.assignee().unwrap_or("unassigned"),
+            error
+                .command()
+                .unwrap_or("br update <bead> --assignee <agent> --status in_progress"),
+        )),
+    }
 }
 fn agent_for_pane(config: &Config, pane: &str) -> Option<String> {
     let contract = config.repo.join(".flywheel/AUTONOMOUS-WAVE.md");
@@ -662,33 +680,37 @@ fn validate_receiver_pane(
         None => Ok(()),
     }
 }
+/// Prepares one bead dispatch, or refuses.
+///
+/// # The measured defect this shape exists to prevent
+///
+/// This function used to CLAIM the bead on the receiver's behalf when it
+/// observed `status=open` — `br update <bead> --assignee <receiver> --status
+/// in_progress` — reload the snapshot, and only then call the claim fence. The
+/// fence could therefore never refuse an unclaimed bead: the dispatcher forged
+/// the precondition immediately before checking for it, so `authorize` always
+/// saw an `in_progress` bead owned by the receiver.
+///
+/// That inverts the fourth rule of AGENTS.md — file -> CLAIM -> dispatch. The
+/// claim is an act by the agent that will do the work, and it is the only
+/// evidence that anybody accepted the packet. A dispatcher that manufactures it
+/// destroys the one signal the follow-up detector keys on (assigned +
+/// in_progress + no comment since dispatch), which is why 135 re-dispatches of
+/// `omp-orchestrator-815` to `%1408` produced no alert for 247 minutes on
+/// 2026-09-01 (pid 70561).
+///
+/// So the snapshot is now read once and never written. An unclaimed bead is a
+/// refusal that reaches the operator as a nonzero exit, not a claim.
 async fn prepare_bead_dispatch(
     cx: &Cx,
     config: &Config,
     pane: &str,
     bead: &str,
 ) -> Result<(BeadSnapshot, String), String> {
-    let mut snapshot = load_bead_snapshot(cx, config, bead).await?;
+    let snapshot = load_bead_snapshot(cx, config, bead).await?;
     let receiver_agent = receiver_agent_for_dispatch(config, bead, &snapshot)?;
     validate_receiver_pane(config, pane, bead, &receiver_agent)?;
-
-    if snapshot.status_label() == "open" {
-        let claim_args = vec![
-            "update".to_owned(),
-            bead.to_owned(),
-            "--assignee".to_owned(),
-            receiver_agent.clone(),
-            "--status".to_owned(),
-            "in_progress".to_owned(),
-        ];
-        require_success(
-            &config.br,
-            invoke(cx, config, &config.br, &claim_args).await?,
-        )?;
-        snapshot = load_bead_snapshot(cx, config, bead).await?;
-    }
-
-    let receiver_agent = authorize_bead_dispatch(config, bead, &snapshot)?;
+    let receiver_agent = authorize_bead_dispatch(config, pane, bead, &snapshot)?;
     Ok((snapshot, receiver_agent))
 }
 
@@ -1334,6 +1356,116 @@ async fn run_finished_pane_sweep(cx: &Cx, config: &Config) -> Result<String, Str
 }
 
 
+struct DispatchOutcome {
+    detail: String,
+    clear_intent: bool,
+}
+const RESULT_PANE: &str = "1";
+
+fn one_line_detail(detail: &str) -> String {
+    detail.replace('\r', " ").replace('\n', " ")
+}
+
+fn dispatch_result_ntm_args(
+    session: &str,
+    pane: &str,
+    bead: &str,
+    tick: u64,
+    result: &str,
+) -> Vec<String> {
+    let result = one_line_detail(result);
+    vec![
+        format!("--robot-send={session}"),
+        format!("--panes={RESULT_PANE}"),
+        format!("--msg=DISPATCH_RESULT tick={tick} pane={pane} bead={bead} {result}"),
+    ]
+}
+
+/// Records one dispatch result, then notifies the result pane as a courtesy.
+///
+/// # Ledger first, send second
+///
+/// This function used to invoke `ntm --robot-send` FIRST and only write the
+/// heartbeat if that send reported success, returning `Err` otherwise. A
+/// blocked notification therefore erased the record: the one durable trace of
+/// the dispatch outcome was conditional on the least reliable step. Pane 4
+/// measured a `--robot-send` that returned `successful:["1"]` and never
+/// arrived, so the send cannot be the authority for anything.
+///
+/// The ledger write is now unconditional and happens before the notify, and a
+/// failed notify is reported as a `DISPATCH_RESULT_NOTIFY_DEGRADED` row rather
+/// than an error. The caller must not be able to lose a dispatch outcome — or
+/// strand the pending-dispatch marker — because a courtesy message bounced.
+async fn report_dispatch_result(
+    cx: &Cx,
+    config: &Config,
+    tick: u64,
+    pane: &str,
+    bead: &str,
+    result: &str,
+) -> Result<(), String> {
+    let detail = one_line_detail(result);
+    write_heartbeat(
+        config,
+        tick,
+        "DISPATCH_RESULT_RECORDED",
+        &format!("target_pane={RESULT_PANE} source_pane={pane} bead={bead} {detail}"),
+    )?;
+    println!(
+        "DISPATCH_RESULT_RECORDED tick={tick} session={} target_pane={RESULT_PANE} source_pane={pane} bead={bead} detail={detail}",
+        config.session
+    );
+
+    let notify = notify_dispatch_result(cx, config, tick, pane, bead, result).await;
+    if let Err(error) = notify {
+        let degraded = one_line_detail(&error);
+        write_heartbeat(
+            config,
+            tick,
+            "DISPATCH_RESULT_NOTIFY_DEGRADED",
+            &format!("target_pane={RESULT_PANE} source_pane={pane} bead={bead} {degraded}"),
+        )?;
+        println!(
+            "DISPATCH_RESULT_NOTIFY_DEGRADED tick={tick} session={} target_pane={RESULT_PANE} source_pane={pane} bead={bead} owner=josh next_action=read-the-ledger-not-the-pane detail={degraded}",
+            config.session
+        );
+    }
+    Ok(())
+}
+
+/// Sends the courtesy notification. Its failure is never the caller's failure;
+/// `report_dispatch_result` downgrades it to a ledger row.
+async fn notify_dispatch_result(
+    cx: &Cx,
+    config: &Config,
+    tick: u64,
+    pane: &str,
+    bead: &str,
+    result: &str,
+) -> Result<(), String> {
+    let args = dispatch_result_ntm_args(&config.session, pane, bead, tick, result);
+    let stdout = require_success(&config.ntm, invoke(cx, config, &config.ntm, &args).await?)?;
+    let receipt = TransportReceipt::capture_ntm(&stdout).map_err(|error| {
+        format!(
+            "DISPATCH_RESULT_NOTIFY_REFUSED pane={RESULT_PANE} bead={bead} malformed ntm receipt: {error}"
+        )
+    })?;
+    match &receipt {
+        TransportReceipt::NtmRobotSend(receipt)
+            if !receipt.blocked
+                && receipt.successful.iter().any(|target| target == RESULT_PANE) =>
+        {
+            Ok(())
+        }
+        TransportReceipt::NtmRobotSend(receipt) => Err(format!(
+            "DISPATCH_RESULT_NOTIFY_REFUSED pane={RESULT_PANE} bead={bead} blocked={} successful={:?} failed={:?}",
+            receipt.blocked, receipt.successful, receipt.failed
+        )),
+        TransportReceipt::TmuxSendKeysLiteral(_) => Err(format!(
+            "DISPATCH_RESULT_NOTIFY_REFUSED pane={RESULT_PANE} bead={bead} transport=tmux_send_keys_literal"
+        )),
+    }
+}
 async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     write_heartbeat(config, tick, "CYCLE_STARTED", "phase=observe")?;
     if let Some(intent) = read_pending_dispatch(config)? {
@@ -1497,44 +1629,83 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             let bead = bead_ids.first().ok_or_else(|| {
                 "QUEUE_UNREADABLE ready count changed before bead selection".to_owned()
             })?;
-            let (snapshot, receiver_agent) = prepare_bead_dispatch(cx, config, &pane, bead).await?;
-            let dispatch_epoch = now_unix() as i64;
-            write_dispatch_intent(config, &pane, bead)?;
-            let before = capture_pane(cx, config, &pane).await?;
-            let stage = send_and_verify(cx, config, &pane, bead, &snapshot, &before, tick).await?;
-            let silence = run_silence_watch(cx, config, bead, dispatch_epoch, &receiver_agent).await?;
-            write_heartbeat(
-                config,
-                tick,
-                "DISPATCH_SILENCE_WATCH",
-                &format!("pane={pane} bead={bead} verdict={silence}"),
-            )?;
-            match silence {
-                SilenceVerdict::VerdictPosted => {
-                    write_heartbeat(
-                        config,
-                        tick,
-                        "DISPATCHED",
-                        &format!(
-                            "pane={pane} bead={bead} receiver={} ack_action={}",
+            let dispatch_result = async {
+                let (snapshot, receiver_agent) =
+                    prepare_bead_dispatch(cx, config, &pane, bead).await?;
+                let dispatch_epoch = now_unix() as i64;
+                write_dispatch_intent(config, &pane, bead)?;
+                let before = capture_pane(cx, config, &pane).await?;
+                let stage = send_and_verify(cx, config, &pane, bead, &snapshot, &before, tick).await?;
+                let silence =
+                    run_silence_watch(cx, config, bead, dispatch_epoch, &receiver_agent).await?;
+                write_heartbeat(
+                    config,
+                    tick,
+                    "DISPATCH_SILENCE_WATCH",
+                    &format!("pane={pane} bead={bead} verdict={silence}"),
+                )?;
+                match silence {
+                    SilenceVerdict::VerdictPosted => {
+                        write_heartbeat(
+                            config,
+                            tick,
+                            "DISPATCHED",
+                            &format!(
+                                "pane={pane} bead={bead} receiver={} ack_action={}",
+                                stage.transport.kind().label(),
+                                stage.action.label(),
+                            ),
+                        )?;
+                        println!(
+                            "DISPATCHED tick={tick} session={} pane={pane} bead={bead} RECEIVER_RECEIPT={} ACK_ACTION={} SILENCE_VERDICT={silence}",
+                            config.session,
                             stage.transport.kind().label(),
-                            stage.action.label(),
-                        ),
-                    )?;
-                    clear_dispatch_intent(config)?;
-                    println!(
-                        "DISPATCHED tick={tick} session={} pane={pane} bead={bead} RECEIVER_RECEIPT={} ACK_ACTION={} SILENCE_VERDICT={silence}",
-                        config.session,
-                        stage.transport.kind().label(),
-                        stage.action.label()
-                    );
+                            stage.action.label()
+                        );
+                        Ok::<DispatchOutcome, String>(DispatchOutcome {
+                            detail: format!(
+                                "status=DISPATCHED receiver={} ack_action={} silence_verdict=VERDICT_POSTED",
+                                stage.transport.kind().label(),
+                                stage.action.label(),
+                            ),
+                            clear_intent: true,
+                        })
+                    }
+                    other => {
+                        println!(
+                            "DISPATCH_SILENCE tick={tick} session={} pane={pane} bead={bead} verdict={other} next_action=inspect-or-resolve-pending",
+                            config.session
+                        );
+                        Ok(DispatchOutcome {
+                            detail: format!(
+                                "status=DISPATCH_SILENCE verdict={other} next_action=inspect-or-resolve-pending"
+                            ),
+                            clear_intent: false,
+                        })
+                    }
                 }
-                other => {
-                    println!(
-                        "DISPATCH_SILENCE tick={tick} session={} pane={pane} bead={bead} verdict={other} next_action=inspect-or-resolve-pending",
-                        config.session
-                    );
-                }
+            }
+            .await;
+            let report_detail = match &dispatch_result {
+                Ok(outcome) => outcome.detail.clone(),
+                Err(error) => format!("status=DISPATCH_FAILED detail={}", one_line_detail(error)),
+            };
+            // This now escalates ONLY when the ledger write itself failed. A
+            // bounced courtesy notify to the result pane is downgraded to a
+            // DISPATCH_RESULT_NOTIFY_DEGRADED row inside
+            // `report_dispatch_result`, because losing the dispatch outcome and
+            // stranding the pending-dispatch marker is strictly worse than an
+            // operator having to read the ledger instead of a pane.
+            if let Err(report_error) =
+                report_dispatch_result(cx, config, tick, &pane, bead, &report_detail).await
+            {
+                return Err(format!(
+                    "DISPATCH_RESULT_LEDGER_WRITE_FAILED source_pane={pane} bead={bead} result={report_detail} owner=josh next_action=repair-heartbeat-ledger report_error={report_error}"
+                ));
+            }
+            let outcome = dispatch_result?;
+            if outcome.clear_intent {
+                clear_dispatch_intent(config)?;
             }
         }
         SupervisorDecision::GateUnwired { unwired } => {
@@ -1921,13 +2092,163 @@ mod tests {
             Some("SilverWolf"),
         );
 
-        let receiver_agent = authorize_bead_dispatch(
-            &config,
-            "receiver-assignment-test",
-            &snapshot,
-        )
-        .expect("an assigned bead should supply the receiver agent when config is unset");
+        let receiver_agent =
+            authorize_bead_dispatch(&config, "%1408", "receiver-assignment-test", &snapshot)
+                .expect("an assigned bead should supply the receiver agent when config is unset");
         assert_eq!(receiver_agent, "SilverWolf");
+    }
+
+    /// The known-bad is the real incident, replayed from the heartbeat ledger.
+    ///
+    /// # The measured defect
+    ///
+    /// Measured 2026-09-01 from
+    /// `~/.local/state/flywheel/omp-orchestrator.heartbeat.jsonl`: supervisor pid
+    /// 70561 wrote 139 `DISPATCHED` rows, and every single one named
+    /// `bead=omp-orchestrator-815`; 135 of them named `pane=%1408`. Bead 815 was
+    /// `open` throughout, and `%1408` was dead on `402 This request requires more
+    /// credits` while accumulating 54 copies of the packet in its scrollback.
+    ///
+    /// The refusal must name BOTH the bead and the pane: the bead says what was
+    /// wrong, the pane says what to stop feeding. It must also carry a typed
+    /// reason, because 135 identical rows carrying only a transport label are
+    /// what made this invisible for 247 minutes.
+    #[test]
+    fn unclaimed_bead_is_refused_before_send() {
+        let mut config = fixture_config(std::env::temp_dir().join("claim-fence-known-bad.jsonl"));
+        config.receiver_agent = "GreenFrog".to_owned();
+
+        // The exact tracker state the ledger recorded: open, and at filing time
+        // not assigned to anybody.
+        let snapshot = BeadSnapshot::new(
+            "omp-orchestrator-815",
+            "Extract 20 fleet crates from control-plane, deps-first, tests intact",
+            "deps-first extraction",
+            "open",
+            None,
+        );
+
+        let error = authorize_bead_dispatch(&config, "%1408", "omp-orchestrator-815", &snapshot)
+            .expect_err("an open, unassigned bead must never be dispatched");
+
+        assert!(error.contains("DISPATCH_BLOCKED"), "{error}");
+        assert!(error.contains("bead=omp-orchestrator-815"), "{error}");
+        assert!(error.contains("pane=%1408"), "{error}");
+        assert!(error.contains("reason=CLAIM_REQUIRED"), "{error}");
+        assert!(error.contains("status=open"), "{error}");
+        assert!(error.contains("assignee=unassigned"), "{error}");
+        assert!(
+            error.contains(
+                "br update omp-orchestrator-815 --assignee GreenFrog --status in_progress"
+            ),
+            "{error}"
+        );
+    }
+
+    /// An `open` bead that HAS an assignee is still unclaimed.
+    ///
+    /// Bead 815 is in exactly this state now: `status=open, assignee=GreenFrog`.
+    /// Assignment is not acceptance, so the fence must still refuse — otherwise
+    /// the incident reproduces the moment somebody sets an assignee.
+    #[test]
+    fn assigned_but_open_bead_is_still_refused() {
+        let mut config =
+            fixture_config(std::env::temp_dir().join("claim-fence-open-assigned.jsonl"));
+        config.receiver_agent = "GreenFrog".to_owned();
+
+        let snapshot = BeadSnapshot::new(
+            "omp-orchestrator-815",
+            "title",
+            "description",
+            "open",
+            Some("GreenFrog"),
+        );
+
+        let error = authorize_bead_dispatch(&config, "%1408", "omp-orchestrator-815", &snapshot)
+            .expect_err("an assignee on an open bead is not a claim");
+
+        assert!(error.contains("reason=CLAIM_REQUIRED"), "{error}");
+        assert!(error.contains("pane=%1408"), "{error}");
+        assert!(error.contains("assignee=GreenFrog"), "{error}");
+    }
+
+    /// The mandatory known-good leg.
+    ///
+    /// An attack-only suite ships an over-strict fence, and an over-strict fence
+    /// gets routed around — a slower death than no fence at all. A properly
+    /// claimed bead must still dispatch.
+    #[test]
+    fn correctly_claimed_bead_still_dispatches() {
+        let mut config = fixture_config(std::env::temp_dir().join("claim-fence-known-good.jsonl"));
+        config.receiver_agent = "GreenFrog".to_owned();
+
+        let snapshot = BeadSnapshot::new(
+            "omp-orchestrator-815",
+            "title",
+            "description",
+            "in_progress",
+            Some("GreenFrog"),
+        );
+
+        let receiver_agent =
+            authorize_bead_dispatch(&config, "%1408", "omp-orchestrator-815", &snapshot)
+                .expect("a claimed bead owned by the receiver must still dispatch");
+        assert_eq!(receiver_agent, "GreenFrog");
+    }
+
+    /// A bead claimed by somebody ELSE must be refused with a distinct reason.
+    #[test]
+    fn bead_claimed_by_another_agent_is_refused() {
+        let mut config = fixture_config(std::env::temp_dir().join("claim-fence-elsewhere.jsonl"));
+        config.receiver_agent = "GreenFrog".to_owned();
+
+        let snapshot = BeadSnapshot::new(
+            "omp-orchestrator-815",
+            "title",
+            "description",
+            "in_progress",
+            Some("AmberGate"),
+        );
+
+        let error = authorize_bead_dispatch(&config, "%1408", "omp-orchestrator-815", &snapshot)
+            .expect_err("a bead owned by another agent must not be dispatched");
+
+        assert!(error.contains("reason=ASSIGNED_ELSEWHERE"), "{error}");
+        assert!(error.contains("assignee=AmberGate"), "{error}");
+        assert!(error.contains("pane=%1408"), "{error}");
+    }
+
+    /// The dispatch path must never write to the tracker.
+    ///
+    /// `prepare_bead_dispatch` used to run `br update <bead> --assignee
+    /// <receiver> --status in_progress` when it saw an `open` bead, then reload
+    /// the snapshot and only then call the fence — so the fence could never
+    /// refuse. This is the source-level guard against that bypass returning:
+    /// the dispatch preparation path holds no `--status in_progress` argument
+    /// vector at all.
+    #[test]
+    fn dispatch_path_never_claims_on_the_receivers_behalf() {
+        let source = include_str!("main.rs");
+        let start = source
+            .find("async fn prepare_bead_dispatch")
+            .expect("prepare_bead_dispatch must exist");
+        let body = &source[start..];
+        let end = body
+            .find("\nasync fn run_silence_watch")
+            .expect("prepare_bead_dispatch must be followed by run_silence_watch");
+        let body = &body[..end];
+        assert!(
+            !body.contains("in_progress"),
+            "the dispatch path must not claim a bead on the receiver's behalf: {body}"
+        );
+        assert!(
+            !body.contains("\"update\""),
+            "the dispatch path must not write to the tracker: {body}"
+        );
+        assert!(
+            body.contains("authorize_bead_dispatch"),
+            "the dispatch path must call the claim fence: {body}"
+        );
     }
     #[test]
     fn dispatch_refuses_a_pane_owned_by_another_agent() {
@@ -2125,4 +2446,57 @@ mod tests {
         }
     }
 
+    #[test]
+    fn every_dispatch_result_report_targets_pane_one() {
+        let args = dispatch_result_ntm_args(
+            "test-session",
+            "5",
+            "omp-orchestrator-test",
+            7,
+            "status=RECEIVER_VERIFIED detail=ack",
+        );
+        assert_eq!(args[0], "--robot-send=test-session");
+        assert_eq!(args[1], "--panes=1");
+        assert_eq!(
+            args[2],
+            "--msg=DISPATCH_RESULT tick=7 pane=5 bead=omp-orchestrator-test status=RECEIVER_VERIFIED detail=ack"
+        );
+    }
+    #[test]
+    fn dispatch_result_report_requires_a_successful_ntm_send_to_pane_one() {
+        let temp = tempfile::tempdir().expect("result report fixture");
+        let capture = temp.path().join("ntm-args");
+        let script = format!(
+            "#!/bin/sh\nprintf '%s\n' \"$@\" > {}\nprintf '%s\n' '{{\"targets\":[\"1\"],\"successful\":[\"1\"],\"failed\":[],\"blocked\":false}}'\n",
+            capture.display()
+        );
+        let fake_ntm = executable_reaper(&temp, &script);
+        let heartbeat = temp.path().join("heartbeat.jsonl");
+        let mut config = fixture_config(heartbeat.clone());
+        config.repo = temp.path().to_owned();
+        config.ntm = fake_ntm.display().to_string();
+
+        let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
+        runtime
+            .block_on(async {
+                let cx = Cx::current().expect("runtime context");
+                report_dispatch_result(
+                    &cx,
+                    &config,
+                    7,
+                    "5",
+                    "omp-orchestrator-test",
+                    "status=DISPATCHED detail=ack",
+                )
+                .await
+            })
+            .expect("pane-one result report");
+
+        let args = std::fs::read_to_string(capture).expect("captured ntm args");
+        assert!(args.lines().any(|line| line == "--robot-send=test-session"));
+        assert!(args.lines().any(|line| line == "--panes=1"));
+        assert!(args.lines().any(|line| line.contains("DISPATCH_RESULT")));
+        let heartbeat = std::fs::read_to_string(heartbeat).expect("heartbeat");
+        assert!(heartbeat.contains("DISPATCH_RESULT_REPORTED"));
+    }
 }

@@ -200,6 +200,25 @@ impl ClaimFenceError {
             _ => None,
         }
     }
+
+    /// Stable machine-readable reason label.
+    ///
+    /// The operator-facing refusal names this instead of a prose fragment, so a
+    /// refusal can be counted by cause without parsing English. Measured
+    /// 2026-09-01: 135 re-dispatches of one unclaimed bead were invisible
+    /// because the only per-tick trace was a transport label.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::MissingBeadId => "MISSING_BEAD_ID",
+            Self::MissingReceiverAgent => "MISSING_RECEIVER_AGENT",
+            Self::MissingOperation => "MISSING_OPERATION",
+            Self::MissingSnapshot { .. } => "MISSING_SNAPSHOT",
+            Self::SnapshotIdMismatch { .. } => "SNAPSHOT_ID_MISMATCH",
+            Self::ClaimRequired { .. } => "CLAIM_REQUIRED",
+            Self::AssignedElsewhere { .. } => "ASSIGNED_ELSEWHERE",
+            Self::UnknownStatus { .. } => "UNKNOWN_STATUS",
+        }
+    }
 }
 
 impl std::fmt::Display for ClaimFenceError {
