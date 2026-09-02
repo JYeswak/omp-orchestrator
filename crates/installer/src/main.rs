@@ -8,7 +8,8 @@
 use installer::RepoOwnership;
 use std::path::PathBuf;
 use std::process::ExitCode;
-
+#[used]
+static BUILD_ID_MARKER: &[u8] = concat!("build_id=", env!("OMP_BUILD_ID")).as_bytes();
 const BINARIES: &[(&str, &str)] = &[
     ("omp-orchestrator", "omp-orchestrator"),
     ("tick-monitor", "tick-monitor"),
@@ -17,21 +18,19 @@ const BINARIES: &[(&str, &str)] = &[
 ];
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let raw_args: Vec<String> = std::env::args().skip(1).collect();
+    let (args, bin_dir) = match parse_cli_args(raw_args) {
+        Ok(parsed) => parsed,
+        Err(error) => {
+            eprintln!("INSTALLER ERROR: {error}");
+            return ExitCode::from(2);
+        }
+    };
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(|p| p.parent())
         .expect("crate lives two levels below repo root")
         .to_path_buf();
-
-    let bin_dir = std::env::var_os("INSTALL_BIN_DIR")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .or_else(|| dirs_home().map(|home| home.join(".local/bin")));
-    let Some(bin_dir) = bin_dir else {
-        eprintln!("INSTALLER ERROR: INSTALL_BIN_DIR or HOME must be set; install destination is unavailable");
-        return ExitCode::from(2);
-    };
 
     match args.first().map(String::as_str) {
         Some("--check") if args.len() == 1 => run_check(&repo_root, &bin_dir),
@@ -58,6 +57,34 @@ fn main() -> ExitCode {
     }
 }
 
+fn parse_cli_args(raw_args: Vec<String>) -> Result<(Vec<String>, PathBuf), String> {
+    let mut positional = Vec::new();
+    let mut explicit_bin_dir = None;
+    let mut args = raw_args.into_iter();
+    while let Some(arg) = args.next() {
+        if arg == "--bin-dir" {
+            let value = args
+                .next()
+                .ok_or_else(|| "--bin-dir requires a path".to_owned())?;
+            if value.is_empty() {
+                return Err("--bin-dir requires a non-empty path".to_owned());
+            }
+            explicit_bin_dir = Some(PathBuf::from(value));
+        } else if let Some(value) = arg.strip_prefix("--bin-dir=") {
+            if value.is_empty() {
+                return Err("--bin-dir requires a non-empty path".to_owned());
+            }
+            explicit_bin_dir = Some(PathBuf::from(value));
+        } else {
+            positional.push(arg);
+        }
+    }
+    let bin_dir = explicit_bin_dir
+        .or_else(|| std::env::var_os("INSTALL_BIN_DIR").filter(|value| !value.is_empty()).map(PathBuf::from))
+        .or_else(|| dirs_home().map(|home| home.join(".local/bin")))
+        .ok_or_else(|| "INSTALL_BIN_DIR, --bin-dir, or HOME must be set".to_owned())?;
+    Ok((positional, bin_dir))
+}
 fn usage() {
     eprintln!("installer [--check | --install TARGET | --version] [--bin-dir PATH]");
 }
@@ -195,4 +222,21 @@ fn shellexpand_path(path: &str) -> String {
         }
     }
     path.to_owned()
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bin_dir_flag_is_removed_before_verb_dispatch() {
+        let (args, bin_dir) = parse_cli_args(vec![
+            "--install".to_owned(),
+            "installer".to_owned(),
+            "--bin-dir".to_owned(),
+            "scratch-home".to_owned(),
+        ])
+        .expect("bin-dir parses");
+        assert_eq!(args, vec!["--install", "installer"]);
+        assert_eq!(bin_dir, PathBuf::from("scratch-home"));
+    }
 }

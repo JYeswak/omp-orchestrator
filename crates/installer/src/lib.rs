@@ -20,13 +20,12 @@ pub enum InstallError {
     NotAGitRepo { path: String },
     NoBinaries { repo_root: String },
     RestartFailed { binary: String, detail: String },
-    /// A build is already running in this repo (a `.build_in_flight` marker is
-    /// present). RESTRICTIVE: installing over an in-flight build races the linker and
-    /// produces a binary whose identity matches neither tree.
+    RunningExecutableMissing { binary: String, path: String },
+    /// A build is already running in this repo (a .build_in_flight marker is
+    /// present). Installing over an in-flight build races the linker.
     BuildInFlight { detail: String },
     IoError { path: String, detail: String },
-    /// A bounded spawn exceeded its deadline and the process group was
-    /// killed. RESTRICTIVE: names the step, never a partial success.
+    /// A bounded spawn exceeded its deadline and the process group was killed.
     InstallTimeout { step: &'static str, deadline_secs: u64 },
 }
 
@@ -48,6 +47,9 @@ impl fmt::Display for InstallError {
             }
             Self::RestartFailed { binary, detail } => {
                 write!(formatter, "RESTART FAILED for {binary}: {detail}")
+            }
+            Self::RunningExecutableMissing { binary, path } => {
+                write!(formatter, "RUNNING EXECUTABLE MISSING for {binary}: {path}")
             }
             Self::BuildInFlight { detail } => {
                 write!(formatter, "build in flight: {detail}")
@@ -340,7 +342,31 @@ pub fn build_target(
 
 // ── IDENTITY VERIFICATION ───────────────────────────────────────────────────────
 
-/// Probe the installed binary's build_id via `--version`.
+fn parse_build_id(text: &str) -> Option<String> {
+    text.lines().find_map(|line| {
+        let value = line.split_once("build_id=")?.1.trim();
+        let sha_len = [64usize, 40usize].into_iter().find(|length| {
+            value.len() >= *length
+                && value.as_bytes()[..*length]
+                    .iter()
+                    .all(|byte| byte.is_ascii_hexdigit())
+        });
+        let hex_len = value
+            .bytes()
+            .take_while(|byte| byte.is_ascii_hexdigit())
+            .count();
+        let token = if let Some(length) = sha_len {
+            &value[..length]
+        } else if hex_len >= 8 {
+            &value[..hex_len]
+        } else {
+            value.split(|character: char| character.is_whitespace() || character == '_').next()?
+        };
+        (!token.is_empty()).then(|| token.to_owned())
+    })
+}
+
+/// Probe the installed binary's build_id via its version output.
 pub fn probe_version(binary: &Path) -> Option<String> {
     let mut probe_command = Command::new(binary);
     probe_command.arg("--version");
@@ -349,19 +375,12 @@ pub fn probe_version(binary: &Path) -> Option<String> {
         PROBE_DEADLINE,
     ) {
         subprocess_contract::BoundedOutcome::Completed(out) => out,
-        // A probe that hangs or cannot spawn is a typed absence, not a
-        // partial answer: the caller treats None as "identity unproven".
         _ => return None,
     };
     if !out.status.success() {
         return None;
     }
-    let text = String::from_utf8_lossy(&out.stdout);
-    // Parse "name version build_id=<sha>" pattern
-    text.lines()
-        .find(|l| l.contains("build_id="))
-        .and_then(|l| l.split("build_id=").nth(1))
-        .map(|s| s.trim().to_owned())
+    parse_build_id(&String::from_utf8_lossy(&out.stdout))
 }
 
 /// Probe the installed binary's embedded build_id via strings.
@@ -375,13 +394,7 @@ pub fn probe_build_id_string(binary: &Path) -> Option<String> {
         subprocess_contract::BoundedOutcome::Completed(out) => out,
         _ => return None,
     };
-    let text = String::from_utf8_lossy(&out.stdout);
-    // Look for the build_id pattern
-    text.lines()
-        .find(|l| l.contains("build_id="))
-        .and_then(|l| l.split("build_id=").nth(1))
-        .map(|s| s.trim().to_owned())
-        .filter(|s| !s.is_empty())
+    parse_build_id(&String::from_utf8_lossy(&out.stdout))
 }
 
 /// The local identity legs for one binary are build-id-in-binary and --version.
@@ -529,6 +542,12 @@ pub fn restart_and_verify(
 
     let deadline = std::time::Instant::now() + PROBE_DEADLINE;
     loop {
+        if !installed_path.is_file() {
+            return Err(InstallError::RunningExecutableMissing {
+                binary: binary_name.to_owned(),
+                path: installed_path.display().to_string(),
+            });
+        }
         let after_start_secs = running_process_start(binary_name)?;
         let identity_ok = verify_identity(
             installed_path,
@@ -565,6 +584,17 @@ pub fn restart_and_verify(
 }
 
 // ── INSTALL ─────────────────────────────────────────────────────────────────────
+fn staged_install_path(install_path: &Path) -> PathBuf {
+    let name = install_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("binary");
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    install_path.with_file_name(format!(".{name}.staged.{}-{nonce}", std::process::id()))
+}
 
 pub fn install_binary(
     source: &Path,
@@ -580,40 +610,74 @@ pub fn install_binary(
             detail: "binary has no filename".to_owned(),
         })?
         .to_owned();
-
-    let install_path = install_dir.join(&binary_name);
-
-    // Copy
-    std::fs::copy(source, &install_path).map_err(|error| InstallError::IoError {
-        path: install_path.display().to_string(),
-        detail: format!("copy failed: {error}"),
+    std::fs::create_dir_all(install_dir).map_err(|error| InstallError::IoError {
+        path: install_dir.display().to_string(),
+        detail: format!("create install directory failed: {error}"),
     })?;
+    let install_path = install_dir.join(&binary_name);
+    let staged_path = staged_install_path(&install_path);
 
-    // Set executable permissions
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&install_path, std::fs::Permissions::from_mode(0o755))
-            .map_err(|error| InstallError::IoError {
-                path: install_path.display().to_string(),
-                detail: format!("chmod failed: {error}"),
-            })?;
+    if let Err(error) = std::fs::copy(source, &staged_path) {
+        let _ = std::fs::remove_file(&staged_path);
+        return Err(InstallError::IoError {
+            path: staged_path.display().to_string(),
+            detail: format!("staged copy failed: {error}"),
+        });
     }
-
-    // Verify the four-way identity after install.
-    let check = verify_identity(&install_path, head_sha, repo_ownership);
-    if !check.consistent {
-        // Roll back: remove the bad install.
-        let _ = std::fs::remove_file(&install_path);
-        return Err(InstallError::IdentityMismatch {
-            binary: binary_name,
-            head: head_sha.to_owned(),
-            build_id: check.build_id_in_binary.unwrap_or_default(),
-            version: check.version_output.unwrap_or_default(),
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+    #[cfg(unix)]
+    if let Err(error) = std::fs::set_permissions(
+        &staged_path,
+        std::fs::Permissions::from_mode(0o755),
+    ) {
+        let _ = std::fs::remove_file(&staged_path);
+        return Err(InstallError::IoError {
+            path: staged_path.display().to_string(),
+            detail: format!("staged chmod failed: {error}"),
         });
     }
 
-    Ok(check)
+    let staged_check = verify_identity(&staged_path, head_sha, repo_ownership);
+    if !staged_check.consistent {
+        let _ = std::fs::remove_file(&staged_path);
+        return Err(InstallError::IdentityMismatch {
+            binary: binary_name,
+            head: head_sha.to_owned(),
+            build_id: staged_check.build_id_in_binary.unwrap_or_default(),
+            version: staged_check.version_output.unwrap_or_default(),
+        });
+    }
+
+    // Rename replaces the old path atomically on the same filesystem. There is
+    // no unlink-before-place window for a launchd process to observe.
+    if let Err(error) = std::fs::rename(&staged_path, &install_path) {
+        let _ = std::fs::remove_file(&staged_path);
+        return Err(InstallError::IoError {
+            path: install_path.display().to_string(),
+            detail: format!("atomic replace failed: {error}"),
+        });
+    }
+    let metadata = std::fs::metadata(&install_path).map_err(|error| InstallError::IoError {
+        path: install_path.display().to_string(),
+        detail: format!("post-install stat failed: {error}"),
+    })?;
+    if !metadata.is_file() || metadata.len() == 0 {
+        return Err(InstallError::RunningExecutableMissing {
+            binary: binary_name,
+            path: install_path.display().to_string(),
+        });
+    }
+    let final_check = verify_identity(&install_path, head_sha, repo_ownership);
+    if !final_check.consistent {
+        return Err(InstallError::IdentityMismatch {
+            binary: binary_name,
+            head: head_sha.to_owned(),
+            build_id: final_check.build_id_in_binary.unwrap_or_default(),
+            version: final_check.version_output.unwrap_or_default(),
+        });
+    }
+    Ok(final_check)
 }
 
 #[cfg(test)]
@@ -794,5 +858,35 @@ exit 0
         assert_eq!(check.identity_legs(), "build_id,version");
         assert!(check.to_string().contains("legs=build_id,version"));
         std::fs::remove_dir_all(root).expect("cleanup");
+    }
+    #[cfg(unix)]
+    #[test]
+    fn identity_failure_keeps_existing_destination_present() {
+        let source_root = std::env::temp_dir().join(format!(
+            "omp-installer-atomic-source-{}",
+            std::process::id()
+        ));
+        let scratch = std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .expect("HOME for scratch-home")
+            .join(".local/state/zeststream/scratch/omp-orchestrator/installer-tests")
+            .join(std::process::id().to_string());
+        std::fs::create_dir_all(&source_root).expect("source root");
+        std::fs::create_dir_all(&scratch).expect("scratch bin dir");
+        let source = source_root.join("fake-target");
+        let installed = scratch.join("fake-target");
+        std::fs::write(&source, b"not an identity-bearing executable").expect("source");
+        std::fs::write(&installed, b"previous installed binary").expect("previous install");
+        let result = install_binary(&source, &scratch, "head-42", &RepoOwnership::ThisRepo);
+        assert!(result.is_err(), "identity-less source must refuse");
+        assert_eq!(std::fs::read(&installed).expect("destination remains"), b"previous installed binary");
+        let staged = std::fs::read_dir(&scratch)
+            .expect("scratch entries")
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().contains(".staged."))
+            .count();
+        assert_eq!(staged, 0, "failed install must remove only its staged file");
+        std::fs::remove_dir_all(source_root).expect("source cleanup");
+        std::fs::remove_dir_all(scratch).expect("scratch cleanup");
     }
 }

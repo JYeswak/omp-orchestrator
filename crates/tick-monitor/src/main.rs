@@ -11,7 +11,8 @@ use std::path::PathBuf;
 use std::process::exit;
 use std::time::Duration;
 use tick_monitor::*;
-
+#[used]
+static BUILD_ID_MARKER: &[u8] = concat!("build_id=", env!("OMP_BUILD_ID")).as_bytes();
 const TMUX_TIMEOUT: Duration = Duration::from_secs(10);
 const GIT_TIMEOUT: Duration = Duration::from_secs(20);
 

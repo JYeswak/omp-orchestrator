@@ -2,7 +2,8 @@
 
 use pane_truth::{run_live, run_live_exit_code, selftest, selftest_exit_code, PaneTruthRules};
 use std::process::ExitCode;
-
+#[used]
+static BUILD_ID_MARKER: &[u8] = concat!("build_id=", env!("OMP_BUILD_ID")).as_bytes();
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.iter().any(|arg| arg == "--version") {
