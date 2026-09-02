@@ -9,10 +9,11 @@ Define the session-scoped namespace, owner attribution, ephemeral-buffer excepti
 ## Contract Artifacts
 
 1. Canonical artifact: `crates/scratch-home/src/lib.rs`
-2. CLI surface: `crates/scratch-home/src/main.rs`
+2. Runner: the package-level command in `## Validation` below.
 3. Invariant suite: the `#[cfg(test)] mod tests` in `crates/scratch-home/src/lib.rs`
-4. Production caller: `crates/ack-spine/src/main.rs:171-201`, which creates a pending-marker job through `ScratchRoot`
-5. Adjacent ownership boundary: `docs/contracts/dispatch_claim_contract.md`, law `DCL-L5-CLAIM-DIES-WITH-WORK`
+4. CLI surface: `crates/scratch-home/src/main.rs`
+5. Production caller: `crates/ack-spine/src/main.rs:171-201`, which creates a pending-marker job through `ScratchRoot`
+6. Adjacent ownership boundary: `docs/contracts/dispatch_claim_contract.md`, law `DCL-L5-CLAIM-DIES-WITH-WORK`
 
 ## Scratch Home Model
 
@@ -31,21 +32,24 @@ $HOME/.local/state/zeststream/scratch/<ntm-session>/<pane-or-agent>/<job>/
 | `pane_env(session)` | `SH-PANE-ENV` | Produces `ZS_SCRATCH=<session-root>/{pane}` for NTM pane creation. |
 | `create_job(session, pane_or_agent, job, owner)` | `SH-JOB-OWNER` | Creates the job directory and atomically writes matching owner metadata. |
 | `OwnerMetadata` | `SH-OWNER-METADATA` | Durable attribution: schema, session, pane/agent, job, and owner. |
+| `OwnerActivity` | `SH-OWNER-ACTIVITY` | Activity result supplied by an independent owner/session authority. |
+| `IdleProof` | `SH-IDLE-PROOF` | Identity-bound activity evidence supplied to `reap` and `apply`. |
 | `UnknownEntry` | `SH-UNKNOWN` | Any missing, malformed, mismatched, symlinked, or unreadable ownership boundary. |
-| `ReapCandidate` | `SH-REAP-CANDIDATE` | A matching owner sidecar plus an age-qualified job; candidate only, not deletion authority. |
-| `ReapReport` | `SH-REAP-REPORT` | Separate candidates from unknown entries; only candidates may reach `apply`. |
+| `ProtectedEntry` | `SH-PROTECTED` | Age-qualified work blocked by active, unknown, conflicting, or absent idle proof. |
+| `ReapCandidate` | `SH-REAP-CANDIDATE` | A matching owner sidecar, age-qualified job, and matching idle authority. |
+| `ReapReport` | `SH-REAP-REPORT` | Separates candidates, protected entries, and unknown entries; only candidates may reach `apply`. |
 | `unix_now()` | `SH-CLOCK` | Current Unix seconds for callers that need a timestamp. |
 
-The six local public types are `ScratchError`, `ScratchRoot`, `OwnerMetadata`, `ReapCandidate`, `UnknownEntry`, and `ReapReport`. `SCHEMA_VERSION`, `ENV_VAR`, and `DEFAULT_BASE` are public constants, not additional types.
+The nine local public types are `ScratchError`, `ScratchRoot`, `OwnerMetadata`, `OwnerActivity`, `IdleProof`, `ReapCandidate`, `UnknownEntry`, `ProtectedEntry`, and `ReapReport`. `SCHEMA_VERSION`, `ENV_VAR`, and `DEFAULT_BASE` are public constants, not additional types.
 
 ## Operations and Ownership
 
 - `ScratchRoot::ensure_session` creates only the validated session directory and rejects a symlink root.
 - `ScratchRoot::pane_env` and `ntm_spawn_args` carry the session-scoped path into NTM rather than asking a caller to reconstruct it.
 - `ScratchRoot::create_job` validates session, pane/agent, job, and owner components; rejects traversal and control characters; creates the job; then atomically renames `.owner.json.<pid>-<nonce>.tmp` into `.owner.json`.
-- `ScratchRoot::reap` scans one session and produces a report. Valid sidecar identity plus age can produce a candidate; unknown ownership is reported separately.
-- `ScratchRoot::apply` revalidates each candidate immediately before recursive removal. A report is not by itself authority to delete.
-- `ReapReport::auto_reapable` is a diagnostic projection of whether unknown entries exist; it is not a substitute for candidate revalidation.
+- `ScratchRoot::reap` scans one session and produces a report. Valid sidecar identity, age, and a matching idle proof can produce a candidate; active, unknown, conflicting, or absent idle evidence is protected.
+- `ScratchRoot::apply` revalidates each candidate immediately before recursive removal, including identity and idle proof. A report is not by itself authority to delete.
+- `ReapReport::auto_reapable` is a diagnostic projection of whether protected or unknown entries exist; it is not a substitute for candidate revalidation.
 
 An owner string in `.owner.json` is durable attribution for recovery, not proof that an owner process is alive. A live ownership claim must have a lifecycle receipt outside this crate and must die with the owned job or its explicit resolution. A PID in a durable marker is never sufficient evidence of current ownership.
 
@@ -67,9 +71,9 @@ Missing, malformed, wrong-schema, mismatched, symlinked, non-regular, or unreada
 
 ### SH-L4-OWNER-AND-IDLE-REQUIRED
 
-Age reaping requires both a proven owner and a proven idle window. Filesystem age alone is not a proof that the job is idle, the owner is gone, or the work is resolved. A candidate must be based on matching owner metadata, a current age check at mutation time, and an independent owner/session/job-idle authority. If any leg is unavailable, the result is `UnknownEntry` or a refusal and no removal occurs.
+Age reaping requires both a proven owner and a proven idle window. Filesystem age alone is not a proof that the job is idle, the owner is gone, or the work is resolved. `reap` requires a matching `IdleProof` from an authority with a non-empty identity; active, unknown, conflicting, or absent proof yields `ProtectedEntry` rather than a candidate.
 
-The current `reap` implementation uses `min_age` as a filesystem-mtime threshold, but `apply` revalidates with `Duration::ZERO` and no independent idle authority. That is an explicit conformance gap, not a safe interpretation of age. It is tracked by `omp-orchestrator-scratch-reaping-owner-idle-proof-jwe`.
+`apply` revalidates owner identity and idle proof immediately before deletion, but the current implementation calls `inspect_job(..., Duration::ZERO)`, so it does not recheck the original age threshold at mutation time. That is an explicit age-only conformance gap, not a safe interpretation of age, and is tracked by `omp-orchestrator-scratch-reaping-owner-idle-proof-jwe`.
 
 ### SH-L5-EPHEMERAL-MKTEMP
 
@@ -84,8 +88,8 @@ The commit is not, by itself, proof that a scratch job is idle, that an owner pr
 ## VIOLATION — where shipped code contradicts this law
 
 - **Declared:** `SH-L1-SESSION-SCOPED` forbids durable scratch fallback to an unowned temporary directory. **Shipped:** `crates/ack-spine/src/main.rs:184-197` falls back to `std::env::temp_dir()` for `pending.json` when `ScratchRoot::default().create_job(...)` fails. **Consequence:** the pending marker outlives the command without session/pane/job attribution and cannot be safely reaped. Tracked by `omp-orchestrator-remove-unattributed-scratch-fallback-7bp`.
-- **Declared:** `SH-L4-OWNER-AND-IDLE-REQUIRED` requires age and current idle proof at deletion. **Shipped:** `crates/scratch-home/src/lib.rs:307-312` calls `inspect_job(..., Duration::ZERO)` from `apply`, so the original age threshold is not rechecked; `inspect_job` has no independent live-owner or session-idle input. **Consequence:** a previously reported candidate can be removed without a current age/idle proof. Tracked by `omp-orchestrator-scratch-reaping-owner-idle-proof-jwe`.
-- **Declared:** `SH-L2-OWNERSHIP-DIES-WITH-WORK` distinguishes durable attribution from live ownership. **Shipped:** `crates/scratch-home/src/lib.rs:337-344` stores only static owner/session/job strings and no owner-lifecycle receipt. **Consequence:** the sidecar can attribute an abandoned job, but cannot prove that the named owner is still alive or that the job is idle; it must not be treated as a live lease.
+- **Declared:** `SH-L4-OWNER-AND-IDLE-REQUIRED` requires age and current idle proof at deletion. **Shipped:** `crates/scratch-home/src/lib.rs:322-327` revalidates with `inspect_job(..., Duration::ZERO)`, so the original age threshold is not rechecked even though the current implementation accepts idle proofs. **Consequence:** a previously reported candidate can be removed without a current age proof. Tracked by `omp-orchestrator-scratch-reaping-owner-idle-proof-jwe`.
+- **Declared:** `SH-L2-OWNERSHIP-DIES-WITH-WORK` distinguishes durable attribution from live ownership. **Shipped:** `crates/scratch-home/src/lib.rs:362-385` stores static owner/session/job strings and an activity result, but no owner-lifecycle receipt. **Consequence:** the sidecar and idle proof can attribute and classify a job, but cannot prove that the named owner is still alive or that the work lifecycle ended; they must not be treated as a live lease.
 
 ## Non-Coverage
 
@@ -100,7 +104,7 @@ The commit is not, by itself, proof that a scratch job is idle, that an owner pr
 ## Validation
 
 ```bash
-RCH_WORKER=contabo-4 CARGO_BUILD_JOBS=2 rch exec -- env RCH_ENABLED=false CARGO_MINT_MIN_CONTAINER_PCT=0 cargo test -j 2 -p scratch-home --lib -- --nocapture
+tmp="$(mktemp -d)"; trap 'rmdir "$tmp"' EXIT; TMPDIR="$tmp" RCH_ENABLED=false CARGO_MINT_MIN_CONTAINER_PCT=0 cargo test -p scratch-home --lib -- --nocapture
 ```
 
 ## Cross-References
@@ -119,4 +123,4 @@ RCH_WORKER=contabo-4 CARGO_BUILD_JOBS=2 rch exec -- env RCH_ENABLED=false CARGO_
 
 ## NO-CLAIM
 
-This contract defines the scratch ownership and reaping boundary but does not make current callers conform. It does not prove that the ack-spine fallback is removed, that `apply` rechecks age, that any owner is alive, or that any job is idle. It does not bind Agent Mail reservations automatically to commits; it only specifies the preferred commit-aware release receipt with TTL as crash fallback. A clean `scratch-home` invariant suite proves the crate's modeled filesystem cases, not the safety of every caller or the truth of an external lifecycle authority.
+This contract defines the scratch ownership and reaping boundary but does not make current callers conform. It does not prove that the ack-spine fallback is removed, that `apply` rechecks age, that any owner is alive, or that any job is actually idle. It does not bind Agent Mail reservations automatically to commits; it only specifies the preferred commit-aware release receipt with TTL as crash fallback. A clean `scratch-home` invariant suite proves the crate's modeled filesystem cases, not the safety of every caller or the truth of an external lifecycle authority.
