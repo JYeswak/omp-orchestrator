@@ -98,7 +98,7 @@ the only editorial act, and they change no edge.
 Degrees, from the same file via
 `python3 -c "...collections.Counter(e['to'] ...)"`:
 
-- **17 of 26 crates appear in the DAG at all. 9 are isolated** — `commit-build-fence`,
+- **17 of 26 crates appear in the DAG at all. 9 are isolated** — `commit-build-fence`, — HISTORICAL as of 2026-09-02.
   `composer-typed`, `dispatch-silence-watch`, `fleet-composite`, `installer`,
   `kernel-bypass-gate`, `loop-queue-filter`, `omp-inventory-map`, `omp-types`. That
   `omp-types` — the crate that exists specifically to be the shared vocabulary,
@@ -109,10 +109,10 @@ Degrees, from the same file via
   with no shared trait and 17 ack/receipt types in 3 incompatible dialects.
 - **Hub:** `subprocess-contract`, in-degree 4 (`finding`, `omp-orchestrator`,
   `kernel-only-operator-hook`, `pane-dispatch-fence`). It is the correct hub — the
-  process-boundary contract is what should be universal — but only 4 of 26 crates depend on it
+  process-boundary contract is what should be universal — but only 4 of 26 crates depend on it — HISTORICAL as of 2026-09-02.
   directly (6 reach it transitively; 22 do not route through it at all), against 29 raw spawn
   sites measured in the repo.
-- **8 leaves** (out-degree 0): `dispatch-claim-fence`, `omp-rpc-session`,
+- **8 leaves** (out-degree 0): `dispatch-claim-fence`, `omp-rpc-session`, — HISTORICAL as of 2026-09-02.
   `path-literal-guard`, `pre-delete-citation-check`, `state-wildcard-lint`,
   `subprocess-contract`, `tick-monitor`, `undrained-pipe-lint`.
 - **5 roots** (in-degree 0): `ack-spine`, `finding-dispatch`,
@@ -167,10 +167,10 @@ dashed `no edge exists` arrow is drawn to represent an **absence** in the data a
 the only line in the diagram that is not itself an edge in the census — it is labelled
 as such.
 
-Every one of the 7 edges carries the same evidence string, `"direct process probe
+Every one of the 7 edges carries the same evidence string, `"direct process probe — HISTORICAL as of 2026-09-02.
 produced this row"`. That is honest and it is also the whole problem: the only crate
 that touches the OMP surface is the crate whose job is to *scan* the OMP surface. The
-census measures the observer observing itself. Of 183 rows, 157 classify
+census measures the observer observing itself. Of 183 rows, 157 classify — HISTORICAL as of 2026-09-02.
 `CAPABILITY_NOT_USED`, 18 `SCRAPED_OR_OBSERVED_ALTERNATIVE`, 8 `MAPPED_BY_DIRECT_PROBE`.
 
 **NO-CLAIM:** this diagram does not claim the 176 untouched rows are *useful* surface,
@@ -207,7 +207,7 @@ graph LR
     linkStyle 4 stroke:#c04040,stroke-width:3px
 ```
 
-**MEASURED.** Source: layer 1 from the `tick-monitor` crate's live operation; layer 2 from the local `idle_panes`/`free_capacity` producer-consumer path. State, corrected 2026-09-01: the filter defect is FIXED (commit -oco; `is_free_capacity` is now its own field and `NewlyIdle` is included), and what remains broken is the SEAM — the producer's field and the consumer's parser agree by convention across a process boundary with no shared type (09 M1). OMP supplies `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts:9-30`) for guest host-idle reconciliation and settle handling, but this declared type has no measured path into the local filter. Layer 3 is from the tick ledger — **162 refused ticks across 4.2 hours, every one carrying `DISPATCH_RETRY_BLOCKED`**; layer 5 is recorded as absent because no crate receives a completion. **Layer 4 was corrected 2026-09-01 by the guardian pass:** it is not absent — the resident `omp-orchestrator` (launchd, build `9a61acd`) emits into panes via `ntm --robot-send`, and the heartbeat ledger records 131 `DISPATCHED` rows for bead `815` to `%1408` between 11:45 and 15:53 MDT with the bead `open` and the pane dead on HTTP 402 (00-brief §4 carries the command). The dashed link now names the defect that is live rather than an absence that is not. This node text is hand-edited, as every node in this diagram has been since it was captured — the generator this section requires still has no command and no owner.
+**MEASURED.** Source: layer 1 from the `tick-monitor` crate's live operation; layer 2 from the local `idle_panes`/`free_capacity` producer-consumer path. State, corrected 2026-09-01: the filter defect is FIXED (commit -oco; `is_free_capacity` is now its own field and `NewlyIdle` is included), and what remains broken is the SEAM — the producer's field and the consumer's parser agree by convention across a process boundary with no shared type (09 M1). OMP supplies `GuestIdleReconcilerCtx` (`dist/types/collab/guest.d.ts:GuestIdleReconcilerCtx`) for guest host-idle reconciliation and settle handling, but this declared type has no measured path into the local filter. Layer 3 is from the tick ledger — **162 refused ticks across 4.2 hours, every one carrying `DISPATCH_RETRY_BLOCKED`**; layer 5 is recorded as absent because no crate receives a completion. **Layer 4 was corrected 2026-09-01 by the guardian pass:** it is not absent — the resident `omp-orchestrator` (launchd, build `9a61acd`) emits into panes via `ntm --robot-send`, and the heartbeat ledger records 131 `DISPATCHED` rows for bead `815` to `%1408` between 11:45 and 15:53 MDT with the bead `open` and the pane dead on HTTP 402 (00-brief §4 carries the command). The dashed link now names the defect that is live rather than an absence that is not. This node text is hand-edited, as every node in this diagram has been since it was captured — the generator this section requires still has no command and no owner.
 
 
 Read left to right, exactly one of five links is solid. The loop is not slow, it is
@@ -273,7 +273,7 @@ of defect; it never guarantees the class is absent.
 A sixth required property fell out of this session and is not in the table because
 nothing measures it yet: **ADDRESSABLE**. `omp-inventory-map --help` returns
 `{"status":"ERROR","error":"CONFIG_ERROR unknown argument --help"}`. The gate is
-built, its 13 tests pass, and `types_inventory.rs:176-178` deliberately excludes
+built, its 13 tests pass, and `types_inventory.rs:heading_built_its_13_tests_pass_and_types` deliberately excludes — HISTORICAL as of 2026-09-02.
 `Observation` from the allowance list so the name collision *demands* convergence
 rather than tolerating it. It is correct and it is undiscoverable. A gate nobody can
 invoke has a real-world firing rate of zero regardless of its test count.
@@ -296,7 +296,7 @@ gate specifically: **RETRACTED as a false zero, 2026-09-01.** The original scan 
 finds **293 mirror `.rs` files containing `mermaid`**, topped by an entire **`frankenmermaid`
 monorepo (190 files: fm-parser, fm-render-*, fm-cli)** — mermaid generation with parsers,
 renderers, and a CLI — plus `beads_rust`'s `br dep --format mermaid`
-(`src/cli/commands/dep.rs:1654`, `render_dep_tree_mermaid`, with e2e contract tests) emitting
+(`src/cli/commands/dep.rs:render_dep_tree_mermaid`, `render_dep_tree_mermaid`, with e2e contract tests) emitting
 mermaid directly from a dependency graph, and ftui-extras renderers. What remains ours to build
 is the DELTA none of them ships: regenerating Diagram 1 from the live census inside CI and
 failing the diff when the crate DAG moves — the generator-as-gate, not the generator.
@@ -335,7 +335,7 @@ or from any command. It is the target shape only. Mapping it against Diagram 3: 
 do not exist in any crate; `M` exists at 1-of-8 leg coverage. The install path `B`
 through `D` is unbuilt — `installer` is one of the 9 orphan crates in Diagram 1.
 
-The projected NewlyIdle admitted target is not an implementation claim. OMP declares GuestIdleReconcilerCtx at dist/types/collab/guest.d.ts:9-30 for guest host-idle reconciliation and settle handling, but no evidence connects that context to this local tick-monitor filter.
+The projected NewlyIdle admitted target is not an implementation claim. OMP declares GuestIdleReconcilerCtx at dist/types/collab/guest.d.ts:GuestIdleReconcilerCtx for guest host-idle reconciliation and settle handling, but no evidence connects that context to this local tick-monitor filter.
 
 The single hardest link in this diagram is `J -> H`: the no-ack retry. It is the link
 that turns a fire-and-forget send into a delivery contract, and it is the link that
@@ -365,7 +365,7 @@ sequenceDiagram
     B-->>C: bead state as of read time
     Note over C,B: the only feedback channel is<br/>polling a board a human updated
 ```
-> **Upstream type for the receipts gap:** `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`) exists upstream, so "missing receipt" names an UNCONSUMED type, not an absent one. The diagram shows what our transport does today, not what the platform can express.
+> **Upstream type for the receipts gap:** `IrcDeliveryReceipt` (`tools/hub/types.d.ts:IrcDeliveryReceipt`) exists upstream, so "missing receipt" names an UNCONSUMED type, not an absent one. The diagram shows what our transport does today, not what the platform can express.
 
 **MEASURED.** This sequence is the current actuator shape: the conductor calls `send_and_verify`, which selects `ntm --robot-send` or tmux transport, writes transport evidence, and waits for receiver-side evidence. The diagram does not claim that a packet was accepted; sender success remains weaker than receiver acknowledgement.
 
@@ -422,6 +422,6 @@ this section already records why — *"Nothing in this repo currently regenerate
 diagrams … that command does not exist today"* — and building it is a separate piece
 of work. So the honest state is: **the diagrams reflect a 16:50 snapshot, which is
 labelled, hashed, and preserved, and they are not current.** Row counts in Diagram 2
-(176 census rows) are from that capture; the 23:01 capture holds 981 rows.
+(176 census rows) are from that capture; the 23:01 capture holds 981 rows. — HISTORICAL as of 2026-09-02.
 
 That gap is now stated in the document; the retained artifacts make the historical comparison reproducible without depending on ephemeral source-era paths.
