@@ -269,6 +269,89 @@ fn l2_safe_to_dispatch_tracks_observation_state_not_state() {
     );
 }
 
+/// The two `robot-tail` status lines for pane 1, verbatim, ~95 seconds apart. Both captures
+/// carry a braille spinner and an elapsed timer — the v18 WORKING signature — and the timer
+/// ADVANCED between them, which is the strongest evidence grade `pane_observation_contract`
+/// `PO-L1` defines. `ntm` reported `observation_state: "idle"` at `observation_confidence:
+/// 0.95` for this pane at BOTH timestamps.
+const PANE1_CAPTURE_A: &str =
+    " ⠏ 26m  · ◕ Opus 5 · ⏸ Goal 878K · 📁 ~/Developer/omp-orchestrator · ⑂ main *8 ?5 · ◫ 77.4%/1M ⟲ · S1060.49";
+const PANE1_CAPTURE_B: &str =
+    " ⠼ 28m  · ◕ Opus 5 · ⏸ Goal 878K · 📁 ~/Developer/omp-orchestrator · ⑂ main *9 ?5 · ◫ 77.9%/1M ⟲ · S1";
+/// What `ntm` said about that same pane, at both captures.
+const PANE1_NTM_OBSERVATION_STATE: &str = "idle";
+const PANE1_NTM_OBSERVATION_CONFIDENCE: f64 = 0.95;
+
+#[test]
+fn l2_the_observation_channel_was_confidently_wrong_about_a_working_pane() {
+    // MEASURED 2026-09-02T03:42-03:44Z, six minutes AFTER this contract landed, while
+    // reporting dispatch results to pane 1. It refutes the conclusion the contract had just
+    // published — "gate on observation_state" — and is recorded rather than buried.
+    //
+    // Bead omp-orchestrator-observation-state-false-idle-riqd.
+    //
+    // A spinner plus an elapsed timer is the v18 WORKING signature (AGENTS.md). Both captures
+    // carry one, the timer advanced 26m -> 28m across ~95s, and the dirty-file count moved
+    // 8 -> 9. That is two-capture motion above the 75-second floor: WORKING is PROVEN, not
+    // inferred. `ntm` said idle at 0.95 on both.
+    fn has_spinner(line: &str) -> bool {
+        line.chars().any(|c| ('\u{2800}'..='\u{28ff}').contains(&c))
+    }
+    fn minutes(line: &str) -> u64 {
+        let bytes = line.as_bytes();
+        let mut i = 0usize;
+        while i < bytes.len() {
+            if bytes[i].is_ascii_digit() {
+                let s = i;
+                while i < bytes.len() && bytes[i].is_ascii_digit() {
+                    i += 1;
+                }
+                if i < bytes.len() && bytes[i] == b'm' {
+                    return line[s..i].parse().expect("elapsed minutes");
+                }
+            } else {
+                i += 1;
+            }
+        }
+        panic!("no elapsed timer in {line}");
+    }
+
+    for (label, line) in [("A", PANE1_CAPTURE_A), ("B", PANE1_CAPTURE_B)] {
+        assert!(
+            has_spinner(line),
+            "capture {label} must carry the braille spinner that makes WORKING readable"
+        );
+    }
+    let (a, b) = (minutes(PANE1_CAPTURE_A), minutes(PANE1_CAPTURE_B));
+    assert!(
+        b > a,
+        "the elapsed timer must ADVANCE between captures for motion to be proven: {a}m -> {b}m"
+    );
+    assert_ne!(
+        PANE1_CAPTURE_A, PANE1_CAPTURE_B,
+        "the spinner-stripped content must differ, per PO-L1's second clause"
+    );
+
+    // The contradiction, asserted rather than described.
+    assert_eq!(
+        PANE1_NTM_OBSERVATION_STATE, "idle",
+        "the fixture records what ntm actually said; do not soften it"
+    );
+    assert!(
+        (PANE1_NTM_OBSERVATION_CONFIDENCE - 0.95).abs() < f64::EPSILON,
+        "and it said so at 0.95 — a confident wrong answer, not a hedge"
+    );
+
+    // POSITIVE CONTROL on the same readers: an idle v18 status line has NO spinner and no
+    // elapsed timer, so `has_spinner` and `minutes` are not answering true for everything.
+    let idle_line = " π  > claude-opus-5 > 📁 ~/Developer/omp-orchestrator > ⑂ main";
+    assert!(
+        !has_spinner(idle_line),
+        "POSITIVE CONTROL FAILED: the spinner reader fires on an idle line, so its result \
+         above proves nothing"
+    );
+}
+
 // ---------------------------------------------------------------------------------------
 // PR-L3 — readiness needs two captures >=75s apart  (PINNED DEFECT)
 // ---------------------------------------------------------------------------------------

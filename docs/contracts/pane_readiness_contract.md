@@ -112,9 +112,41 @@ UNKNOWN non-answer. It does not. Pane 1 is the counter-example in the same snaps
 `state=THINKING` — a busy-sounding word — with `observation_state=idle` at **0.95** and
 `safe_to_dispatch=true`. Across all five rows `safe_to_dispatch == (observation_state == "idle")`,
 and the observation channel is 0.95-confident on every pane. **The derivation follows
-`observation_state`, never `state`.** The rule for a caller is therefore stronger than "distrust
-UNKNOWN": gate on `observation_state`, and treat `state` as advisory prose on every agent type,
-not only codex.
+`observation_state`, never `state`.**
+
+#### 2.2.1 AMENDMENT — and it retracts this section's own advice
+
+That correction concluded "gate on `observation_state`". **Six minutes after this document
+landed, a differently-shaped reader refuted it.** Measured 2026-09-02T03:42–03:44Z on pane 1,
+two `--robot-tail` captures ~95 seconds apart — above the 75-second floor:
+
+```
+A   ⠏ 26m  · ◕ Opus 5 · ⏸ Goal 878K · 📁 ~/Developer/omp-orchestrator · ⑂ main *8 ?5 · ◫ 77.4%/1M
+B   ⠼ 28m  · ◕ Opus 5 · ⏸ Goal 878K · 📁 ~/Developer/omp-orchestrator · ⑂ main *9 ?5 · ◫ 77.9%/1M
+```
+
+Both lines carry a braille spinner AND an elapsed timer — the v18 WORKING signature. The timer
+advanced 26m → 28m, the spinner changed, and the dirty-file count moved `*8` → `*9`. That
+satisfies `PO-L1` on both clauses, so **WORKING is proven, not inferred.** At those same two
+timestamps `ntm` reported `observation_state: "idle"` at `observation_confidence: 0.95` and
+`safe_to_dispatch: true`; `--robot-tail` independently reported `state: "idle"`. Both surfaces
+were confidently wrong about a pane 28 minutes into a turn.
+
+**This is worse than the `UNKNOWN` case above.** An UNKNOWN at 0.5 announces its own weakness;
+an `idle` at 0.95 does not. So the rule is NOT "gate on `observation_state`" — it is:
+
+> No single ntm field is sufficient. A positive free read must be confirmed against the last
+> status line at the two-capture grade, which is what `pane-truth` already does.
+
+Both measurements stand and they are consistent: in the five-pane snapshot the derivation
+faithfully followed `observation_state`, and here `observation_state` itself was false. Together
+they say the derivation is faithful to a field that can lie. Owned by
+`omp-orchestrator-observation-state-false-idle-riqd`; pinned by
+`l2_the_observation_channel_was_confidently_wrong_about_a_working_pane`.
+
+The advice retracted here survived **six minutes** in a landed contract. That is the argument
+for the pinned-defect pattern: the claim was written down precisely enough to be refuted, and the
+refutation is now a test rather than a memory.
 
 ### 2.3 `PR-L3` — this crate's motion window is 1/7.5 of the floor
 
@@ -164,7 +196,7 @@ them would make a `capture-pane` failure look like an idle terminal.
 cargo test -p pane-dispatch-ready --test readiness_contract
 ```
 
-Expect **11 passed**. Two legs (`l1_a_wedged_pane_still_classifies_free_in_this_crate`,
+Expect **12 passed**. Two legs (`l1_a_wedged_pane_still_classifies_free_in_this_crate`,
 `l3_this_crates_motion_window_is_below_the_75_second_floor`) are **pinned defects**: they pass
 because the law is unenforced and go RED the moment it is enforced. Their failure is the signal
 that this document must be updated, not that the code broke. Both were proven to fire by mutation
@@ -217,11 +249,13 @@ this crate can read says free at the moment of capture; it does not mean the pan
 work. Two of the five laws are stated and unenforced — a reader who takes `PR-L1` or `PR-L3` as a
 guarantee has misread the document, which is why each carries its bead id inline.
 
-`PR-L2`'s table is **one snapshot on one machine at one timestamp**. It is enough to refute the
-"derived from UNKNOWN" claim, because a single counter-example refutes a universal; it is not
-enough to prove the derivation is `observation_state` in every ntm version. The leg asserts the
-rule across all five rows rather than any one row's value, and a different fleet state could
-still surprise it.
+`PR-L2`'s five-pane table is **one snapshot on one machine at one timestamp**, and §2.2.1
+records what happened when a second reader was pointed at the same field two minutes later: it
+refuted the conclusion. Neither measurement is retracted; the *advice* drawn from the first one
+is. Treat every ntm field as advisory and confirm a positive free read against the last status
+line at the two-capture grade. `omp-orchestrator-observation-state-false-idle-riqd` owns
+characterising the failure — one pane over two minutes refutes a universal, and it does not
+establish when `observation_state` lies or how often.
 
 The suite proves the laws for `classify`/`confirm_free` as called directly. It does not prove any
 caller consults them, waits for the second capture, or gates on `observation_state` — three
