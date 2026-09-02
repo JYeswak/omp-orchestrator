@@ -1,0 +1,23 @@
+[package]
+name = "staged-build-gate"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Pre-commit gate: every crate a commit touches must compile, per-crate and bounded"
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "staged_build_gate"
+path = "src/lib.rs"
+
+[[bin]]
+name = "staged-build-gate"
+path = "src/main.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+subprocess-contract = { path = "../subprocess-contract" }
