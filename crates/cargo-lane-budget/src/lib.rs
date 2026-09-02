@@ -14,7 +14,8 @@ use std::env;
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
+use subprocess_contract::{bounded_output, BoundedOutcome};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 pub const DEFAULT_LANES_PER_SESSION: u64 = 22;
@@ -216,52 +217,22 @@ struct RunOutput {
 /// stderr each have their own) blocks in `write` forever, so it never exits, so `try_wait`
 /// never returns `Some`, and the call burns its entire timeout at 0% CPU before being killed.
 /// The pre-extraction source read the pipes only inside the exited arm — which is exactly
-/// that hazard, and `undrained-pipe-lint` refuses it at commit time in this repo.
 fn run_bounded(program: &str, args: &[String], timeout: Duration) -> Result<RunOutput, RunError> {
-    let mut child = Command::new(program)
-        .args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| RunError::Spawn(format!("{program}: {e}")))?;
-    let out = child.stdout.take().map(|mut pipe| {
-        std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            let _ = pipe.read_to_end(&mut buf);
-            buf
-        })
-    });
-    let err = child.stderr.take().map(|mut pipe| {
-        std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            let _ = pipe.read_to_end(&mut buf);
-            buf
-        })
-    });
-    let started = Instant::now();
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) if started.elapsed() >= timeout => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(RunError::Timeout);
+    let mut command = Command::new(program);
+    command.args(args);
+    match bounded_output(&mut command, timeout) {
+        BoundedOutcome::Completed(output) => {
+            let result = RunOutput {
+                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            };
+            if output.status.success() {
+                Ok(result)
+            } else {
+                Err(RunError::Exit(output.status.code().unwrap_or(1)))
             }
-            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
-            Err(e) => return Err(RunError::Io(e.to_string())),
         }
-    };
-    // The readers end when the child's fds close, which exit or the kill above guarantees.
-    let stdout = out.and_then(|handle| handle.join().ok()).unwrap_or_default();
-    let _ = err.and_then(|handle| handle.join().ok());
-    let result = RunOutput {
-        stdout: String::from_utf8_lossy(&stdout).into_owned(),
-    };
-    if status.success() {
-        Ok(result)
-    } else {
-        Err(RunError::Exit(status.code().unwrap_or(1)))
+        BoundedOutcome::TimedOut => Err(RunError::Timeout),
+        BoundedOutcome::Unspawned(error) => Err(RunError::Spawn(format!("{program}: {error}"))),
     }
 }
 
