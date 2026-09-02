@@ -152,13 +152,99 @@ Non-zero (A) and non-zero (B), per the anti-vacuity condition.
 | 7 | `last_active` is registration recency wearing an activity name | **C** | named finding; never use as a work oracle |
 | 8 | the `am` CLI does not talk to the authenticated daemon | **C** | named finding; house pattern = daemon-primary, CLI-as-differential-oracle |
 | 9 | every pane binding resolves `legacy-unverified` | **B** | typed `PaneBindingUnverified`; reap with existing `cleanup_pane_identities` |
-| 10 | daemon documents `CURSOR_EXPIRED` but silently CLAMPS instead (AmNative) | **B**+**A** | shipped as `journey::verify_resume_continuity` / `journey::resume_from`; upstream too |
+| 10 | ~~daemon documents `CURSOR_EXPIRED` but silently CLAMPS instead~~ | **REFUTED** | **NOT A DEFECT — resolved at source below. The clamp is correct and intended (GH#238); the guard built against it is over-strict.** |
 | 11 | `signaled=false` while `persisted=true` and `acknowledged=true` (AmNative) | **C** | **RESOLVED AT SOURCE below — documented behaviour, not a delivery gap. Do NOT defend against it.** |
 | 12 | "daemon 0 unread vs CLI 20 rows" — **NOT a read-state disagreement; it is agent-identity resolution** | **B** | typed `AgentNameAmbiguous`; every name lookup MUST carry a project scope |
 | 13 | `inbox_stats.ack_pending_count` drifts from ground truth (113 vs 46) | **C** | named finding; never read the cached aggregate as truth |
 
-Totals over thirteen rows: **(A) 2, (B) 8, (C) 5** — #3 carries an (A) plus a supporting (B), and
-#10 is both (A) and (B). Anti-vacuity satisfied.
+Totals over thirteen rows: **(A) 1, (B) 7, (C) 5, REFUTED 1** — #3 carries an (A) plus a supporting
+(B). Anti-vacuity satisfied. **Two rows of the original nine-plus-four turned out not to be defects
+at all (#10, #11), and both were dissolved by reading version-matched source rather than by
+measuring harder.**
+
+### Row #10 — REFUTED AT SOURCE: the clamp is correct and the guard is over-strict
+
+AmNative filed #10 as "the daemon's own docs promise `CURSOR_EXPIRED` below retained history and it
+silently clamps instead", shipped a typed `CursorExpired` guard against it
+(`journey::verify_resume_continuity` / `resume_from`, d0a88e5), and then — correctly — flagged that
+the whole claim rested on an unchecked inference: **is `oldest_available_cursor` an eviction floor,
+or simply that recipient's first-ever delivery?** It asked for the source discriminator. Here it is,
+and it refutes the defect.
+
+**1 — There is NO production prune of delivery events.** The only `DELETE FROM
+inbox_delivery_events` in the tree is at `crates/mcp-agent-mail-db/src/sync.rs:1456`, inside
+`mod tests {` (opens at :1252), and its own `.expect()` string says
+`"simulate a pruned historical event"` — the test has to manufacture a prune because nothing in
+production performs one.
+
+**2 — `oldest_available_cursor` is `MIN(seq)` over that recipient's surviving rows**
+(`sync.rs:574`: `SELECT MIN(seq) AS oldest_cursor, MAX(seq) AS tail_cursor, (SELECT MIN(seq) FROM
+inbox_delivery_events) AS global_oldest`). With no prune, that is exactly the first-ever delivery —
+**not** a retention floor. Note the query computes a *second*, store-wide floor as well; that one is
+the real retention signal.
+
+**3 — `CursorExpired` is gated on the GLOBAL floor, and the source comment anticipates this exact
+mistake by name.** At `sync.rs:606-624`:
+
+```rust
+// `seq` is a GLOBAL AUTOINCREMENT shared by every recipient, so a gap
+// between `after` and this recipient's oldest event normally consists
+// of other recipients' deliveries — NOT lost history. A monitor that
+// called `--position-now` on an empty inbox (cursor 0) must still
+// receive its first delivery even when that lands at a high global
+// seq (GH#238). A cursor is only genuinely expired when retention has
+// actually removed rows, which is observable while global seq 1 is
+// gone from the ledger.
+let retention_has_pruned = global_oldest_cursor.is_some_and(|global| global > 1);
+if let Some(oldest) = oldest_available_cursor
+    && retention_has_pruned
+    && after < oldest.saturating_sub(1)
+{ return Err(InboxDeliveryEventError::CursorExpired { after, oldest_available: oldest }); }
+```
+
+So refusing a high first-event seq is **the bug GH#238 fixed**, and not refusing it is the intended
+behaviour. `after: 1` on GreenFrog returning a success page from 2108 is correct.
+
+**4 — Confirmed empirically on the live store: the ledger is CONTIGUOUS.**
+
+```
+$ sqlite3 ... "select min(seq), max(seq), count(*) from inbox_delivery_events;"
+1|5226|5226
+```
+
+`count == max` with `min == 1` means **zero rows have ever been removed**. Therefore
+`retention_has_pruned = (1 > 1) = false`, and `CursorExpired` is **unreachable in this store by
+construction** — it has never been observed because nothing has been evicted, not because the daemon
+fails to emit it. Per-recipient floors are first events, exactly as AmNative suspected: GreenFrog
+2108, AmberGate 2058, BlueLantern 2063.
+
+**Consequence for the shipped guard.** `verify_resume_continuity` refuses whenever
+`oldest_available > stored`, which omits the `retention_has_pruned` conjunct — so it refuses a
+healthy replay for **every** recipient whose first event is nonzero, i.e. every recipient in the
+store, including `DeliveryCursor::ORIGIN`. That is precisely the *"monitor that called
+`--position-now` on an empty inbox must still receive its first delivery"* case **GH#238 was filed
+about**: the guard reimplements the bug upstream already fixed, inside something advertised as a
+defense. This is the over-strict gate row #11 warns about, built for real this time. Live blast
+radius is zero today because the wired caller uses `CursorQuery::PositionNow`, not `resume_from`.
+
+**THE FIX IS A DELETION, AND MY FIRST RECOMMENDATION WAS WRONG.** I initially advised copying the
+stateless predicate `global_oldest_cursor > 1` into the guard. **A client cannot compute it.**
+`InboxDeliveryEventPage` (`sync.rs:32-38`) returns exactly `events`, `next_cursor`, `has_more`,
+`oldest_available_cursor`, `tail_cursor` — `global_oldest` is computed at `:575`, consumed for the
+decision at `:615`, and **never leaves the function**. So `retention_has_pruned` is unknowable
+client-side, and the guard was deciding expiry with **strictly less information than the daemon
+has**. AmNative reached this independently and its conclusion is the right one: delete the
+client-side continuity check and trust the daemon's refusal. `MailError::CursorExpired` stays as a
+**decode** of the daemon's `CURSOR_EXPIRED`, never as a locally synthesised verdict.
+
+That generalises past this row: **a layer must not re-derive a judgement whose deciding input it
+cannot observe.** The daemon keeps `global_oldest` private precisely because the decision is its to
+make.
+
+If a fires-on-known-bad is ever wanted for the daemon's own path, the recipe is already in the tree:
+`sync.rs:1456-1462` deletes one `seq` and then asserts `after=0` returns
+`expect_err("cursor before retained floor must be explicit")`. That is the only shape that evidences
+loss — and it needs a manufactured prune, which is itself the proof that no production prune exists.
 
 ### Row #11 — RESOLVED AT SOURCE: the field is narrow, the notification is fine
 
@@ -431,16 +517,42 @@ grep -qF 'pub read_ts: Option<String>,' /tmp/amd_msg.rs \
 grep -qF 'mark returned messages read' /tmp/amd_msg.rs \
   && echo "leg10 PASS fetch_inbox self-documents that it MUTATES read state (do not call it)" \
   || echo "leg10 NOTE fetch_inbox no longer documents the mutation"
+
+# LEG 11 — #10 REFUTED: the ledger is contiguous, so CursorExpired is unreachable, and the
+# deciding input never reaches the client.
+read -r G T N <<<"$(sqlite3 "file:$LIVE?mode=ro" \
+  "select min(seq)||' '||max(seq)||' '||count(*) from inbox_delivery_events;")"
+test -n "$G" || { echo "FAIL leg11 vacuous: no delivery events"; exit 1; }
+test "$G" = "1" -a "$T" = "$N" \
+  && echo "leg11 PASS ledger contiguous (min=$G max=$T count=$N) -> retention_has_pruned=false -> the clamp is CORRECT" \
+  || echo "leg11 NOTE ledger no longer contiguous (min=$G max=$T count=$N) -> a real prune may now exist; re-open #10"
+# The only DELETE is test-only, which is why no prune exists. NOTE: `git grep -c` against a REV
+# prefixes `<rev>:<path>:` to the count, so the bare output is never a number — strip it, or the
+# check reports NOTE forever. (This bit me writing the leg.)
+DEL=$(git grep -cF 'DELETE FROM inbox_delivery_events' v0.3.31 -- '*sync.rs' | sed 's/.*://')
+test "${DEL:-0}" = "1" \
+  && echo "leg11 PASS exactly one DELETE ($DEL), and it is inside mod tests" \
+  || echo "leg11 NOTE DELETE count is $DEL — a production prune may have been added"
+grep -qF 'simulate a pruned historical event' /tmp/sync331.rs 2>/dev/null \
+  && echo "leg11 PASS that DELETE self-documents as a SIMULATED prune" \
+  || echo "leg11 NOTE the simulate-a-prune marker is gone — re-read before trusting #10"
+# and the deciding input is NOT exposed to callers
+git show v0.3.31:crates/mcp-agent-mail-db/src/sync.rs \
+  | sed -n '/pub struct InboxDeliveryEventPage/,/^}/p' | grep -qF 'global_oldest' \
+  && echo "leg11 NOTE global_oldest is now exposed — a client guard becomes possible" \
+  || echo "leg11 PASS global_oldest absent from the page: clients CANNOT decide expiry"
 ```
 
-All **ten** legs run today, all PASS: leg0 `shipped=0.3.31 tag=v0.3.31 version=0.3.31`; leg1 `rows=5`
+All **eleven** legs run today, all PASS: leg0 `shipped=0.3.31 tag=v0.3.31 version=0.3.31`; leg1 `rows=5`
 (stock sqlite3 answered the `m.topic` query); leg2 `messages.topic exists`; leg3 both planner FROM
 clauses bind `m=messages`; leg4 `rc=1`, engine error on stderr, **stdout empty**; leg5
 `/health 200, /mcp/ 401`; leg6 search SQL unchanged upstream with `origin/main` pinning
 `fsqlite = "=0.3.14"`; leg7 `AmberGate rows=2, colliding names=10`; leg8 cache drift
 `ground_truth=115 cached=47`; leg9 `signaled == receipt-existence` and the debounced case documented;
 leg10 `read_ts` declared and populated on the daemon surface, and `fetch_inbox` self-documents that
-it mutates read state.
+it mutates read state; leg11 ledger contiguous `min=1 max=5226 count=5226` (so
+`retention_has_pruned=false` and the clamp is correct), exactly one delete site and it self-documents
+as a SIMULATED prune, and `global_oldest` absent from the page a client receives.
 
 **Two legs invert the usual reading and must not be pattern-matched.** Leg 4 PASSES when the defect
 **still reproduces on the installed binary** — its PASS means the work is *not* done, and its
