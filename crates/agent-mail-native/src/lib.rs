@@ -96,6 +96,7 @@ pub mod error;
 pub mod journey;
 pub mod oracle;
 pub mod identity;
+pub mod packet;
 pub mod wake;
 
 pub use client::{DaemonHealth, MailClient};
