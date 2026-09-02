@@ -35,6 +35,11 @@ pub fn read_ledger(path: &Path) -> Result<Vec<Value>, LedgerError> {
             path.display()
         ))
     })?;
+    parse_ledger(&bytes)
+}
+
+/// Parse staged ledger bytes without reading the worktree version.
+pub fn parse_ledger(bytes: &[u8]) -> Result<Vec<Value>, LedgerError> {
     if bytes.iter().all(u8::is_ascii_whitespace) {
         return Err(LedgerError::NothingToCheck(format!(
             "{NOTHING_TO_CHECK}: orchestration ledger has zero receipt rows"

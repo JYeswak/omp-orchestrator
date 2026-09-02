@@ -62,6 +62,7 @@ const HOOK_SOURCE_CRATES: &[&str] = &[
     "no-shell-gate",
     "state-wildcard-lint",
     "path-literal-guard",
+    "orchestration-tick-gate",
     "undrained-pipe-lint",
 ];
 

@@ -1,6 +1,6 @@
-//! Multi-call pre-commit gate: runs five workspace gates on the staged file set.
+//! Multi-call pre-commit gate: runs six workspace gates on the staged file set.
 //!
-//! GATES: no-shell-gate, path-literal-guard, undrained-pipe-lint,
+//! GATES: no-shell-gate, path-literal-guard, undrained-pipe-lint, orchestration-tick-gate,
 //! state-wildcard-lint, pre-delete-citation-check.
 //!
 //! EXIT CODES: 0 = clean, 1 = violation/refusal, 2 = operational error,
@@ -10,9 +10,10 @@
 #![forbid(unsafe_code)]
 
 use no_shell_gate::violation_for;
+use orchestration_tick_gate::{law_code, parse_ledger, validate_receipt, LedgerError};
 use std::io::{self, Write};
+use std::path::Path;
 use std::process::ExitCode;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PreCommitOutcome {
     Clean,
@@ -46,7 +47,7 @@ fn main() -> ExitCode {
         }
     }
 
-    // ── PRE-COMMIT mode: the five file gates below ──────────────────────
+    // ── PRE-COMMIT mode: the six staged-set gates below ─────────────────
     let staged = match get_staged_files() {
         Ok(files) => files,
         Err(err) => {
@@ -235,6 +236,7 @@ fn main() -> ExitCode {
         }
     }
 
+    validate_staged_tick_ledger(&repo_root, &mut refusals);
     if refusals.is_empty() {
         eprintln!("CLEAN: all staged files passed the multi-gate checks");
         PreCommitOutcome::Clean.exit_code()
@@ -257,6 +259,125 @@ fn main() -> ExitCode {
             "the exemption list is empty by design; there is no check.sh carve-out"
         );
         PreCommitOutcome::Violation.exit_code()
+    }
+}
+fn validate_staged_tick_ledger(repo_root: &Path, refusals: &mut Vec<String>) {
+    const LEDGER_PATH: &str = ".flywheel/orchestration-ticks.jsonl";
+    let staged = match staged_paths_for_tick_ledger(repo_root) {
+        Ok(paths) => paths,
+        Err(error) => {
+            refusals.push(format!(
+                "orchestration-tick-gate: ERROR checking staged ledger path={LEDGER_PATH}: {error}"
+            ));
+            return;
+        }
+    };
+    if !staged.iter().any(|path| path == LEDGER_PATH) {
+        let _ = writeln!(
+            io::stderr(),
+            "orchestration-tick-gate: GATE_NOT_APPLICABLE -- {LEDGER_PATH} is not staged"
+        );
+        return;
+    }
+
+    let bytes = match staged_blob(repo_root, LEDGER_PATH) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            refusals.push(format!(
+                "orchestration-tick-gate: file={LEDGER_PATH} law=LEDGER_UNREADABLE detail={error}"
+            ));
+            return;
+        }
+    };
+    let rows = match parse_ledger(&bytes) {
+        Ok(rows) => rows,
+        Err(LedgerError::NothingToCheck(detail)) => {
+            refusals.push(format!(
+                "orchestration-tick-gate: file={LEDGER_PATH} law=LEDGER_NOTHING_TO_CHECK detail={detail}"
+            ));
+            return;
+        }
+        Err(LedgerError::Invalid(detail)) => {
+            refusals.push(format!(
+                "orchestration-tick-gate: file={LEDGER_PATH} law=LEDGER_ROW_INVALID detail={detail}"
+            ));
+            return;
+        }
+    };
+
+    let mut violations = Vec::new();
+    for (index, row) in rows.iter().enumerate() {
+        if let Err(errors) = validate_receipt(row) {
+            for error in errors {
+                violations.push(format!(
+                    "file={LEDGER_PATH} row={} law={} detail={error}",
+                    index + 1,
+                    law_code(&error)
+                ));
+            }
+        }
+    }
+    if violations.is_empty() {
+        let _ = writeln!(
+            io::stderr(),
+            "orchestration-tick-gate: CLEAN file={LEDGER_PATH} rows={}",
+            rows.len()
+        );
+    } else {
+        refusals.extend(
+            violations
+                .into_iter()
+                .map(|violation| format!("orchestration-tick-gate: {violation}")),
+        );
+    }
+}
+
+fn staged_paths_for_tick_ledger(repo_root: &Path) -> Result<Vec<String>, String> {
+    let mut command = std::process::Command::new("git");
+    command.current_dir(repo_root).args([
+        "diff",
+        "--cached",
+        "--name-only",
+        "--",
+        ".flywheel/orchestration-ticks.jsonl",
+    ]);
+    match subprocess_contract::bounded_output(&mut command, std::time::Duration::from_secs(10)) {
+        subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() => {
+            Ok(String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .filter(|line| !line.trim().is_empty())
+                .map(str::to_owned)
+                .collect())
+        }
+        subprocess_contract::BoundedOutcome::Completed(output) => Err(format!(
+            "git diff --cached exited {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        )),
+        subprocess_contract::BoundedOutcome::TimedOut => {
+            Err("git diff --cached exceeded deadline; group killed".to_owned())
+        }
+        subprocess_contract::BoundedOutcome::Unspawned(error) => Err(error.to_string()),
+    }
+}
+
+fn staged_blob(repo_root: &Path, path: &str) -> Result<Vec<u8>, String> {
+    let stage_spec = format!(":{path}");
+    let mut command = std::process::Command::new("git");
+    command.current_dir(repo_root).args(["show", &stage_spec]);
+    match subprocess_contract::bounded_output(&mut command, std::time::Duration::from_secs(10)) {
+        subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() => {
+            Ok(output.stdout)
+        }
+        subprocess_contract::BoundedOutcome::Completed(output) => Err(format!(
+            "git show {stage_spec} exited {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        )),
+        subprocess_contract::BoundedOutcome::TimedOut => Err(format!(
+            "git show {stage_spec} exceeded deadline; group killed"
+        )),
+        subprocess_contract::BoundedOutcome::Unspawned(error) => Err(error.to_string()),
     }
 }
 
