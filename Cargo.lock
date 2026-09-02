@@ -26,6 +26,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "admission-reason"
+version = "0.1.0"
+dependencies = [
+ "regex",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "aead"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -58,6 +67,17 @@ dependencies = [
  "ctr",
  "ctutils",
  "ghash",
+]
+
+[[package]]
+name = "agent-mail-native"
+version = "0.1.0"
+dependencies = [
+ "asupersync",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -230,6 +250,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
+name = "cargo-lane-budget"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "cc"
 version = "1.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -377,6 +405,10 @@ checksum = "5ca28b0ae3115b884660db4118d803791fd6756b6e88f39c0f3f7859060d7566"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "crate-soundness-verify"
+version = "0.1.0"
 
 [[package]]
 name = "crc32fast"
@@ -857,6 +889,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "inbox-monitor"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "subprocess-contract",
+]
+
+[[package]]
 name = "inout"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1144,6 +1185,7 @@ name = "omp-orchestrator"
 version = "0.1.0"
 dependencies = [
  "ack-stage",
+ "agent-mail-native",
  "asupersync",
  "composer-typed",
  "dispatch-claim-fence",
@@ -1470,7 +1512,9 @@ name = "reap-finished-panes"
 version = "0.1.0"
 dependencies = [
  "fs2",
+ "pane-dispatch-ready",
  "serde_json",
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -1526,6 +1570,14 @@ name = "regex-syntax"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
+
+[[package]]
+name = "response-envelope-check"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "rmp"
@@ -1721,6 +1773,14 @@ checksum = "77549399552de45a898a580c1b41d445bf730df867cc44e6c0233bbc4b8329de"
 dependencies = [
  "digest 0.10.7",
  "rand_core 0.6.4",
+]
+
+[[package]]
+name = "silent-success-census"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
