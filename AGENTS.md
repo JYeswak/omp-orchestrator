@@ -1,5 +1,8 @@
 # AGENTS.md — omp-orchestrator
-
+> **SUMMARY:** This repository is the Rust extraction of the OMP orchestrator: typed ground truth,
+> readiness, selection, dispatch, verification, and reaping. Read this file completely before acting;
+> the lifecycle, cancellation, gate, and evidence rules below are binding.
+**Session start:** read this file, `CLAUDE.md`, and `NEGATIVE_EVIDENCE.md` before acting; after compaction, re-read them before resuming.
 The operating manual for any agent working this repo. `README.md` says what the product is and why.
 This file says how you work here, what every crate is for, and what "done" means.
 
@@ -13,6 +16,17 @@ found a missing crate.
 
 The exemption list is empty. There is deliberately no `check.sh` carve-out — that carve-out is what
 let **160 scripts and 60,467 lines** accrete in the repo this substrate is extracted from.
+---
+
+## Scratch homes
+
+Work that outlives the command that created it MUST use the session-scoped
+`ZS_SCRATCH` directory under `$HOME/.local/state/zeststream/scratch/<ntm-session>/<pane-or-agent>/<job>/`.
+Do not create durable scratch under `/private/tmp` or `$TMPDIR`; those locations have no
+session owner and cannot be safely reaped. Single-command ephemeral buffers MAY use
+`mktemp` only when removed before the command exits. Use the `scratch-home` crate to
+resolve, create, attribute, and age-reap jobs; missing or invalid owner metadata is
+`UNKNOWN` and MUST NOT be auto-reaped.
 
 ---
 
@@ -51,26 +65,57 @@ document, a log, or a CI file.** This rule is the standing one; read it every se
 A gate that cannot fire is worse than no gate, because the repo *reads* as protected. Measured on
 2026-08-31, the flagship gate was correct — run by hand it exits 1, names the offending files, and
 prints *"the exemption list is empty by design"* — and it was invoked **only** from
-`.github/workflows/gate.yml`. `git remote -v` returns empty. **The workflow can never execute.**
-Two `.sh` files were committed into the tree that gate forbids while it watched from a runner that
-does not exist.
+`.github/workflows/gate.yml`, in a repo that then had no remote. Two `.sh` files were committed into
+the tree that gate forbids while it watched from a runner that did not exist.
 
-**The census, same day — five of six gates could not fire:**
+### CORRECTION 2026-09-02 — the remote now exists, and the failure INVERTED into something worse
 
-| gate | trigger | reachable? |
-|---|---|---|
-| `no-shell-gate` | `.git/hooks/pre-commit` (Mach-O binary) | **yes** — proven by a staged `.sh` refused at `commit_exit=1` |
-| `kernel-bypass-gate` | none at all | no |
-| `pre-delete-citation-check` | none at all | no |
-| `path-literal-guard` | `.github/` only | no — no remote |
-| `state-wildcard-lint` | `.github/` only | no — no remote |
-| `undrained-pipe-lint` | `.github/` only | no — no remote |
+**Retracted:** *"`git remote -v` returns empty. The workflow can never execute."* and the census
+row `no — no remote` on three gates. Both were true on 2026-08-31 and are false now:
+
+```
+$ git remote -v
+origin  https://github.com/JYeswak/omp-orchestrator.git (fetch)
+origin  https://github.com/JYeswak/omp-orchestrator.git (push)
+```
+
+`gh run list` shows **six consecutive FAILED runs, one per push** — `8e8050e`, `cb3df6d`,
+`84833e0`, `2acf6a1`, `5520f42` and more. Root cause, from `gh run view --log-failed`:
+
+```
+error[E0554]: `#![feature]` may not be used on the stable release channel
+error: could not compile `asupersync`
+```
+
+**`asupersync` requires nightly; the runner uses stable.** Every job that transitively depends on
+it dies at compile — `omp-inventory-map`, `porting-gate`, `installer` and others — after burning
+~17 minutes each.
+
+**This is the INVERSE of the failure this rule was written for, and it is worse.** The rule warns
+about a gate that *cannot* fire. What we have is a gate that **fires on every push, fails every
+time, and nobody reads it** — while the local `PRE_PUSH_GATE_OK` receipt green-lit all eight of that
+session's commits. **A local gate that certifies what CI rejects is a fooled certificate**, which
+is strictly more dangerous than a silent one: it manufactures confidence instead of merely
+withholding it.
+
+So the rule needs a second clause. **Reachability is necessary and not sufficient. A gate must be
+reachable AND its verdict must be READ.** An unread red is indistinguishable from an unwired gate
+at the only point that matters — the moment someone decides the tree is fine.
+
+Also corrected: a pane reported `gate.yml` as invalid YAML (*"Map keys must be unique at line 52"*).
+It parses clean under a strict duplicate-key loader; line 52 is a well-formed `kernel-bypass-gate:`
+job. **And note `yaml.safe_load` silently ACCEPTS duplicate keys, taking the last** — so a bare
+`safe_load` cannot be used to disprove a duplicate-key claim. Use a strict loader.
+
+**The census below is therefore STALE in the reachable column.** All six gates are now reachable
+via a live remote. Re-derive it with `git remote -v` plus `gh run list` before citing it, and treat
+the trigger column as the durable half.
 
 **Why it lives in the kernel processes.** Every other signalling path here is *measured silent*:
 `ATTENTION.txt` took 178 consecutive ticks from one writer with zero readers; the supervisor printed
-a typed refusal naming `owner=josh` 29 times and nobody read it for hours; `gate.yml` has no runner.
-A file, a log, and a CI job are each loud in principle and silent in fact. **The only path that
-reached a human was a nonzero typed outcome the operator had to answer.**
+a typed refusal naming `owner=josh` 29 times and nobody read it for hours; six red CI runs went
+unread in a single evening. A file, a log, and a CI job are each loud in principle and silent in
+fact. **The only path that reached a human was a nonzero typed outcome the operator had to answer.**
 
 So the census is the **first** check in `decide()`, ahead of the pane and queue checks, and it is
 unreachable-around: no branch may return `SupervisedWorking` or `AuthorizedIdle` while any gate is
@@ -454,6 +499,21 @@ theories could only agree with themselves.
 
 The current source-directory measurement is **27 crates here**, **59 control-plane crate directories**, and **4 names in both** (composer-typed, fleet-composite, loop-queue-filter, pane-dispatch-fence). Therefore 55 control-plane source directories are absent here. Cargo loads 57 control-plane packages because two source directories are standalone or excluded workspace manifests. The 24-row legacy table is retained for extraction history; its scoped split is **3 HERE / 17 CONTROL-PLANE**.
 
+**CORRECTED 2026-09-02 — the figure is 51, not 27.** `cargo metadata --no-deps` reports **51
+packages** and `ls -d crates/*/` counts **51 source directories**; the two agree, so this is not a
+manifest-vs-directory discrepancy. The `27` above is a stale snapshot from before the extraction
+wave landed 24 crates.
+
+```bash
+cargo metadata --no-deps --format-version 1 --offline | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["packages"]))'
+ls -d crates/*/ | wc -l
+```
+
+**Re-derive before citing, every time.** This figure moved 27 -> 50 -> 51 inside one session, and
+a grading round burned its whole budget re-finding that drift across four plan sections. A count in
+prose is stale the moment anyone lands a crate; the durable form is the command, which is why
+`NUMBERS.toml` exists and why plan sections must resolve figures to it rather than typing integers.
+
 This table was corrected from the original false impression. Every row below names its repository. A row marked CONTROL-PLANE is not an available local dependency and must not be cited as present.
 
 Measured by cargo metadata --no-deps and directory existence under each crates/ root, not by grep over this file:
@@ -780,6 +840,40 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
    passes. A residual "guarantees / proves / makes impossible" in a gate header is itself a defect —
    the overclaim is worse than the gap, because a reader stops looking.
 
+6. **An `#[ignore]`d leg is not a passing leg.** Measured 2026-09-02:
+   `findings_ledger::real_findings_ledger_is_strictly_valid` — the ONLY leg that validates the
+   actual `FINDINGS.jsonl` rather than a fixture — is `#[ignore]`d, and `--include-ignored` has
+   **zero callers** in this repo (the only matches are inside a vendored `asupersync` checkout
+   under `.rch-tmp/`). It passes when run. So a default `cargo test` reports the gate green while
+   production data goes unchecked: BUILT ≠ WIRED at test granularity. If a leg must be opt-in,
+   something in-tree has to opt in.
+
+---
+
+## Every DOCUMENT proves it bites, too
+
+A contract is a deliverable with a pass bar, not prose. The bar and its runner live in
+`docs/contracts/asupersync_process_grade.md`, derived from 97 asupersync contracts; the skeleton is
+`~/.claude/skills/project-startup/assets/contract-template.md`.
+
+| marker | corpus | why it is not optional |
+|---|---:|---|
+| `## Validation` — ONE pasteable command | 43% | without it, "is this still true" costs a grading ROUND |
+| `Bead:` line | 40% | the doc↔DAG link; absent, the document is commentary and no bead can close on it |
+| `## Contract Artifacts` incl. an **invariant suite** | 26% | a contract naming no test file is a DESCRIPTION |
+| `## Purpose`, `## Cross-References`, ≥5 stable IDs | 47 / 38 / 50% | |
+| ≤25 KB (corpus median **7,132 B**) | — | past that it cannot be verified in one sitting, so it gets graded in rounds — and a round finds drift, never absence |
+
+**Measured 2026-09-02, and it is a clean natural experiment.** Four Phase 0 contracts were
+dispatched. Three packets carried this bar plus the template path; one — written before the bar
+existed — asked only for "carrier set, operations, laws, NON-COVERAGE". **The three conforming
+packets produced three PASSING contracts; the under-specified packet produced the one contract that
+failed all five markers**, despite having the richest substance of the four.
+
+**Packet quality determined output quality with zero exceptions.** A dispatcher who omits the bar
+owns the non-conforming doc, not the pane. State the bar in every packet, and have the pane run the
+grader and paste its output before committing.
+
 ---
 
 ## Working here
@@ -800,6 +894,22 @@ production path. Most theater is (c).
 **Commits.** Path-scoped with an explicit list — `git commit -- <paths>`. Never `-A`; a shared
 checkout means a bare commit sweeps in another agent's unfinished work. Commit messages carry a
 verification-level tag (`[test]`, `(code-first, test pending)`, `[selftest-verified]`).
+
+**A path-scoped `add` does NOT make a bare `commit` path-scoped.** Measured 2026-09-02, twice in
+consecutive commits: the index is **shared state**. `git add -- <paths>` followed by
+`git commit -F <msg>` with no pathspec commits the ENTIRE INDEX, including whatever another agent
+had already staged. Two commits swept a peer's 220-line taxonomy, 236 changed bead lines, and a
+third agent's file rename, all under unrelated subjects.
+
+```bash
+git add -- <paths> && git commit -- <paths>   # correct — BOTH pathspecs
+git add -- <paths> && git commit              # WRONG — takes the whole index
+git commit -- <new-file>                       # fails — pathspec must be TRACKED, so add first
+```
+
+New files need **both**, in that order. And export `OMP_MSG_SRC=<msgfile>` when committing with
+`-F`, or the commit-msg hook refuses with `COMMIT-MSG REFUSED: round-trip: no message source found`
+— a refusal that scrolls past while the agent believes the commit landed. **Read the sha back.**
 
 ---
 
@@ -997,8 +1107,28 @@ scoped. The kernel does. **A handroll is not merely redundant — it is usually 
 ### THE RULE: if a kernel is broken, FIXING IT IS THE WORK
 
 This is the clause that matters, because it names the mechanism rather than the symptom.
-`refill-idle-panes` carries **only control-plane paths** (measured via `strings`), so it supervised
-the wrong repo all night. Rather than fix one default, I hand-dispatched for hours.
+`refill-idle-panes` carried **only control-plane paths** (measured via `strings` on 2026-08-31), so
+it supervised the wrong repo all night. Rather than fix one default, I hand-dispatched for hours.
+
+**CORRECTED 2026-09-02 — the kernel was FIXED and the doctrine outlived the defect.** The binary
+was rebuilt Sep 1 19:29 and now carries no `/Users/josh/Developer/*` literals at all
+(`strings … | grep -oE '/Users/josh/Developer/[a-z-]+'` returns nothing). `--plan` from this repo
+correctly resolves `bead=omp-orchestrator-omp-surface-map-41b`, and the `--apply` lane is cron'd at
+`8,28,48` and alive — its log reads `no idle pane both surfaces agree on — nothing to do`, which is
+the two-surface agreement rule working, not a silent failure.
+
+**The lesson survives the fix, and got sharper.** A stale "this kernel is broken" note is itself a
+reason to handroll — it licenses the routing-around indefinitely, long after the kernel is sound.
+**A doctrine row asserting a kernel is broken MUST be re-measured before it is obeyed.** Measured
+the same session: I handrolled `tick-monitor`'s job with `capture-pane | grep` for hours on the
+strength of notes like this one, while `tick-monitor observe` was installed, correct, and returning
+strictly more — `state`, `timer_secs`, `liveness`, `attention`, `dead_panes`, `omp_lifecycle`,
+`git_commits`, correctly session-scoped. Its first invocation reported `gap_secs=7773`: **nobody
+had observed a tick in 2.2 hours.**
+
+One live defect remains, and it is small: `refill-idle-panes --plan` proposes `pane=1`, the
+ORCHESTRATOR pane. The orchestrator must be excluded, and no `OMP_*` exclusion variable appears in
+the binary's strings. **That is the fix to make — not a reason to hand-dispatch.**
 
 > **Every handroll is locally cheaper and removes exactly the pressure that would have fixed the
 > kernel.** That is why the kernels stay broken. Routing around a broken kernel is not pragmatism;
