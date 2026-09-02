@@ -1,0 +1,24 @@
+[package]
+name = "asupersync-conformance"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Generated asupersync shape table and raw spawn triage gate"
+
+[lib]
+name = "asupersync_conformance"
+path = "src/lib.rs"
+
+[[bin]]
+name = "asupersync-conformance"
+path = "src/main.rs"
+
+[dependencies]
+sha2 = "0.11"
+undrained-pipe-lint = { path = "../undrained-pipe-lint" }
+
+[lints.rust]
+unsafe_code = "forbid"

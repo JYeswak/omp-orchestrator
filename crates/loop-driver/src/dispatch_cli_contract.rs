@@ -1,8 +1,6 @@
-use std::io::Read;
 use std::path::PathBuf;
 use std::process::{Command, ExitCode, Stdio};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 const ORACLE_TIMEOUT: Duration = Duration::from_secs(120);
 const DIAGNOSTIC_VERBS: [&str; 4] = ["status", "why", "capabilities", "robot-docs"];
@@ -25,84 +23,43 @@ pub fn handle(binary: &str, args: &[String]) -> Option<ExitCode> {
 fn oracle_output() -> Result<String, String> {
     let oracle = std::env::var_os("DISPATCH_STALL_ORACLE")
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("CONTROL_PLANE_REPO").map(|root| PathBuf::from(root).join("bin/dispatch-stall-profile.sh")))
+        .or_else(|| {
+            std::env::var_os("CONTROL_PLANE_REPO")
+                .map(|root| PathBuf::from(root).join("bin/dispatch-stall-profile.sh"))
+        })
         .unwrap_or_else(|| PathBuf::from("dispatch-stall-profile"));
     let mut command = Command::new("/bin/bash");
-    command
-        .arg(oracle)
-        .arg("--check")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    command.arg(oracle).arg("--check").stdin(Stdio::null());
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut command, 0);
-    let mut child = command.spawn().map_err(|e| format!("spawn oracle: {e}"))?;
-    // `mut` is required: read_to_end takes &mut self, and these are moved into the
-    // drainer threads below. Unlike fleet-monitor's version, this one DOES drain both
-    // pipes concurrently rather than polling try_wait() against undrained pipes -- the
-    // handroll is still redundant with subprocess-contract::bounded_output, but it is
-    // not the ~64 KiB deadlock, so this is left as a follow-up rather than widened here.
-    let mut stdout = child.stdout.take().ok_or_else(|| "oracle stdout pipe unavailable".to_owned())?;
-    let mut stderr = child.stderr.take().ok_or_else(|| "oracle stderr pipe unavailable".to_owned())?;
-    let stdout_reader = thread::spawn(move || {
-        let mut bytes = Vec::new();
-        stdout.read_to_end(&mut bytes).map(|_| bytes)
-    });
-    let stderr_reader = thread::spawn(move || {
-        let mut bytes = Vec::new();
-        stderr.read_to_end(&mut bytes).map(|_| bytes)
-    });
-    let deadline = Instant::now() + ORACLE_TIMEOUT;
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                let stdout = stdout_reader
-                    .join()
-                    .map_err(|_| "oracle stdout reader panicked".to_owned())?
-                    .map_err(|e| format!("read oracle stdout: {e}"))?;
-                let stderr = stderr_reader
-                    .join()
-                    .map_err(|_| "oracle stderr reader panicked".to_owned())?
-                    .map_err(|e| format!("read oracle stderr: {e}"))?;
-                let stdout = String::from_utf8_lossy(&stdout).into_owned();
-                let stderr = String::from_utf8_lossy(&stderr).trim().to_owned();
-                if stdout.trim().is_empty() {
-                    return Err(format!(
-                        "oracle produced no output (rc={:?}{})",
-                        status.code(),
-                        if stderr.is_empty() {
-                            String::new()
-                        } else {
-                            format!(", stderr={stderr}")
-                        }
-                    ));
-                }
-                return Ok(stdout);
-            }
-            Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(25)),
-            Ok(None) => {
-                let _ = Command::new("/bin/kill")
-                    .args(["-TERM", &format!("-{}", child.id())])
-                    .status();
-                let _ = child.wait();
-                let _ = stdout_reader.join();
-                let _ = stderr_reader.join();
-                return Err(format!(
-                    "oracle timeout after {}s",
-                    ORACLE_TIMEOUT.as_secs()
-                ));
-            }
-            Err(e) => {
-                let _ = Command::new("/bin/kill")
-                    .args(["-TERM", &format!("-{}", child.id())])
-                    .status();
-                let _ = child.wait();
-                let _ = stdout_reader.join();
-                let _ = stderr_reader.join();
-                return Err(format!("wait oracle: {e}"));
-            }
+    let output = match subprocess_contract::bounded_output(&mut command, ORACLE_TIMEOUT) {
+        subprocess_contract::BoundedOutcome::Completed(output) => output,
+        subprocess_contract::BoundedOutcome::TimedOut => {
+            return Err(format!(
+                "oracle timeout after {}s",
+                ORACLE_TIMEOUT.as_secs()
+            ));
         }
+        subprocess_contract::BoundedOutcome::Unspawned(error) => {
+            return Err(format!("oracle spawn inconclusive: {error}"));
+        }
+    };
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    if stdout.trim().is_empty() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        return Err(format!(
+            "oracle produced no output (rc={:?}, stderr_tail={stderr:?})",
+            output.status.code()
+        ));
     }
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        return Err(format!(
+            "oracle refused (rc={:?}, stderr_tail={stderr:?})",
+            output.status.code()
+        ));
+    }
+    Ok(stdout)
 }
 #[derive(Default)]
 struct Fields {
