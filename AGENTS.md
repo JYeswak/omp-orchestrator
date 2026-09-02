@@ -901,22 +901,33 @@ Every part of it was false. `printenv HTTP_BEARER_TOKEN` -> **SET, 65 chars**; `
 **SET**; both read at `mcp-agent-mail-cli/src/lib.rs:82140`. The CLI had authenticated via the
 environment the entire time. `printenv` was available throughout.
 
-**The refusal was not evidence. It was the absence of evidence, wearing evidence's shape** — which
-is exactly the failure the agent had been congratulating itself on explaining elsewhere, where
-`am agent start` reported "no listener" for what was actually an auth failure. **A tool refusal, a
-non-zero exit, an empty result, and a policy denial are all UNKNOWN.** The honest moves are: retry
-differently, or say unknown. Asserting the negative is the one move that is never available.
+**The refusal was not evidence. It was the absence of evidence, wearing evidence's shape.** **A tool
+refusal, a non-zero exit, an empty result, and a policy denial are all UNKNOWN.** The honest moves
+are: retry differently, or say unknown. Asserting the negative is the one move that is never
+available.
 
-**Two further facts the same investigation got backwards, both worth keeping:**
-- The CLI calls the daemon **by default**. `check_inbox_should_use_daemon(direct, daemon_reachable)
-  = !direct || daemon_reachable` — without `--direct` that is `true`, so the SQLite read is the
-  EXCEPTION. It uses a route nobody had probed: `/api/`, not `/mcp/`, proven by pointing it at a
-  dead port and getting `transport failure calling http://127.0.0.1:9999/api/`. A client reading
-  SQLite directly could not care about a port.
-- **`--direct` is inverted relative to its own help text.** The help says "allow a direct SQLite
-  read only when no daemon is reachable", but `daemon_reachable = direct && port_reachable`, so
-  passing `--direct` is what ENABLES the daemon attempt with SQLite as fallback, while OMITTING it
-  takes the daemon unconditionally with no fallback.
+**AND THE THING THAT FALSE PREMISE WAS INVENTED TO EXPLAIN IS NOW UNEXPLAINED AGAIN.** `am agent
+start` reported "no listener on 127.0.0.1:8765" while `curl /health` returned `status: ready` and
+two robot calls returned live data. The two-authorities story accounted for it; the story is false,
+so **the contradiction is OPEN and must stop being cited as answered.** A retracted explanation
+does not leave the thing it explained explained.
+
+**What survives, measured at the shipped tag `v0.3.31`:** the CLI calls the daemon **by default** —
+`mcp-agent-mail-cli/src/lib.rs:8911` is `!direct || daemon_reachable`, doc-commented "the default
+(non-`--direct`) path always prefers the daemon", so **omitting `--direct` takes the daemon
+unconditionally with NO fallback** and the SQLite read is the exception. Its own 401 text at
+`:40179` names `AGENT_MAIL_TOKEN`/`HTTP_BEARER_TOKEN` — a CLI that never called the daemon could not
+emit that. `/api/` and `/mcp/` are each other's alternates (`:9351-9352`). And `am health` really
+does build a throwaway probe SQLite and never contacts the daemon — **that single measurement was
+correct; the error was generalising `health` to the entire CLI.**
+
+**A CORRECTION TO THIS SECTION'S OWN FIRST DRAFT, which is the point of the section.** It shipped a
+replacement row claiming `--direct` is inverted relative to its help text. **That is also false**,
+and a second reader refused it before it could be filed: the installed `--help` reads "Allow a
+direct SQLite read only when no daemon is reachable", which **is** the predicate. Help and code
+agree; the doc comment names GH#158 (WAL contention). **A retraction is not a licence to publish the
+next plausible story** — the replacement needs the same standard as the thing it replaces, and this
+one was accepted into doctrine for twenty minutes on nobody's measurement.
 
 **AND IT DOWNGRADED THE INVESTIGATOR'S OWN BEST EVIDENCE, which is why this rule is worth more than
 the correction.** `oracle_skew=0` was reported as two independent authorities agreeing about a
