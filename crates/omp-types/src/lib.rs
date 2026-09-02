@@ -61,6 +61,16 @@
 //! single-session and cannot address a third-party pane, so the receipt gap may survive the
 //! vocabulary.
 
+// ─────────────────────────────────────────────── AUTHORED, not derived (Phase 0 · T1)
+//
+// Contract: docs/contracts/claim_strength_contract.md. The crate rule above says contents are
+// DERIVED from asupersync, never authored; §2 of that contract is the measured survey that
+// licenses this single exception. The near miss is asupersync's EvidenceStrength, which cannot
+// serve because it carries an `Against` variant: a magnitude including evidence AGAINST a
+// hypothesis, where this is a KIND order with no such element.
+pub mod claim_strength;
+pub use claim_strength::{ClaimStrength, UnknownClaimStrength};
+
 /// A completed operation's result — severity and panic payload modelled rather than flattened.
 ///
 /// **Resolves a live collision:** `tick-monitor` declares its own `Outcome`, unrelated to this
