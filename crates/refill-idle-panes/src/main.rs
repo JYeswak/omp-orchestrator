@@ -11,8 +11,9 @@
 //! Verbs: `--plan` (default, mutates nothing) | `--apply` | `--selftest`
 
 use refill_idle_panes::{
-    dispatchable_panes, packet_is_sendable, parse_recommendations, plan, reconciliation_failure,
-    survey, Assignment,
+    conflict_verdict, decide, measurability_refusal, measurability_verdict, packet_is_sendable,
+    parse_activity_view, parse_oracle_view, parse_recommendations, plan, reconciliation_failure,
+    run_outcome, Assignment,
 };
 use std::io::Write;
 use std::path::PathBuf;
@@ -178,18 +179,41 @@ fn run(apply: bool) -> ExitCode {
     )
     .unwrap_or_default();
 
-    let s = survey(&activity, &oracle);
-    let panes = dispatchable_panes(&s);
+    // MEASURABILITY FIRST, through the shared kernel. An empty or unreadable roster is a
+    // broken probe (ntm#254 class), never consensus that the fleet has no work.
+    if let Some(outcome) = measurability_refusal(&measurability_verdict(&activity, &oracle)) {
+        eprintln!("{}", outcome.message);
+        return ExitCode::from(outcome.code);
+    }
+    // Both parse — measurability_refusal already proved it — so these cannot be None.
+    let (Some(activity_view), Some(oracle_view)) =
+        (parse_activity_view(&activity), parse_oracle_view(&oracle))
+    else {
+        eprintln!(
+            "refill: UNMEASURABLE detector=probe_reparse why=a probe that parsed for the roster \
+             comparison failed to parse again; this is a defect in refill, not in the fleet"
+        );
+        return ExitCode::from(2);
+    };
+
+    let decision = decide(&activity_view, &oracle_view);
+    let conflict = conflict_verdict(&activity_view, &oracle_view);
+    let outcome = run_outcome(&decision, &conflict);
+    let panes = decision.dispatchable.clone();
     if panes.is_empty() {
-        if s.unreadable {
-            eprintln!(
-                "refill: SURFACE_DISAGREEMENT detector=idle_pane_probe_unreadable verdict=FAIL"
-            );
-            return ExitCode::from(1);
+        if outcome.code == 0 {
+            println!("{}", outcome.message);
+        } else {
+            eprintln!("{}", outcome.message);
         }
-        // A reconciled fleet with no intersecting idle panes is the genuine healthy no-work case.
-        println!("refill: no idle pane both surfaces agree on — nothing to do");
-        return ExitCode::SUCCESS;
+        return ExitCode::from(outcome.code);
+    }
+    // A conflict or an unknowable pane is reported even while the established panes are
+    // fed. Starving the fleet to report a problem is the failure this crate exists to end.
+    if outcome.code != 0 {
+        eprintln!("{}", outcome.message);
+    } else {
+        println!("{}", outcome.message);
     }
 
     let triage = probe("bv", &["--robot-triage".into()], 90).unwrap_or_default();
@@ -199,7 +223,7 @@ fn run(apply: bool) -> ExitCode {
             "refill: {} idle pane(s) but bv returned NO picks — queue empty or triage unreadable",
             panes.len()
         );
-        return ExitCode::SUCCESS;
+        return ExitCode::from(outcome.code);
     }
 
     let assignments = plan(&panes, &picks, max);
@@ -248,7 +272,8 @@ fn run(apply: bool) -> ExitCode {
         panes.len(),
         picks.len()
     );
-    ExitCode::SUCCESS
+    // The dispatch happened; the exit code still carries the unresolved observation.
+    ExitCode::from(outcome.code)
 }
 
 fn append_ledger(session: &str, pane: &str, bead: &str) {
@@ -279,15 +304,38 @@ fn selftest() -> ExitCode {
         }
     };
 
-    // The measured 2026-08-27 disagreement.
-    let s = survey(
-        r#"{"agents":[{"pane":"2","safe_to_dispatch":true},{"pane":"4","safe_to_dispatch":true}]}"#,
-        r#"{"panes":[{"pane":"2","state":"FREE"},{"pane":"4","state":"NO_AGENT"}]}"#,
+    // THE MEASURED DEFECT, 2026-09-02 03:14:55Z: ntm cannot classify a codex pane and
+    // coerces its UNKNOWN into safe_to_dispatch=false. pane-dispatch-ready CONFIRMS free.
+    let codex_activity = r#"{"agents":[
+        {"pane":"2","agent_type":"codex","state":"UNKNOWN","confidence":0.5,"safe_to_dispatch":false},
+        {"pane":"4","agent_type":"omp-glm","state":"ERROR","confidence":0.95,"safe_to_dispatch":false}]}"#;
+    let codex_oracle =
+        r#"{"panes":[{"pane":"2","state":"FREE"},{"pane":"4","state":"BUSY"}]}"#;
+    let codex = decide(
+        &parse_activity_view(codex_activity).expect("fixture parses"),
+        &parse_oracle_view(codex_oracle).expect("fixture parses"),
     );
-    check("a bare shell is refused even when activity says free",
-          dispatchable_panes(&s) == vec!["2".to_string()]);
-    check("a pane both surfaces call free IS selected (anti-vacuity)",
-          !dispatchable_panes(&s).is_empty());
+    check(
+        "a codex pane ntm cannot classify IS dispatchable when the oracle confirms it",
+        codex.dispatchable == vec!["2".to_string()],
+    );
+    check(
+        "the old two-valued rule selected NOTHING here (known-bad reproduced)",
+        !codex_activity.contains(r#""safe_to_dispatch":true"#),
+    );
+
+    // The measured 2026-08-27 disagreement: a CONFIDENT conflict is never dispatched.
+    let conflict = decide(
+        &parse_activity_view(
+            r#"{"agents":[{"pane":"4","state":"IDLE","confidence":0.95,"safe_to_dispatch":true}]}"#,
+        )
+        .expect("fixture parses"),
+        &parse_oracle_view(r#"{"panes":[{"pane":"4","state":"NO_AGENT"}]}"#).expect("fixture parses"),
+    );
+    check(
+        "a bare shell is refused even when activity confidently says free",
+        conflict.dispatchable.is_empty() && conflict.conflicts == vec!["4".to_string()],
+    );
 
     let bad_reconcile = fleet_reconcile::InnerVerdict {
         detector: "ntm_empty_success_with_live_tmux".into(),
@@ -310,18 +358,43 @@ fn selftest() -> ExitCode {
         ntm_count: 1,
         detail: "ntm and tmux agree".into(),
     };
-    let no_idle = survey(
-        r#"{"agents":[{"pane":"2","safe_to_dispatch":true}]}"#,
-        r#"{"panes":[{"pane":"2","state":"BUSY"}]}"#,
+    let busy_activity =
+        r#"{"agents":[{"pane":"2","state":"THINKING","confidence":0.9,"safe_to_dispatch":false}]}"#;
+    let busy_oracle = r#"{"panes":[{"pane":"2","state":"BUSY"}]}"#;
+    let busy = decide(
+        &parse_activity_view(busy_activity).expect("fixture parses"),
+        &parse_oracle_view(busy_oracle).expect("fixture parses"),
+    );
+    let busy_outcome = run_outcome(
+        &busy,
+        &conflict_verdict(
+            &parse_activity_view(busy_activity).expect("fixture parses"),
+            &parse_oracle_view(busy_oracle).expect("fixture parses"),
+        ),
     );
     check(
-        "reconciled no-idle capacity remains the healthy no-work case",
-        reconciliation_failure(&good_reconcile).is_none() && dispatchable_panes(&no_idle).is_empty(),
+        "a CONFIDENTLY busy fleet remains the healthy no-work case at exit 0",
+        reconciliation_failure(&good_reconcile).is_none()
+            && busy.dispatchable.is_empty()
+            && busy_outcome.code == 0,
     );
 
-    let broken = survey("not json", "not json");
-    check("an unreadable probe yields ZERO candidates",
-          dispatchable_panes(&broken).is_empty());
+    let unreadable = measurability_refusal(&measurability_verdict("not json", "not json"));
+    check(
+        "an unreadable probe is a typed NONZERO refusal, not zero candidates",
+        unreadable.as_ref().is_some_and(|o| o.code == 2),
+    );
+
+    let empty_ntm = measurability_refusal(&measurability_verdict(
+        r#"{"success":true,"agents":[]}"#,
+        r#"{"panes":[{"pane":"2","state":"FREE"}]}"#,
+    ));
+    check(
+        "an EMPTY ntm roster against a live oracle refuses nonzero and names the probe",
+        empty_ntm
+            .as_ref()
+            .is_some_and(|o| o.code == 1 && o.message.contains("ntm --robot-activity")),
+    );
 
     check("an undersized packet is refused", !packet_is_sendable(10));
     check("a full-size packet is accepted", packet_is_sendable(7_347));
