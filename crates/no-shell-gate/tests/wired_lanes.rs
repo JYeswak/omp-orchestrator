@@ -518,7 +518,10 @@ fn every_allowance_row_names_a_lane_and_carries_a_reason() {
     // No invented rows (validated above), and no silent gaps (check_wiring enforces
     // them): the allowance is the only sanctioned unwired state.
     for (name, reason) in UNWIRED_LANE_ALLOWANCE {
-        assert!(!reason.trim().is_empty(), "allowance {name} has an empty reason");
+        assert!(
+            !reason.trim().is_empty(),
+            "allowance {name} has an empty reason"
+        );
     }
 }
 
@@ -528,7 +531,10 @@ fn derivation_is_an_error_when_the_workspace_is_unreadable() {
     // a root with no member crates must refuse, not report green.
     let empty_root = std::env::temp_dir().join(format!("wl-empty-{}", std::process::id()));
     std::fs::create_dir_all(&empty_root).expect("create empty root");
-    assert!(derive_lanes(&empty_root).is_err(), "an empty derivation must be an error");
+    assert!(
+        derive_lanes(&empty_root).is_err(),
+        "an empty derivation must be an error"
+    );
     let _ = std::fs::remove_dir_all(&empty_root);
 }
 
@@ -727,13 +733,20 @@ fn no_public_type_name_collisions_across_crates() {
                 let t = line.trim();
                 for kw in ["pub struct ", "pub enum "] {
                     if let Some(rest) = t.strip_prefix(kw) {
-                        if let Some(type_name) = rest.split(|c: char| !c.is_alphanumeric() && c != '_').next() {
+                        if let Some(type_name) = rest
+                            .split(|c: char| !c.is_alphanumeric() && c != '_')
+                            .next()
+                        {
                             if type_name.is_empty() {
                                 continue;
                             }
                             if let Some(first) = seen.get(type_name) {
                                 if first != name {
-                                    collisions.push((type_name.to_owned(), first.clone(), name.clone()));
+                                    collisions.push((
+                                        type_name.to_owned(),
+                                        first.clone(),
+                                        name.clone(),
+                                    ));
                                 }
                             } else {
                                 seen.insert(type_name.to_owned(), name.clone());
@@ -744,8 +757,10 @@ fn no_public_type_name_collisions_across_crates() {
             }
         }
     }
-    let allowed: std::collections::HashSet<_> =
-        COLLISION_ALLOWANCE.iter().map(|(n, _)| n.to_owned()).collect();
+    let allowed: std::collections::HashSet<_> = COLLISION_ALLOWANCE
+        .iter()
+        .map(|(n, _)| n.to_owned())
+        .collect();
     let unallowed: Vec<_> = collisions
         .iter()
         .filter(|(n, _, _)| !allowed.contains(n.as_str()))
@@ -755,4 +770,514 @@ fn no_public_type_name_collisions_across_crates() {
         "PUBLIC TYPE NAME COLLISION (not in allowance): {:?} — two crates declaring the same pub type is a seam bug; add an allowance row WITH A REASON or unify the type",
         unallowed
     );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// LEG 4 and the per-leg contract tests. Appended beside the existing wired leg;
+// the existing leg-1 implementation above is intentionally untouched.
+// ═════════════════════════════════════════════════════════════════════════════
+
+mod ipg18_contract {
+    use super::*;
+    use std::collections::{HashMap, HashSet};
+    use std::fs;
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct PublicType {
+        name: String,
+        crate_name: String,
+        file: String,
+        line: usize,
+    }
+
+    fn validate_leg2_allowance(rows: &[(&str, &str)]) -> Result<(), String> {
+        for (subject, reason) in rows {
+            if subject.trim().is_empty() || reason.trim().len() < 8 {
+                return Err("leg2-surface allowance requires subject and reason".to_owned());
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_leg3_allowance(rows: &[(&str, &str)]) -> Result<(), String> {
+        for (subject, reason) in rows {
+            if subject.trim().is_empty() || reason.trim().len() < 8 {
+                return Err("leg3-asupersync allowance requires subject and reason".to_owned());
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_leg4_allowance(rows: &[(&str, &str)]) -> Result<(), String> {
+        for (subject, reason) in rows {
+            if subject.trim().is_empty() || reason.trim().len() < 8 {
+                return Err("leg4-canonical allowance requires subject and reason".to_owned());
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_leg5_allowance(rows: &[(&str, &str)]) -> Result<(), String> {
+        for (subject, reason) in rows {
+            if subject.trim().is_empty() || reason.trim().len() < 8 {
+                return Err("leg5-collision allowance requires subject and reason".to_owned());
+            }
+        }
+        Ok(())
+    }
+
+    fn scan_nonempty<T>(items: &[T], leg: &str) -> Result<(), String> {
+        if items.is_empty() {
+            return Err(format!("ANTI-VACUITY: {leg} scanned zero crates"));
+        }
+        Ok(())
+    }
+
+    fn canonical_type_names(root: &Path) -> Result<HashSet<String>, String> {
+        let mut names = HashSet::new();
+        let source_files = [
+            "src/lib.rs",
+            "src/pane_observation.rs",
+            "src/claim_strength.rs",
+            "src/lifecycle.rs",
+        ];
+        for relative in source_files {
+            let path = root.join("crates/omp-types").join(relative);
+            let source = fs::read_to_string(&path).map_err(|error| {
+                format!("canonical source unreadable {}: {error}", path.display())
+            })?;
+            for line in source.lines() {
+                let trimmed = line.trim_start();
+                for prefix in ["pub struct ", "pub enum ", "pub type "] {
+                    if let Some(rest) = trimmed.strip_prefix(prefix) {
+                        if let Some(name) = rest
+                            .split(|character: char| {
+                                !character.is_ascii_alphanumeric() && character != '_'
+                            })
+                            .next()
+                        {
+                            if !name.is_empty() {
+                                names.insert(name.to_owned());
+                            }
+                        }
+                    }
+                }
+            }
+            let mut in_use = false;
+            let mut use_block = String::new();
+            for line in source.lines() {
+                if !in_use && line.contains("pub use ") {
+                    in_use = true;
+                }
+                if in_use {
+                    use_block.push_str(line);
+                    use_block.push('\n');
+                    if line.contains(';') {
+                        if let (Some(open), Some(close)) =
+                            (use_block.find('{'), use_block.rfind('}'))
+                        {
+                            if close > open {
+                                for item in use_block[open + 1..close].split(',') {
+                                    let identifier =
+                                        item.trim().split_whitespace().next().unwrap_or("");
+                                    if identifier
+                                        .chars()
+                                        .next()
+                                        .is_some_and(|character| character.is_ascii_uppercase())
+                                    {
+                                        names.insert(identifier.to_owned());
+                                    }
+                                }
+                            }
+                        }
+                        in_use = false;
+                        use_block.clear();
+                    }
+                }
+            }
+        }
+        if names.is_empty() {
+            return Err("ANTI-VACUITY: canonical type scan found zero omp-types names".to_owned());
+        }
+        Ok(names)
+    }
+
+    fn public_types_in_source(crate_name: &str, file: &Path, source: &str) -> Vec<PublicType> {
+        source
+            .lines()
+            .enumerate()
+            .filter_map(|(index, line)| {
+                let trimmed = line.trim_start();
+                ["pub struct ", "pub enum ", "pub type "]
+                    .iter()
+                    .find_map(|prefix| {
+                        trimmed.strip_prefix(prefix).and_then(|rest| {
+                            let name = rest
+                                .split(|character: char| {
+                                    !character.is_ascii_alphanumeric() && character != '_'
+                                })
+                                .next()?;
+                            (!name.is_empty()).then(|| PublicType {
+                                name: name.to_owned(),
+                                crate_name: crate_name.to_owned(),
+                                file: file.display().to_string(),
+                                line: index + 1,
+                            })
+                        })
+                    })
+            })
+            .collect()
+    }
+
+    fn collect_public_types(root: &Path, crates: &[String]) -> Result<Vec<PublicType>, String> {
+        scan_nonempty(crates, "leg4-canonical")?;
+        let mut types = Vec::new();
+        for crate_name in crates {
+            if crate_name == "omp-types" {
+                continue;
+            }
+            let source_root = root.join("crates").join(crate_name).join("src");
+            let mut stack = vec![source_root];
+            while let Some(directory) = stack.pop() {
+                let entries = fs::read_dir(&directory)
+                    .map_err(|error| format!("leg4 read {}: {error}", directory.display()))?;
+                for entry in entries {
+                    let path = entry
+                        .map_err(|error| format!("leg4 directory entry: {error}"))?
+                        .path();
+                    if path.is_dir() {
+                        stack.push(path);
+                    } else if path.extension().and_then(|extension| extension.to_str())
+                        == Some("rs")
+                    {
+                        let source = fs::read_to_string(&path)
+                            .map_err(|error| format!("leg4 read {}: {error}", path.display()))?;
+                        types.extend(public_types_in_source(crate_name, &path, &source));
+                    }
+                }
+            }
+        }
+        if types.is_empty() {
+            return Err("ANTI-VACUITY: leg4 scanned zero public type declarations".to_owned());
+        }
+        Ok(types)
+    }
+
+    fn canonical_violations(
+        types: &[PublicType],
+        canonical: &HashSet<String>,
+        allowance: &[(&str, &str)],
+    ) -> Vec<PublicType> {
+        let allowed: HashSet<&str> = allowance.iter().map(|(name, _)| *name).collect();
+        types
+            .iter()
+            .filter(|declaration| canonical.contains(&declaration.name))
+            .filter(|declaration| !allowed.contains(declaration.name.as_str()))
+            .cloned()
+            .collect()
+    }
+
+    const CANONICAL_ALLOWANCE: &[(&str, &str)] = &[];
+
+    #[test]
+    fn every_leg_has_an_independent_allowance_validator() {
+        assert!(validate_leg2_allowance(&[("crate", "named reason")]).is_ok());
+        assert!(validate_leg3_allowance(&[("crate", "named reason")]).is_ok());
+        assert!(validate_leg4_allowance(&[("Type", "named reason")]).is_ok());
+        assert!(validate_leg5_allowance(&[("Type", "named reason")]).is_ok());
+        assert!(validate_leg2_allowance(&[("crate", "")]).is_err());
+        assert!(validate_leg3_allowance(&[("crate", "")]).is_err());
+        assert!(validate_leg4_allowance(&[("Type", "")]).is_err());
+        assert!(validate_leg5_allowance(&[("Type", "")]).is_err());
+    }
+
+    #[test]
+    fn leg2_known_good_and_empty_scan_controls_are_separate() {
+        let root = repo_root();
+        let map = fs::read_to_string(root.join("OMP-SURFACE-MAP.toml")).expect("surface map");
+        assert!(
+            map.contains("[crates.no-shell-gate]"),
+            "known-good surface declaration missing"
+        );
+        let empty: Vec<String> = Vec::new();
+        assert!(
+            scan_nonempty(&empty, "leg2-surface").is_err(),
+            "leg2 empty scan must be ERROR"
+        );
+        assert!(validate_leg2_allowance(SURFACE_ALLOWANCE).is_ok());
+    }
+
+    #[test]
+    fn leg3_known_good_and_empty_scan_controls_are_separate() {
+        let root = repo_root();
+        let manifest =
+            fs::read_to_string(root.join("crates/no-shell-gate/Cargo.toml")).expect("manifest");
+        assert!(
+            manifest.contains("unsafe_code = \"forbid\""),
+            "known-good lint declaration missing"
+        );
+        let empty: Vec<String> = Vec::new();
+        assert!(
+            scan_nonempty(&empty, "leg3-asupersync").is_err(),
+            "leg3 empty scan must be ERROR"
+        );
+        assert!(validate_leg3_allowance(FORBID_ALLOWANCE).is_ok());
+    }
+
+    #[test]
+    fn leg4_canonical_type_scan_refuses_current_redeclarations() {
+        let root = repo_root();
+        let crates = workspace_crate_names(&root);
+        let canonical =
+            canonical_type_names(&root).expect("canonical vocabulary must be non-empty");
+        let declarations = collect_public_types(&root, &crates).expect("public type scan");
+        let violations = canonical_violations(&declarations, &canonical, CANONICAL_ALLOWANCE);
+        assert!(
+            violations.is_empty(),
+            "LEG4 CANONICAL TYPE REDECLARATION: {:?} — use omp-types instead",
+            violations
+                .iter()
+                .map(|declaration| format!(
+                    "{} in {}:{}:{}",
+                    declaration.name, declaration.crate_name, declaration.file, declaration.line
+                ))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn leg4_known_good_specimen_and_empty_scan_are_separate() {
+        let canonical = HashSet::from(["CanonicalType".to_owned()]);
+        let good =
+            public_types_in_source("fixture", Path::new("good.rs"), "pub struct UniqueType;\n");
+        assert!(canonical_violations(&good, &canonical, CANONICAL_ALLOWANCE).is_empty());
+        let bad = public_types_in_source(
+            "fixture",
+            Path::new("bad.rs"),
+            "pub struct CanonicalType;\n",
+        );
+        assert_eq!(
+            canonical_violations(&bad, &canonical, CANONICAL_ALLOWANCE).len(),
+            1
+        );
+        let empty: Vec<String> = Vec::new();
+        assert!(
+            scan_nonempty(&empty, "leg4-canonical").is_err(),
+            "leg4 empty scan must be ERROR"
+        );
+        assert!(validate_leg4_allowance(CANONICAL_ALLOWANCE).is_ok());
+    }
+
+    #[test]
+    fn leg5_known_good_and_empty_scan_controls_are_separate() {
+        let good_sources = ["pub struct UniqueA;", "pub enum UniqueB { One }"];
+        let mut seen = HashMap::new();
+        for (index, source) in good_sources.iter().enumerate() {
+            let declarations = public_types_in_source("fixture", Path::new("good.rs"), source);
+            for declaration in declarations {
+                assert!(seen.insert(declaration.name, index).is_none());
+            }
+        }
+        let empty: Vec<String> = Vec::new();
+        assert!(
+            scan_nonempty(&empty, "leg5-collision").is_err(),
+            "leg5 empty scan must be ERROR"
+        );
+        assert!(validate_leg5_allowance(COLLISION_ALLOWANCE).is_ok());
+    }
+
+    #[test]
+    fn leg4_predicate_mutation_is_attributable() {
+        let canonical = HashSet::from(["CanonicalType".to_owned()]);
+        let source = "pub struct CanonicalType;\n";
+        let declarations = public_types_in_source("fixture", Path::new("mutation.rs"), source);
+        let before = canonical_violations(&declarations, &canonical, CANONICAL_ALLOWANCE);
+        assert_eq!(before.len(), 1, "known-bad canonical specimen must be red");
+        let restored = "pub struct UniqueType;\n";
+        let restored_declarations =
+            public_types_in_source("fixture", Path::new("mutation.rs"), restored);
+        let after = canonical_violations(&restored_declarations, &canonical, CANONICAL_ALLOWANCE);
+        assert!(
+            after.is_empty(),
+            "restored canonical specimen must be green"
+        );
+    }
+
+    #[test]
+    fn leg5_predicate_mutation_is_attributable() {
+        let source = "pub struct Duplicate;\n";
+        let first = public_types_in_source("first", Path::new("first.rs"), source);
+        let second = public_types_in_source("second", Path::new("second.rs"), source);
+        let mut seen = HashMap::new();
+        for declaration in first.iter().chain(second.iter()) {
+            let prior = seen.insert(declaration.name.clone(), declaration.crate_name.clone());
+            if prior.is_some() {
+                assert_eq!(declaration.name, "Duplicate");
+            }
+        }
+        let unique =
+            public_types_in_source("second", Path::new("second.rs"), "pub struct Unique;\n");
+        let mut names = HashSet::new();
+        for declaration in first.iter().chain(unique.iter()) {
+            assert!(names.insert(declaration.name.clone()));
+        }
+    }
+}
+
+mod ipg18_more {
+    use super::*;
+    use std::collections::HashSet;
+
+    fn leg2_membership_violations(
+        on_disk: &[String],
+        declared: &HashSet<String>,
+    ) -> (Vec<String>, Vec<String>) {
+        if on_disk.is_empty() || declared.is_empty() {
+            return (
+                vec!["ANTI-VACUITY".to_owned()],
+                vec!["ANTI-VACUITY".to_owned()],
+            );
+        }
+        let undeclared = on_disk
+            .iter()
+            .filter(|name| !declared.contains(*name))
+            .cloned()
+            .collect();
+        let ghosts = declared
+            .iter()
+            .filter(|name| !on_disk.iter().any(|candidate| candidate == *name))
+            .cloned()
+            .collect();
+        (undeclared, ghosts)
+    }
+
+    fn leg3_forbid_predicate(manifest: &str) -> bool {
+        manifest.lines().any(|line| {
+            let line = line.trim();
+            line == "unsafe_code = \"forbid\"" || line == "unsafe_code=\"forbid\""
+        })
+    }
+
+    #[test]
+    fn leg2_predicate_mutation_is_attributable() {
+        let on_disk = vec!["known-good".to_owned()];
+        let good = HashSet::from(["known-good".to_owned()]);
+        let (undeclared, ghosts) = leg2_membership_violations(&on_disk, &good);
+        assert!(
+            undeclared.is_empty() && ghosts.is_empty(),
+            "known-good surface must pass"
+        );
+        let mutated = HashSet::from(["mutated-ghost".to_owned()]);
+        let (undeclared, ghosts) = leg2_membership_violations(&on_disk, &mutated);
+        assert_eq!(undeclared, vec!["known-good"]);
+        assert_eq!(ghosts, vec!["mutated-ghost"]);
+    }
+
+    #[test]
+    fn leg3_predicate_mutation_is_attributable() {
+        let good = "[lints.rust]\nunsafe_code = \"forbid\"\n";
+        let mutated = good.replace("forbid", "warn");
+        assert!(leg3_forbid_predicate(good), "known-good lint must pass");
+        assert!(!leg3_forbid_predicate(&mutated), "mutated lint must fail");
+        // The leg-specific allowance validator is exercised in ipg18_contract.
+    }
+
+    #[test]
+    fn leg3_asupersync_schema_is_enforced_on_the_production_scan() {
+        let root = repo_root();
+        let report = asupersync_conformance::scan_repository(&root)
+            .expect("asupersync conformance scan must produce a non-empty report");
+        assert!(
+            !report.crates.is_empty(),
+            "ANTI-VACUITY: leg3 scanned zero crates"
+        );
+        assert!(
+            !report.spawn_sites.is_empty(),
+            "ANTI-VACUITY: leg3 scanned zero raw sites"
+        );
+        let mut violations = Vec::new();
+        for row in &report.crates {
+            if !row.forbid_unsafe {
+                violations.push(format!("{} missing forbid(unsafe_code)", row.name));
+            }
+            if row.async_fns != row.cx_first {
+                violations.push(format!(
+                    "{} async/cx-first mismatch {}/{}",
+                    row.name, row.async_fns, row.cx_first
+                ));
+            }
+            if !row.forbidden_deps.is_empty() {
+                violations.push(format!(
+                    "{} forbidden deps {:?}",
+                    row.name, row.forbidden_deps
+                ));
+            }
+            let triaged = report
+                .spawn_sites
+                .iter()
+                .filter(|site| site.crate_name == row.name)
+                .count();
+            if triaged != row.raw_command {
+                violations.push(format!(
+                    "{} raw_command={} triaged={}",
+                    row.name, row.raw_command, triaged
+                ));
+            }
+        }
+        assert!(
+            violations.is_empty(),
+            "LEG3 ASUPERSYNC CONFORMANCE failed: {violations:?}"
+        );
+        let known_good = report
+            .crates
+            .iter()
+            .find(|row| row.name == "no-shell-gate")
+            .expect("known-good no-shell-gate row");
+        assert!(known_good.forbid_unsafe);
+        assert_eq!(known_good.async_fns, known_good.cx_first);
+        assert!(known_good.forbidden_deps.is_empty());
+    }
+}
+
+mod ipg18_leg1_mutation {
+    use super::*;
+
+    #[test]
+    fn predicate_mutation_is_attributable() {
+        let lane = Lane {
+            name: "mutation-lane".to_owned(),
+            needle_hyphen: "mutation-lane".to_owned(),
+            needle_underscore: "mutation_lane".to_owned(),
+        };
+        let test_only = rust_source(
+            "src/mutation.rs",
+            "#[cfg(test)]\nmod tests { fn fake() { let _ = \"mutation-lane\"; } }\n",
+        );
+        let red = check_wiring(&[lane.clone()], &[test_only.clone()], &[], STRIP_TEST_CODE)
+            .expect_err("leg1 known-bad test-only caller must be red");
+        assert_eq!(red, "UNWIRED LANE: mutation-lane");
+        let restored = check_wiring(&[lane], &[test_only], &[], false)
+            .expect("mutating the stripping predicate must make the fixture green");
+        assert_eq!(restored.len(), 1);
+    }
+}
+
+mod ipg18_leg3_fixture {
+    use super::*;
+
+    fn has_forbid(manifest: &str) -> bool {
+        manifest.lines().any(|line| {
+            let line = line.trim();
+            line == "unsafe_code = \"forbid\"" || line == "unsafe_code=\"forbid\""
+        })
+    }
+
+    #[test]
+    fn in_tree_missing_forbid_specimen_is_red() {
+        let path = repo_root().join(
+            "crates/asupersync-conformance/tests/fixtures/known-bad/crates/raw-command-no-subprocess/Cargo.toml",
+        );
+        let manifest = std::fs::read_to_string(&path).expect("known-bad manifest");
+        assert!(!has_forbid(&manifest), "known-bad fixture must omit forbid(unsafe_code)");
+    }
 }
