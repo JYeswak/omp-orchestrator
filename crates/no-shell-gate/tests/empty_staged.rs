@@ -156,3 +156,26 @@ fn one_violating_staged_file_is_violation() {
     );
     assert_no_ambiguous_nested_outcomes(&error);
 }
+#[test]
+fn collapsing_whole_commit_marker_into_gate_note_is_red() {
+    let dir = fresh_git_tree("scope-boundary-mutation");
+    stage(&dir, "README.md", "clean staged fixture\n");
+    let actual = stderr(&run_gate(&dir));
+    assert_eq!(top_level_outcome(&actual), "CLEAN:");
+
+    let collapsed = actual
+        .lines()
+        .map(|line| {
+            line.strip_prefix("CLEAN:").map_or_else(
+                || line.to_owned(),
+                |rest| format!("path-literal-guard: CLEAN:{rest}"),
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let red = std::panic::catch_unwind(|| top_level_outcome(&collapsed));
+    assert!(
+        red.is_err(),
+        "a whole-commit marker collapsed into a per-gate note must be rejected: {collapsed}"
+    );
+}
