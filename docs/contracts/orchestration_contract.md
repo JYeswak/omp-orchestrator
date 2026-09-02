@@ -15,7 +15,8 @@ processes on an unmeasured diagnosis.
 
 1. Canonical artifact: `.flywheel/orchestration-ticks.jsonl` — one row per tick, append-only
 2. Runner: `tick-monitor observe --session <s>` plus `bv --robot-triage` (both installed kernels)
-3. Invariant suite: `crates/no-shell-gate/tests/orchestration_tick.rs`
+3. Invariant suite: `crates/no-shell-gate/tests/orchestration_tick.rs` (fixtures preserved)
+4. Callable validator and reachable binary: `orchestration-tick-gate` (`cargo run -p orchestration-tick-gate -- --ledger .flywheel/orchestration-ticks.jsonl`)
 
 ## The tick
 
@@ -107,7 +108,9 @@ post-mortem M3 and remains unowned.
 ## Validation
 
 ```bash
+cargo test -p orchestration-tick-gate -- --nocapture
 cargo test -p no-shell-gate --test orchestration_tick -- --nocapture
+cargo run -p orchestration-tick-gate -- --ledger .flywheel/orchestration-ticks.jsonl
 ```
 
 ## Cross-References
@@ -121,11 +124,12 @@ cargo test -p no-shell-gate --test orchestration_tick -- --nocapture
 
 ## NO-CLAIM
 
-**This is prose until the invariant suite exists.** Fifteen anti-patterns were already written down
-and six were committed anyway in the same session, so a contract the orchestrator reads is not a
-control the orchestrator obeys. The only mechanical enforcement identified is
-`omp-orchestrator-kernel-only-operator-hook-5rh` — a `PreToolUse` hook refusing a handroll at the
-tool call — which is P0, assigned, and **blocked**.
+**The receipt laws now have callable validation.** The reusable `orchestration-tick-gate` crate is
+called by its binary and by the preserved `no-shell-gate` fixture suite. Its local command is the
+reachable trigger; `.github/workflows/` is not used as the only trigger because this repository has
+no remote. Missing or empty ledgers and invalid rows produce typed nonzero text with the ledger
+path, row, and law. This does not make the ledger complete: a separate writer must ensure every
+supervisor tick emits a row.
 
 It also does not establish that these six laws are complete. They are the failures measured in one
 session on one fleet; a seventh will surface, and the ledger row is the mechanism for adding it,
