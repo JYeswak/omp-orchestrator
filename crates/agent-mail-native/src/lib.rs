@@ -66,7 +66,7 @@
 //! | `fetch_inbox_events` promises `CURSOR_EXPIRED` below retained history but silently clamps to the floor and returns success | [`journey::verify_resume_continuity`] |
 //! | `fetch_inbox` marks messages read by default, so a read mutates state | [`journey::InboxRequest::mark_read`], explicit and defaulting to `false` |
 //! | tool refusals ride HTTP 200 with `isError` inside a double-encoded payload | decoded and promoted to typed variants in [`client`] |
-//! | `ntm --robot-wait --wait-until=mail_pending` never returns without an explicit `--timeout` | [`wake::WakeRequest::timeout`] is mandatory, not optional |
+//! | `ntm --robot-wait --wait-until=mail_pending` can be externally terminated before its internal deadline and discard `cursor_info` | [`wake::WakeRequest::timeout`] is mandatory for caller-owned latency and cursor preservation |
 //!
 //! # Example
 //!
@@ -95,6 +95,7 @@ pub mod endpoint;
 pub mod error;
 pub mod journey;
 pub mod oracle;
+pub mod identity;
 pub mod wake;
 
 pub use client::{DaemonHealth, MailClient};
@@ -102,4 +103,10 @@ pub use cursor::{CursorQuery, DeliveryCursor, MessageId};
 pub use endpoint::{Endpoint, TokenSource};
 pub use error::MailError;
 pub use journey::{AgentName, ProjectKey, ResumePoint, SenderToken};
+pub use identity::{
+    assert_readback_fields, cleanup_pane_identities, cleanup_pane_identities_arguments,
+    parse_pane_identity, resolve_pane_identity, tmux_identity_argv, tmux_identity_argv_from_env,
+    validate_register_fields,
+    BindingStatus, IdentityError, PaneIdentity,
+};
 pub use wake::{AttentionCursor, MailWakeOutcome, WakeRequest};

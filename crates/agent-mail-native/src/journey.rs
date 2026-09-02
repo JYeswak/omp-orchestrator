@@ -22,6 +22,7 @@
 //!   delivery failure visible.
 
 use crate::client::MailClient;
+use crate::identity;
 use crate::cursor::{CursorQuery, DeliveryCursor, MessageId};
 use crate::error::MailError;
 use asupersync::Cx;
@@ -166,21 +167,15 @@ pub async fn register(
     client: &MailClient,
     request: &RegisterRequest,
 ) -> Result<RegisteredAgent, MailError> {
-    let mut arguments = Map::new();
-    arguments.insert(
-        "project_key".to_owned(),
-        json!(request.project.as_str()),
-    );
-    arguments.insert("program".to_owned(), json!(request.program));
-    arguments.insert("model".to_owned(), json!(request.model));
-    if let Some(description) = &request.task_description {
-        arguments.insert("task_description".to_owned(), json!(description));
-    }
+    let arguments = identity::register_arguments(request);
+    identity::validate_register_fields(&arguments).map_err(|error| MailError::Protocol {
+        detail: error.to_string(),
+    })?;
 
     let payload = client
-        .call_tool(cx, "register_agent", Value::Object(arguments))
+        .call_tool(cx, identity::REGISTER_AGENT_TOOL, Value::Object(arguments))
         .await?;
-    decode(&payload, "register_agent")
+    decode(&payload, identity::REGISTER_AGENT_TOOL)
 }
 
 /// Look up one agent's stored profile.
