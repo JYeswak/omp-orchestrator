@@ -4,6 +4,18 @@
 # tracked .sh/.py), and `cargo test -p no-shell-gate` re-runs the gate's own
 # red/green battery — so the gate fires in CI even when a change is never
 # exercised by a local `cargo test`, and locally even when CI is skipped.
+#
+# TOOLCHAIN PARITY (2026-09-02). Every job carries a `Rust toolchain` step for
+# one measured reason: `gh run list --limit 200` returned 67 runs and 67
+# failures, and three independently-failing jobs all died at
+# `error[E0554]: #![feature] may not be used on the stable release channel`
+# compiling `asupersync`. The runner default is stable; this workspace is
+# nightly. `rust-toolchain.toml` now pins the channel and the rustup shim honours
+# it on any `cargo` invocation — the step exists so that a toolchain-install
+# failure is attributed to ITSELF rather than surfacing as a mysterious gate
+# failure, which is the same reason `Workspace loads` is its own step. GitHub
+# Actions does not resolve YAML anchors, so the step is repeated per job rather
+# than shared.
 name: gate
 
 on:
@@ -18,16 +30,25 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Install Rust
-        run: rustup toolchain install stable --profile minimal
+      # Was `rustup toolchain install stable --profile minimal`, which installed
+      # the WRONG compiler explicitly and was the only job that said anything
+      # about a toolchain at all — the other nine inherited the runner default.
+      - name: Rust toolchain (pinned by rust-toolchain.toml)
+        run: |
+          rustup show active-toolchain
+          cargo --version
+          rustc --version
       # Acceptance 3 (bead omp-orchestrator-workspace-load-gate-of3): the
       # workspace LOADS as its own step, BEFORE and independently of the gate
       # steps — a manifest break is attributed to itself, not surfaced as a
       # mysterious gate failure.
       - name: Workspace loads
         run: cargo metadata --no-deps --format-version 1 > /dev/null
+      # `-p no-shell-gate` alone exited 101 with "could not determine which
+      # binary to run" on every run since the package grew its second bin. A gate
+      # that cannot start is indistinguishable from a gate that found nothing.
       - name: Gate binary — refuse tracked .sh/.py
-        run: cargo run --quiet -p no-shell-gate
+        run: cargo run --quiet -p no-shell-gate --bin no-shell-gate
       - name: Gate tests — red/green legs and the real-tree leg
         run: cargo test -p no-shell-gate
       # ROUND ADMISSION (Josh, 2026-09-01): one stamped doc must cover every grading round
@@ -39,11 +60,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Rust toolchain (pinned by rust-toolchain.toml)
+        run: |
+          cargo --version
+          rustc --version
       - run: cargo test -p path-literal-guard
   undrained-pipe-lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Rust toolchain (pinned by rust-toolchain.toml)
+        run: |
+          cargo --version
+          rustc --version
       - run: cargo test -p undrained-pipe-lint
       - name: Scan checked-out workspace for undrained-pipe pattern
         run: cargo run --quiet -p undrained-pipe-lint -- .
@@ -51,6 +80,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Rust toolchain (pinned by rust-toolchain.toml)
+        run: |
+          cargo --version
+          rustc --version
       - run: cargo test -p kernel-bypass-gate
       - name: Scan checked-out workspace for kernel bypasses
         run: cargo run --quiet -p kernel-bypass-gate -- .
@@ -58,6 +91,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Rust toolchain (pinned by rust-toolchain.toml)
+        run: |
+          cargo --version
+          rustc --version
       - run: cargo test -p state-wildcard-lint
       - name: Reject wildcard arms on state-like enums
         run: cargo run --quiet -p state-wildcard-lint -- .
@@ -69,6 +106,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Rust toolchain (pinned by rust-toolchain.toml)
+        run: |
+          cargo --version
+          rustc --version
       - run: cargo test -p installer
       - name: installer --check must agree with the workspace
         run: cargo run --quiet -p installer -- --check
@@ -78,6 +119,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Rust toolchain (pinned by rust-toolchain.toml)
+        run: |
+          cargo --version
+          rustc --version
       - run: cargo test -p omp-inventory-map
       - run: cargo run --quiet -p omp-inventory-map -- .
   pre-delete-citation-check:
@@ -86,6 +131,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Rust toolchain (pinned by rust-toolchain.toml)
+        run: |
+          cargo --version
+          rustc --version
       - run: cargo test -p pre-delete-citation-check
       - run: cargo run --quiet -p pre-delete-citation-check -- .
   commit-build-fence:
@@ -94,6 +143,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Rust toolchain (pinned by rust-toolchain.toml)
+        run: |
+          cargo --version
+          rustc --version
       - run: cargo test -p commit-build-fence
       - run: cargo run --quiet -p commit-build-fence -- .
 
@@ -102,6 +155,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Rust toolchain (pinned by rust-toolchain.toml)
+        run: |
+          cargo --version
+          rustc --version
       - run: cargo test -p porting-gate
       - name: Gate candidate porting-gate from clean archive
         run: cargo run --quiet -p porting-gate -- --repo . --crate porting-gate

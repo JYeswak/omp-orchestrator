@@ -1,0 +1,53 @@
+# TOOLCHAIN PARITY — the file whose absence made CI dark for 67 consecutive runs.
+#
+# # What was measured (2026-09-02)
+#
+# `gh run list --limit 200` returned 67 runs and 67 failures, every one since
+# 2026-09-01T05:59:47Z. Three independently-failing jobs (commit-build-fence,
+# omp-inventory-map, porting-gate) died at the same line:
+#
+#     error[E0554]: `#![feature]` may not be used on the stable release channel
+#     52 | #![cfg_attr(feature = "nightly-outcome-try", feature(try_trait_v2))]
+#     error: could not compile `asupersync` (lib) due to 1 previous error
+#
+# The runner had stable; this workspace is developed on nightly. 19 of 51
+# workspace members depend on `asupersync` transitively (11 directly), so the
+# mismatch takes out every job that touches a kernel crate — while the five jobs
+# that do not (path-literal-guard, undrained-pipe-lint, state-wildcard-lint,
+# kernel-bypass-gate, pre-delete-citation-check) reached real verdicts the whole
+# time. A gate set that is 50% dark reads as "CI is red" and gets ignored.
+#
+# # Why the pin, and not `default-features = false`
+#
+# `nightly-outcome-try` is not something we ask for. It is in asupersync's OWN
+# default feature set:
+#
+#     default = ["proc-macros", "nightly-outcome-try"]
+#
+# So asupersync does not "require nightly" — its defaults do, and turning them
+# off is a real alternative. It was rejected because it means editing 11
+# manifests, one of which (`crates/omp-types`) is under concurrent authorship,
+# and because it would silently drop `Try` for `Outcome` across every kernel
+# call site — a behavioural change smuggled in under a CI fix. Pinning changes
+# no code.
+#
+# # The cost, stated plainly
+#
+# Pinning nightly buys CI parity and gives up stable's stability guarantee. A
+# nightly rustc can regress, and unstable APIs can change under us with no
+# semver signal. The date is pinned rather than floating precisely so that a
+# regression cannot arrive on its own: `nightly-2026-08-23` is
+# `rustc 1.100.0-nightly (c54751567 2026-08-22)`, byte-identical to the
+# toolchain this workspace was developed against, and moving it is a commit
+# somebody has to justify.
+#
+# Bumping this file re-dates the CI compiler for every job at once. Verify a
+# candidate locally (`rustup toolchain install <channel>`, then the workspace
+# suite) before you change the string.
+[toolchain]
+channel = "nightly-2026-08-23"
+profile = "minimal"
+# `cargo fmt` / `cargo clippy` are not in gate.yml, but a pinned MINIMAL
+# toolchain without them means the next agent to type `cargo fmt` gets
+# "not installed" and reaches for `+nightly`, which is the parity hole again.
+components = ["rustfmt", "clippy"]
