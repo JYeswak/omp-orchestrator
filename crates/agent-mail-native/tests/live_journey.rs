@@ -468,24 +468,36 @@ fn a_missing_credential_refuses_before_any_io() {
 }
 
 #[test]
-#[ignore = "requires the live Agent Mail daemon"]
 fn first_resume_from_origin_succeeds_for_recipient_with_later_first_event() {
     run(async {
-        let cx = Cx::current().expect("cx");
-        let client = live_client();
+        let cx = Cx::current().expect("runtime installs a Cx");
+        let endpoint = Endpoint::discover();
+        if endpoint.token().is_none() {
+            panic!(
+                "K0_LIVE_UNAVAILABLE: no Agent Mail credential; searched {:?}",
+                Endpoint::discovery_sources()
+            );
+        }
+        let client = MailClient::new(endpoint).with_request_timeout(Duration::from_secs(20));
         let from = ResumePoint::restored(project(), me(), DeliveryCursor::ORIGIN);
-        let page = journey::resume_from(&cx, &client, &from, Some(50))
-            .await
-            .expect("a first resume from origin must not be rejected by a client floor guess");
+        let page = match journey::resume_from(&cx, &client, &from, Some(50)).await {
+            Ok(page) => page,
+            Err(
+                unavailable @ (MailError::Unreachable { .. }
+                | MailError::Unauthorized { .. }
+                | MailError::MissingCredential { .. }),
+            ) => panic!("K0_LIVE_UNAVAILABLE: {unavailable:?}"),
+            Err(error) => panic!("K0_LIVE_ASSERTION_BROKEN: {error:?}"),
+        };
         assert!(
             !page.events.is_empty(),
-            "the live attribution leg must not pass on an empty page"
+            "K0_LIVE_EMPTY_PAGE: the live attribution leg reached no events"
         );
         assert!(
             page.events
                 .iter()
                 .all(|event| event.cursor > DeliveryCursor::ORIGIN),
-            "every returned event must advance past origin"
+            "K0_LIVE_ASSERTION_BROKEN: returned event did not advance past origin"
         );
     });
 }
