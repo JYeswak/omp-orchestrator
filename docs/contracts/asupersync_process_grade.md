@@ -17,21 +17,42 @@ substance does he have — how do we meet his quality on each doc."*
 
 ## The substance he has — measured across all 97 `*contract*.md`
 
-| ID | marker | his adoption | ours (21 docs) |
+| ID | marker | his adoption | ours (59 docs) |
 |---|---|---:|---:|
-| SM-VALIDATION | a `## Validation` section | 43% | **0%** |
-| SM-COMMAND | a runnable ```` ```bash ```` block | **62%** | 23% |
-| SM-IDS | ≥5 stable IDs (`FD-ISOLATED`, `RA-NARROW-ON-CRASH`) | 50% | 33% |
-| SM-PURPOSE | a `## Purpose` paragraph | 47% | **0%** |
-| SM-BEAD | a `Bead:` line binding the doc to the DAG | 40% | **0%** |
-| SM-XREF | a `## Cross-References` list of paths | 38% | **0%** |
-| SM-ARTIFACTS | a `## Contract Artifacts` triple | 26% | **0%** |
+| SM-VALIDATION | a Validation section | 43% | 61% |
+| SM-COMMAND | a runnable fenced bash block | 62% | 69% |
+| SM-IDS | at least 5 stable IDs | 50% | 52% |
+| SM-PURPOSE | a Purpose paragraph | 47% | 61% |
+| SM-BEAD | a Bead line binding the doc to the DAG | 40% | 61% |
+| SM-XREF | a Cross-References list of paths | 38% | 61% |
+| SM-ARTIFACTS | a Contract Artifacts triple | 26% | 38% |
 
-**Size:** his contracts median **7,132 bytes** (min 2,177, max 27,727). Our plan sections run
-25–120 KB; `docs/PLAN.md` is 1,080 KB.
+**Size:** corpus contracts median **7,132 bytes** (min 2,177, max 27,727). The current validation
+scope is 59 docs with median **11,701 bytes** and 6 over 50 KB; the runner below is the authority.
 
-**Five of seven markers are at literally 0% on our side.** Not one of our 21 documents carries a
-Purpose, a Validation section, a Bead binding, Cross-References, or an Artifacts triple.
+**Current measurement:** the runner reports every marker above for the current docs tree. Earlier
+21-document and zero-percent values are historical snapshots, not current claims.
+
+## Stable ID vocabulary
+
+The pass bar uses these additional stable IDs for the boundaries this document itself enforces:
+
+| ID | refusal boundary |
+|---|---|
+| DPB-COMMAND | the command block is missing or not pasteable |
+| DPB-NON-COVERAGE | the document hides an excluded claim without naming it |
+| DPB-STATUS-BOUNDARY | PROJECTED, EXISTS, and UNPROVEN are collapsed |
+| DPB-OWNER | a failing acceptance has no accountable owner |
+| DPB-REPRODUCIBLE | a cited result has no command and source scope |
+| DPB-NO-EMPTY | an empty scan is reported as a successful grade |
+| DPB-DOES-NOT-MEAN | the contract lacks the negative interpretation boundary |
+| DPB-DOCUMENT | the file path or document kind is not the stated contract scope |
+| DPB-SCOPE | the scanner's input universe is narrower than the claim |
+| DPB-GENERATED | a derived artifact is edited without its source/assembly contract |
+| DPB-FRESHNESS | a cited result has no revision or capture boundary |
+| DPB-EVIDENCE-SOURCE | a claimed result lacks an attributable writer and reader |
+
+
 
 ## The anatomy, quoted
 
@@ -55,24 +76,21 @@ Bead: asupersync-1508v.9.5              <- SM-BEAD: bound to the DAG
 Seventeen stable IDs in 69 lines. **Zero narrative.** No "why this matters", no hedging, no
 history. Every line is a normative statement, a table row, a path, or a command.
 
-## What the four zeros actually cost us
+## What the measurements mean now
 
-**GDP-VALIDATION — the largest gap.** His documents ship with the command that checks them; ours
-assert. A document with a `## Validation` block is falsifiable by anyone in one paste. Without it,
-"is this doc still true" requires an entire grading round — which is precisely how we came to run
-twenty-three of them.
+The validation runner below is the authority for current scope and percentages. At the current
+run it scanned 59 documents in this repository: the median is 11,701 bytes and 6 documents exceed
+50 KB. Earlier 21-document, 0-percent, and 25–120 KB statements are historical snapshots. The
+corpus comparison remains a snapshot of the daily mirror; it is not a product readiness score.
 
-**GDP-BEAD — the doc↔DAG link.** 40% of his contracts name their bead. That single line is what
-makes a document *work* rather than commentary: the bead can close, the doc is its artifact, and
-`bv` can see the relationship. Our 21 documents are bound to nothing.
+The seven marker rows are structural obligations, not quality claims. A current document may meet
+the marker while its command is weak, its cited artifact is stale, or its prose is substantively
+wrong. That is why the runner reports scope and the contract carries explicit non-coverage below.
 
-**GDP-ARTIFACTS — the triple.** Canonical machine artifact, smoke runner, invariant suite. This is
-the mechanism that makes a contract enforceable instead of aspirational, and it is where our
-`00-brief.md` §2 table failed: it claims requirement statuses with no artifact path, so it drifted
-in **both** directions (R3 stale-pessimistic, R4/R6/R8/R9/R10 accurate-absent).
-
-**GDP-SIZE.** Median 7.1 KB against our 25–120 KB sections. A 73 KB document cannot be verified in
-one sitting, so it is graded in rounds instead — and a round finds drift, never absence.
+The useful adoption rule is narrow: every contract must carry a purpose, a bead binding, a
+canonical artifact/runner/invariant-suite triple, a pasteable validation command, stable IDs, and
+cross-references. The runner refuses an empty input set and exposes the current denominator rather
+than preserving a remembered percentage.
 
 ## The pass bar for a single document
 
@@ -128,6 +146,15 @@ category we have not started.
 - `docs/plan/round24-L1-dag.md` — the corpus measurements and the retracted claim
 - `/Volumes/ZestData/dicklesworthstone-mirror/asupersync/docs/failure_domain_contract.md` — template
 - `/Volumes/ZestData/dicklesworthstone-mirror/asupersync/docs/crash_only_region_contract.md`
+
+## Non-Coverage
+
+- This document checks structural markers, size, and scan scope. It does not prove that a named
+  command returns the right verdict or that a cited artifact contains the claimed truth.
+- The corpus is one daily mirror snapshot. It does not establish an optimum, transferability, or
+  runtime correctness of this repository.
+- No marker substitutes for semantic review, external validation, or a product-level shipping
+  receipt. Those remain separate claims with separate oracles.
 
 ## NO-CLAIM
 
