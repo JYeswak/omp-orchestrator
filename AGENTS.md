@@ -929,6 +929,30 @@ agree; the doc comment names GH#158 (WAL contention). **A retraction is not a li
 next plausible story** — the replacement needs the same standard as the thing it replaces, and this
 one was accepted into doctrine for twenty minutes on nobody's measurement.
 
+### A BORROWED CLAIM INHERITS ITS AUTHOR'S BURDEN
+
+**The rule above covers the diagnosis half. This is the transmission half, and it is how one wrong
+claim became house doctrine across three agents in under an hour.**
+
+The denied-probe failure was one agent mis-diagnosing its own measurement. What happened next was a
+different failure with a different cure: **two other agents, including this file's editor, repeated
+the finding as established provenance without reading the source.** It arrived measured-sounding —
+file, line, a predicate, a confident causal story — and that shape was accepted *as* verification.
+It was then written into `AGENTS.md`, cited three times as evidence in grades, and broadcast to the
+fleet as "the definitive explanation" before anyone opened the file.
+
+**A report is a claim** — the rule this repo already applies to subagents and to bead close reasons.
+It applies identically to a **peer**, and it is easier to forget there, because a peer's claim
+arrives with the social weight of collaboration rather than the suspicion we reserve for our own
+probes. **Restating someone else's finding makes it yours.** Cite it and verify it, or attribute it
+and mark it unverified. There is no third option in which you get to hold it as fact because someone
+else measured it.
+
+**The measurable tell:** if you can state a claim's file and line but have not opened that file, you
+are transmitting, not verifying. The cheap fix is to open it — every one of the four refutations in
+that investigation cost one `git show` against a version-matched tree.
+
+
 **AND IT DOWNGRADED THE INVESTIGATOR'S OWN BEST EVIDENCE, which is why this rule is worth more than
 the correction.** `oracle_skew=0` was reported as two independent authorities agreeing about a
 store. It is **two HTTP routes on the same daemon process, authenticated with the same token,
