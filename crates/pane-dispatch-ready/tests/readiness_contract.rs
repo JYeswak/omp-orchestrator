@@ -450,6 +450,139 @@ fn l2_the_observation_channel_was_confidently_wrong_about_a_working_pane() {
     );
 }
 
+/// SECOND REPRODUCTION, 2026-09-02T23:38:21Z / 23:41:59Z — a 218-second gap on the same
+/// pane, twenty hours after the first. Recorded because the bead's acceptance 1 asked
+/// whether the defect re-triggers: it does, on the first attempt.
+const REPRO_CAPTURE_A: &str =
+    " ⠋ 17m  · ◕ Fable 5.1 · ⏸ Goal 878K · 📁 ~/Developer/omp-orchestrator · ⑂ main *144 ?12 · ◫ 83.0%/1M";
+const REPRO_CAPTURE_B: &str =
+    " ⠼ 20m  · ◕ Fable 5.1 · ⏸ Goal 878K · 📁 ~/Developer/omp-orchestrator · ⑂ main *133 ?11 · ◫ 83.2%/1M";
+const REPRO_GAP_SECS: u64 = 218;
+/// `capture_provenance` and `capture_collected_at` from the SAME activity payload that
+/// said idle, beside the tail's own `captured_at`. Equal to the second.
+const REPRO_PROVENANCE: &str = "live";
+const REPRO_COLLECTED_AT: &str = "2026-09-02T23:41:59Z";
+const REPRO_TAIL_CAPTURED_AT: &str = "2026-09-02T23:41:59Z";
+/// `detected_patterns` for the false-idle row, verbatim. This is the decisive field.
+const REPRO_DETECTED_PATTERNS: &[&str] = &["failed_text", "claude_unicode_prompt", "braille_spinner"];
+
+#[test]
+fn l2_the_false_idle_is_a_precedence_defect_upstream_not_staleness_here() {
+    // ACCEPTANCE 2 of omp-orchestrator-observation-state-false-idle-riqd asked which side is
+    // broken: (a) ntm misreads the v18 spinner+timer footer, or (b) it derives from a stale
+    // or differently-scoped capture. The payload answers, and it is neither exactly.
+    //
+    // NOT (b): the observation row's own `capture_provenance` is "live" and its
+    // `capture_collected_at` equals the tail's `captured_at` to the second. Same capture,
+    // same instant, no staleness to blame.
+    assert_eq!(REPRO_PROVENANCE, "live", "staleness is refuted by the payload itself");
+    assert_eq!(
+        REPRO_COLLECTED_AT, REPRO_TAIL_CAPTURED_AT,
+        "the observation and the tail read the same capture at the same second"
+    );
+
+    // NOT quite (a) either — and this is the sharper result. `braille_spinner` IS in
+    // `detected_patterns` for the very row that reads idle. The spinner was DETECTED and an
+    // idle-side signal outranked it. That makes it a PRECEDENCE defect, not a missed read,
+    // which is a different upstream report.
+    assert!(
+        REPRO_DETECTED_PATTERNS.contains(&"braille_spinner"),
+        "the decisive evidence: the spinner was detected on the row that reads idle"
+    );
+
+    // And the pane really was working, at the same grade as the first measurement.
+    //
+    // Clippy flagged the runtime form as "this assertion has a constant value", which is
+    // correct and is an argument for STRENGTHENING rather than silencing: both sides are
+    // consts, so the check belongs at build time. If someone edits the recorded gap below
+    // the floor, or raises the floor above the recorded gap, the evidence and the law now
+    // contradict each other as a COMPILE ERROR instead of a test failure nobody may run.
+    const _: () = assert!(REPRO_GAP_SECS >= TWO_CAPTURE_MIN_SECS);
+    let mins = |line: &str| -> u64 {
+        let s = line.split('m').next().expect("timer");
+        s.trim_start_matches(|c: char| !c.is_ascii_digit())
+            .parse()
+            .expect("elapsed minutes")
+    };
+    assert!(
+        mins(REPRO_CAPTURE_B) > mins(REPRO_CAPTURE_A),
+        "the timer must advance: {}m -> {}m",
+        mins(REPRO_CAPTURE_A),
+        mins(REPRO_CAPTURE_B)
+    );
+    assert_ne!(REPRO_CAPTURE_A, REPRO_CAPTURE_B, "and the content must differ");
+
+    // POSITIVE CONTROL on the pattern reader: it must not answer true for everything, or
+    // the assertion above is satisfied by a broken `contains`.
+    assert!(
+        !REPRO_DETECTED_PATTERNS.contains(&"codex_chevron_prompt"),
+        "POSITIVE CONTROL FAILED: the pattern reader matches a pattern that is absent"
+    );
+}
+
+/// The BOUND on the defect, from a 22-row sample across five live sessions at
+/// 2026-09-02T23:39Z. `braille_spinner` present implied `observation_state == "working"` on
+/// **12 of 13** rows carrying it; `omp-orchestrator` pane 1 was the only violation. Three
+/// candidate triggers were refuted by rows in the same sample, and the surviving candidate
+/// has n=1 and is NOT claimed. Each row is `(session, agent_type, observation_state,
+/// detected_patterns)`.
+const WIDE_SAMPLE: &[(&str, &str, &str, &[&str])] = &[
+    ("omp-orchestrator", "claude", "idle", &["failed_text", "claude_unicode_prompt", "braille_spinner"]),
+    ("omp-orchestrator", "codex", "working", &["braille_spinner"]),
+    ("omp-orchestrator", "omp-glm", "working", &["braille_spinner"]),
+    ("clutterfreespaces", "claude", "idle", &["claude_spinner_past"]),
+    ("clutterfreespaces", "omp", "working", &["braille_spinner"]),
+    ("clutterfreespaces", "omp", "working", &["api_error", "failed_text", "braille_spinner"]),
+    ("control-plane", "omp-claude", "idle", &["sigkill"]),
+    ("control-plane", "omp-claude", "working", &["braille_spinner"]),
+    ("franken-harvest", "codex", "idle", &["failed_text", "codex_chevron_prompt"]),
+    ("franken-harvest", "grok", "idle", &["grok_composer_prompt"]),
+    ("zeststream-cast", "claude", "working", &["claude_spinner_timing", "claude_unicode_prompt", "claude_spinner_past"]),
+    ("zeststream-cast", "codex", "idle", &["generic_angle"]),
+    ("zeststream-cast", "codex", "working", &["braille_spinner"]),
+];
+
+#[test]
+fn l2_three_candidate_triggers_for_the_false_idle_are_refuted_by_the_wider_sample() {
+    // The bead's step 1 asked for the conditions under which the defect does NOT occur. Four
+    // features were perfectly correlated with the single idle row in the five-pane session
+    // sample, so none could be blamed from it. Widening to five sessions refutes three.
+    fn rows_with(pat: &'static str) -> impl Iterator<Item = &'static (&'static str, &'static str, &'static str, &'static [&'static str])> {
+        WIDE_SAMPLE.iter().filter(move |r| r.3.contains(&pat))
+    }
+
+    // REFUTED: "agent_type claude implies idle" — zeststream-cast pane 1 is claude, working.
+    assert!(
+        WIDE_SAMPLE.iter().any(|r| r.1.contains("claude") && r.2 == "working"),
+        "no claude row reads working, so agent_type remains a live candidate"
+    );
+    // REFUTED: "claude_unicode_prompt implies idle" — the same row carries it and works.
+    assert!(
+        rows_with("claude_unicode_prompt").any(|r| r.2 == "working"),
+        "claude_unicode_prompt remains a live candidate"
+    );
+    // REFUTED: "failed_text implies idle" — clutterfreespaces carries it and works.
+    assert!(
+        rows_with("failed_text").any(|r| r.2 == "working"),
+        "failed_text remains a live candidate"
+    );
+
+    // WHAT SURVIVES, stated as a bound rather than a cause. Every row carrying a bare
+    // `braille_spinner` reads working EXCEPT the one violation, so the defect is rare and
+    // conditional — n=1, and this leg does not name its trigger.
+    let spinner: Vec<_> = WIDE_SAMPLE.iter().filter(|r| r.3.contains(&"braille_spinner")).collect();
+    let violations: Vec<_> = spinner.iter().filter(|r| r.2 == "idle").collect();
+    assert!(!spinner.is_empty(), "ANTI-VACUITY: no spinner rows means no bound");
+    assert_eq!(
+        violations.len(),
+        1,
+        "the bound is one violation in {} spinner rows; a change here is new evidence and \
+         belongs in the bead, not a silent edit: {violations:?}",
+        spinner.len()
+    );
+    assert_eq!(violations[0].0, "omp-orchestrator");
+}
+
 // ---------------------------------------------------------------------------------------
 // PR-L3 — readiness needs two captures >=75s apart
 // ---------------------------------------------------------------------------------------

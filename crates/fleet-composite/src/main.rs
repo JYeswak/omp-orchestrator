@@ -1,12 +1,14 @@
 #![forbid(unsafe_code)]
 
-use fleet_composite::{compute_with_epsilon, compute_json_with_epsilon, factors, run_selftest, CompositeReport};
+use fleet_composite::{
+    compute_json_with_epsilon, compute_with_epsilon, factors, run_selftest, CompositeReport,
+};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
 use std::io::{self, Read};
-use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitCode, Stdio};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -72,9 +74,17 @@ struct CommandOutput {
     error: Option<String>,
 }
 
-fn run_command(program: &str, args: &[&str], cwd: Option<&Path>, timeout: Duration) -> CommandOutput {
+fn run_command(
+    program: &str,
+    args: &[&str],
+    cwd: Option<&Path>,
+    timeout: Duration,
+) -> CommandOutput {
     let mut command = Command::new(program);
-    command.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
+    command
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     #[cfg(unix)]
     CommandExt::process_group(&mut command, 0);
     if let Some(cwd) = cwd {
@@ -139,7 +149,9 @@ fn run_command(program: &str, args: &[&str], cwd: Option<&Path>, timeout: Durati
                 let message = signal_error.map_or_else(
                     || format!("wait {program}: {error}"),
                     |signal_error| {
-                        format!("wait {program}: {error}; process-group signal failed: {signal_error}")
+                        format!(
+                            "wait {program}: {error}; process-group signal failed: {signal_error}"
+                        )
                     },
                 );
                 return collect_output(child, None, Some(message), stdout_thread, stderr_thread);
@@ -160,7 +172,10 @@ fn terminate_process_group(child: &mut Child) -> Option<String> {
     }
     #[cfg(not(unix))]
     {
-        child.kill().err().map(|error| format!("kill child: {error}"))
+        child
+            .kill()
+            .err()
+            .map(|error| format!("kill child: {error}"))
     }
 }
 
@@ -178,7 +193,8 @@ fn collect_output(
         stdout: String::from_utf8_lossy(&stdout).into_owned(),
         stderr: String::from_utf8_lossy(&stderr).into_owned(),
         status,
-        error: error.or_else(|| wait_error.map(|wait_error| format!("collect child output: {wait_error}"))),
+        error: error
+            .or_else(|| wait_error.map(|wait_error| format!("collect child output: {wait_error}"))),
     }
 }
 
@@ -188,7 +204,10 @@ fn collect_output(
 fn discover_repo_root(start: &Path) -> Option<PathBuf> {
     let mut current = Some(start);
     while let Some(directory) = current {
-        if REPO_MARKERS.iter().any(|marker| directory.join(marker).exists()) {
+        if REPO_MARKERS
+            .iter()
+            .any(|marker| directory.join(marker).exists())
+        {
             return Some(directory.to_path_buf());
         }
         current = directory.parent();
@@ -206,17 +225,23 @@ fn resolve_repo_root(
 ) -> Result<PathBuf, ConfigError> {
     if let Some(flag) = flag {
         if flag.trim().is_empty() {
-            return Err(ConfigError::ExplicitEmpty { source: "--repo".to_owned() });
+            return Err(ConfigError::ExplicitEmpty {
+                source: "--repo".to_owned(),
+            });
         }
         return Ok(PathBuf::from(flag));
     }
     if let Some(value) = env_value {
         if value.trim().is_empty() {
-            return Err(ConfigError::ExplicitEmpty { source: REPO_ENV.to_owned() });
+            return Err(ConfigError::ExplicitEmpty {
+                source: REPO_ENV.to_owned(),
+            });
         }
         return Ok(PathBuf::from(value));
     }
-    discover_repo_root(start).ok_or_else(|| ConfigError::RepoNotFound { from: start.to_path_buf() })
+    discover_repo_root(start).ok_or_else(|| ConfigError::RepoNotFound {
+        from: start.to_path_buf(),
+    })
 }
 
 /// `$HOME`, or a typed error. Never a guessed literal.
@@ -255,7 +280,10 @@ fn resolve_ledger() -> Result<PathBuf, ConfigError> {
 /// a moved checkout resolves its own session instead of silently measuring a session that
 /// no longer matches the repository.
 fn session_name(repo: &Path) -> String {
-    if let Some(session) = std::env::var(SESSION_ENV).ok().filter(|value| !value.trim().is_empty()) {
+    if let Some(session) = std::env::var(SESSION_ENV)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+    {
         return session;
     }
     // No invented fallback: an empty name makes `ntm` fail loudly downstream.
@@ -268,7 +296,10 @@ fn epsilon_from_env() -> (f64, Option<String>) {
     match std::env::var("FLEET_GEO_EPS") {
         Ok(value) if !value.trim().is_empty() => match value.parse::<f64>() {
             Ok(eps) if eps.is_finite() => (eps.clamp(0.0, 1.0), None),
-            _ => (0.0, Some("FLEET_GEO_EPS must be a finite number".to_owned())),
+            _ => (
+                0.0,
+                Some("FLEET_GEO_EPS must be a finite number".to_owned()),
+            ),
         },
         _ => (0.0, None),
     }
@@ -289,13 +320,14 @@ fn measure(repo: &Path, ledger: &Path, session: &str) -> Measurement {
         Some(repo),
         COMMAND_TIMEOUT,
     );
-    let commit_count = commits.stdout.lines().filter(|line| !line.trim().is_empty()).count() as f64;
+    let commit_count = commits
+        .stdout
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .count() as f64;
     raw.insert("commits_1h".to_owned(), commit_count);
     if commits.error.is_some() || commits.status != Some(0) {
-        errors.insert(
-            "commits_1h".to_owned(),
-            command_error("git log", &commits),
-        );
+        errors.insert("commits_1h".to_owned(), command_error("git log", &commits));
     }
 
     let activity_flag = format!("--robot-activity={session}");
@@ -306,35 +338,62 @@ fn measure(repo: &Path, ledger: &Path, session: &str) -> Measurement {
             Ok(value) => {
                 if let Some(agents) = value.get("agents").and_then(Value::as_array) {
                     for agent in agents {
-                        let agent_type = agent.get("agent_type").and_then(Value::as_str).unwrap_or("");
+                        let agent_type = agent
+                            .get("agent_type")
+                            .and_then(Value::as_str)
+                            .unwrap_or("");
                         if !agent_type.starts_with("omp") {
                             continue;
                         }
                         // `is true` in the Python oracle is deliberate: the string "true" is not
                         // safe evidence of an idle pane, so only a JSON boolean qualifies.
-                        let idle = agent.get("observation_state").and_then(Value::as_str) == Some("idle")
+                        //
+                        // NOT A DISPATCH GATE. `observation_state` can be CONFIDENTLY WRONG:
+                        // measured 2026-09-02T23:38-23:42Z, `idle` at 0.95 with
+                        // `safe_to_dispatch: true` on a pane proven WORKING across a 218s
+                        // two-capture gap (bead
+                        // omp-orchestrator-observation-state-false-idle-riqd). Here that only
+                        // understates `busy` in a health SCORE; nothing downstream sends a
+                        // packet on this reading. A caller that DOES dispatch must require the
+                        // `state`/`observation_state` agreement check --
+                        // `ntm-fleet-monitor::readiness()` -- because a disagreement is a
+                        // refusal available inside a single payload.
+                        let idle = agent.get("observation_state").and_then(Value::as_str)
+                            == Some("idle")
                             && agent.get("safe_to_dispatch").and_then(Value::as_bool) == Some(true);
                         if !idle {
                             busy += 1.0;
                         }
                     }
                 } else {
-                    errors.insert("omp_busy".to_owned(), "ntm activity has no agents array".to_owned());
+                    errors.insert(
+                        "omp_busy".to_owned(),
+                        "ntm activity has no agents array".to_owned(),
+                    );
                 }
             }
             Err(error) => {
-                errors.insert("omp_busy".to_owned(), format!("ntm activity malformed JSON: {error}"));
+                errors.insert(
+                    "omp_busy".to_owned(),
+                    format!("ntm activity malformed JSON: {error}"),
+                );
             }
         }
     } else {
-        errors.insert("omp_busy".to_owned(), command_error("ntm --robot-activity", &activity));
+        errors.insert(
+            "omp_busy".to_owned(),
+            command_error("ntm --robot-activity", &activity),
+        );
     }
     raw.insert("omp_busy".to_owned(), busy);
 
     let age_min = match std::fs::metadata(ledger).and_then(|metadata| metadata.modified()) {
         Ok(modified) => signed_age_minutes(modified),
         Err(error) => {
-            errors.insert("ledger_fresh".to_owned(), format!("ledger mtime unavailable: {error}"));
+            errors.insert(
+                "ledger_fresh".to_owned(),
+                format!("ledger mtime unavailable: {error}"),
+            );
             1.0e9
         }
     };
@@ -347,7 +406,12 @@ fn measure(repo: &Path, ledger: &Path, session: &str) -> Measurement {
     };
     raw.insert("ledger_fresh".to_owned(), freshness);
 
-    let closed = run_command("br", &["list", "--status=closed", "--json"], Some(repo), COMMAND_TIMEOUT);
+    let closed = run_command(
+        "br",
+        &["list", "--status=closed", "--json"],
+        Some(repo),
+        COMMAND_TIMEOUT,
+    );
     let mut closed_count = 0.0;
     if closed.status == Some(0) && closed.error.is_none() {
         match serde_json::from_str::<Value>(&closed.stdout) {
@@ -356,28 +420,46 @@ fn measure(repo: &Path, ledger: &Path, session: &str) -> Measurement {
                     .as_array()
                     .or_else(|| value.get("issues").and_then(Value::as_array));
                 if let Some(issues) = issues {
-                    let cutoff = utc_hour_key(SystemTime::now().checked_sub(Duration::from_secs(3600)).unwrap_or(SystemTime::now()));
+                    let cutoff = utc_hour_key(
+                        SystemTime::now()
+                            .checked_sub(Duration::from_secs(3600))
+                            .unwrap_or(SystemTime::now()),
+                    );
                     for issue in issues {
                         let timestamp = issue
                             .get("closed_at")
                             .and_then(Value::as_str)
                             .filter(|value| !value.is_empty())
-                            .or_else(|| issue.get("updated_at").and_then(Value::as_str).filter(|value| !value.is_empty()))
+                            .or_else(|| {
+                                issue
+                                    .get("updated_at")
+                                    .and_then(Value::as_str)
+                                    .filter(|value| !value.is_empty())
+                            })
                             .unwrap_or("");
                         if timestamp.get(..14).unwrap_or(timestamp) >= cutoff.as_str() {
                             closed_count += 1.0;
                         }
                     }
                 } else {
-                    errors.insert("beads_closed_1h".to_owned(), "br output has no issues array".to_owned());
+                    errors.insert(
+                        "beads_closed_1h".to_owned(),
+                        "br output has no issues array".to_owned(),
+                    );
                 }
             }
             Err(error) => {
-                errors.insert("beads_closed_1h".to_owned(), format!("br output malformed JSON: {error}"));
+                errors.insert(
+                    "beads_closed_1h".to_owned(),
+                    format!("br output malformed JSON: {error}"),
+                );
             }
         }
     } else {
-        errors.insert("beads_closed_1h".to_owned(), command_error("br list", &closed));
+        errors.insert(
+            "beads_closed_1h".to_owned(),
+            command_error("br list", &closed),
+        );
     }
     raw.insert("beads_closed_1h".to_owned(), closed_count);
 
@@ -389,7 +471,11 @@ fn command_error(label: &str, output: &CommandOutput) -> String {
         return error.clone();
     }
     if !output.stderr.trim().is_empty() {
-        return format!("{label} exited {:?}: {}", output.status, output.stderr.trim());
+        return format!(
+            "{label} exited {:?}: {}",
+            output.status,
+            output.stderr.trim()
+        );
     }
     format!("{label} exited {:?}", output.status)
 }
@@ -438,7 +524,8 @@ fn invoker_provenance() -> (&'static str, &'static str) {
 }
 
 fn report_value(report: CompositeReport, mode: &str, measurement: Option<&Measurement>) -> Value {
-    let mut value = serde_json::to_value(report).expect("CompositeReport contains only JSON values");
+    let mut value =
+        serde_json::to_value(report).expect("CompositeReport contains only JSON values");
     if let Value::Object(object) = &mut value {
         object.insert("mode".to_owned(), Value::String(mode.to_owned()));
         let (invoker, proof) = invoker_provenance();
@@ -456,10 +543,17 @@ fn live_report(mode: &str, repo: &Path) -> Result<Value, ConfigError> {
     let session = session_name(repo);
     let measurement = measure(repo, &ledger, &session);
     let (eps, epsilon_error) = epsilon_from_env();
-    let mut value = report_value(compute_with_epsilon(&measurement.raw, eps), mode, Some(&measurement));
+    let mut value = report_value(
+        compute_with_epsilon(&measurement.raw, eps),
+        mode,
+        Some(&measurement),
+    );
     if let Value::Object(object) = &mut value {
         object.insert("repo".to_owned(), Value::String(repo.display().to_string()));
-        object.insert("ledger".to_owned(), Value::String(ledger.display().to_string()));
+        object.insert(
+            "ledger".to_owned(),
+            Value::String(ledger.display().to_string()),
+        );
         object.insert("session".to_owned(), Value::String(session));
         if let Some(error) = epsilon_error {
             object.insert("epsilon_error".to_owned(), Value::String(error));
@@ -508,7 +602,10 @@ fn capabilities() -> Value {
 }
 
 fn print_json(value: &Value) {
-    println!("{}", serde_json::to_string_pretty(value).expect("diagnostic output is JSON serializable"));
+    println!(
+        "{}",
+        serde_json::to_string_pretty(value).expect("diagnostic output is JSON serializable")
+    );
 }
 
 fn selftest_exit() -> ExitCode {
@@ -517,14 +614,24 @@ fn selftest_exit() -> ExitCode {
         if check.passed {
             println!("  PASS  {:<62} {}", check.label, check.got);
         } else {
-            println!("  FAIL  {:<62} got=[{}] want=[{}]", check.label, check.got, check.want);
+            println!(
+                "  FAIL  {:<62} got=[{}] want=[{}]",
+                check.label, check.got, check.want
+            );
         }
     }
     if result.failures.is_empty() {
-        println!("\nSELFTEST PASS ({} assertions; both directions + 1 mutation)", result.checked);
+        println!(
+            "\nSELFTEST PASS ({} assertions; both directions + 1 mutation)",
+            result.checked
+        );
         ExitCode::SUCCESS
     } else {
-        println!("\nSELFTEST FAIL ({} of {} assertions failed)", result.failures.len(), result.checked);
+        println!(
+            "\nSELFTEST FAIL ({} of {} assertions failed)",
+            result.failures.len(),
+            result.checked
+        );
         ExitCode::from(1)
     }
 }
@@ -595,11 +702,19 @@ fn main() -> ExitCode {
         "composite" => {
             let mut input = String::new();
             if io::stdin().read_to_string(&mut input).is_err() {
-                print_json(&report_value(compute_json_with_epsilon("", epsilon_from_env().0), "composite", None));
+                print_json(&report_value(
+                    compute_json_with_epsilon("", epsilon_from_env().0),
+                    "composite",
+                    None,
+                ));
                 return ExitCode::from(1);
             }
             let (eps, _) = epsilon_from_env();
-            print_json(&report_value(compute_json_with_epsilon(&input, eps), "composite", None));
+            print_json(&report_value(
+                compute_json_with_epsilon(&input, eps),
+                "composite",
+                None,
+            ));
             let _ = json_requested;
             ExitCode::SUCCESS
         }
@@ -617,7 +732,9 @@ fn main() -> ExitCode {
 fn resolve_repo_for_report(flag: Option<&str>) -> Result<PathBuf, ConfigError> {
     let cwd = std::env::current_dir().map_err(|error| {
         eprintln!("fleet-composite: cannot read the current directory: {error}");
-        ConfigError::RepoNotFound { from: PathBuf::from(".") }
+        ConfigError::RepoNotFound {
+            from: PathBuf::from("."),
+        }
     })?;
     let env_value = std::env::var(REPO_ENV).ok();
     resolve_repo_root(flag, env_value, &cwd)
@@ -682,12 +799,16 @@ mod tests {
         .expect("flag must win");
         assert_eq!(resolved, flag_target.path());
 
-        let resolved =
-            resolve_repo_root(None, Some(env_target.path().to_string_lossy().into_owned()), &nested)
-                .expect("env must win over discovery");
+        let resolved = resolve_repo_root(
+            None,
+            Some(env_target.path().to_string_lossy().into_owned()),
+            &nested,
+        )
+        .expect("env must win over discovery");
         assert_eq!(resolved, env_target.path());
 
-        let resolved = resolve_repo_root(None, None, &nested).expect("discovery must find the marker");
+        let resolved =
+            resolve_repo_root(None, None, &nested).expect("discovery must find the marker");
         assert_eq!(resolved, root.path());
     }
 
@@ -697,13 +818,19 @@ mod tests {
         let nested = git_root.path().join("deeply/nested");
         fs::create_dir_all(&nested).expect("create nested directory");
         fs::create_dir(git_root.path().join(".git")).expect("create .git marker");
-        assert_eq!(discover_repo_root(&nested), Some(git_root.path().to_path_buf()));
+        assert_eq!(
+            discover_repo_root(&nested),
+            Some(git_root.path().to_path_buf())
+        );
 
         let beads_root = TempDir::create("beads-marker");
         let nested = beads_root.path().join("x");
         fs::create_dir_all(&nested).expect("create nested directory");
         fs::create_dir(beads_root.path().join(".beads")).expect("create .beads marker");
-        assert_eq!(discover_repo_root(&nested), Some(beads_root.path().to_path_buf()));
+        assert_eq!(
+            discover_repo_root(&nested),
+            Some(beads_root.path().to_path_buf())
+        );
     }
 
     #[test]
@@ -713,7 +840,10 @@ mod tests {
         fs::create_dir_all(&start).expect("create start directory");
 
         let error = match resolve_repo_root(None, None, &start) {
-            Ok(found) => panic!("a marker-free directory must not resolve; found {}", found.display()),
+            Ok(found) => panic!(
+                "a marker-free directory must not resolve; found {}",
+                found.display()
+            ),
             Err(error) => error,
         };
         // KNOWN-BAD: the typed error must name the markers and the start directory.
@@ -722,24 +852,44 @@ mod tests {
             "wrong error for a marker-free directory: {error:?}"
         );
         let message = error.to_string();
-        assert!(message.contains(".git") && message.contains(".beads"), "message must name the markers: {message}");
+        assert!(
+            message.contains(".git") && message.contains(".beads"),
+            "message must name the markers: {message}"
+        );
         assert!(
             message.contains(start.to_string_lossy().as_ref()),
             "message must name the start directory: {message}"
         );
-        assert!(message.contains(REPO_ENV), "message must name the escape hatch env: {message}");
+        assert!(
+            message.contains(REPO_ENV),
+            "message must name the escape hatch env: {message}"
+        );
     }
 
     #[test]
     fn empty_explicit_sources_are_errors_not_defaults() {
         let start = Path::new("/");
-        let error = resolve_repo_root(Some("   "), None, start).expect_err("empty --repo is an error");
-        assert!(matches!(error, ConfigError::ExplicitEmpty { .. }), "wrong error: {error:?}");
-        assert!(error.to_string().contains("--repo"), "message must name --repo: {error}");
+        let error =
+            resolve_repo_root(Some("   "), None, start).expect_err("empty --repo is an error");
+        assert!(
+            matches!(error, ConfigError::ExplicitEmpty { .. }),
+            "wrong error: {error:?}"
+        );
+        assert!(
+            error.to_string().contains("--repo"),
+            "message must name --repo: {error}"
+        );
 
-        let error = resolve_repo_root(None, Some(String::new()), start).expect_err("empty env is an error");
-        assert!(matches!(error, ConfigError::ExplicitEmpty { .. }), "wrong error: {error:?}");
-        assert!(error.to_string().contains(REPO_ENV), "message must name the env var: {error}");
+        let error =
+            resolve_repo_root(None, Some(String::new()), start).expect_err("empty env is an error");
+        assert!(
+            matches!(error, ConfigError::ExplicitEmpty { .. }),
+            "wrong error: {error:?}"
+        );
+        assert!(
+            error.to_string().contains(REPO_ENV),
+            "message must name the env var: {error}"
+        );
     }
 
     #[test]
@@ -752,7 +902,8 @@ mod tests {
             assert_eq!(expanded, home.join("state/ledger.jsonl"));
         }
         // A non-tilde path passes through untouched.
-        let plain = expand_tilde(PathBuf::from("/tmp/absolute.jsonl")).expect("absolute path needs no HOME");
+        let plain = expand_tilde(PathBuf::from("/tmp/absolute.jsonl"))
+            .expect("absolute path needs no HOME");
         assert_eq!(plain, PathBuf::from("/tmp/absolute.jsonl"));
     }
 
@@ -792,7 +943,11 @@ mod tests {
         let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let (hits, scanned) = hardcoded_user_path_hits(&src);
         // Anti-vacuity: a scan that saw no source files proves nothing.
-        assert!(scanned >= 2, "vacuous scan: only {scanned} source files under {}", src.display());
+        assert!(
+            scanned >= 2,
+            "vacuous scan: only {scanned} source files under {}",
+            src.display()
+        );
         assert!(
             hits.is_empty(),
             "hardcoded home-path literal(s) reintroduced (this test exists so a \
@@ -803,7 +958,13 @@ mod tests {
     #[test]
     fn session_name_env_beats_repo_basename() {
         std::env::remove_var(SESSION_ENV);
-        assert_eq!(session_name(Path::new("/somewhere/control-plane")), "control-plane");
-        assert_eq!(session_name(Path::new("/other/omp-orchestrator")), "omp-orchestrator");
+        assert_eq!(
+            session_name(Path::new("/somewhere/control-plane")),
+            "control-plane"
+        );
+        assert_eq!(
+            session_name(Path::new("/other/omp-orchestrator")),
+            "omp-orchestrator"
+        );
     }
 }

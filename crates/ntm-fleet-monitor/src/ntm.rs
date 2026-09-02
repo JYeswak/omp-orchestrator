@@ -151,6 +151,28 @@ impl AgentObservation {
     /// True only when all independent facts agree on a fresh, idle OMP pane.
     /// A missing field, stale source, state conflict, error, or unknown plugin
     /// is conservative and returns false.
+    ///
+    /// # Why the state/observation CONFLICT check is load-bearing, not belt-and-braces
+    ///
+    /// `observation_state` can be CONFIDENTLY WRONG. Measured 2026-09-02T23:38-23:42Z on
+    /// `omp-orchestrator` pane 1: `observation_state: "idle"` at `observation_confidence:
+    /// 0.95` with `safe_to_dispatch: true`, for a pane proven WORKING at the strongest
+    /// grade this repo defines — two captures 218s apart (75s floor), elapsed timer 17m ->
+    /// 20m, spinner ⠋ -> ⠼, content hash changed. `capture_provenance: "live"` and
+    /// `capture_collected_at` equal to the tail's own `captured_at`, so staleness is
+    /// refuted. `detected_patterns` for that row CONTAINED `braille_spinner`: the spinner
+    /// was detected and an idle-side signal outranked it, so this is a PRECEDENCE defect
+    /// upstream, not a missed read.
+    ///
+    /// `readiness()` scored that row `Conflicting` (`state: "THINKING"` -> Working vs
+    /// `observation_state: "idle"` -> Idle), so both predicates below refused it. Verified
+    /// with `agent_type: "omp"` substituted so `is_omp()` could not be the reason —
+    /// `l2_a_confidently_false_idle_is_refused_by_the_conflict_check`.
+    ///
+    /// So the rule is NOT "gate on `observation_state`, never on `state`", which
+    /// `pane_readiness_contract` §2.2 briefly published: that advice discards the only
+    /// signal that caught this. **Both channels must agree; a disagreement is a refusal.**
+    /// Bead `omp-orchestrator-observation-state-false-idle-riqd`.
     pub fn dispatchable(&self) -> bool {
         self.kind.is_omp()
             && self.readiness == Readiness::Idle
@@ -406,6 +428,68 @@ mod tests {
 
     fn response(rows: &[String]) -> String {
         format!(r#"{{"success":true,"agents":[{}]}}"#, rows.join(","))
+    }
+
+    /// The VERBATIM `--robot-activity` row for `omp-orchestrator` pane 1, captured
+    /// 2026-09-02T23:42Z, while two `--robot-tail` captures 218s apart proved the pane
+    /// WORKING (timer 17m -> 20m, spinner ⠋ -> ⠼, content changed). Only the fields this
+    /// parser reads are kept; nothing is softened.
+    const LIVE_FALSE_IDLE_PANE1: &str = r#"{"pane":"1","pane_idx":1,"agent_type":"claude","state":"THINKING","confidence":0.8,"observation_state":"idle","observation_confidence":0.95,"observation_freshness":"fresh","safe_to_dispatch":true,"capture_provenance":"live","capture_collected_at":"2026-09-02T23:42:03Z"}"#;
+
+    #[test]
+    fn l2_a_confidently_false_idle_is_refused_by_the_conflict_check() {
+        // NOT the first cover. `thinking_and_idle_conflict_is_not_dispatchable` already
+        // asserted the synthetic conflict, and both legs go RED under the same mutation.
+        // What this one adds: the VERBATIM live payload rather than a hand-built row, the
+        // `is_omp` isolation that proves the CONFLICT is the refusing reason, the known-good
+        // arm that stops the guard from refusing everything, and the directional case.
+        //
+        // Bead omp-orchestrator-observation-state-false-idle-riqd. `observation_state` was
+        // "idle" at 0.95 with safe_to_dispatch TRUE on a pane proven WORKING. This crate
+        // reads that field, so the guard that makes the lie non-fatal must be pinned.
+        let live = parse_activity_json(&format!(
+            r#"{{"success":true,"agents":[{LIVE_FALSE_IDLE_PANE1}]}}"#
+        ))
+        .expect("the verbatim live payload must parse");
+        let a = &live.agents[0];
+        assert_eq!(a.observation_state, SignalState::Idle);
+        assert!(a.safe_to_dispatch, "ntm really did say safe_to_dispatch=true");
+        assert!(!a.dispatchable(), "a false idle must not be dispatchable");
+        assert!(!a.capture_eligible(), "nor eligible for the capture gate");
+
+        // TWO REASONS could refuse that row: the state/observation conflict, or `is_omp()`
+        // rejecting agent_type "claude". A test that cannot separate them proves the wrong
+        // thing, so substitute an OMP agent_type and leave the contradiction intact.
+        let omp = parse_activity_json(&response(&[row("omp", "THINKING", "idle")]))
+            .expect("synthetic omp row must parse");
+        let a = &omp.agents[0];
+        assert!(a.kind.is_omp(), "is_omp must be TRUE so it cannot be the reason");
+        assert_eq!(a.freshness, EvidenceFreshness::Live, "nor may staleness be");
+        assert!(a.safe_to_dispatch, "nor a missing safe_to_dispatch");
+        assert_eq!(
+            a.readiness,
+            Readiness::Conflicting,
+            "the conflict itself must be what refuses it"
+        );
+        assert!(!a.dispatchable());
+        assert!(!a.capture_eligible());
+
+        // KNOWN-GOOD ARM: the check must not refuse everything. An OMP row whose channels
+        // AGREE on idle is still dispatchable, or this guard is a fleet-wide outage.
+        let agree = parse_activity_json(&response(&[row("omp", "IDLE", "idle")]))
+            .expect("agreeing row must parse");
+        let a = &agree.agents[0];
+        assert_eq!(a.readiness, Readiness::Idle);
+        assert!(
+            a.dispatchable(),
+            "an agreeing idle OMP row must remain dispatchable"
+        );
+
+        // And the corrected law is DIRECTIONAL: agreement on WORKING is refused too, so the
+        // guard is not merely "reject Conflicting".
+        let working = parse_activity_json(&response(&[row("omp", "WORKING", "working")]))
+            .expect("working row must parse");
+        assert!(!working.agents[0].dispatchable());
     }
 
     #[test]

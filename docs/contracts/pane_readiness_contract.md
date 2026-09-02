@@ -191,6 +191,71 @@ The advice retracted here survived **six minutes** in a landed contract. That is
 for the pinned-defect pattern: the claim was written down precisely enough to be refuted, and the
 refutation is now a test rather than a memory.
 
+#### 2.2.2 AMENDMENT 2 — it reproduces, staleness is refuted, and the payload already contradicted itself
+
+`§2.2.1` retracted the advice. This bounds the defect, answers which side is broken, and replaces
+the retraction with a cheaper rule. Owned by `omp-orchestrator-observation-state-false-idle-riqd`.
+
+**It reproduces on the first attempt.** 2026-09-02T23:38:21Z / 23:41:59Z, same pane, twenty hours
+later, a **218-second** gap:
+
+```
+A   ⠋ 17m  · ◕ Fable 5.1 · ⏸ Goal 878K · 📁 ~/Developer/omp-orchestrator · ⑂ main *144 ?12 · ◫ 83.0%/1M
+B   ⠼ 20m  · ◕ Fable 5.1 · ⏸ Goal 878K · 📁 ~/Developer/omp-orchestrator · ⑂ main *133 ?11 · ◫ 83.2%/1M
+```
+
+`observation_state: "idle"`, `observation_confidence: 0.95`, `safe_to_dispatch: true` at both
+timestamps, from both `--robot-activity` and `--robot-tail`.
+
+**Not a freshness bug.** The observation row's own `capture_provenance` is `"live"`, its
+`capture_collected_at` is `2026-09-02T23:41:59Z` — equal to the tail's `captured_at` **to the
+second** — `observation_freshness: "fresh"`, and `source_health.tmux.freshness_sec: 0`. The
+observation and the spinner come from the same capture at the same instant.
+
+**Not a missed read either, which is sharper than the two options the bead offered.**
+`detected_patterns` for the false-idle row is
+`["failed_text", "claude_unicode_prompt", "braille_spinner"]`. **The spinner was DETECTED and an
+idle-side signal outranked it.** That makes this a PRECEDENCE defect upstream, not a footer the
+classifier cannot see — a different report, and a much easier one to fix.
+
+**The bound.** 22 rows across five live sessions at 23:39Z: a bare `braille_spinner` implied
+`observation_state == "working"` on **12 of 13** rows carrying it, and `omp-orchestrator` pane 1
+was the only violation. Four features were perfectly correlated with the single idle row inside one
+session, so none could be blamed from it; widening the sample **refutes three** —
+`agent_type=claude` (zeststream-cast pane 1 is claude and reads working),
+`claude_unicode_prompt` (same row carries it), and `failed_text` (a clutterfreespaces row carries
+it and works). The surviving candidate has **n=1 and is not claimed.** Pinned by
+`l2_three_candidate_triggers_for_the_false_idle_are_refuted_by_the_wider_sample`.
+
+**A CHEAPER RULE THAN `§2.2.1`'s.** That amendment concluded a positive free read must be confirmed
+against the last status line at the two-capture grade. True, and it costs 75 seconds. But the
+false-idle payload **already contradicted itself**: `state: "THINKING"` and
+`observation_state: "idle"` in the same row. `ntm-fleet-monitor::readiness()` scores that
+`Conflicting`, so `dispatchable()` and `capture_eligible()` both refused the live row with **no
+second capture at all**. Verified with `agent_type` substituted to `"omp"` so `is_omp()` could not
+be the reason — `readiness == Conflicting`, `freshness == Live`, `safe_to_dispatch == true`, both
+predicates false. So:
+
+> **Both ntm channels must AGREE, and a disagreement is a refusal.** That is available inside a
+> single payload. The two-capture confirmation of `§2.2.1` is still required for a positive free
+> read, because agreement is not proof — but disagreement is sufficient to refuse, and it is free.
+
+This also says the retracted advice was worse than merely incomplete: *"gate on `observation_state`,
+never on `state`"* would have **discarded the only channel that caught this**.
+
+**Site audit.** `git grep -n --no-index -F 'observation_state' -- 'crates/*/src/*'`: the three
+kernels that decide dispatch — `pane-truth`, `tick-monitor`, `pane-dispatch-ready` — carry **0**
+sites each (positive control: the same reader finds `fn ` in 2, 3 and 2 files respectively). Of the
+remaining non-fixture sites, `ntm-fleet-monitor::capture_eligible` reads the field and names why in
+its own doc, guarded by the conflict check and pinned by
+`l2_a_confidently_false_idle_is_refused_by_the_conflict_check`; `fleet-composite` reads it for a
+health SCORE and never dispatches; `refill-idle-panes` reads it to select panes and is owned by a
+separate bead.
+
+**NO-CLAIM.** Two reproductions on one machine. Enough to say the defect re-triggers and that
+staleness is not its cause; not enough to name its trigger. The 12-of-13 bound is a sample, not a
+rate.
+
 ### 2.3 PR-L3 — the canonical two-capture floor is enforced
 
 | authority | constant | value |
