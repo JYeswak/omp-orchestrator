@@ -10,9 +10,9 @@
 //!
 //! Verbs: `--plan` (default, mutates nothing) | `--apply` | `--selftest`
 
-use refill_idle_panes::{
+use refill_idle_panes::{SkippedPick, 
     conflict_verdict, decide, measurability_refusal, measurability_verdict, packet_is_sendable,
-    parse_activity_view, parse_oracle_view, parse_recommendations, plan, reconciliation_failure,
+    parse_activity_view, parse_oracle_view, parse_recommendations_with_skips, plan, reconciliation_failure,
     run_outcome, Assignment,
 };
 use std::io::Write;
@@ -210,7 +210,12 @@ fn run(apply: bool) -> ExitCode {
     }
 
     let triage = probe("bv", &["--robot-triage".into()], 90).unwrap_or_default();
-    let picks = parse_recommendations(&triage);
+    let (picks, refused) = parse_recommendations_with_skips(&triage);
+    // Name every refusal so a reader of the log can see WHY a top-ranked bead was not
+    // sent, instead of inferring it from its absence.
+    for SkippedPick { bead, reason } in &refused {
+        println!("SKIP  bead={bead} reason={reason}");
+    }
     if picks.is_empty() {
         println!(
             "refill: {} idle pane(s) but bv returned NO picks — queue empty or triage unreadable",

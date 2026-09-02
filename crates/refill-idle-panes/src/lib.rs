@@ -174,7 +174,10 @@ impl SurfaceView {
     }
     /// A pane this surface never enumerated is UNKNOWN to it, not busy.
     pub fn get(&self, pane: &str) -> Observation {
-        self.panes.get(pane).copied().unwrap_or(Observation::Unknown)
+        self.panes
+            .get(pane)
+            .copied()
+            .unwrap_or(Observation::Unknown)
     }
 }
 
@@ -602,30 +605,91 @@ pub fn reconciliation_failure(verdict: &fleet_reconcile::InnerVerdict) -> Option
     ))
 }
 
+/// A recommendation the selector refused, with the reason a reader can act on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkippedPick {
+    pub bead: String,
+    pub reason: String,
+}
+
+/// Bead statuses that may receive a fresh packet. Everything else is owned by someone:
+/// `in_progress` by its worker, `grading` by its grader, `blocked` by its blocker.
+pub const DISPATCHABLE_STATUSES: [&str; 2] = ["open", "ready"];
+
+/// Why a recommendation must not be dispatched, or `None` if it may be.
+///
+/// The bv envelope carries `type` and `status` on every recommendation (measured
+/// 2026-09-02, keys: action, breakdown, id, labels, priority, reasons, score, status,
+/// title, type, unblocks_ids). A field that is ABSENT is not a disqualifier — an older
+/// envelope or a fixture without it must not silently empty the queue — but a field that
+/// is PRESENT and disqualifying is refused by name.
+///
+/// MEASURED 2026-09-02T20:21Z, the first live `--apply` after the cron environment was
+/// repaired: the two top picks were `cp-epic-fleet-work-quality-08l6` (type=epic) and
+/// `cp-...08l6.74.2` (status=grading, owned by its grader). Both panes accepted the packet
+/// and went WORKING; one spent its cycle proving an epic is not a unit of work. bv ranks
+/// by graph centrality, and an epic is the most central node there is — so without this
+/// filter the top pick is an epic whenever one is open.
+pub fn dispatch_refusal(recommendation: &serde_json::Value) -> Option<String> {
+    if let Some(kind) = recommendation.get("type").and_then(serde_json::Value::as_str) {
+        if kind.eq_ignore_ascii_case("epic") {
+            return Some("type=epic".into());
+        }
+    }
+    if let Some(status) = recommendation.get("status").and_then(serde_json::Value::as_str) {
+        if !DISPATCHABLE_STATUSES
+            .iter()
+            .any(|ok| ok.eq_ignore_ascii_case(status))
+        {
+            return Some(format!("status={status}"));
+        }
+    }
+    None
+}
+
 /// Parse `bv --robot-triage` recommendations into descending-score bead ids.
 ///
 /// `quick_ref.top_picks` is a weaker summary and does not carry the ranking score
 /// that dispatch needs. Recommendations are sorted explicitly so this parser does
-/// not silently inherit a different envelope order.
+/// not silently inherit a different envelope order. Epics and non-dispatchable
+/// statuses are refused (see `dispatch_refusal`); use `parse_recommendations_with_skips`
+/// when the refusals must be reported.
 pub fn parse_recommendations(text: &str) -> Vec<String> {
+    parse_recommendations_with_skips(text).0
+}
+
+/// `parse_recommendations`, plus every refused recommendation with its reason, so a
+/// `--plan` reader can see WHY a bead was skipped instead of inferring it from absence.
+pub fn parse_recommendations_with_skips(text: &str) -> (Vec<String>, Vec<SkippedPick>) {
     let Ok(value) = serde_json::from_str::<serde_json::Value>(text) else {
-        return Vec::new();
+        return (Vec::new(), Vec::new());
     };
     let Some(recommendations) = value
         .get("triage")
         .and_then(|t| t.get("recommendations"))
         .and_then(serde_json::Value::as_array)
     else {
-        return Vec::new();
+        return (Vec::new(), Vec::new());
     };
 
+    let mut skipped = Vec::new();
     let mut ranked = recommendations
         .iter()
         .enumerate()
         .filter_map(|(position, recommendation)| {
             let id = recommendation.get("id")?.as_str()?;
             let score = recommendation.get("score")?.as_f64()?;
-            score.is_finite().then(|| (score, position, id.to_string()))
+            if !score.is_finite() {
+                return None;
+            }
+            if let Some(reason) = dispatch_refusal(recommendation) {
+                skipped.push(SkippedPick {
+                    bead: id.to_string(),
+                    reason,
+                });
+                return None;
+            }
+            Some((score, position, id.to_string()))
         })
         .collect::<Vec<_>>();
     ranked.sort_by(|left, right| {
@@ -635,7 +699,7 @@ pub fn parse_recommendations(text: &str) -> Vec<String> {
             .unwrap_or(std::cmp::Ordering::Equal)
             .then_with(|| left.1.cmp(&right.1))
     });
-    ranked.into_iter().map(|(_, _, id)| id).collect()
+    (ranked.into_iter().map(|(_, _, id)| id).collect(), skipped)
 }
 
 /// One pane paired with the bead it should receive.
@@ -755,8 +819,7 @@ mod tests {
             .iter()
             .map(|(p, s)| format!(r#"{{"pane":"{p}","state":"{s}"}}"#))
             .collect();
-        parse_oracle_view(&format!(r#"{{"panes":[{}]}}"#, body.join(",")))
-            .expect("fixture parses")
+        parse_oracle_view(&format!(r#"{{"panes":[{}]}}"#, body.join(","))).expect("fixture parses")
     }
 
     fn live_views() -> (SurfaceView, SurfaceView) {
@@ -785,7 +848,9 @@ mod tests {
             let agents = value["agents"].as_array().expect("agents");
             let mut state_agrees = 0usize;
             for agent in agents {
-                let safe = agent["safe_to_dispatch"].as_bool().expect("safe_to_dispatch");
+                let safe = agent["safe_to_dispatch"]
+                    .as_bool()
+                    .expect("safe_to_dispatch");
                 assert_eq!(
                     safe,
                     agent["observation_state"].as_str() == Some("idle"),
@@ -1231,6 +1296,42 @@ mod tests {
         );
     }
 
+    /// PLANTED KNOWN-BAD, verbatim shape of the live envelope that dispatched an epic and a
+    /// grading bead on 2026-09-02T20:21Z. The epic outranks everything (0.58) and the
+    /// grading bead outranks the honest pick; both must be refused BY NAME and the honest
+    /// pick must survive. Removing either arm of `dispatch_refusal` turns this RED.
+    #[test]
+    fn epics_and_owned_statuses_are_refused_by_name() {
+        let text = r#"{"triage":{"recommendations":[
+            {"id":"cp-epic-fleet-work-quality-08l6","score":0.58,"type":"epic","status":"open"},
+            {"id":"cp-epic-fleet-work-quality-08l6.74.2","score":0.28,"type":"feature","status":"grading"},
+            {"id":"cp-busy","score":0.27,"type":"bug","status":"in_progress"},
+            {"id":"cp-honest","score":0.20,"type":"task","status":"open"},
+            {"id":"cp-ready","score":0.10,"type":"bug","status":"ready"}
+        ]}}"#;
+        let (picks, skipped) = parse_recommendations_with_skips(text);
+        assert_eq!(picks, vec!["cp-honest", "cp-ready"]);
+        assert_eq!(
+            skipped,
+            vec![
+                SkippedPick { bead: "cp-epic-fleet-work-quality-08l6".into(), reason: "type=epic".into() },
+                SkippedPick { bead: "cp-epic-fleet-work-quality-08l6.74.2".into(), reason: "status=grading".into() },
+                SkippedPick { bead: "cp-busy".into(), reason: "status=in_progress".into() },
+            ]
+        );
+        assert_eq!(parse_recommendations(text), vec!["cp-honest", "cp-ready"]);
+    }
+
+    /// An ABSENT field is not a disqualifier: an envelope without `type`/`status` (older bv,
+    /// or the fixture above) must still rank, or a schema drift would silently idle the fleet.
+    #[test]
+    fn absent_type_and_status_fields_do_not_refuse() {
+        let text = r#"{"triage":{"recommendations":[{"id":"cp-bare","score":0.4}]}}"#;
+        let (picks, skipped) = parse_recommendations_with_skips(text);
+        assert_eq!(picks, vec!["cp-bare"]);
+        assert!(skipped.is_empty());
+    }
+
     #[test]
     fn unparseable_triage_yields_no_recommendations() {
         assert!(parse_recommendations("{}").is_empty());
@@ -1339,7 +1440,10 @@ mod tests {
                 seen.insert(outcome.code);
             }
         }
-        assert_eq!(cases, 96, "the enumeration must actually run all 32x3 shapes");
+        assert_eq!(
+            cases, 96,
+            "the enumeration must actually run all 32x3 shapes"
+        );
         assert_eq!(
             seen.iter().copied().collect::<Vec<u8>>(),
             DOCUMENTED.to_vec(),
@@ -1357,7 +1461,10 @@ mod tests {
         let (activity, oracle_view) = live_views();
         let decision = decide(&activity, &oracle_view);
         let outcome = run_outcome(&decision, &conflict_verdict(&activity, &oracle_view));
-        assert_ne!(outcome.code, 0, "a confident contradiction must exit NONZERO");
+        assert_ne!(
+            outcome.code, 0,
+            "a confident contradiction must exit NONZERO"
+        );
         assert_eq!(outcome.code, 1);
         for pane in ["1", "2", "3"] {
             assert!(
