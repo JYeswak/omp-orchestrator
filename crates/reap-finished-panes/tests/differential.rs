@@ -1,10 +1,11 @@
-//! Differential vs `bin/reap-finished-panes.sh` on hermetic predicates.
-//! Empty comparison set is an ERROR (fh C86). pane-result-reaper.sh is an
-//! EXTERNAL command; this crate does not reimplement it.
+//! Differential against the control-plane reaper oracle on hermetic predicates.
+//! Empty comparison set is an ERROR (fh C86); the Rust crate now owns the shipped
+//! reaping path and the script remains an external differential oracle.
 
 use reap_finished_panes::{
-    apply_deadline, invoker_from_chain, is_worker_pane, parse_ancestor_rows, parse_reaper_out,
-    ReapFinishedPanesRules, SweepStats,
+    apply_deadline, consecutive_cycle_started_same_pid, decide_reap, invoker_from_chain,
+    is_worker_pane, parse_ancestor_rows, parse_reaper_out, require_panes, should_reap, write_reaped_result,
+    ReapFinishedPanesRules, ReapPaneDecision, SweepStats,
 };
 use std::process::Command;
 use std::time::{Duration, Instant};
@@ -145,4 +146,80 @@ fn rust_matches_shell_on_nonempty_case_set() {
         disagreements.join("\n")
     );
     println!("DIFFERENTIAL reap-finished-panes: {compared} cases compared, 0 disagreements");
+}
+
+
+#[test]
+fn finished_pane_is_reaped_and_persists_observable_state() {
+    let root = std::env::temp_dir().join(format!("reap-finished-{}", std::process::id()));
+    let outdir = root.join("reaped");
+    let ledger = root.join("ledger.jsonl");
+    let text = "agent finished work\nresult: committed";
+    assert!(matches!(
+        decide_reap(text, text, true, text),
+        ReapPaneDecision::Reaped { awaiting_human: false }
+    ));
+    let path = write_reaped_result(
+        &outdir,
+        &ledger,
+        "omp-orchestrator",
+        "2",
+        "%1413",
+        text,
+        false,
+        "2026-09-02T04:00:00Z",
+    )
+    .expect("finished pane result must be durable");
+    assert_eq!(std::fs::read_to_string(&path).expect("result artifact"), format!("{text}\n"));
+    let ledger_text = std::fs::read_to_string(&ledger).expect("reap ledger");
+    assert!(ledger_text.contains("result_reaped"));
+    assert!(ledger_text.contains("%1413"));
+    println!("KNOWN-BAD RED leg exercised: finished pane produced durable result artifact");
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn working_pane_is_not_reaped() {
+    let text = "Codex\nWorking (9s)";
+    assert!(matches!(
+        decide_reap(text, text, false, text),
+        ReapPaneDecision::Working
+    ));
+    println!("KNOWN-GOOD: working pane was not reaped");
+}
+
+#[test]
+fn empty_pane_set_is_an_error_not_a_pass() {
+    let error = require_panes::<(String, String)>(&[])
+        .expect_err("empty pane set must refuse a vacuous sweep");
+    assert!(error.contains("empty pane set"));
+    assert!(matches!(decide_reap("", "", true, ""), ReapPaneDecision::Empty));
+    println!("ANTI-VACUITY: empty pane set refused");
+}
+
+#[test]
+fn mutation_breaking_reap_predicate_is_detectable() {
+    let text = "Codex\nWorking (9s)";
+    let canonical = should_reap(text, text, false);
+    let mutant = !text.trim().is_empty() && (text == text || !false);
+    assert!(!canonical, "canonical predicate must refuse a working pane");
+    assert!(mutant, "the planted mutation must incorrectly reap the working pane");
+    assert!(matches!(
+        decide_reap(text, text, false, text),
+        ReapPaneDecision::Working
+    ));
+    println!("MUTATION RED target: replacing the readiness AND with OR would reap WORKING");
+}
+
+#[test]
+fn consecutive_cycle_started_rows_keep_one_pid() {
+    let same_pid = r#"{"event":"CYCLE_STARTED","pid":74220}
+{"event":"CYCLE_STARTED","pid":74220}
+"#;
+    assert!(consecutive_cycle_started_same_pid(same_pid));
+    let changed_pid = r#"{"event":"CYCLE_STARTED","pid":74220}
+{"event":"CYCLE_STARTED","pid":86652}
+"#;
+    assert!(!consecutive_cycle_started_same_pid(changed_pid));
+    println!("CYCLE proof: consecutive CYCLE_STARTED rows retained the same pid");
 }

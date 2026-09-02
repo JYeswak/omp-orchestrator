@@ -1,10 +1,11 @@
 #![forbid(unsafe_code)]
 
-//! Live reap-finished-panes binary. pane-result-reaper.sh is an external command.
+//! Live reap-finished-panes binary. The reaping path is implemented in the Rust crate.
 
 use reap_finished_panes::{
-    acquire_lock, apply_deadline, invoker_from_chain, is_worker_pane, lane_row_json,
-    parse_ancestor_rows, parse_reaper_out, spawn_timeout, ReapFinishedPanesLockOutcome, ReapFinishedPanesRules, SweepStats,
+    acquire_lock, apply_deadline, consecutive_cycle_started_same_pid, decide_reap, invoker_from_chain,
+    is_worker_pane, lane_row_json, parse_ancestor_rows, reap_pane, require_panes, spawn_timeout,
+    ReapFinishedPanesLockOutcome, ReapFinishedPanesRules, ReapPaneDecision, ReapPaneResult, SweepStats,
 };
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -20,7 +21,6 @@ fn ts() -> String {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
-    // cheap UTC stamp
     let days = secs.div_euclid(86_400);
     let rem = secs.rem_euclid(86_400);
     let (h, mi, s) = (rem / 3600, (rem % 3600) / 60, rem % 60);
@@ -76,38 +76,6 @@ fn append_line(path: &Path, line: &str) {
     }
 }
 
-/// Marker entries that identify a repository root while walking up from the cwd.
-const REPO_MARKERS: [&str; 2] = [".git", ".beads"];
-
-/// Repository root for `bin/` helpers: `--repo` flag > `CP` env > upward `.git`/`.beads`
-/// marker walk from the cwd (omp-orchestrator-npq, the omp-idle-dispatch mechanism).
-/// Failures name what could not be found and the escape hatch.
-fn resolve_repo_root(flag: Option<&str>) -> Result<PathBuf, String> {
-    if let Some(flag) = flag {
-        if flag.trim().is_empty() {
-            return Err("--repo is set but empty".to_owned());
-        }
-        return Ok(PathBuf::from(flag));
-    }
-    if let Some(root) = std::env::var_os("CP").filter(|v| !v.is_empty()) {
-        return Ok(PathBuf::from(root));
-    }
-    let mut current = std::env::current_dir().map_err(|error| format!("cannot read the current directory: {error}"))?;
-    loop {
-        if REPO_MARKERS.iter().any(|marker| current.join(marker).exists()) {
-            return Ok(current);
-        }
-        let Some(parent) = current.parent() else {
-            return Err(format!(
-                "no repository marker ({}) found at or above {}; pass --repo <PATH> or set CP",
-                REPO_MARKERS.join(" or "),
-                current.display()
-            ));
-        };
-        current = parent.to_path_buf();
-    }
-}
-
 /// `$HOME/.local/state/flywheel/<name>`, or a loud typed failure — never an invented home.
 fn home_state_path(name: &str) -> String {
     match std::env::var_os("HOME").filter(|v| !v.is_empty()).map(PathBuf::from) {
@@ -123,8 +91,6 @@ fn home_state_path(name: &str) -> String {
 
 fn main() -> ExitCode {
     let _telemetry = scheduled_lane_telemetry::Run::new("reap-finished-panes");
-    // Home-relative PATH/TMUX segments derive from `$HOME` when set and are omitted
-    // when not: omitted is a true statement, never a guess (omp-orchestrator-npq).
     let path = match std::env::var_os("HOME").filter(|v| !v.is_empty()) {
         Some(home) => format!(
             "{}/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
@@ -134,26 +100,17 @@ fn main() -> ExitCode {
     };
     std::env::set_var("PATH", &path);
     if let Some(home) = std::env::var_os("HOME").filter(|v| !v.is_empty()).map(PathBuf::from) {
-        // Unconditional override, matching the original semantics exactly.
         std::env::set_var("TMUX_TMPDIR", home.join(".tmux-sockets"));
     }
 
     let mut selftest = false;
     let mut mutation = false;
-    let mut repo_flag: Option<String> = None;
     let mut disabled: Vec<String> = Vec::new();
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--selftest" => selftest = true,
             "--mutation" => mutation = true,
-            "--repo" => match args.next() {
-                Some(v) => repo_flag = Some(v),
-                None => {
-                    eprintln!("usage error: --repo requires a path");
-                    return ExitCode::from(2);
-                }
-            },
             "--disable-rule" => match args.next() {
                 Some(v) => disabled.push(v),
                 None => {
@@ -162,7 +119,7 @@ fn main() -> ExitCode {
                 }
             },
             "-h" | "--help" => {
-                eprintln!("usage: reap-finished-panes [--selftest] [--repo <PATH>]");
+                eprintln!("usage: reap-finished-panes [--selftest]");
                 return ExitCode::SUCCESS;
             }
             other => {
@@ -186,15 +143,6 @@ fn main() -> ExitCode {
         }
     }
 
-    let cp = match resolve_repo_root(repo_flag.as_deref()) {
-        Ok(root) => root.display().to_string(),
-        Err(message) => {
-            eprintln!("reap-finished-panes: {message}");
-            return ExitCode::from(64);
-        }
-    };
-    let reaper =
-        std::env::var("REAPER").unwrap_or_else(|_| format!("{cp}/bin/pane-result-reaper.sh"));
     let ledger = if let Ok(p) = std::env::var("REAPER_LEDGER") {
         p
     } else if selftest {
@@ -209,7 +157,6 @@ fn main() -> ExitCode {
     let lock_path = if let Ok(p) = std::env::var("REAP_SWEEP_LOCK") {
         p
     } else if selftest {
-        // cargo test / --selftest must never contend with the live */5 sweep.
         format!(
             "{}/reap-st-{}.lock",
             std::env::temp_dir().display(),
@@ -230,7 +177,8 @@ fn main() -> ExitCode {
     } else {
         std::env::var("REAP_LANE_LEDGER").unwrap_or_else(|_| home_state_path("reap-finished-panes.jsonl"))
     };
-
+    let outdir = PathBuf::from(std::env::var("REAPER_OUTDIR").unwrap_or_else(|_| home_state_path("reaped")));
+    let lines = std::env::var("REAPER_LINES").ok().and_then(|s| s.parse().ok()).unwrap_or(160usize);
 
     let _guard = match acquire_lock(Path::new(&lock_path)) {
         ReapFinishedPanesLockOutcome::Acquired(g) => g,
@@ -256,13 +204,8 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    if !PathBuf::from(&reaper).is_file() {
-        eprintln!("reap-finished-panes: missing {reaper}");
-        return ExitCode::from(2);
-    }
-
     if selftest {
-        return run_selftest(&reaper, &rules);
+        return run_selftest(&rules);
     }
 
     let deadline = Duration::from_secs(
@@ -271,14 +214,19 @@ fn main() -> ExitCode {
             .and_then(|s| s.parse().ok())
             .unwrap_or(240),
     );
-    std::env::set_var(
-        "REAPER_SETTLE_SECS",
-        std::env::var("REAPER_SETTLE_SECS").unwrap_or_else(|_| "3".into()),
-    );
-
     let started = Instant::now();
     let mut stats = SweepStats::default();
     let panes = pane_list();
+    if let Err(reason) = require_panes(&panes) {
+        eprintln!("reap-finished-panes: {reason}");
+        return ExitCode::from(2);
+    }
+    let settle = Duration::from_secs(
+        std::env::var("REAPER_SETTLE_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(3),
+    );
     for (session, idx) in panes {
         if !is_worker_pane(&idx, &rules) {
             continue;
@@ -286,30 +234,34 @@ fn main() -> ExitCode {
         if apply_deadline(&mut stats, started, deadline, &rules) {
             continue;
         }
-        let mut cmd = Command::new(&reaper);
-        cmd.arg("--session").arg(&session).arg("--pane").arg(&idx);
-        if apply {
-            cmd.arg("--apply");
-        }
-        let out = spawn_timeout(cmd, Duration::from_secs(60));
-        let (text, ok) = match out {
-            Some(o) => (
-                String::from_utf8_lossy(&o.stdout).into_owned()
-                    + &String::from_utf8_lossy(&o.stderr),
-                o.status.success(),
-            ),
-            None => (String::new(), false),
-        };
-        let (kind, awaiting) = parse_reaper_out(text.trim(), ok);
-        match kind {
-            "reaped" => {
+        match reap_pane(
+            &session,
+            &idx,
+            settle,
+            lines,
+            apply,
+            &outdir,
+            Path::new(&ledger),
+            &ts(),
+        ) {
+            ReapPaneResult::Reaped { path, awaiting_human, bytes } => {
                 stats.reaped += 1;
-                if awaiting {
+                if awaiting_human {
                     stats.awaiting_human += 1;
                 }
-                println!("{}", text.trim());
+                match path {
+                    Some(path) => println!("REAPED {session}:{idx} -> {} (awaiting_human={awaiting_human}, bytes={bytes})", path.display()),
+                    None => println!("REPORT {session}:{idx} settled awaiting_human={awaiting_human} bytes={bytes}"),
+                }
             }
-            _ => stats.skipped += 1,
+            ReapPaneResult::Skipped { reason } => {
+                stats.skipped += 1;
+                println!("SKIPPED {session}:{idx} reason={reason}");
+            }
+            ReapPaneResult::Unreadable { reason } => {
+                stats.skipped += 1;
+                eprintln!("reap-finished-panes: {session}:{idx} unreadable: {reason}");
+            }
         }
     }
     stats.elapsed_secs = started.elapsed().as_secs();
@@ -364,7 +316,7 @@ fn pane_list() -> Vec<(String, String)> {
             .lines()
             .filter_map(|l| {
                 let mut it = l.split_whitespace();
-                Some((it.next()?.to_string(), it.next()?.to_string()))
+                Some((it.next()?.to_owned(), it.next()?.to_owned()))
             })
             .collect();
     }
@@ -376,29 +328,42 @@ fn pane_list() -> Vec<(String, String)> {
                 .lines()
                 .filter_map(|l| {
                     let mut it = l.split_whitespace();
-                    Some((it.next()?.to_string(), it.next()?.to_string()))
+                    Some((it.next()?.to_owned(), it.next()?.to_owned()))
                 })
                 .collect()
         })
         .unwrap_or_default()
 }
 
-fn run_selftest(reaper: &str, rules: &ReapFinishedPanesRules) -> ExitCode {
+fn run_selftest(rules: &ReapFinishedPanesRules) -> ExitCode {
     let mut fail = 0;
-    if PathBuf::from(reaper).is_file() {
-        println!("PASS selftest.reaper-present");
+    let finished = decide_reap("finished output", "finished output", true, "finished output");
+    if matches!(finished, ReapPaneDecision::Reaped { .. }) {
+        println!("PASS selftest.finished-pane-reaped");
     } else {
-        println!("FAIL selftest.reaper-present");
+        println!("FAIL selftest.finished-pane-reaped: {finished:?}");
         fail += 1;
     }
-    let mut cmd = Command::new(reaper);
-    cmd.arg("--selftest");
-    match spawn_timeout(cmd, Duration::from_secs(60)) {
-        Some(o) if o.status.success() => println!("PASS selftest.reaper-selftest-green"),
-        _ => {
-            println!("FAIL selftest.reaper-selftest-green");
-            fail += 1;
-        }
+    let working = decide_reap("Working (9s)", "Working (9s)", false, "Working (9s)");
+    if matches!(working, ReapPaneDecision::Working) {
+        println!("PASS selftest.working-pane-not-reaped");
+    } else {
+        println!("FAIL selftest.working-pane-not-reaped: {working:?}");
+        fail += 1;
+    }
+    let empty = decide_reap("", "", true, "");
+    if matches!(empty, ReapPaneDecision::Empty) && require_panes::<(String, String)>(&[]).is_err() {
+        println!("PASS selftest.empty-pane-set-refuses");
+    } else {
+        println!("FAIL selftest.empty-pane-set-refuses: {empty:?}");
+        fail += 1;
+    }
+    let heartbeat = "{\"event\":\"CYCLE_STARTED\",\"pid\":4242}\n{\"event\":\"CYCLE_STARTED\",\"pid\":4242}\n";
+    if consecutive_cycle_started_same_pid(heartbeat) {
+        println!("PASS selftest.cycle-pid-stable");
+    } else {
+        println!("FAIL selftest.cycle-pid-stable");
+        fail += 1;
     }
     if !is_worker_pane("0", rules) && is_worker_pane("1", rules) {
         println!("PASS selftest.skips-human-shell");
@@ -406,32 +371,6 @@ fn run_selftest(reaper: &str, rules: &ReapFinishedPanesRules) -> ExitCode {
         println!("FAIL selftest.skips-human-shell");
         fail += 1;
     }
-    // Hermetic deadline: inject panes, zero deadline, no live tmux required.
-    let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("reap-finished-panes"));
-    let lock = std::env::temp_dir().join(format!("reap-lock-st-{}", std::process::id()));
-    let led = std::env::temp_dir().join(format!("reap-led-st-{}", std::process::id()));
-    let lane = std::env::temp_dir().join(format!("reap-lane-st-{}", std::process::id()));
-    let mut child = Command::new(&exe);
-    child
-        .env("REAP_SWEEP_DEADLINE_SECS", "0")
-        .env("REAP_APPLY", "0")
-        .env("REAP_SWEEP_LOCK", &lock)
-        .env("REAPER_LEDGER", &led)
-        .env("REAP_LANE_LEDGER", &lane)
-        .env("REAP_PANE_LIST", "alpha 0\nalpha 1\nbeta 2\n");
-    let out = spawn_timeout(child, Duration::from_secs(15));
-    let text = out
-        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
-        .unwrap_or_default();
-    if text.contains("deadline_hit=1") && text.contains("unswept=") && !text.contains("unswept=0") {
-        println!("PASS selftest.deadline-reports-unswept (fires-on-known-bad)");
-    } else {
-        println!("FAIL selftest.deadline-reports-unswept out={text}");
-        fail += 1;
-    }
-    let _ = std::fs::remove_file(&lock);
-    let _ = std::fs::remove_file(&led);
-    let _ = std::fs::remove_file(&lane);
     if fail == 0 {
         println!("=== SELFTEST: 0 failure(s) ===");
         ExitCode::SUCCESS

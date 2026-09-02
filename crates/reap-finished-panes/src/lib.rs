@@ -1,13 +1,15 @@
 #![forbid(unsafe_code)]
 
-//! Sweep finished worker panes. Port of `bin/reap-finished-panes.sh`.
-//! The reaper binary (`pane-result-reaper.sh`) is an EXTERNAL command.
+//! Sweep finished worker panes. The reaping path is implemented in this crate.
+//! The control-plane script remains only as an external differential oracle.
 
 use fs2::FileExt;
 use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
-use std::io::Read;
-use std::process::{Command, Output, Stdio};
+use std::io::Write;
+use std::process::{Command, Output};
+use pane_dispatch_ready::{classify, PaneDispatchReadyRules, PaneDispatchReadyState};
+use subprocess_contract::BoundedOutcome;
 use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -133,6 +135,168 @@ pub struct SweepStats {
     pub deadline_hit: u8,
     pub elapsed_secs: u64,
 }
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ReapPaneDecision {
+    Reaped { awaiting_human: bool },
+    Working,
+    Changing,
+    Empty,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ReapPaneResult {
+    Reaped { path: Option<PathBuf>, awaiting_human: bool, bytes: usize },
+    Skipped { reason: &'static str },
+    Unreadable { reason: String },
+}
+
+/// The reaping predicate is strict: two non-empty equal captures and a FREE readiness verdict.
+pub fn should_reap(first: &str, second: &str, ready: bool) -> bool {
+    !first.trim().is_empty() && first == second && ready
+}
+pub fn decide_reap(first: &str, second: &str, ready: bool, text: &str) -> ReapPaneDecision {
+    if !should_reap(first, second, ready) {
+        if first.trim().is_empty() || second.trim().is_empty() {
+            return ReapPaneDecision::Empty;
+        }
+        if first != second {
+            return ReapPaneDecision::Changing;
+        }
+        return ReapPaneDecision::Working;
+    }
+    ReapPaneDecision::Reaped { awaiting_human: awaiting_human(text) }
+}
+
+fn awaiting_human(text: &str) -> bool {
+    text.lines()
+        .rev()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .find(|line| !matches!(line.chars().next(), Some('│' | '─' | '└' | '├' | '›')))
+        .is_some_and(|line| line.ends_with('?'))
+}
+
+pub fn require_panes<T>(panes: &[T]) -> Result<(), &'static str> {
+    if panes.is_empty() {
+        Err("empty pane set — refusing a vacuous reap sweep")
+    } else {
+        Ok(())
+    }
+}
+
+pub fn resolve_pane_id(session: &str, idx: &str, timeout: Duration) -> Result<String, String> {
+    let mut cmd = Command::new("tmux");
+    cmd.args(["list-panes", "-a", "-F", "#{pane_id} #{session_name}:#{window_index}.#{pane_index}"]);
+    let out = spawn_timeout(cmd, timeout).ok_or_else(|| "tmux list-panes timed out or failed".to_owned())?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_owned());
+    }
+    let wanted = format!("{session}:0.{idx}");
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .find_map(|line| {
+            let mut fields = line.split_whitespace();
+            let pane_id = fields.next()?;
+            (fields.next()? == wanted).then(|| pane_id.to_owned())
+        })
+        .ok_or_else(|| format!("no such pane {session}:0.{idx}"))
+}
+
+pub fn capture_pane(pane_id: &str, lines: usize, timeout: Duration) -> Result<String, String> {
+    let mut cmd = Command::new("tmux");
+    cmd.args(["capture-pane", "-p", "-e", "-t", pane_id, "-S"])
+        .arg(format!("-{lines}"));
+    let out = spawn_timeout(cmd, timeout).ok_or_else(|| "tmux capture-pane timed out or failed".to_owned())?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_owned());
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+fn safe_component(value: &str) -> String {
+    value.chars().map(|c| if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') { c } else { '_' }).collect()
+}
+
+pub fn write_reaped_result(
+    outdir: &Path,
+    ledger: &Path,
+    session: &str,
+    pane: &str,
+    pane_id: &str,
+    text: &str,
+    awaiting_human: bool,
+    stamp: &str,
+) -> std::io::Result<PathBuf> {
+    std::fs::create_dir_all(outdir)?;
+    let path = outdir.join(format!("{}.pane{}.{}.txt", safe_component(session), safe_component(pane), stamp));
+    std::fs::write(&path, format!("{text}\n"))?;
+    if let Some(parent) = ledger.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let row = serde_json::json!({"ts": stamp, "event": "result_reaped", "session": session, "pane": pane, "pane_id": pane_id, "awaiting_human": awaiting_human, "bytes": text.len(), "path": path});
+    let mut file = OpenOptions::new().create(true).append(true).open(ledger)?;
+    writeln!(file, "{row}")?;
+    Ok(path)
+}
+
+pub fn reap_pane(
+    session: &str,
+    idx: &str,
+    settle: Duration,
+    lines: usize,
+    apply: bool,
+    outdir: &Path,
+    ledger: &Path,
+    stamp: &str,
+) -> ReapPaneResult {
+    let pane_id = match resolve_pane_id(session, idx, Duration::from_secs(15)) {
+        Ok(id) => id,
+        Err(reason) => return ReapPaneResult::Unreadable { reason },
+    };
+    let first = match capture_pane(&pane_id, lines, Duration::from_secs(15)) {
+        Ok(text) => text,
+        Err(reason) => return ReapPaneResult::Unreadable { reason },
+    };
+    std::thread::sleep(settle);
+    let second = match capture_pane(&pane_id, lines, Duration::from_secs(15)) {
+        Ok(text) => text,
+        Err(reason) => return ReapPaneResult::Unreadable { reason },
+    };
+    let readiness = classify(&second, false, &PaneDispatchReadyRules::default());
+    let ready = readiness.state == PaneDispatchReadyState::Free;
+    match decide_reap(&first, &second, ready, &second) {
+        ReapPaneDecision::Empty => ReapPaneResult::Skipped { reason: "empty_capture" },
+        ReapPaneDecision::Changing => ReapPaneResult::Skipped { reason: "still_changing" },
+        ReapPaneDecision::Working => ReapPaneResult::Skipped { reason: "working" },
+        ReapPaneDecision::Reaped { awaiting_human } if apply => {
+            match write_reaped_result(outdir, ledger, session, idx, &pane_id, &second, awaiting_human, stamp) {
+                Ok(path) => ReapPaneResult::Reaped { path: Some(path), awaiting_human, bytes: second.len() },
+                Err(error) => ReapPaneResult::Unreadable { reason: format!("write reaped result: {error}") },
+            }
+        }
+        ReapPaneDecision::Reaped { awaiting_human } => ReapPaneResult::Reaped { path: None, awaiting_human, bytes: second.len() },
+    }
+}
+
+pub fn consecutive_cycle_started_same_pid(heartbeat: &str) -> bool {
+    let mut previous: Option<String> = None;
+    let mut cycles = 0usize;
+    for line in heartbeat.lines() {
+        let Ok(row) = serde_json::from_str::<serde_json::Value>(line) else { continue; };
+        if row.get("event").and_then(|v| v.as_str()) != Some("CYCLE_STARTED") {
+            continue;
+        }
+        let Some(pid) = row.get("pid").or_else(|| row.get("process_pid")) else { return false; };
+        let current = pid.to_string();
+        if previous.as_deref().is_some_and(|old| old != current) {
+            return false;
+        }
+        previous = Some(current);
+        cycles += 1;
+    }
+    cycles >= 2
+}
+
 
 /// A pane with index 0 is the human shell — never a worker, never reaped.
 pub fn is_worker_pane(idx: &str, rules: &ReapFinishedPanesRules) -> bool {
@@ -252,49 +416,10 @@ fn ps_etime(pid: &str) -> Option<String> {
 }
 
 pub fn spawn_timeout(mut cmd: Command, timeout: Duration) -> Option<Output> {
-    cmd.stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = cmd.spawn().ok()?;
-    // DRAIN THE PIPES ON DEDICATED THREADS.  `try_wait` in a poll loop CANNOT be paired with
-    // undrained pipes: a child that writes more than the OS pipe buffer (~64 KiB, and stdout and
-    // stderr each have their own) blocks in `write` forever, so it never exits, so `try_wait`
-    // never returns Some, and the call burns its entire timeout at 0% CPU before being killed.
-    //
-    // MEASURED 2026-08-27: `git -C <repo> log --since "24 hours ago" --oneline` completes in
-    // 0.6-0.9s from a shell, and sat at 0.0% CPU for 104s as a child here -- reproduced exactly by
-    // polling `try_wait` without reading the pipes.  Six crates shared this shape; fixing only the
-    // one that fired would have left five live.
-    let out = child.stdout.take().map(|mut r| {
-        std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            let _ = r.read_to_end(&mut buf);
-            buf
-        })
-    });
-    let err = child.stderr.take().map(|mut r| {
-        std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            let _ = r.read_to_end(&mut buf);
-            buf
-        })
-    });
-    let start = Instant::now();
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(s)) => break s,
-            Ok(None) if start.elapsed() >= timeout => {
-                let _ = child.kill();
-                break child.wait().ok()?;
-            }
-            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
-            Err(_) => return None,
-        }
-    };
-    // The readers end when the child's fds close, which the kill above guarantees.
-    let stdout = out.and_then(|h| h.join().ok()).unwrap_or_default();
-    let stderr = err.and_then(|h| h.join().ok()).unwrap_or_default();
-    Some(Output { status, stdout, stderr })
+    match subprocess_contract::bounded_output(&mut cmd, timeout) {
+        BoundedOutcome::Completed(output) => Some(output),
+        BoundedOutcome::TimedOut | BoundedOutcome::Unspawned(_) => None,
+    }
 }
 
 pub fn lane_row_json(verdict: &str, detail: &str, inv: ReapFinishedPanesInvoker, ts: &str) -> String {
@@ -417,8 +542,8 @@ mod tests {
             start.elapsed()
         );
         assert!(
-            out.is_some(),
-            "rule bounded_waits: timeout path must still return"
+            out.is_none(),
+            "rule bounded_waits: timeout path is restrictive and returns no output"
         );
     }
 

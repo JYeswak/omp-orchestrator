@@ -11,9 +11,6 @@ fn rust_bin() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_reap-finished-panes"))
 }
 
-fn reaper() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../bin/pane-result-reaper.sh")
-}
 
 /// rfp-001: pane 0 is the human shell. Deleting the skip reaps Joshua's pane.
 #[test]
@@ -79,12 +76,7 @@ fn mutation_lock_names_holder() {
         .env("REAPER_LEDGER", &led)
         .env("REAP_LANE_LEDGER", &lane)
         .env("REAP_APPLY", "0")
-        .env("REAP_PANE_LIST", "alpha 1\n")
-        .env("REAPER", reaper())
-        .env(
-            "CP",
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
-        );
+        .env("REAP_PANE_LIST", "alpha 1\n");
     let out = spawn_timeout(cmd, Duration::from_secs(15)).expect("bin");
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(
