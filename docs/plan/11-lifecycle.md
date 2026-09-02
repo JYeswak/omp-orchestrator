@@ -56,7 +56,7 @@ additional `S` IDs. `viability`, `loop`, and `honesty` are cross-stage attribute
 
 The former map called several names current owners without checking the current inventory. The current inventory confirms `fast-dispatch`, `tick-dispatch`, `reap-finished-panes`, and `verify-dispatch` as crates. Their existence does not prove production ownership or a complete stage handoff. The names are therefore **CURRENT CRATES / UNPROVEN CONSUMERS**, not projected or absent.
 
-Conversely, `crates/omp-orchestrator/Cargo.toml:21-30` lists `ack-stage`, `dispatch-claim-fence`, `omp-rpc-session`, `subprocess-contract`, `receiver-receipt`, and other supporting dependencies. The resident dispatch path is in `crates/omp-orchestrator/src/main.rs:1255-1553`; the finished-pane sweep helper is at `main.rs:1241-1253`. `pane-dispatch-fence` is present in the crate inventory but is not listed as an `omp-orchestrator` manifest dependency in the measured slice. Ownership claims therefore name `omp-orchestrator` as the S5 consumer and list only manifest dependencies as supporting edges; a separate current crate is not thereby proven called in production.
+Conversely, `crates/omp-orchestrator/Cargo.toml:Conversely` lists `ack-stage`, `dispatch-claim-fence`, `omp-rpc-session`, `subprocess-contract`, `receiver-receipt`, and other supporting dependencies. The resident dispatch path is in `crates/omp-orchestrator/src/main.rs:Conversely`; the finished-pane sweep helper is at `main.rs:Conversely`. `pane-dispatch-fence` is present in the crate inventory but is not listed as an `omp-orchestrator` manifest dependency in the measured slice. Ownership claims therefore name `omp-orchestrator` as the S5 consumer and list only manifest dependencies as supporting edges; a separate current crate is not thereby proven called in production.
 
 The graph represented by this section is therefore:
 
@@ -99,7 +99,7 @@ three observations occurred; it does not say that the nine-stage journey complet
 Human actuation remains a prerequisite for an unclaimed bead. The resident supervisor's later
 dispatch path is a designed/source-level property, not measured runtime use.
 
-> *Upstream type for this gap: `Stage1Claim`/`ownershipToken` (`memories/storage.d.ts:20-27`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+> *Upstream type for this gap: `Stage1Claim`/`ownershipToken` (`memories/storage.d.ts:ownershipToken`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 ---
 
@@ -119,7 +119,7 @@ Variables:
 ```
 
 The template's required variables protect **packet shape**. They do not prove tracker custody.
-`dispatch-claim-fence/src/lib.rs:257-319` authorizes a bead only from a fresh snapshot whose
+`dispatch-claim-fence/src/lib.rs:heading_dispatch_claim_fence_src_lib_rs_257` authorizes a bead only from a fresh snapshot whose
 status is `in_progress` and whose assignee exactly matches the receiver. A `target` string that
 contains a path and bead ID cannot establish that state.
 
@@ -164,7 +164,7 @@ git ls-files | grep -c commit-msg-verification
 
 The script that enforces build-grading discipline is a 6.3 KB shell script, invisible to the
 rule because `no-shell-gate` scans the git index. The gate states its boundary at
-`crates/no-shell-gate/src/lib.rs:14`: *"this gate covers FILE EXTENSIONS of tracked files,
+`crates/no-shell-gate/src/lib.rs:EXTENSIONS`: *"this gate covers FILE EXTENSIONS of tracked files,
 nothing else."* This is a coverage finding, not a claim that the gate implementation is
 incorrect. Q13 remains unresolved and is retained here rather than silently closed:
 
@@ -186,7 +186,7 @@ mean that no partial mechanism exists.
 
 | edge | required input | expected handoff artifact | refusal / non-terminal rule | measured current state |
 |---|---|---|---|---|
-| `S4 → S5` | graph-selected bead, fresh `br show --json`, receiver | claim record, then dispatch-template packet and permit | refuse missing/open/elsewhere-assigned snapshot; do not send before claim | `main.rs:1318-1394` runs the finished-pane sweep and `br ready`, takes `bead_ids.first()`, then `prepare_bead_dispatch` at `main.rs:645-673` claims open rows and calls `authorize`; no separate atomic claim service is proven |
+| `S4 → S5` | graph-selected bead, fresh `br show --json`, receiver | claim record, then dispatch-template packet and permit | refuse missing/open/elsewhere-assigned snapshot; do not send before claim | `main.rs:prepare_bead_dispatch` runs the finished-pane sweep and `br ready`, takes `bead_ids.first()`, then `prepare_bead_dispatch` at `main.rs:prepare_bead_dispatch` claims open rows and calls `authorize`; no separate atomic claim service is proven |
 | `S5 → S6` | dispatch attempt, receiver receipt, session/pane identity | grade packet tied to the receipt and bead | refuse absent receiver receipt; receipt is not a grade | resident path reaches receipt and stops; no production grade handoff is wired |
 | `S6 → S7` | independent grade plus worker completion evidence | validation/reap input | an in-progress or non-terminal completion is not finished | completion frame is wire-proven, but local parser/consumer/reap-by-completion are absent |
 | `S7 → S8` | validation result, external/foreign-host run evidence | ship/release packet with rollback | refuse without validation artifact or rollback path | no production validation-to-ship edge is measured |
@@ -202,17 +202,17 @@ S5 dispatch. The future atomic wrapper is a `PROJECTED` remedy, not a current ca
 
 ### S5 is automated through receipt, not through a proven full journey
 
-`crates/omp-orchestrator/src/main.rs:1255-1553` and `src/lib.rs:24-29` describe an automated observe → queue → finished-pane sweep → dispatch → receiver-receipt path. That corrects the old human-only S5 claim, but it does not prove runtime behavior on the live fleet. The current local `omp-rpc-session` crate is explicitly a transport for **one** `--mode=rpc` child (`crates/omp-rpc-session/src/lib.rs:5-21`) and does not claim cross-session continuity.
+`crates/omp-orchestrator/src/main.rs:That` and `src/lib.rs:That` describe an automated observe → queue → finished-pane sweep → dispatch → receiver-receipt path. That corrects the old human-only S5 claim, but it does not prove runtime behavior on the live fleet. The current local `omp-rpc-session` crate is explicitly a transport for **one** `--mode=rpc` child (`crates/omp-rpc-session/src/lib.rs:That`) and does not claim cross-session continuity.
 
 Completion evidence has five separate layers; they must not be collapsed:
 
 | layer | evidence | status |
 |---|---|---|
-| declaration | upstream `AgentEndEvent` at `dist/types/extensibility/shared-events.d.ts:154`, with `willContinue` | **AVAILABLE / DECLARED** |
+| declaration | upstream `AgentEndEvent` at `dist/types/extensibility/shared-events.d.ts:AgentEndEvent`, with `willContinue` | **AVAILABLE / DECLARED** |
 | wire observation | `1408` / `1414`; `.flywheel/grade-evidence/agent-end-raw-frame.json.gz` contains `{"type":"agent_end","isTerminal":true}` | **WIRE-PROVEN for one terminal frame** |
-| local parser | `omp-rpc-session/src/lib.rs:416-423` recognizes only Ready/Response/Unknown/Malformed | **NOT IMPLEMENTED for AgentEndEvent** |
+| local parser | `omp-rpc-session/src/lib.rs:AgentEndEvent` recognizes only Ready/Response/Unknown/Malformed | **NOT IMPLEMENTED for AgentEndEvent** |
 | local consumer | focused search found no `agent_end`, `willContinue`, `isTerminal`, `RpcSessionEventFrame`, or `AgentEndEvent` consumer | **NOT CONSUMED** |
-| reap | `reap-finished-panes` exists and is invoked by `omp-orchestrator` at `main.rs:1241-1253,1331`, but it sweeps finished panes rather than consuming AgentEndEvent | **WIRED for pane sweep; NOT WIRED for completion event** |
+| reap | `reap-finished-panes` exists and is invoked by `omp-orchestrator` at `main.rs:AgentEndEvent`, but it sweeps finished panes rather than consuming AgentEndEvent | **WIRED for pane sweep; NOT WIRED for completion event** |
 
 `isTerminal: true` is not proven equivalent to `willContinue: false`; one terminal frame cannot
 establish non-terminal settle behavior, crashes, killed panes, rate-limited turns, or compaction.
@@ -222,10 +222,10 @@ requires changing the one-child attachment topology. No completion crate is clai
 
 ### Reap is a consumer, not an idle observation
 
-The named `reap-finished-panes` crate is **present** and its binary is invoked by the resident supervisor, but it is a finished-pane sweep, not an AgentEndEvent completion consumer. `ack-spine/src/followup.rs:86-137` remains a pure candidate classifier, and the focused `classify_followup|followup_action` search found no production caller. It has a measured false-completion path:
+The named `reap-finished-panes` crate is **present** and its binary is invoked by the resident supervisor, but it is a finished-pane sweep, not an AgentEndEvent completion consumer. `ack-spine/src/followup.rs:AgentEndEvent` remains a pure candidate classifier, and the focused `classify_followup|followup_action` search found no production caller. It has a measured false-completion path:
 
 * for an open/in-progress bead, unchanged assignee, no comment, and before the deadline, `classify_followup` returns `FollowUpVerdict::VerdictPosted`; and
-* `followup_action` maps `VerdictPosted` to `Healthy` at `followup.rs:150-156`.
+* `followup_action` maps `VerdictPosted` to `Healthy` at `followup.rs:followup_action`.
 
 That state is **in progress**, not a posted verdict and not a finish. A future consumer MUST
 represent it as a distinct non-terminal `InProgress` result. Only a read-back closed row may
@@ -233,7 +233,7 @@ produce `Finished`; only `Finished` may authorize refill. `SilentPastDeadline` r
 follow-up, not a refill. These are **PROJECTED contract repairs**, not claims that the current
 candidate has been changed.
 
-The resident cycle (`main.rs:1255-1553`) invokes the finished-pane sweep before reading the ready queue and then proceeds through dispatch/receipt. It has no production AgentEndEvent reap → grade → validation → ship edge. This is the explicit post-dispatch **NO-CLAIM** boundary for the current supervisor.
+The resident cycle (`main.rs:AgentEndEvent`) invokes the finished-pane sweep before reading the ready queue and then proceeds through dispatch/receipt. It has no production AgentEndEvent reap → grade → validation → ship edge. This is the explicit post-dispatch **NO-CLAIM** boundary for the current supervisor.
 
 ### Settled wire fact
 
@@ -246,7 +246,7 @@ The `1414` result remains useful and is not withdrawn: `AgentEndEvent` crosses `
 R14/R15 batch rows 1–9 contain **270 mapped rows** across `ntm`, `br`, `bv`, and OMP. The
 **544-row R14/R15 surface-universe denominator is `DECLARED` from the R14/R15 review** rather
 than derived from this section; `NUMBERS.toml` records related surface-map snapshot drift and figure discipline. The named
-query below is a historical snapshot: it used 591 rows and SHA-256 f155a358dd302982367a7c0107fe0eb1e3cd6f5ec7d4689bac67f11b1c5063f7. The current map identity is **614 rows, 302,002 bytes, SHA-256 5b3c3238c4ec9dd7f72a097bb3668e7de224e3b6f0eddc1132de2902a1d9d93c**; NUMBERS.toml is the current count authority.
+query below is a historical snapshot: it used 591 rows and SHA-256 f155a358dd302982367a7c0107fe0eb1e3cd6f5ec7d4689bac67f11b1c5063f7. The current map identity is **614 rows, 302,002 bytes, SHA-256 5b3c3238c4ec9dd7f72a097bb3668e7de224e3b6f0eddc1132de2902a1d9d93c**; NUMBERS.toml is the current count authority. — HISTORICAL as of 2026-09-02.
 
 ```sh
 SNAPSHOT=docs/plan/SURFACE-MAP.jsonl
@@ -331,7 +331,7 @@ The measured grouping is:
 
 The seven selection-related WIRE rows (`br:blocked`, `br:dep`, `bv:candidates`,
 `bv:decision-relevant`, `bv:dependencies`, `bv:not-ready`, `bv:robot`) still point to
-`loop-queue-filter`, supporting it as the intended S4 graph consumer. The 18 rows pointing to
+`loop-queue-filter`, supporting it as the intended S4 graph consumer. The 18 rows pointing to — HISTORICAL as of 2026-09-02.
 `omp-orchestrator` are the larger current WIRE cluster and include `ntm:template` plus other
 resident-control-plane surfaces. Neither convergence result proves implementation or schedule.
 
@@ -380,7 +380,7 @@ human reading prose. The measured typed boundaries are narrow:
 * S7 has an upstream completion frame but no local parser/consumer/reap.
 
 `omp-types` has zero dependents and is a possible future home for shared handoff types. The
-upstream `IrcDeliveryReceipt` declaration (`tools/hub/types.d.ts:8`) and `AsyncJobDeliverySink`
+upstream `IrcDeliveryReceipt` declaration (`tools/hub/types.d.ts:AsyncJobDeliverySink`) and `AsyncJobDeliverySink`
 (`:84`) remain **DECLARED only** and are not evidence that this local S5 path consumes them.
 
 **NO-CLAIM:** this maps the R10 search results; it does not prove that the 16 skills are the only
@@ -390,7 +390,7 @@ skills that could participate, or that they compose cleanly merely because they 
 
 ## 11.9 Stage logging and the S9 decision ledger
 
-Current heartbeat rows written by `write_heartbeat` at `crates/omp-orchestrator/src/main.rs:907-950` contain `event`, `status`, `tick`, `repo`, `session`, and `detail`. Focused search found no `stage_id`, `from_stage`, or `to_stage`. The old "3 of 9 stages log" statement is withdrawn as a stage-level guarantee: a few files contain records, but those records cannot prove a stage transition.
+Current heartbeat rows written by `write_heartbeat` at `crates/omp-orchestrator/src/main.rs:write_heartbeat` contain `event`, `status`, `tick`, `repo`, `session`, and `detail`. Focused search found no `stage_id`, `from_stage`, or `to_stage`. The old "3 of 9 stages log" statement is withdrawn as a stage-level guarantee: a few files contain records, but those records cannot prove a stage transition.
 
 The required **PROJECTED** append-only lifecycle event shape is:
 
@@ -452,9 +452,9 @@ reserved for a captured runtime probe.
 |---|---|---|
 | resident `omp-orchestrator` process | one configured supervisor process | one process per session until fan-out is proven |
 | `omp-rpc-session` | exactly one OMP `--mode=rpc` child; no cross-session continuity | one child per attached session; no cross-session completion claim |
-| pane candidates | omp-orchestrator/src/lib.rs:773-777 counts dispatchable panes and returns dispatchable.first() | one selected pane per cycle; N > 1 must not silently truncate |
-| ready beads | omp-orchestrator/src/main.rs:1393-1396 selects bead_ids.first() after parse_ready | one selected bead per cycle; N > 1 must not silently truncate |
-| heartbeat ledger | session-named heartbeat path is formed at `main.rs:228-235`, while default tick-monitor state and pending-dispatch basenames are formed at `main.rs:236-243` | basename reuse can collide across sessions; env overrides exist, but collision refusal is unverified |
+| pane candidates | omp-orchestrator/src/lib.rs:heading_pane_candidates_omp_orchestrator_src_lib_rs counts dispatchable panes and returns dispatchable.first() | one selected pane per cycle; N > 1 must not silently truncate |
+| ready beads | omp-orchestrator/src/main.rs:heading_ready_beads_omp_orchestrator_src_main_rs selects bead_ids.first() after parse_ready | one selected bead per cycle; N > 1 must not silently truncate |
+| heartbeat ledger | session-named heartbeat path is formed at `main.rs:heading_heartbeat_ledger_session_named_heartbeat_path_is`, while default tick-monitor state and pending-dispatch basenames are formed at `main.rs:heading_heartbeat_ledger_session_named_heartbeat_path_is` | basename reuse can collide across sessions; env overrides exist, but collision refusal is unverified |
 | claim permit | one bead ID plus one receiver in `DispatchIntent::Bead` | one bead → one receiver → one permit |
 | completion/reap | `reap-finished-panes` is invoked for finished-pane sweep; no local AgentEndEvent consumer | zero automatic completion-based refill claims until a consumer is wired |
 
