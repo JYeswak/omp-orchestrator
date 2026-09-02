@@ -4,14 +4,14 @@ Bead: `omp-orchestrator-omp-coverage-mission-ipg` — the wave epic these eleven
 
 ## Purpose
 
-Eleven surface-coverage waves were declared as beads `ipg.1`–`ipg.11`. Ten produced a coverage
-table; one never did. This index owns the roll-up — which wave owns which surfaces, where its
-document is, and which declared wave has no document at all. Per-surface rows live in the sibling
-documents; machine-readable dispositions live in `docs/plan/OMP-COVERAGE-TABLE.jsonl`.
+Eleven surface-coverage waves were declared as beads ipg.1–ipg.11. All eleven now have a coverage
+document. This index owns the roll-up — which wave owns which surfaces, where its document is, and
+which classifications were assigned. Per-surface rows live in the sibling documents;
+machine-readable dispositions live in docs/plan/OMP-COVERAGE-TABLE.jsonl.
 
-Every one of these documents was Appendix B–K of `docs/plan/12-journey.md` until `50df553`. They were
-extracted because a 125 KB runbook cannot show you a missing appendix, and this one is missing:
-see `ipg.4` below.
+Every one of these documents was Appendix B–K of docs/plan/12-journey.md until 50df553. They were
+extracted because a 125 KB runbook cannot show a missing appendix when the classification is buried
+inside it.
 
 ## The eleven waves
 
@@ -22,7 +22,7 @@ see `ipg.4` below.
 | `ipg.1` | PLAN | 3 | a×1 / b×1 / c×1 | [`omp_surface_coverage_ipg1.md`](omp_surface_coverage_ipg1.md) |
 | `ipg.2` | BEADS | 3 | a×1 / b×2 | [`omp_surface_coverage_ipg2.md`](omp_surface_coverage_ipg2.md) |
 | `ipg.3` | TRIAGE | 3 | a×3 | [`omp_surface_coverage_ipg3.md`](omp_surface_coverage_ipg3.md) |
-| `ipg.4` | DISPATCH | 7 | — | **ABSENT** |
+| `ipg.4` | DISPATCH | 7 | b×5 / c×2 | [`omp_surface_coverage_ipg4.md`](omp_surface_coverage_ipg4.md) |
 | `ipg.5` | OBSERVE | 4 | a×3 / b×1 | [`omp_surface_coverage_ipg5.md`](omp_surface_coverage_ipg5.md) |
 | `ipg.6` | VERIFY | 8 | a×8 | [`omp_surface_coverage_ipg6.md`](omp_surface_coverage_ipg6.md) |
 | `ipg.7` | MEMORY | 5 | a×5 | [`omp_surface_coverage_ipg7.md`](omp_surface_coverage_ipg7.md) |
@@ -33,47 +33,49 @@ see `ipg.4` below.
 
 ## What the extraction exposed, measured
 
-**1 — `ipg.4` DISPATCH has a bead and no coverage document, because the bead was repurposed.**
-Seven surfaces were declared for the wave — `irc`, `collab`, `jsonrpc`, `mcp`, `launch`, `exec`,
-`subprocess` — and none was ever swept. The bead is not idle: three Phase 1 contracts
-(`docs/contracts/subprocess_contract.md`, `cancellation_contract.md`,
-`dispatch_claim_contract.md`) carry `Bead: omp-orchestrator-omp-coverage-mission-ipg.4` on line 3,
-so the wave id now names contract-corpus work instead of a surface sweep. That covers three of the
-seven concerns from a different direction and leaves `irc`, `collab`, `jsonrpc` and `mcp` with no
-coverage row of any kind — and those four are the orchestrator's own transport surfaces. Round 13
-filed `ipg.4 absent` against `12-journey` and it stayed absent, because inside a 21-heading
-document an absent heading looks like nothing at all. As eleven filenames it is one `ls`.
+**1 — ipg.4 DISPATCH is now covered by a dedicated seven-row inventory.**
+The wave contains irc, collab, jsonrpc, mcp, launch, exec, and subprocess. The document
+omp_surface_coverage_ipg4.md records all seven rows against the eight-clause per-crate contract:
+irc and collab are (c) unused capabilities; jsonrpc, mcp, launch, exec, and subprocess are (b)
+reimplemented-by-scraping or local boundary alternatives, each naming the existing OMP alternative.
+The subprocess row is the positive control and reports FULLY COVERED at the local contract boundary;
+that does not claim OMP type adoption.
 
-**2 — 50 surfaces classified; 45 are (a) not ours, 4 are (b) scraped, 1 is (c) adoptable.** The
-single (c) is `goals` in `ipg.1`. Nine of the ten waves report `Positive control: FAILED`; only
-`ipg.11` passes, at 1 of 6. A census whose positive control fails nine times running is measuring
-a real boundary, but it is also a census that has not yet found the thing it was built to find.
+The prior absence was real historical evidence: three Phase 1 contracts carried the ipg.4 bead id,
+so the wave id had been reused for contract-corpus work while the seven surface rows were missing.
+That gap is closed in the inventory document and machine ledger; the classification is a mapping,
+not an adoption claim.
 
-**3 — 12 of those 50 surfaces reached the machine ledger.** `docs/plan/OMP-COVERAGE-TABLE.jsonl`
-holds 12 rows, `graded_by` naming only `ipg.8` and `ipg.11`. The other eight waves exist as prose
-tables and nothing else, so no gate can read them.
+**2 — 57 surfaces classified; 45 are (a) not ours, 9 are (b) scraped, 3 are (c) unused capabilities.** The
+three (c) rows are goals from ipg.1 plus irc and collab from ipg.4. Nine of the eleven waves report
+Positive control: FAILED; ipg.4 and ipg.11 report a local-boundary positive control. A census whose
+positive control fails on an OMP type plane can still describe a real ownership boundary, but the
+local positive control must remain explicit.
 
-**4 — the ten tables carry four different schemas for one concern.** Three waves use a 12-column
-form, five collapse the eight clauses into a single `1-8 clauses` column, and two use a 14-column
-form that disagrees with itself on the second clause's name (`2 forbid` vs `2 unsafe`). One
-concern, four shapes, invisible while they were 600 lines apart in the same file.
+**3 — 19 of those 57 surfaces reached the machine ledger.** docs/plan/OMP-COVERAGE-TABLE.jsonl now
+holds 19 rows, with ipg.4 added to the graded wave set. The remaining wave documents are still
+prose-plus-validation artifacts unless their rows are added to the machine ledger.
+
+**4 — the eleven tables carry multiple schemas for one concern.** The wave documents retain their
+human-readable table shapes, while the machine ledger carries the normalized per-surface fields.
+This distinction is deliberate: a table can be readable without being machine-checkable.
 
 ## NO-CLAIM
 
-Splitting these out changed no classification, no count and no verdict. The bytes are the
-appendix bytes with a one-level heading demotion; a smaller mean document size is not evidence
-that any row in them is correct. In particular this index does NOT establish that the 45 (a)
-rows are rightly (a) — it establishes only that 45 rows say so, and that 38 of the 50 were never
-written to a ledger anything can check.
+Adding ipg.4 changed the classified-surface and ledger counts, but it did not adopt an OMP type or
+prove any local alternative correct. The index records what the wave documents say; it does not
+establish that the 45 (a), 9 (b), or 3 (c) classifications are themselves correct. The map remains
+an inventory and a decision surface, not a runtime guarantee.
 
 ## Cross-References
 
-- `docs/plan/12-journey.md` — the nine-stage runbook these appendices were extracted from
-- `docs/plan/OMP-COVERAGE-TABLE.jsonl` — the 12-row machine ledger
-- `docs/plan/ipg10-coverage.json`, `docs/plan/ipg11-coverage.json` — per-wave capture artifacts
-- `docs/plan/02-surface-census.md` — the surface census these waves refine
-- `crates/no-shell-gate/tests/coverage_rows.rs` — the gate over `ipg*-coverage.json`
-- `crates/omp-inventory-map/tests/coverage_mission.rs` — the gate over `OMP-COVERAGE-TABLE.jsonl`
+- docs/plan/12-journey.md — the nine-stage runbook these appendices were extracted from
+- docs/plan/OMP-COVERAGE-TABLE.jsonl — the 19-row machine ledger
+- docs/plan/ipg10-coverage.json, docs/plan/ipg11-coverage.json — per-wave capture artifacts
+- docs/plan/02-surface-census.md — the surface census these waves refine
+- crates/no-shell-gate/tests/coverage_rows.rs — the gate over ipg*-coverage.json
+- crates/omp-inventory-map/tests/coverage_mission.rs — the gate over OMP-COVERAGE-TABLE.jsonl
+
 
 ## Validation
 
@@ -87,8 +89,8 @@ cd /Users/josh/Developer/omp-orchestrator
 
 # LEG 1 — declared waves (ipg.1-11 are the surface-coverage waves) vs documents on disk
 DECL=$(jq -r 'select(.id|test("omp-coverage-mission-ipg\\.([1-9]|10|11)$"))|.id' .beads/issues.jsonl \
-       | sed 's/.*ipg\.//' | sort -un)
-DOCS=$(ls docs/inventories/omp_surface_coverage_ipg*.md | sed -E 's#.*ipg([0-9]+)\.md#\1#' | sort -un)
+       | sed 's/.*ipg\.//' | sort -u)
+DOCS=$(ls docs/inventories/omp_surface_coverage_ipg*.md | sed -E 's#.*ipg([0-9]+)\.md#\1#' | sort -u)
 test -n "$DECL" -a -n "$DOCS" || { echo "FAIL leg1 vacuous"; exit 1; }
 echo "waves declared with NO document: $(comm -23 <(echo "$DECL") <(echo "$DOCS") | tr '\n' ' ')"
 echo "documents with NO declared wave: $(comm -13 <(echo "$DECL") <(echo "$DOCS") | tr '\n' ' ')"
@@ -110,6 +112,6 @@ L=$(wc -l < docs/plan/OMP-COVERAGE-TABLE.jsonl)
 echo "surfaces tabulated: $P   rows in OMP-COVERAGE-TABLE.jsonl: $L"
 ```
 
-Expected on a healthy tree today: leg 1 prints `4` on the first line and nothing on the second;
-leg 2 prints ten `PASS`; leg 3 prints `50` and `12`. The first line going empty means `ipg.4`
-was finally swept — lower nothing, just delete that sentence.
+Expected on a healthy tree today: leg 1 prints an empty missing-document list and an empty
+orphan-document list; leg 2 prints eleven PASS rows; leg 3 prints 57 tabulated surfaces and 19
+machine-ledger rows. A non-empty absence list or a zero count is an error, not a quiet success.

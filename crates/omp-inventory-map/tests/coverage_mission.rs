@@ -55,12 +55,19 @@ fn actual_table_covers_exact_named_surfaces() {
             "omp:async",
             "omp:auto-thinking",
             "omp:cleanse",
+            "omp:collab",
             "omp:commit",
             "omp:compress",
             "omp:edit",
+            "omp:exec",
+            "omp:irc",
+            "omp:jsonrpc",
+            "omp:launch",
             "omp:lib",
             "omp:lsp",
             "omp:markit",
+            "omp:mcp",
+            "omp:subprocess",
             "omp:tiny",
             "omp:utils",
             "omp:vibe",
@@ -68,9 +75,22 @@ fn actual_table_covers_exact_named_surfaces() {
     );
     assert_eq!(
         rows.iter().filter(|row| row.classification == "b").count(),
-        1
+        6
     );
     assert!(rows.iter().any(|row| row.coverage == "FULLY COVERED"));
+    assert_eq!(
+        rows.iter().filter(|row| row.classification == "c").count(),
+        5
+    );
+    for row in rows.iter().filter(|row| row.classification == "b") {
+        assert!(
+            row.omp_alternative
+                .as_deref()
+                .is_some_and(|alternative| !alternative.trim().is_empty()),
+            "category-b row {} must name an OMP alternative",
+            row.surface
+        );
+    }
     let commit = rows
         .iter()
         .find(|row| row.surface == "omp:commit")
