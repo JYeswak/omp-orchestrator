@@ -20,6 +20,7 @@ use asupersync::time::{sleep, timeout};
 use asupersync::Cx;
 use dispatch_claim_fence::{authorize, parse_br_show_json, BeadSnapshot, DispatchIntent};
 use dispatch_silence_watch::SilenceVerdict;
+use ntm_fleet_monitor::parse_activity_json;
 use omp_orchestrator::{
     applicable, census_gates, decide, read_idle_authorization, GateCensus, Observation,
     PaneObservation, QueueState, SupervisorDecision,
@@ -30,7 +31,7 @@ use omp_rpc_session::{
 };
 use receiver_receipt::{
     escalate_non_delivery, observe_capture, ComposerEvidence, NonDeliveryEscalation,
-    PostSendObservation, ReceiptReason, ReceiptVerdict,
+    ObservationIdentity, PostSendObservation, ReceiptReason, ReceiptVerdict,
 };
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
@@ -530,6 +531,38 @@ async fn receiver_is_codex(cx: &Cx, config: &Config, pane: &str) -> Result<bool,
     Ok(title.contains("__cod_") || title.contains("codex"))
 }
 
+async fn ntm_output_identity(
+    cx: &Cx,
+    config: &Config,
+    pane: &str,
+) -> Result<ObservationIdentity, String> {
+    let args = vec![
+        format!("--robot-activity={}", config.session),
+        "--panes".to_owned(),
+        pane.to_owned(),
+    ];
+    let bytes = require_success(
+        "ntm robot-activity",
+        invoke(cx, config, &config.ntm, &args).await?,
+    )?;
+    let text = String::from_utf8_lossy(&bytes);
+    let snapshot = parse_activity_json(&text)
+        .map_err(|error| format!("RECEIVER_OBSERVATION_MISSING pane={pane} identity: {error}"))?;
+    let agent = snapshot
+        .agents
+        .iter()
+        .find(|agent| agent.pane == pane)
+        .ok_or_else(|| format!("RECEIVER_OBSERVATION_MISSING pane={pane} identity row absent"))?;
+    let identity = agent
+        .output_identity()
+        .map_err(|error| format!("RECEIVER_OBSERVATION_MISSING pane={pane} identity: {error}"))?;
+    Ok(ObservationIdentity {
+        epoch: identity.epoch.clone(),
+        sequence: identity.sequence,
+        changed_at: identity.changed_at.clone(),
+    })
+}
+
 async fn post_send_observation(
     cx: &Cx,
     config: &Config,
@@ -576,8 +609,16 @@ async fn post_send_observation(
         }
     };
     let text = String::from_utf8_lossy(&capture).into_owned();
+    let at = now_unix();
+    let identity = match ntm_output_identity(cx, config, pane).await {
+        Ok(identity) => identity,
+        Err(error) => {
+            eprintln!("{error}");
+            return (PostSendObservation::Missing, Some(text));
+        }
+    };
     (
-        PostSendObservation::Present(observe_capture(pane, &text, now_unix())),
+        PostSendObservation::Present(observe_capture(pane, &text, at, identity)),
         Some(text),
     )
 }
@@ -891,7 +932,10 @@ async fn send_and_verify(
     ));
     fs::write(&staged, packet.as_bytes())
         .map_err(|error| format!("DISPATCH_BLOCKED bead={bead} stage packet: {error}"))?;
-    let pre_observation = observe_capture(pane, &String::from_utf8_lossy(before), now_unix());
+    let pre_at = now_unix();
+    let pre_identity = ntm_output_identity(cx, config, pane).await?;
+    let pre_observation =
+        observe_capture(pane, &String::from_utf8_lossy(before), pre_at, pre_identity);
     let codex = receiver_is_codex(cx, config, pane).await?;
     let transport = if codex {
         let typed_args = vec![
@@ -959,11 +1003,7 @@ async fn send_and_verify(
             return Ok(stage);
         }
 
-        let recovery = match (
-            &stage.delivery,
-            &post_send,
-            pane_capture.as_deref(),
-        ) {
+        let recovery = match (&stage.delivery, &post_send, pane_capture.as_deref()) {
             (
                 ReceiptVerdict::NoReceipt {
                     reason: ReceiptReason::IdleUnchanged,
@@ -992,19 +1032,28 @@ async fn send_and_verify(
                         "-l".to_owned(),
                         packet.clone(),
                     ];
-                    require_success("tmux resend send-keys -l", invoke(cx, config, "tmux", &resend_args).await?)?;
+                    require_success(
+                        "tmux resend send-keys -l",
+                        invoke(cx, config, "tmux", &resend_args).await?,
+                    )?;
                     let enter_args = vec![
                         "send-keys".to_owned(),
                         "-t".to_owned(),
                         pane.to_owned(),
                         "Enter".to_owned(),
                     ];
-                    require_success("tmux resend Enter", invoke(cx, config, "tmux", &enter_args).await?)?;
+                    require_success(
+                        "tmux resend Enter",
+                        invoke(cx, config, "tmux", &enter_args).await?,
+                    )?;
                     write_heartbeat(
                         config,
                         tick,
                         "RECEIVER_RECOVERY",
-                        &format!("pane={pane} bead={bead} action=RESEND_DIRECT attempts={}", attempts_so_far + 1),
+                        &format!(
+                            "pane={pane} bead={bead} action=RESEND_DIRECT attempts={}",
+                            attempts_so_far + 1
+                        ),
                     )?;
                     attempts_so_far += 1;
                 }
@@ -1015,12 +1064,18 @@ async fn send_and_verify(
                         pane.to_owned(),
                         "Enter".to_owned(),
                     ];
-                    require_success("tmux recovery Enter", invoke(cx, config, "tmux", &enter_args).await?)?;
+                    require_success(
+                        "tmux recovery Enter",
+                        invoke(cx, config, "tmux", &enter_args).await?,
+                    )?;
                     write_heartbeat(
                         config,
                         tick,
                         "RECEIVER_RECOVERY",
-                        &format!("pane={pane} bead={bead} action=SUBMIT_PARKED attempts={}", attempts_so_far + 1),
+                        &format!(
+                            "pane={pane} bead={bead} action=SUBMIT_PARKED attempts={}",
+                            attempts_so_far + 1
+                        ),
                     )?;
                     attempts_so_far += 1;
                 }
@@ -1111,14 +1166,93 @@ fn write_heartbeat(config: &Config, tick: u64, status: &str, detail: &str) -> Re
         })?;
     Ok(())
 }
-fn read_pending_dispatch(config: &Config) -> Result<Option<String>, String> {
+/// How long a pending-dispatch marker may block the whole loop before the loop
+/// itself retires it.
+///
+/// # Why a deadline at all
+///
+/// Measured 2026-09-02 (`y6v5`): one dispatch failed at `RECEIVER_OBSERVATION_MISSING`
+/// and the marker was never cleared, because `clear_dispatch_intent` sits AFTER a `?`
+/// on the dispatch result. The next cycle read the marker, refused, and did so **15
+/// consecutive times over 20 minutes on the same bead** while `br ready` held **77**
+/// other beads — and `ack-spine-oj6.3` was not even among them, being `in_progress`.
+/// **The marker alone blocked all 77**, because this check is the first statement in
+/// `run_cycle`, ahead of observe and select.
+///
+/// The only named remedy was `owner=josh next_action=inspect-or-clear-pending-dispatch`
+/// — a human. That is the third position of one pendulum: K9 fixed a fence that could
+/// never refuse, `mj8w` fixed a fence that could never pass, and this one passes
+/// **exactly once**. Each time the tell was a count of ONE where the healthy value is
+/// unbounded.
+///
+/// # What the deadline does and does not buy
+///
+/// The marker is a **double-send guard**, so retiring it early could re-send a packet
+/// that is genuinely in flight. Ten minutes is far beyond any observed dispatch
+/// latency, and the expiry writes a typed row naming the pane and bead, so a
+/// re-dispatch after expiry is auditable rather than silent.
+const PENDING_DISPATCH_MAX_AGE_SECS: u64 = 600;
+
+/// A pending-dispatch marker, classified. The variants exist so that "no marker",
+/// "a live marker", and "a marker whose age cannot be computed" can never collapse
+/// into one another — the collapse is what let a stale marker read exactly like a
+/// dispatch in flight.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PendingDispatch {
+    /// No marker on disk. Reachable and NOT an error — the healthy steady state.
+    None,
+    /// Young enough that a packet may still be in flight. Still blocks; this is the
+    /// positive control that keeps the double-send guard real.
+    Live { detail: String, age_secs: u64 },
+    /// Older than the deadline. The loop retires this itself.
+    Expired { detail: String, age_secs: u64 },
+    /// A marker whose `issued_at` is missing, non-numeric, or in the future.
+    /// **FAILS CLOSED and keeps blocking.** An age we cannot compute is the unknown,
+    /// and an unknown must not be retired as though it were stale — that would let a
+    /// corrupt marker unlock the loop, which is the opposite of the guard's purpose.
+    Undatable { detail: String, reason: &'static str },
+}
+
+/// Classify marker text against a clock. Pure, so a test plants an age without
+/// touching the filesystem or waiting.
+fn classify_pending_dispatch(text: &str, now: u64) -> PendingDispatch {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return PendingDispatch::Undatable {
+            detail: "marker_exists_but_is_empty".to_owned(),
+            reason: "INTENT_EMPTY",
+        };
+    }
+    let detail = trimmed.to_owned();
+    let issued_at = serde_json::from_str::<serde_json::Value>(trimmed)
+        .ok()
+        .and_then(|row| row.get("issued_at").and_then(serde_json::Value::as_u64));
+    let Some(issued_at) = issued_at else {
+        return PendingDispatch::Undatable {
+            detail,
+            reason: "INTENT_ISSUED_AT_MISSING",
+        };
+    };
+    if issued_at > now {
+        return PendingDispatch::Undatable {
+            detail,
+            reason: "INTENT_ISSUED_IN_FUTURE",
+        };
+    }
+    let age_secs = now - issued_at;
+    if age_secs > PENDING_DISPATCH_MAX_AGE_SECS {
+        PendingDispatch::Expired { detail, age_secs }
+    } else {
+        PendingDispatch::Live { detail, age_secs }
+    }
+}
+
+fn read_pending_dispatch(config: &Config) -> Result<PendingDispatch, String> {
     match fs::read_to_string(&config.pending_dispatch) {
-        Ok(text) => Ok(Some(if text.trim().is_empty() {
-            "marker_exists_but_is_empty".to_owned()
-        } else {
-            text.trim().to_owned()
-        })),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Ok(text) => Ok(classify_pending_dispatch(&text, now_unix())),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(PendingDispatch::None),
+        // An unreadable marker stays an ERROR and is NOT `None`. A marker we cannot
+        // read is not a marker that is absent.
         Err(error) => Err(format!(
             "DISPATCH_RETRY_BLOCKED pending marker unreadable path={} error={error}",
             config.pending_dispatch.display()
@@ -1159,24 +1293,37 @@ fn docs_are_stale(config: &Config) -> Result<Option<String>, String> {
     };
 
     let Ok(entries) = fs::read_dir(&dir) else {
-        return Err(format!("DOCS_STALE section dir unreadable path={}", dir.display()));
+        return Err(format!(
+            "DOCS_STALE section dir unreadable path={}",
+            dir.display()
+        ));
     };
 
     let mut scanned = 0usize;
     let mut missing = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
-        let Some(name) = path.file_name().and_then(|s| s.to_str()) else { continue };
+        let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
+            continue;
+        };
         if !name.ends_with(".md") || !name.starts_with(|c: char| c.is_ascii_digit()) {
             continue;
         }
-        let Ok(section) = fs::read_to_string(&path) else { continue };
+        let Ok(section) = fs::read_to_string(&path) else {
+            continue;
+        };
         scanned += 1;
         // Compare a stable interior slice, not the whole file: the assembler trims
         // trailing whitespace, so an exact whole-file match would false-positive.
         let body = section.trim();
-        let probe: String = body.chars().rev().take(240).collect::<Vec<_>>()
-            .into_iter().rev().collect();
+        let probe: String = body
+            .chars()
+            .rev()
+            .take(240)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
         if !probe.trim().is_empty() && !assembly.contains(probe.trim()) {
             missing.push(name.to_owned());
         }
@@ -1247,7 +1394,9 @@ fn resolve_target_dir(config: &Config) -> PathBuf {
             .unwrap_or_default()
             .join(".cargo/config.toml"),
     ] {
-        let Ok(text) = std::fs::read_to_string(&cfg) else { continue };
+        let Ok(text) = std::fs::read_to_string(&cfg) else {
+            continue;
+        };
         let mut in_build = false;
         for raw in text.lines() {
             let line = raw.trim();
@@ -1261,7 +1410,9 @@ fn resolve_target_dir(config: &Config) -> PathBuf {
             if !in_build {
                 continue;
             }
-            let Some(rest) = line.strip_prefix("target-dir") else { continue };
+            let Some(rest) = line.strip_prefix("target-dir") else {
+                continue;
+            };
             let Some(eq) = rest.find('=') else { continue };
             let val = rest[eq + 1..].trim().trim_matches('"').trim_matches('\'');
             if !val.is_empty() {
@@ -1369,7 +1520,7 @@ fn disk_pressure(config: &Config) -> Result<Option<String>, String> {
 /// is **capped** at a few rebuilds' worth, because that is what the floor was ever for.
 /// Behaviour on small volumes is deliberately unchanged:
 ///
-/// | volume | old required | new required | 
+/// | volume | old required | new required |
 /// |---|---:|---:|
 /// | 9.3 GiB (BuildShared) | 1.0 GiB (8% floors to the 1 GiB minimum) | 1.0 GiB — identical |
 /// | 926 GiB (root) | 74 GiB | 16 GiB |
@@ -1394,7 +1545,9 @@ fn disk_floor_verdict(total_kb: u64, avail_kb: u64) -> Option<String> {
     let free_gib = avail_kb as f64 / 1024.0 / 1024.0;
     let pct_free = (avail_kb as f64 / total_kb as f64) * 100.0;
 
-    let required_gib = (0.08 * total_gib).min(HEADROOM_CAP_GIB).max(ABSOLUTE_MIN_GIB);
+    let required_gib = (0.08 * total_gib)
+        .min(HEADROOM_CAP_GIB)
+        .max(ABSOLUTE_MIN_GIB);
     if free_gib < required_gib {
         return Some(format!(
             "free={free_gib:.2}GiB ({pct_free:.1}%) below floor {required_gib:.2}GiB \
@@ -1404,7 +1557,6 @@ fn disk_floor_verdict(total_kb: u64, avail_kb: u64) -> Option<String> {
     }
     None
 }
-
 
 fn write_dispatch_intent(config: &Config, pane: &str, bead: &str) -> Result<(), String> {
     if let Some(parent) = config.pending_dispatch.parent() {
@@ -1475,7 +1627,6 @@ async fn run_finished_pane_sweep(cx: &Cx, config: &Config) -> Result<String, Str
     }
     Ok(reaper_summary)
 }
-
 
 struct DispatchOutcome {
     detail: String,
@@ -1842,14 +1993,45 @@ fn queue_empty_detail(free_capacity_count: usize) -> String {
 
 async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     write_heartbeat(config, tick, "CYCLE_STARTED", "phase=observe")?;
-    if let Some(intent) = read_pending_dispatch(config)? {
-        write_heartbeat(config, tick, "DISPATCH_RETRY_BLOCKED", &intent)?;
-        let detail = format!(
-            "DISPATCH_RETRY_BLOCKED owner=josh next_action=inspect-or-clear-pending-dispatch marker={} detail={intent}",
-            config.pending_dispatch.display()
-        );
-        println!("{detail}");
-        return Ok(());
+    // THE CLEARING TRANSITION THE LOOP CAN TAKE ITSELF. Everything below the
+    // `Expired` arm is the fix for `y6v5`: the loop retires a stale marker and
+    // CONTINUES the cycle, instead of returning Ok(()) and waiting for a human.
+    match read_pending_dispatch(config)? {
+        PendingDispatch::None => {}
+        PendingDispatch::Live { detail, age_secs } => {
+            write_heartbeat(config, tick, "DISPATCH_RETRY_BLOCKED", &detail)?;
+            let remaining = PENDING_DISPATCH_MAX_AGE_SECS.saturating_sub(age_secs);
+            // The remedy names a MACHINE path and when it fires. The old string
+            // said only `owner=josh`, which is what made 15 consecutive refusals
+            // read as a standing human obligation rather than a countdown.
+            let line = format!(
+                "DISPATCH_RETRY_BLOCKED age_secs={age_secs} expires_in_secs={remaining} owner=loop next_action=await-intent-expiry marker={} detail={detail}",
+                config.pending_dispatch.display()
+            );
+            println!("{line}");
+            return Ok(());
+        }
+        PendingDispatch::Undatable { detail, reason } => {
+            // FAIL CLOSED. An age we cannot compute must not be retired as stale;
+            // this is the one arm that still owes a human, and it says so.
+            write_heartbeat(config, tick, "DISPATCH_RETRY_BLOCKED", &detail)?;
+            let line = format!(
+                "DISPATCH_RETRY_BLOCKED reason={reason} owner=josh next_action=inspect-or-clear-pending-dispatch marker={} detail={detail}",
+                config.pending_dispatch.display()
+            );
+            println!("{line}");
+            return Ok(());
+        }
+        PendingDispatch::Expired { detail, age_secs } => {
+            clear_dispatch_intent(config)?;
+            let expiry = format!(
+                "age_secs={age_secs} max_age_secs={PENDING_DISPATCH_MAX_AGE_SECS} marker={} detail={detail}",
+                config.pending_dispatch.display()
+            );
+            write_heartbeat(config, tick, "DISPATCH_INTENT_EXPIRED", &expiry)?;
+            println!("DISPATCH_INTENT_EXPIRED tick={tick} session={} {expiry}", config.session);
+            // Deliberately NOT `return` — the whole defect was returning here.
+        }
     }
 
     // HD-0001 (docs/decisions.jsonl): "tick loop continues as long as we're keeping
@@ -1936,9 +2118,11 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         Ok(v) if v.starts_with("unavailable:") => {
             let reason = v.trim_start_matches("unavailable:").trim();
             if reason.is_empty() {
-                return Err("REAP_SWEEP_SKIP_REASON_EMPTY OMP_REAP_SWEEP=unavailable: requires a \
+                return Err(
+                    "REAP_SWEEP_SKIP_REASON_EMPTY OMP_REAP_SWEEP=unavailable: requires a \
                             reason; an unexplained degradation is indistinguishable from a bug"
-                    .to_owned());
+                        .to_owned(),
+                );
             }
             write_heartbeat(config, tick, "REAP_SWEEP_SKIPPED", reason)?;
             format!("SKIPPED reason={reason}")
@@ -1971,9 +2155,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     // A guard that observes and does not refuse is a note. This refuses before dispatch.
     if let Some(why) = disk_pressure(config)? {
         write_heartbeat(config, tick, "DISK_PRESSURE", &why)?;
-        println!(
-            "DISK_PRESSURE owner=josh next_action=cargo-clean-or-grow-volume detail={why}"
-        );
+        println!("DISK_PRESSURE owner=josh next_action=cargo-clean-or-grow-volume detail={why}");
         return Ok(());
     }
     let authorization = applicable(
@@ -2298,12 +2480,13 @@ mod tests {
     fn executable_reaper(temp: &tempfile::TempDir, body: &str) -> PathBuf {
         let path = temp.path().join("reaper");
         std::fs::write(&path, body).expect("write reaper fixture");
-        let mut permissions = std::fs::metadata(&path).expect("reaper metadata").permissions();
+        let mut permissions = std::fs::metadata(&path)
+            .expect("reaper metadata")
+            .permissions();
         permissions.set_mode(0o755);
         std::fs::set_permissions(&path, permissions).expect("make reaper executable");
         path
     }
-
 
     #[test]
     fn observed_idle_state_counts_as_free_capacity_before_confirmation() {
@@ -2327,14 +2510,154 @@ mod tests {
         let mut config = fixture_config(root.join("heartbeat.jsonl"));
         config.pending_dispatch = pending.clone();
         write_dispatch_intent(&config, "%1413", "omp-orchestrator-test").unwrap();
-        let intent = read_pending_dispatch(&config).unwrap().unwrap();
-        assert!(intent.contains("omp-orchestrator-test"));
+        // POSITIVE CONTROL, acceptance 4: a FRESH marker still blocks. A fix that
+        // retires markers unconditionally re-opens double-dispatch, which is worse
+        // than latching.
+        let live = read_pending_dispatch(&config).unwrap();
+        let PendingDispatch::Live { detail, age_secs } = &live else {
+            panic!("a marker written moments ago must classify Live, got {live:?}");
+        };
+        assert!(detail.contains("omp-orchestrator-test"));
+        assert!(*age_secs <= PENDING_DISPATCH_MAX_AGE_SECS);
         let retry = write_dispatch_intent(&config, "%1414", "another-bead");
         assert!(retry.unwrap_err().contains("DISPATCH_RETRY_BLOCKED"));
         clear_dispatch_intent(&config).unwrap();
         std::fs::remove_dir(root).unwrap();
     }
 
+    // -----------------------------------------------------------------------
+    // y6v5 legs. The defect: one failed dispatch left a marker, and `run_cycle`
+    // returned Ok(()) on it 15 consecutive times over 20 minutes while `br ready`
+    // held 77 other beads. The marker check is the FIRST statement in the cycle,
+    // so one stale file blocked the entire queue and the only named remedy was a
+    // human.
+    //
+    // `classify_pending_dispatch` takes the clock, so these legs plant an age
+    // instead of sleeping.
+    // -----------------------------------------------------------------------
+
+    fn intent_text(issued_at: u64) -> String {
+        serde_json::json!({
+            "event": "dispatch_intent",
+            "pane": "%1413",
+            "bead": "omp-orchestrator-ack-spine-oj6.3",
+            "issued_at": issued_at,
+        })
+        .to_string()
+    }
+
+    /// ACCEPTANCE 3, fires-on-known-bad: the marker that actually latched the fleet.
+    /// Its real age at the last observed refusal was ~600s and climbing.
+    #[test]
+    fn a_stale_intent_is_expired_by_the_loop_and_names_its_age() {
+        let now = 1_767_331_200;
+        let stale = classify_pending_dispatch(&intent_text(now - 1_200), now);
+        let PendingDispatch::Expired { detail, age_secs } = &stale else {
+            panic!("a 20-minute-old marker must Expire, got {stale:?}");
+        };
+        assert_eq!(*age_secs, 1_200);
+        // Per gate rule 7: assert on the emitted TEXT, so the row an operator reads
+        // carries the bead. A verdict with no subject cannot be acted on.
+        assert!(detail.contains("omp-orchestrator-ack-spine-oj6.3"));
+    }
+
+    /// ACCEPTANCE 4, the positive control at the boundary. Exactly at the deadline the
+    /// marker is still Live; one second past it Expires. A fix that is off by one at
+    /// the boundary is a fix whose deadline nobody can state.
+    #[test]
+    fn the_deadline_boundary_is_exact_in_both_directions() {
+        let now = 1_767_331_200;
+        let at = classify_pending_dispatch(&intent_text(now - PENDING_DISPATCH_MAX_AGE_SECS), now);
+        assert!(
+            matches!(at, PendingDispatch::Live { .. }),
+            "exactly at max_age must still block, got {at:?}"
+        );
+        let past =
+            classify_pending_dispatch(&intent_text(now - PENDING_DISPATCH_MAX_AGE_SECS - 1), now);
+        assert!(
+            matches!(past, PendingDispatch::Expired { .. }),
+            "one second past max_age must expire, got {past:?}"
+        );
+    }
+
+    /// ACCEPTANCE 5 + the fail-closed rule. Three unknowns must all keep blocking and
+    /// must NOT be retired as stale. A corrupt marker unlocking the loop is the
+    /// inverse of the guard's purpose, and it is the cheaper mistake to make.
+    #[test]
+    fn an_undatable_intent_fails_closed_and_never_expires() {
+        let now = 1_767_331_200;
+        for (text, want) in [
+            ("", "INTENT_EMPTY"),
+            ("   \n ", "INTENT_EMPTY"),
+            (r#"{"event":"dispatch_intent","pane":"%1413"}"#, "INTENT_ISSUED_AT_MISSING"),
+            (r#"{"issued_at":"not-a-number"}"#, "INTENT_ISSUED_AT_MISSING"),
+            ("not json at all", "INTENT_ISSUED_AT_MISSING"),
+        ] {
+            let verdict = classify_pending_dispatch(text, now);
+            let PendingDispatch::Undatable { reason, .. } = &verdict else {
+                panic!("{text:?} must fail closed, got {verdict:?}");
+            };
+            assert_eq!(*reason, want, "reason for {text:?}");
+        }
+        // A marker stamped in the FUTURE is a clock fault, not an old marker. It must
+        // not compute a wrapped age and expire itself.
+        let future = classify_pending_dispatch(&intent_text(now + 30), now);
+        assert_eq!(
+            future,
+            PendingDispatch::Undatable {
+                detail: intent_text(now + 30),
+                reason: "INTENT_ISSUED_IN_FUTURE",
+            }
+        );
+    }
+
+    /// ACCEPTANCE 5, the reachable-absence half. `None` must be a real state, not an
+    /// error and not a silent pass — and an UNREADABLE marker must stay an error.
+    /// Those two collapsing is how "nothing pending" becomes indistinguishable from
+    /// "cannot tell".
+    #[test]
+    fn an_absent_marker_is_a_reachable_state_and_an_unreadable_one_is_an_error() {
+        let root = env::temp_dir().join(format!(
+            "omp-orchestrator-y6v5-absent-{}-{}",
+            std::process::id(),
+            now_unix()
+        ));
+        std::fs::create_dir_all(&root).expect("fixture root");
+        let mut config = fixture_config(root.join("heartbeat.jsonl"));
+        config.pending_dispatch = root.join("no-such-marker");
+        assert_eq!(read_pending_dispatch(&config).unwrap(), PendingDispatch::None);
+
+        // A DIRECTORY where the marker should be is readable-as-a-path and
+        // unreadable-as-a-file: the unknown that must not read as absent.
+        let as_dir = root.join("marker-is-a-dir");
+        std::fs::create_dir_all(&as_dir).expect("marker dir");
+        config.pending_dispatch = as_dir.clone();
+        let error = read_pending_dispatch(&config).expect_err("a directory must not read as None");
+        assert!(error.contains("unreadable"), "error must name the condition: {error}");
+
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// ACCEPTANCE 6: the retry is bounded, and the bound is stated in seconds rather
+    /// than in ticks. The observed latch reset its tick counter from 7 to 1, so a
+    /// tick budget would have been reset by the same restart that re-entered the
+    /// latch. Wall-clock age survives a restart; a tick counter does not.
+    #[test]
+    fn the_bound_is_wall_clock_so_a_restart_cannot_reset_it() {
+        let now = 1_767_331_200;
+        let issued = now - PENDING_DISPATCH_MAX_AGE_SECS - 1;
+        // Same marker, two different "processes" — no shared counter between them.
+        for _restart in 0..3 {
+            assert!(matches!(
+                classify_pending_dispatch(&intent_text(issued), now),
+                PendingDispatch::Expired { .. }
+            ));
+        }
+        assert!(
+            PENDING_DISPATCH_MAX_AGE_SECS > 0,
+            "a zero deadline expires every marker instantly and disables the guard"
+        );
+    }
     #[test]
     fn heartbeat_is_durable_json_with_build_identity() {
         let root = env::temp_dir().join(format!(
@@ -2367,24 +2690,35 @@ mod tests {
     fn flag_only_invocation_is_unchanged_for_launchd() {
         let args = ["--once".to_owned()];
         let config = Config::from_args(&args).unwrap();
-        assert!(!config.run_subcommand, "flag-only form must not require the subcommand");
+        assert!(
+            !config.run_subcommand,
+            "flag-only form must not require the subcommand"
+        );
         assert_eq!(config.max_ticks, Some(1));
     }
 
     #[test]
     fn unknown_positional_is_refused() {
-        let stray = Config::from_args(&["run".to_owned(), "extra".to_owned()])
-            .unwrap_err();
-        assert!(stray.contains("CONFIG_REFUSED unknown argument extra"), "{stray}");
+        let stray = Config::from_args(&["run".to_owned(), "extra".to_owned()]).unwrap_err();
+        assert!(
+            stray.contains("CONFIG_REFUSED unknown argument extra"),
+            "{stray}"
+        );
         let bare = Config::from_args(&["frobnicate".to_owned()]).unwrap_err();
-        assert!(bare.contains("CONFIG_REFUSED unknown argument frobnicate"), "{bare}");
+        assert!(
+            bare.contains("CONFIG_REFUSED unknown argument frobnicate"),
+            "{bare}"
+        );
     }
 
     #[test]
     fn help_reports_the_run_entrypoint() {
         let help = Config::from_args(&["--help".to_owned()]).unwrap_err();
         assert_eq!(help, usage());
-        assert!(help.contains("[run]"), "usage must advertise the run subcommand");
+        assert!(
+            help.contains("[run]"),
+            "usage must advertise the run subcommand"
+        );
     }
     #[test]
     fn zero_command_timeout_is_refused() {
@@ -2398,7 +2732,9 @@ mod tests {
 
     #[test]
     fn finished_pane_reaper_receives_the_same_repository() {
-        let config = fixture_config(PathBuf::from("/tmp/omp-orchestrator-reaper-heartbeat.jsonl"));
+        let config = fixture_config(PathBuf::from(
+            "/tmp/omp-orchestrator-reaper-heartbeat.jsonl",
+        ));
         assert_eq!(
             finished_pane_reaper_args(&config),
             vec!["--repo".to_owned(), config.repo.display().to_string()]
@@ -2466,10 +2802,10 @@ mod tests {
         assert!(error.contains("TIMEOUT program="), "{error}");
     }
 
-
     #[test]
     fn missing_receiver_agent_inherits_claimed_assignee() {
-        let mut config = fixture_config(std::env::temp_dir().join("receiver-assignment-heartbeat.jsonl"));
+        let mut config =
+            fixture_config(std::env::temp_dir().join("receiver-assignment-heartbeat.jsonl"));
         config.receiver_agent.clear();
 
         let snapshot = BeadSnapshot::new(
@@ -2741,17 +3077,15 @@ exit 2
         let mut config = fixture_config(temp.path().join("heartbeat.jsonl"));
         config.repo = temp.path().to_owned();
 
-        let error = validate_receiver_pane(
-            &config,
-            "%1408",
-            "receiver-assignment-test",
-            "SilverWolf",
-        )
-        .expect_err("a pane mapped to another agent must not receive this bead");
+        let error =
+            validate_receiver_pane(&config, "%1408", "receiver-assignment-test", "SilverWolf")
+                .expect_err("a pane mapped to another agent must not receive this bead");
         assert!(error.contains("mapped_agent=AmberGate"), "{error}");
-        assert!(error.contains("next_action=select-matching-pane"), "{error}");
+        assert!(
+            error.contains("next_action=select-matching-pane"),
+            "{error}"
+        );
     }
-
 
     /// The build volume must be resolved from cargo's own config, not assumed to be
     /// `<repo>/target`.
@@ -2819,7 +3153,6 @@ exit 2
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
-
     /// A big disk with plenty of absolute room must not be refused.
     ///
     /// # The measured failure this reproduces
@@ -2874,22 +3207,28 @@ exit 2
     #[test]
     fn the_cap_does_not_change_small_volume_behaviour() {
         let total = 9u64 * 1024 * 1024 + 300 * 1024; // ~9.3 GiB
-        // 8% of 9.3 GiB is 0.74 GiB, which floors up to the 1 GiB absolute minimum,
-        // so 1.5 GiB passes and 0.9 GiB refuses -- identical to the original predicate.
-        assert_eq!(disk_floor_verdict(total, 1536 * 1024), None, "1.5 GiB must pass");
+                                                     // 8% of 9.3 GiB is 0.74 GiB, which floors up to the 1 GiB absolute minimum,
+                                                     // so 1.5 GiB passes and 0.9 GiB refuses -- identical to the original predicate.
+        assert_eq!(
+            disk_floor_verdict(total, 1536 * 1024),
+            None,
+            "1.5 GiB must pass"
+        );
         assert!(
             disk_floor_verdict(total, 920 * 1024).is_some(),
             "0.9 GiB must refuse, exactly as the original 1 GiB floor did"
         );
     }
 
-
     /// KNOWN-GOOD: an operator-set skip with a reason yields a typed SKIPPED summary and the
     /// cycle continues. This is M1 (typed degraded dispatch) from the 2026-08-31 post-mortem.
     #[test]
     fn an_operator_declared_unavailable_reaper_yields_a_typed_skip() {
         let v = "unavailable:t00: reaper is a control-plane shell script";
-        assert!(v.starts_with("unavailable:"), "the sentinel must be recognised");
+        assert!(
+            v.starts_with("unavailable:"),
+            "the sentinel must be recognised"
+        );
         let reason = v.trim_start_matches("unavailable:").trim();
         assert!(!reason.is_empty(), "a reason is mandatory");
         assert!(
@@ -2917,7 +3256,16 @@ exit 2
     /// change is indistinguishable from deleting the precondition.
     #[test]
     fn anything_but_the_exact_sentinel_still_fails_closed() {
-        for v in ["", "1", "true", "yes", "skip", "unavailable", "UNAVAILABLE:x", " unavailable:x"] {
+        for v in [
+            "",
+            "1",
+            "true",
+            "yes",
+            "skip",
+            "unavailable",
+            "UNAVAILABLE:x",
+            " unavailable:x",
+        ] {
             assert!(
                 !v.starts_with("unavailable:"),
                 "value {v:?} must NOT be treated as a skip; fail-closed is the default"
@@ -3134,8 +3482,15 @@ exit 2
         runtime
             .block_on(async {
                 let cx = Cx::current().expect("runtime context");
-                report_dispatch_result(&cx, &config, 11, "5", "omp-orchestrator-test", "status=DISPATCHED")
-                    .await
+                report_dispatch_result(
+                    &cx,
+                    &config,
+                    11,
+                    "5",
+                    "omp-orchestrator-test",
+                    "status=DISPATCHED",
+                )
+                .await
             })
             .expect("a degraded mail notify must not fail the caller");
 
@@ -3189,8 +3544,8 @@ exit 2
         // `mail_recipient` falls back to this configured receiver instead of
         // addressing a real teammate's inbox.
         config.receiver_agent = "BrightGorge".to_owned();
-        config.mail_sender = env::var("AGENT_MAIL_AGENT")
-            .unwrap_or_else(|_| "BrightGorge".to_owned());
+        config.mail_sender =
+            env::var("AGENT_MAIL_AGENT").unwrap_or_else(|_| "BrightGorge".to_owned());
         config.ntm = temp.path().join("no-such-ntm").display().to_string();
 
         let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
