@@ -4,9 +4,22 @@ use oracle_compare::{spawn_timeout, OracleCompareRules, OracleCompareVerdict};
 use oracle_pane_state_differential::{diff_sets, parse_ntm_keys, parse_tmux_keys};
 use std::collections::BTreeSet;
 use std::io::{self, Read};
-use std::process::{Command, ExitCode};
+use std::process::{Command, ExitCode, Output};
 use std::time::Duration;
-
+use subprocess_contract::BoundedOutcome;
+fn completed(label: &str, outcome: BoundedOutcome) -> Option<Output> {
+    match outcome {
+        BoundedOutcome::Completed(output) => Some(output),
+        BoundedOutcome::TimedOut => {
+            eprintln!("ERROR oracle-pane-state-differential: {label} timed out before its deadline");
+            None
+        }
+        BoundedOutcome::Unspawned(error) => {
+            eprintln!("ERROR oracle-pane-state-differential: {label} could not spawn: {error}");
+            None
+        }
+    }
+}
 fn main() -> ExitCode {
     let mut json_out = false;
     let mut selftest = false;
@@ -137,8 +150,8 @@ fn run_live(json_out: bool, rules: &OracleCompareRules) -> ExitCode {
     }
     let mut cmd = Command::new(&tmux);
     cmd.args(["list-panes", "-a", "-F", "#{session_name}:#{pane_index}"]);
-    let Some(out) = spawn_timeout(cmd, Duration::from_secs(15)) else {
-        eprintln!("ORACLE_UNAVAILABLE: {tmux} is not executable");
+    let Some(out) = completed("tmux pane oracle", spawn_timeout(cmd, Duration::from_secs(15))) else {
+        eprintln!("ORACLE_UNAVAILABLE: {tmux} did not complete before its deadline");
         return ExitCode::from(3);
     };
     let oracle = parse_tmux_keys(&String::from_utf8_lossy(&out.stdout));
@@ -149,7 +162,7 @@ fn run_live(json_out: bool, rules: &OracleCompareRules) -> ExitCode {
     }
     let mut sess_cmd = Command::new(&tmux);
     sess_cmd.args(["list-sessions", "-F", "#{session_name}"]);
-    let Some(sessions) = spawn_timeout(sess_cmd, Duration::from_secs(15)) else {
+    let Some(sessions) = completed("tmux session oracle", spawn_timeout(sess_cmd, Duration::from_secs(15))) else {
         eprintln!("PRODUCT_UNASKABLE: could not pose the pane-set question to ntm");
         return ExitCode::from(3);
     };
@@ -168,7 +181,7 @@ fn run_live(json_out: bool, rules: &OracleCompareRules) -> ExitCode {
         let mut ntm = Command::new("ntm");
         ntm.arg(format!("--robot-activity={s}"))
             .arg("--robot-format=json");
-        let Some(out) = spawn_timeout(ntm, Duration::from_secs(30)) else {
+        let Some(out) = completed("ntm activity", spawn_timeout(ntm, Duration::from_secs(30))) else {
             continue;
         };
         if let Ok(set) = parse_ntm_keys(s, &String::from_utf8_lossy(&out.stdout)) {
