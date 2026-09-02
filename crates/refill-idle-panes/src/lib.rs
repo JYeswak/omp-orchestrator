@@ -84,12 +84,17 @@
 //! So the observation is three-valued ([`Observation`]), and the join ([`resolve`]) is:
 //!
 //! * both surfaces confidently Idle -> dispatch;
-//! * one CONFIRMED Idle, the other UNKNOWN -> dispatch. This is not "silently preferring
-//!   a surface": UNKNOWN is not a competing claim, so there is nothing to prefer over.
-//!   The ntm arm is UNKNOWN when the pane is absent from its roster, when the evidence
-//!   is not `(capture_provenance=live, observation_freshness=fresh)`, or when
-//!   `observation_state` is a value this parser does not recognise — NEVER because
-//!   `state` said UNKNOWN;
+//! * one Idle, the other UNKNOWN -> `Unconfirmed`. NEVER dispatched. A lone positive is
+//!   not a confirmed free pane, per `pane_readiness_contract` 2.2.1 (609a97b), which was
+//!   measured: ntm reported pane 1 `observation_state: "idle"` at
+//!   `observation_confidence: 0.95` while two status-line captures 95 seconds apart both
+//!   carried a spinner with the timer advancing 26m -> 28m. A confident idle can be
+//!   FALSE, and unlike `state=UNKNOWN` at 0.5 it does not announce its own weakness.
+//!   UNKNOWN therefore yields to CONFIRMED only in the NEGATIVE direction — a confident
+//!   busy on either arm holds the pane. The ntm arm is UNKNOWN when the pane is absent
+//!   from its roster, when the evidence is not
+//!   `(capture_provenance=live, observation_freshness=fresh)`, or when
+//!   `observation_state` is unrecognised — NEVER because `state` said UNKNOWN;
 //! * both UNKNOWN -> `Unknowable`, a typed nonzero refusal, never "nothing to do";
 //! * both confident and disagreeing -> `Conflict`, held AND reported nonzero. This is
 //!   the branch that fires on the capture above, and it is the product change: the
@@ -283,12 +288,15 @@ fn pane_id(value: Option<&serde_json::Value>) -> Option<String> {
 /// What the two surfaces jointly establish about one pane.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Resolution {
-    /// At least one surface confidently says idle and neither confidently contradicts.
+    /// BOTH surfaces confidently say idle.
     Dispatch,
     /// Some surface confidently says the pane cannot receive work.
     Hold,
     /// Both surfaces are confident and they disagree. A finding, not a quiet skip.
     Conflict,
+    /// Exactly one surface says idle and the other cannot see the pane. A positive read
+    /// no second reader confirmed — never dispatched, always reported.
+    Unconfirmed,
     /// Neither surface could classify the pane. We cannot tell — and cannot say "busy".
     Unknowable,
 }
@@ -299,20 +307,36 @@ impl Resolution {
             Self::Dispatch => "dispatch",
             Self::Hold => "hold",
             Self::Conflict => "conflict",
+            Self::Unconfirmed => "unconfirmed",
             Self::Unknowable => "unknowable",
         }
     }
 }
 
-/// The three-valued join. See the module header for why UNKNOWN yields to CONFIRMED.
+/// The three-valued join.
+///
+/// **A LONE POSITIVE NEVER DISPATCHES**, and that clause is the one this crate got wrong
+/// first. `docs/contracts/pane_readiness_contract.md` §2.2.1, landed 2026-09-01 21:47 in
+/// 609a97b: "No single ntm field is sufficient. A positive free read must be confirmed
+/// against the last status line at the two-capture grade." It was measured — pane 1 read
+/// `observation_state: "idle", observation_confidence: 0.95, safe_to_dispatch: true`
+/// while two `--robot-tail` captures 95 seconds apart both carried a braille spinner with
+/// the timer advancing 26m -> 28m. **A confident idle can be false, and unlike
+/// `state=UNKNOWN` at 0.5 it does not announce its own weakness.** Bead
+/// `omp-orchestrator-observation-state-false-idle-riqd`.
+///
+/// So UNKNOWN yields to CONFIRMED only in the NEGATIVE direction — a confident busy on
+/// either arm holds the pane. In the positive direction both arms must agree. The
+/// asymmetry is deliberate: a false hold costs a tick of throughput, a false dispatch
+/// interrupts a pane 28 minutes into a turn.
 pub const fn resolve(activity: Observation, oracle: Observation) -> Resolution {
     match (activity, oracle) {
         (Observation::Idle, Observation::Idle) => Resolution::Dispatch,
-        (Observation::Idle, Observation::Unknown) | (Observation::Unknown, Observation::Idle) => {
-            Resolution::Dispatch
-        }
         (Observation::Idle, Observation::Busy) | (Observation::Busy, Observation::Idle) => {
             Resolution::Conflict
+        }
+        (Observation::Idle, Observation::Unknown) | (Observation::Unknown, Observation::Idle) => {
+            Resolution::Unconfirmed
         }
         (Observation::Unknown, Observation::Unknown) => Resolution::Unknowable,
         _ => Resolution::Hold,
@@ -324,6 +348,7 @@ pub const fn resolve(activity: Observation, oracle: Observation) -> Resolution {
 pub struct Decision {
     pub dispatchable: Vec<String>,
     pub conflicts: Vec<String>,
+    pub unconfirmed: Vec<String>,
     pub unknowable: Vec<String>,
     pub held: Vec<String>,
 }
@@ -331,7 +356,11 @@ pub struct Decision {
 impl Decision {
     /// Panes actually observed by at least one surface.
     pub fn observed(&self) -> usize {
-        self.dispatchable.len() + self.conflicts.len() + self.unknowable.len() + self.held.len()
+        self.dispatchable.len()
+            + self.conflicts.len()
+            + self.unconfirmed.len()
+            + self.unknowable.len()
+            + self.held.len()
     }
 }
 
@@ -352,6 +381,7 @@ pub fn decide(activity: &SurfaceView, oracle: &SurfaceView) -> Decision {
         let bucket = match resolve(activity.get(&pane), oracle.get(&pane)) {
             Resolution::Dispatch => &mut decision.dispatchable,
             Resolution::Conflict => &mut decision.conflicts,
+            Resolution::Unconfirmed => &mut decision.unconfirmed,
             Resolution::Unknowable => &mut decision.unknowable,
             Resolution::Hold => &mut decision.held,
         };
@@ -359,6 +389,7 @@ pub fn decide(activity: &SurfaceView, oracle: &SurfaceView) -> Decision {
     }
     sort_panes(&mut decision.dispatchable);
     sort_panes(&mut decision.conflicts);
+    sort_panes(&mut decision.unconfirmed);
     sort_panes(&mut decision.unknowable);
     sort_panes(&mut decision.held);
     decision
@@ -517,16 +548,19 @@ pub fn run_outcome(decision: &Decision, conflict: &OracleCompareVerdict) -> Refi
             code: 1,
         };
     }
-    if decision.dispatchable.is_empty() && !decision.unknowable.is_empty() {
+    if decision.dispatchable.is_empty()
+        && (!decision.unknowable.is_empty() || !decision.unconfirmed.is_empty())
+    {
         return RefillOutcome {
             message: format!(
-                "refill: UNMEASURABLE detector=pane_state_unknown_on_both_surfaces \
-                 panes={:?} probe=`ntm --robot-activity` did not report a live, fresh \
-                 observation_state for them and `pane-dispatch-ready` could not classify \
-                 them either \
-                 remedy=an unobservable pane is NOT a busy pane; fix the probe or read the \
-                 panes by hand — this is not a quiet fleet",
-                decision.unknowable
+                "refill: UNMEASURABLE detector=pane_state_not_established \
+                 unknown_on_both={:?} unconfirmed_positive={:?} \
+                 probe=`ntm --robot-activity` vs `pane-dispatch-ready <session> --json` \
+                 remedy=an unobservable pane is NOT a busy pane, and a positive read only \
+                 one surface can see is NOT a confirmed free pane \
+                 (pane_readiness_contract 2.2.1); fix the probe or read the panes by hand \
+                 — this is not a quiet fleet",
+                decision.unknowable, decision.unconfirmed
             ),
             code: 2,
         };
@@ -544,10 +578,11 @@ pub fn run_outcome(decision: &Decision, conflict: &OracleCompareVerdict) -> Refi
     }
     RefillOutcome {
         message: format!(
-            "refill: {} dispatchable pane(s) {:?} (held={}, unknowable={})",
+            "refill: {} dispatchable pane(s) {:?} (held={}, unconfirmed={}, unknowable={})",
             decision.dispatchable.len(),
             decision.dispatchable,
             decision.held.len(),
+            decision.unconfirmed.len(),
             decision.unknowable.len()
         ),
         code: 0,
@@ -890,10 +925,11 @@ mod tests {
         );
     }
 
-    /// An UNKNOWN arm yields to a CONFIRMED one. This is the branch that lets a pane
-    /// absent from the ntm roster still dispatch on the oracle's confirmation.
+    /// A LONE POSITIVE IS NEVER DISPATCHED. `pane_readiness_contract` 2.2.1: a positive
+    /// free read must be confirmed by a second reader, because a confident idle was
+    /// MEASURED false on a pane 28 minutes into a turn (609a97b).
     #[test]
-    fn a_pane_only_one_surface_can_see_dispatches_on_that_surface() {
+    fn a_positive_only_one_surface_can_see_is_unconfirmed_and_never_dispatched() {
         let activity = ntm(&[("2", "idle")]);
         let oracle_view = oracle(&[("2", "FREE"), ("7", "FREE")]);
         assert_eq!(
@@ -901,10 +937,43 @@ mod tests {
             Observation::Unknown,
             "a pane ntm never enumerated is UNKNOWN to it, not busy"
         );
+        let decision = decide(&activity, &oracle_view);
         assert_eq!(
-            decide(&activity, &oracle_view).dispatchable,
-            vec!["2".to_string(), "7".to_string()]
+            decision.dispatchable,
+            vec!["2".to_string()],
+            "only the pane BOTH surfaces confirm is dispatched"
         );
+        assert_eq!(
+            decision.unconfirmed,
+            vec!["7".to_string()],
+            "the oracle-only positive is reported, not acted on"
+        );
+    }
+
+    /// The asymmetry is deliberate: a lone CONFIDENT BUSY still holds the pane, because
+    /// a false hold costs a tick and a false dispatch interrupts a working agent.
+    #[test]
+    fn a_lone_confident_busy_still_holds_the_pane() {
+        let activity = ntm(&[("2", "working")]);
+        let oracle_view = oracle(&[]);
+        let decision = decide(&activity, &oracle_view);
+        assert_eq!(decision.held, vec!["2".to_string()]);
+        assert!(decision.dispatchable.is_empty());
+        assert!(decision.unconfirmed.is_empty());
+    }
+
+    /// A run with nothing dispatchable but an unconfirmed positive must NOT read as a
+    /// quiet fleet — that is the whole defect, one class over.
+    #[test]
+    fn an_unconfirmed_positive_alone_is_a_typed_nonzero_refusal() {
+        let activity = ntm(&[("7", "idle")]);
+        let oracle_view = oracle(&[("2", "BUSY")]);
+        let decision = decide(&activity, &oracle_view);
+        assert_eq!(decision.unconfirmed, vec!["7".to_string()]);
+        let outcome = run_outcome(&decision, &conflict_verdict(&activity, &oracle_view));
+        assert_eq!(outcome.code, 2);
+        assert!(outcome.message.contains("unconfirmed_positive"));
+        assert!(outcome.message.contains("pane_readiness_contract 2.2.1"));
     }
 
     /// A capture that is not live-and-fresh is UNKNOWN, not busy. A stale reading is
