@@ -279,13 +279,28 @@ fn declared_skip_dirs_each_carry_a_reason_and_are_stated() {
     for row in state_wildcard_lint::DECLARED_SKIP_DIRS {
         assert!(row.reason.len() > 20, "skip row {row:?} needs a real reason");
     }
-    let stated = state_wildcard_lint::declared_scope_line();
-    for name in &names {
-        assert!(stated.contains(name), "scope line must name {name}: {stated}");
+    for mode in [
+        state_wildcard_lint::ScanMode::RepoWide,
+        state_wildcard_lint::ScanMode::StagedPaths,
+    ] {
+        let stated = state_wildcard_lint::declared_scope_line(mode);
+        for name in &names {
+            assert!(stated.contains(name), "scope line must name {name}: {stated}");
+        }
+        assert!(
+            stated.contains("masked"),
+            "the scope line must state the specimen-masking mechanism: {stated}"
+        );
     }
+    // Each mode must declare a DIFFERENT scope, or the declaration is decoration.
+    assert_ne!(
+        state_wildcard_lint::declared_scope_line(state_wildcard_lint::ScanMode::RepoWide),
+        state_wildcard_lint::declared_scope_line(state_wildcard_lint::ScanMode::StagedPaths)
+    );
     assert!(
-        stated.contains("masked"),
-        "the scope line must state the specimen-masking mechanism: {stated}"
+        state_wildcard_lint::declared_scope_line(state_wildcard_lint::ScanMode::StagedPaths)
+            .contains("UNTRACKED"),
+        "a scoped green must state that it does NOT cover the workspace"
     );
 }
 
@@ -361,6 +376,114 @@ fn self_scan_of_lib_is_clean_without_an_exclusion() {
         assert!(
             !row.file.contains("state-wildcard-lint"),
             "the self-reference must not be handled by an allowlist row: {row:?}"
+        );
+    }
+}
+
+/// THE SCOPING LEG (omp-orchestrator-oej2, second gate). A wildcard arm in a file
+/// that is not part of the change must not refuse the change; the sweep must still
+/// find it. Measured 2026-09-02: this lint ran repo-wide from a hook keyed on the
+/// staged set and refused a commit staging only `AGENTS.md` because of an arm in an
+/// UNTRACKED file — the same fleet-blocking shape as `path-literal-guard`.
+#[test]
+fn an_unstaged_wildcard_cannot_refuse_a_clean_staged_change() {
+    let root = std::env::temp_dir().join(format!("swl-scoped-{}", std::process::id()));
+    let src = root.join("crates/example/src");
+    std::fs::create_dir_all(&src).expect("create fixture tree");
+    std::fs::write(src.join("clean.rs"), "fn main() {}\n").expect("write clean file");
+    std::fs::write(
+        src.join("scratch.rs"),
+        "enum PaneState { Working, Idle }\nfn f(state: PaneState) {\n    match state {\n        PaneState::Working => (),\n        _ => (),\n    }\n}\n",
+    )
+    .expect("write unstaged dirty file");
+
+    // RED direction: the sweep finds it and NAMES file:line.
+    let sweep = state_wildcard_lint::lint_workspace(&root);
+    assert_eq!(sweep.mode, state_wildcard_lint::ScanMode::RepoWide);
+    assert_eq!(sweep.verdict(), state_wildcard_lint::Verdict::Violation, "{sweep:?}");
+    let named: Vec<String> = sweep
+        .findings
+        .iter()
+        .map(std::string::ToString::to_string)
+        .collect();
+    assert!(
+        named.iter().any(|f| f.contains("scratch.rs:5")),
+        "the sweep must NAME file:line: {named:?}"
+    );
+
+    // GREEN direction: scoped to the staged file, the same arm is not this commit's
+    // problem. This is the direction that unblocks a shared checkout.
+    let scoped = state_wildcard_lint::lint_paths(&root, &["crates/example/src/clean.rs"]);
+    assert_eq!(scoped.mode, state_wildcard_lint::ScanMode::StagedPaths);
+    assert_eq!(
+        scoped.verdict(),
+        state_wildcard_lint::Verdict::Clean,
+        "an unstaged wildcard must not refuse an unrelated change: {scoped:?}"
+    );
+
+    // Scoped to the dirty file: RED, naming it. Scoping narrows the file set; it does
+    // not weaken the predicate.
+    let caught = state_wildcard_lint::lint_paths(&root, &["crates/example/src/scratch.rs"]);
+    assert_eq!(caught.verdict(), state_wildcard_lint::Verdict::Violation);
+    assert_eq!(caught.findings.len(), 1, "{:?}", caught.findings);
+    assert_eq!(caught.findings[0].wildcard_line, 5);
+
+    std::fs::remove_dir_all(&root).expect("remove fixture tree");
+}
+
+/// ISOMORPHISM. Scoping must narrow WHICH files are read and nothing else: staged mode
+/// handed every file the sweep read must reach the same verdict, on the REAL repo.
+#[test]
+fn staged_mode_over_the_real_repo_equals_the_sweep() {
+    let root = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
+        .canonicalize()
+        .expect("repo root");
+    let sweep = state_wildcard_lint::lint_workspace(&root);
+    assert!(
+        !sweep.scanned.is_empty(),
+        "anti-vacuity: the real repo must have files to compare"
+    );
+    let scoped = state_wildcard_lint::lint_paths(&root, &sweep.scanned);
+    assert_eq!(scoped.scanned, sweep.scanned, "the same files must be read");
+    assert_eq!(scoped.findings, sweep.findings, "the same findings, same file:line");
+    assert_eq!(scoped.verdict(), sweep.verdict());
+}
+
+/// THREE OUTCOMES. Staging only a doc leaves this lint nothing to check, which is NOT
+/// clean (omp-orchestrator-calr).
+#[test]
+fn staged_set_with_no_eligible_file_is_nothing_to_check_not_clean() {
+    let root = std::env::temp_dir().join(format!("swl-ntc-{}", std::process::id()));
+    std::fs::create_dir_all(root.join("crates/example/src")).expect("create fixture tree");
+    let report = state_wildcard_lint::lint_paths(
+        &root,
+        &["AGENTS.md", "crates/example/tests/it.rs", "docs/PLAN.md"],
+    );
+    assert!(report.scanned.is_empty(), "{:?}", report.scanned);
+    assert_eq!(report.verdict(), state_wildcard_lint::Verdict::NothingToCheck);
+    assert!(!report.is_pass(), "nothing-to-check must not read as a pass");
+    std::fs::remove_dir_all(&root).expect("remove fixture tree");
+}
+
+/// The shared eligibility predicate: both modes agree on the floor, including the
+/// pruned directories the DECLARED table names.
+#[test]
+fn eligibility_predicate_matches_the_declared_floor() {
+    use state_wildcard_lint::is_in_scan_scope;
+    for inside in ["crates/x/src/lib.rs", "crates/x/src/bin/y.rs", "crates/x/benches/b.rs"] {
+        assert!(is_in_scan_scope(std::path::Path::new(inside)), "{inside} must be in scope");
+    }
+    for outside in [
+        "crates/x/tests/it.rs",
+        "crates/x/src/fixtures/f.rs",
+        "crates/x/target/debug/g.rs",
+        "crates/x/Cargo.toml",
+        "src/main.rs",
+        "AGENTS.md",
+    ] {
+        assert!(
+            !is_in_scan_scope(std::path::Path::new(outside)),
+            "{outside} must be out of scope"
         );
     }
 }

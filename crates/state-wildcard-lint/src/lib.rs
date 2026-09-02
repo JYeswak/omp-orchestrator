@@ -135,17 +135,104 @@ pub const DECLARED_SKIP_DIRS: &[SkipDir] = &[
     },
 ];
 
+/// Which files a lint run covered. Named, because a verdict whose scope is
+/// implied is a verdict a reader cannot check.
+///
+/// MEASURED 2026-09-02 (omp-orchestrator-oej2): this lint ran REPO-WIDE from a
+/// pre-commit hook that keys on the staged set, exactly as `path-literal-guard`
+/// did. While repairing that gate, the rebuilt hook refused a commit staging
+/// only `AGENTS.md` because of a wildcard arm in an UNTRACKED file the author
+/// had never staged -- the same fleet-blocking shape, through a different gate.
+/// Scoping one and leaving the other would have moved the block, not removed it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScanMode {
+    /// Every `.rs` file under `crates/`, pruning [`DECLARED_SKIP_DIRS`] -- CI and audits.
+    RepoWide,
+    /// Only the paths handed in, filtered by [`is_in_scan_scope`] -- the pre-commit hook.
+    StagedPaths,
+}
+
+impl fmt::Display for ScanMode {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::RepoWide => formatter.write_str("repo-wide"),
+            Self::StagedPaths => formatter.write_str("staged"),
+        }
+    }
+}
+
+/// The lint's verdict. THREE outcomes plus an error: a run that covered nothing
+/// is not a run that found nothing (omp-orchestrator-calr).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Verdict {
+    Clean,
+    Violation,
+    /// Staged mode with zero eligible paths: this lint has no opinion here.
+    NothingToCheck,
+    /// Repo-wide empty scan set, a stale DECLARED row, or an unreadable tree.
+    VacuousError,
+}
+
+impl fmt::Display for Verdict {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Clean => formatter.write_str("CLEAN"),
+            Self::Violation => formatter.write_str("VIOLATION"),
+            Self::NothingToCheck => formatter.write_str("NOTHING_TO_CHECK"),
+            Self::VacuousError => formatter.write_str("VACUOUS_ERROR"),
+        }
+    }
+}
+
+/// THE ONE ELIGIBILITY PREDICATE, shared by both modes.
+///
+/// True for a repo-relative `.rs` path under `crates/` whose components include
+/// none of [`DECLARED_SKIP_DIRS`]. Both modes route through the same floor, so a
+/// scoped run and a sweep can never disagree about WHAT is in scope -- only
+/// about which subset was read.
+pub fn is_in_scan_scope(relative: &Path) -> bool {
+    if !relative.extension().is_some_and(|extension| extension == "rs") {
+        return false;
+    }
+    let parts: Vec<&str> = relative
+        .components()
+        .filter_map(|component| match component {
+            std::path::Component::Normal(part) => part.to_str(),
+            _ => None,
+        })
+        .collect();
+    if parts.first() != Some(&"crates") || parts.len() < 3 {
+        return false;
+    }
+    !parts
+        .iter()
+        .any(|part| DECLARED_SKIP_DIRS.iter().any(|row| row.name == *part))
+}
+
 /// One line stating the scan boundary, for callers that refuse. A gate whose
-/// scope is invisible cannot be argued with.
-pub fn declared_scope_line() -> String {
+/// scope is invisible cannot be argued with, and a scoped green that reads like
+/// a repo-wide one is the next overclaim.
+pub fn declared_scope_line(mode: ScanMode) -> String {
     let pruned: Vec<&str> = DECLARED_SKIP_DIRS.iter().map(|row| row.name).collect();
-    format!(
-        "DECLARED SCOPE crates/**/*.rs, pruning {}; string-literal contents are masked before \
-         scanning, so a pattern quoted as specimen data is not code. DECLARED allowlist rows: {} \
-         (a row matching nothing is an ERROR, not a pass).",
-        pruned.join(", "),
+    let common = format!(
+        "string-literal contents are masked before scanning, so a pattern quoted as \
+         specimen data is not code. DECLARED allowlist rows: {} (a row matching nothing \
+         in repo-wide mode is an ERROR, not a pass)",
         DECLARED_ALLOWLIST.len()
-    )
+    );
+    match mode {
+        ScanMode::RepoWide => format!(
+            "DECLARED SCOPE repo-wide: crates/**/*.rs, pruning {}, untracked included; {common}.",
+            pruned.join(", ")
+        ),
+        ScanMode::StagedPaths => format!(
+            "DECLARED SCOPE staged set only: crates/**/*.rs among the staged paths, pruning \
+             {}. A wildcard arm in an UNSTAGED or UNTRACKED file is not this commit's problem \
+             and cannot refuse it; only `state-wildcard-lint <root>` (repo-wide mode) claims \
+             the workspace is clean. {common}.",
+            pruned.join(", ")
+        ),
+    }
 }
 
 /// A finding that a DECLARED row suppressed, carried so the suppression is
@@ -192,9 +279,11 @@ pub fn apply_allowlist(
     (kept, allowed, stale)
 }
 
-/// Result of scanning a repository source root.
+/// Result of one lint run, in one named mode.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LintReport {
+    /// Which files this run covered.
+    pub mode: ScanMode,
     pub scanned: Vec<String>,
     pub findings: Vec<Finding>,
     /// Findings a DECLARED row suppressed, with the reason.
@@ -203,8 +292,31 @@ pub struct LintReport {
 }
 
 impl LintReport {
+    /// The run's verdict. Staged mode with nothing eligible is NOTHING-TO-CHECK,
+    /// never CLEAN: reporting an uncovered change as clean is the vacuous-green
+    /// inversion.
+    pub fn verdict(&self) -> Verdict {
+        if self.error.is_some() {
+            return Verdict::VacuousError;
+        }
+        if !self.findings.is_empty() {
+            return Verdict::Violation;
+        }
+        match (self.mode, self.scanned.is_empty()) {
+            (ScanMode::RepoWide, true) => Verdict::VacuousError,
+            (ScanMode::StagedPaths, true) => Verdict::NothingToCheck,
+            (_, false) => Verdict::Clean,
+        }
+    }
+
+    /// Green only when files were actually covered AND zero findings survived.
     pub fn is_pass(&self) -> bool {
-        self.error.is_none() && !self.scanned.is_empty() && self.findings.is_empty()
+        self.verdict() == Verdict::Clean
+    }
+
+    /// One line stating exactly what this verdict covers.
+    pub fn declared_scope_line(&self) -> String {
+        declared_scope_line(self.mode)
     }
 }
 
@@ -709,39 +821,23 @@ fn visit_rs(root: &Path, directory: &Path, scanned: &mut Vec<String>, findings: 
     Ok(())
 }
 
-/// Scan production Rust sources below a repository's crates directory.
-pub fn lint_workspace(root: &Path) -> LintReport {
-    let source_root = root.join("crates");
-    let mut scanned = Vec::new();
-    let mut findings = Vec::new();
-    if let Err(error) = visit_rs(root, &source_root, &mut scanned, &mut findings) {
-        return LintReport {
-            scanned: Vec::new(),
-            findings: Vec::new(),
-            allowed: Vec::new(),
-            error: Some(error),
-        };
-    }
-    // ANTI-VACUITY. A deliverable that was never checked reports exactly like
-    // one that passed, so an empty scan set is an ERROR and never a pass.
-    if scanned.is_empty() {
-        return LintReport {
-            scanned: Vec::new(),
-            findings: Vec::new(),
-            allowed: Vec::new(),
-            error: Some(format!(
-                "ERROR: empty scan set under {} -- nothing was checked, which is not a pass",
-                source_root.display()
-            )),
-        };
-    }
+fn finish(mode: ScanMode, mut scanned: Vec<String>, findings: Vec<Finding>) -> LintReport {
     scanned.sort();
+    let mut findings = findings;
     findings.sort_by(|left, right| {
         left.file
             .cmp(&right.file)
             .then(left.wildcard_line.cmp(&right.wildcard_line))
     });
     let (findings, allowed, stale) = apply_allowlist(findings, DECLARED_ALLOWLIST);
+    // A row that matches nothing is only evidence of rot when the sweep was
+    // total. In staged mode a row legitimately matches nothing whenever its
+    // file is not part of this commit, and treating that as an error would
+    // reintroduce the very defect this scoping removes.
+    let stale = match mode {
+        ScanMode::RepoWide => stale,
+        ScanMode::StagedPaths => Vec::new(),
+    };
     let error = (!stale.is_empty()).then(|| {
         let rows: Vec<String> = stale
             .iter()
@@ -755,11 +851,92 @@ pub fn lint_workspace(root: &Path) -> LintReport {
         )
     });
     LintReport {
+        mode,
         scanned,
         findings,
         allowed,
         error,
     }
+}
+
+/// REPO-WIDE mode: scan production Rust sources below a repository's crates
+/// directory. This is the sweep -- CI, full audits, arrival checks.
+pub fn lint_workspace(root: &Path) -> LintReport {
+    let source_root = root.join("crates");
+    let mut scanned = Vec::new();
+    let mut findings = Vec::new();
+    if let Err(error) = visit_rs(root, &source_root, &mut scanned, &mut findings) {
+        return LintReport {
+            mode: ScanMode::RepoWide,
+            scanned: Vec::new(),
+            findings: Vec::new(),
+            allowed: Vec::new(),
+            error: Some(error),
+        };
+    }
+    // ANTI-VACUITY. A deliverable that was never checked reports exactly like
+    // one that passed, so an empty scan set is an ERROR and never a pass.
+    if scanned.is_empty() {
+        return LintReport {
+            mode: ScanMode::RepoWide,
+            scanned: Vec::new(),
+            findings: Vec::new(),
+            allowed: Vec::new(),
+            error: Some(format!(
+                "ERROR: empty scan set under {} -- nothing was checked, which is not a pass",
+                source_root.display()
+            )),
+        };
+    }
+    finish(ScanMode::RepoWide, scanned, findings)
+}
+
+/// STAGED mode: lint only the handed-in paths, filtered by [`is_in_scan_scope`].
+///
+/// This is what the pre-commit hook calls. A wildcard arm in an unstaged or
+/// untracked file is invisible here BY DESIGN: measured 2026-09-02, this lint
+/// refused a commit staging only `AGENTS.md` because of an arm in a file the
+/// author had never staged. An in-scope path absent from the worktree (a staged
+/// deletion) is skipped rather than read; an unreadable in-scope file is an
+/// ERROR, because a run that silently skipped a file reports identically to one
+/// that covered it.
+pub fn lint_paths<P: AsRef<Path>>(root: &Path, paths: &[P]) -> LintReport {
+    let mut scanned = Vec::new();
+    let mut findings = Vec::new();
+    for path in paths {
+        let given = path.as_ref();
+        let relative = given.strip_prefix(root).unwrap_or(given);
+        if !is_in_scan_scope(relative) {
+            continue;
+        }
+        let absolute = if given.is_absolute() {
+            given.to_path_buf()
+        } else {
+            root.join(relative)
+        };
+        if !absolute.is_file() {
+            continue;
+        }
+        let source = match fs::read_to_string(&absolute) {
+            Ok(source) => source,
+            Err(error) => {
+                return LintReport {
+                    mode: ScanMode::StagedPaths,
+                    scanned: Vec::new(),
+                    findings: Vec::new(),
+                    allowed: Vec::new(),
+                    error: Some(format!(
+                        "ERROR: cannot read staged {}: {error}",
+                        absolute.display()
+                    )),
+                }
+            }
+        };
+        let name = relative.display().to_string();
+        scanned.push(name.clone());
+        findings.extend(scan_source(&name, &source));
+    }
+    finish(ScanMode::StagedPaths, scanned, findings)
 }
 
 #[cfg(test)]

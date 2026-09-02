@@ -3,11 +3,15 @@ license.workspace = true
 name = "path-literal-guard"
 version = "0.1.0"
 edition = "2021"
-description = "Repo-wide gate: zero hardcoded home-path literals across crates/*/src"
+description = "Home-path-literal gate over crates/*/src, in two named modes: repo-wide sweep and staged-set scope"
 
 [lib]
 name = "path_literal_guard"
 path = "src/lib.rs"
+
+[[bin]]
+name = "path-literal-guard"
+path = "src/main.rs"
 
 [lints.rust]
 unsafe_code = "forbid"

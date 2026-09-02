@@ -1,18 +1,40 @@
-//! The repo-wide home-path-literal gate (bead omp-orchestrator-npq, acceptance #2).
+//! The home-path-literal gate, both modes (beads omp-orchestrator-npq, -oej2).
 //!
-//! Asserts the count over `<repo>/crates/*/src` is zero, prints the scan set with the
-//! verdict so a reader can see exactly what was covered, and treats an EMPTY scan set
-//! as an ERROR — never a pass. A reintroduced literal turns this test RED and the
-//! failure message names the file and line (acceptance #3).
+//! The REPO-WIDE leg asserts the count over `<repo>/crates/*/src` is zero, prints the
+//! scan set with the verdict so a reader can see exactly what was covered, and treats
+//! an EMPTY scan set as an ERROR — never a pass.
+//!
+//! The STAGED leg asserts the property this repository actually needs: a literal in a
+//! file that is NOT part of the change cannot refuse the change. That direction is the
+//! one that was broken, and it is the one that made the repo single-writer.
+//!
+//! Per AGENTS.md rule 7, every known-bad leg asserts the MESSAGE and not merely a
+//! nonzero exit: an exit code alone cannot distinguish "the gate bit" from "the
+//! workspace failed to load".
 
-use path_literal_guard::{repo_root, scan};
+use path_literal_guard::{
+    is_in_scan_scope, repo_root, scan, scan_paths, ScanMode, Verdict, USER_HOME_LITERAL,
+};
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
+use std::panic::catch_unwind;
+use std::path::{Path, PathBuf};
+
+/// The literal is CONSTRUCTED, never spelled: this file lives under `tests/`, which the
+/// gate does not scan, but spelling it would still be a specimen this repo forbids.
+fn planted_line() -> String {
+    format!("const REPO: &str = \"{USER_HOME_LITERAL}\";\n")
+}
 
 #[test]
 fn zero_home_path_literals_across_crates_src() {
     let report = scan(&repo_root());
 
     // Print the scan set: a verdict without its coverage is unauditable.
-    println!("PATH-LITERAL-GATE scan set ({} .rs files under crates/*/src):", report.scanned.len());
+    println!(
+        "PATH-LITERAL-GATE scan set ({} .rs files under crates/*/src):",
+        report.scanned.len()
+    );
     for file in &report.scanned {
         println!("  {}", file.display());
     }
@@ -37,5 +59,168 @@ fn zero_home_path_literals_across_crates_src() {
             .collect::<Vec<String>>()
     );
 
-    println!("PATH-LITERAL-GATE PASS: {} files scanned, zero home-path literals", report.scanned.len());
+    println!(
+        "PATH-LITERAL-GATE PASS: {} files scanned, zero home-path literals",
+        report.scanned.len()
+    );
+}
+
+/// UNREADABLE INPUT is an ERROR, never an empty clean scan. The source directory
+/// is discovered before its permissions are revoked, so the scanner must refuse
+/// when `read_dir` cannot enumerate it rather than silently returning no files.
+///
+/// MUTATION: restoring the directory permissions is the GREEN leg; the same fixture
+/// must scan cleanly again after the unreadable-input mutation is reversed.
+#[test]
+fn unreadable_input_is_refused_and_restores_to_a_clean_scan() {
+    let root = std::env::temp_dir().join(format!("plg-unreadable-{}", std::process::id()));
+    let src = root.join("crates/example/src");
+    fs::create_dir_all(&src).expect("create unreadable fixture tree");
+    fs::write(src.join("lib.rs"), "fn main() {}\n").expect("write clean fixture file");
+
+    fs::set_permissions(&src, fs::Permissions::from_mode(0o000))
+        .expect("make fixture source directory unreadable");
+    let refused = catch_unwind(|| scan(&root));
+
+    // Restore before asserting or cleaning up: a failed scan must not leave a
+    // permission-mutated fixture behind for a later test or developer.
+    fs::set_permissions(&src, fs::Permissions::from_mode(0o755))
+        .expect("restore fixture source directory permissions");
+    assert!(
+        refused.is_err(),
+        "an unreadable source directory must be an ERROR, not an empty scan"
+    );
+
+    let report = scan(&root);
+    assert!(
+        report.is_pass(),
+        "restoring permissions must recover a nonempty clean scan: {report:?}"
+    );
+    assert_eq!(report.scanned, vec![src.join("lib.rs")]);
+
+    fs::remove_dir_all(&root).expect("remove unreadable fixture tree");
+}
+
+/// THE LEG THAT PROVES omp-orchestrator-oej2, in the repository's own shape: one dirty
+/// file that is NOT staged, one clean file that is, and the scoped verdict must be GREEN
+/// while the sweep stays RED. Both verdicts and both MESSAGES are asserted.
+#[test]
+fn an_unstaged_literal_cannot_refuse_a_clean_staged_change() {
+    let root = std::env::temp_dir().join(format!("plg-unstaged-{}", std::process::id()));
+    let src = root.join("crates/example/src");
+    fs::create_dir_all(&src).expect("create fixture tree");
+    fs::write(src.join("staged.rs"), "fn main() {}\n").expect("write staged clean file");
+    fs::write(src.join("scratch.rs"), planted_line()).expect("write unstaged dirty file");
+
+    // RED direction: the sweep still finds it, and names it.
+    let sweep = scan(&root);
+    assert_eq!(sweep.mode, ScanMode::RepoWide);
+    assert_eq!(sweep.verdict(), Verdict::Violation, "{sweep:?}");
+    let named: Vec<String> = sweep.hits.iter().map(std::string::ToString::to_string).collect();
+    assert!(
+        named.iter().any(|hit| hit.contains("scratch.rs") && hit.ends_with(":1")),
+        "the sweep must NAME file:line, not a count: {named:?}"
+    );
+    assert!(
+        sweep.declared_scope_line().contains("repo-wide"),
+        "the sweep must declare its scope: {}",
+        sweep.declared_scope_line()
+    );
+
+    // GREEN direction: scoped to the staged file, the same literal is not this
+    // commit's problem.
+    let scoped = scan_paths(&root, &["crates/example/src/staged.rs"]);
+    assert_eq!(scoped.mode, ScanMode::StagedPaths);
+    assert_eq!(
+        scoped.verdict(),
+        Verdict::Clean,
+        "an unstaged literal must not refuse an unrelated change: {scoped:?}"
+    );
+    assert!(scoped.hits.is_empty(), "{:?}", scoped.hits);
+    let declared = scoped.declared_scope_line();
+    assert!(declared.contains("staged set only"), "{declared}");
+    assert!(
+        declared.contains("UNSTAGED") && declared.contains("UNTRACKED"),
+        "a scoped green must state that it does NOT cover the repo: {declared}"
+    );
+
+    fs::remove_dir_all(&root).expect("remove fixture tree");
+}
+
+/// REPO-WIDE MODE REMAINS REACHABLE (acceptance #3). Deleting the sweep would trade one
+/// blind spot for another, so the two modes must both exist and be distinguishable.
+#[test]
+fn both_modes_exist_and_are_distinguishable() {
+    let root = std::env::temp_dir().join(format!("plg-modes-{}", std::process::id()));
+    let src = root.join("crates/example/src");
+    fs::create_dir_all(&src).expect("create fixture tree");
+    fs::write(src.join("lib.rs"), "fn main() {}\n").expect("write clean file");
+
+    let sweep = scan(&root);
+    let scoped = scan_paths(&root, &["crates/example/src/lib.rs"]);
+    assert_ne!(sweep.mode, scoped.mode, "the modes must be distinguishable");
+    assert_eq!(sweep.mode.to_string(), "repo-wide");
+    assert_eq!(scoped.mode.to_string(), "staged");
+    assert_ne!(
+        sweep.declared_scope_line(),
+        scoped.declared_scope_line(),
+        "each mode must declare a DIFFERENT scope, or the declaration is decoration"
+    );
+
+    // The CLI names both modes too, so an operator or CI job can state its claim.
+    let cli = fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"))
+        .expect("the CLI must be readable");
+    assert!(cli.contains("--repo-wide"), "the sweep must stay reachable from the CLI");
+    assert!(cli.contains("--staged"), "the scoped mode must be nameable from the CLI");
+
+    fs::remove_dir_all(&root).expect("remove fixture tree");
+}
+
+/// ISOMORPHISM against the REAL repository: staged mode handed every file the sweep read
+/// must reach the same verdict. This is what makes "scoped" a narrowing of the file set
+/// rather than a weakening of the check.
+#[test]
+fn staged_mode_over_the_real_repo_equals_the_sweep() {
+    let root = repo_root();
+    let sweep = scan(&root);
+    let every: Vec<PathBuf> = sweep.scanned.clone();
+    assert!(!every.is_empty(), "anti-vacuity: the real repo must have files to compare");
+    let scoped = scan_paths(&root, &every);
+    assert_eq!(scoped.scanned, sweep.scanned, "the same files must be read");
+    assert_eq!(scoped.hits, sweep.hits, "the same hits, at the same file:line");
+    assert_eq!(scoped.verdict(), sweep.verdict());
+}
+
+/// KNOWN-GOOD leg, and the self-reference handled WITHOUT a carve-out: this gate's own
+/// source is scanned by both modes and is clean, because the needle is built by
+/// `concat!` rather than spelled. Five sibling crates use the same idiom.
+#[test]
+fn the_guards_own_source_is_clean_without_an_exclusion() {
+    let root = repo_root();
+    let own = Path::new("crates/path-literal-guard/src/lib.rs");
+    assert!(is_in_scan_scope(own), "the gate's own source must be IN scope");
+
+    let source = fs::read_to_string(root.join(own)).expect("read the gate's own source");
+    assert!(
+        source.contains("USER_HOME_LITERAL"),
+        "specimen data must actually be present for this leg to prove anything"
+    );
+    assert!(
+        !source.contains(USER_HOME_LITERAL),
+        "the needle must never appear contiguously in this gate's own source"
+    );
+
+    let scoped = scan_paths(&root, &[own]);
+    assert_eq!(scoped.scanned.len(), 1, "{:?}", scoped.scanned);
+    assert_eq!(
+        scoped.verdict(),
+        Verdict::Clean,
+        "the gate must not catch its own needle: {scoped:?}"
+    );
+    assert!(
+        path_literal_guard::DECLARED_ALLOWLIST
+            .iter()
+            .all(|row| !row.file.contains("path-literal-guard")),
+        "the self-reference must be a MECHANISM, never an allowlist row"
+    );
 }
