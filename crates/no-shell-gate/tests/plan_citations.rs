@@ -47,7 +47,10 @@ fn plan_files(root: &Path) -> Vec<PathBuf> {
 
 fn is_boundary(byte: u8) -> bool {
     byte.is_ascii_whitespace()
-        || matches!(byte, b'`' | b'(' | b')' | b'[' | b']' | b'{' | b'}' | b',' | b';')
+        || matches!(
+            byte,
+            b'`' | b'(' | b')' | b'[' | b']' | b'{' | b'}' | b',' | b';'
+        )
 }
 
 fn citation_findings(file: &Path, line_number: usize, text: &str) -> Vec<Finding> {
@@ -109,7 +112,10 @@ fn count_findings(file: &Path, line_number: usize, text: &str) -> Vec<Finding> {
                 .iter()
                 .take_while(|byte| byte.is_ascii_digit())
                 .count();
-        if digits_end - index > 4 || digits_end == bytes.len() || !bytes[digits_end].is_ascii_whitespace() {
+        if digits_end - index > 4
+            || digits_end == bytes.len()
+            || !bytes[digits_end].is_ascii_whitespace()
+        {
             index = digits_end.max(index + 1);
             continue;
         }
@@ -117,7 +123,10 @@ fn count_findings(file: &Path, line_number: usize, text: &str) -> Vec<Finding> {
         while unit_start < bytes.len() && bytes[unit_start].is_ascii_whitespace() {
             unit_start += 1;
         }
-        let Some(unit) = UNITS.iter().find(|unit| text[unit_start..].starts_with(**unit)) else {
+        let Some(unit) = UNITS
+            .iter()
+            .find(|unit| text[unit_start..].starts_with(**unit))
+        else {
             index = digits_end;
             continue;
         };
@@ -135,12 +144,18 @@ fn count_findings(file: &Path, line_number: usize, text: &str) -> Vec<Finding> {
 
 fn count_is_documented(text: &str) -> bool {
     let has_date = (text.contains("2026-") || text.contains("2025-"))
-        && text.as_bytes().windows(5).any(|window| window[0].is_ascii_digit());
+        && text
+            .as_bytes()
+            .windows(5)
+            .any(|window| window[0].is_ascii_digit());
     (text.contains("HISTORICAL") && has_date)
         || (text.contains("NUMBERS.toml") && text.contains("figures"))
 }
 
-fn scan_lines(lines: impl IntoIterator<Item = (String, usize, String)>, enabled: bool) -> Vec<Finding> {
+fn scan_lines(
+    lines: impl IntoIterator<Item = (String, usize, String)>,
+    enabled: bool,
+) -> Vec<Finding> {
     if !enabled {
         return Vec::new();
     }
@@ -171,20 +186,35 @@ fn render_findings(findings: &[Finding], scanned_lines: usize) -> String {
     }
     let detail = findings
         .iter()
-        .map(|finding| format!("{} {}:{} {}", finding.kind, finding.file, finding.line, finding.token))
+        .map(|finding| {
+            format!(
+                "{} {}:{} {}",
+                finding.kind, finding.file, finding.line, finding.token
+            )
+        })
         .collect::<Vec<_>>()
         .join("; ");
     format!("VIOLATION: {detail}")
 }
 
 fn ratchet_check(findings: &[Finding]) -> Result<(), String> {
-    let citations = findings.iter().filter(|finding| finding.kind == "citation").count();
-    let counts = findings.iter().filter(|finding| finding.kind == "count").count();
+    let citations = findings
+        .iter()
+        .filter(|finding| finding.kind == "citation")
+        .count();
+    let counts = findings
+        .iter()
+        .filter(|finding| finding.kind == "count")
+        .count();
     if citations > MAX_NUMERIC_CITATIONS {
-        return Err(format!("citation ceiling exceeded: {citations} > {MAX_NUMERIC_CITATIONS}"));
+        return Err(format!(
+            "citation ceiling exceeded: {citations} > {MAX_NUMERIC_CITATIONS}"
+        ));
     }
     if counts > MAX_UNDOCUMENTED_COUNTS {
-        return Err(format!("count ceiling exceeded: {counts} > {MAX_UNDOCUMENTED_COUNTS}"));
+        return Err(format!(
+            "count ceiling exceeded: {counts} > {MAX_UNDOCUMENTED_COUNTS}"
+        ));
     }
     Ok(())
 }
@@ -214,17 +244,32 @@ fn fixture_lines(source: &str) -> Vec<(String, usize, String)> {
 #[test]
 fn known_good_constructs_fences_and_documented_counts_are_clean() {
     let source = "construct main.rs:send_and_verify\n```text\nmain.rs:123\n26 crates\n```\n26 crates HISTORICAL as of 2026-09-01\n50 crates from NUMBERS.toml figures.workspace_crates";
-    let report = render_findings(&scan_lines(fixture_lines(source), true), source.lines().count());
+    let report = render_findings(
+        &scan_lines(fixture_lines(source), true),
+        source.lines().count(),
+    );
     assert!(report.starts_with("CLEAN:"), "expected CLEAN, got {report}");
 }
 
 #[test]
 fn known_bad_bare_citation_and_count_are_named_in_text() {
     let source = "main.rs:123\n26 crates";
-    let report = render_findings(&scan_lines(fixture_lines(source), true), source.lines().count());
-    assert!(report.starts_with("VIOLATION:"), "expected VIOLATION, got {report}");
-    assert!(report.contains("citation fixture.md:1 main.rs:123"), "missing citation: {report}");
-    assert!(report.contains("count fixture.md:2 26 crates"), "missing count: {report}");
+    let report = render_findings(
+        &scan_lines(fixture_lines(source), true),
+        source.lines().count(),
+    );
+    assert!(
+        report.starts_with("VIOLATION:"),
+        "expected VIOLATION, got {report}"
+    );
+    assert!(
+        report.contains("citation fixture.md:1 main.rs:123"),
+        "missing citation: {report}"
+    );
+    assert!(
+        report.contains("count fixture.md:2 26 crates"),
+        "missing count: {report}"
+    );
 }
 
 #[test]
@@ -244,15 +289,29 @@ fn disabling_drift_predicates_silences_known_bad_mutation() {
 
 #[test]
 fn test_function_registry_names_all_three_denominators() {
-    let numbers = fs::read_to_string(repo_root().join("NUMBERS.toml")).expect("NUMBERS.toml must be readable");
-    assert!(numbers.contains("#[test] ATTRIBUTES"), "missing attribute-count denominator note");
-    assert!(numbers.contains("PACKAGE AGGREGATE"), "missing package aggregate denominator note");
-    assert!(numbers.contains("LIB SUITE"), "missing library-suite denominator note");
+    let numbers = fs::read_to_string(repo_root().join("NUMBERS.toml"))
+        .expect("NUMBERS.toml must be readable");
+    assert!(
+        numbers.contains("#[test] ATTRIBUTES"),
+        "missing attribute-count denominator note"
+    );
+    assert!(
+        numbers.contains("PACKAGE AGGREGATE"),
+        "missing package aggregate denominator note"
+    );
+    assert!(
+        numbers.contains("LIB SUITE"),
+        "missing library-suite denominator note"
+    );
 }
 
 #[test]
-fn real_plan_prose_has_no_new_drift() {
+fn plan_citations_name_constructs() {
     let (report, findings) = scan_repo(&repo_root());
-    ratchet_check(&findings).unwrap_or_else(|error| panic!("real plan drift ratchet: {error}; {report}"));
-    assert!(report.starts_with("CLEAN:"), "real plan drift gate: {report}");
+    ratchet_check(&findings)
+        .unwrap_or_else(|error| panic!("real plan drift ratchet: {error}; {report}"));
+    assert!(
+        report.starts_with("CLEAN:"),
+        "real plan drift gate: {report}"
+    );
 }
