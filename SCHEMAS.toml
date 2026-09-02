@@ -144,6 +144,15 @@ writer    = "reconciliation panes (rounds 15-21), then every grading pane from r
 reader    = "crates/no-shell-gate/tests/findings_ledger.rs (unbuilt at declaration) and the integrator before cutting a pin"
 note      = "Declared 2026-09-01 by HD-0006 (Josh: no new rounds until ALL fixes from rounds 15-22 are in the plan properly). One row per DECLARED finding: id is the grader's finding id where one exists (R19-00-section-map-omits-11-12) or <round>-<section>-<eye>-<n> where the eye recorded only a count. disposition is FIXED (fixed_in = commit sha), RETRACTED (retracted_reason, dispositioned_by), or DEFERRED (deferred_to = bead id); OPEN is the initial state and any OPEN row refuses the next round. Anti-vacuity: a ledger with fewer rows than the sum of new_findings across the reconciled round files is an ERROR, not a pass."
 
+[artifacts.hypotheses]
+path      = "docs/plan/HYPOTHESES.jsonl"
+format    = "jsonl"
+required  = ["id", "prediction", "falsifier", "evidence_scope", "recorded_commit"]
+optional  = ["observed_result"]
+writer    = "preregistration-gate bootstrap and loop planning path"
+reader    = "preregistration-gate immediately before PLAN.md materialization"
+note      = "Append-only hypothesis rows must be committed before evidence changes and every changed evidence row must cite a known hypothesis_id."
+
 [artifacts.inception_manifest]
 path      = ".omp-orchestrator/inception.json"
 format    = "json"

@@ -41,6 +41,11 @@ fn fixture() -> TempRepo {
         "{\"round\":15,\"new_findings\":1}\n",
     );
 
+    let placeholder = "0".repeat(40);
+    let hypothesis = format!(
+        r#"{{"id":"fixture-h1","prediction":"plan remains assembled","falsifier":"a missing section","evidence_scope":"docs/plan","recorded_commit":"{placeholder}","observed_result":null}}"#
+    );
+    write(&root, "docs/plan/HYPOTHESES.jsonl", &(hypothesis + "\n"));
     for round in 15..=21 {
         write(
             &root,
@@ -56,7 +61,38 @@ fn fixture() -> TempRepo {
         );
     }
 
+    git(&root, &["init", "-q"]);
+    git(&root, &["config", "user.email", "fixture@example.invalid"]);
+    git(&root, &["config", "user.name", "plan-assemble fixture"]);
+    git(&root, &["add", "docs/plan"]);
+    git(&root, &["commit", "-qm", "fixture source"]);
+    let recorded_commit = git(&root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let committed_hypothesis = format!(
+        r#"{{"id":"fixture-h1","prediction":"plan remains assembled","falsifier":"a missing section","evidence_scope":"docs/plan","recorded_commit":"{recorded_commit}","observed_result":null}}"#
+    );
+    write(
+        &root,
+        "docs/plan/HYPOTHESES.jsonl",
+        &(committed_hypothesis + "\n"),
+    );
+    git(&root, &["add", "docs/plan/HYPOTHESES.jsonl"]);
+    git(&root, &["commit", "-qm", "fixture preregistration"]);
+
     TempRepo(root)
+}
+
+fn git(root: &Path, args: &[&str]) -> String {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(root)
+        .output()
+        .expect("run git fixture command");
+    assert!(
+        output.status.success(),
+        "git command failed: args={args:?} stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).expect("git fixture output is UTF-8")
 }
 
 fn write(root: &Path, relative: &str, contents: &str) {
@@ -145,4 +181,30 @@ fn mutating_required_section_refuses_then_byte_identical_restore_passes() {
         restored.status.success(),
         "byte-identical restore did not recover check: {restored:?}"
     );
+    #[test]
+    fn changed_evidence_without_prior_hypothesis_refuses_before_write() {
+        let repo = fixture();
+        let target = repo.0.join("docs/PLAN.md");
+        fs::write(&target, b"sentinel prior output\n").expect("write sentinel output");
+        fs::write(
+            repo.0.join("docs/plan/FINDINGS.jsonl"),
+            b"{\"round\":15,\"finding\":\"new evidence\"}\n",
+        )
+        .expect("mutate evidence without citation");
+
+        let assembled = run(&repo.0, &[]);
+        assert!(
+            !assembled.status.success(),
+            "assembly accepted evidence without a prior hypothesis"
+        );
+        assert!(
+            String::from_utf8_lossy(&assembled.stderr).contains("lacks hypothesis_id"),
+            "unexpected refusal: {}",
+            String::from_utf8_lossy(&assembled.stderr)
+        );
+        assert_eq!(
+            fs::read(&target).expect("read sentinel output"),
+            b"sentinel prior output\n"
+        );
+    }
 }

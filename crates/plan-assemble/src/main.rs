@@ -35,6 +35,8 @@
 //! real change in `assembly_freshness` and in every downstream figure, which would make
 //! the port indistinguishable from an edit.
 
+use asupersync::Cx;
+use preregistration_gate::{collect_repository_inputs, validate_pre_write};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -252,8 +254,15 @@ fn guard_output_size(previous_len: usize, output_len: usize) -> Result<(), Strin
         Ok(())
     }
 }
-
-fn main() -> std::process::ExitCode {
+#[asupersync::main]
+async fn main() -> std::process::ExitCode {
+    let cx = match Cx::current() {
+        Some(cx) => cx,
+        None => {
+            eprintln!("PREREGISTRATION_ERROR no asupersync context");
+            return std::process::ExitCode::from(2);
+        }
+    };
     let root = repo_root();
     let dir = root.join("docs/plan");
 
@@ -655,6 +664,33 @@ fn main() -> std::process::ExitCode {
                 "PLAN_ASSEMBLE_ERROR cannot read prior output {}: {error}",
                 target.display()
             );
+            return std::process::ExitCode::from(2);
+        }
+    }
+    let inputs = match collect_repository_inputs(&cx, &root).await {
+        Ok(inputs) => inputs,
+        Err(error) => {
+            eprintln!("PLAN_ASSEMBLE_ERROR {error}");
+            return std::process::ExitCode::from(2);
+        }
+    };
+    match validate_pre_write(
+        &inputs.registry,
+        &inputs.base_revision,
+        &inputs.committed_revisions,
+        &inputs.changed_paths,
+        &inputs.evidence_rows,
+    ) {
+        Ok(report) => println!(
+            "  PREREGISTRATION PASS base={} hypotheses={} changed_paths={} checked_paths={} evidence_rows={}",
+            report.base_revision,
+            report.hypothesis_count,
+            report.changed_path_count,
+            report.checked_path_count,
+            report.checked_evidence_row_count
+        ),
+        Err(error) => {
+            eprintln!("PLAN_ASSEMBLE_ERROR {error}");
             return std::process::ExitCode::from(2);
         }
     }

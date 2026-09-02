@@ -10,6 +10,7 @@ description = "Build gate: refuse tracked .sh/.py files; the exemption list is e
 convergence-stamp = { path = "../convergence-stamp" }
 orchestration-tick-gate = { path = "../orchestration-tick-gate" }
 path-literal-guard = { path = "../path-literal-guard" }
+preregistration-gate = { path = "../preregistration-gate" }
 state-wildcard-lint = { path = "../state-wildcard-lint" }
 pre-delete-citation-check = { path = "../pre-delete-citation-check" }
 undrained-pipe-lint = { path = "../undrained-pipe-lint" }
