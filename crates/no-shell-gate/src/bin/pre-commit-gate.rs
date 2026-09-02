@@ -533,6 +533,12 @@ fn validate_plan_assemble_build(repo_root: &Path, staged: &[String]) -> Result<(
         path.starts_with("crates/plan-assemble/")
             || path.starts_with("crates/preregistration-gate/")
     }) {
+        match staged_build_gate::classify_cargo_invocation(false, None, "") {
+            staged_build_gate::CargoBuildOutcome::NotApplicable => {
+                eprintln!("plan-assemble-build: NOT_APPLICABLE cargo invocation count=0");
+            }
+            _ => unreachable!("disabled cargo consumer cannot become a build verdict"),
+        }
         return Ok(());
     }
     let mut command = std::process::Command::new("cargo");
@@ -540,20 +546,44 @@ fn validate_plan_assemble_build(repo_root: &Path, staged: &[String]) -> Result<(
         .current_dir(repo_root)
         .args(["build", "--quiet", "-p", "plan-assemble"]);
     match subprocess_contract::bounded_output(&mut command, std::time::Duration::from_secs(180)) {
-        subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() => {
-            eprintln!("plan-assemble-build: PASS");
-            Ok(())
+        subprocess_contract::BoundedOutcome::Completed(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            match staged_build_gate::classify_cargo_invocation(
+                true,
+                output.status.code(),
+                &stderr,
+            ) {
+                staged_build_gate::CargoBuildOutcome::Pass => {
+                    eprintln!("plan-assemble-build: PASS");
+                    Ok(())
+                }
+                staged_build_gate::CargoBuildOutcome::BuildFailed { code, first_error } => {
+                    Err(format!(
+                        "cargo build -p plan-assemble reason=BUILD_FAILED exit={code:?} first_error={first_error}"
+                    ))
+                }
+                staged_build_gate::CargoBuildOutcome::BuildInconclusive { code, stderr_tail } => {
+                    Err(format!(
+                        "cargo build -p plan-assemble reason=BUILD_INCONCLUSIVE exit={code:?} stderr_tail={stderr_tail:?}"
+                    ))
+                }
+                staged_build_gate::CargoBuildOutcome::NotApplicable => {
+                    Err("cargo build -p plan-assemble reason=NOT_APPLICABLE".to_owned())
+                }
+            }
         }
-        subprocess_contract::BoundedOutcome::Completed(output) => Err(format!(
-            "cargo build -p plan-assemble exited {}: {}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr).trim()
-        )),
         subprocess_contract::BoundedOutcome::TimedOut => {
             Err("cargo build -p plan-assemble exceeded 180s deadline".to_owned())
         }
         subprocess_contract::BoundedOutcome::Unspawned(error) => {
-            Err(format!("cannot spawn cargo build -p plan-assemble: {error}"))
+            match staged_build_gate::classify_cargo_invocation(true, None, &error.to_string()) {
+                staged_build_gate::CargoBuildOutcome::BuildInconclusive { stderr_tail, .. } => {
+                    Err(format!(
+                        "cargo build -p plan-assemble reason=BUILD_INCONCLUSIVE stderr_tail={stderr_tail:?}"
+                    ))
+                }
+                _ => Err(format!("cargo build -p plan-assemble could not spawn: {error}")),
+            }
         }
     }
 }

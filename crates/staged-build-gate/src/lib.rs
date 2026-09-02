@@ -71,6 +71,66 @@ pub enum StagedScope {
     Crates(BTreeSet<String>),
 }
 
+/// Shared result classification for every cargo build consumer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CargoBuildOutcome {
+    Pass,
+    BuildFailed {
+        code: Option<i32>,
+        first_error: String,
+    },
+    BuildInconclusive {
+        code: Option<i32>,
+        stderr_tail: String,
+    },
+    NotApplicable,
+}
+
+impl CargoBuildOutcome {
+    #[must_use]
+    pub fn admits(&self) -> bool {
+        matches!(self, Self::Pass)
+    }
+}
+
+/// Classify a cargo invocation without treating its exit code as a code verdict.
+/// A non-zero result with no compiler diagnostic is restrictive but inconclusive.
+#[must_use]
+pub fn classify_cargo_invocation(
+    invoked: bool,
+    code: Option<i32>,
+    stderr: &str,
+) -> CargoBuildOutcome {
+    if !invoked {
+        return CargoBuildOutcome::NotApplicable;
+    }
+    if code == Some(0) {
+        return CargoBuildOutcome::Pass;
+    }
+    match first_cargo_error(stderr) {
+        Some(first_error) => CargoBuildOutcome::BuildFailed { code, first_error },
+        None => CargoBuildOutcome::BuildInconclusive {
+            code,
+            stderr_tail: stderr_tail(stderr),
+        },
+    }
+}
+
+fn stderr_tail(stderr: &str) -> String {
+    stderr
+        .lines()
+        .rev()
+        .take(3)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<Vec<_>>()
+        .join(" | ")
+        .chars()
+        .take(240)
+        .collect()
+}
+
 /// The verdict for one crate.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CrateVerdict {
@@ -626,5 +686,42 @@ error: asupersync entry macros support only `()` or `Result<(), E>` return types
         // Only the failures are reported: a refusal listing passes buries its cause.
         assert_eq!(refused.len(), 1);
         assert!(refused.contains_key("bad"));
+    }
+    #[test]
+    fn shared_classifier_distinguishes_code_failure_infrastructure_refusal_and_no_call() {
+        let compiler = classify_cargo_invocation(
+            true,
+            Some(101),
+            "error[E0601]: main function not found\n",
+        );
+        assert!(matches!(
+            compiler,
+            CargoBuildOutcome::BuildFailed { code: Some(101), ref first_error } if first_error.starts_with("error[E0601]")
+        ));
+
+        let rch = classify_cargo_invocation(
+            true,
+            Some(103),
+            "[RCH] remote required; refusing local fallback (no admissible workers)\n",
+        );
+        assert!(matches!(
+            rch,
+            CargoBuildOutcome::BuildInconclusive { code: Some(103), ref stderr_tail } if stderr_tail.contains("[RCH] remote required")
+        ));
+
+        let generic_refusal = classify_cargo_invocation(true, Some(7), "remote wrapper refused\n");
+        assert!(matches!(
+            generic_refusal,
+            CargoBuildOutcome::BuildInconclusive { code: Some(7), ref stderr_tail }
+                if stderr_tail == "remote wrapper refused"
+        ));
+        assert_eq!(
+            classify_cargo_invocation(false, None, ""),
+            CargoBuildOutcome::NotApplicable
+        );
+        assert_eq!(
+            classify_cargo_invocation(true, Some(0), ""),
+            CargoBuildOutcome::Pass
+        );
     }
 }

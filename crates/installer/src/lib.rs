@@ -16,6 +16,7 @@ use std::process::Command;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InstallError {
     BuildFailed { crate_name: String, detail: String },
+    BuildInconclusive { crate_name: String, code: Option<i32>, stderr_tail: String },
     IdentityMismatch { binary: String, head: String, build_id: String, version: String },
     NotAGitRepo { path: String },
     NoBinaries { repo_root: String },
@@ -34,6 +35,12 @@ impl fmt::Display for InstallError {
         match self {
             Self::BuildFailed { crate_name, detail } => {
                 write!(formatter, "BUILD FAILED: {crate_name} — {detail}")
+            }
+            Self::BuildInconclusive { crate_name, code, stderr_tail } => {
+                write!(
+                    formatter,
+                    "BUILD INCONCLUSIVE: {crate_name} exit={code:?} stderr_tail={stderr_tail:?}"
+                )
             }
             Self::IdentityMismatch { binary, head, build_id, version } => write!(
                 formatter,
@@ -313,31 +320,44 @@ pub fn build_target(
     // The source build's identity is the HEAD this invocation read, not an
     // inherited environment value or a cached anonymous artifact.
     build_command.env("OMP_BUILD_ID", build_id);
-    let out = match subprocess_contract::bounded_output(&mut build_command, BUILD_DEADLINE) {
-        subprocess_contract::BoundedOutcome::Completed(out) => out,
+    let output = match subprocess_contract::bounded_output(&mut build_command, BUILD_DEADLINE) {
+        subprocess_contract::BoundedOutcome::Completed(output) => output,
         subprocess_contract::BoundedOutcome::TimedOut => {
-            return Err(InstallError::BuildFailed {
-                crate_name: crate_name.to_owned(),
-                detail: format!(
-                    "cargo build exceeded {}s deadline; process group killed - check for a stuck build lock or credential prompt",
-                    BUILD_DEADLINE.as_secs()
-                ),
+            return Err(InstallError::InstallTimeout {
+                step: "cargo target build",
+                deadline_secs: BUILD_DEADLINE.as_secs(),
             });
         }
         subprocess_contract::BoundedOutcome::Unspawned(error) => {
-            return Err(InstallError::BuildFailed {
+            return Err(InstallError::BuildInconclusive {
                 crate_name: crate_name.to_owned(),
-                detail: format!("cargo spawn failed: {error}"),
+                code: None,
+                stderr_tail: format!("cargo could not spawn: {error}"),
             });
         }
     };
-    if !out.status.success() {
-        return Err(InstallError::BuildFailed {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    match staged_build_gate::classify_cargo_invocation(true, output.status.code(), &stderr) {
+        staged_build_gate::CargoBuildOutcome::Pass => Ok(()),
+        staged_build_gate::CargoBuildOutcome::BuildFailed { first_error, .. } => {
+            Err(InstallError::BuildFailed {
+                crate_name: crate_name.to_owned(),
+                detail: first_error,
+            })
+        }
+        staged_build_gate::CargoBuildOutcome::BuildInconclusive { code, stderr_tail } => {
+            Err(InstallError::BuildInconclusive {
+                crate_name: crate_name.to_owned(),
+                code,
+                stderr_tail,
+            })
+        }
+        staged_build_gate::CargoBuildOutcome::NotApplicable => Err(InstallError::BuildInconclusive {
             crate_name: crate_name.to_owned(),
-            detail: String::from_utf8_lossy(&out.stderr).into_owned(),
-        });
+            code: output.status.code(),
+            stderr_tail: "cargo invocation was not classified".to_owned(),
+        }),
     }
-    Ok(())
 }
 
 // ── IDENTITY VERIFICATION ───────────────────────────────────────────────────────
@@ -888,5 +908,28 @@ exit 0
         assert_eq!(staged, 0, "failed install must remove only its staged file");
         std::fs::remove_dir_all(source_root).expect("source cleanup");
         std::fs::remove_dir_all(scratch).expect("scratch cleanup");
+    }
+    #[cfg(unix)]
+    #[test]
+    fn cargo_shim_refusal_is_inconclusive_with_stderr_tail() {
+        let root = std::env::temp_dir().join(format!(
+            "omp-installer-rch-refusal-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&root).expect("fixture root");
+        let cargo = executable_fixture(
+            &root,
+            "#!/bin/sh\nprintf '%s\n' '[RCH] remote required; refusing local fallback (no admissible workers)' >&2\nexit 103\n",
+        );
+        let error = build_target(&root, cargo.to_str().expect("cargo path"), "installer", "head-42")
+            .expect_err("shim refusal must block install");
+        match error {
+            InstallError::BuildInconclusive { code, stderr_tail, .. } => {
+                assert_eq!(code, Some(103));
+                assert!(stderr_tail.contains("[RCH] remote required"), "{stderr_tail}");
+            }
+            other => panic!("expected inconclusive build, got {other:?}"),
+        }
+        std::fs::remove_dir_all(root).expect("cleanup");
     }
 }

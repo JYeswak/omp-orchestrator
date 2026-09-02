@@ -193,7 +193,7 @@ fn run_install(repo_root: &PathBuf, bin_dir: &PathBuf, target: &str) -> ExitCode
         .unwrap_or_else(|_| "~/.cargo/bin/cargo".to_owned());
     let cargo = shellexpand_path(&cargo);
     if let Err(error) = installer::build_target(repo_root, &cargo, crate_name, &head) {
-        eprintln!("INSTALLER BUILD FAILED: {error}");
+        eprintln!("INSTALLER BUILD REFUSED: {error}");
         return ExitCode::from(2);
     }
     let source = repo_root.join("target/release").join(binary_name);

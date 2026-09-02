@@ -13,7 +13,7 @@
 //!   2  the gate could not do its job (git unreadable, zero targets resolved)
 
 use staged_build_gate::{
-    classify_scope, first_cargo_error, fold, render_refusal, CrateVerdict, GateVerdict,
+    classify_cargo_invocation, classify_scope, fold, render_refusal, CrateVerdict, GateVerdict,
     StagedScope, BUILD_DEADLINE_SECS,
 };
 use std::collections::BTreeMap;
@@ -145,36 +145,17 @@ fn evaluate_crate(repo: &Path, name: &str) -> CrateVerdict {
         .arg(&package);
     match subprocess_contract::bounded_output(&mut command, Duration::from_secs(BUILD_DEADLINE_SECS))
     {
-        subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() => {
-            CrateVerdict::Pass
-        }
         subprocess_contract::BoundedOutcome::Completed(output) => {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            // A non-zero exit is evidence about the CODE only when a compiler
-            // diagnostic accompanies it. Without one, the build did not run --
-            // measured here as `[RCH] remote required; refusing local fallback` with
-            // exit 103 and zero `error` lines -- and blaming the crate for that is
-            // the same defect as reading a timeout as a verdict.
-            match first_cargo_error(&stderr) {
-                Some(first_error) => CrateVerdict::BuildFailed {
-                    code: output.status.code(),
-                    first_error,
-                },
-                None => CrateVerdict::BuildInconclusive {
-                    code: output.status.code(),
-                    stderr_tail: stderr
-                        .lines()
-                        .rev()
-                        .take(3)
-                        .collect::<Vec<_>>()
-                        .into_iter()
-                        .rev()
-                        .collect::<Vec<_>>()
-                        .join(" | ")
-                        .chars()
-                        .take(240)
-                        .collect(),
-                },
+            match classify_cargo_invocation(true, output.status.code(), &stderr) {
+                staged_build_gate::CargoBuildOutcome::Pass => CrateVerdict::Pass,
+                staged_build_gate::CargoBuildOutcome::BuildFailed { code, first_error } => {
+                    CrateVerdict::BuildFailed { code, first_error }
+                }
+                staged_build_gate::CargoBuildOutcome::BuildInconclusive { code, stderr_tail } => {
+                    CrateVerdict::BuildInconclusive { code, stderr_tail }
+                }
+                staged_build_gate::CargoBuildOutcome::NotApplicable => CrateVerdict::NoTarget,
             }
         }
         subprocess_contract::BoundedOutcome::TimedOut => CrateVerdict::TimedOut {
