@@ -6,19 +6,16 @@
 //! Never ranks on an NTM busy/error label. Work evidence is the agent's rendered line.
 //! A FREE result is provisional until a second capture agrees (content hash). Busy
 //! markers short-circuit immediately.
-//!
-//! BUFFER_MOTION_SECONDS controls the inter-capture wait and defaults to the
-//! canonical TWO_CAPTURE_MIN_SECS floor. A shorter caller override is refused.
-
+use regex::Regex;
 use omp_types::{
     CaptureSnapshot, DispatchAdmissibility, EvidenceGrade, PaneLiveness, PaneObservation,
     UnknownReason,
 };
-use regex::Regex;
-use std::io::Read;
-use std::process::{Command, Output, Stdio};
+use std::path::Path;
+use std::process::Command;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
+use subprocess_contract::{bounded_output, bounded_output_stdin, BoundedOutcome};
 
 pub const BUSY_RE: &str = r"Working \([0-9]|esc to interrupt|Pursuing goal|Thinking…|Sautéed for|Infusing…|Warping…|Warping\.\.\.|Flummoxing…|Flummoxing\.\.\.|ctrl \+ t to view transcript";
 // `(?i)` because a live Codex pane renders its model as "GPT-5.6-Luna" with a capital
@@ -400,90 +397,27 @@ pub fn confirm_free(
     }
 }
 
-pub fn spawn_timeout(mut cmd: Command, timeout: Duration) -> Option<Output> {
-    cmd.stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = cmd.spawn().ok()?;
-    // DRAIN THE PIPES ON DEDICATED THREADS.  `try_wait` in a poll loop CANNOT be paired with
-    // undrained pipes: a child that writes more than the OS pipe buffer (~64 KiB, and stdout and
-    // stderr each have their own) blocks in `write` forever, so it never exits, so `try_wait`
-    // never returns Some, and the call burns its entire timeout at 0% CPU before being killed.
-    //
-    // MEASURED 2026-08-27: `git -C <repo> log --since "24 hours ago" --oneline` completes in
-    // 0.6-0.9s from a shell, and sat at 0.0% CPU for 104s as a child here -- reproduced exactly by
-    // polling `try_wait` without reading the pipes.  Six crates shared this shape; fixing only the
-    // one that fired would have left five live.
-    let out = child.stdout.take().map(|mut r| {
-        std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            let _ = r.read_to_end(&mut buf);
-            buf
-        })
-    });
-    let err = child.stderr.take().map(|mut r| {
-        std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            let _ = r.read_to_end(&mut buf);
-            buf
-        })
-    });
-    let start = Instant::now();
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(s)) => break s,
-            Ok(None) if start.elapsed() >= timeout => {
-                let _ = child.kill();
-                break child.wait().ok()?;
-            }
-            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
-            Err(_) => return None,
-        }
-    };
-    // The readers end when the child's fds close, which the kill above guarantees.
-    let stdout = out.and_then(|h| h.join().ok()).unwrap_or_default();
-    let stderr = err.and_then(|h| h.join().ok()).unwrap_or_default();
-    Some(Output {
-        status,
-        stdout,
-        stderr,
-    })
+pub fn spawn_timeout(mut cmd: Command, timeout: Duration) -> BoundedOutcome {
+    bounded_output(&mut cmd, timeout)
 }
 
 pub fn sha_text(s: &str) -> String {
     let mut cmd = Command::new("shasum");
-    cmd.stdin(Stdio::piped());
-    cmd.stdout(Stdio::piped());
-    cmd.stderr(Stdio::null());
-    let mut child = match cmd.spawn() {
-        Ok(c) => c,
-        Err(_) => return String::new(),
-    };
-    if let Some(mut stdin) = child.stdin.take() {
-        use std::io::Write;
-        let _ = stdin.write_all(s.as_bytes());
-    }
-    let start = Instant::now();
-    loop {
-        match child.try_wait() {
-            Ok(Some(_)) => {
-                return child
-                    .wait_with_output()
-                    .ok()
-                    .and_then(|o| {
-                        String::from_utf8_lossy(&o.stdout)
-                            .split_whitespace()
-                            .next()
-                            .map(|s| s.to_string())
-                    })
-                    .unwrap_or_default();
-            }
-            Ok(None) if start.elapsed() >= Duration::from_secs(5) => {
-                let _ = child.kill();
-                return String::new();
-            }
-            Ok(None) => std::thread::sleep(Duration::from_millis(10)),
-            Err(_) => return String::new(),
+    match bounded_output_stdin(&mut cmd, Duration::from_secs(5), s.as_bytes()) {
+        BoundedOutcome::Completed(output) if output.status.success() => output
+            .stdout
+            .split(|byte| byte.is_ascii_whitespace())
+            .find(|part| !part.is_empty())
+            .map(|part| String::from_utf8_lossy(part).into_owned())
+            .unwrap_or_default(),
+        BoundedOutcome::Completed(_) => String::new(),
+        BoundedOutcome::TimedOut => {
+            eprintln!("pane-dispatch-ready: shasum timed out before its deadline");
+            String::new()
+        }
+        BoundedOutcome::Unspawned(error) => {
+            eprintln!("pane-dispatch-ready: shasum could not spawn: {error}");
+            String::new()
         }
     }
 }
@@ -707,8 +641,8 @@ mod tests {
             start.elapsed()
         );
         assert!(
-            out.is_some(),
-            "rule bounded_waits: timeout path must still return"
+            matches!(out, BoundedOutcome::TimedOut),
+            "rule bounded_waits: timeout path must still return a restrictive timeout outcome"
         );
     }
 
@@ -723,7 +657,10 @@ mod tests {
         let mut cmd = Command::new("/bin/sh");
         cmd.args(["-c", "exec 3<>/dev/fd/$CHECK_FD"])
             .env("CHECK_FD", fd.to_string());
-        let out = spawn_timeout(cmd, Duration::from_secs(2)).expect("sh open-fd");
+        let out = spawn_timeout(cmd, Duration::from_secs(2));
+        let BoundedOutcome::Completed(out) = out else {
+            panic!("rule lock_not_inheritable: fd probe did not complete");
+        };
         assert!(
             !out.status.success(),
             "rule lock_not_inheritable: child opened our File fd {fd} (inherited, not CLOEXEC)"

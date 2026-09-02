@@ -6,15 +6,28 @@ use pane_dispatch_ready::{
     apply_composer_rc, capture_snapshot, classify, confirm_free, missing_composer, spawn_timeout,
     PaneDispatchReadyRules, PaneDispatchReadyState, TWO_CAPTURE_MIN_SECS,
 };
-use std::io::{self, Read, Write};
+use std::io::{self, Read};
 use std::path::PathBuf;
-use std::process::{Command, ExitCode, Stdio};
+use std::process::{Command, ExitCode, Output};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use subprocess_contract::{bounded_output_stdin, BoundedOutcome};
 
 fn say(line: &str) {
     println!("{line}");
 }
-
+fn completed(label: &str, outcome: BoundedOutcome) -> Option<Output> {
+    match outcome {
+        BoundedOutcome::Completed(output) => Some(output),
+        BoundedOutcome::TimedOut => {
+            eprintln!("pane-dispatch-ready: {label} timed out before its deadline");
+            None
+        }
+        BoundedOutcome::Unspawned(error) => {
+            eprintln!("pane-dispatch-ready: {label} could not spawn: {error}");
+            None
+        }
+    }
+}
 fn unix_seconds() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -26,38 +39,22 @@ fn composer_rc(tail: &str, path: &str) -> i32 {
     if !PathBuf::from(path).is_file() {
         return 99;
     }
-    // The discriminator was ported to Rust (crates/composer-typed) and the `.py` was
-    // removed, but this caller still shelled out to `python3 <path>` -- so it returned
-    // 99 and fail-closed EVERY pane in the fleet to BUSY. Built, ported, and never
-    // rewired. Dispatch by extension so both forms work and neither can silently rot.
     let mut cmd = if path.ends_with(".py") {
-        let mut c = Command::new("python3");
-        c.arg(path);
-        c
+        let mut command = Command::new("python3");
+        command.arg(path);
+        command
     } else {
         Command::new(path)
     };
-    cmd.stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    let mut child = match cmd.spawn() {
-        Ok(c) => c,
-        Err(_) => return 99,
-    };
-    if let Some(mut stdin) = child.stdin.take() {
-        let _ = stdin.write_all(tail.as_bytes());
-    }
-    let start = std::time::Instant::now();
-    loop {
-        match child.try_wait() {
-            Ok(Some(st)) => return st.code().unwrap_or(99),
-            Ok(None) if start.elapsed() >= Duration::from_secs(5) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return 99;
-            }
-            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
-            Err(_) => return 99,
+    match bounded_output_stdin(&mut cmd, Duration::from_secs(5), tail.as_bytes()) {
+        BoundedOutcome::Completed(output) => output.status.code().unwrap_or(99),
+        BoundedOutcome::TimedOut => {
+            eprintln!("pane-dispatch-ready: composer probe timed out before its deadline");
+            124
+        }
+        BoundedOutcome::Unspawned(error) => {
+            eprintln!("pane-dispatch-ready: composer probe could not spawn: {error}");
+            77
         }
     }
 }
@@ -252,17 +249,25 @@ fn run_live(
 ) -> ExitCode {
     let mut tmv = Command::new("tmux");
     tmv.arg("-V");
-    if spawn_timeout(tmv, Duration::from_secs(5))
-        .map(|o| !o.status.success())
-        .unwrap_or(true)
-    {
+    let tmux_unhealthy = match spawn_timeout(tmv, Duration::from_secs(5)) {
+        BoundedOutcome::Completed(output) => !output.status.success(),
+        BoundedOutcome::TimedOut => {
+            eprintln!("pane-dispatch-ready: tmux version timed out before its deadline");
+            true
+        }
+        BoundedOutcome::Unspawned(error) => {
+            eprintln!("pane-dispatch-ready: tmux version could not spawn: {error}");
+            true
+        }
+    };
+    if tmux_unhealthy {
         eprintln!("tmux not available");
         return ExitCode::from(2);
     }
     let sess_list: Vec<String> = if sessions.is_empty() {
         let mut cmd = Command::new("tmux");
         cmd.args(["list-sessions", "-F", "#{session_name}"]);
-        let t = spawn_timeout(cmd, Duration::from_secs(15))
+        let t = completed("tmux sessions", spawn_timeout(cmd, Duration::from_secs(15)))
             .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
             .unwrap_or_default();
         if t.trim().is_empty() {
@@ -291,7 +296,7 @@ fn run_live(
     for s in &sess_list {
         let mut cmd = Command::new("tmux");
         cmd.args(["list-panes", "-t", s, "-F", "#{pane_index}"]);
-        let panes = spawn_timeout(cmd, Duration::from_secs(15))
+        let panes = completed("tmux panes", spawn_timeout(cmd, Duration::from_secs(15)))
             .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
             .unwrap_or_default();
         for pane in panes.lines().map(str::trim).filter(|p| !p.is_empty()) {
@@ -310,7 +315,7 @@ fn run_live(
                 "-S",
                 "-40",
             ]);
-            let txt = spawn_timeout(cap, Duration::from_secs(10))
+            let txt = completed("tmux first capture", spawn_timeout(cap, Duration::from_secs(10)))
                 .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
                 .unwrap_or_default();
             let first_captured_at_secs = unix_seconds();
@@ -328,7 +333,7 @@ fn run_live(
                     "-S",
                     "-40",
                 ]);
-                let next = spawn_timeout(cap2, Duration::from_secs(10))
+                let next = completed("tmux second capture", spawn_timeout(cap2, Duration::from_secs(10)))
                     .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
                     .unwrap_or_default();
                 let current_snapshot = capture_snapshot(unix_seconds(), &next);
