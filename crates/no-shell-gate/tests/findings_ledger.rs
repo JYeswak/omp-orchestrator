@@ -19,6 +19,7 @@ struct GateReport {
     declared: usize,
     reconciled: usize,
     void_rows: usize,
+    open: usize,
 }
 
 fn fixture_root(label: &str) -> PathBuf {
@@ -230,6 +231,10 @@ fn validate_finding_row(row: &Value) -> Result<(String, u64, bool, String), Stri
     let section = string_field(row, &["section"])
         .ok_or_else(|| format!("FINDINGS_ROW_MISSING_SECTION id={id}"))?
         .to_owned();
+    let _severity = row
+        .get("severity")
+        .filter(|value| !value.is_null())
+        .ok_or_else(|| format!("FINDINGS_ROW_MISSING_SEVERITY id={id}"))?;
     let _summary = string_field(row, &["summary", "finding"])
         .ok_or_else(|| format!("FINDINGS_ROW_MISSING_SUMMARY id={id}"))?;
     let _verified_by = string_field(row, &["verified_by", "graded_by"])
@@ -564,11 +569,16 @@ fn validate_findings_ledger(repo: &Path) -> Result<GateReport, String> {
             ));
         }
     }
+    let open_rows = serial_rows
+        .iter()
+        .filter(|(_, _, is_void, status)| !*is_void && status == "OPEN")
+        .count();
     validate_serial_rule(&convergence, &serial_rows)?;
     Ok(GateReport {
         declared: declared_total,
         reconciled: actual.len(),
         void_rows,
+        open: open_rows,
     })
 }
 
@@ -598,11 +608,27 @@ fn empty_findings_ledger_is_an_error() {
 }
 
 #[test]
+fn findings_rows_require_schema_severity() {
+    let row = serde_json::json!({
+        "id": "R21-00-001",
+        "round": 21,
+        "section": "00-brief",
+        "finding": "missing severity",
+        "disposition": "RETRACTED",
+        "retracted_reason": "test",
+        "evidence": ".flywheel/grade-evidence/evidence.gz",
+        "graded_by": "FreshEye",
+    });
+    let error = validate_finding_row(&row).expect_err("schema severity is required");
+    assert!(error.contains("FINDINGS_ROW_MISSING_SEVERITY"), "{error}");
+}
+
+#[test]
 fn known_good_reconciliation_has_exact_coverage() {
     let root = fixture_root("good");
     write_fixture(
         &root,
-        r#"{"finding_id":"R21-00-001","round":21,"section":"00-brief","summary":"fixed","status":"FIXED","sha":"0123456789012345678901234567890123456789","evidence":".flywheel/grade-evidence/evidence.gz","verified_by":"BlueLantern"}
+        r#"{"finding_id":"R21-00-001","round":21,"section":"00-brief","severity":"major","summary":"fixed","status":"FIXED","sha":"0123456789012345678901234567890123456789","evidence":".flywheel/grade-evidence/evidence.gz","verified_by":"BlueLantern"}
 "#,
         r#"{"section":"00-brief","round":21,"new_findings":1,"finding_ids":["R21-00-001"],"lens":"fresh","graded_by":"FreshEye"}
 "#,
@@ -621,8 +647,8 @@ fn supplemental_reconciliation_rows_are_allowed_after_exact_coverage() {
     let root = fixture_root("supplemental");
     write_fixture(
         &root,
-        r#"{"finding_id":"R21-00-001","round":21,"section":"00-brief","summary":"fixed","status":"FIXED","sha":"0123456789012345678901234567890123456789","evidence":".flywheel/grade-evidence/evidence.gz","verified_by":"BlueLantern"}
-{"finding_id":"R21-supplemental","round":21,"section":"00-brief","summary":"additional disposition","status":"DEFERRED","bead":"omp-orchestrator-kxe.3","evidence":".flywheel/grade-evidence/evidence.gz","verified_by":"BlueLantern"}
+        r#"{"finding_id":"R21-00-001","round":21,"section":"00-brief","severity":"major","summary":"fixed","status":"FIXED","sha":"0123456789012345678901234567890123456789","evidence":".flywheel/grade-evidence/evidence.gz","verified_by":"BlueLantern"}
+{"finding_id":"R21-supplemental","round":21,"section":"00-brief","severity":"minor","summary":"additional disposition","status":"DEFERRED","bead":"omp-orchestrator-kxe.3","evidence":".flywheel/grade-evidence/evidence.gz","verified_by":"BlueLantern"}
 "#,
         r#"{"section":"00-brief","round":21,"new_findings":1,"finding_ids":["R21-00-001"],"lens":"fresh","graded_by":"FreshEye"}
 "#,
@@ -641,7 +667,7 @@ fn count_only_coverage_rejects_a_short_ledger() {
     let root = fixture_root("count-only");
     write_fixture(
         &root,
-        r#"{"finding_id":"R21-00-001","round":21,"section":"00-brief","summary":"one","status":"RETRACTED","reason":"wrong","evidence":".flywheel/grade-evidence/evidence.gz","verified_by":"BlueLantern"}
+        r#"{"finding_id":"R21-00-001","round":21,"section":"00-brief","severity":"major","summary":"one","status":"RETRACTED","reason":"wrong","evidence":".flywheel/grade-evidence/evidence.gz","verified_by":"BlueLantern"}
 "#,
         r#"{"section":"00-brief","round":21,"new_findings":2,"lens":"fresh","graded_by":"FreshEye"}
 "#,
@@ -660,6 +686,7 @@ fn void_finding_rows_are_excluded_from_coverage_map() {
         "finding_id": "R22-00-001",
         "round": 22,
         "section": "00-brief",
+        "severity": "info",
         "summary": "void",
         "status": "DEFERRED",
         "bead": "omp-orchestrator-kxe.3",
@@ -689,7 +716,7 @@ fn short_ledger_is_an_error_with_both_counts() {
     let root = fixture_root("short");
     write_fixture(
         &root,
-        r#"{"finding_id":"R21-00-001","round":21,"section":"00-brief","summary":"one","status":"RETRACTED","reason":"wrong","evidence":".flywheel/grade-evidence/evidence.gz","verified_by":"BlueLantern"}
+        r#"{"finding_id":"R21-00-001","round":21,"section":"00-brief","severity":"major","summary":"one","status":"RETRACTED","reason":"wrong","evidence":".flywheel/grade-evidence/evidence.gz","verified_by":"BlueLantern"}
 "#,
         r#"{"section":"00-brief","round":21,"new_findings":2,"finding_ids":["R21-00-001","R21-00-002"],"lens":"fresh","graded_by":"FreshEye"}
 "#,
@@ -711,7 +738,7 @@ fn pinned_later_round_cannot_follow_open_finding() {
     let root = fixture_root("serial");
     write_fixture(
         &root,
-        r#"{"finding_id":"R21-00-001","round":21,"section":"00-brief","summary":"open","status":"OPEN","evidence":".flywheel/grade-evidence/evidence.gz","verified_by":"BlueLantern"}
+        r#"{"finding_id":"R21-00-001","round":21,"section":"00-brief","severity":"blocker","summary":"open","status":"OPEN","evidence":".flywheel/grade-evidence/evidence.gz","verified_by":"BlueLantern"}
 "#,
         r#"{"section":"00-brief","round":21,"new_findings":1,"finding_ids":["R21-00-001"],"lens":"fresh","graded_by":"FreshEye"}
 "#,
@@ -729,7 +756,7 @@ fn unpinned_future_convergence_rows_are_void_and_not_coverage() {
     let root = fixture_root("void");
     write_fixture(
         &root,
-        r#"{"finding_id":"R21-00-001","round":21,"section":"00-brief","summary":"fixed","status":"DEFERRED","bead":"omp-orchestrator-kxe.3","evidence":".flywheel/grade-evidence/evidence.gz","verified_by":"BlueLantern"}
+        r#"{"finding_id":"R21-00-001","round":21,"section":"00-brief","severity":"major","summary":"fixed","status":"DEFERRED","bead":"omp-orchestrator-kxe.3","evidence":".flywheel/grade-evidence/evidence.gz","verified_by":"BlueLantern"}
 "#,
         r#"{"section":"00-brief","round":21,"new_findings":1,"finding_ids":["R21-00-001"],"lens":"fresh","graded_by":"FreshEye"}
 "#,
@@ -769,6 +796,18 @@ fn real_findings_ledger_is_strictly_valid() {
         "ledger must cover every declaration; supplemental reconciliations are allowed: declared={} reconciled={}",
         report.declared,
         report.reconciled
+    );
+    eprintln!(
+        "FINDINGS_LEDGER_REAL declared={} reconciled={} void_rows={} open_rows={}",
+        report.declared, report.reconciled, report.void_rows, report.open
+    );
+    assert_eq!(
+        report.void_rows, 4,
+        "the four unpinned round-22 rows must be reported VOID"
+    );
+    assert_eq!(
+        report.open, 0,
+        "the reconciled real ledger must report zero OPEN rows"
     );
 }
 
@@ -828,8 +867,14 @@ fn a_fixed_pointer_at_a_ledger_only_commit_is_refused_and_named() {
         text.contains("FINDINGS_FIXED_POINTER_LEDGER_ONLY"),
         "must classify a FINDINGS.jsonl-only commit as ledger-only:\n{text}"
     );
-    assert!(text.contains("PLANTED-ledger-only"), "must NAME the row:\n{text}");
-    assert!(text.contains("04-diagrams"), "and the section it claimed to fix:\n{text}");
+    assert!(
+        text.contains("PLANTED-ledger-only"),
+        "must NAME the row:\n{text}"
+    );
+    assert!(
+        text.contains("04-diagrams"),
+        "and the section it claimed to fix:\n{text}"
+    );
 }
 
 /// FIRES-ON-KNOWN-BAD: a shaped-but-nonexistent sha, which the old shape-only check accepted.
@@ -850,7 +895,9 @@ fn a_fixed_pointer_at_a_nonexistent_commit_is_refused() {
 
     let failures = unverifiable_fixed_pointers(&root, &rows, true);
     assert!(
-        failures.iter().any(|f| f.starts_with("FINDINGS_FIXED_POINTER_MISSING")),
+        failures
+            .iter()
+            .any(|f| f.starts_with("FINDINGS_FIXED_POINTER_MISSING")),
         "the pre-existing shape check accepts `deadbeef`; this one must not: {failures:?}"
     );
 }
@@ -863,7 +910,11 @@ fn a_fixed_pointer_at_a_nonexistent_commit_is_refused() {
 fn a_cross_cutting_row_is_skipped_rather_than_failed() {
     let root = repo_root();
     assert_eq!(
-        classify_fixed_pointer(&root, "cross-cutting", "506351316df7af0883a267543e87e740b2511ec8"),
+        classify_fixed_pointer(
+            &root,
+            "cross-cutting",
+            "506351316df7af0883a267543e87e740b2511ec8"
+        ),
         PointerVerdict::NotASection
     );
     let rows: Vec<Value> = serde_json::json!([{
@@ -889,7 +940,8 @@ fn a_cross_cutting_row_is_skipped_rather_than_failed() {
 /// `docs/plan/FINDINGS.jsonl` is sha256'd before and after so "byte-identical restore" is a
 /// measurement rather than an assurance — it is another agent's file and is never written here.
 #[test]
-fn repointing_a_good_row_at_a_ledger_only_commit_flips_the_verdict_and_the_real_file_is_untouched() {
+fn repointing_a_good_row_at_a_ledger_only_commit_flips_the_verdict_and_the_real_file_is_untouched()
+{
     let root = repo_root();
     let path = root.join("docs/plan/FINDINGS.jsonl");
     let before = fs::read(&path).expect("read");
@@ -898,9 +950,7 @@ fn repointing_a_good_row_at_a_ledger_only_commit_flips_the_verdict_and_the_real_
     let rows = read_jsonl(&path, "FINDINGS_LEDGER").expect("readable");
     let good = fixed_rows(&rows)
         .into_iter()
-        .find(|(_, section, sha)| {
-            classify_fixed_pointer(&root, section, sha) == PointerVerdict::Ok
-        })
+        .find(|(_, section, sha)| classify_fixed_pointer(&root, section, sha) == PointerVerdict::Ok)
         .expect("the ledger must contain at least one verifying FIXED row to mutate");
 
     // baseline GREEN for exactly this row
@@ -927,7 +977,8 @@ fn repointing_a_good_row_at_a_ledger_only_commit_flips_the_verdict_and_the_real_
     .clone();
     let red = unverifiable_fixed_pointers(&root, &mutated, false);
     assert!(
-        red.iter().any(|f| f.starts_with("FINDINGS_FIXED_POINTER_LEDGER_ONLY")),
+        red.iter()
+            .any(|f| f.starts_with("FINDINGS_FIXED_POINTER_LEDGER_ONLY")),
         "mutation must go RED on exactly the repointed row: {red:?}"
     );
 
@@ -954,8 +1005,8 @@ fn repointing_a_good_row_at_a_ledger_only_commit_flips_the_verdict_and_the_real_
 #[test]
 fn every_fixed_pointer_allowance_row_is_real_and_carries_a_dies_when() {
     let root = repo_root();
-    let rows = read_jsonl(&root.join("docs/plan/FINDINGS.jsonl"), "FINDINGS_LEDGER")
-        .expect("readable");
+    let rows =
+        read_jsonl(&root.join("docs/plan/FINDINGS.jsonl"), "FINDINGS_LEDGER").expect("readable");
     let ids: BTreeSet<String> = rows
         .iter()
         .filter_map(|r| string_field(r, &["id", "finding_id"]).map(ToOwned::to_owned))
