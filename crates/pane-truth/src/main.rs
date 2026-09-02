@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use pane_truth::{run_live, selftest, PaneTruthRules};
+use pane_truth::{run_live, run_live_exit_code, selftest, selftest_exit_code, PaneTruthRules};
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
@@ -46,7 +46,15 @@ fn main() -> ExitCode {
         }
     }
     if self_test {
-        return ExitCode::from(selftest(&rules) as u8);
+        // NOT `selftest(&rules) as u8` (bead omp-orchestrator-e4wp): `as` WRAPS between
+        // integers, so a count of 256 truncated to 0 and this oracle would print RED while
+        // exiting SUCCESS. `selftest_exit_code` is total over i32 and returns u8 literals.
+        return ExitCode::from(selftest_exit_code(selftest(&rules)));
     }
-    ExitCode::from(run_live(&session, &rules) as u8)
+    // Same narrowing, second site in the same function. Fixing only the one that was reported
+    // would have left this one live — the failure mode `admission-reason` records as "six
+    // crates shared this shape; fixing only the one that fired would have left five live".
+    // `run_live_exit_code` preserves 0 and 4 exactly and refuses to turn anything
+    // unrepresentable into a SUCCESS exit.
+    ExitCode::from(run_live_exit_code(run_live(&session, &rules)))
 }

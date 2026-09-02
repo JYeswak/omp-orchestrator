@@ -692,6 +692,70 @@ pub fn run_live(session: &str, rules: &PaneTruthRules) -> i32 {
     0
 }
 
+/// Exit code for a RED pane-truth selftest.
+///
+/// The EXISTING `1`, not a newly allocated number: `XC-001` already documents 1 as "a gate
+/// refused", and a RED selftest is that meaning. Nothing new lands in the `1`-`4` legacy band
+/// the registry band rule closes to new semantics.
+pub const SELFTEST_RED_EXIT: u8 = 1;
+
+/// Collapse a selftest failure count into a process exit code **without narrowing**.
+///
+/// THE DEFECT THIS REPLACES (bead `omp-orchestrator-e4wp`): `main.rs:49` was
+/// `ExitCode::from(selftest(&rules) as u8)`. In Rust `as` between integers WRAPS rather than
+/// saturates, so a count of 256 became exit code **0** — the oracle would print RED and exit
+/// SUCCESS. `pane-truth` is the fleet's ground-truth oracle, so that is a broken oracle
+/// reporting itself healthy, and every dispatch decision keyed on it inherits the lie.
+///
+/// Worse than the `cargo-lane-budget` twin fixed at `dc617e2`: because the argument was
+/// `selftest(&rules)`, `passthrough_chain` (`no-shell-gate/tests/exit_codes.rs:237-258`)
+/// rejected it on the `(` and `&`, so the site was undeclared AND unscanned — invisible to
+/// the mechanism built to catch exactly this.
+///
+/// This function is total over `i32` and its two results are `u8` LITERALS: there is no
+/// numeric conversion on the path, so truncation is inexpressible rather than merely absent.
+/// On the domain `selftest` can actually return — `{0, 1}`, every arm is a literal — it
+/// agrees with the old cast byte for byte, so behaviour diverges ONLY where the old path was
+/// wrong.
+pub fn selftest_exit_code(failures: i32) -> u8 {
+    if failures == 0 {
+        0
+    } else {
+        SELFTEST_RED_EXIT
+    }
+}
+
+/// The selftest verdict token and its exit code, derived from ONE value.
+///
+/// The defect's teeth are that the emitted text and the exit status could DISAGREE, so an
+/// exit-code-only assertion cannot see it (`AGENTS.md` gate rule 7). Producing both from a
+/// single argument makes disagreement unrepresentable rather than merely untested.
+pub fn selftest_report(failures: i32) -> (&'static str, u8) {
+    if failures == 0 {
+        ("SELFTEST PASS", selftest_exit_code(failures))
+    } else {
+        ("SELFTEST FAIL", selftest_exit_code(failures))
+    }
+}
+
+/// Convert a `run_live` verdict into a process exit code **without narrowing**.
+///
+/// DELIBERATE DEVIATION from `selftest_exit_code`'s literals-only shape, and the reason is
+/// behavioural: `run_live` returns `0` or `4`, and `4` is an observable code that
+/// `tests/differential.rs` compares against the shell oracle with `assert_eq!(shell_rc,
+/// rust_rc)`. Collapsing it to a single RED value would change a live exit code, which is a
+/// behavioural change this crate has no oracle in this repo to verify (its differential
+/// spawns `bin/pane-truth.sh`, which cannot exist here). So this is a CHECKED conversion —
+/// `u8::try_from`, never `as` — that is the identity on `0..=255` and maps anything
+/// unrepresentable to a NON-ZERO code. An out-of-range verdict can therefore never become a
+/// SUCCESS exit, which is the whole property at stake.
+pub fn run_live_exit_code(code: i32) -> u8 {
+    match u8::try_from(code) {
+        Ok(representable) => representable,
+        Err(_) => SELFTEST_RED_EXIT,
+    }
+}
+
 pub fn selftest(rules: &PaneTruthRules) -> i32 {
     let text = "claude\nWorking (2s - esc to interrupt)\n❯ ";
     let now = 10_000;
@@ -778,8 +842,11 @@ pub fn selftest(rules: &PaneTruthRules) -> i32 {
         );
         return 1;
     }
-    println!("SELFTEST PASS pane-truth fixtures=6 (two-capture, rendered markers, input prompt, v18 working, v18 busy-flip, v18 idle)");
-    0
+    // The token and the code leave this function as ONE decision, so the emitted verdict and
+    // the exit status cannot drift apart (gate rule 7, bead omp-orchestrator-e4wp).
+    let (token, code) = selftest_report(0);
+    println!("{token} pane-truth fixtures=6 (two-capture, rendered markers, input prompt, v18 working, v18 busy-flip, v18 idle)");
+    i32::from(code)
 }
 
 #[cfg(test)]
@@ -1043,5 +1110,114 @@ mod tests {
                 row.verdict
             );
         }
+    }
+
+    /// KNOWN-BAD LEG, FIRING AT THE EXACT ACTIVATION VALUE — bead `omp-orchestrator-e4wp`.
+    ///
+    /// The defect is invisible below 256 and at every value that is not a multiple of it,
+    /// which is why it survived review in two crates. A leg at `failures = 1` proves nothing.
+    /// This one first PINS THE MECHANISM as an assertion rather than as prose — `256_i32 as
+    /// u8 == 0`, the wrap the old `main.rs:49` performed — and then asserts the replacement
+    /// refuses it. `pane-truth` is the fleet's ground-truth oracle, so the property being
+    /// defended is that it can never print RED and exit SUCCESS.
+    #[test]
+    fn selftest_exit_code_does_not_truncate_at_256() {
+        assert_eq!(
+            256_i32 as u8, 0,
+            "the premise of this bead: `as` wraps, so 256 became a SUCCESS exit"
+        );
+
+        let mut checked = 0usize;
+        for failures in [256, 512, 65_536, 16_777_216, -1, i32::MIN] {
+            assert_ne!(
+                selftest_exit_code(failures),
+                0,
+                "failures={failures} truncated to a SUCCESS exit; the e4wp defect is back"
+            );
+            assert_eq!(selftest_exit_code(failures), SELFTEST_RED_EXIT);
+            checked += 1;
+        }
+        // Anti-vacuity: an empty case set is an ERROR, never a pass. A loop that iterated
+        // zero times reports identically to one that checked every value.
+        assert_eq!(checked, 6, "the known-bad case set must not be empty");
+    }
+
+    /// The SAME property for the second site in the same function. `run_live` returns 0 or 4,
+    /// and 4 is an observable code its differential compares against the shell oracle, so this
+    /// conversion is the identity on `0..=255` rather than a collapse — but it must still be
+    /// incapable of turning an unrepresentable verdict into SUCCESS.
+    #[test]
+    fn run_live_exit_code_preserves_its_codes_and_never_yields_success_by_accident() {
+        assert_eq!(run_live_exit_code(0), 0, "PASS must stay 0");
+        assert_eq!(run_live_exit_code(4), 4, "cannot-observe must stay 4, not collapse");
+
+        let mut checked = 0usize;
+        for code in [256, 260, 512, 65_536, -1, i32::MIN] {
+            assert_ne!(
+                run_live_exit_code(code),
+                0,
+                "code={code} became a SUCCESS exit; `as u8` is back at main.rs:51"
+            );
+            checked += 1;
+        }
+        assert_eq!(checked, 6, "the known-bad case set must not be empty");
+
+        // 260 is the case that separates a CHECKED conversion from a wrapping one: `260 as u8`
+        // is 4, which would silently impersonate the real cannot-observe verdict.
+        assert_eq!(260_i32 as u8, 4, "the mechanism: 260 wrapped into a REAL verdict value");
+        assert_ne!(
+            run_live_exit_code(260),
+            4,
+            "260 must not impersonate cannot-observe"
+        );
+    }
+
+    /// KNOWN-GOOD, and the reason this is safe in a crate with no equivalence oracle here
+    /// (EE-P4): on every value the callers can actually produce, the new conversions equal
+    /// `reachable as u8` byte for byte. Behaviour diverges ONLY where the old path was wrong.
+    #[test]
+    fn exit_codes_agree_with_the_old_cast_on_the_reachable_domain() {
+        let mut checked = 0usize;
+        for reachable in [0_i32, 1] {
+            assert_eq!(selftest_exit_code(reachable), reachable as u8);
+            checked += 1;
+        }
+        for reachable in [0_i32, 4] {
+            assert_eq!(run_live_exit_code(reachable), reachable as u8);
+            checked += 1;
+        }
+        assert_eq!(checked, 4, "the equivalence case set must not be empty");
+    }
+
+    /// ASSERT THE MESSAGE, NOT JUST THE CODE — `AGENTS.md` gate rule 7.
+    ///
+    /// The entire defect is that the emitted verdict and the exit status can DISAGREE, so an
+    /// exit-code-only assertion is blind to it. This reads the token as well as the code, at
+    /// 256 specifically, and pins that a PASS token is never paired with a non-zero code nor a
+    /// FAIL token with zero.
+    #[test]
+    fn the_emitted_token_and_the_status_cannot_disagree() {
+        let (token, code) = selftest_report(256);
+        assert_eq!(token, "SELFTEST FAIL");
+        assert_ne!(
+            code, 0,
+            "the token says FAIL while the exit code says SUCCESS — the e4wp defect"
+        );
+
+        let (pass_token, pass_code) = selftest_report(0);
+        assert_eq!(pass_token, "SELFTEST PASS");
+        assert_eq!(pass_code, 0);
+
+        let mut checked = 0usize;
+        for failures in [0, 1, 2, 255, 256, -1] {
+            let (token, code) = selftest_report(failures);
+            assert_eq!(
+                token == "SELFTEST FAIL",
+                code != 0,
+                "token/status disagreement at failures={failures}: {token} with code {code}"
+            );
+            checked += 1;
+        }
+        assert_eq!(checked, 6, "the pairing case set must not be empty");
     }
 }
