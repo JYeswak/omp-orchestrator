@@ -54,6 +54,7 @@ jobs:
       - run: cargo test -p kernel-bypass-gate
       - name: Scan checked-out workspace for kernel bypasses
         run: cargo run --quiet -p kernel-bypass-gate -- .
+  state-wildcard-lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
