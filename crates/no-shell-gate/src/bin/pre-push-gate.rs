@@ -33,8 +33,8 @@
 //! - `--record` : write the receipt. Requires the caller to pass the observed
 //!   failing-suite count; a nonzero count writes NO receipt and exits nonzero.
 //! - default    : verify. Refuses if the receipt is missing, malformed, records
-//!   failures, or is older than the newest tracked `.rs` / `.toml` file.
-//!
+//!   failures, carries no matching writer_build_id, or is older than the newest
+//!   tracked .rs / .toml file.
 //! # Toolchain parity — added after this gate certified 67 red CI runs
 //!
 //! 2026-09-02. `gh run list --limit 200` returned **67 runs and 67 failures**,
@@ -77,6 +77,10 @@ use std::process::ExitCode;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const RECEIPT: &str = ".flywheel/workspace-green.receipt";
+const BUILD_ID: &str = env!(
+    "OMP_BUILD_ID",
+    "OMP_BUILD_ID missing: no-shell-gate build.rs must stamp every pre-push writer"
+);
 
 fn usage() -> String {
     format!(
@@ -150,13 +154,11 @@ fn rustc_commit(root: &Path, toolchain: Option<&str>) -> Option<String> {
     // Generous bound on purpose: with a pin present and the toolchain not yet
     // installed, the rustup shim DOWNLOADS it on this call. That happens once per
     // machine and takes minutes; the steady-state cost is milliseconds.
-    let out = match subprocess_contract::bounded_output(
-        &mut cmd,
-        std::time::Duration::from_secs(600),
-    ) {
-        subprocess_contract::BoundedOutcome::Completed(out) if out.status.success() => out,
-        _ => return None,
-    };
+    let out =
+        match subprocess_contract::bounded_output(&mut cmd, std::time::Duration::from_secs(600)) {
+            subprocess_contract::BoundedOutcome::Completed(out) if out.status.success() => out,
+            _ => return None,
+        };
     String::from_utf8_lossy(&out.stdout)
         .lines()
         .find_map(|l| l.strip_prefix("commit-hash:").map(|s| s.trim().to_string()))
@@ -293,7 +295,9 @@ fn main() -> ExitCode {
     }
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let root = repo.map(PathBuf::from).unwrap_or_else(|| repo_root_from(&cwd));
+    let root = repo
+        .map(PathBuf::from)
+        .unwrap_or_else(|| repo_root_from(&cwd));
     let receipt = root.join(RECEIPT);
 
     if let Some(count) = record {
@@ -331,9 +335,10 @@ fn main() -> ExitCode {
         let body = format!(
             "workspace_green_receipt\nrecorded_at_unix={now}\nfailing_suites=0\n\
              recorded_by=pre-push-gate\n\
+             writer_build_id={BUILD_ID}\n\
              toolchain_channel={}\nrustc_commit={}\n\
              NOTE: the count is asserted by the caller, not observed by this binary.\n\
-             NOTE: the toolchain fields ARE observed — `rustc -vV` ran here.\n",
+             NOTE: the toolchain fields ARE observed — rustc -vV ran here.\n",
             parity.channel, parity.commit
         );
         if let Err(e) = std::fs::write(&receipt, body) {
@@ -418,6 +423,24 @@ fn main() -> ExitCode {
         Some(_) => {}
     }
 
+    match body
+        .lines()
+        .find_map(|line| line.strip_prefix("writer_build_id=").map(str::trim))
+    {
+        None => {
+            eprintln!(
+                "PRE_PUSH_GATE_REFUSED writer build identity mismatch: receipt has no writer_build_id; running writer_build_id={BUILD_ID}"
+            );
+            return ExitCode::from(1);
+        }
+        Some(recorded) if recorded != BUILD_ID => {
+            eprintln!(
+                "PRE_PUSH_GATE_REFUSED writer build identity mismatch: receipt writer_build_id={recorded} differs from running writer_build_id={BUILD_ID}"
+            );
+            return ExitCode::from(1);
+        }
+        Some(_) => {}
+    }
     match newest_tracked_source(&root) {
         None => {
             // ANTI-VACUITY: no tracked sources means the scan is broken, not that
@@ -446,7 +469,7 @@ fn main() -> ExitCode {
         Some(_) => {
             println!(
                 "PRE_PUSH_GATE_OK green receipt postdates every tracked source, and was \
-                 recorded by {} ({}) — the compiler CI installs from rust-toolchain.toml",
+                 written by writer_build_id={BUILD_ID} under {} ({}) — the compiler CI installs from rust-toolchain.toml",
                 parity.channel, parity.commit
             );
             println!(

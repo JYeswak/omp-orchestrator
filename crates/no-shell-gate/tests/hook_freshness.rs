@@ -72,7 +72,9 @@ fn newest_source(root: &Path) -> Option<(PathBuf, SystemTime)> {
         let dir = root.join("crates").join(crate_name).join("src");
         let mut stack = vec![dir];
         while let Some(d) = stack.pop() {
-            let Ok(entries) = std::fs::read_dir(&d) else { continue };
+            let Ok(entries) = std::fs::read_dir(&d) else {
+                continue;
+            };
             for e in entries.flatten() {
                 let p = e.path();
                 if p.is_dir() {
@@ -82,7 +84,9 @@ fn newest_source(root: &Path) -> Option<(PathBuf, SystemTime)> {
                 if p.extension().is_none_or(|x| x != "rs") {
                     continue;
                 }
-                let Ok(meta) = std::fs::metadata(&p) else { continue };
+                let Ok(meta) = std::fs::metadata(&p) else {
+                    continue;
+                };
                 let Ok(mtime) = meta.modified() else { continue };
                 let replace = newest.as_ref().is_none_or(|(_, t)| mtime > *t);
                 if replace {
@@ -116,8 +120,8 @@ fn the_installed_hook_is_not_older_than_the_source_it_enforces() {
 
     let hook_mtime = hook_meta.modified().expect("hook mtime readable");
 
-    let (newest_path, newest_mtime) =
-        newest_source(&root).expect("ANTI-VACUITY: no .rs sources found under the hook's crates — the scan is broken");
+    let (newest_path, newest_mtime) = newest_source(&root)
+        .expect("ANTI-VACUITY: no .rs sources found under the hook's crates — the scan is broken");
 
     assert!(
         newest_mtime <= hook_mtime,
@@ -167,11 +171,14 @@ fn the_installed_pre_push_hook_is_not_older_than_its_source() {
     // bounded `rustc -vV`); everything else it needs is in its own bin file.
     let sources = [
         root.join("crates/no-shell-gate/src/bin/pre-push-gate.rs"),
+        root.join("crates/no-shell-gate/build.rs"),
         root.join("crates/subprocess-contract/src/lib.rs"),
     ];
     let mut newest: Option<(PathBuf, SystemTime)> = None;
     for p in sources {
-        let Ok(meta) = std::fs::metadata(&p) else { continue };
+        let Ok(meta) = std::fs::metadata(&p) else {
+            continue;
+        };
         let Ok(mtime) = meta.modified() else { continue };
         if newest.as_ref().is_none_or(|(_, t)| mtime > *t) {
             newest = Some((p, mtime));
@@ -215,5 +222,42 @@ fn the_hook_source_crate_list_names_only_crates_that_exist() {
          written. Both make the freshness scan narrower than it claims.",
         missing.len(),
         missing
+    );
+}
+#[test]
+fn an_installed_pre_push_copy_is_fresh_when_present() {
+    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
+        eprintln!("SKIP installed pre-push copy freshness: HOME is unset");
+        return;
+    };
+    let installed = home.join(".local/bin/pre-push-gate");
+    let Ok(installed_meta) = std::fs::metadata(&installed) else {
+        eprintln!(
+            "SKIP installed pre-push copy freshness: {} is absent and installer does not own this path",
+            installed.display()
+        );
+        return;
+    };
+    let installed_mtime = installed_meta
+        .modified()
+        .expect("installed pre-push copy mtime readable");
+    let sources = [
+        repo_root().join("crates/no-shell-gate/src/bin/pre-push-gate.rs"),
+        repo_root().join("crates/no-shell-gate/build.rs"),
+        repo_root().join("crates/subprocess-contract/src/lib.rs"),
+    ];
+    let (newest_path, newest_mtime) = sources
+        .into_iter()
+        .filter_map(|path| {
+            let mtime = std::fs::metadata(&path).ok()?.modified().ok()?;
+            Some((path, mtime))
+        })
+        .max_by_key(|(_, mtime)| *mtime)
+        .expect("ANTI-VACUITY: installed pre-push sources are unreadable");
+    assert!(
+        newest_mtime <= installed_mtime,
+        "INSTALLED PRE-PUSH COPY IS STALE: copy={} newer_source={}",
+        installed.display(),
+        newest_path.display()
     );
 }

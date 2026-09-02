@@ -59,7 +59,10 @@ fn pinned_commit() -> String {
         .arg("-vV")
         .output()
         .expect("rustc runs");
-    assert!(out.status.success(), "the pinned toolchain must be installed");
+    assert!(
+        out.status.success(),
+        "the pinned toolchain must be installed"
+    );
     String::from_utf8_lossy(&out.stdout)
         .lines()
         .find_map(|l| l.strip_prefix("commit-hash:").map(|s| s.trim().to_string()))
@@ -158,7 +161,69 @@ fn refuses_a_receipt_that_records_no_compiler() {
         "must name the missing compiler field, got:\n{out}"
     );
 }
-
+#[test]
+fn refuses_a_receipt_from_a_foreign_writer_build() {
+    let s = Scratch::new("foreign-writer");
+    s.write(
+        "rust-toolchain.toml",
+        &format!("[toolchain]\nchannel = \"{}\"\n", pinned_channel()),
+    );
+    s.write("src/lib.rs", "pub fn fixture() {}\n");
+    for args in [
+        vec!["init", "--quiet"],
+        vec!["config", "user.email", "identity@test"],
+        vec!["config", "user.name", "identity"],
+        vec!["add", "src/lib.rs"],
+    ] {
+        let status = Command::new("git")
+            .args(&args)
+            .current_dir(s.path())
+            .status()
+            .expect("git runs");
+        assert!(status.success(), "git {args:?} must succeed");
+    }
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    s.receipt(&format!(
+        "writer_build_id=foreign-build\nrustc_commit={}\n",
+        pinned_commit()
+    ));
+    let (code, out) = s.verify();
+    assert_eq!(code, 1, "must refuse, got:\n{out}");
+    assert!(
+        out.contains("writer build identity mismatch"),
+        "must name the writer mismatch, got:\n{out}"
+    );
+}
+#[test]
+fn refuses_a_receipt_without_a_writer_build_id() {
+    let s = Scratch::new("absent-writer");
+    s.write(
+        "rust-toolchain.toml",
+        &format!("[toolchain]\nchannel = \"{}\"\n", pinned_channel()),
+    );
+    s.write("src/lib.rs", "pub fn fixture() {}\n");
+    for args in [
+        vec!["init", "--quiet"],
+        vec!["config", "user.email", "identity@test"],
+        vec!["config", "user.name", "identity"],
+        vec!["add", "src/lib.rs"],
+    ] {
+        let status = Command::new("git")
+            .args(&args)
+            .current_dir(s.path())
+            .status()
+            .expect("git runs");
+        assert!(status.success(), "git {args:?} must succeed");
+    }
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    s.receipt(&format!("rustc_commit={}\n", pinned_commit()));
+    let (code, out) = s.verify();
+    assert_eq!(code, 1, "must refuse, got:\n{out}");
+    assert!(
+        out.contains("writer build identity mismatch"),
+        "must name the missing writer identity, got:\n{out}"
+    );
+}
 /// LEG 3: the suite ran, but under a different compiler than the pin now names —
 /// e.g. somebody bumped the pin after recording.
 #[test]
@@ -232,7 +297,11 @@ fn green_path_still_passes_and_states_its_limits() {
     // reads `git ls-files`, so only src/lib.rs counts, and the receipt written
     // after it is genuinely newer.
     std::thread::sleep(std::time::Duration::from_millis(1100));
-    s.receipt(&format!("rustc_commit={}\n", pinned_commit()));
+    s.receipt(&format!(
+        "writer_build_id={}\nrustc_commit={}\n",
+        env!("OMP_BUILD_ID"),
+        pinned_commit()
+    ));
 
     let (code, out) = s.verify();
     assert_eq!(code, 0, "green path must pass, got:\n{out}");
