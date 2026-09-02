@@ -33,37 +33,73 @@
 //! received a packet. So a pane one surface CONFIDENTLY calls busy is never dispatched
 //! on the strength of the other, and an unreadable probe yields zero candidates.
 //!
-//! # The defect that was fixed, and why the old rule was only half right
+//! # The defect that was fixed, and the wrong diagnosis that nearly shipped
 //!
-//! MEASURED 2026-09-02 03:14:55Z, live, `ntm --robot-activity=omp-orchestrator`:
+//! MEASURED 2026-09-02 03:14:55Z, live, `ntm --robot-activity=omp-orchestrator`
+//! alongside `pane-dispatch-ready omp-orchestrator --json`:
 //!
 //! ```text
-//!   pane  agent_type  state    confidence  observation_state  safe_to_dispatch   pane-dispatch-ready
-//!   2     codex       UNKNOWN  0.5         working            false              FREE
-//!   3     codex       UNKNOWN  0.5         working            false              FREE
+//!   pane  agent_type  state     conf  observation_state  obs_conf  safe   pane-dispatch-ready
+//!   1     claude      UNKNOWN   0.5   idle               0.95      true   BUSY
+//!   2     codex       UNKNOWN   0.5   working            0.95      false  FREE
+//!   3     codex       UNKNOWN   0.5   working            0.95      false  FREE
+//!   4     omp-glm     ERROR     0.95  working            0.95      false  BUSY
+//!   5     omp-glm     UNKNOWN   0.5   working            0.95      false  NO_AGENT
 //! ```
 //!
-//! `ntm` cannot classify a codex pane. It says so — `state=UNKNOWN, confidence=0.5` —
-//! and then **coerces that UNKNOWN into `observation_state=working,
-//! safe_to_dispatch=false`**. The previous rule here read `safe_to_dispatch` as a state
-//! assertion and intersected it with the oracle's `FREE`, so for a codex pane the
-//! conjunction was NEVER true: **refill could not dispatch to a codex pane, by
-//! construction.** Three of four workers in that session were codex. Every refill in
-//! that session came from the operator by hand.
+//! Panes 2 and 3 are the whole story: `pane-dispatch-ready` CONFIRMS them free while
+//! `ntm` reports them working at `observation_confidence: 0.95`. Two surfaces, both
+//! confident, flatly contradicting. The old rule intersected `safe_to_dispatch == true`
+//! with `FREE`, got the empty set, and printed
+//! `refill: no idle pane both surfaces agree on — nothing to do` at **exit 0**. It was
+//! refusing CORRECTLY and reporting the refusal as a healthy quiet fleet, so nobody
+//! learned that two authorities disagreed about three panes. The operator hand-dispatched
+//! all night.
 //!
-//! `docs/contracts/pane_observation_contract.md` L2 states the law one direction over:
-//! "Unknown is a first-class value and NEVER coerces to Idle". This is its mirror image
-//! and equally fatal — **UNKNOWN must not coerce to WORKING either. An unclassifiable
-//! pane is not a busy pane.**
+//! **A WRONG DIAGNOSIS ALMOST SHIPPED HERE, and the trap is worth recording because the
+//! payload invites it.** The reading was: "ntm cannot classify a codex pane —
+//! `state=UNKNOWN, confidence=0.5` — and coerces that UNKNOWN into
+//! `safe_to_dispatch=false`". Every row above is consistent with it. It is false.
+//! `safe_to_dispatch` never consults `state`. Measured across two captures 23 minutes
+//! apart, 10 rows:
 //!
-//! So the observation is three-valued ([`Observation`]), and the join
-//! ([`resolve`]) is:
+//! ```text
+//!   safe_to_dispatch == (observation_state == "idle")   10/10
+//!   safe_to_dispatch derivable from state                0/10
+//! ```
+//!
+//! and the 03:37:51Z capture settles it in the opposite direction: panes 4 and 5 carried
+//! `state=UNKNOWN, confidence=0.5` with `safe_to_dispatch=TRUE`, while panes 2 and 3
+//! carried `state=THINKING, confidence=0.8` with `safe_to_dispatch=FALSE`. On that
+//! capture `state` is ANTI-correlated with dispatch. A rule gating on `state` would have
+//! refused the only panes that were dispatchable.
+//!
+//! `docs/contracts/pane_observation_contract.md` names the distinction as a law —
+//! **PO-L5-DISPATCH-SEPARATE**: dispatch admissibility is a separate field, and "no
+//! conversion from `bool`, `safe_to_dispatch`, or a liveness variant is part of this
+//! contract". `state` is the last-status-line liveness classifier;
+//! `observation_state` is what dispatch reads. This crate reads `observation_state` and
+//! deliberately does not read `state`.
+//!
+//! So the observation is three-valued ([`Observation`]), and the join ([`resolve`]) is:
 //!
 //! * both surfaces confidently Idle -> dispatch;
 //! * one CONFIRMED Idle, the other UNKNOWN -> dispatch. This is not "silently preferring
-//!   a surface": UNKNOWN is not a competing claim, so there is nothing to prefer over;
+//!   a surface": UNKNOWN is not a competing claim, so there is nothing to prefer over.
+//!   The ntm arm is UNKNOWN when the pane is absent from its roster, when the evidence
+//!   is not `(capture_provenance=live, observation_freshness=fresh)`, or when
+//!   `observation_state` is a value this parser does not recognise — NEVER because
+//!   `state` said UNKNOWN;
 //! * both UNKNOWN -> `Unknowable`, a typed nonzero refusal, never "nothing to do";
-//! * both confident and disagreeing -> `Conflict`, held AND reported nonzero.
+//! * both confident and disagreeing -> `Conflict`, held AND reported nonzero. This is
+//!   the branch that fires on the capture above, and it is the product change: the
+//!   contradiction is now named per pane at a nonzero exit instead of rendering as a
+//!   quiet fleet.
+//!
+//! **WHAT THIS DOES NOT DO:** it does not make panes 2 and 3 dispatchable. While the two
+//! surfaces contradict, refusing is right. Unblocking them requires fixing whichever
+//! surface is wrong, which is upstream of this crate and unresolved — see
+//! `omp-orchestrator-readiness-l3-motion-window-7523` for the leading candidate.
 //!
 //! # What routes through `oracle-compare`, and what does not
 //!
@@ -137,18 +173,10 @@ impl SurfaceView {
     }
 }
 
-/// `ntm` publishes this confidence when its classifier did not classify the pane.
-///
-/// Measured 2026-09-02: every codex pane in the live fleet carried
-/// `state=UNKNOWN, confidence=0.5`, and `ntm` then rendered
-/// `observation_state=working, safe_to_dispatch=false` from it.
-pub const NTM_UNCLASSIFIED_CONFIDENCE: f64 = 0.5;
-
 /// Parse `ntm --robot-activity=<session>` into a three-valued view.
 ///
 /// Returns `None` on unparseable input or a missing `agents` array — malformed is not
-/// "nothing is free". `safe_to_dispatch` is read ONLY when the classifier was
-/// confident; otherwise the pane is `Unknown` and the other surface decides.
+/// "nothing is free".
 pub fn parse_activity_view(text: &str) -> Option<SurfaceView> {
     let value: serde_json::Value = serde_json::from_str(text).ok()?;
     let agents = value.get("agents")?.as_array()?;
@@ -162,24 +190,55 @@ pub fn parse_activity_view(text: &str) -> Option<SurfaceView> {
     Some(SurfaceView { panes })
 }
 
-/// Classify one `agents[]` entry, refusing to read a coerced UNKNOWN as an assertion.
+/// Is this row's evidence a LIVE, FRESH capture?
+///
+/// Same pair `ntm-fleet-monitor::freshness` requires (`src/ntm.rs:242`): both
+/// `capture_provenance == "live"` and `observation_freshness == "fresh"`. Reusing that
+/// shape rather than inventing a confidence floor is deliberate — every row measured on
+/// this fleet carried `observation_confidence: 0.95`, so a numeric floor would be a
+/// threshold with no observation behind it and a branch that never fires.
+///
+/// A row that is not live-and-fresh is UNKNOWN, not busy: a stale capture is not
+/// evidence of work, it is absence of evidence.
+fn evidence_is_live(agent: &serde_json::Value) -> bool {
+    let field = |key: &str| {
+        agent
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_ascii_lowercase)
+    };
+    matches!(
+        (
+            field("capture_provenance").as_deref(),
+            field("observation_freshness").as_deref()
+        ),
+        (Some("live"), Some("fresh"))
+    )
+}
+
+/// Classify one `agents[]` entry from the field dispatch actually reads.
+///
+/// **`state` and `confidence` are deliberately NOT consulted.** They are the
+/// last-status-line liveness classifier, and `safe_to_dispatch` does not derive from
+/// them — measured 10/10 rows across two captures, with the 03:37:51Z capture showing
+/// `state=UNKNOWN` panes dispatchable and `state=THINKING` panes not. Gating on `state`
+/// refuses the only panes that can receive work. `pane_observation_contract`
+/// PO-L5-DISPATCH-SEPARATE is the same rule stated as law.
+///
+/// `observation_state` is read directly rather than `safe_to_dispatch`, because the
+/// boolean cannot express the third value: `safe_to_dispatch=false` renders identically
+/// for "this pane is working" and "I could not observe this pane".
 fn activity_observation(agent: &serde_json::Value) -> Observation {
-    let state = agent.get("state").and_then(serde_json::Value::as_str);
-    if state.is_none() || state == Some("UNKNOWN") {
+    if !evidence_is_live(agent) {
         return Observation::Unknown;
     }
-    if let Some(confidence) = agent.get("confidence").and_then(serde_json::Value::as_f64) {
-        if confidence <= NTM_UNCLASSIFIED_CONFIDENCE {
-            return Observation::Unknown;
-        }
-    }
     match agent
-        .get("safe_to_dispatch")
-        .and_then(serde_json::Value::as_bool)
+        .get("observation_state")
+        .and_then(serde_json::Value::as_str)
     {
-        Some(true) => Observation::Idle,
-        Some(false) => Observation::Busy,
-        None => Observation::Unknown,
+        Some("idle") => Observation::Idle,
+        Some("working") => Observation::Busy,
+        _ => Observation::Unknown,
     }
 }
 
@@ -462,11 +521,11 @@ pub fn run_outcome(decision: &Decision, conflict: &OracleCompareVerdict) -> Refi
         return RefillOutcome {
             message: format!(
                 "refill: UNMEASURABLE detector=pane_state_unknown_on_both_surfaces \
-                 panes={:?} probe=`ntm --robot-activity` reported state=UNKNOWN at \
-                 confidence<={NTM_UNCLASSIFIED_CONFIDENCE} and `pane-dispatch-ready` could not \
-                 classify them either \
-                 remedy=an unclassifiable pane is NOT a busy pane; fix the classifier or read the \
-                 panes by hand — this is not 'nothing to do'",
+                 panes={:?} probe=`ntm --robot-activity` did not report a live, fresh \
+                 observation_state for them and `pane-dispatch-ready` could not classify \
+                 them either \
+                 remedy=an unobservable pane is NOT a busy pane; fix the probe or read the \
+                 panes by hand — this is not a quiet fleet",
                 decision.unknowable
             ),
             code: 2,
@@ -584,29 +643,54 @@ mod tests {
     use super::*;
 
     /// VERBATIM from `ntm --robot-activity=omp-orchestrator`, captured 2026-09-02
-    /// 03:14:55Z on the live fleet. Panes 2 and 3 are codex workers. This is the
-    /// known-bad: under the previous two-valued rule neither could ever be dispatched.
-    const LIVE_ACTIVITY_2026_09_02: &str = r#"{
+    /// 03:14:55Z on the live fleet, trimmed to the fields either rule reads.
+    ///
+    /// Panes 2 and 3 are codex workers `pane-dispatch-ready` CONFIRMS free while `ntm`
+    /// reports them working at `observation_confidence: 0.95`. Note `state=UNKNOWN,
+    /// confidence=0.5` on panes 1, 2, 3 and 5 with OPPOSITE `safe_to_dispatch` values —
+    /// that detail refutes the unknown-coercion reading, and it is retained here so the
+    /// refutation stays visible.
+    const LIVE_ACTIVITY_0314: &str = r#"{
       "success": true,
       "session": "omp-orchestrator",
       "agents": [
         {"pane":"1","agent_type":"claude","state":"UNKNOWN","confidence":0.5,
-         "observation_state":"idle","safe_to_dispatch":true},
+         "observation_state":"idle","observation_confidence":0.95,
+         "capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":true},
         {"pane":"2","agent_type":"codex","state":"UNKNOWN","confidence":0.5,
-         "observation_state":"working","safe_to_dispatch":false},
+         "observation_state":"working","observation_confidence":0.95,
+         "capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":false},
         {"pane":"3","agent_type":"codex","state":"UNKNOWN","confidence":0.5,
-         "observation_state":"working","safe_to_dispatch":false},
+         "observation_state":"working","observation_confidence":0.95,
+         "capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":false},
         {"pane":"4","agent_type":"omp-glm","state":"ERROR","confidence":0.95,
-         "observation_state":"working","safe_to_dispatch":false},
+         "observation_state":"working","observation_confidence":0.95,
+         "capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":false},
         {"pane":"5","agent_type":"omp-glm","state":"UNKNOWN","confidence":0.5,
-         "observation_state":"working","safe_to_dispatch":false}
+         "observation_state":"working","observation_confidence":0.95,
+         "capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":false}
       ]}"#;
 
-    /// VERBATIM from `pane-dispatch-ready omp-orchestrator --json`, same minute.
+    /// VERBATIM `ntm --robot-activity=omp-orchestrator` at 2026-09-02 03:37:51Z, the
+    /// capture that settles which field dispatch reads. `state=UNKNOWN` panes are
+    /// dispatchable here and `state=THINKING` panes are not.
+    const LIVE_ACTIVITY_0337: &str = r#"{"agents":[
+        {"pane":"1","state":"THINKING","confidence":0.8,"observation_state":"idle",
+         "observation_confidence":0.95,"capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":true},
+        {"pane":"2","state":"THINKING","confidence":0.8,"observation_state":"working",
+         "observation_confidence":0.95,"capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":false},
+        {"pane":"3","state":"THINKING","confidence":0.8,"observation_state":"working",
+         "observation_confidence":0.95,"capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":false},
+        {"pane":"4","state":"UNKNOWN","confidence":0.5,"observation_state":"idle",
+         "observation_confidence":0.95,"capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":true},
+        {"pane":"5","state":"UNKNOWN","confidence":0.5,"observation_state":"idle",
+         "observation_confidence":0.95,"capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":true}]}"#;
+
+    /// VERBATIM from `pane-dispatch-ready omp-orchestrator --json`, 03:14:55Z.
     ///
     /// The key is `state`. A fixture written against `status` parses to zero classified
     /// panes and certifies a payload shape production never emits.
-    const LIVE_ORACLE_2026_09_02: &str = r#"{"schema":"zs.dispatch-ready.v1","panes":[
+    const LIVE_ORACLE_0314: &str = r#"{"schema":"zs.dispatch-ready.v1","panes":[
         {"pane":"0","state":"BUSY"},
         {"pane":"1","state":"BUSY"},
         {"pane":"2","state":"FREE"},
@@ -614,52 +698,164 @@ mod tests {
         {"pane":"4","state":"BUSY"},
         {"pane":"5","state":"NO_AGENT"}]}"#;
 
+    /// A live, fresh ntm row. Every synthetic fixture goes through this so no test can
+    /// accidentally assert on a row the parser treats as UNKNOWN for a reason the test
+    /// did not intend.
+    fn ntm_row(pane: &str, observation_state: &str) -> String {
+        format!(
+            r#"{{"pane":"{pane}","observation_state":"{observation_state}",
+                "observation_confidence":0.95,"capture_provenance":"live",
+                "observation_freshness":"fresh"}}"#
+        )
+    }
+
+    fn ntm(rows: &[(&str, &str)]) -> SurfaceView {
+        let body: Vec<String> = rows.iter().map(|(p, s)| ntm_row(p, s)).collect();
+        parse_activity_view(&format!(r#"{{"agents":[{}]}}"#, body.join(",")))
+            .expect("fixture parses")
+    }
+
+    fn oracle(rows: &[(&str, &str)]) -> SurfaceView {
+        let body: Vec<String> = rows
+            .iter()
+            .map(|(p, s)| format!(r#"{{"pane":"{p}","state":"{s}"}}"#))
+            .collect();
+        parse_oracle_view(&format!(r#"{{"panes":[{}]}}"#, body.join(",")))
+            .expect("fixture parses")
+    }
+
     fn live_views() -> (SurfaceView, SurfaceView) {
         (
-            parse_activity_view(LIVE_ACTIVITY_2026_09_02).expect("fixture parses"),
-            parse_oracle_view(LIVE_ORACLE_2026_09_02).expect("fixture parses"),
+            parse_activity_view(LIVE_ACTIVITY_0314).expect("fixture parses"),
+            parse_oracle_view(LIVE_ORACLE_0314).expect("fixture parses"),
         )
+    }
+
+    /// THE REFUTATION, pinned, with the numbers it actually measures.
+    ///
+    /// `safe_to_dispatch == (observation_state == "idle")` holds on 10/10 rows across
+    /// both captures. A rule deriving it from `state` scores 5/10 overall — a coin flip
+    /// — and 1/5 on the 03:37 capture, WORSE than chance, because there
+    /// `state=UNKNOWN` panes are dispatchable and `state=THINKING` panes are not.
+    ///
+    /// The overall 5/10 is why the wrong diagnosis was so easy to believe: on the
+    /// 03:14 capture alone a `state` rule scores 4/5 and looks like the mechanism. Only
+    /// the second capture separates them. If this test ever fails, the field this crate
+    /// reads is the wrong one and the header's reasoning is void.
+    #[test]
+    fn dispatch_admissibility_tracks_observation_state_and_not_state() {
+        let mut agreement = Vec::new();
+        for capture in [LIVE_ACTIVITY_0314, LIVE_ACTIVITY_0337] {
+            let value: serde_json::Value = serde_json::from_str(capture).expect("parses");
+            let agents = value["agents"].as_array().expect("agents");
+            let mut state_agrees = 0usize;
+            for agent in agents {
+                let safe = agent["safe_to_dispatch"].as_bool().expect("safe_to_dispatch");
+                assert_eq!(
+                    safe,
+                    agent["observation_state"].as_str() == Some("idle"),
+                    "pane {} breaks safe_to_dispatch == (observation_state == idle)",
+                    agent["pane"]
+                );
+                let state_unclassified =
+                    matches!(agent["state"].as_str(), Some("UNKNOWN" | "ERROR"));
+                if safe == (state_unclassified == false) {
+                    state_agrees += 1;
+                }
+            }
+            agreement.push((agents.len(), state_agrees));
+        }
+        assert_eq!(
+            agreement,
+            vec![(5usize, 4usize), (5usize, 1usize)],
+            "measured agreement of a `state`-derived rule with safe_to_dispatch, per \
+             capture. 4/5 on 03:14 is why the wrong mechanism was believable; 1/5 on \
+             03:37 is what refutes it, and a single capture could never have."
+        );
+    }
+
+    /// The gating fields are the observation ones. A row whose `state` says UNKNOWN is
+    /// still a CONFIDENT observation, and vice versa.
+    #[test]
+    fn state_is_never_consulted_by_the_parser() {
+        let unknown_state_idle_observation = parse_activity_view(
+            r#"{"agents":[{"pane":"4","state":"UNKNOWN","confidence":0.5,
+                "observation_state":"idle","capture_provenance":"live",
+                "observation_freshness":"fresh","safe_to_dispatch":true}]}"#,
+        )
+        .expect("parses");
+        assert_eq!(
+            unknown_state_idle_observation.get("4"),
+            Observation::Idle,
+            "state=UNKNOWN must NOT make a live idle observation unknown — this is the \
+             03:37 capture's pane 4, the only kind of pane that was dispatchable"
+        );
+        let thinking_state_working_observation = parse_activity_view(
+            r#"{"agents":[{"pane":"2","state":"THINKING","confidence":0.8,
+                "observation_state":"working","capture_provenance":"live",
+                "observation_freshness":"fresh","safe_to_dispatch":false}]}"#,
+        )
+        .expect("parses");
+        assert_eq!(
+            thinking_state_working_observation.get("2"),
+            Observation::Busy
+        );
     }
 
     /// The oracle fixture must actually CLASSIFY panes. A drifted key would make every
     /// assertion below vacuous while every one of them still passed.
     #[test]
     fn the_oracle_fixture_matches_the_shape_the_real_surface_emits() {
-        let (_, oracle) = live_views();
-        assert_eq!(oracle.get("2"), Observation::Idle);
-        assert_eq!(oracle.get("5"), Observation::Busy);
+        let (_, oracle_view) = live_views();
+        assert_eq!(oracle_view.get("2"), Observation::Idle);
+        assert_eq!(oracle_view.get("5"), Observation::Busy);
         assert_eq!(
-            oracle.confident().len(),
+            oracle_view.confident().len(),
             6,
             "every pane in the capture must be classified; a `status`-keyed fixture yields 0"
         );
     }
 
-    /// THE MEASURED DEFECT, as a test. `ntm` cannot classify codex; the oracle can.
+    /// THE MEASURED DEFECT. On the 03:14:55Z capture the two surfaces are BOTH confident
+    /// and contradict on three panes. The old rule rendered that as "nothing to do" at
+    /// exit 0; it must now be a named, per-pane, nonzero refusal.
     #[test]
-    fn a_codex_pane_ntm_cannot_classify_is_dispatchable_when_the_oracle_confirms_it() {
-        let (activity, oracle) = live_views();
-        assert_eq!(
-            activity.get("2"),
-            Observation::Unknown,
-            "fixture must model ntm's UNKNOWN — without it this test proves nothing"
+    fn the_live_capture_is_a_named_nonzero_conflict_not_a_quiet_fleet() {
+        let (activity, oracle_view) = live_views();
+        let decision = decide(&activity, &oracle_view);
+        assert!(
+            decision.dispatchable.is_empty(),
+            "refusing was CORRECT while the surfaces contradict; this fix does not \
+             invent dispatchability"
         );
-        assert_eq!(oracle.get("2"), Observation::Idle);
-        let decision = decide(&activity, &oracle);
         assert_eq!(
-            decision.dispatchable,
-            vec!["2".to_string(), "3".to_string()],
-            "a pane the oracle CONFIRMS free must dispatch even though ntm coerced its \
-             UNKNOWN into safe_to_dispatch=false"
+            decision.conflicts,
+            vec!["1".to_string(), "2".to_string(), "3".to_string()],
+            "pane 1: ntm idle vs oracle BUSY; panes 2,3: ntm working vs oracle FREE"
+        );
+        let verdict = conflict_verdict(&activity, &oracle_view);
+        assert!(
+            matches!(verdict, OracleCompareVerdict::Disagree { .. }),
+            "the shared kernel must see it: {verdict:?}"
+        );
+        let outcome = run_outcome(&decision, &verdict);
+        assert_eq!(outcome.code, 1, "a confident contradiction exits NONZERO");
+        assert!(outcome.message.contains("SURFACE_CONFLICT"));
+        let renders_retired_line = outcome
+            .message
+            .contains("no idle pane both surfaces agree on");
+        assert_eq!(
+            renders_retired_line, false,
+            "the retired quiet-success line must never render here"
         );
     }
 
-    /// THE KNOWN-BAD LEG. The previous rule is reproduced here exactly, and must refuse
-    /// the very panes the fix dispatches. Without this the repair is unfalsifiable.
+    /// THE KNOWN-BAD LEG. The previous rule is reproduced exactly and must produce the
+    /// reassuring empty answer on the same capture. Without this the repair is
+    /// unfalsifiable.
     #[test]
-    fn the_old_two_valued_rule_refuses_those_same_panes_forever() {
-        let value: serde_json::Value =
-            serde_json::from_str(LIVE_ACTIVITY_2026_09_02).expect("fixture parses");
+    fn the_old_two_valued_rule_reports_the_conflict_as_an_empty_intersection() {
+        let value: serde_json::Value = serde_json::from_str(LIVE_ACTIVITY_0314).expect("parses");
         let safe: BTreeSet<String> = value["agents"]
             .as_array()
             .expect("agents")
@@ -668,7 +864,7 @@ mod tests {
             .filter_map(|a| pane_id(a.get("pane")))
             .collect();
         let oracle_value: serde_json::Value =
-            serde_json::from_str(LIVE_ORACLE_2026_09_02).expect("fixture parses");
+            serde_json::from_str(LIVE_ORACLE_0314).expect("parses");
         let free: BTreeSet<String> = oracle_value["panes"]
             .as_array()
             .expect("panes")
@@ -676,33 +872,86 @@ mod tests {
             .filter(|p| p["state"].as_str() == Some("FREE"))
             .filter_map(|p| pane_id(p.get("pane")))
             .collect();
-        assert!(!safe.is_empty() && !free.is_empty(), "both legs must be inhabited");
-        let old: Vec<&String> = safe.intersection(&free).collect();
-        assert!(
-            old.is_empty(),
-            "the old intersection must select NOTHING on the live fixture — that is the \
-             defect being repaired"
+        assert_eq!(
+            safe.is_empty() || free.is_empty(),
+            false,
+            "both legs must be inhabited or the empty intersection proves nothing"
         );
-        let (activity, oracle) = live_views();
         assert!(
-            !decide(&activity, &oracle).dispatchable.is_empty(),
-            "and the new rule must select something, or the two rules are the same rule"
+            safe.intersection(&free).next().is_none(),
+            "the old rule must select NOTHING here — that empty set is what it printed \
+             as 'nothing to do' at exit 0"
         );
+        let (activity, oracle_view) = live_views();
+        assert_eq!(
+            decide(&activity, &oracle_view).conflicts.is_empty(),
+            false,
+            "and the new rule must NAME what the old one silently swallowed"
+        );
+    }
+
+    /// An UNKNOWN arm yields to a CONFIRMED one. This is the branch that lets a pane
+    /// absent from the ntm roster still dispatch on the oracle's confirmation.
+    #[test]
+    fn a_pane_only_one_surface_can_see_dispatches_on_that_surface() {
+        let activity = ntm(&[("2", "idle")]);
+        let oracle_view = oracle(&[("2", "FREE"), ("7", "FREE")]);
+        assert_eq!(
+            activity.get("7"),
+            Observation::Unknown,
+            "a pane ntm never enumerated is UNKNOWN to it, not busy"
+        );
+        assert_eq!(
+            decide(&activity, &oracle_view).dispatchable,
+            vec!["2".to_string(), "7".to_string()]
+        );
+    }
+
+    /// A capture that is not live-and-fresh is UNKNOWN, not busy. A stale reading is
+    /// absence of evidence, and absence of evidence must not refuse a pane forever.
+    #[test]
+    fn a_stale_or_replayed_capture_is_unknown_not_busy() {
+        for (provenance, freshness) in [("stale", "fresh"), ("live", "stale"), ("replay", "fresh")]
+        {
+            let view = parse_activity_view(&format!(
+                r#"{{"agents":[{{"pane":"2","observation_state":"working",
+                    "capture_provenance":"{provenance}","observation_freshness":"{freshness}",
+                    "safe_to_dispatch":false}}]}}"#
+            ))
+            .expect("parses");
+            assert_eq!(
+                view.get("2"),
+                Observation::Unknown,
+                "provenance={provenance} freshness={freshness} must not assert working"
+            );
+        }
+        let missing = parse_activity_view(
+            r#"{"agents":[{"pane":"2","observation_state":"idle","safe_to_dispatch":true}]}"#,
+        )
+        .expect("parses");
+        assert_eq!(
+            missing.get("2"),
+            Observation::Unknown,
+            "a row with no provenance fields at all has not established liveness"
+        );
+    }
+
+    /// An `observation_state` this parser does not recognise is UNKNOWN, never folded
+    /// into one of the two it does.
+    #[test]
+    fn an_unrecognised_observation_state_is_unknown() {
+        assert_eq!(ntm(&[("2", "wedged")]).get("2"), Observation::Unknown);
     }
 
     /// A pane no surface can classify is UNMEASURABLE and exits nonzero. It is NOT
     /// "nothing to do" — that coercion is the whole defect.
     #[test]
     fn a_pane_unknown_on_both_surfaces_is_a_typed_nonzero_refusal() {
-        let activity = parse_activity_view(
-            r#"{"agents":[{"pane":"2","state":"UNKNOWN","confidence":0.5,"safe_to_dispatch":false}]}"#,
-        )
-        .expect("parses");
-        let oracle =
-            parse_oracle_view(r#"{"panes":[{"pane":"2","state":"WHO_KNOWS"}]}"#).expect("parses");
-        let decision = decide(&activity, &oracle);
+        let activity = ntm(&[("2", "wedged")]);
+        let oracle_view = oracle(&[("2", "WHO_KNOWS")]);
+        let decision = decide(&activity, &oracle_view);
         assert_eq!(decision.unknowable, vec!["2".to_string()]);
-        let outcome = run_outcome(&decision, &conflict_verdict(&activity, &oracle));
+        let outcome = run_outcome(&decision, &conflict_verdict(&activity, &oracle_view));
         assert_eq!(outcome.code, 2, "unknowable must exit NONZERO");
         assert!(outcome.message.contains("UNMEASURABLE"));
         assert!(
@@ -710,74 +959,60 @@ mod tests {
             "the refusal must NAME the probe: {}",
             outcome.message
         );
-        assert!(
-            !outcome.message.contains("no idle pane both surfaces agree on"),
-            "the retired quiet-success line must never render here"
-        );
+        assert!(!outcome
+            .message
+            .contains("no idle pane both surfaces agree on"));
     }
 
     /// THE PRESERVED CONSERVATISM. 2026-08-27: activity said pane 4 was free, the
     /// oracle said bare shell. A CONFIDENT disagreement is a conflict, never a dispatch.
     #[test]
     fn a_confident_disagreement_is_a_conflict_and_is_never_dispatched() {
-        let activity = parse_activity_view(
-            r#"{"agents":[{"pane":"4","state":"IDLE","confidence":0.95,"safe_to_dispatch":true}]}"#,
-        )
-        .expect("parses");
-        let oracle =
-            parse_oracle_view(r#"{"panes":[{"pane":"4","state":"NO_AGENT"}]}"#).expect("parses");
-        let decision = decide(&activity, &oracle);
+        let activity = ntm(&[("4", "idle")]);
+        let oracle_view = oracle(&[("4", "NO_AGENT")]);
+        let decision = decide(&activity, &oracle_view);
         assert!(
             decision.dispatchable.is_empty(),
             "a bare shell is never dispatched"
         );
         assert_eq!(decision.conflicts, vec!["4".to_string()]);
-        assert_eq!(conflicting_panes(&activity, &oracle), vec!["4".to_string()]);
-        let verdict = conflict_verdict(&activity, &oracle);
-        assert!(
-            matches!(verdict, OracleCompareVerdict::Disagree { .. }),
-            "the shared kernel must see it: {verdict:?}"
+        assert_eq!(
+            conflicting_panes(&activity, &oracle_view),
+            vec!["4".to_string()]
         );
-        let outcome = run_outcome(&decision, &verdict);
-        assert_eq!(outcome.code, 1, "a conflict exits NONZERO");
+        let outcome = run_outcome(&decision, &conflict_verdict(&activity, &oracle_view));
+        assert_eq!(outcome.code, 1);
         assert!(outcome.message.contains("SURFACE_CONFLICT"));
     }
 
     /// A conflict must not starve the panes that ARE established. Report AND feed.
     #[test]
-    fn a_conflict_on_one_pane_still_reports_the_panes_that_are_established() {
-        let activity = parse_activity_view(
-            r#"{"agents":[
-                {"pane":"2","state":"IDLE","confidence":0.95,"safe_to_dispatch":true},
-                {"pane":"4","state":"IDLE","confidence":0.95,"safe_to_dispatch":true}]}"#,
-        )
-        .expect("parses");
-        let oracle = parse_oracle_view(
-            r#"{"panes":[{"pane":"2","state":"FREE"},{"pane":"4","state":"NO_AGENT"}]}"#,
-        )
-        .expect("parses");
-        let decision = decide(&activity, &oracle);
+    fn a_conflict_on_one_pane_still_dispatches_the_panes_that_are_established() {
+        let activity = ntm(&[("2", "idle"), ("4", "idle")]);
+        let oracle_view = oracle(&[("2", "FREE"), ("4", "NO_AGENT")]);
+        let decision = decide(&activity, &oracle_view);
         assert_eq!(decision.dispatchable, vec!["2".to_string()]);
         assert_eq!(decision.conflicts, vec!["4".to_string()]);
+        assert_eq!(
+            run_outcome(&decision, &conflict_verdict(&activity, &oracle_view)).code,
+            1,
+            "the fleet is fed AND the exit code still carries the unresolved observation"
+        );
     }
 
     /// ANTI-VACUITY on the positive path: both surfaces confident and agreeing.
     #[test]
     fn a_pane_both_surfaces_confidently_call_free_is_selected() {
-        let activity = parse_activity_view(
-            r#"{"agents":[{"pane":"2","state":"IDLE","confidence":0.95,"safe_to_dispatch":true}]}"#,
-        )
-        .expect("parses");
-        let oracle =
-            parse_oracle_view(r#"{"panes":[{"pane":"2","state":"FREE"}]}"#).expect("parses");
-        let decision = decide(&activity, &oracle);
+        let activity = ntm(&[("2", "idle")]);
+        let oracle_view = oracle(&[("2", "FREE")]);
+        let decision = decide(&activity, &oracle_view);
         assert_eq!(decision.dispatchable, vec!["2".to_string()]);
         assert!(matches!(
-            conflict_verdict(&activity, &oracle),
+            conflict_verdict(&activity, &oracle_view),
             OracleCompareVerdict::Agree { .. }
         ));
         assert_eq!(
-            run_outcome(&decision, &conflict_verdict(&activity, &oracle)).code,
+            run_outcome(&decision, &conflict_verdict(&activity, &oracle_view)).code,
             0
         );
     }
@@ -785,16 +1020,13 @@ mod tests {
     /// The genuine no-work case survives: every pane confidently busy, exit 0.
     #[test]
     fn a_confidently_busy_fleet_is_genuine_no_work_at_exit_zero() {
-        let activity = parse_activity_view(
-            r#"{"agents":[{"pane":"2","state":"THINKING","confidence":0.9,"safe_to_dispatch":false}]}"#,
-        )
-        .expect("parses");
-        let oracle =
-            parse_oracle_view(r#"{"panes":[{"pane":"2","state":"BUSY"}]}"#).expect("parses");
-        let decision = decide(&activity, &oracle);
+        let activity = ntm(&[("2", "working")]);
+        let oracle_view = oracle(&[("2", "BUSY")]);
+        let decision = decide(&activity, &oracle_view);
         assert!(decision.dispatchable.is_empty());
         assert!(decision.unknowable.is_empty());
-        let outcome = run_outcome(&decision, &conflict_verdict(&activity, &oracle));
+        assert!(decision.conflicts.is_empty());
+        let outcome = run_outcome(&decision, &conflict_verdict(&activity, &oracle_view));
         assert_eq!(outcome.code, 0);
         assert!(outcome.message.contains("genuine no-work"));
     }
@@ -819,7 +1051,7 @@ mod tests {
     #[test]
     fn an_empty_oracle_roster_is_unmeasurable() {
         let verdict = measurability_verdict(
-            r#"{"agents":[{"pane":"2","state":"IDLE","confidence":0.9,"safe_to_dispatch":true}]}"#,
+            &format!(r#"{{"agents":[{}]}}"#, ntm_row("2", "idle")),
             r#"{"panes":[]}"#,
         );
         let refusal = measurability_refusal(&verdict).expect("an empty oracle must refuse");
@@ -829,12 +1061,10 @@ mod tests {
 
     #[test]
     fn an_unreadable_probe_is_unmeasurable_not_empty() {
+        let good = format!(r#"{{"agents":[{}]}}"#, ntm_row("2", "idle"));
         for (a, o) in [
             ("not json", r#"{"panes":[{"pane":"2","state":"FREE"}]}"#),
-            (
-                r#"{"agents":[{"pane":"2","state":"IDLE","confidence":0.9,"safe_to_dispatch":true}]}"#,
-                "not json",
-            ),
+            (good.as_str(), "not json"),
             ("not json", "not json"),
             ("{}", r#"{"panes":[{"pane":"2","state":"FREE"}]}"#),
         ] {
@@ -848,12 +1078,12 @@ mod tests {
     }
 
     /// A roster the two surfaces enumerate differently is NOT a failure — the oracle
-    /// sees bare shells ntm never reports. Over-strictness here gets the gate routed
+    /// sees bare shells ntm never reports. Over-strictness here gets the lane routed
     /// around, so it is pinned.
     #[test]
     fn differing_rosters_alone_do_not_refuse() {
         let verdict = measurability_verdict(
-            r#"{"agents":[{"pane":"2","state":"IDLE","confidence":0.9,"safe_to_dispatch":true}]}"#,
+            &format!(r#"{{"agents":[{}]}}"#, ntm_row("2", "idle")),
             r#"{"panes":[{"pane":"0","state":"BUSY"},{"pane":"2","state":"FREE"}]}"#,
         );
         assert!(
@@ -862,15 +1092,16 @@ mod tests {
         );
     }
 
-    /// The confident domain excludes UNKNOWN panes, so ntm's coerced `working` on a
-    /// codex pane cannot register as a conflict against the oracle's FREE.
+    /// The confident domain excludes UNKNOWN panes, so a pane only one surface can see
+    /// cannot register as a conflict.
     #[test]
     fn an_unknown_arm_never_registers_as_a_conflict() {
-        let (activity, oracle) = live_views();
-        assert!(!confident_domain(&activity, &oracle).contains("2"));
-        assert!(conflicting_panes(&activity, &oracle).is_empty());
+        let activity = ntm(&[("2", "idle")]);
+        let oracle_view = oracle(&[("2", "FREE"), ("7", "BUSY")]);
+        assert!(!confident_domain(&activity, &oracle_view).contains("7"));
+        assert!(conflicting_panes(&activity, &oracle_view).is_empty());
         assert!(matches!(
-            conflict_verdict(&activity, &oracle),
+            conflict_verdict(&activity, &oracle_view),
             OracleCompareVerdict::Agree { .. }
         ));
     }
@@ -880,40 +1111,16 @@ mod tests {
     /// the product claimed a pane was idle.
     #[test]
     fn a_conflict_is_seen_even_when_the_oracle_calls_every_pane_busy() {
-        let activity = parse_activity_view(
-            r#"{"agents":[{"pane":"2","state":"IDLE","confidence":0.95,"safe_to_dispatch":true}]}"#,
-        )
-        .expect("parses");
-        let oracle =
-            parse_oracle_view(r#"{"panes":[{"pane":"2","state":"BUSY"}]}"#).expect("parses");
+        let activity = ntm(&[("2", "idle")]);
+        let oracle_view = oracle(&[("2", "BUSY")]);
         assert!(matches!(
-            conflict_verdict(&activity, &oracle),
+            conflict_verdict(&activity, &oracle_view),
             OracleCompareVerdict::Disagree { .. }
         ));
-        assert_eq!(conflicting_panes(&activity, &oracle), vec!["2".to_string()]);
-    }
-
-    /// A high-confidence non-UNKNOWN state is read as the assertion it is.
-    #[test]
-    fn a_confident_ntm_state_is_still_believed() {
-        let view = parse_activity_view(
-            r#"{"agents":[
-                {"pane":"2","state":"IDLE","confidence":0.95,"safe_to_dispatch":true},
-                {"pane":"3","state":"THINKING","confidence":0.8,"safe_to_dispatch":false}]}"#,
-        )
-        .expect("parses");
-        assert_eq!(view.get("2"), Observation::Idle);
-        assert_eq!(view.get("3"), Observation::Busy);
-    }
-
-    /// Exactly at the measured threshold the classifier is not believed.
-    #[test]
-    fn confidence_at_the_unclassified_threshold_is_unknown() {
-        let view = parse_activity_view(
-            r#"{"agents":[{"pane":"2","state":"IDLE","confidence":0.5,"safe_to_dispatch":true}]}"#,
-        )
-        .expect("parses");
-        assert_eq!(view.get("2"), Observation::Unknown);
+        assert_eq!(
+            conflicting_panes(&activity, &oracle_view),
+            vec!["2".to_string()]
+        );
     }
 
     /// Pane ids arrive as both string and number across surfaces. Dropping one form
@@ -921,13 +1128,13 @@ mod tests {
     #[test]
     fn numeric_and_string_pane_ids_both_parse() {
         let activity = parse_activity_view(
-            r#"{"agents":[{"pane":2,"state":"IDLE","confidence":0.9,"safe_to_dispatch":true}]}"#,
+            r#"{"agents":[{"pane":2,"observation_state":"idle","capture_provenance":"live",
+                "observation_freshness":"fresh"}]}"#,
         )
         .expect("parses");
-        let oracle =
-            parse_oracle_view(r#"{"panes":[{"pane":"2","state":"FREE"}]}"#).expect("parses");
+        let oracle_view = oracle(&[("2", "FREE")]);
         assert_eq!(
-            decide(&activity, &oracle).dispatchable,
+            decide(&activity, &oracle_view).dispatchable,
             vec!["2".to_string()]
         );
     }

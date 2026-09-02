@@ -15,26 +15,28 @@
 //! selected = safe & free
 //! ```
 //!
-//! `safe_to_dispatch` is a two-valued rendering of a three-valued classifier. Measured
-//! 2026-09-02 03:14:55Z on the live fleet, `ntm` reported every codex pane as
-//! `state=UNKNOWN, confidence=0.5` and then rendered `safe_to_dispatch=false` from that
-//! UNKNOWN. So `safe` excluded every codex pane, the intersection was empty, and the
-//! shell rule could never dispatch to a codex worker — three of the four workers in that
-//! session. The port now reads UNKNOWN as UNKNOWN and lets the CONFIRMING surface decide.
+//! On the verbatim 2026-09-02 03:14:55Z capture that intersection is EMPTY, and the
+//! shell reports it by printing nothing and exiting 0. It was refusing correctly — the
+//! two surfaces genuinely contradict on panes 1, 2 and 3, both at
+//! `observation_confidence: 0.95` — but a silent empty answer is indistinguishable from
+//! a quiet fleet, and that is what cost the session.
 //!
 //! So this file has two kinds of leg:
 //!
-//! * AGREEMENT legs, where both surfaces are CONFIDENT. The port must still match the
-//!   shell there — that is the conservatism worth keeping, and dropping it silently
-//!   would be how a repair becomes a regression.
-//! * The DIVERGENCE leg, where `ntm` is UNKNOWN. The port must select a pane the shell
-//!   refuses, and the shell must be observed refusing it. A repair whose known-bad is
-//!   not reproduced is unfalsifiable.
+//! * AGREEMENT legs. Where the surfaces agree, the port must select exactly what the
+//!   shell selects. That is the conservatism worth keeping, and dropping it silently
+//!   would turn a repair into a regression.
+//! * The DIVERGENCE leg. On the live capture both select nothing, and the port must
+//!   additionally NAME the contradiction the shell swallowed. The known-bad is the
+//!   silence, not the selection, so the leg asserts BOTH: the shell selects nothing,
+//!   and the port reports a nonzero per-pane conflict on the same bytes.
 //!
 //! A differential that only ever runs one side proves nothing, so each leg asserts the
 //! oracle actually ran (`status.success()`) before comparing.
 
-use refill_idle_panes::{decide, parse_activity_view, parse_oracle_view};
+use refill_idle_panes::{
+    conflict_verdict, decide, parse_activity_view, parse_oracle_view, run_outcome,
+};
 use std::process::Command;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -136,11 +138,16 @@ fn assert_agrees(name: &str, activity: &str, oracle: &str) {
 /// VERBATIM `ntm --robot-activity=omp-orchestrator`, 2026-09-02 03:14:55Z, trimmed to
 /// the fields the two rules read. Panes 2 and 3 are codex.
 const LIVE_ACTIVITY: &str = r#"{"agents":[
-    {"pane":"1","agent_type":"claude","state":"UNKNOWN","confidence":0.5,"safe_to_dispatch":true},
-    {"pane":"2","agent_type":"codex","state":"UNKNOWN","confidence":0.5,"safe_to_dispatch":false},
-    {"pane":"3","agent_type":"codex","state":"UNKNOWN","confidence":0.5,"safe_to_dispatch":false},
-    {"pane":"4","agent_type":"omp-glm","state":"ERROR","confidence":0.95,"safe_to_dispatch":false},
-    {"pane":"5","agent_type":"omp-glm","state":"UNKNOWN","confidence":0.5,"safe_to_dispatch":false}]}"#;
+    {"pane":"1","agent_type":"claude","state":"UNKNOWN","confidence":0.5,"observation_state":"idle",
+     "observation_confidence":0.95,"capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":true},
+    {"pane":"2","agent_type":"codex","state":"UNKNOWN","confidence":0.5,"observation_state":"working",
+     "observation_confidence":0.95,"capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":false},
+    {"pane":"3","agent_type":"codex","state":"UNKNOWN","confidence":0.5,"observation_state":"working",
+     "observation_confidence":0.95,"capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":false},
+    {"pane":"4","agent_type":"omp-glm","state":"ERROR","confidence":0.95,"observation_state":"working",
+     "observation_confidence":0.95,"capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":false},
+    {"pane":"5","agent_type":"omp-glm","state":"UNKNOWN","confidence":0.5,"observation_state":"working",
+     "observation_confidence":0.95,"capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":false}]}"#;
 
 /// VERBATIM `pane-dispatch-ready omp-orchestrator --json`, same minute.
 const LIVE_ORACLE: &str = r#"{"panes":[
@@ -153,19 +160,24 @@ const LIVE_ORACLE: &str = r#"{"panes":[
 
 /// THE DIVERGENCE LEG, and the known-bad reproduced in the same test.
 ///
-/// The shell must select NOTHING on the live capture — that is the outage. The port must
-/// select the two codex panes the readiness oracle CONFIRMS free. Asserting only the
-/// port would leave the claim "the shell was broken here" unmeasured.
+/// Both implementations select NOTHING on the live capture, and that selection is
+/// CORRECT — the surfaces genuinely contradict. The divergence is in what each one
+/// SAYS about it. The shell prints nothing and exits 0; the port must name the
+/// conflicting panes and exit nonzero. Asserting only the port would leave the claim
+/// "the shell was silent here" unmeasured, which is the entire defect.
 #[test]
-fn the_port_dispatches_codex_panes_the_shell_rule_refuses_forever() {
+fn the_port_names_the_conflict_the_shell_rule_reports_as_silence() {
     let status = oracle_status();
     let OracleStatus::Ready = status else {
-        announce_skip("the_port_dispatches_codex_panes_the_shell_rule_refuses_forever", &status);
+        announce_skip(
+            "the_port_names_the_conflict_the_shell_rule_reports_as_silence",
+            &status,
+        );
         return;
     };
     let Some(shell) = shell_select(LIVE_ACTIVITY, LIVE_ORACLE) else {
         println!(
-            "DIFFERENTIAL DID NOT RUN: test=the_port_dispatches_codex_panes_the_shell_rule_refuses_forever \
+            "DIFFERENTIAL DID NOT RUN: test=the_port_names_the_conflict_the_shell_rule_reports_as_silence \
              reason=oracle_execution_failed\n  0 cases compared. This is NOT a passing differential."
         );
         return;
@@ -173,12 +185,27 @@ fn the_port_dispatches_codex_panes_the_shell_rule_refuses_forever() {
     assert!(
         shell.is_empty(),
         "KNOWN-BAD NOT REPRODUCED: the shell rule selected {shell:?} on the live capture. \
-         The whole repair rests on it selecting nothing here."
+         The whole repair rests on it selecting nothing, and saying nothing, here."
     );
     assert_eq!(
         port_select(LIVE_ACTIVITY, LIVE_ORACLE),
-        vec!["2".to_string(), "3".to_string()],
-        "the port must dispatch the codex panes the readiness oracle confirms free"
+        Vec::<String>::new(),
+        "the port must agree that nothing is dispatchable — refusing is right while the \
+         surfaces contradict"
+    );
+
+    let activity = parse_activity_view(LIVE_ACTIVITY).expect("fixture parses");
+    let oracle = parse_oracle_view(LIVE_ORACLE).expect("fixture parses");
+    let decision = decide(&activity, &oracle);
+    assert_eq!(
+        decision.conflicts,
+        vec!["1".to_string(), "2".to_string(), "3".to_string()],
+        "and it must NAME the three panes the shell's empty set concealed"
+    );
+    let outcome = run_outcome(&decision, &conflict_verdict(&activity, &oracle));
+    assert_eq!(
+        outcome.code, 1,
+        "the shell exits 0 on this capture; the port must not"
     );
 }
 
@@ -190,8 +217,8 @@ fn agrees_on_the_measured_bare_shell_disagreement() {
     assert_agrees(
         "bare shell",
         r#"{"agents":[
-            {"pane":"2","state":"IDLE","confidence":0.95,"safe_to_dispatch":true},
-            {"pane":"4","state":"IDLE","confidence":0.95,"safe_to_dispatch":true}]}"#,
+            {"pane":"2","state":"IDLE","confidence":0.95,"observation_state":"idle","observation_confidence":0.95,"capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":true},
+            {"pane":"4","state":"IDLE","confidence":0.95,"observation_state":"idle","observation_confidence":0.95,"capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":true}]}"#,
         r#"{"panes":[{"pane":"2","state":"FREE"},{"pane":"4","state":"NO_AGENT"}]}"#,
     );
 }
@@ -201,7 +228,7 @@ fn agrees_on_the_measured_bare_shell_disagreement() {
 #[test]
 fn agrees_when_a_pane_is_genuinely_free() {
     let activity =
-        r#"{"agents":[{"pane":"2","state":"IDLE","confidence":0.95,"safe_to_dispatch":true}]}"#;
+        r#"{"agents":[{"pane":"2","state":"IDLE","confidence":0.95,"observation_state":"idle","observation_confidence":0.95,"capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":true}]}"#;
     let oracle = r#"{"panes":[{"pane":"2","state":"FREE"}]}"#;
     assert_agrees("genuinely free", activity, oracle);
     assert_eq!(
@@ -215,7 +242,7 @@ fn agrees_when_a_pane_is_genuinely_free() {
 fn agrees_when_every_pane_is_busy() {
     assert_agrees(
         "all busy",
-        r#"{"agents":[{"pane":"2","state":"THINKING","confidence":0.9,"safe_to_dispatch":false}]}"#,
+        r#"{"agents":[{"pane":"2","state":"THINKING","confidence":0.9,"observation_state":"working","observation_confidence":0.95,"capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":false}]}"#,
         r#"{"panes":[{"pane":"2","state":"BUSY"}]}"#,
     );
 }
@@ -225,10 +252,10 @@ fn agrees_on_a_multi_pane_fleet() {
     assert_agrees(
         "multi pane",
         r#"{"agents":[
-            {"pane":"1","state":"THINKING","confidence":0.9,"safe_to_dispatch":false},
-            {"pane":"2","state":"IDLE","confidence":0.95,"safe_to_dispatch":true},
-            {"pane":"3","state":"IDLE","confidence":0.95,"safe_to_dispatch":true},
-            {"pane":"4","state":"IDLE","confidence":0.95,"safe_to_dispatch":true}]}"#,
+            {"pane":"1","state":"THINKING","confidence":0.9,"observation_state":"working","observation_confidence":0.95,"capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":false},
+            {"pane":"2","state":"IDLE","confidence":0.95,"observation_state":"idle","observation_confidence":0.95,"capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":true},
+            {"pane":"3","state":"IDLE","confidence":0.95,"observation_state":"idle","observation_confidence":0.95,"capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":true},
+            {"pane":"4","state":"IDLE","confidence":0.95,"observation_state":"idle","observation_confidence":0.95,"capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":true}]}"#,
         r#"{"panes":[
             {"pane":"1","state":"BUSY"},
             {"pane":"2","state":"FREE"},

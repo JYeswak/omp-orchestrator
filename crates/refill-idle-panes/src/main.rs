@@ -299,42 +299,69 @@ fn selftest() -> ExitCode {
     let mut fails = 0;
     let mut check = |name: &str, ok: bool| {
         println!("  {} {name}", if ok { "PASS" } else { "FAIL" });
-        if !ok {
+        if ok == false {
             fails += 1;
         }
     };
 
-    // THE MEASURED DEFECT, 2026-09-02 03:14:55Z: ntm cannot classify a codex pane and
-    // coerces its UNKNOWN into safe_to_dispatch=false. pane-dispatch-ready CONFIRMS free.
-    let codex_activity = r#"{"agents":[
-        {"pane":"2","agent_type":"codex","state":"UNKNOWN","confidence":0.5,"safe_to_dispatch":false},
-        {"pane":"4","agent_type":"omp-glm","state":"ERROR","confidence":0.95,"safe_to_dispatch":false}]}"#;
-    let codex_oracle =
-        r#"{"panes":[{"pane":"2","state":"FREE"},{"pane":"4","state":"BUSY"}]}"#;
-    let codex = decide(
-        &parse_activity_view(codex_activity).expect("fixture parses"),
-        &parse_oracle_view(codex_oracle).expect("fixture parses"),
+    // THE MEASURED DEFECT, verbatim from 2026-09-02 03:14:55Z. Panes 2 and 3 are codex
+    // workers pane-dispatch-ready CONFIRMS free while ntm reports them working at
+    // observation_confidence 0.95. Two confident surfaces, flatly contradicting.
+    let live_activity = r#"{"agents":[
+        {"pane":"1","agent_type":"claude","state":"UNKNOWN","confidence":0.5,"observation_state":"idle",
+         "observation_confidence":0.95,"capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":true},
+        {"pane":"2","agent_type":"codex","state":"UNKNOWN","confidence":0.5,"observation_state":"working",
+         "observation_confidence":0.95,"capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":false},
+        {"pane":"3","agent_type":"codex","state":"UNKNOWN","confidence":0.5,"observation_state":"working",
+         "observation_confidence":0.95,"capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":false}]}"#;
+    let live_oracle = r#"{"panes":[
+        {"pane":"1","state":"BUSY"},{"pane":"2","state":"FREE"},{"pane":"3","state":"FREE"}]}"#;
+    let live_a = parse_activity_view(live_activity).expect("fixture parses");
+    let live_o = parse_oracle_view(live_oracle).expect("fixture parses");
+    let live = decide(&live_a, &live_o);
+    let live_outcome = run_outcome(&live, &conflict_verdict(&live_a, &live_o));
+    check(
+        "the live capture is a NAMED per-pane conflict, not a quiet fleet",
+        live.conflicts == vec!["1".to_string(), "2".to_string(), "3".to_string()]
+            && live_outcome.code == 1
+            && live_outcome.message.contains("SURFACE_CONFLICT"),
     );
     check(
-        "a codex pane ntm cannot classify IS dispatchable when the oracle confirms it",
-        codex.dispatchable == vec!["2".to_string()],
+        "refusing to dispatch there is still CORRECT (this fix invents no dispatchability)",
+        live.dispatchable.is_empty(),
     );
+    // The retired quiet-success line is asserted absent by three lib tests. It is NOT
+    // repeated here: a guard that embeds the string it forbids puts that string back
+    // into the shipped binary, and `strings ~/.local/bin/refill-idle-panes` is how an
+    // operator checks that the reinstall actually landed.
+
+    // `state` is NOT the dispatch signal. On the 03:37:51Z capture a state=UNKNOWN pane
+    // was dispatchable and a state=THINKING pane was not; gating on `state` refuses the
+    // only panes that can receive work.
+    let state_unknown_but_idle = parse_activity_view(
+        r#"{"agents":[{"pane":"4","state":"UNKNOWN","confidence":0.5,"observation_state":"idle",
+            "capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":true}]}"#,
+    )
+    .expect("fixture parses");
+    let oracle_4_free = parse_oracle_view(r#"{"panes":[{"pane":"4","state":"FREE"}]}"#)
+        .expect("fixture parses");
     check(
-        "the old two-valued rule selected NOTHING here (known-bad reproduced)",
-        !codex_activity.contains(r#""safe_to_dispatch":true"#),
+        "state=UNKNOWN does not blind the parser to a live idle observation",
+        decide(&state_unknown_but_idle, &oracle_4_free).dispatchable == vec!["4".to_string()],
     );
 
     // The measured 2026-08-27 disagreement: a CONFIDENT conflict is never dispatched.
-    let conflict = decide(
+    let bare_shell = decide(
         &parse_activity_view(
-            r#"{"agents":[{"pane":"4","state":"IDLE","confidence":0.95,"safe_to_dispatch":true}]}"#,
+            r#"{"agents":[{"pane":"4","observation_state":"idle","capture_provenance":"live",
+                "observation_freshness":"fresh"}]}"#,
         )
         .expect("fixture parses"),
         &parse_oracle_view(r#"{"panes":[{"pane":"4","state":"NO_AGENT"}]}"#).expect("fixture parses"),
     );
     check(
-        "a bare shell is refused even when activity confidently says free",
-        conflict.dispatchable.is_empty() && conflict.conflicts == vec!["4".to_string()],
+        "a bare shell is refused even when ntm confidently says idle",
+        bare_shell.dispatchable.is_empty() && bare_shell.conflicts == vec!["4".to_string()],
     );
 
     let bad_reconcile = fleet_reconcile::InnerVerdict {
@@ -358,25 +385,30 @@ fn selftest() -> ExitCode {
         ntm_count: 1,
         detail: "ntm and tmux agree".into(),
     };
-    let busy_activity =
-        r#"{"agents":[{"pane":"2","state":"THINKING","confidence":0.9,"safe_to_dispatch":false}]}"#;
-    let busy_oracle = r#"{"panes":[{"pane":"2","state":"BUSY"}]}"#;
-    let busy = decide(
-        &parse_activity_view(busy_activity).expect("fixture parses"),
-        &parse_oracle_view(busy_oracle).expect("fixture parses"),
-    );
-    let busy_outcome = run_outcome(
-        &busy,
-        &conflict_verdict(
-            &parse_activity_view(busy_activity).expect("fixture parses"),
-            &parse_oracle_view(busy_oracle).expect("fixture parses"),
-        ),
-    );
+    let busy_a = parse_activity_view(
+        r#"{"agents":[{"pane":"2","observation_state":"working","capture_provenance":"live",
+            "observation_freshness":"fresh"}]}"#,
+    )
+    .expect("fixture parses");
+    let busy_o =
+        parse_oracle_view(r#"{"panes":[{"pane":"2","state":"BUSY"}]}"#).expect("fixture parses");
+    let busy = decide(&busy_a, &busy_o);
+    let busy_outcome = run_outcome(&busy, &conflict_verdict(&busy_a, &busy_o));
     check(
         "a CONFIDENTLY busy fleet remains the healthy no-work case at exit 0",
         reconciliation_failure(&good_reconcile).is_none()
             && busy.dispatchable.is_empty()
             && busy_outcome.code == 0,
+    );
+
+    let stale = parse_activity_view(
+        r#"{"agents":[{"pane":"2","observation_state":"working","capture_provenance":"stale",
+            "observation_freshness":"stale"}]}"#,
+    )
+    .expect("fixture parses");
+    check(
+        "a stale capture is UNKNOWN, not a busy assertion",
+        stale.confident().is_empty(),
     );
 
     let unreadable = measurability_refusal(&measurability_verdict("not json", "not json"));
@@ -396,7 +428,7 @@ fn selftest() -> ExitCode {
             .is_some_and(|o| o.code == 1 && o.message.contains("ntm --robot-activity")),
     );
 
-    check("an undersized packet is refused", !packet_is_sendable(10));
+    check("an undersized packet is refused", packet_is_sendable(10) == false);
     check("a full-size packet is accepted", packet_is_sendable(7_347));
 
     println!("---");
