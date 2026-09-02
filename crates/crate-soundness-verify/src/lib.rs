@@ -9,10 +9,9 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, ExitStatus, Stdio};
-use std::thread;
-use std::time::{Duration, Instant};
-
+use std::process::{Command, ExitStatus};
+use subprocess_contract::{bounded_output, BoundedOutcome};
+use std::time::Duration;
 fn is_executable(path: &Path) -> bool {
     #[cfg(unix)]
     {
@@ -250,33 +249,6 @@ pub struct ChildResult {
     pub timed_out: bool,
 }
 
-fn wait_bounded(mut child: Child, timeout: Duration) -> ChildResult {
-    let started = Instant::now();
-    let mut status = None;
-    let mut timed_out = false;
-    while started.elapsed() < timeout {
-        match child.try_wait() {
-            Ok(Some(exit)) => {
-                status = Some(exit);
-                break;
-            }
-            Ok(None) => thread::sleep(Duration::from_millis(20)),
-            Err(_) => break,
-        }
-    }
-    if status.is_none() {
-        timed_out = true;
-        let _ = child.kill();
-        status = child.wait().ok();
-    }
-    ChildResult {
-        status,
-        stdout: String::new(),
-        stderr: String::new(),
-        timed_out,
-    }
-}
-
 pub fn run_command(config: &Config, crate_name: &str, args: &[&str]) -> ChildResult {
     run_binary(
         &config.cargo,
@@ -295,19 +267,21 @@ pub fn run_binary(
     timeout: Duration,
 ) -> ChildResult {
     let mut command = Command::new(binary);
-    command
-        .args(args)
-        .current_dir(cwd)
-        .env("CARGO_TARGET_DIR", target_dir)
-        .stdin(Stdio::null())
-        // Null stdio is deliberate: no descendant can inherit a pipe and hold
-        // the parent in a post-exit read/join. The gate reports named status,
-        // not unbounded child transcripts.
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    match command.spawn() {
-        Ok(child) => wait_bounded(child, timeout),
-        Err(error) => ChildResult {
+    command.args(args).current_dir(cwd).env("CARGO_TARGET_DIR", target_dir);
+    match bounded_output(&mut command, timeout) {
+        BoundedOutcome::Completed(output) => ChildResult {
+            status: Some(output.status),
+            stdout: String::new(),
+            stderr: String::new(),
+            timed_out: false,
+        },
+        BoundedOutcome::TimedOut => ChildResult {
+            status: None,
+            stdout: String::new(),
+            stderr: String::new(),
+            timed_out: true,
+        },
+        BoundedOutcome::Unspawned(error) => ChildResult {
             status: None,
             stdout: String::new(),
             stderr: error.to_string(),

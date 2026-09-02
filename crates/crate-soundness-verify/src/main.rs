@@ -211,5 +211,3 @@ fn source_has_async(root: &std::path::Path) -> bool {
         }
     })
 }
-
-

@@ -12,5 +12,8 @@ path = "src/main.rs"
 name = "crate_soundness_verify"
 path = "src/lib.rs"
 
+[dependencies]
+subprocess-contract = { path = "../subprocess-contract" }
+
 [lints.rust]
 unsafe_code = "forbid"
