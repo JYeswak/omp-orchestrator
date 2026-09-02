@@ -7,6 +7,7 @@
 //! A sender return value is therefore never part of the receipt proof.
 
 use std::fmt;
+pub use tick_monitor::ObservationIdentity;
 use tick_monitor::{classify, Observation, PaneState};
 
 /// How much the receiver census proves about the named pane.
@@ -212,18 +213,25 @@ pub const OBSERVATION_WINDOW_MIN_SECS: u64 = 75;
 
 /// Convert a captured pane render into the shared tick-monitor observation shape.
 ///
-/// `tick-monitor` owns last-line anchoring, timer parsing, dialog detection, and
-/// spinner-stripped hashing. This adapter only adds the caller's pane id and timestamp.
-pub fn observe_capture(pane_id: impl Into<String>, capture: &str, at: u64) -> Observation {
+/// tick-monitor owns last-line anchoring, timer parsing, dialog detection, and
+/// spinner-stripped hashing. This adapter requires the producer identity from
+/// the caller; it never manufactures an identity or defaults a missing sequence.
+pub fn observe_capture(
+    pane_id: impl Into<String>,
+    capture: &str,
+    at: u64,
+    identity: ObservationIdentity,
+) -> Observation {
     Observation {
         pane_id: pane_id.into(),
         state: classify(capture),
         hash: tick_monitor::stable_hash(capture),
         at,
+        epoch: identity.epoch,
+        sequence: identity.sequence,
+        changed_at: identity.changed_at,
     }
 }
-
-/// Classify receiver evidence after an external transport send.
 ///
 /// The function performs no send and does not inspect sender return values. Confirmation
 /// is keyed by the pre-send state:
@@ -533,16 +541,30 @@ mod tests {
         assert_eq!(NonDeliveryEscalation::KeepPolling.label(), "KEEP_POLLING");
     }
 
+    fn identity(at: u64) -> ObservationIdentity {
+        ObservationIdentity {
+            epoch: "receiver-test".into(),
+            sequence: at,
+            changed_at: at.to_string(),
+        }
+    }
+
     fn working(pane: &str, timer: u64, body: &str, spinner: char, at: u64) -> Observation {
         observe_capture(
             pane,
             &format!("{body}\n{spinner} {timer}s . GPT-5.6 . /tmp/receiver"),
             at,
+            identity(at),
         )
     }
 
     fn idle(pane: &str, body: &str, at: u64) -> Observation {
-        observe_capture(pane, &format!("{body}\nπ . GPT-5.6 . /tmp/receiver"), at)
+        observe_capture(
+            pane,
+            &format!("{body}\nπ . GPT-5.6 . /tmp/receiver"),
+            at,
+            identity(at),
+        )
     }
 
     fn dialog(pane: &str, timer: u64, at: u64) -> Observation {
@@ -552,6 +574,7 @@ mod tests {
                 "│ Enter select\n│ Esc cancel\n│ ↑/↓ move\n⠙ {timer}s . GPT-5.6 . /tmp/receiver"
             ),
             at,
+            identity(at),
         )
     }
 
@@ -742,7 +765,13 @@ mod tests {
     #[test]
     fn the_same_evidence_at_a_valid_span_still_confirms() {
         let pre = idle("%live", "prompt", 100);
-        let post = working("%live", 1, "accepted packet", '⠙', 100 + OBSERVATION_WINDOW_MIN_SECS);
+        let post = working(
+            "%live",
+            1,
+            "accepted packet",
+            '⠙',
+            100 + OBSERVATION_WINDOW_MIN_SECS,
+        );
         let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
         assert_eq!(result.label(), "RECEIPT_CONFIRMED", "{result:?}");
     }
@@ -806,7 +835,13 @@ mod tests {
     #[test]
     fn a_sender_failure_does_not_withdraw_a_receiver_confirmation() {
         let pre = working("%live", 58, "before", '⠋', 100);
-        let post = working("%live", 1, "after", '⠙', 100 + OBSERVATION_WINDOW_MIN_SECS + 5);
+        let post = working(
+            "%live",
+            1,
+            "after",
+            '⠙',
+            100 + OBSERVATION_WINDOW_MIN_SECS + 5,
+        );
         let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
         assert_eq!(result.label(), "RECEIPT_CONFIRMED", "{result:?}");
     }
@@ -817,7 +852,10 @@ mod tests {
     #[test]
     fn an_empty_census_is_an_error_never_a_non_arrival() {
         let pre = idle("%live", "prompt", 100);
-        for probe in [PostSendObservation::EmptyPaneList, PostSendObservation::Missing] {
+        for probe in [
+            PostSendObservation::EmptyPaneList,
+            PostSendObservation::Missing,
+        ] {
             let result = assess_receiver_receipt("%live", &pre, probe);
             assert_eq!(
                 result.label(),
@@ -915,7 +953,7 @@ mod tests {
 #[cfg(test)]
 mod escalation_tests {
     use super::*;
-    use crate::{ComposerEvidence, NonDeliveryEscalation, escalate_non_delivery};
+    use crate::{escalate_non_delivery, ComposerEvidence, NonDeliveryEscalation};
     use tick_monitor::PaneState;
 
     /// 6q5 THE MEASURED DEFECT: sender reported success, pane stayed Idle,
@@ -938,8 +976,14 @@ mod escalation_tests {
     /// The escalation must not fire there.
     #[test]
     fn working_pane_keeps_polling_regardless_of_composer() {
-        let r1 = escalate_non_delivery(&PaneState::Working { timer_secs: 60 }, ComposerEvidence::Free);
-        let r2 = escalate_non_delivery(&PaneState::Working { timer_secs: 60 }, ComposerEvidence::Typed);
+        let r1 = escalate_non_delivery(
+            &PaneState::Working { timer_secs: 60 },
+            ComposerEvidence::Free,
+        );
+        let r2 = escalate_non_delivery(
+            &PaneState::Working { timer_secs: 60 },
+            ComposerEvidence::Typed,
+        );
         assert_eq!(r1, NonDeliveryEscalation::KeepPolling);
         assert_eq!(r2, NonDeliveryEscalation::KeepPolling);
     }

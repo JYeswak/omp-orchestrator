@@ -2,7 +2,10 @@
 
 //! Observation-only receiver receipt harness. Transport-specific sends stay outside this binary.
 
-use receiver_receipt::{assess_receiver_receipt, observe_capture, PostSendObservation, ReceiptVerdict};
+use receiver_receipt::{
+    assess_receiver_receipt, observe_capture, ObservationIdentity, PostSendObservation,
+    ReceiptVerdict,
+};
 use std::env;
 use std::fs;
 use std::process::{Command, ExitCode};
@@ -13,6 +16,13 @@ fn usage() -> ExitCode {
          usage: receiver-receipt assess <pane-id> <pre-file> <post-file> <pre-seconds> <post-seconds>"
     );
     ExitCode::from(2)
+}
+fn identity(at: u64) -> ObservationIdentity {
+    ObservationIdentity {
+        epoch: "receiver-receipt-cli".into(),
+        sequence: at,
+        changed_at: at.to_string(),
+    }
 }
 
 fn capture(target: &str, path: &str, at: u64) -> ExitCode {
@@ -53,8 +63,8 @@ fn assess(pane_id: &str, pre_path: &str, post_path: &str, pre_at: u64, post_at: 
             return ExitCode::from(2);
         }
     };
-    let pre = observe_capture(pane_id, &pre_text, pre_at);
-    let post = observe_capture(pane_id, &post_text, post_at);
+    let pre = observe_capture(pane_id, &pre_text, pre_at, identity(pre_at));
+    let post = observe_capture(pane_id, &post_text, post_at, identity(post_at));
     let result = assess_receiver_receipt(pane_id, &pre, PostSendObservation::Present(post));
     println!("{} reason={:?}", result.label(), result.reason());
     match result {
@@ -64,12 +74,12 @@ fn assess(pane_id: &str, pre_path: &str, post_path: &str, pre_at: u64, post_at: 
         ReceiptVerdict::Dead { .. } => ExitCode::from(1),
     }
 }
-
 fn main() -> ExitCode {
     let mut args = env::args().skip(1);
     match args.next().as_deref() {
         Some("capture") => {
-            let (Some(target), Some(path), Some(at)) = (args.next(), args.next(), args.next()) else {
+            let (Some(target), Some(path), Some(at)) = (args.next(), args.next(), args.next())
+            else {
                 return usage();
             };
             let Ok(at) = at.parse() else { return usage() };
@@ -77,7 +87,11 @@ fn main() -> ExitCode {
         }
         Some("assess") => {
             let (Some(pane), Some(pre), Some(post), Some(pre_at), Some(post_at)) = (
-                args.next(), args.next(), args.next(), args.next(), args.next()
+                args.next(),
+                args.next(),
+                args.next(),
+                args.next(),
+                args.next(),
             ) else {
                 return usage();
             };

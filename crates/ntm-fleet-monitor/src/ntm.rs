@@ -123,6 +123,13 @@ impl EvidenceFreshness {
 
 /// One agent row from `ntm --robot-activity=<session>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OutputSequence {
+    pub epoch: String,
+    pub sequence: u64,
+    pub changed_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentObservation {
     pub pane: String,
     pub kind: AgentKind,
@@ -136,6 +143,8 @@ pub struct AgentObservation {
     pub capture_collected_at: Option<String>,
     /// Raw producer confidence, retained without floating-point equality loss.
     pub observation_confidence: Option<String>,
+    /// Producer-side identity from NTM's output_sequence payload.
+    pub output_sequence: Option<OutputSequence>,
 }
 
 impl AgentObservation {
@@ -147,6 +156,12 @@ impl AgentObservation {
             && self.readiness == Readiness::Idle
             && self.freshness == EvidenceFreshness::Live
             && self.safe_to_dispatch
+    }
+    /// Return the producer identity or refuse a payload that omitted it.
+    pub fn output_identity(&self) -> Result<&OutputSequence, ActivityError> {
+        self.output_sequence
+            .as_ref()
+            .ok_or(ActivityError::MissingField("agents[].output_sequence"))
     }
 
     /// True when this OMP row may be handed to the independent pane-capture
@@ -191,6 +206,8 @@ pub enum ActivityError {
     EmptyAgents,
     AgentNotObject,
     PaneNotString,
+    OutputSequenceNotObject,
+    InvalidOutputSequence,
 }
 
 impl fmt::Display for ActivityError {
@@ -206,6 +223,10 @@ impl fmt::Display for ActivityError {
             }
             Self::AgentNotObject => f.write_str("NTM response contains a non-object agent"),
             Self::PaneNotString => f.write_str("NTM response pane is not a string"),
+            Self::OutputSequenceNotObject => {
+                f.write_str("NTM response output_sequence is not an object")
+            }
+            Self::InvalidOutputSequence => f.write_str("NTM response output_sequence is invalid"),
         }
     }
 }
@@ -273,6 +294,38 @@ fn readiness(state: SignalState, observation_state: SignalState) -> Readiness {
         }
     }
 }
+fn parse_output_sequence(
+    agent: &serde_json::Map<String, Value>,
+) -> Result<Option<OutputSequence>, ActivityError> {
+    let Some(value) = agent.get("output_sequence") else {
+        return Ok(None);
+    };
+    let object = value
+        .as_object()
+        .ok_or(ActivityError::OutputSequenceNotObject)?;
+    let epoch = object
+        .get("epoch")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .ok_or(ActivityError::MissingField(
+            "agents[].output_sequence.epoch",
+        ))?;
+    let sequence = object
+        .get("sequence")
+        .and_then(Value::as_u64)
+        .ok_or(ActivityError::InvalidOutputSequence)?;
+    let changed_at = object
+        .get("changed_at")
+        .and_then(Value::as_str)
+        .ok_or(ActivityError::MissingField(
+            "agents[].output_sequence.changed_at",
+        ))?;
+    Ok(Some(OutputSequence {
+        epoch: epoch.to_owned(),
+        sequence,
+        changed_at: changed_at.to_owned(),
+    }))
+}
 
 /// Parse the exact machine-readable response emitted by NTM's activity robot.
 /// Empty agent sets are an error rather than a healthy zero, preventing a
@@ -315,6 +368,7 @@ pub fn parse_activity_json(input: &str) -> Result<ActivitySnapshot, ActivityErro
             .ok_or(ActivityError::MissingField("agents[].agent_type"))?;
         let state = signal_state(agent.get("state"));
         let observation_state = signal_state(agent.get("observation_state"));
+        let output_sequence = parse_output_sequence(agent)?;
         observations.push(AgentObservation {
             pane,
             kind: AgentKind::parse(kind_name),
@@ -331,6 +385,7 @@ pub fn parse_activity_json(input: &str) -> Result<ActivitySnapshot, ActivityErro
                 .and_then(Value::as_str)
                 .map(str::to_owned),
             observation_confidence: agent.get("observation_confidence").map(Value::to_string),
+            output_sequence,
         });
     }
     Ok(ActivitySnapshot {
@@ -458,5 +513,39 @@ mod tests {
         assert_eq!(snapshot.agents[0].pane, "4");
         assert_eq!(snapshot.agents[0].kind.as_str(), "omp-grok");
         assert!(snapshot.agents[0].dispatchable());
+    }
+    #[test]
+    fn output_sequence_is_typed_and_preserved() {
+        let snapshot = parse_activity_json(
+            r#"{"success":true,"agents":[{"pane":"3","agent_type":"omp-claude","state":"IDLE","observation_state":"idle","safe_to_dispatch":true,"capture_provenance":"live","observation_freshness":"fresh","output_sequence":{"epoch":"epoch-a","sequence":6459,"changed_at":"2026-09-02T14:32:35Z"}}]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            snapshot.agents[0].output_identity().unwrap(),
+            &OutputSequence {
+                epoch: "epoch-a".to_owned(),
+                sequence: 6459,
+                changed_at: "2026-09-02T14:32:35Z".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn missing_output_sequence_is_a_typed_refusal() {
+        let snapshot =
+            parse_activity_json(&response(&[row("omp-claude", "IDLE", "idle")])).unwrap();
+        assert_eq!(
+            snapshot.agents[0].output_identity(),
+            Err(ActivityError::MissingField("agents[].output_sequence"))
+        );
+    }
+    #[test]
+    fn empty_changed_at_is_valid_baseline_identity() {
+        let snapshot = parse_activity_json(
+            r#"{"success":true,"agents":[{"pane":"3","agent_type":"omp-claude","state":"IDLE","observation_state":"idle","safe_to_dispatch":true,"capture_provenance":"live","observation_freshness":"fresh","output_sequence":{"epoch":"epoch-a","sequence":0,"changed_at":""}}]}"#,
+        )
+        .unwrap();
+        assert_eq!(snapshot.agents[0].output_identity().unwrap().sequence, 0);
+        assert_eq!(snapshot.agents[0].output_identity().unwrap().changed_at, "");
     }
 }

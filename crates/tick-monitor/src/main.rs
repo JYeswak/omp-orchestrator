@@ -7,13 +7,27 @@
 //! `observe` is read-only and idempotent apart from the state file it must update to make
 //! the next tick's two-capture comparison possible. `--no-save` suppresses even that.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::exit;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tick_monitor::*;
 
 const TMUX_TIMEOUT: Duration = Duration::from_secs(10);
 const GIT_TIMEOUT: Duration = Duration::from_secs(20);
+static NEXT_LOCAL_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+
+fn local_observation_identity(state_file: &Path, changed_at: u64) -> ObservationIdentity {
+    ObservationIdentity {
+        epoch: format!(
+            "tick-monitor:{}:{}",
+            state_file.display(),
+            std::process::id()
+        ),
+        sequence: NEXT_LOCAL_SEQUENCE.fetch_add(1, Ordering::Relaxed),
+        changed_at: changed_at.to_string(),
+    }
+}
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -130,7 +144,10 @@ fn pane_ids(session: &str) -> Result<Vec<String>, String> {
 }
 
 fn capture(pane: &str) -> Option<String> {
-    match run(&["tmux", "capture-pane", "-p", "-t", pane, "-S", "-14"], TMUX_TIMEOUT) {
+    match run(
+        &["tmux", "capture-pane", "-p", "-t", pane, "-S", "-14"],
+        TMUX_TIMEOUT,
+    ) {
         Outcome::Completed { stdout, .. } => Some(stdout),
         _ => None,
     }
@@ -147,15 +164,20 @@ fn commits_since(repo: &str, since_unix: u64) -> Result<Vec<String>, String> {
         GIT_TIMEOUT,
     );
     match &out {
-        Outcome::Completed { stdout, code, .. } if *code == Some(0) => {
-            Ok(stdout.lines().filter(|l| !l.trim().is_empty()).map(str::to_owned).collect())
-        }
+        Outcome::Completed { stdout, code, .. } if *code == Some(0) => Ok(stdout
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(str::to_owned)
+            .collect()),
         other => Err(format!("git log in {repo}: {}", other.kind())),
     }
 }
 
 fn head_sha(repo: &str) -> Option<String> {
-    match run(&["git", "-C", repo, "rev-parse", "--short", "HEAD"], GIT_TIMEOUT) {
+    match run(
+        &["git", "-C", repo, "rev-parse", "--short", "HEAD"],
+        GIT_TIMEOUT,
+    ) {
         Outcome::Completed { stdout, code, .. } if code == Some(0) => {
             Some(stdout.trim().to_owned())
         }
@@ -169,9 +191,16 @@ fn head_sha(repo: &str) -> Option<String> {
 
 fn observe_core(args: &[String]) -> Result<String, i32> {
     let session = flag(args, "--session").unwrap_or("omp-orchestrator");
-    let mut repos: Vec<String> = flags(args, "--repo").iter().map(|s| s.to_string()).collect();
+    let mut repos: Vec<String> = flags(args, "--repo")
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
     if repos.is_empty() {
-        repos.push(std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default());
+        repos.push(
+            std::env::current_dir()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default(),
+        );
     }
     // Panes that are never worker capacity. The conductor's own pane belongs here: it is
     // idle between turns by design, so counting it fires the idle alarm forever.
@@ -217,11 +246,15 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
             continue;
         };
         let state = classify(&cap);
+        let identity = local_observation_identity(&state_file, now);
         let o = Observation {
             pane_id: id.clone(),
             state: state.clone(),
             hash: stable_hash(&cap),
             at: now,
+            epoch: identity.epoch,
+            sequence: identity.sequence,
+            changed_at: identity.changed_at,
         };
         let prev = prior.panes.iter().find(|p| &p.pane_id == id);
         let live = liveness(prev, &o);
@@ -267,12 +300,15 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
             _ => "",
         };
         rows.push(format!(
-            "{{\"pane\":\"{}\",\"state\":\"{}\",\"timer_secs\":{},\"liveness\":\"{}\",\"why\":\"{}\",\"last_line\":\"{}\"}}",
+            "{{\"pane\":\"{}\",\"state\":\"{}\",\"timer_secs\":{},\"liveness\":\"{}\",\"why\":\"{}\",\"epoch\":\"{}\",\"sequence\":{},\"changed_at\":\"{}\",\"last_line\":\"{}\"}}",
             esc(id),
             state.label(),
             timer,
             live.label(),
             why,
+            esc(&o.epoch),
+            o.sequence,
+            esc(&o.changed_at),
             esc(last_status_line(&cap))
         ));
         obs.push(o);
@@ -282,7 +318,11 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
     let mut new_commits = 0usize;
     let mut heads = Vec::new();
     for repo in &repos {
-        let since = if prior.last_tick == 0 { now - 3600 } else { prior.last_tick };
+        let since = if prior.last_tick == 0 {
+            now - 3600
+        } else {
+            prior.last_tick
+        };
         match commits_since(repo, since) {
             Ok(list) => {
                 new_commits += list.len();
@@ -463,9 +503,8 @@ fn watch(args: &[String]) -> i32 {
 
         // A tick has value if anything moved or any capacity opened.
         let has_free = !line.contains("\"free_capacity\":[]");
-        let moved = !line.contains("\"new_total\":0")
-            || !line.contains("\"transitions\":[]")
-            || has_free;
+        let moved =
+            !line.contains("\"new_total\":0") || !line.contains("\"transitions\":[]") || has_free;
         if moved {
             no_value = 0;
         } else {
@@ -558,7 +597,9 @@ fn session_of(args: &[String]) -> &str {
 }
 
 fn emit_tick(args: &[String]) -> i32 {
-    let state_file = flag(args, "--state").map(PathBuf::from).unwrap_or_else(|| state_path(session_of(args)));
+    let state_file = flag(args, "--state")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| state_path(session_of(args)));
     let ledger = flag(args, "--ledger")
         .map(PathBuf::from)
         .unwrap_or_else(|| state_file.with_file_name("tick-ledger.jsonl"));
@@ -601,7 +642,11 @@ fn emit_tick(args: &[String]) -> i32 {
                 let _ = std::fs::create_dir_all(dir);
             }
             use std::io::Write;
-            match std::fs::OpenOptions::new().create(true).append(true).open(&ledger) {
+            match std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&ledger)
+            {
                 Ok(mut f) => {
                     if writeln!(f, "{line}").is_err() {
                         eprintln!("REJECT: ledger write failed");
@@ -651,9 +696,18 @@ fn selftest() -> i32 {
     let shell = "-orchestrator %";
 
     println!("v18 detector (the exact payload pane-truth scores claims_busy=false on):");
-    leg!("glm working", matches!(classify(glm), PaneState::Working { timer_secs: 720 }));
-    leg!("codex working", matches!(classify(codex), PaneState::Working { timer_secs: 360 }));
-    leg!("opus working", matches!(classify(opus), PaneState::Working { timer_secs: 48 }));
+    leg!(
+        "glm working",
+        matches!(classify(glm), PaneState::Working { timer_secs: 720 })
+    );
+    leg!(
+        "codex working",
+        matches!(classify(codex), PaneState::Working { timer_secs: 360 })
+    );
+    leg!(
+        "opus working",
+        matches!(classify(opus), PaneState::Working { timer_secs: 48 })
+    );
     leg!("codex idle", classify(idle_codex) == PaneState::Idle);
     leg!("glm idle", classify(idle_glm) == PaneState::Idle);
     leg!("shell unproven", classify(shell) == PaneState::Unproven);
@@ -690,14 +744,20 @@ fn selftest() -> i32 {
                 state: PaneState::Working { timer_secs: 1 },
                 hash: 1,
                 at: 100,
+                epoch: "selftest".into(),
+                sequence: 1,
+                changed_at: "100".into(),
             }],
-            &[]
+            &[],
         )
         .is_empty()
     );
 
     println!("known-bad: tokens that must NOT read as an elapsed timer");
-    leg!("token budget 1.3M is not a timer", parse_timer("13.0%/1.3M").is_none());
+    leg!(
+        "token budget 1.3M is not a timer",
+        parse_timer("13.0%/1.3M").is_none()
+    );
     leg!("spend S0.25 is not a timer", parse_timer("S0.25").is_none());
     leg!("uppercase 5M is not a timer", parse_timer("5M").is_none());
     leg!("bare word is not a timer", parse_timer("main").is_none());
@@ -705,14 +765,23 @@ fn selftest() -> i32 {
 
     println!("known-bad: a spinner in SCROLLBACK PROSE must not make a pane working");
     let prose = format!("agent said \"{glm}\" earlier\n{idle_glm}");
-    leg!("last-line anchoring defeats prose", classify(&prose) == PaneState::Idle);
+    leg!(
+        "last-line anchoring defeats prose",
+        classify(&prose) == PaneState::Idle
+    );
 
     println!("spinner trap: a stripped hash must be stable while only the spinner animates");
     let f1 = format!("body unchanged\n \u{280b} 5m  \u{b7} same");
     let f2 = format!("body unchanged\n \u{2819} 5m  \u{b7} same");
-    leg!("animation alone does not change the hash", stable_hash(&f1) == stable_hash(&f2));
+    leg!(
+        "animation alone does not change the hash",
+        stable_hash(&f1) == stable_hash(&f2)
+    );
     let f3 = "body CHANGED\n \u{280b} 5m  \u{b7} same".to_owned();
-    leg!("real content change does change the hash", stable_hash(&f1) != stable_hash(&f3));
+    leg!(
+        "real content change does change the hash",
+        stable_hash(&f1) != stable_hash(&f3)
+    );
 
     println!("two-capture liveness (never idle from one observation)");
     let mk = |st: PaneState, h: u64, at: u64| Observation {
@@ -720,6 +789,9 @@ fn selftest() -> i32 {
         state: st,
         hash: h,
         at,
+        epoch: "selftest".to_owned(),
+        sequence: at,
+        changed_at: at.to_string(),
     };
     leg!(
         "single capture is UNPROVEN, not idle",
@@ -734,8 +806,11 @@ fn selftest() -> i32 {
     );
     leg!(
         "two idle captures 80s apart are dispatchable",
-        liveness(Some(&mk(PaneState::Idle, 1, 1000)), &mk(PaneState::Idle, 1, 1080))
-            .is_dispatchable()
+        liveness(
+            Some(&mk(PaneState::Idle, 1, 1000)),
+            &mk(PaneState::Idle, 1, 1080)
+        )
+        .is_dispatchable()
     );
     leg!(
         "advancing timer is LIVE",
@@ -782,7 +857,10 @@ fn selftest() -> i32 {
         validate(&base("47th_HOLD_silent", "GREEN"), "", 0)
             == Err(Reject::UnknownMode("47th_HOLD_silent".to_owned()))
     );
-    leg!("valid mode accepted", validate(&base("DISPATCH", "GREEN"), "", 0).is_ok());
+    leg!(
+        "valid mode accepted",
+        validate(&base("DISPATCH", "GREEN"), "", 0).is_ok()
+    );
     let mut t = base("DISPATCH", "GREEN");
     t.note = "standing by for work".to_owned();
     leg!(
@@ -815,7 +893,10 @@ fn selftest() -> i32 {
     let mut b4 = base("BLOCKED", "BLOCKED");
     b4.external_blocker = Some("joshua-decision:omp-orchestrator-2z2".to_owned());
     b4.escalation_action = Some("filed bead comment".to_owned());
-    leg!("joshua-decision WITH a bead id accepted", validate(&b4, "", 0).is_ok());
+    leg!(
+        "joshua-decision WITH a bead id accepted",
+        validate(&b4, "", 0).is_ok()
+    );
     let mut b5 = base("BLOCKED", "BLOCKED");
     b5.external_blocker = Some("infrastructure:rch".to_owned());
     b5.escalation_action = Some("standing by".to_owned());
@@ -850,7 +931,13 @@ fn selftest() -> i32 {
     let slow = run(&["/bin/sleep", "30"], Duration::from_millis(600));
     leg!(
         "a deadline yields TimedOut, NOT Completed(non-zero)",
-        matches!(slow, Outcome::TimedOut { group_killed: true, .. })
+        matches!(
+            slow,
+            Outcome::TimedOut {
+                group_killed: true,
+                ..
+            }
+        )
     );
     leg!(
         "a timeout is not readable as output (stdout_if_completed is None)",
@@ -892,7 +979,6 @@ fn selftest() -> i32 {
         1
     }
 }
-
 
 /// The four-surface JOIN. Thin on purpose: the logic lives in `lifecycle::collect` where
 /// `cargo test` can reach it, not in a `main.rs` subcommand only a human invokes.

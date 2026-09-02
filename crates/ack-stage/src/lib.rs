@@ -449,8 +449,21 @@ mod tests {
         }
     }
 
+    fn identity(at: u64) -> receiver_receipt::ObservationIdentity {
+        receiver_receipt::ObservationIdentity {
+            epoch: "ack-stage-test".into(),
+            sequence: at,
+            changed_at: at.to_string(),
+        }
+    }
+
     fn idle() -> Observation {
-        receiver_receipt::observe_capture("%1413", "prompt\nπ . GPT-5.6 . /tmp/receiver", 100)
+        receiver_receipt::observe_capture(
+            "%1413",
+            "prompt\nπ . GPT-5.6 . /tmp/receiver",
+            100,
+            identity(100),
+        )
     }
 
     fn working() -> Observation {
@@ -458,9 +471,9 @@ mod tests {
             "%1413",
             "accepted packet\n⠙ 1s . GPT-5.6 . /tmp/receiver",
             101,
+            identity(101),
         )
     }
-
     #[test]
     fn ntm_capture_retains_full_json_and_successful_is_not_delivery() {
         let raw = br#"{"targets":["5"],"successful":["5"],"failed":[],"blocked":false}"#;

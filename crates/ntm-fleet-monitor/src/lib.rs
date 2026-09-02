@@ -30,7 +30,7 @@ pub mod ntm;
 pub use approved::{Approved, NotApproved};
 pub use ntm::{
     parse_activity_json, ActivityError, ActivitySnapshot, AgentKind, AgentObservation,
-    EvidenceFreshness, OmpVariant, Readiness, SignalState,
+    EvidenceFreshness, OmpVariant, OutputSequence, Readiness, SignalState,
 };
 
 use loop_coverage::LoopLayer;

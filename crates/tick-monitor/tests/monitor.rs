@@ -94,6 +94,9 @@ fn idle_is_never_reported_from_a_single_capture() {
         state: PaneState::Idle,
         hash: 1,
         at: 1000,
+        epoch: "test".into(),
+        sequence: 1,
+        changed_at: "test".into(),
     };
     let v = liveness(None, &o);
     assert!(matches!(v, Liveness::Unproven { .. }), "got {v:?}");
@@ -107,6 +110,9 @@ fn a_gap_shorter_than_the_floor_is_unproven() {
         state: PaneState::Idle,
         hash: 1,
         at,
+        epoch: "test".into(),
+        sequence: 1,
+        changed_at: "test".into(),
     };
     // 30s was measured as TOO SHORT: a lane inside a long tool call has a static timer,
     // and a 30s window called two live panes frozen.
@@ -121,6 +127,9 @@ fn working_and_unproven_panes_are_never_dispatchable() {
         state: st,
         hash: h,
         at,
+        epoch: "test".into(),
+        sequence: 1,
+        changed_at: "test".into(),
     };
     let working = liveness(
         Some(&mk(PaneState::Working { timer_secs: 60 }, 1, 1000)),
@@ -145,6 +154,9 @@ fn static_timer_with_changed_content_is_live_not_frozen() {
         state: PaneState::Working { timer_secs: t },
         hash: h,
         at,
+        epoch: "test".into(),
+        sequence: 1,
+        changed_at: "test".into(),
     };
     assert_eq!(
         liveness(Some(&mk(60, 7, 1000)), &mk(60, 9, 1100)),
@@ -313,12 +325,18 @@ fn a_just_finished_pane_is_newly_idle_not_live() {
         state: PaneState::Working { timer_secs: 120 },
         hash: 11,
         at: 1000,
+        epoch: "test".into(),
+        sequence: 1,
+        changed_at: "test".into(),
     };
     let now = Observation {
         pane_id: "%1408".to_owned(),
         state: PaneState::Idle,
         hash: 22,
         at: 1000 + MIN_GAP_SECS + 5,
+        epoch: "test".into(),
+        sequence: 1,
+        changed_at: "test".into(),
     };
     let v = liveness(Some(&prev), &now);
     assert_eq!(v, Liveness::NewlyIdle, "a just-finished pane is NEWLY_IDLE");
@@ -341,6 +359,9 @@ fn a_just_finished_pane_is_newly_idle_not_live() {
         state: PaneState::Idle,
         hash: 22,
         at: now.at + MIN_GAP_SECS + 5,
+        epoch: "test".into(),
+        sequence: 1,
+        changed_at: "test".into(),
     };
     let confirmed = liveness(Some(&now), &later);
     assert_eq!(confirmed, Liveness::ConfirmedIdle);
@@ -354,12 +375,18 @@ fn a_pane_picking_work_up_is_live_and_not_free_capacity() {
         state: PaneState::Idle,
         hash: 1,
         at: 1000,
+        epoch: "test".into(),
+        sequence: 1,
+        changed_at: "test".into(),
     };
     let now = Observation {
         pane_id: "%1".to_owned(),
         state: PaneState::Working { timer_secs: 30 },
         hash: 2,
         at: 1000 + MIN_GAP_SECS + 5,
+        epoch: "test".into(),
+        sequence: 1,
+        changed_at: "test".into(),
     };
     let v = liveness(Some(&prev), &now);
     assert_eq!(v, Liveness::Live);
@@ -444,6 +471,9 @@ fn dialog_survives_the_state_file_round_trip() {
         state: tick_monitor::PaneState::Dialog { timer_secs: 1560 },
         hash: 42,
         at: 1788170000,
+        epoch: "test".into(),
+        sequence: 1,
+        changed_at: "test".into(),
     };
     let dir = std::env::temp_dir().join(format!("tmdlg{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -459,6 +489,9 @@ fn dialog_survives_the_state_file_round_trip() {
         tick_monitor::PaneState::Dialog { timer_secs: 1560 },
         "DIALOG must round-trip, not silently downgrade to UNPROVEN"
     );
+    assert_eq!(back.panes[0].epoch, "test");
+    assert_eq!(back.panes[0].sequence, 1);
+    assert_eq!(back.panes[0].changed_at, "test");
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -472,12 +505,18 @@ fn an_absent_pane_id_is_dead_and_a_dialog_pane_is_not() {
             state: tick_monitor::PaneState::Dialog { timer_secs: 60 },
             hash: 1,
             at: 100,
+            epoch: "test".into(),
+            sequence: 1,
+            changed_at: "test".into(),
         },
         tick_monitor::Observation {
             pane_id: "%9999".into(),
             state: tick_monitor::PaneState::Working { timer_secs: 60 },
             hash: 2,
             at: 100,
+            epoch: "test".into(),
+            sequence: 1,
+            changed_at: "test".into(),
         },
     ];
     let live = vec!["%1413".to_string(), "%1397".to_string()];
@@ -502,6 +541,9 @@ fn an_empty_pane_list_declares_nobody_dead() {
         state: tick_monitor::PaneState::Working { timer_secs: 1 },
         hash: 1,
         at: 100,
+        epoch: "test".into(),
+        sequence: 1,
+        changed_at: "test".into(),
     }];
     assert!(
         tick_monitor::vanished(&prior, &[]).is_empty(),
@@ -526,6 +568,9 @@ fn obs_at(id: &str, st: tick_monitor::PaneState, at: u64) -> tick_monitor::Obser
         state: st,
         hash: 7,
         at,
+        epoch: "test".into(),
+        sequence: 1,
+        changed_at: "test".into(),
     }
 }
 
@@ -757,8 +802,10 @@ fn capacity_alarm_is_wired_to_watch_escalation() {
 fn an_unowned_ledger_is_claimable() {
     let d = tempfile::tempdir().unwrap();
     let p = d.path().join("s.tsv");
-    assert!(tick_monitor::check_ownership(&p, 4242).is_ok(),
-        "a ledger that does not exist yet must be claimable");
+    assert!(
+        tick_monitor::check_ownership(&p, 4242).is_ok(),
+        "a ledger that does not exist yet must be claimable"
+    );
 }
 
 #[test]
@@ -766,10 +813,15 @@ fn the_owner_may_rewrite_its_own_ledger() {
     let d = tempfile::tempdir().unwrap();
     let p = d.path().join("s.tsv");
     let me = std::process::id();
-    let st = tick_monitor::State { owner_pid: me, ..Default::default() };
+    let st = tick_monitor::State {
+        owner_pid: me,
+        ..Default::default()
+    };
     tick_monitor::save(&p, &st).unwrap();
-    assert!(tick_monitor::check_ownership(&p, me).is_ok(),
-        "the owning process must not lock itself out");
+    assert!(
+        tick_monitor::check_ownership(&p, me).is_ok(),
+        "the owning process must not lock itself out"
+    );
 }
 
 #[test]
@@ -778,12 +830,25 @@ fn a_second_live_writer_is_refused() {
     let p = d.path().join("s.tsv");
     // Our own pid is unambiguously live; claim as it, then approach as someone else.
     let owner = std::process::id();
-    tick_monitor::save(&p, &tick_monitor::State { owner_pid: owner, ..Default::default() }).unwrap();
+    tick_monitor::save(
+        &p,
+        &tick_monitor::State {
+            owner_pid: owner,
+            ..Default::default()
+        },
+    )
+    .unwrap();
 
     let err = tick_monitor::check_ownership(&p, owner + 1)
         .expect_err("a different LIVE owner must be refused");
-    assert!(err.contains("LEDGER CONTENDED"), "refusal must name the condition: {err}");
-    assert!(err.contains(&owner.to_string()), "refusal must name the owner: {err}");
+    assert!(
+        err.contains("LEDGER CONTENDED"),
+        "refusal must name the condition: {err}"
+    );
+    assert!(
+        err.contains(&owner.to_string()),
+        "refusal must name the owner: {err}"
+    );
 }
 
 #[test]
@@ -792,18 +857,37 @@ fn a_dead_owner_does_not_hold_the_ledger_forever() {
     let p = d.path().join("s.tsv");
     // pid 0 is never a live user process, and the loader treats an absent field as 0;
     // a reaped watcher must not wedge the next one out.
-    tick_monitor::save(&p, &tick_monitor::State { owner_pid: 0, ..Default::default() }).unwrap();
-    assert!(tick_monitor::check_ownership(&p, 4242).is_ok(),
-        "a stale owner must be reclaimable, or one crash disables monitoring permanently");
+    tick_monitor::save(
+        &p,
+        &tick_monitor::State {
+            owner_pid: 0,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(
+        tick_monitor::check_ownership(&p, 4242).is_ok(),
+        "a stale owner must be reclaimable, or one crash disables monitoring permanently"
+    );
 }
 
 #[test]
 fn owner_pid_survives_a_save_load_round_trip() {
     let d = tempfile::tempdir().unwrap();
     let p = d.path().join("s.tsv");
-    tick_monitor::save(&p, &tick_monitor::State { owner_pid: 31337, ..Default::default() }).unwrap();
-    assert_eq!(tick_monitor::load(&p).owner_pid, 31337,
-        "an owner that does not round-trip is no owner at all");
+    tick_monitor::save(
+        &p,
+        &tick_monitor::State {
+            owner_pid: 31337,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        tick_monitor::load(&p).owner_pid,
+        31337,
+        "an owner that does not round-trip is no owner at all"
+    );
 }
 
 // ── SESSION SCOPING ─────────────────────────────────────────────────────────
@@ -815,14 +899,19 @@ fn owner_pid_survives_a_save_load_round_trip() {
 fn two_sessions_do_not_share_a_ledger() {
     let a = tick_monitor::state_path("omp-orchestrator");
     let b = tick_monitor::state_path("zeststream-cast");
-    assert_ne!(a, b, "distinct sessions MUST get distinct ledgers — this is the 1:many property");
+    assert_ne!(
+        a, b,
+        "distinct sessions MUST get distinct ledgers — this is the 1:many property"
+    );
 }
 
 #[test]
 fn the_same_session_is_stable_across_calls() {
-    assert_eq!(tick_monitor::state_path("franken-harvest"),
-               tick_monitor::state_path("franken-harvest"),
-        "a watcher restarting must find its own prior state, not a fresh one");
+    assert_eq!(
+        tick_monitor::state_path("franken-harvest"),
+        tick_monitor::state_path("franken-harvest"),
+        "a watcher restarting must find its own prior state, not a fresh one"
+    );
 }
 
 #[test]
@@ -831,13 +920,25 @@ fn a_session_name_cannot_escape_the_state_directory() {
     for hostile in ["../../etc/passwd", "a/b/c", "..", "../.ssh/authorized_keys"] {
         let p = tick_monitor::state_path(hostile);
         let s = p.to_string_lossy();
-        assert!(s.contains("/.local/state/omp-orchestrator/sessions/"),
-            "{hostile:?} escaped the state root: {s}");
-        assert!(!s.contains(".."), "{hostile:?} left a traversal segment: {s}");
-        assert!(p.ends_with("tick-monitor.tsv"), "{hostile:?} lost the filename: {s}");
+        assert!(
+            s.contains("/.local/state/omp-orchestrator/sessions/"),
+            "{hostile:?} escaped the state root: {s}"
+        );
+        assert!(
+            !s.contains(".."),
+            "{hostile:?} left a traversal segment: {s}"
+        );
+        assert!(
+            p.ends_with("tick-monitor.tsv"),
+            "{hostile:?} lost the filename: {s}"
+        );
         // THE REAL INVARIANT: exactly one directory segment under sessions/.
         let tail: Vec<_> = s.rsplit("/sessions/").next().unwrap().split('/').collect();
-        assert_eq!(tail.len(), 2, "{hostile:?} produced nested segments: {tail:?}");
+        assert_eq!(
+            tail.len(),
+            2,
+            "{hostile:?} produced nested segments: {tail:?}"
+        );
     }
 }
 
@@ -845,8 +946,11 @@ fn a_session_name_cannot_escape_the_state_directory() {
 fn an_empty_or_dotted_session_still_yields_a_usable_path() {
     for degenerate in ["", ".", "..", "..."] {
         let p = tick_monitor::state_path(degenerate);
-        assert!(p.to_string_lossy().contains("/sessions/unnamed/"),
-            "{degenerate:?} must fall back to a named directory, got {}", p.display());
+        assert!(
+            p.to_string_lossy().contains("/sessions/unnamed/"),
+            "{degenerate:?} must fall back to a named directory, got {}",
+            p.display()
+        );
     }
 }
 
@@ -855,7 +959,10 @@ fn distinct_sessions_are_distinct_even_after_sanitisation() {
     // The sanitiser must not collapse two real sessions onto one path.
     let a = tick_monitor::state_path("zeststream-cast");
     let b = tick_monitor::state_path("zeststream-cast-wave-20260825-1910");
-    assert_ne!(a, b, "sanitisation collapsed two live session names onto one ledger");
+    assert_ne!(
+        a, b,
+        "sanitisation collapsed two live session names onto one ledger"
+    );
 }
 
 /// POSITIVE PROOF OF LIFE SURVIVES A SHORT GAP.
@@ -880,6 +987,9 @@ fn an_advanced_timer_inside_the_gap_floor_is_live_not_unproven() {
         state: PaneState::Working { timer_secs: 30 },
         hash: 111,
         at: 1_000,
+        epoch: "test".into(),
+        sequence: 1,
+        changed_at: "test".into(),
     };
     // 10 seconds later: well inside MIN_GAP_SECS (75), and the turn timer ADVANCED.
     let now = Observation {
@@ -887,6 +997,9 @@ fn an_advanced_timer_inside_the_gap_floor_is_live_not_unproven() {
         state: PaneState::Working { timer_secs: 40 },
         hash: 111,
         at: 1_010,
+        epoch: "test".into(),
+        sequence: 1,
+        changed_at: "test".into(),
     };
     assert_eq!(
         liveness(Some(&prev), &now),
@@ -903,12 +1016,18 @@ fn a_changed_hash_inside_the_gap_floor_is_live_not_unproven() {
         state: PaneState::Working { timer_secs: 30 },
         hash: 111,
         at: 1_000,
+        epoch: "test".into(),
+        sequence: 1,
+        changed_at: "test".into(),
     };
     let now = Observation {
         pane_id: "%1408".into(),
         state: PaneState::Working { timer_secs: 30 },
         hash: 222,
         at: 1_010,
+        epoch: "test".into(),
+        sequence: 1,
+        changed_at: "test".into(),
     };
     assert_eq!(
         liveness(Some(&prev), &now),
@@ -930,17 +1049,96 @@ fn no_movement_inside_the_gap_floor_is_still_unproven() {
         state: PaneState::Working { timer_secs: 30 },
         hash: 111,
         at: 1_000,
+        epoch: "test".into(),
+        sequence: 1,
+        changed_at: "test".into(),
     };
     let now = Observation {
         pane_id: "%1408".into(),
         state: PaneState::Working { timer_secs: 30 },
         hash: 111,
         at: 1_010,
+        epoch: "test".into(),
+        sequence: 1,
+        changed_at: "test".into(),
     };
     assert_eq!(
         liveness(Some(&prev), &now),
-        Liveness::Unproven { why: "gap_too_short" },
+        Liveness::Unproven {
+            why: "gap_too_short"
+        },
         "the floor must still guard the NEGATIVE verdict; absence of change inside \
          ten seconds is not evidence of freezing"
     );
+}
+fn identified_observation(
+    pane_id: &str,
+    epoch: &str,
+    sequence: u64,
+    at: u64,
+    changed_at: &str,
+) -> Observation {
+    Observation {
+        pane_id: pane_id.into(),
+        state: PaneState::Idle,
+        hash: 7,
+        at,
+        epoch: epoch.into(),
+        sequence,
+        changed_at: changed_at.into(),
+    }
+}
+
+#[test]
+fn output_sequence_distinguishes_frozen_capture_samples() {
+    let first = identified_observation("%1", "epoch-a", 7, 100, "2026-09-02T14:32:35Z");
+    let second = identified_observation("%1", "epoch-a", 8, 100, "2026-09-02T14:32:35Z");
+
+    assert!(!first.same_observation(&second));
+    assert_eq!(deduplicate_observations(&[first, second]).unwrap().len(), 2);
+}
+
+#[test]
+fn rereading_one_output_sequence_is_a_duplicate() {
+    let first = identified_observation("%1", "epoch-a", 7, 100, "2026-09-02T14:32:35Z");
+    let reread = identified_observation("%1", "epoch-a", 7, 101, "2026-09-02T14:32:35Z");
+
+    assert!(first.same_observation(&reread));
+    assert_eq!(deduplicate_observations(&[first, reread]).unwrap().len(), 1);
+}
+
+#[test]
+fn epoch_change_with_lower_sequence_is_a_restart() {
+    let prior = identified_observation("%1", "epoch-a", 900, 100, "2026-09-02T14:32:35Z");
+    let restarted = identified_observation("%1", "epoch-b", 1, 101, "2026-09-02T14:32:36Z");
+
+    assert_eq!(
+        sequence_relation(&prior, &restarted).unwrap(),
+        SequenceRelation::Restart
+    );
+}
+
+#[test]
+fn same_epoch_sequence_regression_is_typed_fault() {
+    let prior = identified_observation("%1", "epoch-a", 900, 100, "2026-09-02T14:32:35Z");
+    let regressed = identified_observation("%1", "epoch-a", 1, 101, "2026-09-02T14:32:36Z");
+
+    assert!(matches!(
+        sequence_relation(&prior, &regressed),
+        Err(ObservationIdentityError::SequenceRegression { .. })
+    ));
+}
+
+#[test]
+fn empty_or_unidentified_observation_set_is_an_error() {
+    assert!(matches!(
+        deduplicate_observations(&[]),
+        Err(ObservationIdentityError::EmptyObservationSet)
+    ));
+
+    let missing = identified_observation("%1", "", 7, 100, "2026-09-02T14:32:35Z");
+    assert!(matches!(
+        deduplicate_observations(&[missing]),
+        Err(ObservationIdentityError::MissingEpoch { .. })
+    ));
 }

@@ -28,6 +28,7 @@ composer-typed = { path = "../composer-typed" }
 omp-rpc-session = { path = "../omp-rpc-session" }
 subprocess-contract = { path = "../subprocess-contract" }
 receiver-receipt = { path = "../receiver-receipt" }
+ntm-fleet-monitor = { path = "../ntm-fleet-monitor" }
 serde_json = "1"
 
 [lints.rust]

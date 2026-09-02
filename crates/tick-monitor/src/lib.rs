@@ -29,6 +29,7 @@
 pub mod lifecycle;
 
 use std::collections::hash_map::DefaultHasher;
+use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::io::Read;
 use std::os::unix::process::CommandExt;
@@ -490,12 +491,146 @@ impl Liveness {
 pub const MIN_GAP_SECS: u64 = 75;
 
 /// One pane's observation at a point in time.
+/// The exact producer identity of a pane observation.
+///
+/// epoch changes when the producer restarts; sequence is monotonic only inside
+/// an epoch. changed_at is producer time, while Observation::at is recorder
+/// time, so the pair preserves the bitemporal evidence without pretending the
+/// machines share a clock.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ObservationIdentity {
+    pub epoch: String,
+    pub sequence: u64,
+    pub changed_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ObservationIdentityError {
+    EmptyObservationSet,
+    MissingEpoch {
+        pane_id: String,
+    },
+    PaneMismatch {
+        expected: String,
+        observed: String,
+    },
+    SequenceRegression {
+        epoch: String,
+        previous: u64,
+        current: u64,
+    },
+}
+
+impl fmt::Display for ObservationIdentityError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EmptyObservationSet => f.write_str("observation identity set is empty"),
+            Self::MissingEpoch { pane_id } => write!(f, "observation {pane_id} has no epoch"),
+            Self::PaneMismatch { expected, observed } => {
+                write!(f, "pane mismatch: expected {expected}, observed {observed}")
+            }
+            Self::SequenceRegression {
+                epoch,
+                previous,
+                current,
+            } => write!(
+                f,
+                "sequence regression in epoch {epoch}: previous={previous}, current={current}"
+            ),
+        }
+    }
+}
+
+/// Relationship between adjacent producer observations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SequenceRelation {
+    First,
+    Same,
+    Advance,
+    Restart,
+}
+
+/// One pane's observation at a point in time.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Observation {
     pub pane_id: String,
     pub state: PaneState,
     pub hash: u64,
     pub at: u64,
+    pub epoch: String,
+    pub sequence: u64,
+    pub changed_at: String,
+}
+
+impl Observation {
+    fn validate_identity(&self) -> Result<(), ObservationIdentityError> {
+        if self.epoch.is_empty() {
+            return Err(ObservationIdentityError::MissingEpoch {
+                pane_id: self.pane_id.clone(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Exact deduplication key. at and hash are deliberately excluded:
+    /// wall-clock seconds collide and the stable hash deliberately ignores pane
+    /// animation, so neither identifies a producer observation.
+    pub fn same_observation(&self, other: &Self) -> bool {
+        self.pane_id == other.pane_id
+            && self.epoch == other.epoch
+            && self.sequence == other.sequence
+    }
+}
+
+/// Classify a sequence transition without conflating restart with corruption.
+pub fn sequence_relation(
+    previous: &Observation,
+    current: &Observation,
+) -> Result<SequenceRelation, ObservationIdentityError> {
+    previous.validate_identity()?;
+    current.validate_identity()?;
+    if previous.pane_id != current.pane_id {
+        return Err(ObservationIdentityError::PaneMismatch {
+            expected: previous.pane_id.clone(),
+            observed: current.pane_id.clone(),
+        });
+    }
+    if previous.epoch != current.epoch {
+        return Ok(SequenceRelation::Restart);
+    }
+    match current.sequence.cmp(&previous.sequence) {
+        std::cmp::Ordering::Less => Err(ObservationIdentityError::SequenceRegression {
+            epoch: current.epoch.clone(),
+            previous: previous.sequence,
+            current: current.sequence,
+        }),
+        std::cmp::Ordering::Equal => Ok(SequenceRelation::Same),
+        std::cmp::Ordering::Greater => Ok(SequenceRelation::Advance),
+    }
+}
+
+/// Deduplicate a non-empty observation set by producer identity.
+///
+/// Empty and unkeyed inputs refuse rather than returning an apparently clean
+/// set. This is the anti-vacuity boundary required before any estimator counts
+/// observations or accumulates a non-idempotent evidence product.
+pub fn deduplicate_observations(
+    observations: &[Observation],
+) -> Result<Vec<Observation>, ObservationIdentityError> {
+    if observations.is_empty() {
+        return Err(ObservationIdentityError::EmptyObservationSet);
+    }
+    let mut unique = Vec::with_capacity(observations.len());
+    for observation in observations {
+        observation.validate_identity()?;
+        if !unique
+            .iter()
+            .any(|prior: &Observation| prior.same_observation(observation))
+        {
+            unique.push(observation.clone());
+        }
+    }
+    Ok(unique)
 }
 
 pub fn liveness(prev: Option<&Observation>, now: &Observation) -> Liveness {
@@ -561,10 +696,8 @@ pub fn liveness(prev: Option<&Observation>, now: &Observation) -> Liveness {
     // The PRESENCE of change needs no such protection. A turn timer that advanced, or a
     // content hash that differs, cannot occur in a dead pane at any gap. The floor now
     // guards only the direction it was reasoned for.
-    if let (
-        PaneState::Working { timer_secs: before },
-        PaneState::Working { timer_secs: after },
-    ) = (&prev.state, &now.state)
+    if let (PaneState::Working { timer_secs: before }, PaneState::Working { timer_secs: after }) =
+        (&prev.state, &now.state)
     {
         if after > before || prev.hash != now.hash {
             return Liveness::Live;
@@ -1036,7 +1169,13 @@ pub fn state_path(session: &str) -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_owned());
     let safe: String = session
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     // Collapse any traversal-shaped run. `../../etc/passwd` sanitises to
     // `.._.._etc_passwd`, which is a harmless single segment — but leaving a
@@ -1071,26 +1210,29 @@ pub fn load(path: &Path) -> State {
             ["blocker_streak", v] => st.blocker_streak = v.parse().unwrap_or(0),
             ["red_streak", v] => st.red_streak = v.parse().unwrap_or(0),
             ["commit", repo, sha] => st.commits.push(((*repo).to_owned(), (*sha).to_owned())),
-            ["pane", id, label, timer, hash, at] => {
+            ["pane", id, label, timer, hash, at, epoch, sequence, changed_at] => {
                 let state = match *label {
                     "WORKING" => PaneState::Working {
                         timer_secs: timer.parse().unwrap_or(0),
                     },
                     "IDLE" => PaneState::Idle,
                     "WEDGED" => PaneState::Wedged,
-                    // Without this arm the writer emits DIALOG and the next tick reads it
-                    // back as Unproven -- a silent downgrade that loses the prior-side
-                    // "was awaiting an answer" fact one tick after it was established.
                     "DIALOG" => PaneState::Dialog {
                         timer_secs: timer.parse().unwrap_or(0),
                     },
                     _ => PaneState::Unproven,
+                };
+                let Ok(sequence) = sequence.parse::<u64>() else {
+                    continue;
                 };
                 st.panes.push(Observation {
                     pane_id: (*id).to_owned(),
                     state,
                     hash: hash.parse().unwrap_or(0),
                     at: at.parse().unwrap_or(0),
+                    epoch: (*epoch).to_owned(),
+                    sequence,
+                    changed_at: (*changed_at).to_owned(),
                 });
             }
             _ => {}
@@ -1098,7 +1240,6 @@ pub fn load(path: &Path) -> State {
     }
     st
 }
-
 /// True when `pid` names a process that currently exists.
 ///
 /// `kill(pid, 0)` is the portable liveness probe: it performs permission and
@@ -1161,12 +1302,15 @@ pub fn save(path: &Path, st: &State) -> std::io::Result<()> {
             PaneState::Idle | PaneState::Wedged | PaneState::Unproven => 0,
         };
         out.push_str(&format!(
-            "pane\t{}\t{}\t{}\t{}\t{}\n",
+            "pane\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
             p.pane_id,
             p.state.label(),
             timer,
             p.hash,
-            p.at
+            p.at,
+            p.epoch,
+            p.sequence,
+            p.changed_at
         ));
     }
     // Write-then-rename so a crash mid-write cannot leave a truncated state file that
