@@ -19,6 +19,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, ExitCode};
 use std::time::Duration;
+use subprocess_contract::{bounded_output, bounded_status, BoundedOutcome};
 
 const DEFAULT_MAX_PANES: usize = 8;
 
@@ -32,29 +33,19 @@ fn env_or(key: &str, fallback: &str) -> String {
 /// orphans blocked forever in `write(2)` on a full pipe. `None` on any failure, which
 /// the caller turns into "refuse everything" rather than "nothing is busy".
 fn probe(bin: &str, args: &[String], secs: u64) -> Option<String> {
-    let mut child = Command::new(bin)
-        .args(args)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .ok()?;
-    let deadline = std::time::Instant::now() + Duration::from_secs(secs);
-    loop {
-        match child.try_wait() {
-            Ok(Some(_)) => break,
-            Ok(None) => {
-                if std::time::Instant::now() > deadline {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return None;
-                }
-                std::thread::sleep(Duration::from_millis(100));
-            }
-            Err(_) => return None,
+    let mut command = Command::new(bin);
+    command.args(args);
+    match bounded_output(&mut command, Duration::from_secs(secs)) {
+        BoundedOutcome::Completed(output) => String::from_utf8(output.stdout).ok(),
+        BoundedOutcome::TimedOut => {
+            eprintln!("refill-idle-panes: {bin} timed out before its deadline");
+            None
+        }
+        BoundedOutcome::Unspawned(error) => {
+            eprintln!("refill-idle-panes: {bin} could not spawn: {error}");
+            None
         }
     }
-    let out = child.wait_with_output().ok()?;
-    String::from_utf8(out.stdout).ok()
 }
 /// Reconcile NTM and tmux before interpreting an empty idle-pane intersection.
 ///
@@ -64,7 +55,11 @@ fn probe(bin: &str, args: &[String], secs: u64) -> Option<String> {
 fn reconcile_fleet() -> Result<(), String> {
     let tmux = probe(
         "tmux",
-        &["list-sessions".into(), "-F".into(), "#{session_name}".into()],
+        &[
+            "list-sessions".into(),
+            "-F".into(),
+            "#{session_name}".into(),
+        ],
         45,
     )
     .unwrap_or_default();
@@ -88,21 +83,16 @@ fn reconcile_fleet() -> Result<(), String> {
 /// `.git`/`.beads` marker walk from the cwd) — never a literal, because a packet
 /// naming a wrong checkout compiles into a worker that reads the wrong repo.
 fn render_packet(bead: &str, footer: Option<&str>, target: &str) -> Option<String> {
-    let raw = probe(
-        "br",
-        &[
-            "show".into(),
-            bead.into(),
-            "--json".into(),
-        ],
-        30,
-    )?;
+    let raw = probe("br", &["show".into(), bead.into(), "--json".into()], 30)?;
     let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
     let row = match &value {
         serde_json::Value::Array(a) => a.first()?,
         other => other,
     };
-    let title = row.get("title").and_then(serde_json::Value::as_str).unwrap_or("");
+    let title = row
+        .get("title")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
     let body = row
         .get("description")
         .and_then(serde_json::Value::as_str)
@@ -139,7 +129,10 @@ fn resolve_target() -> Result<String, String> {
     }
     let mut current = std::env::current_dir().ok();
     while let Some(directory) = current {
-        if REPO_MARKERS.iter().any(|marker| directory.join(marker).exists()) {
+        if REPO_MARKERS
+            .iter()
+            .any(|marker| directory.join(marker).exists())
+        {
             return Ok(directory.display().to_string());
         }
         current = directory.parent().map(|p| p.to_path_buf());
@@ -244,15 +237,19 @@ fn run(apply: bool) -> ExitCode {
             skipped += 1;
             continue;
         }
-        let ok = Command::new("ntm")
+        let mut command = Command::new("ntm");
+        command
             .arg(format!("--robot-send={session}"))
             .arg(format!("--panes={pane}"))
-            .arg(format!("--msg-file={}", staged.display()))
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false);
+            .arg(format!("--msg-file={}", staged.display()));
+        let (ok, failure) = match bounded_status(&mut command, Duration::from_secs(45)) {
+            BoundedOutcome::Completed(output) => (output.status.success(), "send_failed"),
+            BoundedOutcome::TimedOut => (false, "send_timed_out"),
+            BoundedOutcome::Unspawned(error) => {
+                eprintln!("refill-idle-panes: ntm send could not spawn: {error}");
+                (false, "send_unspawned")
+            }
+        };
         if ok {
             // SENDER SUCCESS IS NOT RECEIVER RECEIPT. ntm returns success while a packet
             // sits unsubmitted in a composer. Verification is controller-tick's job, and
@@ -261,7 +258,7 @@ fn run(apply: bool) -> ExitCode {
             append_ledger(&session, pane, bead);
             sent += 1;
         } else {
-            println!("FAIL  pane={pane} bead={bead} reason=send_failed");
+            println!("FAIL  pane={pane} bead={bead} reason={failure}");
             skipped += 1;
         }
     }
@@ -343,8 +340,8 @@ fn selftest() -> ExitCode {
             "capture_provenance":"live","observation_freshness":"fresh","safe_to_dispatch":true}]}"#,
     )
     .expect("fixture parses");
-    let oracle_4_free = parse_oracle_view(r#"{"panes":[{"pane":"4","state":"FREE"}]}"#)
-        .expect("fixture parses");
+    let oracle_4_free =
+        parse_oracle_view(r#"{"panes":[{"pane":"4","state":"FREE"}]}"#).expect("fixture parses");
     check(
         "state=UNKNOWN does not blind the parser to a live idle observation",
         decide(&state_unknown_but_idle, &oracle_4_free).dispatchable == vec!["4".to_string()],
@@ -357,7 +354,8 @@ fn selftest() -> ExitCode {
                 "observation_freshness":"fresh"}]}"#,
         )
         .expect("fixture parses"),
-        &parse_oracle_view(r#"{"panes":[{"pane":"4","state":"NO_AGENT"}]}"#).expect("fixture parses"),
+        &parse_oracle_view(r#"{"panes":[{"pane":"4","state":"NO_AGENT"}]}"#)
+            .expect("fixture parses"),
     );
     check(
         "a bare shell is refused even when ntm confidently says idle",
@@ -428,7 +426,10 @@ fn selftest() -> ExitCode {
             .is_some_and(|o| o.code == 1 && o.message.contains("ntm --robot-activity")),
     );
 
-    check("an undersized packet is refused", packet_is_sendable(10) == false);
+    check(
+        "an undersized packet is refused",
+        packet_is_sendable(10) == false,
+    );
     check("a full-size packet is accepted", packet_is_sendable(7_347));
 
     println!("---");
