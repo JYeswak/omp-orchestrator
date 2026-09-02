@@ -13,4 +13,9 @@ asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", rev = "f
 subprocess-contract = { path = "../subprocess-contract" }
 
 [dev-dependencies]
+# An integration test in `tests/` links against the crate and its DEV-dependencies only —
+# a normal dependency of the crate is not in scope for it. `Finding::file` takes `&Cx`, so
+# the suite cannot construct one without asupersync here. Same git rev as above, so cargo
+# unifies rather than resolving a second copy.
+asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", rev = "fa3c01aec" }
 futures-lite = "2"
