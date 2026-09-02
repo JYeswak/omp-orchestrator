@@ -61,6 +61,16 @@
 //! single-session and cannot address a third-party pane, so the receipt gap may survive the
 //! vocabulary.
 
+// ─────────────────────────────────────────────── AUTHORED, not derived (Phase 0 · T3)
+//
+// Contract: docs/contracts/pane_observation_contract.md. This algebra is authored in this
+// workspace; it is not a re-export from asupersync and has no Phase 0 caller migration.
+pub mod pane_observation;
+pub use pane_observation::{
+    CaptureSnapshot, DispatchAdmissibility, EvidenceGrade, ObservationError, PaneLiveness,
+    PaneObservation, UnknownReason, MIN_TWO_CAPTURE_INTERVAL_SECS,
+};
+
 // ─────────────────────────────────────────────── AUTHORED, not derived (Phase 0 · T1)
 //
 // Contract: docs/contracts/claim_strength_contract.md. The crate rule above says contents are
