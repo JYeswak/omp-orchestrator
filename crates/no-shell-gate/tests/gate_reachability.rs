@@ -81,10 +81,16 @@ fn known_good_fixture_reports_ci_trigger_and_unwired_gate() {
         "// KNOWN-GOOD\n#[test] fn gate() {}\n",
     );
     write_fixture(&root, "crates/bar-lint/src/lib.rs", "pub fn lint() {}\n");
+    write_fixture(&root, "crates/plain/src/lib.rs", "pub fn plain() {}\n");
+    write_fixture(
+        &root,
+        "crates/plain/tests/mutation.rs",
+        "// MUTATION\n#[test] fn mutation() {}\n",
+    );
     write_fixture(
         &root,
         ".github/workflows/gate.yml",
-        "jobs:\n  foo:\n    steps:\n      - run: cargo test -p foo-gate\n",
+        "jobs:\n  foo:\n    steps:\n      - run: cargo test -p foo-gate\n  plain:\n    steps:\n      - run: cargo test -p plain\n",
     );
 
     let output = run_census(&root);
@@ -105,6 +111,15 @@ fn known_good_fixture_reports_ci_trigger_and_unwired_gate() {
         .find(|row| row["name"] == "bar-lint" && row["kind"] == "crate")
         .expect("bar-lint row");
     assert_eq!(bar["reachable"], false);
+    let plain = rows(&report)
+        .iter()
+        .find(|row| row["name"] == "plain/tests/mutation.rs" && row["kind"] == "test_gate")
+        .expect("plain mutation test gate row");
+    assert_eq!(plain["reachable"], true);
+    assert!(plain["proof_command"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("cargo test -p plain"));
     fs::remove_dir_all(root).expect("fixture cleanup");
 }
 #[test]

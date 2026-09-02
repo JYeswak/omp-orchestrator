@@ -77,8 +77,29 @@ fn gate_crates(root: &Path) -> Vec<String> {
                 return None;
             }
             let name = path.file_name()?.to_str()?.to_owned();
-            (name.ends_with("-gate") || name.ends_with("-lint") || name.ends_with("-check"))
+            (name.ends_with("-gate")
+                || name.ends_with("-lint")
+                || name.ends_with("-check")
+                || name == "commit-build-fence")
                 .then_some(name)
+        })
+        .collect::<Vec<_>>();
+    names.sort();
+    names
+}
+
+fn workspace_packages(root: &Path) -> Vec<String> {
+    let mut names = fs::read_dir(root.join("crates"))
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let path = entry.path();
+            if !path.is_dir() {
+                return None;
+            }
+            path.file_name()?.to_str().map(ToOwned::to_owned)
         })
         .collect::<Vec<_>>();
     names.sort();
@@ -167,9 +188,27 @@ fn test_gate_files(root: &Path, package: &str) -> Vec<String> {
         .collect()
 }
 
+fn add_test_gate_rows(root: &Path, package: &str, rows: &mut Vec<Row>) {
+    let mut test_triggers = workflow_triggers(root, package);
+    test_triggers.sort();
+    test_triggers.dedup();
+    for filename in test_gate_files(root, package) {
+        rows.push(Row {
+            name: format!("{package}/tests/{filename}"),
+            kind: "test_gate",
+            reachable: !test_triggers.is_empty(),
+            proof_command: format!(
+                "cargo test -p {package} --test {}",
+                filename.trim_end_matches(".rs")
+            ),
+            triggers: test_triggers.clone(),
+        });
+    }
+}
+
 fn census(root: &Path) -> Result<(Vec<Row>, Vec<String>), String> {
-    let crates = gate_crates(root);
-    if crates.is_empty() {
+    let gate_names = gate_crates(root);
+    if gate_names.is_empty() {
         return Err("EMPTY_GATE_SET".to_owned());
     }
     let mut rows = Vec::new();
@@ -177,9 +216,9 @@ fn census(root: &Path) -> Result<(Vec<Row>, Vec<String>), String> {
         "crates/no-shell-gate/src/bin/gate-reachability.rs".to_owned(),
         "crates/no-shell-gate/tests/gate_reachability.rs".to_owned(),
     ];
-    for package in crates {
-        let mut triggers = workflow_triggers(root, &package);
-        if let Some(trigger) = hook_trigger(root, &package) {
+    for package in &gate_names {
+        let mut triggers = workflow_triggers(root, package);
+        if let Some(trigger) = hook_trigger(root, package) {
             triggers.push(trigger);
         }
         triggers.sort();
@@ -201,21 +240,9 @@ fn census(root: &Path) -> Result<(Vec<Row>, Vec<String>), String> {
             triggers,
             proof_command,
         });
-        for filename in test_gate_files(root, &package) {
-            let mut test_triggers = workflow_triggers(root, &package);
-            test_triggers.sort();
-            test_triggers.dedup();
-            rows.push(Row {
-                name: format!("{package}/tests/{filename}"),
-                kind: "test_gate",
-                reachable: !test_triggers.is_empty(),
-                proof_command: format!(
-                    "cargo test -p {package} --test {}",
-                    filename.trim_end_matches(".rs")
-                ),
-                triggers: test_triggers,
-            });
-        }
+    }
+    for package in workspace_packages(root) {
+        add_test_gate_rows(root, &package, &mut rows);
     }
     excluded.sort();
     excluded.dedup();
