@@ -88,12 +88,42 @@ fn main() -> ExitCode {
     }
 
     // ── GATE 4: state-wildcard-lint (refuse wildcard on state enums) ──────
+    // Every refusal NAMES file:line and the offending arm. A count with no
+    // path is not actionable: measured 2026-09-02, this printed
+    // "state-wildcard-lint: 2 finding(s)" while the crate had already
+    // computed both locations, and an agent in a five-agent checkout could
+    // not tell its own violation from a neighbour's.
     let swl_report = state_wildcard_lint::lint_workspace(&repo_root);
-    if !swl_report.is_pass() {
+    if let Some(error) = &swl_report.error {
+        // Includes the empty-scan case: nothing checked is not a pass.
+        refusals.push(format!("state-wildcard-lint: {error}"));
+    } else if swl_report.scanned.is_empty() {
+        refusals.push(
+            "state-wildcard-lint: ERROR empty scan set under crates/; nothing was checked, \
+             which is not a pass"
+                .to_owned(),
+        );
+    }
+    for finding in &swl_report.findings {
+        refusals.push(format!("state-wildcard-lint: {finding}"));
+    }
+    // A suppression that is invisible is a carve-out, and so is an invisible
+    // scan boundary. State both whenever this gate has anything to say.
+    if !swl_report.findings.is_empty() || swl_report.error.is_some() {
         refusals.push(format!(
-            "state-wildcard-lint: {} finding(s)",
-            swl_report.findings.len()
+            "state-wildcard-lint: {}",
+            state_wildcard_lint::declared_scope_line()
         ));
+    }
+    if !swl_report.allowed.is_empty() {
+        let mut stderr = io::stderr();
+        for allowed in &swl_report.allowed {
+            let _ = writeln!(
+                stderr,
+                "state-wildcard-lint: DECLARED allowlist suppressed {} -- {}",
+                allowed.finding, allowed.reason
+            );
+        }
     }
 
     // ── GATE 5: pre-delete-citation-check (refuse deleting cited files) ───

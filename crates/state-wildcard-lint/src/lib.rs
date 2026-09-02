@@ -10,7 +10,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Why a wildcard match was reported.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,6 +34,15 @@ pub struct Finding {
     pub file: String,
     pub match_line: usize,
     pub wildcard_line: usize,
+    /// The offending arm, verbatim from the source (trimmed, bounded).
+    ///
+    /// A refusal that names a count and not the offence is not actionable: an
+    /// agent that hits it cannot tell its own violation from a neighbour's.
+    /// Measured 2026-09-02: the pre-commit gate printed
+    /// `state-wildcard-lint: 2 finding(s)` with no path, no line and no arm,
+    /// while this crate had already computed all three and discarded them at
+    /// the reporting boundary.
+    pub wildcard_text: String,
     pub scrutinee: String,
     pub inferred_type: Option<String>,
     pub kind: FindingKind,
@@ -44,15 +53,143 @@ impl fmt::Display for Finding {
         let ty = self.inferred_type.as_deref().unwrap_or("unknown");
         write!(
             formatter,
-            "{}: match line {}, wildcard arm line {}, scrutinee={:?}, type={}, kind={}",
+            "{}:{}: wildcard arm `{}` in `match {}` (match opens line {}, type={}, kind={})",
             self.file,
-            self.match_line,
             self.wildcard_line,
+            self.wildcard_text,
             self.scrutinee,
+            self.match_line,
             ty,
             self.kind
         )
     }
+}
+
+/// One DECLARED suppression. Never inferred.
+///
+/// A row exists only where the lint's predicate is provably wrong about a
+/// specific site, and it must say WHY in prose a reader can check. An
+/// exclusion the tool derives for itself is indistinguishable from a bug.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AllowRow {
+    /// Repo-relative path, as `lint_workspace` reports it.
+    pub file: &'static str,
+    /// The match scrutinee, as the scanner normalizes it.
+    pub scrutinee: &'static str,
+    pub reason: &'static str,
+}
+
+/// The complete suppression set. Keyed by file+scrutinee, not by line, so a
+/// row does not silently re-target when the file shifts; a row that matches
+/// nothing is an ERROR (see `apply_allowlist`), so it cannot rot into a
+/// standing carve-out.
+///
+/// EMPTY BY DESIGN as of 2026-09-02. The two live findings
+/// (`crates/cargo-lane-budget/src/main.rs` scrutinee `mode`,
+/// `crates/check-publish/src/json.rs` scrutinee `verdict`) were both repaired
+/// at the source by annotating the scrutinee's type, so neither needs one.
+/// THE SELF-REFERENCE IS NOT SUPPRESSED HERE EITHER: see `DECLARED_SKIP_DIRS`
+/// and `mask_line` — a row for it would match nothing and therefore be stale.
+pub const DECLARED_ALLOWLIST: &[AllowRow] = &[];
+
+/// One DECLARED directory prune, with the reason it is not production source.
+///
+/// This replaces a bare `matches!(name, ".git" | "target" | "tests" | "fixtures")`.
+/// The set was identical; the difference is that each entry now states WHY and
+/// the gate prints them, so the scan's boundary is auditable rather than
+/// buried in a pattern.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SkipDir {
+    pub name: &'static str,
+    pub reason: &'static str,
+}
+
+/// THE DECLARED SCAN BOUNDARY.
+///
+/// This crate embeds the forbidden pattern as specimen data, which makes it the
+/// seventh checker this session whose own input contains text about the thing it
+/// checks. It is handled by two DECLARED mechanisms and by NO carve-out:
+///
+///   1. `mask_line` blanks string-literal contents before scanning, so a
+///      pattern quoted as test data is not code. `src/lib.rs` IS scanned, and
+///      `self_scan_of_lib_is_clean_without_an_exclusion` is the standing proof.
+///   2. `tests/` and `fixtures/` are pruned by the rows below, so specimen
+///      files are never production source.
+pub const DECLARED_SKIP_DIRS: &[SkipDir] = &[
+    SkipDir {
+        name: ".git",
+        reason: "object store, not source; blobs are not Rust even when they end in .rs",
+    },
+    SkipDir {
+        name: "target",
+        reason: "build output; generated code is not authored code and cannot be repaired here",
+    },
+    SkipDir {
+        name: "tests",
+        reason: "specimen data: a known-bad fixture MUST contain the forbidden pattern, so \
+                 scanning it would make every fires-on-known-bad test a violation",
+    },
+    SkipDir {
+        name: "fixtures",
+        reason: "specimen data, same reason as tests/",
+    },
+];
+
+/// One line stating the scan boundary, for callers that refuse. A gate whose
+/// scope is invisible cannot be argued with.
+pub fn declared_scope_line() -> String {
+    let pruned: Vec<&str> = DECLARED_SKIP_DIRS.iter().map(|row| row.name).collect();
+    format!(
+        "DECLARED SCOPE crates/**/*.rs, pruning {}; string-literal contents are masked before \
+         scanning, so a pattern quoted as specimen data is not code. DECLARED allowlist rows: {} \
+         (a row matching nothing is an ERROR, not a pass).",
+        pruned.join(", "),
+        DECLARED_ALLOWLIST.len()
+    )
+}
+
+/// A finding that a DECLARED row suppressed, carried so the suppression is
+/// visible instead of subtracted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AllowedFinding {
+    pub finding: Finding,
+    pub reason: &'static str,
+}
+
+/// Partition findings against a suppression set.
+///
+/// Returns `(kept, allowed, stale)`. `stale` names rows that matched nothing:
+/// a carve-out that suppresses nothing is a silent carve-out, and callers MUST
+/// treat it as an error rather than a pass.
+pub fn apply_allowlist(
+    findings: Vec<Finding>,
+    allowlist: &[AllowRow],
+) -> (Vec<Finding>, Vec<AllowedFinding>, Vec<AllowRow>) {
+    let mut used = vec![false; allowlist.len()];
+    let mut kept = Vec::new();
+    let mut allowed = Vec::new();
+    for finding in findings {
+        let matched = allowlist
+            .iter()
+            .position(|row| row.file == finding.file && row.scrutinee == finding.scrutinee);
+        match matched {
+            Some(index) => {
+                used[index] = true;
+                allowed.push(AllowedFinding {
+                    finding,
+                    reason: allowlist[index].reason,
+                });
+            }
+            None => kept.push(finding),
+        }
+    }
+    let stale = allowlist
+        .iter()
+        .zip(used.iter())
+        .filter(|(_, hit)| !**hit)
+        .map(|(row, _)| *row)
+        .collect();
+    (kept, allowed, stale)
 }
 
 /// Result of scanning a repository source root.
@@ -60,6 +197,8 @@ impl fmt::Display for Finding {
 pub struct LintReport {
     pub scanned: Vec<String>,
     pub findings: Vec<Finding>,
+    /// Findings a DECLARED row suppressed, with the reason.
+    pub allowed: Vec<AllowedFinding>,
     pub error: Option<String>,
 }
 
@@ -223,19 +362,201 @@ fn known_non_state_type(type_name: &str) -> bool {
         || lower.starts_with("btreemap<")
 }
 
-fn wildcard_arm_line(code: &[String], start: usize, end: usize) -> Option<usize> {
-    let has_wildcard = |line: &str| {
-        let trimmed = line.trim_start();
-        trimmed.starts_with("_ =>")
-            || trimmed.starts_with("_=>")
-            || trimmed.starts_with("_ if")
-            || line.contains("_ =>")
-            || line.contains("_=>")
-    };
-    if has_wildcard(&code[start]) {
-        return Some(start);
+/// Byte offset of a wildcard arm's `_` on this line, if any.
+///
+/// Token-aware on purpose. `Some(_) =>` is a partial pattern, not a wildcard,
+/// and `x_ =>` is an identifier; the old substring test (`line.contains("_ =>")`)
+/// would have been happy to call a `_` anywhere on the line an arm.
+fn wildcard_offset(line: &str) -> Option<usize> {
+    let mut previous: Option<char> = None;
+    for (index, character) in line.char_indices() {
+        if character == '_' && !previous.is_some_and(|p| p.is_alphanumeric() || p == '_') {
+            let rest = line[index + 1..].trim_start();
+            let guarded = rest.starts_with("if ") && line[index..].contains("=>");
+            if rest.starts_with("=>") || guarded {
+                return Some(index);
+            }
+        }
+        previous = Some(character);
     }
-    (start + 1..=end).find(|index| has_wildcard(&code[*index]))
+    None
+}
+
+/// The wildcard arm of THIS match, at this match's own arm depth.
+///
+/// Measured 2026-09-02: `crates/cargo-lane-budget/src/main.rs` was reported as
+/// `match line 29, wildcard arm line 60`. Line 60 is the `_ =>` of the INNER
+/// `match args[index].as_str()` at line 43; the outer `match mode` has its own
+/// wildcard at line 94. The old scan took the first wildcard anywhere inside
+/// the outer match's brace span, so the file:line it names can belong to a
+/// different match — a refusal pointing at the wrong arm is worse than a count,
+/// because it looks actionable and is not.
+///
+/// Depth-scoping loses no coverage: every `match ` line gets its own iteration,
+/// so a nested match's wildcard is still reported against the nested match.
+fn wildcard_arm_line(code: &[String], start: usize, end: usize) -> Option<usize> {
+    if let Some(offset) = wildcard_offset(&code[start]) {
+        // Single-line match: `match x { A => (), _ => () }`. The arm sits on
+        // the header line, after the brace that opens the match body.
+        if code[start][..offset].contains('{') {
+            return Some(start);
+        }
+    }
+    let mut depth = 0i32;
+    for index in start..=end {
+        let line = &code[index];
+        if index > start {
+            if let Some(offset) = wildcard_offset(line) {
+                // Depth AT the arm, not before the line: `} _ => {` closes the
+                // previous arm on the same line it opens this one.
+                if depth + brace_delta(&line[..offset]) == 1 {
+                    return Some(index);
+                }
+            }
+        }
+        depth += brace_delta(line);
+    }
+    None
+}
+
+/// Split a parameter list on top-level commas, respecting `<>`, `()` and `[]`.
+fn split_top_level(list: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut depth = 0i32;
+    let mut previous = ' ';
+    for character in list.chars() {
+        match character {
+            '<' | '(' | '[' => {
+                depth += 1;
+                current.push(character);
+            }
+            '>' | ')' | ']' => {
+                // `->` and `=>` inside a parameter type are arrows, not closers.
+                if !(character == '>' && (previous == '-' || previous == '=')) {
+                    depth = (depth - 1).max(0);
+                }
+                current.push(character);
+            }
+            ',' if depth == 0 => {
+                parts.push(current.trim().to_owned());
+                current.clear();
+            }
+            other => current.push(other),
+        }
+        previous = character;
+    }
+    let tail = current.trim();
+    if !tail.is_empty() {
+        parts.push(tail.to_owned());
+    }
+    parts.retain(|part| !part.is_empty());
+    parts
+}
+
+/// Strip references, `mut`, `dyn` and lifetimes so a parameter type can be
+/// compared against the enum set and the primitive set.
+fn normalize_param_type(text: &str) -> String {
+    let mut current = text.trim();
+    loop {
+        let mut next = current.trim_start_matches('&').trim_start();
+        if let Some(rest) = next.strip_prefix("mut ") {
+            next = rest.trim_start();
+        }
+        if let Some(rest) = next.strip_prefix("dyn ") {
+            next = rest.trim_start();
+        }
+        if next.starts_with('\'') {
+            next = next
+                .find(char::is_whitespace)
+                .map_or("", |space| next[space..].trim_start());
+        }
+        if next == current {
+            return current.to_owned();
+        }
+        current = next;
+    }
+}
+
+/// Offset of a `fn` keyword used as a token on this line.
+fn fn_keyword_offset(line: &str) -> Option<usize> {
+    let mut search = 0;
+    while let Some(relative) = line[search..].find("fn ") {
+        let position = search + relative;
+        let preceding = line[..position].chars().next_back();
+        if !preceding.is_some_and(|p| p.is_alphanumeric() || p == '_') {
+            return Some(position);
+        }
+        search = position + 3;
+    }
+    None
+}
+
+/// Typed bindings from function signatures.
+///
+/// `parse_typed_bindings` only sees `let name: Type`. A parameter is just as
+/// authoritative and far more common as a match scrutinee. Measured 2026-09-02:
+/// `pub fn count_key(verdict: &str)` in `crates/check-publish/src/json.rs` was
+/// reported as UNRESOLVED_STATE_TYPE — a `match` on `&str` cannot be exhaustive,
+/// so its `_` arm is compiler-required. The type was declared three characters
+/// from the match; only the resolver could not see it.
+fn parse_fn_param_bindings(code: &[String]) -> BTreeMap<String, String> {
+    let mut bindings = BTreeMap::new();
+    for (index, line) in code.iter().enumerate() {
+        let Some(fn_position) = fn_keyword_offset(line) else { continue };
+        let Some(open) = line[fn_position..].find('(') else { continue };
+        let mut list = String::new();
+        let mut depth = 0i32;
+        let mut closed = false;
+        let mut cursor = fn_position + open;
+        let mut scan = index;
+        // A signature spanning more than a dozen lines is not a signature.
+        while scan < code.len() && scan <= index + 12 {
+            for character in code[scan][cursor..].chars() {
+                if character == '(' {
+                    depth += 1;
+                    if depth == 1 {
+                        continue;
+                    }
+                } else if character == ')' {
+                    depth -= 1;
+                    if depth == 0 {
+                        closed = true;
+                        break;
+                    }
+                }
+                if depth >= 1 {
+                    list.push(character);
+                }
+            }
+            if closed {
+                break;
+            }
+            list.push(' ');
+            scan += 1;
+            cursor = 0;
+        }
+        if !closed {
+            continue;
+        }
+        for part in split_top_level(&list) {
+            let Some(colon) = part.find(':') else { continue };
+            let name = part[..colon].trim();
+            if name.is_empty()
+                || name == "self"
+                || !name
+                    .chars()
+                    .all(|character| character.is_ascii_alphanumeric() || character == '_')
+            {
+                continue;
+            }
+            let type_text = normalize_param_type(&part[colon + 1..]);
+            if !type_text.is_empty() {
+                bindings.insert(name.to_owned(), type_text);
+            }
+        }
+    }
+    bindings
 }
 
 fn type_for_match(
@@ -292,10 +613,16 @@ fn type_for_match(
 }
 
 /// Find wildcard arms on state-like matches in one Rust source file.
-pub fn find_findings_in_source(source: &str) -> Vec<(usize, usize, String, Option<String>, FindingKind)> {
-    let code: Vec<String> = source.lines().map(mask_line).collect();
+///
+/// The returned `Finding::file` is empty: this entry point has no filename.
+/// `lint_workspace` fills it in. The line numbers and the arm text are final.
+pub fn find_findings_in_source(source: &str) -> Vec<Finding> {
+    let raw: Vec<&str> = source.lines().collect();
+    let code: Vec<String> = raw.iter().map(|line| mask_line(line)).collect();
     let (all_enums, state_enums) = parse_enum_names(&code);
-    let bindings = parse_typed_bindings(&code);
+    // Parameters first, `let` bindings second: the nearer declaration wins.
+    let mut bindings = parse_fn_param_bindings(&code);
+    bindings.extend(parse_typed_bindings(&code));
     let mut findings = Vec::new();
     for (start, line) in code.iter().enumerate() {
         let Some(match_position) = line.find("match ") else { continue };
@@ -305,29 +632,50 @@ pub fn find_findings_in_source(source: &str) -> Vec<(usize, usize, String, Optio
         let Some(wildcard) = wildcard_arm_line(&code, start, end) else { continue };
         let body = code[start..=end].join("\n");
         let (inferred_type, state_candidate) = type_for_match(&scrutinee, &body, &bindings, &state_enums);
-        if let Some(type_name) = inferred_type.as_deref() {
+        let kind = if let Some(type_name) = inferred_type.as_deref() {
             if state_enums.contains(type_name) {
-                findings.push((start + 1, wildcard + 1, scrutinee, inferred_type, FindingKind::WildcardState));
+                FindingKind::WildcardState
             } else if !all_enums.contains(type_name) && state_candidate {
-                findings.push((start + 1, wildcard + 1, scrutinee, inferred_type, FindingKind::UnresolvedStateType));
+                FindingKind::UnresolvedStateType
+            } else {
+                continue;
             }
         } else if state_candidate {
-            findings.push((start + 1, wildcard + 1, scrutinee, inferred_type, FindingKind::UnresolvedStateType));
-        }
+            FindingKind::UnresolvedStateType
+        } else {
+            continue;
+        };
+        findings.push(Finding {
+            file: String::new(),
+            match_line: start + 1,
+            wildcard_line: wildcard + 1,
+            wildcard_text: arm_text(raw.get(wildcard).copied().unwrap_or("")),
+            scrutinee,
+            inferred_type,
+            kind,
+        });
     }
     findings
+}
+
+/// The arm as an author would recognize it: trimmed, one line, bounded so a
+/// generated or minified line cannot flood a refusal.
+fn arm_text(line: &str) -> String {
+    let trimmed = line.trim();
+    let limit = 96;
+    if trimmed.chars().count() <= limit {
+        return trimmed.to_owned();
+    }
+    let head: String = trimmed.chars().take(limit).collect();
+    format!("{head}...")
 }
 
 fn scan_source(file: &str, source: &str) -> Vec<Finding> {
     find_findings_in_source(source)
         .into_iter()
-        .map(|(match_line, wildcard_line, scrutinee, inferred_type, kind)| Finding {
+        .map(|finding| Finding {
             file: file.to_owned(),
-            match_line,
-            wildcard_line,
-            scrutinee,
-            inferred_type,
-            kind,
+            ..finding
         })
         .collect()
 }
@@ -340,7 +688,7 @@ fn visit_rs(root: &Path, directory: &Path, scanned: &mut Vec<String>, findings: 
         let path = entry.path();
         if path.is_dir() {
             let name = path.file_name().and_then(|value| value.to_str()).unwrap_or("");
-            if !matches!(name, ".git" | "target" | "tests" | "fixtures") {
+            if !DECLARED_SKIP_DIRS.iter().any(|row| row.name == name) {
                 visit_rs(root, &path, scanned, findings)?;
             }
             continue;
@@ -370,7 +718,21 @@ pub fn lint_workspace(root: &Path) -> LintReport {
         return LintReport {
             scanned: Vec::new(),
             findings: Vec::new(),
+            allowed: Vec::new(),
             error: Some(error),
+        };
+    }
+    // ANTI-VACUITY. A deliverable that was never checked reports exactly like
+    // one that passed, so an empty scan set is an ERROR and never a pass.
+    if scanned.is_empty() {
+        return LintReport {
+            scanned: Vec::new(),
+            findings: Vec::new(),
+            allowed: Vec::new(),
+            error: Some(format!(
+                "ERROR: empty scan set under {} -- nothing was checked, which is not a pass",
+                source_root.display()
+            )),
         };
     }
     scanned.sort();
@@ -379,10 +741,24 @@ pub fn lint_workspace(root: &Path) -> LintReport {
             .cmp(&right.file)
             .then(left.wildcard_line.cmp(&right.wildcard_line))
     });
+    let (findings, allowed, stale) = apply_allowlist(findings, DECLARED_ALLOWLIST);
+    let error = (!stale.is_empty()).then(|| {
+        let rows: Vec<String> = stale
+            .iter()
+            .map(|row| format!("{} scrutinee={}", row.file, row.scrutinee))
+            .collect();
+        format!(
+            "ERROR: {} DECLARED allowlist row(s) matched nothing -- a carve-out that suppresses \
+             nothing is a silent carve-out: {}",
+            stale.len(),
+            rows.join("; ")
+        )
+    });
     LintReport {
         scanned,
         findings,
-        error: None,
+        allowed,
+        error,
     }
 }
 
@@ -401,6 +777,12 @@ mod tests {
         let source = "enum PaneState { Working, Idle }\nfn f(state: PaneState) { match state { PaneState::Working => (), _ => () } }";
         let findings = find_findings_in_source(source);
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].4, FindingKind::WildcardState);
+        assert_eq!(findings[0].kind, FindingKind::WildcardState);
+        assert_eq!(findings[0].wildcard_line, 2);
+        assert!(
+            findings[0].wildcard_text.contains("_ => ()"),
+            "the arm must be named: {}",
+            findings[0].wildcard_text
+        );
     }
 }
