@@ -1193,6 +1193,16 @@ fn write_heartbeat(config: &Config, tick: u64, status: &str, detail: &str) -> Re
 /// re-dispatch after expiry is auditable rather than silent.
 const PENDING_DISPATCH_MAX_AGE_SECS: u64 = 600;
 
+/// COMPILE-TIME bound on the deadline. A zero deadline does not expire every marker
+/// instantly -- a fresh marker has `age_secs == 0` and `0 > 0` is false -- but it
+/// shrinks the double-send guard to a one-second window, which is indistinguishable
+/// from having no guard on a 90-second cycle. This is a `const` assertion rather than
+/// a test assertion so it cannot be skipped by a filtered run.
+const _: () = assert!(
+    PENDING_DISPATCH_MAX_AGE_SECS >= 60,
+    "the pending-dispatch deadline must exceed one cycle, or the guard cannot span a dispatch"
+);
+
 /// A pending-dispatch marker, classified. The variants exist so that "no marker",
 /// "a live marker", and "a marker whose age cannot be computed" can never collapse
 /// into one another — the collapse is what let a stale marker read exactly like a
@@ -2653,9 +2663,14 @@ mod tests {
                 PendingDispatch::Expired { .. }
             ));
         }
+        // Clippy caught this leg as `assertion has a constant value`, and it was
+        // right in a way worth keeping: a bound on a `const` belongs at COMPILE
+        // time, where it cannot be skipped by a filtered test run. Moved to the
+        // const-assert beside the constant; what remains here is the runtime fact.
         assert!(
-            PENDING_DISPATCH_MAX_AGE_SECS > 0,
-            "a zero deadline expires every marker instantly and disables the guard"
+            classify_pending_dispatch(&intent_text(now), now)
+                != classify_pending_dispatch(&intent_text(issued), now),
+            "a fresh marker and a stale one must not classify alike"
         );
     }
     #[test]
