@@ -889,6 +889,50 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
 
 ---
 
+## Three arbitrations from a five-agent shared checkout
+
+**1. A RESERVATION ANSWERS "MAY I EDIT NOW". AN OWNERSHIP MAP ANSWERS "WHOSE LANE IS THIS". A green
+reservation is NOT a transfer of ownership.** Measured 2026-09-02: `.flywheel/AUTONOMOUS-WAVE.md:59`
+assigns `%1414` the binary — `crates/omp-orchestrator/**` — while an Agent Mail exclusive
+reservation on `crates/omp-orchestrator/src/main.rs` returned `conflict_free: true`,
+`total_conflicting_reservations: 0`. Both readings were correct and they answer different questions:
+the reservation system is the only surface that can **REFUSE at edit time**, so it governs
+concurrent safety; the map expresses **intent**, so it governs whose lane a change belongs to. A
+`conflict_free` green means only that nobody else holds a lease *right now* — it does not mean the
+path is unowned, and an owner who never took a lease is invisible to it.
+  **RULING:** the reservation governs the edit, the map governs the assignment, and neither
+  substitutes for the other. Cross-lane edits are legitimate when the orchestrator assigns them
+  explicitly — but the assignee MUST disclose the crossing, as this one did, and the lane owner
+  keeps the follow-on work. Treating a green reservation as an ownership claim is the same category
+  error as treating a stale roster table as a live handle.
+
+**2. A KNOWN-BAD FIXTURE MUST NOT LIVE UNDER `crates/`.** The root manifest uses
+`members = ["crates/*"]` **deliberately**, so no pane holds a reservation on the root `Cargo.toml`.
+Its one sharp edge: a directory with a `Cargo.toml` and no `src/` breaks workspace **LOADING**, so
+`-p <your-crate>` cannot dodge it and EVERY cargo command in the repo fails. This happened **twice
+in one hour** — `crates/response-envelope-check` at 23:29, `crates/zz-planted-dup` at 05:57 — both
+from gate authors planting fixtures, both self-resolved within minutes, and both read to other
+agents as "every cargo command is failing".
+  **RULING:** plant known-bad fixtures OUTSIDE `crates/`, or write `src/` and `Cargo.toml` in the
+  same step. `Cargo.toml`-before-`src/` under a glob member is a fleet-wide stall, and a gate author
+  is precisely the agent most likely to create one.
+
+**3. `mtime` PROVES ORDERING, NOT PROVENANCE — and a sha diff between two differently-produced
+artifacts is not a staleness test.** Measured: the installed hook `a87917e68…` and a freshly built
+`pre-commit-gate` `9ca721b19…` have DIFFERENT shas while
+`cargo test -p no-shell-gate --test hook_freshness` reports **3 passed / 0 failed**. Both facts are
+true. Rust builds are not bit-reproducible by default, so two shas differing does not imply the
+sources differ; and `hook_freshness` compares **mtime** (16 sites) — source-newer-than-hook — which
+is an ORDERING check.
+  **RULING:** the freshness oracle wins over an ad-hoc sha comparison, because it measures the
+  question asked. But the instinct behind the sha check is right and names a real residual: mtime
+  proves the hook is not OLDER than its source, NOT that it was BUILT FROM that source. A `touch`,
+  or a rebuild with different flags, satisfies mtime while carrying different logic. Closing that
+  needs the hook to embed and report its own source hash — a content-identity check, not a
+  timestamp one. Until then, "the hook is fresh" is a floor, not a proof.
+
+---
+
 ## Every DOCUMENT proves it bites, too
 
 A contract is a deliverable with a pass bar, not prose. The bar and its runner live in
