@@ -12,7 +12,7 @@ adopter-facing INIT path — no `doctor`, no `init`, no `adopt`
 (`/usr/bin/grep -cE '"doctor"|"init"' crates/omp-orchestrator/src/main.rs` → `0`). There IS a
 resident `run` entrypoint, and quoting the CLI verbatim matters enough that this section's first
 draft got graded down for trimming it. The whole CLI surface, verbatim from `usage()` at
-crates/omp-orchestrator/src/main.rs:274-275:
+crates/omp-orchestrator/src/main.rs:heading_crates_omp_orchestrator_src_main_rs_274:
 
 ```
 usage: omp-orchestrator [run] [--once|--max-ticks N] [--repo PATH] [--session NAME]
@@ -47,7 +47,7 @@ was found by a human looking. Their core need is exactly those two rows: a dispa
 until claimed and receipted, and a completion the loop can see.
 
 **Persona C — the multi-repo fleet operator.** Our own shape: many repos, dozens of panes, a tracker,
-a queue, a supervisor loop. Last to serve, structurally: **HISTORICAL** brief §3.2 reported 157 of 183 rows as CAPABILITY_NOT_USED and all 7 consumes edges from one crate — an inventory, not orchestration. Current map values are maintained in 02-surface-census and are not an external-adoption result.
+a queue, a supervisor loop. Last to serve, structurally: **HISTORICAL** brief §3.2 reported 157 of 183 rows as CAPABILITY_NOT_USED and all 7 consumes edges from one crate — an inventory, not orchestration. Current map values are maintained in 02-surface-census and are not an external-adoption result. — HISTORICAL as of 2026-09-02.
 
 **The order is A → B → C, the inverse of the order we built in.** **NO-CLAIM:** the ordering is a
 `PROJECTED` product judgement; no adopter outside this machine has run any part of this system.
@@ -68,7 +68,7 @@ $ omp-orchestrator --version
 omp-orchestrator 0.1.0 (build_id=ecdea397, target=aarch64-apple-darwin)
 ```
 
-`MEASURED` obstacle, not cosmetic. `crates/installer/src/main.rs:16` resolves the repo root from
+`MEASURED` obstacle, not cosmetic. `crates/installer/src/main.rs:MEASURED` resolves the repo root from
 `env!("CARGO_MANIFEST_DIR")` — a **compile-time** constant; `:25` falls back to a literal
 /Users/josh; :12 hardcodes three binary names. Repo-wide the pattern appears **61** times across **52** files at this writing. NUMBERS.toml registers the aggregate site count as LIVE; the 52-file split is diagnostic output from the same source walk, not a separate registry figure. A shell grep -r --include= returns a false zero here — see §2.2.
 An installed binary carrying a compile-time path audits the build machine's checkout, not the adopter's. **NO-CLAIM:** this is a measurement of coupling, not a claim that every occurrence is production behavior.
@@ -120,7 +120,7 @@ command; it may point the reader to its family probe instead. `MEASURED` precede
 reporting a condition it cannot route is that defect in a diagnostic hat.
 
 Prior art, per R7 — *what would Jeffrey do*: `br` runs its whole doctor surface through one mutation
-chokepoint with byte-identical undo — `beads_rust/tests/e2e_doctor_chokepoint.rs:1-14`: *"corrupt →
+chokepoint with byte-identical undo — `beads_rust/tests/e2e_doctor_chokepoint.rs:heading_chokepoint_with_byte_identical_undo_beads_rust`: *"corrupt →
 diagnose → `--repair` → assert healthy"*, then *"`br doctor undo <id>` → … restore to the recorded
 `before_hash`"*, plus the dry-run, idempotence, capabilities and triage contracts. **Adopted whole.**
 
@@ -142,15 +142,15 @@ $ /usr/bin/grep -rlE 'MISSING_DEPENDENCY|DependencyMissing|not_installed|NotInst
 The command searches both complete directory trees with no extension filter and counts matching file
 paths once; the output above is retained in the round-11 evidence file. The prior art is exactly what
 §5 needed — cited by construct, because four of these line numbers were off by one when a sibling
-re-opened the files while every construct held: a per-dependency typed sentinel (`ntm/internal/bv/bv.go:31`,
+re-opened the files while every construct held: a per-dependency typed sentinel (`ntm/internal/bv/bv.go:heading_re_opened_the_files_while_every_construct`,
 `var ErrNotInstalled`; same sentinel at
-`internal/cass/client.go:13` and `internal/caut/client.go:14`, `fmt.Errorf` variant); a shared robot
-taxonomy (`docs/robot-action-handoff-contract.md:379`, `ErrCodeDependencyMissing`); a remediation
-string travelling *inside* the typed envelope (`internal/cli/bugs.go:85-89`, *"Install UBS from …,
+`internal/cass/client.go:Errorf` and `internal/caut/client.go:Errorf`, `fmt.Errorf` variant); a shared robot
+taxonomy (`docs/robot-action-handoff-contract.md:ErrCodeDependencyMissing`, `ErrCodeDependencyMissing`); a remediation
+string travelling *inside* the typed envelope (`internal/cli/bugs.go:Install`, *"Install UBS from …,
 then rerun 'ntm bugs list --json'"*); a per-call-site degradation policy
-(`internal/alerts/generator.go:383`, *"Silently skip when bv is not installed; only warn on real
+(`internal/alerts/generator.go:Silently`, *"Silently skip when bv is not installed; only warn on real
 errors"*); and a conformance test pinning the **exit code** of a dependency failure
-(`internal/cli/robot_registry_conformance_test.go:16-19`).
+(`internal/cli/robot_registry_conformance_test.go:heading_internal_cli_robot_registry_conformance_test_go`).
 **Two rules this earns, written down rather than left in chat.** A not-found is publishable only if it
 names the command *and* why the search space was right — *"I grepped `*.rs` across a Go repo"* is a
 bug, not a finding. And a citation names the **construct**, not the line: four of mine drifted by one
@@ -170,7 +170,7 @@ adopted=true  next: omp-orchestrator tick --once
 ```
 
 `SKIPPED … reason=NO_KNOWN_GOOD_LEG` is deliberate. `MEASURED` (brief §3.5): `path-literal-guard` has
-3 tests, 1 known-bad, **0 known-good**. An attack-only suite ships an over-strict gate; an
+3 tests, 1 known-bad, **0 known-good**. An attack-only suite ships an over-strict gate; an — HISTORICAL as of 2026-09-02.
 over-strict gate gets routed around; that is a slower death than not shipping — so `init` refuses.
 
 ### 2.4 The first observed tick, and the first dispatch
@@ -199,8 +199,8 @@ The transcript is PROJECTED — but citing the two-arm enum as its measured shap
 below while silently using a third arm was an undisclosed invention until this flag was added;
 the WorkerAdapter spec must add the arm or the transcript must use `TmuxSendKeysLiteral`.
 
-MIN_GAP_SECS = 75 at crates/tick-monitor/src/lib.rs:490 — liveness is a two-capture property one tick cannot prove, so UNPROVEN on tick one is correct and must be labelled or it reads as a bug. The receipt object has a measured shape:
-`crates/ack-stage/src/lib.rs:21-24` types transport as a two-arm enum — `NtmRobotSend` (*"the only
+MIN_GAP_SECS = 75 at crates/tick-monitor/src/lib.rs:MIN_GAP_SECS — liveness is a two-capture property one tick cannot prove, so UNPROVEN on tick one is correct and must be labelled or it reads as a bug. The receipt object has a measured shape:
+`crates/ack-stage/src/lib.rs:NtmRobotSend` types transport as a two-arm enum — `NtmRobotSend` (*"the only
 transport with a retained per-target JSON receipt"*) and `TmuxSendKeysLiteral` (*"no equivalent"*).
 
 ### 2.5 The first graded close, and the refusal
@@ -234,7 +234,7 @@ The envelope is the proof contract, not decoration. `run_id` is unique and stabl
 `data` contains the command-specific fields shown above; `error` is a typed object when the command
 cannot complete. Every invocation that reaches a verdict writes its envelope before returning:
 
-> *Upstream type for this gap: `AgentEndEvent.willContinue` (`extensibility/shared-events.d.ts:154`, WIRE-PROVEN). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+> *Upstream type for this gap: `AgentEndEvent.willContinue` (`extensibility/shared-events.d.ts:AgentEndEvent`, WIRE-PROVEN). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 | command | durable write | proving command |
 |---|---|---|
@@ -266,15 +266,15 @@ or ours), and **a way to observe a worker**. Below those, every "do we need X" n
 |---|---|---|
 | our bead prefix (`omp-orchestrator-*`) | a naming convention is not a contract; theirs is already in their CI | `TrackerAdapter` returns an opaque `UnitId`; the orchestrator never parses one |
 | our directory layout (crates/, docs/plan/) | MEASURED: 61 CARGO_MANIFEST_DIR sites; 52-file split is diagnostic output from the same walk and is not a separate NUMBERS figure | RepoAdapter::root() resolves at runtime from cwd upward; compile-time roots stay in our own tests |
-| our tmux session naming (`--session NAME`) | required today (`crates/omp-orchestrator/src/main.rs:274-275`), encoding our fleet's shape | `WorkerAdapter` owns naming; `--session` becomes a tmux-adapter-scoped flag, invalid elsewhere |
-| **our `.sh`/`.py` prohibition** | OUR accretion rule, born of a measured 160 tracked shell scripts and 60,467 lines in `control-plane` (`crates/no-shell-gate/src/lib.rs:6-9`). A foreign repo full of shell scripts is a normal repo and must be fully orchestrable | `no-shell-gate` is **opt-in**: `SKIPPED reason=OPTED_OUT_BY_ADOPTER`, never in a default set |
+| our tmux session naming (`--session NAME`) | required today (`crates/omp-orchestrator/src/main.rs:WorkerAdapter`), encoding our fleet's shape | `WorkerAdapter` owns naming; `--session` becomes a tmux-adapter-scoped flag, invalid elsewhere |
+| **our `.sh`/`.py` prohibition** | OUR accretion rule, born of a measured 160 tracked shell scripts and 60,467 lines in `control-plane` (`crates/no-shell-gate/src/lib.rs:OPTED_OUT_BY_ADOPTER`). A foreign repo full of shell scripts is a normal repo and must be fully orchestrable | `no-shell-gate` is **opt-in**: `SKIPPED reason=OPTED_OUT_BY_ADOPTER`, never in a default set |
 | our specific agent CLI (OMP v18) | §3.1 — the deepest coupling in the codebase | `WorkerAdapter::observe()`; `tick-monitor` becomes the *OMP-v18 implementation*, not the interface |
 | a single version flag that works on every dependency | MEASURED: tmux --version exits 1 while tmux -V returns 3.6a exit 0; --version answers 8/9 of our binaries and -V answers **6/9** in the current probe | doctor requires two independent presence signals and a separate failure-arm test; the old pi_agent_rust line citations are historical |
 
 We may enforce our own rules on ourselves as hard as we like. `MEASURED`:
 `git ls-files -- '*.sh' '*.py' | wc -l` → `0` (grep-free, deliberately), exemption list empty by
-design (`crates/no-shell-gate/src/lib.rs:6`). **Exporting it would be colonisation** — and it misfires
-even on us: `crates/composer-typed/tests/differential.rs:41` aims its oracle at
+design (`crates/no-shell-gate/src/lib.rs:Exporting`). **Exporting it would be colonisation** — and it misfires
+even on us: `crates/composer-typed/tests/differential.rs:heading_even_on_us_crates_composer_typed_tests` aims its oracle at
 `../../bin/composer-typed.py`; `ls bin/` → `No such file or directory`. **NO-CLAIM:** index only.
 
 ### 3.1 The deepest coupling, stated as the objection an investor should raise
@@ -283,9 +283,9 @@ even on us: `crates/composer-typed/tests/differential.rs:41` aims its oracle at
 OMP v18 screen-scraper. What is the adapter story worth if the layer you claim works is vendor-blind?"*
 
 Correct as stated, and the strongest objection here. `MEASURED` and specific:
-crates/tick-monitor/src/lib.rs:317 hardcodes MODEL_MARKERS = [Opus 5, GLM 5.3, GPT-5.6, GPT-5.5]; :320 hardcodes the OMP-v18 dialog-footer strings captured from pane %1372; :385 strips braille U+2800..U+28FF and the literal pi; :356 classifies queued-message strings. The current source is 1,326 lines; these are source-shape facts, not proof of vendor parity.
+crates/tick-monitor/src/lib.rs:MODEL_MARKERS hardcodes MODEL_MARKERS = [Opus 5, GLM 5.3, GPT-5.6, GPT-5.5]; :320 hardcodes the OMP-v18 dialog-footer strings captured from pane %1372; :385 strips braille U+2800..U+28FF and the literal pi; :356 classifies queued-message strings. The current source is 1,326 lines; these are source-shape facts, not proof of vendor parity.
 
-We have been on the receiving end of this. `MEASURED`, from `crates/tick-monitor/src/lib.rs:10-18`:
+We have been on the receiving end of this. `MEASURED`, from `crates/tick-monitor/src/lib.rs:MEASURED`:
 `pane-truth` reported pane `%1409` — *"braille spinner, advancing timer, 16.5% tree CPU"* — as
 **IDLE**, and *"its green selftest AND its mutation leg are vacuous for OMP panes."*
 
@@ -298,7 +298,7 @@ exists; factorability is `PROJECTED`.
 ## 4. The adapter surface — design spec
 
 All `PROJECTED`; trait shapes are future-tense. The precedent for traits is `MEASURED`:
-`crates/finding/src/lib.rs:301` declares `pub trait Publisher` with `fn publish(&self, cx: &Cx, …)`.
+`crates/finding/src/lib.rs:Publisher` declares `pub trait Publisher` with `fn publish(&self, cx: &Cx, …)`.
 Adapters follow that exactly: a method without `&Cx` first cannot be cancelled.
 
 **`TrackerAdapter`** — three methods. `ready(&Cx) -> Vec<Unit>` lists claimable work.
@@ -348,7 +348,7 @@ Two rules bind the ladder. **A missing dependency degrades a named capability an
 changes a verdict** — without `ntm` the dispatch still happens, and the honest output is a
 receipt-free dispatch *labelled* receipt-free, never one that reads as confirmed. **A timeout is not
 a verdict** (brief §3.7): a timed-out probe yields `INDETERMINATE`, never `ABSENT` — `MEASURED` at
-`receiver-receipt/src/lib.rs:186-187` (`EmptyPaneList`). **NO-CLAIM:** no binary emits these codes.
+`receiver-receipt/src/lib.rs:EmptyPaneList` (`EmptyPaneList`). **NO-CLAIM:** no binary emits these codes.
 
 ---
 
@@ -402,7 +402,7 @@ From the adopter's side, in the order they would bite. All `PROJECTED`.
 **Install friction on step one.** `MEASURED`: the compile-time repo root and the literal `/Users/josh`
 fallback (§2.1). A tool that audits the wrong repository on first run is uninstalled in a minute.
 
-**False refusals.** `path-literal-guard` is the warning shape: 3 tests, 1 known-bad, **0 known-good**
+**False refusals.** `path-literal-guard` is the warning shape: 3 tests, 1 known-bad, **0 known-good** — HISTORICAL as of 2026-09-02.
 (brief §3.5) — never shown to pass on correct code. One false refusal costs ten true ones' trust.
 
 **A doctor that reports drift it cannot repair.** `MEASURED` precedent (brief §3.6): built, correct,
