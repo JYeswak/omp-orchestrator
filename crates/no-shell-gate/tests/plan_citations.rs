@@ -304,6 +304,21 @@ fn test_function_registry_names_all_three_denominators() {
         "missing library-suite denominator note"
     );
 }
+#[test]
+fn ratchet_rejects_new_violation_above_zero_ceiling() {
+    let finding = Finding {
+        kind: "citation",
+        file: "fixture.md".to_owned(),
+        line: 1,
+        token: "main.rs:123".to_owned(),
+    };
+    let error =
+        ratchet_check(&[finding]).expect_err("a new violation must exceed the zero ceiling");
+    assert!(
+        error.contains("citation ceiling exceeded"),
+        "wrong ratchet refusal: {error}"
+    );
+}
 
 #[test]
 fn plan_citations_name_constructs() {
