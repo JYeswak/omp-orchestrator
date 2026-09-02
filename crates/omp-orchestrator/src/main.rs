@@ -2963,4 +2963,79 @@ mod tests {
             "nothing was sent, so nothing may claim persistence: {ledger}"
         );
     }
+
+    /// Proves the WIRED path actually fires against the running daemon.
+    ///
+    /// `#[ignore]`d because it needs the live daemon and sends real mail. Run:
+    ///
+    /// ```text
+    /// AGENT_MAIL_AGENT=BrightGorge cargo test -p omp-orchestrator \
+    ///   --bin omp-orchestrator -- --ignored --nocapture mail_notification_fires
+    /// ```
+    ///
+    /// This calls the PRODUCTION `report_dispatch_result`, not a
+    /// reimplementation, so a pass is evidence about the wired call site
+    /// rather than about the test. It deliberately does NOT run the supervisor
+    /// loop: dispatching real work to real panes is not something a test may
+    /// do.
+    #[test]
+    #[ignore = "requires the live Agent Mail daemon and sends real mail"]
+    fn mail_notification_fires_against_the_live_daemon() {
+        let temp = tempfile::tempdir().expect("live fixture");
+        let heartbeat = temp.path().join("heartbeat.jsonl");
+        let mut config = fixture_config(heartbeat.clone());
+        // The REAL repo, because the project key must be one the daemon has
+        // registered. A temp path would create a junk project.
+        config.repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(std::path::Path::parent)
+            .expect("repo root two levels above the manifest")
+            .to_owned();
+        // Send to ourselves. Pane "99" is absent from the live pane map, so
+        // `mail_recipient` falls back to this configured receiver instead of
+        // addressing a real teammate's inbox.
+        config.receiver_agent = "BrightGorge".to_owned();
+        config.mail_sender = env::var("AGENT_MAIL_AGENT")
+            .unwrap_or_else(|_| "BrightGorge".to_owned());
+        config.ntm = temp.path().join("no-such-ntm").display().to_string();
+
+        let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
+        runtime
+            .block_on(async {
+                let cx = Cx::current().expect("runtime context");
+                report_dispatch_result(
+                    &cx,
+                    &config,
+                    99,
+                    "99",
+                    "omp-orchestrator-wire-agent-mail-caller-7n5b",
+                    "status=DISPATCHED detail=live-wiring-proof",
+                )
+                .await
+            })
+            .expect("the wired path must not fail the caller");
+
+        let ledger = std::fs::read_to_string(&heartbeat).expect("heartbeat");
+        println!("{ledger}");
+        assert!(
+            ledger.contains("DISPATCH_RESULT_RECORDED"),
+            "dispatch record missing: {ledger}"
+        );
+        assert!(
+            ledger.contains("DISPATCH_RESULT_MAIL_PERSISTED"),
+            "the durable notification did not fire: {ledger}"
+        );
+        assert!(
+            ledger.contains("persisted=true"),
+            "the daemon did not report the copy durable: {ledger}"
+        );
+        assert!(
+            ledger.contains("recipient=BrightGorge"),
+            "notification went to the wrong recipient: {ledger}"
+        );
+        assert!(
+            !ledger.contains("DISPATCH_RESULT_MAIL_DEGRADED"),
+            "the mail leg degraded when it should have succeeded: {ledger}"
+        );
+    }
 }
