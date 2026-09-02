@@ -565,7 +565,7 @@ pub struct EventPage {
     /// Whether more events are already available.
     #[serde(default)]
     pub has_more: bool,
-    /// The oldest position still retained, when the daemon reported one.
+    /// The first delivery position observed for this recipient; not an eviction floor.
     #[serde(default)]
     pub oldest_available_cursor: Option<DeliveryCursor>,
     /// This recipient's high-water mark in the sequence.
@@ -604,42 +604,6 @@ pub async fn fetch_inbox_events(
         .call_tool(cx, "fetch_inbox_events", Value::Object(arguments))
         .await?;
     decode(&payload, "fetch_inbox_events")
-}
-
-/// Verify that a page fetched with `after: stored` really contains every
-/// event the caller had not yet processed.
-///
-/// **This guard exists because the daemon does not enforce its own documented
-/// contract.** The `fetch_inbox_events` description states that "a cursor
-/// below retained history produces `CURSOR_EXPIRED`". Measured 2026-09-02
-/// against recipient `GreenFrog`, whose oldest retained position was 2108:
-/// requesting `after: 1` did NOT refuse. It returned a normal success page
-/// beginning at cursor 2108, silently skipping everything between. A caller
-/// that trusted the refusal contract would have recorded a clean read over a
-/// gap it never saw.
-///
-/// So continuity is checked client-side. When `stored` sits below the oldest
-/// retained position, this refuses with
-/// [`MailError::CursorExpired`](crate::MailError::CursorExpired).
-///
-/// Note the honest limit of what this can prove: because the delivery
-/// sequence is GLOBAL and a single recipient's events are sparse within it
-/// (measured: `GreenFrog` events at 2108, 2109, 2126 — non-contiguous),
-/// a cursor below `oldest_available_cursor` cannot be distinguished from a
-/// recipient whose first event simply arrived later. Both readings mean the
-/// same thing for a resuming monitor: **continuity is unprovable, so do not
-/// claim it.** Refusing is correct in both cases.
-pub fn verify_resume_continuity(
-    stored: DeliveryCursor,
-    page: &EventPage,
-) -> Result<(), MailError> {
-    match page.oldest_available_cursor {
-        Some(oldest) if oldest.advanced_beyond(stored) => Err(MailError::CursorExpired {
-            requested: stored,
-            oldest_available: Some(oldest),
-        }),
-        Some(_) | None => Ok(()),
-    }
 }
 
 /// A delivery position bound to the recipient it was read for.
@@ -686,9 +650,8 @@ impl ResumePoint {
     /// Rebuild a resume point loaded from persistence.
     ///
     /// Named to make the provenance obvious at the call site: the caller is
-    /// asserting this integer was stored for THIS recipient. That assertion
-    /// is still checked at read time by [`verify_resume_continuity`], which
-    /// refuses a position below the recipient's floor.
+    /// asserting this integer was stored for THIS recipient. Pairing is explicit;
+    /// the daemon remains the authority for any actual cursor expiry.
     #[must_use]
     pub fn restored(project: ProjectKey, recipient: AgentName, cursor: DeliveryCursor) -> Self {
         Self {
@@ -717,12 +680,12 @@ impl ResumePoint {
     }
 }
 
-/// Resume a durable read from a persisted position, refusing a silent gap.
+/// Resume a durable read from a persisted position.
 ///
-/// The restart-safe entry point: fetch everything after the stored position,
-/// then prove the page is continuous with it. Prefer this over
-/// [`fetch_inbox_events`] with [`CursorQuery::After`] in any monitor that
-/// persists its position across restarts.
+/// The restart-safe entry point: fetch everything after the stored position and
+/// trust the daemon's authoritative cursor errors. No client-side floor
+/// predicate is applied because the client cannot observe the daemon's global
+/// pruning input.
 pub async fn resume_from(
     cx: &Cx,
     client: &MailClient,
@@ -738,7 +701,7 @@ pub async fn resume_from(
         limit,
     )
     .await?;
-    verify_resume_continuity(from.cursor(), &page)?;
+
     Ok(page)
 }
 
@@ -1207,55 +1170,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn a_cursor_at_or_above_the_floor_is_continuous() {
-        // GreenFrog's measured floor is 2108. The circulated 5105 baseline is
-        // perfectly resumable for that recipient.
-        let page = page_with(5161, Some(2108));
-        assert!(verify_resume_continuity(DeliveryCursor::new(5105), &page).is_ok());
-        // Exactly at the floor is still continuous: nothing below it was owed.
-        assert!(verify_resume_continuity(DeliveryCursor::new(2108), &page).is_ok());
-    }
 
-    #[test]
-    fn a_cursor_below_the_floor_refuses_instead_of_silently_clamping() {
-        // The measured daemon defect: `after: 1` against GreenFrog returned a
-        // success page starting at 2108, skipping everything between, despite
-        // its own docs promising CURSOR_EXPIRED. The guard restores the
-        // documented refusal.
-        let page = page_with(5161, Some(2108));
-        match verify_resume_continuity(DeliveryCursor::new(1), &page).expect_err("must refuse") {
-            MailError::CursorExpired {
-                requested,
-                oldest_available,
-            } => {
-                assert_eq!(requested, DeliveryCursor::new(1));
-                assert_eq!(oldest_available, Some(DeliveryCursor::new(2108)));
-            }
-            other => panic!("expected CursorExpired, got {other}"),
-        }
-    }
 
-    #[test]
-    fn the_5105_cross_recipient_case_refuses_for_the_recipient_that_started_later() {
-        // Both true at the same instant, which is why a bare integer is not a
-        // resume point: 5105 resumes GreenFrog (floor 2108) and cannot resume
-        // SnowyCanyon (floor 5147).
-        let green = page_with(5161, Some(2108));
-        let snowy = page_with(5164, Some(5147));
-        let stored = DeliveryCursor::new(5105);
-        assert!(verify_resume_continuity(stored, &green).is_ok());
-        assert!(verify_resume_continuity(stored, &snowy).is_err());
-    }
 
-    #[test]
-    fn a_null_floor_cannot_disprove_continuity() {
-        // A never-delivered recipient reports `oldest_available_cursor: null`
-        // (measured: SnowyCanyon at 05:02, tail 0). With no floor there is
-        // nothing to contradict, so the read is accepted.
-        let page = page_with(0, None);
-        assert!(verify_resume_continuity(DeliveryCursor::ORIGIN, &page).is_ok());
-    }
 
     #[test]
     fn a_resume_point_carries_its_recipient() {

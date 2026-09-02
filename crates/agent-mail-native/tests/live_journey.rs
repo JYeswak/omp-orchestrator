@@ -17,7 +17,7 @@
 use agent_mail_native::journey::{
     self, AgentName, InboxRequest, ProjectKey, ResumePoint, SendRequest,
 };
-use agent_mail_native::{CursorQuery, Endpoint, MailClient, MailError};
+use agent_mail_native::{CursorQuery, DeliveryCursor, Endpoint, MailClient, MailError};
 use asupersync::Cx;
 use asupersync::runtime::RuntimeBuilder;
 use std::future::Future;
@@ -464,5 +464,28 @@ fn a_missing_credential_refuses_before_any_io() {
             Err(other) => panic!("expected MissingCredential, got {other}"),
             Ok(agents) => panic!("expected a refusal, got {} agents", agents.len()),
         }
+    });
+}
+
+#[test]
+#[ignore = "requires the live Agent Mail daemon"]
+fn first_resume_from_origin_succeeds_for_recipient_with_later_first_event() {
+    run(async {
+        let cx = Cx::current().expect("cx");
+        let client = live_client();
+        let from = ResumePoint::restored(project(), me(), DeliveryCursor::ORIGIN);
+        let page = journey::resume_from(&cx, &client, &from, Some(50))
+            .await
+            .expect("a first resume from origin must not be rejected by a client floor guess");
+        assert!(
+            !page.events.is_empty(),
+            "the live attribution leg must not pass on an empty page"
+        );
+        assert!(
+            page.events
+                .iter()
+                .all(|event| event.cursor > DeliveryCursor::ORIGIN),
+            "every returned event must advance past origin"
+        );
     });
 }

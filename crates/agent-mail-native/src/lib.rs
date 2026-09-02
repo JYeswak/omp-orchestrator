@@ -63,7 +63,7 @@
 //!
 //! | defect | defence |
 //! |---|---|
-//! | `fetch_inbox_events` promises `CURSOR_EXPIRED` below retained history but silently clamps to the floor and returns success | [`journey::verify_resume_continuity`] |
+//! | `fetch_inbox_events` owns `CURSOR_EXPIRED` in the daemon, whose global-pruning input is not visible to the client | [`journey::resume_from`] trusts the typed daemon error and does not re-derive expiry |
 //! | `fetch_inbox` marks messages read by default, so a read mutates state | [`journey::InboxRequest::mark_read`], explicit and defaulting to `false` |
 //! | tool refusals ride HTTP 200 with `isError` inside a double-encoded payload | decoded and promoted to typed variants in [`client`] |
 //! | `ntm --robot-wait --wait-until=mail_pending` can be externally terminated before its internal deadline and discard `cursor_info` | [`wake::WakeRequest::timeout`] is mandatory for caller-owned latency and cursor preservation |
