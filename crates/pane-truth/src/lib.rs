@@ -28,13 +28,14 @@ use regex::Regex;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use subprocess_contract::{bounded_output, BoundedOutcome};
 
 pub const TWO_CAPTURE_MIN_SECS: i64 = 75;
 const CHILD_DEADLINE: Duration = Duration::from_secs(15);
@@ -115,72 +116,20 @@ pub struct ExternalOutput {
 
 /// Run a child with closed stdin and a hard wall deadline.
 pub fn run_external(mut command: Command, deadline: Duration) -> Result<ExternalOutput, String> {
-    let temp = std::env::temp_dir().join(format!(
-        "pane-truth-child-{}-{}",
-        std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0)
-    ));
-    fs::create_dir_all(&temp).map_err(|e| format!("temp directory failed: {e}"))?;
-    let stdout_path = temp.join("stdout");
-    let stderr_path = temp.join("stderr");
-    let stdout_file = File::create(&stdout_path).map_err(|e| format!("stdout file failed: {e}"))?;
-    let stderr_file = File::create(&stderr_path).map_err(|e| format!("stderr file failed: {e}"))?;
-    command
-        .stdin(Stdio::null())
-        .stdout(Stdio::from(stdout_file))
-        .stderr(Stdio::from(stderr_file));
-    let mut child = command.spawn().map_err(|e| format!("spawn failed: {e}"))?;
-    let started = Instant::now();
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                let result = child_result(status.code(), &stdout_path, &stderr_path, false);
-                let _ = fs::remove_dir_all(&temp);
-                return Ok(result);
-            }
-            Ok(None) if started.elapsed() >= deadline => {
-                let _ = child.kill();
-                reap_bounded(&mut child);
-                let result = child_result(None, &stdout_path, &stderr_path, true);
-                let _ = fs::remove_dir_all(&temp);
-                return Ok(result);
-            }
-            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
-            Err(e) => {
-                let _ = child.kill();
-                reap_bounded(&mut child);
-                let _ = fs::remove_dir_all(&temp);
-                return Err(format!("wait failed: {e}"));
-            }
-        }
-    }
-}
-
-fn reap_bounded(child: &mut std::process::Child) {
-    let deadline = Instant::now() + Duration::from_secs(1);
-    while Instant::now() < deadline {
-        match child.try_wait() {
-            Ok(Some(_)) => return,
-            Ok(None) => std::thread::sleep(Duration::from_millis(10)),
-            Err(_) => return,
-        }
-    }
-}
-
-fn child_result(
-    status: Option<i32>,
-    stdout_path: &std::path::Path,
-    stderr_path: &std::path::Path,
-    timed_out: bool,
-) -> ExternalOutput {
-    ExternalOutput {
-        status,
-        stdout: fs::read_to_string(stdout_path).unwrap_or_default(),
-        stderr: fs::read_to_string(stderr_path).unwrap_or_default(),
-        timed_out,
+    match bounded_output(&mut command, deadline) {
+        BoundedOutcome::Completed(output) => Ok(ExternalOutput {
+            status: output.status.code(),
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            timed_out: false,
+        }),
+        BoundedOutcome::TimedOut => Ok(ExternalOutput {
+            status: None,
+            stdout: String::new(),
+            stderr: "TIMED_OUT before subprocess deadline".to_owned(),
+            timed_out: true,
+        }),
+        BoundedOutcome::Unspawned(error) => Err(format!("spawn failed: {error}")),
     }
 }
 
@@ -430,7 +379,12 @@ fn now_iso() -> String {
 /// Two-capture liveness: true only when a prior ledger row exists, is at least
 /// TWO_CAPTURE_MIN_SECS old, and something moved. A `false` here means
 /// UNPROVEN — not idle, and never safe to dispatch on by itself.
-fn liveness_from_history(history: Option<&Value>, text: &str, now: i64, rules: &PaneTruthRules) -> bool {
+fn liveness_from_history(
+    history: Option<&Value>,
+    text: &str,
+    now: i64,
+    rules: &PaneTruthRules,
+) -> bool {
     if !rules.two_capture_liveness {
         return false;
     }
@@ -929,7 +883,10 @@ mod tests {
             claims_busy(V18_WORKING_CODEX_1413, &PaneTruthRules::default()),
             "v18 detector: the codex status line sits behind the ╰─ border; the anchor must reach it"
         );
-        assert!(claims_busy(V18_WORKING_CODEX_1414, &PaneTruthRules::default()));
+        assert!(claims_busy(
+            V18_WORKING_CODEX_1414,
+            &PaneTruthRules::default()
+        ));
     }
 
     #[test]
@@ -1149,7 +1106,11 @@ mod tests {
     #[test]
     fn run_live_exit_code_preserves_its_codes_and_never_yields_success_by_accident() {
         assert_eq!(run_live_exit_code(0), 0, "PASS must stay 0");
-        assert_eq!(run_live_exit_code(4), 4, "cannot-observe must stay 4, not collapse");
+        assert_eq!(
+            run_live_exit_code(4),
+            4,
+            "cannot-observe must stay 4, not collapse"
+        );
 
         let mut checked = 0usize;
         for code in [256, 260, 512, 65_536, -1, i32::MIN] {
@@ -1164,7 +1125,10 @@ mod tests {
 
         // 260 is the case that separates a CHECKED conversion from a wrapping one: `260 as u8`
         // is 4, which would silently impersonate the real cannot-observe verdict.
-        assert_eq!(260_i32 as u8, 4, "the mechanism: 260 wrapped into a REAL verdict value");
+        assert_eq!(
+            260_i32 as u8, 4,
+            "the mechanism: 260 wrapped into a REAL verdict value"
+        );
         assert_ne!(
             run_live_exit_code(260),
             4,
