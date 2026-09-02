@@ -3,16 +3,23 @@
 //! Live pane-dispatch-ready binary. Verdicts on STDOUT. stderr is usage only.
 
 use pane_dispatch_ready::{
-    apply_composer_rc, classify, confirm_free, missing_composer, sha_text, spawn_timeout, PaneDispatchReadyRules,
-    PaneDispatchReadyState, DEFAULT_MOTION_SECS,
+    apply_composer_rc, capture_snapshot, classify, confirm_free, missing_composer, spawn_timeout,
+    PaneDispatchReadyRules, PaneDispatchReadyState, TWO_CAPTURE_MIN_SECS,
 };
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, ExitCode, Stdio};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 fn say(line: &str) {
     println!("{line}");
+}
+
+fn unix_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
 }
 
 fn composer_rc(tail: &str, path: &str) -> i32 {
@@ -76,7 +83,10 @@ fn main() -> ExitCode {
     };
     std::env::set_var("PATH", &path);
     if std::env::var("TMUX_TMPDIR").is_err() {
-        if let Some(home) = std::env::var_os("HOME").filter(|v| !v.is_empty()).map(std::path::PathBuf::from) {
+        if let Some(home) = std::env::var_os("HOME")
+            .filter(|v| !v.is_empty())
+            .map(std::path::PathBuf::from)
+        {
             std::env::set_var("TMUX_TMPDIR", home.join(".tmux-sockets"));
         }
     }
@@ -165,9 +175,13 @@ fn composer_repo_root() -> Result<std::path::PathBuf, String> {
     if let Some(root) = std::env::var_os("CP").filter(|v| !v.is_empty()) {
         return Ok(std::path::PathBuf::from(root));
     }
-    let mut current = std::env::current_dir().map_err(|error| format!("cannot read the current directory: {error}"))?;
+    let mut current = std::env::current_dir()
+        .map_err(|error| format!("cannot read the current directory: {error}"))?;
     loop {
-        if [".git", ".beads"].iter().any(|marker| current.join(marker).exists()) {
+        if [".git", ".beads"]
+            .iter()
+            .any(|marker| current.join(marker).exists())
+        {
             return Ok(current);
         }
         let Some(parent) = current.parent() else {
@@ -263,10 +277,10 @@ fn run_live(
         sessions.to_vec()
     };
 
-    let motion = std::env::var("BUFFER_MOTION_SECONDS")
+    let capture_interval_secs = std::env::var("BUFFER_MOTION_SECONDS")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(DEFAULT_MOTION_SECS);
+        .unwrap_or(TWO_CAPTURE_MIN_SECS);
 
     let mut free_count = 0usize;
     let mut rows: Vec<String> = Vec::new();
@@ -299,9 +313,11 @@ fn run_live(
             let txt = spawn_timeout(cap, Duration::from_secs(10))
                 .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
                 .unwrap_or_default();
+            let first_captured_at_secs = unix_seconds();
             let mut v = classify_with_composer(&txt, false, rules);
             if v.state == PaneDispatchReadyState::Free && rules.two_capture_liveness {
-                std::thread::sleep(Duration::from_secs(motion));
+                let first_snapshot = capture_snapshot(first_captured_at_secs, &txt);
+                std::thread::sleep(Duration::from_secs(capture_interval_secs));
                 let mut cap2 = Command::new("tmux");
                 cap2.args([
                     "capture-pane",
@@ -315,9 +331,8 @@ fn run_live(
                 let next = spawn_timeout(cap2, Duration::from_secs(10))
                     .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
                     .unwrap_or_default();
-                let sha1 = sha_text(&txt);
-                let sha2 = sha_text(&next);
-                v = confirm_free(v, &next, &sha1, &sha2, rules);
+                let current_snapshot = capture_snapshot(unix_seconds(), &next);
+                v = confirm_free(v, &next, first_snapshot, current_snapshot, rules);
                 if v.state == PaneDispatchReadyState::Free {
                     v = classify_with_composer(&next, false, rules);
                 }
@@ -426,12 +441,22 @@ fn run_selftest(rules: &PaneDispatchReadyRules) -> ExitCode {
         PaneDispatchReadyState::Busy,
         &mut fail,
     );
-    chk("empty capture", "", PaneDispatchReadyState::Unreadable, &mut fail);
+    chk(
+        "empty capture",
+        "",
+        PaneDispatchReadyState::Unreadable,
+        &mut fail,
+    );
     chk(
         "bare shell, no agent",
         // Assembled by `concat!` so this source never contains the contiguous home
         // literal the repo-wide gate forbids (omp-orchestrator-npq).
-        concat!("josh@Studio repo % pwd", "\n/Users/", "josh", "/Developer/x"),
+        concat!(
+            "josh@Studio repo % pwd",
+            "\n/Users/",
+            "josh",
+            "/Developer/x"
+        ),
         PaneDispatchReadyState::NoAgent,
         &mut fail,
     );
@@ -487,8 +512,8 @@ fn run_selftest(rules: &PaneDispatchReadyRules) -> ExitCode {
     let moved = confirm_free(
         first.clone(),
         "Opus 5 │ bypass permissions\n❯ ",
-        "aaa",
-        "bbb",
+        capture_snapshot(0, "first capture"),
+        capture_snapshot(TWO_CAPTURE_MIN_SECS, "second capture"),
         rules,
     );
     if rules.two_capture_liveness && moved.state == PaneDispatchReadyState::Busy {

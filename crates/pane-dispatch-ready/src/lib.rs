@@ -7,9 +7,13 @@
 //! A FREE result is provisional until a second capture agrees (content hash). Busy
 //! markers short-circuit immediately.
 //!
-//! BUFFER_MOTION_SECONDS defaults to 10, matching the shell oracle. The rubric's 75s
-//! interval would change which panes live callers treat as FREE; we do not widen it.
+//! BUFFER_MOTION_SECONDS controls the inter-capture wait and defaults to the
+//! canonical TWO_CAPTURE_MIN_SECS floor. A shorter caller override is refused.
 
+use omp_types::{
+    CaptureSnapshot, DispatchAdmissibility, EvidenceGrade, PaneLiveness, PaneObservation,
+    UnknownReason,
+};
 use regex::Regex;
 use std::io::Read;
 use std::process::{Command, Output, Stdio};
@@ -33,11 +37,12 @@ pub const DEFAULT_BUSY_TAIL: usize = 6;
 /// busy markers are evaluated first and return early.
 pub const DEFAULT_PROMPT_TAIL: usize = 12;
 pub const DEFAULT_QUOTA_TAIL: usize = 8;
-pub const DEFAULT_MOTION_SECS: u64 = 10;
+pub const TWO_CAPTURE_MIN_SECS: u64 = omp_types::MIN_TWO_CAPTURE_INTERVAL_SECS;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PaneDispatchReadyRule {
     TwoCaptureLiveness,
+    TwoCaptureInterval,
     BusyMarkersLoadBearing,
     TailOnlyBusy,
     QuotaBeforeBusy,
@@ -47,6 +52,7 @@ pub enum PaneDispatchReadyRule {
 impl PaneDispatchReadyRule {
     pub const ALL: &'static [PaneDispatchReadyRule] = &[
         PaneDispatchReadyRule::TwoCaptureLiveness,
+        PaneDispatchReadyRule::TwoCaptureInterval,
         PaneDispatchReadyRule::BusyMarkersLoadBearing,
         PaneDispatchReadyRule::TailOnlyBusy,
         PaneDispatchReadyRule::QuotaBeforeBusy,
@@ -55,6 +61,7 @@ impl PaneDispatchReadyRule {
     pub fn as_str(self) -> &'static str {
         match self {
             PaneDispatchReadyRule::TwoCaptureLiveness => "two_capture_liveness",
+            PaneDispatchReadyRule::TwoCaptureInterval => "two_capture_interval",
             PaneDispatchReadyRule::BusyMarkersLoadBearing => "busy_markers_load_bearing",
             PaneDispatchReadyRule::TailOnlyBusy => "tail_only_busy",
             PaneDispatchReadyRule::QuotaBeforeBusy => "quota_before_busy",
@@ -69,6 +76,7 @@ impl PaneDispatchReadyRule {
 #[derive(Clone, Debug)]
 pub struct PaneDispatchReadyRules {
     pub two_capture_liveness: bool,
+    pub two_capture_interval: bool,
     pub busy_markers_load_bearing: bool,
     pub tail_only_busy: bool,
     pub quota_before_busy: bool,
@@ -79,6 +87,7 @@ impl Default for PaneDispatchReadyRules {
     fn default() -> Self {
         Self {
             two_capture_liveness: true,
+            two_capture_interval: true,
             busy_markers_load_bearing: true,
             tail_only_busy: true,
             quota_before_busy: true,
@@ -94,6 +103,7 @@ impl PaneDispatchReadyRules {
         };
         match rule {
             PaneDispatchReadyRule::TwoCaptureLiveness => self.two_capture_liveness = false,
+            PaneDispatchReadyRule::TwoCaptureInterval => self.two_capture_interval = false,
             PaneDispatchReadyRule::BusyMarkersLoadBearing => self.busy_markers_load_bearing = false,
             PaneDispatchReadyRule::TailOnlyBusy => self.tail_only_busy = false,
             PaneDispatchReadyRule::QuotaBeforeBusy => self.quota_before_busy = false,
@@ -240,7 +250,11 @@ fn has_prompt_marker(tail: &str) -> bool {
 }
 
 /// Classify captured pane text. `buffer_changed` is the second-capture motion bit.
-pub fn classify(text: &str, buffer_changed: bool, rules: &PaneDispatchReadyRules) -> PaneDispatchReadyVerdict {
+pub fn classify(
+    text: &str,
+    buffer_changed: bool,
+    rules: &PaneDispatchReadyRules,
+) -> PaneDispatchReadyVerdict {
     if text.is_empty() {
         return PaneDispatchReadyVerdict {
             state: PaneDispatchReadyState::Unreadable,
@@ -282,9 +296,7 @@ pub fn classify(text: &str, buffer_changed: bool, rules: &PaneDispatchReadyRules
     if buffer_changed {
         return PaneDispatchReadyVerdict {
             state: PaneDispatchReadyState::Busy,
-            reason: format!(
-                "pane buffer changed over {DEFAULT_MOTION_SECS}s — rendered work is in flight"
-            ),
+            reason: "pane buffer changed between captures — rendered work is in flight".into(),
         };
     }
     // The prompt check gets its OWN, wider window. The 6-line busy tail is deliberately
@@ -313,7 +325,12 @@ pub fn classify(text: &str, buffer_changed: bool, rules: &PaneDispatchReadyRules
 }
 
 /// Apply composer-typed.py outcome. rc 0 = typed = BUSY, 1 = FREE, else fail-closed BUSY.
-pub fn apply_composer_rc(v: PaneDispatchReadyVerdict, rc: i32, _composer_path: &str, rules: &PaneDispatchReadyRules) -> PaneDispatchReadyVerdict {
+pub fn apply_composer_rc(
+    v: PaneDispatchReadyVerdict,
+    rc: i32,
+    _composer_path: &str,
+    rules: &PaneDispatchReadyRules,
+) -> PaneDispatchReadyVerdict {
     if v.state != PaneDispatchReadyState::Free {
         return v;
     }
@@ -338,13 +355,14 @@ pub fn missing_composer(path: &str) -> PaneDispatchReadyVerdict {
     }
 }
 
-/// Confirm a provisional FREE with a second capture. Disabling two_capture_liveness
-/// returns the first verdict unchanged — the frozen/generating fusion.
+/// Confirm a provisional FREE with a second capture. The canonical K0 evidence
+/// type enforces the minimum interval and meaningful motion; this function
+/// converts its typed refusal into an UNREADABLE, fail-closed readiness verdict.
 pub fn confirm_free(
     first: PaneDispatchReadyVerdict,
     next_text: &str,
-    sha1: &str,
-    sha2: &str,
+    previous: CaptureSnapshot,
+    current: CaptureSnapshot,
     rules: &PaneDispatchReadyRules,
 ) -> PaneDispatchReadyVerdict {
     if first.state != PaneDispatchReadyState::Free {
@@ -353,13 +371,33 @@ pub fn confirm_free(
     if !rules.two_capture_liveness {
         return first;
     }
-    if next_text.is_empty() || sha1.is_empty() || sha2.is_empty() {
+    if !rules.two_capture_interval {
         return classify(next_text, false, rules);
     }
-    if sha1 != sha2 {
-        return classify(next_text, true, rules);
+    match PaneObservation::from_two_captures(
+        "pane-dispatch-ready",
+        previous,
+        current,
+        DispatchAdmissibility::Unknown,
+    ) {
+        Ok(observation) => {
+            let moved = matches!(
+                observation.evidence(),
+                EvidenceGrade::TwoCapture {
+                    timer_changed: true,
+                    ..
+                } | EvidenceGrade::TwoCapture {
+                    content_hash_changed: true,
+                    ..
+                }
+            );
+            classify(next_text, moved, rules)
+        }
+        Err(error) => PaneDispatchReadyVerdict {
+            state: PaneDispatchReadyState::Unreadable,
+            reason: format!("TWO_CAPTURE_UNPROVEN: {error} (fail closed)"),
+        },
     }
-    classify(next_text, false, rules)
 }
 
 pub fn spawn_timeout(mut cmd: Command, timeout: Duration) -> Option<Output> {
@@ -405,7 +443,11 @@ pub fn spawn_timeout(mut cmd: Command, timeout: Duration) -> Option<Output> {
     // The readers end when the child's fds close, which the kill above guarantees.
     let stdout = out.and_then(|h| h.join().ok()).unwrap_or_default();
     let stderr = err.and_then(|h| h.join().ok()).unwrap_or_default();
-    Some(Output { status, stdout, stderr })
+    Some(Output {
+        status,
+        stdout,
+        stderr,
+    })
 }
 
 pub fn sha_text(s: &str) -> String {
@@ -445,6 +487,54 @@ pub fn sha_text(s: &str) -> String {
         }
     }
 }
+fn timer_piece(token: &str) -> Option<String> {
+    let trimmed = token.trim_matches(|character: char| {
+        !character.is_ascii_digit() && !matches!(character, 'h' | 'm' | 's')
+    });
+    if trimmed.is_empty()
+        || !trimmed.chars().any(|character| character.is_ascii_digit())
+        || !matches!(trimmed.chars().last(), Some('h' | 'm' | 's'))
+    {
+        return None;
+    }
+    Some(trimmed.to_owned())
+}
+
+fn timer_token(text: &str) -> Option<String> {
+    for line in text.lines().rev() {
+        let tokens: Vec<&str> = line.split_whitespace().collect();
+        for (index, token) in tokens.iter().enumerate() {
+            let Some(first) = timer_piece(token) else {
+                continue;
+            };
+            let mut value = first;
+            if let Some(second) = tokens.get(index + 1).and_then(|token| timer_piece(token)) {
+                value.push(' ');
+                value.push_str(&second);
+            }
+            return Some(value);
+        }
+    }
+    None
+}
+
+fn spinner_stripped_content(text: &str) -> String {
+    text.chars()
+        .filter(|character| !('⠀'..='⣿').contains(character))
+        .collect()
+}
+
+/// Build the canonical K0 capture evidence from one raw pane capture.
+/// Braille spinner glyphs are removed before hashing; the elapsed timer token
+/// remains a separate motion signal.
+pub fn capture_snapshot(captured_at_secs: u64, text: &str) -> CaptureSnapshot {
+    CaptureSnapshot::new(
+        captured_at_secs,
+        PaneLiveness::Unknown(UnknownReason::Unclassified),
+        timer_token(text),
+        sha_text(&spinner_stripped_content(text)),
+    )
+}
 
 #[cfg(test)]
 mod tests {
@@ -452,6 +542,9 @@ mod tests {
 
     fn r() -> PaneDispatchReadyRules {
         PaneDispatchReadyRules::default()
+    }
+    fn snapshot(at_secs: u64, hash: &str) -> CaptureSnapshot {
+        CaptureSnapshot::new(at_secs, PaneLiveness::Idle, None, hash.to_owned())
     }
 
     fn st(text: &str) -> PaneDispatchReadyState {
@@ -461,7 +554,11 @@ mod tests {
     #[test]
     fn working_timer_is_busy() {
         let t = "claude\n• Working (38m 29s • esc to interrupt)";
-        assert_eq!(st(t), PaneDispatchReadyState::Busy, "rule busy_markers_load_bearing");
+        assert_eq!(
+            st(t),
+            PaneDispatchReadyState::Busy,
+            "rule busy_markers_load_bearing"
+        );
     }
 
     #[test]
@@ -508,7 +605,11 @@ mod tests {
     #[test]
     fn quota_banner_is_quota_blocked() {
         let t = "  Opus 5 (1M context) | control-plane\n■ You've hit your usage limit. try again later.\n❯ ";
-        assert_eq!(st(t), PaneDispatchReadyState::QuotaBlocked, "rule quota_before_busy");
+        assert_eq!(
+            st(t),
+            PaneDispatchReadyState::QuotaBlocked,
+            "rule quota_before_busy"
+        );
     }
 
     #[test]
@@ -521,7 +622,13 @@ mod tests {
     fn two_capture_motion_is_busy() {
         let first = classify("Opus 5 │ bypass permissions\n❯ ", false, &r());
         assert_eq!(first.state, PaneDispatchReadyState::Free);
-        let v = confirm_free(first, "Opus 5 │ bypass permissions\n❯ ", "aaa", "bbb", &r());
+        let v = confirm_free(
+            first,
+            "Opus 5 │ bypass permissions\n❯ ",
+            snapshot(0, "aaa"),
+            snapshot(TWO_CAPTURE_MIN_SECS, "bbb"),
+            &r(),
+        );
         assert_eq!(
             v.state,
             PaneDispatchReadyState::Busy,
@@ -537,8 +644,8 @@ mod tests {
         let v = confirm_free(
             first,
             "Opus 5 │ bypass permissions\n❯ ",
-            "aaa",
-            "bbb",
+            snapshot(0, "aaa"),
+            snapshot(TWO_CAPTURE_MIN_SECS, "bbb"),
             &rules,
         );
         assert_eq!(
@@ -570,8 +677,14 @@ mod tests {
             st("claude\n✻ Sautéed for 3m 9s · 4 monitors still running"),
             PaneDispatchReadyState::Busy
         );
-        assert_eq!(st("claude\n✽ Infusing… (21s · ↓ 443 tokens)"), PaneDispatchReadyState::Busy);
-        assert_eq!(st("claude\n✻ Warping… (47s · ↓ 1.7k tokens)"), PaneDispatchReadyState::Busy);
+        assert_eq!(
+            st("claude\n✽ Infusing… (21s · ↓ 443 tokens)"),
+            PaneDispatchReadyState::Busy
+        );
+        assert_eq!(
+            st("claude\n✻ Warping… (47s · ↓ 1.7k tokens)"),
+            PaneDispatchReadyState::Busy
+        );
         assert_eq!(
             st("claude\n✻ Flummoxing… (51s · ↓ 1.3k tokens)"),
             PaneDispatchReadyState::Busy

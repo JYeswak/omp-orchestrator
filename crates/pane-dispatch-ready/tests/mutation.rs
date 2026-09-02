@@ -1,6 +1,7 @@
 //! Fires-on-known-bad mutation legs. Each names its rule on a column-0 RED line.
 //! A nonzero exit alone is not evidence.
 
+use omp_types::{CaptureSnapshot, PaneLiveness};
 use pane_dispatch_ready::{classify, confirm_free, PaneDispatchReadyRules, PaneDispatchReadyState};
 use std::io::Write;
 use std::path::PathBuf;
@@ -44,6 +45,9 @@ fn eval_bin(args: &[&str], input: &str) -> String {
 fn state_of(line: &str) -> &str {
     line.split('|').next().unwrap_or("")
 }
+fn snapshot(at_secs: u64, hash: &str) -> CaptureSnapshot {
+    CaptureSnapshot::new(at_secs, PaneLiveness::Idle, None, hash.to_owned())
+}
 
 /// pdr-001: two captures. A hash change is BUSY; deleting the rule treats a
 /// generating pane as FREE — the frozen/Working (27s) fusion.
@@ -53,7 +57,13 @@ fn mutation_two_capture_liveness() {
     let mut off = PaneDispatchReadyRules::default();
     assert!(off.disable("two_capture_liveness"));
     let first_off = classify(prompt, false, &off);
-    let v_off = confirm_free(first_off, prompt, "aaa", "bbb", &off);
+    let v_off = confirm_free(
+        first_off,
+        prompt,
+        snapshot(0, "aaa"),
+        snapshot(75, "bbb"),
+        &off,
+    );
     assert_eq!(
         v_off.state,
         PaneDispatchReadyState::Free,
@@ -66,7 +76,13 @@ fn mutation_two_capture_liveness() {
 
     let on = PaneDispatchReadyRules::default();
     let first_on = classify(prompt, false, &on);
-    let v_on = confirm_free(first_on, prompt, "aaa", "bbb", &on);
+    let v_on = confirm_free(
+        first_on,
+        prompt,
+        snapshot(0, "aaa"),
+        snapshot(75, "bbb"),
+        &on,
+    );
     assert_eq!(
         v_on.state,
         PaneDispatchReadyState::Busy,

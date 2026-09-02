@@ -14,13 +14,22 @@
 //! below is a VERBATIM `ntm --robot-activity` payload, dated and cited, so the leg tests the
 //! RULE against a fixed observation instead of testing the fleet.
 
+use omp_types::{CaptureSnapshot, PaneLiveness};
 use pane_dispatch_ready::{
-    classify, confirm_free, PaneDispatchReadyRules, PaneDispatchReadyState, DEFAULT_MOTION_SECS,
+    classify, confirm_free, PaneDispatchReadyRules, PaneDispatchReadyState, TWO_CAPTURE_MIN_SECS,
 };
 use std::path::{Path, PathBuf};
 
 fn rules() -> PaneDispatchReadyRules {
     PaneDispatchReadyRules::default()
+}
+fn snapshot(at_secs: u64, timer: &str, hash: &str) -> CaptureSnapshot {
+    CaptureSnapshot::new(
+        at_secs,
+        PaneLiveness::Idle,
+        Some(timer.to_owned()),
+        hash.to_owned(),
+    )
 }
 
 fn repo_root() -> PathBuf {
@@ -157,7 +166,11 @@ fn l1_a_wedged_pane_still_classifies_free_in_this_crate() {
     // `classify` returns FREE and a caller dispatches into a pane that will never submit.
     let idle = classify(IDLE_CLAUDE, false, &rules());
     let wedged = classify(WEDGED_CLAUDE, false, &rules());
-    assert_eq!(idle.state, PaneDispatchReadyState::Free, "control: idle is FREE");
+    assert_eq!(
+        idle.state,
+        PaneDispatchReadyState::Free,
+        "control: idle is FREE"
+    );
     assert_eq!(
         wedged.state,
         PaneDispatchReadyState::Free,
@@ -214,9 +227,16 @@ fn l1_the_wedge_marker_is_detected_by_three_other_crates() {
 fn l2_a_codex_pane_can_be_unclassifiable_in_the_state_field() {
     let rows = snapshot_rows();
     let unknown: Vec<&Row> = rows.iter().filter(|r| r.state == "UNKNOWN").collect();
-    assert_eq!(unknown.len(), 1, "the snapshot carries exactly one UNKNOWN row");
+    assert_eq!(
+        unknown.len(),
+        1,
+        "the snapshot carries exactly one UNKNOWN row"
+    );
     let r = unknown[0];
-    assert_eq!(r.agent_type, "codex", "the unclassifiable pane is a codex pane");
+    assert_eq!(
+        r.agent_type, "codex",
+        "the unclassifiable pane is a codex pane"
+    );
     assert_eq!(r.pane, "3");
     assert!(
         (r.confidence - 0.5).abs() < f64::EPSILON,
@@ -353,42 +373,18 @@ fn l2_the_observation_channel_was_confidently_wrong_about_a_working_pane() {
 }
 
 // ---------------------------------------------------------------------------------------
-// PR-L3 — readiness needs two captures >=75s apart  (PINNED DEFECT)
+// PR-L3 — readiness needs two captures >=75s apart
 // ---------------------------------------------------------------------------------------
 
 #[test]
-fn l3_this_crates_motion_window_is_below_the_75_second_floor() {
-    // PINNED DEFECT, bead omp-orchestrator-readiness-l3-motion-window-7523.
-    //
-    // `pane_observation_contract` PO-L1 requires two captures at least 75 seconds apart.
-    // `pane-truth` and `tick-monitor` both encode 75. This crate sleeps DEFAULT_MOTION_SECS
-    // between captures, and an UNCHANGED buffer over that window is what lets a provisional
-    // FREE stand.
+fn l3_this_crates_motion_window_meets_the_75_second_floor() {
     assert_eq!(
-        DEFAULT_MOTION_SECS, 10,
-        "PR-L3 may now be satisfied: the motion window is {DEFAULT_MOTION_SECS}s. Update the \
-         contract's PR-L3 row and close the bead in the same commit."
-    );
-    // The two authorities that DO carry the floor, read from source so no dev-dep is added.
-    let pane_truth = read("crates/pane-truth/src/lib.rs");
-    let tick_monitor = read("crates/tick-monitor/src/lib.rs");
-    assert!(
-        pane_truth.contains("TWO_CAPTURE_MIN_SECS: i64 = 75"),
-        "pane-truth must still encode the 75s floor; if not, PR-L3's evidence is stale"
+        TWO_CAPTURE_MIN_SECS, 75,
+        "the readiness gate must use the canonical K0 two-capture floor"
     );
     assert!(
-        tick_monitor.contains("MIN_GAP_SECS: u64 = 75"),
-        "tick-monitor must still encode the 75s floor"
-    );
-    // POSITIVE CONTROL on the same reader: a constant this crate genuinely declares.
-    assert!(
-        read("crates/pane-dispatch-ready/src/lib.rs")
-            .contains("DEFAULT_MOTION_SECS: u64 = 10"),
-        "POSITIVE CONTROL FAILED: the reader cannot see this crate's own constant"
-    );
-    assert!(
-        DEFAULT_MOTION_SECS < 75,
-        "the window must be below the floor for this leg to be the pinned defect it claims"
+        read("crates/pane-dispatch-ready/src/lib.rs").contains("TWO_CAPTURE_MIN_SECS"),
+        "the readiness implementation must retain the canonical interval"
     );
 }
 
@@ -402,7 +398,13 @@ fn l4_a_changed_second_capture_overturns_a_provisional_free() {
     // beats the first capture's free read.
     let first = classify(IDLE_CLAUDE, false, &rules());
     assert_eq!(first.state, PaneDispatchReadyState::Free);
-    let confirmed = confirm_free(first, IDLE_CLAUDE, "sha-one", "sha-two", &rules());
+    let confirmed = confirm_free(
+        first,
+        IDLE_CLAUDE,
+        snapshot(0, "27s", "sha-one"),
+        snapshot(75, "27s", "sha-two"),
+        &rules(),
+    );
     assert_eq!(
         confirmed.state,
         PaneDispatchReadyState::Busy,
@@ -423,7 +425,13 @@ fn l4_an_unreadable_second_capture_does_not_become_free_or_a_busy_claim() {
     // empty scan set reporting as a pass.
     let first = classify(IDLE_CLAUDE, false, &rules());
     assert_eq!(first.state, PaneDispatchReadyState::Free);
-    let confirmed = confirm_free(first, "", "sha-one", "sha-one", &rules());
+    let confirmed = confirm_free(
+        first,
+        "",
+        snapshot(0, "27s", "sha-one"),
+        snapshot(75, "27s", "sha-one"),
+        &rules(),
+    );
     assert_eq!(
         confirmed.state,
         PaneDispatchReadyState::Unreadable,
@@ -434,15 +442,19 @@ fn l4_an_unreadable_second_capture_does_not_become_free_or_a_busy_claim() {
         "the reason must say the verdict is fail-closed: {}",
         confirmed.reason
     );
-    // And an unchanged second capture leaves the free read standing — the known-GOOD arm,
-    // without which this suite would be over-strict and get routed around.
+    // An unchanged second capture does not establish motion. The K0 evidence
+    // type refuses to call the pane idle when both timer and spinner-stripped
+    // content hash are unchanged.
     let again = classify(IDLE_CLAUDE, false, &rules());
-    let held = confirm_free(again, IDLE_CLAUDE, "same", "same", &rules());
-    assert_eq!(
-        held.state,
-        PaneDispatchReadyState::Free,
-        "an unchanged second capture must not invent motion"
+    let held = confirm_free(
+        again,
+        IDLE_CLAUDE,
+        snapshot(0, "27s", "same"),
+        snapshot(75, "27s", "same"),
+        &rules(),
     );
+    assert_eq!(held.state, PaneDispatchReadyState::Unreadable);
+    assert!(held.reason.contains("TWO_CAPTURE_UNPROVEN"));
 }
 
 // ---------------------------------------------------------------------------------------
@@ -504,10 +516,7 @@ fn a_planted_busy_marker_is_caught_in_the_tail_and_ignored_above_it() {
     );
     // KNOWN-GOOD: the same marker far above the tail must NOT, or a stale spinner in
     // scrollback pins every pane BUSY forever.
-    let stale = format!(
-        "esc to interrupt\n{}\n{IDLE_CLAUDE}",
-        "filler\n".repeat(20)
-    );
+    let stale = format!("esc to interrupt\n{}\n{IDLE_CLAUDE}", "filler\n".repeat(20));
     assert_eq!(
         classify(&stale, false, &rules()).state,
         PaneDispatchReadyState::Free,
