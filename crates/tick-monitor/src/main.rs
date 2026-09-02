@@ -296,12 +296,12 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
         // round-trip test could not see it because it never rendered JSON.
         let timer = match &state {
             PaneState::Working { timer_secs } | PaneState::Dialog { timer_secs } => *timer_secs,
-            PaneState::Idle | PaneState::Wedged | PaneState::Unproven => 0,
+            PaneState::Idle
+            | PaneState::Wedged
+            | PaneState::ProviderError402
+            | PaneState::Unproven => 0,
         };
-        let why = match &live {
-            Liveness::Unproven { why } => *why,
-            _ => "",
-        };
+        let why = live.why();
         rows.push(format!(
             "{{\"pane\":\"{}\",\"state\":\"{}\",\"timer_secs\":{},\"liveness\":\"{}\",\"why\":\"{}\",\"epoch\":\"{}\",\"sequence\":{},\"changed_at\":\"{}\",\"last_line\":\"{}\"}}",
             esc(id),

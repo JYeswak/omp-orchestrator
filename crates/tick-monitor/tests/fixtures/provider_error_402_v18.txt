@@ -1,0 +1,9 @@
+ Error: 402 This request requires more credits, or fewer max_tokens. You requested up to 131072 tokens, but can only …
+ RESUME CURRENT HARDENING: the installer diff still has a compile-shape mismatch (uses Bounded::Completed/Other while subprocess-contract exposes BoundedOutcome). First verify your
+ crates/installer, add/retain failing-first and mutation evidence for the six foreign-host git/build/probe spawns, run cargo test -p installer on the ZestData lane, and commit path
+ a neighbor re-runs it and reports exact counts.
+                                                                                                                         TODO 0/9 · ☐ Round 16: 4 fresh-eyes graders running (DeltaE
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── Wire
+❯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ π  · ◉ GLM 5.3 Flash · ⏸ Goal 452K · 📁 ~/Developer/omp-orchestrator · ⑂ main *25 +5 ?35 · ◫ 34.5%/1.3M ⟲ · $51.72

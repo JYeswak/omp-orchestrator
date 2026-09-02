@@ -235,6 +235,9 @@ pub enum PaneState {
     /// answer -- the opposite of dead. `timer_secs` is the pane's turn timer, which keeps
     /// ADVANCING while the pane waits, which is precisely why this needed its own state.
     Dialog { timer_secs: u64 },
+    /// A provider has refused further work for this pane. This is attention, never capacity.
+    /// Measured on OMP v18 as HTTP 402: more credits are required or max_tokens must be lower.
+    ProviderError402,
     /// Not an agent pane, or an unrecognised capture.
     Unproven,
 }
@@ -246,7 +249,19 @@ impl PaneState {
             PaneState::Idle => "IDLE",
             PaneState::Wedged => "WEDGED",
             PaneState::Dialog { .. } => "DIALOG",
+            PaneState::ProviderError402 => "PROVIDER_ERROR_402",
             PaneState::Unproven => "UNPROVEN",
+        }
+    }
+
+    pub fn why(&self) -> &'static str {
+        match self {
+            PaneState::Working { .. }
+            | PaneState::Idle
+            | PaneState::Wedged
+            | PaneState::Dialog { .. }
+            | PaneState::Unproven => "",
+            PaneState::ProviderError402 => "provider_error_402",
         }
     }
 }
@@ -353,8 +368,26 @@ pub fn dialog_open(capture: &str) -> bool {
     })
 }
 
+/// The measured OMP v18 provider-error footer. A leading Error: is the captured form;
+/// OMP's framed rendering can prefix the same footer with a cross mark.
+const PROVIDER_ERROR_402_ERROR_PREFIX: &str =
+    "Error: 402 This request requires more credits, or fewer max_tokens";
+const PROVIDER_ERROR_402_CROSS_PREFIX: &str =
+    "✘ 402 This request requires more credits, or fewer max_tokens";
+
+pub fn provider_error_402(capture: &str) -> bool {
+    capture.lines().any(|line| {
+        let line = line.trim_start();
+        line.starts_with(PROVIDER_ERROR_402_ERROR_PREFIX)
+            || line.starts_with(PROVIDER_ERROR_402_CROSS_PREFIX)
+    })
+}
+
 /// Classify a capture by the OMP v18 contract: spinner + timer = Working, `pi` = Idle.
 pub fn classify(capture: &str) -> PaneState {
+    if provider_error_402(capture) {
+        return PaneState::ProviderError402;
+    }
     if capture.contains("Press up to edit queued messages")
         || capture.contains("Messages to be submitted after next tool call")
     {
@@ -432,6 +465,9 @@ pub enum Liveness {
     /// arc-keepalive install approval reading as `WORKING`/`LIVE`, so the escalation it was
     /// waiting on was invisible to the conductor while looking perfectly healthy.
     Dialog { timer_secs: u64 },
+    /// The provider rejected further work with HTTP 402. This is an attention state,
+    /// never free capacity or dispatchable, because refilling cannot fix the pane.
+    ProviderError402,
     /// The capture succeeded and the pane is PRESENT, but no model-name line was found --
     /// and it carried one last tick. Alive, and unreadable rather than idle or dead.
     ///
@@ -454,8 +490,23 @@ impl Liveness {
             Liveness::Frozen => "FROZEN",
             Liveness::Wedged => "WEDGED",
             Liveness::Dialog { .. } => "DIALOG",
+            Liveness::ProviderError402 => "PROVIDER_ERROR_402",
             Liveness::Obscured => "OBSCURED",
             Liveness::Unproven { .. } => "UNPROVEN",
+        }
+    }
+
+    pub fn why(&self) -> &'static str {
+        match self {
+            Liveness::ProviderError402 => "provider_error_402",
+            Liveness::Unproven { why } => why,
+            Liveness::Live
+            | Liveness::ConfirmedIdle
+            | Liveness::NewlyIdle
+            | Liveness::Frozen
+            | Liveness::Dialog { .. }
+            | Liveness::Obscured
+            | Liveness::Wedged => "",
         }
     }
     /// Only a two-capture confirmed idle may receive work.
@@ -478,7 +529,10 @@ impl Liveness {
     /// `Obscured` needs a deeper capture. Both used to vanish into `Unproven` and be
     /// dropped from capacity, which is precisely how a live pane goes untended.
     pub fn needs_attention(&self) -> bool {
-        matches!(self, Liveness::Dialog { .. } | Liveness::Obscured)
+        matches!(
+            self,
+            Liveness::Dialog { .. } | Liveness::ProviderError402 | Liveness::Obscured
+        )
     }
 }
 
@@ -685,6 +739,11 @@ pub fn liveness(prev: Option<&Observation>, now: &Observation) -> Liveness {
     if matches!(now.state, PaneState::Wedged) {
         return Liveness::Wedged;
     }
+    // A provider error is a current, explicit blocker. Return it before the two-capture
+    // machinery and before prompt/status interpretation can call the pane idle.
+    if matches!(now.state, PaneState::ProviderError402) {
+        return Liveness::ProviderError402;
+    }
     // Alive and awaiting an answer. Returned BEFORE the two-capture machinery on purpose:
     // its timer advances while blocked, so the (Working, Working) arm would call it Live.
     if let PaneState::Dialog { timer_secs } = now.state {
@@ -717,9 +776,10 @@ pub fn liveness(prev: Option<&Observation>, now: &Observation) -> Liveness {
     // from evidence for the first invents a blocker that does not exist.
     if matches!(now.state, PaneState::Unproven) {
         return match prev.state {
-            PaneState::Working { .. } | PaneState::Idle | PaneState::Dialog { .. } => {
-                Liveness::Obscured
-            }
+            PaneState::Working { .. }
+            | PaneState::Idle
+            | PaneState::Dialog { .. }
+            | PaneState::ProviderError402 => Liveness::Obscured,
             PaneState::Wedged | PaneState::Unproven => Liveness::Unproven {
                 why: "capture_unrecognised",
             },
@@ -776,6 +836,11 @@ pub fn liveness(prev: Option<&Observation>, now: &Observation) -> Liveness {
         (PaneState::Working { .. }, PaneState::Idle) => Liveness::NewlyIdle,
         // It picked work up. Unambiguously alive.
         (PaneState::Idle, PaneState::Working { .. }) => Liveness::Live,
+        // A provider error on the previous capture must not be mistaken for a fresh
+        // idle/work transition after the footer disappears.
+        (PaneState::ProviderError402, _) => Liveness::Unproven {
+            why: "prior_provider_error_402",
+        },
         // Anything involving Wedged/Unproven on EITHER side is not a liveness claim.
         // `now` being Wedged/Unproven already returned above, so this is a prior-side
         // Wedged/Unproven paired with a readable now: motion, but not a verdict we will
@@ -793,11 +858,15 @@ pub fn liveness(prev: Option<&Observation>, now: &Observation) -> Liveness {
         // `now` being Dialog returned above, so that half is unreachable here -- but the
         // match is exhaustive by design, so it must be spelled rather than wildcarded. A
         // wildcard is exactly what let the WORKING->IDLE transition fall into `Live`.
-        (_, PaneState::Wedged | PaneState::Unproven | PaneState::Dialog { .. }) => {
-            Liveness::Unproven {
-                why: "capture_unrecognised",
-            }
-        }
+        (
+            _,
+            PaneState::Wedged
+            | PaneState::Unproven
+            | PaneState::Dialog { .. }
+            | PaneState::ProviderError402,
+        ) => Liveness::Unproven {
+            why: "capture_unrecognised",
+        },
     }
 }
 
@@ -1276,6 +1345,7 @@ pub fn load(path: &Path) -> State {
                     "DIALOG" => PaneState::Dialog {
                         timer_secs: timer.parse().unwrap_or(0),
                     },
+                    "PROVIDER_ERROR_402" => PaneState::ProviderError402,
                     _ => PaneState::Unproven,
                 };
                 let Ok(sequence) = sequence.parse::<u64>() else {
@@ -1360,7 +1430,10 @@ pub fn save(path: &Path, st: &State) -> std::io::Result<()> {
         // DIALOG's timer -- caught by the round-trip leg, not by review.
         let timer = match &p.state {
             PaneState::Working { timer_secs } | PaneState::Dialog { timer_secs } => *timer_secs,
-            PaneState::Idle | PaneState::Wedged | PaneState::Unproven => 0,
+            PaneState::Idle
+            | PaneState::Wedged
+            | PaneState::ProviderError402
+            | PaneState::Unproven => 0,
         };
         out.push_str(&format!(
             "pane\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",

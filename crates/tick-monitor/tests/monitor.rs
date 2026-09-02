@@ -442,6 +442,47 @@ fn no_observed_panes_is_monitor_blind() {
 /// Verbatim capture of the live arc-keepalive approval dialog on %1372, 2026-08-31.
 const DIALOG_FIXTURE: &str = include_str!("fixtures/dialog_v18.txt");
 
+/// Verbatim excerpt from the %1409 OMP v18 capture recorded on 2026-09-01. The
+/// command output was clipped to 180 columns, but the provider-error block and final
+/// prompt/status lines are unchanged. The paired status line is intentionally present:
+/// the detector must key on the 402 footer, not on the pi glyph.
+const PROVIDER_ERROR_402_FIXTURE: &str = include_str!("fixtures/provider_error_402_v18.txt");
+
+#[test]
+fn provider_error_pane_is_attention_not_capacity() {
+    let state = tick_monitor::classify(PROVIDER_ERROR_402_FIXTURE);
+    assert_eq!(
+        state.why(),
+        "provider_error_402",
+        "fixture must name the provider error"
+    );
+    let now = obs_at("%1409", state, 1200);
+    let live = tick_monitor::liveness(None, &now);
+    assert!(
+        live.needs_attention(),
+        "402-dead pane must be surfaced: {live:?}"
+    );
+    assert!(
+        !live.is_free_capacity() && !live.is_dispatchable(),
+        "402-dead pane must not be refilled: {live:?}"
+    );
+    assert_eq!(live.why(), "provider_error_402");
+}
+
+#[test]
+fn provider_error_known_good_leg_is_idle_without_footer() {
+    let without_footer = PROVIDER_ERROR_402_FIXTURE
+        .lines()
+        .filter(|line| !line.contains("Error: 402 This request requires more credits"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_eq!(
+        tick_monitor::classify(&without_footer),
+        tick_monitor::PaneState::Idle,
+        "the same prompt without the 402 footer must remain IDLE"
+    );
+}
+
 #[test]
 fn planted_dialog_is_dialog_not_working() {
     let st = tick_monitor::classify(DIALOG_FIXTURE);
