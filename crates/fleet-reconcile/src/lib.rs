@@ -10,56 +10,14 @@
 
 use serde_json::{json, Map, Value};
 use std::collections::BTreeSet;
-use std::io::Read;
-use std::process::{Command, Output, Stdio};
+use std::process::Command;
+use subprocess_contract::{bounded_output, BoundedOutcome};
 use std::time::{Duration, Instant};
 
 /// Spawn a child with stdin=null (O_CLOEXEC on every other fd) and an explicit deadline.
 /// Drop of the Child on kill/wait releases pipes. No unbounded wait.
-pub fn spawn_timeout(mut cmd: Command, timeout: Duration) -> Option<Output> {
-    cmd.stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = cmd.spawn().ok()?;
-    // DRAIN THE PIPES ON DEDICATED THREADS.  `try_wait` in a poll loop CANNOT be paired with
-    // undrained pipes: a child that writes more than the OS pipe buffer (~64 KiB, and stdout and
-    // stderr each have their own) blocks in `write` forever, so it never exits, so `try_wait`
-    // never returns Some, and the call burns its entire timeout at 0% CPU before being killed.
-    //
-    // MEASURED 2026-08-27: `git -C <repo> log --since "24 hours ago" --oneline` completes in
-    // 0.6-0.9s from a shell, and sat at 0.0% CPU for 104s as a child here -- reproduced exactly by
-    // polling `try_wait` without reading the pipes.  Six crates shared this shape; fixing only the
-    // one that fired would have left five live.
-    let out = child.stdout.take().map(|mut r| {
-        std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            let _ = r.read_to_end(&mut buf);
-            buf
-        })
-    });
-    let err = child.stderr.take().map(|mut r| {
-        std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            let _ = r.read_to_end(&mut buf);
-            buf
-        })
-    });
-    let start = Instant::now();
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(s)) => break s,
-            Ok(None) if start.elapsed() >= timeout => {
-                let _ = child.kill();
-                break child.wait().ok()?;
-            }
-            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
-            Err(_) => return None,
-        }
-    };
-    // The readers end when the child's fds close, which the kill above guarantees.
-    let stdout = out.and_then(|h| h.join().ok()).unwrap_or_default();
-    let stderr = err.and_then(|h| h.join().ok()).unwrap_or_default();
-    Some(Output { status, stdout, stderr })
+pub fn spawn_timeout(mut cmd: Command, timeout: Duration) -> BoundedOutcome {
+    bounded_output(&mut cmd, timeout)
 }
 
 pub const FAIL_MODE: &str =
@@ -123,7 +81,9 @@ impl FleetReconcileRules {
         };
         match rule {
             FleetReconcileRule::EmptySuccessFailsClosed => self.empty_success_fails_closed = false,
-            FleetReconcileRule::ListEmptyTextFailsClosed => self.list_empty_text_fails_closed = false,
+            FleetReconcileRule::ListEmptyTextFailsClosed => {
+                self.list_empty_text_fails_closed = false
+            }
             FleetReconcileRule::NameSetsMustAgree => self.name_sets_must_agree = false,
             FleetReconcileRule::UnparseableIsFail => self.unparseable_is_fail = false,
         }
@@ -208,7 +168,11 @@ pub fn invoker_from_chain(chain: &[FleetReconcileAncestorRow]) -> FleetReconcile
 }
 
 /// Honor an inherited SCHEDULED/cron_parent pair only when this process's own chain also reaches cron.
-pub fn invoker_resolve_env(inv: &str, proof: &str, own_chain: &[FleetReconcileAncestorRow]) -> FleetReconcileInvoker {
+pub fn invoker_resolve_env(
+    inv: &str,
+    proof: &str,
+    own_chain: &[FleetReconcileAncestorRow],
+) -> FleetReconcileInvoker {
     if inv == "SCHEDULED" && proof == "cron_parent" {
         let own = invoker_from_chain(own_chain);
         if own == FleetReconcileInvoker::SCHEDULED {
@@ -656,10 +620,7 @@ mod tests {
             "rule bounded_waits: a hung child must not be waited on unbounded, elapsed={:?}",
             start.elapsed()
         );
-        assert!(
-            out.is_some(),
-            "rule bounded_waits: timeout path must still return"
-        );
+        assert!(matches!(out, BoundedOutcome::TimedOut), "timeout path must remain typed");
     }
 
     #[test]
@@ -675,11 +636,16 @@ mod tests {
         let mut cmd = Command::new("/bin/sh");
         cmd.args(["-c", "exec 3<>/dev/fd/$CHECK_FD"])
             .env("CHECK_FD", fd.to_string());
-        let out = spawn_timeout(cmd, Duration::from_secs(2)).expect("sh open-fd");
-        assert!(
-            !out.status.success(),
-            "rule lock_not_inheritable: child opened our File fd {fd} (inherited, not CLOEXEC)"
-        );
+        match spawn_timeout(cmd, Duration::from_secs(2)) {
+            BoundedOutcome::Completed(output) => {
+                assert!(
+                    !output.status.success(),
+                    "rule lock_not_inheritable: child opened our File fd {fd} (inherited, not CLOEXEC)"
+                );
+            }
+            BoundedOutcome::TimedOut => panic!("fd probe must complete before its deadline"),
+            BoundedOutcome::Unspawned(error) => panic!("fd probe must spawn: {error}"),
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 

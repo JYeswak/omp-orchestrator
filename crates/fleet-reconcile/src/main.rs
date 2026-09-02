@@ -11,9 +11,23 @@ use fleet_reconcile::{
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
-use std::process::{Command, ExitCode};
+use std::process::{Command, ExitCode, Output};
 use std::time::Duration;
+use subprocess_contract::{bounded_output, BoundedOutcome};
 
+fn completed(label: &str, outcome: BoundedOutcome) -> Option<Output> {
+    match outcome {
+        BoundedOutcome::Completed(output) => Some(output),
+        BoundedOutcome::TimedOut => {
+            eprintln!("fleet-reconcile: {label} timed out before its deadline");
+            None
+        }
+        BoundedOutcome::Unspawned(error) => {
+            eprintln!("fleet-reconcile: {label} could not spawn: {error}");
+            None
+        }
+    }
+}
 /// How long an observation child (tmux, ntm, ft) may take before it is killed.
 ///
 /// LOAD-AWARE BECAUSE A FIXED BOUND MADE THE WHOLE FLEET LOOP DIE UNDER LOAD.
@@ -41,7 +55,18 @@ fn observe_timeout() -> Duration {
     // read we fall back to load 0, i.e. today's fixed 15s floor -- an unreadable load must not
     // silently WIDEN the window, only fail to widen it.
     let load = (|| -> Option<f64> {
-        let out = Command::new("/usr/bin/uptime").output().ok()?;
+        let mut command = Command::new("/usr/bin/uptime");
+        let out = match bounded_output(&mut command, Duration::from_secs(2)) {
+            BoundedOutcome::Completed(output) => output,
+            BoundedOutcome::TimedOut => {
+                eprintln!("fleet-reconcile: uptime timed out before its deadline");
+                return None;
+            }
+            BoundedOutcome::Unspawned(error) => {
+                eprintln!("fleet-reconcile: uptime could not spawn: {error}");
+                return None;
+            }
+        };
         let text = String::from_utf8_lossy(&out.stdout).into_owned();
         let tail = text.rsplit("load averages:").next()?.trim().to_string();
         tail.split_whitespace().next()?.parse::<f64>().ok()
@@ -71,7 +96,10 @@ fn main() -> ExitCode {
     };
     std::env::set_var("PATH", &path);
     if std::env::var("TMUX_TMPDIR").is_err() {
-        if let Some(home) = std::env::var_os("HOME").filter(|v| !v.is_empty()).map(PathBuf::from) {
+        if let Some(home) = std::env::var_os("HOME")
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+        {
             std::env::set_var("TMUX_TMPDIR", home.join(".tmux-sockets"));
         }
     }
@@ -133,7 +161,7 @@ fn ancestry_text() -> String {
         }
         let mut cmd = Command::new("ps");
         cmd.args(["-p", &pid.to_string(), "-o", "uid=,ppid=,comm="]);
-        let Some(out) = spawn_timeout(cmd, Duration::from_secs(2)) else {
+        let Some(out) = completed("ps ancestry", spawn_timeout(cmd, Duration::from_secs(2))) else {
             break;
         };
         let line = String::from_utf8_lossy(&out.stdout).trim().to_string();
@@ -181,17 +209,17 @@ fn read_inputs() -> Result<(String, String, String, String), String> {
     }
     let mut tmux = Command::new("tmux");
     tmux.args(["list-sessions", "-F", "#{session_name}"]);
-    let tmux_sessions = spawn_timeout(tmux, observe_timeout())
+    let tmux_sessions = completed("tmux sessions", spawn_timeout(tmux, observe_timeout()))
         .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
         .unwrap_or_default();
     let mut ntm_l = Command::new("ntm");
     ntm_l.arg("list");
-    let ntm_list = spawn_timeout(ntm_l, observe_timeout())
+    let ntm_list = completed("ntm list", spawn_timeout(ntm_l, observe_timeout()))
         .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
         .unwrap_or_default();
     let mut ntm_s = Command::new("ntm");
     ntm_s.arg("--robot-snapshot");
-    let ntm_snap = spawn_timeout(ntm_s, observe_timeout())
+    let ntm_snap = completed("ntm snapshot", spawn_timeout(ntm_s, observe_timeout()))
         .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
         .unwrap_or_default();
     let ft_bin = std::env::var("FT_BIN").unwrap_or_else(|_| {
@@ -217,7 +245,7 @@ fn read_inputs() -> Result<(String, String, String, String), String> {
             .env("FT_WORKSPACE", ft_ws)
             .env("RUST_LOG", "error")
             .env_remove("WEZTERM_UNIX_SOCKET");
-        spawn_timeout(ft, observe_timeout())
+        completed("ft state", spawn_timeout(ft, observe_timeout()))
             .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
             .unwrap_or_default()
     } else {
@@ -270,7 +298,8 @@ fn run_selftest(_json: bool) -> ExitCode {
     let mut run_leg = |name: &str, want_det: &str, want_ver: &str, want_rc: i32| {
         let mut cmd = Command::new(&exe);
         cmd.arg("--json").env("FLEET_RECONCILE_FIXTURE_DIR", &fix);
-        let out = spawn_timeout(cmd, Duration::from_secs(15)).expect("selftest spawn");
+        let out = completed("fleet-reconcile selftest", spawn_timeout(cmd, Duration::from_secs(15)))
+            .expect("selftest spawn");
         let rc = out.status.code().unwrap_or(99);
         let text = String::from_utf8_lossy(&out.stdout);
         let v: serde_json::Value =
