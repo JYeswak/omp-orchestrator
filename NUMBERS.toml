@@ -22,19 +22,19 @@
 
 [figures.workspace_crates]
 command  = "ls -1 crates | wc -l"
-expect   = "50"
+expect   = "51"
 appears  = ["docs/plan/03-crates.md", "AGENTS.md"]
 
 note     = "50 current workspace crates from the exact command; 20/23/26 are dated historical snapshots."
 [figures.built_binaries]
 command  = "cargo metadata --format-version 1 --no-deps 2>/dev/null | python3 -c \"import sys,json;m=json.load(sys.stdin);print(len([t for p in m['packages'] for t in p['targets'] if 'bin' in t['kind']]))\""
-expect   = "48"
+expect   = "49"
 appears  = ["docs/plan/07-installability.md"]
 note     = "cargo metadata, NOT cargo build: build emits artifacts only for crates it actually recompiles, so an up-to-date workspace answers 0. The gate caught that on its first run. This is the instrument that answers 'binaries the workspace builds'. grep fn main says 18 (re-measured 2026-09-01), [[bin]] says 16."
 
 [figures.crates_forbidding_unsafe]
 command  = "grep -l 'unsafe_code = \"forbid\"' crates/*/Cargo.toml | wc -l"
-expect   = "50"
+expect   = "51"
 appears  = ["docs/plan/00-brief.md", "AGENTS.md"]
 
 note     = "50 current manifests from the exact command; 2/20/26 are dated historical snapshots."
@@ -62,7 +62,7 @@ note     = "13 numbered plan sections are in docs/plan/00 through 12; convergenc
 [figures.test_files]
 
 command  = "find crates -type f -path '*/tests/*.rs' | wc -l"
-expect   = "95"
+expect   = "96"
 note     = "Recursive source-file count; the prior top-level glob undercounted nested fixture tests and is historical."
 [figures.board_total]
 command  = "for s in closed in_progress open blocked grading; do br list --status $s --json | jq '.issues | length'; done | awk '{s += $1} END {print s}'"
@@ -73,7 +73,7 @@ note     = "not a fixed figure — the board moves hourly. Declared so any prose
 [figures.test_functions]
 command  = "grep -RhoF '#[test]' crates --include='*.rs' | wc -l"
 note     = "Recursive annotation count across all Rust sources; current re-derived value is 987; earlier 962/983/984 values are dated snapshots."
-expect   = "1006"
+expect   = "1019"
 appears  = ["docs/plan/01-idea.md", "docs/plan/06-gates.md", "docs/plan/00-brief.md"]
 
 [figures.no_claim_blocks]
@@ -96,7 +96,7 @@ note     = "Counts only original evidence rows; appended finding-resolution note
 
 [figures.unsafe_both_mechanisms]
 command  = "python3 -c \"import pathlib,re;m=[re.search(r'unsafe_code\\s*=\\s*.forbid.',p.read_text()) for p in pathlib.Path('crates').glob('*/Cargo.toml')];i=[any(re.search(r'^#!\\[forbid\\(unsafe_code\\)\\]',x.read_text(errors='ignore'),re.M) for x in p.parent.glob('src/**/*.rs')) for p in pathlib.Path('crates').glob('*/Cargo.toml')];print(sum(1 for a,b in zip(m,i) if a and b))\""
-expect   = "49"
+expect   = "50"
 appears  = ["docs/plan/03-crates.md"]
 note     = "Current both-mechanisms count is 49 of 50; 19/25/48 are dated historical snapshots. The separate manifest/source/union rows in this registry carry the full split."
 
@@ -124,7 +124,7 @@ appears  = ["docs/plan/03-crates.md", "AGENTS.md"]
 note     = "Current scan finds zero missing target directories; the 20-crate upstream corpus remains the source-of-truth input, not unextracted work."
 [figures.workspace_crates_on_disk]
 command  = "ls -1 crates | wc -l"
-expect   = "50"
+expect   = "51"
 appears  = ["docs/plan/03-crates.md", "AGENTS.md", "docs/PLAN.md"]
 note     = "duplicate of workspace_crates by design: 03-crates §3.9 reasons about the RELATIONSHIP between this and unextracted_crates, so both must be pinned or the ratio silently rots."
 
@@ -136,7 +136,7 @@ note     = "duplicate of workspace_crates by design: 03-crates §3.9 reasons abo
 
 [figures.forbid_unsafe_authoritative]
 command  = "u=0; for d in crates/*/; do if grep -q 'unsafe_code = \"forbid\"' \"$d/Cargo.toml\" 2>/dev/null || grep -rq 'forbid\\(unsafe_code\\)' \"$d\" --include='*.rs' 2>/dev/null; then u=$((u+1)); fi; done; echo $u"
-expect   = "50"
+expect   = "51"
 note     = "AUTHORITATIVE union: 50 of 50 current crates are covered; manifest-only = 50, source-attribute = 49, both = 49, and tick-monitor is the manifest-only straggler. Earlier 16/22, 20/26, 25/26, and 26/26 values are dated snapshots."
 
 [figures.control_plane_unextracted_loc]
