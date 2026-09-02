@@ -10,9 +10,8 @@ use std::{
     fs::{self, OpenOptions},
     io::{self, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
-    process::{Child, Command, ExitStatus, Stdio},
-    thread,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    process::{Command, ExitStatus, Stdio},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 const DEFAULT_SESSION: &str = "control-plane";
@@ -58,71 +57,6 @@ pub struct ChildOutput {
     pub stdout: String,
     pub stderr: String,
     pub timed_out: bool,
-}
-
-fn wait_deadline(child: &mut Child, deadline: Duration) -> io::Result<(Option<ExitStatus>, bool)> {
-    /// Kill the process GROUP, then reap under a bounded deadline.
-    ///
-    /// This was `child.kill()` — the PID only. AGENTS.md records the measured cost of that
-    /// exact shape: "orphaned grandchildren (ppid=1, 0.0% CPU) held the admission lock, so
-    /// every timeout guaranteed the next attempt also failed — the failure created the
-    /// condition for its own repetition." A pid kill leaves a `sh -c 'foo & bar'` child's
-    /// grandchildren running, holding whatever the parent held.
-    ///
-    /// Requires the spawn site to set `process_group(0)` so the child IS the group leader;
-    /// without that, `-pid` names a group we do not own and the signal goes nowhere useful.
-    /// Both halves are in this commit.
-    ///
-    /// TERM first, then a graced KILL, matching `subprocess-contract::bounded_output` so the
-    /// two paths behave identically. loop-tick cannot simply CALL that helper: it redirects
-    /// stdout/stderr to FILES and feeds stdin from one, while `bounded_output` pipes and
-    /// `bounded_status` inherits — neither shape fits, and forcing one would change what the
-    /// caller observes. The duplication is deliberate and narrow; the kill semantics are
-    /// what had to match.
-    fn reap_after_kill(child: &mut Child) -> Option<ExitStatus> {
-        let group = format!("-{}", child.id());
-        let _ = Command::new("/bin/kill")
-            .args(["-TERM", &group])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-        thread::sleep(Duration::from_millis(300));
-        let _ = Command::new("/bin/kill")
-            .args(["-KILL", &group])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-        // Belt and braces: if the group signal could not be delivered (the child was never a
-        // group leader, or /bin/kill is unavailable), still terminate the direct child rather
-        // than leaving it running because the better mechanism failed.
-        let _ = child.kill();
-        let started = Instant::now();
-        loop {
-            match child.try_wait() {
-                Ok(Some(status)) => return Some(status),
-                Ok(None) if started.elapsed() >= Duration::from_secs(1) => return None,
-                Ok(None) => thread::sleep(Duration::from_millis(20)),
-                Err(_) => return None,
-            }
-        }
-    }
-
-    let start = Instant::now();
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => return Ok((Some(status), false)),
-            Ok(None) => {}
-            Err(error) => {
-                let _ = reap_after_kill(child);
-                return Err(error);
-            }
-        }
-        if start.elapsed() >= deadline {
-            let status = reap_after_kill(child);
-            return Ok((status, true));
-        }
-        thread::sleep(Duration::from_millis(20));
-    }
 }
 
 /// Run one child with an explicit deadline. No lock descriptor is held by this
@@ -181,9 +115,27 @@ pub fn run_child(
     for (key, value) in envs {
         cmd.env(key, value);
     }
-    let mut child = match cmd.spawn() {
-        Ok(child) => child,
-        Err(error) => {
+    // ROUTE THROUGH THE KERNEL. This was a hand-rolled spawn plus a private `wait_deadline`
+    // with its own kill logic - a duplicate of `subprocess-contract::bounded_status` that had
+    // drifted from it in the one way that matters: it killed the PID, not the GROUP.
+    //
+    // I nearly did not make this conversion. My first reading was that "neither kernel shape
+    // fits: bounded_output PIPES and bounded_status INHERITS, while loop-tick redirects to
+    // FILES." The second half is wrong. `bounded_status` sets NO stdio at all - its body is
+    // `command.process_group(0).spawn()` - so the caller's redirects survive untouched, and
+    // "inherits" was only ever describing what happens when the caller sets nothing. Reading
+    // the kernel instead of its doc comment is what unblocked this.
+    //
+    // The caller still reads stdout/stderr from the files below; Completed's Output carries
+    // empty buffers by construction, which is correct here and documented on the kernel.
+    let outcome = subprocess_contract::bounded_status(&mut cmd, deadline);
+    let (status, timed_out) = match outcome {
+        subprocess_contract::BoundedOutcome::Completed(out) => (Some(out.status), false),
+        // RESTRICTIVE. A killed child is not a child that exited; the caller distinguishes
+        // them through `timed_out`, and folding them together is the defect the kernel's
+        // two restrictive variants exist to prevent.
+        subprocess_contract::BoundedOutcome::TimedOut => (None, true),
+        subprocess_contract::BoundedOutcome::Unspawned(error) => {
             let _ = fs::remove_file(&stdout_path);
             let _ = fs::remove_file(&stderr_path);
             if let Some(path) = &stdin_path {
@@ -192,7 +144,6 @@ pub fn run_child(
             return Err(error);
         }
     };
-    let (status, timed_out) = wait_deadline(&mut child, deadline)?;
     let stdout = fs::read_to_string(&stdout_path).unwrap_or_default();
     let stderr = fs::read_to_string(&stderr_path).unwrap_or_default();
     let _ = fs::remove_file(&stdout_path);
@@ -1171,6 +1122,8 @@ pub fn run(args: &[String]) -> Result<i32, String> {
 
 #[cfg(test)]
 mod tests {
+    use std::thread;
+    use std::time::Instant;
     use super::*;
 
     #[test]
@@ -1371,16 +1324,19 @@ mod tests {
         println!("NO-SILENT-TRUNCATION PASS — description_limit=1800 residue=1");
     }
 
-    /// A deadline must kill the GRANDCHILDREN too, not just the direct child.
+
+    /// A deadline must kill the GRANDCHILDREN too, and it must do so through the PRODUCTION
+    /// path, not a helper.
     ///
-    /// The 11 existing tests all passed both before and after the group-kill fix, which is
-    /// exactly the fixture-only trap this repo keeps hitting: a change nothing exercises is
-    /// indistinguishable from no change. This test fails against `child.kill()`.
+    /// The first version of this test called the private `wait_deadline` directly. That
+    /// helper is now GONE - `run_child` routes through `subprocess-contract::bounded_status`
+    /// - and a test bound to a helper would have been deleted along with it, taking the only
+    /// proof of group-kill with it. Testing the exported entry point is what survives a
+    /// refactor.
     ///
     /// Shape: the child spawns a grandchild that will touch a marker 2 seconds from now, then
-    /// sleeps well past the deadline. If the deadline signals only the child's pid, the
-    /// grandchild is reparented to init and touches the marker. If it signals the GROUP, the
-    /// grandchild dies with it and the marker never appears.
+    /// sleeps well past the deadline. A pid-only kill reparents the grandchild to init and the
+    /// marker appears; a GROUP kill takes it with the child and the marker never does.
     ///
     /// This is the measured admission-lock trap: orphans at ppid=1 held a lock, so every
     /// timeout guaranteed the next attempt failed too.
@@ -1390,22 +1346,31 @@ mod tests {
         let _ = fs::remove_file(&marker);
         let script = format!("( sleep 2; touch {} ) & sleep 30", marker.display());
 
-        let mut cmd = Command::new("/bin/sh");
-        cmd.args(["-c", &script])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        #[cfg(unix)]
-        std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
-        let mut child = cmd.spawn().expect("spawn the probe");
-
         let started = Instant::now();
-        let (_status, timed_out) =
-            wait_deadline(&mut child, Duration::from_millis(200)).expect("wait_deadline");
-        assert!(timed_out, "the fixture must actually hit the deadline, or it proves nothing");
+        let out = run_child(
+            Path::new("/bin/sh"),
+            &["-c".to_owned(), script],
+            Path::new("/tmp"),
+            None,
+            &[],
+            Duration::from_millis(200),
+        )
+        .expect("run_child must return, not error");
+
+        assert!(
+            out.timed_out,
+            "the fixture must actually hit the deadline, or this test proves nothing about \
+             what happens when one fires"
+        );
+        assert!(
+            out.status.is_none(),
+            "a killed child has NO exit status - TimedOut is restrictive and must not be \
+             folded into a normal exit"
+        );
         assert!(
             started.elapsed() < Duration::from_secs(10),
-            "the deadline must bound the wait against a 30s child"
+            "the deadline must bound the wait against a 30s child; took {:?}",
+            started.elapsed()
         );
 
         // The grandchild would touch the marker at t+2s.
@@ -1414,8 +1379,8 @@ mod tests {
         let _ = fs::remove_file(&marker);
         assert!(
             !survived,
-            "the grandchild survived the deadline and touched {} - the signal went to the \
-             pid, not the group, and an orphan at ppid=1 is what held the admission lock",
+            "the grandchild survived the deadline and touched {} - the signal reached the pid, \
+             not the group, and an orphan at ppid=1 is what held the admission lock",
             marker.display()
         );
     }

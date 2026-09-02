@@ -37,7 +37,7 @@ use std::path::PathBuf;
 /// Measured 2026-09-01 BY THIS GATE'S OWN SCAN. Lower it as sites convert; never raise it.
 /// Seeded from this scan, not a neighbouring one — the build-identity ratchet was first set
 /// from a different measurement and had a slot of slack, so its mutation probe passed.
-const PID_KILL_CEILING: usize = 32; // measured by this scan 2026-09-01
+const PID_KILL_CEILING: usize = 31; // 32 -> 31: loop-tick now routes through the kernel
 
 fn repo_root() -> Option<PathBuf> {
     let mut cur = std::env::current_dir().ok()?;
@@ -127,22 +127,42 @@ fn the_pid_only_kill_count_only_falls() {
     );
 }
 
-/// The reference fix must stay reachable: loop-tick signals the group AND makes its child a
-/// group leader. Without both, `-pid` names a group we do not own.
+/// The reference fix must stay reachable — and it CHANGED SHAPE mid-session, which is why
+/// this test is worth reading before copying it.
+///
+/// It first asserted that `loop-tick` carried its own `-TERM`/`-KILL` on the group. That was
+/// right for about an hour. Then `loop-tick` was routed through
+/// `subprocess-contract::bounded_status`, its private `wait_deadline` was deleted as a
+/// 64-line duplicate, and this assertion went RED — correctly. Having your own group-kill is
+/// the SECOND-best outcome; calling the kernel's is the best one, and a gate that demands the
+/// second-best blocks the first.
+///
+/// So it now accepts either: route through the kernel, or signal the group yourself.
 #[test]
 fn the_reference_fix_signals_the_group_and_leads_it() {
     let Some(root) = repo_root() else { return };
     let text = std::fs::read_to_string(root.join("crates/loop-tick/src/lib.rs"))
         .expect("loop-tick lib.rs must exist");
     let code = code_only(&text);
+
+    let routes_through_kernel = code.contains("subprocess_contract::bounded_status")
+        || code.contains("subprocess_contract::bounded_output");
+    let signals_group_itself = code.contains("\"-TERM\"") && code.contains("\"-KILL\"");
+
     assert!(
-        code.contains("process_group(&mut cmd, 0)"),
-        "loop-tick must make its child a group leader; without it the -pid signal in \
-         reap_after_kill names a group we do not own"
+        routes_through_kernel || signals_group_itself,
+        "loop-tick must either route through subprocess-contract (preferred) or signal the \
+         process group itself. It currently does neither, so a deadline there kills a pid and \
+         leaves grandchildren at ppid=1 holding whatever the parent held."
     );
+
+    // The mutation that proves the kernel route is live: breaking bounded_status's `-pid`
+    // signal makes loop-tick's grandchild test fail. That is the check this cannot make
+    // statically, and it is recorded here so nobody mistakes this test for that proof.
     assert!(
-        code.contains("\"-TERM\"") && code.contains("\"-KILL\""),
-        "loop-tick must signal TERM then a graced KILL on the group, matching \
-         subprocess-contract::bounded_output"
+        !code.contains("fn wait_deadline"),
+        "the private wait_deadline duplicate is back. It drifted from the kernel in exactly \
+         the way that matters — it killed the pid, not the group — and re-adding it re-opens \
+         that drift."
     );
 }

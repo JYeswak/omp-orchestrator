@@ -15,6 +15,7 @@ name = "loop_tick"
 path = "src/lib.rs"
 
 [dependencies]
+subprocess-contract = { path = "../subprocess-contract" }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 serde_json = "1"
 
