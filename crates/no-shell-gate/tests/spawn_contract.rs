@@ -13,17 +13,18 @@
 //! Each of those is a property of *how* a child is spawned, so a bare
 //! `Command::new` cannot satisfy them. `subprocess-contract` is where they live.
 //!
-//! # Measured state, 2026-09-01
+//! # Computed state
 //!
-//! 12 crates contain `Command::new`; 6 declare `subprocess-contract`. The overlap
-//! is partial, so **8 crates and 38 raw spawn sites do not route through it** —
-//! including `tick-monitor` (4 sites, the orchestrator's primary sensor, spawning
-//! `tmux`) and `omp-rpc-session` (3 sites, spawning the OMP RPC child).
+//! The test walks every workspace crate's Rust sources, counts code-level
+//! Command::new expressions (ignoring comments and string literals), and checks
+//! the corresponding manifest dependency with a syntax-aware parser. The count
+//! is deliberately computed at test time: a copied measurement becomes stale as
+//! extraction waves land.
 //!
-//! `GradeCrates` filed this in round 13 as a MAJOR:
-//!
-//! > `omp-rpc-session` and `omp-inventory-map` both spawn processes and neither
-//! > routes through `subprocess-contract`.
+//! The dependency check is a routing floor, not proof that every call site uses
+//! the kernel. The good and mutation legs below keep the census attributable.
+//! Per-call-site proof still requires the source-level audit performed alongside
+//! each extraction wave.
 //!
 //! # Why an allowance list rather than a hard failure
 //!
@@ -66,7 +67,6 @@ const SPAWN_ALLOWANCE: &[(&str, &str)] = &[
         "no-shell-gate",
         "test harness: spawns cargo/git/grep to derive figures, under the harness's own deadline",
     ),
-
     (
         "pre-delete-citation-check",
         "pre-commit-time check, bounded by the hook's lifetime rather than a runtime deadline",
@@ -83,19 +83,9 @@ const SPAWN_ALLOWANCE: &[(&str, &str)] = &[
          deadline costs the most",
     ),
     (
-        "kernel-bypass-gate",
-        "PROVISIONAL: 3 sites in a gate that inspects kernel-level bypass; runs at hook time \
-         under the hook's lifetime, but the boundary is not stated anywhere",
-    ),
-    (
         "dispatch-silence-watch",
         "PROVISIONAL: 2 sites. Wired as a path dependency this session (gate-wiring-wave2-at2), \
          so it is newly live and inherits no deadline yet",
-    ),
-    (
-        "fleet-composite",
-        "PROVISIONAL: 2 sites. One of the three shell->Rust ported crates; the shell original \
-         had no deadline either, so this is inherited debt rather than new",
     ),
     (
         "tick-monitor",
@@ -108,11 +98,133 @@ const SPAWN_ALLOWANCE: &[(&str, &str)] = &[
         "PROVISIONAL, recorded as debt: 3 sites spawning the OMP RPC child, which is exactly \
          the cancellable-work-with-a-deadline case the contract exists for",
     ),
-    (
-        "omp-inventory-map",
-        "PROVISIONAL, recorded as debt: named by GradeCrates in round 13",
-    ),
 ];
+
+fn raw_string_end(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut cursor = start;
+    if bytes.get(cursor) == Some(&b'b') {
+        cursor += 1;
+    }
+    if bytes.get(cursor) != Some(&b'r') {
+        return None;
+    }
+    cursor += 1;
+    let mut hashes = 0usize;
+    while bytes.get(cursor) == Some(&b'#') {
+        hashes += 1;
+        cursor += 1;
+    }
+    if bytes.get(cursor) != Some(&b'"') {
+        return None;
+    }
+    cursor += 1;
+    while cursor < bytes.len() {
+        if bytes[cursor] == b'"' {
+            let mut end = cursor + 1;
+            let mut closed = true;
+            for _ in 0..hashes {
+                if bytes.get(end) != Some(&b'#') {
+                    closed = false;
+                    break;
+                }
+                end += 1;
+            }
+            if closed {
+                return Some(end);
+            }
+        }
+        cursor += 1;
+    }
+    None
+}
+
+fn count_spawn_expressions(source: &str) -> usize {
+    #[derive(Clone, Copy)]
+    enum State {
+        Code,
+        LineComment,
+        BlockComment(usize),
+        String,
+        Char,
+    }
+
+    let bytes = source.as_bytes();
+    let mut state = State::Code;
+    let mut cursor = 0usize;
+    let mut count = 0usize;
+    while cursor < bytes.len() {
+        match state {
+            State::Code => {
+                if let Some(end) = raw_string_end(bytes, cursor) {
+                    cursor = end;
+                    continue;
+                }
+                if bytes.get(cursor) == Some(&b'/') && bytes.get(cursor + 1) == Some(&b'/') {
+                    state = State::LineComment;
+                    cursor += 2;
+                } else if bytes.get(cursor) == Some(&b'/')
+                    && bytes.get(cursor + 1) == Some(&b'*')
+                {
+                    state = State::BlockComment(1);
+                    cursor += 2;
+                } else if bytes.get(cursor) == Some(&b'"') {
+                    state = State::String;
+                    cursor += 1;
+                } else if bytes.get(cursor) == Some(&b'\'') {
+                    state = State::Char;
+                    cursor += 1;
+                } else if bytes[cursor..].starts_with(b"Command::new") {
+                    count += 1;
+                    cursor += b"Command::new".len();
+                } else {
+                    cursor += 1;
+                }
+            }
+            State::LineComment => {
+                if bytes[cursor] == b'\n' {
+                    state = State::Code;
+                }
+                cursor += 1;
+            }
+            State::BlockComment(mut depth) => {
+                if bytes.get(cursor) == Some(&b'/') && bytes.get(cursor + 1) == Some(&b'*') {
+                    depth += 1;
+                    state = State::BlockComment(depth);
+                    cursor += 2;
+                } else if bytes.get(cursor) == Some(&b'*')
+                    && bytes.get(cursor + 1) == Some(&b'/')
+                {
+                    depth -= 1;
+                    cursor += 2;
+                    if depth == 0 {
+                        state = State::Code;
+                    } else {
+                        state = State::BlockComment(depth);
+                    }
+                } else {
+                    cursor += 1;
+                    state = State::BlockComment(depth);
+                }
+            }
+            State::String | State::Char => {
+                let quote = match state {
+                    State::String => b'"',
+                    State::Char => b'\'',
+                    _ => unreachable!(),
+                };
+                if bytes[cursor] == 92 {
+                    cursor = (cursor + 2).min(bytes.len());
+                } else if bytes[cursor] == quote {
+                    state = State::Code;
+                    cursor += 1;
+                } else {
+                    cursor += 1;
+                }
+            }
+        }
+    }
+    count
+}
 
 fn crates_with_spawn(root: &Path) -> Vec<(String, usize)> {
     let mut out = Vec::new();
@@ -131,7 +243,9 @@ fn crates_with_spawn(root: &Path) -> Vec<(String, usize)> {
         let mut count = 0usize;
         let mut stack = vec![dir.join("src")];
         while let Some(d) = stack.pop() {
-            let Ok(items) = std::fs::read_dir(&d) else { continue };
+            let Ok(items) = std::fs::read_dir(&d) else {
+                continue;
+            };
             for it in items.flatten() {
                 let p = it.path();
                 if p.is_dir() {
@@ -142,7 +256,7 @@ fn crates_with_spawn(root: &Path) -> Vec<(String, usize)> {
                     continue;
                 }
                 if let Ok(body) = std::fs::read_to_string(&p) {
-                    count += body.matches("Command::new").count();
+                    count += count_spawn_expressions(&body);
                 }
             }
         }
@@ -154,10 +268,38 @@ fn crates_with_spawn(root: &Path) -> Vec<(String, usize)> {
     out
 }
 
+fn manifest_has_dependency(manifest: &str, dependency: &str) -> bool {
+    let mut in_dependencies = false;
+    for raw_line in manifest.lines() {
+        let line = raw_line.split_once('#').map_or(raw_line, |(head, _)| head).trim();
+        if line.starts_with('[') && line.ends_with(']') {
+            in_dependencies = line == "[dependencies]"
+                || (line.starts_with("[target.") && line.ends_with(".dependencies]"));
+            if line
+                .strip_prefix("[dependencies.")
+                .and_then(|section| section.strip_suffix(']'))
+                == Some(dependency)
+            {
+                return true;
+            }
+            continue;
+        }
+        if in_dependencies {
+            let Some((key, _value)) = line.split_once('=') else {
+                continue;
+            };
+            if key.trim().trim_matches('"') == dependency {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 fn declares_contract(root: &Path, crate_name: &str) -> bool {
     let manifest = root.join("crates").join(crate_name).join("Cargo.toml");
     std::fs::read_to_string(manifest)
-        .map(|t| t.contains("subprocess-contract"))
+        .map(|text| manifest_has_dependency(&text, "subprocess-contract"))
         .unwrap_or(false)
 }
 
@@ -198,8 +340,10 @@ fn every_allowance_row_names_a_crate_that_still_spawns() {
     // the same rot the gate census had when it hardcoded three crates as
     // permanently Unreachable.
     let root = repo_root();
-    let spawners: std::collections::HashSet<String> =
-        crates_with_spawn(&root).into_iter().map(|(c, _)| c).collect();
+    let spawners: std::collections::HashSet<String> = crates_with_spawn(&root)
+        .into_iter()
+        .map(|(c, _)| c)
+        .collect();
     let stale: Vec<&str> = SPAWN_ALLOWANCE
         .iter()
         .map(|(c, _)| *c)
@@ -228,4 +372,35 @@ fn every_allowance_row_carries_a_reason() {
         empty.len(),
         empty
     );
+}
+
+#[test]
+fn census_ignores_comments_and_string_literals() {
+    let source = r#"
+        // Command::new("comment")
+        let _text = "Command::new(\"string\")";
+        let _real = Command::new("echo");
+    "#;
+    assert_eq!(count_spawn_expressions(source), 1);
+}
+
+#[test]
+fn census_known_positive_is_specific() {
+    assert_eq!(count_spawn_expressions("let _ = Command::new(\"echo\");"), 1);
+}
+
+#[test]
+fn manifest_parser_accepts_both_dependency_assignment_spellings() {
+    assert!(manifest_has_dependency(
+        "[dependencies]\nsubprocess-contract = { path = \"../subprocess-contract\" }",
+        "subprocess-contract"
+    ));
+    assert!(manifest_has_dependency(
+        "[dependencies]\nsubprocess-contract={path=\"../subprocess-contract\"}",
+        "subprocess-contract"
+    ));
+    assert!(!manifest_has_dependency(
+        "[package]\nname=\"subprocess-contract\"",
+        "subprocess-contract"
+    ));
 }
