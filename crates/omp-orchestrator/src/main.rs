@@ -876,15 +876,22 @@ async fn claim_bead_for_supervisor(
             claimed.assignee().unwrap_or("unassigned")
         ));
     }
-    let detail =
-        format!("bead={bead} pane={pane} assignee={supervisor} receiver_agent={receiver_agent}");
+    // The heartbeat and the returned owner must name the assignee that ACTUALLY
+    // landed, not `supervisor` unconditionally. Measured 2026-09-02: after the
+    // half-claim shape transitioned a bead to `in_progress` KEEPING
+    // `assignee=GreenFrog`, this returned `supervisor:<pid>` anyway and the caller
+    // refused `ASSIGNED_ELSEWHERE assignee=GreenFrog claim_owner=supervisor:90627`
+    // -- rejecting the transition it had just performed correctly.
+    let detail = format!(
+        "bead={bead} pane={pane} assignee={expected_assignee} receiver_agent={receiver_agent}"
+    );
     write_heartbeat(config, tick, "DISPATCH_CLAIMED", &detail).map_err(|error| {
         format!(
             "DISPATCH_BLOCKED bead={bead} pane={pane} reason=CLAIM_HEARTBEAT_FAILED receiver_agent={receiver_agent} error={error}"
         )
     })?;
     eprintln!("DISPATCH_CLAIMED {detail}");
-    Ok((claimed, supervisor))
+    Ok((claimed, expected_assignee))
 }
 
 /// Prepares one bead dispatch, or refuses.
