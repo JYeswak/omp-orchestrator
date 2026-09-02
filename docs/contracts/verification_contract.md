@@ -57,7 +57,7 @@ A fixture-only test, a test that only asserts setup, an output that was never ch
 
 ### VC-L4-IGNORED-IS-UNRUN
 
-An `#[ignore]`d leg is not a passing leg. `findings_ledger::real_findings_ledger_is_strictly_valid` is the only leg that validates the real `docs/plan/FINDINGS.jsonl` rather than a synthetic fixture. It is `#[ignore]`d, and `--include-ignored` has zero in-tree callers; therefore default `cargo test` can report green while production data is unchecked.
+An `#[ignore]`d leg is not a passing leg. `findings_ledger::real_findings_ledger_is_strictly_valid` is the only leg that validates the real `docs/plan/FINDINGS.jsonl` rather than a synthetic fixture. Before `4443c43` it was `#[ignore]`d and `--include-ignored` had zero in-tree callers; that historical shape let default `cargo test` report green while production data was unchecked. The current source is un-ignored, but the contract retains the violation because the same omission can recur if the real-ledger leg is skipped again.
 
 The real-ledger leg receives explicit credit only when the current command includes `--include-ignored`, the test exists, the process exits 0, and the test asserts the real ledger. Fixture tests remain useful for branch behavior but cannot substitute for that leg. `VC-IGNORED-LEG` is a named absence of evidence, never a green result.
 
@@ -82,24 +82,23 @@ independent re-run -> grade
 
 ## VIOLATION — where shipped code contradicts this law
 
-- **Declared:** `VC-L4-IGNORED-IS-UNRUN` requires the real findings ledger to run for a passing claim. **Shipped:** `crates/no-shell-gate/tests/findings_ledger.rs:754-755` marks `real_findings_ledger_is_strictly_valid` with `#[ignore]`; `--include-ignored` has zero in-tree callers. **Consequence:** default cargo test can be green while `FINDINGS.jsonl` is unchecked, the measured BUILT ≠ WIRED failure.
-- **Declared:** `VC-L3-NONVACUOUS-TEST` distinguishes semantic verification from exit status. **Shipped:** `crates/verify-dispatch/src/main.rs:3-5` documents that the live path always exits 0, and `src/lib.rs:472-483` returns code 0 after reporting both verified and no-evidence rows. **Consequence:** a caller that checks only exit 0 can certify an incomplete dispatch.
+- **Declared:** `VC-L4-IGNORED-IS-UNRUN` requires the real findings ledger to run for a passing claim. **Historical shipped:** before `4443c43`, `crates/no-shell-gate/tests/findings_ledger.rs:775` documented and applied `#[ignore]` to `real_findings_ledger_is_strictly_valid`, while `--include-ignored` had zero in-tree callers. **Consequence:** default cargo test reported green while `FINDINGS.jsonl` was unchecked, the measured BUILT ≠ WIRED failure. **Current status:** `4443c43` removed the ignore; the historical violation remains the reason this law and explicit `--include-ignored` validation are required.
+- **Declared:** `VC-L3-NONVACUOUS-TEST` distinguishes semantic verification from exit status. **Shipped:** `crates/verify-dispatch/src/main.rs:3-5` documents that the live path always exits 0, and `crates/verify-dispatch/src/lib.rs:474-483` returns code 0 after reporting both verified and no-evidence rows. **Consequence:** a caller that checks only exit 0 can certify an incomplete dispatch.
 - **Declared:** `VC-L5-INDEPENDENT-GRADER` requires grader identity and a non-implementer re-run. **Shipped:** `crates/verify-dispatch/src/main.rs:52-55` prints the run output and returns its code without carrying implementer/grader identity. **Consequence:** the binary cannot enforce the independent-grader process gate; the identity check remains external and must be recorded by the bead workflow.
-
 ## Non-Coverage
 
 - No pane self-report, task label, composer state, transport result, or receiver receipt is accepted as completion evidence.
 - No verifier run proves packet delivery, worker comprehension, or task quality; bead status is the completion projection, not a semantic proof of work.
 - No old CI log, prior artifact, copied stdout, or historical bead comment satisfies `VC-L2-RERUN-CURRENT`.
 - No ignored, skipped, zero-case, fixture-only, or setup-only test satisfies `VC-L3-NONVACUOUS` or `VC-L4-IGNORED-IS-UNRUN`.
-- No code change is made here to remove the `#[ignore]` marker, add an `--include-ignored` caller, or enforce grader identity. Those are separate implementation/process work.
-- No full workspace suite is part of this contract; the validation command targets `verify-dispatch`/the real findings-ledger leg only.
+- No code change is made here to enforce execution of the real-ledger leg, prevent a future `#[ignore]`, add an in-tree `--include-ignored` caller, or enforce grader identity. The historical ignore was removed by `4443c43`; this contract records the failure mode and its required evidence boundary.
+- No full workspace suite is part of this contract; the validation command targets the real findings-ledger leg only.
 - No `VC-VERIFIED` claim is made for an unassigned, legacy, malformed, unreadable, or partially closed dispatch set.
 
 ## Validation
 
 ```bash
-RCH_WORKER=contabo-4 CARGO_BUILD_JOBS=2 rch exec -- env RCH_ENABLED=false CARGO_MINT_MIN_CONTAINER_PCT=0 cargo test -j 2 -p no-shell-gate --test findings_ledger -- --include-ignored --nocapture
+RCH_ENABLED=0 PATH="$HOME/.rustup/toolchains/nightly-2026-08-23-aarch64-apple-darwin/bin:$PATH" "$HOME/.rustup/toolchains/nightly-2026-08-23-aarch64-apple-darwin/bin/cargo" test -p no-shell-gate --test findings_ledger -- --include-ignored --nocapture --test-threads=1
 ```
 
 ## Cross-References
@@ -107,9 +106,9 @@ RCH_WORKER=contabo-4 CARGO_BUILD_JOBS=2 rch exec -- env RCH_ENABLED=false CARGO_
 - `crates/verify-dispatch/src/lib.rs` — bead-status reader, current-window filter, semantic verifier, and unit tests
 - `crates/verify-dispatch/src/main.rs` — reporter exit semantics and mutation controls
 - `crates/verify-dispatch/tests/differential.rs` — non-empty Rust/Python oracle comparison and manufactured-disagreement leg
-- `crates/no-shell-gate/tests/findings_ledger.rs:754-755` — ignored real-ledger leg
+- `crates/no-shell-gate/tests/findings_ledger.rs:773-791` — historical ignored real-ledger violation and current real-ledger leg
 - `crates/no-shell-gate/tests/findings_ledger.rs:591-753` — fixture and reconciliation coverage
-- `AGENTS.md:843-848` — measured ignored-leg and zero-caller finding
+- `AGENTS.md:932-938` — measured ignored-leg and zero-caller finding
 - `docs/contracts/dispatch_claim_contract.md` — claim-before-dispatch and lifecycle ownership boundary
 - `docs/contracts/ack_spine_contract.md` — transport/delivery/ack authorities remain distinct
 - `docs/contracts/receiver_receipt_contract.md` — receiver evidence is not completion or acknowledgement
@@ -117,4 +116,4 @@ RCH_WORKER=contabo-4 CARGO_BUILD_JOBS=2 rch exec -- env RCH_ENABLED=false CARGO_
 
 ## NO-CLAIM
 
-This contract defines the verification evidence boundary but does not make callers obey it. It does not repair the ignored real-ledger leg, create an in-tree `--include-ignored` caller, prove current source identity for copied reports, or enforce non-implementer grader identity in Rust. A green test process is not meaningful without existence, exit 0, and a non-trivial production-path assertion. A `VC-VERIFIED` row still does not prove delivery, comprehension, quality, or completion beyond the bead status authority it explicitly reads.
+This contract defines the verification evidence boundary but does not make callers obey it. It does not guarantee that the real-ledger leg is run by every future workflow, create an in-tree `--include-ignored` caller, prove current source identity for copied reports, or enforce non-implementer grader identity in Rust. A green test process is not meaningful without existence, exit 0, and a non-trivial production-path assertion. A `VC-VERIFIED` row still does not prove delivery, comprehension, quality, or completion beyond the bead status authority it explicitly reads.
