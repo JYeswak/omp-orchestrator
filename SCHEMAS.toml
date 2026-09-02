@@ -139,7 +139,7 @@ note      = "declared 2026-09-01 by 12-journey S9 F1. The ledger currently conta
 path      = "docs/plan/FINDINGS.jsonl"
 format    = "jsonl"
 required  = ["id", "round", "section", "graded_by", "severity", "finding", "disposition"]
-optional  = ["fixed_in", "retracted_reason", "deferred_to", "evidence", "dispositioned_by", "dispositioned_at"]
+optional  = ["fixed_in", "retracted_reason", "deferred_to", "evidence", "dispositioned_by", "dispositioned_at", "hypothesis_id"]
 writer    = "reconciliation panes (rounds 15-21), then every grading pane from round 22 on"
 reader    = "crates/no-shell-gate/tests/findings_ledger.rs (unbuilt at declaration) and the integrator before cutting a pin"
 note      = "Declared 2026-09-01 by HD-0006 (Josh: no new rounds until ALL fixes from rounds 15-22 are in the plan properly). One row per DECLARED finding: id is the grader's finding id where one exists (R19-00-section-map-omits-11-12) or <round>-<section>-<eye>-<n> where the eye recorded only a count. disposition is FIXED (fixed_in = commit sha), RETRACTED (retracted_reason, dispositioned_by), or DEFERRED (deferred_to = bead id); OPEN is the initial state and any OPEN row refuses the next round. Anti-vacuity: a ledger with fewer rows than the sum of new_findings across the reconciled round files is an ERROR, not a pass."
@@ -170,3 +170,12 @@ optional  = ["note"]
 writer    = "journey foundation and figure owners"
 reader    = "numbers.rs and every load-bearing plan claim"
 note      = "Every numeric claim has one runnable command and expectation; LIVE figures use an explicit live boundary. Duplicate figure keys are refused by the registry gate."
+
+[artifacts.cross_section_authority]
+path      = "docs/plan/CROSS-SECTION-AUTHORITY.jsonl"
+format    = "jsonl"
+required  = ["schema_version", "record_type"]
+optional  = ["finding_id", "disposition", "authority_scope", "authority_command", "acceptance_command", "owner", "failure_result", "status", "writer", "consumer", "fixed_in", "linked_bead", "evidence", "evidence_sha256", "source_revision", "command", "result", "notes"]
+writer    = "kxe.5 authority reconciliation"
+reader    = "crates/no-shell-gate/tests/cross_section_authority.rs and fresh plan readers"
+note      = "One current overlay for cross-section finding dispositions and authority rows. Historical FINDINGS.jsonl rows remain the round record; this artifact names the current disposition, command scope, owner, failure result, and PROJECTED/EXISTS/UNPROVEN status."

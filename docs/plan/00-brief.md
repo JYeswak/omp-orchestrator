@@ -583,6 +583,30 @@ These rules exist because each one has already been violated in this repo and co
 8. **Write it to be failed.** State the strongest version of the objection an investor would raise,
    then answer it or concede it.
 
+## 6.1 Cross-section authority overlay
+
+'docs/plan/CROSS-SECTION-AUTHORITY.jsonl' is the current cross-section disposition overlay. It
+does not replace the section files or the round ledger: section files carry the argument, the round
+ledger carries historical observations, and this overlay carries the one current authority scope
+for each cross-section claim plus its status boundary. Every row names an owner, an authority
+command, an independent executable acceptance command, and the failure result that must be
+reported if the claim drifts.
+
+The falsifier is:
+
+    cargo test --quiet -p no-shell-gate --test cross_section_authority
+
+It refuses an empty registry, duplicate finding or authority IDs, any omitted R19/R20/R21
+cross-section finding, a command that searches its own registry text, a collapsed authority and
+acceptance command pair, a missing owner or failure result, and an unpinned fresh-reader result.
+The registry explicitly distinguishes EXISTS, PROJECTED, UNPROVEN, and HISTORICAL; a
+PROJECTED product surface is never laundered into an existence claim. SCHEMAS.toml's
+artifacts.cross_section_authority is the artifact schema authority.
+
+**NO-CLAIM:** this overlay repairs plan authority and acceptance descriptions. It does not prove
+that the runtime product is shipped, that a PROJECTED generator exists, or that an UNPROVEN local
+consumer is wired.
+
 ---
 ## 7. What the writing of this brief proved
 
@@ -865,6 +889,11 @@ second block with the same key made the registry's own duplicate-key gate fail â
 with concurrent writers, and it caught a concurrent append by its author within
 a minute. The duplicate was removed; the `LIVE` declaration stands, because
 pinning a number that moves hourly would drift by design.
+**CURRENT ACCEPTANCE OWNER.** BlueLantern owns the board authority row. The executable falsifier is
+the independent registry gate command cargo test --quiet -p no-shell-gate --test
+cross_section_authority; it emits CROSS_SECTION_BOARD_AUTHORITY_FAILURE if the five status
+buckets cannot be enumerated or the registry loses its command, owner, or failure result. This
+does not pin the board total: the total remains LIVE and must be re-run at every cited revision.
 
 The `75` and `74` were not
 a typo and a correction â€” **they were two different hand-sums of an

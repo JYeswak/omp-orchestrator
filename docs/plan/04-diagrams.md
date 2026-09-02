@@ -277,12 +277,17 @@ built, its 13 tests pass, and `types_inventory.rs:heading_built_its_13_tests_pas
 `Observation` from the allowance list so the name collision *demands* convergence
 rather than tolerating it. It is correct and it is undiscoverable. A gate nobody can
 invoke has a real-world firing rate of zero regardless of its test count.
-**CURRENT ACCEPTANCE AUTHORITY (UNRESOLVED).** The diagram generator and CI diff gate named by
-the requirement above do not exist in this repository: generator command = **NONE**; CI job =
-**NONE**; owner = **UNASSIGNED**. Until a bead assigns an owner and lands an executable command,
-these diagrams are snapshots only. The future bead is not accepted until its command regenerates
-Diagram 1 from the live census and a deliberately changed crate edge makes CI fail on the diff;
-there is currently no command or owner to run.
+**CURRENT ACCEPTANCE AUTHORITY (PROJECTED).** The diagram generator remains unbuilt, so the
+diagrams remain a labelled snapshot rather than a live generated view. The owner is
+**BlueLantern** for this authority contract. Registry row 'generator_acceptance' in
+'docs/plan/CROSS-SECTION-AUTHORITY.jsonl' carries the executable acceptance command and the
+failure result CROSS_SECTION_GENERATOR_ACCEPTANCE_FAILURE; the gate itself runs:
+
+    cargo test --quiet -p no-shell-gate --test cross_section_authority
+
+The required future generator RED leg is explicit: change one measured crate edge, regenerate the
+diagram, and require the checked-in artifact diff to fail. Until that child implementation lands,
+the status is **PROJECTED**, not EXISTS.
 
 **What would Jeffrey do.** Searched the mirror at
 /Volumes/ZestData/dicklesworthstone-mirror (210 filesystem .git entries, not validated as git work-trees) for diagram-generation and
