@@ -12,6 +12,66 @@ const OWNER_NAME: &str = "omp-orchestrator";
 
 fn main() {
     println!("cargo:rerun-if-env-changed=OMP_BUILD_ID");
+
+    // DERIVE the build id rather than hoping an operator exports it.
+    //
+    // Measured 2026-09-01, and every link of the night's worst outage runs through this one
+    // fail-open. `BUILD_ID` was `option_env!("OMP_BUILD_ID")` falling back to "unversioned",
+    // and build.rs only WATCHED the variable - it never produced one. A build with the env
+    // unset therefore shipped an anonymous binary and said nothing about it:
+    //
+    //   * `tick-monitor` carries no build-id mechanism at all. The installer's identity rule
+    //     refuses a binary it cannot verify, so a routine install DELETED it and the resident
+    //     supervisor refused every 30s for hours with "tick-monitor: process not found". The
+    //     fleet sat idle because a binary could not say what it was built from.
+    //   * `pane-truth` is the same class, recorded in AGENTS.md as a MISMATCH that "can never
+    //     clear" - a fixed point that trains operators to ignore the gate entirely.
+    //   * An install run tonight WITH the env set still produced `build_id=unversioned`,
+    //     because cargo reused a cached artifact. The variable is not a reliable input even
+    //     when someone remembers it.
+    //
+    // So fix the producer, not the consumers: ask git. An explicit OMP_BUILD_ID still wins,
+    // so a release can stamp something deliberate, but ABSENCE now resolves to the commit
+    // instead of to an anonymous string.
+    //
+    // NO-CLAIM: this makes the id PRESENT, not TRUE. A dirty tree stamps its HEAD sha and the
+    // `-dirty` suffix is the only thing that says so; with git unavailable it yields
+    // `nogit-<epoch>`, which is at least honest about being underived.
+    let build_id = env::var("OMP_BUILD_ID")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| {
+            let head = std::process::Command::new("git")
+                .args(["rev-parse", "HEAD"])
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
+                .filter(|s| !s.is_empty());
+            match head {
+                Some(sha) => {
+                    let dirty = std::process::Command::new("git")
+                        .args(["status", "--porcelain"])
+                        .output()
+                        .ok()
+                        .map(|o| !o.stdout.is_empty())
+                        .unwrap_or(false);
+                    if dirty {
+                        format!("{sha}-dirty")
+                    } else {
+                        sha
+                    }
+                }
+                None => format!(
+                    "nogit-{}",
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0)
+                ),
+            }
+        });
+    println!("cargo:rustc-env=OMP_BUILD_ID={build_id}");
     println!("cargo:rerun-if-env-changed=CARGO_TARGET_DIR");
     println!("cargo:rerun-if-env-changed=FRANKEN_CARGO_TARGET_ROOT");
     println!("cargo:rerun-if-env-changed=RUSTUP_TOOLCHAIN");

@@ -42,10 +42,24 @@ const DEFAULT_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const RECEIPT_TIMEOUT: Duration = Duration::from_secs(30);
 const RECEIPT_POLL: Duration = Duration::from_millis(250);
 const SILENCE_WATCH: &str = "dispatch-silence-watch";
-const BUILD_ID: &str = match option_env!("OMP_BUILD_ID") {
-    Some(value) => value,
-    None => "unversioned",
-};
+/// The commit this binary was built from. MANDATORY.
+///
+/// This was `option_env!("OMP_BUILD_ID")` with a fallback to `"unversioned"`, and that
+/// fallback is the root of the 2026-09-01 fleet outage: a binary that cannot say what it
+/// was built from is exactly what the installer's identity rule exists to refuse, and we
+/// made saying nothing a legal outcome. `env!` makes it a COMPILE ERROR instead, and
+/// `build.rs` derives the value from git so no operator has to remember an export.
+///
+/// The pairing matters: mandatory-without-derivation would just move the failure from
+/// runtime to the build, and derivation-without-mandatory leaves the fallback alive for
+/// anyone who deletes the build script. Both halves, or neither works.
+const BUILD_ID: &str = env!(
+    "OMP_BUILD_ID",
+    "OMP_BUILD_ID is unset. build.rs derives it from git, so reaching this means the build \
+     script did not run or was removed. A binary with no build id gets DELETED by the \
+     installer's identity rule - that is what took tick-monitor out and left the fleet \
+     untended for hours."
+);
 #[derive(Debug)]
 struct Config {
     repo: PathBuf,
