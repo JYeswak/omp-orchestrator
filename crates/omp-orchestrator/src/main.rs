@@ -1584,11 +1584,101 @@ fn disk_floor_verdict(total_kb: u64, avail_kb: u64) -> Option<String> {
     None
 }
 
+/// The marker path for ONE pane.
+///
+/// MEASURED 2026-09-02: with a single global marker file, `create_new(true)`
+/// returned `File exists (os error 17)` for every dispatch after the first, so
+/// only one pane could ever hold a dispatch. Scoping the CHECK per-pane was not
+/// enough — the WRITE is what enforced fleet-wide exclusivity, and freeing the
+/// check alone just moved the refusal from selection to write.
+///
+/// The slug keeps only ASCII alphanumerics from the pane id (`%1409` ->
+/// `1409`), so the filename cannot contain a separator or escape the directory.
+/// An id that slugs to empty falls back to the base path, which preserves the
+/// old global behaviour rather than writing a colliding name.
+fn pending_dispatch_path(config: &Config, pane: &str) -> PathBuf {
+    let slug: String = pane.chars().filter(char::is_ascii_alphanumeric).collect();
+    if slug.is_empty() {
+        return config.pending_dispatch.clone();
+    }
+    let base = config
+        .pending_dispatch
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "omp-orchestrator.pending-dispatch".to_owned());
+    config.pending_dispatch.with_file_name(format!("{base}.{slug}"))
+}
+
+/// Every pending-dispatch marker on disk, classified, paired with the pane it
+/// names.
+///
+/// Reads the LEGACY global path too, so a marker written by a build that predates
+/// per-pane paths is still seen. Its pane comes from the payload; a payload we
+/// cannot parse yields an empty pane, which the caller treats as fleet-wide and
+/// fails closed on — an in-flight dispatch we cannot attribute could be to any
+/// pane, and double-sending is the harm the guard exists to prevent.
+///
+/// An unreadable directory is an ERROR, never an empty scan: "no markers" and
+/// "cannot tell" must not report identically, which is the anti-vacuity rule this
+/// repo applies to every gate.
+fn read_pending_dispatches(config: &Config) -> Result<Vec<(String, PendingDispatch)>, String> {
+    let base_name = config
+        .pending_dispatch
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "omp-orchestrator.pending-dispatch".to_owned());
+    let Some(dir) = config.pending_dispatch.parent() else {
+        return Ok(Vec::new());
+    };
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => {
+            return Err(format!(
+                "DISPATCH_BLOCKED pending marker dir unreadable path={} error={error}",
+                dir.display()
+            ))
+        }
+    };
+    let mut found = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| {
+            format!(
+                "DISPATCH_BLOCKED pending marker entry unreadable dir={} error={error}",
+                dir.display()
+            )
+        })?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        // The legacy global name, or a per-pane sibling of it.
+        if name != base_name && !name.starts_with(&format!("{base_name}.")) {
+            continue;
+        }
+        let text = match fs::read_to_string(entry.path()) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => {
+                return Err(format!(
+                    "DISPATCH_BLOCKED pending marker unreadable path={} error={error}",
+                    entry.path().display()
+                ))
+            }
+        };
+        let verdict = classify_pending_dispatch(&text, now_unix());
+        let pane = serde_json::from_str::<Value>(text.trim())
+            .ok()
+            .and_then(|value| value.get("pane").and_then(Value::as_str).map(str::to_owned))
+            .unwrap_or_default();
+        found.push((pane, verdict));
+    }
+    Ok(found)
+}
+
 fn write_dispatch_intent(config: &Config, pane: &str, bead: &str) -> Result<(), String> {
-    if let Some(parent) = config.pending_dispatch.parent() {
+    let path = pending_dispatch_path(config, pane);
+    if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|error| {
             format!(
-                "DISPATCH_BLOCKED pending marker parent={} error={error}",
+                "DISPATCH_BLOCKED pending marker parent path={} error={error}",
                 parent.display()
             )
         })?;
@@ -1605,14 +1695,16 @@ fn write_dispatch_intent(config: &Config, pane: &str, bead: &str) -> Result<(), 
     });
     let bytes = serde_json::to_vec(&row)
         .map_err(|error| format!("DISPATCH_BLOCKED pending marker serialize: {error}"))?;
+    // `create_new` STAYS. Per-pane it is the correct guard: a second dispatch to
+    // the SAME pane while one is in flight must still refuse.
     let mut marker = OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(&config.pending_dispatch)
+        .open(&path)
         .map_err(|error| {
             format!(
                 "DISPATCH_RETRY_BLOCKED pane={pane} bead={bead} marker={} error={error}",
-                config.pending_dispatch.display()
+                path.display()
             )
         })?;
     marker
@@ -1622,18 +1714,19 @@ fn write_dispatch_intent(config: &Config, pane: &str, bead: &str) -> Result<(), 
         .map_err(|error| {
             format!(
                 "DISPATCH_BLOCKED pending marker write path={} error={error}",
-                config.pending_dispatch.display()
+                path.display()
             )
         })
 }
 
-fn clear_dispatch_intent(config: &Config) -> Result<(), String> {
-    match fs::remove_file(&config.pending_dispatch) {
+fn clear_dispatch_intent(config: &Config, pane: &str) -> Result<(), String> {
+    let path = pending_dispatch_path(config, pane);
+    match fs::remove_file(&path) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(format!(
-            "DISPATCH_CONFIRMED_BUT_MARKER_CLEAR_FAILED path={} error={error}",
-            config.pending_dispatch.display()
+            "DISPATCH_CONFIRMED_BUT_MARKER_CLEAR_FAILED pane={pane} path={} error={error}",
+            path.display()
         )),
     }
 }
@@ -2019,78 +2112,60 @@ fn queue_empty_detail(free_capacity_count: usize) -> String {
 
 async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     write_heartbeat(config, tick, "CYCLE_STARTED", "phase=observe")?;
-    // THE CLEARING TRANSITION THE LOOP CAN TAKE ITSELF. Everything below the
-    // `Expired` arm is the fix for `y6v5`: the loop retires a stale marker and
-    // CONTINUES the cycle, instead of returning Ok(()) and waiting for a human.
-    // A LIVE MARKER BLOCKS THE PANE IT NAMES, NOT THE FLEET.
+    // THE MARKER FENCE IS PER-PANE. It withholds the panes whose dispatches are
+    // still in flight and leaves every other pane dispatchable.
     //
-    // MEASURED 2026-09-02: the marker is ONE global file
-    // (`omp-orchestrator.pending-dispatch`, no pane in the path) and the `Live`
-    // arm below used to `return Ok(())`, so a single pending dispatch to `%1409`
-    // refused every dispatch to every OTHER pane for up to
-    // PENDING_DISPATCH_MAX_AGE_SECS. Observed live: 3 panes IDLE, 76 beads ready,
-    // and the loop moving at most one bead per deadline while reporting
-    // `DISPATCH_RETRY_BLOCKED` on three consecutive cycles.
+    // MEASURED 2026-09-02, two defects one behind the other. First the marker was
+    // ONE global file and the `Live` arm returned from the whole cycle, so a
+    // pending dispatch to `%1409` refused every dispatch to every OTHER pane for
+    // up to PENDING_DISPATCH_MAX_AGE_SECS: 3 panes IDLE, 76 beads ready,
+    // `DISPATCH_RETRY_BLOCKED` on three consecutive cycles. Scoping only the
+    // CHECK then moved the refusal to the WRITE, which surfaced as
+    // `DISPATCH_RETRY_BLOCKED ... error=File exists (os error 17)` — because
+    // `create_new(true)` against one shared path is itself the fleet-wide mutex.
+    // Both halves are needed: per-pane PATHS (see `pending_dispatch_path`) and
+    // this per-pane scan.
     //
-    // The marker's own payload already carries `pane`, so the guard it was
-    // written for -- do not double-send to a pane whose dispatch is still in
-    // flight -- is expressible per-pane. The fleet-wide return was scope, not
-    // intent: this is a global mutex where a per-pane fence was meant.
-    let mut marker_blocked_pane: Option<String> = None;
-    match read_pending_dispatch(config)? {
-        PendingDispatch::None => {}
-        PendingDispatch::Live { detail, age_secs } => {
-            write_heartbeat(config, tick, "DISPATCH_RETRY_BLOCKED", &detail)?;
-            let remaining = PENDING_DISPATCH_MAX_AGE_SECS.saturating_sub(age_secs);
-            // Parse the pane the marker names. A marker we cannot attribute is
-            // treated as blocking the FLEET -- fail closed -- because an
-            // unattributable in-flight dispatch could be to any pane, and
-            // double-sending is the harm this guard exists to prevent.
-            marker_blocked_pane = serde_json::from_str::<Value>(&detail)
-                .ok()
-                .and_then(|value| value.get("pane").and_then(Value::as_str).map(str::to_owned));
-            let scope = match marker_blocked_pane.as_deref() {
-                Some(pane) => format!("scope=pane blocked_pane={pane}"),
-                None => "scope=fleet blocked_pane=UNATTRIBUTABLE".to_owned(),
-            };
-            // The remedy names a MACHINE path and when it fires. The old string
-            // said only `owner=josh`, which is what made 15 consecutive refusals
-            // read as a standing human obligation rather than a countdown.
-            let line = format!(
-                "DISPATCH_RETRY_BLOCKED age_secs={age_secs} expires_in_secs={remaining} owner=loop next_action=await-intent-expiry {scope} marker={} detail={detail}",
-                config.pending_dispatch.display()
-            );
-            println!("{line}");
-            if marker_blocked_pane.is_none() {
-                // Unattributable: preserve the original fleet-wide refusal.
+    // `Expired` still clears and CONTINUES (the y6v5 fix). `Undatable` still
+    // fails closed to a human. Neither is weakened here; both are now per-pane.
+    let mut marker_blocked_panes: Vec<String> = Vec::new();
+    for (pane, verdict) in read_pending_dispatches(config)? {
+        match verdict {
+            PendingDispatch::None => {}
+            PendingDispatch::Live { detail, age_secs } => {
+                write_heartbeat(config, tick, "DISPATCH_RETRY_BLOCKED", &detail)?;
+                let remaining = PENDING_DISPATCH_MAX_AGE_SECS.saturating_sub(age_secs);
+                println!(
+                    "DISPATCH_RETRY_BLOCKED age_secs={age_secs} expires_in_secs={remaining} owner=loop next_action=await-intent-expiry scope=pane blocked_pane={pane} marker={} detail={detail}",
+                    pending_dispatch_path(config, &pane).display()
+                );
+                marker_blocked_panes.push(pane);
+            }
+            PendingDispatch::Undatable { detail, reason } => {
+                // FAIL CLOSED, and fleet-wide. An age we cannot compute must not be
+                // retired as stale, and a marker we cannot date may name a pane whose
+                // dispatch is genuinely in flight — so this is the one arm that still
+                // stops the cycle and still owes a human.
+                write_heartbeat(config, tick, "DISPATCH_RETRY_BLOCKED", &detail)?;
+                println!(
+                    "DISPATCH_RETRY_BLOCKED reason={reason} owner=josh next_action=inspect-or-clear-pending-dispatch scope=fleet marker={} detail={detail}",
+                    pending_dispatch_path(config, &pane).display()
+                );
                 return Ok(());
             }
-            // Attributable: fall through. The named pane is excluded from
-            // selection below; every other pane stays dispatchable.
-        }
-        PendingDispatch::Undatable { detail, reason } => {
-            // FAIL CLOSED. An age we cannot compute must not be retired as stale;
-            // this is the one arm that still owes a human, and it says so.
-            write_heartbeat(config, tick, "DISPATCH_RETRY_BLOCKED", &detail)?;
-            let line = format!(
-                "DISPATCH_RETRY_BLOCKED reason={reason} owner=josh next_action=inspect-or-clear-pending-dispatch marker={} detail={detail}",
-                config.pending_dispatch.display()
-            );
-            println!("{line}");
-            return Ok(());
-        }
-        PendingDispatch::Expired { detail, age_secs } => {
-            clear_dispatch_intent(config)?;
-            let expiry = format!(
-                "age_secs={age_secs} max_age_secs={PENDING_DISPATCH_MAX_AGE_SECS} marker={} detail={detail}",
-                config.pending_dispatch.display()
-            );
-            write_heartbeat(config, tick, "DISPATCH_INTENT_EXPIRED", &expiry)?;
-            println!(
-                "DISPATCH_INTENT_EXPIRED tick={tick} session={} {expiry}",
-                config.session
-            );
-            // Deliberately NOT `return` — the whole defect was returning here.
+            PendingDispatch::Expired { detail, age_secs } => {
+                clear_dispatch_intent(config, &pane)?;
+                let expiry = format!(
+                    "age_secs={age_secs} max_age_secs={PENDING_DISPATCH_MAX_AGE_SECS} pane={pane} marker={} detail={detail}",
+                    pending_dispatch_path(config, &pane).display()
+                );
+                write_heartbeat(config, tick, "DISPATCH_INTENT_EXPIRED", &expiry)?;
+                println!(
+                    "DISPATCH_INTENT_EXPIRED tick={tick} session={} {expiry}",
+                    config.session
+                );
+                // Deliberately NOT `return` — the whole defect was returning here.
+            }
         }
     }
 
@@ -2138,12 +2213,15 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     // `config.exclude_panes` above, scoped to one tick: the double-send guard is
     // preserved for the in-flight pane while the rest of the fleet stays
     // dispatchable. Before this, a marker naming one pane refused every pane.
-    if let Some(blocked) = marker_blocked_pane.as_deref() {
+    if !marker_blocked_panes.is_empty() {
         let before = observation.panes.len();
-        observation.panes.retain(|pane| pane.pane_id != blocked);
+        observation
+            .panes
+            .retain(|pane| !marker_blocked_panes.iter().any(|held| held == &pane.pane_id));
         println!(
-            "MARKER_PANE_WITHHELD tick={tick} session={} pane={blocked} panes_before={before} panes_after={}",
+            "MARKER_PANE_WITHHELD tick={tick} session={} panes=[{}] panes_before={before} panes_after={}",
             config.session,
+            marker_blocked_panes.join(","),
             observation.panes.len()
         );
     }
@@ -2337,7 +2415,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             }
             let outcome = dispatch_result?;
             if outcome.clear_intent {
-                clear_dispatch_intent(config)?;
+                clear_dispatch_intent(config, &pane)?;
             }
         }
         SupervisorDecision::GateUnwired { unwired } => {
@@ -2648,25 +2726,54 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
     }
 
     #[test]
-    fn uncertain_dispatch_is_fenced_across_restarts() {
+    fn uncertain_dispatch_is_fenced_per_pane_not_fleet_wide() {
         let temp = tempfile::tempdir().expect("pending fixture tempdir");
         let root = temp.path().to_path_buf();
         let pending = root.join("pending-dispatch");
         let mut config = fixture_config(root.join("heartbeat.jsonl"));
         config.pending_dispatch = pending.clone();
         write_dispatch_intent(&config, "%1413", "omp-orchestrator-test").unwrap();
-        // POSITIVE CONTROL, acceptance 4: a FRESH marker still blocks. A fix that
+
+        // POSITIVE CONTROL: a FRESH marker still blocks ITS OWN pane. A fix that
         // retires markers unconditionally re-opens double-dispatch, which is worse
         // than latching.
-        let live = read_pending_dispatch(&config).unwrap();
-        let PendingDispatch::Live { detail, age_secs } = &live else {
-            panic!("a marker written moments ago must classify Live, got {live:?}");
-        };
-        assert!(detail.contains("omp-orchestrator-test"));
-        assert!(*age_secs <= PENDING_DISPATCH_MAX_AGE_SECS);
-        let retry = write_dispatch_intent(&config, "%1414", "another-bead");
-        assert!(retry.unwrap_err().contains("DISPATCH_RETRY_BLOCKED"));
-        clear_dispatch_intent(&config).unwrap();
+        let same_pane = write_dispatch_intent(&config, "%1413", "second-bead-same-pane");
+        assert!(
+            same_pane.unwrap_err().contains("DISPATCH_RETRY_BLOCKED"),
+            "a second dispatch to the SAME pane must still be refused"
+        );
+
+        // THE LEG THIS TEST EXISTED TO ASSERT THE OPPOSITE OF. It previously
+        // required `%1414` to be REFUSED, which encoded the defect as a
+        // requirement: one global marker file meant `create_new` returned
+        // `File exists (os error 17)` for every other pane, so a single in-flight
+        // dispatch idled the whole fleet for up to PENDING_DISPATCH_MAX_AGE_SECS.
+        // Measured live 2026-09-02 with 3 panes IDLE and 76 beads ready.
+        write_dispatch_intent(&config, "%1414", "another-bead")
+            .expect("a DIFFERENT pane must not be blocked by %1413's marker");
+
+        // Both markers coexist, each attributed to its own pane.
+        let mut seen = read_pending_dispatches(&config)
+            .unwrap()
+            .into_iter()
+            .map(|(pane, verdict)| {
+                assert!(
+                    matches!(verdict, PendingDispatch::Live { .. }),
+                    "a marker written moments ago must classify Live for {pane}"
+                );
+                pane
+            })
+            .collect::<Vec<_>>();
+        seen.sort();
+        assert_eq!(seen, vec!["%1413".to_owned(), "%1414".to_owned()]);
+
+        // Clearing one pane leaves the other's fence standing.
+        clear_dispatch_intent(&config, "%1413").unwrap();
+        let remaining = read_pending_dispatches(&config).unwrap();
+        assert_eq!(remaining.len(), 1, "clearing %1413 must not clear %1414");
+        assert_eq!(remaining[0].0, "%1414");
+        clear_dispatch_intent(&config, "%1414").unwrap();
+        assert!(read_pending_dispatches(&config).unwrap().is_empty());
     }
 
     // -----------------------------------------------------------------------
