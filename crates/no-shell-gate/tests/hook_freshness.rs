@@ -138,6 +138,64 @@ fn the_installed_hook_is_not_older_than_the_source_it_enforces() {
     );
 }
 
+/// The SAME staleness class, aimed at the pre-push hook — which had no leg at all
+/// until 2026-09-02.
+///
+/// `.git/hooks/pre-push` is also a compiled Mach-O binary (615,728 bytes, built
+/// 09-01 09:49 when this was written), so teaching `pre-push-gate.rs` to check
+/// toolchain parity with CI changed nothing about what the installed hook
+/// enforces. That is exactly the failure the pre-commit leg above was written for,
+/// and it was reachable through the pre-push door the whole time.
+#[test]
+fn the_installed_pre_push_hook_is_not_older_than_its_source() {
+    let root = repo_root();
+    let hook = root.join(".git/hooks/pre-push");
+
+    let Ok(hook_meta) = std::fs::metadata(&hook) else {
+        eprintln!(
+            "SKIP the_installed_pre_push_hook_is_not_older_than_its_source: no hook at {} \
+             — nothing is enforcing pre-push here, which is worth knowing but is not a \
+             staleness finding",
+            hook.display()
+        );
+        return;
+    };
+    let hook_mtime = hook_meta.modified().expect("hook mtime readable");
+
+    // The pre-push binary links `subprocess-contract` (bounded `git ls-files` and
+    // bounded `rustc -vV`); everything else it needs is in its own bin file.
+    let sources = [
+        root.join("crates/no-shell-gate/src/bin/pre-push-gate.rs"),
+        root.join("crates/subprocess-contract/src/lib.rs"),
+    ];
+    let mut newest: Option<(PathBuf, SystemTime)> = None;
+    for p in sources {
+        let Ok(meta) = std::fs::metadata(&p) else { continue };
+        let Ok(mtime) = meta.modified() else { continue };
+        if newest.as_ref().is_none_or(|(_, t)| mtime > *t) {
+            newest = Some((p, mtime));
+        }
+    }
+    let (newest_path, newest_mtime) = newest.expect(
+        "ANTI-VACUITY: none of the pre-push hook's sources were readable — the scan is broken",
+    );
+
+    assert!(
+        newest_mtime <= hook_mtime,
+        "THE INSTALLED PRE-PUSH HOOK IS STALE.\n\
+         \n\
+         hook:   {}\n\
+         newer:  {}\n\
+         \n\
+         Repair:\n\
+           cargo build --release --bin pre-push-gate\n\
+           cp <target>/release/pre-push-gate .git/hooks/pre-push\n\
+           .git/hooks/pre-push   # expect a refusal you understand, or exit 0",
+        hook.display(),
+        newest_path.display(),
+    );
+}
+
 #[test]
 fn the_hook_source_crate_list_names_only_crates_that_exist() {
     // A hand-maintained list that names a crate which is gone rots into a scan of
