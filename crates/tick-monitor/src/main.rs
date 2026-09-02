@@ -225,7 +225,7 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
     };
     // ANTI-VACUITY: an empty pane set is an ERROR, never a healthy fleet.
     if ids.is_empty() {
-        eprintln!("REFUSE observe: pane set is EMPTY for session {session:?}; an empty scan set is an error, never a pass");
+        eprintln!("REFUSE observe: {MonitorBlind} for session {session:?}; zero panes is an error, never a pass");
         return Err(3);
     }
 
@@ -238,9 +238,8 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
     let mut obs = Vec::new();
     let mut rows = Vec::new();
     let mut transitions = Vec::new();
-    let mut dispatchable = Vec::new();
+    let mut capacity_rows = Vec::new();
     let mut attention = Vec::new();
-    let mut free_capacity = Vec::new();
 
     for id in &ids {
         let Some(cap) = capture(id) else {
@@ -268,9 +267,6 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
         };
         let prev = prior.panes.iter().find(|p| &p.pane_id == id);
         let live = liveness(prev, &o);
-        if live.is_dispatchable() && !excluded.contains(&id.as_str()) {
-            dispatchable.push(id.clone());
-        }
         // Reported separately: a NewlyIdle pane is free capacity a conductor must SEE,
         // even though it may not be filled until the next tick confirms it.
         //
@@ -283,9 +279,6 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
         // prompting too, and "it is not worker capacity" is not "I need not look at it".
         if live.needs_attention() {
             attention.push(format!("{}:{}", id, live.label()));
-        }
-        if live.is_free_capacity() && !excluded.contains(&id.as_str()) {
-            free_capacity.push(id.clone());
         }
         if let Some(p) = prev {
             if p.state.label() != state.label() {
@@ -322,7 +315,16 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
             esc(last_status_line(&cap))
         ));
         obs.push(o);
+        capacity_rows.push((id.clone(), live));
     }
+
+    let CapacityReport {
+        dispatchable,
+        free_capacity,
+    } = partition_capacity(&capacity_rows, &excluded).map_err(|error| {
+        eprintln!("REFUSE observe: {error} for session {session:?}");
+        3
+    })?;
 
     let mut commit_rows = Vec::new();
     let mut new_commits = 0usize;

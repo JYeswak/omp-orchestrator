@@ -12,7 +12,7 @@
 use no_shell_gate::violation_for;
 use orchestration_tick_gate::{law_code, parse_ledger, validate_receipt, LedgerError};
 use preregistration_gate::{
-    HYPOTHESES_PATH, added_line_numbers, parse_evidence_rows_at, validate_pre_write,
+    added_line_numbers, parse_evidence_rows_at, validate_pre_write, HYPOTHESES_PATH,
 };
 use std::io::{self, Write};
 use std::path::Path;
@@ -653,6 +653,9 @@ fn round_trip_check(editmsg_path: &std::path::Path) -> Option<String> {
         Err(e) => return Some(format!("round-trip: cannot read COMMIT_EDITMSG: {e}")),
     };
 
+    if src.is_empty() {
+        return Some("round-trip: empty commit message is an error".to_owned());
+    }
     if src != recv {
         return Some(format!(
             "round-trip: MESSAGE MISMATCH — {} ({} bytes) differs from COMMIT_EDITMSG ({} bytes).\n\

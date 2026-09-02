@@ -482,6 +482,54 @@ impl Liveness {
     }
 }
 
+/// The observer's two capacity projections. free_capacity is awareness;
+/// dispatchable is permission to send. They intentionally disagree for NewlyIdle.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CapacityReport {
+    pub dispatchable: Vec<String>,
+    pub free_capacity: Vec<String>,
+}
+
+/// Observation could not establish any readable pane truth.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MonitorBlind;
+
+impl fmt::Display for MonitorBlind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("MONITOR_BLIND: no readable panes")
+    }
+}
+
+/// Partition observed pane liveness without allowing dispatchability to hide capacity.
+///
+/// Empty input is an error: a zero-row report is indistinguishable from a healthy fleet
+/// unless the monitor names its blindness.
+pub fn partition_capacity(
+    rows: &[(String, Liveness)],
+    excluded: &[&str],
+) -> Result<CapacityReport, MonitorBlind> {
+    if rows.is_empty() {
+        return Err(MonitorBlind);
+    }
+
+    let mut report = CapacityReport {
+        dispatchable: Vec::new(),
+        free_capacity: Vec::new(),
+    };
+    for (pane_id, liveness) in rows {
+        if excluded.contains(&pane_id.as_str()) {
+            continue;
+        }
+        if liveness.is_dispatchable() {
+            report.dispatchable.push(pane_id.clone());
+        }
+        if liveness.is_free_capacity() {
+            report.free_capacity.push(pane_id.clone());
+        }
+    }
+    Ok(report)
+}
+
 /// Minimum gap between the two captures.
 ///
 /// 75s, not 30s: measured, a lane deep in a long tool call has a STATIC timer and

@@ -396,6 +396,40 @@ fn a_pane_picking_work_up_is_live_and_not_free_capacity() {
     );
 }
 
+#[test]
+fn newly_idle_is_free_capacity_but_not_dispatchable_in_report() {
+    // Known-bad observer report: the pane has just gone idle at t=0 of the new
+    // observation state. It must be visible to the conductor before the next
+    // capture confirms it, but it is not yet safe to fill.
+    let rows = vec![("%newly-idle".to_owned(), Liveness::NewlyIdle)];
+    let report = partition_capacity(&rows, &[]).expect("one observed pane is not monitor-blind");
+
+    assert!(report.dispatchable.is_empty());
+    assert_eq!(report.free_capacity, vec!["%newly-idle".to_owned()]);
+    assert_ne!(report.dispatchable, report.free_capacity);
+}
+
+#[test]
+fn a_busy_fleet_has_no_free_capacity() {
+    let rows = vec![
+        ("%live".to_owned(), Liveness::Live),
+        ("%frozen".to_owned(), Liveness::Frozen),
+        ("%dialog".to_owned(), Liveness::Dialog { timer_secs: 1 }),
+    ];
+    let report = partition_capacity(&rows, &[]).expect("observed busy panes are not monitor-blind");
+
+    assert!(report.dispatchable.is_empty());
+    assert!(report.free_capacity.is_empty());
+}
+
+#[test]
+fn no_observed_panes_is_monitor_blind() {
+    assert_eq!(
+        partition_capacity(&[] as &[(String, Liveness)], &[]),
+        Err(MonitorBlind)
+    );
+}
+
 // ---------------------------------------------------------------------------
 // DIALOG -- three planted states, each asserting a SPECIFIC name.
 //
