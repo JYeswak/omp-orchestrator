@@ -104,7 +104,7 @@ The commit is not, by itself, proof that a scratch job is idle, that an owner pr
 ## Validation
 
 ```bash
-tmp="$(mktemp -d)"; trap 'rmdir "$tmp"' EXIT; TMPDIR="$tmp" RCH_ENABLED=false CARGO_MINT_MIN_CONTAINER_PCT=0 cargo test -p scratch-home --lib -- --nocapture
+tmp="$(mktemp -d)"; trap 'rmdir "$tmp"' EXIT; TMPDIR="$tmp" RCH_ENABLED=false CARGO_MINT_MIN_CONTAINER_PCT=0 cargo test -p scratch-home --lib -- --nocapture --test-threads=1
 ```
 
 ## Cross-References
