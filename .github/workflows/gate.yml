@@ -201,8 +201,10 @@ jobs:
       # gate permanently unsatisfiable. Regenerating here and refusing a diff makes
       # staleness IMPOSSIBLE rather than merely reportable, which is the wiring
       # docs/plan/04-diagrams.md R4 says every generated artifact still needs.
-      - name: Preregistration gate — every changed plan/evidence row has a prior hypothesis
-        run: cargo run --quiet -p preregistration-gate -- --repo .
+      - name: Preregistration gate — plan-assemble compile leg and prior-hypothesis witness
+        run: |
+          cargo build --quiet -p plan-assemble
+          cargo run --quiet -p preregistration-gate -- --repo .
       - name: docs/PLAN.md must match its section files
         run: |
           cargo run --quiet -p plan-assemble

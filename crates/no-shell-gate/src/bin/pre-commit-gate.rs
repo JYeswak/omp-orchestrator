@@ -11,6 +11,9 @@
 
 use no_shell_gate::violation_for;
 use orchestration_tick_gate::{law_code, parse_ledger, validate_receipt, LedgerError};
+use preregistration_gate::{
+    HYPOTHESES_PATH, added_line_numbers, parse_evidence_rows_at, validate_pre_write,
+};
 use std::io::{self, Write};
 use std::path::Path;
 use std::process::ExitCode;
@@ -55,13 +58,31 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    if staged.is_empty() {
+    // A DELETION-ONLY commit is real work, and GATE 5 below
+    // (pre-delete-citation-check) exists precisely for it. This emptiness test
+    // keys on `get_staged_files()`, which filters `--diff-filter=ACMR` and so
+    // cannot see deletions -- meaning a pure deletion returned exit-3 HERE,
+    // before GATE 5 could ever run. The gate built to guard deletions was
+    // unreachable for the most dangerous kind of commit.
+    //
+    // MEASURED 2026-09-02: 243 staged deletions of dormant
+    // `.flywheel/grade-evidence/` receipts read as `NOTHING_TO_CHECK` and the
+    // commit was refused, with no path to land an authorized removal.
+    let deletions = get_staged_deletions();
+    if staged.is_empty() && deletions.is_empty() {
         eprintln!("NOTHING_TO_CHECK: no staged files to check");
         return PreCommitOutcome::NothingToCheck.exit_code();
     }
 
     let repo_root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let mut refusals: Vec<String> = Vec::new();
+
+    if let Err(error) = validate_staged_preregistration(&repo_root, &staged) {
+        refusals.push(format!("preregistration-gate: {error}"));
+    }
+    if let Err(error) = validate_plan_assemble_build(&repo_root, &staged) {
+        refusals.push(format!("plan-assemble-build: {error}"));
+    }
 
     // ── GATE 1: no-shell-gate (refuse tracked .sh/.py) ────────────────────
     let nsg: Vec<_> = staged.iter().filter_map(|f| violation_for(f)).collect();
@@ -409,7 +430,135 @@ fn get_staged_files() -> Result<Vec<String>, String> {
     }
 }
 
-fn get_staged_deletions() -> Vec<String> {
+fn bounded_git_text(repo_root: &Path, args: &[&str]) -> Result<String, String> {
+    let mut command = std::process::Command::new("git");
+    command.current_dir(repo_root).args(args);
+    match subprocess_contract::bounded_output(&mut command, std::time::Duration::from_secs(10)) {
+        subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() => {
+            String::from_utf8(output.stdout)
+                .map_err(|error| format!("git output is not UTF-8: {error}"))
+        }
+        subprocess_contract::BoundedOutcome::Completed(output) => Err(format!(
+            "git {:?} exited {}: {}",
+            args,
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        )),
+        subprocess_contract::BoundedOutcome::TimedOut => {
+            Err(format!("git {:?} exceeded 10s deadline", args))
+        }
+        subprocess_contract::BoundedOutcome::Unspawned(error) => {
+            Err(format!("cannot spawn git {:?}: {error}", args))
+        }
+    }
+}
+
+fn added_lines_or_all(diff: &str, text: &str) -> Vec<usize> {
+    let added = added_line_numbers(diff);
+    if added.is_empty() {
+        (1..=text.lines().count()).collect()
+    } else {
+        added
+    }
+}
+
+fn validate_staged_preregistration(repo_root: &Path, staged: &[String]) -> Result<(), String> {
+    let base_revision = bounded_git_text(repo_root, &["rev-parse", "HEAD"])?
+        .trim()
+        .to_owned();
+    let registry = match bounded_git_text(repo_root, &["show", &format!("HEAD:{HYPOTHESES_PATH}")])
+    {
+        Ok(registry) => registry,
+        Err(_error)
+            if staged
+                .iter()
+                .filter(|path| path.starts_with("docs/plan/"))
+                .count()
+                == 1
+                && staged.iter().any(|path| path == HYPOTHESES_PATH) =>
+        {
+            eprintln!(
+                "preregistration-gate: BOOTSTRAP PASS registry is the only staged plan artifact"
+            );
+            return Ok(());
+        }
+        Err(error) => return Err(error),
+    };
+    let committed_revisions = bounded_git_text(repo_root, &["rev-list", "HEAD"])?
+        .lines()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    let changed_paths = staged
+        .iter()
+        .filter(|path| path.starts_with("docs/plan/"))
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut evidence_rows = Vec::new();
+    for path in &changed_paths {
+        if path.ends_with(".jsonl") && path != HYPOTHESES_PATH {
+            let text = String::from_utf8(staged_blob(repo_root, path)?)
+                .map_err(|error| format!("staged evidence is not UTF-8 path={path}: {error}"))?;
+            let diff = bounded_git_text(
+                repo_root,
+                &["diff", "--cached", "--unified=0", "HEAD", "--", path],
+            )?;
+            let selected = added_lines_or_all(&diff, &text);
+            evidence_rows.extend(
+                parse_evidence_rows_at(path.clone(), &text, &selected)
+                    .map_err(|error| error.to_string())?,
+            );
+        }
+    }
+    let report = validate_pre_write(
+        &registry,
+        &base_revision,
+        &committed_revisions,
+        &changed_paths,
+        &evidence_rows,
+    )
+    .map_err(|error| error.to_string())?;
+    eprintln!(
+        "preregistration-gate: PASS base={} hypotheses={} changed_paths={} checked_paths={} evidence_rows={}",
+        report.base_revision,
+        report.hypothesis_count,
+        report.changed_path_count,
+        report.checked_path_count,
+        report.checked_evidence_row_count
+    );
+    Ok(())
+}
+
+fn validate_plan_assemble_build(repo_root: &Path, staged: &[String]) -> Result<(), String> {
+    if !staged.iter().any(|path| {
+        path.starts_with("crates/plan-assemble/")
+            || path.starts_with("crates/preregistration-gate/")
+    }) {
+        return Ok(());
+    }
+    let mut command = std::process::Command::new("cargo");
+    command
+        .current_dir(repo_root)
+        .args(["build", "--quiet", "-p", "plan-assemble"]);
+    match subprocess_contract::bounded_output(&mut command, std::time::Duration::from_secs(180)) {
+        subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() => {
+            eprintln!("plan-assemble-build: PASS");
+            Ok(())
+        }
+        subprocess_contract::BoundedOutcome::Completed(output) => Err(format!(
+            "cargo build -p plan-assemble exited {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        )),
+        subprocess_contract::BoundedOutcome::TimedOut => {
+            Err("cargo build -p plan-assemble exceeded 180s deadline".to_owned())
+        }
+        subprocess_contract::BoundedOutcome::Unspawned(error) => {
+            Err(format!("cannot spawn cargo build -p plan-assemble: {error}"))
+        }
+    }
+}
+
+ fn get_staged_deletions() -> Vec<String> {
     // Bounded, fail-closed to "no deletions observed": a wedged git must
     // not hang the hook; the deletions scan is an OPT-IN check (empty list
     // skips the citation gate), and a typed skip beats an unbounded stall.

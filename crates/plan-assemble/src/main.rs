@@ -255,12 +255,17 @@ fn guard_output_size(previous_len: usize, output_len: usize) -> Result<(), Strin
     }
 }
 #[asupersync::main]
-async fn main() -> std::process::ExitCode {
+async fn main() {
+    let code = run().await;
+    std::process::exit(i32::from(code));
+}
+
+async fn run() -> u8 {
     let cx = match Cx::current() {
         Some(cx) => cx,
         None => {
             eprintln!("PREREGISTRATION_ERROR no asupersync context");
-            return std::process::ExitCode::from(2);
+        return 2;
         }
     };
     let root = repo_root();
@@ -277,7 +282,7 @@ async fn main() -> std::process::ExitCode {
             .collect(),
         Err(error) => {
             eprintln!("PLAN_ASSEMBLE_ERROR cannot read {}: {error}", dir.display());
-            return std::process::ExitCode::from(2);
+        return 2;
         }
     };
     sections.sort();
@@ -287,7 +292,7 @@ async fn main() -> std::process::ExitCode {
         eprintln!(
             "PLAN_ASSEMBLE_ERROR zero sections matched NN-*.md — refusing to write an empty plan"
         );
-        return std::process::ExitCode::from(2);
+        return 2;
     }
 
     let mut round_files: Vec<PathBuf> = match directory_paths(&dir) {
@@ -304,7 +309,7 @@ async fn main() -> std::process::ExitCode {
                 "PLAN_ASSEMBLE_ERROR cannot read round ledgers in {}: {error}",
                 dir.display()
             );
-            return std::process::ExitCode::from(2);
+        return 2;
         }
     };
     round_files.sort();
@@ -315,7 +320,7 @@ async fn main() -> std::process::ExitCode {
             Ok(rounds) => rounds,
             Err(error) => {
                 eprintln!("PLAN_ASSEMBLE_ERROR {error}");
-                return std::process::ExitCode::from(2);
+        return 2;
             }
         };
         let name = path
@@ -335,7 +340,7 @@ async fn main() -> std::process::ExitCode {
     round_files = allowed_round_files;
     if round_files.is_empty() {
         eprintln!("PLAN_ASSEMBLE_ERROR no round ledgers for the required 15-21 range");
-        return std::process::ExitCode::from(2);
+        return 2;
     }
     if !excluded_round_files.is_empty() {
         eprintln!(
@@ -352,13 +357,13 @@ async fn main() -> std::process::ExitCode {
                 "PLAN_ASSEMBLE_ERROR required audit ledger is absent: {}",
                 path.display()
             );
-            return std::process::ExitCode::from(2);
+        return 2;
         }
         audit_ledgers.push(path);
     }
     if let Err(error) = guard_ledger_set(round_files.len(), audit_ledgers.len()) {
         eprintln!("PLAN_ASSEMBLE_ERROR {error}");
-        return std::process::ExitCode::from(2);
+        return 2;
     }
 
     let mut covered_rounds = Vec::new();
@@ -367,7 +372,7 @@ async fn main() -> std::process::ExitCode {
             Ok(rounds) => rounds,
             Err(error) => {
                 eprintln!("PLAN_ASSEMBLE_ERROR {error}");
-                return std::process::ExitCode::from(2);
+        return 2;
             }
         } {
             if !covered_rounds.contains(&round) {
@@ -378,7 +383,7 @@ async fn main() -> std::process::ExitCode {
     for required in 15..=21 {
         if !covered_rounds.contains(&required) {
             eprintln!("PLAN_ASSEMBLE_ERROR required convergence round {required} is absent from the embedded records");
-            return std::process::ExitCode::from(2);
+        return 2;
         }
     }
     let mut round23_files = 0;
@@ -387,7 +392,7 @@ async fn main() -> std::process::ExitCode {
             Ok(rounds) => rounds,
             Err(error) => {
                 eprintln!("PLAN_ASSEMBLE_ERROR {error}");
-                return std::process::ExitCode::from(2);
+        return 2;
             }
         };
         if rounds.contains(&23) {
@@ -396,13 +401,13 @@ async fn main() -> std::process::ExitCode {
     }
     if round23_files != 4 {
         eprintln!("PLAN_ASSEMBLE_ERROR expected four round-23 ledgers, found {round23_files}");
-        return std::process::ExitCode::from(2);
+        return 2;
     }
     if !covered_rounds.contains(&23) {
         eprintln!(
             "PLAN_ASSEMBLE_ERROR required convergence round 23 is absent from the embedded records"
         );
-        return std::process::ExitCode::from(2);
+        return 2;
     }
 
     let mut stamp_inputs = sections.clone();
@@ -412,7 +417,7 @@ async fn main() -> std::process::ExitCode {
         Ok(value) => value,
         Err(error) => {
             eprintln!("PLAN_ASSEMBLE_ERROR {error}");
-            return std::process::ExitCode::from(2);
+        return 2;
         }
     };
     let round_manifest = round_files
@@ -440,21 +445,21 @@ async fn main() -> std::process::ExitCode {
         Ok(value) => value,
         Err(error) => {
             eprintln!("PLAN_ASSEMBLE_ERROR {error}");
-            return std::process::ExitCode::from(2);
+        return 2;
         }
     };
     let sm_text = match read_required_text(&dir.join("SURFACE-MAP.jsonl"), "required input") {
         Ok(value) => value,
         Err(error) => {
             eprintln!("PLAN_ASSEMBLE_ERROR {error}");
-            return std::process::ExitCode::from(2);
+        return 2;
         }
     };
     let cv_text = match read_required_text(&dir.join("CONVERGENCE.jsonl"), "required input") {
         Ok(value) => value,
         Err(error) => {
             eprintln!("PLAN_ASSEMBLE_ERROR {error}");
-            return std::process::ExitCode::from(2);
+        return 2;
         }
     };
     if std::env::args().any(|arg| arg == "--check") {
@@ -466,16 +471,16 @@ async fn main() -> std::process::ExitCode {
                     "PLAN_STAMP_REFUSED cannot read {}: {error}",
                     target.display()
                 );
-                return std::process::ExitCode::from(1);
+        return 1;
             }
         };
         if plan.matches("<!-- PLAN_STAMP").count() != 1 {
             eprintln!("PLAN_STAMP_REFUSED expected exactly one current PLAN_STAMP marker");
-            return std::process::ExitCode::from(1);
+        return 1;
         }
         if !plan.contains(&stamp) {
             eprintln!("PLAN_STAMP_REFUSED source fingerprint or manifest differs; run cargo run -p plan-assemble");
-            return std::process::ExitCode::from(1);
+        return 1;
         }
         let appendix = plan
             .split("## Appendix — convergence and audit ledgers")
@@ -485,18 +490,18 @@ async fn main() -> std::process::ExitCode {
             let needle = format!("\"round\":{required}");
             if !appendix.contains(&needle) {
                 eprintln!("PLAN_STAMP_REFUSED embedded records do not cover round {required}");
-                return std::process::ExitCode::from(1);
+        return 1;
             }
         }
         if appendix.contains("\"round\":22") {
             eprintln!("PLAN_STAMP_REFUSED halted round-22 records must not be embedded");
-            return std::process::ExitCode::from(1);
+        return 1;
         }
         for name in &excluded_round_files {
             let marker = format!("<!-- ===== {name} ===== -->");
             if plan.contains(&marker) {
                 eprintln!("PLAN_STAMP_REFUSED excluded record was embedded {name}");
-                return std::process::ExitCode::from(1);
+        return 1;
             }
         }
 
@@ -508,7 +513,7 @@ async fn main() -> std::process::ExitCode {
             let marker = format!("<!-- ===== {name} ===== -->");
             if !plan.contains(&marker) {
                 eprintln!("PLAN_STAMP_REFUSED missing embedded record {name}");
-                return std::process::ExitCode::from(1);
+        return 1;
             }
         }
         println!(
@@ -516,7 +521,7 @@ async fn main() -> std::process::ExitCode {
             sections.len(),
             round_files.len()
         );
-        return std::process::ExitCode::SUCCESS;
+        return 0;
     }
 
     let n = brief.lines().filter(|l| is_refuted_claim_row(l)).count();
@@ -545,7 +550,7 @@ async fn main() -> std::process::ExitCode {
 
     if sm.is_empty() {
         eprintln!("PLAN_ASSEMBLE_ERROR SURFACE-MAP.jsonl is empty — the engaged percentage would divide by zero");
-        return std::process::ExitCode::from(2);
+        return 2;
     }
     let engaged_pct = 100.0 * (eng as f64) / (sm.len() as f64);
 
@@ -579,7 +584,7 @@ async fn main() -> std::process::ExitCode {
             Ok(value) => value,
             Err(error) => {
                 eprintln!("PLAN_ASSEMBLE_ERROR {error}");
-                return std::process::ExitCode::from(2);
+        return 2;
             }
         };
         let title = text
@@ -605,7 +610,7 @@ async fn main() -> std::process::ExitCode {
             Ok(value) => value,
             Err(error) => {
                 eprintln!("PLAN_ASSEMBLE_ERROR {error}");
-                return std::process::ExitCode::from(2);
+        return 2;
             }
         };
         body.push(format!("\n\n<!-- ===== {name} ===== -->\n"));
@@ -625,7 +630,7 @@ async fn main() -> std::process::ExitCode {
             Ok(text) => text,
             Err(error) => {
                 eprintln!("PLAN_ASSEMBLE_ERROR {error}");
-                return std::process::ExitCode::from(2);
+        return 2;
             }
         };
         body.push(format!(
@@ -638,7 +643,7 @@ async fn main() -> std::process::ExitCode {
     let ledgers = round_files.len() + audit_ledgers.len();
     if ledgers == 0 {
         eprintln!("PLAN_ASSEMBLE_ERROR ledger set is empty; refusing a sections-only assembly");
-        return std::process::ExitCode::from(2);
+        return 2;
     }
     let embedded_records = sections.len() + ledgers;
     let target = root.join("docs/PLAN.md");
@@ -646,7 +651,7 @@ async fn main() -> std::process::ExitCode {
         Ok(previous) => {
             if let Err(error) = guard_output_size(previous.len(), body_text.len()) {
                 eprintln!("PLAN_ASSEMBLE_ERROR {error}");
-                return std::process::ExitCode::from(2);
+        return 2;
             }
             if body_text.len() < previous.len() {
                 println!(
@@ -664,14 +669,14 @@ async fn main() -> std::process::ExitCode {
                 "PLAN_ASSEMBLE_ERROR cannot read prior output {}: {error}",
                 target.display()
             );
-            return std::process::ExitCode::from(2);
+        return 2;
         }
     }
     let inputs = match collect_repository_inputs(&cx, &root).await {
         Ok(inputs) => inputs,
         Err(error) => {
             eprintln!("PLAN_ASSEMBLE_ERROR {error}");
-            return std::process::ExitCode::from(2);
+        return 2;
         }
     };
     match validate_pre_write(
@@ -691,13 +696,13 @@ async fn main() -> std::process::ExitCode {
         ),
         Err(error) => {
             eprintln!("PLAN_ASSEMBLE_ERROR {error}");
-            return std::process::ExitCode::from(2);
+        return 2;
         }
     }
     let out = body_text;
     if let Err(e) = std::fs::write(&target, &out) {
         eprintln!("PLAN_ASSEMBLE_ERROR cannot write {}: {e}", target.display());
-        return std::process::ExitCode::from(2);
+        return 2;
     }
 
     println!(
@@ -715,9 +720,9 @@ async fn main() -> std::process::ExitCode {
     let dupes = out.matches("<!-- ===== 00-brief.md ===== -->").count();
     println!("  duplicate-section check: 00-brief appears {dupes} time(s) — must be 1");
     if dupes != 1 {
-        return std::process::ExitCode::from(1);
+        return 1;
     }
-    std::process::ExitCode::SUCCESS
+        0
 }
 
 #[cfg(test)]
