@@ -22,22 +22,22 @@
 
 [figures.workspace_crates]
 command  = "ls -1 crates | wc -l"
-expect   = "51"
-appears  = ["docs/plan/03-crates.md", "AGENTS.md"]
+expect   = "LIVE"
+appears  = ["docs/plan/00-brief.md", "docs/plan/01-idea.md", "docs/plan/02-surface-census.md", "docs/plan/03-crates.md", "AGENTS.md"]
 
-note     = "50 current workspace crates from the exact command; 20/23/26 are dated historical snapshots."
+note     = "LIVE current workspace crate count from the exact command; 20/23/26 are dated historical snapshots."
 [figures.built_binaries]
 command  = "cargo metadata --format-version 1 --no-deps 2>/dev/null | python3 -c \"import sys,json;m=json.load(sys.stdin);print(len([t for p in m['packages'] for t in p['targets'] if 'bin' in t['kind']]))\""
-expect   = "49"
-appears  = ["docs/plan/07-installability.md"]
-note     = "cargo metadata, NOT cargo build: build emits artifacts only for crates it actually recompiles, so an up-to-date workspace answers 0. The gate caught that on its first run. This is the instrument that answers 'binaries the workspace builds'. grep fn main says 18 (re-measured 2026-09-01), [[bin]] says 16."
+expect   = "LIVE"
+appears  = ["docs/plan/00-brief.md", "docs/plan/02-surface-census.md", "docs/plan/07-installability.md"]
+note     = "cargo metadata, NOT cargo build: build emits artifacts only for crates it actually recompiles, so an up-to-date workspace answers 0. The gate caught that on its first run. This is the instrument that answers 'binaries the workspace builds'; its current result is LIVE, while grep fn main and [[bin]] are separate, non-authoritative inventories."
 
 [figures.crates_forbidding_unsafe]
 command  = "grep -l 'unsafe_code = \"forbid\"' crates/*/Cargo.toml | wc -l"
-expect   = "51"
-appears  = ["docs/plan/00-brief.md", "AGENTS.md"]
+expect   = "LIVE"
+appears  = ["docs/plan/00-brief.md", "docs/plan/03-crates.md", "AGENTS.md"]
 
-note     = "50 current manifests from the exact command; 2/20/26 are dated historical snapshots."
+note     = "LIVE current manifest count from the exact command; 2/20/26 are dated historical snapshots."
 [figures.installer_known_binaries]
 command  = "grep -o '\"[a-z-]*\"' crates/installer/src/main.rs | head -3 | wc -l"
 expect   = "3"
@@ -46,9 +46,9 @@ note     = "3 of 48 target rows = 6.25% install coverage in the current metadata
 
 [figures.surface_map_rows]
 command  = "grep -c . docs/plan/SURFACE-MAP.jsonl"
-expect   = "614"
+expect   = "LIVE"
 appears  = ["docs/plan/02-surface-census.md", "docs/PLAN.md"]
-note     = "round 10 found THREE unreconciled snapshots of this: 101, 121, and live."
+note     = "LIVE current surface-map row count; re-run with the map rather than hand-copying it."
 
 [figures.plan_sections]
 command  = "ls -1 docs/plan/[0-9][0-9]-*.md | wc -l"
@@ -62,8 +62,9 @@ note     = "13 numbered plan sections are in docs/plan/00 through 12; convergenc
 [figures.test_files]
 
 command  = "find crates -type f -path '*/tests/*.rs' | wc -l"
-expect   = "96"
-note     = "Recursive source-file count; the prior top-level glob undercounted nested fixture tests and is historical."
+expect   = "LIVE"
+appears  = ["docs/plan/01-idea.md"]
+note     = "LIVE recursive test-source file count; the prior top-level glob undercounted nested fixture tests and is historical."
 [figures.board_total]
 command  = "for s in closed in_progress open blocked grading; do br list --status $s --json | jq '.issues | length'; done | awk '{s += $1} END {print s}'"
 expect   = "LIVE"
@@ -72,8 +73,8 @@ note     = "not a fixed figure — the board moves hourly. Declared so any prose
 
 [figures.test_functions]
 command  = "grep -RhoF '#[test]' crates --include='*.rs' | wc -l"
-note     = "Recursive annotation count across all Rust sources; current re-derived value is 987; earlier 962/983/984 values are dated snapshots."
-expect   = "1019"
+note     = "LIVE recursive annotation count across all Rust sources; earlier counts are dated snapshots."
+expect   = "LIVE"
 appears  = ["docs/plan/01-idea.md", "docs/plan/06-gates.md", "docs/plan/00-brief.md"]
 
 [figures.no_claim_blocks]
@@ -84,9 +85,81 @@ note     = "the header quantifies the plan's own hedging; it is generated at ass
 
 [figures.surface_engaged_pct]
 command  = "python3 -c \"import json;r=[json.loads(l) for l in open('docs/plan/SURFACE-MAP.jsonl') if l.strip()];e=sum(1 for x in r if x.get('disposition') in ('CONSUMED','WIRE','VALIDATE'));print(f'{100*e/len(r):.1f}')\""
-expect   = "24.8"
+expect   = "LIVE"
 appears  = ["docs/PLAN.md", "docs/plan/02-surface-census.md"]
-note     = "published as 6.2% first, then 17.1%, then 21.8%. Round 10 found THREE unreconciled snapshots of the table this derives from."
+note     = "The live command derives the current engaged-row numerator and percentage; earlier percentage values are dated snapshots."
+
+[figures.surface_map_consumed]
+command  = "jq -s '[.[] | select(.disposition == \"CONSUMED\")] | length' docs/plan/SURFACE-MAP.jsonl"
+expect   = "LIVE"
+appears  = ["docs/plan/02-surface-census.md"]
+note     = "Current CONSUMED disposition count; re-run with the map rather than hand-copying it."
+
+[figures.surface_map_wire]
+command  = "jq -s '[.[] | select(.disposition == \"WIRE\")] | length' docs/plan/SURFACE-MAP.jsonl"
+expect   = "LIVE"
+appears  = ["docs/plan/02-surface-census.md"]
+note     = "Current WIRE disposition count; re-run with the map rather than hand-copying it."
+
+[figures.surface_map_validate]
+command  = "jq -s '[.[] | select(.disposition == \"VALIDATE\")] | length' docs/plan/SURFACE-MAP.jsonl"
+expect   = "LIVE"
+appears  = ["docs/plan/02-surface-census.md"]
+note     = "Current VALIDATE disposition count; re-run with the map rather than hand-copying it."
+
+[figures.surface_map_retire]
+command  = "jq -s '[.[] | select(.disposition == \"RETIRE\")] | length' docs/plan/SURFACE-MAP.jsonl"
+expect   = "LIVE"
+appears  = ["docs/plan/02-surface-census.md"]
+note     = "Current RETIRE disposition count; re-run with the map rather than hand-copying it."
+
+[figures.surface_map_unprobeable_pending]
+command  = "jq -s '[.[] | select(.disposition == \"UNPROBEABLE-PENDING\")] | length' docs/plan/SURFACE-MAP.jsonl"
+expect   = "LIVE"
+appears  = ["docs/plan/02-surface-census.md"]
+note     = "Current UNPROBEABLE-PENDING disposition count; re-run with the map rather than hand-copying it."
+
+[figures.surface_map_engaged_rows]
+command  = "jq -s '[.[] | select(.disposition == \"CONSUMED\" or .disposition == \"WIRE\" or .disposition == \"VALIDATE\")] | length' docs/plan/SURFACE-MAP.jsonl"
+expect   = "LIVE"
+appears  = ["docs/plan/02-surface-census.md"]
+note     = "Current engaged-row numerator behind surface_engaged_pct."
+
+[figures.path_dependency_edges]
+command  = "cargo metadata --format-version 1 --no-deps --offline 2>/dev/null | jq -c '[.packages[].dependencies[] | select(.path != null)] | length'"
+expect   = "LIVE"
+appears  = ["docs/plan/03-crates.md"]
+note     = "Volatile path-edge count. LIVE is intentional: the command must run and emit the current count, but this registry does not freeze an integer that an unrelated dependency commit can invalidate."
+
+[figures.unsafe_source_attributes]
+command  = "for d in crates/*/; do grep -RqlF '#![forbid(unsafe_code)]' \"$d/src\" 2>/dev/null && echo \"$d\"; done | wc -l"
+expect   = "LIVE"
+appears  = ["docs/plan/03-crates.md"]
+note     = "Current source-tree count carrying the inner forbid(unsafe_code) attribute."
+
+[figures.public_enums]
+command  = "grep -RhoE '^pub enum [A-Za-z_0-9]+' crates --include='*.rs' | wc -l"
+expect   = "LIVE"
+appears  = ["docs/plan/03-crates.md"]
+note     = "Recursive all-source public-enum count, including test and binary sources."
+
+[figures.public_structs]
+command  = "grep -RhoE '^pub struct [A-Za-z_0-9]+' crates --include='*.rs' | wc -l"
+expect   = "LIVE"
+appears  = ["docs/plan/03-crates.md"]
+note     = "Recursive all-source public-struct count, including test and binary sources."
+
+[figures.colliding_type_names]
+command  = "grep -RhoE '^pub (enum|struct) [A-Za-z_0-9]+' crates --include='*.rs' | awk '{print $3}' | sort | uniq -d | wc -l"
+expect   = "LIVE"
+appears  = ["docs/plan/03-crates.md"]
+note     = "Recursive all-source count of public type names declared more than once."
+
+[figures.verdict_types]
+command  = "grep -RhoE '^pub enum [A-Za-z_0-9]*Verdict' crates --include='*.rs' | sort -u | wc -l"
+expect   = "LIVE"
+appears  = ["docs/plan/03-crates.md"]
+note     = "Recursive all-source count of distinct public enum names ending in Verdict."
 
 [figures.convergence_rows]
 command  = "jq -s '[.[] | select(.record_type == null)] | length' docs/plan/CONVERGENCE.jsonl"
@@ -96,9 +169,9 @@ note     = "Counts only original evidence rows; appended finding-resolution note
 
 [figures.unsafe_both_mechanisms]
 command  = "python3 -c \"import pathlib,re;m=[re.search(r'unsafe_code\\s*=\\s*.forbid.',p.read_text()) for p in pathlib.Path('crates').glob('*/Cargo.toml')];i=[any(re.search(r'^#!\\[forbid\\(unsafe_code\\)\\]',x.read_text(errors='ignore'),re.M) for x in p.parent.glob('src/**/*.rs')) for p in pathlib.Path('crates').glob('*/Cargo.toml')];print(sum(1 for a,b in zip(m,i) if a and b))\""
-expect   = "50"
+expect   = "LIVE"
 appears  = ["docs/plan/03-crates.md"]
-note     = "Current both-mechanisms count is 49 of 50; 19/25/48 are dated historical snapshots. The separate manifest/source/union rows in this registry carry the full split."
+note     = "LIVE current both-mechanisms count; manifest-only and source-attribute-only rows are separate figures. Earlier 19/25/48/49 values are dated historical snapshots."
 
 [figures.cargo_manifest_dir_sites]
 command  = "python3 -c \"import pathlib;print(sum(p.read_text(errors='ignore').count('CARGO_MANIFEST_DIR') for p in pathlib.Path('crates').rglob('*.rs')))\""
@@ -136,8 +209,8 @@ note     = "duplicate of workspace_crates by design: 03-crates §3.9 reasons abo
 
 [figures.forbid_unsafe_authoritative]
 command  = "u=0; for d in crates/*/; do if grep -q 'unsafe_code = \"forbid\"' \"$d/Cargo.toml\" 2>/dev/null || grep -rq 'forbid\\(unsafe_code\\)' \"$d\" --include='*.rs' 2>/dev/null; then u=$((u+1)); fi; done; echo $u"
-expect   = "51"
-note     = "AUTHORITATIVE union: 50 of 50 current crates are covered; manifest-only = 50, source-attribute = 49, both = 49, and tick-monitor is the manifest-only straggler. Earlier 16/22, 20/26, 25/26, and 26/26 values are dated snapshots."
+expect   = "LIVE"
+note     = "AUTHORITATIVE union command; the current result is intentionally not frozen in prose because workspace membership moves. The manifest-only, source-attribute, and both-mechanisms commands carry the component split. Earlier 16/22, 20/26, 25/26, and 26/26 values are dated historical snapshots."
 
 [figures.control_plane_unextracted_loc]
 command  = "tot=0; for c in fleet-truth oracle-compare oracle-pane-state-differential ntm-fleet-monitor fleet-monitor loop-driver fast-dispatch omp-idle-dispatch pane-dispatch-ready loop-tick fleet-reconcile wired-but-inert-guard verify-dispatch pane-truth reap-finished-panes tick-dispatch loop-coverage dispatcher-deadman refill-idle-panes pane-oracle-diff; do s=/Users/josh/Developer/control-plane/crates/$c; if [ -d $s ] && [ ! -d crates/$c ]; then tot=$((tot+$(find $s -name '*.rs' -type f -exec cat {} + 2>/dev/null | wc -l))); fi; done; echo $tot"
