@@ -848,6 +848,45 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
    production data goes unchecked: BUILT ≠ WIRED at test granularity. If a leg must be opt-in,
    something in-tree has to opt in.
 
+7. **A known-bad leg must assert its MESSAGE, not just its exit code.** Measured 2026-09-02.
+   `DJ-D-OT-UNGATED` rests on `cargo test -p no-shell-gate --test orchestration_tick` returning
+   **101 / "no test target named `orchestration_tick`"**. During an unrelated fleet outage — a
+   `Cargo.toml` under the `crates/*` glob with no `src/`, which breaks workspace **loading** so
+   `-p <crate>` cannot dodge it — that identical command **also returned 101**, with a completely
+   different message. **Same exit code, different cause.** Anyone re-running that Validation block
+   mid-outage would have seen 101, ticked the box, and confirmed the finding on the wrong evidence.
+   `101` is `cargo`'s generic failure; a fires-on-known-bad leg matching only `rc != 0` goes green
+   on any unrelated breakage. Grep the specific string, and print the output so a reader can see
+   which cause fired.
+
+   **This is the sixth instrument defect of that session, and they are one family:** `$?` after a
+   pipe returning the pipeline's status (three false findings, all in surfaces being audited FOR
+   false success); a `timeout` ceiling below the subject's documented 5-minute deadline read as
+   "unbounded" (three agents, one shared wrong model, each measuring their own SIGTERM); a
+   `cargo metadata` probe whose `map(select($n|index(.)))` asked whether a list contained itself;
+   a pane-identity probe whose input contained every agent name because the operator had typed them
+   all; the flagship pre-commit gate exiting **0** on an empty index while the worktree was dirty at
+   30 files. **In every case the instrument produced the reading, not the subject.** A gate's own
+   evidence is subject to this too, which is why the message matters more than the code.
+
+8. **A `cargo` figure is NEVER evidence about a commit.** `cargo test` reads the **WORKTREE**; a
+   commit sha names a **TREE**. In a shared checkout those diverge constantly, so a grade that
+   cites a sha and a test count has silently mixed two tree states. Measured 2026-09-02, against
+   the orchestrator: it graded commit `5b164cd` and reported `admission-reason` at 22 passed / 3
+   failed with a `rc=3` behavioural defect. Both were artifacts of uncommitted work by a third
+   agent. `git log --oneline 5b164cd..HEAD -- crates/admission-reason` -> **0 commits**;
+   `git status --porcelain` -> three files modified; `#[test]` count **16 at HEAD, 17 in the
+   worktree**; `ExitCode::from(3)`/`ledger_missing` **0 occurrences at HEAD, 2 in the worktree**.
+   At the commit under grade the test passes and the crate has 16 tests. The implementer's original
+   figures were right and the grader's were right — **for different trees**.
+
+   **This is the mirror of the `git ls-files` rule and it bites in the opposite direction.**
+   `ls-files` reads the INDEX, so it gives a false GREEN on "did my work land"; verify with
+   `git ls-tree -r HEAD`. `cargo` reads the WORKTREE, so it gives a false RED (or a false green)
+   about a commit. To grade a commit you must pin the tree: read it with `git show <sha>:<path>`,
+   diff with `git log <sha>..HEAD -- <path>`, and state which tree every number came from. A grade
+   is otherwise a claim about "the repo right now", which is not a thing five agents can agree on.
+
 ---
 
 ## Every DOCUMENT proves it bites, too
