@@ -27,7 +27,8 @@ fn main() -> ExitCode {
         }
     };
     let result = runtime.block_on(async move {
-        let cx = Cx::current().ok_or_else(|| "ACK_SPINE_ERROR reason=no_runtime_context".to_owned())?;
+        let cx =
+            Cx::current().ok_or_else(|| "ACK_SPINE_ERROR reason=no_runtime_context".to_owned())?;
         run(&cx, &args).await
     });
     match result {
@@ -55,8 +56,46 @@ async fn run(cx: &Cx, args: &[String]) -> Result<ExitCode, String> {
             selftest(cx).await?;
             Ok(ExitCode::SUCCESS)
         }
+        // THE WORKER'S EMIT PATH — `ipg.19`. Prints the canonical completion row
+        // for `br comments add`, so a worker never hand-formats one.
+        //
+        // A hand-formatted row is a row that drifts from its parser, and the ACK
+        // protocol already paid for that: the pane in every ACK today is the
+        // orchestrator's dictation echoed back, because the format lived in packets
+        // instead of in code. This prints from `Display`, which is the same
+        // implementation `parse_completion` round-trips against in
+        // `tests/completion.rs`.
+        Some("--complete") => {
+            let [bead, pane, verdict, evidence] = match args.get(1..5) {
+                Some([bead, pane, verdict, evidence]) => [bead, pane, verdict, evidence],
+                _ => {
+                    return Err(
+                        "usage: ack-spine --complete <bead-id> <pane> <verdict> <evidence> \
+                         [frees-pane]"
+                            .to_owned(),
+                    )
+                }
+            };
+            // Defaults to the emitting pane: a worker normally frees its own, and a
+            // required argument that is almost always the same value is an argument
+            // people get wrong.
+            let frees = args.get(5).map(String::as_str).unwrap_or(pane.as_str());
+            let row = ack_spine::completion::completion_row(bead, pane, verdict, evidence, frees);
+            // REFUSE TO PRINT A ROW THAT WILL NOT PARSE. Emitting an unparseable
+            // completion is the malformed case the classifier escalates, and the
+            // emitter is the one place it can be prevented rather than reported.
+            let rendered = row.to_string();
+            ack_spine::completion::parse_completion(&rendered, bead)
+                .map_err(|error| format!("COMPLETION_UNPARSEABLE detail={error:?} row={rendered}"))?;
+            println!("{rendered}");
+            Ok(ExitCode::SUCCESS)
+        }
         Some(command) => Err(format!("usage error: unknown command {command}")),
-        None => Err("usage: ack-spine --demo | --spine-demo | --selftest".to_owned()),
+        None => Err(
+            "usage: ack-spine --demo | --spine-demo | --selftest | --complete <bead> <pane> \
+             <verdict> <evidence> [frees]"
+                .to_owned(),
+        ),
     }
 }
 

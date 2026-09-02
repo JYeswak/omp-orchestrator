@@ -53,6 +53,7 @@ pub mod ledger;
 /// without re-exporting them would break that path silently at the callsite.
 pub use ledger::*;
 
+pub mod followup;
 /// The typed heartbeat row — `build_id` + `pid`, findable by a third party.
 /// Owned by SilverWolf (%1409), landed in `41744d6`.
 ///
@@ -65,7 +66,6 @@ pub use ledger::*;
 /// `build_id` at all. That identity leg was unverifiable BY CONSTRUCTION.
 /// Porting it fixed the writer; this line makes the reader reachable.
 pub mod heartbeat;
-pub mod followup;
 pub mod spine;
 
 /// K9 acceptance 4, enforced rather than documented.
@@ -78,3 +78,15 @@ pub mod spine;
 /// `classify_followup` did not take the reason as an input at all. A derived
 /// value that cannot vary is not derived.
 pub mod close_reason;
+
+/// THE WORKER'S COMPLETION SIGNAL — `ipg.19`.
+///
+/// `followup` detects SILENCE past a deadline; this detects a FINISH. They are
+/// different facts with different responses — refill versus investigate — and the
+/// bead's acceptance 3 forbids collapsing them.
+///
+/// It exists because the existing push was unreachable: `FollowUpVerdict::Finished`
+/// is gated on `bead_closed`, and `AGENTS.md:1268` forbids a worker closing its own
+/// bead. **A compliant worker could not produce the artifact that signalled its own
+/// finish.**
+pub mod completion;

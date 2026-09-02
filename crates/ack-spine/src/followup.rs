@@ -40,11 +40,28 @@ pub enum FollowUpVerdict {
     },
     /// The assignee posted a verdict comment (confirmed by read-back).
     VerdictPosted { bead_id: String },
+    /// Dispatched, acknowledged or not, no verdict yet, and the deadline has not
+    /// passed. **Working normally — nothing to do.**
+    ///
+    /// This did not exist: the healthy-in-progress fallthrough returned
+    /// `VerdictPosted` while its own comment said *"NOT a finish and NOT silence"*.
+    /// A reader could not distinguish "a verdict was posted" from "still working",
+    /// so `VerdictPosted` was true for both and useless for either. `ipg.19`.
+    InProgress {
+        bead_id: String,
+        minutes_since_dispatch: u64,
+    },
     /// The assignee went silent past the deadline — the pane is idle
     /// with an in_progress bead and no comment since dispatch.
-    SilentPastDeadline { bead_id: String, minutes_since_dispatch: u64 },
+    SilentPastDeadline {
+        bead_id: String,
+        minutes_since_dispatch: u64,
+    },
     /// The bead was reassigned — not silent, re-dispatch needed.
-    Reassigned { bead_id: String, new_assignee: String },
+    Reassigned {
+        bead_id: String,
+        new_assignee: String,
+    },
     /// The tracker is unreadable — an ERROR, never VERDICT_POSTED.
     TrackerError { bead_id: String, detail: String },
 }
@@ -64,17 +81,39 @@ impl fmt::Display for FollowUpVerdict {
             Self::VerdictPosted { bead_id } => {
                 write!(formatter, "VERDICT_POSTED: {bead_id} has a verdict comment")
             }
-            Self::SilentPastDeadline { bead_id, minutes_since_dispatch } => {
+            Self::InProgress {
+                bead_id,
+                minutes_since_dispatch,
+            } => {
+                write!(
+                    formatter,
+                    "IN_PROGRESS: {bead_id} working {minutes_since_dispatch}m, no verdict yet, \
+                     before the deadline — nothing to do"
+                )
+            }
+            Self::SilentPastDeadline {
+                bead_id,
+                minutes_since_dispatch,
+            } => {
                 write!(
                     formatter,
                     "SILENT_PAST_DEADLINE: {bead_id} dispatched {minutes_since_dispatch}m ago, no verdict comment — investigate, do not refill"
                 )
             }
-            Self::Reassigned { bead_id, new_assignee } => {
-                write!(formatter, "REASSIGNED: {bead_id} moved to {new_assignee} — not silent")
+            Self::Reassigned {
+                bead_id,
+                new_assignee,
+            } => {
+                write!(
+                    formatter,
+                    "REASSIGNED: {bead_id} moved to {new_assignee} — not silent"
+                )
             }
             Self::TrackerError { bead_id, detail } => {
-                write!(formatter, "TRACKER_ERROR: {bead_id} — {detail} (an ERROR, not VERDICT_POSTED)")
+                write!(
+                    formatter,
+                    "TRACKER_ERROR: {bead_id} — {detail} (an ERROR, not VERDICT_POSTED)"
+                )
             }
         }
     }
@@ -97,15 +136,30 @@ impl fmt::Display for FollowUpVerdict {
 ///   2. bead_closed       -> FINISHED — the worker pushed completion via the
 ///      tracker; this beats reassignment, comments, and the deadline
 ///   3. assigned_to changed from the original assignee -> REASSIGNED
-///   4. comments_present -> VERDICT_POSTED
+///   4. a SUBSTANTIVE comment -> VERDICT_POSTED
 ///   5. minutes_elapsed >= deadline -> SILENT_PAST_DEADLINE
+///
+/// # `comments_present: bool` BECAME `comments: &[String]`, and the reason is a defect
+///
+/// MEASURED 2026-09-02 (`ipg.19`): step 4 is checked BEFORE step 5, and the ACK
+/// protocol adopted today posts a comment on **every** dispatch. So every ACKed
+/// bead returned `VerdictPosted` forever and **`SilentPastDeadline` could never
+/// fire** — 63 beads `in_progress` with the watchdog silently off. A mechanism
+/// adopted to make delivery provable turned off the detector for the whole fleet.
+///
+/// A `bool` cannot tell an ACK from a verdict, so the fix has to be at the input:
+/// the classifier now sees the rows and asks
+/// [`crate::completion::is_ack_row`]. This is the same lesson as
+/// `close_reason: Option<&str>` replacing a hardcoded literal in this very
+/// function — **a parameter too narrow to express the distinction forces the wrong
+/// answer**, and the narrowing reads as normal.
 pub fn classify_followup(
     bead_id: &str,
     bead_closed: bool,
     close_reason: Option<&str>,
     assigned_to: &str,
     original_assignee: &str,
-    comments_present: bool,
+    comments: &[String],
     minutes_elapsed: u64,
     deadline_minutes: u64,
     tracker_readable: bool,
@@ -137,7 +191,30 @@ pub fn classify_followup(
         };
     }
 
-    if comments_present {
+    // THE PUSH, MADE REACHABLE. A compliant worker may not close its own bead, so
+    // `bead_closed` above can only ever fire for a worker that broke the grading
+    // rule or for the grader's own sweep. A typed completion row is the artifact a
+    // compliant worker CAN produce, and it means the same thing: finished, here is
+    // the evidence, the pane is free.
+    for comment in comments {
+        if crate::completion::parse_completion(comment, bead_id).is_ok() {
+            return FollowUpVerdict::Finished {
+                bead_id: bead_id.to_owned(),
+                // A worker's completion is NOT a grade — nobody re-ran anything
+                // yet. `Unread` is the honest classification, and it is the same
+                // honesty the hardcoded `"MUTATION-VERIFIED-or-equivalent"`
+                // literal existed to avoid admitting.
+                close_reason: classify_close_reason(None),
+            };
+        }
+    }
+
+    // A SUBSTANTIVE comment, which an ACK is not. See the signature note: an ACK is
+    // posted on every dispatch, so counting it as a verdict disabled the deadline.
+    let substantive = comments
+        .iter()
+        .any(|c| !crate::completion::is_ack_row(c, bead_id) && !c.trim().is_empty());
+    if substantive {
         return FollowUpVerdict::VerdictPosted {
             bead_id: bead_id.to_owned(),
         };
@@ -150,10 +227,17 @@ pub fn classify_followup(
         };
     }
 
-    // Not closed, not reassigned, no comment, before deadline: healthy
-    // in-progress. NOT a finish and NOT silence — nothing to do yet.
-    FollowUpVerdict::VerdictPosted {
+    // HEALTHY IN-PROGRESS, and it is its OWN arm now.
+    //
+    // This returned `VerdictPosted` while its own comment said "NOT a finish and
+    // NOT silence — nothing to do yet". Two genuinely different conditions, one
+    // value: a reader could not tell "a verdict was posted" from "working
+    // normally, nothing yet", which is the seventh instance of the
+    // missing-representation defect and it was inside the function whose doc warns
+    // that collapsing arms is the `free_capacity` bug one layer up.
+    FollowUpVerdict::InProgress {
         bead_id: bead_id.to_owned(),
+        minutes_since_dispatch: minutes_elapsed,
     }
 }
 
@@ -171,7 +255,13 @@ pub fn followup_action(verdict: &FollowUpVerdict) -> FollowUpAction {
     match verdict {
         FollowUpVerdict::Finished { .. } => FollowUpAction::Healthy,
         FollowUpVerdict::VerdictPosted { .. } => FollowUpAction::Healthy,
-        FollowUpVerdict::SilentPastDeadline { .. } => FollowUpAction::NeedsFollowUp(verdict.clone()),
+        // Healthy, and DELIBERATELY not folded into VerdictPosted's arm even though
+        // both are Healthy today: the two conditions differ, and a future rule that
+        // treats them differently must not have to re-split them.
+        FollowUpVerdict::InProgress { .. } => FollowUpAction::Healthy,
+        FollowUpVerdict::SilentPastDeadline { .. } => {
+            FollowUpAction::NeedsFollowUp(verdict.clone())
+        }
         FollowUpVerdict::Reassigned { .. } => FollowUpAction::Healthy,
         FollowUpVerdict::TrackerError { .. } => FollowUpAction::NeedsFollowUp(verdict.clone()),
     }
@@ -179,6 +269,11 @@ pub fn followup_action(verdict: &FollowUpVerdict) -> FollowUpAction {
 
 #[cfg(test)]
 mod tests {
+    /// A comment that is NOT an ACK, so it counts as a verdict. Named rather
+    /// than inlined because the distinction is the point: an ACK row here
+    /// would leave the deadline reachable, which is the defect `ipg.19` fixed.
+    const SUBSTANTIVE: &str = "VERDICT: re-ran the acceptance command, PASS";
+
     use super::*;
 
     /// LEG 1 — THE PUSH: completion is asserted by the worker via the tracker
@@ -187,10 +282,14 @@ mod tests {
     #[test]
     fn a_worker_closed_row_classifies_finished_from_tracker_state_alone() {
         let v = classify_followup(
-            "omp-orchestrator-test-push", /* bead_closed = */ true,
+            "omp-orchestrator-test-push",
+            /* bead_closed = */ true,
             /* close_reason = */ Some("MUTATION-VERIFIED: re-ran the suite"),
-            /* assigned_to = */ "AmberGate", /* original = */ "AmberGate",
-            /* comments_present = */ false, /* minutes = */ 1, /* deadline = */ 60,
+            /* assigned_to = */ "AmberGate",
+            /* original = */ "AmberGate",
+            /* comments = */ &[],
+            /* minutes = */ 1,
+            /* deadline = */ 60,
             /* tracker_readable = */ true,
         );
         assert_eq!(
@@ -213,12 +312,31 @@ mod tests {
     /// DIFFERENT responses. Same elapsed time, only the closed row differs.
     #[test]
     fn finished_and_silent_are_distinct_facts_with_distinct_responses() {
-        let finished = classify_followup("b", true, Some("DONE: shipped"), "w", "w", false, 120, 60, true);
-        let silent = classify_followup("b", false, None, "w", "w", false, 120, 60, true);
+        let finished = classify_followup(
+            "b",
+            true,
+            Some("DONE: shipped"),
+            "w",
+            "w",
+            &[],
+            120,
+            60,
+            true,
+        );
+        let silent = classify_followup("b", false, None, "w", "w", &[], 120, 60, true);
         assert_ne!(finished, silent, "same bead, same clock — the closed row is the only difference and it MUST change the verdict");
         assert!(matches!(finished, FollowUpVerdict::Finished { .. }));
-        assert!(matches!(silent, FollowUpVerdict::SilentPastDeadline { minutes_since_dispatch: 120, .. }));
-        assert!(matches!(followup_action(&finished), FollowUpAction::Healthy), "finish -> refill");
+        assert!(matches!(
+            silent,
+            FollowUpVerdict::SilentPastDeadline {
+                minutes_since_dispatch: 120,
+                ..
+            }
+        ));
+        assert!(
+            matches!(followup_action(&finished), FollowUpAction::Healthy),
+            "finish -> refill"
+        );
         assert!(
             matches!(followup_action(&silent), FollowUpAction::NeedsFollowUp(_)),
             "silence -> investigate"
@@ -229,15 +347,31 @@ mod tests {
     /// silence) and this leg goes RED — the two facts are not interchangeable.
     #[test]
     fn collapsing_finished_into_silence_is_a_red_defect() {
-        let closed_row = classify_followup("b", true, Some("DONE: shipped"), "w", "w", false, 120, 60, true);
-        assert!(!matches!(closed_row, FollowUpVerdict::SilentPastDeadline { .. }));
+        let closed_row = classify_followup(
+            "b",
+            true,
+            Some("DONE: shipped"),
+            "w",
+            "w",
+            &[],
+            120,
+            60,
+            true,
+        );
+        assert!(!matches!(
+            closed_row,
+            FollowUpVerdict::SilentPastDeadline { .. }
+        ));
         // The display strings must not collide either: different facts get
         // different text, so an operator reading a log cannot confuse them.
         assert_ne!(
             format!("{}", closed_row),
             format!(
                 "{}",
-                FollowUpVerdict::SilentPastDeadline { bead_id: "b".to_owned(), minutes_since_dispatch: 120 }
+                FollowUpVerdict::SilentPastDeadline {
+                    bead_id: "b".to_owned(),
+                    minutes_since_dispatch: 120
+                }
             )
         );
     }
@@ -260,7 +394,7 @@ mod tests {
             Some("MUTATION-VERIFIED: the leg went RED"),
             "w",
             "w",
-            false,
+            &[],
             1,
             60,
             true,
@@ -271,12 +405,12 @@ mod tests {
             Some("fixed the thing, tests pass"),
             "w",
             "w",
-            false,
+            &[],
             1,
             60,
             true,
         );
-        let unread = classify_followup("b", true, None, "w", "w", false, 1, 60, true);
+        let unread = classify_followup("b", true, None, "w", "w", &[], 1, 60, true);
 
         assert_ne!(
             verified, prose,
@@ -310,7 +444,17 @@ mod tests {
     /// authorities, one store.
     #[test]
     fn a_refused_reason_does_not_reopen_the_bead() {
-        let prose = classify_followup("b", true, Some("just fixed it"), "w", "w", false, 1, 60, true);
+        let prose = classify_followup(
+            "b",
+            true,
+            Some("just fixed it"),
+            "w",
+            "w",
+            &[],
+            1,
+            60,
+            true,
+        );
         assert!(
             matches!(prose, FollowUpVerdict::Finished { .. }),
             "the bead IS closed; only the reason is refused: {prose:?}"
@@ -332,7 +476,7 @@ mod tests {
             Some("MUTATION-VERIFIED: proven"),
             "w",
             "w",
-            true,
+            &[SUBSTANTIVE.to_owned()],
             1,
             60,
             /* tracker_readable = */ false,
@@ -360,7 +504,10 @@ mod tests {
 
         // ANTI-VACUITY plus a positive control: the slice must be real and must
         // contain the function under audit.
-        assert!(production.len() > 500, "the production slice is too small to scan");
+        assert!(
+            production.len() > 500,
+            "the production slice is too small to scan"
+        );
         assert!(
             production.contains("pub fn classify_followup"),
             "ANTI-VACUITY: the slice does not contain the function under audit"
