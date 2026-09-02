@@ -269,7 +269,7 @@ that seven "gaps" had upstream types in the tool we wrap, and the eighth (`plan-
 hours later. Every one had sat in prose as a settled absence. **An unknown that never had a resolving
 experiment attached is indistinguishable from a known** — and §10 called one of them "precedent-free across 210 filesystem entries" while the precedent shipped in the binary named on line one.
 
-> *Upstream type for this gap: `AgentEndEvent.willContinue` (`extensibility/shared-events.d.ts:154`, WIRE-PROVEN). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+> *Upstream type for this gap: `AgentEndEvent.willContinue` (`extensibility/shared-events.d.ts:AgentEndEvent`, WIRE-PROVEN). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 ### The loop, per milestone
 
@@ -321,7 +321,7 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 **Adequate.** 1:1 dispatch with claim + receipt; fan-out to N panes done as N sequential 1:1 sends with the receipts collected by hand. Costs later: the fan-in barrier does not exist, so a partial wave reads as complete until a human notices (the cp-z42vu class at N scale).
 
-> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:IrcDeliveryReceipt`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 **Negative patterns.** (1) Unclaimed dispatch — 5rh-to-%1413, measured twice (11-lifecycle §S5). (2) Transport success is not delivery — cp-z42vu and success:[4] are a historical incident record only; the current repository has no cp-z42vu fixture or success:[4] planted test. (3) Recency over graph — 19 waves dispatched newest-first while PageRank named the articulation point. The first two remain failure shapes; only the claim-fence and receipt legs are currently in-tree.
 
@@ -337,7 +337,7 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 
 **F4 GATES.** The dispatch claim fence refuses a packet naming an unclaimed bead, and the transport gate refuses bare success without a receipt. The cp-z42vu known-BAD fixture is **PROJECTED, not present**: current dispatch-silence-watch tests contain no cp-z42vu or success:[4] payload. The claim-fence Reassigned arm is in-tree. Until the planted receipt fixture exists, no in-tree test claim is made for that historical transport incident. REFUSES: unclaimed send, receipt-less success, and partial fan-in reported as complete once the fan-in gate exists.
-> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:IrcDeliveryReceipt`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 > **Upstream type for the claims gap:** `ownershipToken` exists upstream, so "unclaimed bead" is a gap in OUR consumption, not in the vocabulary available. The fence is ours to build; the noun is not ours to invent.
 
 **F5 NUMBERS.** Figures this stage claims, to be declared in NUMBERS.toml on first run: `dispatch_journal_rows` (baseline 0 today — declare with `expect="0"` and ratchet up; NUMBERS gate fails on drift, which IS the ratchet), `unclaimed_dispatches` (expect 0 after the claim wire; any nonzero is a regression), `fanout_partial_waves` (expect 0). Declared today: none — the stage has not run; declaring a number for a stage that has never executed is a figure with no derivation, which is the defect this field exists to kill.
@@ -348,7 +348,7 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 **GAP.** Fan-out/fan-in primitive (barrier + partial-verdict): cost of leaving it missing = every multi-pane wave is N hand-typed sends with hand-collected receipts, and a partial wave is indistinguishable from a complete one — the cp-z42vu class at scale. Packet journal: cost of leaving it missing = every forensic question ("which packet did this?") requires a human memory — measured: the reap could only name "seven conditions living in scrollback."
 
-> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:8`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
+> *Upstream type for this gap: `IrcDeliveryReceipt` (`tools/hub/types.d.ts:IrcDeliveryReceipt`, DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 ### S6 — Grading the work
 
@@ -360,7 +360,7 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 **Adequate.** Spot-check grading: 1 in 3 closes re-derived fully, the rest checked for cite-presence only (the pre-delete-citation-check shape). Costs later: two-thirds of closes carry un-re-run evidence — the `cp-3k9jq` class (104-char close reason, zero path citations, three citations of a deleted script).
 
-**Negative patterns.** (1) Worker-asserted done as the close condition — `ack-spine`'s own taxonomy classes `Finished` as a claim (followup.rs), and M4's fix requires the close actor ≠ dispatched worker. (2) Grading that can only pass or fail — bead ipg.17 was "built, correct, and undiscoverable": `Grade` needs a third arm (09 A8). (3) Prose close reasons — 29-bead wave, 8 gaps named in prose and never filed (finding/src/lib.rs:6-10).
+**Negative patterns.** (1) Worker-asserted done as the close condition — `ack-spine`'s own taxonomy classes `Finished` as a claim (followup.rs), and M4's fix requires the close actor ≠ dispatched worker. (2) Grading that can only pass or fail — bead ipg.17 was "built, correct, and undiscoverable": `Grade` needs a third arm (09 A8). (3) Prose close reasons — 29-bead wave, 8 gaps named in prose and never filed (finding/src/lib.rs:Finished).
 
 **Skills.** `beads-compliance-and-completion-verification` (the audit shape; does NOT cover the receipt/claim chain), `verification-before-completion` (the re-derivation discipline), `beads-north-star` (VERDICT comment shape).
 
@@ -408,7 +408,7 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 **F5 NUMBERS.** Figures: `validation_transcripts` (expect 0 today; ratchet up), `unattended_window_hours` (expect 0; the 4h19m outage is a negative datapoint, recorded as history not as the figure), `refusal_classes_escalated` (expect 0). Declared today: none.
 
-**KNOWN.** The observable template (09 §1) is doctrine; the four-milestone chain (M5/M6/M7) is specified; upstream `unexpected-stop-classifier.d.ts` exists (probed, DECLARED only); `FINDING_THRESHOLD == 3` measured at finding-dispatch/src/lib.rs:15.
+**KNOWN.** The observable template (09 §1) is doctrine; the four-milestone chain (M5/M6/M7) is specified; upstream `unexpected-stop-classifier.d.ts` exists (probed, DECLARED only); `FINDING_THRESHOLD == 3` measured at finding-dispatch/src/lib.rs:FINDING_THRESHOLD.
 
 **UNKNOWN.** (1) Does the orchestrator binary run on a clean machine at all (missing dylibs, HOME assumptions)? Experiment: `cargo clean -p omp-orchestrator && cargo build --release && ./target/release/omp-orchestrator --once --repo /tmp/fixture` in a worktree. Cost: ~30 min. (2) What does 24h unattended actually cost in refusals? Experiment: the M7 window with the escalation consumer wired. Cost: one day of wall clock + the finding-dispatch wire (half a day). (3) Does `unexpected-stop-classifier` match our `Liveness` taxonomy? Experiment: map its arms against `PaneState` — an afternoon, zero code, prior-art payoff pattern.
 
@@ -424,7 +424,7 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 **Adequate.** Manual install on this machine with the identity check run by hand. Costs later: no rollback path (the M6 standard degrades to "reinstall and hope"), and the identity check stays a convention — the exact gap that let a stale binary supervise the fleet for 4.2 hours.
 
-**Negative patterns.** (1) Identity unproven at install — the 23-commit stale supervisor (README:155 family). (2) Host-coupled defaults — `/Users/josh` fallback at installer main.rs:25, compile-time roots at :16-20, measured. (3) Install-plane colonialism — 08 §3's table: conventions imposed on the adopter's repo.
+**Negative patterns.** (1) Identity unproven at install — the 23-commit stale supervisor (README:155 family). (2) Host-coupled defaults — `/Users/josh` fallback at installer main.rs:Negative, compile-time roots at :16-20, measured. (3) Install-plane colonialism — 08 §3's table: conventions imposed on the adopter's repo.
 
 **Skills.** `installer-workmanship` (the four-way identity, dual checksums, atomic lock, per-crate summary — the shape this crate already follows), `release-preparations` (version + checksums + transcript; GitHub-release assumptions do not transfer to a local-first tool), `rust-crates-publishing` (crates.io path; NOT this — the mission is local-first install).
 
@@ -482,7 +482,7 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 ## S1 — Inception
 
 S1 is the first gate on a new or foreign project. It must establish the identity and capabilities that every later stage treats as input; it must not silently inherit the current repository's paths, control files, toolchain, or trust assumptions.
-**CURRENT WORKSPACE FACTS (re-derived 2026-09-01).** The current repository has a resolvable root and a real workspace inventory: ls -1 crates | wc -l -> **50**. The current binary-target figure is **48**, derived by the registered NUMBERS.toml built_binaries command; these are current-repo facts, not proof that a new project is ready.
+**CURRENT WORKSPACE FACTS (re-derived 2026-09-01).** The current repository has a resolvable root and a real workspace inventory: ls -1 crates | wc -l -> **50**. The current binary-target figure is **48**, derived by the registered NUMBERS.toml built_binaries command; these are current-repo facts, not proof that a new project is ready. — current authority: NUMBERS.toml figures.workspace_crates / NUMBERS.toml figures.built_binaries.
 
 **Trigger.** Human intent names a project and repository path, but no accepted inception manifest exists for that project.
 
@@ -594,7 +594,7 @@ command and expectation are added to NUMBERS.toml.
 
 **KNOWN.** The plan already has a declared registry mechanism: NUMBERS.toml rows carry command and
 expectation, and SCHEMAS.toml rows carry artifact format and required fields. The current plan's
-foundation contract says F1–F5 run before beads at docs/plan/12-journey.md:243-258; this is the
+foundation contract says F1–F5 run before beads at docs/plan/12-journey.md:heading_field_8_foundation_runs_before_any_bead; this is the
 input contract S2 must instantiate, not evidence that S2 currently works.
 
 **UNKNOWN.** Can a plan validator detect semantic omissions rather than only present fields? 
@@ -692,7 +692,7 @@ S4 is the first stage allowed to create implementation work. It must transform a
 
 **Adequate.** Create beads through `br` with explicit acceptance and dependency links, but leave graph-digest and orphan checks as named GAPS. Cost: S5 is blocked from autonomous selection until those checks land.
 
-**Negative patterns.** The 29-bead wave left eight gaps in prose (`finding/src/lib.rs:6-10`); a cycle or parent accounting node offered as work is the known-bad S4 shape described in the foundation gate below.
+**Negative patterns.** The 29-bead wave left eight gaps in prose (`finding/src/lib.rs:Negative`); a cycle or parent accounting node offered as work is the known-bad S4 shape described in the foundation gate below.
 
 **Skills.** `beads-workflow` and `beads-north-star` cover self-contained bead shape but do NOT materialize the full plan graph; `beads-bv` covers graph-aware triage but does NOT prove source-to-DAG equality.
 
@@ -756,7 +756,7 @@ than incidental is free.
 
 > ## **A CHARTER IS NOT A DELIVERABLE. THE PRODUCT IS.**
 
-There is no Charter for this project. The **6,647-line, 519 KB** figure is a historical plan snapshot, not current size; the current command wc -l -c docs/plan/*.md returns **8,353 lines and 677,275 bytes**. There is still **zero shipped product**: current cargo metadata reports 48 binary targets and NUMBERS.toml records 3 installer names, while the run subcommand's bead remains blocked on a dispatch fence.
+There is no Charter for this project. The **6,647-line, 519 KB** figure is a historical plan snapshot, not current size; the current command wc -l -c docs/plan/*.md returns **8,353 lines and 677,275 bytes**. There is still **zero shipped product**: current cargo metadata reports 48 binary targets and NUMBERS.toml records 3 installer names, while the run subcommand's bead remains blocked on a dispatch fence. — current authority: NUMBERS.toml figures.built_binaries.
 
 The skill also says *"one Charter per project, edited in place"* and routes by project type instead
 of re-deriving the skill library by hand — which is what the Foundation preflight loop did by hand, an hour ago.
@@ -855,7 +855,7 @@ contracts (`docs/contracts/subprocess_contract.md`, `cancellation_contract.md`,
 `ipg.4 absent` against this section and it survived ten further rounds, because a missing `##`
 heading inside a 21-heading file is invisible, while a missing file in a directory of eleven is one
 `ls`. The index carries three more measurements of the same kind: 50 surfaces classified but only
-12 rows in `docs/plan/OMP-COVERAGE-TABLE.jsonl`, and four different table schemas for one concern.
+12 rows in `docs/plan/OMP-COVERAGE-TABLE.jsonl`, and four different table schemas for one concern. — HISTORICAL as of 2026-09-02.
 
 **Appendix A stayed.** It is a `jsm` skill sweep about how this plan is being graded, not a surface
 classification; it belongs with the runbook's AAR material above, and moving it would have been a
