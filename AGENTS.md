@@ -889,6 +889,45 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
 
 ---
 
+## Before calling anything a defect, READ THE DEFINITION OF CORRECT BEHAVIOUR
+
+**A reproducible observation plus a plausible story is not a defect. It is a hypothesis — and
+upstream usually has a comment about it.**
+
+Measured 2026-09-02. One agent produced three diagnosis errors in a single session and they were
+all the same shape: **every measurement held up; every diagnosis was made without first reading the
+code that defines correct behaviour.** In all three cases the "defect" turned out to be specified,
+deliberate, or documented — twice with a source comment explaining precisely why the reading was
+wrong.
+
+|"defect"|what it actually was|
+|---|---|
+|`mail_pending` — "the flag is the discriminator", then "unbounded"|a documented **300s** internal deadline. Every `CANCELED` was the caller's own SIGTERM landing first, and `waited_seconds` tracked the caller's ceiling linearly at 75/90/180. Only a **340s** ceiling could discriminate|
+|`signaled=false` with `persisted=true, acknowledged=true` — "the cleanest silent-notification defect of the night"|specified debounce. `messaging.rs:4259` is `"signaled": !signal_receipts.is_empty()`; `:4219` documents the state; `sync.rs:134-138` states the mutable `.signal` file is intentionally not read|
+|the `CURSOR_EXPIRED` "silent clamp" — broadcast as the purest silent-success instance found|**the deliberate fix for GH#238.** `sync.rs:606-624` at 0.3.32 explains that a gap between `after` and a recipient's oldest is *other recipients' deliveries, not lost history*, and that a monitor calling `--position-now` on an empty inbox **must still receive its first delivery**. `retention_has_pruned = global_oldest_cursor > 1`|
+
+**THE THIRD ONE IS THE CAUTIONARY TALE, because the "defense" reproduced the bug upstream had
+fixed.** A client-side guard (`verify_resume_continuity`) refused whenever
+`oldest_available > stored` — which refuses resuming from origin for EVERY recipient, since
+`oldest_available_cursor` is `MIN(seq) WHERE project_id AND agent_id`, a **first-event marker**, not
+an eviction floor. Worse, the client *cannot* make that judgement: the response exposes
+`oldest_available_cursor` and `tail_cursor` but **not the global oldest**, so `retention_has_pruned`
+is unknowable client-side. The guard decided expiry with strictly less information than the daemon
+has, and got it backwards. **The fix was a deletion**, and the correct posture is to trust the
+daemon's typed refusal and decode it — never to synthesise one locally.
+
+**Two operational consequences:**
+- **Version-match before diagnosing.** Reading source at the *shipped* version turned all three
+  arguments into one-minute reads. Our working checkout was 1,285 commits behind while the mirror
+  was at 0.3.32 — *ahead* of the shipped binary. A defect claim against source you do not hold is
+  not a claim.
+- **A guard is a claim too, and it inherits this rule.** Shipping a defense against a
+  misdiagnosed defect is worse than shipping nothing: it refuses healthy traffic, it is advertised
+  as protection, and it is harder to retract than a note. Before writing a guard, read what the
+  thing you are guarding against is *supposed* to do.
+
+---
+
 ## Three arbitrations from a five-agent shared checkout
 
 **1. A RESERVATION ANSWERS "MAY I EDIT NOW". AN OWNERSHIP MAP ANSWERS "WHOSE LANE IS THIS". A green
