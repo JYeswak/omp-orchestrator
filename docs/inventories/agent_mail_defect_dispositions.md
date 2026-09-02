@@ -127,6 +127,16 @@ a different version line from the pinned `=0.3.11` library, so it is not a valid
 code. A true minimal repro requires building `fsqlite 0.3.11` and is the named next step. Nothing in
 this document claims the minimal repro exists.
 
+**CORRECTION TO AN ATTRIBUTION.** The orchestrator's 06:2xZ bead comment records #3 as *"the fault
+is the QUERY BUILDER'S ALIAS, not the schema (MailMining)"* and repeats that
+`grep -rlF 'm.topic'` returns 0 files in both local checkouts. **Neither half is this lane's
+finding.** The alias is not the fault — leg 3 refutes it, since both planner FROM clauses bind
+`m = messages` and stock sqlite3 executes the query — and the grep does find it, in 6 files at
+`v0.3.31` and 6 in the 0.3.32 mirror. This matters because *"query-builder alias"* and *"engine
+planner"* are the different-bugs-with-different-fixes fork the bead asks about: the first invites a
+patch to `search_planner.rs`, which would edit correct code, while the second is a dependency bump
+upstream already made. **Do not patch the alias.**
+
 ## The disposition table
 
 Non-zero (A) and non-zero (B), per the anti-vacuity condition.
@@ -142,10 +152,49 @@ Non-zero (A) and non-zero (B), per the anti-vacuity condition.
 | 7 | `last_active` is registration recency wearing an activity name | **C** | named finding; never use as a work oracle |
 | 8 | the `am` CLI does not talk to the authenticated daemon | **C** | named finding; house pattern = daemon-primary, CLI-as-differential-oracle |
 | 9 | every pane binding resolves `legacy-unverified` | **B** | typed `PaneBindingUnverified`; reap with existing `cleanup_pane_identities` |
+| 10 | daemon documents `CURSOR_EXPIRED` but silently CLAMPS instead (AmNative) | **B**+**A** | shipped as `journey::verify_resume_continuity` / `journey::resume_from`; upstream too |
+| 11 | `signaled=false` while `persisted=true` and `acknowledged=true` (AmNative) | **C** | **RESOLVED AT SOURCE below — documented behaviour, not a delivery gap. Do NOT defend against it.** |
 | 12 | "daemon 0 unread vs CLI 20 rows" — **NOT a read-state disagreement; it is agent-identity resolution** | **B** | typed `AgentNameAmbiguous`; every name lookup MUST carry a project scope |
 | 13 | `inbox_stats.ack_pending_count` drifts from ground truth (113 vs 46) | **C** | named finding; never read the cached aggregate as truth |
 
-Totals: **(A) 1, (B) 7, (C) 4** — one row (#3) carries both an (A) and a supporting (B).
+Totals over thirteen rows: **(A) 2, (B) 8, (C) 5** — #3 carries an (A) plus a supporting (B), and
+#10 is both (A) and (B). Anti-vacuity satisfied.
+
+### Row #11 — RESOLVED AT SOURCE: the field is narrow, the notification is fine
+
+#11 was filed with the fork left open and an explicit instruction not to guess: *either* the
+notification genuinely did not fire, *or* `signaled` reports something narrower than its name. **The
+tree is now version-matched to the shipped binary, so that fork is answerable by reading, and the
+answer is the second one.** At `v0.3.31`:
+
+`crates/mcp-agent-mail-tools/src/messaging.rs:4259` — the boolean is nothing but a receipt-existence
+test:
+
+```rust
+"signaled": !signal_receipts.is_empty(),
+```
+
+and its own tool description at `messaging.rs:4219` states the semantics outright:
+
+> "`signaled` is true only when a message-ID-bound signal receipt was appended after a successful
+> signal write; **a debounced or failed signal remains persisted but not signaled.**"
+
+Corroborated by `crates/mcp-agent-mail-db/src/sync.rs:134-138`:
+
+> "The mutable recipient `.signal` file is **intentionally not read here**: it is a debounced
+> latest-state hint that can point at another message. Only the append-only receipt ledger
+> establishes the `signaled` fact."
+
+**So `persisted=true, signaled=false, acknowledged=true` is documented, correct behaviour for a
+DEBOUNCED signal.** There is no delivery gap: the payload was stored, the notification was
+debounced rather than lost, and the ack proves it arrived. The defect is a **naming trap** — the
+field answers "was a message-ID-bound signal receipt appended?" while its name invites "was anyone
+notified?" — and the harm is entirely in the reading, not the mechanism.
+
+This confirms AmNative's own caution and closes it out as (C): **do not build a typed refusal on
+`signaled`.** A defense against a correctly-reported narrow field would be an over-strict gate that
+refuses healthy debounced traffic. The right fix is documentation and consumer discipline —
+`signaled` is not a delivery oracle, `acknowledged` is the one that proves arrival.
 
 ### Row #12 — folded into this epic, and RECLASSIFIED
 
@@ -304,14 +353,24 @@ CA=$(sqlite3 "file:$LIVE?mode=ro" "select ack_pending_count from inbox_stats whe
 test -n "$GT" -a -n "$CA" || { echo "FAIL leg8 vacuous: no rows for agent 69"; exit 1; }
 test "$GT" != "$CA" && echo "leg8 PASS cache drift reproduces: ground_truth=$GT cached=$CA" \
                     || echo "leg8 NOTE cache now agrees ($GT) — close #13"
+
+# LEG 9 — #11: `signaled` really is receipt-existence, and source really says "debounced".
+git show v0.3.31:crates/mcp-agent-mail-tools/src/messaging.rs \
+  | grep -qF '"signaled": !signal_receipts.is_empty(),' \
+  && echo "leg9 PASS signaled == receipt-existence test" \
+  || { echo "FAIL leg9: the boolean's computation changed — re-read before trusting row #11"; exit 1; }
+git show v0.3.31:crates/mcp-agent-mail-tools/src/messaging.rs \
+  | grep -qF 'a debounced or failed signal remains persisted but not signaled' \
+  && echo "leg9 PASS source documents the debounced case (not a delivery gap)" \
+  || echo "leg9 NOTE the documented semantics moved — #11 may need reopening"
 ```
 
-All eight legs run today, all PASS: leg0 `shipped=0.3.31 tag=v0.3.31 version=0.3.31`; leg1 `rows=5`
+All **nine** legs run today, all PASS: leg0 `shipped=0.3.31 tag=v0.3.31 version=0.3.31`; leg1 `rows=5`
 (stock sqlite3 answered the `m.topic` query); leg2 `messages.topic exists`; leg3 both planner FROM
 clauses bind `m=messages`; leg4 `rc=1`, engine error on stderr, **stdout empty**; leg5
 `/health 200, /mcp/ 401`; leg6 search SQL unchanged upstream with `origin/main` pinning
 `fsqlite = "=0.3.14"`; leg7 `AmberGate rows=2, colliding names=10`; leg8 cache drift
-`ground_truth=115 cached=47`.
+`ground_truth=115 cached=47`; leg9 `signaled == receipt-existence` and the debounced case documented.
 
 **Two legs invert the usual reading and must not be pattern-matched.** Leg 4 PASSES when the defect
 **still reproduces on the installed binary** — its PASS means the work is *not* done, and its
