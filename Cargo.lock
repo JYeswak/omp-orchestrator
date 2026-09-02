@@ -980,6 +980,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "serde_json",
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -1167,6 +1168,7 @@ name = "omp-types"
 version = "0.1.0"
 dependencies = [
  "asupersync",
+ "subprocess-contract",
 ]
 
 [[package]]

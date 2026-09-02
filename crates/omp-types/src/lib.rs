@@ -80,7 +80,13 @@ pub use pane_observation::{
 // hypothesis, where this is a KIND order with no such element.
 pub mod claim_strength;
 pub use claim_strength::{ClaimStrength, UnknownClaimStrength};
-
+// ─────────────────────────────────────────────── AUTHORED, not derived (Phase 0 · T4)
+//
+// Contract: docs/contracts/lifecycle_contract.md. This is the OMP pane lifecycle, distinct from
+// the sibling control-plane RPC session machine; it bridges the typed subprocess boundary without
+// flattening timeout or spawn failure into success.
+pub mod lifecycle;
+pub use lifecycle::{Lifecycle, LifecycleInput, WaitDeadline};
 /// A completed operation's result — severity and panic payload modelled rather than flattened.
 ///
 /// **Resolves a live collision:** `tick-monitor` declares its own `Outcome`, unrelated to this

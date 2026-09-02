@@ -18,6 +18,7 @@ path = "src/lib.rs"
 # build. Enabling test-internals here would reintroduce exactly the production leak #46 closed.
 # So the ack vocabulary is UNREACHABLE at our pinned rev; only the ungated `types` module is.
 asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", rev = "fa3c01aec" }
+subprocess-contract = { path = "../subprocess-contract" }
 
 [lints.rust]
 unsafe_code = "forbid"
