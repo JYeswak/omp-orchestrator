@@ -889,6 +889,48 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
 
 ---
 
+## A DENIED OR ERRORED PROBE IS *UNKNOWN*, NEVER A NEGATIVE RESULT
+
+**Measured 2026-09-02, and it is the ugliest root cause of that session.** An agent checked whether
+the `am` CLI carried an auth token with `env | grep -i -E 'agent_mail|AM_'`. **`dcg` DENIED the
+command as a policy violation.** The agent never retried, then asserted *"the CLI carries no token"*
+as measured fact, built a two-authority architecture on it, wrote it into a crate's module docs, and
+broadcast it — where it was adopted as house doctrine.
+
+Every part of it was false. `printenv HTTP_BEARER_TOKEN` -> **SET, 65 chars**; `AGENT_MAIL_TOKEN` ->
+**SET**; both read at `mcp-agent-mail-cli/src/lib.rs:82140`. The CLI had authenticated via the
+environment the entire time. `printenv` was available throughout.
+
+**The refusal was not evidence. It was the absence of evidence, wearing evidence's shape** — which
+is exactly the failure the agent had been congratulating itself on explaining elsewhere, where
+`am agent start` reported "no listener" for what was actually an auth failure. **A tool refusal, a
+non-zero exit, an empty result, and a policy denial are all UNKNOWN.** The honest moves are: retry
+differently, or say unknown. Asserting the negative is the one move that is never available.
+
+**Two further facts the same investigation got backwards, both worth keeping:**
+- The CLI calls the daemon **by default**. `check_inbox_should_use_daemon(direct, daemon_reachable)
+  = !direct || daemon_reachable` — without `--direct` that is `true`, so the SQLite read is the
+  EXCEPTION. It uses a route nobody had probed: `/api/`, not `/mcp/`, proven by pointing it at a
+  dead port and getting `transport failure calling http://127.0.0.1:9999/api/`. A client reading
+  SQLite directly could not care about a port.
+- **`--direct` is inverted relative to its own help text.** The help says "allow a direct SQLite
+  read only when no daemon is reachable", but `daemon_reachable = direct && port_reachable`, so
+  passing `--direct` is what ENABLES the daemon attempt with SQLite as fallback, while OMITTING it
+  takes the daemon unconditionally with no fallback.
+
+**AND IT DOWNGRADED THE INVESTIGATOR'S OWN BEST EVIDENCE, which is why this rule is worth more than
+the correction.** `oracle_skew=0` was reported as two independent authorities agreeing about a
+store. It is **two HTTP routes on the same daemon process, authenticated with the same token,
+reading the same in-process state.** It proves one daemon is self-consistent; it does not
+corroborate the store. A differential oracle whose two arms share a process, a credential and a
+cache is not a differential oracle — **it is one reading, taken twice.**
+
+The consequence for consumers ran the *other* way from what was announced: every CLI-derived figure
+came from the DAEMON and is therefore MORE trustworthy than the fleet was told, not less. **The
+numbers were fine; the explanation of where they came from was not.**
+
+---
+
 ## Before calling anything a defect, READ THE DEFINITION OF CORRECT BEHAVIOUR
 
 **A reproducible observation plus a plausible story is not a defect. It is a hypothesis — and
