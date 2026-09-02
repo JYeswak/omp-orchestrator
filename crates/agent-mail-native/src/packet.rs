@@ -272,6 +272,22 @@ pub enum PacketError {
     },
     /// `attempt` was zero. Attempts are 1-based: a zeroth attempt did not happen.
     ZeroAttempt,
+    /// A denial named a NON-restrictive outcome. `Delivered` and `NothingToDo`
+    /// describe effects that ran, so pairing either with a denial would
+    /// reintroduce the incoherence `EffectResult` exists to remove.
+    NonRestrictiveDenial {
+        /// The wire token that was offered.
+        outcome: &'static str,
+    },
+    /// A row on the wire carried a restrictive outcome AND an output digest, or
+    /// a completed outcome and none. The pairing is unconstructible in this
+    /// crate; a hand-written row can still attempt it, and this refuses it.
+    IncoherentResult {
+        /// The outcome the row claimed.
+        outcome: &'static str,
+        /// Whether an output digest was present.
+        output_present: bool,
+    },
     /// The row was not valid JSON, or not an object.
     Malformed {
         /// What the parser said.
@@ -326,6 +342,20 @@ impl fmt::Display for PacketError {
                 formatter,
                 "PACKET_MALFORMED_SHA256: `{field}` must be 64 lowercase hex characters, \
                  observed {observed_len}"
+            ),
+            Self::NonRestrictiveDenial { outcome } => write!(
+                formatter,
+                "PACKET_NON_RESTRICTIVE_DENIAL: `{outcome}` describes an effect that RAN, so it \
+                 cannot be paired with a denial; a denied effect has no output digest"
+            ),
+            Self::IncoherentResult {
+                outcome,
+                output_present,
+            } => write!(
+                formatter,
+                "PACKET_INCOHERENT_RESULT: outcome=`{outcome}` with output_sha256 present={output_present} \
+                 -- a restrictive outcome must carry NO output digest and a completed one must carry \
+                 exactly one; the proof that nothing ran is the ABSENCE of the digest"
             ),
             Self::ZeroAttempt => write!(
                 formatter,
@@ -575,6 +605,103 @@ impl Timestamp {
     }
 }
 
+/// Whether the effect RAN, and therefore whether an output digest exists at all.
+///
+/// # Absence as proof
+///
+/// rigor-atlas prescription `admit-then-act-with-absence-as-proof`
+/// (kinds: audit-kernel, runtime-kernel, sandbox-kernel), whose anti-pattern this
+/// type exists to remove, stated verbatim in the card:
+///
+/// > A `denied: bool` field on an otherwise-complete receipt. **A boolean can be
+/// > set wrongly; a missing field cannot be forged into presence.**
+///
+/// Exemplar: `franken_node/crates/franken-node/src/runtime/effect_receipt.rs:21`
+/// — *"a `PolicyOutcome::Denied` receipt has **no** `result_hash` /
+/// `post_state_hash`"*.
+///
+/// The first version of this contract had `outcome: Outcome` beside a REQUIRED
+/// `output_sha256: String`, so a row could say `outcome: refused` while carrying
+/// a 64-hex digest of bytes that were never produced. Both halves were settable
+/// and nothing tied them together. Here the pairing is the type: a `Denied`
+/// variant has no digest field to fill, and a `Completed` variant has no way to
+/// omit one.
+///
+/// # What this does NOT mean
+///
+/// It does not prove the effect's output is correct, only that a digest exists
+/// exactly when bytes were produced. And it does not make a false receipt
+/// impossible — an emitter can still call `Completed` after doing nothing. It
+/// makes the *specific* forgery of a denial-with-a-result unconstructible.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EffectResult {
+    /// The effect ran and produced bytes, whose digest is carried.
+    Completed {
+        /// SHA-256 of the exact output payload bytes.
+        output_sha256: String,
+    },
+    /// The effect did not run. **There is no output digest, by construction.**
+    Denied {
+        /// Which restrictive outcome. Enforced restrictive by
+        /// [`EffectResult::denied`].
+        outcome: Outcome,
+        /// Why, in the emitter's words. Required: a denial with no reason
+        /// records nothing.
+        error: String,
+    },
+}
+
+impl EffectResult {
+    /// A completed effect. Validates the digest shape at construction.
+    pub fn completed(output_sha256: impl Into<String>) -> Result<Self, PacketError> {
+        let output_sha256 = output_sha256.into();
+        validate_sha256("output_sha256", &output_sha256)?;
+        Ok(Self::Completed { output_sha256 })
+    }
+
+    /// A denied effect. **Refuses a non-restrictive outcome**: `Delivered` and
+    /// `NothingToDo` describe effects that ran, so pairing either with a denial
+    /// would reintroduce exactly the incoherence this type removes.
+    pub fn denied(outcome: Outcome, error: impl Into<String>) -> Result<Self, PacketError> {
+        if !outcome.is_restrictive() {
+            return Err(PacketError::NonRestrictiveDenial {
+                outcome: outcome.as_str(),
+            });
+        }
+        let error = error.into();
+        require_non_empty("error", &error)?;
+        Ok(Self::Denied { outcome, error })
+    }
+
+    /// The outcome to emit on the wire.
+    #[must_use]
+    pub const fn outcome(&self) -> Outcome {
+        match self {
+            // A completed effect that named no restrictive outcome delivered.
+            Self::Completed { .. } => Outcome::Delivered,
+            Self::Denied { outcome, .. } => *outcome,
+        }
+    }
+
+    /// The output digest, present exactly when the effect ran.
+    #[must_use]
+    pub fn output_sha256(&self) -> Option<&str> {
+        match self {
+            Self::Completed { output_sha256 } => Some(output_sha256),
+            Self::Denied { .. } => None,
+        }
+    }
+
+    /// The error text, present exactly when the effect did not run.
+    #[must_use]
+    pub fn error(&self) -> Option<&str> {
+        match self {
+            Self::Completed { .. } => None,
+            Self::Denied { error, .. } => Some(error),
+        }
+    }
+}
+
 /// Every value a row needs, with no optional required fields.
 ///
 /// This is a struct rather than a builder on purpose. Every required field is
@@ -598,12 +725,10 @@ pub struct RowSpec {
     pub cursor: CursorTouch,
     /// SHA-256 of the exact input payload bytes.
     pub input_sha256: String,
-    /// SHA-256 of the exact output payload bytes.
-    pub output_sha256: String,
-    /// What the attempt produced.
-    pub outcome: Outcome,
-    /// The error text when the outcome is restrictive; `None` otherwise.
-    pub error: Option<String>,
+    /// What the attempt produced, and — inseparably — whether there is an output
+    /// digest at all. See [`EffectResult`]: a denied effect carries NO
+    /// `output_sha256`, structurally.
+    pub result: EffectResult,
     /// When the fact this row records was observed.
     pub ts: Timestamp,
 }
@@ -641,7 +766,7 @@ struct Wire<'row> {
     cursor_before: Option<&'row CursorPoint>,
     cursor_after: Option<&'row CursorPoint>,
     input_sha256: &'row str,
-    output_sha256: &'row str,
+    output_sha256: Option<&'row str>,
     outcome: Outcome,
     error: Option<&'row str>,
 }
@@ -671,8 +796,9 @@ pub struct ParsedRow {
     pub cursor_after: Option<CursorPoint>,
     /// Digest of the input payload.
     pub input_sha256: String,
-    /// Digest of the output payload.
-    pub output_sha256: String,
+    /// Digest of the output payload. **Absent exactly when the effect was
+    /// denied** — that absence is the proof nothing ran.
+    pub output_sha256: Option<String>,
     /// What the attempt produced.
     pub outcome: Outcome,
     /// Error text on a restrictive outcome.
@@ -703,13 +829,12 @@ impl PacketRow {
         require_non_empty("actor.agent_name", &spec.actor.agent_name)?;
         require_non_empty("actor.pane_id", &spec.actor.pane_id)?;
         validate_sha256("input_sha256", &spec.input_sha256)?;
-        validate_sha256("output_sha256", &spec.output_sha256)?;
         if spec.attempt == 0 {
             return Err(PacketError::ZeroAttempt);
         }
-        if let Some(error) = spec.error.as_deref() {
-            require_non_empty("error", error)?;
-        }
+        // The output digest and the error text are validated by
+        // `EffectResult`'s constructors, which is the point: there is no path
+        // from an unvalidated pair to a row, and no pair to validate here.
         Ok(Self { spec })
     }
 
@@ -738,9 +863,9 @@ impl PacketRow {
             cursor_before: self.spec.cursor.before(),
             cursor_after: self.spec.cursor.after(),
             input_sha256: &self.spec.input_sha256,
-            output_sha256: &self.spec.output_sha256,
-            outcome: self.spec.outcome,
-            error: self.spec.error.as_deref(),
+            output_sha256: self.spec.result.output_sha256(),
+            outcome: self.spec.result.outcome(),
+            error: self.spec.result.error(),
         };
         let line = serde_json::to_string(&wire).map_err(|error| PacketError::Malformed {
             detail: error.to_string(),
@@ -903,9 +1028,26 @@ pub fn parse_line(line: &str) -> Result<ParsedRow, PacketError> {
             expected: SCHEMA_VERSION,
         });
     }
-    serde_json::from_value(value).map_err(|error| PacketError::Malformed {
-        detail: error.to_string(),
-    })
+    let parsed: ParsedRow =
+        serde_json::from_value(value).map_err(|error| PacketError::Malformed {
+            detail: error.to_string(),
+        })?;
+
+    // ABSENCE AS PROOF, enforced on READ as well as on write.
+    //
+    // The emitter cannot construct a denial carrying an output digest -
+    // `EffectResult` has no field to put one in. A HAND-WRITTEN row can attempt
+    // it, and a reader that accepted it would let the forgery in through the
+    // back door. So the coherence is re-checked here: restrictive outcome =>
+    // no digest, non-restrictive => exactly one.
+    let output_present = parsed.output_sha256.is_some();
+    if parsed.outcome.is_restrictive() == output_present {
+        return Err(PacketError::IncoherentResult {
+            outcome: parsed.outcome.as_str(),
+            output_present,
+        });
+    }
+    Ok(parsed)
 }
 
 /// An append-only journal of emitted rows.

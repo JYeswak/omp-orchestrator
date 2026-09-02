@@ -10,7 +10,8 @@ use agent_mail_native::identity::{BindingStatus, PaneIdentity};
 use agent_mail_native::journey::{AgentName, ProjectKey, ResumePoint};
 use agent_mail_native::packet::{
     assert_field_order, parse_line, sha256_hex, ActorIdentity, Authority, CursorPoint, CursorTouch,
-    Outcome, PacketError, PacketJournal, PacketRow, RowSpec, Stage, Timestamp, ACTOR_FIELD_ORDER,
+    EffectResult, Outcome, PacketError, PacketJournal, PacketRow, RowSpec, Stage, Timestamp,
+    ACTOR_FIELD_ORDER,
     FIELD_ORDER, SCHEMA, SCHEMA_VERSION,
 };
 use agent_mail_native::DeliveryCursor;
@@ -40,9 +41,8 @@ fn valid_spec() -> RowSpec {
         attempt: 1,
         cursor: CursorTouch::Untouched,
         input_sha256: sha256_hex(b"input payload"),
-        output_sha256: sha256_hex(b"output payload"),
-        outcome: Outcome::Delivered,
-        error: None,
+        result: EffectResult::completed(sha256_hex(b"output payload"))
+            .expect("a well-formed digest is a valid completed effect"),
         ts: Timestamp::from_unix(1_767_331_200),
     }
 }
@@ -485,13 +485,9 @@ fn a_malformed_digest_refuses_with_the_observed_length() {
 
     // Uppercase hex is refused too: two spellings of one digest would make an
     // equality comparison a false mismatch.
-    let uppercase = RowSpec {
-        output_sha256: sha256_hex(b"x").to_uppercase(),
-        ..valid_spec()
-    };
     assert!(
         matches!(
-            PacketRow::new(uppercase),
+            EffectResult::completed(sha256_hex(b"x").to_uppercase()),
             Err(PacketError::MalformedSha256 { .. })
         ),
         "uppercase hex must be refused so one digest has one spelling"
@@ -544,8 +540,8 @@ fn an_empty_journal_is_an_error_not_a_clean_run() {
 fn a_value_containing_newlines_quotes_and_backslashes_stays_one_parseable_line() {
     let hostile = "line one\nline two\ttabbed \"quoted\" back\\slash \u{1b}[31mansi\u{1b}[0m";
     let spec = RowSpec {
-        outcome: Outcome::ToolError,
-        error: Some(hostile.to_owned()),
+        result: EffectResult::denied(Outcome::ToolError, hostile)
+            .expect("ToolError is restrictive"),
         ..valid_spec()
     };
     let emitted = PacketRow::new(spec).expect("valid").emit().expect("emit");
@@ -701,4 +697,154 @@ fn every_authority_round_trips_through_the_wire() {
             authority
         );
     }
+}
+
+// ─────────── ABSENCE AS PROOF (rigor-atlas: admit-then-act-with-absence-as-proof)
+//             kinds: audit-kernel, runtime-kernel, sandbox-kernel
+//             exemplar: franken_node/.../runtime/effect_receipt.rs:21
+
+/// THE DECISIVE LEG. A denied effect emits `"output_sha256":null`, and the proof
+/// that nothing ran is that ABSENCE — not a settable flag beside a digest.
+///
+/// The first version of this contract had `outcome: Outcome` next to a REQUIRED
+/// `output_sha256: String`, so a row could say `refused` while carrying a 64-hex
+/// digest of bytes that were never produced. The card's anti-pattern, verbatim:
+/// *"a boolean can be set wrongly; a missing field cannot be forged into
+/// presence."*
+#[test]
+fn a_denied_effect_emits_no_output_digest() {
+    for outcome in [
+        Outcome::Refused,
+        Outcome::TimedOut,
+        Outcome::Unreachable,
+        Outcome::ToolError,
+    ] {
+        let spec = RowSpec {
+            result: EffectResult::denied(outcome, "the fence refused this pane")
+                .expect("every restrictive outcome is a valid denial"),
+            ..valid_spec()
+        };
+        let emitted = PacketRow::new(spec).expect("valid").emit().expect("emit");
+
+        assert!(
+            emitted.line.contains("\"output_sha256\":null"),
+            "{} must emit a null output digest: {}",
+            outcome.as_str(),
+            emitted.line
+        );
+        assert!(
+            !emitted.line.contains(r#""error":null"#),
+            "a denial must carry its reason: {}",
+            emitted.line
+        );
+        // The field order is untouched by the change: still exactly 14 keys.
+        assert_field_order(&emitted.line).expect("order holds for a denied row");
+
+        let parsed = parse_line(&emitted.line).expect("a coherent denial parses");
+        assert_eq!(
+            parsed.output_sha256, None,
+            "the absence must survive the round trip, not become an empty string"
+        );
+        assert_eq!(parsed.outcome, outcome);
+    }
+}
+
+/// The type has no field to hold a digest on the denied side, so the forgery is
+/// unconstructible in this crate. This leg asserts the accessor agrees for every
+/// restrictive outcome — the structural claim, checked rather than asserted in
+/// prose.
+#[test]
+fn no_restrictive_outcome_can_carry_an_output_digest() {
+    for outcome in [
+        Outcome::Refused,
+        Outcome::TimedOut,
+        Outcome::Unreachable,
+        Outcome::ToolError,
+    ] {
+        let denied = EffectResult::denied(outcome, "reason").expect("restrictive");
+        assert_eq!(denied.output_sha256(), None, "{}", outcome.as_str());
+        assert_eq!(denied.outcome(), outcome);
+        assert!(denied.error().is_some());
+    }
+    let completed = EffectResult::completed(sha256_hex(b"out")).expect("valid digest");
+    assert!(completed.output_sha256().is_some());
+    assert_eq!(completed.error(), None, "a completed effect has no error text");
+}
+
+/// KNOWN-BAD: a NON-restrictive outcome cannot be paired with a denial.
+/// `Delivered` and `NothingToDo` describe effects that ran, so allowing either
+/// would reintroduce the incoherence the type removes.
+#[test]
+fn a_non_restrictive_outcome_cannot_be_denied() {
+    for outcome in [Outcome::Delivered, Outcome::NothingToDo] {
+        match EffectResult::denied(outcome, "reason") {
+            Err(PacketError::NonRestrictiveDenial { outcome: named }) => {
+                assert_eq!(named, outcome.as_str());
+            }
+            other => panic!("{} must not be deniable, got {other:?}", outcome.as_str()),
+        }
+    }
+    let refusal = EffectResult::denied(Outcome::Delivered, "x").unwrap_err().to_string();
+    assert!(
+        refusal.contains("PACKET_NON_RESTRICTIVE_DENIAL") && refusal.contains("describes an effect that RAN"),
+        "the refusal must say why: {refusal}"
+    );
+}
+
+/// A denial with no reason records nothing.
+#[test]
+fn a_denial_without_a_reason_is_refused() {
+    match EffectResult::denied(Outcome::Refused, "   ") {
+        Err(PacketError::EmptyField { field }) => assert_eq!(field, "error"),
+        other => panic!("a blank denial reason must refuse, got {other:?}"),
+    }
+}
+
+/// ABSENCE AS PROOF ENFORCED ON READ, both directions. The emitter cannot build
+/// the forgery; a HAND-WRITTEN row can attempt it, and a reader that accepted it
+/// would let it in through the back door.
+#[test]
+fn a_hand_written_row_cannot_forge_either_direction() {
+    let completed = PacketRow::new(valid_spec())
+        .expect("valid")
+        .emit()
+        .expect("emit");
+
+    // FORGERY 1: a restrictive outcome carrying an output digest.
+    let forged_denial = completed
+        .line
+        .replacen("\"outcome\":\"delivered\"", "\"outcome\":\"refused\"", 1);
+    assert_ne!(forged_denial, completed.line, "the forgery must apply");
+    match parse_line(&forged_denial) {
+        Err(PacketError::IncoherentResult {
+            outcome,
+            output_present,
+        }) => {
+            assert_eq!(outcome, "refused");
+            assert!(output_present, "the forgery is a denial WITH a digest");
+        }
+        other => panic!("a denial carrying a digest must be refused, got {other:?}"),
+    }
+
+    // FORGERY 2: the inverse — a completed outcome with the digest stripped.
+    let stripped = completed.line.replacen(
+        &format!("\"output_sha256\":\"{}\"", sha256_hex(b"output payload")),
+        "\"output_sha256\":null",
+        1,
+    );
+    assert_ne!(stripped, completed.line, "the strip must apply");
+    match parse_line(&stripped) {
+        Err(PacketError::IncoherentResult {
+            outcome,
+            output_present,
+        }) => {
+            assert_eq!(outcome, "delivered");
+            assert!(!output_present, "the forgery is a completion WITHOUT a digest");
+        }
+        other => panic!("a completion missing its digest must be refused, got {other:?}"),
+    }
+
+    // KNOWN-GOOD: the unforged row still parses. Without this the check is
+    // attack-only, and an over-strict gate gets routed around.
+    parse_line(&completed.line).expect("the coherent row must still parse");
 }
