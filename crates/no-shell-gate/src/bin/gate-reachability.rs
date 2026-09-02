@@ -150,8 +150,11 @@ fn test_gate_files(root: &Path, package: &str) -> Vec<String> {
     files
         .into_iter()
         .filter_map(|path| {
-            let text = fs::read_to_string(&path).ok()?;
             let filename = path.file_name()?.to_str()?.to_owned();
+            if package == "no-shell-gate" && filename == "gate_reachability.rs" {
+                return None;
+            }
+            let text = fs::read_to_string(&path).ok()?;
             let marker = filename.contains("gate")
                 || filename.contains("ledger")
                 || filename.contains("census")
@@ -170,7 +173,10 @@ fn census(root: &Path) -> Result<(Vec<Row>, Vec<String>), String> {
         return Err("EMPTY_GATE_SET".to_owned());
     }
     let mut rows = Vec::new();
-    let mut excluded = vec!["crates/no-shell-gate/src/bin/gate-reachability.rs".to_owned()];
+    let mut excluded = vec![
+        "crates/no-shell-gate/src/bin/gate-reachability.rs".to_owned(),
+        "crates/no-shell-gate/tests/gate_reachability.rs".to_owned(),
+    ];
     for package in crates {
         let mut triggers = workflow_triggers(root, &package);
         if let Some(trigger) = hook_trigger(root, &package) {

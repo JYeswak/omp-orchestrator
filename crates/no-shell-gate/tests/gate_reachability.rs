@@ -155,6 +155,12 @@ fn report_excludes_its_own_source_and_has_a_no_shell_positive_control() {
     assert!(excluded.iter().any(|path| {
         path.as_str() == Some("crates/no-shell-gate/src/bin/gate-reachability.rs")
     }));
+    assert!(excluded
+        .iter()
+        .any(|path| { path.as_str() == Some("crates/no-shell-gate/tests/gate_reachability.rs") }));
+    assert!(!rows(&report)
+        .iter()
+        .any(|row| row["name"] == "no-shell-gate/tests/gate_reachability.rs"));
     let positive = &report["positive_control"];
     assert_eq!(positive["name"], "no-shell-gate");
     assert_eq!(positive["reachable"], true);
