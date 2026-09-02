@@ -42,6 +42,23 @@ error family. We have exit codes scattered across 51 crates and not one document
 
 Counts are the plan; each phase re-derives its own denominator on entry.
 
+## Phase epics — tracker anchors
+
+The root program epic `omp-orchestrator-jplf` owns this fixed eight-phase arc. These IDs are the
+tracker anchors for the phase headings below; each phase epic carries its own WHAT/WHY/ACCEPTANCE
+and independent-grader closure condition. The table is an identity map, not closure evidence.
+
+| phase | tracker epic | manifest scope |
+|---:|---|---|
+| 0 | `omp-orchestrator-jplf.1` | type algebra |
+| 1 | `omp-orchestrator-jplf.2` | kernel contracts |
+| 2 | `omp-orchestrator-jplf.3` | lifecycle stages |
+| 3 | `omp-orchestrator-jplf.4` | gates and enforcement |
+| 4 | `omp-orchestrator-jplf.5` | OMP surface |
+| 5 | `omp-orchestrator-jplf.6` | measurement |
+| 6 | `omp-orchestrator-jplf.7` | installability |
+| 7 | `omp-orchestrator-jplf.8` | governance and closure |
+
 ## PHASE 0 — the type algebra (5 docs) · IN FLIGHT
 
 Detail in `plan_to_pin_the_orchestrator_type_algebra.md`.
