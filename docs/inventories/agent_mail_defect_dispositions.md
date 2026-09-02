@@ -148,7 +148,7 @@ Non-zero (A) and non-zero (B), per the anti-vacuity condition.
 | 3 | `am robot search` RED for the entire corpus | **A** | adopt upstream `c7a7083f` (fsqlite `=0.3.14`); + **B** `SearchUnavailable` so an error is never read as empty |
 | 4 | `--direct` SQLite fallback does not announce itself | **B** | probe `/health` first; label source; typed `SourceAmbiguous` |
 | 5 | `mail_pending` default path never terminates and drops the cursor | **B** | wrapper always supplies a ceiling; typed `WaitCanceledWithoutCursor` distinct from "no mail" |
-| 6 | `inbox-events` carries no read state | **B** | reconcile pair: `inbox-events` cursor + the CLI's `priority` (NOT `read_ts` — see correction below) |
+| 6 | `inbox-events` carries no read state | **B** | reconcile pair: `inbox-events` cursor + `read_ts` from the **daemon** surface (the CLI lacks it and exposes `priority` instead — see correction below) |
 | 7 | `last_active` is registration recency wearing an activity name | **C** | named finding; never use as a work oracle |
 | 8 | the `am` CLI does not talk to the authenticated daemon | **C** | named finding; house pattern = daemon-primary, CLI-as-differential-oracle |
 | 9 | every pane binding resolves `legacy-unverified` | **B** | typed `PaneBindingUnverified`; reap with existing `cleanup_pane_identities` |
@@ -196,6 +196,23 @@ This confirms AmNative's own caution and closes it out as (C): **do not build a 
 refuses healthy debounced traffic. The right fix is documentation and consumer discipline —
 `signaled` is not a delivery oracle, `acknowledged` is the one that proves arrival.
 
+**WHERE THE WRONG FRAMING ACTUALLY LIVES, per AmNative's own audit of its crate.**
+`agent-mail-native` **never gates on `signaled`** — it only exposes
+`RecipientReceipt::is_persisted_but_unsignalled`, and the wired orchestrator caller records
+`signaled=` into a ledger row without branching on it. So **no healthy debounced traffic is refused
+anywhere today**, and the over-strict gate this row warns about was never built. The residue is in
+`agent-mail-native`'s **doc comments**, which describe the state as "the silent-failure shape"; the
+correction to the consumer rule above is pending, blocked only because `journey.rs` and `lib.rs` are
+held by GreenFrog's identity work. Recorded here so the framing does not outlive the message that
+corrected it.
+
+AmNative also notes its three "independent instances" (40786, 40810, 40826) were three instances of
+**normal debounced traffic** — the measurements were right and the diagnosis was wrong. Worth keeping
+because it is the same shape as the `mail_pending` error: a real, reproducible observation
+generalised into a defect claim **without first reading the thing that defines correct behaviour**.
+That is the failure mode task one exists to prevent, and it is why version-matching the checkout was
+the blocking task rather than housekeeping.
+
 ### Row #12 — folded into this epic, and RECLASSIFIED
 
 AmberGate filed `omp-orchestrator-monitor-reads-oracle-y256` as a read-state disagreement: the
@@ -232,15 +249,31 @@ $ sqlite3 ... "select count(*) from (select name from agents group by name havin
 So any Agent Mail figure derived from a name-based lookup without a project scope — including
 figures cited tonight — is suspect by construction.
 
-### Correction to a row inherited from the orchestrator
+### `read_ts` — a two-authorities split, not a missing field
 
-The broadcast that `am inbox --json` rows carry `read_ts` is **wrong**, and defect #6's action above
-is corrected accordingly. Measured keys are eight: `ack_status, age, from, id, importance,
-priority, subject, thread` — no `read_ts`, no `topic`. Read state on the CLI surface is `priority`.
-True per-recipient read state lives in the store as **`message_recipients.read_ts`** (schema
-confirmed: `read_ts INTEGER, ack_ts INTEGER, PRIMARY KEY(message_id, agent_id)`), which is the
-arbiter both surfaces should be checked against. The *conclusion* — a monitor needs both surfaces —
-stands; only the field name changes.
+This row was corrected twice and the second correction is AmNative's, against me. The orchestrator
+broadcast that `am inbox --json` rows carry `read_ts`; they do not — the CLI's keys are eight
+(`ack_status, age, from, id, importance, priority, subject, thread`) with read state exposed as
+`priority`. But my wording generalised that into "`read_ts` is not on the inbox surface", and
+**AmNative measured it on the daemon**: `fetch_inbox` over MCP returned
+`"read_ts":"2026-09-02T05:10:25.416054Z"` at 05:10Z.
+
+Confirmed at source rather than by re-calling the tool, because `fetch_inbox` **marks messages read**
+and that is a stated non-goal — its own description at `messaging.rs:3731` begins *"Retrieve recent
+messages for an agent and mark returned messages read"*, and documents `unread_only` as *"only
+recipient rows whose `read_ts` is unset"*. The field is declared and populated:
+
+```
+messaging.rs:1706   pub read_ts: Option<String>,
+messaging.rs:3871   read_ts: row.read_ts.map(micros_to_iso),
+```
+
+So the correct statement is **#8's two-authorities split again, not a contradiction**: `read_ts`
+originates in the store as `message_recipients.read_ts` (`read_ts INTEGER, ack_ts INTEGER,
+PRIMARY KEY(message_id, agent_id)`), the **daemon surfaces it**, and the **CLI does not**. The store
+remains the arbiter — it is what settled #12 — and a monitor still needs both surfaces. AmNative's
+`InboxMessage::read_ts` and its reconciliation pair are therefore reading a field that genuinely
+exists on the path it uses.
 
 ### (A) row — #3, the patch path
 
@@ -265,6 +298,30 @@ Each defense must be shown refusing the input that produced the defect:
 | 6 | (reconciliation, not a refusal) | a monitor reading only `inbox-events` reporting "no unread" while `message_recipients.read_ts` is null for that recipient |
 | 9 | `PaneBindingUnverified` | `resolve_pane_identity('%1397')` returning `binding: "legacy-unverified"` |
 | 12 | `AgentNameAmbiguous` | resolving the bare name `AmberGate` with no project scope, which matches agent ids **39 and 69** — must refuse, never silently pick one |
+
+**#12 CARRIES NO FIRES-ON-KNOWN-BAD LEG TODAY, AND THAT IS RECORDED RATHER THAN PAPERED OVER.**
+AmNative reports `agent-mail-native` is already structurally safe here: every `journey` function
+takes `&ProjectKey` alongside `&AgentName`, and `ResumePoint` binds project + recipient + cursor
+together so a position cannot travel without its owner. The ambiguous-resolution path is therefore
+**unreachable through that API**.
+
+But it holds because the known-bad input is **unconstructible**, not because anything refuses it —
+and by this document's own rule (a defense that has never refused is not a defense),
+**"unrepresentable" and "refuses" are different claims.** AmNative declined to report the second
+while shipping the first, which is the correct call. So:
+
+- **What is true today:** the bad input cannot be expressed against `agent-mail-native`'s types.
+  Arguably stronger than a refusal, since there is no path to gate.
+- **What is NOT true today:** that any code fires on a bare unscoped `AmberGate`. Nothing does,
+  because nothing can receive it.
+- **The residual gap:** callers that build arguments dynamically — from a config string, a message
+  body, a pane label — can still resolve a bare name through some *other* surface. The typed
+  `AgentNameAmbiguous` variant is a belt for exactly those, and it belongs with the identity work
+  currently held by GreenFrog, not beside it.
+
+Type-level unrepresentability is counted as satisfying #12's (B) **only** for calls that go through
+`agent-mail-native`. It closes nothing on the CLI or raw-MCP paths, where 10 ambiguous names remain
+resolvable by name alone.
 
 ### (C) rows — reproductions
 
@@ -363,14 +420,27 @@ git show v0.3.31:crates/mcp-agent-mail-tools/src/messaging.rs \
   | grep -qF 'a debounced or failed signal remains persisted but not signaled' \
   && echo "leg9 PASS source documents the debounced case (not a delivery gap)" \
   || echo "leg9 NOTE the documented semantics moved — #11 may need reopening"
+
+# LEG 10 — read_ts really is on the DAEMON surface (verified at source, never by calling
+# fetch_inbox, which marks messages read and is a stated non-goal).
+git show v0.3.31:crates/mcp-agent-mail-tools/src/messaging.rs > /tmp/amd_msg.rs
+grep -qF 'pub read_ts: Option<String>,' /tmp/amd_msg.rs \
+  && grep -qF 'read_ts: row.read_ts.map(micros_to_iso),' /tmp/amd_msg.rs \
+  && echo "leg10 PASS read_ts declared AND populated on the daemon inbox surface" \
+  || echo "leg10 NOTE daemon read_ts wiring changed — recheck the two-authorities row"
+grep -qF 'mark returned messages read' /tmp/amd_msg.rs \
+  && echo "leg10 PASS fetch_inbox self-documents that it MUTATES read state (do not call it)" \
+  || echo "leg10 NOTE fetch_inbox no longer documents the mutation"
 ```
 
-All **nine** legs run today, all PASS: leg0 `shipped=0.3.31 tag=v0.3.31 version=0.3.31`; leg1 `rows=5`
+All **ten** legs run today, all PASS: leg0 `shipped=0.3.31 tag=v0.3.31 version=0.3.31`; leg1 `rows=5`
 (stock sqlite3 answered the `m.topic` query); leg2 `messages.topic exists`; leg3 both planner FROM
 clauses bind `m=messages`; leg4 `rc=1`, engine error on stderr, **stdout empty**; leg5
 `/health 200, /mcp/ 401`; leg6 search SQL unchanged upstream with `origin/main` pinning
 `fsqlite = "=0.3.14"`; leg7 `AmberGate rows=2, colliding names=10`; leg8 cache drift
-`ground_truth=115 cached=47`; leg9 `signaled == receipt-existence` and the debounced case documented.
+`ground_truth=115 cached=47`; leg9 `signaled == receipt-existence` and the debounced case documented;
+leg10 `read_ts` declared and populated on the daemon surface, and `fetch_inbox` self-documents that
+it mutates read state.
 
 **Two legs invert the usual reading and must not be pattern-matched.** Leg 4 PASSES when the defect
 **still reproduces on the installed binary** — its PASS means the work is *not* done, and its
