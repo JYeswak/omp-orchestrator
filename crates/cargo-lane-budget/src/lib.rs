@@ -883,6 +883,57 @@ pub fn packet_contract(session: &str, pane: &str) -> Option<String> {
     ))
 }
 
+/// Exit code for a RED selftest.
+///
+/// Deliberately the EXISTING `1`, not a newly allocated number. `XC-001` already carries
+/// "a gate refused", and a RED selftest is exactly that meaning — so nothing new lands in
+/// the `1`-`4` legacy band, which the registry's band rule closes to new semantics ("do not
+/// add meanings; new semantics go to an unallocated band"). The failure COUNT deliberately
+/// does not become the code: 256 distinct meanings is not a contract.
+pub const SELFTEST_RED_EXIT: u8 = 1;
+
+/// Collapse a selftest failure count into a process exit code **without narrowing**.
+///
+/// THE DEFECT THIS REPLACES (bead `omp-orchestrator-n34x`): `main.rs` forwarded the count as
+/// `ExitCode::from(selftest() as u8)`. In Rust `as` between integers WRAPS, it does not
+/// saturate, so `256 as u8 == 0` — the process would exit SUCCESS while its own stdout said
+/// `SELFTEST RED cargo-lane-budget failures=256`. Latent only because both `return` arms were
+/// literals; the obvious next edit (return the already-computed count, which is strictly more
+/// informative) activates it. Every multiple of 256 is an activation value.
+///
+/// This function is total over `i32` and contains no numeric conversion at all: the codes are
+/// `u8` literals. Truncation is not fixed here, it is inexpressible.
+///
+/// On the domain `selftest` can actually return — `{0, 1}` — this agrees with the old cast
+/// byte for byte, which is what makes the change safe in a crate that has no equivalence
+/// oracle in this repo (EE-P4). It diverges only where the old cast was wrong.
+pub fn selftest_exit_code(failures: i32) -> u8 {
+    if failures == 0 {
+        0
+    } else {
+        SELFTEST_RED_EXIT
+    }
+}
+
+/// The selftest summary line and its exit code, derived from ONE value.
+///
+/// The whole defect in `n34x` is that the emitted line and the exit status could DISAGREE, so
+/// an exit-code-only assertion could not see it (`AGENTS.md` gate rule 7). Producing both from
+/// a single argument makes disagreement unrepresentable rather than merely untested.
+pub fn selftest_summary(failures: i32) -> (String, u8) {
+    if failures == 0 {
+        (
+            "SELFTEST PASS cargo-lane-budget".to_owned(),
+            selftest_exit_code(failures),
+        )
+    } else {
+        (
+            format!("SELFTEST RED cargo-lane-budget failures={failures}"),
+            selftest_exit_code(failures),
+        )
+    }
+}
+
 pub fn selftest() -> i32 {
     let mut failures = 0;
     if derive_budget(3, 22, 29, 96) == 96 && derive_budget(7, 22, 29, 96) == 183 {
@@ -909,13 +960,9 @@ pub fn selftest() -> i32 {
         println!("SELFTEST RED shared-lane identity");
         failures += 1;
     }
-    if failures == 0 {
-        println!("SELFTEST PASS cargo-lane-budget");
-        0
-    } else {
-        println!("SELFTEST RED cargo-lane-budget failures={failures}");
-        1
-    }
+    let (summary, code) = selftest_summary(failures);
+    println!("{summary}");
+    i32::from(code)
 }
 
 pub fn print_report(report: &Report) -> i32 {
@@ -934,7 +981,10 @@ pub fn read_to_string(path: &Path) -> io::Result<String> {
 }
 #[cfg(test)]
 mod tests {
-    use super::{assess_count, check, selftest, Config, Status};
+    use super::{
+        assess_count, check, selftest, selftest_exit_code, selftest_summary, Config, Status,
+        SELFTEST_RED_EXIT,
+    };
     use std::{fs, path::PathBuf};
 
     /// THE CLOSED CODE SPACE `XC-PT-SELFTEST` CLAIMS.
@@ -967,6 +1017,88 @@ mod tests {
             "selftest() returned {code}, which `ExitCode::from(selftest() as u8)` at \
              main.rs:24 would TRUNCATE rather than refuse"
         );
+    }
+
+    /// KNOWN-BAD LEG, FIRING AT THE EXACT ACTIVATION VALUE — bead `omp-orchestrator-n34x`.
+    ///
+    /// The defect is invisible at every value below 256 and at every value that is not a
+    /// multiple of it, which is precisely why it survived review. A leg at `failures = 1`
+    /// proves nothing. This one first PINS THE MECHANISM — `256_i32 as u8 == 0`, the wrapping
+    /// the old `main.rs:24` performed — and then asserts the replacement refuses it.
+    #[test]
+    fn exit_code_does_not_truncate_at_256() {
+        // The mechanism, stated as an assertion rather than as prose: this is what the old
+        // `ExitCode::from(selftest() as u8)` did with a count of 256.
+        assert_eq!(
+            256_i32 as u8, 0,
+            "the premise of this bead: `as` wraps, so 256 became a SUCCESS exit"
+        );
+
+        // The replacement, at 256 and at every other multiple that would have wrapped.
+        for failures in [256, 512, 768, 65_536, 16_777_216] {
+            assert_ne!(
+                selftest_exit_code(failures),
+                0,
+                "failures={failures} truncated to a SUCCESS exit; the n34x defect is back"
+            );
+            assert_eq!(selftest_exit_code(failures), SELFTEST_RED_EXIT);
+        }
+
+        // i32::MIN is the other value `as u8` mishandles silently.
+        assert_ne!(selftest_exit_code(i32::MIN), 0);
+        assert_ne!(selftest_exit_code(-1), 0);
+    }
+
+    /// KNOWN-GOOD LEG: zero failures still exits 0, and on the domain `selftest` can actually
+    /// return the new conversion agrees with the old cast BYTE FOR BYTE. That equivalence is
+    /// what makes this change safe in a crate with no equivalence oracle in this repo (EE-P4):
+    /// it diverges from the old behaviour only where the old behaviour was wrong.
+    #[test]
+    fn exit_code_agrees_with_the_old_cast_on_the_reachable_domain() {
+        assert_eq!(selftest_exit_code(0), 0);
+        for reachable in [0_i32, 1] {
+            assert_eq!(
+                selftest_exit_code(reachable),
+                reachable as u8,
+                "behaviour changed on a value selftest can actually return"
+            );
+        }
+    }
+
+    /// ASSERT THE MESSAGE, NOT JUST THE CODE — `AGENTS.md` gate rule 7.
+    ///
+    /// The entire defect is that the emitted line and the exit status DISAGREE, so an
+    /// exit-code-only assertion is blind to it. This reads both, at 256 specifically, and
+    /// pins that the RED line still names the true count even though the code does not carry
+    /// it — the count belongs in the message, never in the exit status.
+    #[test]
+    fn the_line_and_the_status_cannot_disagree() {
+        let (line, code) = selftest_summary(256);
+        assert!(
+            line.contains("SELFTEST RED cargo-lane-budget failures=256"),
+            "the RED line must still name the real count, got {line:?}"
+        );
+        assert_ne!(
+            code, 0,
+            "stdout says RED failures=256 while the exit code says SUCCESS — the n34x defect"
+        );
+
+        let (pass_line, pass_code) = selftest_summary(0);
+        assert!(
+            pass_line.contains("SELFTEST PASS cargo-lane-budget"),
+            "got {pass_line:?}"
+        );
+        assert_eq!(pass_code, 0);
+
+        // Anti-vacuity: a PASS line must never be paired with a nonzero code either.
+        for failures in [0, 1, 2, 255, 256] {
+            let (line, code) = selftest_summary(failures);
+            assert_eq!(
+                line.contains("SELFTEST RED"),
+                code != 0,
+                "line/status disagreement at failures={failures}: {line:?} with code {code}"
+            );
+        }
     }
 
     #[test]

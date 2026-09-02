@@ -2,7 +2,7 @@
 
 use cargo_lane_budget::{
     check, config_from_env, packet_contract, print_report, resolve_lane_identity, root_set,
-    selftest,
+    selftest, selftest_exit_code,
 };
 use std::env;
 use std::process::ExitCode;
@@ -21,7 +21,11 @@ fn main() -> ExitCode {
     // arm below is what the compiler requires, not a silently-absorbed state.
     let mode: &str = args.first().map(String::as_str).unwrap_or("");
     if mode == "--selftest" {
-        return ExitCode::from(selftest() as u8);
+        // NOT `selftest() as u8` (bead omp-orchestrator-n34x): `as` WRAPS between integers,
+        // so a count of 256 truncated to 0 and the process exited SUCCESS while stdout said
+        // `SELFTEST RED ... failures=256`. `selftest_exit_code` is total over i32 and does no
+        // numeric conversion, so the narrowing is inexpressible rather than merely absent.
+        return ExitCode::from(selftest_exit_code(selftest()));
     }
     let config = match config_from_env() {
         Ok(config) => config,
