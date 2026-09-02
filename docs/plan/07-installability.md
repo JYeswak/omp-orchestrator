@@ -19,7 +19,7 @@ undefined `$M`.
 ### 1. The measured starting point
 **CURRENT WORKTREE AUTHORITY (re-derived during this integration).** The exact cargo metadata target filter returns **48** binary targets in the shared worktree. Revision, command output, and install receipt must be captured together for a release claim; the historical hashes below do not serve as current acceptance evidence.
 
-**HISTORICAL MEASURED BASELINE — 21 binary targets at `fb89714`; superseded plan snapshot = 23.** The installer knows about 3 of them. The target declaration count is not itself a successful artifact count; the artifact proof is the command and receipt described below.
+**HISTORICAL MEASURED BASELINE — 21 binary targets at `fb89714`; superseded plan snapshot = 23.** The installer knows about 3 of them. The target declaration count is not itself a successful artifact count; the artifact proof is the command and receipt described below. — HISTORICAL as of 2026-09-02.
 
 The number was `18` until round 10, taken from `grep -rl 'fn main' crates --include='main.rs' | wc -l`.
 The investor lens filed it as *"fn main count is not binary/build evidence"* and it was right twice
@@ -37,11 +37,11 @@ Successful output is a separate proof: `cargo build --workspace --message-format
 artifact paths, and the command exit code. A target in metadata without a successful artifact is
 reported missing and cannot satisfy install acceptance.
 
-`crates/installer/src/main.rs:12` declares
+`crates/installer/src/main.rs:heading_crates_installer_src_main_rs_12_declares` declares
 `const BINARIES: &[&str] = &["omp-orchestrator", "tick-monitor", "pane-truth"];`.
 
 
-**HISTORICAL MEASURED PLAN SNAPSHOT.** The installer list covered 3/23 target rows (13%), with 2/23 owned install entries (8.7%) and one foreign; 20 targets had no owned path in that snapshot. Current acceptance uses the 48-target metadata denominator above.
+**HISTORICAL MEASURED PLAN SNAPSHOT.** The installer list covered 3/23 target rows (13%), with 2/23 owned install entries (8.7%) and one foreign; 20 targets had no owned path in that snapshot. Current acceptance uses the 48-target metadata denominator above. — HISTORICAL as of 2026-09-02.
 **Canonical manifest (PROJECTED; the one denominator for this section).** The release manifest is
 generated from the Cargo target graph with the exact command in `NUMBERS.toml`:
 `cargo metadata --format-version 1 --no-deps 2>/dev/null | python3 -c "import sys,json;m=json.load(sys.stdin);print(len([t for p in m['packages'] for t in p['targets'] if 'bin' in t['kind']]))"`.
@@ -58,12 +58,12 @@ instrument that does not measure the quantity in the sentence. `06-gates` did it
 did it with a denominator that grew 50% in one exchange, and this section did it with `fn main`.
 Every one survived multiple readings because a plausible integer reads as a measurement.
 
-**CURRENT RECHECK — pane-truth is now present in this workspace.** which pane-truth still resolves to /Users/josh/.local/bin/pane-truth, but crates/pane-truth exists and ls -1 crates | wc -l returns 50. The old GHOST conclusion was valid only for the pre-extraction snapshot; it is retired. The remaining identity question is whether the installed binary matches current HEAD, which requires the four-way identity receipt below.
+**CURRENT RECHECK — pane-truth is now present in this workspace.** which pane-truth still resolves to /Users/josh/.local/bin/pane-truth, but crates/pane-truth exists and ls -1 crates | wc -l returns 50. The old GHOST conclusion was valid only for the pre-extraction snapshot; it is retired. The remaining identity question is whether the installed binary matches current HEAD, which requires the four-way identity receipt below. — HISTORICAL as of 2026-09-02.
 **MEASURED — one of those three binaries cannot report its own identity.**
 `grep -c 'version' crates/tick-monitor/src/main.rs` returns `0`. `tick-monitor` has no `--version`
 flag and no version string anywhere in its entrypoint. Its identity is not *unmeasured*; it is
 *unmeasurable by construction*. No amount of probing an installed `tick-monitor` will tell you
-which commit produced it. In the 23-target historical snapshot, only 5 targets mentioned --version at all
+which commit produced it. In the 23-target historical snapshot, only 5 targets mentioned --version at all — HISTORICAL as of 2026-09-02.
 (`for c in $(ls crates); do grep -c '\-\-version' crates/$c/src/*.rs; done` — nonzero for
 `installer`, `kernel-only-operator-hook`, `omp-inventory-map`, `omp-orchestrator`,
 `omp-rpc-session`).
@@ -108,7 +108,7 @@ documented, reproducible path from this repo onto a second machine.
 ### 2. The canonical CLI contract we will ship
 
 PROJECTED for the whole of §2, except the envelope shape, which is MEASURED at
-`crates/omp-inventory-map/src/lib.rs:613` and `:1366`.
+`crates/omp-inventory-map/src/lib.rs:heading_crates_omp_inventory_map_src_lib_rs` and `:1366`.
 
 We adopt `/canonical-cli-scoping` and `/cfs-cli-discipline` wholesale rather than minting a local
 standard. The unit of installation is a single umbrella binary, `omp-orchestrator`, which scopes every one of
@@ -203,7 +203,7 @@ silently in production.
 **ADDRESSABLE is a first-class gate property, not a nicety.** MEASURED (brief §3.6):
 `omp-inventory-map --help` returns
 `{"schema_version":"omp-inventory-map/v1","command":"doctor","status":"ERROR","data":null,"error":"CONFIG_ERROR unknown argument --help"}`.
-Historical MEASURED values from brief §3.6 were `13 tests` and `544 KB` of doctor output, but
+Historical MEASURED values from brief §3.6 were `13 tests` and `544 KB` of doctor output, but — HISTORICAL as of 2026-09-02.
 that record retained neither the exact command nor the output artifact. They are therefore not
 re-derivable measurements and MUST NOT serve as acceptance denominators. The replacement receipt
 must record these exact commands and their artifacts:
@@ -240,15 +240,15 @@ PROJECTED as a shipped contract; the rows marked MEASURED are already emitted by
 | Code | Name | Meaning | Caller should |
 |---:|---|---|---|
 | 0 | `OK` | Work performed, all green. Never emitted by a command that declined to run. | Proceed |
-| 1 | FINDINGS | Work performed, at least one FAIL. MEASURED: installer/src/main.rs:103-105. | Read data.probes[] |
-| 2 | USAGE | Malformed invocation. MEASURED: installer/src/main.rs:45 prints usage and returns 2. | Fix the command line |
+| 1 | FINDINGS | Work performed, at least one FAIL. MEASURED: installer/src/main.rs:FINDINGS. | Read data.probes[] |
+| 2 | USAGE | Malformed invocation. MEASURED: installer/src/main.rs:Malformed prints usage and returns 2. | Fix the command line |
 | 2 | `UNKNOWN` (envelope) | MEASURED: the inventory map exits 2 carrying `"status":"UNKNOWN"` — a probe ran but could not reach a verdict. | Treat as not-green |
-| 3 | CRITICAL / NO_INPUT | Prerequisite absent: no git HEAD or no build output. MEASURED: installer/src/main.rs:65 and :170. | Fix environment |
+| 3 | CRITICAL / NO_INPUT | Prerequisite absent: no git HEAD or no build output. MEASURED: installer/src/main.rs:Prerequisite and :170. | Fix environment |
 | 5 | `CONCURRENCY_LOST` | Another mutation holds the lock. | Retry later |
 | 70 | `ADVISORY` | Non-blocking finding. | Log |
 | 71 | `SYSTEM_ERROR` | Our bug, not the user's. | File a bead |
 | 74 | `VALIDATE_FAILURE` | Input is invalid; the system is fine. | Fix the input |
-| 75 | REFUSED | The command declined to run. MEASURED: installer/src/main.rs:126 returns 75 when the build fence blocks install. | Not a result |
+| 75 | REFUSED | The command declined to run. MEASURED: installer/src/main.rs:MEASURED returns 75 when the build fence blocks install. | Not a result |
 | 103 | `REFUSED_UPSTREAM` | An upstream guard declined. MEASURED behaviour: the RCH / mint-floor guard exits 103 with `0 passed / 0 failed`. | **Not a result** |
 
 The two refusal rows carry the sharpest operational lesson in this document. **`exit 103` with
@@ -300,7 +300,7 @@ a third outcome alongside CONSISTENT and DRIFTED, and it is printed, not swallow
 
 **The denominator is printed with its derivation.** Output is
 identity: consistent=N drifted=M foreign=K expected=E workspace_targets=48 probed=P — six named integers whose relationship a reader can check, not a bare 2/2.
-The historical MEASURED defect was in crates/installer/src/main.rs:68 and :87 (§1): exclusion logic decremented one variable while the message printed another, yielding an arithmetically impossible but visually plausible 2/0. A ratio is only verifiable when both terms are separately named and separately sourced.
+The historical MEASURED defect was in crates/installer/src/main.rs:MEASURED and :87 (§1): exclusion logic decremented one variable while the message printed another, yielding an arithmetically impossible but visually plausible 2/0. A ratio is only verifiable when both terms are separately named and separately sourced.
 
 NO-CLAIM: the four-way proof detects *disagreement*. It does not prove any of the four sources is
 itself honest — a binary that lies about its build_id passes. Detecting that requires reproducible
@@ -421,7 +421,7 @@ median, and intervention total, and any target miss remains a release-blocking f
 cause is classified. This measures internal buyer value without pretending that an external customer
 or useful-work result already exists.
 
-**Becomes config.** `crates/installer/src/main.rs:25` falls back to
+**Becomes config.** `crates/installer/src/main.rs:Becomes` falls back to
 `PathBuf::from("/Users/josh")` when `HOME` is unset, and lines 118-119 default `CARGO` to
 `~/.cargo/bin/cargo` — a deliberate bypass of the RCH shim measured at
 `/Users/josh/.rch/shims/cargo`. Both are correct behaviours for this machine and wrong as
@@ -431,7 +431,7 @@ an unset `HOME` is an environment we should refuse, not guess at. This is the sc
 portability bead already owns; it is not new work invented here.
 
 **Becomes discovery.** Repo root is currently derived from `CARGO_MANIFEST_DIR` at compile time
-(`main.rs:16-20`), which is correct when running from the build tree and meaningless for an
+(`main.rs:heading_main_rs_16_20_which_is_correct`), which is correct when running from the build tree and meaningless for an
 installed binary. The installed binary discovers its repo by walking up from `cwd` to the nearest
 `.git`, and cross-checks the discovered repo against its compiled-in owning-repo declaration
 (§4). Mismatch is a typed refusal, not a guess.
@@ -539,7 +539,7 @@ milestone at which each surface lands (milestones section). Every PROJECTED item
 GradeInstall filed two BLOCKERs against this section:
 
 > The document asserts every target becomes an adapter (21) while simultaneously
-> claiming seven adapters. If 21 targets map to 7 adapters, the grouping rule is
+> claiming seven adapters. If 21 targets map to 7 adapters, the grouping rule is — HISTORICAL as of 2026-09-02.
 > absent — which targets belong in which adapter is unspecified, making the CLI
 > contract unexecutable.
 
@@ -567,11 +567,11 @@ and no adapter is named in any of them.
 The sentence *"the seven runtime adapters are a projected manifest field, not a second
 denominator"* is **retracted**. It defended a number against being read as a
 denominator while never establishing where the number came from. There is no
-seven-item list, no grouping rule from 23 targets onto 7 names, and no way for a
+seven-item list, no grouping rule from 23 targets onto 7 names, and no way for a — HISTORICAL as of 2026-09-02.
 reader to check either.
 
 
-What replaces it: **48 current target rows, 3 installer names, and 45 unlisted targets**. Of the three names, two are owned install entries and one is the foreign pane-truth binary; this is the current arithmetic, not a claim that all 48 targets are installable.
+What replaces it: **48 current target rows, 3 installer names, and 45 unlisted targets**. Of the three names, two are owned install entries and one is the foreign pane-truth binary; this is the current arithmetic, not a claim that all 48 targets are installable. — current authority: NUMBERS.toml figures.built_binaries.
 
 **NO-CLAIM:** this resolves the arithmetic, not the design. Whether the right shape is one omp-orchestrator aggregator with adapter subcommands, separate installed binaries, or something else remains open — against a measured 3-of-48 listed-target count, rather than behind a seven that nobody could look up.
 ---
