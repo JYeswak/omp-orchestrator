@@ -87,6 +87,31 @@ fn is_plan_source(name: &str) -> bool {
     section || is_round_ledger(name) || matches!(name, "FINDINGS.jsonl" | "CONVERGENCE.jsonl")
 }
 
+/// Exactly what a ledger contributes to the assembly. `plan-assemble` embeds every record
+/// verbatim except `CONVERGENCE.jsonl`, whose halted round-22 rows it drops. Both the
+/// derived floor and the per-record containment check read this one function, so a change
+/// to the embedding rule cannot make one of them right and the other wrong.
+fn embedded_text(path: &PathBuf) -> String {
+    let content = fs::read_to_string(path).expect("record readable");
+    let is_convergence = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name == "CONVERGENCE.jsonl");
+    if is_convergence {
+        content
+            .lines()
+            .filter(|line| !line.contains("\"round\":22") && !line.contains("\"round\": 22"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else {
+        content
+    }
+}
+
+fn embedded_len(path: &PathBuf) -> usize {
+    embedded_text(path).trim_end().len()
+}
+
 /// Source artifacts newer than the assembly, newest first.
 fn stale_sections() -> (usize, Vec<(String, u64)>) {
     let root = repo_root();
@@ -213,11 +238,16 @@ fn the_plan_embeds_every_round_and_stamp() {
             && plan.contains("\"source_fingerprint\":\"fnv1a64:"),
         "PLAN.md is missing the plan-assemble source stamp"
     );
-    assert!(
-        plan.len() >= 1_086_000,
-        "PLAN.md shrank below the known-good all-rounds floor: {} bytes",
-        plan.len()
-    );
+    // The floor used to be the literal `1_086_000`, and a literal floor is a second stale
+    // figure: it was seeded from an assembly that still carried `12-journey`'s ten
+    // surface-coverage appendices, so when those 43,113 bytes moved to
+    // `docs/inventories/` on 2026-09-01 the gate refused a correct assembly (1,068,695
+    // bytes) for being 17,305 short of a number nothing re-derived. The floor now DERIVES
+    // what it checks: PLAN.md embeds every section and every admitted ledger verbatim, so
+    // it cannot be smaller than their sum. Measured the same day: sum 1,062,869 against an
+    // assembly of 1,068,695 — the 5,826-byte margin is the header plus the 29 record
+    // markers. Both sides move together when a section is edited, which is exactly the
+    // property the literal did not have.
 
     let mut records: Vec<PathBuf> = fs::read_dir(root.join("docs/plan"))
         .expect("read docs/plan")
@@ -246,6 +276,42 @@ fn the_plan_embeds_every_round_and_stamp() {
         "13 sections plus 16 ledgers must be embedded"
     );
 
+    // THE DERIVED FLOOR. Every section and every admitted ledger is embedded verbatim
+    // (the loop at the end of this test proves containment record by record), so the
+    // assembly cannot be smaller than their combined length. ANTI-VACUITY: a collapsed
+    // scan set would make this floor trivially satisfiable, so the sum is asserted
+    // non-trivial before it is used as a bound.
+    let mut sections_bytes = 0usize;
+    let mut sections_seen = 0usize;
+    for entry in fs::read_dir(root.join("docs/plan")).expect("read docs/plan").flatten() {
+        let path = entry.path();
+        let is_section = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| is_plan_source(name) && name.ends_with(".md"));
+        if is_section {
+            sections_seen += 1;
+            sections_bytes += fs::read_to_string(&path).expect("section readable").len();
+        }
+    }
+    assert_eq!(sections_seen, 13, "expected 13 numbered plan sections");
+    let records_bytes: usize = records
+        .iter()
+        .map(|path| embedded_len(path))
+        .sum();
+    let floor = sections_bytes + records_bytes;
+    assert!(
+        floor > 900_000,
+        "ANTI-VACUITY: derived floor collapsed to {floor} bytes; the source scan broke, and \
+         a floor of nearly nothing passes for any PLAN.md at all"
+    );
+    assert!(
+        plan.len() >= floor,
+        "PLAN.md is {} bytes, smaller than the {floor} bytes of sections and ledgers it \
+         claims to embed — content was dropped, not merely edited",
+        plan.len()
+    );
+
     let appendix = plan
         .split("## Appendix — convergence and audit ledgers")
         .nth(1)
@@ -268,20 +334,8 @@ fn the_plan_embeds_every_round_and_stamp() {
             .expect("record filename");
         let marker = format!("<!-- ===== {name} ===== -->");
         assert!(plan.contains(&marker), "PLAN.md omits record marker {name}");
-        let content = fs::read_to_string(&path).expect("record readable");
-        let expected = if name == "CONVERGENCE.jsonl" {
-            content
-                .lines()
-                .filter(|line| {
-                    !line.contains("\"round\":22") && !line.contains("\"round\": 22")
-                })
-                .collect::<Vec<_>>()
-                .join("\n")
-        } else {
-            content
-        };
         assert!(
-            plan.contains(expected.trim_end()),
+            plan.contains(embedded_text(&path).trim_end()),
             "PLAN.md omits record content {name}"
         );
     }

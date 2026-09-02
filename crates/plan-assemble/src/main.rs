@@ -204,10 +204,34 @@ fn guard_ledger_set(round_ledgers: usize, audit_ledgers: usize) -> Result<(), St
     }
 }
 
+/// The largest single-assembly reduction that is still a plausible human edit, in percent.
+const MAX_SHRINK_PERCENT: usize = 10;
+
+/// Refuse a CATASTROPHIC shrink, not any shrink.
+///
+/// # Why this is a band and not `output_len < previous_len`, measured 2026-09-01
+///
+/// The original predicate refused ANY reduction, which made the assembled plan
+/// monotonically non-decreasing and forbade the one remediation the document shape
+/// actually needed. Moving `docs/plan/12-journey.md`'s ten surface-coverage appendices
+/// to `docs/inventories/` — 43,113 bytes out of a 125,048-byte section, verbatim, with a
+/// stub left behind — produced exactly this:
+///
+/// ```text
+/// PLAN_ASSEMBLE_ERROR assembled body shrank from 1111808 to 1068695 bytes; refusing truncation
+/// ```
+///
+/// A deliberate 3.9% reduction and a collapsed scan set are not the same event, and a
+/// guard that cannot tell them apart forbids the fix instead of the defect. The
+/// catastrophic case is already covered twice over — `guard_ledger_set` refuses a
+/// sections-only assembly, and `main` refuses a duplicated section marker — so this
+/// predicate only has to catch the order-of-magnitude collapse. An allowed reduction is
+/// PRINTED by the caller, never silent: a plan that shrinks should always say so.
 fn guard_output_size(previous_len: usize, output_len: usize) -> Result<(), String> {
-    if output_len < previous_len {
+    if output_len * 100 < previous_len * (100 - MAX_SHRINK_PERCENT) {
         Err(format!(
-            "assembled body shrank from {previous_len} to {output_len} bytes; refusing truncation"
+            "assembled body shrank from {previous_len} to {output_len} bytes, more than \
+             {MAX_SHRINK_PERCENT}% of the document; refusing truncation"
         ))
     } else {
         Ok(())
@@ -565,6 +589,15 @@ fn main() -> std::process::ExitCode {
             eprintln!("PLAN_ASSEMBLE_ERROR {error}");
             return std::process::ExitCode::from(2);
         }
+        if body_text.len() < previous.len() {
+            println!(
+                "  PLAN_ASSEMBLE_SHRANK {} -> {} bytes (-{}, within the {MAX_SHRINK_PERCENT}% band) \
+                 — an allowed reduction, stated so it is never silent",
+                previous.len(),
+                body_text.len(),
+                previous.len() - body_text.len()
+            );
+        }
     }
     let out = body_text;
     if let Err(e) = std::fs::write(&target, &out) {
@@ -604,10 +637,18 @@ mod tests {
         assert!(error.contains("ledger set is empty"), "{error}");
     }
 
+    /// KNOWN-BAD then KNOWN-GOOD, in that order, because a band that never refuses is
+    /// decoration and a band that refuses a real edit is what this test replaced.
     #[test]
-    fn output_shrink_refuses_and_growth_admits() {
-        let error = guard_output_size(100, 99).expect_err("smaller output must refuse");
-        assert!(error.contains("shrank"), "{error}");
+    fn output_collapse_refuses_and_a_deliberate_reduction_admits() {
+        let error = guard_output_size(1_000_000, 500_000).expect_err("a 50% collapse must refuse");
+        assert!(error.contains("refusing truncation"), "{error}");
+        guard_output_size(1_000_000, 899_999).expect_err("10.0001% is past the band");
+        guard_output_size(1_000_000, 900_000).expect("exactly 10% is the last admissible value");
+        // The measured 2026-09-01 appendix extraction: 1111808 -> 1068695 is 3.9%, and the
+        // predicate this replaced refused it, which is why the predicate changed.
+        guard_output_size(1_111_808, 1_068_695)
+            .expect("a deliberate 3.9% reduction is an edit, not a truncation");
         guard_output_size(100, 100).expect("equal output is not truncation");
         guard_output_size(100, 101).expect("larger output is admissible");
     }
