@@ -9,6 +9,7 @@
 
 #![forbid(unsafe_code)]
 
+use no_shell_gate::commit_serialization;
 use no_shell_gate::violation_for;
 use orchestration_tick_gate::{law_code, parse_ledger, validate_receipt, LedgerError};
 use preregistration_gate::{
@@ -49,6 +50,46 @@ fn main() -> ExitCode {
             };
         }
     }
+
+    // ── nh5: ENTER THE GATE SECTION BEFORE READING THE INDEX ────────────
+    //
+    // Everything below reads `.git/index`, which is SHARED by every pane in this
+    // checkout. Without this, two concurrent hooks each gated a staged set the
+    // other was already changing, and both honestly passed -- on sets that no
+    // longer existed by the time git wrote the trees. That is the silent loss:
+    // no gate was wrong, and no gate was about the commit being made.
+    //
+    // Acquired BEFORE `get_staged_files()` on purpose. Acquiring after the read
+    // would leave exactly the window this exists to close.
+    let git_dir = resolve_git_dir();
+    let _gate_section = match commit_serialization::enter_gate_section(&git_dir, std::process::id())
+    {
+        commit_serialization::Serialization::Acquired(guard) => guard,
+        commit_serialization::Serialization::Contended {
+            holder_pid,
+            age_secs,
+        } => {
+            eprintln!(
+                "{}",
+                commit_serialization::retry_refusal(
+                    "GATE_SECTION_HELD",
+                    &format!("holder_pid={holder_pid} age_secs={age_secs}"),
+                )
+            );
+            return ExitCode::from(1);
+        }
+        // FAIL CLOSED. An unusable lock is not an absent one.
+        commit_serialization::Serialization::Unusable { detail } => {
+            eprintln!(
+                "{}",
+                commit_serialization::retry_refusal(
+                    "GATE_SECTION_UNUSABLE",
+                    &format!("detail=\"{detail}\""),
+                )
+            );
+            return ExitCode::from(2);
+        }
+    };
 
     // ── PRE-COMMIT mode: the six staged-set gates below ─────────────────
     let staged = match get_staged_files() {
@@ -259,6 +300,34 @@ fn main() -> ExitCode {
 
     validate_staged_tick_ledger(&repo_root, &mut refusals);
     if refusals.is_empty() {
+        // ── nh5: THE TOCTOU RECHECK ─────────────────────────────────────
+        //
+        // The lock serialises OUR hooks. It cannot stop a bare `git add` or
+        // `git reset` from another pane, because those paths run no hook. So
+        // re-read the staged set and compare: if it moved while the gates ran,
+        // this verdict describes a set that is not being committed, and saying
+        // CLEAN would be the silent loss with extra steps.
+        let after = match get_staged_files() {
+            Ok(files) => files,
+            Err(err) => {
+                eprintln!("MULTI-GATE ERROR: staged-set recheck failed: {err}");
+                return ExitCode::from(2);
+            }
+        };
+        let before_digest = commit_serialization::staged_digest(&staged);
+        let after_digest = commit_serialization::staged_digest(&after);
+        if let commit_serialization::IndexDrift::Drifted { before, after } =
+            commit_serialization::classify_drift(before_digest, after_digest)
+        {
+            eprintln!(
+                "{}",
+                commit_serialization::retry_refusal(
+                    "INDEX_DRIFTED_MID_GATE",
+                    &format!("before={before:x} after={after:x}"),
+                )
+            );
+            return ExitCode::from(1);
+        }
         eprintln!("CLEAN: all staged files passed the multi-gate checks");
         PreCommitOutcome::Clean.exit_code()
     } else {
@@ -427,6 +496,26 @@ fn get_staged_files() -> Result<Vec<String>, String> {
         subprocess_contract::BoundedOutcome::Unspawned(error) => {
             Err(format!("cannot spawn git diff --cached: {error}"))
         }
+    }
+}
+
+/// The absolute git directory, which is where the gate-section lock lives.
+///
+/// **Per git dir, not per repo path.** Two checkouts of the same repository have
+/// different git dirs and must not serialise against each other — they do not share
+/// an index, so there is no race between them. Getting this wrong would make the
+/// lock a global mutex across unrelated work.
+///
+/// Falls back to `./.git` when git cannot answer. That is deliberate rather than a
+/// refusal: a hook that cannot find its git dir is already in a state where the
+/// commit will fail on its own, and `./.git` still serialises the common case. The
+/// fallback CANNOT silently disable the lock — an uncreatable path yields
+/// `Serialization::Unusable`, which fails closed.
+fn resolve_git_dir() -> std::path::PathBuf {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    match bounded_git_text(&cwd, &["rev-parse", "--absolute-git-dir"]) {
+        Ok(text) if !text.trim().is_empty() => std::path::PathBuf::from(text.trim()),
+        _ => cwd.join(".git"),
     }
 }
 

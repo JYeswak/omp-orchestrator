@@ -25,6 +25,11 @@
 
 #![forbid(unsafe_code)]
 
+/// Concurrency discipline for the pre-commit hook (bead `omp-orchestrator-nh5`).
+/// The six gates decide WHAT is wrong; this module decides whether their verdict is
+/// about the commit that is actually being made.
+pub mod commit_serialization;
+
 use std::fmt;
 use std::path::Path;
 use std::process::Command;
@@ -139,7 +144,10 @@ pub fn tracked_files(repo_root: &Path) -> Result<Vec<String>, GateError> {
     // fail CLOSED as a typed gate error (exit 3 class), never hang the
     // hook and never read as a clean scan.
     let mut git_command = Command::new("git");
-    git_command.arg("-C").arg(repo_root).args(["ls-files", "-z"]);
+    git_command
+        .arg("-C")
+        .arg(repo_root)
+        .args(["ls-files", "-z"]);
     let output = match subprocess_contract::bounded_output(
         &mut git_command,
         std::time::Duration::from_secs(GIT_READ_DEADLINE_SECS),
@@ -254,10 +262,9 @@ fn cargo_metadata(manifest: &Path) -> (Option<i32>, String) {
             None,
             "cargo metadata exceeded deadline; group killed".to_owned(),
         ),
-        subprocess_contract::BoundedOutcome::Unspawned(err) => (
-            None,
-            format!("cargo metadata could not be spawned: {err}"),
-        ),
+        subprocess_contract::BoundedOutcome::Unspawned(err) => {
+            (None, format!("cargo metadata could not be spawned: {err}"))
+        }
     }
 }
 
