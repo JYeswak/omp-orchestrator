@@ -4,13 +4,13 @@
 //! The control-plane script remains only as an external differential oracle.
 
 use fs2::FileExt;
-use std::fs::{File, OpenOptions};
-use std::path::{Path, PathBuf};
-use std::io::Write;
-use std::process::{Command, Output};
 use pane_dispatch_ready::{classify, PaneDispatchReadyRules, PaneDispatchReadyState};
-use subprocess_contract::BoundedOutcome;
+use std::fs::{File, OpenOptions};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
 use std::time::{Duration, Instant};
+use subprocess_contract::BoundedOutcome;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReapFinishedPanesRule {
@@ -145,9 +145,17 @@ pub enum ReapPaneDecision {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ReapPaneResult {
-    Reaped { path: Option<PathBuf>, awaiting_human: bool, bytes: usize },
-    Skipped { reason: &'static str },
-    Unreadable { reason: String },
+    Reaped {
+        path: Option<PathBuf>,
+        awaiting_human: bool,
+        bytes: usize,
+    },
+    Skipped {
+        reason: &'static str,
+    },
+    Unreadable {
+        reason: String,
+    },
 }
 
 /// The reaping predicate is strict: two non-empty equal captures and a FREE readiness verdict.
@@ -164,7 +172,9 @@ pub fn decide_reap(first: &str, second: &str, ready: bool, text: &str) -> ReapPa
         }
         return ReapPaneDecision::Working;
     }
-    ReapPaneDecision::Reaped { awaiting_human: awaiting_human(text) }
+    ReapPaneDecision::Reaped {
+        awaiting_human: awaiting_human(text),
+    }
 }
 
 fn awaiting_human(text: &str) -> bool {
@@ -186,8 +196,14 @@ pub fn require_panes<T>(panes: &[T]) -> Result<(), &'static str> {
 
 pub fn resolve_pane_id(session: &str, idx: &str, timeout: Duration) -> Result<String, String> {
     let mut cmd = Command::new("tmux");
-    cmd.args(["list-panes", "-a", "-F", "#{pane_id} #{session_name}:#{window_index}.#{pane_index}"]);
-    let out = spawn_timeout(cmd, timeout).ok_or_else(|| "tmux list-panes timed out or failed".to_owned())?;
+    cmd.args([
+        "list-panes",
+        "-a",
+        "-F",
+        "#{pane_id} #{session_name}:#{window_index}.#{pane_index}",
+    ]);
+    let out = spawn_timeout(cmd, timeout)
+        .ok_or_else(|| "tmux list-panes timed out or failed".to_owned())?;
     if !out.status.success() {
         return Err(String::from_utf8_lossy(&out.stderr).trim().to_owned());
     }
@@ -206,7 +222,8 @@ pub fn capture_pane(pane_id: &str, lines: usize, timeout: Duration) -> Result<St
     let mut cmd = Command::new("tmux");
     cmd.args(["capture-pane", "-p", "-e", "-t", pane_id, "-S"])
         .arg(format!("-{lines}"));
-    let out = spawn_timeout(cmd, timeout).ok_or_else(|| "tmux capture-pane timed out or failed".to_owned())?;
+    let out = spawn_timeout(cmd, timeout)
+        .ok_or_else(|| "tmux capture-pane timed out or failed".to_owned())?;
     if !out.status.success() {
         return Err(String::from_utf8_lossy(&out.stderr).trim().to_owned());
     }
@@ -214,7 +231,20 @@ pub fn capture_pane(pane_id: &str, lines: usize, timeout: Duration) -> Result<St
 }
 
 fn safe_component(value: &str) -> String {
-    value.chars().map(|c| if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') { c } else { '_' }).collect()
+    value
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn rendered_result_bytes(text: &str) -> usize {
+    text.trim_end_matches('\n').len() + 1
 }
 
 pub fn write_reaped_result(
@@ -228,12 +258,19 @@ pub fn write_reaped_result(
     stamp: &str,
 ) -> std::io::Result<PathBuf> {
     std::fs::create_dir_all(outdir)?;
-    let path = outdir.join(format!("{}.pane{}.{}.txt", safe_component(session), safe_component(pane), stamp));
-    std::fs::write(&path, format!("{text}\n"))?;
+    let path = outdir.join(format!(
+        "{}.pane{}.{}.txt",
+        safe_component(session),
+        safe_component(pane),
+        stamp
+    ));
+    let result_text = text.trim_end_matches('\n');
+    let result_bytes = rendered_result_bytes(text);
+    std::fs::write(&path, format!("{result_text}\n"))?;
     if let Some(parent) = ledger.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let row = serde_json::json!({"ts": stamp, "event": "result_reaped", "session": session, "pane": pane, "pane_id": pane_id, "awaiting_human": awaiting_human, "bytes": text.len(), "path": path});
+    let row = serde_json::json!({"ts": stamp, "event": "result_reaped", "session": session, "pane": pane, "pane_id": pane_id, "awaiting_human": awaiting_human, "bytes": result_bytes, "path": path});
     let mut file = OpenOptions::new().create(true).append(true).open(ledger)?;
     writeln!(file, "{row}")?;
     Ok(path)
@@ -265,16 +302,39 @@ pub fn reap_pane(
     let readiness = classify(&second, false, &PaneDispatchReadyRules::default());
     let ready = readiness.state == PaneDispatchReadyState::Free;
     match decide_reap(&first, &second, ready, &second) {
-        ReapPaneDecision::Empty => ReapPaneResult::Skipped { reason: "empty_capture" },
-        ReapPaneDecision::Changing => ReapPaneResult::Skipped { reason: "still_changing" },
+        ReapPaneDecision::Empty => ReapPaneResult::Skipped {
+            reason: "empty_capture",
+        },
+        ReapPaneDecision::Changing => ReapPaneResult::Skipped {
+            reason: "still_changing",
+        },
         ReapPaneDecision::Working => ReapPaneResult::Skipped { reason: "working" },
         ReapPaneDecision::Reaped { awaiting_human } if apply => {
-            match write_reaped_result(outdir, ledger, session, idx, &pane_id, &second, awaiting_human, stamp) {
-                Ok(path) => ReapPaneResult::Reaped { path: Some(path), awaiting_human, bytes: second.len() },
-                Err(error) => ReapPaneResult::Unreadable { reason: format!("write reaped result: {error}") },
+            match write_reaped_result(
+                outdir,
+                ledger,
+                session,
+                idx,
+                &pane_id,
+                &second,
+                awaiting_human,
+                stamp,
+            ) {
+                Ok(path) => ReapPaneResult::Reaped {
+                    path: Some(path),
+                    awaiting_human,
+                    bytes: second.len(),
+                },
+                Err(error) => ReapPaneResult::Unreadable {
+                    reason: format!("write reaped result: {error}"),
+                },
             }
         }
-        ReapPaneDecision::Reaped { awaiting_human } => ReapPaneResult::Reaped { path: None, awaiting_human, bytes: second.len() },
+        ReapPaneDecision::Reaped { awaiting_human } => ReapPaneResult::Reaped {
+            path: None,
+            awaiting_human,
+            bytes: rendered_result_bytes(&second),
+        },
     }
 }
 
@@ -282,11 +342,15 @@ pub fn consecutive_cycle_started_same_pid(heartbeat: &str) -> bool {
     let mut previous: Option<String> = None;
     let mut cycles = 0usize;
     for line in heartbeat.lines() {
-        let Ok(row) = serde_json::from_str::<serde_json::Value>(line) else { continue; };
+        let Ok(row) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
         if row.get("event").and_then(|v| v.as_str()) != Some("CYCLE_STARTED") {
             continue;
         }
-        let Some(pid) = row.get("pid").or_else(|| row.get("process_pid")) else { return false; };
+        let Some(pid) = row.get("pid").or_else(|| row.get("process_pid")) else {
+            return false;
+        };
         let current = pid.to_string();
         if previous.as_deref().is_some_and(|old| old != current) {
             return false;
@@ -296,7 +360,6 @@ pub fn consecutive_cycle_started_same_pid(heartbeat: &str) -> bool {
     }
     cycles >= 2
 }
-
 
 /// A pane with index 0 is the human shell — never a worker, never reaped.
 pub fn is_worker_pane(idx: &str, rules: &ReapFinishedPanesRules) -> bool {
@@ -422,7 +485,12 @@ pub fn spawn_timeout(mut cmd: Command, timeout: Duration) -> Option<Output> {
     }
 }
 
-pub fn lane_row_json(verdict: &str, detail: &str, inv: ReapFinishedPanesInvoker, ts: &str) -> String {
+pub fn lane_row_json(
+    verdict: &str,
+    detail: &str,
+    inv: ReapFinishedPanesInvoker,
+    ts: &str,
+) -> String {
     serde_json::json!({
         "ts": ts,
         "event": "lane_run",
@@ -499,7 +567,10 @@ mod tests {
     #[test]
     fn invoker_genuine_cron_certifies() {
         let chain = parse_ancestor_rows("501 233 /bin/sh\n0 1 /usr/sbin/cron\n");
-        assert_eq!(invoker_from_chain(&chain), ReapFinishedPanesInvoker::SCHEDULED);
+        assert_eq!(
+            invoker_from_chain(&chain),
+            ReapFinishedPanesInvoker::SCHEDULED
+        );
     }
 
     #[test]
@@ -526,7 +597,8 @@ mod tests {
                 assert_ne!(holder_pid, "unknown", "rule lock_names_holder");
                 assert_ne!(holder_elapsed, "unknown");
             }
-            ReapFinishedPanesLockOutcome::Acquired(_) | ReapFinishedPanesLockOutcome::Unusable { .. } => panic!("expected Busy"),
+            ReapFinishedPanesLockOutcome::Acquired(_)
+            | ReapFinishedPanesLockOutcome::Unusable { .. } => panic!("expected Busy"),
         }
     }
 
@@ -555,10 +627,9 @@ mod tests {
         let held = dir.join("held");
         let guard = std::fs::File::create(&held).expect("held file");
         let fd = guard.as_raw_fd();
-        let mut cmd = Command::new("/bin/sh");
-        cmd.args(["-c", "exec 3<>/dev/fd/$CHECK_FD"])
-            .env("CHECK_FD", fd.to_string());
-        let out = spawn_timeout(cmd, Duration::from_secs(2)).expect("sh open-fd");
+        let mut cmd = Command::new("cat");
+        cmd.arg(format!("/dev/fd/{fd}"));
+        let out = spawn_timeout(cmd, Duration::from_secs(2)).expect("cat open-fd");
         assert!(
             !out.status.success(),
             "rule lock_not_inheritable: child opened our File fd {fd} (inherited, not CLOEXEC)"

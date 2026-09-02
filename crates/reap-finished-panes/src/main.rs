@@ -3,9 +3,10 @@
 //! Live reap-finished-panes binary. The reaping path is implemented in the Rust crate.
 
 use reap_finished_panes::{
-    acquire_lock, apply_deadline, consecutive_cycle_started_same_pid, decide_reap, invoker_from_chain,
-    is_worker_pane, lane_row_json, parse_ancestor_rows, reap_pane, require_panes, spawn_timeout,
-    ReapFinishedPanesLockOutcome, ReapFinishedPanesRules, ReapPaneDecision, ReapPaneResult, SweepStats,
+    acquire_lock, apply_deadline, consecutive_cycle_started_same_pid, decide_reap,
+    invoker_from_chain, is_worker_pane, lane_row_json, parse_ancestor_rows, reap_pane,
+    require_panes, spawn_timeout, write_reaped_result, ReapFinishedPanesLockOutcome,
+    ReapFinishedPanesRules, ReapPaneDecision, ReapPaneResult, SweepStats,
 };
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -78,7 +79,10 @@ fn append_line(path: &Path, line: &str) {
 
 /// `$HOME/.local/state/flywheel/<name>`, or a loud typed failure — never an invented home.
 fn home_state_path(name: &str) -> String {
-    match std::env::var_os("HOME").filter(|v| !v.is_empty()).map(PathBuf::from) {
+    match std::env::var_os("HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+    {
         Some(home) => format!("{}/.local/state/flywheel/{name}", home.display()),
         None => {
             eprintln!(
@@ -99,16 +103,27 @@ fn main() -> ExitCode {
         None => "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin".to_owned(),
     };
     std::env::set_var("PATH", &path);
-    if let Some(home) = std::env::var_os("HOME").filter(|v| !v.is_empty()).map(PathBuf::from) {
+    if let Some(home) = std::env::var_os("HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+    {
         std::env::set_var("TMUX_TMPDIR", home.join(".tmux-sockets"));
     }
 
+    let mut repo: Option<PathBuf> = None;
     let mut selftest = false;
     let mut mutation = false;
     let mut disabled: Vec<String> = Vec::new();
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
+            "--repo" => match args.next() {
+                Some(v) => repo = Some(PathBuf::from(v)),
+                None => {
+                    eprintln!("usage error: --repo requires a path");
+                    return ExitCode::from(2);
+                }
+            },
             "--selftest" => selftest = true,
             "--mutation" => mutation = true,
             "--disable-rule" => match args.next() {
@@ -119,7 +134,7 @@ fn main() -> ExitCode {
                 }
             },
             "-h" | "--help" => {
-                eprintln!("usage: reap-finished-panes [--selftest]");
+                eprintln!("usage: reap-finished-panes [--repo PATH] [--selftest]");
                 return ExitCode::SUCCESS;
             }
             other => {
@@ -127,6 +142,12 @@ fn main() -> ExitCode {
                 return ExitCode::from(2);
             }
         }
+    }
+    let repo =
+        repo.unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    if !repo.is_dir() {
+        eprintln!("usage error: --repo is not a directory: {}", repo.display());
+        return ExitCode::from(2);
     }
     let mut rules = ReapFinishedPanesRules::default();
     if !disabled.is_empty() && !mutation {
@@ -175,10 +196,15 @@ fn main() -> ExitCode {
             )
         })
     } else {
-        std::env::var("REAP_LANE_LEDGER").unwrap_or_else(|_| home_state_path("reap-finished-panes.jsonl"))
+        std::env::var("REAP_LANE_LEDGER")
+            .unwrap_or_else(|_| home_state_path("reap-finished-panes.jsonl"))
     };
-    let outdir = PathBuf::from(std::env::var("REAPER_OUTDIR").unwrap_or_else(|_| home_state_path("reaped")));
-    let lines = std::env::var("REAPER_LINES").ok().and_then(|s| s.parse().ok()).unwrap_or(160usize);
+    let outdir =
+        PathBuf::from(std::env::var("REAPER_OUTDIR").unwrap_or_else(|_| home_state_path("reaped")));
+    let lines = std::env::var("REAPER_LINES")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(160usize);
 
     let _guard = match acquire_lock(Path::new(&lock_path)) {
         ReapFinishedPanesLockOutcome::Acquired(g) => g,
@@ -205,7 +231,7 @@ fn main() -> ExitCode {
         }
     };
     if selftest {
-        return run_selftest(&rules);
+        return run_selftest(&rules, &repo);
     }
 
     let deadline = Duration::from_secs(
@@ -244,7 +270,11 @@ fn main() -> ExitCode {
             Path::new(&ledger),
             &ts(),
         ) {
-            ReapPaneResult::Reaped { path, awaiting_human, bytes } => {
+            ReapPaneResult::Reaped {
+                path,
+                awaiting_human,
+                bytes,
+            } => {
                 stats.reaped += 1;
                 if awaiting_human {
                     stats.awaiting_human += 1;
@@ -335,15 +365,59 @@ fn pane_list() -> Vec<(String, String)> {
         .unwrap_or_default()
 }
 
-fn run_selftest(rules: &ReapFinishedPanesRules) -> ExitCode {
+fn run_selftest(rules: &ReapFinishedPanesRules, repo: &Path) -> ExitCode {
     let mut fail = 0;
-    let finished = decide_reap("finished output", "finished output", true, "finished output");
-    if matches!(finished, ReapPaneDecision::Reaped { .. }) {
-        println!("PASS selftest.finished-pane-reaped");
+    let root = repo.join("var/agent-tmp").join(format!(
+        "reap-finished-panes-selftest-{}",
+        std::process::id()
+    ));
+    let outdir = root.join("reaped");
+    let ledger = root.join("pane-result-reaper.jsonl");
+    let stamp = "2026-09-02T04:00:00Z";
+    let finished_text = "finished output\nresult: committed";
+
+    let finished = decide_reap(finished_text, finished_text, true, finished_text);
+    let finished_ok = match finished {
+        ReapPaneDecision::Reaped { awaiting_human } => {
+            let path = write_reaped_result(
+                &outdir,
+                &ledger,
+                "reaper-selftest",
+                "1",
+                "%selftest",
+                finished_text,
+                awaiting_human,
+                stamp,
+            );
+            let row = path.as_ref().ok().and_then(|path| {
+                let row = std::fs::read_to_string(&ledger).ok()?;
+                let row: serde_json::Value = serde_json::from_str(row.trim()).ok()?;
+                let expected = serde_json::json!({
+                    "ts": stamp,
+                    "event": "result_reaped",
+                    "session": "reaper-selftest",
+                    "pane": "1",
+                    "pane_id": "%selftest",
+                    "awaiting_human": awaiting_human,
+                    "bytes": finished_text.len() + 1,
+                    "path": path,
+                });
+                let artifact = std::fs::read_to_string(path).ok()?;
+                Some(row == expected && artifact == format!("{finished_text}\n"))
+            });
+            row == Some(true)
+        }
+        other => {
+            println!("FAIL selftest.finished-pane-ledger: {other:?}");
+            false
+        }
+    };
+    if finished_ok {
+        println!("PASS selftest.finished-pane-ledger");
     } else {
-        println!("FAIL selftest.finished-pane-reaped: {finished:?}");
         fail += 1;
     }
+
     let working = decide_reap("Working (9s)", "Working (9s)", false, "Working (9s)");
     if matches!(working, ReapPaneDecision::Working) {
         println!("PASS selftest.working-pane-not-reaped");
@@ -358,7 +432,8 @@ fn run_selftest(rules: &ReapFinishedPanesRules) -> ExitCode {
         println!("FAIL selftest.empty-pane-set-refuses: {empty:?}");
         fail += 1;
     }
-    let heartbeat = "{\"event\":\"CYCLE_STARTED\",\"pid\":4242}\n{\"event\":\"CYCLE_STARTED\",\"pid\":4242}\n";
+    let heartbeat =
+        "{\"event\":\"CYCLE_STARTED\",\"pid\":4242}\n{\"event\":\"CYCLE_STARTED\",\"pid\":4242}\n";
     if consecutive_cycle_started_same_pid(heartbeat) {
         println!("PASS selftest.cycle-pid-stable");
     } else {
@@ -371,6 +446,7 @@ fn run_selftest(rules: &ReapFinishedPanesRules) -> ExitCode {
         println!("FAIL selftest.skips-human-shell");
         fail += 1;
     }
+    let _ = std::fs::remove_dir_all(&root);
     if fail == 0 {
         println!("=== SELFTEST: 0 failure(s) ===");
         ExitCode::SUCCESS
