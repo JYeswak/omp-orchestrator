@@ -22,7 +22,7 @@ carrying 184 nodes, 207 edges, and 183 rows. The denominator is worth stating pl
 
 **SNAPSHOT BOUNDARY.** The 183-row denominator and all ratios below are dated inventory results, not current workspace counts; re-run cargo metadata and regenerate this section after extraction.
 
-**CURRENT-STATE BOUNDARY (2026-09-01):** the 183-row artifact and 26-crate denominator above are pre-extraction historical data. Current cargo metadata reports 50 packages and 48 binary targets; regenerate the scanner artifact before using any §§1–5 count as current. The historical artifact remains retained for provenance, not closure.
+**CURRENT-STATE BOUNDARY (2026-09-01):** the 183-row artifact and 26-crate denominator above are pre-extraction historical data. Current cargo metadata is the live source for package and binary-target counts, owned by NUMBERS.toml keys `[figures.workspace_crates]` and `[figures.built_binaries]`; this paragraph deliberately freezes no integer. Regenerate the scanner artifact before using any §§1–5 count as current. The historical artifact remains retained for provenance, not closure.
 
 `MEASURED` — `python3 -c "import json,collections; d=json.load(open('/tmp/inv.txt'))['data']; print(collections.Counter(r['kind'] for r in d['rows']))"`
 
@@ -92,7 +92,7 @@ wires named handlers, but this document makes no forecast of a target percentage
 because a coverage target would immediately become a metric to game: wiring a
 handler nobody calls raises the ratio and lowers the truth.
 
-There is a structural reason for the historical ratio, and it is recorded in the brief's five-stage control loop table rather than discovered here: the retained scanner snapshot predates the current actuator. The current source contains `send_and_verify` at `crates/omp-orchestrator/src/main.rs:714` and its tick call at `:1461`, but transport and receiver receipts remain unverified. The 157 `CAPABILITY_NOT_USED` rows therefore remain historical classifications, not a current proof that actuation is absent.
+There is a structural reason for the historical ratio, and it is recorded in the brief's five-stage control loop table rather than discovered here: the retained scanner snapshot predates the current actuator. The current source contains the grep-addressable `send_and_verify` symbol in `crates/omp-orchestrator/src/main.rs` and its tick path invokes it, but transport and receiver receipts remain unverified. The 157 `CAPABILITY_NOT_USED` rows therefore remain historical classifications, not a current proof that actuation is absent.
 
 ### 3. The surface, enumerated by kind
 
@@ -271,12 +271,9 @@ validation receipt; until then it is a proposal, not bead-backed disposition.
 - **RETIRE / NAMED_REASON** — a proposed non-consumption decision. It is not validated merely
 because `validated_by` is non-null; a current RETIRE proof requires structured
 read-only probe evidence (command, exit/result, timestamp, and artifact identity).
-"Not yet triaged" is not a disposition. `MEASURED` — 175 rows currently sit at
-`NAMED_REASON` and 8 at `WIRE`, so 175 ÷ 183 = **95.63%** of the census is
-currently answered with a reason rather than a plan. `PROJECTED` — the plan's
-first milestone converts a named subset of those reasons into WIRE beads; this
-document does not pre-commit the size of that subset, because a number chosen
-before the triage is a number chosen to look good.
+"Not yet triaged" is not a disposition. `MEASURED` — the current map disposition counts are command-backed by NUMBERS.toml and re-derived by the numbers gate:
+The current disposition counts are owned by NUMBERS.toml keys `[figures.surface_map_consumed]`, `[figures.surface_map_wire]`, `[figures.surface_map_validate]`, `[figures.surface_map_retire]`, and `[figures.surface_map_unprobeable_pending]`; this prose does not hand-type their volatile values.
+The engaged numerator and percentage are owned by NUMBERS.toml keys `[figures.surface_map_engaged_rows]`, `[figures.surface_map_rows]`, and `[figures.surface_engaged_pct]`; this paragraph deliberately freezes no integer. `PROJECTED` — the plan's first milestone converts a named subset of those reasons into WIRE beads; this document does not pre-commit the size of that subset, because a number chosen before the triage is a number chosen to look good.
 
 ### 5. The vacuity finding, stated against ourselves
 
