@@ -1494,6 +1494,7 @@ name = "refill-idle-panes"
 version = "0.1.0"
 dependencies = [
  "fleet-reconcile",
+ "oracle-compare",
  "serde_json",
 ]
 
