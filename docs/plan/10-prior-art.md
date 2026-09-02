@@ -223,7 +223,7 @@ The earlier exit-0 claim came from `tmux --version 2>&1 | head -1` (`PIPESTATUS=
 |---|---|---|---|
 | Jeffrey mirror | root /Volumes/ZestData/dicklesworthstone-mirror; manifest and sync-log hashes recorded | per-gap commands above; Gap 7 limited to named asupersync roots/files | source constructs at the recorded snapshot; no broader absence claim |
 | OMP signal sweep | installed package, not mirror | suffix sweep over all .d.ts plus field reads | .flywheel/grade-evidence/omp-signals.md.gz is ephemeral; its hash identifies that snapshot but does not make it durable |
-| OMP completion capture | installed package, not mirror; bounded rpc probe | omp --mode=rpc --no-session --no-tools --no-lsp --max-time=30; prompt AGENT_END_PROBE_OK | .flywheel/grade-evidence/r7-agent-end.md.gz and raw frame are ephemeral; copy into an in-repo artifact before calling them durable |
+| OMP completion capture | installed package, not mirror; bounded rpc probe | omp --mode=rpc --no-session --no-tools --no-lsp --max-time=30; prompt AGENT_END_PROBE_OK | `.flywheel/inventory-artifacts/agent-end-raw-frame.json.gz` is retained in-repo; SHA-256 of its uncompressed bytes is `d8bd80c6949b2ec48af1639b5b5e241bd90b4dce1e769483dd1690ed2be8f644`; `artifact_provenance` verifies decompression and hash |
 | mux adjacent probe | installed package, not mirror | Content-Length JSON-RPC omp/muxPing against scoped lsp-mux.sock endpoints | .flywheel/grade-evidence/mux-investigation.md.gz is ephemeral; its hash identifies the snapshot only |
 
 ---
