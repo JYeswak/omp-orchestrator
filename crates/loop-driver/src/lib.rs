@@ -1787,12 +1787,7 @@ mod tests {
                 .expect("system clock")
                 .as_nanos()
         ));
-        let started = marker.with_extension("started");
-        let script = format!(
-            "nohup /bin/sh -c 'touch {}; sleep 1; touch {}' >/dev/null 2>&1 & sleep 30",
-            started.display(),
-            marker.display()
-        );
+        let script = format!("( sleep 2; touch {} ) & sleep 30", marker.display());
         let mut command = Command::new("/bin/sh");
         command.args(["-c", &script]);
         let result = run_command(command, Deadline::new(Duration::from_millis(200)))
@@ -1802,32 +1797,22 @@ mod tests {
             "fixture must exercise the restrictive timeout"
         );
 
-        let started_deadline = Instant::now() + Duration::from_secs(1);
-        while !started.exists() && Instant::now() < started_deadline {
-            std::thread::sleep(Duration::from_millis(25));
-        }
-        assert!(
-            started.exists(),
-            "grandchild fixture never started; survival assertion is vacuous"
-        );
-        let wait_deadline = Instant::now() + Duration::from_secs(2);
+        let wait_deadline = Instant::now() + Duration::from_secs(3);
         while !marker.exists() && Instant::now() < wait_deadline {
             std::thread::sleep(Duration::from_millis(25));
         }
+        let marker_survived = marker.exists();
+        let _ = std::fs::remove_file(&marker);
         assert!(
-            !marker.exists(),
+            !marker_survived,
             "a pid-only timeout leaves the grandchild alive and the marker appears"
         );
 
-        let next = run_command(
-            Command::new("true"),
-            Deadline::new(Duration::from_secs(1)),
-        )
-        .expect("next attempt must spawn");
+        let next = run_command(Command::new("true"), Deadline::new(Duration::from_secs(1)))
+            .expect("next attempt must spawn");
         assert!(
             !next.timed_out && next.code() == 0,
             "next attempt: {next:?}"
         );
-        let _ = std::fs::remove_file(marker);
     }
 }

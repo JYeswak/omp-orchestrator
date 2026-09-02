@@ -37,7 +37,7 @@ use std::path::PathBuf;
 /// Measured 2026-09-01 BY THIS GATE'S OWN SCAN. Lower it as sites convert; never raise it.
 /// Seeded from this scan, not a neighbouring one — the build-identity ratchet was first set
 /// from a different measurement and had a slot of slack, so its mutation probe passed.
-const PID_KILL_CEILING: usize = 31; // 32 -> 31: loop-tick now routes through the kernel
+const PID_KILL_CEILING: usize = 30; // 31 -> 30: loop-driver now routes through the kernel
 
 fn repo_root() -> Option<PathBuf> {
     let mut cur = std::env::current_dir().ok()?;
