@@ -38,7 +38,7 @@ use std::collections::BTreeSet;
 use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use subprocess_contract::run_output;
 
@@ -65,6 +65,8 @@ const BUILD_ID: &str = env!(
      installer's identity rule - that is what took tick-monitor out and left the fleet \
      untended for hours."
 );
+#[used]
+static BUILD_ID_MARKER: &[u8] = concat!("build_id=", env!("OMP_BUILD_ID")).as_bytes();
 #[derive(Debug)]
 struct Config {
     repo: PathBuf,
@@ -546,16 +548,29 @@ async fn ntm_output_identity(
         invoke(cx, config, &config.ntm, &args).await?,
     )?;
     let text = String::from_utf8_lossy(&bytes);
-    let snapshot = parse_activity_json(&text)
-        .map_err(|error| format!("RECEIVER_OBSERVATION_MISSING pane={pane} identity: {error}"))?;
-    let agent = snapshot
-        .agents
-        .iter()
-        .find(|agent| agent.pane == pane)
-        .ok_or_else(|| format!("RECEIVER_OBSERVATION_MISSING pane={pane} identity row absent"))?;
+    let snapshot = match parse_activity_json(&text) {
+        Ok(snapshot) => snapshot,
+        Err(ntm_fleet_monitor::ActivityError::EmptyAgents) => {
+            return Err(format!("IDENTITY_ROW_ABSENT pane={pane} rows=0"));
+        }
+        Err(error) => {
+            return Err(format!(
+                "IDENTITY_ROW_PARSE_REFUSED pane={pane} detail={error}"
+            ));
+        }
+    };
+    let mut agents = snapshot.agents.into_iter();
+    let Some(agent) = agents.next() else {
+        return Err(format!("IDENTITY_ROW_ABSENT pane={pane} rows=0"));
+    };
+    if agents.next().is_some() {
+        return Err(format!(
+            "IDENTITY_ROW_KEY_MISMATCH pane={pane} expected=one-server-selected-row"
+        ));
+    }
     let identity = agent
         .output_identity()
-        .map_err(|error| format!("RECEIVER_OBSERVATION_MISSING pane={pane} identity: {error}"))?;
+        .map_err(|error| format!("IDENTITY_ROW_IDENTITY_MISSING pane={pane} detail={error}"))?;
     Ok(ObservationIdentity {
         epoch: identity.epoch.clone(),
         sequence: identity.sequence,
@@ -817,9 +832,8 @@ async fn claim_bead_for_supervisor(
             claimed.assignee().unwrap_or("unassigned")
         ));
     }
-    let detail = format!(
-        "bead={bead} pane={pane} assignee={supervisor} receiver_agent={receiver_agent}"
-    );
+    let detail =
+        format!("bead={bead} pane={pane} assignee={supervisor} receiver_agent={receiver_agent}");
     write_heartbeat(config, tick, "DISPATCH_CLAIMED", &detail).map_err(|error| {
         format!(
             "DISPATCH_BLOCKED bead={bead} pane={pane} reason=CLAIM_HEARTBEAT_FAILED receiver_agent={receiver_agent} error={error}"
@@ -856,13 +870,7 @@ async fn prepare_bead_dispatch(
         claim_enabled,
     )
     .await?;
-    let receiver_agent = authorize_bead_dispatch_as(
-        config,
-        pane,
-        bead,
-        &snapshot,
-        &claim_owner,
-    )?;
+    let receiver_agent = authorize_bead_dispatch_as(config, pane, bead, &snapshot, &claim_owner)?;
     Ok((snapshot, receiver_agent))
 }
 
@@ -1220,7 +1228,10 @@ enum PendingDispatch {
     /// **FAILS CLOSED and keeps blocking.** An age we cannot compute is the unknown,
     /// and an unknown must not be retired as though it were stale — that would let a
     /// corrupt marker unlock the loop, which is the opposite of the guard's purpose.
-    Undatable { detail: String, reason: &'static str },
+    Undatable {
+        detail: String,
+        reason: &'static str,
+    },
 }
 
 /// Classify marker text against a clock. Pure, so a test plants an age without
@@ -1394,7 +1405,12 @@ fn docs_are_stale(config: &Config) -> Result<Option<String>, String> {
 /// seen. Fixing the volume also does not guarantee the gate passes: the correct
 /// volume holds only 3.5 GiB, which is tighter in absolute terms than the wrong one.
 fn resolve_target_dir(config: &Config) -> PathBuf {
-    if let Some(v) = std::env::var_os("CARGO_TARGET_DIR") {
+    let env_override = std::env::var_os("CARGO_TARGET_DIR");
+    resolve_target_dir_with_env(config, env_override.as_deref())
+}
+
+fn resolve_target_dir_with_env(config: &Config, env_override: Option<&std::ffi::OsStr>) -> PathBuf {
+    if let Some(v) = env_override {
         return PathBuf::from(v);
     }
     for cfg in [
@@ -2039,7 +2055,10 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                 config.pending_dispatch.display()
             );
             write_heartbeat(config, tick, "DISPATCH_INTENT_EXPIRED", &expiry)?;
-            println!("DISPATCH_INTENT_EXPIRED tick={tick} session={} {expiry}", config.session);
+            println!(
+                "DISPATCH_INTENT_EXPIRED tick={tick} session={} {expiry}",
+                config.session
+            );
             // Deliberately NOT `return` — the whole defect was returning here.
         }
     }
@@ -2437,23 +2456,31 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
 
     fn fixture_config(heartbeat_ledger: PathBuf) -> Config {
+        let root = heartbeat_ledger
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."));
+        let repo = root.join("repo");
+        let tmux_tmpdir = root.join("tmux");
+        std::fs::create_dir_all(&repo).expect("fixture repository");
+        std::fs::create_dir_all(&tmux_tmpdir).expect("fixture tmux directory");
         Config {
-            repo: PathBuf::from("/tmp/omp-orchestrator-test-repo"),
+            repo,
             reap_finished_panes: "reap-finished-panes".to_owned(),
             omp_quick: false,
             session: "test-session".to_owned(),
             interval: Duration::from_secs(1),
-            command_timeout: Duration::from_secs(1),
+            command_timeout: Duration::from_secs(5),
             max_ticks: Some(1),
             tick_monitor: "tick-monitor".to_owned(),
             run_subcommand: false,
             br: "br".to_owned(),
             ntm: "ntm".to_owned(),
-            tmux_tmpdir: PathBuf::from("/tmp/omp-orchestrator-test-tmux"),
+            tmux_tmpdir,
             exclude_panes: Vec::new(),
             heartbeat_ledger,
-            tick_monitor_state: PathBuf::from("/tmp/omp-orchestrator-test-state"),
-            pending_dispatch: PathBuf::from("/tmp/omp-orchestrator-test-pending"),
+            tick_monitor_state: root.join("state"),
+            pending_dispatch: root.join("pending"),
             receiver_agent: "BlueLantern".to_owned(),
             // EMPTY ON PURPOSE. A populated identity here would make every
             // test that reaches `report_dispatch_result` send REAL mail to the
@@ -2465,6 +2492,12 @@ mod tests {
             omp_binary: PathBuf::from("omp"),
         }
     }
+    fn isolated_fixture_config() -> (tempfile::TempDir, Config) {
+        let temp = tempfile::tempdir().expect("isolated fixture root");
+        let config = fixture_config(temp.path().join("heartbeat.jsonl"));
+        (temp, config)
+    }
+
     fn run_reaper_for_test(config: &Config) -> Result<String, String> {
         let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
         runtime.block_on(async {
@@ -2498,6 +2531,66 @@ mod tests {
         path
     }
 
+    fn run_identity_for_test(config: &Config, pane: &str) -> Result<ObservationIdentity, String> {
+        let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
+        runtime.block_on(async {
+            let cx = Cx::current().expect("runtime context");
+            ntm_output_identity(&cx, config, pane).await
+        })
+    }
+
+    #[test]
+    fn a_single_index_row_resolves_a_percent_pane_request() {
+        let temp = tempfile::tempdir().expect("identity fixture");
+        let script = executable_reaper(
+            &temp,
+            r#"#!/bin/sh
+printf '%s\n' '{"success":true,"agents":[{"pane":"5","agent_type":"omp-claude","state":"IDLE","observation_state":"idle","safe_to_dispatch":true,"capture_provenance":"live","observation_freshness":"fresh","output_sequence":{"epoch":"epoch-a","sequence":9}}]}'
+"#,
+        );
+        let mut config = fixture_config(temp.path().join("heartbeat.jsonl"));
+        config.repo = temp.path().to_owned();
+        config.ntm = script.display().to_string();
+
+        let identity = run_identity_for_test(&config, "%1409").expect("single NTM row");
+        assert_eq!(identity.epoch, "epoch-a");
+        assert_eq!(identity.sequence, 9);
+    }
+
+    #[test]
+    fn zero_identity_rows_are_named_absent() {
+        let temp = tempfile::tempdir().expect("identity absent fixture");
+        let script = executable_reaper(
+            &temp,
+            r#"#!/bin/sh
+printf '%s\n' '{"success":true,"agents":[]}'
+"#,
+        );
+        let mut config = fixture_config(temp.path().join("heartbeat.jsonl"));
+        config.repo = temp.path().to_owned();
+        config.ntm = script.display().to_string();
+
+        let error = run_identity_for_test(&config, "%1409").expect_err("empty NTM rows");
+        assert!(error.contains("IDENTITY_ROW_ABSENT"), "{error}");
+    }
+
+    #[test]
+    fn multiple_identity_rows_without_a_canonical_key_are_named_mismatch() {
+        let temp = tempfile::tempdir().expect("identity mismatch fixture");
+        let script = executable_reaper(
+            &temp,
+            r#"#!/bin/sh
+printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","state":"IDLE","observation_state":"idle","safe_to_dispatch":true,"capture_provenance":"live","observation_freshness":"fresh"},{"pane":"5","agent_type":"omp-claude","state":"IDLE","observation_state":"idle","safe_to_dispatch":true,"capture_provenance":"live","observation_freshness":"fresh"}]}'
+"#,
+        );
+        let mut config = fixture_config(temp.path().join("heartbeat.jsonl"));
+        config.repo = temp.path().to_owned();
+        config.ntm = script.display().to_string();
+
+        let error = run_identity_for_test(&config, "%1409").expect_err("ambiguous NTM rows");
+        assert!(error.contains("IDENTITY_ROW_KEY_MISMATCH"), "{error}");
+    }
+
     #[test]
     fn observed_idle_state_counts_as_free_capacity_before_confirmation() {
         let observation = parse_observation(
@@ -2511,11 +2604,8 @@ mod tests {
 
     #[test]
     fn uncertain_dispatch_is_fenced_across_restarts() {
-        let root = env::temp_dir().join(format!(
-            "omp-orchestrator-pending-test-{}-{}",
-            std::process::id(),
-            now_unix()
-        ));
+        let temp = tempfile::tempdir().expect("pending fixture tempdir");
+        let root = temp.path().to_path_buf();
         let pending = root.join("pending-dispatch");
         let mut config = fixture_config(root.join("heartbeat.jsonl"));
         config.pending_dispatch = pending.clone();
@@ -2532,7 +2622,6 @@ mod tests {
         let retry = write_dispatch_intent(&config, "%1414", "another-bead");
         assert!(retry.unwrap_err().contains("DISPATCH_RETRY_BLOCKED"));
         clear_dispatch_intent(&config).unwrap();
-        std::fs::remove_dir(root).unwrap();
     }
 
     // -----------------------------------------------------------------------
@@ -2599,8 +2688,14 @@ mod tests {
         for (text, want) in [
             ("", "INTENT_EMPTY"),
             ("   \n ", "INTENT_EMPTY"),
-            (r#"{"event":"dispatch_intent","pane":"%1413"}"#, "INTENT_ISSUED_AT_MISSING"),
-            (r#"{"issued_at":"not-a-number"}"#, "INTENT_ISSUED_AT_MISSING"),
+            (
+                r#"{"event":"dispatch_intent","pane":"%1413"}"#,
+                "INTENT_ISSUED_AT_MISSING",
+            ),
+            (
+                r#"{"issued_at":"not-a-number"}"#,
+                "INTENT_ISSUED_AT_MISSING",
+            ),
             ("not json at all", "INTENT_ISSUED_AT_MISSING"),
         ] {
             let verdict = classify_pending_dispatch(text, now);
@@ -2627,15 +2722,15 @@ mod tests {
     /// "cannot tell".
     #[test]
     fn an_absent_marker_is_a_reachable_state_and_an_unreadable_one_is_an_error() {
-        let root = env::temp_dir().join(format!(
-            "omp-orchestrator-y6v5-absent-{}-{}",
-            std::process::id(),
-            now_unix()
-        ));
+        let temp = tempfile::tempdir().expect("marker fixture tempdir");
+        let root = temp.path().to_path_buf();
         std::fs::create_dir_all(&root).expect("fixture root");
         let mut config = fixture_config(root.join("heartbeat.jsonl"));
         config.pending_dispatch = root.join("no-such-marker");
-        assert_eq!(read_pending_dispatch(&config).unwrap(), PendingDispatch::None);
+        assert_eq!(
+            read_pending_dispatch(&config).unwrap(),
+            PendingDispatch::None
+        );
 
         // A DIRECTORY where the marker should be is readable-as-a-path and
         // unreadable-as-a-file: the unknown that must not read as absent.
@@ -2643,9 +2738,10 @@ mod tests {
         std::fs::create_dir_all(&as_dir).expect("marker dir");
         config.pending_dispatch = as_dir.clone();
         let error = read_pending_dispatch(&config).expect_err("a directory must not read as None");
-        assert!(error.contains("unreadable"), "error must name the condition: {error}");
-
-        std::fs::remove_dir_all(&root).ok();
+        assert!(
+            error.contains("unreadable"),
+            "error must name the condition: {error}"
+        );
     }
 
     /// ACCEPTANCE 6: the retry is bounded, and the bound is stated in seconds rather
@@ -2675,11 +2771,8 @@ mod tests {
     }
     #[test]
     fn heartbeat_is_durable_json_with_build_identity() {
-        let root = env::temp_dir().join(format!(
-            "omp-orchestrator-heartbeat-test-{}-{}",
-            std::process::id(),
-            Instant::now().elapsed().as_nanos()
-        ));
+        let temp = tempfile::tempdir().expect("heartbeat fixture tempdir");
+        let root = temp.path().to_path_buf();
         let path = root.join("heartbeat.jsonl");
         let config = fixture_config(path.clone());
         write_heartbeat(&config, 7, "SUPERVISED_WORKING", "working=2 ready=1").unwrap();
@@ -2690,7 +2783,6 @@ mod tests {
         assert_eq!(row["build_id"], BUILD_ID);
         assert_eq!(row["tick"], 7);
         std::fs::remove_file(path).unwrap();
-        std::fs::remove_dir(root).unwrap();
     }
 
     #[test]
@@ -2747,9 +2839,8 @@ mod tests {
 
     #[test]
     fn finished_pane_reaper_receives_the_same_repository() {
-        let config = fixture_config(PathBuf::from(
-            "/tmp/omp-orchestrator-reaper-heartbeat.jsonl",
-        ));
+        let temp = tempfile::tempdir().expect("reaper fixture");
+        let config = fixture_config(temp.path().join("heartbeat.jsonl"));
         assert_eq!(
             finished_pane_reaper_args(&config),
             vec!["--repo".to_owned(), config.repo.display().to_string()]
@@ -2819,8 +2910,7 @@ mod tests {
 
     #[test]
     fn missing_receiver_agent_inherits_claimed_assignee() {
-        let mut config =
-            fixture_config(std::env::temp_dir().join("receiver-assignment-heartbeat.jsonl"));
+        let (_temp, mut config) = isolated_fixture_config();
         config.receiver_agent.clear();
 
         let snapshot = BeadSnapshot::new(
@@ -2854,7 +2944,7 @@ mod tests {
     /// what made this invisible for 247 minutes.
     #[test]
     fn unclaimed_bead_is_refused_before_send() {
-        let mut config = fixture_config(std::env::temp_dir().join("claim-fence-known-bad.jsonl"));
+        let (_temp, mut config) = isolated_fixture_config();
         config.receiver_agent = "GreenFrog".to_owned();
 
         // The exact tracker state the ledger recorded: open, and at filing time
@@ -2891,8 +2981,7 @@ mod tests {
     /// the incident reproduces the moment somebody sets an assignee.
     #[test]
     fn assigned_but_open_bead_is_still_refused() {
-        let mut config =
-            fixture_config(std::env::temp_dir().join("claim-fence-open-assigned.jsonl"));
+        let (_temp, mut config) = isolated_fixture_config();
         config.receiver_agent = "GreenFrog".to_owned();
 
         let snapshot = BeadSnapshot::new(
@@ -2918,7 +3007,7 @@ mod tests {
     /// claimed bead must still dispatch.
     #[test]
     fn correctly_claimed_bead_still_dispatches() {
-        let mut config = fixture_config(std::env::temp_dir().join("claim-fence-known-good.jsonl"));
+        let (_temp, mut config) = isolated_fixture_config();
         config.receiver_agent = "GreenFrog".to_owned();
 
         let snapshot = BeadSnapshot::new(
@@ -2938,7 +3027,7 @@ mod tests {
     /// A bead claimed by somebody ELSE must be refused with a distinct reason.
     #[test]
     fn bead_claimed_by_another_agent_is_refused() {
-        let mut config = fixture_config(std::env::temp_dir().join("claim-fence-elsewhere.jsonl"));
+        let (_temp, mut config) = isolated_fixture_config();
         config.receiver_agent = "GreenFrog".to_owned();
 
         let snapshot = BeadSnapshot::new(
@@ -3008,7 +3097,12 @@ exit 2
         let (config, state, args, supervisor) = open_bead_br_fixture(&temp, bead);
 
         let (snapshot, receiver) = run_prepare_for_test(&config, "%1408", bead, 17, true)
-            .unwrap_or_else(|error| panic!("supervisor claim failed: {error}; args={:?}", std::fs::read_to_string(&args)));
+            .unwrap_or_else(|error| {
+                panic!(
+                    "supervisor claim failed: {error}; args={:?}",
+                    std::fs::read_to_string(&args)
+                )
+            });
 
         assert_eq!(receiver, "GreenFrog");
         assert_eq!(snapshot.status_label(), "in_progress");
@@ -3017,11 +3111,17 @@ exit 2
         assert!(claim_args.contains("update"), "{claim_args}");
         assert!(claim_args.contains(bead), "{claim_args}");
         assert!(claim_args.contains(&supervisor), "{claim_args}");
-        assert!(!claim_args.contains("GreenFrog"), "receiver must not be forged: {claim_args}");
+        assert!(
+            !claim_args.contains("GreenFrog"),
+            "receiver must not be forged: {claim_args}"
+        );
         let heartbeat = std::fs::read_to_string(&config.heartbeat_ledger).expect("claim heartbeat");
         assert!(heartbeat.contains("DISPATCH_CLAIMED"), "{heartbeat}");
         assert!(heartbeat.contains(bead), "{heartbeat}");
-        assert!(state.exists(), "the claimed state must be durable before dispatch");
+        assert!(
+            state.exists(),
+            "the claimed state must be durable before dispatch"
+        );
     }
 
     #[test]
@@ -3034,13 +3134,22 @@ exit 2
             .expect_err("disabled claim transition must refuse the open bead");
         assert!(error.contains("DISPATCH_BLOCKED"), "{error}");
         assert!(error.contains("reason=CLAIM_REQUIRED"), "{error}");
-        assert!(!state.exists(), "disabled claim transition must not mutate the bead");
+        assert!(
+            !state.exists(),
+            "disabled claim transition must not mutate the bead"
+        );
 
         let (snapshot, receiver) = run_prepare_for_test(&config, "%1408", bead, 18, true)
             .expect("restored claim transition must dispatch");
         assert_eq!(receiver, "GreenFrog");
-        assert_eq!(snapshot.assignee(), Some(format!("supervisor:{}", std::process::id()).as_str()));
-        assert!(state.exists(), "restored claim transition must perform the claim");
+        assert_eq!(
+            snapshot.assignee(),
+            Some(format!("supervisor:{}", std::process::id()).as_str())
+        );
+        assert!(
+            state.exists(),
+            "restored claim transition must perform the claim"
+        );
     }
 
     /// The dispatch path must never forge a receiver-owned claim.
@@ -3124,7 +3233,8 @@ exit 2
     /// which is the exact gap a test closes.
     #[test]
     fn build_volume_comes_from_cargo_config_not_the_repo_default() {
-        let tmp = std::env::temp_dir().join(format!("omp-tgt-{}", std::process::id()));
+        let temp = tempfile::tempdir().expect("temp repo");
+        let tmp = temp.path().to_owned();
         let cargo_dir = tmp.join(".cargo");
         std::fs::create_dir_all(&cargo_dir).expect("temp repo");
         std::fs::write(
@@ -3142,16 +3252,15 @@ exit 2
         ];
         let config = Config::from_args(&args).expect("config");
 
-        // The env var wins, exactly as it does in cargo, so it must be absent here for
-        // the config path to be the thing under test.
-        let saved = std::env::var_os("CARGO_TARGET_DIR");
-        // SAFETY-EQUIVALENT NOTE: single-threaded test, restored below. This crate
-        // forbids unsafe; remove_var/set_var are safe in this edition.
-        std::env::remove_var("CARGO_TARGET_DIR");
-        let resolved = resolve_target_dir(&config);
-        if let Some(v) = saved {
-            std::env::set_var("CARGO_TARGET_DIR", v);
-        }
+        // The resolver takes the environment value as data. Passing None exercises
+        // the config path without poisoning the process-global test environment.
+        let resolved = resolve_target_dir_with_env(&config, None);
+        let explicit = PathBuf::from("/Volumes/Explicit/cargo-targets");
+        assert_eq!(
+            resolve_target_dir_with_env(&config, Some(explicit.as_os_str())),
+            explicit,
+            "an explicit CARGO_TARGET_DIR value must win without mutating process state"
+        );
 
         assert_eq!(
             resolved,
@@ -3370,14 +3479,14 @@ exit 2
     fn the_recipient_falls_back_to_the_configured_receiver_when_no_pane_map_exists() {
         // fixture repo has no .flywheel/AUTONOMOUS-WAVE.md, so the pane map
         // yields nothing and the configured receiver is used.
-        let config = fixture_config(PathBuf::from("/tmp/omp-orchestrator-test-heartbeat"));
+        let (_temp, config) = isolated_fixture_config();
         let recipient = mail_recipient(&config, "5").expect("configured receiver");
         assert_eq!(recipient.as_str(), "BlueLantern");
     }
 
     #[test]
     fn an_unresolvable_recipient_refuses_rather_than_guessing() {
-        let mut config = fixture_config(PathBuf::from("/tmp/omp-orchestrator-test-heartbeat"));
+        let (_temp, mut config) = isolated_fixture_config();
         config.receiver_agent = String::new();
         let error = mail_recipient(&config, "5").expect_err("must refuse");
         assert!(error.contains("recipient_unresolved"), "{error}");
@@ -3398,7 +3507,7 @@ exit 2
             "| pane | agent | role |\n| `5` | **MistyCrane** | grader |\n",
         )
         .expect("write pane map");
-        let mut config = fixture_config(PathBuf::from("/tmp/omp-orchestrator-test-heartbeat"));
+        let (_temp, mut config) = isolated_fixture_config();
         config.repo = temp.path().to_owned();
         let recipient = mail_recipient(&config, "5").expect("mapped agent");
         assert_eq!(recipient.as_str(), "MistyCrane");
