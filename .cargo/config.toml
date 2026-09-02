@@ -5,3 +5,32 @@ target-dir = "target"
 
 [env]
 OMP_CARGO_TARGET_POLICY = { value = "REPO_OWNED_TARGET", force = true }
+
+# RCH lane pin. omp-orchestrator is assigned `contabo-3` (94.72.121.48) in
+# control-plane/registries/rch_lanes.tsv, which is the authority -- not this file
+# and not the /zeststream-rch table. The registry FAILS CLOSED for a repo with no
+# row.
+#
+# `force = true` beats a stale exported RCH_WORKER: verified in the sibling repo
+# that with RCH_WORKER=contabo-4 exported, cargo still resolves the pinned lane.
+#
+# LIMITS, stated because a reader will otherwise take this for enforcement:
+#   - This is a STRONG DEFAULT, NOT AN ENFORCEMENT BOUNDARY. Cargo applies [env]
+#     to processes cargo itself spawns, while the RCH PreToolUse hook intercepts
+#     BEFORE cargo runs -- so a hook-intercepted command never sees this pin.
+#     Enforcement is control-plane/bin/rch-lane-guard.sh, which checks BOTH the
+#     request (RCH_WORKER) and the OBSERVED placement from `rch queue --json`.
+#   - The lanes are linux/x86_64 and return VERDICTS ONLY. Their binaries are ELF
+#     and `exec format error` on this Mac -- three certified hooks were briefly
+#     bricked that way. Anything that must RUN here builds on joshs-brain or
+#     zestdata-local. Never install an rch-retrieved artifact without `file`.
+#   - CARGO_BUILD_JOBS stays 2: `cargo test` estimates higher than `cargo check`
+#     and gets refused RCH-I003 against a 4-slot box. `-j` caps CONCURRENT rustc
+#     and can never shrink ONE oversized rustc.
+#
+# Added 2026-09-02 after control-plane proved placement: `rch workers enable
+# contabo-3` cleared a stale cached lifecycle status that was refusing every
+# pinned build while ssh, `rch workers probe` and `rch admit` all reported ok.
+# A pin added before that fix would still have been refused.
+RCH_WORKER = { value = "contabo-3", force = true }
+CARGO_BUILD_JOBS = { value = "2", force = true }
