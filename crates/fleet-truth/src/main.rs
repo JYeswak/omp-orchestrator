@@ -10,11 +10,24 @@ use fleet_truth::{
 use serde_json::{json, Value};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitCode};
+use std::process::{Command, ExitCode, Output};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use subprocess_contract::{bounded_output, BoundedOutcome};
 
+fn successful(label: &str, outcome: BoundedOutcome) -> bool {
+    match outcome {
+        BoundedOutcome::Completed(output) => output.status.success(),
+        BoundedOutcome::TimedOut => {
+            eprintln!("fleet-truth: {label} timed out before its deadline");
+            false
+        }
+        BoundedOutcome::Unspawned(error) => {
+            eprintln!("fleet-truth: {label} could not spawn: {error}");
+            false
+        }
+    }
+}
 /// How long an observation child (ntm, tmux, git) may take before it is killed.
-///
 /// LOAD-AWARE FOR THE SAME MEASURED REASON AS fleet-reconcile's observe_timeout().
 /// MEASURED 2026-08-26: `ntm --robot-snapshot` took 12s at load 43 on this shared box, and load
 /// ran 100+ for most of that day; fleet-truth itself timed out at 200s wall while its children
@@ -34,7 +47,18 @@ fn child_timeout() -> Duration {
         }
     }
     let load = (|| -> Option<f64> {
-        let out = Command::new("/usr/bin/uptime").output().ok()?;
+        let mut command = Command::new("/usr/bin/uptime");
+        let out = match bounded_output(&mut command, Duration::from_secs(2)) {
+            BoundedOutcome::Completed(output) => output,
+            BoundedOutcome::TimedOut => {
+                eprintln!("fleet-truth: uptime timed out before its deadline");
+                return None;
+            }
+            BoundedOutcome::Unspawned(error) => {
+                eprintln!("fleet-truth: uptime could not spawn: {error}");
+                return None;
+            }
+        };
         let text = String::from_utf8_lossy(&out.stdout).into_owned();
         let tail = text.rsplit("load averages:").next()?.trim().to_string();
         tail.split_whitespace().next()?.parse::<f64>().ok()
@@ -43,10 +67,18 @@ fn child_timeout() -> Duration {
     Duration::from_secs(30u64.saturating_add((load * 2.0) as u64).min(120))
 }
 
-fn stdout_of(cmd: Command) -> String {
-    spawn_timeout(cmd, child_timeout())
-        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
-        .unwrap_or_default()
+fn stdout_of(mut cmd: Command) -> String {
+    match spawn_timeout(cmd, child_timeout()) {
+        BoundedOutcome::Completed(output) => String::from_utf8_lossy(&output.stdout).into_owned(),
+        BoundedOutcome::TimedOut => {
+            eprintln!("fleet-truth: observation timed out before its deadline");
+            String::new()
+        }
+        BoundedOutcome::Unspawned(error) => {
+            eprintln!("fleet-truth: observation could not spawn: {error}");
+            String::new()
+        }
+    }
 }
 
 fn say(line: &str) {
@@ -382,14 +414,10 @@ fn eval_row_mode(rules: &FleetTruthRules) -> ExitCode {
 fn run_register(json_out: bool, sessions: &[String], rules: &FleetTruthRules) -> ExitCode {
     let mut tmux_v = Command::new("tmux");
     tmux_v.arg("-V");
-    let tmux_ok = spawn_timeout(tmux_v, Duration::from_secs(5))
-        .map(|o| o.status.success())
-        .unwrap_or(false);
+    let tmux_ok = successful("tmux version", spawn_timeout(tmux_v, Duration::from_secs(5)));
     let mut git_v = Command::new("git");
     git_v.arg("--version");
-    let git_ok = spawn_timeout(git_v, Duration::from_secs(5))
-        .map(|o| o.status.success())
-        .unwrap_or(false);
+    let git_ok = successful("git version", spawn_timeout(git_v, Duration::from_secs(5)));
     if !tmux_ok || !git_ok {
         let mut missing = String::new();
         if !tmux_ok {
