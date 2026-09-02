@@ -67,3 +67,14 @@ pub use ledger::*;
 pub mod heartbeat;
 pub mod followup;
 pub mod spine;
+
+/// K9 acceptance 4, enforced rather than documented.
+///
+/// The close-reason policy — a reason must start with `MUTATION-VERIFIED`,
+/// `DONE`, `APPROVED` or `WONTFIX` — existed as doctrine in `AGENTS.md` and the
+/// bead with **no validator anywhere** under `crates/*/src`. Worse,
+/// `followup.rs` reported every closed bead as
+/// `close_verdict: "MUTATION-VERIFIED-or-equivalent"`, a hardcoded literal, while
+/// `classify_followup` did not take the reason as an input at all. A derived
+/// value that cannot vary is not derived.
+pub mod close_reason;

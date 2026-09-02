@@ -9,6 +9,10 @@ fn dispatched_silent_past_deadline_is_typed() {
     let verdict = classify_followup(
         "omp-orchestrator-he6",
         /* bead_closed = */ false,
+        // An unclosed bead has no close reason to read, so the honest input is
+        // None -> CloseReasonVerdict::Unread. Added when K9 threaded the real
+        // reason through; every one of these cases is unclosed.
+        /* close_reason = */ None,
         "SilverWolf",       // current assignee
         "SilverWolf",       // original assignee (unchanged)
         false,              // no verdict comment
@@ -36,6 +40,10 @@ fn verdict_posted_is_healthy() {
     let verdict = classify_followup(
         "omp-orchestrator-0hk",
         /* bead_closed = */ false,
+        // An unclosed bead has no close reason to read, so the honest input is
+        // None -> CloseReasonVerdict::Unread. Added when K9 threaded the real
+        // reason through; every one of these cases is unclosed.
+        /* close_reason = */ None,
         "SilverWolf",
         "SilverWolf",
         true,               // verdict comment present
@@ -59,6 +67,10 @@ fn reassigned_bead_is_not_silent() {
     let verdict = classify_followup(
         "omp-orchestrator-815",
         /* bead_closed = */ false,
+        // An unclosed bead has no close reason to read, so the honest input is
+        // None -> CloseReasonVerdict::Unread. Added when K9 threaded the real
+        // reason through; every one of these cases is unclosed.
+        /* close_reason = */ None,
         "GreenFrog",        // current assignee (CHANGED)
         "AmberGate",        // original assignee
         false,              // no verdict comment
@@ -85,6 +97,10 @@ fn tracker_error_is_not_verdict_posted() {
     let verdict = classify_followup(
         "any-bead",
         /* bead_closed = */ false,
+        // An unclosed bead has no close reason to read, so the honest input is
+        // None -> CloseReasonVerdict::Unread. Added when K9 threaded the real
+        // reason through; every one of these cases is unclosed.
+        /* close_reason = */ None,
         "anyone",
         "anyone",
         false,
@@ -108,6 +124,10 @@ fn within_deadline_and_working_is_healthy() {
     let verdict = classify_followup(
         "omp-orchestrator-6gq",
         /* bead_closed = */ false,
+        // An unclosed bead has no close reason to read, so the honest input is
+        // None -> CloseReasonVerdict::Unread. Added when K9 threaded the real
+        // reason through; every one of these cases is unclosed.
+        /* close_reason = */ None,
         "BlueLantern",
         "BlueLantern",
         false,              // no verdict yet
@@ -136,6 +156,10 @@ fn boundary_case_deadline_equals_elapsed_is_silent() {
     let verdict = classify_followup(
         "omp-orchestrator-x",
         /* bead_closed = */ false,
+        // An unclosed bead has no close reason to read, so the honest input is
+        // None -> CloseReasonVerdict::Unread. Added when K9 threaded the real
+        // reason through; every one of these cases is unclosed.
+        /* close_reason = */ None,
         "me",
         "me",
         false,
