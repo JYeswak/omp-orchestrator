@@ -1,0 +1,16 @@
+[package]
+name = "crate-soundness-verify"
+version = "0.1.0"
+edition = "2021"
+description = "Derived, bounded Rust soundness gate for control-plane crates."
+
+[[bin]]
+name = "crate-soundness-verify"
+path = "src/main.rs"
+
+[lib]
+name = "crate_soundness_verify"
+path = "src/lib.rs"
+
+[lints.rust]
+unsafe_code = "forbid"

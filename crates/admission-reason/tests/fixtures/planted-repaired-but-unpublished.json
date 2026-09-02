@@ -1,0 +1,95 @@
+{
+  "schema": "control-plane.check.v1",
+  "expected": [
+    "docs-staleness",
+    "domain-closure",
+    "close-evidence",
+    "ollama-single-writer",
+    "session-repo",
+    "br-comment-form",
+    "bead-lineage",
+    "clone-bootstrap",
+    "machine-config",
+    "shellcheck",
+    "drift",
+    "tests",
+    "mutation"
+  ],
+  "entries": [
+    {
+      "gate": "docs-staleness",
+      "verdict": "RED",
+      "detail": "docs-staleness RED (planted published failure; live override is PASS)"
+    },
+    {
+      "gate": "domain-closure",
+      "verdict": "PASS",
+      "detail": "{\"accepted_input_boundary\":\"local hooks_certified.toml, settings.json, and referenced artifact bytes\",\"command\":\"doctor\",\"external_writes\":false,\"live_hooks\":16,\"mode\":\"doctor\",\"next_falsifier\":\"mutat"
+    },
+    {
+      "gate": "close-evidence",
+      "verdict": "PASS",
+      "detail": "ok"
+    },
+    {
+      "gate": "ollama-single-writer",
+      "verdict": "PASS",
+      "detail": "ok"
+    },
+    {
+      "gate": "session-repo",
+      "verdict": "PASS",
+      "detail": "ok"
+    },
+    {
+      "gate": "br-comment-form",
+      "verdict": "PASS",
+      "detail": "ok"
+    },
+    {
+      "gate": "bead-lineage",
+      "verdict": "PASS",
+      "detail": "ok"
+    },
+    {
+      "gate": "clone-bootstrap",
+      "verdict": "PASS",
+      "detail": "ok"
+    },
+    {
+      "gate": "machine-config",
+      "verdict": "PASS",
+      "detail": "ok"
+    },
+    {
+      "gate": "shellcheck",
+      "verdict": "PASS",
+      "detail": "ok"
+    },
+    {
+      "gate": "drift",
+      "verdict": "PASS",
+      "detail": "ok"
+    },
+    {
+      "gate": "tests",
+      "verdict": "PASS",
+      "detail": "ok"
+    },
+    {
+      "gate": "mutation",
+      "verdict": "PASS",
+      "detail": "ok"
+    }
+  ],
+  "pass": 2,
+  "red": 1,
+  "unrun": 10,
+  "unknown": 0,
+  "timeout": 0,
+  "unknown_until_ts": null,
+  "unknown_horizon_seconds": 120,
+  "overall": "FAIL",
+  "completed_ts": "2020-01-01T00:00:00Z",
+  "subject_id": "domain:cb19544a0bd80510"
+}

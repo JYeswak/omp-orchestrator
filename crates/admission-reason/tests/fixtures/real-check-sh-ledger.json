@@ -1,0 +1,95 @@
+{
+  "schema": "control-plane.check.v1",
+  "expected": [
+    "docs-staleness",
+    "domain-closure",
+    "close-evidence",
+    "ollama-single-writer",
+    "session-repo",
+    "br-comment-form",
+    "bead-lineage",
+    "clone-bootstrap",
+    "machine-config",
+    "shellcheck",
+    "drift",
+    "tests",
+    "mutation"
+  ],
+  "entries": [
+    {
+      "gate": "docs-staleness",
+      "verdict": "PASS",
+      "detail": "docs-staleness PASS file=AGENTS.md commits_since_last_touch=2 limit=50 docs-staleness PASS file=CLAUDE.md commits_since_last_touch=36 limit=50 docs-staleness PASS file=.flywheel/GOAL.md commits_since_"
+    },
+    {
+      "gate": "domain-closure",
+      "verdict": "PASS",
+      "detail": "{\"accepted_input_boundary\":\"local hooks_certified.toml, settings.json, and referenced artifact bytes\",\"command\":\"doctor\",\"external_writes\":false,\"live_hooks\":16,\"mode\":\"doctor\",\"next_falsifier\":\"mutat"
+    },
+    {
+      "gate": "close-evidence",
+      "verdict": "RED",
+      "detail": " cp-epic-fleet-work-quality-08l6.60\tUNKNOWN\tsha 4294967295 could not be resolved: repository sweep incomplete cp-epic-fleet-work-quality-08l6.58\tUNKNOWN\tsha 97e587f1 could not be resolved: repository sweep incomplete cp-2sv88\tUNKNOWN\tsha 69796335616 could not be resolved: repository sweep incomplete cp-m30.5\tUNKNOWN\tsha 1508274176 could not be resolved: repository sweep incomplete cp-m30.1\tUNKNOWN\tsha 20260815 could not be resolved: repository sweep incomplete cp-xxu9\tUNKNOWN\tsha 20260609 could not be resolved: repository sweep incomplete cp-epic-fleet-work-quality-08l6.55\tUNKNOWN\tsha 4bc670a137c88aa3 could not be resolved: repository sweep incomplete cp-m30.2\tUNKNOWN\tsha 39519280 could not be resolved: repository sweep incomplete cp-epic-fleet-work-quality-08l6.40\tUNKNOWN\tsha cfc815e could not be resolved: repository sweep incomplete SUMMARY close-evidence since=2026-08-26 graded=710 without_evidence=9"
+    },
+    {
+      "gate": "ollama-single-writer",
+      "verdict": "UNRUN",
+      "detail": "skipped-after-close-evidence"
+    },
+    {
+      "gate": "session-repo",
+      "verdict": "UNRUN",
+      "detail": "skipped-after-close-evidence"
+    },
+    {
+      "gate": "br-comment-form",
+      "verdict": "UNRUN",
+      "detail": "skipped-after-close-evidence"
+    },
+    {
+      "gate": "bead-lineage",
+      "verdict": "UNRUN",
+      "detail": "skipped-after-close-evidence"
+    },
+    {
+      "gate": "clone-bootstrap",
+      "verdict": "UNRUN",
+      "detail": "skipped-after-close-evidence"
+    },
+    {
+      "gate": "machine-config",
+      "verdict": "UNRUN",
+      "detail": "skipped-after-close-evidence"
+    },
+    {
+      "gate": "shellcheck",
+      "verdict": "UNRUN",
+      "detail": "skipped-after-close-evidence"
+    },
+    {
+      "gate": "drift",
+      "verdict": "UNRUN",
+      "detail": "skipped-after-close-evidence"
+    },
+    {
+      "gate": "tests",
+      "verdict": "UNRUN",
+      "detail": "skipped-after-close-evidence"
+    },
+    {
+      "gate": "mutation",
+      "verdict": "UNRUN",
+      "detail": "skipped-after-close-evidence"
+    }
+  ],
+  "pass": 2,
+  "red": 1,
+  "unrun": 10,
+  "unknown": 0,
+  "timeout": 0,
+  "unknown_until_ts": null,
+  "unknown_horizon_seconds": 120,
+  "overall": "FAIL",
+  "completed_ts": "2026-08-26T19:29:05Z",
+  "subject_id": "domain:cb19544a0bd80510"
+}

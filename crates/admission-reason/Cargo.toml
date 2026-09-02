@@ -1,0 +1,21 @@
+[package]
+name = "admission-reason"
+version = "0.1.0"
+edition = "2021"
+description = "Name the gate that refused a dispatch, from the standing verdict. Port of bin/admission-reason.sh + bin/admission_reason.py; those remain the differential oracle."
+
+[[bin]]
+name = "admission-reason"
+path = "src/main.rs"
+
+[lib]
+name = "admission_reason"
+path = "src/lib.rs"
+
+[dependencies]
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "forbid"
