@@ -72,12 +72,75 @@ fn main() {
             }
         });
     println!("cargo:rustc-env=OMP_BUILD_ID={build_id}");
+
+    // WATCH the inputs the id is derived from, or the derivation never re-runs.
+    //
+    // Measured 2026-09-01: build.rs was changed to DERIVE `build_id` from git, and the
+    // very next install still shipped `build_id=unversioned`. The comment above blames
+    // "cargo reused a cached artifact" — but that is not bad luck, it is this omission.
+    // build.rs emitted only `rerun-if-env-changed`, so cargo had no reason to re-run it
+    // when HEAD moved, and a derived id that is never RE-derived is a cached id that
+    // silently describes a different commit than the one being built.
+    //
+    // This is the identity half of the same failure as the claim fence: a mechanism was
+    // correct in source and inert in the installed artifact. `~/.local/bin/omp-orchestrator`
+    // still reported `build_id=unversioned` at 18:18 tonight for exactly this reason,
+    // while its `--version` output was being trusted to prove what it was built from.
+    //
+    // So watch every derivation input: HEAD, whatever ref HEAD names, packed-refs (a
+    // packed branch has no loose ref file), and the index (which carries the dirty bit).
+    watch_git_inputs();
     println!("cargo:rerun-if-env-changed=CARGO_TARGET_DIR");
     println!("cargo:rerun-if-env-changed=FRANKEN_CARGO_TARGET_ROOT");
     println!("cargo:rerun-if-env-changed=RUSTUP_TOOLCHAIN");
 
     if let Err(error) = register_target_directory() {
         panic!("{error}");
+    }
+}
+
+/// Emits `cargo:rerun-if-changed` for every input `build_id` is derived from.
+///
+/// The paths must be ABSOLUTE. A relative `rerun-if-changed` is resolved against the
+/// package root (`crates/omp-orchestrator`), and the git directory is two levels above
+/// it, so a relative form would silently watch a path that does not exist — which fails
+/// the same open way this function exists to close.
+fn watch_git_inputs() {
+    let git_dir = std::process::Command::new("git")
+        .args(["rev-parse", "--absolute-git-dir"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| PathBuf::from(String::from_utf8_lossy(&o.stdout).trim().to_owned()))
+        .filter(|p| p.is_dir());
+    let git_dir = match git_dir {
+        Some(dir) => dir,
+        // With git unavailable the id already resolved to `nogit-<epoch>`, which is
+        // different on every run, so there is nothing to invalidate.
+        None => return,
+    };
+
+    for input in ["HEAD", "index", "packed-refs"] {
+        let path = git_dir.join(input);
+        if path.exists() {
+            println!("cargo:rerun-if-changed={}", path.display());
+        }
+    }
+
+    // A loose branch ref: HEAD is a symref to it, and it is what actually moves on
+    // commit. `.git/HEAD` itself only changes on checkout.
+    let reference = std::process::Command::new("git")
+        .args(["symbolic-ref", "-q", "HEAD"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
+        .filter(|s| !s.is_empty());
+    if let Some(reference) = reference {
+        let path = git_dir.join(reference);
+        if path.exists() {
+            println!("cargo:rerun-if-changed={}", path.display());
+        }
     }
 }
 
