@@ -8,18 +8,24 @@ use std::path::{Path, PathBuf};
 use subprocess_contract::run_output;
 
 fn scratch_root() -> PathBuf {
-    let root = std::env::temp_dir().join(format!(
-        "finding-br-publisher-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("system clock")
-            .as_nanos()
-    ));
-    let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(&root).expect("scratch root");
-    root
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("system clock")
+        .as_nanos();
+    for suffix in 0..1_000_u32 {
+        let root = std::env::temp_dir().join(format!(
+            "finding-br-publisher-{}-{stamp}-{suffix}",
+            std::process::id()
+        ));
+        match std::fs::create_dir(&root) {
+            Ok(()) => return root,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => panic!("scratch root {root:?}: {error}"),
+        }
+    }
+    panic!("unable to allocate a unique scratch root");
 }
+
 
 fn with_cx<T>(body: impl AsyncFnOnce(&Cx) -> T) -> T {
     let runtime = RuntimeBuilder::current_thread()
