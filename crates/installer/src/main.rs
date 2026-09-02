@@ -5,11 +5,16 @@
 //! main wires the subprocess calls (git, cargo) to the lib's identity check.
 //! Single writer per file: SilverWolf owns main.rs; pane 1 owns lib.rs.
 
-use installer::{resolve_repo_ownership, verify_identity, RepoOwnership};
+use installer::RepoOwnership;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-const BINARIES: &[&str] = &["omp-orchestrator", "tick-monitor", "pane-truth"];
+const BINARIES: &[(&str, &str)] = &[
+    ("omp-orchestrator", "omp-orchestrator"),
+    ("tick-monitor", "tick-monitor"),
+    ("pane-truth", "pane-truth"),
+    ("installer", "installer"),
+];
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -29,10 +34,15 @@ fn main() -> ExitCode {
     };
 
     match args.first().map(String::as_str) {
-        Some("--check") => run_check(&repo_root, &bin_dir),
-        Some("--install") => run_install(&repo_root, &bin_dir),
+        Some("--check") if args.len() == 1 => run_check(&repo_root, &bin_dir),
+        Some("--install") if args.len() == 2 => run_install(&repo_root, &bin_dir, &args[1]),
+        Some("--install") => {
+            eprintln!("INSTALLER ERROR: --install requires exactly one target");
+            usage();
+            ExitCode::from(2)
+        }
         Some("--version") => {
-            println!("installer 0.1.0");
+            println!("installer 0.1.0 build_id={}", env!("OMP_BUILD_ID"));
             ExitCode::SUCCESS
         }
         Some("-h") | Some("--help") => {
@@ -49,7 +59,7 @@ fn main() -> ExitCode {
 }
 
 fn usage() {
-    eprintln!("installer [--check | --install | --version] [--bin-dir PATH]");
+    eprintln!("installer [--check | --install TARGET | --version] [--bin-dir PATH]");
 }
 
 fn dirs_home() -> Option<PathBuf> {
@@ -78,7 +88,7 @@ fn run_check(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
     // class as the retired "81 JSON-RPC methods, 17 used" figure.
     let mut owned = 0usize;
 
-    for name in BINARIES {
+    for &(_, name) in BINARIES {
         let binary = bin_dir.join(name);
         if !binary.exists() {
             println!("  {name}: NOT INSTALLED (skipped)");
@@ -120,20 +130,24 @@ fn run_check(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn run_install(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
+fn run_install(repo_root: &PathBuf, bin_dir: &PathBuf, target: &str) -> ExitCode {
     if let Err(error) = installer::check_build_fence(repo_root) {
         eprintln!("INSTALLER BLOCKED: {error}");
         return ExitCode::from(75);
     }
-
-    let cargo = std::env::var("CARGO")
-        .unwrap_or_else(|_| "~/.cargo/bin/cargo".to_owned());
-    let cargo = shellexpand_path(&cargo);
-    if let Err(error) = installer::build_workspace(repo_root, &cargo) {
-        eprintln!("INSTALLER BUILD FAILED: {error}");
+    let Some((crate_name, binary_name)) = BINARIES
+        .iter()
+        .find(|(_, name)| *name == target)
+        .copied()
+    else {
+        eprintln!("INSTALLER ERROR: unknown target {target:?}; expected one of omp-orchestrator, tick-monitor, pane-truth, installer");
         return ExitCode::from(2);
+    };
+    let ownership = installer::resolve_repo_ownership(repo_root, binary_name);
+    if let RepoOwnership::Foreign { repo } = &ownership {
+        eprintln!("INSTALLER ERROR: target {binary_name} is FOREIGN (source in {repo}); install it from its owning repository");
+        return ExitCode::from(3);
     }
-
     let head = match installer::git_head(repo_root) {
         Ok(sha) => sha,
         Err(error) => {
@@ -141,36 +155,36 @@ fn run_install(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
             return ExitCode::from(3);
         }
     };
-
-    let target_dir = repo_root.join("target/release");
-    let mut installed_count = 0usize;
-    let mut identity_checks = Vec::new();
-
-    for name in BINARIES {
-        let source = target_dir.join(name);
-        if !source.exists() {
-            continue;
+    let before_start = match installer::running_process_start(binary_name) {
+        Ok(start) => start,
+        Err(error) => {
+            eprintln!("INSTALLER RESTART READ FAILED: {error}");
+            return ExitCode::from(2);
         }
-        let ownership = installer::resolve_repo_ownership(repo_root, name);
-        match installer::install_binary(&source, bin_dir, &head, &ownership) {
-            Ok(check) => {
-                println!("  INSTALLED {name}: {check}");
-                installed_count += 1;
-                identity_checks.push(check);
-            }
-            Err(error) => {
-                eprintln!("INSTALLER ERROR: {error}");
-                return ExitCode::from(1);
-            }
+    };
+    let cargo = std::env::var("CARGO")
+        .unwrap_or_else(|_| "~/.cargo/bin/cargo".to_owned());
+    let cargo = shellexpand_path(&cargo);
+    if let Err(error) = installer::build_target(repo_root, &cargo, crate_name, &head) {
+        eprintln!("INSTALLER BUILD FAILED: {error}");
+        return ExitCode::from(2);
+    }
+    let source = repo_root.join("target/release").join(binary_name);
+    match installer::install_binary(&source, bin_dir, &head, &ownership) {
+        Ok(check) => println!("  INSTALLED {binary_name}: {check}"),
+        Err(error) => {
+            eprintln!("INSTALLER ERROR: {error}");
+            return ExitCode::from(1);
         }
     }
-
-    if installed_count == 0 {
-        eprintln!("INSTALLER ERROR: no binaries found in target/release");
-        return ExitCode::from(3);
+    match installer::restart_and_verify(binary_name, &bin_dir.join(binary_name), &head, before_start) {
+        Ok(outcome) => println!("  RESTART {binary_name}: {outcome}"),
+        Err(error) => {
+            eprintln!("INSTALLER RESTART FAILED: {error}");
+            return ExitCode::from(1);
+        }
     }
-
-    println!("INSTALLER: {installed_count} binaries installed");
+    println!("INSTALLER: target {binary_name} installed and verified");
     ExitCode::SUCCESS
 }
 

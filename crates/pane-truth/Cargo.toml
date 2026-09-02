@@ -3,6 +3,7 @@ license.workspace = true
 name = "pane-truth"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
 description = "Ground-truth tmux pane state; the shell remains the differential oracle."
 
 [lib]

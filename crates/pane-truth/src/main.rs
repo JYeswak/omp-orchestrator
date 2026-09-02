@@ -4,6 +4,11 @@ use pane_truth::{run_live, run_live_exit_code, selftest, selftest_exit_code, Pan
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.iter().any(|arg| arg == "--version") {
+        println!("pane-truth 0.1.0 build_id={}", env!("OMP_BUILD_ID"));
+        return ExitCode::SUCCESS;
+    }
     let mut session = "control-plane".to_string();
     let mut self_test = false;
     let mut mutation = false;

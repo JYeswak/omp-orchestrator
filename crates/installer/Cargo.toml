@@ -3,6 +3,7 @@ license.workspace = true
 name = "installer"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
 description = "One-touch install: build, verify four-way identity, install to ~/.local/bin, launchd plist"
 
 [[bin]]
@@ -10,6 +11,7 @@ name = "installer"
 path = "src/main.rs"
 
 [dependencies]
+subprocess-contract = { path = "../subprocess-contract" }
 serde_json = "1"
 
 [lints.rust]

@@ -7,7 +7,6 @@
 //!   == what --version reports == what the running process reports.
 //! Install FAILS if any pair disagrees.
 
-use serde_json::Value;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -20,6 +19,7 @@ pub enum InstallError {
     IdentityMismatch { binary: String, head: String, build_id: String, version: String },
     NotAGitRepo { path: String },
     NoBinaries { repo_root: String },
+    RestartFailed { binary: String, detail: String },
     /// A build is already running in this repo (a `.build_in_flight` marker is
     /// present). RESTRICTIVE: installing over an in-flight build races the linker and
     /// produces a binary whose identity matches neither tree.
@@ -46,6 +46,9 @@ impl fmt::Display for InstallError {
             Self::NoBinaries { repo_root } => {
                 write!(formatter, "no installable binaries found in {repo_root}")
             }
+            Self::RestartFailed { binary, detail } => {
+                write!(formatter, "RESTART FAILED for {binary}: {detail}")
+            }
             Self::BuildInFlight { detail } => {
                 write!(formatter, "build in flight: {detail}")
             }
@@ -54,8 +57,8 @@ impl fmt::Display for InstallError {
             }
             Self::InstallTimeout { step, deadline_secs } => write!(
                 formatter,
-                "INSTALL TIMEOUT at {step}: exceeded {deadline_secs}s; \\
-                 the process group was killed - remedy: retry, or inspect \\
+                "INSTALL TIMEOUT at {step}: exceeded {deadline_secs}s; \
+                 the process group was killed - remedy: retry, or inspect \
                  for a credential prompt / build lock before retrying"
             ),
         }
@@ -127,7 +130,55 @@ pub struct IdentityCheck {
     pub version_output: Option<String>,
     pub consistent: bool,
 }
+impl IdentityCheck {
+    #[must_use]
+    pub fn identity_legs(&self) -> &'static str {
+        match (&self.build_id_in_binary, &self.version_output) {
+            (Some(_), Some(_)) => "build_id,version",
+            (Some(_), None) => "build_id",
+            (None, Some(_)) => "version",
+            (None, None) => "none",
+        }
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RestartPostcondition {
+    Verified,
+    NotRestarted,
+    NotRunning,
+    IdentityMismatch,
+}
 
+impl fmt::Display for RestartPostcondition {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let label = match self {
+            Self::Verified => "VERIFIED",
+            Self::NotRestarted => "NOT_RESTARTED",
+            Self::NotRunning => "NOT_RUNNING",
+            Self::IdentityMismatch => "IDENTITY_MISMATCH",
+        };
+        write!(formatter, "{label}")
+    }
+}
+
+/// The restart proof needs both a changed process start time and a fresh
+/// identity check. Either signal alone is insufficient.
+#[must_use]
+pub fn classify_restart_postcondition(
+    before_start_secs: Option<u64>,
+    after_start_secs: Option<u64>,
+    identity_ok: bool,
+) -> RestartPostcondition {
+    if !identity_ok {
+        return RestartPostcondition::IdentityMismatch;
+    }
+    match (before_start_secs, after_start_secs) {
+        (_, None) => RestartPostcondition::NotRunning,
+        (None, Some(_)) => RestartPostcondition::Verified,
+        (Some(before), Some(after)) if after > before => RestartPostcondition::Verified,
+        (Some(_), Some(_)) => RestartPostcondition::NotRestarted,
+    }
+}
 impl fmt::Display for IdentityCheck {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.repo_ownership {
@@ -149,11 +200,12 @@ impl fmt::Display for IdentityCheck {
         }
         write!(
             formatter,
-            "{}: HEAD={} build_id={} version={} {}",
+            "{}: HEAD={} build_id={} version={} legs={} {}",
             self.binary_name,
             self.head_sha,
             self.build_id_in_binary.as_deref().unwrap_or("ABSENT"),
             self.version_output.as_deref().unwrap_or("ABSENT"),
+            self.identity_legs(),
             if self.consistent { "IDENTITY OK" } else { "MISMATCH" }
         )
     }
@@ -184,6 +236,11 @@ pub fn resolve_repo_ownership(this_root: &Path, binary_name: &str) -> RepoOwners
                 repo: sibling.display().to_string(),
             };
         }
+    }
+    if binary_name == "pane-truth" {
+        return RepoOwnership::Foreign {
+            repo: "control-plane (external workspace; source not present here)".to_owned(),
+        };
     }
     RepoOwnership::Unknown
 }
@@ -236,35 +293,45 @@ pub fn check_build_fence(repo: &Path) -> Result<(), InstallError> {
 
 // ── BUILD ──────────────────────────────────────────────────────────────────────
 
-pub fn build_workspace(repo: &Path, cargo: &str) -> Result<(), InstallError> {
+/// Build only the requested package. The installer must not require an unrelated
+/// workspace member to compile before it can replace this target.
+pub fn build_target(
+    repo: &Path,
+    cargo: &str,
+    crate_name: &str,
+    build_id: &str,
+) -> Result<(), InstallError> {
     let mut build_command = Command::new(cargo);
-    build_command.args(["build", "--release", "--workspace"]);
+    build_command.args(["build", "--release", "-p", crate_name]);
     build_command.current_dir(repo);
-    let out = match subprocess_contract::bounded_output(
-        &mut build_command,
-        BUILD_DEADLINE,
-    ) {
+    // The current workspace's release strip toolchain is known-bad on this host:
+    // rust-objcopy aborts while loading libLLVM.dylib. Keep the override at the
+    // install chokepoint rather than requiring every operator to discover it.
+    build_command.env("CARGO_PROFILE_RELEASE_STRIP", "false");
+    // The source build's identity is the HEAD this invocation read, not an
+    // inherited environment value or a cached anonymous artifact.
+    build_command.env("OMP_BUILD_ID", build_id);
+    let out = match subprocess_contract::bounded_output(&mut build_command, BUILD_DEADLINE) {
         subprocess_contract::BoundedOutcome::Completed(out) => out,
         subprocess_contract::BoundedOutcome::TimedOut => {
             return Err(InstallError::BuildFailed {
-                crate_name: "workspace".to_owned(),
+                crate_name: crate_name.to_owned(),
                 detail: format!(
-                    "cargo build exceeded {}s deadline; process group killed - \
-                     check for a stuck build lock or a credential prompt",
+                    "cargo build exceeded {}s deadline; process group killed - check for a stuck build lock or credential prompt",
                     BUILD_DEADLINE.as_secs()
                 ),
             });
         }
         subprocess_contract::BoundedOutcome::Unspawned(error) => {
             return Err(InstallError::BuildFailed {
-                crate_name: "workspace".to_owned(),
+                crate_name: crate_name.to_owned(),
                 detail: format!("cargo spawn failed: {error}"),
             });
         }
     };
     if !out.status.success() {
         return Err(InstallError::BuildFailed {
-            crate_name: "workspace".to_owned(),
+            crate_name: crate_name.to_owned(),
             detail: String::from_utf8_lossy(&out.stderr).into_owned(),
         });
     }
@@ -317,8 +384,8 @@ pub fn probe_build_id_string(binary: &Path) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
-/// The four-way identity check for one binary:
-///   HEAD == build_id in the artifact == --version output == (running process, if any)
+/// The local identity legs for one binary are build-id-in-binary and --version.
+/// Running-process freshness is a separate restart postcondition in G2.
 pub fn verify_identity(
     binary: &Path,
     head_sha: &str,
@@ -334,7 +401,7 @@ pub fn verify_identity(
     let version = probe_version(binary);
 
     let consistent = match (&build_id, &version) {
-        (Some(bid), Some(ver)) => bid == head_sha || ver == head_sha,
+        (Some(bid), Some(ver)) => bid == head_sha && ver == head_sha,
         (Some(bid), None) => bid == head_sha,
         (None, Some(ver)) => ver == head_sha,
         (None, None) => false,
@@ -347,6 +414,153 @@ pub fn verify_identity(
         build_id_in_binary: build_id,
         version_output: version,
         consistent,
+    }
+}
+
+
+fn bounded_probe(command: &mut Command, step: &'static str) -> Result<std::process::Output, InstallError> {
+    match subprocess_contract::bounded_output(command, PROBE_DEADLINE) {
+        subprocess_contract::BoundedOutcome::Completed(output) => Ok(output),
+        subprocess_contract::BoundedOutcome::TimedOut => Err(InstallError::InstallTimeout {
+            step,
+            deadline_secs: PROBE_DEADLINE.as_secs(),
+        }),
+        subprocess_contract::BoundedOutcome::Unspawned(error) => Err(InstallError::IoError {
+            path: command.get_program().display().to_string(),
+            detail: format!("spawn failed: {error}"),
+        }),
+    }
+}
+
+fn launchd_uid() -> Result<String, InstallError> {
+    let mut command = Command::new("id");
+    command.arg("-u");
+    let output = bounded_probe(&mut command, "launchd uid probe")?;
+    if !output.status.success() {
+        return Err(InstallError::IoError {
+            path: "id".to_owned(),
+            detail: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+        });
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+}
+
+fn launchd_service_for_binary(binary_name: &str) -> Option<&'static str> {
+    match binary_name {
+        "omp-orchestrator" => Some("ai.zeststream.omp-orchestrator"),
+        _ => None,
+    }
+}
+
+#[must_use]
+pub fn is_launchd_managed(binary_name: &str) -> bool {
+    launchd_service_for_binary(binary_name).is_some()
+}
+
+fn launchd_pid(service_label: &str) -> Result<Option<u32>, InstallError> {
+    let uid = launchd_uid()?;
+    let target = format!("gui/{uid}/{service_label}");
+    let mut command = Command::new("launchctl");
+    command.args(["print", &target]);
+    let output = bounded_probe(&mut command, "launchd service probe")?;
+    if !output.status.success() {
+        return Ok(None);
+    }
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("pid = ")?.parse::<u32>().ok()))
+}
+
+fn process_start_secs(pid: u32) -> Result<Option<u64>, InstallError> {
+    let mut ps = Command::new("ps");
+    ps.args(["-p", &pid.to_string(), "-o", "lstart="]);
+    let output = bounded_probe(&mut ps, "process start probe")?;
+    if !output.status.success() {
+        return Ok(None);
+    }
+    let start = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    if start.is_empty() {
+        return Ok(None);
+    }
+    let mut date = Command::new("date");
+    date.args(["-j", "-f", "%a %b %e %H:%M:%S %Y", &start, "+%s"]);
+    let output = bounded_probe(&mut date, "process start timestamp probe")?;
+    if !output.status.success() {
+        return Ok(None);
+    }
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .parse::<u64>()
+        .ok())
+}
+
+/// Read the process start time for a managed binary. It never restarts anything.
+pub fn running_process_start(binary_name: &str) -> Result<Option<u64>, InstallError> {
+    let Some(service_label) = launchd_service_for_binary(binary_name) else {
+        return Ok(None);
+    };
+    let Some(pid) = launchd_pid(service_label)? else {
+        return Ok(None);
+    };
+    process_start_secs(pid)
+}
+
+/// Restart a launchd-managed target and prove both process movement and identity.
+pub fn restart_and_verify(
+    binary_name: &str,
+    installed_path: &Path,
+    head_sha: &str,
+    before_start_secs: Option<u64>,
+) -> Result<RestartPostcondition, InstallError> {
+    let Some(service_label) = launchd_service_for_binary(binary_name) else {
+        return Ok(RestartPostcondition::NotRunning);
+    };
+    let uid = launchd_uid()?;
+    let target = format!("gui/{uid}/{service_label}");
+    let mut command = Command::new("launchctl");
+    command.args(["kickstart", "-k", &target]);
+    let output = bounded_probe(&mut command, "launchd kickstart")?;
+    if !output.status.success() {
+        return Err(InstallError::RestartFailed {
+            binary: binary_name.to_owned(),
+            detail: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+        });
+    }
+
+    let deadline = std::time::Instant::now() + PROBE_DEADLINE;
+    loop {
+        let after_start_secs = running_process_start(binary_name)?;
+        let identity_ok = verify_identity(
+            installed_path,
+            head_sha,
+            &RepoOwnership::ThisRepo,
+        )
+        .consistent;
+        let postcondition = classify_restart_postcondition(
+            before_start_secs,
+            after_start_secs,
+            identity_ok,
+        );
+        match postcondition {
+            RestartPostcondition::Verified => return Ok(postcondition),
+            RestartPostcondition::IdentityMismatch => {
+                return Err(InstallError::RestartFailed {
+                    binary: binary_name.to_owned(),
+                    detail: "running process identity does not match installed target".to_owned(),
+                });
+            }
+            RestartPostcondition::NotRestarted | RestartPostcondition::NotRunning
+                if std::time::Instant::now() >= deadline =>
+            {
+                return Err(InstallError::RestartFailed {
+                    binary: binary_name.to_owned(),
+                    detail: format!(
+                        "postcondition={postcondition} before={before_start_secs:?} after={after_start_secs:?}"
+                    ),
+                });
+            }
+            _ => std::thread::sleep(std::time::Duration::from_millis(100)),
+        }
     }
 }
 
@@ -446,10 +660,14 @@ mod tests {
         build_id: Option<String>,
         version_output: Option<String>,
     ) -> IdentityCheck {
+        let version_id = version_output
+            .as_deref()
+            .and_then(|value| value.split("build_id=").nth(1))
+            .unwrap_or("");
         let consistent = match (&build_id, &version_output) {
-            (Some(bid), Some(ver)) => bid == head_sha || ver == head_sha,
+            (Some(bid), Some(_)) => bid == head_sha && version_id == head_sha,
             (Some(bid), None) => bid == head_sha,
-            (None, Some(ver)) => ver == head_sha,
+            (None, Some(_)) => version_id == head_sha,
             (None, None) => false,
         };
         IdentityCheck {
@@ -460,5 +678,121 @@ mod tests {
             version_output,
             consistent,
         }
+    }
+    #[cfg(unix)]
+    fn executable_fixture(root: &std::path::Path, body: &str) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let path = root.join("fake-cargo");
+        std::fs::write(&path, body).expect("write fake cargo");
+        let mut permissions = std::fs::metadata(&path).expect("fake cargo metadata").permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&path, permissions).expect("make fake cargo executable");
+        path
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn target_build_ignores_broken_sibling_and_disables_release_strip() {
+        let root = std::env::temp_dir().join(format!(
+            "omp-installer-target-build-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).expect("fixture root");
+        let args = root.join("args");
+        let strip = root.join("strip");
+        let build_id = root.join("build-id");
+        let args_path = args.display().to_string();
+        let strip_path = strip.display().to_string();
+        let build_id_path = build_id.display().to_string();
+        let body = format!(
+            r#"#!/bin/sh
+printf '%s\n' "$@" > "{args_path}"
+printf '%s\n' "$CARGO_PROFILE_RELEASE_STRIP" > "{strip_path}"
+printf '%s\n' "$OMP_BUILD_ID" > "{build_id_path}"
+case "$*" in
+  *--workspace*) exit 91 ;;
+esac
+exit 0
+"#
+        );
+        let cargo = executable_fixture(&root, &body);
+        build_target(&root, cargo.to_str().expect("cargo path"), "omp-orchestrator", "head-42")
+            .expect("single-target build must not require a broken sibling");
+        let command_args = std::fs::read_to_string(args).expect("recorded cargo args");
+        assert!(command_args.contains("build"), "{command_args}");
+        assert!(command_args.contains("--release"), "{command_args}");
+        assert!(command_args.contains("-p"), "{command_args}");
+        assert!(command_args.contains("omp-orchestrator"), "{command_args}");
+        assert!(!command_args.contains("--workspace"), "{command_args}");
+        assert_eq!(std::fs::read_to_string(strip).unwrap().trim(), "false");
+        assert_eq!(std::fs::read_to_string(build_id).unwrap().trim(), "head-42");
+        std::fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn pane_truth_without_local_source_is_foreign_with_named_origin() {
+        let root = std::env::temp_dir().join(format!("omp-installer-foreign-{}", std::process::id()));
+        assert!(matches!(
+            resolve_repo_ownership(&root, "pane-truth"),
+            RepoOwnership::Foreign { ref repo } if repo.contains("control-plane")
+        ));
+    }
+
+    #[test]
+    fn identity_output_names_the_legs_that_ran() {
+        let check = verify_identity_impl(
+            "omp-orchestrator",
+            "head-42",
+            Some("head-42".to_owned()),
+            Some("omp-orchestrator 0.1.0 build_id=head-42".to_owned()),
+        );
+        let rendered = check.to_string();
+        assert!(rendered.contains("legs=build_id,version"), "{rendered}");
+    }
+
+    #[test]
+    fn restart_postcondition_requires_movement_and_identity() {
+        assert_eq!(
+            classify_restart_postcondition(Some(10), Some(11), true),
+            RestartPostcondition::Verified
+        );
+        assert_eq!(
+            classify_restart_postcondition(Some(10), Some(10), true),
+            RestartPostcondition::NotRestarted
+        );
+        assert_eq!(
+            classify_restart_postcondition(Some(10), Some(11), false),
+            RestartPostcondition::IdentityMismatch
+        );
+        assert_eq!(
+            classify_restart_postcondition(Some(10), None, true),
+            RestartPostcondition::NotRunning
+        );
+    }
+    #[cfg(unix)]
+    #[test]
+    fn identity_check_runs_and_reports_both_embedded_legs() {
+        let root = std::env::temp_dir().join(format!(
+            "omp-installer-identity-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).expect("fixture root");
+        let binary = executable_fixture(
+            &root,
+            "#!/bin/sh\n# build_id=head-42\nif [ \"$1\" = \"--version\" ]; then printf '%s\\n' 'omp-orchestrator 0.1.0 build_id=head-42'; fi\n",
+        );
+        let check = verify_identity(&binary, "head-42", &RepoOwnership::ThisRepo);
+        assert!(check.consistent, "{check}");
+        assert_eq!(check.identity_legs(), "build_id,version");
+        assert!(check.to_string().contains("legs=build_id,version"));
+        std::fs::remove_dir_all(root).expect("cleanup");
     }
 }

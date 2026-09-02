@@ -3,6 +3,7 @@ license.workspace = true
 name = "tick-monitor"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
 publish = false
 description = "Three repeatable monitors (OMP lifecycle, git commits, idle panes) behind one loop-enforcement choke point"
 

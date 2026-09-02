@@ -25,6 +25,10 @@ fn local_observation_identity(epoch: &str, sequence: u64, changed_at: u64) -> Ob
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.iter().any(|arg| arg == "--version") {
+        println!("tick-monitor 0.1.0 build_id={}", env!("OMP_BUILD_ID"));
+        return;
+    }
     if args.iter().any(|a| a == "--selftest") {
         exit(selftest());
     }
