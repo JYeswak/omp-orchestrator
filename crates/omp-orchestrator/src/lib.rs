@@ -28,6 +28,7 @@
 //! spinner-stripped content change — a different protocol than ntm's, and
 //! the DispatchReceipt type models both but neither is proven here.
 
+use std::collections::BTreeSet;
 use std::fmt;
 use std::path::{Path, PathBuf};
 pub mod target_directory;
@@ -254,6 +255,25 @@ pub enum GateReachability {
     /// from the census so the gate would go green, which would have erased
     /// measured extraction debt to manufacture a pass.
     NotExtracted { upstream: String, loc: u32 },
+    /// The crate exists on disk and its manifest could NOT BE READ, so no probe
+    /// ran and the census has no opinion about it.
+    ///
+    /// # Why this is not an `Unreachable` reason string
+    ///
+    /// `leht`, measured 2026-09-02: the census had **25 rows against 65 crates on
+    /// disk**, so 40 crates had no row at all and `all_reachable()` was true over a
+    /// set that never included them. The enum had no way to say *we did not look*,
+    /// which is precisely why the omission was silent — an unasked crate was
+    /// indistinguishable from one that does not exist.
+    ///
+    /// Membership is now derived from disk, so nothing is unasked merely by being
+    /// unlisted. This variant covers the residue that derivation cannot fix: a
+    /// directory whose `Cargo.toml` is missing or unreadable. **Calling that
+    /// `Unreachable` would report a measurement we did not take**, and its remedy
+    /// (`repair-gate-trigger`) sends the operator to wire a crate whose manifest is
+    /// the actual problem — the same wrong-next-action defect that forced
+    /// `NotExtracted` to become its own variant.
+    Unprobed { reason: String },
 }
 
 impl GateReachability {
@@ -274,6 +294,7 @@ impl GateReachability {
             Self::Unreachable { .. } => "repair-gate-trigger",
             Self::NotInstalled => "install-gate",
             Self::NotExtracted { .. } => "extract-crate-from-control-plane",
+            Self::Unprobed { .. } => "repair-the-crate-manifest",
         }
     }
 
@@ -285,6 +306,48 @@ impl GateReachability {
             Self::Unreachable { .. } => "UNWIRED",
             Self::NotInstalled => "NOT_INSTALLED",
             Self::NotExtracted { .. } => "NOT_EXTRACTED",
+            Self::Unprobed { .. } => "UNPROBED",
+        }
+    }
+}
+/// Whether a row's verdict may STOP THE FLEET, or is reported and does not.
+///
+/// # Why this is a separate axis from reachability (`leht`, and an amendment)
+///
+/// The ruling was advisory-first, on the ground that refusing dispatch across 40
+/// newly-visible crates would be refusing **on absence of evidence, not on evidence
+/// of absence**. That is right, and it needs a place to live: without this type,
+/// "advisory" is a word in a comment and the census either blocks on everything or
+/// silently ignores things.
+///
+/// **It is deliberately NOT a `GateReachability` variant.** Derivation means the
+/// probe now runs on every crate on disk, so a newly-censused crate's reachability
+/// is genuinely MEASURED — calling it `NotAsked` after measuring it would be the
+/// same false-label defect this census keeps producing. What is missing for those
+/// crates is not a measurement, it is a **triage judgement about the measurement**,
+/// and that is what this axis records. (`Unprobed` covers the one case where we
+/// truly could not look: an unreadable manifest.)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CensusDisposition {
+    /// On the curated roster. A non-`Reachable` verdict here REFUSES dispatch.
+    Blocking,
+    /// Entered the census by derived membership and has not been triaged. The
+    /// verdict is reported every cycle and does not gate the loop.
+    ///
+    /// `reason` names why it is not yet blocking, per the allowance row that
+    /// admits it. An advisory row with no allowance row is a BUILD FAILURE.
+    Advisory { reason: String },
+}
+
+impl CensusDisposition {
+    pub fn is_blocking(&self) -> bool {
+        matches!(self, CensusDisposition::Blocking)
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Blocking => "BLOCKING",
+            Self::Advisory { .. } => "ADVISORY",
         }
     }
 }
@@ -294,6 +357,8 @@ impl GateReachability {
 pub struct GateCensusRow {
     pub gate: String,
     pub reachability: GateReachability,
+    /// Whether this row's verdict may stop the fleet. See [`CensusDisposition`].
+    pub disposition: CensusDisposition,
 }
 
 /// The full census across all known gates.
@@ -301,6 +366,103 @@ pub struct GateCensusRow {
 pub struct GateCensus {
     pub rows: Vec<GateCensusRow>,
 }
+
+/// Advisory rows that are allowed to be non-`Reachable` without stopping the loop,
+/// each with the reason it is not yet blocking.
+///
+/// # Why a NAMED LIST and not a count
+///
+/// This is `franken_lean`'s `UNWIRED_LANE_ALLOWANCE` applied here: every exception
+/// is a named row with a reason, and **the set is required to shrink**. A bare count
+/// can be satisfied by any 40 crates, so it cannot tell "we fixed one and broke
+/// another" from "nothing happened". A named row can.
+///
+/// # THE RATCHET, and it is mechanical rather than a nag
+///
+/// Three legs hold it, and the third is the one with teeth:
+///
+/// 1. An advisory row that is non-`Reachable` and NOT named here fails the build,
+///    so growth cannot be silent.
+/// 2. `ADVISORY_CEILING` bounds the length, so adding a name is a visible diff.
+/// 3. **A name here that is now `Reachable`, or no longer on disk, fails the
+///    build.** So wiring a crate FORCES the deletion of its row — the count cannot
+///    stay high after the work is done, and nobody has to remember to lower it.
+///
+/// Without leg 3, advisory-first is indistinguishable from permanent silence.
+pub const ADVISORY_ALLOWANCE: &[(&str, &str)] = &[
+    ("admission-reason", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("bead-availability", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("cargo-lane-budget", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("crate-soundness-verify", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("dispatcher-deadman", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("extraction-roster", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("fast-dispatch", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("fleet-monitor", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("fleet-truth", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("inbox-monitor", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("loop-driver", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("loop-tick", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("omp-idle-dispatch", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("omp-surface-consumption", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("oracle-pane-state-differential", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("pane-oracle-diff", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("reap-finished-panes", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("refill-idle-panes", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("response-envelope-check", "lib with no manifest caller; entered census 2026-09-02 by derived membership, untriaged"),
+    ("silent-success-census", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("tick-dispatch", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("verify-dispatch", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("wired-but-inert-guard", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+];
+
+/// The high-water mark for [`ADVISORY_ALLOWANCE`]. May only be LOWERED.
+pub const ADVISORY_CEILING: usize = 23;
+
+/// When [`ADVISORY_CEILING`] was last recorded, and the deadline the operator asked
+/// to be held to.
+///
+/// SnowyCanyon's own falsifier, written in as a number so the ruling is checkable:
+/// *"if the advisory count has not decreased after a stated number of ticks,
+/// advisory-first has failed and triage-first was the right call."*
+///
+/// 200 ticks at the supervisor's 90s interval is **5 hours**. The supervisor prints
+/// `CENSUS_ADVISORY_RATCHET_OVERDUE` past that point with no decrease, in its own
+/// class that already produced 178 unread ticks and a 29-times-unread refusal.
+/// Crates whose verdict was BLOCKING before `leht` and must stay blocking.
+///
+/// # Why a list is honest here and was NOT honest for membership
+///
+/// Membership is a **fact about the repository** — the crate is on disk or it is
+/// not — so hand-listing it produced 43 invisible crates. Triage status is a
+/// **human judgement about a measurement**, and a judgement has nowhere to live
+/// except a list. The distinction is the whole ruling: derive the facts, record the
+/// judgements, and never let a missing judgement masquerade as a missing fact.
+///
+/// These six were rowed by the old hand-written generic loop. Every other pre-`leht`
+/// row is pushed by a curated site that declares `Blocking` inline. Without this
+/// list, derivation would have silently demoted all six to advisory — `ack-spine`
+/// among them, which is the row that refused the loop in `kwo9`. **That would be a
+/// membership fix quietly changing verdicts**, which the ruling explicitly forbids.
+pub const CURATED_BLOCKING_ROSTER: &[&str] = &[
+    "ack-spine",
+    "ack-stage",
+    "composer-typed",
+    "finding",
+    "receiver-receipt",
+    "subprocess-contract",
+];
+
+/// The pre-`leht` census row count, recorded so the known-good leg has a number.
+///
+/// **CORRECTED 2026-09-02.** First reported as 25, from a script that read the
+/// source lists; the real function walks push order and answers 22. The script
+/// counted the three `UNEXTRACTED` names as rows, and that loop `continue`s for
+/// every one of them because all three are now on disk. Third instrument error of
+/// the same shape today: a reader that did not model the code it was summarising.
+pub const PRE_LEHT_BLOCKING_ROWS: usize = 22;
+
+pub const ADVISORY_CEILING_RECORDED_AT_UNIX: u64 = 1_756_845_000;
+pub const ADVISORY_RATCHET_DEADLINE_TICKS: u64 = 200;
 /// Crates emitted by the eleven OMP coverage waves and watched by the
 /// supervisor. This list is intentionally explicit: a new wave output must
 /// add a census row before it can be treated as wired.
@@ -328,15 +490,38 @@ impl GateCensus {
         "no-shell-gate"
     }
 
+    /// Rows that are not reachable AND may stop the fleet.
+    ///
+    /// `leht`: this used to return every non-reachable row, over a hand-listed
+    /// membership of 25. Derivation took membership to every crate on disk, so an
+    /// unscoped version of this would have converted one blocker into forty — which
+    /// is refusing on absence of evidence rather than evidence of absence, and is
+    /// the reason the ruling was advisory-first.
     pub fn unwired_gates(&self) -> Vec<&GateCensusRow> {
         self.rows
             .iter()
-            .filter(|r| !r.reachability.is_reachable())
+            .filter(|r| !r.reachability.is_reachable() && r.disposition.is_blocking())
             .collect()
     }
 
+    /// Non-reachable rows that are REPORTED and do not gate. This is the triage
+    /// queue, and the number the ratchet is measured on.
+    pub fn advisory_gates(&self) -> Vec<&GateCensusRow> {
+        self.rows
+            .iter()
+            .filter(|r| !r.reachability.is_reachable() && !r.disposition.is_blocking())
+            .collect()
+    }
+
+    /// Whether every BLOCKING row is reachable.
+    ///
+    /// Deliberately says nothing about advisory rows: that is the ruling, and
+    /// naming it here keeps a caller from reading this as "the tree is wired".
     pub fn all_reachable(&self) -> bool {
-        self.rows.iter().all(|r| r.reachability.is_reachable())
+        self.rows
+            .iter()
+            .filter(|r| r.disposition.is_blocking())
+            .all(|r| r.reachability.is_reachable())
     }
 
     /// The POSITIVE CONTROL: no-shell-gate must be reachable, or the census
@@ -477,6 +662,8 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
                 reason: ".git/hooks/pre-commit does not exist on this clone".into(),
             }
         },
+        // CURATED, therefore BLOCKING: this row was triaged before `leht`.
+        disposition: CensusDisposition::Blocking,
     });
 
     // path-literal-guard, state-wildcard-lint, undrained-pipe-lint:
@@ -498,6 +685,8 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
                     reason: "no git remote: the CI workflow can never execute".into(),
                 }
             },
+            // CURATED, therefore BLOCKING: this row was triaged before `leht`.
+            disposition: CensusDisposition::Blocking,
         });
     }
 
@@ -531,6 +720,8 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
                 upstream: configured_upstream_crate(repo_root, gate),
                 loc: *loc,
             },
+            // CURATED, therefore BLOCKING: this row was triaged before `leht`.
+            disposition: CensusDisposition::Blocking,
         });
     }
 
@@ -558,6 +749,8 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
                     reason: "not invoked by the installed hook and not declared in gate.yml".into(),
                 }
             },
+            // CURATED, therefore BLOCKING: this row was triaged before `leht`.
+            disposition: CensusDisposition::Blocking,
         });
     }
 
@@ -571,30 +764,32 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
         rows.push(GateCensusRow {
             gate: (*crate_name).into(),
             reachability: coverage_output_reachability(repo_root, crate_name),
+            // CURATED, therefore BLOCKING: this row was triaged before `leht`.
+            disposition: CensusDisposition::Blocking,
         });
     }
-    // All other workspace crates: they are LIBRARIES (not standalone gates),
-    // so their reachability is measured through the manifest caller count.
-    // A lib with no manifest caller is DEAD — the conductor routes by work
-    // location, and dead libs are invisible to both the conductor and the
-    // gate. These are NOT defects (bins without manifest callers are
-    // expected), but they must be VISIBLE.
-    for crate_name in [
-        "ack-spine",
-        "ack-stage",
-        "composer-typed",
-        "dispatch-silence-watch",
-        "finding",
-        "finding-dispatch",
-        "fleet-composite",
-        "kernel-only-operator-hook",
-        "receiver-receipt",
-        "subprocess-contract",
-        "tick-monitor",
-    ] {
-        if COVERAGE_WAVE_OUTPUT_CRATES.contains(&crate_name) {
+    // ===================== MEMBERSHIP IS DERIVED, NOT LISTED =====================
+    //
+    // `leht`, MEASURED 2026-09-02: this loop was a hand-written list of eleven
+    // crate names. With the four special-cased gates and the coverage-wave outputs
+    // that made **25 census rows against 65 crates on disk** — 40 crates with no
+    // row at all, 61% of the tree, and `all_reachable()` true over a set that never
+    // included them. A crate could be uninstalled, unwired, and INVISIBLE at once.
+    //
+    // This file's own comment 200 lines up already named the class — *"a
+    // hand-maintained list masquerading as a probe"* — and it was written about two
+    // hardcoded verdicts while the membership list beside it stayed hand-written.
+    // An observation in a comment that the code ignores.
+    //
+    // The dependency graph and the crate set are both already on disk. Reading the
+    // directory is exact, needs no subprocess, and cannot time out — the same
+    // argument that replaced the load-dependent grep below.
+    let mut already_rowed: BTreeSet<String> = rows.iter().map(|r| r.gate.clone()).collect();
+    for crate_name in crates_on_disk(repo_root) {
+        if !already_rowed.insert(crate_name.clone()) {
             continue;
         }
+        let crate_name: &str = &crate_name;
         // DETERMINISTIC MANIFEST READ, replacing a load-dependent grep.
         //
         // MEASURED 2026-09-02, build `7600dda`: the supervisor refused with
@@ -632,35 +827,98 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
         // file's own comment already said "bins without manifest callers are
         // expected"; the code did not act on it.
         let has_bin = crate_ships_a_bin(repo_root, crate_name);
+        // The one case where we genuinely could not look. Checked BEFORE the
+        // trigger arms, because every one of them reads this file: an unreadable
+        // manifest makes `callers` and `has_bin` both zero, which would render as
+        // "library with no manifest dependency" — a measurement we did not take.
+        let manifest = repo_root.join("crates").join(crate_name).join("Cargo.toml");
+        let reachability = if !manifest.is_file() {
+            GateReachability::Unprobed {
+                reason: format!("no readable manifest at crates/{crate_name}/Cargo.toml"),
+            }
+        } else if callers > 0 {
+            GateReachability::Reachable {
+                trigger: format!("manifest dependency ({callers} caller(s))"),
+            }
+        } else if has_bin && hook_invokes(&hook_path, crate_name) {
+            GateReachability::Reachable {
+                trigger: ".git/hooks/pre-commit".into(),
+            }
+        } else if has_bin && workflow_invokes(repo_root, crate_name) && has_remote {
+            GateReachability::Reachable {
+                trigger: ".github/workflows/gate.yml".into(),
+            }
+        } else if has_bin {
+            GateReachability::Unreachable {
+                reason: "binary with no invocation site: no manifest caller, not \
+                         invoked by the installed hook, not declared in gate.yml"
+                    .into(),
+            }
+        } else {
+            GateReachability::Unreachable {
+                reason: "library with no manifest dependency referencing it".into(),
+            }
+        };
         rows.push(GateCensusRow {
             gate: crate_name.into(),
-            reachability: if callers > 0 {
-                GateReachability::Reachable {
-                    trigger: format!("manifest dependency ({callers} caller(s))"),
-                }
-            } else if has_bin && hook_invokes(&hook_path, crate_name) {
-                GateReachability::Reachable {
-                    trigger: ".git/hooks/pre-commit".into(),
-                }
-            } else if has_bin && workflow_invokes(repo_root, crate_name) && has_remote {
-                GateReachability::Reachable {
-                    trigger: ".github/workflows/gate.yml".into(),
-                }
-            } else if has_bin {
-                GateReachability::Unreachable {
-                    reason: "binary with no invocation site: no manifest caller, not \
-                             invoked by the installed hook, not declared in gate.yml"
-                        .into(),
-                }
-            } else {
-                GateReachability::Unreachable {
-                    reason: "library with no manifest dependency referencing it".into(),
-                }
-            },
+            reachability,
+            // Derived rows are ADVISORY. Their verdict is real and their triage is
+            // not done, and per the ruling the loop must not stop on the second
+            // fact. `disposition_for` refuses an advisory non-reachable row that no
+            // allowance names, so this cannot become a quiet default.
+            disposition: disposition_for(crate_name),
         });
     }
 
     GateCensus { rows }
+}
+
+/// Every directory under `crates/` — the census's membership, derived.
+///
+/// A crate is a directory, not a manifest, on purpose: a directory whose manifest
+/// is missing is exactly the `Unprobed` case, and keying membership on the manifest
+/// would make that crate vanish from the census again.
+pub fn crates_on_disk(repo_root: &Path) -> Vec<String> {
+    let mut names = Vec::new();
+    let Ok(entries) = std::fs::read_dir(repo_root.join("crates")) else {
+        return names;
+    };
+    for entry in entries.flatten() {
+        if !entry.path().is_dir() {
+            continue;
+        }
+        if let Some(name) = entry.file_name().to_str() {
+            names.push(name.to_owned());
+        }
+    }
+    names.sort_unstable();
+    names
+}
+
+/// The disposition for a derived row: advisory, with the reason the allowance gives.
+///
+/// An unnamed crate still returns `Advisory`, carrying a reason that says it is
+/// unnamed. That is deliberate: the REFUSAL for an unnamed advisory row belongs to
+/// the ratchet test, which can name the crate and the file to edit, not to this
+/// function, which runs inside the supervisor's tick and must never panic the loop.
+pub fn disposition_for(crate_name: &str) -> CensusDisposition {
+    // KNOWN-GOOD FIRST: a triaged row keeps its blocking disposition no matter how
+    // it is now produced. Without this, derivation would silently demote all six
+    // roster crates to advisory, which is a membership fix changing verdicts.
+    if CURATED_BLOCKING_ROSTER.contains(&crate_name) {
+        return CensusDisposition::Blocking;
+    }
+    match ADVISORY_ALLOWANCE
+        .iter()
+        .find(|(name, _)| *name == crate_name)
+    {
+        Some((_, reason)) => CensusDisposition::Advisory {
+            reason: (*reason).to_owned(),
+        },
+        None => CensusDisposition::Advisory {
+            reason: "NOT NAMED IN ADVISORY_ALLOWANCE -- the ratchet test fails on this".to_owned(),
+        },
+    }
 }
 
 /// How many OTHER workspace manifests declare a path dependency on `crate_name`.
@@ -952,6 +1210,8 @@ mod tests {
                 reachability: GateReachability::Reachable {
                     trigger: ".git/hooks/pre-commit".to_owned(),
                 },
+                // The positive control is triaged, so it BLOCKS.
+                disposition: CensusDisposition::Blocking,
             }],
         }
     }
@@ -1660,6 +1920,8 @@ mod kernel_tests {
                 reachability: GateReachability::Reachable {
                     trigger: ".git/hooks/pre-commit".to_owned(),
                 },
+                // The positive control is triaged, so it BLOCKS.
+                disposition: CensusDisposition::Blocking,
             }],
         })
     }

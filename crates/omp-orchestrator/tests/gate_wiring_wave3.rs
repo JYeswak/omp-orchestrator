@@ -91,10 +91,12 @@ fn an_unreachable_wave_output_blocks_supervisor_decision() {
                     reachability: GateReachability::Reachable {
                         trigger: "test-positive-control".to_owned(),
                     },
+                    disposition: omp_orchestrator::CensusDisposition::Blocking,
                 },
                 omp_orchestrator::GateCensusRow {
                     gate: "finding-dispatch".to_owned(),
                     reachability: GateReachability::NotInstalled,
+                    disposition: omp_orchestrator::CensusDisposition::Blocking,
                 },
             ],
         }),

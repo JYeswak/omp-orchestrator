@@ -2451,6 +2451,48 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         &observation.queue,
     );
     let decision = decide(&observation, &authorization);
+
+    // ============ CONDITION 2: LOUD IN THE DECISION OUTPUT, EVERY CYCLE ============
+    //
+    // `leht`. The advisory count prints HERE — ahead of the match, so it appears on
+    // every branch including the ones that `return` early — and not into a log or a
+    // file.
+    //
+    // WHY THE PLACEMENT IS THE MECHANISM. Every other signalling path in this repo
+    // is measured silent: `ATTENTION.txt` took 178 consecutive ticks from one writer
+    // with zero readers; a typed refusal naming `owner=josh` printed 29 times unread;
+    // `gate.yml` failed six consecutive runs unread. **The only path that has ever
+    // reached a human is a verdict the operator had to answer.** A count written to a
+    // file would be the fourth instance of that class.
+    let advisory_census = crate::census_gates(&config.repo);
+    let advisory = advisory_census.advisory_gates();
+    let overdue = {
+        let elapsed = now_unix().saturating_sub(omp_orchestrator::ADVISORY_CEILING_RECORDED_AT_UNIX);
+        let ticks = elapsed / DEFAULT_INTERVAL.as_secs().max(1);
+        // The falsifier the operator asked to be held to: no decrease inside the
+        // deadline means advisory-first failed and triage-first was the right call.
+        ticks > omp_orchestrator::ADVISORY_RATCHET_DEADLINE_TICKS
+            && advisory.len() >= omp_orchestrator::ADVISORY_CEILING
+    };
+    println!(
+        "CENSUS_ADVISORY count={} ceiling={} rows={} blocking={} {} \
+         next_action=wire-or-retire-one-advisory-crate",
+        advisory.len(),
+        omp_orchestrator::ADVISORY_CEILING,
+        advisory_census.rows.len(),
+        advisory_census
+            .rows
+            .iter()
+            .filter(|r| r.disposition.is_blocking())
+            .count(),
+        if overdue {
+            "CENSUS_ADVISORY_RATCHET_OVERDUE owner=josh -- the advisory count has not \
+             decreased inside the deadline; advisory-first has failed its own falsifier and \
+             triage-first was the right call"
+        } else {
+            "ratchet=on-time"
+        }
+    );
     match decision {
         SupervisorDecision::AwaitingHuman { panes } => {
             // The one refusal a human MUST see, because no amount of looping clears
