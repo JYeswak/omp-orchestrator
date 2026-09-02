@@ -23,6 +23,15 @@ use std::process::Command;
 use std::time::{Duration, Instant};
 
 use fleet_truth::spawn_timeout;
+use subprocess_contract::BoundedOutcome;
+
+fn completed(outcome: BoundedOutcome) -> std::process::Output {
+    match outcome {
+        BoundedOutcome::Completed(output) => output,
+        BoundedOutcome::TimedOut => panic!("fixture child timed out"),
+        BoundedOutcome::Unspawned(error) => panic!("fixture child did not spawn: {error}"),
+    }
+}
 
 /// THE PLANTED KNOWN-BAD: a child that writes far more than one pipe buffer.  Under the old
 /// implementation this blocked until the timeout expired and returned a KILLED child's partial
@@ -37,7 +46,7 @@ fn a_child_that_outwrites_the_pipe_buffer_still_completes() {
     ]);
 
     let start = Instant::now();
-    let out = spawn_timeout(cmd, Duration::from_secs(60)).expect("child must run");
+    let out = completed(spawn_timeout(cmd, Duration::from_secs(60)));
     let elapsed = start.elapsed();
 
     assert!(
@@ -67,7 +76,7 @@ fn a_child_that_outwrites_the_buffer_on_stderr_still_completes() {
     ]);
 
     let start = Instant::now();
-    let out = spawn_timeout(cmd, Duration::from_secs(60)).expect("child must run");
+    let out = completed(spawn_timeout(cmd, Duration::from_secs(60)));
 
     assert!(out.status.success(), "child must exit normally");
     assert!(
@@ -90,12 +99,12 @@ fn a_genuinely_hung_child_is_still_killed_at_the_bound() {
     cmd.args(["-c", "sleep 60"]);
 
     let start = Instant::now();
-    let out = spawn_timeout(cmd, Duration::from_millis(500)).expect("must return");
+    let out = spawn_timeout(cmd, Duration::from_millis(500));
     let elapsed = start.elapsed();
 
     assert!(
-        !out.status.success(),
-        "a killed child must not report success"
+        matches!(out, BoundedOutcome::TimedOut),
+        "a killed child must be reported as TimedOut"
     );
     assert!(
         elapsed < Duration::from_secs(10),
@@ -108,7 +117,7 @@ fn a_genuinely_hung_child_is_still_killed_at_the_bound() {
 fn small_output_is_returned_verbatim() {
     let mut cmd = Command::new("/bin/sh");
     cmd.args(["-c", "printf 'hello'"]);
-    let out = spawn_timeout(cmd, Duration::from_secs(30)).expect("must run");
+    let out = completed(spawn_timeout(cmd, Duration::from_secs(30)));
     assert_eq!(String::from_utf8_lossy(&out.stdout), "hello");
     assert!(out.status.success());
 }
