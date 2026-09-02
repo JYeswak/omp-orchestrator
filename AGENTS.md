@@ -563,35 +563,41 @@ theories could only agree with themselves.
 
 ## The crate extraction target list — what each one is, and **which repository it is actually in**
 
-**Read the STATUS column before you reason about any row.** The legacy extraction-target table below has 24 rows. The current workspace has 27 Cargo packages; the 24 rows are a historical target list, not the complete package inventory.
+**Read the STATUS column before you reason about any row.** The table below has 24 rows and is a
+**historical extraction-target list, not the package inventory.** The workspace is now far larger
+than the table; a row marked CONTROL-PLANE is not an available local dependency and must not be
+cited as present.
 
-The current source-directory measurement is **27 crates here**, **59 control-plane crate directories**, and **4 names in both** (composer-typed, fleet-composite, loop-queue-filter, pane-dispatch-fence). Therefore 55 control-plane source directories are absent here. Cargo loads 57 control-plane packages because two source directories are standalone or excluded workspace manifests. The 24-row legacy table is retained for extraction history; its scoped split is **3 HERE / 17 CONTROL-PLANE**.
+### DO NOT CITE A PACKAGE COUNT FROM THIS FILE. RUN THE COMMAND.
 
-**CORRECTED 2026-09-02 — the figure is 51, not 27.** `cargo metadata --no-deps` reports **51
-packages** and `ls -d crates/*/` counts **51 source directories**; the two agree, so this is not a
-manifest-vs-directory discrepancy. The `27` above is a stale snapshot from before the extraction
-wave landed 24 crates.
+**This figure has moved `27 → 50 → 51 → 65` inside the lifetime of this one document**, and each
+stale value was corrected by a later agent who then wrote a fresh integer that went stale in turn.
+A count in prose is wrong the moment anyone lands a crate, and this section has now proven that
+four times. The correction is not a better number — it is **no number**:
 
 ```bash
-cargo metadata --no-deps --format-version 1 --offline | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["packages"]))'
-ls -d crates/*/ | wc -l
+# in either repo; these two must agree, or you have a manifest-vs-directory discrepancy
+cargo metadata --no-deps --format-version 1 --offline \
+  | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["packages"]))'
+find crates -mindepth 1 -maxdepth 1 -type d | wc -l
+
+# names present in BOTH repos
+comm -12 <(find crates -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort) \
+         <(find /Users/josh/Developer/control-plane/crates -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)
 ```
 
-**Re-derive before citing, every time.** This figure moved 27 -> 50 -> 51 inside one session, and
-a grading round burned its whole budget re-finding that drift across four plan sections. A count in
-prose is stale the moment anyone lands a crate; the durable form is the command, which is why
-`NUMBERS.toml` exists and why plan sections must resolve figures to it rather than typing integers.
+**One dated measurement, as evidence that the commands run — never as a figure to cite.** Measured
+2026-09-02 by the orchestrator: **65 here** (`cargo metadata` and the directory count agree),
+**62 in control-plane**, **28 names in both**. Compare against the previously-published `27 / 59 / 4`:
+every one of the three moved, and the intersection grew **7×**. The extraction wave is landing
+crates faster than any prose table can track it.
 
-This table was corrected from the original false impression. Every row below names its repository. A row marked CONTROL-PLANE is not an available local dependency and must not be cited as present.
-
-Measured by cargo metadata --no-deps and directory existence under each crates/ root, not by grep over this file:
-
-| | Count | Names / authority |
-|---|---:|---|
-| Current workspace Cargo packages | 27 | cargo metadata --no-deps --format-version 1 |
-| Control-plane source crate directories | 59 | printf '%s\n' crates/*/ in /Users/josh/Developer/control-plane |
-| Names existing in both | 4 | composer-typed, fleet-composite, loop-queue-filter, pane-dispatch-fence |
-| Control-plane-only source directories | 55 | 59 minus the 4-name intersection |
+**There is no percent-ported figure, and there cannot be one from this file.** The numerator moves
+hourly and the denominator was never established — the extraction scope has been asserted as 20 and
+as 23 crates and **neither figure ever shipped a producing command.** Treat both the way the retired
+"81 JSON-RPC methods, 17 used" pair is treated: cite neither. `NUMBERS.toml` exists precisely so
+plan sections resolve figures to a runner instead of typing integers; a section that types an
+integer here is a defect, not a shortcut.
 
 ### Current workspace packages outside the legacy extraction table
 
