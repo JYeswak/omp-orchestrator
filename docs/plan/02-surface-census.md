@@ -18,7 +18,7 @@ Map counts below are derived by the exact NUMBERS.toml commands; worker observat
 
 The scanner emits a versioned envelope,
 `{"schema_version":"omp-inventory-map/v1","command":"doctor","status":"UNKNOWN","data":{…}}`,
-carrying 184 nodes, 207 edges, and 183 rows. The denominator is worth stating plainly, because a census with an unstated denominator is a press release: 183 rows = every OMP surface the probe could enumerate, plus our 26-crate snapshot recorded on 2026-08-31. It is not 183 OMP features. It is 157 OMP surfaces and 26 things built in that historical snapshot.
+carrying 184 nodes, 207 edges, and 183 rows. The denominator is worth stating plainly, because a census with an unstated denominator is a press release: 183 rows = every OMP surface the probe could enumerate, plus our 26-crate snapshot recorded on 2026-08-31. It is not 183 OMP features. It is 157 OMP surfaces and 26 things built in that historical snapshot. — HISTORICAL as of 2026-09-02.
 
 **SNAPSHOT BOUNDARY.** The 183-row denominator and all ratios below are dated inventory results, not current workspace counts; re-run cargo metadata and regenerate this section after extraction.
 
@@ -65,7 +65,7 @@ MAPPED_BY_DIRECT_PROBE            8
 - alternative-path coverage = 18 / 183 = **9.84%** and unconsumed capability = 157 / 183 = **85.79%**;
 - 8 + 18 + 157 = 183, so the three classes partition the all-census rows with no residue. The OMP-only denominator is 157, not 183.
 
-The edge graph tells the same story from the other side. Of 207 edges, exactly **7
+The edge graph tells the same story from the other side. Of 207 edges, exactly **7 — HISTORICAL as of 2026-09-02.
 are `consumes`**, and all 7 originate from a single crate, `omp-inventory-map`,
 each carrying the evidence string *"direct process probe produced this row"*. They
 point at `type_root:cli`, `type_root:commands`, `type_root:jsonrpc`,
@@ -136,7 +136,7 @@ One transport selector, classification `MAPPED_BY_DIRECT_PROBE`, owner
 `UNKNOWN_PROBE`, classification `MAPPED_BY_DIRECT_PROBE`. The envelope's
 `counts.slash_commands` is `0` while `counts.expected_slash_commands` is `136`.
 The scanner could not enumerate slash commands, so instead of emitting 136
-guesses or 0 rows and calling it clean, it emits one row named `UNKNOWN_PROBE`
+guesses or 0 rows and calling it clean, it emits one row named `UNKNOWN_PROBE` — HISTORICAL as of 2026-09-02.
 and drives `status` to `UNKNOWN` with exit 2. `MEASURED` — the largest **unenumerated**
 region of the OMP expectation is 136 slash commands; no claim is made that 136 is the world count.
 
@@ -221,13 +221,13 @@ The census carries an `orphan_disposition` on every row. `MEASURED` —
 yields `NAMED_REASON: 175, WIRE: 8`. There is no third value, and there must never
 be one, because the third value is always "later".
 
-**`MAPPED_BY_DIRECT_PROBE` (8 rows) — we actually touch it.** A live process probe
+**`MAPPED_BY_DIRECT_PROBE` (8 rows) — we actually touch it.** A live process probe — HISTORICAL as of 2026-09-02.
 produced the row. The evidence string is *"direct process probe produced this
 row"*, the owning crate is named, and a `consumes` edge exists in the graph. This
 is the only class that carries runtime truth. Disposition: keep, and keep probing —
 a mapped row that stops being probed silently degrades to a scraped row.
 
-**`SCRAPED_OR_OBSERVED_ALTERNATIVE` (18 rows) — we get the information some other
+**`SCRAPED_OR_OBSERVED_ALTERNATIVE` (18 rows) — we get the information some other — HISTORICAL as of 2026-09-02.
 way.** The row's reason text is uniform: *"No typed runtime adapter owns
 `<surface>`; retain as a named wire candidate."* Naming the alternatives, which is
 the part that makes this class honest rather than a synonym for "unused":
@@ -260,7 +260,7 @@ Disposition: every scraped row must name its alternative in one sentence, and th
 alternative must be a thing that exists. A scraped row whose alternative is "we
 plan to" is a `CAPABILITY_NOT_USED` row wearing a better hat.
 
-**`CAPABILITY_NOT_USED` (157 rows) — a real capability we do not consume.** The
+**`CAPABILITY_NOT_USED` (157 rows) — a real capability we do not consume.** The — HISTORICAL as of 2026-09-02.
 reason text is *"The repository has no measured runtime trigger for `<surface>`."*
 This class admits exactly two dispositions and no third:
 
@@ -305,7 +305,7 @@ for nm,s in [('crate',cr),('non-crate',nc)]:
   non-crate n=157 distinct must_be_true=1  distinct negative_evidence=1  missing=0
 ```
 
-All 183 rows carry all four mandatory fields — `inputs`, `outputs`,
+All 183 rows carry all four mandatory fields — `inputs`, `outputs`, — HISTORICAL as of 2026-09-02.
 `must_be_true`, `negative_evidence` — with **zero missing**. And across the entire
 census there is **exactly one distinct `must_be_true` and one distinct
 `negative_evidence`**:
@@ -372,8 +372,8 @@ a gate that is correct but unreachable is as vacuous as an invariant that is
 populated but identical. `MEASURED` — `omp-inventory-map --help` returns
 `{"status":"ERROR","error":"CONFIG_ERROR unknown argument --help"}`. The gate is
 **UNVERIFIED:** the retained record has no exact scoped test command, exit/output receipt,
-or source revision for the claim that the gate is built/correct or that 13 tests pass.
-`types_inventory.rs:176-178` is a source assertion, not test execution. The only
+or source revision for the claim that the gate is built/correct or that 13 tests pass. — HISTORICAL as of 2026-09-02.
+`types_inventory.rs:heading_types_inventory_rs_176_178_is_a` is a source assertion, not test execution. The only
 current runtime evidence is the `--help` error above; ADDRESSABLE remains a required
 property until a command, receipt, and revision are attached.
 
@@ -556,7 +556,7 @@ rows are known-bad and remain in `SURFACE-MAP.jsonl` pending re-extraction again
 
 | binary | version | surfaces | refs | what it is |
 |---|---|---:|---:|---|
-| `ee` | 0.14.2 | **111** | 1 | Eidetic Engine — durable, local-first agent memory; the "123" first published here was the help-text count — the map carries 111 rows (109 RETIRE, 2 WIRE), reconciled in §9 |
+| `ee` | 0.14.2 | **111** | 1 | Eidetic Engine — durable, local-first agent memory; the "123" first published here was the help-text count — the map carries 111 rows (109 RETIRE, 2 WIRE), reconciled in §9 | — HISTORICAL as of 2026-09-02.
 | `ms` | 0.2.1 | 61 | 1 | Meta Skill — mines CASS sessions to generate skills |
 
 
@@ -621,7 +621,7 @@ hash, and command receipt were not retained here):
 CONSUMED  12     WIRE  13     VALIDATE  8     RETIRE  469     unmapped 42
 RETIRE with no validating command: 144 (31% of the 469 historical retires)
 
-The displayed categories total 544 rows. On the all-listed-row denominator, the historical
+The displayed categories total 544 rows. On the all-listed-row denominator, the historical — HISTORICAL as of 2026-09-02.
 RETIRE rate is 469/544 = **86.2%**. If and only if the 42 unmapped rows are excluded, the
 dispositioned-row denominator is 502 and the rate is 469/502 = **93.4%** (rounded 93%).
 Neither rate describes the current 614-row map below; both are historical pre-correction ratios.
@@ -646,7 +646,7 @@ Set against the measured failures of the same session:
 | `ntm:conflicts` | `SilverWolf` and pane 3 both editing the same three ported crates with no advisory lock |
 | `ntm:agents` | the roster was re-derived by hand from `tmux list-panes` every tick |
 
-The upstream OMP memory vocabulary does not close this NTM/bead claim gap. memories/storage.d.ts:18-29 declares Stage1Claim and GlobalClaim with ownershipToken and inputWatermark, but those fields govern memory-storage work ownership and watermarks, not bead assignment or pane dispatch. This is a type-level weakening of the “no claim vocabulary” absence, not a consumed dispatch contract: no caller maps either type to ntm:claim here, so the local file→CLAIM→dispatch gap remains unclosed.
+The upstream OMP memory vocabulary does not close this NTM/bead claim gap. memories/storage.d.ts:Stage1Claim declares Stage1Claim and GlobalClaim with ownershipToken and inputWatermark, but those fields govern memory-storage work ownership and watermarks, not bead assignment or pane dispatch. This is a type-level weakening of the “no claim vocabulary” absence, not a consumed dispatch contract: no caller maps either type to ntm:claim here, so the local file→CLAIM→dispatch gap remains unclosed.
 
 **HISTORICAL FINDING:** every row in that prior set was retired without a recorded run. A
 `RETIRE` carrying `validated_by: null` was an assertion that a surface was irrelevant
@@ -666,7 +666,7 @@ the equivalent declaration/file probe must record command, result, timestamp, an
 **unrecognised subcommand**, and classified it a scrape artifact rather than a surface — a retire
 backed by an invocation. That is the bar, set by a worker, not by me.
 
-**NO-CLAIM (historical snapshot):** 144 rows lacked a recorded probe and 15 were
+**NO-CLAIM (historical snapshot):** 144 rows lacked a recorded probe and 15 were — HISTORICAL as of 2026-09-02.
 orchestration-shaped and defect-adjacent. This does **not** establish that those 15 should be
 `WIRE`. The current map records non-null `validated_by` on every row, but its schema
 does not expose the required command/exit/timestamp/artifact fields, so current RETIRE validation
@@ -676,7 +676,7 @@ remains unproven rather than silently upgraded.
 
 ## 9. The corrected census — and how far wrong §6 was
 
-The current map is docs/plan/SURFACE-MAP.jsonl with **614 non-empty rows**, SHA-256 **5b3c3238c4ec9dd7f72a097bb3668e7de224e3b6f0eddc1132de2902a1d9d93c**. In this section, **unmapped** means maps_to_crate == null, not missing from the file. The exact map query returns **614 479 0**: 479 rows are unmapped by crate, while all 614 have non-null validated_by. The field is non-null on all 614 rows, but it is not structured RETIRE proof; the current map therefore does not establish RETIRE validation.
+The current map is docs/plan/SURFACE-MAP.jsonl with **614 non-empty rows**, SHA-256 **5b3c3238c4ec9dd7f72a097bb3668e7de224e3b6f0eddc1132de2902a1d9d93c**. In this section, **unmapped** means maps_to_crate == null, not missing from the file. The exact map query returns **614 479 0**: 479 rows are unmapped by crate, while all 614 have non-null validated_by. The field is non-null on all 614 rows, but it is not structured RETIRE proof; the current map therefore does not establish RETIRE validation. — current authority: NUMBERS.toml figures.surface_map_rows / NUMBERS.toml figures.surface_map_unmapped_rows.
 CONSUMED 52     WIRE 67     VALIDATE 33     RETIRE 453     UNPROBEABLE-PENDING 9
 engaged (CONSUMED+WIRE+VALIDATE) 152 / 614 = 24.8% [current map; exact command in NUMBERS.toml]
 
@@ -738,7 +738,7 @@ problem rather than a counting one:
 > *"every RETIRE whose only evidence is scanner `CAPABILITY_NOT_USED` inherits the §3.3 self-twin
 > vacuity."*
 
-§3.3 measured that the scanner's own census carries **183 rows with exactly one distinct
+§3.3 measured that the scanner's own census carries **183 rows with exactly one distinct — HISTORICAL as of 2026-09-02.
 `must_be_true` and one distinct `negative_evidence`** — the four-field discipline satisfied
 syntactically and vacuously. Any retirement justified by *"the scanner classified it
 `CAPABILITY_NOT_USED`"* therefore rests on a classification produced by a process already measured
@@ -811,7 +811,7 @@ dist/types/commands/  42 files   176 KB
 dist/types/jsonrpc/    1 file      4 KB
 ```
 
-Of the 63 rows reclassified in §10, **54 are `type_root` and every one is a directory of TypeScript
+Of the 63 rows reclassified in §10, **54 are `type_root` and every one is a directory of TypeScript — HISTORICAL as of 2026-09-02.
 declarations that can be read right now.** `type_root:cli` exports **359 symbols**.
 
 ### 11.1 The category error
