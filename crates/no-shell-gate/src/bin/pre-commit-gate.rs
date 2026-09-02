@@ -95,9 +95,14 @@ fn main() -> ExitCode {
             // "0 hardcoded home-path literal(s):" — zero hits, empty list,
             // still a refusal (omp-orchestrator-588v).
             for hit in &pl_report.hits {
-                refusals.push(format!("path-literal-guard: {hit} contains the author-machine home path"));
+                refusals.push(format!(
+                    "path-literal-guard: {hit} contains the author-machine home path"
+                ));
             }
-            refusals.push(format!("path-literal-guard: {}", pl_report.declared_scope_line()));
+            refusals.push(format!(
+                "path-literal-guard: {}",
+                pl_report.declared_scope_line()
+            ));
         }
         path_literal_guard::Verdict::VacuousError => {
             refusals.push(format!(
@@ -111,7 +116,7 @@ fn main() -> ExitCode {
         path_literal_guard::Verdict::NothingToCheck => {
             let _ = writeln!(
                 io::stderr(),
-                "path-literal-guard: NOTHING_TO_CHECK -- no staged .rs under crates/*/src. {}",
+                "path-literal-guard: GATE_NOT_APPLICABLE -- no staged .rs under crates/*/src. {}",
                 pl_report.declared_scope_line()
             );
         }
@@ -121,7 +126,8 @@ fn main() -> ExitCode {
         let _ = writeln!(
             io::stderr(),
             "path-literal-guard: DECLARED allowlist suppressed {} -- {}",
-            allowed.hit, allowed.reason
+            allowed.hit,
+            allowed.reason
         );
     }
 
@@ -156,8 +162,7 @@ fn main() -> ExitCode {
     // `state-wildcard-lint <root>` and `cargo test -p state-wildcard-lint`.
     let swl_report = state_wildcard_lint::lint_paths(&repo_root, &staged);
     match swl_report.verdict() {
-        state_wildcard_lint::Verdict::Violation
-        | state_wildcard_lint::Verdict::VacuousError => {
+        state_wildcard_lint::Verdict::Violation | state_wildcard_lint::Verdict::VacuousError => {
             if let Some(error) = &swl_report.error {
                 refusals.push(format!("state-wildcard-lint: {error}"));
             }
@@ -174,7 +179,7 @@ fn main() -> ExitCode {
         state_wildcard_lint::Verdict::NothingToCheck => {
             let _ = writeln!(
                 io::stderr(),
-                "state-wildcard-lint: NOTHING_TO_CHECK -- no staged .rs in scope. {}",
+                "state-wildcard-lint: GATE_NOT_APPLICABLE -- no staged .rs in scope. {}",
                 swl_report.declared_scope_line()
             );
         }
@@ -184,7 +189,8 @@ fn main() -> ExitCode {
         let _ = writeln!(
             io::stderr(),
             "state-wildcard-lint: DECLARED allowlist suppressed {} -- {}",
-            allowed.finding, allowed.reason
+            allowed.finding,
+            allowed.reason
         );
     }
 

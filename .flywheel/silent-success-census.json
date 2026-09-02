@@ -1,0 +1,2733 @@
+{
+  "schema": "silent-success-census",
+  "version": 1,
+  "status": "ok",
+  "scan_root": ".",
+  "git_head": "525abaac60489cda66a5b750f93a409c03e32297",
+  "file_count": 144,
+  "predicate_counts": {
+    "ok_zero": 6,
+    "exit_code_success": 145,
+    "exit_zero": 3,
+    "unwrap_or_default": 158,
+    "empty_collection_return": 25
+  },
+  "positive_controls": [
+    {
+      "file": "crates/admission-reason/src/main.rs",
+      "line": 40,
+      "predicate": "exit_code_success",
+      "found": true
+    },
+    {
+      "file": "crates/loop-tick/src/lib.rs",
+      "line": 77,
+      "predicate": "unwrap_or_default",
+      "found": true
+    },
+    {
+      "file": "crates/state-wildcard-lint/src/main.rs",
+      "line": 80,
+      "predicate": "exit_code_success",
+      "found": true
+    }
+  ],
+  "candidates": [
+    {
+      "file": "crates/ack-spine/src/main.rs",
+      "line": 48,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "Ok(ExitCode::SUCCESS)"
+    },
+    {
+      "file": "crates/ack-spine/src/main.rs",
+      "line": 52,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "Ok(ExitCode::SUCCESS)"
+    },
+    {
+      "file": "crates/ack-spine/src/main.rs",
+      "line": 56,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "Ok(ExitCode::SUCCESS)"
+    },
+    {
+      "file": "crates/admission-reason/src/lib.rs",
+      "line": 193,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let stdout = out.and_then(|h| h.join().ok()).unwrap_or_default();"
+    },
+    {
+      "file": "crates/admission-reason/src/lib.rs",
+      "line": 194,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let stderr = err.and_then(|h| h.join().ok()).unwrap_or_default();"
+    },
+    {
+      "file": "crates/admission-reason/src/lib.rs",
+      "line": 312,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "return Vec::new();"
+    },
+    {
+      "file": "crates/admission-reason/src/lib.rs",
+      "line": 318,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "return Vec::new();"
+    },
+    {
+      "file": "crates/admission-reason/src/lib.rs",
+      "line": 321,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "return Vec::new();"
+    },
+    {
+      "file": "crates/admission-reason/src/main.rs",
+      "line": 40,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/admission-reason/src/main.rs",
+      "line": 71,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/admission-reason/src/main.rs",
+      "line": 258,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/agent-mail-native/src/endpoint.rs",
+      "line": 209,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "return Vec::new();"
+    },
+    {
+      "file": "crates/cargo-lane-budget/src/lib.rs",
+      "line": 256,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let stdout = out.and_then(|handle| handle.join().ok()).unwrap_or_default();"
+    },
+    {
+      "file": "crates/cargo-lane-budget/src/main.rs",
+      "line": 38,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/cargo-lane-budget/src/main.rs",
+      "line": 77,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/cargo-lane-budget/src/main.rs",
+      "line": 89,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/commit-build-fence/src/main.rs",
+      "line": 43,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "Ok(Outcome::Allow) => ExitCode::SUCCESS,"
+    },
+    {
+      "file": "crates/composer-typed/src/lib.rs",
+      "line": 169,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/composer-typed/src/main.rs",
+      "line": 28,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/composer-typed/src/main.rs",
+      "line": 53,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/composer-typed/src/main.rs",
+      "line": 93,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/convergence-stamp/src/lib.rs",
+      "line": 264,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/convergence-stamp/src/lib.rs",
+      "line": 348,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/convergence-stamp/src/lib.rs",
+      "line": 690,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/convergence-stamp/src/main.rs",
+      "line": 91,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/crate-soundness-verify/src/lib.rs",
+      "line": 102,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let requested_lane = std::env::var(\"CRATE_SOUNDNESS_LANE\").unwrap_or_default();"
+    },
+    {
+      "file": "crates/crate-soundness-verify/src/main.rs",
+      "line": 16,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let mode = args.next().unwrap_or_default();"
+    },
+    {
+      "file": "crates/crate-soundness-verify/src/main.rs",
+      "line": 19,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/crate-soundness-verify/src/main.rs",
+      "line": 27,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/crate-soundness-verify/src/main.rs",
+      "line": 61,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/crate-soundness-verify/src/main.rs",
+      "line": 184,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/dispatch-silence-watch/src/main.rs",
+      "line": 72,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "parse_bead_assignee(&text, bead_id).unwrap_or_default()"
+    },
+    {
+      "file": "crates/dispatch-silence-watch/src/main.rs",
+      "line": 94,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/dispatcher-deadman/src/lib.rs",
+      "line": 206,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let stdout = out.and_then(|h| h.join().ok()).unwrap_or_default();"
+    },
+    {
+      "file": "crates/dispatcher-deadman/src/lib.rs",
+      "line": 207,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let stderr = err.and_then(|h| h.join().ok()).unwrap_or_default();"
+    },
+    {
+      "file": "crates/dispatcher-deadman/src/main.rs",
+      "line": 66,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/dispatcher-deadman/src/main.rs",
+      "line": 85,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "state_file = args.next().unwrap_or_default();"
+    },
+    {
+      "file": "crates/dispatcher-deadman/src/main.rs",
+      "line": 88,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "threshold = args.next().unwrap_or_default();"
+    },
+    {
+      "file": "crates/dispatcher-deadman/src/main.rs",
+      "line": 91,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "ready = args.next().unwrap_or_default();"
+    },
+    {
+      "file": "crates/dispatcher-deadman/src/main.rs",
+      "line": 94,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "delivered = args.next().unwrap_or_default();"
+    },
+    {
+      "file": "crates/dispatcher-deadman/src/main.rs",
+      "line": 97,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "tick_id = args.next().unwrap_or_default();"
+    },
+    {
+      "file": "crates/dispatcher-deadman/src/main.rs",
+      "line": 100,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "reason = args.next().unwrap_or_default();"
+    },
+    {
+      "file": "crates/dispatcher-deadman/src/main.rs",
+      "line": 163,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/dispatcher-deadman/src/main.rs",
+      "line": 196,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/dispatcher-deadman/src/main.rs",
+      "line": 208,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/dispatcher-deadman/src/main.rs",
+      "line": 216,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/dispatcher-deadman/src/main.rs",
+      "line": 226,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/dispatcher-deadman/src/main.rs",
+      "line": 236,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/fast-dispatch/src/dispatch_cli_contract.rs",
+      "line": 200,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let line = output.lines().next().unwrap_or_default();"
+    },
+    {
+      "file": "crates/fast-dispatch/src/dispatch_cli_contract.rs",
+      "line": 273,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/fast-dispatch/src/dispatch_cli_contract.rs",
+      "line": 311,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/fast-dispatch/src/dispatch_cli_contract.rs",
+      "line": 336,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/fast-dispatch/src/dispatch_cli_contract.rs",
+      "line": 347,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/fast-dispatch/src/lib.rs",
+      "line": 114,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "subject_id: std::env::var(\"ADMISSION_SUBJECT_ID\").unwrap_or_default(),"
+    },
+    {
+      "file": "crates/fast-dispatch/src/lib.rs",
+      "line": 609,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let home = PathBuf::from(std::env::var_os(\"HOME\").filter(|v| !v.is_empty()).unwrap_or_default());"
+    },
+    {
+      "file": "crates/fast-dispatch/src/lib.rs",
+      "line": 679,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let home = PathBuf::from(std::env::var_os(\"HOME\").filter(|v| !v.is_empty()).unwrap_or_default());"
+    },
+    {
+      "file": "crates/fast-dispatch/src/main.rs",
+      "line": 90,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let holder = fs::read_to_string(dir.join(\"pid\")).unwrap_or_default();"
+    },
+    {
+      "file": "crates/fast-dispatch/src/main.rs",
+      "line": 276,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/fast-dispatch/src/main.rs",
+      "line": 382,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/fast-dispatch/src/main.rs",
+      "line": 434,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/fast-dispatch/src/main.rs",
+      "line": 499,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/fast-dispatch/src/main.rs",
+      "line": 527,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/fast-dispatch/src/main.rs",
+      "line": 537,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/fast-dispatch/src/main.rs",
+      "line": 560,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/fast-dispatch/src/main.rs",
+      "line": 579,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/fast-dispatch/src/main.rs",
+      "line": 643,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/fast-dispatch/src/main.rs",
+      "line": 672,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/fast-dispatch/src/main.rs",
+      "line": 686,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/fast-dispatch/src/main.rs",
+      "line": 702,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/fast-dispatch/src/main.rs",
+      "line": 782,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/fast-dispatch/src/main.rs",
+      "line": 809,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/fast-dispatch/src/main.rs",
+      "line": 861,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/fast-dispatch/src/main.rs",
+      "line": 914,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/fast-dispatch/src/main.rs",
+      "line": 1162,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/fast-dispatch/src/main.rs",
+      "line": 1302,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/fleet-composite/src/main.rs",
+      "line": 175,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let stdout = stdout_thread.join().unwrap_or_default();"
+    },
+    {
+      "file": "crates/fleet-composite/src/main.rs",
+      "line": 176,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let stderr = stderr_thread.join().unwrap_or_default();"
+    },
+    {
+      "file": "crates/fleet-composite/src/main.rs",
+      "line": 264,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/fleet-composite/src/main.rs",
+      "line": 407,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/fleet-composite/src/main.rs",
+      "line": 525,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/fleet-composite/src/main.rs",
+      "line": 557,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/fleet-composite/src/main.rs",
+      "line": 585,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/fleet-composite/src/main.rs",
+      "line": 593,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/fleet-composite/src/main.rs",
+      "line": 604,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/fleet-monitor/src/bin/fleet-monitor-diffprobe.rs",
+      "line": 18,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let mode = std::env::args().nth(1).unwrap_or_default();"
+    },
+    {
+      "file": "crates/fleet-monitor/src/bin/fleet-monitor-diffprobe.rs",
+      "line": 21,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let mutate = std::env::var(\"FLEET_MONITOR_DIFFPROBE_MUTATE\").unwrap_or_default();"
+    },
+    {
+      "file": "crates/fleet-monitor/src/dispatch_cli_contract.rs",
+      "line": 152,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let line = output.lines().next().unwrap_or_default();"
+    },
+    {
+      "file": "crates/fleet-monitor/src/dispatch_cli_contract.rs",
+      "line": 206,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/fleet-monitor/src/dispatch_cli_contract.rs",
+      "line": 235,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/fleet-monitor/src/dispatch_cli_contract.rs",
+      "line": 260,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/fleet-monitor/src/dispatch_cli_contract.rs",
+      "line": 271,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/fleet-monitor/src/lib.rs",
+      "line": 225,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "return Vec::new();"
+    },
+    {
+      "file": "crates/fleet-monitor/src/lib.rs",
+      "line": 232,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/fleet-monitor/src/lib.rs",
+      "line": 257,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/fleet-monitor/src/lib.rs",
+      "line": 278,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "v.get(\"issues\").and_then(|x| x.as_array()).cloned().unwrap_or_default()"
+    },
+    {
+      "file": "crates/fleet-monitor/src/lib.rs",
+      "line": 404,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "return ObserveScan::Repos(Vec::new());"
+    },
+    {
+      "file": "crates/fleet-monitor/src/main.rs",
+      "line": 399,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/fleet-monitor/src/main.rs",
+      "line": 415,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/fleet-monitor/src/main.rs",
+      "line": 437,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return if rc == 0 { ExitCode::SUCCESS } else { ExitCode::from(rc as u8) };"
+    },
+    {
+      "file": "crates/fleet-monitor/src/main.rs",
+      "line": 452,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/fleet-monitor/src/main.rs",
+      "line": 498,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/fleet-monitor/src/main.rs",
+      "line": 526,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/fleet-monitor/src/main.rs",
+      "line": 985,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/fleet-monitor/src/main.rs",
+      "line": 1006,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let cursor = std::fs::read_to_string(&cfg.cursor_f).unwrap_or_default().trim().to_string();"
+    },
+    {
+      "file": "crates/fleet-monitor/src/main.rs",
+      "line": 1333,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/fleet-reconcile/src/lib.rs",
+      "line": 60,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let stdout = out.and_then(|h| h.join().ok()).unwrap_or_default();"
+    },
+    {
+      "file": "crates/fleet-reconcile/src/lib.rs",
+      "line": 61,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let stderr = err.and_then(|h| h.join().ok()).unwrap_or_default();"
+    },
+    {
+      "file": "crates/fleet-reconcile/src/main.rs",
+      "line": 98,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/fleet-reconcile/src/main.rs",
+      "line": 161,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/fleet-reconcile/src/main.rs",
+      "line": 165,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/fleet-reconcile/src/main.rs",
+      "line": 174,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let read = |name: &str| fs::read_to_string(d.join(name)).unwrap_or_default();"
+    },
+    {
+      "file": "crates/fleet-reconcile/src/main.rs",
+      "line": 186,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/fleet-reconcile/src/main.rs",
+      "line": 191,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/fleet-reconcile/src/main.rs",
+      "line": 196,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/fleet-reconcile/src/main.rs",
+      "line": 222,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/fleet-reconcile/src/main.rs",
+      "line": 363,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/fleet-truth/src/lib.rs",
+      "line": 56,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let stdout = out.and_then(|h| h.join().ok()).unwrap_or_default();"
+    },
+    {
+      "file": "crates/fleet-truth/src/lib.rs",
+      "line": 57,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let stderr = err.and_then(|h| h.join().ok()).unwrap_or_default();"
+    },
+    {
+      "file": "crates/fleet-truth/src/main.rs",
+      "line": 49,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/fleet-truth/src/main.rs",
+      "line": 83,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let repo = counts.first().map(|(_, p)| p.clone()).unwrap_or_default();"
+    },
+    {
+      "file": "crates/fleet-truth/src/main.rs",
+      "line": 144,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/fleet-truth/src/main.rs",
+      "line": 292,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/fleet-truth/src/main.rs",
+      "line": 379,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/fleet-truth/src/main.rs",
+      "line": 509,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/fleet-truth/src/main.rs",
+      "line": 513,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "std::fs::read_to_string(p).unwrap_or_default()"
+    },
+    {
+      "file": "crates/fleet-truth/src/main.rs",
+      "line": 607,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/installer/src/lib.rs",
+      "line": 397,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "build_id: check.build_id_in_binary.unwrap_or_default(),"
+    },
+    {
+      "file": "crates/installer/src/lib.rs",
+      "line": 398,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "version: check.version_output.unwrap_or_default(),"
+    },
+    {
+      "file": "crates/installer/src/main.rs",
+      "line": 36,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/installer/src/main.rs",
+      "line": 40,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/installer/src/main.rs",
+      "line": 68,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let head_short = installer::git_rev_parse_short(repo_root).unwrap_or_default();"
+    },
+    {
+      "file": "crates/installer/src/main.rs",
+      "line": 120,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/installer/src/main.rs",
+      "line": 174,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/kernel-bypass-gate/src/lib.rs",
+      "line": 163,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let source = std::fs::read_to_string(&path).unwrap_or_default();"
+    },
+    {
+      "file": "crates/kernel-bypass-gate/src/lib.rs",
+      "line": 220,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let source = std::fs::read_to_string(&path).unwrap_or_default();"
+    },
+    {
+      "file": "crates/kernel-bypass-gate/src/main.rs",
+      "line": 38,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/kernel-only-operator-hook/src/lib.rs",
+      "line": 253,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "executable_name(tokens.first().copied().unwrap_or_default()) == \"tmux\""
+    },
+    {
+      "file": "crates/kernel-only-operator-hook/src/lib.rs",
+      "line": 259,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "if executable_name(tokens.first().copied().unwrap_or_default()) != \"br\" {"
+    },
+    {
+      "file": "crates/kernel-only-operator-hook/src/lib.rs",
+      "line": 271,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "executable_name(tokens.first().copied().unwrap_or_default()) == \"tmux\""
+    },
+    {
+      "file": "crates/kernel-only-operator-hook/src/main.rs",
+      "line": 46,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/kernel-only-operator-hook/src/main.rs",
+      "line": 166,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/kernel-only-operator-hook/src/main.rs",
+      "line": 171,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/kernel-only-operator-hook/src/main.rs",
+      "line": 192,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/loop-coverage/src/lib.rs",
+      "line": 765,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let text = std::fs::read_to_string(root.join(path)).unwrap_or_default();"
+    },
+    {
+      "file": "crates/loop-coverage/src/main.rs",
+      "line": 25,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/loop-coverage/src/main.rs",
+      "line": 29,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/loop-coverage/src/main.rs",
+      "line": 33,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/loop-driver/src/dispatch_cli_contract.rs",
+      "line": 197,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let line = output.lines().next().unwrap_or_default();"
+    },
+    {
+      "file": "crates/loop-driver/src/dispatch_cli_contract.rs",
+      "line": 251,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/loop-driver/src/dispatch_cli_contract.rs",
+      "line": 280,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/loop-driver/src/dispatch_cli_contract.rs",
+      "line": 305,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/loop-driver/src/dispatch_cli_contract.rs",
+      "line": 316,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/loop-driver/src/lib.rs",
+      "line": 141,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/loop-driver/src/lib.rs",
+      "line": 462,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "return Vec::new();"
+    },
+    {
+      "file": "crates/loop-driver/src/lib.rs",
+      "line": 505,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "return Vec::new();"
+    },
+    {
+      "file": "crates/loop-driver/src/lib.rs",
+      "line": 941,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "stdout: stdout_reader.join().unwrap_or_default(),"
+    },
+    {
+      "file": "crates/loop-driver/src/lib.rs",
+      "line": 942,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "stderr: stderr_reader.join().unwrap_or_default(),"
+    },
+    {
+      "file": "crates/loop-driver/src/main.rs",
+      "line": 116,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/loop-driver/src/main.rs",
+      "line": 163,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/loop-driver/src/main.rs",
+      "line": 175,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/loop-driver/src/main.rs",
+      "line": 191,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/loop-driver/src/main.rs",
+      "line": 217,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/loop-driver/src/main.rs",
+      "line": 240,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/loop-queue-filter/src/lib.rs",
+      "line": 132,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let epic = filtered.first().map(|s| s.to_string()).unwrap_or_default();"
+    },
+    {
+      "file": "crates/loop-queue-filter/src/lib.rs",
+      "line": 205,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/loop-queue-filter/src/lib.rs",
+      "line": 373,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default(),"
+    },
+    {
+      "file": "crates/loop-queue-filter/src/lib.rs",
+      "line": 374,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "_ => Vec::new(),"
+    },
+    {
+      "file": "crates/loop-queue-filter/src/main.rs",
+      "line": 9,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return std::process::ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/loop-switch/src/main.rs",
+      "line": 19,
+      "predicate": "exit_zero",
+      "classification": "healthy_noop",
+      "reason": "explicit zero process exit; verify the surrounding operation reports failures independently",
+      "source_excerpt": "loop-switch status [--json]     is the loop running? (exit 0 = ON, 3 = OFF)"
+    },
+    {
+      "file": "crates/loop-switch/src/main.rs",
+      "line": 58,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/loop-switch/src/main.rs",
+      "line": 71,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/loop-switch/src/main.rs",
+      "line": 85,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/loop-switch/src/main.rs",
+      "line": 100,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/loop-switch/src/main.rs",
+      "line": 104,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/loop-tick/src/lib.rs",
+      "line": 77,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/loop-tick/src/lib.rs",
+      "line": 147,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let stdout = fs::read_to_string(&stdout_path).unwrap_or_default();"
+    },
+    {
+      "file": "crates/loop-tick/src/lib.rs",
+      "line": 148,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let stderr = fs::read_to_string(&stderr_path).unwrap_or_default();"
+    },
+    {
+      "file": "crates/loop-tick/src/lib.rs",
+      "line": 182,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/loop-tick/src/lib.rs",
+      "line": 229,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let metadata = fs::read_to_string(path.join(\"owner\")).unwrap_or_default();"
+    },
+    {
+      "file": "crates/loop-tick/src/lib.rs",
+      "line": 241,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/loop-tick/src/lib.rs",
+      "line": 531,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/loop-tick/src/lib.rs",
+      "line": 1081,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/loop-tick/src/lib.rs",
+      "line": 1106,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let message = fs::read_to_string(packet_path).unwrap_or_default();"
+    },
+    {
+      "file": "crates/loop-tick/src/lib.rs",
+      "line": 1286,
+      "predicate": "ok_zero",
+      "classification": "typed_nonzero",
+      "reason": "typed numeric zero wrapped in Ok; zero may be an intentional no-work result",
+      "source_excerpt": "return Ok(0);"
+    },
+    {
+      "file": "crates/loop-tick/src/lib.rs",
+      "line": 1289,
+      "predicate": "ok_zero",
+      "classification": "typed_nonzero",
+      "reason": "typed numeric zero wrapped in Ok; zero may be an intentional no-work result",
+      "source_excerpt": "return Ok(0);"
+    },
+    {
+      "file": "crates/loop-tick/src/lib.rs",
+      "line": 1307,
+      "predicate": "ok_zero",
+      "classification": "typed_nonzero",
+      "reason": "typed numeric zero wrapped in Ok; zero may be an intentional no-work result",
+      "source_excerpt": "return Ok(0);"
+    },
+    {
+      "file": "crates/loop-tick/src/lib.rs",
+      "line": 1328,
+      "predicate": "ok_zero",
+      "classification": "typed_nonzero",
+      "reason": "typed numeric zero wrapped in Ok; zero may be an intentional no-work result",
+      "source_excerpt": "return Ok(0);"
+    },
+    {
+      "file": "crates/loop-tick/src/main.rs",
+      "line": 9,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/loop-tick/src/main.rs",
+      "line": 13,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/loop-tick/src/main.rs",
+      "line": 50,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/no-shell-gate/src/bin/pre-commit-gate.rs",
+      "line": 26,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "Self::Clean => ExitCode::SUCCESS,"
+    },
+    {
+      "file": "crates/no-shell-gate/src/bin/pre-commit-gate.rs",
+      "line": 44,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "None => ExitCode::SUCCESS,"
+    },
+    {
+      "file": "crates/no-shell-gate/src/bin/pre-commit-gate.rs",
+      "line": 300,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "_ => Vec::new(),"
+    },
+    {
+      "file": "crates/no-shell-gate/src/bin/pre-push-gate.rs",
+      "line": 276,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/no-shell-gate/src/bin/pre-push-gate.rs",
+      "line": 349,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/no-shell-gate/src/bin/pre-push-gate.rs",
+      "line": 369,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let body = std::fs::read_to_string(&receipt).unwrap_or_default();"
+    },
+    {
+      "file": "crates/no-shell-gate/src/bin/pre-push-gate.rs",
+      "line": 459,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/no-shell-gate/src/bin/workspace-load.rs",
+      "line": 29,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/no-shell-gate/src/main.rs",
+      "line": 30,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/ntm-fleet-monitor/src/bin/ntm-activity-fixture-gate.rs",
+      "line": 58,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/ntm-fleet-monitor/src/bin/ntm-activity-fixture-gate.rs",
+      "line": 116,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/ntm-fleet-monitor/src/main.rs",
+      "line": 53,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/ntm-fleet-monitor/src/main.rs",
+      "line": 59,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/ntm-fleet-monitor/src/main.rs",
+      "line": 72,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/ntm-fleet-monitor/src/main.rs",
+      "line": 93,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/omp-idle-dispatch/src/lib.rs",
+      "line": 161,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "let Ok(value) = serde_json::from_str::<Value>(json) else { return Vec::new() };"
+    },
+    {
+      "file": "crates/omp-idle-dispatch/src/lib.rs",
+      "line": 166,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "_ => return Vec::new(),"
+    },
+    {
+      "file": "crates/omp-idle-dispatch/src/lib.rs",
+      "line": 168,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "_ => return Vec::new(),"
+    },
+    {
+      "file": "crates/omp-idle-dispatch/src/lib.rs",
+      "line": 173,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let id = object.get(\"id\").and_then(Value::as_str).unwrap_or_default();"
+    },
+    {
+      "file": "crates/omp-idle-dispatch/src/lib.rs",
+      "line": 177,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/omp-idle-dispatch/src/lib.rs",
+      "line": 181,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/omp-idle-dispatch/src/lib.rs",
+      "line": 194,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/omp-idle-dispatch/src/lib.rs",
+      "line": 198,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/omp-idle-dispatch/src/lib.rs",
+      "line": 234,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/omp-idle-dispatch/src/lib.rs",
+      "line": 329,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/omp-idle-dispatch/src/lib.rs",
+      "line": 494,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let first = capture.lines().find(|line| line.contains(MODEL_BANNER)).unwrap_or_default();"
+    },
+    {
+      "file": "crates/omp-idle-dispatch/src/lib.rs",
+      "line": 568,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let marker = parse_dispatch_marker(ledger.lines().next().unwrap_or_default()).unwrap();"
+    },
+    {
+      "file": "crates/omp-idle-dispatch/src/main.rs",
+      "line": 218,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/omp-idle-dispatch/src/main.rs",
+      "line": 312,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/omp-idle-dispatch/src/main.rs",
+      "line": 334,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let seconds = now.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64;"
+    },
+    {
+      "file": "crates/omp-idle-dispatch/src/main.rs",
+      "line": 521,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let ledger_text = fs::read_to_string(&ledger).unwrap_or_default();"
+    },
+    {
+      "file": "crates/omp-idle-dispatch/src/main.rs",
+      "line": 562,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let first_bead = queue.first().map(|bead| bead.id.clone()).unwrap_or_default();"
+    },
+    {
+      "file": "crates/omp-inventory-map/src/lib.rs",
+      "line": 835,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/omp-inventory-map/src/lib.rs",
+      "line": 873,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let first = trimmed.split_whitespace().next().unwrap_or_default();"
+    },
+    {
+      "file": "crates/omp-inventory-map/src/lib.rs",
+      "line": 1071,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "_ => (vec![], ProbeState::Unknown),"
+    },
+    {
+      "file": "crates/omp-inventory-map/src/lib.rs",
+      "line": 1246,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".map(|help| parse_cli_commands(help).value.unwrap_or_default()),"
+    },
+    {
+      "file": "crates/omp-inventory-map/src/main.rs",
+      "line": 224,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/omp-inventory-map/src/main.rs",
+      "line": 245,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "Ok(()) => (\"OK\", Vec::new()),"
+    },
+    {
+      "file": "crates/omp-inventory-map/src/types_inventory.rs",
+      "line": 488,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/omp-orchestrator/src/lib.rs",
+      "line": 155,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "reason: get(\"reason\").unwrap_or_default(),"
+    },
+    {
+      "file": "crates/omp-orchestrator/src/lib.rs",
+      "line": 156,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "session: get(\"session\").unwrap_or_default(),"
+    },
+    {
+      "file": "crates/omp-orchestrator/src/lib.rs",
+      "line": 157,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "pane_set_hash: get(\"pane_set_hash\").unwrap_or_default(),"
+    },
+    {
+      "file": "crates/omp-orchestrator/src/main.rs",
+      "line": 129,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let mut receiver_agent = env::var(\"OMP_RECEIVER_AGENT\").unwrap_or_default();"
+    },
+    {
+      "file": "crates/omp-orchestrator/src/main.rs",
+      "line": 252,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/omp-orchestrator/src/main.rs",
+      "line": 304,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default(),"
+    },
+    {
+      "file": "crates/omp-orchestrator/src/main.rs",
+      "line": 1150,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/omp-orchestrator/src/main.rs",
+      "line": 2120,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return std::process::ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/omp-orchestrator/src/main.rs",
+      "line": 2145,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "Ok(()) => std::process::ExitCode::SUCCESS,"
+    },
+    {
+      "file": "crates/omp-orchestrator/src/target_directory.rs",
+      "line": 372,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "std::env::current_dir().unwrap_or_default().join(path)"
+    },
+    {
+      "file": "crates/oracle-compare/src/lib.rs",
+      "line": 315,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "None => Vec::new(),"
+    },
+    {
+      "file": "crates/oracle-compare/src/lib.rs",
+      "line": 319,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "None => Vec::new(),"
+    },
+    {
+      "file": "crates/oracle-pane-state-differential/src/main.rs",
+      "line": 30,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/oracle-pane-state-differential/src/main.rs",
+      "line": 234,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/pane-dispatch-fence/src/main.rs",
+      "line": 223,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/pane-dispatch-ready/src/lib.rs",
+      "line": 406,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let stdout = out.and_then(|h| h.join().ok()).unwrap_or_default();"
+    },
+    {
+      "file": "crates/pane-dispatch-ready/src/lib.rs",
+      "line": 407,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let stderr = err.and_then(|h| h.join().ok()).unwrap_or_default();"
+    },
+    {
+      "file": "crates/pane-dispatch-ready/src/lib.rs",
+      "line": 437,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/pane-dispatch-ready/src/main.rs",
+      "line": 109,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/pane-dispatch-ready/src/main.rs",
+      "line": 153,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/pane-dispatch-ready/src/main.rs",
+      "line": 253,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/pane-dispatch-ready/src/main.rs",
+      "line": 282,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/pane-dispatch-ready/src/main.rs",
+      "line": 301,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/pane-dispatch-ready/src/main.rs",
+      "line": 317,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/pane-dispatch-ready/src/main.rs",
+      "line": 364,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/pane-dispatch-ready/src/main.rs",
+      "line": 508,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/pane-oracle-diff/src/lib.rs",
+      "line": 68,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/pane-oracle-diff/src/main.rs",
+      "line": 47,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/pane-oracle-diff/src/main.rs",
+      "line": 183,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "return Vec::new();"
+    },
+    {
+      "file": "crates/pane-oracle-diff/src/main.rs",
+      "line": 264,
+      "predicate": "ok_zero",
+      "classification": "typed_nonzero",
+      "reason": "typed numeric zero wrapped in Ok; zero may be an intentional no-work result",
+      "source_excerpt": "let v = census(0, Ok(0), false, rules);"
+    },
+    {
+      "file": "crates/pane-oracle-diff/src/main.rs",
+      "line": 270,
+      "predicate": "ok_zero",
+      "classification": "typed_nonzero",
+      "reason": "typed numeric zero wrapped in Ok; zero may be an intentional no-work result",
+      "source_excerpt": "let v = census(0, Ok(0), true, rules);"
+    },
+    {
+      "file": "crates/pane-oracle-diff/src/main.rs",
+      "line": 287,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/pane-oracle-diff/src/main.rs",
+      "line": 316,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/pane-truth/src/lib.rs",
+      "line": 181,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "stdout: fs::read_to_string(stdout_path).unwrap_or_default(),"
+    },
+    {
+      "file": "crates/pane-truth/src/lib.rs",
+      "line": 182,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "stderr: fs::read_to_string(stderr_path).unwrap_or_default(),"
+    },
+    {
+      "file": "crates/pane-truth/src/lib.rs",
+      "line": 584,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "PathBuf::from(std::env::var_os(\"HOME\").unwrap_or_default())"
+    },
+    {
+      "file": "crates/pane-truth/src/lib.rs",
+      "line": 597,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/pane-truth/src/lib.rs",
+      "line": 660,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let text = capture(session, index).unwrap_or_default();"
+    },
+    {
+      "file": "crates/pane-truth/src/main.rs",
+      "line": 25,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/path-literal-guard/src/main.rs",
+      "line": 75,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "Verdict::Clean => ExitCode::SUCCESS,"
+    },
+    {
+      "file": "crates/plan-assemble/src/main.rs",
+      "line": 510,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return std::process::ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/plan-assemble/src/main.rs",
+      "line": 684,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "std::process::ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/porting-gate/src/lib.rs",
+      "line": 183,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let text = fs::read_to_string(&path).unwrap_or_default();"
+    },
+    {
+      "file": "crates/porting-gate/src/lib.rs",
+      "line": 257,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/porting-gate/src/main.rs",
+      "line": 35,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/porting-gate/src/main.rs",
+      "line": 75,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/pre-delete-citation-check/src/lib.rs",
+      "line": 102,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "let Ok(value) = parsed else { return Vec::new() };"
+    },
+    {
+      "file": "crates/pre-delete-citation-check/src/lib.rs",
+      "line": 105,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "None => return Vec::new(),"
+    },
+    {
+      "file": "crates/pre-delete-citation-check/src/main.rs",
+      "line": 37,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/pre-delete-citation-check/src/main.rs",
+      "line": 75,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/pre-delete-citation-check/src/main.rs",
+      "line": 95,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/reap-finished-panes/src/main.rs",
+      "line": 123,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/reap-finished-panes/src/main.rs",
+      "line": 200,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/reap-finished-panes/src/main.rs",
+      "line": 310,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/reap-finished-panes/src/main.rs",
+      "line": 335,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/reap-finished-panes/src/main.rs",
+      "line": 376,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/receiver-receipt/src/bin/receiver-receipt.rs",
+      "line": 38,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/receiver-receipt/src/bin/receiver-receipt.rs",
+      "line": 61,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ReceiptVerdict::ReceiptConfirmed { .. } => ExitCode::SUCCESS,"
+    },
+    {
+      "file": "crates/refill-idle-panes/src/lib.rs",
+      "line": 612,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "return Vec::new();"
+    },
+    {
+      "file": "crates/refill-idle-panes/src/lib.rs",
+      "line": 619,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "return Vec::new();"
+    },
+    {
+      "file": "crates/refill-idle-panes/src/lib.rs",
+      "line": 918,
+      "predicate": "exit_zero",
+      "classification": "healthy_noop",
+      "reason": "explicit zero process exit; verify the surrounding operation reports failures independently",
+      "source_excerpt": "as 'nothing to do' at exit 0\""
+    },
+    {
+      "file": "crates/refill-idle-panes/src/main.rs",
+      "line": 70,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/refill-idle-panes/src/main.rs",
+      "line": 71,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let list = probe(\"ntm\", &[\"list\".into()], 45).unwrap_or_default();"
+    },
+    {
+      "file": "crates/refill-idle-panes/src/main.rs",
+      "line": 72,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let snapshot = probe(\"ntm\", &[\"--robot-snapshot\".into()], 45).unwrap_or_default();"
+    },
+    {
+      "file": "crates/refill-idle-panes/src/main.rs",
+      "line": 173,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let activity = probe(\"ntm\", &[format!(\"--robot-activity={session}\")], 45).unwrap_or_default();"
+    },
+    {
+      "file": "crates/refill-idle-panes/src/main.rs",
+      "line": 180,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/refill-idle-panes/src/main.rs",
+      "line": 219,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let triage = probe(\"bv\", &[\"--robot-triage\".into()], 90).unwrap_or_default();"
+    },
+    {
+      "file": "crates/refill-idle-panes/src/main.rs",
+      "line": 374,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let bad_message = reconciliation_failure(&bad_reconcile).unwrap_or_default();"
+    },
+    {
+      "file": "crates/refill-idle-panes/src/main.rs",
+      "line": 437,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/scratch-home/src/main.rs",
+      "line": 220,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/scratch-home/src/main.rs",
+      "line": 247,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "\"resolve\" => resolve(&args).map(|()| ExitCode::SUCCESS),"
+    },
+    {
+      "file": "crates/scratch-home/src/main.rs",
+      "line": 248,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "\"pane-env\" => pane_env(&args).map(|()| ExitCode::SUCCESS),"
+    },
+    {
+      "file": "crates/scratch-home/src/main.rs",
+      "line": 249,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "\"job\" => create_job(&args).map(|()| ExitCode::SUCCESS),"
+    },
+    {
+      "file": "crates/scratch-home/src/main.rs",
+      "line": 250,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "\"reap\" => reap(&args).map(|()| ExitCode::SUCCESS),"
+    },
+    {
+      "file": "crates/scratch-home/src/main.rs",
+      "line": 256,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "Ok(ExitCode::SUCCESS)"
+    },
+    {
+      "file": "crates/scratch-home/src/main.rs",
+      "line": 260,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "Ok(ExitCode::SUCCESS)"
+    },
+    {
+      "file": "crates/silent-success-census/src/lib.rs",
+      "line": 407,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let context = std::str::from_utf8(&bytes[start..offset]).unwrap_or_default();"
+    },
+    {
+      "file": "crates/silent-success-census/src/lib.rs",
+      "line": 494,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/silent-success-census/src/main.rs",
+      "line": 39,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/state-wildcard-lint/src/lib.rs",
+      "line": 839,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "ScanMode::StagedPaths => Vec::new(),"
+    },
+    {
+      "file": "crates/state-wildcard-lint/src/main.rs",
+      "line": 80,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "Verdict::Clean => ExitCode::SUCCESS,"
+    },
+    {
+      "file": "crates/subprocess-contract/src/lib.rs",
+      "line": 131,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "return handle.join().unwrap_or_default();"
+    },
+    {
+      "file": "crates/subprocess-contract/src/lib.rs",
+      "line": 205,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let stdout = stdout_reader.join().unwrap_or_default();"
+    },
+    {
+      "file": "crates/subprocess-contract/src/lib.rs",
+      "line": 206,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let stderr = stderr_reader.join().unwrap_or_default();"
+    },
+    {
+      "file": "crates/tick-dispatch/src/main.rs",
+      "line": 126,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/tick-dispatch/src/main.rs",
+      "line": 261,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default()"
+    },
+    {
+      "file": "crates/tick-dispatch/src/main.rs",
+      "line": 391,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/tick-dispatch/src/main.rs",
+      "line": 463,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default();"
+    },
+    {
+      "file": "crates/tick-dispatch/src/main.rs",
+      "line": 650,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/tick-dispatch/src/main.rs",
+      "line": 703,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let msg = i.get(\"message\").map(|x| x.to_string()).unwrap_or_default();"
+    },
+    {
+      "file": "crates/tick-dispatch/src/main.rs",
+      "line": 769,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/tick-monitor/src/lib.rs",
+      "line": 175,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let stdout = out_thread.join().unwrap_or_default();"
+    },
+    {
+      "file": "crates/tick-monitor/src/lib.rs",
+      "line": 176,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let stderr = err_thread.join().unwrap_or_default();"
+    },
+    {
+      "file": "crates/tick-monitor/src/lib.rs",
+      "line": 778,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let blocker = tick.external_blocker.clone().unwrap_or_default();"
+    },
+    {
+      "file": "crates/tick-monitor/src/lib.rs",
+      "line": 1194,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "return Vec::new();"
+    },
+    {
+      "file": "crates/tick-monitor/src/main.rs",
+      "line": 30,
+      "predicate": "exit_zero",
+      "classification": "healthy_noop",
+      "reason": "explicit zero process exit; verify the surrounding operation reports failures independently",
+      "source_excerpt": "exit(0)"
+    },
+    {
+      "file": "crates/tick-monitor/src/main.rs",
+      "line": 174,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "repos.push(std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default());"
+    },
+    {
+      "file": "crates/tick-monitor/src/main.rs",
+      "line": 616,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "prior.last_blocker = tick.external_blocker.unwrap_or_default();"
+    },
+    {
+      "file": "crates/undrained-pipe-lint/src/lib.rs",
+      "line": 338,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let source = fs::read_to_string(&path).unwrap_or_default();"
+    },
+    {
+      "file": "crates/undrained-pipe-lint/src/lib.rs",
+      "line": 403,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": "let source = fs::read_to_string(&path).unwrap_or_default();"
+    },
+    {
+      "file": "crates/undrained-pipe-lint/src/main.rs",
+      "line": 38,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/verify-dispatch/src/lib.rs",
+      "line": 547,
+      "predicate": "unwrap_or_default",
+      "classification": "unresolved",
+      "reason": "default fallback can erase an upstream error or missing value; inspect the resolved type and caller contract",
+      "source_excerpt": ".unwrap_or_default(),"
+    },
+    {
+      "file": "crates/wired-but-inert-guard/src/main.rs",
+      "line": 201,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "ExitCode::SUCCESS"
+    },
+    {
+      "file": "crates/wired-but-inert-guard/src/main.rs",
+      "line": 252,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/wired-but-inert-guard/src/main.rs",
+      "line": 257,
+      "predicate": "empty_collection_return",
+      "classification": "unresolved",
+      "reason": "empty collection is returned; this may be a valid empty result or a swallowed failure",
+      "source_excerpt": "None => (\"guard\", Vec::new()),"
+    },
+    {
+      "file": "crates/wired-but-inert-guard/src/main.rs",
+      "line": 273,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return ExitCode::SUCCESS;"
+    },
+    {
+      "file": "crates/wired-but-inert-guard/src/main.rs",
+      "line": 288,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return if report.is_pass() { ExitCode::SUCCESS } else { ExitCode::from(1) };"
+    },
+    {
+      "file": "crates/wired-but-inert-guard/src/main.rs",
+      "line": 300,
+      "predicate": "exit_code_success",
+      "classification": "healthy_noop",
+      "reason": "explicit successful process exit; verify that success is not standing in for work completion",
+      "source_excerpt": "return if report.is_pass() { ExitCode::SUCCESS } else { ExitCode::from(1) };"
+    }
+  ]
+}

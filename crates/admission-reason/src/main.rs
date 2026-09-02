@@ -2,7 +2,7 @@
 
 //! Live admission-reason binary. Verdicts on STDOUT at column 0.
 
-use admission_reason::{explain, Rules};
+use admission_reason::{explain, explain_checked, LedgerError, Rules};
 use std::env;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -20,7 +20,13 @@ fn main() -> ExitCode {
             "--mutation" => mutation = true,
             "--publication-check" => publication_check = true,
             "--ledger" => {
-                ledger = Some(PathBuf::from(args.next().unwrap_or_default()));
+                let Some(value) = args.next() else {
+                    return report_ledger_error(LedgerError::Missing {
+                        path: PathBuf::from("<missing>"),
+                        reason: "--ledger requires a PATH value".to_owned(),
+                    });
+                };
+                ledger = Some(PathBuf::from(value));
             }
             "--disable-rule" => match args.next() {
                 Some(v) => disabled.push(v),
@@ -54,10 +60,43 @@ fn main() -> ExitCode {
     if selftest {
         return run_selftest(&rules);
     }
-    let path =
-        ledger.unwrap_or_else(|| PathBuf::from(env::var("CHECK_SH_LEDGER").unwrap_or_default()));
-    print!("{}", explain(&path, publication_check, &rules));
+    let path = match resolve_ledger_path(ledger) {
+        Ok(path) => path,
+        Err(error) => return report_ledger_error(error),
+    };
+    match explain_checked(&path, publication_check, &rules) {
+        Ok(output) => print!("{output}"),
+        Err(error) => return report_ledger_error(error),
+    }
     ExitCode::SUCCESS
+}
+
+fn resolve_ledger_path(explicit: Option<PathBuf>) -> Result<PathBuf, LedgerError> {
+    if let Some(path) = explicit {
+        if path.as_os_str().is_empty() {
+            return Err(LedgerError::Missing {
+                path: PathBuf::from("<empty>"),
+                reason: "--ledger PATH must not be empty".to_owned(),
+            });
+        }
+        return Ok(path);
+    }
+    match env::var_os("CHECK_SH_LEDGER") {
+        Some(value) if !value.is_empty() => Ok(PathBuf::from(value)),
+        Some(_) => Err(LedgerError::Missing {
+            path: PathBuf::from("<CHECK_SH_LEDGER>"),
+            reason: "CHECK_SH_LEDGER is set but empty".to_owned(),
+        }),
+        None => Err(LedgerError::Missing {
+            path: PathBuf::from("<CHECK_SH_LEDGER>"),
+            reason: "--ledger was not supplied and CHECK_SH_LEDGER is unset".to_owned(),
+        }),
+    }
+}
+
+fn report_ledger_error(error: LedgerError) -> ExitCode {
+    eprintln!("ERROR {}: {}", error.code(), error);
+    ExitCode::from(3)
 }
 
 fn run_selftest(rules: &Rules) -> ExitCode {
@@ -198,6 +237,20 @@ fn run_selftest(rules: &Rules) -> ExitCode {
         "SELFTEST RED a missing ledger was silent (reads as healthy)",
         &mut rc,
     );
+    match explain_checked(&absent, false, rules) {
+        Ok(_) => chk(
+            false,
+            "SELFTEST typed missing-ledger check unexpectedly passed",
+            &mut rc,
+        ),
+        Err(error) => chk(
+            error.code() == "ledger_missing"
+                && error.to_string().contains(&absent.display().to_string())
+                && error.to_string().contains("reason="),
+            "SELFTEST typed missing-ledger error omitted code, path, or reason",
+            &mut rc,
+        ),
+    }
 
     let _ = fs::remove_dir_all(&tmp);
     if rc == 0 {

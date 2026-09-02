@@ -1,4 +1,4 @@
-//! Differential vs `bin/admission-reason.sh --ledger` on identical fixtures.
+//! Differential vs the control-plane `bin/admission-reason.sh --ledger` oracle on identical fixtures.
 //! Empty comparison set is an ERROR.
 
 use std::path::PathBuf;
@@ -13,25 +13,44 @@ fn repo() -> PathBuf {
 }
 
 fn shell() -> PathBuf {
-    repo().join("bin/admission-reason.sh")
+    let oracle = std::env::var_os("OMP_CONTROL_PLANE_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| repo().join("../control-plane"))
+        .join("bin/admission-reason.sh");
+    assert!(
+        oracle.is_file(),
+        "missing shell oracle at {}; set OMP_CONTROL_PLANE_ROOT to the control-plane checkout",
+        oracle.display()
+    );
+    oracle
 }
 
-fn run_shell(ledger: &std::path::Path) -> String {
+fn run_shell_output(ledger: &std::path::Path) -> std::process::Output {
     let out = Command::new(shell())
         .args(["--ledger", ledger.to_str().unwrap()])
         .env("ADMISSION_REASON_ORACLE", "1")
         .output()
         .expect("shell");
+    out
+}
+
+fn run_shell(ledger: &std::path::Path) -> String {
+    let out = run_shell_output(ledger);
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
-fn run_rust(ledger: &std::path::Path, extra: &[&str]) -> String {
+fn run_rust_output(ledger: &std::path::Path, extra: &[&str]) -> std::process::Output {
     let out = Command::new(rust_bin())
         .arg("--ledger")
         .arg(ledger)
         .args(extra)
         .output()
         .expect("rust");
+    out
+}
+
+fn run_rust(ledger: &std::path::Path, extra: &[&str]) -> String {
+    let out = run_rust_output(ledger, extra);
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
@@ -108,11 +127,27 @@ fn rust_matches_shell_on_nonempty_case_set() {
         let p = tmp.join(format!("{name}.json"));
         if name == "missing-path-is-a-case" {
             let missing = tmp.join("no-such.json");
-            let sh = run_shell(&missing);
-            let rs = run_rust(&missing, &[]);
-            if norm(&sh) != norm(&rs) {
-                disagreements.push(format!("missing: shell={sh:?} rust={rs:?}"));
-            }
+            let sh = run_shell_output(&missing);
+            let rs = run_rust_output(&missing, &[]);
+            // Expected hardening divergence: the shell oracle preserves its
+            // historical successful exit while naming the missing ledger; Rust
+            // must fail closed with a machine-readable ledger_missing error.
+            assert!(
+                sh.status.success(),
+                "shell missing-ledger exit shape changed: {sh:?}"
+            );
+            assert!(
+                String::from_utf8_lossy(&sh.stdout).contains("no check.sh ledger"),
+                "shell missing-ledger reason changed: {sh:?}"
+            );
+            assert!(
+                !rs.status.success(),
+                "rust missing-ledger unexpectedly succeeded: {rs:?}"
+            );
+            assert!(
+                String::from_utf8_lossy(&rs.stderr).contains("ledger_missing"),
+                "rust missing-ledger error changed: {rs:?}"
+            );
             continue;
         }
         std::fs::write(&p, body).unwrap();

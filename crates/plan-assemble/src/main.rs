@@ -51,7 +51,22 @@ fn repo_root() -> PathBuf {
         }
     }
 }
+fn directory_paths(dir: &Path) -> Result<Vec<PathBuf>, String> {
+    let entries = std::fs::read_dir(dir)
+        .map_err(|error| format!("cannot read {}: {error}", dir.display()))?;
+    entries
+        .map(|entry| {
+            entry.map(|entry| entry.path()).map_err(|error| {
+                format!("cannot read directory entry in {}: {error}", dir.display())
+            })
+        })
+        .collect()
+}
 
+fn read_required_text(path: &Path, kind: &str) -> Result<String, String> {
+    std::fs::read_to_string(path)
+        .map_err(|error| format!("cannot read {kind} {}: {error}", path.display()))
+}
 /// Sections are `NN-name.md` — two leading digits then a dash. Matches the Python
 /// `^\d\d-`, and deliberately excludes SURFACE-MAP, CONVERGENCE and coverage JSON.
 fn is_section(name: &str) -> bool {
@@ -242,18 +257,17 @@ fn main() -> std::process::ExitCode {
     let root = repo_root();
     let dir = root.join("docs/plan");
 
-    let mut sections: Vec<PathBuf> = match std::fs::read_dir(&dir) {
-        Ok(entries) => entries
-            .flatten()
-            .map(|e| e.path())
+    let mut sections: Vec<PathBuf> = match directory_paths(&dir) {
+        Ok(paths) => paths
+            .into_iter()
             .filter(|p| {
                 p.file_name()
                     .and_then(|n| n.to_str())
                     .is_some_and(is_section)
             })
             .collect(),
-        Err(e) => {
-            eprintln!("PLAN_ASSEMBLE_ERROR cannot read {}: {e}", dir.display());
+        Err(error) => {
+            eprintln!("PLAN_ASSEMBLE_ERROR cannot read {}: {error}", dir.display());
             return std::process::ExitCode::from(2);
         }
     };
@@ -267,10 +281,9 @@ fn main() -> std::process::ExitCode {
         return std::process::ExitCode::from(2);
     }
 
-    let mut round_files: Vec<PathBuf> = match std::fs::read_dir(&dir) {
-        Ok(entries) => entries
-            .flatten()
-            .map(|entry| entry.path())
+    let mut round_files: Vec<PathBuf> = match directory_paths(&dir) {
+        Ok(paths) => paths
+            .into_iter()
             .filter(|path| {
                 path.file_name()
                     .and_then(|name| name.to_str())
@@ -359,11 +372,19 @@ fn main() -> std::process::ExitCode {
             return std::process::ExitCode::from(2);
         }
     }
-    let round23_files = round_files
-        .iter()
-        .filter_map(|path| round_numbers(path).ok())
-        .filter(|rounds| rounds.contains(&23))
-        .count();
+    let mut round23_files = 0;
+    for path in &round_files {
+        let rounds = match round_numbers(path) {
+            Ok(rounds) => rounds,
+            Err(error) => {
+                eprintln!("PLAN_ASSEMBLE_ERROR {error}");
+                return std::process::ExitCode::from(2);
+            }
+        };
+        if rounds.contains(&23) {
+            round23_files += 1;
+        }
+    }
     if round23_files != 4 {
         eprintln!("PLAN_ASSEMBLE_ERROR expected four round-23 ledgers, found {round23_files}");
         return std::process::ExitCode::from(2);
@@ -406,6 +427,27 @@ fn main() -> std::process::ExitCode {
         "<!-- PLAN_STAMP {{\"schema\":\"plan-stamp/v1\",\"generator\":\"plan-assemble\",\"round_range\":\"15-23 (22 void)\",\"required_rounds\":[15,16,17,18,19,20,21,23],\"sections\":{},\"round_files\":[{}],\"excluded_round_files\":[{}],\"ledgers\":[\"FINDINGS.jsonl\",\"CONVERGENCE.jsonl\"],\"source_fingerprint\":\"{}\"}} -->",
         sections.len(), round_manifest, excluded_manifest, fingerprint
     );
+    let brief = match read_required_text(&dir.join("00-brief.md"), "required input") {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("PLAN_ASSEMBLE_ERROR {error}");
+            return std::process::ExitCode::from(2);
+        }
+    };
+    let sm_text = match read_required_text(&dir.join("SURFACE-MAP.jsonl"), "required input") {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("PLAN_ASSEMBLE_ERROR {error}");
+            return std::process::ExitCode::from(2);
+        }
+    };
+    let cv_text = match read_required_text(&dir.join("CONVERGENCE.jsonl"), "required input") {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("PLAN_ASSEMBLE_ERROR {error}");
+            return std::process::ExitCode::from(2);
+        }
+    };
     if std::env::args().any(|arg| arg == "--check") {
         let target = root.join("docs/PLAN.md");
         let plan = match std::fs::read_to_string(&target) {
@@ -468,12 +510,9 @@ fn main() -> std::process::ExitCode {
         return std::process::ExitCode::SUCCESS;
     }
 
-    let brief = std::fs::read_to_string(dir.join("00-brief.md")).unwrap_or_default();
     let n = brief.lines().filter(|l| is_refuted_claim_row(l)).count();
     let qs = brief.lines().filter(|l| is_prefixed_row(l, 'Q')).count();
     let ks = brief.lines().filter(|l| is_prefixed_row(l, 'K')).count();
-
-    let sm_text = std::fs::read_to_string(dir.join("SURFACE-MAP.jsonl")).unwrap_or_default();
     let sm: Vec<&str> = sm_text.lines().filter(|l| !l.trim().is_empty()).collect();
     let mut counts: BTreeMap<String, usize> = BTreeMap::new();
     for l in &sm {
@@ -482,8 +521,6 @@ fn main() -> std::process::ExitCode {
     }
     let get = |k: &str| counts.get(k).copied().unwrap_or(0);
     let eng = get("CONSUMED") + get("WIRE") + get("VALIDATE");
-
-    let cv_text = std::fs::read_to_string(dir.join("CONVERGENCE.jsonl")).unwrap_or_default();
     let mut rounds: Vec<u64> = Vec::new();
     let mut tot: u64 = 0;
     for l in cv_text.lines().filter(|l| !l.trim().is_empty()) {
@@ -529,7 +566,13 @@ fn main() -> std::process::ExitCode {
         "## Contents\n".into(),
     ];
     for p in &sections {
-        let text = std::fs::read_to_string(p).unwrap_or_default();
+        let text = match read_required_text(p, "section input") {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!("PLAN_ASSEMBLE_ERROR {error}");
+                return std::process::ExitCode::from(2);
+            }
+        };
         let title = text
             .lines()
             .find(|l| l.starts_with("# "))
@@ -549,7 +592,13 @@ fn main() -> std::process::ExitCode {
     let mut body: Vec<String> = Vec::new();
     for p in &sections {
         let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("?");
-        let text = std::fs::read_to_string(p).unwrap_or_default();
+        let text = match read_required_text(p, "section input") {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!("PLAN_ASSEMBLE_ERROR {error}");
+                return std::process::ExitCode::from(2);
+            }
+        };
         body.push(format!("\n\n<!-- ===== {name} ===== -->\n"));
         body.push(text.trim_end().to_owned());
         body.push("\n\n---".into());
@@ -584,19 +633,29 @@ fn main() -> std::process::ExitCode {
     }
     let embedded_records = sections.len() + ledgers;
     let target = root.join("docs/PLAN.md");
-    if let Ok(previous) = std::fs::read(&target) {
-        if let Err(error) = guard_output_size(previous.len(), body_text.len()) {
-            eprintln!("PLAN_ASSEMBLE_ERROR {error}");
-            return std::process::ExitCode::from(2);
+    match std::fs::read(&target) {
+        Ok(previous) => {
+            if let Err(error) = guard_output_size(previous.len(), body_text.len()) {
+                eprintln!("PLAN_ASSEMBLE_ERROR {error}");
+                return std::process::ExitCode::from(2);
+            }
+            if body_text.len() < previous.len() {
+                println!(
+                    "  PLAN_ASSEMBLE_SHRANK {} -> {} bytes (-{}, within the {MAX_SHRINK_PERCENT}% band) \
+                     — an allowed reduction, stated so it is never silent",
+                    previous.len(),
+                    body_text.len(),
+                    previous.len() - body_text.len()
+                );
+            }
         }
-        if body_text.len() < previous.len() {
-            println!(
-                "  PLAN_ASSEMBLE_SHRANK {} -> {} bytes (-{}, within the {MAX_SHRINK_PERCENT}% band) \
-                 — an allowed reduction, stated so it is never silent",
-                previous.len(),
-                body_text.len(),
-                previous.len() - body_text.len()
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            eprintln!(
+                "PLAN_ASSEMBLE_ERROR cannot read prior output {}: {error}",
+                target.display()
             );
+            return std::process::ExitCode::from(2);
         }
     }
     let out = body_text;

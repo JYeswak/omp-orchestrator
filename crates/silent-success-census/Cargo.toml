@@ -1,0 +1,22 @@
+[package]
+license.workspace = true
+name = "silent-success-census"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Deterministic census of silent-success predicates in crate source"
+
+[lib]
+name = "silent_success_census"
+path = "src/lib.rs"
+
+[[bin]]
+name = "silent-success-census"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "forbid"

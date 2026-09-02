@@ -103,6 +103,36 @@ struct Entry {
     #[serde(default)]
     detail: String,
 }
+/// Errors encountered while loading a ledger from a path.
+#[derive(Debug, PartialEq, Eq)]
+pub enum LedgerError {
+    Missing { path: PathBuf, reason: String },
+    Unreadable { path: PathBuf, reason: String },
+    Malformed { path: PathBuf, reason: String },
+}
+
+impl LedgerError {
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::Missing { .. } => "ledger_missing",
+            Self::Unreadable { .. } => "ledger_unreadable",
+            Self::Malformed { .. } => "ledger_malformed",
+        }
+    }
+}
+
+impl std::fmt::Display for LedgerError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (path, reason) = match self {
+            Self::Missing { path, reason }
+            | Self::Unreadable { path, reason }
+            | Self::Malformed { path, reason } => (path, reason),
+        };
+        write!(formatter, "path='{}' reason={}", path.display(), reason)
+    }
+}
+
+impl std::error::Error for LedgerError {}
 
 fn code_detail_re() -> &'static Regex {
     static R: OnceLock<Regex> = OnceLock::new();
@@ -440,41 +470,45 @@ fn age_seconds(data: &Ledger) -> Option<f64> {
     Some((now_epoch() - when) as f64)
 }
 
-/// Top-level explain. Default path matches `admission_reason.py`.
-/// `publication_check` adds REPAIRED_BUT_UNPUBLISHED when a published RED
-/// gate is overridden live to PASS and the stamp is outside the window.
-pub fn explain(path: &Path, publication_check: bool, rules: &Rules) -> String {
-    if !path.is_file() {
-        return format!(
-            "  (no check.sh ledger at '{}' — run check.sh with CHECK_SH_LEDGER set to see the reason)\n",
-            path.display()
-        );
+/// Load and explain a ledger from a path.
+///
+/// Unlike the compatibility wrapper explain, this API preserves missing, unreadable, and
+/// malformed ledger input as typed errors for callers that must fail closed.
+pub fn explain_checked(
+    path: &Path,
+    publication_check: bool,
+    rules: &Rules,
+) -> Result<String, LedgerError> {
+    let text = fs::read_to_string(path).map_err(|error| {
+        let reason = error.to_string();
+        if error.kind() == std::io::ErrorKind::NotFound {
+            LedgerError::Missing {
+                path: path.to_path_buf(),
+                reason,
+            }
+        } else {
+            LedgerError::Unreadable {
+                path: path.to_path_buf(),
+                reason,
+            }
+        }
+    })?;
+    let data: Ledger = serde_json::from_str(&text).map_err(|error| LedgerError::Malformed {
+        path: path.to_path_buf(),
+        reason: error.to_string(),
+    })?;
+    if data.entries.is_empty() {
+        return Err(LedgerError::Malformed {
+            path: path.to_path_buf(),
+            reason: "ledger contains no entries".to_owned(),
+        });
     }
-    let text = match fs::read_to_string(path) {
-        Ok(t) => t,
-        Err(e) => return format!("  (ledger unreadable: {e})\n"),
-    };
-    explain_text(&text, publication_check, rules)
+    Ok(explain_data(&data, publication_check, rules))
 }
 
-/// The SAME explanation, from ledger TEXT rather than a path.
-///
-/// This exists because the caller that most needs it — `controller-tick`'s `standing_pass` — has
-/// already read the ledger it is refusing on. Re-reading by path would let the emitter explain a
-/// DIFFERENT file's contents than the one that produced the refusal, and this repo has two files
-/// named `check-sh-ledger.json` (the tick's `~/.local/state/flywheel` copy and `loop-tick`'s
-/// in-repo copy) that routinely hold different verdicts. Passing the text makes explaining the
-/// wrong subject inexpressible.
-///
-/// `explain` is now a thin path wrapper over this, so there is exactly one implementation and one
-/// vocabulary; the differential oracle in `tests/differential.rs` keeps covering both.
-pub fn explain_text(text: &str, publication_check: bool, rules: &Rules) -> String {
-    let data: Ledger = match serde_json::from_str(text) {
-        Ok(d) => d,
-        Err(e) => return format!("  (ledger unreadable: {e})\n"),
-    };
+fn explain_data(data: &Ledger, publication_check: bool, rules: &Rules) -> String {
     let mut out = String::new();
-    if let Some(s) = standing_verdict_reason(&data, rules) {
+    if let Some(s) = standing_verdict_reason(data, rules) {
         out.push_str(&s);
         out.push('\n');
     }
@@ -509,7 +543,7 @@ pub fn explain_text(text: &str, publication_check: bool, rules: &Rules) -> Strin
     if publication_check && rules.repaired_but_unpublished {
         if let Some(red) = data.entries.iter().find(|e| e.verdict == "RED") {
             let live = live_override(&red.gate);
-            let stale = age_seconds(&data)
+            let stale = age_seconds(data)
                 .map(|a| a > fresh_seconds())
                 .unwrap_or(false);
             if live.as_deref() == Some("PASS") && stale {
@@ -523,6 +557,38 @@ pub fn explain_text(text: &str, publication_check: bool, rules: &Rules) -> Strin
     out
 }
 
+/// Top-level explain, retaining the historical string-returning API.
+pub fn explain(path: &Path, publication_check: bool, rules: &Rules) -> String {
+    match explain_checked(path, publication_check, rules) {
+        Ok(output) => output,
+        Err(LedgerError::Missing { path, .. }) => format!(
+            "  (no check.sh ledger at '{}' — run check.sh with CHECK_SH_LEDGER set to see the reason)\n",
+            path.display()
+        ),
+        Err(LedgerError::Unreadable { reason, .. } | LedgerError::Malformed { reason, .. }) => {
+            format!("  (ledger unreadable: {reason})\n")
+        }
+    }
+}
+
+/// The SAME explanation, from ledger TEXT rather than a path.
+///
+/// This exists because the caller that most needs it — `controller-tick`'s `standing_pass` — has
+/// already read the ledger it is refusing on. Re-reading by path would let the emitter explain a
+/// DIFFERENT file's contents than the one that produced the refusal, and this repo has two files
+/// named `check-sh-ledger.json` (the tick's `~/.local/state/flywheel` copy and `loop-tick`'s
+/// in-repo copy) that routinely hold different verdicts. Passing the text makes explaining the
+/// wrong subject inexpressible.
+///
+/// Both path and text explanations share one rendering implementation;
+/// the differential oracle in tests/differential.rs keeps covering both.
+pub fn explain_text(text: &str, publication_check: bool, rules: &Rules) -> String {
+    let data: Ledger = match serde_json::from_str(text) {
+        Ok(d) => d,
+        Err(e) => return format!("  (ledger unreadable: {e})\n"),
+    };
+    explain_data(&data, publication_check, rules)
+}
 /// ONE-LINE refusal detail for a ledger ROW, from the ledger text the refuser actually read.
 ///
 /// MEASURED 2026-08-27 (bead cp-jsgiu): `controller-tick` emitted 62 `admission_refused` rows
@@ -636,6 +702,13 @@ mod tests {
     #[test]
     fn the_cascade_is_dropped_but_counted() {
         let mut entries = vec![r#"{"gate":"docs-staleness","verdict":"RED","detail":"docs-staleness RED file=CLAUDE.md commits_since_last_touch=57 limit=50"}"#.to_string()];
+        // Keep the cascade detail in the structured form consumed by structured_reasons.
+        // This makes the fixture deterministic: domain-closure otherwise invokes its live
+        // probe before the plain-text fallback, so an installed probe can hide one cascade row.
+        let cascade_detail = serde_json::to_string(
+            r#"{"violations":[{"code":"skipped-after-docs-staleness"}]}"#,
+        )
+        .expect("cascade detail must serialize");
         for g in [
             "domain-closure",
             "close-evidence",
@@ -644,7 +717,7 @@ mod tests {
             "mutation",
         ] {
             entries.push(format!(
-                r#"{{"gate":"{g}","verdict":"UNRUN","detail":"skipped-after-docs-staleness"}}"#
+                r#"{{"gate":"{g}","verdict":"UNRUN","detail":{cascade_detail}}}"#
             ));
         }
         let text = format!(
@@ -725,6 +798,48 @@ mod tests {
     fn unparseable_ledger_is_not_silent() {
         assert!(refusal_detail("not json at all", &Rules::default()).is_some());
         assert!(refusal_detail("", &Rules::default()).is_some());
+    }
+    #[test]
+    fn path_loading_reports_typed_errors_with_path_and_reason() {
+        let dir = std::env::temp_dir().join(format!("ar-ledger-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let missing = dir.join("missing.json");
+        let error = explain_checked(&missing, false, &Rules::default())
+            .expect_err("missing ledger must fail");
+        assert_eq!(error.code(), "ledger_missing");
+        assert!(error.to_string().contains(&missing.display().to_string()));
+        assert!(
+            error.to_string().contains("No such file") || error.to_string().contains("not found")
+        );
+
+        let malformed = dir.join("malformed.json");
+        std::fs::write(&malformed, "not json").expect("write malformed ledger");
+        let error = explain_checked(&malformed, false, &Rules::default())
+            .expect_err("malformed ledger must fail");
+        assert_eq!(error.code(), "ledger_malformed");
+        assert!(error.to_string().contains(&malformed.display().to_string()));
+        assert!(error.to_string().contains("expected") || error.to_string().contains("key"));
+
+        let empty = dir.join("empty.json");
+        std::fs::write(&empty, "{}").expect("write empty ledger");
+        let error =
+            explain_checked(&empty, false, &Rules::default()).expect_err("empty ledger must fail");
+        assert_eq!(error.code(), "ledger_malformed");
+        assert!(error.to_string().contains("no entries"));
+
+        let unreadable = dir.join("directory");
+        std::fs::create_dir_all(&unreadable).expect("create unreadable ledger path");
+        let error = explain_checked(&unreadable, false, &Rules::default())
+            .expect_err("directory ledger must fail");
+        assert_eq!(error.code(), "ledger_unreadable");
+        match error {
+            LedgerError::Unreadable { path, reason } => {
+                assert_eq!(path, unreadable);
+                assert!(!reason.is_empty());
+            }
+            other => panic!("expected unreadable ledger error, got {other:?}"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn epoch_to_stamp(epoch: i64) -> String {
@@ -834,7 +949,10 @@ mod tests {
             Err(ConfigError::HomeUnset)
         );
         let bare = PathBuf::from("hooks-registry-check");
-        assert_eq!(resolve_hooks_registry_check(Err(ConfigError::HomeUnset)), bare);
+        assert_eq!(
+            resolve_hooks_registry_check(Err(ConfigError::HomeUnset)),
+            bare
+        );
         assert_eq!(
             resolve_hooks_registry_check(Ok(PathBuf::from("/nonexistent-home-for-tests"))),
             bare,
