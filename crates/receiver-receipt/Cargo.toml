@@ -11,3 +11,9 @@ unsafe_code = "forbid"
 
 [dependencies]
 tick-monitor = { path = "../tick-monitor" }
+
+[dev-dependencies]
+# Dev-only ON PURPOSE: pane-truth spawns tmux and this crate must stay I/O-free.
+# Present solely so the_window_floor_matches_pane_truths_authority can gate the
+# restated TWO_CAPTURE_MIN_SECS against its owner.
+pane-truth = { path = "../pane-truth" }

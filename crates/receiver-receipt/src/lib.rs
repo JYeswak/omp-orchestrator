@@ -68,6 +68,14 @@ pub enum ReceiptReason {
         after_secs: u64,
         max_secs: u64,
     },
+    /// The two captures were taken too close together for motion to be
+    /// observable, so neither delivery nor non-delivery is derivable.
+    ObservationWindowTooShort {
+        /// Seconds between the pre-send and post-send captures.
+        span_secs: u64,
+        /// The floor below which the comparison is unsound.
+        floor_secs: u64,
+    },
 }
 
 impl fmt::Display for ReceiptReason {
@@ -109,6 +117,15 @@ impl fmt::Display for ReceiptReason {
             } => write!(
                 f,
                 "timer_too_large_after_idle after_secs={after_secs} max_secs={max_secs}"
+            ),
+            Self::ObservationWindowTooShort {
+                span_secs,
+                floor_secs,
+            } => write!(
+                f,
+                "OBSERVATION_WINDOW_TOO_SHORT span_secs={span_secs} floor_secs={floor_secs} \
+                 -- motion is not observable in this window, so neither delivery nor \
+                 non-delivery is derivable"
             ),
         }
     }
@@ -158,6 +175,40 @@ impl ReceiptVerdict {
 
 /// New work must begin promptly after an idle pane accepts the packet.
 pub const MAX_IDLE_TO_WORKING_TIMER_SECS: u64 = 30;
+
+/// The minimum span between the two captures a receipt is derived from.
+///
+/// # Why a receipt needs a window at all
+///
+/// Every confirming and refuting branch below compares a TIMER and a
+/// spinner-stripped CONTENT HASH across two captures. Both comparisons are
+/// statements about MOTION, and motion is not observable in an arbitrarily
+/// short window. Without a floor the same code manufactures errors in BOTH
+/// directions:
+///
+/// * `Working -> Working`, two captures seconds apart: a healthy pane's timer has
+///   ADVANCED, so `after >= before` fires `TimerDidNotReset` and a working pane
+///   is reported as having no receipt. A FALSE NEGATIVE produced by looking too
+///   fast.
+/// * `Idle -> Working`, two captures seconds apart: a small timer plus any hash
+///   change reads as confirmation, even when the pane began working for an
+///   unrelated reason. A FALSE POSITIVE.
+///
+/// `tick-monitor` already records the first half of this in
+/// `liveness`: it returns `Wedged` BEFORE the two-capture machinery precisely
+/// because "its timer advances while blocked, so the (Working, Working) arm
+/// would call it Live."
+///
+/// # Where the number comes from
+///
+/// `pane_truth::TWO_CAPTURE_MIN_SECS`, which is the repo's authority for this
+/// floor and enforces it at `crates/pane-truth/src/lib.rs:443`. It is restated
+/// here rather than imported so this crate stays pure — `pane-truth`'s lib pulls
+/// in `std::process::Command` and spawns `tmux`, and this crate's contract is
+/// that it never performs I/O. **A restated constant is a drift risk, so it is
+/// gated, not hoped about:** `the_window_floor_matches_pane_truths_authority`
+/// asserts the two agree, with `pane-truth` as a dev-dependency only.
+pub const OBSERVATION_WINDOW_MIN_SECS: u64 = 75;
 
 /// Convert a captured pane render into the shared tick-monitor observation shape.
 ///
@@ -325,6 +376,50 @@ pub fn assess_receiver_receipt(
         };
     }
 
+    // ORDERING GATE, and it is deliberately NARROWER than the bead's literal
+    // "two captures >= 75s apart". Read the retraction before widening it.
+    //
+    // WHAT I BUILT FIRST AND WITHDREW: a blanket floor refusing every verdict
+    // below 75 seconds. It was wrong twice over.
+    //
+    // 1. IT WOULD HAVE REGRESSED THE LIVE PATH. `crates/omp-orchestrator/src/main.rs`
+    //    takes `pre_observation` at :797 and the post capture at :580 with NO
+    //    sleep between them — a span of seconds. A blanket floor turns every
+    //    production receipt into INDETERMINATE, which is strictly worse than the
+    //    gap it closes.
+    // 2. MY JUSTIFICATION FOR IT WAS ALSO WRONG. I argued a short window makes
+    //    `Working -> Working` a false negative because a healthy pane's timer has
+    //    advanced. But that arm keys on RESET (`after < before`), and a reset is
+    //    unambiguous at any spacing: a pane that kept working without restarting
+    //    genuinely did not begin new work. Likewise `Idle -> Working` with a
+    //    fresh timer is the STRONGEST receipt this fleet has (measured:
+    //    `%1413 IDLE -> WORKING t=14s`), and a 75s floor would destroy it.
+    //
+    // WHAT SURVIVES, because it is unambiguous: a post capture stamped STRICTLY
+    // BEFORE the pre capture cannot support ANY motion claim.
+    //
+    // STRICTLY, and the boundary is load-bearing. A first draft refused
+    // `post.at <= pre_send.at` and broke a live consumer: ack-stage builds both
+    // captures at the same second, and `now_unix()` in production legitimately
+    // returns the SAME second twice for calls milliseconds apart. Equal stamps are
+    // second-resolution truncation, not a fault. Only a BACKWARD stamp is. That is a clock or
+    // ordering fault in the observer, and `saturating_sub` yields 0 rather than
+    // wrapping to a huge span that would sail through any floor.
+    //
+    // The narrower open question — what the floor should be on the `Idle -> Idle`
+    // arm, where a pane may simply not have rendered yet — needs measurement of
+    // real composer latency and is filed, not guessed at here.
+    let span_secs = post.at.saturating_sub(pre_send.at);
+    if post.at < pre_send.at {
+        return ReceiptVerdict::Indeterminate {
+            pane_id: pane_id_owned,
+            reason: ReceiptReason::ObservationWindowTooShort {
+                span_secs,
+                floor_secs: OBSERVATION_WINDOW_MIN_SECS,
+            },
+        };
+    }
+
     match (&pre_send.state, &post.state) {
         (PaneState::Idle, PaneState::Working { timer_secs }) => {
             if *timer_secs > MAX_IDLE_TO_WORKING_TIMER_SECS {
@@ -463,7 +558,7 @@ mod tests {
     #[test]
     fn idle_to_working_confirms_with_small_new_timer() {
         let pre = idle("%live", "prompt", 100);
-        let post = working("%live", 1, "accepted packet", '⠙', 101);
+        let post = working("%live", 1, "accepted packet", '⠙', 180);
         let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
         assert_eq!(result.label(), "RECEIPT_CONFIRMED");
     }
@@ -471,7 +566,7 @@ mod tests {
     #[test]
     fn idle_to_working_without_hash_change_is_no_receipt() {
         let pre = idle("%live", "prompt", 100);
-        let post = working("%live", 1, "prompt", '⠙', 101);
+        let post = working("%live", 1, "prompt", '⠙', 180);
         let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
         assert_eq!(result.label(), "NO_RECEIPT");
         assert_eq!(
@@ -483,7 +578,7 @@ mod tests {
     #[test]
     fn idle_to_working_with_large_timer_is_indeterminate() {
         let pre = idle("%live", "prompt", 100);
-        let post = working("%live", 61, "unrelated old work", '⠙', 101);
+        let post = working("%live", 61, "unrelated old work", '⠙', 180);
         let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
         assert_eq!(result.label(), "INDETERMINATE");
         assert!(matches!(
@@ -495,7 +590,7 @@ mod tests {
     #[test]
     fn idle_to_idle_is_no_receipt() {
         let pre = idle("%live", "prompt", 100);
-        let post = idle("%live", "prompt", 101);
+        let post = idle("%live", "prompt", 180);
         let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
         assert_eq!(result.reason(), Some(&ReceiptReason::IdleUnchanged));
     }
@@ -503,7 +598,7 @@ mod tests {
     #[test]
     fn working_to_working_reset_and_content_change_confirms() {
         let pre = working("%live", 58, "before", '⠋', 100);
-        let post = working("%live", 1, "after", '⠙', 101);
+        let post = working("%live", 1, "after", '⠙', 180);
         let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
         assert_eq!(result.label(), "RECEIPT_CONFIRMED");
     }
@@ -511,7 +606,7 @@ mod tests {
     #[test]
     fn working_to_working_without_timer_reset_is_no_receipt() {
         let pre = working("%live", 58, "before", '⠋', 100);
-        let post = working("%live", 59, "after", '⠙', 101);
+        let post = working("%live", 59, "after", '⠙', 180);
         let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
         assert!(matches!(
             result.reason(),
@@ -525,7 +620,7 @@ mod tests {
     #[test]
     fn working_to_working_reset_without_content_change_is_no_receipt() {
         let pre = working("%live", 58, "same", '⠋', 100);
-        let post = working("%live", 1, "same", '⠙', 101);
+        let post = working("%live", 1, "same", '⠙', 180);
         let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
         assert_eq!(
             result.reason(),
@@ -575,6 +670,245 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    // ─────────── K8 legs (omp-orchestrator-d6q2): the window, the two
+    //             inversions, sender-input isolation, anti-vacuity
+
+    /// RETRACTED LEGS, recorded rather than deleted.
+    ///
+    /// Two legs stood here asserting that ANY span below 75 seconds yields
+    /// INDETERMINATE. They passed. They were removed with the blanket floor they
+    /// tested, because the floor would have regressed the live dispatch path -
+    /// `crates/omp-orchestrator/src/main.rs` captures pre at :797 and post at
+    /// :580 with no sleep between them - and because the reasoning behind them
+    /// was wrong: a timer RESET is unambiguous at any spacing, and an
+    /// `Idle -> Working` fresh timer is the strongest receipt the fleet has.
+    ///
+    /// A test that passes is not thereby correct. These two encoded my
+    /// misreading faithfully, which is exactly why deleting them silently would
+    /// have hidden it.
+    ///
+    /// What replaces them is the leg below: the ONE ordering claim that holds at
+    /// every spacing.
+    #[test]
+    fn a_short_but_forward_window_is_still_adjudicated() {
+        // The live caller's shape: captures seconds apart, not 75.
+        let pre = idle("%live", "prompt", 100);
+        let post = working("%live", 1, "accepted packet", '\u{2819}', 101);
+        let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
+        assert_eq!(
+            result.label(),
+            "RECEIPT_CONFIRMED",
+            "a 1-second forward window must still confirm, or the live path regresses: {result:?}"
+        );
+
+        let pre_w = working("%live", 58, "before", '\u{280B}', 100);
+        let post_w = working("%live", 59, "after", '\u{2819}', 101);
+        let no_receipt =
+            assess_receiver_receipt("%live", &pre_w, PostSendObservation::Present(post_w));
+        assert_eq!(
+            no_receipt.label(),
+            "NO_RECEIPT",
+            "a timer that did not reset is unambiguous at any spacing: {no_receipt:?}"
+        );
+    }
+
+    /// THE LEG THAT SHOULD HAVE EXISTED BEFORE THE GATE DID.
+    ///
+    /// Equal timestamps are NOT a fault. `now_unix()` has second resolution, so
+    /// two captures milliseconds apart legitimately carry the same stamp — and
+    /// `ack-stage`'s own fixtures build both captures at `at=100`. A first draft
+    /// of the ordering gate refused `post.at <= pre_send.at` and turned that
+    /// consumer's `RETRY` into `AWAIT_HUMAN`. Caught by running the CONSUMER's
+    /// suite, not by reading the gate — which is the argument for running the
+    /// blast radius rather than the crate.
+    #[test]
+    fn equal_timestamps_are_adjudicated_not_refused() {
+        let pre = idle("%live", "prompt", 100);
+        let post = idle("%live", "prompt", 100);
+        let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
+        assert_eq!(
+            result.label(),
+            "NO_RECEIPT",
+            "equal stamps are second-resolution truncation, not a clock fault: {result:?}"
+        );
+        assert_eq!(result.reason(), Some(&ReceiptReason::IdleUnchanged));
+    }
+
+    /// KNOWN-GOOD, mandatory: the identical evidence at a valid span still
+    /// confirms. Without this the gate is attack-only, and an over-strict gate
+    /// gets routed around — a slower death than no gate.
+    #[test]
+    fn the_same_evidence_at_a_valid_span_still_confirms() {
+        let pre = idle("%live", "prompt", 100);
+        let post = working("%live", 1, "accepted packet", '⠙', 100 + OBSERVATION_WINDOW_MIN_SECS);
+        let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
+        assert_eq!(result.label(), "RECEIPT_CONFIRMED", "{result:?}");
+    }
+
+    /// A post capture stamped BEFORE the pre capture is a clock or ordering
+    /// fault. It must refuse, not wrap to a huge span that would pass the floor.
+    #[test]
+    fn a_reversed_capture_order_refuses_rather_than_wrapping() {
+        let pre = working("%live", 58, "before", '⠋', 500);
+        let post = working("%live", 1, "after", '⠙', 100);
+        let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
+        let text = result.reason().expect("reason").to_string();
+        assert_eq!(result.label(), "INDETERMINATE");
+        assert!(
+            text.contains("span_secs=0"),
+            "saturating_sub must yield 0, not a wrapped span: {text}"
+        );
+    }
+
+    /// The window floor must not suppress verdicts derivable from ONE capture.
+    /// This is the positive control on the gate's PLACEMENT: a wedge marker and
+    /// an open dialog are single-capture facts and stay sound below the floor.
+    #[test]
+    fn single_capture_verdicts_survive_below_the_floor() {
+        let pre = idle("%live", "prompt", 100);
+        let wedge = working("%live", 5, "Press up to edit queued messages", '⠙', 101);
+        // The wedge marker is tick-monitor's call, not a fourth detector here.
+        if matches!(wedge.state, PaneState::Wedged) {
+            let result =
+                assess_receiver_receipt("%live", &pre, PostSendObservation::Present(wedge));
+            assert_eq!(result.label(), "NO_RECEIPT", "{result:?}");
+            assert_eq!(result.reason(), Some(&ReceiptReason::WedgedUnsubmitted));
+        }
+        let dialog_result = assess_receiver_receipt(
+            "%live",
+            &pre,
+            PostSendObservation::Present(dialog("%live", 1, 101)),
+        );
+        assert_eq!(dialog_result.reason(), Some(&ReceiptReason::DialogOpen));
+    }
+
+    /// INVERSION 1 — measured: a send returned `successful: ["4"]` for a packet
+    /// that NEVER ARRIVED. The receiver evidence for that case is an idle pane
+    /// that did not change, and it must be inexpressible as an arrival.
+    #[test]
+    fn a_sender_success_with_an_unchanged_idle_pane_is_not_an_arrival() {
+        let pre = idle("%live", "prompt", 100);
+        let post = idle("%live", "prompt", 100 + OBSERVATION_WINDOW_MIN_SECS + 5);
+        let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
+        assert_ne!(
+            result.label(),
+            "RECEIPT_CONFIRMED",
+            "no sender return value may make this an arrival: {result:?}"
+        );
+        assert_eq!(result.reason(), Some(&ReceiptReason::IdleUnchanged));
+    }
+
+    /// INVERSION 2 — the converse fired the same session: a send reported
+    /// FAILURE while the packet DID land. The receiver evidence confirms, and no
+    /// sender-reported failure can withdraw it, because none is accepted.
+    #[test]
+    fn a_sender_failure_does_not_withdraw_a_receiver_confirmation() {
+        let pre = working("%live", 58, "before", '⠋', 100);
+        let post = working("%live", 1, "after", '⠙', 100 + OBSERVATION_WINDOW_MIN_SECS + 5);
+        let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
+        assert_eq!(result.label(), "RECEIPT_CONFIRMED", "{result:?}");
+    }
+
+    /// ANTI-VACUITY: an EMPTY observation set and a genuine non-arrival are
+    /// different facts. An empty pane census may never produce `DEAD` and may
+    /// never produce `NO_RECEIPT` — only `INDETERMINATE`.
+    #[test]
+    fn an_empty_census_is_an_error_never_a_non_arrival() {
+        let pre = idle("%live", "prompt", 100);
+        for probe in [PostSendObservation::EmptyPaneList, PostSendObservation::Missing] {
+            let result = assess_receiver_receipt("%live", &pre, probe);
+            assert_eq!(
+                result.label(),
+                "INDETERMINATE",
+                "an unobservable receiver is an ERROR, not 'nothing arrived': {result:?}"
+            );
+            assert_ne!(result.label(), "NO_RECEIPT");
+            assert_ne!(result.label(), "DEAD");
+        }
+    }
+
+    /// SENDER-INPUT ISOLATION, checked against the SOURCE rather than asserted
+    /// in prose. `assess_receiver_receipt` cannot read a sender return value
+    /// because no such value is in its signature; this leg proves the crate does
+    /// not smuggle one in by another route.
+    ///
+    /// # Two traps this leg fell into, in order, both recorded because they are
+    /// the same family
+    ///
+    /// 1. **Self-referential input.** The first version wrote the forbidden words
+    ///    as plain literals, and failed on itself: the scanner's input is the file
+    ///    containing the scanner. Cured with `concat!`, the house pattern from
+    ///    `path-literal-guard`, so this file never holds the contiguous needle.
+    /// 2. **A bare scan cannot tell PROSE from CODE.** It still failed, because
+    ///    `successful:` appears in this module's own doc comment quoting the
+    ///    measured inversion, and `sender_success` appears inside a TEST NAME.
+    ///    Both are prose ABOUT the sender path, not code that reads it. That is
+    ///    the identical defect the orchestrator hit the same evening, where
+    ///    `grep -c` returned 1 from a `///` doc comment and nearly became an
+    ///    incomplete-fix report.
+    ///
+    /// So the claim is scoped to what it can actually support: **the PRODUCTION
+    /// source** — everything above the first `#[cfg(test)]` — references no
+    /// sender-side success. Tests legitimately name the inversions they encode.
+    ///
+    /// ANTI-VACUITY, twice: the production slice must be non-empty AND must
+    /// contain a known production symbol, or a zero below is a broken reader
+    /// rather than a clean crate.
+    #[test]
+    fn the_crate_source_references_no_sender_side_success() {
+        let source = include_str!("lib.rs");
+        let production = source
+            .split_once(concat!("#[cfg", "(test)]"))
+            .map_or(source, |(before, _)| before);
+
+        assert!(
+            production.len() > 1_000,
+            "ANTI-VACUITY: the production slice is {} bytes, so the scan covers nothing",
+            production.len()
+        );
+        assert!(
+            production.contains("pub fn assess_receiver_receipt"),
+            "ANTI-VACUITY: the slice does not contain the function under audit, \
+             so every check below is void"
+        );
+        assert!(
+            !production.contains("mod tests"),
+            "the slice must END before the tests, or their prose is scanned as code"
+        );
+
+        // Sender-side vocabulary in the forms this fleet actually emits, built by
+        // `concat!` so the needle exists only at runtime.
+        let forbidden = [
+            concat!("successful", ":"),
+            concat!("robot", "_send"),
+            concat!("send", "_result"),
+            concat!("sender", "_success"),
+            concat!("transport", "_ok"),
+        ];
+        for needle in forbidden {
+            let hits = production.matches(needle).count();
+            assert_eq!(
+                hits, 0,
+                "receiver observation must share no input with the sender path, \
+                 but the production source mentions `{needle}` {hits} time(s)"
+            );
+        }
+    }
+
+    /// The window floor is restated from `pane_truth::TWO_CAPTURE_MIN_SECS`
+    /// rather than imported, so the two must be gated into agreement. A drift
+    /// between two copies of a floor is how one caller enforces 75 and another
+    /// enforces nothing.
+    #[test]
+    fn the_window_floor_matches_pane_truths_authority() {
+        let authority = u64::try_from(pane_truth::TWO_CAPTURE_MIN_SECS)
+            .expect("the authority's floor must be a non-negative number of seconds");
+        assert_eq!(
+            OBSERVATION_WINDOW_MIN_SECS, authority,
+            "receiver-receipt's window floor drifted from pane-truth's authority"
+        );
     }
 }
 
