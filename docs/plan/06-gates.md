@@ -197,16 +197,7 @@ Every member of a *derived* set must satisfy a property. Exceptions live in a de
 
 **Shape here.** MEASURED. The `UNWIRED_LANE_ALLOWANCE` pattern, taken from `franken_lean`. `wired_lanes.rs` carries four independent legs, each owning one predicate, one scan, one allowance, one validator — "Mutating one predicate must leave the other three green: no shared scan, no shared helper beyond `workspace_crate_names` (a pure directory read)" (:557-562). Two allowances are **empty by construction**: `SURFACE_ALLOWANCE` (:596) and `FORBID_ALLOWANCE` (:636). The validators are `every_allowance_row_names_a_lane_and_carries_a_reason` (486-506) and `validate_allowance_rows` (590-604) — the latter requires a reason of **≥ 8 characters**, so a one-character reason is refused too. The maintenance contract is load-bearing: rows are checked against the DERIVED set every run, and stale rows are refused with "allowance names undeclared lane …", which **fired live** when extraction removed two members mid-grade. The harness caught the `installer` lane; **the RED was the pass** — a harness green on first run would have told us nothing.
 
-**A PROJECTED RED BY INSPECTION, found writing this section.** MEASURED input set, not an executed test failure. Leg 3, `every_crate_declares_the_forbid_lint` (:639-672), iterates the derived set (all 26 `crates/*` dirs holding a `Cargo.toml`; the root manifest is `members = ["crates/*"]`, a glob) and requires each `Cargo.toml` to satisfy `text.contains("unsafe_code") && text.contains("forbid")`, with `FORBID_ALLOWANCE` empty. Measured with an inline Python walk of `crates/*/Cargo.toml` and `crates/*/src/{lib,main}.rs`:
-
-```
-crate dirs            : 50
-manifest lint present : 50
-manifest lint MISSING : none
-all src roots forbid  : 49   (missing: tick-monitor)
-```
-
-**Current measurement, not the old six-crate snapshot:** one source root (tick-monitor) lacks the inner attribute, but the union command reports 50 of 50. The gate remains PROJECTED-BY-INSPECTION because no executable conformance test has yet been run against this current set.
+**A PROJECTED RED BY INSPECTION, found writing this section.** The forbid-lint predicate iterates the package set derived by `cargo metadata --format-version 1 --no-deps`, filtered to manifests under `crates/`, and requires each manifest to declare the forbid lint. The set is authoritative and not hand-listed; an empty or unreadable derivation remains an ERROR. The gate is still PROJECTED-BY-INSPECTION because no executable conformance test has yet been run against this current set.
 
 
 Three things follow. **First**, the current property holds by union but not by the stricter both-mechanisms predicate: 50 manifests, 49 source attributes, 49 intersections, and tick-monitor as the one manifest-only crate. **Second**, a new crate can still drift unless the projected conformance gate parses manifests and checks the source attribute. **Third**, substring conjunctions over a whole file remain invalid because comments can satisfy them; parse the manifest and read the lints.rust unsafe_code field.
