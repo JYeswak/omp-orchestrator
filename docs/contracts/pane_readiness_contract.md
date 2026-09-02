@@ -4,31 +4,32 @@ Bead: `omp-orchestrator-pane-readiness-contract-n8c0`
 
 ## Purpose
 
-Defines dispatch readiness for one terminal pane: the five states `pane-dispatch-ready` can
-return (`FREE`, `BUSY`, `WEDGED`, `QUOTA_BLOCKED`, `NO_AGENT`, `UNREADABLE`), which of them are
-*claims*
-and which are *fail-closed non-answers*, and the five laws that separate readiness from liveness
-— `PR-L1` `safe_to_dispatch` is not liveness, `PR-L2` an UNKNOWN classification is not a busy
-claim, `PR-L3` a positive readiness read needs two captures ≥75s apart, `PR-L4` a confident busy
-claim beats a stale free read while an unknown one does not, `PR-L5` `NO_AGENT` is a bare shell
-and never dispatchable. **`PR-L1` is enforced as of the commit below; `PR-L3` is stated here
-and NOT enforced by this crate**, named with the bead that will change it. Documents what IS at the commit below; changes no
-crate source.
+Defines dispatch readiness for one terminal pane: the six states pane-dispatch-ready can return
+(FREE, BUSY, WEDGED, QUOTA_BLOCKED, NO_AGENT, UNREADABLE), which of them are claims
+and which are fail-closed non-answers, and the five laws that separate readiness from liveness.
+— PR-L1 safe_to_dispatch is not liveness, PR-L2 an UNKNOWN classification is not a busy
+claim, PR-L3 a positive readiness read needs two captures ≥75s apart, PR-L4 a confident busy
+claim beats a stale free read while an unknown one does not, PR-L5 NO_AGENT is a bare shell
+and never dispatchable. **PR-L1 and PR-L3 are enforced by the current source.** PR-L1 delegates
+wedge recognition to tick-monitor; PR-L3 delegates two-capture interval and motion evidence to
+PaneObservation. Documents what IS at the commits below; changes no crate source.
 
 ## Contract Artifacts
 
-1. **Canonical artifact:** `crates/pane-dispatch-ready/src/lib.rs` — `PaneDispatchReadyState`,
-   `classify`, `confirm_free`, `apply_composer_rc`, and the three marker regexes. There is
-   deliberately no `artifacts/readiness_v1.json`: the input is a **terminal capture**, and the
-   suite carries its fixtures inline so a reader sees the exact bytes each verdict was derived
-   from rather than a filename.
-2. **Runner:** `cargo test -p pane-dispatch-ready --test readiness_contract`
-3. **Invariant suite:** `crates/pane-dispatch-ready/tests/readiness_contract.rs` — 11 legs. Two
-   are pinned defects that go RED when a law becomes enforced, forcing this document to be
-   updated in the same commit; both were proven to fire by mutation at authoring time.
+1. **Canonical artifact:** crates/pane-dispatch-ready/src/lib.rs — PaneDispatchReadyState,
+   classify, confirm_free, apply_composer_rc, and the marker authority edge. There is deliberately
+   no artifacts/readiness_v1.json: the input is a terminal capture, and the suite carries its
+   fixtures inline so a reader sees the exact bytes each verdict was derived from rather than a
+   filename.
+2. **Runner:** cargo test -p pane-dispatch-ready --test readiness_contract
+3. **Invariant suite:** crates/pane-dispatch-ready/tests/readiness_contract.rs — 13 legs. The
+   original 11-leg characterization suite now includes the post-landing wedge authority and
+   state-registry legs. Former PR-L1 and PR-L3 pinned-defect assertions were replaced when the
+   corresponding source paths became enforced.
 
-> A contract naming no invariant suite is a DESCRIPTION. Item 3 is what makes the pinned defects
+> A contract naming no invariant suite is a DESCRIPTION. Item 3 is what makes the evidence
 > load-bearing instead of a to-do list.
+
 
 ## 1. The state model
 
@@ -38,11 +39,12 @@ admission that the question was not answered, and conflating those two is this d
 
 | ID | state | meaning | kind |
 |---|---|---|---|
-| `PR-S-FREE` | `FREE` | agent present, no busy marker, prompt marker present, composer holds no typed text | **positive claim** |
-| `PR-S-BUSY` | `BUSY` | a busy marker in the 6-line tail, or motion between captures, or no prompt marker in the live region | negative claim, and partly fail-closed |
-| `PR-S-QUOTA` | `QUOTA_BLOCKED` | provider quota exhausted — "not busy, not free; needs spend, not a dispatch" | negative claim, distinct action |
-| `PR-S-NOAGENT` | `NO_AGENT` | no agent process rendering; a bare shell | negative claim, never dispatchable |
-| `PR-S-UNREADABLE` | `UNREADABLE` | empty capture; pane blank or `capture-pane` failed | **non-answer**, fail closed |
+| PR-S-FREE | FREE | agent present, no busy marker, prompt marker present, composer holds no typed text | **positive claim** |
+| PR-S-BUSY | BUSY | a busy marker in the 6-line tail, or motion between captures, or no prompt marker in the live region | negative claim, and partly fail-closed |
+| PR-S-WEDGED | WEDGED | a packet arrived and is parked unsubmitted; an operator must submit or clear it | negative claim, operator action required |
+| PR-S-QUOTA | QUOTA_BLOCKED | provider quota exhausted — not busy, not free; needs spend, not a dispatch | negative claim, distinct action |
+| PR-S-NOAGENT | NO_AGENT | no agent process rendering; a bare shell | negative claim, never dispatchable |
+| PR-S-UNREADABLE | UNREADABLE | empty capture; pane blank or capture-pane failed | **non-answer**, fail closed |
 
 `BUSY` is doing double duty: it carries both "the agent is working: `esc to interrupt`" (a real
 observation) and "no prompt marker in the live region — free-prompt not PROVEN (fail closed)" (an
@@ -53,22 +55,26 @@ overloading `docs/error_codes/exit_code_registry.md` records for exit 1.
 
 | ID | law | enforced by this crate? | evidence |
 |---|---|---|---|
-| `PR-L1` | `safe_to_dispatch` is NOT liveness — a wedged pane accepts a packet and parks it forever | **PARTLY** | a parked packet returns `WEDGED`, not `FREE`; the two verdicts differ on the wire. One named blindness, not liveness — §2.1 |
-| `PR-L2` | an UNKNOWN classification is not a busy claim | **YES**, and the framing needed correcting | §2.2 |
-| `PR-L3` | a positive readiness read needs two captures ≥75s apart (`pane_observation_contract` `PO-L1`) | **NO** | 10s window against a 75s floor, §2.3 — `readiness-l3-motion-window-7523` |
-| `PR-L4` | a CONFIDENT busy claim beats a stale free read; an UNKNOWN one does not | **YES** | §2.4 |
-| `PR-L5` | `NO_AGENT` is a bare shell and never dispatchable | **YES** | §2.5 |
+| PR-L1 | safe_to_dispatch is NOT liveness — a wedged pane accepts a packet and parks it forever | **YES for the named wedge path; not general liveness** | the classifier consults tick-monitor and returns WEDGED, not FREE; §2.1 |
+| PR-L2 | an UNKNOWN classification is not a busy claim | **YES**, and the framing needed correcting | §2.2 |
+| PR-L3 | a positive readiness read needs two captures ≥75s apart (pane_observation_contract PO-L1) | **YES** | PaneObservation enforces the canonical interval and motion evidence; §2.3 |
+| PR-L4 | a CONFIDENT busy claim beats a stale free read; an UNKNOWN one does not | **YES** | §2.4 |
+| PR-L5 | NO_AGENT is a bare shell and never dispatchable | **YES** | §2.5 |
 
-*Tests:* `crates/pane-dispatch-ready/tests/readiness_contract.rs` —
-`l1_a_wedged_pane_still_classifies_free_in_this_crate`,
-`l1_the_wedge_marker_is_detected_by_three_other_crates`,
-`l2_a_codex_pane_can_be_unclassifiable_in_the_state_field`,
-`l2_safe_to_dispatch_tracks_observation_state_not_state`,
-`l3_this_crates_motion_window_is_below_the_75_second_floor`,
-`l4_a_changed_second_capture_overturns_a_provisional_free`,
-`l4_an_unreadable_second_capture_does_not_become_free_or_a_busy_claim`,
-`l5_a_bare_shell_is_no_agent_even_with_a_perfect_prompt`,
-`l5_an_empty_capture_is_unreadable_not_no_agent`.
+*Tests:* crates/pane-dispatch-ready/tests/readiness_contract.rs —
+ l1_a_wedged_pane_is_distinguishable_from_an_idle_one,
+ l1_the_wedge_authority_is_consulted_not_reimplemented,
+ l1_state_registry_round_trips_and_covers_every_state_the_classifier_emits,
+ l2_a_codex_pane_can_be_unclassifiable_in_the_state_field,
+ l2_safe_to_dispatch_tracks_observation_state_not_state,
+ l2_the_observation_channel_was_confidently_wrong_about_a_working_pane,
+ l3_this_crates_motion_window_meets_the_75_second_floor,
+ l4_a_changed_second_capture_overturns_a_provisional_free,
+ l4_an_unreadable_second_capture_does_not_become_free_or_a_busy_claim,
+ l5_a_bare_shell_is_no_agent_even_with_a_perfect_prompt,
+ l5_an_empty_capture_is_unreadable_not_no_agent,
+ a_planted_busy_marker_is_caught_in_the_tail_and_ignored_above_it,
+ a_quota_exhausted_pane_is_neither_busy_nor_free.
 
 ### 2.1 `PR-L1` — the readiness authority now CONSULTS the wedge authority instead of guessing
 
@@ -185,22 +191,23 @@ The advice retracted here survived **six minutes** in a landed contract. That is
 for the pinned-defect pattern: the claim was written down precisely enough to be refuted, and the
 refutation is now a test rather than a memory.
 
-### 2.3 `PR-L3` — this crate's motion window is 1/7.5 of the floor
+### 2.3 PR-L3 — the canonical two-capture floor is enforced
 
 | authority | constant | value |
 |---|---|---|
-| `pane-truth` | `TWO_CAPTURE_MIN_SECS: i64` (`src/lib.rs:39`) | **75** |
-| `tick-monitor` | `MIN_GAP_SECS: u64` (`src/lib.rs:490`) | **75** |
-| `pane_observation_contract` `PO-L1` | two captures | **≥75s** |
-| `pane-dispatch-ready` | `DEFAULT_MOTION_SECS: u64` (`src/lib.rs:36`, slept at `src/main.rs:304`) | **10** |
+| pane-truth | TWO_CAPTURE_MIN_SECS: i64 | **75** |
+| tick-monitor | MIN_GAP_SECS: u64 | **75** |
+| pane_observation_contract PO-L1 | two captures | **≥75s** |
+| pane-dispatch-ready | TWO_CAPTURE_MIN_SECS = omp_types::MIN_TWO_CAPTURE_INTERVAL_SECS | **75** |
 
-`tick-monitor/src/lib.rs:486` records why the floor is 75: *"measured, a lane deep in a long tool
-call has a STATIC timer"*. A pane inside one long tool call renders nothing for far longer than
-10 seconds, so its buffer is unchanged and `confirm_free` keeps the free read.
+The floor is not an idle proof. tick-monitor records why 75 seconds is required: a lane deep in a
+long tool call can have a STATIC timer. The canonical PaneObservation constructor rejects an
+under-floor pair before confirm_free can classify motion as evidence for BUSY or FREE.
 
-The asymmetry decides the severity: `buffer_changed == true` yields `BUSY`, which is fail-closed
-and safe at any window. The unsafe direction is **unchanged-over-10s reading as idle** — a short
-window cannot manufacture a false `BUSY`, only a false `FREE`.
+The former 10-second DEFAULT_MOTION_SECS path is no longer present. The previous short-window
+finding is retained as history in readiness-l3-motion-window-7523; its mutation changed 10 to 75
+and made the pinned leg RED. The current l3 leg asserts the canonical 75-second value and source
+use. A short or zero interval is UNREADABLE and fail-closed, not FREE.
 
 ### 2.4 `PR-L4` — the confident/unknown asymmetry, and it holds
 
@@ -233,20 +240,16 @@ them would make a `capture-pane` failure look like an idle terminal.
 cargo test -p pane-dispatch-ready --test readiness_contract
 ```
 
-Expect **13 passed**. One leg
-(`l3_this_crates_motion_window_is_below_the_75_second_floor`) remains a **pinned defect**: it
-passes because the law is unenforced and goes RED the moment it is enforced. Its failure is the
-signal that this document must be updated, not that the code broke. Proven to fire by mutation —
-`DEFAULT_MOTION_SECS` 10→75 turned it RED (10 passed / 1 failed), restored byte-identically to
-sha256 `1409f2de20f241b4282544870633be5f57ff5fd643bc37921a47b07774ce8837`.
+Expect 13 passed in the current workspace. The original 11-leg characterization suite has two
+additional post-landing legs for the delegated wedge authority and exhaustive state registry.
+PR-L1 and PR-L3 are no longer pinned defects: the former now returns WEDGED for the parked-packet
+fixture, and the latter now uses the canonical 75-second two-capture floor.
 
-**The retired `PR-L1` pin carries a lesson worth more than the pin.** Its reachability was proven
-at authoring time by appending the wedge marker to `BUSY_RE`, which turned both `l1_` legs RED
-(9 passed / 2 failed). But that mutation is **the same shape as the fix the bead explicitly
-forbade** — *"consult one, do not write a fourth"* — because it put the marker string INTO this
-crate's source, which is the only thing the second leg looked at. When the fix actually landed as
-a delegation, leg 1 fired and **leg 2 stayed green**. A reachability proof only covers fixes shaped
-like the mutation that produced it.
+Historical mutation evidence remains reproducible. Mutation A changed the former
+DEFAULT_MOTION_SECS value from 10 to 75 at its single source site and produced 10 passed / 1
+failed. Mutation B appended the wedge marker to BUSY_RE and produced 9 passed / 2 failed. Both
+mutations were restored byte-identically; the recorded source hash is
+1409f2de20f241b4282544870633be5f57ff5fd643bc37921a47b07774ce8837.
 
 ## Cross-References
 
@@ -273,36 +276,31 @@ like the mutation that produced it.
 
 ## Non-Coverage
 
-- **One law is documented as UNENFORCED**, not fixed: `PR-L3`; `PR-L1` was closed by
-  and `PR-L3` (`readiness-l3-motion-window-7523`). No `src/` file was changed.
-- **`crates/refill-idle-panes` is untouched** — another agent owns it — and so is
-  `crates/omp-types`.
-- **The `ntm` classifier is not under test.** `PR-L2` and `PR-L4` are asserted against a dated
-  verbatim `--robot-activity` snapshot, so the suite tests the RULE rather than the live fleet. A
-  live-`ntm` leg would be a flake that measures whatever the fleet happens to be doing.
-- **The composer discriminator is out of scope here.** `apply_composer_rc` is fail-closed on any
-  rc other than 0 or 1, and `crates/pane-dispatch-ready/tests/composer_rc.rs` already owns it.
-- **No transport or receipt claim.** Whether a dispatched packet ARRIVED is
-  `receiver-receipt`'s question, not readiness's.
-- **No queue admission, bead selection, or lifecycle transition.**
-- **`BUSY`'s two meanings are documented, not split.** Splitting them changes an observable
-  contract and belongs with `PR-L1`'s fix, where a new state is already required.
+- This contract does not claim general pane liveness. PR-L1 covers the named parked-packet
+  wedge path, and PR-L3 covers the canonical two-capture evidence floor; neither proves that a
+  pane will continue processing work when those observations are absent.
+- No src/ file was changed for this contract update. The fixes described here are existing source
+  state, not implementation work in this bead.
+- crates/refill-idle-panes is untouched — another agent owns it — and so is crates/omp-types.
+- The ntm classifier is not under test. PR-L2 and PR-L4 use a dated verbatim robot-activity
+  snapshot, so the suite tests the RULE rather than the live fleet. A live-ntm leg would be a flake
+  that measures whatever the fleet happens to be doing.
+- The composer discriminator is out of scope here; composer_rc.rs already owns its fail-closed
+  behavior.
+- No transport, receipt, queue admission, bead selection, or lifecycle-transition claim belongs
+  here.
+- BUSY still carries two meanings. Splitting them changes an observable contract and is separate
+  work from the named wedge and two-capture laws.
 
 ## NO-CLAIM
 
-**Readiness is not liveness, and this contract does not make it so.** `FREE` means every surface
-this crate can read says free at the moment of capture; it does not mean the pane will process
-work. One of the five laws is stated and unenforced — a reader who takes `PR-L3` as a
-guarantee has misread the document, which is why each carries its bead id inline.
+Readiness is not liveness, and this contract does not make it so. FREE means every surface this
+crate can read says free at the moment of capture; it does not mean the pane will process work.
+PR-L1 and PR-L3 are bounded named laws, not universal guarantees: a wedge can render a different
+footer, and two captures can remain static for minutes.
 
-`PR-L2`'s five-pane table is **one snapshot on one machine at one timestamp**, and §2.2.1
-records what happened when a second reader was pointed at the same field two minutes later: it
-refuted the conclusion. Neither measurement is retracted; the *advice* drawn from the first one
-is. Treat every ntm field as advisory and confirm a positive free read against the last status
-line at the two-capture grade. `omp-orchestrator-observation-state-false-idle-riqd` owns
-characterising the failure — one pane over two minutes refutes a universal, and it does not
-establish when `observation_state` lies or how often.
-
-The suite proves the laws for `classify`/`confirm_free` as called directly. It does not prove any
-caller consults them, waits for the second capture, or gates on `observation_state` — three
-separate adoption questions with no test here.
+The PR-L2 five-pane table is one snapshot on one machine at one timestamp, and the amendment
+records a second reader that refuted the first advice. Treat every ntm field as advisory and
+confirm a positive free read against the last status line at the two-capture grade. The suite proves
+classify/confirm_free when called directly; it does not prove any caller consults them, waits for a
+second capture, or gates on observation_state — three separate adoption questions with no test here.

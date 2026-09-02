@@ -1,11 +1,11 @@
-//! INVARIANT SUITE for `docs/contracts/pane_readiness_contract.md` — laws `PR-L1` … `PR-L5`.
+//! INVARIANT SUITE for docs/contracts/pane_readiness_contract.md — laws PR-L1 … PR-L5.
 //!
-//! # Two legs assert a law is NOT enforced, on purpose
+//! # Current enforcement state
 //!
-//! `PR-L1` and `PR-L3` are stated in the contract and unenforced *by this crate*. Those legs
-//! are **pinned defects**: they assert today's behaviour and name the bead that will change
-//! it, so the fix cannot land silently — the leg goes RED and forces the contract to be
-//! updated in the same commit.
+//! PR-L1 and PR-L3 were originally pinned as unenforced laws. The current source now enforces
+//! the named wedge distinction through the existing tick-monitor authority and enforces the
+//! canonical 75-second two-capture floor through PaneObservation. The suite retains the
+//! behavior, authority, and state-registry legs so those fixes cannot regress silently.
 //!
 //! # No live `ntm` dependency
 //!
