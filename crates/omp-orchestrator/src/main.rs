@@ -629,41 +629,62 @@ async fn load_bead_snapshot(cx: &Cx, config: &Config, bead: &str) -> Result<Bead
     parse_br_show_json(&show).map_err(|error| format!("DISPATCH_BLOCKED bead={bead} {error}"))
 }
 
+fn supervisor_claim_identity() -> String {
+    format!("supervisor:{}", std::process::id())
+}
+
 fn receiver_agent_for_dispatch(
     config: &Config,
+    pane: &str,
     bead: &str,
     snapshot: &BeadSnapshot,
 ) -> Result<String, String> {
     if !config.receiver_agent.trim().is_empty() {
         return Ok(config.receiver_agent.trim().to_owned());
     }
-    if let Some(agent) = snapshot.assignee().filter(|agent| !agent.trim().is_empty()) {
+    if let Some(agent) = agent_for_pane(config, pane).filter(|agent| !agent.trim().is_empty()) {
+        return Ok(agent);
+    }
+    if let Some(agent) = snapshot
+        .assignee()
+        .filter(|agent| !agent.trim().is_empty() && !agent.starts_with("supervisor:"))
+    {
         return Ok(agent.to_owned());
     }
     Err(format!(
-        "DISPATCH_BLOCKED bead={bead} receiver agent is missing owner=josh next_action=claim-bead"
+        "DISPATCH_BLOCKED bead={bead} pane={pane} receiver agent is missing owner=josh next_action=claim-bead"
     ))
 }
 
 /// Authorizes one bead packet immediately before construction.
 ///
-/// The refusal names the PANE as well as the bead. Measured 2026-09-01: pid
-/// 70561 emitted 135 `DISPATCHED pane=%1408 bead=omp-orchestrator-815` rows in
-/// one afternoon while that bead was `open`; an operator reading a refusal has
-/// to know which pane to stop feeding, and the fence crate only knows tracker
-/// fields, so the pane is joined here at the transport boundary.
+/// claim_owner is the tracker identity that performed the authorized claim.
+/// It is normally the receiver, except for an unclaimed bead where the
+/// supervisor holds an explicit supervisor:<pid> claim until handoff.
+#[cfg(test)]
 fn authorize_bead_dispatch(
     config: &Config,
     pane: &str,
     bead: &str,
     snapshot: &BeadSnapshot,
 ) -> Result<String, String> {
-    let receiver_agent = receiver_agent_for_dispatch(config, bead, snapshot)?;
-    match authorize(&DispatchIntent::bead(bead, &receiver_agent), Some(snapshot)) {
+    let receiver_agent = receiver_agent_for_dispatch(config, pane, bead, snapshot)?;
+    authorize_bead_dispatch_as(config, pane, bead, snapshot, &receiver_agent)
+}
+
+fn authorize_bead_dispatch_as(
+    config: &Config,
+    pane: &str,
+    bead: &str,
+    snapshot: &BeadSnapshot,
+    claim_owner: &str,
+) -> Result<String, String> {
+    let receiver_agent = receiver_agent_for_dispatch(config, pane, bead, snapshot)?;
+    match authorize(&DispatchIntent::bead(bead, claim_owner), Some(snapshot)) {
         Ok(_) => Ok(receiver_agent),
         Err(error) => Err(format!(
             "DISPATCH_BLOCKED bead={bead} pane={pane} reason={} status={} assignee={} \
-             receiver_agent={receiver_agent} owner=josh next_action=claim-bead command=\"{}\"",
+             receiver_agent={receiver_agent} claim_owner={claim_owner} owner=josh next_action=claim-bead command=\"{}\"",
             error.code(),
             snapshot.status_label(),
             snapshot.assignee().unwrap_or("unassigned"),
@@ -704,37 +725,103 @@ fn validate_receiver_pane(
         None => Ok(()),
     }
 }
+
+async fn claim_bead_for_supervisor(
+    cx: &Cx,
+    config: &Config,
+    pane: &str,
+    bead: &str,
+    snapshot: BeadSnapshot,
+    receiver_agent: &str,
+    tick: u64,
+    claim_enabled: bool,
+) -> Result<(BeadSnapshot, String), String> {
+    let supervisor = supervisor_claim_identity();
+    let unclaimed_open = snapshot.status_label() == "open" && snapshot.assignee().is_none();
+    if !unclaimed_open {
+        let claim_owner = snapshot.assignee().unwrap_or("").to_owned();
+        return Ok((snapshot, claim_owner));
+    }
+    if !claim_enabled {
+        return Err(format!(
+            "DISPATCH_BLOCKED bead={bead} pane={pane} reason=CLAIM_REQUIRED status=open assignee=unassigned receiver_agent={receiver_agent} owner=josh next_action=enable-supervisor-claim"
+        ));
+    }
+
+    let claim_args = vec![
+        "update".to_owned(),
+        bead.to_owned(),
+        "--claim".to_owned(),
+        "--actor".to_owned(),
+        supervisor.clone(),
+    ];
+    let command_output = invoke(cx, config, &config.br, &claim_args)
+        .await
+        .map_err(|error| {
+            format!(
+                "DISPATCH_BLOCKED bead={bead} pane={pane} reason=CLAIM_COMMAND_FAILED receiver_agent={receiver_agent} error={error}"
+            )
+        })?;
+    require_success(&config.br, command_output).map_err(|error| {
+        format!(
+            "DISPATCH_BLOCKED bead={bead} pane={pane} reason=CLAIM_COMMAND_FAILED receiver_agent={receiver_agent} error={error}"
+        )
+    })?;
+
+    let claimed = load_bead_snapshot(cx, config, bead).await?;
+    if claimed.status_label() != "in_progress" || claimed.assignee() != Some(supervisor.as_str()) {
+        return Err(format!(
+            "DISPATCH_BLOCKED bead={bead} pane={pane} reason=CLAIM_READBACK_FAILED status={} assignee={} receiver_agent={receiver_agent} expected_assignee={supervisor} owner=josh next_action=inspect-claim",
+            claimed.status_label(),
+            claimed.assignee().unwrap_or("unassigned")
+        ));
+    }
+    let detail = format!(
+        "bead={bead} pane={pane} assignee={supervisor} receiver_agent={receiver_agent}"
+    );
+    write_heartbeat(config, tick, "DISPATCH_CLAIMED", &detail).map_err(|error| {
+        format!(
+            "DISPATCH_BLOCKED bead={bead} pane={pane} reason=CLAIM_HEARTBEAT_FAILED receiver_agent={receiver_agent} error={error}"
+        )
+    })?;
+    eprintln!("DISPATCH_CLAIMED {detail}");
+    Ok((claimed, supervisor))
+}
+
 /// Prepares one bead dispatch, or refuses.
 ///
-/// # The measured defect this shape exists to prevent
-///
-/// This function used to CLAIM the bead on the receiver's behalf when it
-/// observed `status=open` — `br update <bead> --assignee <receiver> --status
-/// in_progress` — reload the snapshot, and only then call the claim fence. The
-/// fence could therefore never refuse an unclaimed bead: the dispatcher forged
-/// the precondition immediately before checking for it, so `authorize` always
-/// saw an `in_progress` bead owned by the receiver.
-///
-/// That inverts the fourth rule of AGENTS.md — file -> CLAIM -> dispatch. The
-/// claim is an act by the agent that will do the work, and it is the only
-/// evidence that anybody accepted the packet. A dispatcher that manufactures it
-/// destroys the one signal the follow-up detector keys on (assigned +
-/// in_progress + no comment since dispatch), which is why 135 re-dispatches of
-/// `omp-orchestrator-815` to `%1408` produced no alert for 247 minutes on
-/// 2026-09-01 (pid 70561).
-///
-/// So the snapshot is now read once and never written. An unclaimed bead is a
-/// refusal that reaches the operator as a nonzero exit, not a claim.
+/// An unclaimed open bead is claimed atomically by this supervisor as
+/// supervisor:<pid>, never by forging the receiver's ownership. The receiver
+/// remains the transport target and may reassign the bead on first contact.
 async fn prepare_bead_dispatch(
     cx: &Cx,
     config: &Config,
     pane: &str,
     bead: &str,
+    tick: u64,
+    claim_enabled: bool,
 ) -> Result<(BeadSnapshot, String), String> {
-    let snapshot = load_bead_snapshot(cx, config, bead).await?;
-    let receiver_agent = receiver_agent_for_dispatch(config, bead, &snapshot)?;
+    let initial = load_bead_snapshot(cx, config, bead).await?;
+    let receiver_agent = receiver_agent_for_dispatch(config, pane, bead, &initial)?;
     validate_receiver_pane(config, pane, bead, &receiver_agent)?;
-    let receiver_agent = authorize_bead_dispatch(config, pane, bead, &snapshot)?;
+    let (snapshot, claim_owner) = claim_bead_for_supervisor(
+        cx,
+        config,
+        pane,
+        bead,
+        initial,
+        &receiver_agent,
+        tick,
+        claim_enabled,
+    )
+    .await?;
+    let receiver_agent = authorize_bead_dispatch_as(
+        config,
+        pane,
+        bead,
+        &snapshot,
+        &claim_owner,
+    )?;
     Ok((snapshot, receiver_agent))
 }
 
@@ -776,14 +863,24 @@ async fn send_and_verify(
     config: &Config,
     pane: &str,
     bead: &str,
+    receiver_agent: &str,
     snapshot: &BeadSnapshot,
     before: &[u8],
     tick: u64,
 ) -> Result<AckStageResult, String> {
     let title = snapshot.title();
     let body = snapshot.description();
+    let handoff = snapshot
+        .assignee()
+        .filter(|owner| owner.starts_with("supervisor:"))
+        .map(|owner| {
+            format!(
+                "Handoff: {owner} holds this bead for dispatch admission. Before working, claim it as {receiver_agent}: br update {bead} --assignee {receiver_agent} --status in_progress --actor {receiver_agent}.\n"
+            )
+        })
+        .unwrap_or_default();
     let packet = format!(
-        "Objective: complete bead {bead}.\nTarget repository: {}\n\n=== {title} ===\n{body}\n",
+        "Objective: complete bead {bead}.\nTarget repository: {}\n{handoff}\n=== {title} ===\n{body}\n",
         config.repo.display()
     );
     let staged = env::temp_dir().join(format!(
@@ -1737,6 +1834,12 @@ async fn notify_dispatch_result(
         )),
     }
 }
+fn queue_empty_detail(free_capacity_count: usize) -> String {
+    format!(
+        "QUEUE_EMPTY_NEEDS_JOSH owner=josh next_action=authorize-or-create-work free_capacity={free_capacity_count}"
+    )
+}
+
 async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     write_heartbeat(config, tick, "CYCLE_STARTED", "phase=observe")?;
     if let Some(intent) = read_pending_dispatch(config)? {
@@ -1902,11 +2005,13 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             })?;
             let dispatch_result = async {
                 let (snapshot, receiver_agent) =
-                    prepare_bead_dispatch(cx, config, &pane, bead).await?;
+                    prepare_bead_dispatch(cx, config, &pane, bead, tick, true).await?;
                 let dispatch_epoch = now_unix() as i64;
                 write_dispatch_intent(config, &pane, bead)?;
                 let before = capture_pane(cx, config, &pane).await?;
-                let stage = send_and_verify(cx, config, &pane, bead, &snapshot, &before, tick).await?;
+                let stage =
+                    send_and_verify(cx, config, &pane, bead, &receiver_agent, &snapshot, &before, tick)
+                        .await?;
                 let silence =
                     run_silence_watch(cx, config, bead, dispatch_epoch, &receiver_agent).await?;
                 write_heartbeat(
@@ -2053,17 +2158,8 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         SupervisorDecision::QueueEmptyNeedsJosh {
             free_capacity_count,
         } => {
-            write_heartbeat(
-                config,
-                tick,
-                "QUEUE_EMPTY_NEEDS_JOSH",
-                &format!(
-                    "free_capacity={free_capacity_count} next_action=authorize-or-create-work"
-                ),
-            )?;
-            let detail = format!(
-                "QUEUE_EMPTY_NEEDS_JOSH owner=josh next_action=authorize-or-create-work free_capacity={free_capacity_count}"
-            );
+            let detail = queue_empty_detail(free_capacity_count);
+            write_heartbeat(config, tick, "QUEUE_EMPTY_NEEDS_JOSH", &detail)?;
             eprintln!("{detail}");
             return Err(detail);
         }
@@ -2182,6 +2278,20 @@ mod tests {
         runtime.block_on(async {
             let cx = Cx::current().expect("runtime context");
             run_finished_pane_sweep(&cx, config).await
+        })
+    }
+
+    fn run_prepare_for_test(
+        config: &Config,
+        pane: &str,
+        bead: &str,
+        tick: u64,
+        claim_enabled: bool,
+    ) -> Result<(BeadSnapshot, String), String> {
+        let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
+        runtime.block_on(async {
+            let cx = Cx::current().expect("runtime context");
+            prepare_bead_dispatch(&cx, config, pane, bead, tick, claim_enabled).await
         })
     }
 
@@ -2496,36 +2606,127 @@ mod tests {
         assert!(error.contains("pane=%1408"), "{error}");
     }
 
-    /// The dispatch path must never write to the tracker.
+    #[test]
+    fn empty_ready_queue_emits_queue_empty_needs_josh_text() {
+        assert_eq!(
+            queue_empty_detail(3),
+            "QUEUE_EMPTY_NEEDS_JOSH owner=josh next_action=authorize-or-create-work free_capacity=3"
+        );
+    }
+
+    fn open_bead_br_fixture(
+        temp: &tempfile::TempDir,
+        bead: &str,
+    ) -> (Config, PathBuf, PathBuf, String) {
+        let state = temp.path().join("claim-state");
+        let args = temp.path().join("claim-args");
+        let state_path = state.display().to_string();
+        let args_path = args.display().to_string();
+        let supervisor = format!("supervisor:{}", std::process::id());
+        let script = format!(
+            r#"#!/bin/sh
+if [ "$1" = "show" ]; then
+  if [ -e "{state_path}" ]; then
+    printf '[{{"id":"{bead}","title":"title","description":"description","status":"in_progress","assignee":"{supervisor}"}}]\n'
+  else
+    printf '[{{"id":"{bead}","title":"title","description":"description","status":"open","assignee":null}}]\n'
+  fi
+  exit 0
+fi
+if [ "$1" = "update" ]; then
+  printf '%s\n' "$@" > "{args_path}"
+  touch "{state_path}"
+  printf 'updated\n'
+  exit 0
+fi
+exit 2
+"#,
+        );
+        let br = executable_reaper(temp, &script);
+        let mut config = fixture_config(temp.path().join("heartbeat.jsonl"));
+        config.repo = temp.path().to_path_buf();
+        config.br = br.display().to_string();
+        config.receiver_agent = "GreenFrog".to_owned();
+        (config, state, args, supervisor)
+    }
+
+    #[test]
+    fn supervisor_claims_open_bead_before_authorized_dispatch() {
+        let temp = tempfile::tempdir().expect("claim fixture tempdir");
+        let bead = "omp-orchestrator-mj8w";
+        let (config, state, args, supervisor) = open_bead_br_fixture(&temp, bead);
+
+        let (snapshot, receiver) = run_prepare_for_test(&config, "%1408", bead, 17, true)
+            .unwrap_or_else(|error| panic!("supervisor claim failed: {error}; args={:?}", std::fs::read_to_string(&args)));
+
+        assert_eq!(receiver, "GreenFrog");
+        assert_eq!(snapshot.status_label(), "in_progress");
+        assert_eq!(snapshot.assignee(), Some(supervisor.as_str()));
+        let claim_args = std::fs::read_to_string(args).expect("claim command receipt");
+        assert!(claim_args.contains("update"), "{claim_args}");
+        assert!(claim_args.contains(bead), "{claim_args}");
+        assert!(claim_args.contains(&supervisor), "{claim_args}");
+        assert!(!claim_args.contains("GreenFrog"), "receiver must not be forged: {claim_args}");
+        let heartbeat = std::fs::read_to_string(&config.heartbeat_ledger).expect("claim heartbeat");
+        assert!(heartbeat.contains("DISPATCH_CLAIMED"), "{heartbeat}");
+        assert!(heartbeat.contains(bead), "{heartbeat}");
+        assert!(state.exists(), "the claimed state must be durable before dispatch");
+    }
+
+    #[test]
+    fn disabling_supervisor_claim_preserves_known_bad_refusal() {
+        let temp = tempfile::tempdir().expect("claim mutation fixture tempdir");
+        let bead = "omp-orchestrator-mj8w";
+        let (config, state, _args, _supervisor) = open_bead_br_fixture(&temp, bead);
+
+        let error = run_prepare_for_test(&config, "%1408", bead, 17, false)
+            .expect_err("disabled claim transition must refuse the open bead");
+        assert!(error.contains("DISPATCH_BLOCKED"), "{error}");
+        assert!(error.contains("reason=CLAIM_REQUIRED"), "{error}");
+        assert!(!state.exists(), "disabled claim transition must not mutate the bead");
+
+        let (snapshot, receiver) = run_prepare_for_test(&config, "%1408", bead, 18, true)
+            .expect("restored claim transition must dispatch");
+        assert_eq!(receiver, "GreenFrog");
+        assert_eq!(snapshot.assignee(), Some(format!("supervisor:{}", std::process::id()).as_str()));
+        assert!(state.exists(), "restored claim transition must perform the claim");
+    }
+
+    /// The dispatch path must never forge a receiver-owned claim.
     ///
-    /// `prepare_bead_dispatch` used to run `br update <bead> --assignee
-    /// <receiver> --status in_progress` when it saw an `open` bead, then reload
-    /// the snapshot and only then call the fence — so the fence could never
-    /// refuse. This is the source-level guard against that bypass returning:
-    /// the dispatch preparation path holds no `--status in_progress` argument
-    /// vector at all.
+    /// An unclaimed bead may be claimed only by the supervisor identity. The
+    /// receiver remains the transport target and is never written as the
+    /// assignee by dispatch preparation.
     #[test]
     fn dispatch_path_never_claims_on_the_receivers_behalf() {
         let source = include_str!("main.rs");
         let start = source
-            .find("async fn prepare_bead_dispatch")
-            .expect("prepare_bead_dispatch must exist");
+            .find("async fn claim_bead_for_supervisor")
+            .expect("claim_bead_for_supervisor must exist");
         let body = &source[start..];
         let end = body
             .find("\nasync fn run_silence_watch")
             .expect("prepare_bead_dispatch must be followed by run_silence_watch");
         let body = &body[..end];
         assert!(
-            !body.contains("in_progress"),
-            "the dispatch path must not claim a bead on the receiver's behalf: {body}"
+            body.contains("claim_bead_for_supervisor"),
+            "the dispatch path must own the supervisor claim transition: {body}"
         );
         assert!(
-            !body.contains("\"update\""),
-            "the dispatch path must not write to the tracker: {body}"
+            body.contains("\"--claim\""),
+            "the dispatch path must use br's atomic claim operation: {body}"
         );
         assert!(
-            body.contains("authorize_bead_dispatch"),
-            "the dispatch path must call the claim fence: {body}"
+            body.contains("\"--actor\""),
+            "the atomic claim must carry the supervisor actor: {body}"
+        );
+        assert!(
+            !body.contains("\"--assignee\", receiver_agent"),
+            "the dispatch path must never forge the receiver's assignee: {body}"
+        );
+        assert!(
+            body.contains("authorize_bead_dispatch_as"),
+            "the dispatch path must authorize the actual claim owner: {body}"
         );
     }
     #[test]
