@@ -36,6 +36,7 @@ use receiver_receipt::{
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
 use std::env;
+use ack_spine::ledger::StepKind;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -674,6 +675,220 @@ fn write_transport_receipt(
     })
     .to_string();
     write_heartbeat(config, tick, "TRANSPORT_RECEIPT_CAPTURED", &detail)
+}
+
+/// One typed spine record for a step the supervisor just performed.
+///
+/// Routed through `ack_spine::ledger::step` rather than constructing a
+/// `StepRecord`: `emit` is private precisely so every row goes through the
+/// checkpointed primitive, and `assert_step_count` then refuses a row no step
+/// produced. The effect is empty by design — see the comment at the dispatch site.
+async fn emit_step(
+    cx: &Cx,
+    ledger: &mut ack_spine::ledger::StepLedger,
+    kind: StepKind,
+    bead: &str,
+    pane: &str,
+    config: &Config,
+    detail: &str,
+) -> Result<(), String> {
+    ack_spine::ledger::step(
+        cx,
+        ledger,
+        kind,
+        bead,
+        pane,
+        &config.session,
+        detail,
+        |_cx| async {},
+    )
+    .await
+    .map_err(|error| format!("SPINE_STEP_REFUSED kind={} bead={bead} {error}", kind.as_str()))
+}
+
+/// Append the cycle's typed rows to the spine ledger.
+///
+/// `dispatched` carries whether this cycle actually dispatched, because the
+/// anti-vacuity rule is asymmetric: zero steps on a dispatch cycle is an error,
+/// and zero steps on an idle tick is correct.
+fn persist_spine(
+    config: &Config,
+    ledger: &ack_spine::ledger::StepLedger,
+    dispatched: bool,
+) -> Result<(), String> {
+    omp_orchestrator::spine_emit::assert_cycle_emitted(ledger.steps_taken(), dispatched)?;
+    ledger
+        .assert_step_count()
+        .map_err(|error| format!("SPINE_LEDGER_INCONSISTENT {error}"))?;
+    if ledger.rows().is_empty() {
+        return Ok(());
+    }
+    let path = omp_orchestrator::spine_emit::spine_ledger_path(&config.heartbeat_ledger);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|error| format!("SPINE_LEDGER_MKDIR {error}"))?;
+    }
+    let mut body = ledger.to_jsonl();
+    if !body.ends_with('\n') {
+        body.push('\n');
+    }
+    use std::io::Write;
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|error| format!("SPINE_LEDGER_OPEN {} {error}", path.display()))?;
+    file.write_all(body.as_bytes())
+        .map_err(|error| format!("SPINE_LEDGER_WRITE {error}"))
+}
+
+/// How many times this bead has already been dispatched, from the heartbeat's own
+/// `DISPATCHED` rows.
+///
+/// Measured 2026-09-02: 209 `DISPATCHED` rows across 27 distinct beads and 59
+/// (bead, pane) pairs. So `Redispatched` — a kind that existed in the enum and in
+/// zero rows — has real input the moment it is asked for.
+fn prior_dispatch_count(config: &Config, bead: &str) -> usize {
+    let Ok(text) = fs::read_to_string(&config.heartbeat_ledger) else {
+        return 0;
+    };
+    let needle = format!("bead={bead} ");
+    text.lines()
+        .filter(|line| line.contains("\"DISPATCHED\""))
+        // The trailing space matters: without it `bead=omp-orchestrator-2z2`
+        // matches `bead=omp-orchestrator-2z2.1`, and a prefix collision would
+        // inflate the count for every dotted child bead.
+        .filter(|line| line.contains(&needle) || line.contains(&format!("bead={bead}\"")))
+        .count()
+}
+
+/// THE CLOSE HALF. Emit `Closed` and `GradeReceived` for beads this supervisor
+/// dispatched that have since finished.
+///
+/// # Why this exists at all
+///
+/// `Closed`, `GradeReceived` and `Redispatched` appear in ZERO of 6,305 heartbeat
+/// rows. They are the three facts a grader needs to answer *"did this dispatch
+/// finish"*, and nothing in the fleet has ever recorded one. The heartbeat records
+/// dispatch richly and completion not at all.
+///
+/// # Bounded, per the asupersync contract
+///
+/// `br show` is a subprocess per bead, so the pass is capped and cancellation is
+/// checked between beads. A reconcile that could grow with history would make every
+/// tick slower than the last.
+async fn reconcile_completions(
+    cx: &Cx,
+    config: &Config,
+    tick: u64,
+) -> Result<usize, String> {
+    const MAX_BEADS_PER_TICK: usize = 6;
+    let Ok(heartbeat) = fs::read_to_string(&config.heartbeat_ledger) else {
+        return Ok(0);
+    };
+    let spine_path = omp_orchestrator::spine_emit::spine_ledger_path(&config.heartbeat_ledger);
+    let recorded =
+        omp_orchestrator::spine_emit::recorded_closures(&fs::read_to_string(&spine_path).unwrap_or_default());
+    let mut candidates: Vec<(String, String)> = Vec::new();
+    for line in heartbeat.lines().rev() {
+        if !line.contains("\"DISPATCHED\"") {
+            continue;
+        }
+        let Some(bead) = field_after(line, "bead=") else {
+            continue;
+        };
+        let pane = field_after(line, "pane=").unwrap_or_else(|| "unknown".to_owned());
+        if recorded.iter().any(|done| done == &bead) {
+            continue;
+        }
+        if candidates.iter().any(|(known, _)| known == &bead) {
+            continue;
+        }
+        candidates.push((bead, pane));
+        if candidates.len() >= MAX_BEADS_PER_TICK {
+            break;
+        }
+    }
+    if candidates.is_empty() {
+        return Ok(0);
+    }
+    let mut ledger = ack_spine::ledger::StepLedger::new();
+    for (bead, pane) in &candidates {
+        cx.checkpoint()
+            .map_err(|_| "CANCELLED during completion reconcile".to_owned())?;
+        // `BeadSnapshot` carries id/title/description/status/assignee and **no
+        // close_reason** — read from `crates/dispatch-claim-fence/src/lib.rs:48`,
+        // not assumed. `GradeReceived` is decided by the close reason's prefix, so
+        // that type cannot answer this question, and extending a peer's crate is
+        // outside this bead. Parsing the raw tracker JSON here is the narrower
+        // change.
+        let Some((status, close_reason)) = load_close_state(cx, config, bead).await else {
+            // A bead that cannot be read is not a bead that closed. Skipping is the
+            // conservative direction: a missing completion row is recoverable next
+            // tick, a fabricated one is not.
+            continue;
+        };
+        let prior = omp_orchestrator::spine_emit::PriorDispatch {
+            bead_id: bead.clone(),
+            pane_id: pane.clone(),
+            status: status.clone(),
+            close_reason: close_reason.clone(),
+            prior_dispatch_count: 0,
+            already_recorded: false,
+        };
+        for kind in omp_orchestrator::spine_emit::completion_kinds(&prior) {
+            let detail = format!(
+                "status={status} close_reason={}",
+                close_reason.as_deref().unwrap_or("<none>")
+            );
+            emit_step(cx, &mut ledger, kind, bead, pane, config, &detail).await?;
+        }
+    }
+    let steps = ledger.steps_taken();
+    if steps > 0 {
+        persist_spine(config, &ledger, false)?;
+        write_heartbeat(
+            config,
+            tick,
+            "SPINE_COMPLETIONS_RECORDED",
+            &format!("steps={steps} scanned={}", candidates.len()),
+        )?;
+    }
+    Ok(steps)
+}
+
+/// `(status, close_reason)` for one bead, from the raw tracker JSON.
+///
+/// `br show` returns a **bare list**, not an object with an `issues` key — that is
+/// `br list`. Reading the wrong shape here would silently yield `None` for every
+/// bead and the close half would stay empty while looking wired, which is the
+/// failure this whole bead is about.
+///
+/// Returns `None` on any failure, and the caller SKIPS rather than emitting. A
+/// completion row that no tracker state supports is worse than a late one.
+async fn load_close_state(cx: &Cx, config: &Config, bead: &str) -> Option<(String, Option<String>)> {
+    let args = vec!["show".to_owned(), bead.to_owned(), "--json".to_owned()];
+    let output = invoke(cx, config, &config.br, &args).await.ok()?;
+    let bytes = require_success(&config.br, output).ok()?;
+    let parsed: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    let row = parsed.as_array()?.first()?;
+    let status = row.get("status")?.as_str()?.to_owned();
+    let close_reason = row
+        .get("close_reason")
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty())
+        .map(ToOwned::to_owned);
+    Some((status, close_reason))
+}
+
+/// `key=value` up to the next space or quote, from a heartbeat detail string.
+fn field_after(line: &str, key: &str) -> Option<String> {
+    let start = line.find(key)? + key.len();
+    let rest = &line[start..];
+    let end = rest
+        .find(|c: char| c == ' ' || c == '"' || c == ',')
+        .unwrap_or(rest.len());
+    let value = &rest[..end];
+    (!value.is_empty()).then(|| value.to_owned())
 }
 
 async fn load_bead_snapshot(cx: &Cx, config: &Config, bead: &str) -> Result<BeadSnapshot, String> {
@@ -2296,6 +2511,23 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             "ratchet=on-time"
         }
     );
+
+    // eg0m: THE CLOSE HALF, RECONCILED EVERY TICK — ahead of the pending-dispatch
+    // fence and every other branch that can abort, for the reason `leht` measured:
+    // a lane placed after something that can refuse does not run every cycle. This
+    // one especially, because it is the ONLY producer of `Closed` and
+    // `GradeReceived`, which appear in zero of 6,305 heartbeat rows.
+    //
+    // A failure here is a DEGRADED row, never a refused tick: losing the completion
+    // record is bad and stopping the fleet to protect a bookkeeping lane is worse.
+    match reconcile_completions(cx, config, tick).await {
+        Ok(0) => {}
+        Ok(steps) => println!("SPINE_COMPLETIONS_RECORDED steps={steps}"),
+        Err(error) => {
+            write_heartbeat(config, tick, "SPINE_RECONCILE_DEGRADED", &one_line_detail(&error))?;
+            println!("SPINE_RECONCILE_DEGRADED {}", one_line_detail(&error));
+        }
+    }
     // THE MARKER FENCE IS PER-PANE. It withholds the panes whose dispatches are
     // still in flight and leaves every other pane dispatchable.
     //
@@ -2522,15 +2754,36 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             let bead = bead_ids.first().ok_or_else(|| {
                 "QUEUE_UNREADABLE ready count changed before bead selection".to_owned()
             })?;
+            // eg0m: THE SUPERVISOR NOW EMITS THROUGH ack-spine.
+            //
+            // Five of eleven StepKinds appeared in ZERO of 6,305 heartbeat rows, and
+            // four of the five are the close half. `PacketRendered` and
+            // `FenceChecked` were two of the absent five: nothing had ever asked
+            // whether the packet was staged or the fence consulted, so the ledger
+            // could describe a dispatch and not the steps that produced it.
+            //
+            // **The effect closure is intentionally empty.** These record steps the
+            // supervisor already performs on the lines below; moving the effects
+            // inside `step` would restructure a live dispatch path mid-wave. What
+            // `step` still buys is real: a cancellation checkpoint on both sides of
+            // each record, and `assert_step_count` refusing a row that no step
+            // produced.
+            let mut spine = ack_spine::ledger::StepLedger::new();
+            emit_step(cx, &mut spine, StepKind::BeadSelected, bead, &pane, config, "selected from the bv-ordered ready queue").await?;
             let dispatch_result = async {
                 let (snapshot, receiver_agent) =
                     prepare_bead_dispatch(cx, config, &pane, bead, tick, true).await?;
                 let dispatch_epoch = now_unix() as i64;
                 write_dispatch_intent(config, &pane, bead)?;
+                emit_step(cx, &mut spine, StepKind::FenceChecked, bead, &pane, config, "per-pane dispatch fence passed; intent written").await?;
                 let before = capture_pane(cx, config, &pane).await?;
+                emit_step(cx, &mut spine, StepKind::PacketRendered, bead, &pane, config, &format!("receiver={receiver_agent}")).await?;
+                let prior = prior_dispatch_count(config, bead);
+                let send = omp_orchestrator::spine_emit::send_kind(prior);
                 let stage =
                     send_and_verify(cx, config, &pane, bead, &receiver_agent, &snapshot, &before, tick)
                         .await?;
+                emit_step(cx, &mut spine, send, bead, &pane, config, &format!("prior_dispatches={prior} verdict={}", stage.delivery.label())).await?;
                 let silence =
                     run_silence_watch(cx, config, bead, dispatch_epoch, &receiver_agent).await?;
                 write_heartbeat(
@@ -2581,6 +2834,15 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                 }
             }
             .await;
+            // eg0m ACCEPTANCE 5, ANTI-VACUITY: an empty ledger after a dispatch is
+            // an ERROR, because it reads identically to a cycle that never ran.
+            // Persisted after the dispatch resolves so a failed dispatch still
+            // leaves its steps on disk — the rows up to the failure are the
+            // recoverable prefix `step` exists to guarantee.
+            if let Err(error) = persist_spine(config, &spine, true) {
+                write_heartbeat(config, tick, "SPINE_LEDGER_REFUSED", &error)?;
+                println!("SPINE_LEDGER_REFUSED {error}");
+            }
             let report_detail = match &dispatch_result {
                 Ok(outcome) => outcome.detail.clone(),
                 Err(error) => format!("status=DISPATCH_FAILED detail={}", one_line_detail(error)),

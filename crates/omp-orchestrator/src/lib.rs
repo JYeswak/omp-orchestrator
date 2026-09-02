@@ -28,6 +28,8 @@
 //! spinner-stripped content change — a different protocol than ntm's, and
 //! the DispatchReceipt type models both but neither is proven here.
 
+pub mod spine_emit;
+
 use std::collections::BTreeSet;
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -724,6 +726,43 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
         });
     }
 
+    // ack-spine: THE ONE CRATE WHOSE WIRING QUESTION IS "DOES ANYONE EMIT THROUGH
+    // IT", so its row is measured on the emit site and not on a manifest edge.
+    //
+    // `eg0m`. A manifest dependency is an UPPER BOUND on use, never use — the same
+    // distinction that made `finding` show 375 grep hits against 2 real dependency
+    // edges. And `eg0m` forbids the shortcut by name: *"adding a manifest
+    // dependency so the census turns green is the census defect just fixed in
+    // `kwo9`, running backwards — a caller that exists to satisfy a gate."*
+    // Keying on the emit site makes that shortcut ineffective and makes
+    // acceptance 4 mechanical: delete the emission and this row goes RED even
+    // though `Cargo.toml` is untouched.
+    //
+    // THIS IS A BESPOKE PROBE, NOT A HAND-WRITTEN VERDICT. It reads the tree, like
+    // the hook and workflow probes above; `leht`'s defect was a hand-listed
+    // MEMBERSHIP and two HARDCODED verdicts, neither of which this is.
+    {
+        let emitters = crates_emitting(repo_root, "ack-spine");
+        rows.push(GateCensusRow {
+            gate: "ack-spine".into(),
+            reachability: if emitters.is_empty() {
+                GateReachability::Unreachable {
+                    reason: "no crate emits a StepRecord through ack_spine::ledger::step: the \
+                             ledger would hold no production data"
+                        .into(),
+                }
+            } else {
+                GateReachability::Reachable {
+                    trigger: format!("emits StepRecords ({})", emitters.join(", ")),
+                }
+            },
+            // CURATED, therefore BLOCKING: this row was triaged before `leht`.
+            disposition: CensusDisposition::Blocking,
+        });
+    }
+
+    // (the scanner itself lives below, beside the other probes)
+
     // kernel-bypass-gate, pre-delete-citation-check.
     //
     // These two rows were HARDCODED to `Unreachable` with the literal reason
@@ -953,6 +992,133 @@ pub fn disposition_for(crate_name: &str) -> CensusDisposition {
             reason: "NOT NAMED IN ADVISORY_ALLOWANCE -- the ratchet test fails on this".to_owned(),
         },
     }
+}
+
+/// Which OTHER crates actually emit through `target`'s step primitive.
+///
+/// # Why the needle is assembled rather than written
+///
+/// A literal `ack_spine::ledger::step(` in this file would make the census match
+/// ITSELF. That is the self-referential-checker defect this repository has now
+/// produced six times — most exactly, a census that grepped for gate names while
+/// its own table named all of them, and `pgrep -f omp-orchestrator` returning a
+/// `cass search` process whose ARGUMENTS held the string. Assembling the needle
+/// from parts means this source never contains the contiguous text it looks for,
+/// so the scan cannot find the scanner.
+///
+/// # What it does and does not prove
+///
+/// It proves a **call site exists in another crate's source**. It does not prove
+/// the site executes, and a call inside a `#[cfg(test)]` module would count —
+/// `src/` is scanned, and this crate's own tests live in `tests/`, so the exposure
+/// is a test module inside a peer's `src`. Named rather than hidden: the honest
+/// claim is "somebody wrote an emission", which is strictly more than
+/// "somebody declared a dependency".
+pub fn crates_emitting(repo_root: &Path, target: &str) -> Vec<String> {
+    let ident = target.replace('-', "_");
+    let needle = format!("{ident}::{}::{}(", "ledger", "step");
+    let mut out = Vec::new();
+    for crate_name in crates_on_disk(repo_root) {
+        if crate_name == target {
+            continue; // a crate emitting into its own ledger is not a caller
+        }
+        let src = repo_root.join("crates").join(&crate_name).join("src");
+        if !src.is_dir() {
+            continue;
+        }
+        if rust_sources_contain(&src, &needle) {
+            out.push(crate_name);
+        }
+    }
+    out.sort();
+    out
+}
+
+/// Does any `.rs` file under `dir` contain `needle` **in code**? Depth-limited
+/// walk, no subprocess, so it cannot time out the way the old load-dependent grep
+/// did.
+///
+/// # Comments are stripped, and a mutation is why
+///
+/// MEASURED 2026-09-02: removing the supervisor's only emit site left this census
+/// GREEN, so acceptance 4's fires-on-known-bad leg did not bite. The needle was
+/// still matching — **inside the doc comment two functions up that warns about
+/// exactly this**. I assembled the needle from parts so the code would not contain
+/// it, then wrote the literal in the sentence explaining why. **The comment
+/// defeated the mitigation it documented.**
+///
+/// That is the seventh self-referential-checker instance in this repository and my
+/// second today — the first being a `path-literal-guard` refusal where the
+/// sentence explaining the forbidden literal contained the literal. Splitting the
+/// needle protects against the checker's own source; stripping comments protects
+/// against every OTHER file's prose too, which is the general fix. It mirrors
+/// `close-evidence-gate`, which blanks fenced and inline code before harvesting
+/// paths for the same reason.
+fn rust_sources_contain(dir: &Path, needle: &str) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if rust_sources_contain(&path, needle) {
+                return true;
+            }
+        } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
+            if let Ok(text) = std::fs::read_to_string(&path) {
+                if strip_rust_comments(&text).contains(needle) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Blank out `//`-to-end-of-line and `/* … */` spans, preserving line structure.
+///
+/// Deliberately NOT a parser: it does not track string literals, so a needle
+/// inside a string containing `//` could be over-stripped. That direction is safe
+/// for this use — over-stripping can only make the census report LESS reachability,
+/// never more, and the failure mode this exists to stop is a false GREEN.
+fn strip_rust_comments(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    let mut in_block = false;
+    while let Some(c) = chars.next() {
+        if in_block {
+            if c == '*' && chars.peek() == Some(&'/') {
+                chars.next();
+                in_block = false;
+            } else if c == '\n' {
+                out.push('\n');
+            }
+            continue;
+        }
+        if c == '/' {
+            match chars.peek() {
+                Some('/') => {
+                    // Line comment: consume to the newline, keeping the newline so
+                    // line numbers in any future diagnostic still line up.
+                    for next in chars.by_ref() {
+                        if next == '\n' {
+                            out.push('\n');
+                            break;
+                        }
+                    }
+                    continue;
+                }
+                Some('*') => {
+                    chars.next();
+                    in_block = true;
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        out.push(c);
+    }
+    out
 }
 
 /// How many OTHER workspace manifests declare a path dependency on `crate_name`.
@@ -2414,21 +2580,50 @@ mod census_is_measured_not_frozen {
         //
         // Assert the SPECIFIC row instead. `ack-spine` ships a bin and has 0 manifest
         // callers, so its reason must name the BINARY class or the remedy is wrong.
-        let ack_spine = census
-            .rows
-            .iter()
-            .find(|r| r.gate == "ack-spine")
-            .expect("ack-spine must have a census row");
-        match &ack_spine.reachability {
-            GateReachability::Unreachable { reason } => assert!(
-                reason.contains("binary with no invocation site"),
-                "ack-spine ships a bin; its refusal must name the binary class, got: {reason}"
-            ),
-            other => panic!(
-                "ack-spine had 0 manifest callers and no invocation site when measured; \
-                 if that changed, update this leg deliberately. Got {other:?}"
-            ),
+        //
+        // SPECIMEN UNPINNED 2026-09-02 (`eg0m`). This leg named `ack-spine` as the
+        // bin-with-no-invocation-site specimen, and `ack-spine` is now REACHABLE
+        // because the supervisor emits through it — so the leg failed on a change
+        // that FIXED the thing it was watching. Its own message said *"if that
+        // changed, update this leg deliberately"*, and this is that update.
+        //
+        // Pinning a different crate would rebuild the same fragility. The property
+        // that actually matters is the PAIRING: a reason naming the binary class
+        // must belong to a crate that really ships a bin, and a reason naming the
+        // library class must belong to one that does not. That detects the
+        // substitution the old `any()` could not, WITHOUT depending on which crate
+        // happens to be unwired today.
+        let mut bin_class = 0usize;
+        let mut lib_class = 0usize;
+        for row in &census.rows {
+            let GateReachability::Unreachable { reason } = &row.reachability else {
+                continue;
+            };
+            let ships_bin = crate_ships_a_bin(&root, &row.gate);
+            if reason.contains("binary with no invocation site") {
+                bin_class += 1;
+                assert!(
+                    ships_bin,
+                    "{} is told to fix an INVOCATION SITE and ships no binary: the \
+                     remedy sends the operator to the wrong place",
+                    row.gate
+                );
+            } else if reason.contains("library with no manifest dependency") {
+                lib_class += 1;
+                assert!(
+                    !ships_bin,
+                    "{} ships a binary and is told to acquire a MANIFEST DEPENDENCY: \
+                     that is the remedy `eg0m` acceptance 7 forbids",
+                    row.gate
+                );
+            }
         }
+        // ANTI-VACUITY: the pairing above is vacuous if neither class appears.
+        assert!(
+            bin_class + lib_class > 0,
+            "no row carries either class string, so the pairing assertions above \
+             checked nothing"
+        );
     }
 
     fn repo_root_for_test() -> std::path::PathBuf {

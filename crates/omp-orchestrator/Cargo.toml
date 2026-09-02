@@ -19,6 +19,7 @@ name = "omp_orchestrator"
 path = "src/lib.rs"
 
 [dependencies]
+ack-spine = { path = "../ack-spine" }
 ack-stage = { path = "../ack-stage" }
 agent-mail-native = { path = "../agent-mail-native" }
 asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", rev = "fa3c01aec" }
