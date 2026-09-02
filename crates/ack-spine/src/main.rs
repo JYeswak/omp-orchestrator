@@ -203,38 +203,178 @@ async fn selftest(cx: &Cx) -> Result<(), String> {
     ledger
         .assert_non_empty()
         .map_err(|error| error.to_string())?;
-    println!("SELFTEST PASS ack-spine (ledger assertions, anti-vacuity, cancel-consistency)");
+    // ACCEPTANCE 4: the durable-path invariant is asserted BY `--selftest`, so
+    // mutating the resolved path fails the selftest rather than only a unit test.
+    // The bead asks for exactly this, and `--selftest` is the surface an operator
+    // and the gate both run.
+    let pending = durable_pending_path("omp-orchestrator", "ack-spine", "selftest", "josh")?;
+    assert_durable_path_is_owned(&pending)?;
+    // KNOWN-BAD, ONE SPECIMEN PER GUARD. A single planted path is rejected by BOTH
+    // checks, so it cannot prove either one individually bites -- MEASURED: with
+    // the temp-prefix guard disabled the selftest stayed GREEN, because the
+    // scratch-root check caught the same specimen. That is the same defect as an
+    // `any()` over alternatives being unable to detect a substitution among them.
+    //
+    // Specimen A: under the temp root. Both guards reject it, so the leg asserts the
+    // TEMP-SPECIFIC diagnostic. That is what the temp guard is actually for -- the
+    // scratch-root check subsumes it for admission, and only the temp guard can tell
+    // an operator WHICH defect this is.
+    let planted_temp = std::env::temp_dir().join("ack-spine-selftest-known-bad");
+    match assert_durable_path_is_owned(&planted_temp) {
+        Ok(()) => {
+            return Err(format!(
+                "SELFTEST FAIL: a temp path was ADMITTED as durable ({})",
+                planted_temp.display()
+            ))
+        }
+        Err(refusal) => {
+            if !refusal.contains("temp_root=") {
+                return Err(format!(
+                    "SELFTEST FAIL: a temp path was refused for the WRONG reason -- the \
+                     operator cannot tell this is the temp defect: {refusal}"
+                ));
+            }
+        }
+    }
+    // Specimen B: NOT under temp and NOT under the scratch root. Only the
+    // scratch-root requirement can reject this one, so this leg is attributable to
+    // that guard alone.
+    // Built from the filesystem ROOT, not from a developer's home: a hardcoded
+    // "/Users/<name>" literal is what path-literal-guard refuses, and a specimen
+    // that only exists on one machine is not a specimen.
+    let planted_foreign = std::path::PathBuf::from("/").join("ack-spine-known-bad-foreign");
+    match assert_durable_path_is_owned(&planted_foreign) {
+        Ok(()) => {
+            return Err(format!(
+                "SELFTEST FAIL: a path outside the scratch root was ADMITTED as durable ({})",
+                planted_foreign.display()
+            ))
+        }
+        Err(refusal) => {
+            if !refusal.contains("expected_under=") {
+                return Err(format!(
+                    "SELFTEST FAIL: a foreign path was refused for the WRONG reason: {refusal}"
+                ));
+            }
+        }
+    }
+    // ANTI-VACUITY: neither planted path may exist on disk. A check must never be
+    // satisfied by having created the very file it forbids.
+    for planted in [&planted_temp, &planted_foreign] {
+        if planted.exists() {
+            return Err(format!(
+                "SELFTEST FAIL: a known-bad path exists on disk ({}) -- this check created \
+                 the unowned file it exists to prevent",
+                planted.display()
+            ));
+        }
+    }
+    println!(
+        "SELFTEST PASS ack-spine (ledger assertions, anti-vacuity, cancel-consistency, \
+         durable-path ownership; marker root {})",
+        pending.parent().map(|p| p.display().to_string()).unwrap_or_default()
+    );
+    Ok(())
+}
+
+/// Where a durable pending-dispatch marker may live. **There is no fallback.**
+///
+/// # The fallback this replaced, and why announcing it was not enough
+///
+/// This resolution used to end in
+/// `std::env::temp_dir().join(format!("ack-spine-demo-{pid}"))` whenever the
+/// scratch root could not be resolved, with a stderr line saying so. The argument
+/// in the comment was *"a demo that refuses to run because `$HOME` is unusual is
+/// worse than one that runs unattributed and announces it."*
+///
+/// **That is wrong, and the reason is mechanical rather than stylistic.** A marker
+/// under `$TMPDIR` is:
+///
+/// * **unattributable** — nothing in the path or beside it says which session, pane
+///   or agent owns it, so `ScratchRoot::reap` cannot classify it at all;
+/// * **unreapable** — the reaper cannot distinguish a live marker from an abandoned
+///   one, and `scratch-home`'s own contract makes missing owner metadata `UNKNOWN`
+///   and explicitly NOT auto-reapable;
+/// * **gone on reboot**, which is the opposite of durable.
+///
+/// And the announcement does not help: **a stderr line is read by a human, while the
+/// file is reaped by a program.** The message tells the wrong audience. This is the
+/// same shape as every other loud-but-unread signal measured here — 178 unread
+/// ticks, a refusal printed 29 times, a workflow with no runner.
+///
+/// So the refusal is typed and named, and the caller propagates it. A demo that
+/// cannot write an OWNED marker does not write one.
+fn durable_pending_path(
+    session: &str,
+    agent: &str,
+    job: &str,
+    owner: &str,
+) -> Result<std::path::PathBuf, String> {
+    let root = scratch_home::ScratchRoot::default().map_err(|error| {
+        format!(
+            "ACK_SPINE_SCRATCH_UNAVAILABLE reason=root_unresolved detail={error} \
+             owner=josh next_action=set-HOME -- refusing to write a durable marker to an \
+             unattributed temp path that no reaper can own"
+        )
+    })?;
+    let dir = root
+        .create_job(session, agent, job, owner)
+        .map_err(|error| {
+            format!(
+                "ACK_SPINE_SCRATCH_UNAVAILABLE reason=job_uncreatable detail={error} \
+                 owner=josh next_action=check-scratch-root-permissions -- refusing an \
+                 unowned durable marker"
+            )
+        })?;
+    Ok(dir.join("pending.json"))
+}
+
+/// Is this path admissible for a DURABLE marker?
+///
+/// Separated from resolution so the property is checkable without a filesystem, and
+/// so `--selftest` can assert it. **Mutating the resolved path to a temp location
+/// makes this return an error**, which is acceptance 4's leg.
+fn assert_durable_path_is_owned(path: &std::path::Path) -> Result<(), String> {
+    let temp = std::env::temp_dir();
+    // Compared by PREFIX rather than by name: `/private/tmp/x` and `$TMPDIR/x` are
+    // both temp, and a check keyed on the literal string "tmp" would also reject a
+    // legitimate path containing that substring.
+    if path.starts_with(&temp) {
+        return Err(format!(
+            "ACK_SPINE_DURABLE_PATH_UNOWNED path={} temp_root={} -- a durable marker under \
+             the temp root has no session owner and cannot be reaped",
+            path.display(),
+            temp.display()
+        ));
+    }
+    let root = scratch_home::ScratchRoot::default()
+        .map_err(|error| format!("ACK_SPINE_SCRATCH_UNAVAILABLE detail={error}"))?;
+    if !path.starts_with(root.base()) {
+        return Err(format!(
+            "ACK_SPINE_DURABLE_PATH_UNOWNED path={} expected_under={} -- only the scratch \
+             root carries owner metadata",
+            path.display(),
+            root.base().display()
+        ));
+    }
     Ok(())
 }
 
 async fn spine_demo(cx: &Cx) -> Result<(), String> {
-    // SCRATCH-HOME, NOT temp_dir(). A pending-dispatch marker outlives the command that
-    // wrote it -- that is its entire purpose -- and AGENTS.md is explicit: "Do not create
-    // durable scratch under /private/tmp or $TMPDIR; those locations have no session owner
-    // and cannot be safely reaped." A marker in temp_dir() is unattributable (nothing says
-    // which session or pane owns it), unreapable (the reaper cannot distinguish a live
-    // marker from an abandoned one), and gone on reboot.
+    // SCRATCH-HOME, NOT temp_dir(), AND NO FALLBACK. A pending-dispatch marker
+    // outlives the command that wrote it -- that is its entire purpose -- and
+    // AGENTS.md is explicit: "Do not create durable scratch under /private/tmp or
+    // $TMPDIR; those locations have no session owner and cannot be safely reaped."
     //
-    // This is also the production caller `scratch-home` was missing: wired_lanes reported
-    // UNWIRED LANE: scratch-home, and UNWIRED_LANE_ALLOWANCE is empty by design, so the
-    // crate had to be genuinely USED rather than exempted. It is used here because this is
-    // precisely the case it was built for, not to satisfy the gate.
-    //
-    // Falls back to temp_dir() ONLY if the scratch root cannot be resolved, and SAYS SO on
-    // stderr: a demo that refuses to run because $HOME is unusual is worse than one that
-    // runs unattributed and announces it.
-    let pending_path = match scratch_home::ScratchRoot::default()
-        .and_then(|root| root.create_job("omp-orchestrator", "ack-spine", "spine-demo", "josh"))
-    {
-        Ok(dir) => dir.join("pending.json"),
-        Err(error) => {
-            eprintln!(
-                "ACK_SPINE_SCRATCH_UNAVAILABLE {error}; falling back to an UNATTRIBUTED \
-                 temp path that no reaper can own"
-            );
-            std::env::temp_dir().join(format!("ack-spine-demo-{}", std::process::id()))
-        }
-    };
+    // This is also the production caller `scratch-home` was missing: wired_lanes
+    // reported UNWIRED LANE: scratch-home, and UNWIRED_LANE_ALLOWANCE is empty by
+    // design, so the crate had to be genuinely USED rather than exempted.
+    let pending_path =
+        durable_pending_path("omp-orchestrator", "ack-spine", "spine-demo", "josh")?;
+    // Belt AND braces: the resolver cannot currently return a temp path, and this
+    // asserts it anyway, because the next edit to the resolver is the one that
+    // reintroduces the defect.
+    assert_durable_path_is_owned(&pending_path)?;
     let mut spine = AckSpine::new(
         DispatchIntent::new("cp-spine-demo", "%1409", "omp-orchestrator"),
         pending_path,
