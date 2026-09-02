@@ -196,6 +196,52 @@ acceptance list and still be closed by a grader who skips an item — which is w
 level down. And the reverse failure is real too: an acceptance list edited after dispatch can move
 the target under a worker mid-flight, so the edit must precede the send, not follow the report.
 
+### THE RECEIVER MUST **ANSWER**, AND NOBODY WAS EVER TOLD TO
+
+**The lifecycle chain above is missing a beat, and its absence stalled the whole session.**
+`ack-stage` admits exactly one form of authoritative delivery evidence: a comment on the dispatched
+bead whose prefix matches, byte for byte,
+
+```
+ACK <token> on <pane_id> --
+```
+
+where `<token>` is the **last hyphen-segment** of the bead id (`omp-orchestrator-zrq` → `zrq`;
+`omp-orchestrator-kxe.4` → `kxe.4`) and `<pane_id>` carries its percent (`%1413`). The parser is
+`crates/ack-stage/src/lib.rs:243-253`; `:308-320` downgrades an otherwise-`ReceiptConfirmed`
+delivery to `Indeterminate/AckReadbackMissing` when that comment is absent.
+
+**The transport rule is deliberate, not a defect.** `:290-291` states that the tmux literal
+fallback is **always** `INDETERMINATE` on receiver heuristics alone — a timer reset plus a
+content-hash change is explicitly **not** accepted as proof of a uniform transport. So on that path
+the ACK comment is not one evidence source among several; it is **the only one the design admits.**
+
+**Measured 2026-09-02.** Every dispatch packet written this session omitted the instruction, and
+**zero ACK-prefixed comments existed anywhere in the tracker.** `omp-orchestrator-zrq` → `%1413`
+therefore ended `ACK_STAGE_INDETERMINATE / unproven_transport` while the packet had plainly landed:
+**12 `zrq` terms in the pane against a positive control of 10.** The transport worked; the answer
+was never requested. For hours this read as a transport defect (`cp-nq2s9`) when the gap was that
+nobody had been told to reply.
+
+**Why it hid is the same shape as the subsection above.** The sender half is a tested Rust crate.
+The receiver half is a sentence in a hand-written markdown packet — which no gate reads, no test
+covers, and no schema requires. A protocol whose two halves live in different media fails silently
+in the medium that has no checker.
+
+```
+file  →  claim  →  dispatch  →  ACK  →  observe  →  verify  →  close
+                               ^^^^^
+                        the answer nobody asked for
+```
+
+**The mechanical form:** the dispatch site must emit the ACK instruction itself, so a human writing
+markdown cannot omit it. Tracked as `omp-orchestrator-93lo`.
+
+**NO-CLAIM.** An ACK proves the packet **arrived and was read** — nothing about the work. Acceptance
+evidence is still the bead's own criteria, re-run by a grader who is not the implementer. And an ACK
+is forgeable by construction: it is a comment any agent can write, so it is a *delivery* receipt,
+never a *progress* one.
+
 ---
 
 ## The fifth rule: the crates exist to orchestrate OMP, and today they scrape it
