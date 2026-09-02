@@ -1,0 +1,448 @@
+{
+ "schema_version": "omp.b7-terminal-audit.v1",
+ "audited_at_utc": "2026-09-02T14:3xZ",
+ "auditor": "SnowyCanyon pane1 %1397 (non-implementer of the roster)",
+ "roster_source": "docs/inventories/extraction_roster.json (97c4898)",
+ "why": "roster verdicts are all *_CANDIDATE by their own naming; acceptance B7 of omp-orchestrator-815 requires a PER-CRATE audit before any deletion. The Phase A grade verified only that the partition closes and the leaf count matches cargo metadata.",
+ "predicates": {
+  "EE-P1": "the concern is OURS: the crate's source names no other repository as its subject",
+  "EE-P2": "it is a PORT, not a wrapper: it never routes a .sh/.py into Command::new, an argv vector, or fs::read*",
+  "note": "terminal-ness has TWO independent grounds. A single-axis probe reports false positives; measured on this very audit."
+ },
+ "method": "independent re-derivation from control-plane/crates/<name>/src/**/*.rs, not from the roster's own fields",
+ "rows": [
+  {
+   "name": "apfs-wave-guard",
+   "roster_verdict": "TERMINAL_CANDIDATE",
+   "ee_p1_pass": false,
+   "ee_p2_pass": false,
+   "foreign_refs": 1,
+   "shell_refs": 1,
+   "command_new": 1,
+   "terminal_supported_by": [
+    "EE-P1_foreign_subject",
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "arc-checkin",
+   "roster_verdict": "TERMINAL_CANDIDATE",
+   "ee_p1_pass": false,
+   "ee_p2_pass": false,
+   "foreign_refs": 11,
+   "shell_refs": 3,
+   "command_new": 13,
+   "terminal_supported_by": [
+    "EE-P1_foreign_subject",
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "arc-keepalive",
+   "roster_verdict": "TERMINAL_CANDIDATE",
+   "ee_p1_pass": false,
+   "ee_p2_pass": false,
+   "foreign_refs": 4,
+   "shell_refs": 2,
+   "command_new": 14,
+   "terminal_supported_by": [
+    "EE-P1_foreign_subject",
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "assignment-stuck-send-check",
+   "roster_verdict": "WRAPPER_CANDIDATE",
+   "ee_p1_pass": true,
+   "ee_p2_pass": false,
+   "foreign_refs": 0,
+   "shell_refs": 1,
+   "command_new": 3,
+   "terminal_supported_by": [
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "br-comment-form-check",
+   "roster_verdict": "WRAPPER_CANDIDATE",
+   "ee_p1_pass": true,
+   "ee_p2_pass": false,
+   "foreign_refs": 0,
+   "shell_refs": 1,
+   "command_new": 0,
+   "terminal_supported_by": [
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "bughunt-tick",
+   "roster_verdict": "TERMINAL_CANDIDATE",
+   "ee_p1_pass": false,
+   "ee_p2_pass": false,
+   "foreign_refs": 27,
+   "shell_refs": 8,
+   "command_new": 8,
+   "terminal_supported_by": [
+    "EE-P1_foreign_subject",
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "cargo-git-reaper",
+   "roster_verdict": "UNNEEDED_CANDIDATE",
+   "ee_p1_pass": true,
+   "ee_p2_pass": true,
+   "foreign_refs": 0,
+   "shell_refs": 0,
+   "command_new": 7,
+   "terminal_supported_by": [],
+   "extractable": true
+  },
+  {
+   "name": "cfs-honesty-tick",
+   "roster_verdict": "TERMINAL_CANDIDATE",
+   "ee_p1_pass": false,
+   "ee_p2_pass": false,
+   "foreign_refs": 4,
+   "shell_refs": 2,
+   "command_new": 8,
+   "terminal_supported_by": [
+    "EE-P1_foreign_subject",
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "check-publish",
+   "roster_verdict": "WRAPPER_CANDIDATE",
+   "ee_p1_pass": true,
+   "ee_p2_pass": false,
+   "foreign_refs": 0,
+   "shell_refs": 26,
+   "command_new": 5,
+   "terminal_supported_by": [
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "close-evidence-differential",
+   "roster_verdict": "TERMINAL_CANDIDATE",
+   "ee_p1_pass": false,
+   "ee_p2_pass": false,
+   "foreign_refs": 1,
+   "shell_refs": 1,
+   "command_new": 5,
+   "terminal_supported_by": [
+    "EE-P1_foreign_subject",
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "close-evidence-gate",
+   "roster_verdict": "TERMINAL_CANDIDATE",
+   "ee_p1_pass": false,
+   "ee_p2_pass": false,
+   "foreign_refs": 1,
+   "shell_refs": 7,
+   "command_new": 3,
+   "terminal_supported_by": [
+    "EE-P1_foreign_subject",
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "codex-fleet-recovery",
+   "roster_verdict": "UNNEEDED_CANDIDATE",
+   "ee_p1_pass": false,
+   "ee_p2_pass": true,
+   "foreign_refs": 1,
+   "shell_refs": 0,
+   "command_new": 11,
+   "terminal_supported_by": [
+    "EE-P1_foreign_subject"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "controller-tick",
+   "roster_verdict": "TERMINAL_CANDIDATE",
+   "ee_p1_pass": false,
+   "ee_p2_pass": false,
+   "foreign_refs": 3,
+   "shell_refs": 4,
+   "command_new": 11,
+   "terminal_supported_by": [
+    "EE-P1_foreign_subject",
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "coordinator-reservation-preflight",
+   "roster_verdict": "WRAPPER_CANDIDATE",
+   "ee_p1_pass": true,
+   "ee_p2_pass": false,
+   "foreign_refs": 0,
+   "shell_refs": 2,
+   "command_new": 1,
+   "terminal_supported_by": [
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "dispatch-chain-migration-check",
+   "roster_verdict": "WRAPPER_CANDIDATE",
+   "ee_p1_pass": true,
+   "ee_p2_pass": false,
+   "foreign_refs": 0,
+   "shell_refs": 23,
+   "command_new": 0,
+   "terminal_supported_by": [
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "docs-staleness-gate",
+   "roster_verdict": "UNNEEDED_CANDIDATE",
+   "ee_p1_pass": true,
+   "ee_p2_pass": true,
+   "foreign_refs": 0,
+   "shell_refs": 0,
+   "command_new": 6,
+   "terminal_supported_by": [],
+   "extractable": true
+  },
+  {
+   "name": "fleet-arc-report",
+   "roster_verdict": "TERMINAL_CANDIDATE",
+   "ee_p1_pass": false,
+   "ee_p2_pass": true,
+   "foreign_refs": 5,
+   "shell_refs": 0,
+   "command_new": 19,
+   "terminal_supported_by": [
+    "EE-P1_foreign_subject"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "gate-catalog-check",
+   "roster_verdict": "WRAPPER_CANDIDATE",
+   "ee_p1_pass": true,
+   "ee_p2_pass": false,
+   "foreign_refs": 0,
+   "shell_refs": 4,
+   "command_new": 3,
+   "terminal_supported_by": [
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "gate-chain",
+   "roster_verdict": "WRAPPER_CANDIDATE",
+   "ee_p1_pass": true,
+   "ee_p2_pass": false,
+   "foreign_refs": 0,
+   "shell_refs": 4,
+   "command_new": 2,
+   "terminal_supported_by": [
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "harvest-dispatch",
+   "roster_verdict": "TERMINAL_CANDIDATE",
+   "ee_p1_pass": false,
+   "ee_p2_pass": false,
+   "foreign_refs": 1,
+   "shell_refs": 1,
+   "command_new": 3,
+   "terminal_supported_by": [
+    "EE-P1_foreign_subject",
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "harvest-triage",
+   "roster_verdict": "TERMINAL_CANDIDATE",
+   "ee_p1_pass": false,
+   "ee_p2_pass": true,
+   "foreign_refs": 1,
+   "shell_refs": 0,
+   "command_new": 6,
+   "terminal_supported_by": [
+    "EE-P1_foreign_subject"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "hooks-registry-check",
+   "roster_verdict": "WRAPPER_CANDIDATE",
+   "ee_p1_pass": true,
+   "ee_p2_pass": false,
+   "foreign_refs": 0,
+   "shell_refs": 4,
+   "command_new": 1,
+   "terminal_supported_by": [
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "mutation-verify",
+   "roster_verdict": "WRAPPER_CANDIDATE",
+   "ee_p1_pass": true,
+   "ee_p2_pass": false,
+   "foreign_refs": 0,
+   "shell_refs": 3,
+   "command_new": 7,
+   "terminal_supported_by": [
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "prune-cron",
+   "roster_verdict": "UNNEEDED_CANDIDATE",
+   "ee_p1_pass": false,
+   "ee_p2_pass": false,
+   "foreign_refs": 1,
+   "shell_refs": 8,
+   "command_new": 6,
+   "terminal_supported_by": [
+    "EE-P1_foreign_subject",
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "repo-hygiene-wired-proof",
+   "roster_verdict": "TERMINAL_CANDIDATE",
+   "ee_p1_pass": false,
+   "ee_p2_pass": true,
+   "foreign_refs": 1,
+   "shell_refs": 0,
+   "command_new": 7,
+   "terminal_supported_by": [
+    "EE-P1_foreign_subject"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "schedule-drift-check",
+   "roster_verdict": "WRAPPER_CANDIDATE",
+   "ee_p1_pass": true,
+   "ee_p2_pass": false,
+   "foreign_refs": 0,
+   "shell_refs": 2,
+   "command_new": 1,
+   "terminal_supported_by": [
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "scheduled-lane-doctor",
+   "roster_verdict": "TERMINAL_CANDIDATE",
+   "ee_p1_pass": false,
+   "ee_p2_pass": false,
+   "foreign_refs": 5,
+   "shell_refs": 2,
+   "command_new": 2,
+   "terminal_supported_by": [
+    "EE-P1_foreign_subject",
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "scheduled-lane-migration-check",
+   "roster_verdict": "UNNEEDED_CANDIDATE",
+   "ee_p1_pass": true,
+   "ee_p2_pass": true,
+   "foreign_refs": 0,
+   "shell_refs": 0,
+   "command_new": 0,
+   "terminal_supported_by": [],
+   "extractable": true
+  },
+  {
+   "name": "slb-guard-fail-closed",
+   "roster_verdict": "WRAPPER_CANDIDATE",
+   "ee_p1_pass": true,
+   "ee_p2_pass": false,
+   "foreign_refs": 0,
+   "shell_refs": 5,
+   "command_new": 4,
+   "terminal_supported_by": [
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "stack-drift",
+   "roster_verdict": "WRAPPER_CANDIDATE",
+   "ee_p1_pass": true,
+   "ee_p2_pass": false,
+   "foreign_refs": 0,
+   "shell_refs": 1,
+   "command_new": 1,
+   "terminal_supported_by": [
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "xtask",
+   "roster_verdict": "WRAPPER_CANDIDATE",
+   "ee_p1_pass": true,
+   "ee_p2_pass": false,
+   "foreign_refs": 0,
+   "shell_refs": 2,
+   "command_new": 9,
+   "terminal_supported_by": [
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  },
+  {
+   "name": "zestgraph-hook-substrates",
+   "roster_verdict": "TERMINAL_CANDIDATE",
+   "ee_p1_pass": true,
+   "ee_p2_pass": false,
+   "foreign_refs": 0,
+   "shell_refs": 11,
+   "command_new": 5,
+   "terminal_supported_by": [
+    "EE-P2_wrapper"
+   ],
+   "extractable": false
+  }
+ ],
+ "findings": {
+  "terminal_confirmed": 14,
+  "terminal_unsupported": [],
+  "extractable_both_predicates": [
+   "cargo-git-reaper",
+   "docs-staleness-gate",
+   "scheduled-lane-migration-check"
+  ],
+  "headline": "the true extractable denominator is 3, not 18/20/23/24. 14 terminal are all supported; 15 of the 18 'extraction_targets' fail EE-P1 or EE-P2.",
+  "corroboration": "3 was independently derived earlier the same session from docs/contracts/extraction_eligibility_contract.md by a different method (per-crate exec-target counting). Two derivations, same answer."
+ },
+ "no_claim": "This audits CLASSIFICATION, not deletability-in-practice. A terminal crate may still be referenced by a cron entry, a launchd plist, or an installed binary on PATH; that is a separate check and this artifact does not make it. EE-P1/EE-P2 are lexical predicates over source text -- a crate can shell out via a runtime-built path and score 0 shell_refs."
+}
