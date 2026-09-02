@@ -7,8 +7,12 @@
 //! A sender return value is therefore never part of the receipt proof.
 
 use std::fmt;
-pub use tick_monitor::ObservationIdentity;
-use tick_monitor::{classify, Observation, PaneState};
+/// Re-exported so a consumer of [`classify_ack_wait`] can name its inputs without
+/// taking a direct `tick-monitor` dependency it does not otherwise need. Without
+/// this, `omp-orchestrator` — which depends on this crate and not on tick-monitor —
+/// could not spell the argument type.
+pub use tick_monitor::{Observation, ObservationIdentity, PaneState};
+use tick_monitor::classify;
 
 /// How much the receiver census proves about the named pane.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -211,6 +215,168 @@ pub const MAX_IDLE_TO_WORKING_TIMER_SECS: u64 = 30;
 /// asserts the two agree, with `pane-truth` as a dev-dependency only.
 pub const OBSERVATION_WINDOW_MIN_SECS: u64 = 75;
 
+
+/// What an expired ACK wait is allowed to conclude.
+///
+/// # The defect (`omp-orchestrator-iis6`)
+///
+/// `main.rs:47` held `const RECEIPT_TIMEOUT: Duration = Duration::from_secs(30)` — a
+/// bare literal beside `DEFAULT_COMMAND_TIMEOUT`, with no reasoning at its definition
+/// site. On expiry the loop emitted
+/// `ACK_STAGE_RETRY_BLOCKED … reason=ack_readback_missing after=30s` **whether the
+/// receiving pane was mid-tool-call or dead.** A premature `AWAIT_HUMAN` interrupts a
+/// person over work that was proceeding correctly.
+///
+/// # WIDENING THE NUMBER IS NOT THE FIX
+///
+/// Observed pane timers this session sat at **120s, 1320s and 1440s inside a single
+/// tool call**. No fixed constant separates *busy* from *unreachable*, so a longer
+/// window only moves the point at which it guesses wrong. **The window decides when
+/// we re-check; it must not decide whether a human is called.**
+///
+/// # The discriminator, and it is already paid for
+///
+/// [`OBSERVATION_WINDOW_MIN_SECS`] above is 75s and carries the asymmetry that fixes
+/// it: *a missed freeze costs idle minutes, a false freeze destroys work in flight.*
+/// The same evidence answers this question — **is the pane's timer advancing across
+/// two captures at least that far apart?** A pane whose timer advances is demonstrably
+/// working and owes no human anything; the ACK is merely late.
+///
+/// So this reuses the existing floor rather than introducing a second number. There is
+/// no `ACK_WAIT_SECS` constant, deliberately: adding one would be the bare literal
+/// again, one crate over.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AckWaitVerdict {
+    /// Timer advanced across a window at or beyond the floor. **Retry next tick; do
+    /// NOT escalate.** This is the arm that did not exist.
+    BusyStillWorking {
+        timer_from: u64,
+        timer_to: u64,
+        span_secs: u64,
+    },
+    /// The pane is not working and produced no ack. A human is owed.
+    Unreachable { reason: &'static str },
+    /// Not enough separation to judge motion. **Restrictive: it is neither a busy
+    /// finding nor a death claim**, and collapsing it into either is the defect this
+    /// enum exists to prevent.
+    Indeterminate { reason: &'static str },
+}
+
+impl AckWaitVerdict {
+    /// Whether a human must be interrupted. Only `Unreachable` earns that.
+    pub fn owes_a_human(&self) -> bool {
+        matches!(self, AckWaitVerdict::Unreachable { .. })
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            AckWaitVerdict::BusyStillWorking { .. } => "ACK_PENDING_WORKER_BUSY",
+            AckWaitVerdict::Unreachable { .. } => "ACK_READBACK_MISSING",
+            AckWaitVerdict::Indeterminate { .. } => "ACK_WAIT_INDETERMINATE",
+        }
+    }
+
+    /// The action, from the variant, so a refusal string cannot drift from the state
+    /// that produced it — the correction `GateReachability::next_action` needed.
+    pub fn next_action(&self) -> &'static str {
+        match self {
+            AckWaitVerdict::BusyStillWorking { .. } => "retry-next-tick",
+            AckWaitVerdict::Unreachable { .. } => "inspect-pane-or-redispatch",
+            AckWaitVerdict::Indeterminate { .. } => "re-observe-past-the-window-floor",
+        }
+    }
+
+    /// The reason string, or empty for the busy arm which carries numbers instead.
+    /// Exists so two verdicts can be compared on their reason without a caller
+    /// re-matching the enum and drifting from it.
+    pub fn reason_or_empty(&self) -> &'static str {
+        match self {
+            AckWaitVerdict::BusyStillWorking { .. } => "",
+            AckWaitVerdict::Unreachable { reason }
+            | AckWaitVerdict::Indeterminate { reason } => reason,
+        }
+    }
+}
+
+/// Classify an expired ACK wait from the two captures the loop already takes.
+///
+/// Pure and clock-injected, because the never-acking case and the slow-acking case
+/// currently produce the same verdict on live data — so a guard written inline could
+/// not be shown to bite in either direction. That lesson is `kxe.6`'s: a guard on a
+/// condition today's data does not exhibit is indistinguishable from a comment.
+pub fn classify_ack_wait(first: &Observation, last: &Observation) -> AckWaitVerdict {
+    if first.pane_id != last.pane_id {
+        return AckWaitVerdict::Indeterminate {
+            reason: "PANE_ID_MISMATCH",
+        };
+    }
+    // Saturating, and the ordering is checked rather than assumed: a backward-stamped
+    // pair is a clock fault, not a zero-length window.
+    if last.at < first.at {
+        return AckWaitVerdict::Indeterminate {
+            reason: "CAPTURES_OUT_OF_ORDER",
+        };
+    }
+    let span_secs = last.at - first.at;
+    match (&first.state, &last.state) {
+        // THE ARM THAT DID NOT EXIST. Motion is only observable across a window at or
+        // beyond the floor; below it, an unchanged timer means nothing.
+        (
+            PaneState::Working { timer_secs: from },
+            PaneState::Working { timer_secs: to },
+        ) => {
+            if span_secs < OBSERVATION_WINDOW_MIN_SECS {
+                return AckWaitVerdict::Indeterminate {
+                    reason: "WINDOW_BELOW_FLOOR",
+                };
+            }
+            if to > from {
+                AckWaitVerdict::BusyStillWorking {
+                    timer_from: *from,
+                    timer_to: *to,
+                    span_secs,
+                }
+            } else {
+                // A working spinner whose timer did NOT advance across 75s is the
+                // wedge `pane-truth` already names; it is not busy.
+                AckWaitVerdict::Unreachable {
+                    reason: "TIMER_DID_NOT_ADVANCE_ACROSS_THE_FLOOR",
+                }
+            }
+        }
+        // An open dialog is a pane waiting on a person, which is a human debt already
+        // and must not be reported as a missing ack.
+        (_, PaneState::Dialog { .. }) => AckWaitVerdict::Unreachable {
+            reason: "PANE_IS_BLOCKED_ON_A_DIALOG",
+        },
+        (_, PaneState::Wedged) => AckWaitVerdict::Unreachable {
+            reason: "PANE_IS_WEDGED",
+        },
+        // Idle with no ack after a full wait: it read the packet and did not answer,
+        // or never got it. Either way a person is owed.
+        (_, PaneState::Idle) => AckWaitVerdict::Unreachable {
+            reason: "PANE_IDLE_WITH_NO_ACK",
+        },
+        (_, PaneState::Working { .. }) => AckWaitVerdict::Indeterminate {
+            reason: "NO_PRIOR_WORKING_CAPTURE_TO_COMPARE",
+        },
+        // The compiler named these two, and they are genuinely different facts. A
+        // wildcard arm would have swallowed both -- which `state-wildcard-lint`
+        // forbids on state-like enums, and this is why.
+        //
+        // A 402 is a pane stopped by a QUOTA, not by our dispatch: no amount of
+        // waiting or re-dispatching clears it, so it owes a human with its own reason
+        // rather than reading as a missing ack.
+        (_, PaneState::ProviderError402) => AckWaitVerdict::Unreachable {
+            reason: "PANE_HALTED_ON_PROVIDER_402",
+        },
+        // `Unproven` is the classifier declining to answer. Reporting it as
+        // unreachable would turn "we could not tell" into a death claim.
+        (_, PaneState::Unproven) => AckWaitVerdict::Indeterminate {
+            reason: "PANE_STATE_UNPROVEN",
+        },
+    }
+}
 /// Convert a captured pane render into the shared tick-monitor observation shape.
 ///
 /// tick-monitor owns last-line anchoring, timer parsing, dialog detection, and
@@ -998,5 +1164,200 @@ mod escalation_tests {
         // If it returned KeepPolling, the 6q5 bug would reproduce silently.
         let result = escalate_non_delivery(&PaneState::Idle, ComposerEvidence::Free);
         assert_ne!(result, NonDeliveryEscalation::KeepPolling);
+    }
+}
+
+#[cfg(test)]
+mod ack_wait_tests {
+    use super::*;
+    use tick_monitor::{Observation, ObservationIdentity, PaneState};
+
+    fn obs(state: PaneState, at: u64) -> Observation {
+        Observation {
+            pane_id: "%1408".to_owned(),
+            state,
+            hash: 0,
+            at,
+            epoch: "e".to_owned(),
+            sequence: at,
+            changed_at: "c".to_owned(),
+        }
+    }
+
+    /// ACCEPTANCE 3, the arm that did not exist. A pane whose timer ADVANCES across
+    /// the floor is demonstrably working and owes no human anything.
+    #[test]
+    fn an_advancing_timer_across_the_floor_is_busy_not_unreachable() {
+        let first = obs(PaneState::Working { timer_secs: 120 }, 1_000);
+        let last = obs(
+            PaneState::Working { timer_secs: 200 },
+            1_000 + OBSERVATION_WINDOW_MIN_SECS,
+        );
+        let verdict = classify_ack_wait(&first, &last);
+        assert_eq!(
+            verdict,
+            AckWaitVerdict::BusyStillWorking {
+                timer_from: 120,
+                timer_to: 200,
+                span_secs: OBSERVATION_WINDOW_MIN_SECS,
+            }
+        );
+        // THE WHOLE POINT: no human is interrupted.
+        assert!(!verdict.owes_a_human());
+        assert_eq!(verdict.next_action(), "retry-next-tick");
+        assert_eq!(verdict.label(), "ACK_PENDING_WORKER_BUSY");
+    }
+
+    /// ACCEPTANCE 4, the half that refuses the cheap fix. **A pane that never acks
+    /// must stay a human debt at ANY window**, so widening cannot launder it.
+    /// Timer-advance is the discriminator, not elapsed time.
+    #[test]
+    fn a_pane_that_never_acks_stays_a_human_debt_at_every_window() {
+        for span in [
+            0,
+            30,
+            OBSERVATION_WINDOW_MIN_SECS,
+            OBSERVATION_WINDOW_MIN_SECS * 100,
+        ] {
+            // Idle at the end means it is not working and produced no ack.
+            let verdict = classify_ack_wait(
+                &obs(PaneState::Working { timer_secs: 10 }, 0),
+                &obs(PaneState::Idle, span),
+            );
+            assert!(
+                verdict.owes_a_human(),
+                "an idle, un-acking pane must owe a human at span={span}, got {verdict:?}"
+            );
+            assert_eq!(verdict.label(), "ACK_READBACK_MISSING");
+        }
+    }
+
+    /// A working spinner whose timer does NOT advance across the floor is the wedge
+    /// `pane-truth` already names. Busy and wedged are the two states a single
+    /// capture cannot separate, which is why the floor exists.
+    #[test]
+    fn a_frozen_timer_across_the_floor_is_unreachable_not_busy() {
+        let verdict = classify_ack_wait(
+            &obs(PaneState::Working { timer_secs: 300 }, 0),
+            &obs(
+                PaneState::Working { timer_secs: 300 },
+                OBSERVATION_WINDOW_MIN_SECS,
+            ),
+        );
+        assert_eq!(
+            verdict,
+            AckWaitVerdict::Unreachable {
+                reason: "TIMER_DID_NOT_ADVANCE_ACROSS_THE_FLOOR"
+            }
+        );
+        assert!(verdict.owes_a_human());
+    }
+
+    /// RESTRICTIVE MIDDLE. Below the floor, an unchanged timer means nothing — and
+    /// **`Indeterminate` must be neither a busy finding nor a death claim.** The old
+    /// code had no such state: everything that was not confirmed owed a human.
+    #[test]
+    fn below_the_floor_the_answer_is_indeterminate_in_both_directions() {
+        let short = classify_ack_wait(
+            &obs(PaneState::Working { timer_secs: 10 }, 0),
+            &obs(
+                PaneState::Working { timer_secs: 40 },
+                OBSERVATION_WINDOW_MIN_SECS - 1,
+            ),
+        );
+        assert_eq!(
+            short,
+            AckWaitVerdict::Indeterminate {
+                reason: "WINDOW_BELOW_FLOOR"
+            }
+        );
+        assert!(
+            !short.owes_a_human(),
+            "an unmeasurable window must not interrupt a human"
+        );
+        assert_eq!(short.next_action(), "re-observe-past-the-window-floor");
+
+        // 30s -- the OLD bound -- is below the floor, so the old window could not
+        // have answered this question even in principle. That is the bead's thesis.
+        assert!(30 < OBSERVATION_WINDOW_MIN_SECS);
+    }
+
+    /// The two states the COMPILER named. A wildcard arm would have swallowed both,
+    /// and `state-wildcard-lint` forbids that on state-like enums for this reason.
+    /// A 402 is a quota halt no re-dispatch clears; `Unproven` is the classifier
+    /// declining to answer, and calling that unreachable turns "cannot tell" into a
+    /// death claim.
+    #[test]
+    fn a_quota_halt_and_an_unproven_state_are_different_facts() {
+        let quota = classify_ack_wait(
+            &obs(PaneState::Working { timer_secs: 1 }, 0),
+            &obs(PaneState::ProviderError402, OBSERVATION_WINDOW_MIN_SECS),
+        );
+        assert_eq!(
+            quota,
+            AckWaitVerdict::Unreachable {
+                reason: "PANE_HALTED_ON_PROVIDER_402"
+            }
+        );
+        let unproven = classify_ack_wait(
+            &obs(PaneState::Working { timer_secs: 1 }, 0),
+            &obs(PaneState::Unproven, OBSERVATION_WINDOW_MIN_SECS),
+        );
+        assert!(!unproven.owes_a_human(), "cannot-tell is not a death claim");
+        assert_ne!(quota.reason_or_empty(), unproven.reason_or_empty());
+    }
+
+    /// Clock and identity faults must not be laundered into a verdict about the pane.
+    #[test]
+    fn a_mismatched_pane_or_a_backward_clock_refuses_to_judge() {
+        let mut other = obs(PaneState::Idle, OBSERVATION_WINDOW_MIN_SECS);
+        other.pane_id = "%9999".to_owned();
+        assert_eq!(
+            classify_ack_wait(&obs(PaneState::Working { timer_secs: 1 }, 0), &other),
+            AckWaitVerdict::Indeterminate {
+                reason: "PANE_ID_MISMATCH"
+            }
+        );
+        // Backward-stamped pair: a clock fault, NOT a zero-length window. Saturating
+        // subtraction would have silently produced span=0 and read as below-floor.
+        assert_eq!(
+            classify_ack_wait(
+                &obs(PaneState::Working { timer_secs: 1 }, 500),
+                &obs(PaneState::Working { timer_secs: 2 }, 100)
+            ),
+            AckWaitVerdict::Indeterminate {
+                reason: "CAPTURES_OUT_OF_ORDER"
+            }
+        );
+    }
+
+    /// ANTI-VACUITY: exactly one variant may interrupt a human, and at least one
+    /// must. A classifier where none owes a human never escalates; one where all do
+    /// is the defect we started from.
+    #[test]
+    fn exactly_the_unreachable_arm_owes_a_human() {
+        let busy = AckWaitVerdict::BusyStillWorking {
+            timer_from: 1,
+            timer_to: 2,
+            span_secs: 75,
+        };
+        let dead = AckWaitVerdict::Unreachable { reason: "X" };
+        let unknown = AckWaitVerdict::Indeterminate { reason: "Y" };
+        assert_eq!(
+            [&busy, &dead, &unknown]
+                .iter()
+                .filter(|v| v.owes_a_human())
+                .count(),
+            1,
+            "exactly one arm may interrupt a human"
+        );
+        // And the three labels must be distinct, or an operator reading a log cannot
+        // tell which happened.
+        let labels = [busy.label(), dead.label(), unknown.label()];
+        let mut sorted = labels;
+        sorted.sort_unstable();
+        let mut dedup = sorted.to_vec();
+        dedup.dedup();
+        assert_eq!(dedup.len(), 3, "labels collide: {labels:?}");
     }
 }

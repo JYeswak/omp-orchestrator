@@ -1044,10 +1044,24 @@ async fn send_and_verify(
     let deadline = Instant::now() + RECEIPT_TIMEOUT;
     let mut attempts_so_far = 0u32;
     let composer_rules = composer_typed::Rules::default();
+    // iis6: keep the FIRST and LAST observations so an expired wait can DISCRIMINATE
+    // busy from unreachable instead of reporting `ack_readback_missing` for both.
+    // The first must be a WORKING capture: comparing against a pre-send Idle would
+    // yield `NO_PRIOR_WORKING_CAPTURE_TO_COMPARE` and lose the motion evidence.
+    let mut first_working: Option<receiver_receipt::Observation> = None;
+    let mut latest: Option<receiver_receipt::Observation> = None;
     loop {
         cx.checkpoint()
             .map_err(|_| "CANCELLED while verifying receiver receipt".to_owned())?;
         let (post_send, pane_capture) = post_send_observation(cx, config, pane).await;
+        if let receiver_receipt::PostSendObservation::Present(observation) = &post_send {
+            if first_working.is_none()
+                && matches!(observation.state, receiver_receipt::PaneState::Working { .. })
+            {
+                first_working = Some(observation.clone());
+            }
+            latest = Some(observation.clone());
+        }
         let ack = read_ack_readback(cx, config, bead, pane).await?;
         let stage = assess_ack_stage(&AckStageInput {
             bead_id: bead.to_owned(),
@@ -1170,8 +1184,53 @@ async fn send_and_verify(
                 .reason()
                 .map(ToString::to_string)
                 .unwrap_or_else(|| "unclassified".to_owned());
+            // iis6: THE WINDOW DECIDES WHEN WE RE-CHECK, NOT WHETHER A HUMAN IS
+            // CALLED. Before this, every expired wait returned
+            // `ack_readback_missing` — the same verdict for a pane mid-tool-call and
+            // a dead one. Observed timers sat at 120s, 1320s and 1440s inside a
+            // single tool call, so no constant separates those states; the
+            // discriminator is whether the timer ADVANCED across
+            // `OBSERVATION_WINDOW_MIN_SECS`.
+            let discriminated = match (&first_working, &latest) {
+                (Some(first), Some(last)) => {
+                    Some(receiver_receipt::classify_ack_wait(first, last))
+                }
+                _ => None,
+            };
+            if let Some(verdict) = &discriminated {
+                if !verdict.owes_a_human() {
+                    // Busy or unmeasurable: a retryable typed row, and NOT an error,
+                    // so the tick does not escalate. The ack is late, not absent.
+                    write_heartbeat(
+                        config,
+                        tick,
+                        "ACK_WAIT_PENDING",
+                        &format!(
+                            "pane={pane} bead={bead} verdict={} reason={} next_action={} after={}s",
+                            verdict.label(),
+                            verdict.reason_or_empty(),
+                            verdict.next_action(),
+                            RECEIPT_TIMEOUT.as_secs(),
+                        ),
+                    )?;
+                }
+            }
+            let discriminator = discriminated
+                .as_ref()
+                .map(|v| {
+                    format!(
+                        " discriminator={} discriminator_reason={} owes_human={}",
+                        v.label(),
+                        v.reason_or_empty(),
+                        v.owes_a_human()
+                    )
+                })
+                // Absent evidence is NAMED, never silently absent: a wait with no
+                // working capture cannot discriminate and must say so rather than
+                // letting the reader assume it did.
+                .unwrap_or_else(|| " discriminator=NO_WORKING_CAPTURE owes_human=unknown".to_owned());
             return Err(format!(
-                "ACK_STAGE_RETRY_BLOCKED pane={pane} bead={bead} action={} verdict={} reason={} after={}s",
+                "ACK_STAGE_RETRY_BLOCKED pane={pane} bead={bead} action={} verdict={} reason={} after={}s{discriminator}",
                 stage.action.label(),
                 stage.delivery.label(),
                 reason,
