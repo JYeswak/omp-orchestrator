@@ -406,3 +406,17 @@ omp_surface = "none reachable for SCRATCH WORKSPACE"
 why = "test-only scratch home used to isolate filesystem fixtures; it is not an OMP integration surface"
 instead_we = "keep fixture state under an explicit temporary root"
 negative_evidence = "the crate is an extraction workspace helper, not a consumer of the installed OMP surface"
+
+[crates.staged-build-gate]
+classification = "a"
+omp_surface = "none reachable"
+why = "A pre-commit gate over the git INDEX. OMP exposes no surface that answers 'does the crate this commit touches compile' -- the 42 inbound RPC commands address a SESSION, not a repository, and `--mode=rpc` is single-session per REVISION 2 above. cargo is the only oracle for this question."
+instead_we = "run `cargo build -p <crate>` per touched crate through subprocess-contract, in a dedicated CARGO_TARGET_DIR, and refuse when the index diverges from the worktree"
+negative_evidence = "Measured 2026-09-02: an uncompilable plan-assemble was in HEAD and `installer --install` builds the whole workspace, so it blocked installing EVERY binary. Six existing hook gates are properties of the file TEXT; not one compiles anything."
+
+[crates.omp-surface-consumption]
+classification = "c"
+omp_surface = "the inbound JSON-RPC command set, derived live from the installed bundle"
+why = "This crate's whole job IS the OMP surface: it enumerates the inbound command set and maps each method to the crate consuming it. Classification (c) -- a capability we largely do not use -- with the caveat below."
+instead_we = "nothing; this is the measuring instrument, not a scraper"
+negative_evidence = "Measured 2026-09-02 at v18.1.3: 42 inbound commands, 9 mapped, 33 unmapped. `41b` recorded ZERO consumed from four greps that cannot match a quoted method name. AGENTS.md's own derivation command no longer runs -- its anchor `let w=async(v)=>` occurs 0 times in the installed bundle. `consumed_by` is an UPPER BOUND: a quoted method name is a mention, not a call."
