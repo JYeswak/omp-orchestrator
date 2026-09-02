@@ -2,10 +2,11 @@
 
 //! One discoverable scratch location per NTM session and pane.
 //!
-//! Long-lived throwaway work belongs below [`DEFAULT_BASE`], not `/private/tmp` or
-//! `$TMPDIR`. A job directory is auto-reapable only when its owner sidecar is
-//! present, valid, and agrees with the directory identity. Unknown ownership is
-//! reported and never removed.
+//! Long-lived throwaway work belongs below DEFAULT_BASE, not /private/tmp or
+//! $TMPDIR. A job directory is a reap candidate only when its owner sidecar is
+//! valid, agrees with the directory identity, and a separate authority supplies a
+//! matching proven-idle result. The sidecar is attribution only; unknown ownership
+//! or activity is reported and never removed.
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -212,8 +213,14 @@ impl ScratchRoot {
         Ok(job_path)
     }
 
-    /// Inspect old jobs for one session. Unknown ownership is never a candidate.
-    pub fn reap(&self, session: &str, min_age: Duration) -> Result<ReapReport, ScratchError> {
+    /// Inspect old jobs for one session. Attribution alone never makes a candidate;
+    /// a matching explicit idle proof from an owner/session authority is required.
+    pub fn reap(
+        &self,
+        session: &str,
+        min_age: Duration,
+        idle_proofs: &[IdleProof],
+    ) -> Result<ReapReport, ScratchError> {
         reject_symlink(&self.base)?;
         let session_path = self.session_path(session)?;
         let mut report = ReapReport::default();
@@ -285,9 +292,14 @@ impl ScratchRoot {
                         .and_then(|name| name.to_str())
                         .unwrap_or(""),
                     min_age,
+                    idle_proofs,
                 ) {
-                    Ok(Some(candidate)) => report.candidates.push(candidate),
-                    Ok(None) => {}
+                    Ok(JobInspection::Candidate(candidate)) => report.candidates.push(candidate),
+                    Ok(JobInspection::TooYoung) => {}
+                    Ok(JobInspection::Protected(reason)) => report.protected.push(ProtectedEntry {
+                        path: job_path,
+                        reason,
+                    }),
                     Err(reason) => report.unknown.push(UnknownEntry {
                         path: job_path,
                         reason,
@@ -298,25 +310,37 @@ impl ScratchRoot {
         Ok(report)
     }
 
-    /// Remove only candidates from a prior [`ReapReport`].
-    pub fn apply(&self, report: &ReapReport) -> Result<usize, ScratchError> {
+    /// Remove only candidates from a prior ReapReport, revalidating identity and proof.
+    pub fn apply(
+        &self,
+        report: &ReapReport,
+        idle_proofs: &[IdleProof],
+    ) -> Result<usize, ScratchError> {
         let mut removed = 0;
         for candidate in &report.candidates {
-            // Revalidate the sidecar immediately before mutation. A report is not
-            // authority if another process broke attribution after inspection.
-            let Some(_) = inspect_job(
+            // Revalidate attribution and idle proof immediately before mutation.
+            let inspection = inspect_job(
                 &candidate.path,
                 &candidate.session,
                 &candidate.pane_or_agent,
                 Duration::ZERO,
+                idle_proofs,
             )
             .map_err(|reason| ScratchError::InvalidOwnerMetadata {
                 path: candidate.path.clone(),
                 reason,
-            })?
-            else {
+            })?;
+            let JobInspection::Candidate(current) = inspection else {
                 continue;
             };
+            if current.path != candidate.path
+                || current.session != candidate.session
+                || current.pane_or_agent != candidate.pane_or_agent
+                || current.job != candidate.job
+                || current.owner != candidate.owner
+            {
+                continue;
+            }
             fs::remove_dir_all(&candidate.path).map_err(|error| io(&candidate.path, error))?;
             removed += 1;
         }
@@ -344,6 +368,76 @@ pub struct OwnerMetadata {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OwnerActivity {
+    Active,
+    Idle,
+    Unknown { reason: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IdleProof {
+    pub session: String,
+    pub pane_or_agent: String,
+    pub job: String,
+    pub owner: String,
+    pub authority: String,
+    pub activity: OwnerActivity,
+}
+
+impl IdleProof {
+    pub fn idle(
+        session: impl Into<String>,
+        pane_or_agent: impl Into<String>,
+        job: impl Into<String>,
+        owner: impl Into<String>,
+        authority: impl Into<String>,
+    ) -> Self {
+        Self {
+            session: session.into(),
+            pane_or_agent: pane_or_agent.into(),
+            job: job.into(),
+            owner: owner.into(),
+            authority: authority.into(),
+            activity: OwnerActivity::Idle,
+        }
+    }
+
+    pub fn active(
+        session: impl Into<String>,
+        pane_or_agent: impl Into<String>,
+        job: impl Into<String>,
+        owner: impl Into<String>,
+        authority: impl Into<String>,
+    ) -> Self {
+        let mut proof = Self::idle(session, pane_or_agent, job, owner, authority);
+        proof.activity = OwnerActivity::Active;
+        proof
+    }
+
+    pub fn unknown(
+        session: impl Into<String>,
+        pane_or_agent: impl Into<String>,
+        job: impl Into<String>,
+        owner: impl Into<String>,
+        authority: impl Into<String>,
+        reason: impl Into<String>,
+    ) -> Self {
+        let mut proof = Self::idle(session, pane_or_agent, job, owner, authority);
+        proof.activity = OwnerActivity::Unknown {
+            reason: reason.into(),
+        };
+        proof
+    }
+
+    fn matches(&self, owner: &OwnerMetadata) -> bool {
+        self.session == owner.session
+            && self.pane_or_agent == owner.pane_or_agent
+            && self.job == owner.job
+            && self.owner == owner.owner
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReapCandidate {
     pub path: PathBuf,
     pub session: String,
@@ -360,16 +454,34 @@ pub struct UnknownEntry {
     pub reason: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProtectedEntry {
+    pub path: PathBuf,
+    pub reason: String,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReapReport {
     pub candidates: Vec<ReapCandidate>,
     pub unknown: Vec<UnknownEntry>,
+    pub protected: Vec<ProtectedEntry>,
 }
 
 impl ReapReport {
     pub fn auto_reapable(&self) -> bool {
-        self.unknown.is_empty()
+        self.unknown.is_empty() && self.protected.is_empty()
     }
+}
+
+#[derive(Debug)]
+enum JobInspection {
+    TooYoung,
+    Candidate(ReapCandidate),
+    Protected(String),
+}
+
+fn age_meets_minimum(age: Duration, min_age: Duration) -> bool {
+    age >= min_age
 }
 
 fn inspect_job(
@@ -377,7 +489,8 @@ fn inspect_job(
     expected_session: &str,
     expected_pane: &str,
     min_age: Duration,
-) -> Result<Option<ReapCandidate>, String> {
+    idle_proofs: &[IdleProof],
+) -> Result<JobInspection, String> {
     let metadata_path = job_path.join(OWNER_FILE);
     let metadata = fs::symlink_metadata(&metadata_path)
         .map_err(|error| format!("owner metadata unreadable: {error}"))?;
@@ -410,11 +523,50 @@ fn inspect_job(
     let age = SystemTime::now()
         .duration_since(modified)
         .unwrap_or(Duration::ZERO);
-    if age < min_age {
-        return Ok(None);
+    if !age_meets_minimum(age, min_age) {
+        return Ok(JobInspection::TooYoung);
     }
+
+    let mut idle_authority: Option<&str> = None;
+    for proof in idle_proofs.iter().filter(|proof| proof.matches(&owner)) {
+        match &proof.activity {
+            OwnerActivity::Active => {
+                return Ok(JobInspection::Protected(
+                    "owner activity is active; owner metadata is not live-process proof".to_owned(),
+                ));
+            }
+            OwnerActivity::Unknown { reason } => {
+                return Ok(JobInspection::Protected(format!(
+                    "owner activity is unknown: {reason}"
+                )));
+            }
+            OwnerActivity::Idle if proof.authority.trim().is_empty() => {
+                return Ok(JobInspection::Protected(
+                    "idle proof has no authority".to_owned(),
+                ));
+            }
+            OwnerActivity::Idle => {
+                let authority = proof.authority.trim();
+                if let Some(previous) = idle_authority {
+                    if previous != authority {
+                        return Ok(JobInspection::Protected(
+                            "conflicting idle proof authorities".to_owned(),
+                        ));
+                    }
+                } else {
+                    idle_authority = Some(authority);
+                }
+            }
+        }
+    }
+    if idle_authority.is_none() {
+        return Ok(JobInspection::Protected(
+            "no proven idle owner/session authority".to_owned(),
+        ));
+    }
+
     let bytes = directory_bytes(job_path)?;
-    Ok(Some(ReapCandidate {
+    Ok(JobInspection::Candidate(ReapCandidate {
         path: job_path.to_path_buf(),
         session: owner.session,
         pane_or_agent: owner.pane_or_agent,
@@ -479,6 +631,7 @@ pub fn unix_now() -> u64 {
 mod tests {
     use super::*;
     use std::fs;
+    use std::os::unix::fs::symlink;
 
     fn root() -> (ScratchRoot, PathBuf) {
         let nonce = SystemTime::now()
@@ -489,7 +642,6 @@ mod tests {
             std::env::temp_dir().join(format!("scratch-home-test-{}-{nonce}", std::process::id()));
         (ScratchRoot::new(&path).unwrap(), path)
     }
-
     #[test]
     fn creates_one_session_and_emits_ntm_pane_template() {
         let (root, path) = root();
@@ -516,11 +668,11 @@ mod tests {
             .join("job");
         fs::create_dir_all(&job).unwrap();
         fs::write(job.join("payload"), b"keep").unwrap();
-        let report = root.reap("demo", Duration::ZERO).unwrap();
+        let report = root.reap("demo", Duration::ZERO, &[]).unwrap();
         assert!(report.candidates.is_empty());
         assert_eq!(report.unknown.len(), 1);
         assert!(job.join("payload").exists());
-        assert_eq!(root.apply(&report).unwrap(), 0);
+        assert_eq!(root.apply(&report, &[]).unwrap(), 0);
         assert!(job.exists());
         let _ = fs::remove_dir_all(path);
     }
@@ -530,25 +682,126 @@ mod tests {
         let (root, path) = root();
         let job = root.create_job("demo", "cc_1", "run", "agent-a").unwrap();
         fs::write(job.join(OWNER_FILE), b"{}\n").unwrap();
-        let report = root.reap("demo", Duration::ZERO).unwrap();
+        let report = root.reap("demo", Duration::ZERO, &[]).unwrap();
         assert!(report.candidates.is_empty());
         assert_eq!(report.unknown[0].path, job);
-        assert_eq!(root.apply(&report).unwrap(), 0);
+        assert_eq!(root.apply(&report, &[]).unwrap(), 0);
         assert!(job.exists());
         let _ = fs::remove_dir_all(path);
     }
 
     #[test]
-    fn owned_old_job_is_candidate_and_apply_removes_it() {
+    fn owner_metadata_alone_is_not_idle_proof() {
         let (root, path) = root();
         let job = root.create_job("demo", "cc_1", "run", "agent-a").unwrap();
         fs::write(job.join("payload"), b"owned").unwrap();
-        let report = root.reap("demo", Duration::ZERO).unwrap();
+        let report = root.reap("demo", Duration::ZERO, &[]).unwrap();
+        assert!(
+            report.candidates.is_empty(),
+            "owner metadata is attribution only; an idle proof is required"
+        );
+        assert_eq!(report.protected.len(), 1);
+        assert!(!report.auto_reapable());
+        assert!(job.exists());
+        let _ = fs::remove_dir_all(path);
+    }
+
+    #[test]
+    fn idle_owner_is_candidate_and_apply_removes_it() {
+        let (root, path) = root();
+        let job = root.create_job("demo", "cc_1", "run", "agent-a").unwrap();
+        fs::write(job.join("payload"), b"owned").unwrap();
+        let proof = IdleProof::idle("demo", "cc_1", "run", "agent-a", "pane-truth");
+        let report = root.reap("demo", Duration::ZERO, &[proof.clone()]).unwrap();
         assert_eq!(report.candidates.len(), 1);
         assert_eq!(report.candidates[0].owner, "agent-a");
         assert!(report.candidates[0].bytes >= 5);
-        assert_eq!(root.apply(&report).unwrap(), 1);
+        assert_eq!(root.apply(&report, &[proof]).unwrap(), 1);
         assert!(!job.exists());
+        let _ = fs::remove_dir_all(path);
+    }
+    #[test]
+    fn active_owner_is_protected_and_not_candidate() {
+        let (root, path) = root();
+        let job = root.create_job("demo", "cc_1", "run", "agent-a").unwrap();
+        fs::write(job.join("payload"), b"active").unwrap();
+        let proof = IdleProof::active("demo", "cc_1", "run", "agent-a", "pane-truth");
+        let report = root.reap("demo", Duration::ZERO, &[proof.clone()]).unwrap();
+        assert!(report.candidates.is_empty());
+        assert_eq!(report.protected.len(), 1);
+        assert!(report.protected[0].reason.contains("active"));
+        assert!(!report.auto_reapable());
+        assert_eq!(root.apply(&report, &[proof]).unwrap(), 0);
+        assert!(job.exists());
+        let _ = fs::remove_dir_all(path);
+    }
+
+    #[test]
+    fn unknown_owner_activity_is_protected_and_not_candidate() {
+        let (root, path) = root();
+        let job = root.create_job("demo", "cc_1", "run", "agent-a").unwrap();
+        fs::write(job.join("payload"), b"uncertain").unwrap();
+        let proof = IdleProof::unknown(
+            "demo",
+            "cc_1",
+            "run",
+            "agent-a",
+            "pane-truth",
+            "pane state unavailable",
+        );
+        let report = root.reap("demo", Duration::ZERO, &[proof]).unwrap();
+        assert!(report.candidates.is_empty());
+        assert_eq!(report.protected.len(), 1);
+        assert!(report.protected[0].reason.contains("unknown"));
+        assert!(job.exists());
+        let _ = fs::remove_dir_all(path);
+    }
+
+    #[test]
+    fn age_boundary_is_inclusive() {
+        let minimum = Duration::from_secs(60);
+        assert!(!age_meets_minimum(Duration::from_secs(59), minimum));
+        assert!(age_meets_minimum(Duration::from_secs(60), minimum));
+    }
+
+    #[test]
+    fn symlink_owner_metadata_is_unknown_and_never_reaped() {
+        let (root, path) = root();
+        let job = root.create_job("demo", "cc_1", "run", "agent-a").unwrap();
+        let owner_path = job.join(OWNER_FILE);
+        fs::remove_file(&owner_path).unwrap();
+        fs::write(job.join("owner-target"), b"not metadata").unwrap();
+        symlink("owner-target", &owner_path).unwrap();
+        let proof = IdleProof::idle("demo", "cc_1", "run", "agent-a", "pane-truth");
+        let report = root.reap("demo", Duration::ZERO, &[proof]).unwrap();
+        assert!(report.candidates.is_empty());
+        assert_eq!(report.unknown.len(), 1);
+        assert!(report.unknown[0].reason.contains("regular file"));
+        assert!(job.exists());
+        let _ = fs::remove_dir_all(path);
+    }
+
+    #[test]
+    fn owner_metadata_mutation_after_scan_is_not_reaped() {
+        let (root, path) = root();
+        let job = root.create_job("demo", "cc_1", "run", "agent-a").unwrap();
+        fs::write(job.join("payload"), b"owned").unwrap();
+        let proof = IdleProof::idle("demo", "cc_1", "run", "agent-a", "pane-truth");
+        let report = root.reap("demo", Duration::ZERO, &[proof.clone()]).unwrap();
+        assert_eq!(report.candidates.len(), 1);
+        write_owner(
+            &job,
+            &OwnerMetadata {
+                schema: SCHEMA_VERSION,
+                session: "demo".to_owned(),
+                pane_or_agent: "cc_1".to_owned(),
+                job: "run".to_owned(),
+                owner: "agent-b".to_owned(),
+            },
+        )
+        .unwrap();
+        assert_eq!(root.apply(&report, &[proof]).unwrap(), 0);
+        assert!(job.exists());
         let _ = fs::remove_dir_all(path);
     }
 }

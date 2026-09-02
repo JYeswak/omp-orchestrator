@@ -1,14 +1,15 @@
 #![forbid(unsafe_code)]
 
-use scratch_home::{ScratchError, ScratchRoot, ENV_VAR, SCHEMA_VERSION};
+use scratch_home::{IdleProof, ScratchError, ScratchRoot, ENV_VAR, SCHEMA_VERSION};
 use serde_json::json;
+use std::fs;
 use std::process::{Command, ExitCode};
 use std::time::Duration;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn usage() -> &'static str {
-    "usage: scratch-home <resolve|pane-env|job|reap|spawn|version> ...\n\n  resolve SESSION [--base PATH]\n  pane-env SESSION [--base PATH]\n  job SESSION PANE_OR_AGENT JOB OWNER [--base PATH]\n  reap SESSION AGE_SECS [--apply] [--base PATH]\n  spawn SESSION [--base PATH] [--ntm PATH] [-- NTM_ARGS...]"
+    "usage: scratch-home <resolve|pane-env|job|reap|spawn|version> ...\n\n  resolve SESSION [--base PATH]\n  pane-env SESSION [--base PATH]\n  job SESSION PANE_OR_AGENT JOB OWNER [--base PATH]\n  reap SESSION AGE_SECS [--idle-proof JSON] [--apply] [--base PATH]\n  spawn SESSION [--base PATH] [--ntm PATH] [-- NTM_ARGS...]"
 }
 
 fn json_error(error: impl ToString) -> serde_json::Value {
@@ -49,6 +50,40 @@ fn take_base(args: &mut Vec<String>) -> Result<Option<String>, String> {
         }
     }
     Ok(base)
+}
+
+fn take_idle_proof(args: &mut Vec<String>) -> Result<Option<String>, String> {
+    let mut proof = None;
+    let mut index = 0;
+    while index < args.len() {
+        if args[index] == "--idle-proof" {
+            if proof.is_some() {
+                return Err("--idle-proof may be provided once".to_owned());
+            }
+            let Some(value) = args.get(index + 1) else {
+                return Err("--idle-proof requires a JSON path".to_owned());
+            };
+            proof = Some(value.clone());
+            args.drain(index..=index + 1);
+        } else {
+            index += 1;
+        }
+    }
+    Ok(proof)
+}
+
+fn load_idle_proofs(path: Option<String>) -> Result<Vec<IdleProof>, String> {
+    let Some(path) = path else {
+        return Ok(Vec::new());
+    };
+    let text = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read idle proof {path}: {error}"))?;
+    if let Ok(proofs) = serde_json::from_str::<Vec<IdleProof>>(&text) {
+        return Ok(proofs);
+    }
+    serde_json::from_str::<IdleProof>(&text)
+        .map(|proof| vec![proof])
+        .map_err(|error| format!("idle proof {path} is not an object or array: {error}"))
 }
 
 fn resolve(args: &[String]) -> Result<(), String> {
@@ -100,27 +135,20 @@ fn create_job(args: &[String]) -> Result<(), String> {
 }
 
 fn reap(args: &[String]) -> Result<(), String> {
-    let mut positional = Vec::new();
-    let mut base = None;
+    let mut positional = args.to_vec();
+    let base = take_base(&mut positional)?;
+    let idle_proof_path = take_idle_proof(&mut positional)?;
     let mut apply = false;
     let mut index = 0;
-    while index < args.len() {
-        match args[index].as_str() {
-            "--base" => {
-                let Some(value) = args.get(index + 1) else {
-                    return Err("--base requires a path".to_owned());
-                };
-                base = Some(value.clone());
-                index += 2;
+    while index < positional.len() {
+        if positional[index] == "--apply" {
+            if apply {
+                return Err("--apply may be provided once".to_owned());
             }
-            "--apply" => {
-                apply = true;
-                index += 1;
-            }
-            value => {
-                positional.push(value.to_owned());
-                index += 1;
-            }
+            apply = true;
+            positional.remove(index);
+        } else {
+            index += 1;
         }
     }
     if positional.len() != 2 {
@@ -129,12 +157,14 @@ fn reap(args: &[String]) -> Result<(), String> {
     let age_secs = positional[1]
         .parse::<u64>()
         .map_err(|_| "AGE_SECS must be a non-negative integer".to_owned())?;
+    let idle_proofs = load_idle_proofs(idle_proof_path)?;
     let root = root_from(base).map_err(|error| error.to_string())?;
     let report = root
-        .reap(&positional[0], Duration::from_secs(age_secs))
+        .reap(&positional[0], Duration::from_secs(age_secs), &idle_proofs)
         .map_err(|error| error.to_string())?;
     let removed = if apply {
-        root.apply(&report).map_err(|error| error.to_string())?
+        root.apply(&report, &idle_proofs)
+            .map_err(|error| error.to_string())?
     } else {
         0
     };
@@ -146,10 +176,12 @@ fn reap(args: &[String]) -> Result<(), String> {
         "age_secs": age_secs,
         "apply": apply,
         "removed": removed,
+        "proven_idle_proofs": idle_proofs.len(),
         "auto_reapable": report.auto_reapable(),
         "candidates": report.candidates,
+        "protected": report.protected,
         "unknown": report.unknown,
-        "no_claim": "Unknown owner attribution is never auto-reaped; dry-run is the default.",
+        "no_claim": "Owner metadata is attribution only; active or uncertain jobs are never reaped without a matching proven-idle authority.",
     }));
     Ok(())
 }
