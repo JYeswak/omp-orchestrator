@@ -879,6 +879,8 @@ fn owner_pid_survives_a_save_load_round_trip() {
         &p,
         &tick_monitor::State {
             owner_pid: 31337,
+            observation_epoch: "epoch-a".to_owned(),
+            next_observation_sequence: 42,
             ..Default::default()
         },
     )
@@ -888,6 +890,9 @@ fn owner_pid_survives_a_save_load_round_trip() {
         31337,
         "an owner that does not round-trip is no owner at all"
     );
+    let loaded = tick_monitor::load(&p);
+    assert_eq!(loaded.observation_epoch, "epoch-a");
+    assert_eq!(loaded.next_observation_sequence, 42);
 }
 
 // ── SESSION SCOPING ─────────────────────────────────────────────────────────

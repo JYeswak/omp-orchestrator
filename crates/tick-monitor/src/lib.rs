@@ -981,6 +981,10 @@ pub struct State {
     /// AGENTS.md C112, this one names the process that does the writing, so it
     /// dies with the thing it owns.
     pub owner_pid: u32,
+    /// Logical producer epoch persisted across one-shot monitor invocations.
+    pub observation_epoch: String,
+    /// Next identity sequence allocated by this monitor producer.
+    pub next_observation_sequence: u64,
 }
 
 // ---------------------------------------------------------------------------
@@ -1206,6 +1210,10 @@ pub fn load(path: &Path) -> State {
         match f.as_slice() {
             ["last_tick", v] => st.last_tick = v.parse().unwrap_or(0),
             ["owner_pid", v] => st.owner_pid = v.parse().unwrap_or(0),
+            ["observation_epoch", v] => st.observation_epoch = (*v).to_owned(),
+            ["next_observation_sequence", v] => {
+                st.next_observation_sequence = v.parse().unwrap_or(0)
+            }
             ["last_blocker", v] => st.last_blocker = (*v).to_owned(),
             ["blocker_streak", v] => st.blocker_streak = v.parse().unwrap_or(0),
             ["red_streak", v] => st.red_streak = v.parse().unwrap_or(0),
@@ -1287,6 +1295,11 @@ pub fn save(path: &Path, st: &State) -> std::io::Result<()> {
     }
     let mut out = String::new();
     out.push_str(&format!("owner_pid\t{}\n", st.owner_pid));
+    out.push_str(&format!("observation_epoch\t{}\n", st.observation_epoch));
+    out.push_str(&format!(
+        "next_observation_sequence\t{}\n",
+        st.next_observation_sequence
+    ));
     out.push_str(&format!("last_tick\t{}\n", st.last_tick));
     out.push_str(&format!("last_blocker\t{}\n", st.last_blocker));
     out.push_str(&format!("blocker_streak\t{}\n", st.blocker_streak));

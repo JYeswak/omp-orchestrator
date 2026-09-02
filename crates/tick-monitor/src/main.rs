@@ -7,24 +7,18 @@
 //! `observe` is read-only and idempotent apart from the state file it must update to make
 //! the next tick's two-capture comparison possible. `--no-save` suppresses even that.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::exit;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tick_monitor::*;
 
 const TMUX_TIMEOUT: Duration = Duration::from_secs(10);
 const GIT_TIMEOUT: Duration = Duration::from_secs(20);
-static NEXT_LOCAL_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
-fn local_observation_identity(state_file: &Path, changed_at: u64) -> ObservationIdentity {
+fn local_observation_identity(epoch: &str, sequence: u64, changed_at: u64) -> ObservationIdentity {
     ObservationIdentity {
-        epoch: format!(
-            "tick-monitor:{}:{}",
-            state_file.display(),
-            std::process::id()
-        ),
-        sequence: NEXT_LOCAL_SEQUENCE.fetch_add(1, Ordering::Relaxed),
+        epoch: epoch.to_owned(),
+        sequence,
         changed_at: changed_at.to_string(),
     }
 }
@@ -210,6 +204,12 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
         .unwrap_or_else(|| state_path(session_of(args)));
     let prior = load(&state_file);
     let now = now_unix();
+    let epoch = if prior.observation_epoch.is_empty() {
+        format!("tick-monitor:{}:{}", state_file.display(), now)
+    } else {
+        prior.observation_epoch.clone()
+    };
+    let mut next_sequence = prior.next_observation_sequence.max(1);
 
     let ids = match pane_ids(session) {
         Ok(v) => v,
@@ -246,7 +246,12 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
             continue;
         };
         let state = classify(&cap);
-        let identity = local_observation_identity(&state_file, now);
+        let sequence = next_sequence;
+        next_sequence = next_sequence.checked_add(1).ok_or_else(|| {
+            eprintln!("REFUSE observe: observation sequence exhausted");
+            6
+        })?;
+        let identity = local_observation_identity(&epoch, sequence, now);
         let o = Observation {
             pane_id: id.clone(),
             state: state.clone(),
@@ -390,6 +395,8 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
     if !args.iter().any(|a| a == "--no-save") {
         let next = State {
             owner_pid: std::process::id(),
+            observation_epoch: epoch,
+            next_observation_sequence: next_sequence,
             last_tick: now,
             last_blocker: prior.last_blocker,
             blocker_streak: prior.blocker_streak,

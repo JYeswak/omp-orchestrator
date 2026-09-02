@@ -314,16 +314,17 @@ fn parse_output_sequence(
         .get("sequence")
         .and_then(Value::as_u64)
         .ok_or(ActivityError::InvalidOutputSequence)?;
-    let changed_at = object
-        .get("changed_at")
-        .and_then(Value::as_str)
-        .ok_or(ActivityError::MissingField(
-            "agents[].output_sequence.changed_at",
-        ))?;
+    let changed_at = match object.get("changed_at") {
+        None => String::new(),
+        Some(value) => value
+            .as_str()
+            .ok_or(ActivityError::InvalidOutputSequence)?
+            .to_owned(),
+    };
     Ok(Some(OutputSequence {
         epoch: epoch.to_owned(),
         sequence,
-        changed_at: changed_at.to_owned(),
+        changed_at,
     }))
 }
 
@@ -542,7 +543,7 @@ mod tests {
     #[test]
     fn empty_changed_at_is_valid_baseline_identity() {
         let snapshot = parse_activity_json(
-            r#"{"success":true,"agents":[{"pane":"3","agent_type":"omp-claude","state":"IDLE","observation_state":"idle","safe_to_dispatch":true,"capture_provenance":"live","observation_freshness":"fresh","output_sequence":{"epoch":"epoch-a","sequence":0,"changed_at":""}}]}"#,
+            r#"{"success":true,"agents":[{"pane":"3","agent_type":"omp-claude","state":"IDLE","observation_state":"idle","safe_to_dispatch":true,"capture_provenance":"live","observation_freshness":"fresh","output_sequence":{"epoch":"epoch-a","sequence":0}}]}"#,
         )
         .unwrap();
         assert_eq!(snapshot.agents[0].output_identity().unwrap().sequence, 0);
