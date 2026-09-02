@@ -3,11 +3,26 @@
 use oracle_compare::{spawn_timeout, OracleCompareRules, OracleCompareVerdict};
 use pane_oracle_diff::{census, is_agent_command, parse_subject_json};
 use std::io::{self, Read};
-use std::process::{Command, ExitCode};
+use std::process::{Command, ExitCode, Output};
 use std::time::Duration;
+use subprocess_contract::BoundedOutcome;
 
 fn say(line: &str) {
     println!("{line}");
+}
+
+fn completed(label: &str, outcome: BoundedOutcome) -> Option<Output> {
+    match outcome {
+        BoundedOutcome::Completed(output) => Some(output),
+        BoundedOutcome::TimedOut => {
+            eprintln!("ERROR pane-oracle-diff: {label} timed out before its deadline");
+            None
+        }
+        BoundedOutcome::Unspawned(error) => {
+            eprintln!("ERROR pane-oracle-diff: {label} could not spawn: {error}");
+            None
+        }
+    }
 }
 
 fn main() -> ExitCode {
@@ -22,7 +37,10 @@ fn main() -> ExitCode {
     };
     std::env::set_var("PATH", &path);
     if std::env::var("TMUX_TMPDIR").is_err() {
-        if let Some(home) = std::env::var_os("HOME").filter(|v| !v.is_empty()).map(std::path::PathBuf::from) {
+        if let Some(home) = std::env::var_os("HOME")
+            .filter(|v| !v.is_empty())
+            .map(std::path::PathBuf::from)
+        {
             std::env::set_var("TMUX_TMPDIR", home.join(".tmux-sockets"));
         }
     }
@@ -154,7 +172,7 @@ fn run_live(session: &str, rules: &OracleCompareRules) -> ExitCode {
 fn session_visible(session: &str) -> bool {
     let mut cmd = Command::new("tmux");
     cmd.args(["list-panes", "-a", "-F", "#{session_name}"]);
-    let Some(out) = spawn_timeout(cmd, Duration::from_secs(15)) else {
+    let Some(out) = completed("tmux list-panes", spawn_timeout(cmd, Duration::from_secs(15))) else {
         return false;
     };
     String::from_utf8_lossy(&out.stdout)
@@ -165,7 +183,7 @@ fn session_visible(session: &str) -> bool {
 fn subject_count(session: &str) -> Result<u64, ()> {
     let mut cmd = Command::new("ntm");
     cmd.arg(format!("--robot-activity={session}")).arg("--all");
-    let Some(out) = spawn_timeout(cmd, Duration::from_secs(30)) else {
+    let Some(out) = completed("ntm activity", spawn_timeout(cmd, Duration::from_secs(30))) else {
         return Err(());
     };
     parse_subject_json(&String::from_utf8_lossy(&out.stdout))
@@ -179,7 +197,7 @@ fn oracle_panes(session: &str) -> Vec<String> {
         "-F",
         "#{pane_id} #{session_name} #{pane_pid} #{pane_current_command}",
     ]);
-    let Some(out) = spawn_timeout(cmd, Duration::from_secs(15)) else {
+    let Some(out) = completed("tmux pane census", spawn_timeout(cmd, Duration::from_secs(15))) else {
         return Vec::new();
     };
     let mut ids = Vec::new();
@@ -210,7 +228,9 @@ fn oracle_panes(session: &str) -> Vec<String> {
 fn child_command(ppid: &str) -> Option<String> {
     let mut cmd = Command::new("ps");
     cmd.args(["-eo", "ppid,command"]);
-    let out = spawn_timeout(cmd, Duration::from_secs(5))?;
+    let Some(out) = completed("ps child census", spawn_timeout(cmd, Duration::from_secs(5))) else {
+        return None;
+    };
     for line in String::from_utf8_lossy(&out.stdout).lines() {
         let t = line.trim_start();
         let Some((pid, rest)) = t.split_once(char::is_whitespace) else {
