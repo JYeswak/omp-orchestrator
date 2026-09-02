@@ -421,13 +421,6 @@ pub const ADVISORY_CEILING: usize = 23;
 /// When [`ADVISORY_CEILING`] was last recorded, and the deadline the operator asked
 /// to be held to.
 ///
-/// SnowyCanyon's own falsifier, written in as a number so the ruling is checkable:
-/// *"if the advisory count has not decreased after a stated number of ticks,
-/// advisory-first has failed and triage-first was the right call."*
-///
-/// 200 ticks at the supervisor's 90s interval is **5 hours**. The supervisor prints
-/// `CENSUS_ADVISORY_RATCHET_OVERDUE` past that point with no decrease, in its own
-/// class that already produced 178 unread ticks and a 29-times-unread refusal.
 /// Crates whose verdict was BLOCKING before `leht` and must stay blocking.
 ///
 /// # Why a list is honest here and was NOT honest for membership
@@ -461,8 +454,49 @@ pub const CURATED_BLOCKING_ROSTER: &[&str] = &[
 /// the same shape today: a reader that did not model the code it was summarising.
 pub const PRE_LEHT_BLOCKING_ROWS: usize = 22;
 
-pub const ADVISORY_CEILING_RECORDED_AT_UNIX: u64 = 1_756_845_000;
+/// SnowyCanyon's own falsifier, written in as a number so the ruling is checkable:
+/// *"if the advisory count has not decreased after a stated number of ticks,
+/// advisory-first has failed and triage-first was the right call."*
+///
+/// 200 ticks at the supervisor's 90s interval is **5 hours**. The supervisor prints
+/// `CENSUS_ADVISORY_RATCHET_OVERDUE` past that point with no decrease, in its own
+/// decision output — because a deadline nobody prints is the fourth instance of the
+/// class that already produced 178 unread ticks and a 29-times-unread refusal.
+///
+/// # A deadline already past is not a deadline
+///
+/// MEASURED 2026-09-02: the first value here was `1_756_845_000`, **one year off**,
+/// so the live run printed `CENSUS_ADVISORY_RATCHET_OVERDUE` on tick 1 — 350,394
+/// elapsed ticks against a 200-tick deadline. A verdict that is true the instant it
+/// is recorded carries no information, and it would have trained the operator to
+/// ignore the line. `overdue_is_false_at_the_moment_of_recording_and_true_past_the_deadline`
+/// predicate cannot fire at record time.
+pub const ADVISORY_CEILING_RECORDED_AT_UNIX: u64 = 1_788_380_629;
 pub const ADVISORY_RATCHET_DEADLINE_TICKS: u64 = 200;
+
+/// Has the advisory ratchet blown its deadline without the count decreasing?
+///
+/// Pure, so both directions are checkable: the supervisor's inline version could
+/// only ever be observed in the direction the clock happened to be in, and it was
+/// wrong in exactly that way — see the note on
+/// [`ADVISORY_CEILING_RECORDED_AT_UNIX`].
+///
+/// `false` when the count HAS decreased, whatever the clock says: the falsifier is
+/// about a stalled ratchet, not about elapsed time.
+pub fn advisory_ratchet_overdue(
+    now_unix: u64,
+    recorded_at_unix: u64,
+    interval_secs: u64,
+    deadline_ticks: u64,
+    advisory_count: usize,
+    ceiling: usize,
+) -> bool {
+    if advisory_count < ceiling {
+        return false; // it shrank; that is the ratchet working
+    }
+    let ticks = now_unix.saturating_sub(recorded_at_unix) / interval_secs.max(1);
+    ticks > deadline_ticks
+}
 /// Crates emitted by the eleven OMP coverage waves and watched by the
 /// supervisor. This list is intentionally explicit: a new wave output must
 /// add a census row before it can be treated as wired.

@@ -36,7 +36,8 @@
 use omp_orchestrator::{
     census_gates, crates_on_disk, CensusDisposition, GateCensus, GateReachability,
     ADVISORY_ALLOWANCE, ADVISORY_CEILING, ADVISORY_CEILING_RECORDED_AT_UNIX,
-    ADVISORY_RATCHET_DEADLINE_TICKS, CURATED_BLOCKING_ROSTER, PRE_LEHT_BLOCKING_ROWS,
+    advisory_ratchet_overdue, ADVISORY_RATCHET_DEADLINE_TICKS, CURATED_BLOCKING_ROSTER,
+    PRE_LEHT_BLOCKING_ROWS,
 };
 use std::path::PathBuf;
 
@@ -320,6 +321,71 @@ fn the_ratchet_deadline_is_a_real_number_and_not_a_sentiment() {
          the difference or re-record the ceiling -- a ceiling that does not match the \
          measurement is a hand-maintained number masquerading as a bound.",
         census.advisory_gates().len()
+    );
+}
+
+/// THE FALSIFIER, BOTH DIRECTIONS. A deadline already past at the moment it is
+/// recorded is not a deadline — it prints on tick 1 and trains the operator to
+/// ignore the line.
+///
+/// MEASURED 2026-09-02: the first recorded value was one year off, and the live run
+/// printed `CENSUS_ADVISORY_RATCHET_OVERDUE` immediately — 350,394 elapsed ticks
+/// against a 200-tick deadline. Only running it exposed that; the constant looked
+/// plausible in the diff.
+#[test]
+fn overdue_is_false_at_the_moment_of_recording_and_true_past_the_deadline() {
+    let at = ADVISORY_CEILING_RECORDED_AT_UNIX;
+    let deadline = ADVISORY_RATCHET_DEADLINE_TICKS;
+
+    // Direction 1: at record time, and one tick short of the deadline.
+    assert!(
+        !advisory_ratchet_overdue(at, at, 90, deadline, ADVISORY_CEILING, ADVISORY_CEILING),
+        "overdue at the instant of recording: the deadline is already in the past"
+    );
+    assert!(!advisory_ratchet_overdue(
+        at + (deadline * 90),
+        at,
+        90,
+        deadline,
+        ADVISORY_CEILING,
+        ADVISORY_CEILING
+    ));
+
+    // Direction 2: past it, with no decrease. The verdict MUST fire, or the
+    // falsifier is unfalsifiable and the ruling is a preference again.
+    assert!(
+        advisory_ratchet_overdue(
+            at + (deadline * 90) + 90,
+            at,
+            90,
+            deadline,
+            ADVISORY_CEILING,
+            ADVISORY_CEILING
+        ),
+        "past the deadline with no decrease and still not overdue"
+    );
+
+    // Direction 3: past the deadline but the count DECREASED. Not overdue — the
+    // falsifier is about a stalled ratchet, not elapsed time. Without this the
+    // verdict would nag forever after 5 hours no matter how much work landed.
+    assert!(!advisory_ratchet_overdue(
+        at + 10_000_000,
+        at,
+        90,
+        deadline,
+        ADVISORY_CEILING - 1,
+        ADVISORY_CEILING
+    ));
+
+    // A zero interval must not divide by zero: the supervisor's interval is
+    // configurable and a bad config must not panic the loop.
+    let _ = advisory_ratchet_overdue(at + 1, at, 0, deadline, 1, 1);
+
+    // And the recorded moment must be real, not a placeholder.
+    assert!(
+        at > 1_780_000_000,
+        "the recorded time is {at}, which predates this repository -- the ceiling was \
+         never actually recorded"
     );
 }
 
