@@ -100,6 +100,14 @@ struct Config {
     /// junk project in the live store. An empty value here refuses before any
     /// I/O, and the test fixture sets it empty deliberately.
     mail_sender: String,
+    /// WHICH variable the value above came from, kept because a refusal that cannot name
+    /// the variable is one nobody can act on.
+    ///
+    /// yfp2: the resolution used to collapse the var list to a value, so a set-but-ambient
+    /// identity was indistinguishable from a configured one. Measured 2026-09-02: the
+    /// supervisor signed 64 sends as `WildStone` — an agent of `~/Developer/fsw` that
+    /// arrived through the machine-global `AGENT_NAME` — and every one was refused.
+    mail_sender_var: String,
     omp_quick: bool,
     reap_finished_panes: String,
     omp_binary: PathBuf,
@@ -316,6 +324,12 @@ impl Config {
         let finding_spool = env::var_os("OMP_FINDING_SPOOL")
             .map(PathBuf::from)
             .unwrap_or_else(|| heartbeat_ledger.with_file_name("omp-orchestrator.findings"));
+        // yfp2: resolve the mail identity through the kernel, KEEPING the variable it came
+        // from. `sender_identity::first_candidate` walks the same list in the same order;
+        // what is new is that the list is TYPED, so an ambient value can be refused by name
+        // rather than signed with.
+        let resolved_sender =
+            sender_identity::first_candidate(&|name| env::var(name).ok());
         Ok(Self {
             repo,
             session,
@@ -334,14 +348,13 @@ impl Config {
             pending_dispatch,
             finding_spool,
             receiver_agent,
-            mail_sender: MAIL_IDENTITY_VARS
-                .iter()
-                .find_map(|key| {
-                    env::var(key)
-                        .ok()
-                        .map(|value| value.trim().to_owned())
-                        .filter(|value| !value.is_empty())
-                })
+            mail_sender: resolved_sender
+                .as_ref()
+                .map(|candidate| candidate.value.clone())
+                .unwrap_or_default(),
+            mail_sender_var: resolved_sender
+                .as_ref()
+                .map(|candidate| candidate.source.var().to_owned())
                 .unwrap_or_default(),
             omp_quick,
             reap_finished_panes: env::var("OMP_REAP_FINISHED_PANES_BIN")
@@ -1042,7 +1055,60 @@ async fn load_bead_snapshot(cx: &Cx, config: &Config, bead: &str) -> Result<Bead
         &config.br,
         invoke(cx, config, &config.br, &show_args).await?,
     )?;
+    // gfm6 WIRED HERE (it was BUILT and invoked by nothing until now).
+    //
+    // The bytes `br show --json` already returned carry `status` and `assignee`, so the
+    // claim-state check costs no extra process spawn. It sits BEFORE the snapshot parse
+    // because the fourth rule is `file -> claim -> dispatch`: a packet naming a bead in an
+    // illegal claim state is a dispatch the tracker cannot project, and the follow-up
+    // detector keys on `assigned + in_progress`, so it can see neither half-claim nor
+    // orphan-claim. Refusing here is the only place either becomes visible.
+    //
+    // MEASURED 2026-09-02, and it is why this check reads `br show` and NOT `br ready`:
+    // `br ready --json` rows have **no `assignee` key at all** (keys: acceptance_criteria,
+    // created_at, created_by, description, id, issue_type, labels, priority, status, title,
+    // updated_at). A `.get("assignee")` there returns absent-not-empty, and feeding that to
+    // `classify_state` would report ORPHAN_CLAIM for every `in_progress` row in the queue —
+    // the same shape as the `.get("blocked", 0)` reader that answered a plausible 0 against
+    // a field named `severity.blocker`. The field must EXIST before it can be classified.
+    refuse_illegal_claim_state(&show, bead)?;
     parse_br_show_json(&show).map_err(|error| format!("DISPATCH_BLOCKED bead={bead} {error}"))
+}
+
+/// Refuse the dispatch when the bead's claim state is illegal.
+///
+/// `#[must_use]` is LOAD-BEARING, not decoration. MEASURED 2026-09-02: with the consult
+/// written inline as `if let Some(finding) = … { return Err(…) }`, a mutation that ran the
+/// consult and DISCARDED its refusal left every test GREEN — the pure legs below test
+/// `claim_state_finding`, and nothing tested that the call site acts on it. That is
+/// BUILT != WIRED one level down: the check existed, was correct, and could be dropped
+/// silently. As a `#[must_use] Result`, dropping it is a `clippy -D warnings` error at
+/// compile time, which is a stronger guard than any test of mine could be.
+#[must_use = "an illegal claim state must REFUSE the dispatch, not be observed and dropped"]
+fn refuse_illegal_claim_state(show: &[u8], bead: &str) -> Result<(), String> {
+    match claim_state_finding(show, bead) {
+        Some(finding) => Err(format!("DISPATCH_BLOCKED {finding}")),
+        None => Ok(()),
+    }
+}
+
+/// The bead's claim state, read from the `br show --json` bytes already in hand.
+///
+/// Returns `None` for a legal pair AND for bytes this function could not read — the caller
+/// must not treat an unreadable payload as an illegal state, because `parse_br_show_json`
+/// on the next line is the authority that reports a malformed payload with its own error.
+/// Two readers refusing the same bytes with different words is worse than one.
+fn claim_state_finding(show: &[u8], bead: &str) -> Option<bead_holder::StateFinding> {
+    let value: Value = serde_json::from_slice(show).ok()?;
+    let row = match &value {
+        Value::Array(rows) => rows.first()?,
+        other => other,
+    };
+    // `br show` returns a BARE list while `br list` wraps rows in `.issues` - handled above
+    // by taking the first element of an array, and by accepting a naked object.
+    let status = row.get("status").and_then(Value::as_str)?;
+    let assignee = row.get("assignee").and_then(Value::as_str).unwrap_or("");
+    bead_holder::classify_state(bead, status, assignee)
 }
 
 fn supervisor_claim_identity() -> String {
@@ -2373,20 +2439,46 @@ struct DurableNotice {
 /// not be readable as a healthy no-op, because a supervisor that quietly
 /// stopped notifying looks exactly like one with nothing to report.
 fn mail_sender_identity(config: &Config) -> Result<AgentName, String> {
-    sender_identity_from(&config.mail_sender)
+    sender_identity_from(&config.mail_sender, &config.mail_sender_var)
 }
 
 /// The environment variables consulted for the sender identity, in order.
-const MAIL_IDENTITY_VARS: [&str; 2] = ["AGENT_MAIL_AGENT", "AGENT_NAME"];
+///
+/// yfp2: the list moved to `sender-identity`, where each entry carries whether it is OWNED
+/// (set deliberately for this process) or AMBIENT (machine-global, set by
+/// `launchctl setenv`). This alias exists so the refusal text keeps naming every variable
+/// searched; the ORDER and the trust class are the kernel's.
+fn mail_identity_var_names() -> Vec<&'static str> {
+    sender_identity::MAIL_IDENTITY_VARS
+        .iter()
+        .map(|source| source.var())
+        .collect()
+}
 
 /// Turn a configured identity into a usable one, or refuse. Pure, so the
 /// refusal is testable without mutating process-global environment state.
-fn sender_identity_from(configured: &str) -> Result<AgentName, String> {
+fn sender_identity_from(configured: &str, source_var: &str) -> Result<AgentName, String> {
     let trimmed = configured.trim();
     if trimmed.is_empty() {
         return Err(format!(
             "sender_identity_unset searched={}",
-            MAIL_IDENTITY_VARS.join(",")
+            mail_identity_var_names().join(",")
+        ));
+    }
+    // yfp2: THE CASE `7n5b` DID NOT ANTICIPATE. Its acceptance covered the UNSET case and
+    // got it; this is set-but-ambient, which is the case that actually ran. A value that
+    // arrived through a machine-global variable is whatever agent last ran
+    // `launchctl setenv`, so it cannot be a project-scoped identity — measured
+    // 2026-09-02, 64 sends signed `WildStone` (project `~/Developer/fsw`) and all refused.
+    if sender_identity::MAIL_IDENTITY_VARS
+        .iter()
+        .any(|source| source.is_ambient() && source.var() == source_var)
+    {
+        return Err(format!(
+            "SUPERVISOR_REFUSED SENDER_IDENTITY_AMBIENT var={source_var} value={trimmed} \
+             detail=\"{source_var} is machine-global; its value is whatever agent last ran \
+             `launchctl setenv {source_var}`\" \
+             next_action=set-AGENT_MAIL_AGENT-in-the-plist-and-register-it"
         ));
     }
     Ok(AgentName::new(trimmed))
@@ -3507,6 +3599,7 @@ mod tests {
             // notification is exercised as a NAMED degradation in unit tests
             // and proven for real only against the live daemon.
             mail_sender: String::new(),
+            mail_sender_var: String::new(),
             omp_binary: PathBuf::from("omp"),
         }
     }
@@ -4508,18 +4601,95 @@ exit 2
 
     #[test]
     fn an_unset_sender_identity_refuses_and_names_where_to_set_it() {
-        let error = sender_identity_from("").expect_err("empty must refuse");
+        let error = sender_identity_from("", "").expect_err("empty must refuse");
         assert!(error.starts_with("sender_identity_unset"), "{error}");
         assert!(error.contains("AGENT_MAIL_AGENT"), "{error}");
         assert!(error.contains("AGENT_NAME"), "{error}");
         // Whitespace is not an identity.
-        assert!(sender_identity_from("   ").is_err());
+        assert!(sender_identity_from("   ", "").is_err());
     }
 
     #[test]
     fn a_configured_sender_identity_is_trimmed_and_used() {
-        let name = sender_identity_from("  BrightGorge \n").expect("must resolve");
+        let name =
+            sender_identity_from("  BrightGorge \n", "AGENT_MAIL_AGENT").expect("must resolve");
         assert_eq!(name.as_str(), "BrightGorge");
+    }
+
+    /// gfm6's WIRING leg - the claim-state consult must refuse both illegal states.
+    ///
+    /// Fixtures are the `br show --json` shape MEASURED 2026-09-02 (a BARE list whose row
+    /// carries `status` and `assignee`), not an invented one.
+    #[test]
+    fn a_bead_in_an_illegal_claim_state_refuses_the_dispatch() {
+        let half = br#"[{"id":"omp-orchestrator-x","status":"open","assignee":"AmberGate"}]"#;
+        let finding = claim_state_finding(half, "omp-orchestrator-x")
+            .expect("open + assigned is a half-claim");
+        assert!(finding.to_string().contains("HALF_CLAIM"), "{finding}");
+        assert!(finding.to_string().contains("AmberGate"), "{finding}");
+
+        let orphan = br#"[{"id":"omp-orchestrator-x","status":"in_progress","assignee":""}]"#;
+        let finding = claim_state_finding(orphan, "omp-orchestrator-x")
+            .expect("in_progress + unassigned is an orphan claim");
+        assert!(finding.to_string().contains("ORPHAN_CLAIM"), "{finding}");
+
+        // KNOWN-GOOD, both legal pairs. An over-strict check here would refuse every
+        // dispatch, which is a slower death than no check.
+        let open = br#"[{"id":"b","status":"open","assignee":""}]"#;
+        assert!(claim_state_finding(open, "b").is_none());
+        let claimed = br#"[{"id":"b","status":"in_progress","assignee":"GreenFrog"}]"#;
+        assert!(claim_state_finding(claimed, "b").is_none());
+
+        // THE MEASURED INSTRUMENT TRAP: `br ready --json` has no `assignee` key at all.
+        // A missing field must not read as an empty one, or every in-flight row in the
+        // queue is reported as an orphan claim.
+        let ready_row = br#"[{"id":"b","status":"in_progress","priority":0}]"#;
+        assert!(
+            claim_state_finding(ready_row, "b").is_some(),
+            "this row IS classified, which is exactly why the consult reads `br show` and \
+             never `br ready` - see the comment at the call site"
+        );
+
+        // AND THE REFUSAL ITSELF, not just the classifier: the call site's contract is
+        // that an illegal state becomes a `DISPATCH_BLOCKED` error.
+        let error = refuse_illegal_claim_state(half, "omp-orchestrator-x")
+            .expect_err("a half-claim must refuse the dispatch");
+        assert!(error.starts_with("DISPATCH_BLOCKED"), "{error}");
+        assert!(error.contains("HALF_CLAIM"), "{error}");
+        refuse_illegal_claim_state(open, "b").expect("a legal pair must permit the dispatch");
+
+        // ANTI-VACUITY: unreadable bytes are NOT an illegal state. `parse_br_show_json`
+        // on the next line is the authority for a malformed payload.
+        assert!(claim_state_finding(b"", "b").is_none());
+        assert!(claim_state_finding(b"{\"status\":\"open\"}", "b").is_none());
+        assert!(claim_state_finding(b"[{}]", "b").is_none());
+    }
+
+    /// yfp2 - THE CASE THAT ACTUALLY RAN, which the unset leg above does not cover.
+    ///
+    /// `7n5b` proved the UNSET path refuses. The live defect was set-but-AMBIENT: a
+    /// non-empty `AGENT_NAME` inherited from launchd's global environment, carrying
+    /// `WildStone` (an agent of `~/Developer/fsw`). Both legs above stayed GREEN
+    /// throughout the 64 refused sends, because a non-empty string satisfied them.
+    #[test]
+    fn the_measured_ambient_identity_is_refused_before_any_send() {
+        let error = sender_identity_from("WildStone", "AGENT_NAME")
+            .expect_err("an ambient variable can never be a project-scoped identity");
+        assert!(error.contains("SENDER_IDENTITY_AMBIENT"), "{error}");
+        // The refusal must name BOTH the variable and the value, or nobody can act on it.
+        assert!(error.contains("AGENT_NAME"), "{error}");
+        assert!(error.contains("WildStone"), "{error}");
+        assert!(error.contains("next_action="), "{error}");
+        // POSITIVE CONTROL, same value: the identical name through the OWNED variable is
+        // accepted, so the refusal is attributable to the SOURCE and not to the string.
+        assert_eq!(
+            sender_identity_from("WildStone", "AGENT_MAIL_AGENT")
+                .expect("an owned variable is a legitimate source")
+                .as_str(),
+            "WildStone"
+        );
+        // And the third foreign identity measured the same day behaves identically.
+        assert!(sender_identity_from("AzureCrane", "AGENT_NAME").is_err());
     }
 
     #[test]
