@@ -1,0 +1,9 @@
+flowchart TD
+  ROOT["S9 decision ledger"] --> A1["Appended id"]
+  ROOT --> A2["Deduped id"]
+  ROOT --> E1["Unreadable"]
+  ROOT --> E2["Malformed"]
+  ROOT --> E3["NotWritable"]
+  ROOT --> E4["NoSuchRequest"]
+  ROOT --> E5["MissingField"]
+  ROOT --> H["human-halt owner=josh"]

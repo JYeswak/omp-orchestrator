@@ -1,0 +1,17 @@
+[[disagreement]]
+box = 'S1'
+field = 'wave1_sections'
+owner_says = 'S1 is a committed human-start box'
+reviewer_says = 'The box has none of the required Wave 1 sections: measurement=0, gap=0, agreement=0, diagram=0. It is not reviewable under the 113d20d addendum.'
+evidence = 'date -u 2026-09-03T05:40:12Z; grep -c for each required section in docs/plan/flow/boxes/S1.toml returned 0,0,0,0'
+severity = 'blocker'
+resolution = ''
+
+[[disagreement]]
+box = 'S1'
+field = 'sota_cite'
+owner_says = 'mirror:destructive_command_guard/install.sh is a gold-standard installer citation'
+reviewer_says = 'The mirror path exists, but the row does not give a line citation or state the ls verification command. The contract requires every claim citation to be replayable, so the owner must add the exact line and verification evidence in wave 2.'
+evidence = 'test -e /Volumes/ZestData/dicklesworthstone-mirror/destructive_command_guard/install.sh && echo present -> present; current S1 sota_cite has no source line for the mirror claim'
+severity = 'major'
+resolution = ''

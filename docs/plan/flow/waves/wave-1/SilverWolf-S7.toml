@@ -1,0 +1,17 @@
+[[disagreement]]
+box = 'S7'
+field = 'crate'
+owner_says = 'crate = no-shell-gate; crate-atom-gate; staged-build-gate'
+reviewer_says = 'The contract requires crate to be one crates directory or the literal MISSING. A semicolon-separated list is not a valid exact row value. Put the primary dispatcher in crate and name the supporting gates in validator or an explicit supporting_crates field only if the contract is amended.'
+evidence = 'date -u 2026-09-03T05:40:12Z; sed -n 36,45p docs/plan/flow/CONTRACT.md requires crate = one dir under crates/ or MISSING; sed -n 1,8p docs/plan/flow/boxes/S7.toml shows the three-value field'
+severity = 'major'
+resolution = ''
+
+[[disagreement]]
+box = 'S7'
+field = 'bead'
+owner_says = 'bead = omp-orchestrator-d3gm; omp-orchestrator-929j'
+reviewer_says = 'The exact row shape permits one bead identifier or no bead. Two semicolon-separated identifiers violate the schema and make ownership ambiguous. Select the dispatcher bead and list the supporting bead in a gap or disagreement row.'
+evidence = 'sed -n 36,45p docs/plan/flow/CONTRACT.md; sed -n 1,8p docs/plan/flow/boxes/S7.toml; both commands re-ran at 2026-09-03T05:40:12Z'
+severity = 'major'
+resolution = ''

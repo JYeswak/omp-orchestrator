@@ -1,0 +1,8 @@
+[[disagreement]]
+box = 'S4'
+field = 'all'
+owner_says = 'S4 maps the hand materialization boundary and pins crate-atom-gate report shape.'
+reviewer_says = 'No disagreement found in this round. The box distinguishes the existing crate-atom report from the missing plan-materialize and bead-lint callers, marks proposed materializer arms as proposed, and carries the first-live-report no-claim.'
+evidence = 'date -u 2026-09-03T05:40:12Z; grep -c required sections in docs/plan/flow/boxes/S4.toml returned measurement=5 gap=13 agreement=1 diagram=1; sed -n 51,69p and 322,350p crates/crate-atom-gate/src/lib.rs re-ran Part and GateVerdict definitions'
+severity = 'minor'
+resolution = ''

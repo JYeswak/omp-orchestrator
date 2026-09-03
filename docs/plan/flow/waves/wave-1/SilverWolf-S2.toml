@@ -1,0 +1,8 @@
+[[disagreement]]
+box = 'S2'
+field = 'all'
+owner_says = 'Wave 1 physics, gaps, agreement, and diagram sections are present with cited plan-assembly inputs.'
+reviewer_says = 'No disagreement found in this round. The row names its 13 numbered sections separately from five auxiliary markdown files, marks its unverified plan-assemble input as a no-claim, and records the missing typed S3 validator.'
+evidence = 'date -u 2026-09-03T05:40:12Z; grep -c required sections in docs/plan/flow/boxes/S2.toml returned measurement=7 gap=9 agreement=1 diagram=1; sed -n 271,290p and 440,482p crates/plan-assemble/src/main.rs re-ran the directory scan, stamp, and --check paths'
+severity = 'minor'
+resolution = ''

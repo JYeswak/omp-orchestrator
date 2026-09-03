@@ -1,0 +1,17 @@
+[[disagreement]]
+box = 'S5b'
+field = 'event_row'
+owner_says = 'The dispatch event carries pane, agent, bead, incarnation, packet_hash, and transport.'
+reviewer_says = 'The source currently has no PaneIncarnation or AgentIncarnation symbol and no admit call. The event shape promises the ywd5 lease identity but the current sender path only carries reusable pane/agent names; wired status is true for legacy authorize, not for incarnation fencing.'
+evidence = 'date -u 2026-09-03T05:40:12Z; grep -R -n -E PaneIncarnation|AgentIncarnation|incarnation crates/dispatch-claim-fence/src crates/omp-orchestrator/src crates/ack-stage/src crates/receiver-receipt/src returned 0; ywd5 is open after release'
+severity = 'major'
+resolution = ''
+
+[[disagreement]]
+box = 'S5b'
+field = 'wave1_sections'
+owner_says = 'The S5b owner physics section is present.'
+reviewer_says = 'No disagreement found in the Wave 1 section inventory: measurement=6, gap=15, agreement=1, diagram=1. The only open finding is the unlanded incarnation contract above.'
+evidence = 'grep -c required sections in docs/plan/flow/boxes/S5b.toml returned measurement=6 gap=15 agreement=1 diagram=1 at 2026-09-03T05:40:12Z'
+severity = 'minor'
+resolution = ''

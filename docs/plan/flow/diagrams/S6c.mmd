@@ -1,0 +1,11 @@
+flowchart TD
+  ROOT["S6c verify grade close"] --> C1["MutationVerified"]
+  ROOT --> C2["Done"]
+  ROOT --> C3["Approved"]
+  ROOT --> C4["WontFix"]
+  ROOT --> R1["Reaped awaiting_human"]
+  ROOT --> R2["Working"]
+  ROOT --> R3["Changing"]
+  ROOT --> R4["Empty"]
+  ROOT --> M["MISSING Grade and CloseReasonVerdict"]
+  ROOT --> H["human-halt"]

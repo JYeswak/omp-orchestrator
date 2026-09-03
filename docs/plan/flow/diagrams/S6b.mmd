@@ -1,0 +1,9 @@
+flowchart TD
+  ROOT["S6b work in progress"] --> V1["VerdictPosted"]
+  ROOT --> V2["SilentPastDeadline"]
+  ROOT --> V3["Reassigned"]
+  ROOT --> V4["TrackerError"]
+  ROOT --> T1["TrackerRead"]
+  ROOT --> T2["TrackerError read"]
+  ROOT --> M["MISSING classify_followup"]
+  ROOT --> H["human-halt"]

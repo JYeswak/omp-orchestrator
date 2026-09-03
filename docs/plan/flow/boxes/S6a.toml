@@ -29,3 +29,124 @@ branches = [
   'human-halt: receipt is indeterminate or ACK identity disagrees and owner action is required',
 ]
 no_claim = 'Current receiver-receipt has 16 ReceiptReason arms and checks pane identity; the planned AckIncarnationMismatch arm is not present because ywd5 was released before implementation. Receipt confirmation still does not prove code execution, semantic completion, or exactly-once delivery.'
+
+[[box.measurement]]
+claim = 'ReceiptReason has 16 current arms'
+command = 'sed -n 43,115p crates/receiver-receipt/src/lib.rs | grep -E "^    [A-Z][A-Za-z0-9_]*( *\\{|,)" | wc -l'
+value = '16'
+measured_at = '2026-09-03T05:33:44Z'
+by = 'SilverWolf'
+
+[[box.measurement]]
+claim = 'AckAction has 6 current arms'
+command = 'sed -n 429,470p crates/ack-stage/src/lib.rs | grep -E "^    [A-Z][A-Za-z0-9_]*( *\\{|,)" | wc -l'
+value = '6'
+measured_at = '2026-09-03T05:33:44Z'
+by = 'SilverWolf'
+
+[[box.measurement]]
+claim = 'ReceiptVerdict has 4 current arms'
+command = 'sed -n 149,190p crates/receiver-receipt/src/lib.rs | grep -E "^    [A-Z][A-Za-z0-9_]*( *\\{|,)" | wc -l'
+value = '4'
+measured_at = '2026-09-03T05:33:44Z'
+by = 'SilverWolf'
+
+[[box.measurement]]
+claim = 'tick-monitor exposes 6 PaneState arms and 9 Liveness arms'
+command = 'sed -n 227,245p crates/tick-monitor/src/lib.rs and sed -n 443,490p crates/tick-monitor/src/lib.rs with the same enum-arm count'
+value = 'PaneState=6; Liveness=9'
+measured_at = '2026-09-03T05:33:44Z'
+by = 'SilverWolf'
+
+[[box.measurement]]
+claim = 'lifecycle-arrow-gate availability'
+command = 'command -v lifecycle-arrow-gate'
+value = 'MISSING; command returned no executable'
+measured_at = '2026-09-03T05:33:44Z'
+by = 'SilverWolf'
+
+[[box.gap]]
+what = 'atom:lib status=PRESENT; receiver-receipt source owns the classifier'
+resolves = 'none; retain crates/receiver-receipt/src/lib.rs as the lib authority'
+class = 'lib'
+[[box.gap]]
+what = 'atom:bin status=MISSING; receiver-receipt has no dedicated operator binary'
+resolves = 'add a thin binary or record an explicit non-applicability allowance'
+class = 'bin'
+[[box.gap]]
+what = 'atom:verdict_type status=PRESENT; ReceiptVerdict exists, but AckIncarnationMismatch is absent'
+resolves = 'land the planned typed incarnation mismatch reason in the receipt owner'
+class = 'verdict_type(atom 3)'
+[[box.gap]]
+what = 'atom:tests status=PRESENT; unit and integration tests exist'
+resolves = 'none for presence; keep a known-good and mutation leg for each receipt arm'
+class = 'tests'
+[[box.gap]]
+what = 'atom:fuzz_target status=MISSING; no receipt parser fuzz target is declared'
+resolves = 'add a bounded parser fuzz target and a crash-free corpus gate'
+class = 'fuzz_target'
+[[box.gap]]
+what = 'atom:claim_row status=MISSING; no claim-registry row names receipt ownership'
+resolves = 'add a claim row naming the receipt invariant and its independent evidence'
+class = 'claim_row(atom 6)'
+[[box.gap]]
+what = 'atom:slo_row status=MISSING; receipt latency and stale-read SLO are not registered'
+resolves = 'add an SLO row with a measured observation window and refusal budget'
+class = 'slo_row(atom 7)'
+[[box.gap]]
+what = 'atom:oracle status=PRESENT only as pane-truth dev authority; live delivery oracle remains unproven'
+resolves = 'name and run an independent receiver/transport oracle without upgrading tmux glyphs'
+class = 'oracle(atom 8)'
+[[box.gap]]
+what = 'atom:wired_caller status=PARTIAL; ack-stage calls the classifier but no ywd5 incarnation caller exists'
+resolves = 'wire the same pane/incarnation identity through the production ACK caller'
+class = 'wired_caller(atom 9)'
+[[box.gap]]
+what = 'rigor:L1 evidence claim is missing for the current 16-arm inventory and the planned 17th arm'
+resolves = 'record the source command, timestamp, and owner in the claim registry'
+class = 'claim_evidence(L1)'
+[[box.gap]]
+what = 'rigor:L2 SLO is missing for bounded ACK read-back freshness'
+resolves = 'register the receipt-window SLO and measure it on the real observer path'
+class = 'slo(L2)'
+[[box.gap]]
+what = 'rigor:L3 external oracle is incomplete for transport delivery'
+resolves = 'run a separate accepted-delivery oracle and preserve its evidence'
+class = 'oracle(L3)'
+[[box.gap]]
+what = 'rigor:L4 gate trip is missing for incarnation mismatch'
+resolves = 'add a production gate that refuses mismatched ACK identity before recording receipt'
+class = 'gate_trip(L4)'
+[[box.gap]]
+what = 'rigor:L5 fuzz evidence is missing for ACK comment parsing'
+resolves = 'add fuzz and malformed-comment mutation legs'
+class = 'fuzz(L5)'
+[[box.gap]]
+what = 'rigor:L6 formal invariant is missing for receipt identity preservation'
+resolves = 'state and mechanically check that pane and incarnation are preserved across ACK projection'
+class = 'formal(L6)'
+[[box.gap]]
+what = 'rigor:L7 lock/lease boundary is missing; pane id alone remains reusable'
+resolves = 'land the incarnation lease fence only after the freeze lifts and ywd5 is approved'
+class = 'lock(L7)'
+
+[box.agreement]
+wave = 1
+owner = 'SilverWolf'
+reviewers = ['BlueLantern', 'QuietRidge', 'AmberGate']
+open_disagreements = 0
+status = 'draft'
+approval = ''
+
+[box.diagram]
+mmd = 'docs/plan/flow/diagrams/S6a.mmd'
+validate_exit = 0
+
+
+[[box.measurement]]
+claim = 'owned branch diagram validates without warning failure'
+command = 'frankenmermaid validate docs/plan/flow/diagrams/S6a.mmd --fail-on warning --parse-mode strict'
+value = 'exit 0'
+measured_at = '2026-09-03T05:34:39Z'
+by = 'SilverWolf'
+

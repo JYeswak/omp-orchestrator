@@ -7,7 +7,7 @@ crate = 'verify-dispatch'
 crate_status = 'exists-no-caller'
 bead = 'omp-orchestrator-lf.1.1'
 kernel_input = 'bead status, close_reason, comments, independent verifier identity, mutation result, deadman delivery ledger, and finished-pane captures'
-kernel_output = 'MISSING typed Grade and CloseReasonVerdict; current close authority is ClosePrefix::{MutationVerified, Done, Approved, WontFix}'
+kernel_output = 'MISSING typed Grade; CloseReasonVerdict::{Verified, PolicyRefused, Empty, Unread} exists in ack-spine; current close authority also includes ClosePrefix::{MutationVerified, Done, Approved, WontFix}'
 event_row = 'LifecycleEvent{stage_from=S6b, stage_to=S6c, verifier, grader, bead, mutation, evidence_paths, close_prefix, close_reason, outcome, reason_code}'
 validator = 'verify-dispatch must read bead status rather than pane self-report; dispatcher-deadman detects eligible work without a packet; reap-finished-panes requires stable non-empty captures and FREE readiness'
 sota_standard = 'A bead closes only after a different agent reruns acceptance, cites evidence, and uses a sanctioned close prefix; a self-report is not verification'
@@ -22,7 +22,132 @@ branches = [
   'ReapPaneDecision::Working',
   'ReapPaneDecision::Changing',
   'ReapPaneDecision::Empty',
-  'MISSING Grade type and CloseReasonVerdict symbol in current target',
+  'CloseReasonVerdict::Verified{prefix}',
+  'CloseReasonVerdict::PolicyRefused{leading}',
+  'CloseReasonVerdict::Empty',
+  'CloseReasonVerdict::Unread',
+  'MISSING Grade type in current target; CloseReasonVerdict is present in ack-spine',
   'human-halt: verifier or grader refuses evidence, mutation, identity, or close prefix',
 ]
-no_claim = 'The current target has no Grade or CloseReasonVerdict symbols and no caller for verify-dispatch; this box maps the required close boundary without claiming that verification or grading is wired.'
+
+[[box.measurement]]
+claim = 'ClosePrefix has 4 current arms'
+command = 'sed -n 53,64p crates/ack-spine/src/close_reason.rs | grep -E "^    [A-Z][A-Za-z0-9_]*( *\\{|,)" | wc -l'
+value = '4'
+measured_at = '2026-09-03T05:33:44Z'
+by = 'SilverWolf'
+
+[[box.measurement]]
+claim = 'ReapPaneDecision has 4 current arms'
+command = 'sed -n 139,146p crates/reap-finished-panes/src/lib.rs | grep -E "^    [A-Z][A-Za-z0-9_]*( *\\{|,)" | wc -l'
+value = '4'
+measured_at = '2026-09-03T05:33:44Z'
+by = 'SilverWolf'
+
+[[box.measurement]]
+claim = 'Grade type and CloseReasonVerdict source scan'
+command = 'grep -R -n -E "struct Grade|enum Grade|type Grade|CloseReasonVerdict" crates/verify-dispatch/src crates/ack-spine/src crates/omp-orchestrator/src'
+value = 'Grade=0 matches; CloseReasonVerdict=present in ack-spine'
+measured_at = '2026-09-03T05:33:44Z'
+by = 'SilverWolf'
+
+[[box.measurement]]
+claim = 'verify-dispatch focused textual caller count'
+command = 'grep -R -l "verify-dispatch\\|verify_dispatch" crates/omp-orchestrator/src crates/verify-dispatch/src | wc -l'
+value = '3'
+measured_at = '2026-09-03T05:33:44Z'
+by = 'SilverWolf'
+
+[[box.measurement]]
+claim = 'lifecycle-arrow-gate availability'
+command = 'command -v lifecycle-arrow-gate'
+value = 'MISSING; command returned no executable'
+measured_at = '2026-09-03T05:33:44Z'
+by = 'SilverWolf'
+
+[[box.gap]]
+what = 'atom:lib status=PRESENT; verify-dispatch owns the status verifier'
+resolves = 'none; retain crates/verify-dispatch/src/lib.rs as the kernel'
+class = 'lib'
+[[box.gap]]
+what = 'atom:bin status=PRESENT in the verify-dispatch package, but no production caller is established'
+resolves = 'wire the binary into the supervisor or record why it remains an external lane'
+class = 'bin'
+[[box.gap]]
+what = 'atom:verdict_type status=PARTIAL; CloseReasonVerdict exists but Grade is missing'
+resolves = 'land the typed Grade contract and compose it with CloseReasonVerdict'
+class = 'verdict_type(atom 3)'
+[[box.gap]]
+what = 'atom:tests status=PRESENT; tests exercise verify rules, not a full verify-grade-close journey'
+resolves = 'add a caller-level positive control and mutation close test'
+class = 'tests'
+[[box.gap]]
+what = 'atom:fuzz_target status=MISSING for tracker close read-back and grade parsing'
+resolves = 'add bounded fuzz coverage for malformed close rows and grade payloads'
+class = 'fuzz_target'
+[[box.gap]]
+what = 'atom:claim_row status=MISSING for independent grading custody'
+resolves = 'register grader identity, evidence, and mutation result as a claim'
+class = 'claim_row(atom 6)'
+[[box.gap]]
+what = 'atom:slo_row status=MISSING for verify, grade, and close latency'
+resolves = 'register bounded verification and close-read-back SLOs'
+class = 'slo_row(atom 7)'
+[[box.gap]]
+what = 'atom:oracle status=PARTIAL; br status is ground truth but no independent grade oracle is wired'
+resolves = 'define and run the independent acceptance rerun oracle'
+class = 'oracle(atom 8)'
+[[box.gap]]
+what = 'atom:wired_caller status=MISSING; focused caller count is textual and not a reachable invocation proof'
+resolves = 'wire verify-dispatch into the supervisor and add a positive-control trigger test'
+class = 'wired_caller(atom 9)'
+[[box.gap]]
+what = 'rigor:L1 evidence claim is missing for the second-agent grading handoff'
+resolves = 'record grader, command, SHA, mutation, and cited paths in the claim registry'
+class = 'claim_evidence(L1)'
+[[box.gap]]
+what = 'rigor:L2 SLO is missing for bounded grade and close progression'
+resolves = 'register the maximum age and escalation action'
+class = 'slo(L2)'
+[[box.gap]]
+what = 'rigor:L3 independent oracle is incomplete for acceptance satisfaction'
+resolves = 'rerun the bead acceptance from a different agent and preserve the output'
+class = 'oracle(L3)'
+[[box.gap]]
+what = 'rigor:L4 gate trip is missing for self-grade and prose-close refusal'
+resolves = 'route all close decisions through the typed grade and CloseReasonVerdict gates'
+class = 'gate_trip(L4)'
+[[box.gap]]
+what = 'rigor:L5 fuzz evidence is missing for close-reason and grade parsers'
+resolves = 'add malformed-input fuzz and regression corpus cases'
+class = 'fuzz(L5)'
+[[box.gap]]
+what = 'rigor:L6 formal invariant is missing for non-author grading and sanctioned prefix'
+resolves = 'state and check grader disjointness and prefix exhaustiveness'
+class = 'formal(L6)'
+[[box.gap]]
+what = 'rigor:L7 lease/lock boundary is missing for verify-grade-close custody'
+resolves = 'bind verification and close effects to the dispatch identity before any close write'
+class = 'lock(L7)'
+
+[box.agreement]
+wave = 1
+owner = 'SilverWolf'
+reviewers = ['BlueLantern', 'QuietRidge', 'AmberGate']
+open_disagreements = 0
+status = 'draft'
+approval = ''
+
+[box.diagram]
+mmd = 'docs/plan/flow/diagrams/S6c.mmd'
+validate_exit = 0
+
+no_claim = 'The current target has no Grade type and no caller for verify-dispatch; CloseReasonVerdict is implemented in ack-spine. This box maps the required close boundary without claiming that verification or grading is wired.'
+
+[[box.measurement]]
+claim = 'owned branch diagram validates without warning failure'
+command = 'frankenmermaid validate docs/plan/flow/diagrams/S6c.mmd --fail-on warning --parse-mode strict'
+value = 'exit 0'
+measured_at = '2026-09-03T05:34:39Z'
+by = 'SilverWolf'
+

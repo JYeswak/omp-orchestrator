@@ -24,3 +24,124 @@ branches = [
   'human-halt: STAGE or BLOCKED row requires owner=josh action before dispatch continuation',
 ]
 no_claim = 'This box defines tracker-visible work and silence outcomes; it does not claim that dispatch-silence-watch or finding has a production caller, that a pane is live, or that a posted comment means the work is complete.'
+
+[[box.measurement]]
+claim = 'SilenceVerdict has 4 current arms'
+command = 'sed -n 27,40p crates/dispatch-silence-watch/src/lib.rs | grep -E "^    [A-Z][A-Za-z0-9_]*( *\\{|,)" | wc -l'
+value = '4'
+measured_at = '2026-09-03T05:33:44Z'
+by = 'SilverWolf'
+
+[[box.measurement]]
+claim = 'TrackerRead has 2 current arms'
+command = 'sed -n 174,185p crates/dispatch-silence-watch/src/lib.rs | grep -E "^    [A-Z][A-Za-z0-9_]*" | wc -l'
+value = '2'
+measured_at = '2026-09-03T05:42:47Z'
+by = 'SilverWolf'
+
+[[box.measurement]]
+claim = 'textual watch-call sites'
+command = 'grep -R -l "run_silence_watch\\|dispatch-silence-watch" crates/omp-orchestrator/src crates/dispatch-silence-watch/src | wc -l'
+value = '4'
+measured_at = '2026-09-03T05:33:44Z'
+by = 'SilverWolf'
+
+[[box.measurement]]
+claim = 'classify_followup typed symbol in the focused source scan'
+command = 'grep -R -n classify_followup crates/dispatch-silence-watch/src crates/omp-orchestrator/src'
+value = '0 matches'
+measured_at = '2026-09-03T05:33:44Z'
+by = 'SilverWolf'
+
+[[box.measurement]]
+claim = 'lifecycle-arrow-gate availability'
+command = 'command -v lifecycle-arrow-gate'
+value = 'MISSING; command returned no executable'
+measured_at = '2026-09-03T05:33:44Z'
+by = 'SilverWolf'
+
+[[box.gap]]
+what = 'atom:lib status=PRESENT; dispatch-silence-watch owns the silence classifier'
+resolves = 'none; retain crates/dispatch-silence-watch/src/lib.rs as the lib authority'
+class = 'lib'
+[[box.gap]]
+what = 'atom:bin status=MISSING; the focused crate does not expose the required operator entrypoint'
+resolves = 'add a thin bounded binary or name the consuming supervisor as the sole binary owner'
+class = 'bin'
+[[box.gap]]
+what = 'atom:verdict_type status=PRESENT; SilenceVerdict exists, classify_followup does not'
+resolves = 'define the missing typed follow-up projection or explicitly bind the stage to SilenceVerdict'
+class = 'verdict_type(atom 3)'
+[[box.gap]]
+what = 'atom:tests status=PARTIAL; classifier tests exist but no production caller contract test is cited'
+resolves = 'add a caller-level test that proves br read-back reaches the supervisor decision'
+class = 'tests'
+[[box.gap]]
+what = 'atom:fuzz_target status=MISSING; tracker comment parsing has no fuzz target'
+resolves = 'add bounded malformed-output fuzz coverage'
+class = 'fuzz_target'
+[[box.gap]]
+what = 'atom:claim_row status=MISSING; silence ownership is not in the claim registry'
+resolves = 'register the authoritative tracker read-back claim'
+class = 'claim_row(atom 6)'
+[[box.gap]]
+what = 'atom:slo_row status=MISSING; dispatch deadline and read-back freshness have no SLO row'
+resolves = 'register the deadline and escalation SLO with a measured clock source'
+class = 'slo_row(atom 7)'
+[[box.gap]]
+what = 'atom:oracle status=MISSING; tracker read-back is the method but not an independent oracle'
+resolves = 'define an independent ledger/comment oracle and reconcile it with the classifier'
+class = 'oracle(atom 8)'
+[[box.gap]]
+what = 'atom:wired_caller status=PARTIAL; four textual hits include caller and self references, not a wiring proof'
+resolves = 'prove one production caller with a positive-control dispatch and no-caller gate'
+class = 'wired_caller(atom 9)'
+[[box.gap]]
+what = 'rigor:L1 evidence claim is missing for the stage transition and actor identity'
+resolves = 'record the stage, bead, actor, pane, and read-back evidence in a claim row'
+class = 'claim_evidence(L1)'
+[[box.gap]]
+what = 'rigor:L2 SLO is missing for silence deadline and escalation latency'
+resolves = 'register and measure the bounded deadline'
+class = 'slo(L2)'
+[[box.gap]]
+what = 'rigor:L3 independent oracle is missing for comment persistence'
+resolves = 're-read the tracker through a separate durable evidence path'
+class = 'oracle(L3)'
+[[box.gap]]
+what = 'rigor:L4 gate trip is missing for tracker error versus silent deadline'
+resolves = 'make TrackerError a production refusal before follow-up action'
+class = 'gate_trip(L4)'
+[[box.gap]]
+what = 'rigor:L5 fuzz evidence is missing for attribution block parsing'
+resolves = 'fuzz malformed br comments and preserve the refusal corpus'
+class = 'fuzz(L5)'
+[[box.gap]]
+what = 'rigor:L6 formal state invariant is missing for reassignment and silence precedence'
+resolves = 'state and check that reassignment dominates any stale silence result'
+class = 'formal(L6)'
+[[box.gap]]
+what = 'rigor:L7 lock boundary is missing between dispatch epoch and follow-up read'
+resolves = 'bind the read-back to the dispatch identity before classifying silence'
+class = 'lock(L7)'
+
+[box.agreement]
+wave = 1
+owner = 'SilverWolf'
+reviewers = ['BlueLantern', 'QuietRidge', 'AmberGate']
+open_disagreements = 0
+status = 'draft'
+approval = ''
+
+[box.diagram]
+mmd = 'docs/plan/flow/diagrams/S6b.mmd'
+validate_exit = 0
+
+
+[[box.measurement]]
+claim = 'owned branch diagram validates without warning failure'
+command = 'frankenmermaid validate docs/plan/flow/diagrams/S6b.mmd --fail-on warning --parse-mode strict'
+value = 'exit 0'
+measured_at = '2026-09-03T05:34:39Z'
+by = 'SilverWolf'
+

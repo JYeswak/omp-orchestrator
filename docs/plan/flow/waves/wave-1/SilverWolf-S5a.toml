@@ -1,0 +1,8 @@
+[[disagreement]]
+box = 'S5a'
+field = 'all'
+owner_says = 'S5a maps BV-ranked selection, claim attempt, and the unwired selector crates.'
+reviewer_says = 'No disagreement found in this round. The enum branches are labelled against the current source, the measurement commands preserve BV versus br evidence, and the no-claim correctly says the selector crates have no production caller.'
+evidence = 'date -u 2026-09-03T05:40:12Z; grep -c required sections in docs/plan/flow/boxes/S5a.toml returned measurement=6 gap=16 agreement=1 diagram=1; sed -n 21,28p and 78,99p crates/bead-availability/src/lib.rs plus sed -n 382,425p crates/loop-queue-filter/src/lib.rs re-ran the cited inputs'
+severity = 'minor'
+resolution = ''

@@ -24,3 +24,124 @@ branches = [
   'human-halt: owner=josh must resolve a decision row before any refused path resumes',
 ]
 no_claim = 'The decision-ledger crate and file exist, but the gate and consumer are not wired in this target; a row on disk does not prove that the supervisor read it or honored its decision.'
+
+[[box.measurement]]
+claim = 'AppendOutcome has 2 current arms'
+command = 'sed -n 78,87p crates/decision-ledger/src/lib.rs | grep -E "^    [A-Z][A-Za-z0-9_]*( *\\{|,)" | wc -l'
+value = '2'
+measured_at = '2026-09-03T05:33:44Z'
+by = 'SilverWolf'
+
+[[box.measurement]]
+claim = 'LedgerError has 5 current arms'
+command = 'sed -n 105,128p crates/decision-ledger/src/lib.rs | grep -E "^    [A-Z][A-Za-z0-9_]*( *\\{|,)" | wc -l'
+value = '5'
+measured_at = '2026-09-03T05:33:44Z'
+by = 'SilverWolf'
+
+[[box.measurement]]
+claim = 'decision-ledger focused textual caller count'
+command = 'grep -R -l "decision_ledger::\\|decision-ledger" crates/omp-orchestrator/src crates/decision-ledger/src | wc -l'
+value = '2'
+measured_at = '2026-09-03T05:33:44Z'
+by = 'SilverWolf'
+
+[[box.measurement]]
+claim = 'decision ledger artifact exists'
+command = 'test -e docs/decisions.jsonl && echo 1 || echo 0'
+value = '1'
+measured_at = '2026-09-03T05:33:44Z'
+by = 'SilverWolf'
+
+[[box.measurement]]
+claim = 'decision gate and consumer references in production source'
+command = 'grep -R -n -E "12\\.58|12\\.59" crates/decision-ledger/src crates/omp-orchestrator/src'
+value = '0 matches'
+measured_at = '2026-09-03T05:33:44Z'
+by = 'SilverWolf'
+
+[[box.gap]]
+what = 'atom:lib status=PRESENT; decision-ledger owns append and error types'
+resolves = 'none; retain crates/decision-ledger/src/lib.rs as the ledger kernel'
+class = 'lib'
+[[box.gap]]
+what = 'atom:bin status=MISSING; no dedicated decision-ledger operator binary is registered'
+resolves = 'add a thin durable append/read binary or name the supervisor as the binary owner'
+class = 'bin'
+[[box.gap]]
+what = 'atom:verdict_type status=PRESENT; AppendOutcome and LedgerError are exhaustive'
+resolves = 'none for current arms; add a typed consumer verdict only if the ledger contract requires it'
+class = 'verdict_type(atom 3)'
+[[box.gap]]
+what = 'atom:tests status=PRESENT; append and malformed-row behavior are tested'
+resolves = 'none for presence; add a production consumer journey when the gate is wired'
+class = 'tests'
+[[box.gap]]
+what = 'atom:fuzz_target status=MISSING for malformed ledger line and decision payload parsing'
+resolves = 'add bounded fuzz coverage for JSONL row boundaries'
+class = 'fuzz_target'
+[[box.gap]]
+what = 'atom:claim_row status=MISSING for owner-routed decision custody'
+resolves = 'register each decision question with owner, evidence, and resolution'
+class = 'claim_row(atom 6)'
+[[box.gap]]
+what = 'atom:slo_row status=MISSING for append durability and decision read latency'
+resolves = 'register append/read durability and bounded consumer SLOs'
+class = 'slo_row(atom 7)'
+[[box.gap]]
+what = 'atom:oracle status=MISSING; no independent consumer oracle checks that the supervisor honored a row'
+resolves = 'add a third-party read-back or decision replay oracle'
+class = 'oracle(atom 8)'
+[[box.gap]]
+what = 'atom:wired_caller status=PARTIAL; supervisor calls classify_heartbeat but gate 12.58 and consumer 12.59 are absent'
+resolves = 'wire both named gate and consumer and add a reachable positive-control trigger'
+class = 'wired_caller(atom 9)'
+[[box.gap]]
+what = 'rigor:L1 evidence claim is missing for owner=josh halt decisions'
+resolves = 'record the decision question, owner, and evidence as a durable claim row'
+class = 'claim_evidence(L1)'
+[[box.gap]]
+what = 'rigor:L2 SLO is missing for decision append and read-back'
+resolves = 'register and measure bounded ledger latency'
+class = 'slo(L2)'
+[[box.gap]]
+what = 'rigor:L3 independent oracle is missing for honoring the decision'
+resolves = 'replay the row through the consuming decision path and compare outcome'
+class = 'oracle(L3)'
+[[box.gap]]
+what = 'rigor:L4 gate trip is missing for owner=josh blocking decisions'
+resolves = 'wire the gate before any dispatch decision and fail closed on unreadable rows'
+class = 'gate_trip(L4)'
+[[box.gap]]
+what = 'rigor:L5 fuzz evidence is missing for malformed decision rows'
+resolves = 'fuzz JSONL parsing and dedupe keys'
+class = 'fuzz(L5)'
+[[box.gap]]
+what = 'rigor:L6 formal invariant is missing for monotonic IDs and dedupe'
+resolves = 'state and check no unreadable or duplicate row can fork the ID space'
+class = 'formal(L6)'
+[[box.gap]]
+what = 'rigor:L7 lock boundary is missing for concurrent append and consume'
+resolves = 'bind append and read to the durable ledger ownership/locking contract'
+class = 'lock(L7)'
+
+[box.agreement]
+wave = 1
+owner = 'SilverWolf'
+reviewers = ['BlueLantern', 'QuietRidge', 'AmberGate']
+open_disagreements = 0
+status = 'draft'
+approval = ''
+
+[box.diagram]
+mmd = 'docs/plan/flow/diagrams/S9.mmd'
+validate_exit = 0
+
+
+[[box.measurement]]
+claim = 'owned branch diagram validates without warning failure'
+command = 'frankenmermaid validate docs/plan/flow/diagrams/S9.mmd --fail-on warning --parse-mode strict'
+value = 'exit 0'
+measured_at = '2026-09-03T05:34:39Z'
+by = 'SilverWolf'
+
