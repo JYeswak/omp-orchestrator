@@ -1,0 +1,307 @@
+# Rotation Lap 1, axis (b): acceptance falsifiability.
+# Sample pool is the 149 beads created on 2026-09-02; five per intended L0-L5
+# lifecycle layer plus five cross-layer beads. This is a sample, not a census.
+
+lap = "PX-ROTATE-1"
+axis = "acceptance-falsifiability"
+sample_date = "2026-09-02"
+pool_count = 149
+sample_count = 35
+strata = ["L0", "L1", "L2", "L3", "L4", "L5", "cross-layer"]
+
+# RUNNABLE-NOW outputs pasted for five sampled bead acceptances.
+[[run_output]]
+bead = "omp-orchestrator-6hrv"
+command = "command -v installer; installer --check"
+output = "command -v -> /usr/sbin/installer; installer: invalid option --check; exit 255"
+
+[[run_output]]
+bead = "omp-orchestrator-dispatch-journey-mapping-42na"
+command = "test -f docs/contracts/dispatch_journey_mapping_contract.md; wc -c; grep -c sections; grep -oE DJ IDs"
+output = "test -f: PASS; wc -c: 24991; sections: 6; DJ IDs: 21"
+
+[[run_output]]
+bead = "omp-orchestrator-xuu7"
+command = "cargo metadata --no-deps --format-version 1; git grep -nE 'control-plane|control_plane' -- crates/ Cargo.toml .cargo/"
+output = "package count: 69; grep returned control-plane hits in .cargo/config.toml, admission-reason, and its tests"
+
+[[run_output]]
+bead = "omp-orchestrator-8zx1"
+command = "br list --all --format json --limit 0 | jq '[.issues[] | select(.status == \"grading\")] | length'"
+output = "11"
+
+[[run_output]]
+bead = "omp-orchestrator-observation-state-false-idle-riqd"
+command = "ntm --robot-activity=omp-orchestrator"
+output = "live JSON: pane 1 ERROR with sigkill/braille_spinner; panes 2 and 3 THINKING; pane 4 UNKNOWN with observation_state=idle and safe_to_dispatch=true; source_health.tmux=fresh"
+
+[[sample]]
+bead = "omp-orchestrator-wire-agent-mail-caller-7n5b"
+stratum = "L0"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "Concrete cargo test commands and a named production call site exist; the implementation/green result requires the build and non-author test run."
+
+[[sample]]
+bead = "omp-orchestrator-3kpc"
+stratum = "L0"
+bucket = "UNRUNNABLE-AS-WRITTEN"
+acceptance_basis = "Acceptance gives API assertions and conditional prose but no concrete command, test target, or comparable verdict."
+
+[[sample]]
+bead = "omp-orchestrator-yfp2"
+stratum = "L0"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "Live proof names install, launchd kickstart, and a falsifier query; it depends on the supervisor identity implementation and a later installed build."
+
+[[sample]]
+bead = "omp-orchestrator-6hrv"
+stratum = "L0"
+bucket = "UNRUNNABLE-AS-WRITTEN"
+acceptance_basis = "The spelled command resolves to macOS /usr/sbin/installer, which rejects --check; no repository installer binary is named."
+
+[[sample]]
+bead = "omp-orchestrator-xuu7"
+stratum = "L0"
+bucket = "RUNNABLE-NOW"
+acceptance_basis = "The metadata and control-plane grep commands exist and yielded comparable output; the current output is a concrete failing boundary verdict."
+
+[[sample]]
+bead = "omp-orchestrator-r73l"
+stratum = "L1"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "It names a future no-shell-gate census test and explicit known-bad/positive controls; the target gate work is not yet complete."
+
+[[sample]]
+bead = "omp-orchestrator-xrtc"
+stratum = "L1"
+bucket = "UNRUNNABLE-AS-WRITTEN"
+acceptance_basis = "The acceptance says text-structure or fold into an existing crate and uses cargo test -p <crate>; the crate and command are unspecified."
+
+[[sample]]
+bead = "omp-orchestrator-th0z"
+stratum = "L1"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "The exact test target and message assertion are named, but crates/no-shell-gate/tests/orchestration_tick.rs is absent today."
+
+[[sample]]
+bead = "omp-orchestrator-observation-state-false-idle-riqd"
+stratum = "L1"
+bucket = "RUNNABLE-NOW"
+acceptance_basis = "ntm --robot-activity exists and returned live structured state; the acceptance's two-capture temporal leg remains executable."
+
+[[sample]]
+bead = "omp-orchestrator-17pm"
+stratum = "L1"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "Acceptance names concrete cargo test commands and a clean-clone re-run, but it is a fix target with failing legs today."
+
+[[sample]]
+bead = "omp-orchestrator-vyud"
+stratum = "L2"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "The differential test and environment variable are concrete; the acceptance requires the future typed skip/order change."
+
+[[sample]]
+bead = "omp-orchestrator-6fot"
+stratum = "L2"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "The cargo build command is concrete and currently demonstrates the defect; the commit-path build fence must land before the acceptance can pass."
+
+[[sample]]
+bead = "omp-orchestrator-p0fw"
+stratum = "L2"
+bucket = "UNRUNNABLE-AS-WRITTEN"
+acceptance_basis = "Every command uses an unresolved <name> placeholder and explicitly disables RCH/local mint protection; no concrete bead-level runner exists."
+
+[[sample]]
+bead = "omp-orchestrator-h71g"
+stratum = "L2"
+bucket = "UNRUNNABLE-AS-WRITTEN"
+acceptance_basis = "Every command uses unresolved <name> placeholders; the acceptance cannot identify which six crates or one executable verdict a grader must run."
+
+[[sample]]
+bead = "omp-orchestrator-k4sc"
+stratum = "L2"
+bucket = "UNRUNNABLE-AS-WRITTEN"
+acceptance_basis = "Every command uses unresolved <name> placeholders and a local-build command contrary to the current remote-build policy."
+
+[[sample]]
+bead = "omp-orchestrator-phase0-claim-strength-j5r"
+stratum = "L3"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "The exact omp-types test target and expected counts are named; current RCH project exclusion prevented execution in this lap, but the target is well-formed."
+
+[[sample]]
+bead = "omp-orchestrator-lifecycle-type-algebra-sxz"
+stratum = "L3"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "The exact lifecycle contract test target and five law legs are named; the implementation/test result is a later build obligation."
+
+[[sample]]
+bead = "omp-orchestrator-finding-contract-gbok"
+stratum = "L3"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "The exact finding contract test target and 12 expected tests are named; it is a build/test execution obligation."
+
+[[sample]]
+bead = "omp-orchestrator-readiness-l3-motion-window-7523"
+stratum = "L3"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "The exact readiness contract target and pinned 10-second known-bad leg are named; the fix and rerun are not complete."
+
+[[sample]]
+bead = "omp-orchestrator-dispatch-journey-mapping-42na"
+stratum = "L3"
+bucket = "UNFALSIFIABLE-RUNNER"
+acceptance_basis = "The structural commands run and report size/section/ID counts, but do not assert the kernel-anchor and external-source claims in the acceptance; a green runner can coexist with a false mapping."
+
+[[sample]]
+bead = "omp-orchestrator-h27o"
+stratum = "L4"
+bucket = "UNRUNNABLE-AS-WRITTEN"
+acceptance_basis = "Acceptance is a list of design assertions and known-bad prose with no named command, test target, or comparable verdict."
+
+[[sample]]
+bead = "omp-orchestrator-oe2"
+stratum = "L4"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "The acceptance names an oracle-compare gate, tests, positive controls, and an empty-set error; the gate/wiring work is not yet built."
+
+[[sample]]
+bead = "omp-orchestrator-pane-readiness-contract-n8c0"
+stratum = "L4"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "The exact readiness_contract test target and 11 named legs exist as a well-formed future runner."
+
+[[sample]]
+bead = "omp-orchestrator-readiness-l1-wedge-blind-46y7"
+stratum = "L4"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "The exact pane-dispatch-ready test target and mutation behavior are named; the desired classifier change is not landed."
+
+[[sample]]
+bead = "omp-orchestrator-y6v5"
+stratum = "L4"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "Acceptance has explicit stale-marker, positive-control, and anti-vacuity legs, but requires the supervisor clearing transition."
+
+[[sample]]
+bead = "omp-orchestrator-psf7"
+stratum = "L5"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "The writer/gap detector and mutation legs are concrete future work; current acceptance has no completed production runner."
+
+[[sample]]
+bead = "omp-orchestrator-j2te"
+stratum = "L5"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "The acceptance names a pure may_credit/re-execute type and receipt fields; the type and test must still be built."
+
+[[sample]]
+bead = "omp-orchestrator-qt9r"
+stratum = "L5"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "Acceptance names re-execution and actor evidence commands, but the corrected close-credit path is future work."
+
+[[sample]]
+bead = "omp-orchestrator-gcyf"
+stratum = "L5"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "The acceptance has concrete actor/refusal cases, but requires a wrapper/gate change before the legs can pass."
+
+[[sample]]
+bead = "omp-orchestrator-8zx1"
+stratum = "L5"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "The grading-state precondition is runnable and returned 11; the dispatcher, packet, and live grade row are not yet implemented."
+
+[[sample]]
+bead = "omp-orchestrator-igwd"
+stratum = "cross-layer"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "The transition table, actor quorum, mutation, and falsifier are concrete future test obligations."
+
+[[sample]]
+bead = "omp-orchestrator-7kxf"
+stratum = "cross-layer"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "The DispatchKey phases and crash injection are concrete future tests, but the implementation is not complete."
+
+[[sample]]
+bead = "omp-orchestrator-ywd5"
+stratum = "cross-layer"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "The incarnation types, sender call sites, and stale refusal are concrete future build/test work."
+
+[[sample]]
+bead = "omp-orchestrator-wbo2"
+stratum = "cross-layer"
+bucket = "RUNNABLE-AFTER-BUILD"
+acceptance_basis = "The sealed sender, lint, wiring, lock owner, and falsifier are named as future implementation/test legs."
+
+[[sample]]
+bead = "omp-orchestrator-scratch-home-contract-d64"
+stratum = "cross-layer"
+bucket = "VACUOUS"
+acceptance_basis = "Acceptance is only a prose checklist that the contract contains markers and agrees with another contract; it supplies no executable command or independent verdict."
+
+[[candidate_check]]
+name = "propagated j-prefixed bead typo"
+command = "br list --all --format json --limit 0 | jq pool/typo_rows/positive_acceptance_rows"
+result = "pool=149 typo_rows=0 positive_acceptance_rows=145"
+verdict = "REFUTED-IN-SAMPLE-POOL"
+
+[[finding]]
+bead = "omp-orchestrator-6hrv"
+bucket = "UNRUNNABLE-AS-WRITTEN"
+refutation = "command -v installer -> /usr/sbin/installer; installer --check exits 255 with invalid option"
+
+[[finding]]
+bead = "omp-orchestrator-3kpc"
+bucket = "UNRUNNABLE-AS-WRITTEN"
+refutation = "No executable acceptance command or comparable verdict is named; only API assertions are stated."
+
+[[finding]]
+bead = "omp-orchestrator-xrtc"
+bucket = "UNRUNNABLE-AS-WRITTEN"
+refutation = "The acceptance uses cargo test -p <crate> and leaves the crate choice unresolved."
+
+[[finding]]
+bead = "omp-orchestrator-p0fw"
+bucket = "UNRUNNABLE-AS-WRITTEN"
+refutation = "Commands use <name> placeholders and disable the protected remote-build path."
+
+[[finding]]
+bead = "omp-orchestrator-h71g"
+bucket = "UNRUNNABLE-AS-WRITTEN"
+refutation = "Commands use <name> placeholders and do not identify six concrete targets."
+
+[[finding]]
+bead = "omp-orchestrator-k4sc"
+bucket = "UNRUNNABLE-AS-WRITTEN"
+refutation = "Commands use <name> placeholders and request forbidden local-build bypasses."
+
+[[finding]]
+bead = "omp-orchestrator-h27o"
+bucket = "UNRUNNABLE-AS-WRITTEN"
+refutation = "Design assertions have no named runner or comparable output."
+
+[[finding]]
+bead = "omp-orchestrator-scratch-home-contract-d64"
+bucket = "VACUOUS"
+refutation = "The acceptance is satisfied by prose/contract shape and contains no executable verdict."
+
+[[finding]]
+bead = "omp-orchestrator-dispatch-journey-mapping-42na"
+bucket = "UNFALSIFIABLE-RUNNER"
+refutation = "The structural commands report size and marker counts but do not fail on false kernel-anchor or external-source claims."
+
+# Counts are derived from the 35 sample rows above.
+[counts]
+sampled = 35
+runnable_now = 2
+runnable_after_build = 24
+unrunnable = 7
+vacuous = 1
+fifth_bucket = "UNFALSIFIABLE-RUNNER"
+rows_filed = 9
