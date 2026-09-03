@@ -702,6 +702,65 @@ pub fn parse_recommendations_with_skips(text: &str) -> (Vec<String>, Vec<Skipped
     (ranked.into_iter().map(|(_, _, id)| id).collect(), skipped)
 }
 
+/// Fallback picks from `br ready --json` when bv's top-N recommendations all refuse.
+///
+/// MEASURED 2026-09-02T21:23Z, the first `--apply` with `dispatch_refusal` installed: bv
+/// returned exactly 10 recommendations (`--robot-max-results` does not raise it), every one
+/// an epic, a grading bead, or a blocked bead, so the lane reported "NO picks — queue empty"
+/// while `br ready` listed 28 dispatchable beads. bv ranks by centrality; the DAG's most
+/// central nodes are precisely the ones a worker must not receive. The ready list is the
+/// second oracle: rows ordered by priority (P0 first), same refusal applied to
+/// `issue_type`/`status`, epics never.
+pub fn parse_ready_fallback(text: &str) -> (Vec<String>, Vec<SkippedPick>) {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(text) else {
+        return (Vec::new(), Vec::new());
+    };
+    let rows = match &value {
+        serde_json::Value::Array(rows) => rows.clone(),
+        serde_json::Value::Object(map) => map
+            .get("issues")
+            .and_then(serde_json::Value::as_array)
+            .cloned()
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    };
+    let mut skipped = Vec::new();
+    let mut ranked = rows
+        .iter()
+        .enumerate()
+        .filter_map(|(position, row)| {
+            let id = row.get("id")?.as_str()?;
+            // br ready rows spell the type `issue_type`; bv spells it `type`. Normalise so
+            // one refusal function governs both oracles.
+            let mut probe = serde_json::Map::new();
+            if let Some(kind) = row.get("issue_type").or_else(|| row.get("type")) {
+                probe.insert("type".into(), kind.clone());
+            }
+            if let Some(status) = row.get("status") {
+                probe.insert("status".into(), status.clone());
+            }
+            if let Some(reason) = dispatch_refusal(&serde_json::Value::Object(probe)) {
+                skipped.push(SkippedPick {
+                    bead: id.to_string(),
+                    reason,
+                });
+                return None;
+            }
+            if row.get("assignee").and_then(serde_json::Value::as_str).map(|a| !a.is_empty()).unwrap_or(false) {
+                skipped.push(SkippedPick {
+                    bead: id.to_string(),
+                    reason: "assigned".into(),
+                });
+                return None;
+            }
+            let priority = row.get("priority").and_then(serde_json::Value::as_i64).unwrap_or(i64::MAX);
+            Some((priority, position, id.to_string()))
+        })
+        .collect::<Vec<_>>();
+    ranked.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    (ranked.into_iter().map(|(_, _, id)| id).collect(), skipped)
+}
+
 /// One pane paired with the bead it should receive.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Assignment {
@@ -1320,6 +1379,25 @@ mod tests {
             ]
         );
         assert_eq!(parse_recommendations(text), vec!["cp-honest", "cp-ready"]);
+    }
+
+    /// PLANTED: the ready list carries an epic, a grading bead, an assigned bead and two honest
+    /// rows; priority decides the order (P0 before P2), never list position.
+    #[test]
+    fn ready_fallback_orders_by_priority_and_refuses_by_name() {
+        let text = r#"[
+            {"id":"cp-epic","issue_type":"epic","status":"open","priority":0,"assignee":null},
+            {"id":"cp-grading","issue_type":"task","status":"grading","priority":0,"assignee":"Someone"},
+            {"id":"cp-owned","issue_type":"task","status":"open","priority":0,"assignee":"Someone"},
+            {"id":"cp-p2","issue_type":"bug","status":"open","priority":2,"assignee":null},
+            {"id":"cp-p0","issue_type":"task","status":"open","priority":0,"assignee":null}
+        ]"#;
+        let (picks, skipped) = parse_ready_fallback(text);
+        assert_eq!(picks, vec!["cp-p0", "cp-p2"]);
+        assert_eq!(skipped.len(), 3);
+        assert_eq!(skipped[0], SkippedPick { bead: "cp-epic".into(), reason: "type=epic".into() });
+        assert_eq!(skipped[1].reason, "status=grading");
+        assert_eq!(skipped[2].reason, "assigned");
     }
 
     /// An ABSENT field is not a disqualifier: an envelope without `type`/`status` (older bv,
