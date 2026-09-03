@@ -1,0 +1,29 @@
+# 41li cross-attack. Clause (b): a wave of all-accepted rows is a failed wave.
+# Pane 4 owns L3/L4/L5 contracts. Sibling contracts were pane 2 L0 (6gh6) and pane 3 L1/L2 (d9rv).
+
+[[disagreement]]
+box = "S1"
+field = "sibling.6gh6_d9rv_contracts_absent"
+owner_says = "packet: read ONE sibling contract (6gh6 L0, d9rv L1/L2) and REJECT something in it"
+reviewer_says = "NULL RESULT, not agreement. Command: ls docs/contracts/s1_*.md at 2026-09-03T18:03Z returned only s1_l3_walkthrough.md s1_l4_liveness.md s1_l5_portal.md (this pane). git status --porcelain docs/contracts showed no s1_l0/s1_l1/s1_l2 path. 6gh6 and d9rv are in_progress; their contracts have not landed. Silence would be a failed wave; this row is the honest null."
+evidence = "ls docs/contracts/s1_*.md -> s1_l3_walkthrough.md s1_l4_liveness.md s1_l5_portal.md; br show 6gh6/d9rv -> in_progress pane2-%7 / pane3-%8"
+severity = "major"
+resolution = "accepted: null sibling; re-open when 6gh6 or d9rv lands a file under docs/contracts/"
+
+[[disagreement]]
+box = "S1"
+field = "L4.live_definition.raw_tmux_has_no_freshness"
+owner_says = "S1.toml:63 live_definition uses tmux has-session as one of three agreeing sources"
+reviewer_says = "REJECTED. tmux has-session is a boolean with no available/fresh/reason_code/age_ms. L4's copied envelope is ntm sources.sources.* which does carry those four fields (measured on work_coordination). A source that cannot produce age_ms is SILENT; two agreeing plus one SILENT is NOT-live. Using raw tmux would make the known-bad leg unconstructible. Contract: docs/contracts/s1_l4_liveness.md LAW-L4-NO-TMUX-RAW."
+evidence = "ntm --robot-snapshot sources.sources keys=['work_coordination'] with available/fresh/reason_code/age_ms; degraded key absent; tmux has-session has no freshness field; S1.toml:63 names tmux has-session"
+severity = "blocker"
+resolution = "refuted(S1.toml:63 raw tmux is not a liveness source; ntm envelope shape is, and live snapshot only populates work_coordination)"
+
+[[disagreement]]
+box = "S1"
+field = "scout.bv_robot_triage_meta"
+owner_says = "41li UPSTREAM: bv --robot-triage carries generated_at + data_hash + meta{version, issue_count, compute_time_ms}"
+reviewer_says = "PARTIAL / REFUTED on meta. Measured bv --robot-triage keys=['data_hash','generated_at','triage','usage_hints']; meta absent. Adopt data_hash + generated_at. Do not claim meta on this binary."
+evidence = "bv --robot-triage 2026-09-03T18:03Z; python sorted(keys) as above"
+severity = "minor"
+resolution = "refuted(meta); accepted(data_hash and generated_at)"
