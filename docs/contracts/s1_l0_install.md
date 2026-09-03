@@ -177,7 +177,7 @@ S1_REQUIREMENTS=472 COVERED=103 MISSING=369 DOC_ONLY=0
 contract.named_test total=59 covered=37 missing=22 doc_only=0
 ```
 
-WORKTREE delta: total `+27`, covered `+26`, missing `+1`. L0 stable IDs 26/26 and named tests 26/26 are covered by 41 gate edges. The real suite is 9 tests: 8 pass, path-collision refuses by failing RED; 26 contract names collapse 26-to-9. `BUILDABLE=no: parent fsync, hook/skill/signature/report/uninstall modules remain absent; BUILD FREEZE controls implementation.`
+WORKTREE delta: total `+27`, covered `+26`, missing `+1`. L0 stable IDs 26/26 and named tests 26/26 are covered by 41 gate edges. The real suite is 9 tests: 8 pass, path-collision refuses by failing RED; 26 contract names collapse 26-to-9. `BUILDABLE=yes: the real suite compiles and runs; L0 correctness is not green because path collision fails and parent-fsync, hook/skill/signature/report/uninstall modules remain absent.`
 ## Rotation Lap 1 Axis (c): known-bad audit
 
 WORKTREE denominator: 81 test/law rows (`L0=22 L1=22 L2=22 L3=5 L4=5 L5=5`) plus one L0 self-scan leg = 82. Initial WORKTREE `NAMED-AND-PLAUSIBLE=71`, `UNNAMED=9`; L0 itself has no unnamed leg because all six laws map to concrete T rows.
