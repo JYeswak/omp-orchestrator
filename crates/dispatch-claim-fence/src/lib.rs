@@ -7,7 +7,7 @@
 //! the dispatch ledger remains the authority for that separate claim.
 
 use serde::Deserialize;
-
+use std::collections::{BTreeMap, BTreeSet};
 /// The tracker status relevant to dispatch admission.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum BeadStatus {
@@ -94,6 +94,277 @@ impl BeadSnapshot {
     /// Tracker assignee, if one is recorded.
     pub fn assignee(&self) -> Option<&str> {
         self.assignee.as_deref()
+    }
+}
+
+/// The two independent places from which an assignee may be known.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum IdentityNamespace {
+    AgentMail,
+    Subagent,
+}
+
+impl std::fmt::Display for IdentityNamespace {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::AgentMail => "agent_mail",
+            Self::Subagent => "subagents",
+        })
+    }
+}
+
+/// One identity entry from one namespace, with the actor key that lets a
+/// diagnostic recognize aliases without treating them as a refusal.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IdentityRecord {
+    namespace: IdentityNamespace,
+    name: String,
+    actor_id: String,
+}
+
+impl IdentityRecord {
+    pub fn agent_mail(name: &str, actor_id: &str) -> Self {
+        Self::new(IdentityNamespace::AgentMail, name, actor_id)
+    }
+
+    pub fn subagent(name: &str, actor_id: &str) -> Self {
+        Self::new(IdentityNamespace::Subagent, name, actor_id)
+    }
+
+    fn new(namespace: IdentityNamespace, name: &str, actor_id: &str) -> Self {
+        Self {
+            namespace,
+            name: name.trim().to_owned(),
+            actor_id: actor_id.trim().to_owned(),
+        }
+    }
+
+    pub fn namespace(&self) -> IdentityNamespace {
+        self.namespace
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn actor_id(&self) -> &str {
+        &self.actor_id
+    }
+}
+
+/// A resolved assignee. Resolution is by name, while actor_id is retained for
+/// duplicate-name reporting and later lifecycle reconciliation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ResolvedIdentity {
+    assignee: String,
+    actor_id: String,
+    namespaces: Vec<IdentityNamespace>,
+}
+
+impl ResolvedIdentity {
+    pub fn assignee(&self) -> &str {
+        &self.assignee
+    }
+
+    pub fn actor_id(&self) -> &str {
+        &self.actor_id
+    }
+
+    pub fn namespaces(&self) -> &[IdentityNamespace] {
+        &self.namespaces
+    }
+}
+
+/// An alias group is diagnostic data, not an identity failure.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DuplicateAlias {
+    actor_id: String,
+    names: Vec<String>,
+}
+
+impl DuplicateAlias {
+    pub fn actor_id(&self) -> &str {
+        &self.actor_id
+    }
+
+    pub fn names(&self) -> &[String] {
+        &self.names
+    }
+}
+
+/// A refusal or operational failure from the dual identity namespace check.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum AssigneeIdentityError {
+    RegistryUnavailable {
+        missing: Vec<IdentityNamespace>,
+    },
+    UnknownAssignee {
+        assignee: String,
+        agent_mail: Vec<String>,
+        subagents: Vec<String>,
+    },
+    AmbiguousAssignee {
+        assignee: String,
+        matches: Vec<ResolvedIdentity>,
+    },
+}
+
+impl AssigneeIdentityError {
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::RegistryUnavailable { .. } => "IDENTITY_REGISTRY_UNAVAILABLE",
+            Self::UnknownAssignee { .. } => "ASSIGNEE_NOT_REGISTERED",
+            Self::AmbiguousAssignee { .. } => "ASSIGNEE_AMBIGUOUS",
+        }
+    }
+}
+
+impl std::fmt::Display for AssigneeIdentityError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::RegistryUnavailable { missing } => write!(
+                formatter,
+                "ASSIGNEE_IDENTITY_ERROR reason=identity_registry_unavailable missing={} checked=agent_mail,subagents",
+                missing.iter().map(ToString::to_string).collect::<Vec<_>>().join(",")
+            ),
+            Self::UnknownAssignee {
+                assignee,
+                agent_mail,
+                subagents,
+            } => write!(
+                formatter,
+                "ASSIGNEE_IDENTITY_REFUSED assignee={assignee} reason=unknown_assignee checked=agent_mail names=[{}] checked=subagents names=[{}]",
+                agent_mail.join(","),
+                subagents.join(",")
+            ),
+            Self::AmbiguousAssignee { assignee, matches } => write!(
+                formatter,
+                "ASSIGNEE_IDENTITY_ERROR assignee={assignee} reason=ambiguous_assignee matches={}",
+                matches
+                    .iter()
+                    .map(|identity| format!("{}:{}", identity.actor_id, identity.namespaces.iter().map(ToString::to_string).collect::<Vec<_>>().join("+")))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ),
+        }
+    }
+}
+
+impl std::error::Error for AssigneeIdentityError {}
+
+/// Snapshots of the Agent Mail roster and the parent-owned subagent registry.
+/// Both must be present and non-empty before any assignee is accepted.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct IdentityRegistries {
+    agent_mail: Vec<IdentityRecord>,
+    subagents: Vec<IdentityRecord>,
+}
+
+impl IdentityRegistries {
+    pub fn new(agent_mail: Vec<IdentityRecord>, subagents: Vec<IdentityRecord>) -> Self {
+        Self {
+            agent_mail,
+            subagents,
+        }
+    }
+
+    pub fn agent_mail(&self) -> &[IdentityRecord] {
+        &self.agent_mail
+    }
+
+    pub fn subagents(&self) -> &[IdentityRecord] {
+        &self.subagents
+    }
+
+    /// Resolve an assignee only when both registry snapshots are available.
+    pub fn resolve(&self, assignee: &str) -> Result<ResolvedIdentity, AssigneeIdentityError> {
+        let mut missing = Vec::new();
+        if self.agent_mail.is_empty() {
+            missing.push(IdentityNamespace::AgentMail);
+        }
+        if self.subagents.is_empty() {
+            missing.push(IdentityNamespace::Subagent);
+        }
+        if !missing.is_empty() {
+            return Err(AssigneeIdentityError::RegistryUnavailable { missing });
+        }
+
+        let assignee = assignee.trim().to_owned();
+        let matches: Vec<&IdentityRecord> = self
+            .agent_mail
+            .iter()
+            .chain(self.subagents.iter())
+            .filter(|record| record.name == assignee)
+            .collect();
+        let actor_ids: BTreeSet<&str> = matches
+            .iter()
+            .map(|record| record.actor_id.as_str())
+            .collect();
+        if actor_ids.is_empty() {
+            let mut agent_mail: Vec<String> = self
+                .agent_mail
+                .iter()
+                .map(|record| record.name.clone())
+                .collect();
+            let mut subagents: Vec<String> = self
+                .subagents
+                .iter()
+                .map(|record| record.name.clone())
+                .collect();
+            agent_mail.sort();
+            subagents.sort();
+            return Err(AssigneeIdentityError::UnknownAssignee {
+                assignee,
+                agent_mail,
+                subagents,
+            });
+        }
+        if actor_ids.len() > 1 {
+            return Err(AssigneeIdentityError::AmbiguousAssignee {
+                assignee,
+                matches: matches
+                    .iter()
+                    .map(|record| ResolvedIdentity {
+                        assignee: record.name.clone(),
+                        actor_id: record.actor_id.clone(),
+                        namespaces: vec![record.namespace],
+                    })
+                    .collect(),
+            });
+        }
+
+        let actor_id = (*actor_ids.iter().next().expect("nonempty actor ids")).to_owned();
+        let mut namespaces: Vec<IdentityNamespace> =
+            matches.iter().map(|record| record.namespace).collect();
+        namespaces.sort_unstable();
+        namespaces.dedup();
+        Ok(ResolvedIdentity {
+            assignee,
+            actor_id,
+            namespaces,
+        })
+    }
+
+    /// Return every actor represented by more than one distinct assignee name.
+    pub fn duplicate_aliases(&self) -> Vec<DuplicateAlias> {
+        let mut names_by_actor: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
+        for record in self.agent_mail.iter().chain(self.subagents.iter()) {
+            if !record.actor_id.is_empty() && !record.name.is_empty() {
+                names_by_actor
+                    .entry(record.actor_id.as_str())
+                    .or_default()
+                    .insert(record.name.as_str());
+            }
+        }
+        names_by_actor
+            .into_iter()
+            .filter_map(|(actor_id, names)| {
+                (names.len() > 1).then(|| DuplicateAlias {
+                    actor_id: actor_id.to_owned(),
+                    names: names.into_iter().map(ToOwned::to_owned).collect(),
+                })
+            })
+            .collect()
     }
 }
 
@@ -189,6 +460,7 @@ pub enum ClaimFenceError {
         bead_id: String,
         actual_status: String,
     },
+    AssigneeIdentity(AssigneeIdentityError),
 }
 
 impl ClaimFenceError {
@@ -217,6 +489,7 @@ impl ClaimFenceError {
             Self::ClaimRequired { .. } => "CLAIM_REQUIRED",
             Self::AssignedElsewhere { .. } => "ASSIGNED_ELSEWHERE",
             Self::UnknownStatus { .. } => "UNKNOWN_STATUS",
+            Self::AssigneeIdentity(error) => error.code(),
         }
     }
 }
@@ -267,6 +540,7 @@ impl std::fmt::Display for ClaimFenceError {
                 formatter,
                 "DISPATCH_BLOCKED bead={bead_id} tracker status={actual_status} is not recognized"
             ),
+            Self::AssigneeIdentity(error) => std::fmt::Display::fmt(error, formatter),
         }
     }
 }
@@ -358,6 +632,24 @@ pub fn authorize(
             })
         }
     }
+}
+
+/// Authorizes a bead dispatch and verifies that its receiver exists in both
+/// the Agent Mail and parent-owned subagent registry snapshots. The legacy
+/// `authorize` function remains the claim/status-only boundary for callers that
+/// have not yet supplied identity snapshots.
+pub fn authorize_with_identities(
+    intent: &DispatchIntent,
+    snapshot: Option<&BeadSnapshot>,
+    identities: &IdentityRegistries,
+) -> Result<DispatchPermit, ClaimFenceError> {
+    let permit = authorize(intent, snapshot)?;
+    if let DispatchIntent::Bead { receiver_agent, .. } = intent {
+        identities
+            .resolve(receiver_agent)
+            .map_err(ClaimFenceError::AssigneeIdentity)?;
+    }
+    Ok(permit)
 }
 
 fn require_named_operation(operation: &str, receiver_agent: &str) -> Result<(), ClaimFenceError> {
