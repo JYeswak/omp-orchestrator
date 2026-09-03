@@ -1,0 +1,45 @@
+purpose = "Turn independently rerun acceptance evidence into a sanctioned close decision made by an agent other than the author."
+inputs = [
+  "S6b: tracker-visible stage, block, silence, and finding evidence",
+  "external: bead status, close_reason, comments, verifier identity, mutation result, deadman ledger, and finished-pane captures",
+  "external: ack-spine CloseReasonVerdict and sanctioned ClosePrefix values",
+]
+outputs = [
+  "proposed typed Grade and CloseReasonVerdict",
+  "verified, policy-refused, empty, or unread close outcome",
+  "close evidence consumed by S7 and owner-routed decisions",
+]
+dependencies = { hard = ["S6b", "external:bead status and close evidence", "external:independent verifier identity"], soft = ["external:dispatcher-deadman", "external:reap-finished-panes", "external:ack-spine"] }
+consumers = [
+  "S7: validation of the close transition and staged path state",
+  "S9: owner-routed resolution when close is refused or blocked",
+  "external:tracker: sanctioned bead closure",
+]
+unknowns = [
+  { disposition = "BLOCKS_BUILD", item = "The verify-dispatch binary has no established production caller even though the package target exists." },
+  { disposition = "BLOCKS_PLAN", item = "CloseReasonVerdict exists, but the typed Grade contract is missing." },
+  { disposition = "DEFER_TO_BEAD", item = "Tests cover verify rules but not the full verify-grade-close journey." },
+  { disposition = "DEFER_TO_BEAD", item = "No bounded fuzz target covers malformed close read-back and grade payloads." },
+  { disposition = "DEFER_TO_BEAD", item = "Independent grading custody has no claim-registry row." },
+  { disposition = "DEFER_TO_BEAD", item = "Verify, grade, and close latency have no registered SLO." },
+  { disposition = "BLOCKS_PLAN", item = "br status is ground truth, but no independent grade oracle is wired." },
+  { disposition = "BLOCKS_BUILD", item = "No reachable invocation proof wires verify-dispatch into the supervisor." },
+  { disposition = "DEFER_TO_BEAD", item = "The second-agent grading handoff lacks a claim row carrying grader, command, SHA, mutation, and paths." },
+  { disposition = "DEFER_TO_BEAD", item = "No maximum-age or escalation SLO bounds grade and close progression." },
+  { disposition = "DEFER_TO_BEAD", item = "No independent acceptance rerun oracle preserves its output." },
+  { disposition = "BLOCKS_BUILD", item = "No gate refuses self-grade or prose close outside typed Grade and CloseReasonVerdict." },
+  { disposition = "DEFER_TO_BEAD", item = "Close-reason and grade parsers have no malformed-input fuzz corpus." },
+  { disposition = "BLOCKS_PLAN", item = "No invariant checks grader disjointness and sanctioned-prefix exhaustiveness." },
+  { disposition = "BLOCKS_BUILD", item = "No lease binds verification and close effects to dispatch identity before a close write." },
+]
+non_goals = [
+  "S6c does not accept an implementer self-report as verification.",
+  "S6c does not infer bead completion from pane appearance or a transport receipt.",
+  "S6c does not alter the sanctioned close-prefix policy owned by ack-spine.",
+]
+source_pointers = [
+  "docs/plan/flow/boxes/S6c.toml:1-15",
+  "docs/plan/flow/boxes/S6c.toml:16-32",
+  "docs/plan/flow/boxes/S6c.toml:33-153",
+  "docs/plan/flow/boxes/S6c.toml:68-128",
+]

@@ -1,0 +1,41 @@
+purpose = "Apply fresh, disjoint grading lenses until a plan earns two consecutive zero-finding rounds."
+inputs = [
+  "S2: assembled plan and preregistration authority",
+  "external: docs/plan/*.md, docs/plan/CONVERGENCE.jsonl, and round*.jsonl",
+  "external: independent grader identity and named lens",
+]
+outputs = [
+  "round verdict and verified finding rows",
+  "banked-section decision after two qualifying zero-finding rounds",
+  "graded plan authority consumed by S4",
+]
+dependencies = { hard = ["S2", "external:round files and convergence ledger"], soft = ["external:independent graders", "external:external validation signal"] }
+consumers = [
+  "S4: banked plan sections and verified findings for bead materialization",
+  "external:human planner for unresolved findings and lens decisions",
+]
+unknowns = [
+  { disposition = "BLOCKS_BUILD", item = "plan-check does not exist, so all round-validity branches remain proposed." },
+  { disposition = "DEFER_TO_BEAD", item = "No LifecycleEvent row distinguishes a run round from a hand-appended empty round; kxe.8 is named." },
+  { disposition = "BLOCKS_PLAN", item = "CONVERGENCE.jsonl rounds disagree with the available round files and 42 of 87 rows lack gate state." },
+  { disposition = "DEFER_TO_BEAD", item = "There is no claim row or strength lattice for the two-zero-round banking claim." },
+  { disposition = "DEFER_TO_BEAD", item = "There is no grading-lane SLO for p95, budget, or safe-mode trigger." },
+  { disposition = "HUMAN_DECISION", item = "No out-of-our-control oracle currently establishes whether the plan is good; the box says internal agreement is below the external-validation bar." },
+  { disposition = "BLOCKS_BUILD", item = "No gate trips on a spent lens or grader-authored section." },
+  { disposition = "DEFER_TO_BEAD", item = "No fuzz target covers round-row parsing and its stated invariants." },
+  { disposition = "BLOCKS_BUILD", item = "No production caller or reachability trigger invokes plan-check; pane 1 dispatches rounds by hand." },
+  { disposition = "DEFER_TO_BEAD", item = "No hook fires when a malformed round file is written." },
+  { disposition = "BLOCKS_PLAN", item = "new_findings is self-reported and round 15 produced verified false positives, so the record-before-rerun rule is not machine-checked." },
+  { disposition = "OUT_OF_SCOPE", item = "Formal proof and ecosystem lock are explicitly marked not needed for the current grading round." },
+]
+non_goals = [
+  "S3 does not author plan sections or hypotheses.",
+  "S3 does not generate beads, select work, dispatch packets, or close beads.",
+  "S3 does not treat internal agreement as external validation.",
+]
+source_pointers = [
+  "docs/plan/flow/boxes/S3.toml:5-19",
+  "docs/plan/flow/boxes/S3.toml:21-53",
+  "docs/plan/flow/boxes/S3.toml:54-178",
+  "docs/plan/flow/boxes/S3.toml:93-148",
+]

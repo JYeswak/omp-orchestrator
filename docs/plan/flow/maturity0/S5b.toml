@@ -1,0 +1,43 @@
+purpose = "Authorize a claimed operation, render the complete packet, and admit the transport without confusing permission with delivery."
+inputs = [
+  "S5a: selected bead and claim attempt",
+  "external: DispatchIntent, BeadSnapshot, receiver agent, pane, and transport identity",
+  "external: pane-dispatch-fence and dispatch packet renderer",
+]
+outputs = [
+  "DispatchPermit::{Bead, Broadcast, Correction}",
+  "typed ClaimFenceError and PacketError refusal outcomes",
+  "claim-to-dispatch transition consumed by S6a",
+]
+dependencies = { hard = ["S5a", "external:bead snapshot and receiver identity", "external:pane fence"], soft = ["external:transport selection", "external:dispatch packet renderer"] }
+consumers = [
+  "S6a: pre-observation, dispatch identity, and post-send receipt inputs",
+  "external:supervisor: permission refusal before transport side effects",
+]
+unknowns = [
+  { disposition = "BLOCKS_BUILD", item = "dispatch-claim-fence is library-only and has no dedicated binary or named thin caller owning its admission invocation." },
+  { disposition = "DEFER_TO_BEAD", item = "No fuzz target covers DispatchIntent, BeadSnapshot, or ClaimFenceError identity mutations." },
+  { disposition = "DEFER_TO_BEAD", item = "The permission boundary has no durable claim-strength registry row." },
+  { disposition = "DEFER_TO_BEAD", item = "No S5b SLO covers authorization latency or packet-preflight refusal rate." },
+  { disposition = "BLOCKS_PLAN", item = "No independent oracle compares claim state, packet digest, target pane, and transport identity." },
+  { disposition = "DEFER_TO_BEAD", item = "DispatchPermit is not itself a durable lifecycle claim row; kxe.8 and the lifecycle writer are named." },
+  { disposition = "DEFER_TO_BEAD", item = "No registered S5b service-level floor exists." },
+  { disposition = "BLOCKS_PLAN", item = "The permit has no independent post-send transport oracle; S6a must consume the receipt without treating permit success as delivery." },
+  { disposition = "BLOCKS_BUILD", item = "No standalone conformance gate proves a live caller cannot bypass authorize before rendering." },
+  { disposition = "DEFER_TO_BEAD", item = "Packet-field and transport-boundary fuzz coverage is absent." },
+  { disposition = "BLOCKS_PLAN", item = "No invariant connects a permit to the exact bead, pane, agent, and incarnation." },
+  { disposition = "BLOCKS_BUILD", item = "pane-dispatch-fence exists, but no direct S5b supervisor caller was found before the first transport side effect." },
+  { disposition = "DEFER_TO_BEAD", item = "No durable S5a-to-S5b transition row is emitted at the authorization boundary." },
+  { disposition = "DEFER_TO_BEAD", item = "No certified Rust hook row exists for claim-fence and packet-preflight admission." },
+]
+non_goals = [
+  "S5b does not prove transport arrival or receiver acknowledgement.",
+  "S5b does not classify pane liveness, work silence, grading, or closure.",
+  "S5b does not reselect a candidate or mutate the bead claim outside the authorized snapshot.",
+]
+source_pointers = [
+  "docs/plan/flow/boxes/S5b.toml:1-15",
+  "docs/plan/flow/boxes/S5b.toml:16-39",
+  "docs/plan/flow/boxes/S5b.toml:40-172",
+  "docs/plan/flow/boxes/S5b.toml:75-131",
+]

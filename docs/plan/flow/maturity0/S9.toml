@@ -1,0 +1,43 @@
+purpose = "Persist owner-routed halts and resolutions as deduplicated ledger state that cannot be mistaken for an unread or empty ledger."
+inputs = [
+  "S8: install, rollback, identity, and restrictive postcondition evidence",
+  "external: decision question, context, evidence paths, owner, requested decision, and prior docs/decisions.jsonl rows",
+  "external: supervisor halt or resume request",
+]
+outputs = [
+  "AppendOutcome::{Appended{id}, Deduped{id}}",
+  "LedgerError::{Unreadable, Malformed, NotWritable, NoSuchRequest, MissingField}",
+  "durable owner-routed decision row for the operator and next run",
+]
+dependencies = { hard = ["S8", "external:docs/decisions.jsonl", "external:owner-routed decision request"], soft = ["external:human owner=josh", "external:supervisor consumer"] }
+consumers = [
+  "external:supervisor: restrictive read and resume/stop decision",
+  "external:human owner=josh: decision resolution",
+  "S1: decisions owed and portal next-action display by reference only",
+]
+unknowns = [
+  { disposition = "BLOCKS_BUILD", item = "No dedicated decision-ledger operator binary is registered." },
+  { disposition = "DEFER_TO_BEAD", item = "No fuzz target covers malformed ledger lines and decision payload parsing." },
+  { disposition = "DEFER_TO_BEAD", item = "Owner-routed decision custody has no claim-registry row." },
+  { disposition = "DEFER_TO_BEAD", item = "Append durability and decision read latency have no SLO row." },
+  { disposition = "BLOCKS_PLAN", item = "No independent consumer oracle checks that the supervisor honored a ledger row." },
+  { disposition = "BLOCKS_BUILD", item = "The supervisor calls classify_heartbeat, but named gate 12.58 and consumer 12.59 have no reachable production wiring." },
+  { disposition = "DEFER_TO_BEAD", item = "Owner=josh halt decisions lack an L1 evidence claim row." },
+  { disposition = "DEFER_TO_BEAD", item = "No bounded ledger latency SLO is registered." },
+  { disposition = "DEFER_TO_BEAD", item = "No independent replay oracle checks that the consuming path honored the decision." },
+  { disposition = "BLOCKS_BUILD", item = "No gate trips on owner=josh blocking decisions before dispatch, including unreadable rows." },
+  { disposition = "DEFER_TO_BEAD", item = "Malformed decision-row fuzz evidence is absent." },
+  { disposition = "BLOCKS_PLAN", item = "No formal invariant covers monotonic IDs and deduplication across unreadable or duplicate rows." },
+  { disposition = "BLOCKS_BUILD", item = "No lock boundary binds concurrent append and consume to the durable ledger ownership contract." },
+]
+non_goals = [
+  "S9 does not invent the human decision or resolve owner=josh rows automatically.",
+  "S9 does not treat a present file, a successful append, or a self-consistent daemon as proof that the supervisor honored the decision.",
+  "S9 does not own upstream selection, transport, receipt, grading, validation, or installation mechanics.",
+]
+source_pointers = [
+  "docs/plan/flow/boxes/S9.toml:1-26",
+  "docs/plan/flow/boxes/S9.toml:28-62",
+  "docs/plan/flow/boxes/S9.toml:63-126",
+  "docs/plan/flow/boxes/S9.toml:141-147",
+]

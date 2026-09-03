@@ -1,0 +1,43 @@
+purpose = "Install or roll back a supervisor artifact only after repository identity, build outcome, and bounded postconditions are classified."
+inputs = [
+  "S7: validation and bounded build verdict",
+  "external: repository HEAD, selected installer target, build_id, installed path, version output, current artifact, and prior artifact",
+  "external: installer and staged-build-gate surfaces",
+]
+outputs = [
+  "IdentityCheck with repository, build-id, version, and consistency legs",
+  "RestartPostcondition and CargoBuildOutcome",
+  "install or rollback evidence consumed by S9 and the operator",
+]
+dependencies = { hard = ["S7", "external:repository identity", "external:current and prior artifacts"], soft = ["external:RCH release lane", "external:launchd restart/read-back"] }
+consumers = [
+  "S9: artifact identity, rollback, and owner-routed resolution evidence",
+  "external:operator: bounded install, refusal, or rollback action",
+]
+unknowns = [
+  { disposition = "ASSUME_REVERSIBLY", item = "The S8 box snapshot says the external installer test target was missing, but i0uh's real suite now exists; re-measure the box before treating that historical gap as current." },
+  { disposition = "DEFER_TO_BEAD", item = "No installer identity or rollback fuzz target is declared." },
+  { disposition = "DEFER_TO_BEAD", item = "Identity-safe replacement has no claim-registry row." },
+  { disposition = "DEFER_TO_BEAD", item = "No install or rollback SLO row is registered." },
+  { disposition = "BLOCKS_PLAN", item = "No independent artifact oracle compares predecessor and installed bytes or build IDs." },
+  { disposition = "BLOCKS_BUILD", item = "The installer is hand-invocable; no in-repo caller or reachability assertion consumes it." },
+  { disposition = "DEFER_TO_BEAD", item = "Install identity lacks an L1 claim row and source pin." },
+  { disposition = "DEFER_TO_BEAD", item = "No measured install/rollback performance floor is registered." },
+  { disposition = "BLOCKS_PLAN", item = "RCH placement is not a correctness oracle for the installed artifact." },
+  { disposition = "DEFER_TO_BEAD", item = "Source refuses identity drift and build failures, but no current rollback transcript proves the end-to-end gate trip." },
+  { disposition = "DEFER_TO_BEAD", item = "No adversarial predecessor/build-id corpus exists." },
+  { disposition = "BLOCKS_PLAN", item = "No formal invariant covers preserve-before-replace and identity refusal." },
+  { disposition = "BLOCKS_BUILD", item = "The .build_in_flight check does not independently prove cross-process ownership or rollback locking." },
+  { disposition = "HUMAN_DECISION", item = "Automatic certified hook installation is explicitly conditional on Joshua approving that behavior." },
+]
+non_goals = [
+  "S8 does not own S1 human onboarding, S7 validation policy, or S9 decision-ledger append semantics.",
+  "S8 does not claim launchd continuity, receiver liveness, transport delivery, or semantic task completion.",
+  "S8 does not replace a prior artifact before identity checks and bounded rollback evidence are available.",
+]
+source_pointers = [
+  "docs/plan/flow/boxes/S8.toml:1-15",
+  "docs/plan/flow/boxes/S8.toml:16-36",
+  "docs/plan/flow/boxes/S8.toml:37-181",
+  "docs/plan/flow/boxes/S8.toml:94-166",
+]

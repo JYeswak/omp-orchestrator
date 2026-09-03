@@ -1,0 +1,40 @@
+purpose = "Provide the human-facing entry path that turns a fresh host into a known, inspectable swarm session."
+inputs = [
+  "external: operator intent and host capabilities",
+  "external: InstallPlan, Probe, EcosystemProbe, and SwarmState surfaces named by the S1 box",
+  "external: docs/decisions.jsonl decisions HD-0009 through HD-0012",
+]
+outputs = [
+  "proposed S1 lifecycle rows for install, system check, ecosystem check, walkthrough, swarm-live, and portal",
+  "Inception and PortalRow records for S2 and the operator",
+  "typed decision-owed and not-live conditions routed to S9",
+]
+dependencies = { hard = ["external:operator intent", "external:host and ecosystem probes"], soft = ["external:human decisions HD-0009..HD-0012", "external:NTM, tick-monitor, and Agent Mail freshness"] }
+consumers = [
+  "S2: project, repository, and control-file inputs after inception",
+  "S7: pre-commit and hook identity references by reference only",
+  "S8: selected installer artifact identity by reference only",
+  "S9: decisions owed and human-halt outcomes",
+]
+unknowns = [
+  { disposition = "BLOCKS_BUILD", item = "L1-L5 crates and S1-specific doctor, init, start, and portal callers do not exist." },
+  { disposition = "HUMAN_DECISION", item = "The installer executable name must avoid the observed /usr/sbin/installer PATH collision; the box names ompo or omp-orchestrator as alternatives." },
+  { disposition = "HUMAN_DECISION", item = "The Persona A not-live skip-swarm branch requires owner acceptance or rejection." },
+  { disposition = "BLOCKS_PLAN", item = "Three S1 names conflict: 12-journey Inception, boxes/S1 human-start, and spine.mmd S1 inception." },
+  { disposition = "DEFER_TO_BEAD", item = "No LifecycleEvent writer covers L0-L5; the box names kxe.8 at the install, doctor, and spawn chokepoints." },
+  { disposition = "DEFER_TO_BEAD", item = "The S1 doctor SOTA is absent; the gap names jplf.7.3 and its backup/undo contract." },
+  { disposition = "HUMAN_DECISION", item = "SessionStart is measured at zero for the S1 trigger, launchd is paused, and slash start is absent until HD-0009 is resolved." },
+  { disposition = "BLOCKS_BUILD", item = "The S1 umbrella remains missing even though the crate field now names installer." },
+  { disposition = "DEFER_TO_BEAD", item = "The eight hook rows lack the twelve certified fields and certification receipts." },
+  { disposition = "BLOCKS_PLAN", item = "S1 has no registered refusal type; Code::Refused has zero call sites and the box forbids coining a third refusal name." },
+]
+non_goals = [
+  "S1 does not own the S2 plan assembly, S7 validation, S8 artifact installation, or S9 ledger implementations.",
+  "S1 does not duplicate installer, validation, or ledger branch inventories; those records are referenced at their authority sections.",
+  "S1 does not decide HD-0009 through HD-0012 on behalf of Joshua.",
+]
+source_pointers = [
+  "docs/plan/flow/boxes/S1.toml:1-25",
+  "docs/plan/flow/boxes/S1.toml:28-72",
+  "docs/plan/flow/boxes/S1.toml:252-328",
+]

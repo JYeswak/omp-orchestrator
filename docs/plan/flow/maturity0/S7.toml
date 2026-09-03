@@ -1,0 +1,43 @@
+purpose = "Run the staged-set validation dispatcher so applicable violations, unrun instruments, and empty scans remain distinct."
+inputs = [
+  "S6c: close transition and staged path context",
+  "external: staged paths, staged deletions, repository root, and crate facts",
+  "external: bounded RCH build admission and installed pre-commit hook",
+]
+outputs = [
+  "PreCommitOutcome::{Clean, Violation, NothingToCheck}",
+  "crate-atom-gate and staged-build-gate typed verdicts",
+  "validation evidence consumed by S8 and gate operators",
+]
+dependencies = { hard = ["S6c", "external:staged set", "external:pre-commit hook"], soft = ["external:RCH admission", "external:crate facts"] }
+consumers = [
+  "S8: build and validation verdict before install or rollback",
+  "external:commit operation: fail-closed refusal or clean staged result",
+  "external:gate operators: unrun and instrument-error diagnostics",
+]
+unknowns = [
+  { disposition = "DEFER_TO_BEAD", item = "The dispatcher/staged-set parser lacks a dedicated fuzz target or named ratcheting allowance." },
+  { disposition = "DEFER_TO_BEAD", item = "No claim registry row states the load-bearing dispatcher contract." },
+  { disposition = "DEFER_TO_BEAD", item = "No validation latency or refusal-completeness SLO is registered." },
+  { disposition = "BLOCKS_PLAN", item = "No independent external or differential oracle compares the dispatcher result." },
+  { disposition = "BLOCKS_BUILD", item = "The installed hook reaches the dispatcher, but no independent all-eight-lane reachability assertion exists." },
+  { disposition = "DEFER_TO_BEAD", item = "The gate's load-bearing claim lacks an L1 source-backed claim row." },
+  { disposition = "DEFER_TO_BEAD", item = "No performance floor is registered for tick-path validation." },
+  { disposition = "BLOCKS_PLAN", item = "RCH admission is an execution route, not a correctness oracle." },
+  { disposition = "BLOCKS_BUILD", item = "The current good/bad/mutation matrix does not prove a gate trip for every eight-lane branch." },
+  { disposition = "DEFER_TO_BEAD", item = "No dispatcher fuzz corpus covers empty and deletion paths." },
+  { disposition = "BLOCKS_PLAN", item = "No formal artifact checks the staged-set-to-verdict invariant." },
+  { disposition = "BLOCKS_BUILD", item = "Commit serialization and staged-set TOCTOU recheck exist, but cross-process lock coverage is not independently proven." },
+  { disposition = "DEFER_TO_BEAD", item = "The local hook has no hooks_certified.toml row or six-stage certification receipt in this repository." },
+]
+non_goals = [
+  "S7 does not decide plan quality, choose work, transport packets, or install artifacts.",
+  "S7 does not treat RCH placement or a clean local hook as an external correctness oracle.",
+  "S7 does not claim downstream lifecycle success from a passing staged-set validation alone.",
+]
+source_pointers = [
+  "docs/plan/flow/boxes/S7.toml:1-15",
+  "docs/plan/flow/boxes/S7.toml:16-40",
+  "docs/plan/flow/boxes/S7.toml:41-171",
+  "docs/plan/flow/boxes/S7.toml:84-156",
+]

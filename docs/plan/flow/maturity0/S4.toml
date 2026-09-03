@@ -1,0 +1,43 @@
+purpose = "Convert a graded plan into a dependency-complete bead DAG from machine-readable crate-part facts rather than hand-typed prose."
+inputs = [
+  "S3: banked plan sections and verified findings",
+  "external: crate-atom-gate --report --json rows keyed by crate and part",
+  "external: current tracker and bead-lint schema",
+]
+outputs = [
+  "filed bead rows carrying crate and part labels",
+  "MaterializeVerdict with filed, already-filed, lint-refused, or report-unrun outcome",
+  "dependency graph consumed by S5a",
+]
+dependencies = { hard = ["S3", "external:crate-atom-gate report", "external:bead tracker"], soft = ["external:bead-lint", "external:cross-compile lane"] }
+consumers = [
+  "S5a: materialized graph and claimable bead candidates",
+  "S7: bead/schema validation evidence by reference",
+  "external:tracker operators resolving duplicate or malformed filings",
+]
+unknowns = [
+  { disposition = "BLOCKS_BUILD", item = "plan-materialize and bead-lint do not exist, so the plan-to-bead arrow is hand-run." },
+  { disposition = "BLOCKS_BUILD", item = "The crate-atom report has not been produced over the real package set; the measured host/lane mismatch blocks that observation." },
+  { disposition = "DEFER_TO_BEAD", item = "No LifecycleEvent row records that a crate-part became bead X at the filing chokepoint." },
+  { disposition = "BLOCKS_PLAN", item = "allowances.toml ceilings are unreconciled with the first live crate-atom report." },
+  { disposition = "HUMAN_DECISION", item = "No external oracle establishes whether the nine-part atom is the correct atom; the section must either name an arbiter or accept internal doctrine." },
+  { disposition = "DEFER_TO_BEAD", item = "No claim row states that a schema-generated bead cannot be malformed against that schema." },
+  { disposition = "DEFER_TO_BEAD", item = "No SLO bounds beads filed per run or supplies a flood safe-mode trigger." },
+  { disposition = "BLOCKS_BUILD", item = "No gate refuses a bead lacking crate: or arrow: labels; the box reports three of 434 would pass today." },
+  { disposition = "DEFER_TO_BEAD", item = "No fuzz target covers plan-materialize report JSON parsing." },
+  { disposition = "BLOCKS_BUILD", item = "No wired caller invokes either future crate or lifecycle-arrow-gate." },
+  { disposition = "DEFER_TO_BEAD", item = "Any agent can use br create without the materializer; no bead-write hook enforces the schema." },
+  { disposition = "BLOCKS_PLAN", item = "The report schema has no pinned cross-crate revision or load-time compatibility lock." },
+  { disposition = "OUT_OF_SCOPE", item = "Formal proof is explicitly marked not needed for the current file-a-bead-per-missing-part relation." },
+]
+non_goals = [
+  "S4 does not decide which plan claims are true; that is S3.",
+  "S4 does not select or claim a bead for dispatch; that is S5a.",
+  "S4 does not hand-author a second dependency graph beside the materialized tracker graph.",
+]
+source_pointers = [
+  "docs/plan/flow/boxes/S4.toml:5-19",
+  "docs/plan/flow/boxes/S4.toml:21-56",
+  "docs/plan/flow/boxes/S4.toml:57-185",
+  "docs/plan/flow/boxes/S4.toml:95-155",
+]

@@ -1,0 +1,39 @@
+purpose = "Turn idea prose and preregistered hypotheses into one assembled plan artifact that cannot be silently re-narrated."
+inputs = [
+  "S1: inception repository and control-file identity",
+  "external: docs/plan/[0-9][0-9]-*.md numbered sections",
+  "external: docs/plan/HYPOTHESES.jsonl",
+]
+outputs = [
+  "assembled docs/PLAN.md",
+  "preregistration verdict from validate_staged_preregistration",
+  "proposed PlanAssembled{content_hash, sections[]} transition input for S3",
+]
+dependencies = { hard = ["S1", "external:plan sections", "external:HYPOTHESES.jsonl"], soft = ["external:pre-commit hook", "external:/planning-workflow authoring"] }
+consumers = [
+  "S3: assembled plan and hypothesis/round authority",
+  "S4: machine-readable plan material for bead generation",
+  "S7: staged preregistration and plan-assembly validation",
+]
+unknowns = [
+  { disposition = "DEFER_TO_BEAD", item = "S2 writes no LifecycleEvent row for plan changes; the gap names kxe.8 and vcd7.1." },
+  { disposition = "BLOCKS_PLAN", item = "HYPOTHESES.jsonl has one row for a 7969-line plan and 235 findings lack a hypothesis relation." },
+  { disposition = "BLOCKS_BUILD", item = "There is no machine-readable plan-item surface; the only structured 01-12 form is hand-made dag JSON." },
+  { disposition = "BLOCKS_PLAN", item = "docs/PLAN.md remains hand-editable, so freshness measures mtime rather than generated authorship." },
+  { disposition = "DEFER_TO_BEAD", item = "The box lacks its claim row, SLO, parser fuzz target, and wired-caller assertion." },
+  { disposition = "BLOCKS_PLAN", item = "plan-assemble has no Verdict-typed output over its outcome." },
+  { disposition = "BLOCKS_PLAN", item = "The S2-to-S3 readiness edge is hand-written and has no typed PlanAssembled transition." },
+  { disposition = "DEFER_TO_BEAD", item = "S2 has no per-box branch diagram; branches exist only as prose strings." },
+  { disposition = "DEFER_TO_BEAD", item = "The pre-commit dispatcher has no certified hook row or automatic install path for this section." },
+]
+non_goals = [
+  "S2 does not grade plan quality; that is S3.",
+  "S2 does not materialize beads; that is S4.",
+  "S2 does not define downstream dispatch, verification, installation, or ledger behavior.",
+]
+source_pointers = [
+  "docs/plan/flow/boxes/S2.toml:5-19",
+  "docs/plan/flow/boxes/S2.toml:21-47",
+  "docs/plan/flow/boxes/S2.toml:48-137",
+  "docs/plan/flow/boxes/S2.toml:79-111",
+]

@@ -1,0 +1,43 @@
+purpose = "Classify post-dispatch custody from an independent observation carrying the same pane and transport identity."
+inputs = [
+  "S5b: dispatch identity and permit context",
+  "external: pre/post observations, pane identity, timer/hash delta, transport evidence, and ACK line",
+  "external: tick-monitor and ack-stage projections",
+]
+outputs = [
+  "ReceiptVerdict::{ReceiptConfirmed, NoReceipt, Dead, Indeterminate}",
+  "AckAction::{RecordReceipt, Retry, Unstick, AwaitHuman}",
+  "custody evidence consumed by S6b",
+]
+dependencies = { hard = ["S5b", "external:independent post-observation", "external:pane and incarnation identity"], soft = ["external:tick-monitor", "external:ack-stage"] }
+consumers = [
+  "S6b: receipt outcome, dispatch identity, and evidence for work-in-progress classification",
+  "external:operator: retry, unstick, or human-halt action",
+]
+unknowns = [
+  { disposition = "BLOCKS_BUILD", item = "receiver-receipt has no dedicated operator binary." },
+  { disposition = "BLOCKS_PLAN", item = "ReceiptVerdict exists, but the planned AckIncarnationMismatch arm is absent." },
+  { disposition = "DEFER_TO_BEAD", item = "No bounded receipt-parser fuzz target or crash-free corpus is declared." },
+  { disposition = "DEFER_TO_BEAD", item = "No claim-registry row names receipt ownership and independent evidence." },
+  { disposition = "DEFER_TO_BEAD", item = "Receipt latency and stale-read SLOs are not registered." },
+  { disposition = "BLOCKS_PLAN", item = "The live delivery oracle remains unproven; pane-truth is only a development authority." },
+  { disposition = "BLOCKS_BUILD", item = "ack-stage calls the classifier, but no production ACK caller carries the ywd5 pane/incarnation identity." },
+  { disposition = "DEFER_TO_BEAD", item = "The current 16-arm inventory and planned 17th arm lack a source-backed claim row." },
+  { disposition = "DEFER_TO_BEAD", item = "No measured receipt-window SLO exists on the real observer path." },
+  { disposition = "DEFER_TO_BEAD", item = "No separate accepted-delivery oracle has preserved evidence." },
+  { disposition = "BLOCKS_BUILD", item = "No production gate refuses mismatched ACK identity before recording receipt." },
+  { disposition = "DEFER_TO_BEAD", item = "Malformed ACK-comment mutation and fuzz legs are absent." },
+  { disposition = "BLOCKS_PLAN", item = "No mechanically checked invariant preserves pane and incarnation identity across ACK projection." },
+  { disposition = "BLOCKS_BUILD", item = "No lease boundary prevents pane-id reuse; the box defers incarnation fencing until ywd5 approval." },
+]
+non_goals = [
+  "S6a does not prove code execution, semantic completion, exactly-once delivery, or bead closure.",
+  "S6a does not infer receipt from a sender permit or a single terminal capture.",
+  "S6a does not replace the independent observer with raw tmux glyph parsing.",
+]
+source_pointers = [
+  "docs/plan/flow/boxes/S6a.toml:1-15",
+  "docs/plan/flow/boxes/S6a.toml:16-32",
+  "docs/plan/flow/boxes/S6a.toml:33-152",
+  "docs/plan/flow/boxes/S6a.toml:68-128",
+]

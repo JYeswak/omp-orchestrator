@@ -1,0 +1,44 @@
+purpose = "Select one BV-ranked, non-epic, unclaimed candidate and make the claim attempt part of readiness."
+inputs = [
+  "S4: materialized dependency graph",
+  "external: br ready --json and bv --robot-triage/--robot-next snapshots",
+  "external: live claim attempt and tracker status",
+]
+outputs = [
+  "Availability::{Available, Blocked, Unknown}",
+  "RunOutput and proposed typed ClaimAttempt/ClaimRefused decision",
+  "selection-to-claim transition consumed by S5b",
+]
+dependencies = { hard = ["S4", "external:br and bv snapshots", "external:claim attempt"], soft = ["external:launchd supervisor trigger"] }
+consumers = [
+  "S5b: selected bead, claim state, blocker chain, and rank",
+  "external:operator: refusal evidence when a ready row is not claimable",
+]
+unknowns = [
+  { disposition = "BLOCKS_PLAN", item = "loop-queue-filter returns RunOutput rather than a typed ClaimAttempt or ClaimRefused verdict." },
+  { disposition = "DEFER_TO_BEAD", item = "No selector fuzz target covers malformed br/bv rows, claimability, or epic filtering." },
+  { disposition = "DEFER_TO_BEAD", item = "The selection decision has no durable claim-strength registry row." },
+  { disposition = "DEFER_TO_BEAD", item = "No SLO states selection latency, freshness, or refusal behavior." },
+  { disposition = "BLOCKS_PLAN", item = "No persisted oracle compares BV identity/rank with the claimable br snapshot." },
+  { disposition = "BLOCKS_BUILD", item = "The supervisor parses br ready FIFO and does not invoke loop-queue-filter, bead-availability, or fast-dispatch." },
+  { disposition = "DEFER_TO_BEAD", item = "No append-only claim event records the selection-to-claim transition." },
+  { disposition = "DEFER_TO_BEAD", item = "No measured S5a service-level floor or breach ledger is registered." },
+  { disposition = "BLOCKS_PLAN", item = "No independent comparison proves the BV-ranked output agrees with the claimable br snapshot." },
+  { disposition = "BLOCKS_BUILD", item = "No live gate refuses a supervisor bypass that selects raw br ready FIFO." },
+  { disposition = "DEFER_TO_BEAD", item = "Malformed-input and boundary fuzz coverage has no retained selector corpus." },
+  { disposition = "BLOCKS_PLAN", item = "No formal or executable invariant states that a selected bead is open, unclaimed, non-epic, and BV-ranked." },
+  { disposition = "BLOCKS_BUILD", item = "Selection has no lease or atomic claim primitive before the candidate leaves S5a; the box points to S5b's fence." },
+  { disposition = "DEFER_TO_BEAD", item = "No certified Rust hook row exists for BV/claim selection." },
+  { disposition = "DEFER_TO_BEAD", item = "No durable S4-to-S5a lifecycle row carries rank, claim attempt, outcome, and blocker chain." },
+]
+non_goals = [
+  "S5a does not render or transport a dispatch packet.",
+  "S5a does not claim that ready appearance means delivery, execution, grading, or closure.",
+  "S5a does not replace BV with a hand-maintained ranking.",
+]
+source_pointers = [
+  "docs/plan/flow/boxes/S5a.toml:1-15",
+  "docs/plan/flow/boxes/S5a.toml:16-34",
+  "docs/plan/flow/boxes/S5a.toml:35-172",
+  "docs/plan/flow/boxes/S5a.toml:70-169",
+]

@@ -1,0 +1,45 @@
+purpose = "Make in-progress work, blocks, reassignment, and silence visible through authoritative tracker read-back."
+inputs = [
+  "S6a: receipt outcome and dispatch identity",
+  "external: bead comments read through br, dispatch timestamp, assignee, pane observation, and finding payload",
+  "external: dispatch-silence-watch and finding surfaces",
+]
+outputs = [
+  "SilenceVerdict::{VerdictPosted, SilentPastDeadline, Reassigned, TrackerError}",
+  "TrackerRead::{Read, TrackerError}",
+  "finding payload or tracker refusal consumed by S6c and owner routing",
+]
+dependencies = { hard = ["S6a", "external:authoritative br read-back", "external:dispatch identity"], soft = ["external:dispatch-silence-watch", "external:finding store"] }
+consumers = [
+  "S6c: tracker-visible stage, block, silence, and finding evidence",
+  "S9: owner-routed halt or resolution request when a blocker persists",
+  "external:supervisor: reassignment or escalation action",
+]
+unknowns = [
+  { disposition = "BLOCKS_BUILD", item = "dispatch-silence-watch has no dedicated operator entrypoint." },
+  { disposition = "BLOCKS_PLAN", item = "SilenceVerdict exists, but classify_followup does not; the stage-to-verdict projection is unpinned." },
+  { disposition = "BLOCKS_BUILD", item = "Classifier tests exist without a production caller contract proving br read-back reaches the supervisor decision." },
+  { disposition = "DEFER_TO_BEAD", item = "Tracker comment parsing has no bounded malformed-output fuzz coverage." },
+  { disposition = "DEFER_TO_BEAD", item = "Silence ownership is not registered as a durable claim." },
+  { disposition = "DEFER_TO_BEAD", item = "Dispatch deadline and read-back freshness have no measured SLO row." },
+  { disposition = "BLOCKS_PLAN", item = "Tracker read-back is the method but not an independent oracle; the box requires a separate ledger/comment reconciliation." },
+  { disposition = "BLOCKS_BUILD", item = "The textual caller hits are not a wiring proof for a real production caller." },
+  { disposition = "DEFER_TO_BEAD", item = "No claim row records stage, bead, actor, pane, and read-back evidence." },
+  { disposition = "DEFER_TO_BEAD", item = "No bounded deadline or escalation SLO is registered." },
+  { disposition = "DEFER_TO_BEAD", item = "No independent durable evidence path re-reads comment persistence." },
+  { disposition = "BLOCKS_BUILD", item = "No production gate distinguishes TrackerError from SilentPastDeadline before follow-up action." },
+  { disposition = "DEFER_TO_BEAD", item = "Malformed br attribution blocks have no retained fuzz/refusal corpus." },
+  { disposition = "BLOCKS_PLAN", item = "No invariant states that reassignment dominates a stale silence result." },
+  { disposition = "BLOCKS_BUILD", item = "No lock binds follow-up read-back to the dispatch epoch and identity." },
+]
+non_goals = [
+  "S6b does not treat pane quiet as proof of silence.",
+  "S6b does not grade acceptance or close a bead.",
+  "S6b does not overwrite tracker truth with a self-reported worker status.",
+]
+source_pointers = [
+  "docs/plan/flow/boxes/S6b.toml:1-15",
+  "docs/plan/flow/boxes/S6b.toml:16-27",
+  "docs/plan/flow/boxes/S6b.toml:28-147",
+  "docs/plan/flow/boxes/S6b.toml:63-123",
+]
