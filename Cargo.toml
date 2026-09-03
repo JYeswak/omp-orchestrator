@@ -32,3 +32,10 @@ authors = ["Joshua Nowak"]
 [workspace.lints.rust]
 unsafe_code = "forbid"
 unused_must_use = "deny"
+
+# asupersync 0.4.9 is a large git dependency. On the 7.8 GiB Contabo verdict lane,
+# its dev-profile rustc reached 7.64 GiB RSS and was kernel-OOM-killed. Keep debug
+# information for this dependency off in verdict builds; shipped artifacts use their
+# own release profile and are unaffected.
+[profile.dev.package.asupersync]
+debug = false
