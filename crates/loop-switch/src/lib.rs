@@ -11,13 +11,20 @@
 //!   * it survives process death -- an env var dies with the shell that set it;
 //!   * every lane can read it without linking this crate or running a binary;
 //!   * `ls` answers "is the loop off?" with no daemon to interrogate;
-//!   * there is no writer to crash, so the switch cannot fail INTO the off state.
+//!   * there is no writer to crash, so no crash path can CREATE the off state -- only a human
+//!     (or `turn_off`) puts a regular file there.
 //!
-//! THE DEFAULT IS ON. A missing file, an unreadable file, an unset path -- all mean RUNNING. This
-//! is the deliberate inverse of the dispatch gates, and the asymmetry is the point: a dispatch
-//! gate fails CLOSED because dispatching on a stale verdict does damage, whereas a switch that
-//! failed closed would let a permissions error or a full disk silently stop the fleet -- which is
-//! precisely the "the loop keeps turning itself off" failure this exists to end.
+//! THE DEFAULT IS ON. A missing file, an unset path, a NON-FILE at the path (a directory, a
+//! socket) -- all mean RUNNING, because none of them is something stop-intent produces. Measured
+//! 2026-09-02: this read gated on `Path::exists()`, which is true for a directory, so a bare
+//! `mkdir` at the switch path -- no human, no `turn_off` -- stopped the whole fleet as "present
+//! but unreadable". An unreadable REGULAR FILE is the one non-default case and it reads OFF: a
+//! file there was written by someone expressing stop-intent, and we honour it even when we
+//! cannot read why. That is the deliberate inverse of the dispatch gates, and the asymmetry is
+//! the point: a dispatch gate fails CLOSED because dispatching on a stale verdict does damage,
+//! whereas a switch that failed closed would let a permissions error or a full disk silently
+//! stop the fleet -- which is precisely the "the loop keeps turning itself off" failure this
+//! exists to end.
 
 use std::path::{Path, PathBuf};
 
@@ -65,13 +72,15 @@ pub fn switch_path() -> PathBuf {
         })
 }
 
-/// Read the switch. FAIL-SAFE ON: only a file that exists AND is readable turns the loop off.
+/// Read the switch. FAIL-SAFE ON: only a REGULAR FILE that exists turns the loop off.
 ///
-/// An unreadable file is treated as OFF with a stated reason rather than silently ON -- if a human
-/// created the file, their intent to stop was expressed, and we honour it even when we cannot read
-/// why. A file that does not exist is unambiguously ON.
+/// A missing path, or a non-file at the path (directory, socket), is unambiguously ON: nothing
+/// that expresses stop-intent creates those, and `Path::exists()` alone was measured to turn the
+/// fleet off on a bare `mkdir`. An unreadable regular file is treated as OFF with a stated reason
+/// rather than silently ON -- if a human created the file, their intent to stop was expressed, and
+/// we honour it even when we cannot read why.
 pub fn read_state(path: &Path) -> SwitchState {
-    if !path.exists() {
+    if !path.is_file() {
         return SwitchState::On;
     }
     match std::fs::read_to_string(path) {
