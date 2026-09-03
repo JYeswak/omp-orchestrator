@@ -58,6 +58,71 @@ no_claim = "what this box does not establish"
 
 **BUILD FREEZE.** No new crate, no new feature bead, no install, until every box has `agreement.status = "converged"` AND Joshua's approval row in `docs/decisions.jsonl`. The four in-flight beads (`d3gm`, `6nhj`, `ywd5`, `gfb`) go to GRADING or release; nothing new is claimed.
 
+## Wave 2 amendment — THE FREEZE'S EXIT CONDITION IS UNREACHABLE (measured 2026-09-03)
+
+**The freeze above cannot be satisfied, and the measurement proves it rather than arguing it.**
+
+Pane 4, on bead `omp-orchestrator-denominator-invisible-growth-7t33`:
+
+```
+DECLARED_AT_HEAD=211  COVERED_AT_HEAD=43
+GROWTH_PER_COMMIT=19.22  CLOSURE_PER_COMMIT=0  CONVERGES=no:growth>>closure
+trajectory: 6238c0f 38 -> 8de39a5 62 -> 933432d 204 -> fe30a57 211 -> e6dac73 211
+```
+
+**`CLOSURE_PER_COMMIT=0` is the freeze's arithmetic, not a discipline failure.** S1's requirements
+are overwhelmingly *artifacts*: a `LifecycleEvent` writer per layer, artifact+readback, a monitor,
+a gate with a known-bad leg, a metric, a named test — 60 of the coverage rows name a test. Every one
+of those needs code. The freeze forbids code. So the only permitted activity is auditing, auditing
+*discovers* requirements, and `MISSING` rises monotonically while the single operation that could
+lower it is prohibited.
+
+**And the exit condition closes a cycle.** The freeze lifts on `agreement.status = "converged"`.
+S1 was flipped to `converged` at `a9ea672` and Joshua **retracted** it — *"s1 is not converged; you
+can't claim converged when s1 is still missing massive functionality."* So convergence now requires
+the functionality to exist; the functionality requires a crate; the crate requires the freeze
+lifted; the freeze lifts on convergence.
+
+```
+converged  ->  needs functionality  ->  needs a crate  ->  needs freeze lifted  ->  needs converged
+```
+
+That is exactly the strangulation `AGENTS.md` records one level down — an epic holding a `blocks`
+edge onto the leaf it owns, which killed 13 of the first 30 unassigned beads including four P0s.
+**Same shape, applied to the process instead of the graph.** A cycle reads as "not ready yet"
+forever, which is why five agents could work all night and converge nothing.
+
+### The amendment (Joshua, 2026-09-03, verbatim)
+
+> *"i think we need to plan out and build s1 fully and prove it works across all aspects of the
+> lifecycle before we move to s2 — build this in waves"*
+> *"keep s0 / s1 planning going and lets get it executed when ready"*
+
+**S1 IS AUTHORIZED TO BUILD. S2–S9 REMAIN FROZEN.** Scoped, because the original freeze was right
+about everything except its own reachability:
+
+- **Permitted:** crates, feature beads, tests, and installs whose bead is wired to an S1 layer gate
+  (`gate-s1-10-jtgw`, `-11-fnv8`, `-12-j5m9`, `-13-z8hz`, `-14-hs15`, `-15-w44h`) or to
+  `gate-s1-djn8`. Each lands behind its own gate with a known-bad leg, per the "every gate proves it
+  bites" rules in `AGENTS.md`.
+- **Still frozen:** any crate, bead, or install for S2–S9, and any canonical mapping change to
+  boxes S2–S9. `gate-s1-djn8` still blocks `gate-s2-ehx8`, so S2 cannot start until S1 closes.
+- **Unchanged:** `approval` is still an HD row id. The build proceeding does not grant approval; it
+  removes the reason approval can never be earned.
+
+**This amendment is dated and written here because it was a DISPATCH-ONLY INSTRUCTION for hours.**
+Joshua said it in-session; pane 1 recorded it at `S1.toml:220` as a note and never wrote it into the
+contract, so every pane kept reading the unamended freeze and kept filing findings instead of
+building. That is the precise failure `AGENTS.md` names: *a dispatch-only instruction is an
+unrecorded requirement*, and the requirement it lost was the authorization to make progress.
+
+**NO-CLAIM.** Lifting the freeze for S1 does not make S1 converge. It makes `CLOSURE_PER_COMMIT`
+capable of being non-zero, which is a precondition for convergence and not a substitute for it. The
+readiness number itself is still not regenerable from a clean clone
+(`MATRIX_FROM_HEAD=no:untracked-generator`), so until that is fixed no closure figure is
+reproducible by anyone but this working copy.
+
+
 Every box file gains four sections. A box without all four is not reviewable.
 
 ```toml
