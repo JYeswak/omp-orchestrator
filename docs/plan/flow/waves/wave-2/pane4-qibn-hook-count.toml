@@ -1,0 +1,19 @@
+# qibn. Pane 4. Do not land in S1.toml from this pane (owner mid-edit).
+
+[[disagreement]]
+box = "S1"
+field = "box.hook.count.108_vs_96"
+owner_says = "coverage matrix box.hook n=108 (9x12); table has 8 rows"
+reviewer_says = "RECONCILED=yes:phantom-gap-prose. git grep-equivalent: S1.toml contains [[box.hook]] NINE times. Eight are tables (S1-HOOK-PRECOMMIT .. S1-HOOK-LAUNCHD). The ninth is inside [[box.gap]] what = \"the eight [[box.hook]] rows carry...\" at line 322. The generator split on the substring, so it invented a ninth surface and 12 ghost requirements. True HOOK_ROWS=8 REQUIREMENTS=96. MISSING in the matrix is high by 12."
+evidence = "python find of [[box.hook]]: OCC 1-8 are id=S1-HOOK-*; OCC 9 line 322 is gap prose. TREE 74dedfb still has the gap sentence."
+severity = "major"
+resolution = "refuted(108); true count 8x12=96"
+
+[[disagreement]]
+box = "S1"
+field = "box.hook.certified_false_vs_unattempted"
+owner_says = "certified = false on all eight is honest"
+reviewer_says = "UNATTEMPTED is more honest than false. false reads as considered-and-rejected. The truth is never attempted — zero of 27 instances through /hook-certification. Same shape as PX-E14: a form that looks like a decision. Filed 14 beads as blocked-gauntlet with UNATTEMPTED in acceptance, not as ordinary work."
+evidence = "S1.toml certified=false on all 8; source_commit empty on all 8; 74dedfb certified_true=0"
+severity = "major"
+resolution = ""
