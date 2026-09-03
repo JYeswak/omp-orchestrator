@@ -1,6 +1,6 @@
-# TOOLCHAIN PARITY — the file whose absence made CI dark for 67 consecutive runs.
+# TOOLCHAIN PARITY — and, since 2026-09-03, toolchain DURABILITY.
 #
-# # What was measured (2026-09-02)
+# # What was measured (2026-09-02) — the reason this file exists at all
 #
 # `gh run list --limit 200` returned 67 runs and 67 failures, every one since
 # 2026-09-01T05:59:47Z. Three independently-failing jobs (commit-build-fence,
@@ -10,42 +10,102 @@
 #     52 | #![cfg_attr(feature = "nightly-outcome-try", feature(try_trait_v2))]
 #     error: could not compile `asupersync` (lib) due to 1 previous error
 #
-# The runner had stable; this workspace is developed on nightly. 19 of 51
+# The runner had stable; this workspace was developed on nightly. 19 of 51
 # workspace members depend on `asupersync` transitively (11 directly), so the
-# mismatch takes out every job that touches a kernel crate — while the five jobs
+# mismatch took out every job that touches a kernel crate — while the five jobs
 # that do not (path-literal-guard, undrained-pipe-lint, state-wildcard-lint,
 # kernel-bypass-gate, pre-delete-citation-check) reached real verdicts the whole
 # time. A gate set that is 50% dark reads as "CI is red" and gets ignored.
 #
-# # Why the pin, and not `default-features = false`
+# That measurement is retained because it is still the correct diagnosis of the
+# E0554. What changed is the FIX.
 #
-# `nightly-outcome-try` is not something we ask for. It is in asupersync's OWN
-# default feature set:
+# # CORRECTION 2026-09-03 — the pin was the wrong fix, and it did not work
 #
-#     default = ["proc-macros", "nightly-outcome-try"]
+# **Retracted:** *"`default-features = false` ... was rejected because it means
+# editing 11 manifests, one of which (`crates/omp-types`) is under concurrent
+# authorship, and because it would silently drop `Try` for `Outcome` across every
+# kernel call site — a behavioural change smuggled in under a CI fix."*
 #
-# So asupersync does not "require nightly" — its defaults do, and turning them
-# off is a real alternative. It was rejected because it means editing 11
-# manifests, one of which (`crates/omp-types`) is under concurrent authorship,
-# and because it would silently drop `Try` for `Outcome` across every kernel
-# call site — a behavioural change smuggled in under a CI fix. Pinning changes
-# no code.
+# Both halves of that rejection were wrong, and each was checkable at the time.
 #
-# # The cost, stated plainly
+# 1. **The count was wrong and the shape was wrong.** The dependency line
+#    appeared **19 times across 18 member manifests** (`grep -rn 'asupersync = {
+#    git' --include=Cargo.toml crates`), not 11, and it appeared **zero times in
+#    the root manifest** — the root carried only
+#    `[profile.dev.package.asupersync]`. The fix is not "edit N manifests"; it is
+#    ONE `[workspace.dependencies]` entry plus `{ workspace = true }` at each use
+#    site, which is now what the tree has. Concurrent authorship of a member
+#    manifest is no longer an argument against it, because the feature decision
+#    does not live in the member.
 #
-# Pinning nightly buys CI parity and gives up stable's stability guarantee. A
-# nightly rustc can regress, and unstable APIs can change under us with no
-# semver signal. The date is pinned rather than floating precisely so that a
-# regression cannot arrive on its own: `nightly-2026-08-23` is
-# `rustc 1.100.0-nightly (c54751567 2026-08-22)`, byte-identical to the
-# toolchain this workspace was developed against, and moving it is a commit
-# somebody has to justify.
+# 2. **Nothing dropped.** `Try for Outcome` was measured, not assumed, over
+#    `crates/**/*.rs` before the change: `FromResidual` → 0 hits, `impl Try` → 0
+#    hits, `try_trait` → 0 hits outside a doc comment, and `?` applied to an
+#    asupersync `Outcome` → 0 sites. The only greps pairing "Outcome" with "?"
+#    were `{first:?}` / `{second:?}` debug formatting on `decision-ledger`'s own
+#    local `AppendOutcome`. This workspace consumes `Outcome` by pattern match
+#    (`crates/omp-types/src/lib.rs:125`) and never by `?`. There was no
+#    behavioural change to smuggle.
 #
-# Bumping this file re-dates the CI compiler for every job at once. Verify a
-# candidate locally (`rustup toolchain install <channel>`, then the workspace
-# suite) before you change the string.
+# **And the pin did not fix CI.** It landed 2026-09-02 together with six per-job
+# toolchain steps in `gate.yml`, and `gh run view 33585450134` still failed. The
+# pin bought channel parity and then lost to four other causes.
+#
+# # Why stable, and what it buys
+#
+# Measured 2026-09-03 on this host (Apple M3 Ultra, darwin 25.5.0), with
+# `default-features = false, features = ["proc-macros"]` in the new
+# `[workspace.dependencies]` table:
+#
+#     $ rustup run stable rustc -V
+#     rustc 1.98.0 (88d9e12ae 2026-08-18)
+#     $ rustup run stable cargo check --workspace --all-targets \
+#           --exclude loop-driver -j 12
+#     Finished `dev` profile [unoptimized + debuginfo] target(s)
+#     EXIT=0
+#
+# No E0554. Every package CI actually builds — no-shell-gate,
+# asupersync-conformance, convergence-stamp, path-literal-guard,
+# undrained-pipe-lint, kernel-bypass-gate, state-wildcard-lint, installer,
+# omp-inventory-map, pre-delete-citation-check, commit-build-fence, porting-gate,
+# plan-assemble, preregistration-gate — compiles on stable, tests included.
+#
+# The point is not that stable is nicer. It is that **a dated nightly has an
+# expiry date and a daily push cannot depend on one.** `nightly-2026-08-23` is
+# reachable from this host today because it is already installed here; nightly
+# artifacts are garbage-collected upstream, and a channel that vanishes turns
+# every job in `gate.yml` red at once, on a day nobody touched the code. That is
+# the failure mode Joshua was pointing at with "push reliably every single day",
+# and a pin cannot fix it — only not needing nightly can.
+#
+# # The one named exception, stated so it is not discovered as a surprise
+#
+# `crates/loop-driver` does NOT compile, and this is neither caused nor fixed by
+# the channel. Two sites call `asupersync::Cx::for_request()`
+# (`src/lib.rs:1574`, `src/main.rs:232`), which upstream gates as
+# `#[cfg(any(test, feature = "test-internals"))]` (asupersync
+# `src/cx/cx.rs:5037` at rev fa3c01aec). It fails
+# `error[E0599]: no associated function ... named 'for_request'` identically on
+# stable 1.98.0 AND on `nightly-2026-08-23`, and identically with HEAD's exact
+# pre-change feature set `["proc-macros", "nightly-outcome-try"]` — a control run
+# on 2026-09-03 confirms the channel and the feature flags are both irrelevant.
+# `gate.yml` never builds `loop-driver`, so it is not a CI blocker today; it
+# becomes one the moment a workspace-wide job is added. Every other kernel
+# consumer in this repo builds a real runtime and takes the installed `Cx`
+# (`RuntimeBuilder::current_thread().build()` then `Cx::current()`) — that is the
+# repair, in loop-driver's lane, not here.
+#
+# # If you are about to change the channel back
+#
+# Bumping this file re-dates the compiler for every job at once. Verify a
+# candidate locally before you change the string, and note that `cargo` here is
+# intercepted by the RCH offload hook: `allow_local_fallback = false` plus
+# same-project exclusion means a second concurrent build in this repo is refused
+# outright (`active_project_exclusion=1`). `RCH_CARGO_WRAPPER_BYPASS=1` runs it
+# locally, which is how the measurement above was taken.
 [toolchain]
-channel = "nightly-2026-08-23"
+channel = "stable"
 profile = "minimal"
 # `cargo fmt` / `cargo clippy` are not in gate.yml, but a pinned MINIMAL
 # toolchain without them means the next agent to type `cargo fmt` gets

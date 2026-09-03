@@ -15,7 +15,7 @@ name = "omp-rpc-session"
 path = "src/main.rs"
 
 [dependencies]
-asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", rev = "fa3c01aec" }
+asupersync = { workspace = true }
 serde_json = "1"
 
 [lints.rust]

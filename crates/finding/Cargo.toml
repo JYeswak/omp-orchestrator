@@ -9,7 +9,7 @@ description = "A named gap is an obligation: Finding cannot be dropped, only fil
 workspace = true
 
 [dependencies]
-asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", rev = "fa3c01aec" }
+asupersync = { workspace = true }
 subprocess-contract = { path = "../subprocess-contract" }
 
 [dev-dependencies]
@@ -17,5 +17,5 @@ subprocess-contract = { path = "../subprocess-contract" }
 # a normal dependency of the crate is not in scope for it. `Finding::file` takes `&Cx`, so
 # the suite cannot construct one without asupersync here. Same git rev as above, so cargo
 # unifies rather than resolving a second copy.
-asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", rev = "fa3c01aec" }
+asupersync = { workspace = true }
 futures-lite = "2"

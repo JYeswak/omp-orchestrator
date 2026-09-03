@@ -26,7 +26,7 @@ orchestration-tick-gate = { path = "../orchestration-tick-gate" }
 bead-holder = { path = "../bead-holder" }
 decision-ledger = { path = "../decision-ledger" }
 sender-identity = { path = "../sender-identity" }
-asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", rev = "fa3c01aec" }
+asupersync = { workspace = true }
 dispatch-claim-fence = { path = "../dispatch-claim-fence" }
 dispatch-silence-watch = { path = "../dispatch-silence-watch" }
 composer-typed = { path = "../composer-typed" }

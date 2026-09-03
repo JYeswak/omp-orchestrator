@@ -435,6 +435,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "crate-atom-gate"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "subprocess-contract",
+]
+
+[[package]]
 name = "crate-soundness-verify"
 version = "0.1.0"
 dependencies = [
@@ -1132,6 +1140,7 @@ version = "0.1.0"
 dependencies = [
  "asupersync-conformance",
  "convergence-stamp",
+ "crate-atom-gate",
  "orchestration-tick-gate",
  "path-literal-guard",
  "pre-delete-citation-check",
@@ -1318,6 +1327,7 @@ dependencies = [
 name = "orchestration-tick-gate"
 version = "0.1.0"
 dependencies = [
+ "crate-atom-gate",
  "serde_json",
 ]
 

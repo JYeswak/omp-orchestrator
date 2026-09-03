@@ -16,6 +16,53 @@ edition = "2021"
 repository = "https://github.com/JYeswak/omp-orchestrator"
 authors = ["Joshua Nowak"]
 
+# THE asupersync DEPENDENCY, DECLARED ONCE.
+#
+# # What was measured (2026-09-03)
+#
+# Before this table existed, the line
+#
+#     asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", rev = "fa3c01aec" }
+#
+# appeared **19 times in 18 member manifests** and NOWHERE in this root manifest.
+# The root carried only `[profile.dev.package.asupersync]`. So the sentence "the
+# asupersync dependency" had no single referent, and the feature decision below
+# could not be made in one place — which is why the previous fix reached for a
+# toolchain pin instead.
+#
+# # Why `default-features = false`
+#
+# asupersync's OWN default set is `default = ["proc-macros", "nightly-outcome-try"]`
+# (vendored manifest at rev fa3c01aec, Cargo.toml:101). `nightly-outcome-try = []`
+# (:104) is an empty feature whose entire effect is two crate-level attributes in
+# asupersync's `src/lib.rs`:
+#
+#     :52 #![cfg_attr(feature = "nightly-outcome-try", feature(try_trait_v2))]
+#     :53 #![cfg_attr(feature = "nightly-outcome-try", feature(try_trait_v2_residual))]
+#
+# Those are the ONLY `#![feature]` gates reachable from our feature selection, and
+# they are what produced `error[E0554]: #![feature] may not be used on the stable
+# release channel` in every CI run since 2026-09-01. We never asked for them.
+#
+# Blast radius of turning it off, measured over `crates/**/*.rs` before the change:
+# `FromResidual` → 0 hits, `impl Try` → 0 hits, `try_trait` → 0 hits outside a doc
+# comment, and `?` applied to an asupersync `Outcome` → 0 sites. The only two
+# grep hits pairing "Outcome" with "?" were `{first:?}` / `{second:?}` debug
+# formatting on `decision-ledger`'s local `AppendOutcome`. We use `Outcome` by
+# pattern match (`omp-types/src/lib.rs:125`), never by `?`.
+#
+# # Why here and not 19 times
+#
+# Cargo unifies features across a workspace build: ONE member left on default
+# features re-enables nightly for every other member. A per-manifest fix is
+# therefore 18 places that must all agree forever. Members now say
+# `asupersync = { workspace = true }`, so the next agent who needs a feature
+# changes this line, and a new crate cannot silently re-arm the nightly gate.
+[workspace.dependencies]
+asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", rev = "fa3c01aec", default-features = false, features = [
+    "proc-macros",
+] }
+
 # Shared lints, inherited with `lints.workspace = true`.
 #
 # WHY THIS TABLE EXISTS (`omp-orchestrator-finding-l1-bypassable-py3`). `FC-L1` — "a gap

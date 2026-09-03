@@ -11,7 +11,7 @@ name = "plan-assemble"
 path = "src/main.rs"
 
 [dependencies]
-asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", rev = "fa3c01aec" }
+asupersync = { workspace = true }
 preregistration-gate = { path = "../preregistration-gate" }
 # The assembler depends only on the bounded preregistration core and its
 # process-boundary runtime. It never shells out through a script; the gate
