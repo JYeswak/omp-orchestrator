@@ -1636,6 +1636,7 @@ dependencies = [
 name = "refill-idle-panes"
 version = "0.1.0"
 dependencies = [
+ "dispatch-claim-fence",
  "fleet-reconcile",
  "oracle-compare",
  "serde_json",
@@ -1750,6 +1751,10 @@ dependencies = [
  "serde",
  "serde_core",
 ]
+
+[[package]]
+name = "sender-identity"
+version = "0.1.0"
 
 [[package]]
 name = "serde"

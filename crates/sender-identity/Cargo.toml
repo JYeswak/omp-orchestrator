@@ -1,0 +1,18 @@
+[package]
+name = "sender-identity"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Who this process signs mail as, and whether that identity is its own to use"
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "sender_identity"
+path = "src/lib.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
