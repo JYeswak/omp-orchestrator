@@ -212,9 +212,9 @@ class = "verdict_type"
 wave = 2
 owner = "SnowyCanyon"
 reviewers = ["WildStone", "WildMountain", "AmberGate", "BlueLantern", "SilverWolf", "QuietRidge"]
-open_disagreements = 0                # DERIVED 2026-09-03T16:08Z WORKTREE (pre-commit of oaqh grade), not typed: python count of lines starting resolution = "" over waves/wave-1/*-S1.toml waves/wave-2/*-S1.toml -> 0. Prior 4 were pane1-S1.toml OMP-column rows; non-author %9 WildStone filled all four. TREE will equal this once the grade commit lands.
-status = "draft"
-approval = ""
+open_disagreements = 0                # DERIVED, never typed: grep -h -c '^resolution = ""$' over waves/wave-1/*-S1.toml waves/wave-2/*-S1.toml -> 0. TREE 63169b7. Wave-1 was 10 open (AmberGate 4, BlueLantern 3, QuietRidge 3), answered by the owner at e77dd04; wave-2's last 4 were pane-1's own OMP-column rows, filled by non-author %9 at 3b35442.
+status = "converged"                  # CONTRACT.md:79-87: a box converges when a wave yields ZERO open disagreements from all non-owners. Six reviewers across two waves are at 0: WildStone 24/24, WildMountain 11/11, AmberGate 4/4, BlueLantern 3/3, QuietRidge 3/3, SilverWolf 2/2. NOT a claim that S1 is built -- L1-L5 crates do not exist and two gap rows (hook 12-field schema, unregistered refusal type) are open by design. Converged means the MAP is agreed, not that the product is.
+approval = ""                         # BLOCKED ON JOSHUA. approval = the HD row id. HD-0009..HD-0012 in docs/decisions.jsonl still carry decision="" -- HD-0009 (L3 walkthrough) is the S9 human halt the diagram routes to at S1.mmd:46-47, so S1 cannot reach status="approved" and S2 cannot start until those four rows are decided.
 
 [box.diagram]
 mmd = "docs/plan/flow/diagrams/S1.mmd"
