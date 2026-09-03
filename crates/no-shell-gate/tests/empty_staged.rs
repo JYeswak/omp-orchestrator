@@ -22,12 +22,42 @@ fn fresh_git_tree(test: &str) -> PathBuf {
         FIXTURE_SEQ.fetch_add(1, Ordering::SeqCst)
     ));
     fs::create_dir_all(dir.join("crates/example/src")).expect("create fixture tree");
+    fs::create_dir_all(dir.join("docs/plan")).expect("create fixture plan");
     fs::write(
         dir.join("crates/example/src/lib.rs"),
         "pub fn clean_fixture() {}\n",
     )
     .expect("write clean workspace source");
+    fs::write(
+        dir.join("docs/plan/HYPOTHESES.jsonl"),
+        r#"{"id":"h1","prediction":"fixture","falsifier":"missing section","evidence_scope":"docs/plan","recorded_commit":"0123456789abcdef0123456789abcdef01234567","observed_result":null}"#.to_owned() + "\n",
+    )
+    .expect("write fixture hypotheses");
     run_git(&dir, &["init", "-q"], "git init");
+    run_git(
+        &dir,
+        &["add", "--", "crates/example/src/lib.rs", "docs/plan/HYPOTHESES.jsonl"],
+        "stage clean baseline",
+    );
+    run_git(
+        &dir,
+        &["-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "fixture baseline [test]"],
+        "fixture baseline commit",
+    );
+    let parent = String::from_utf8_lossy(&run_git(&dir, &["rev-parse", "HEAD"], "read fixture parent").stdout)
+        .trim()
+        .to_owned();
+    let hypotheses_path = dir.join("docs/plan/HYPOTHESES.jsonl");
+    let hypotheses = fs::read_to_string(&hypotheses_path)
+        .expect("read fixture hypotheses")
+        .replace("0123456789abcdef0123456789abcdef01234567", &parent);
+    fs::write(&hypotheses_path, hypotheses).expect("update fixture parent");
+    run_git(&dir, &["add", "--", "docs/plan/HYPOTHESES.jsonl"], "stage updated hypotheses");
+    run_git(
+        &dir,
+        &["-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "fixture hypotheses [test]"],
+        "fixture hypotheses commit",
+    );
     dir
 }
 
@@ -53,10 +83,15 @@ fn stage(dir: &Path, name: &str, content: &str) {
 }
 
 fn run_gate(dir: &Path) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_pre-commit-gate"))
+    let scoped_index = dir.join(".git/calr-gate-index");
+    fs::copy(dir.join(".git/index"), &scoped_index).expect("copy scoped index");
+    let output = Command::new(env!("CARGO_BIN_EXE_pre-commit-gate"))
         .current_dir(dir)
+        .env("GIT_INDEX_FILE", &scoped_index)
         .output()
-        .expect("spawn pre-commit-gate")
+        .expect("spawn pre-commit-gate");
+    fs::remove_file(scoped_index).expect("remove scoped index");
+    output
 }
 
 fn stderr(output: &Output) -> String {
