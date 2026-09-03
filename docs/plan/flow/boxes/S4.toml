@@ -1,0 +1,53 @@
+# S4 plan -> beads — the arrow that ran by hand, which is why Joshua called the NO-GO.
+#
+# Owner: AmberGate (pane 4, %1408). 2026-09-03. `fh` STALE tonight; no row cites it.
+
+[[box]]
+id = "S4"
+name = "plan -> beads: a graded plan becomes a dependency-complete bead DAG, generated not typed"
+trigger_today = "hand (agents ran the plan->DAG conversion; docs/plan/dag/ holds 23 hand-run files)"
+trigger_target = "slash:/plan-materialize (n92x) reading `crate-atom-gate --report --json`, then bead-lint (2lqd) refusing any bead lacking a crate: and an arrow: label"
+crate = "MISSING"
+crate_status = "MISSING"
+bead = "omp-orchestrator-n92x"
+kernel_input = "crate-atom-gate --report --json: one object per (crate, part) — {crate, part, part_name, status, detail, labels:[\"crate:<name>\",\"part:<n>\"]} (this-repo:crates/crate-atom-gate/src/main.rs, emit(); landed 338a247, legs verified 6e07413)"
+kernel_output = "MISSING — PROPOSED MaterializeVerdict::{Filed{bead,crate,part} | AlreadyFiled{bead} | RefusedByLint{reason} | ReportUnrun}"
+event_row = "LifecycleEvent{stage_from=S3, stage_to=S4, actor=materializer, pane, incarnation=MISSING, outcome, reason_code=FILED|ALREADY_FILED|LINT_REFUSED|REPORT_UNRUN, blocker={label|schema}}"
+validator = "bead-lint (2lqd): a bead lacking BOTH a `crate:` and an `arrow:` label is refused. MISSING as code — `ls crates/bead-lint` -> MISSING"
+sota_standard = "bead = (crate, part): a bead generated from a schema cannot be malformed against that schema, so the materializer files FROM a machine report rather than from prose"
+sota_cite = "this-repo:crates/crate-atom-gate/src/lib.rs (Part::ALL, 9 arms; the discriminants ARE the part:<n> label) + this-repo:docs/plan/dag/ (23 hand-run files, the current oracle) — fh STALE tonight, cited from source"
+skill = "/beads-workflow, /beads-bv, /beads-north-star"
+
+# PINNED, as the packet asks: this is the exact report shape S4 consumes. It is REAL — the
+# emitter is landed and its 10 legs are green on contabo-3 — but see no_claim: the BINARY
+# has never run, so the shape is verified by test fixture and not by a live report.
+branches = [
+  "report status `present` -> no bead filed",
+  "report status `n/a` -> no bead filed (a crate with no parser has nothing to fuzz; NotApplicable is deliberately NOT Present)",
+  "report status `ALLOWED` -> no bead filed; the allowance row names owner + dies_when",
+  "report status `MISSING` -> file one bead labelled crate:<name> part:<n>",
+  "PROPOSED: bead already exists for (crate, part) -> AlreadyFiled, never a duplicate",
+  "PROPOSED: filed bead fails bead-lint -> RefusedByLint{reason}; the materializer must not emit a bead its own linter rejects",
+  "PROPOSED: report absent or exit 2 (SCAN_EMPTY) / exit 3 (INSTRUMENT_ERROR) -> ReportUnrun; the materializer files NOTHING on an unrun report",
+  "human-halt arm: a MISSING part whose remedy is a decision (e.g. retire the crate vs wire it) -> S9 request row",
+]
+no_claim = """
+S4 HAS NO CRATE. `ls crates/plan-materialize` -> MISSING, `ls crates/bead-lint` -> MISSING.
+The 23 files under `docs/plan/dag/` are the hand-run oracle and are exactly what Joshua's
+NO-GO refers to: "the plan->DAG ran by hand, not through crates".
+MY HALF IS LANDED AND UNPROVEN AT THE BOUNDARY. `crate-atom-gate --report --json` is
+implemented and its kernel has 10 green legs on contabo-3, but **the binary has never
+executed**: no `crate-atom-gate check` or `--report` has run over the real 69 packages. So
+the report shape above is pinned from the emitter's source and its fixtures, and the FIRST
+live report may differ in ways no test caught. n92x should treat the first run as a
+reconciliation, not as input.
+Consequence already known: the seeded ceilings in `registries/allowances.toml`
+(2/10/26/68/56/69/20/69/26) come from a second instrument, so the first live report is
+EXPECTED to refuse with CEILING_HAS_SLACK or CEILING_BREACHED wherever the two disagree.
+Filing beads from that first report before reconciling would materialise the disagreement
+as work.
+ALSO NOT ESTABLISHED: that `arrow:` labels exist on any bead today. My d3gm bead carries
+`crate:crate-atom-gate` and `part:1` and `arrow:S4-S5`, so the convention is real on at
+least one bead — but I did not survey the tracker for coverage, so bead-lint's refusal rate
+against the existing corpus is UNMEASURED.
+"""

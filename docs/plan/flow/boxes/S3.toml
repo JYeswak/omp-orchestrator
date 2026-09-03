@@ -1,0 +1,48 @@
+# S3 plan -> grade — 16 rounds of grading, run entirely by hand.
+#
+# Owner: AmberGate (pane 4, %1408). 2026-09-03. `fh` STALE tonight; no row cites it.
+
+[[box]]
+id = "S3"
+name = "plan -> grade: fresh-eyes rounds under a named lens until two consecutive zero-finding rounds"
+trigger_today = "hand (an agent is dispatched a lens and writes round<N>-<name>.jsonl)"
+trigger_target = "slash:/plan-check (bcrn.1) run per round, refusing a round that reuses a spent lens or a grader who wrote the section"
+crate = "MISSING"
+crate_status = "MISSING"
+bead = "omp-orchestrator-bcrn.1"
+kernel_input = "docs/plan/*.md (18 sections) + docs/plan/CONVERGENCE.jsonl + docs/plan/round*.jsonl (16 files)"
+kernel_output = "MISSING — PROPOSED RoundVerdict::{Banked{section} | FindingsOpen{n} | LensReused{lens} | GraderIsAuthor{who} | Unrun}"
+event_row = "LifecycleEvent{stage_from=S2, stage_to=S3, actor=grader, pane, incarnation=MISSING, outcome, reason_code=BANKED|FINDINGS_OPEN|LENS_REUSED, blocker={lens|authorship}}"
+validator = "MISSING as code. The rules exist in prose: a DIFFERENT lens each round, a grader who did not write the section, and verify-before-record (.flywheel/AUTONOMOUS-WAVE.md §Phase A)"
+sota_standard = "two consecutive zero-finding rounds under DIFFERENT lenses, with the grader disjoint from the author; a finding not re-run is not a finding"
+sota_cite = "this-repo:.flywheel/AUTONOMOUS-WAVE.md (Phase A: 'Verify before recording. Round 15 produced 4 verified false positives out of 23 blockers') + this-repo:docs/plan/CONVERGENCE.jsonl — fh STALE tonight, cited from source"
+skill = "/grilling, /modes-of-reasoning-project-analysis"
+
+branches = [
+  "PROPOSED: lens already spent -> LensReused{lens}; the round does not count",
+  "PROPOSED: grader wrote the section -> GraderIsAuthor{who}; the round does not count",
+  "PROPOSED: findings > 0 -> FindingsOpen{n}; each becomes a bead, a one-line note, or is dropped — NEVER a new document",
+  "PROPOSED: findings == 0 with gates green -> Banked{section}",
+  "PROPOSED: gate state unrecorded -> Unrun; an unrecorded check is not a check (all round-8 rows were backfilled gates_green=false for exactly this reason)",
+  "human-halt arm: a finding whose remedy is a decision -> S9 request row",
+]
+no_claim = """
+NO CRATE IMPLEMENTS S3. `ls crates/plan-check` -> MISSING. Every rule in this box is prose in
+`.flywheel/AUTONOMOUS-WAVE.md` and every one of the 16 `docs/plan/round*.jsonl` files was
+produced by a hand-dispatched agent. The `branches` above are therefore PROPOSED, labelled as
+such, and are not a reading of any enum.
+MEASURED EVIDENCE THAT THE HAND PROCESS DOES NOT SELF-ENFORCE, from the rows themselves:
+  - `docs/plan/CONVERGENCE.jsonl` round-8 rows carry
+    `gates_green backfilled FALSE 2026-09-01: this round did not record gate state, and an
+    unrecorded check is not a check` — i.e. rounds banked sections without recording gates.
+  - Round 15 recorded 23 blockers of which 4 were later verified FALSE POSITIVES.
+  - 16 round files exist and ZERO consecutive zero-finding rounds have been achieved.
+WHAT WOULD RESOLVE THIS BOX: bcrn.1 landing `plan-check` as a crate with a bin, reading
+CONVERGENCE.jsonl + the round files and refusing a round that reuses a lens or whose grader
+authored the section. The lens/authorship facts are already IN the round rows, so the input
+exists and only the checker is absent.
+DISAGREEMENT WITH THE PACKET: it says "24 hand rounds in docs/plan/round*.jsonl". `ls` counts
+**16** files matching `docs/plan/round*.jsonl`. Rounds may exceed files (several rounds share
+a file, and CONVERGENCE.jsonl carries rows for rounds 8-21), so 24 may be a round COUNT
+against 16 FILES — but as written the cite does not resolve, and I am not guessing which.
+"""

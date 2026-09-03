@@ -1,0 +1,45 @@
+# S2 idea -> plan — the one front-of-spine box with real, firing machinery.
+#
+# Owner: AmberGate (pane 4, %1408). 2026-09-03. `fh` STALE tonight; no row cites it.
+
+[[box]]
+id = "S2"
+name = "idea -> plan: prose sections become an assembled, preregistered plan artifact"
+trigger_today = "hook:.git/hooks/pre-commit (preregistration-gate, FIRST in the chain) + hand for the sections themselves"
+trigger_target = "hook:.git/hooks/pre-commit for preregistration + slash:/planning-workflow for authoring"
+crate = "plan-assemble"
+crate_status = "wired"
+bead = "omp-orchestrator-bcrn"
+kernel_input = "docs/plan/*.md (18 section files) + docs/plan/HYPOTHESES.jsonl"
+kernel_output = "docs/PLAN.md (assembled) + a preregistration verdict: validate_staged_preregistration -> Result<(), String> (this-repo:crates/no-shell-gate/src/bin/pre-commit-gate.rs:L579)"
+event_row = "LifecycleEvent{stage_from=S1, stage_to=S2, actor=human+agent, pane, incarnation=MISSING, outcome, reason_code=PREREGISTRATION_REFUSED|PLAN_ASSEMBLED|NOT_APPLICABLE, blocker={hypothesis|assemble-stamp}}"
+validator = "preregistration-gate invoked at this-repo:crates/no-shell-gate/src/bin/pre-commit-gate.rs:L121 (refusal pushed at L122); plan-assemble freshness stamp via no-shell-gate/tests/assembly_freshness.rs"
+sota_standard = "preregister the hypothesis before the measurement, so a result cannot be re-narrated after the fact; the plan is assembled from sections by a machine, not maintained by hand in two places"
+sota_cite = "this-repo:crates/no-shell-gate/src/bin/pre-commit-gate.rs:L121 (the invocation) + this-repo:docs/plan/HYPOTHESES.jsonl (the artifact it reads) — fh STALE tonight, cited from source"
+skill = "/planning-workflow, /brennerbot-with-ntm"
+
+branches = [
+  "no staged docs/plan path -> the gate is NOT_APPLICABLE and says so (measured: `plan-assemble-build: NOT_APPLICABLE cargo invocation count=0` on tonight's commits)",
+  "staged plan section without a preregistered hypothesis -> refusal pushed at this-repo:crates/no-shell-gate/src/bin/pre-commit-gate.rs:L122",
+  "HYPOTHESES.jsonl absent -> `git show HEAD:docs/plan/HYPOTHESES.jsonl` fails; measured tonight in a scratch repo as the ONLY refusal a clean commit produced",
+  "docs/PLAN.md newer/older than its sections -> assembly_freshness RED (currently RED on this checkout; PLAN.md is dirty from a peer)",
+  "assembled and preregistered -> S3",
+  "human-halt arm: a section that cannot be assembled without a decision -> S9 request row",
+]
+no_claim = """
+S2 IS THE FIRST BOX IN MY SET WITH A GATE THAT ACTUALLY FIRED TONIGHT. `preregistration-gate`
+refused a commit in the orchestrator's own scratch repo, and it refused mine in a scratch
+clone (`git show HEAD:docs/plan/HYPOTHESES.jsonl` -> path does not exist). Both crates exist:
+`crates/plan-assemble` and `crates/preregistration-gate`.
+WHAT IS NOT ESTABLISHED: that the 18 `docs/plan/*.md` sections are the input plan-assemble
+actually reads — I did not read plan-assemble's source in this walk, only its invocation
+from the hook and its freshness test. A reader should treat `kernel_input` as the documented
+intent rather than a verified read.
+`assembly_freshness` is RED on this checkout right now, on `docs/PLAN.md`, which I never
+opened — 24 sibling test files and PLAN.md are dirty from other panes. So the S2 validator
+is failing for a reason that is not attributable to any single agent, which is itself the
+shared-checkout hazard rather than a plan defect.
+The staleness metric counts commits since the doc's last DISK WRITE, so a wave committing
+~2/min re-stales PLAN.md in ~25 minutes; that is a measured property of the metric, and it
+is why this box's validator is red more often than the plan is wrong.
+"""
