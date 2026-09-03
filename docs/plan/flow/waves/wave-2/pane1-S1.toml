@@ -1,0 +1,180 @@
+# Wave 2, pane 1 (omp-claude, tmux %6, session omp-orchestrator, window 0 pane index 1).
+# Box S1 ONLY. No S2. No crates. BUILD FREEZE per docs/plan/flow/CONTRACT.md:56.
+#
+# WHY THIS FILE EXISTS AND NOT AN EDIT TO A REVIEWER LEDGER: env carries
+# AGENT_NAME=WildStone on this pane, which collides with the pane-2 reviewer ledger
+# docs/plan/flow/waves/wave-2/WildStone-S1.toml. That file is NOT touched here. This is the
+# pane-1-named file; it carries (a) owner answers to the eight Wave-2 rows still marked
+# REMAINING across both reviewer ledgers, and (b) the pane-1 assignment: attack the OMP column
+# of the surfaces map.
+#
+# EVERY OMP FIGURE BELOW IS PINNED TO THE INSTALLED BUNDLE, NOT TO AGENTS.md:
+#   omp --version                                     -> omp/18.1.6
+#   shasum -a 256 .../pi-coding-agent/dist/cli.js     -> 002f6c36c23efa02ec2aedb5247c309eca1525fe262f9ddd7f25b0f3fb6a9dbe
+#   ls -l same path                                   -> 21,263,616 bytes
+# AGENTS.md pins v18.0.11 / a95635ad / 19,803,745 B and crates/omp-surface-consumption pins
+# v18.1.3 / a64dd6cb / 21,382,167 B. Both are stale, and the bundle SHRANK 18.1.3 -> 18.1.6,
+# so no monotonic-growth reasoning is available. A node without a measured_against pin is
+# unfalsifiable.
+#
+# INSTRUMENT NOTES AGAINST MYSELF, recorded because AGENTS.md treats a self-produced reading as
+# subject to the same suspicion as a subject's:
+#   1. tmux display-message -p WITHOUT -t answered for the ACTIVE pane (%9, index 4), not mine.
+#      tmux list-panes -F is the correct instrument for pane identity.
+#   2. A raw grep for Command::new("omp") returns 3 files; 2 of them are COMMENTS quoting the
+#      zero claim. Comments must be stripped before matching (AGENTS.md rule 5).
+#   3. A first regex mux[A-Za-z]+ reported five extra mux methods; it had clipped the leading c
+#      from cmux* (the browser surface mux). Corrected before publishing.
+
+# ===========================================================================================
+# PART A — OWNER ANSWERS to the eight rows still marked REMAINING (measured 2026-09-03).
+# ===========================================================================================
+
+[[disagreement]]
+box = "S1"
+field = "owner_answer.WildStone.gap_ack.L0CX"
+owner_says = "REMAINING_INSTALLER_ZERO_CX_SCOPE_GAP"
+reviewer_says = "ANSWERED AND CONFIRMED OPEN, with the adoption edge now named. Measured: crates/installer contains zero Cx, Scope, or asupersync references, and its Cargo.toml declares no asupersync dependency at all — so this is not a partial adoption, it is absence. The remedy is not new code: 44 crates already depend on subprocess-contract, and installer is not one of them. The row closes only when installer's std::process call sites route through subprocess-contract::run_output under a caller-supplied Cx. Naming that edge is diagram work; making it is frozen."
+evidence = "git grep --no-index -c -E 'Cx|asupersync|Scope' -- crates/installer/src -> 0 files; grep asupersync crates/installer/Cargo.toml -> no match; grep -rl subprocess-contract crates/*/Cargo.toml -> 44 manifests, installer absent; this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:11 already names run_output as the replacement target"
+severity = "major"
+resolution = "accepted: gap stands, scope is crates/installer, resolving edge is subprocess-contract::run_output under Cx; no code under freeze"
+
+[[disagreement]]
+box = "S1"
+field = "owner_answer.WildStone.gap_ack.L4CX"
+owner_says = "REMAINING_L4_CX_RUNTIME_REGION_OWNERSHIP_UNPROVEN"
+reviewer_says = "ANSWERED AND ESCALATED, not resolved. The diagram's L4CX node states the TARGET (spawn ntm through subprocess-contract and Cx). The measured current state is worse than the node implies: there are ten raw Command::new(ntm) sites across nine crates, and every import line checked resolves to std::process::Command, not subprocess-contract. So L4 has no region-owned spawn wrapper anywhere in the fleet today, not merely in the unbuilt S1 path. This is the measured orphan class AGENTS.md names in its asupersync contract, and it is cross-cutting rather than S1-local."
+evidence = "git grep --no-index -n 'Command::new(\"ntm\")' -- 'crates/*/src/*' -> 10 sites in agent-mail-native/src/wake.rs:255, fast-dispatch/src/main.rs:261,379, fleet-reconcile/src/main.rs:215,220, fleet-truth/src/main.rs:192, loop-driver/src/lib.rs:1109, oracle-pane-state-differential/src/main.rs:181, pane-oracle-diff/src/main.rs:184, refill-idle-panes/src/main.rs:747; import lines -> fast-dispatch/src/main.rs:27, loop-driver/src/lib.rs:15, refill-idle-panes/src/main.rs:23 all 'use std::process::{Command, ...}'"
+severity = "blocker"
+resolution = "escalated: row stays open and widens beyond S1 — the ten-site raw ntm spawn census is a cross-cutting Cx finding, not an S1 diagram defect"
+
+[[disagreement]]
+box = "S1"
+field = "owner_answer.WildStone.surface_ack.Asupersync"
+owner_says = "REMAINING_INSTALLER_ZERO_CX_AND_L4_REGION_WRAPPER_GAP"
+reviewer_says = "ANSWERED as the union of the two rows above and kept open on the same evidence. The surfaces map now states the Cx contract correctly at all four layers, which is the right map. What the map may not imply is coverage: installer has zero asupersync, and L4's spawn path is ten std::process sites. The Asupersync column is therefore fully DECLARED and zero WIRED for S1."
+evidence = "same two rows above; this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:11,15,19,23"
+severity = "major"
+resolution = "accepted: column state is DECLARED-not-WIRED for all four S1 layers"
+
+[[disagreement]]
+box = "S1"
+field = "owner_answer.WildStone.invariant.command_v_path_identity"
+owner_says = "REMAINING_PROJECTED_COMMAND_V_PATH_INVARIANT"
+reviewer_says = "ANSWERED AND CLOSEABLE. The reviewer's objection was that the invariant was rendered as KNOW. The rewritten map now reads 'Invariant PROJECTED' and states the current mechanism in the same node ('Today installer verifies a supplied absolute path'). Independently re-measured: crates/installer/src contains no command -v, no which, no type -a, and no PATH enumeration, so PROJECTED is the correct class. The row closes as accepted-projected; it does NOT close as satisfied."
+evidence = "this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:2; git grep --no-index -n -E 'command -v|which |type -a|env::var_os..PATH' -- crates/installer/src -> no probe sites (two prose matches only, lib.rs:133 and lib.rs:286)"
+severity = "blocker"
+resolution = "accepted: invariant is PROJECTED and now labelled so; closes as projected, not as satisfied"
+
+[[disagreement]]
+box = "S1"
+field = "owner_answer.WildStone.branches.L1_external_tool_matrix"
+owner_says = "REMAINING_TOOL_SPECIFIC_PROBE_BRANCHES_NOT_RENDERED"
+reviewer_says = "ANSWERED AND CONFIRMED OPEN. The reviewer asked for distinct arms for bv-ranking-unavailable, fh-stale, rch-lane-unavailable, jsm-absent, frankenmermaid-unavailable, launchd-paused, and OMP-hook-surface-unmeasured. S1.toml:39 lists twelve probes and S1.toml:40 lists four rules, but neither the box branches (S1.toml:113-115) nor either diagram renders a per-tool arm: the three rendered arms are ABSENT-family, ABSENT-specific, and UNPROBEABLE. Two of the reviewer's seven states are already proven distinct rather than hypothetical — fh is STALE right now (CONTRACT.md:42-43 records SEARCH_INDEX_STALE and an index lock) and launchd is paused (S1.toml:106) — so collapsing them into ABSENT would misname a live condition. The fix is a probe verdict type with a stale/paused arm, not seven more nodes."
+evidence = "this-repo:docs/plan/flow/boxes/S1.toml:39,40,113-115; this-repo:docs/plan/flow/CONTRACT.md:42-43 (fh STALE); this-repo:docs/plan/flow/boxes/S1.toml:106 (launchd paused); frankenmermaid validate docs/plan/flow/diagrams/S1.mmd -> Nodes 52 Edges 60 exit 0, no per-tool arm"
+severity = "major"
+resolution = "accepted: row stays open; the resolving artifact is a Probe verdict enum carrying OK|ABSENT_FAMILY|ABSENT_SPECIFIC|UNPROBEABLE|STALE|PAUSED|UNMEASURED, not additional diagram nodes"
+
+[[disagreement]]
+box = "S1"
+field = "owner_answer.WildMountain.OUT.inception_to_S2"
+owner_says = "remaining: OUT names inception.json required fields, but the diagram still does not name the S1 FOUNDATION row and durable validation/readback as acceptance conditions before S2"
+reviewer_says = "ANSWERED, and the reviewer is right that the citation is missing while being wrong that the artifact is undeclared. Both authorities exist and agree: SCHEMAS.toml:156-161 declares [artifacts.inception_manifest] at .omp-orchestrator/inception.json with writer 'S1 inception foundation', and docs/plan/FOUNDATION.jsonl carries a stage S1 row whose output_refs name that exact path plus 'S2 planning foundation'. What is missing is (1) the OUT node citing them and (2) the artifact itself: .omp-orchestrator/inception.json does not exist and no writer crate does either (kxe.10 open). So OUT is a declared handoff with zero instances. The acceptance condition is nameable today: write, then READ BACK, then cite the SCHEMAS row."
+evidence = "this-repo:SCHEMAS.toml:156-161; docs/plan/FOUNDATION.jsonl stage S1 row -> output_refs include '.omp-orchestrator/inception.json (SCHEMAS.toml [artifacts.inception_manifest])' and 'S2 planning foundation'; ls .omp-orchestrator/inception.json -> No such file or directory; br list -> omp-orchestrator-kxe.10 open (S1 inception-manifest writer)"
+severity = "blocker"
+resolution = "accepted: OUT must cite SCHEMAS.toml:156-161 and the FOUNDATION S1 output_refs, and acceptance is write-then-readback; the artifact has zero instances today"
+
+[[disagreement]]
+box = "S1"
+field = "owner_answer.WildMountain.PERSONA.input"
+owner_says = "remaining: Persona A/B/C is labeled through intake.requirements in the diagram, but the S1 kernel contract still lacks a typed requirements_ref/persona derivation schema"
+reviewer_says = "ANSWERED AND CONFIRMED OPEN, narrowed to one missing artifact row. S1.toml:19 now does carry the derivation in the kernel contract — 'intake.requirements.fleet -> persona A|B|C' — so the reviewer's 'no input at all' has been superseded. What remains is exactly what the reviewer named second: SCHEMAS.toml declares no intake-requirements artifact; grepping it for inception, persona, or requirements returns only the inception_manifest rows at 156-161. A derivation named in prose in one box file and absent from the artifact registry cannot be validated by any reader, which is the same defect class as an unregistered type."
+evidence = "this-repo:docs/plan/flow/boxes/S1.toml:19; grep -nE 'inception|persona|requirements' SCHEMAS.toml -> only 156,157,161 (inception_manifest); no intake or requirements artifact row"
+severity = "major"
+resolution = "accepted: row stays open; resolving artifact is a SCHEMAS.toml intake-requirements row with the persona derivation rule, referenced by S1.toml:19"
+
+[[disagreement]]
+box = "S1"
+field = "owner_answer.WildMountain.L5.outcome_type"
+owner_says = "remaining: OutcomeClass::Refusal remains unregistered in the S1 schema; no owner response supplied a canonical typed envelope/error mapping"
+reviewer_says = "ANSWERED with the canonical mapping the reviewer asked for, and the reviewer's premise needs one correction. OutcomeClass is NOT an invented name: it is a real type owned by controller-tick, and the reuse authority table names it explicitly — crates/loop-coverage/src/lib.rs:233 maps 'OutcomeClass' to crates/controller-tick/src/lib.rs, and :131 states verbatim 'Do not fork OutcomeClass / PaneLiveness'. So S1 must REUSE controller-tick::OutcomeClass, and inventing an S1-local refusal enum would violate a written reuse rule. The reviewer is nonetheless correct on the load-bearing half: the type is unregistered in SCHEMAS.toml, and controller-tick is recorded as 'pending-extraction' at loop-coverage/src/lib.rs:581 — it is a control-plane crate, so today S1 cannot depend on it from this workspace. That is the real blocker, and it is an extraction dependency, not a naming dispute."
+evidence = "this-repo:crates/loop-coverage/src/lib.rs:131 ('Do not fork OutcomeClass / PaneLiveness'), :137 ('Authority: controller_tick::OutcomeClass + budget_outcome'), :233 (('OutcomeClass', 'crates/controller-tick/src/lib.rs')), :581 ('pending-extraction: owns OutcomeClass and budget_outcome'); git grep --no-index -n OutcomeClass -- crates -> 5 sites, all in loop-coverage, zero definitions in this workspace; grep -nE 'inception|persona|requirements' SCHEMAS.toml -> no OutcomeClass row"
+severity = "blocker"
+resolution = "escalated: canonical type is controller-tick::OutcomeClass (reuse mandated, do-not-fork), but that crate is pending-extraction from control-plane — S1's refusal taxonomy is blocked on the extraction, not on a naming choice"
+
+# ===========================================================================================
+# PART B — PANE-1 ASSIGNMENT: attack the OMP column of the surfaces map.
+# The map was rewritten at 5743987 between the assignment and this answer. Measured:
+#   5743987^  -> 31 nodes, 33 edges, 6 GAP labels
+#   5743987   -> 17 nodes, 16 edges, 0 GAP labels
+# The rewrite removed 14 nodes and every GAP arm. Four of my six objections to the old OMP
+# column are satisfied by that rewrite (scoping of Command::new(omp) to lib.rs:136, deletion of
+# the mux triple, the PROJECTED invariant label, the 18.1.6 version pin). Three rows survive,
+# and one is NEW and caused by the rewrite itself.
+# ===========================================================================================
+
+[[disagreement]]
+box = "S1"
+field = "omp_column.L4OMP_transport_ownership"
+owner_says = "L4OMP: 'OMP: GetState plus GetSessionStats on each OMP pane. Not a spinner regex'"
+reviewer_says = "REJECTED as unachievable for the panes S1 actually observes, and this is the load-bearing row of the OMP column. Every OMP protocol surface is STDIO-BOUND: --mode=<text|json|rpc|rpc-ui> is a per-process output mode, acp is documented 'over stdio', and omp --help exposes no socket, port, listen, bind, or ipc option at all. RPC addressability is therefore ELECTED AT SPAWN by whoever owns the child's three pipes — our own client proves the shape, appending --mode=rpc at construction and taking stdin/stdout/stderr as pipes with a new process group. tmux owns the stdio of every pane in this session, so 'GetState on each OMP pane' is not available for any pane ntm spawned, including the ones we spawned ourselves. The old node called this a GAP with an available remedy; the rewrite states it as the design. Both are wrong in the same direction. Terminal observation is CORRECT for tmux-owned and third-party panes, and the true residual is narrower: for a child WE own we could carry typed state; for every pane the fleet observes there is no protocol at all. NO-CLAIM: I did not attempt a live RPC handshake against a running pane; this is a transport-topology argument from the help surface, the method census, and our own spawn code, and a live refusal would strengthen it."
+evidence = "omp --help:27 --mode=<value> Output mode: text (default), json, rpc, or rpc-ui; omp --help:81 acp 'Run Oh My Pi as an ACP (Agent Client Protocol) server over stdio'; omp --help | grep -niE 'socket|--port|listen|bind|ipc' -> 0 matches; 42-method census (re-derived below) contains no pane or process address argument; this-repo:crates/omp-rpc-session/src/lib.rs:99 (args --mode=rpc) and :158-163 (stdin/stdout/stderr Pipe, NewProcessGroup, kill_on_drop); tmux list-panes -t omp-orchestrator -F -> %5..%9, pane_current_command zsh/bun, tmux-owned stdio"
+severity = "blocker"
+resolution = ""
+
+[[disagreement]]
+box = "S1"
+field = "omp_column.consumer_absent_for_L1_and_L5"
+owner_says = "L1OMP: 'RpcRequest::GetState get_session_stats via omp-rpc-session for OMP children only'; L5OMP: 'GetState plus GetSessionStats. Does not replace NTM or Agent Mail'"
+reviewer_says = "PARTIAL. Both nodes are now correctly scoped ('for OMP children only', 'does not replace NTM or Agent Mail') and both methods genuinely are emitted by the adapter, which is itself WIRED — omp-orchestrator imports run_session and calls it under cx. What the nodes hide is that neither CONSUMER exists: S1.toml:41 records L1 exists = 'none', and portal appears in zero crates/*/src/* files. A surface attributed to a component with no source is a design intent, and the map must say so, which is exactly the ground the reviewers used to downgrade the command -v invariant to PROJECTED. Apply the same rule to these two nodes."
+evidence = "this-repo:crates/omp-rpc-session/src/lib.rs:243-248 (four-method closed vocabulary), :270-277 (emitted sequence), :246-247 GetSessionStats/GetState; this-repo:crates/omp-orchestrator/src/main.rs:31-32,451 (run_session called under cx); this-repo:docs/plan/flow/boxes/S1.toml:41 (L1 exists = none), :72 (L5 exists = none); git grep --no-index -il portal -- 'crates/*/src/*' -> 0 files"
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S1"
+field = "omp_column.gap_deletion_changed_the_claim_class"
+owner_says = "commit 5743987 subject: 'S1 Wave 2 — close branch holes; named OMP NTM Cx surfaces; no accepted gaps'"
+reviewer_says = "REJECTED as a claim class, not as content. Deleting the six GAP labels did not close the gaps; it removed the only marker distinguishing what is wired from what is intended. Measured, the current twelve surface nodes are three different classes wearing one costume: WIRED (L0OMP's lib.rs:136 child, L1NTM's robot-snapshot), NONE-ON-PURPOSE (L0OMP, L0NTM at install time), and TARGET (every Cx node, L1OMP, L4OMP, L5OMP, whose consumers are unbuilt). AGENTS.md's fifth gate rule requires a floor-raise claim naming what still passes; a commit subject asserting 'no accepted gaps' over a map whose L1-L5 crates do not exist is the overclaim that rule forbids. The fix is one token per node — state = WIRED | DECLARED | TARGET | NONE_ON_PURPOSE — which is cheaper than the deleted nodes and strictly more queryable."
+evidence = "git show 5743987^:docs/plan/flow/diagrams/S1-surfaces.mmd | frankenmermaid validate -> Nodes 31 Edges 33, grep -c GAP -> 6; frankenmermaid validate docs/plan/flow/diagrams/S1-surfaces.mmd -> Nodes 17 Edges 16 exit 0, grep -c GAP -> 0; this-repo:docs/plan/flow/boxes/S1.toml:41,49,57,65,72 (L1 none, L2 crate none, L3 none, L4 wrapper none, L5 none); this-repo:AGENTS.md 'Every gate proves it bites' rule 5"
+severity = "blocker"
+resolution = ""
+
+# ===========================================================================================
+# PART C — the OMP census the column rests on, re-derived at 18.1.6 so the numbers are not
+# inherited. Recorded here because AGENTS.md's own derivation command no longer runs.
+# ===========================================================================================
+
+[[disagreement]]
+box = "S1"
+field = "omp_column.census_reconfirmed_at_18_1_6"
+owner_says = "AGENTS.md: 42 inbound RPC methods, 39 CLI subcommands, derived by the published bun command."
+reviewer_says = "FIGURES ACCEPTED, COMMAND REFUTED. 39 CLI and 42 inbound RPC both re-confirm at 18.1.6, and the 42-method set reproduces AGENTS.md's list byte for byte. But AGENTS.md's derivation command cannot produce them: both of its anchors are minifier-generated identifiers and occur zero times in the installed bundle. I re-derived by brace-matching the switch containing the negotiate_protocol case label, an anchor the protocol requires and the minifier cannot rename. Two independent instruments now agree on 42 — that brace match, and omp-surface-consumption's cluster-gap split. Consumption has two denominators that must never be merged: 4/42 EMITTED as request frames by the only client, and 9/42 REFERENCED as method tokens per that crate's own doc, which I could not re-run because no binary is built. The 'we consume 0 of 42' text is refuted, and so is a naive 3-file recount of Command::new(omp), which counts two comments."
+evidence = "omp --version -> omp/18.1.6; omp --help COMMANDS awk count -> 39; bun indexOf('let w=async(v)=>') -> -1 and indexOf('},E=new KWt') -> -1 in the installed bundle; bun brace-match of the switch at the negotiate_protocol case (offset 19554876, body 19554875-19563025, 8151 bytes) -> 42 case labels, 42 unique, identical to AGENTS.md's list; this-repo:crates/omp-surface-consumption/src/lib.rs:22-34,47-49; comment-stripped scan of 174 crates/*/src/*.rs -> Command::new(\"omp\") at crates/omp-rpc-session/src/lib.rs:136 only, versus 3 files raw (2 comments at omp-surface-consumption/src/lib.rs:39 and src/main.rs:114); ls target/debug/omp-surface-consumption target/release/omp-surface-consumption ~/.local/bin/omp-surface-consumption -> all absent, so 9/42 is DECLARED and UNRUN here"
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S1"
+field = "omp_column.mux_triple_misclassified_in_AGENTS_md"
+owner_says = "AGENTS.md fifth rule, '(c) should use — 5: omp/muxConnect, omp/muxPing, omp/muxRestartServer, goals, collab'"
+reviewer_says = "REFUTED for the three mux methods; the surfaces map has already dropped them, but AGENTS.md still classifies them as orchestration surface we ought to adopt. Measured at 18.1.6: all three are declared in one run beside __omp_worker_lsp_mux, OMP_LSP_MUX_SOCKET, OMP_LSP_MUX_PROJECT_DIR, omp.lsp.mux and the readiness literal 'omp lsp mux listening on'. They multiplex LANGUAGE-SERVER sockets. They address no session and no pane, so adopting them would buy the orchestrator nothing, and citing them as unused orchestration surface implies a remedy that does not exist. Separately, cmuxSurface / cmuxAttachedSurface / cmuxOwnsSurface / cmuxSnapshotToObservation are the BROWSER tab surface mux, not a pane mux. AGENTS.md needs a correction row; no diagram change is required."
+evidence = "bun on the 18.1.6 bundle: omp/muxConnect, omp/muxPing, omp/muxRestartServer occur once each, in the declaration run containing __omp_worker_lsp_mux, OMP_LSP_MUX_SOCKET, OMP_LSP_MUX_PROJECT_DIR, omp.lsp.mux and 'omp lsp mux listening on'; cmux* tokens resolve to the browser tab surface; git grep --no-index -l -E 'muxConnect|muxPing|muxRestartServer' -- 'crates/*/src/*' -> 1 file, the census crate; this-repo:AGENTS.md fifth-rule '(c) should use' row"
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S1"
+field = "box.agreement.open_disagreements_count"
+owner_says = "S1.toml:207 open_disagreements = 12"
+reviewer_says = "REFUTED as a count. Measured across both Wave-2 reviewer ledgers there are EIGHT rows whose resolution still begins REMAINING or 'remaining:' — five in WildStone-S1.toml (branches.L1_external_tool_matrix, gap_ack.L0CX, gap_ack.L4CX, invariant.command_v_path_identity, surface_ack.Asupersync) and three in WildMountain-S1.toml (OUT.inception_to_S2, PERSONA.input, L5.outcome_type). All eight are answered in Part A of this file. The counter is a hand-maintained integer in a file that four panes write, which is the same defect class as a prose package count: derive it, do not type it. Part B adds five new pane-1 rows, so the post-merge open count is 5 until the owner answers them."
+evidence = "awk over docs/plan/flow/waves/wave-2/WildStone-S1.toml and WildMountain-S1.toml pairing each field line with its resolution line -> 24 + 11 rows, of which 8 remain; this-repo:docs/plan/flow/boxes/S1.toml:207"
+severity = "minor"
+resolution = ""
+
+# NO-CLAIM for this whole file. Every row is a static reading of source, help output, an installed
+# bundle, and two committed diagrams. Nothing here was executed against a live OMP RPC child, no
+# pane received a probe, and no crate was built — the freeze forbids it and I did not route around
+# it. Part A answers reviewer rows with measurements; it does not close them, because a wave closes
+# when the OWNER of S1 (SnowyCanyon) files resolutions and Joshua's approval row exists. The three
+# blockers in Part B are unanswered by construction: they were filed minutes ago.
