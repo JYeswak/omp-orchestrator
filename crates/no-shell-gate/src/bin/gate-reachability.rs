@@ -65,6 +65,18 @@ fn json_rows(rows: &[Row]) -> String {
     )
 }
 
+fn machine_name() -> String {
+    for key in ["HOSTNAME", "COMPUTERNAME"] {
+        if let Ok(value) = env::var(key) {
+            let value = value.trim();
+            if !value.is_empty() {
+                return value.to_owned();
+            }
+        }
+    }
+    "unknown".to_owned()
+}
+
 fn gate_crates(root: &Path) -> Vec<String> {
     let mut names = fs::read_dir(root.join("crates"))
         .ok()
@@ -80,6 +92,7 @@ fn gate_crates(root: &Path) -> Vec<String> {
             (name.ends_with("-gate")
                 || name.ends_with("-lint")
                 || name.ends_with("-check")
+                || name == "path-literal-guard"
                 || name == "commit-build-fence")
                 .then_some(name)
         })
@@ -291,9 +304,11 @@ fn main() {
         reachable: root.join(".git/hooks/pre-commit").is_file(),
         proof_command: "stage a .sh and run .git/hooks/pre-commit; expect exit 1".to_owned(),
     };
+    let machine = machine_name();
     let mut report = format!(
-        "{{\"schema_version\":\"omp-gate-reachability/v1\",\"status\":{},\"root\":{},\"rows\":{},\"excluded_paths\":{},\"positive_control\":{},\"summary\":{{\"rows\":{},\"reachable\":{},\"unreachable\":{}}}",
+        "{{\"schema_version\":\"omp-gate-reachability/v1\",\"status\":{},\"machine\":{},\"root\":{},\"rows\":{},\"excluded_paths\":{},\"positive_control\":{},\"summary\":{{\"rows\":{},\"reachable\":{},\"unreachable\":{}}}}}",
         json_string(status),
+        json_string(&machine),
         json_string(&root.display().to_string()),
         json_rows(&rows),
         json_array(&excluded),

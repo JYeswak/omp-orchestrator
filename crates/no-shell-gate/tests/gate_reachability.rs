@@ -166,6 +166,7 @@ fn report_excludes_its_own_source_and_has_a_no_shell_positive_control() {
     assert!(output.status.success(), "{output:?}");
     let report = json_output(&output);
     assert_eq!(report["status"], "ok");
+    assert!(report["machine"].as_str().is_some_and(|machine| !machine.is_empty()));
     let excluded = report["excluded_paths"].as_array().expect("excluded paths");
     assert!(excluded.iter().any(|path| {
         path.as_str() == Some("crates/no-shell-gate/src/bin/gate-reachability.rs")
@@ -183,6 +184,16 @@ fn report_excludes_its_own_source_and_has_a_no_shell_positive_control() {
         .as_str()
         .unwrap_or_default()
         .contains(".git/hooks/pre-commit"));
+    let path_guard = rows(&report)
+        .iter()
+        .find(|row| row["name"] == "path-literal-guard" && row["kind"] == "crate")
+        .expect("path-literal-guard row");
+    assert_eq!(path_guard["reachable"], true);
+    assert!(path_guard["triggers"]
+        .as_array()
+        .expect("path-literal-guard triggers")
+        .iter()
+        .any(|trigger| trigger == "git pre-commit hook"));
 }
 
 #[test]
