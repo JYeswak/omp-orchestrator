@@ -226,3 +226,94 @@ validate_exit = 0
 svg = "docs/plan/flow/diagrams/S1.svg"
 nodes = 52
 edges = 60
+
+# ---- OBSERVABILITY, one row per layer. Bead: omp-orchestrator-s1-observability-every-layer-io0r
+#
+# JOSHUA, 2026-09-03: "why would we not have observability at every layer - this seems like a
+# massive gap". He is right. Three measured causes, recorded so the fix is not mistaken for a
+# preference:
+#
+#   1. OUR OWN GRADING RULE SCOPED IT OUT. crate-atom-gate part 7 (the SLO row) is conditional on
+#      the crate sitting on a TICK PATH -- crates/crate-atom-gate/src/lib.rs:64-65, field at
+#      :174-176. Inception is not a tick path, so the gate NEVER ASKED for an SLO row for L0-L5.
+#      The instrument that grades all 68 crates excused the whole journey. Part 7's trigger must
+#      widen: a JOURNEY STAGE qualifies, not only a tick path.
+#   2. EVERY OBSERVABILITY PRIMITIVE HERE IS SCAR TISSUE. tick-monitor exists because pane
+#      classifiers were wrong; receiver-receipt because a send returned success while the packet
+#      vanished; ack-stage because delivery was unprovable. Each was forced into existence by a
+#      failure. Inception has never executed, so it has no scars -- which is exactly why the first
+#      run would be blind at the moment we most need to watch it.
+#   3. DECLARED IS NOT BUILT. Line 21 of this file declares the LifecycleEvent row. Zero writers.
+#      All nine writer files in the workspace serve the DISPATCH LOOP. Two declared artifacts have
+#      zero instances on disk: SCHEMAS.toml:156 inception_manifest and :138 findings_ledger.
+#
+# Every row below is PROPOSED. Writing them instruments nothing; it makes the requirement checkable
+# before the build, which is the only cheap moment. Each row carries the four things a layer needs
+# -- an event with a reason_code SET, the artifact it writes, the monitor that watches it, and the
+# gate that grades it WITH its known-bad leg -- plus one metric.
+
+[[box.observability]]
+layer = "L0"
+status = "PROPOSED"
+event_row = "LifecycleEvent{stage_to='S1.L0', step, actor, outcome, reason_code, blocker}  -- one row per step, not one per install"
+reason_codes = ["TRIPLE_RESOLVED", "PREFLIGHT_REFUSED_DISK", "SUPPLY_CHAIN_REFUSED_CHECKSUM", "SUPPLY_CHAIN_REFUSED_SIGNATURE", "PATH_COLLISION_REFUSED", "AGENT_DETECTED", "AGENT_MERGE_CREATED", "AGENT_MERGE_MERGED", "AGENT_MERGE_ALREADY", "AGENT_MERGE_SKIPPED", "AGENT_MERGE_FAILED", "BACKUP_WRITTEN", "INSTALL_VERIFIED", "UNINSTALL_CLEAN"]
+artifact = "InstallReport{agent -> created|merged|already|failed|skipped, backups[], path_hits[]} + the host_capabilities and path_hits fields of .omp-orchestrator/inception.json"
+monitor = "command -v ompo readback AFTER the install, plus an inode compare of the installed artifact against the staged one. mirror:beads_rust/src/sync/mod.rs:507-509 fsync_pinned_parent() is the durability reference; mirror:destructive_command_guard/install.sh:1708-1712 does NOT fsync the parent, which is the gap between the two."
+gate = "supply-chain gate + PATH-collision gate"
+known_bad = "a TAMPERED checksum must REFUSE, never warn. Zero agents detected is an ERROR, not 'clean' -- an empty scan set is the anti-vacuity case. And the published name must not be a PATH shadow: bare `installer` resolves to /usr/sbin/installer today."
+metric = "install -> verified-PATH seconds; path_hits count (>1 is a collision, not a note); backups_written : files_mutated must be exactly 1:1"
+
+[[box.observability]]
+layer = "L1"
+status = "PROPOSED"
+event_row = "one row PER PROBE: {probe, family, present, version, remediation, outcome, signals_seen}"
+reason_codes = ["OK", "ABSENT_FAMILY", "ABSENT_SPECIFIC", "UNPROBEABLE", "STALE", "PAUSED", "UNMEASURED"]
+artifact = "DoctorReport{ok|degraded|absent|unprobeable} + the required_tools and host_capabilities fields of inception.json"
+monitor = "the two-band exit code, plus TWO SIGNALS per probe (presence AND version) per line 40 of this file. The verdict arm set is owned by bead omp-orchestrator-s1-probe-verdict-enum-vv9h."
+gate = "probe-verdict gate"
+known_bad = "a tool PRESENT AT THE WRONG VERSION must not read OK. An empty probe set is an ERROR, never a pass. And a STALE tool must not satisfy a probe: fh did exactly that until Joshua removed it at f735cfd -- eleven probes remain and the STALE arm exists because of that removal."
+metric = "probes answered / probes declared; UNPROBEABLE must be a NAMED SET, never a residue; STALE count, which was silently 1 for the whole session"
+
+[[box.observability]]
+layer = "L2"
+status = "PROPOSED"
+event_row = "one row per repo check: {check, before_hash, action, after_hash, backup_path, reprobe_result}"
+reason_codes = ["NOT_A_GIT_REPO", "REMOTE_ABSENT_PERSONA_A_OK", "CONTROLS_UNSTAMPED", "TRUSTED_INIT_DECLINED", "INIT_WRITTEN", "REPROBE_FAILED", "HOOK_IDENTITY_MISMATCH", "HOOK_REPAIR_VERIFIED", "HOOK_STILL_MISMATCHED"]
+artifact = "the repo_identity, control_files and trust_status fields of inception.json, plus every backup file it wrote"
+monitor = "a RE-PROBE after every write -- the loop-back the wave-2 review forced into the diagram. A remediation is an action, never a proof."
+gate = "init gate + hook-identity gate"
+known_bad = "init over an UNSTAMPED FOREIGN AGENTS.md without an explicit opt-in must HALT, not overwrite. A failed repair must not reach L3. Idempotence: a second init or repair performs ZERO actions -- and whether that is 'zero actions' or 'zero actions given identical before-hashes' is an open question dispatched to pane 3."
+metric = "actions on the second run (must be 0); backups_written : files_mutated (must be 1:1); reprobe_failed count (must be 0 before L3)"
+
+[[box.observability]]
+layer = "L3"
+status = "PROPOSED"
+event_row = "one row per step: {step, status, reason_code, next_command} -- the SAME array both renderers read"
+reason_codes = ["STEP_OK", "STEP_BLOCKED", "STEP_SKIPPED_PERSONA", "HD_UNDECIDED_HUMAN_HALT", "STEP_PARITY_VIOLATION"]
+artifact = "the step ledger itself; the TUI and --json are two renderers over one array, never two lists"
+monitor = "the HD-0009 presence check that routes to the S9 human halt (S1.mmd:46-47), plus the parity assertion between renderers"
+gate = "step-parity gate"
+known_bad = "a step present in the TUI and ABSENT from --json must FAIL THE BUILD. Scout PortalObservabilityLineage searched the mirror and found NO ANALOGUE for this property, so it is ours to invent and therefore the likeliest place to be wrong -- membership is the easy half; ORDERING and CONDITIONAL steps are where it breaks."
+metric = "steps identical across modes (must be 100%); re-run drift (must be 0, since the walkthrough is idempotent)"
+
+[[box.observability]]
+layer = "L4"
+status = "PROPOSED"
+event_row = "THREE rows per pane, one per authority: {source, pane_id, verdict, available, fresh, reason_code, age_ms} then one {agreed, disagreeing_source}"
+reason_codes = ["SOURCES_AGREE_LIVE", "SOURCES_DISAGREE_HALT", "SOURCE_SILENT", "PERSONA_A_NO_SPAWN", "SPAWN_PARTIAL_REFUSED", "POST_SPAWN_NOT_LIVE_HALT"]
+artifact = "SwarmState{session, panes, sources_agree} plus the retained spawn response, assigned pane id, generated WAVE.md hash, Agent Mail registration, and context-pack receipt"
+monitor = "tick-monitor observe TWO-CAPTURE for liveness (one capture cannot separate Working from Frozen), and ntm --robot-wait --wait-until=idle as the blocking transition watcher -- NOT a poll. ADOPT ntm --robot-snapshot's per-source shape verbatim: sources{available, fresh, reason_code, age_ms} + degraded[], measured by scout PortalObservabilityLineage. That is exactly the three-source freshness attestation this layer needs and it does not have to be designed."
+gate = "three-source agreement gate"
+known_bad = "TWO sources agreeing and one SILENT must be NOT-live, never live -- silence is not assent. A partial swarm must refuse, not degrade. And the am roster is measured unfit as a sole authority: 36 rows whose freshest last_active was 1h stale while four panes were working."
+metric = "source agreement rate; spawn -> three-source-agreed latency; partial-swarm count (must be 0); per-source staleness age_ms"
+
+[[box.observability]]
+layer = "L5"
+status = "PROPOSED"
+event_row = "the PortalRow snapshot itself, plus one_next_action and decisions_owed[] with each decision's age"
+reason_codes = ["ENVELOPE_WRITTEN", "READBACK_FAILED_REFUSED", "FOUNDATION_ROW_APPENDED", "DECISION_OWED_HUMAN_HALT"]
+artifact = ".omp-orchestrator/inception.json complete (SCHEMAS.toml:156-161) + a FOUNDATION.jsonl stage=S1 row + the jq readback output"
+monitor = "THE READBACK IS THE MONITOR. Write, fsync the FILE and its PARENT DIRECTORY (F_FULLFSYNC on macOS; mirror:beads_rust/src/sync/mod.rs:507-509 called as a PostRename hook at :2425), rename, then jq the fields back. Envelope shape adopts ntm's schema_id + schema_version + a content hash, and am robot status's refusal triple severity+summary+action."
+gate = "envelope gate"
+known_bad = "a write that RETURNS ZERO but whose readback fails must REFUSE. That is the whole point: 'the write succeeded' is not evidence the artifact exists, and inception.json has zero instances on disk today while being declared since SCHEMAS.toml was written."
+metric = "write -> readback success rate (must be 100%); decisions_owed age (the age is the signal, not the count); crash-injection survival between write and rename"
