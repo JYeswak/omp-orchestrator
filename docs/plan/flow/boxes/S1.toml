@@ -60,7 +60,7 @@ exists = "none"
 id = "L4"
 name = "swarm live?"
 command = "ompo start step / ompo portal"
-live_definition = "tmux has-session AND tick-monitor observe sees OMP status lines AND Agent Mail roster - all three agree, else NOT live"
+live_definition = "THREE FRESHNESS-BEARING SOURCES agree on the pane set, each with available/fresh/reason_code/age_ms; one SILENT source makes the swarm NOT-live even if the other two agree. RAW `tmux has-session` IS NOT A SOURCE -- refuted by pane 4 at 6238c0f: it is a boolean exit with no freshness field, so a known-bad leg over it is unconstructible (docs/contracts/s1_l4_liveness.md LAW-L4-NO-TMUX-RAW, L4P-NO-RAW-TMUX). Owner ACCEPTS the refutation; the prior wording named tmux has-session and was wrong."
 not_live = ["ask agent types/counts/models (decision HD-0010)", "ntm spawn <session> --cc N:model --cod N:model --assign --cass-context <repo>", "WAVE.md GENERATED from tmux list-panes, never typed", "macro_start_session per pane", "context pack: ntm send -t tick_zero"]
 exists = "ntm spawn/--assign/--cass-context/templates exist; wrapper none"
 
@@ -215,7 +215,7 @@ reviewers = ["WildStone", "WildMountain", "AmberGate", "BlueLantern", "SilverWol
 open_disagreements = 0                # DERIVED: grep -h -c '^resolution = ""$' over waves/wave-1/*-S1.toml waves/wave-2/*-S1.toml -> 0. NECESSARY, NOT SUFFICIENT -- see CONTRACT.md:82-113. Alone this number is evidence of nothing.
 rows = 62                             # DERIVED: grep -c '^[[disagreement]]' over both waves' S1 files -> wave-1 12 (AmberGate 4, BlueLantern 3, QuietRidge 3, SilverWolf 2), wave-2 50 (WildStone 24, WildMountain 12, pane1 14).
 rejections = 25                       # reviewer rows opening REJECT/REFUTED: wave-1 = 0 of 12 (a SURVEY, not a review), wave-2 = 25 of 50 (WildMountain 9, WildStone 12, pane1 4). The wave-1 zero is the failed wave.
-refutations = 0                       # resolutions beginning refuted( -- ZERO. CONTRACT.md clause (b) is UNMET: no wave has produced a refutation that changed the box, and the owner accepted 10 of 10 reviewer rows without pushing back once.
+refutations = 3                       # clause (b) is now MET, by pane 4 at 6238c0f + waves/wave-2/pane4-41li-cross.toml: (1) S1.toml:63 raw tmux is not a liveness source; (2) the owner's 'ntm sources needs no design' claim -- live snapshot carries ONE source and no degraded[]; (3) the scout's bv --robot-triage `meta` key -- absent, only data_hash/generated_at/triage/usage_hints. All three refuted an instruction the OWNER or a scout wrote, which is the point of the clause. One row is an honest NULL (sibling contracts had not landed) rather than a manufactured objection.
 status = "draft"                      # REVERTED FROM "converged" BY JOSHUA, 2026-09-03: "s1 is not converged - you can't claim converged when s1 is still missing massive functionality" and "converged wrongly is worse than no convergence". Both new clauses fail: (b) refutations = 0, and the FUNCTIONAL FLOOR -- S1.toml:41,49,57,65,72 read exists = "none" for L1, L2, L3, L4's wrapper and L5. The prior flip (a9ea672) certified agreement about a MAP as if it were working software. It was wrong and it is retracted.
 approval = ""                         # BLOCKED ON JOSHUA regardless: approval is an HD row id and HD-0009..HD-0012 all carry decision="". Build S1 fully in waves and prove it across the lifecycle BEFORE S2 (Joshua, 2026-09-03).
 
@@ -226,6 +226,17 @@ validate_exit = 0
 svg = "docs/plan/flow/diagrams/S1.svg"
 nodes = 52
 edges = 60
+
+# ---- CONTRACTS. One per layer. A layer without a contract is not buildable in its wave.
+[box.contracts]
+L0 = "docs/contracts/s1_l0_install.md"                  # 16,415 B, landed by pane 2 (bead 6gh6)
+L1 = "MISSING"                                          # bead d9rv, pane3-%8, in_progress
+L2 = "MISSING"                                          # bead d9rv, pane3-%8, in_progress
+L3 = "docs/contracts/s1_l3_walkthrough.md"              # 9,430 B, pane 4 (41li) at 6238c0f. LAW-L3-ORDERED-IDS
+L4 = "docs/contracts/s1_l4_liveness.md"                 # 10,122 B, pane 4 at 6238c0f. LAW-L4-SILENT-NOT-LIVE, LAW-L4-NO-TMUX-RAW, LAW-L4-MAP-TICK
+L5 = "docs/contracts/s1_l5_portal.md"                   # 9,447 B, pane 4 at 6238c0f. inception ABSENT -> readback REFUSE
+cross_attack = "docs/plan/flow/waves/wave-2/pane4-41li-cross.toml"   # 3 rows: 1 honest NULL, 2 refutations
+note = "L3's parity law was the wave's highest-risk item -- the scout found NO upstream analogue for shipping one step list to a TUI and a --json consumer. Pane 4 confirmed the owner's guess that ORDERING and conditional skips break it, not membership, and found a third failure mode nobody named: a persona-gated view() filter. Its stand-in demonstrates set_equality_would_pass_buggy=true while ordered_equality_buggy=false -- i.e. the obvious set comparison would have shipped the bug."
 
 # ---- OBSERVABILITY, one row per layer. Bead: omp-orchestrator-s1-observability-every-layer-io0r
 #
@@ -302,7 +313,7 @@ status = "PROPOSED"
 event_row = "THREE rows per pane, one per authority: {source, pane_id, verdict, available, fresh, reason_code, age_ms} then one {agreed, disagreeing_source}"
 reason_codes = ["SOURCES_AGREE_LIVE", "SOURCES_DISAGREE_HALT", "SOURCE_SILENT", "PERSONA_A_NO_SPAWN", "SPAWN_PARTIAL_REFUSED", "POST_SPAWN_NOT_LIVE_HALT"]
 artifact = "SwarmState{session, panes, sources_agree} plus the retained spawn response, assigned pane id, generated WAVE.md hash, Agent Mail registration, and context-pack receipt"
-monitor = "tick-monitor observe TWO-CAPTURE for liveness (one capture cannot separate Working from Frozen), and ntm --robot-wait --wait-until=idle as the blocking transition watcher -- NOT a poll. ADOPT ntm --robot-snapshot's per-source shape verbatim: sources{available, fresh, reason_code, age_ms} + degraded[], measured by scout PortalObservabilityLineage. That is exactly the three-source freshness attestation this layer needs and it does not have to be designed."
+monitor = "tick-monitor observe TWO-CAPTURE for liveness (one capture cannot separate Working from Frozen), and ntm --robot-wait --wait-until=idle as the blocking transition watcher -- NOT a poll, and NOT unfiltered: measured 2026-09-03, `--wait-until=idle` without `--panes` includes the CALLING pane and can never fire while the orchestrator works (agents_pending=[%6]). ADOPT ntm's per-source OBJECT SHAPE sources.sources.<name>{available, fresh, reason_code, age_ms} -- but the owner's earlier claim that this 'does not have to be designed' is REFUTED by pane 4 at 6238c0f: the live snapshot populates exactly ONE source, work_coordination, and the top-level `degraded[]` the scout named is ABSENT (there is sources.all_fresh and summary.alerts_active instead). We copy the shape and STILL have to wire three sources into it. age_ms = gap_secs * 1000; a missing gap_secs is SILENT, never age_ms=0."
 gate = "three-source agreement gate"
 known_bad = "TWO sources agreeing and one SILENT must be NOT-live, never live -- silence is not assent. A partial swarm must refuse, not degrade. And the am roster is measured unfit as a sole authority: 36 rows whose freshest last_active was 1h stale while four panes were working."
 metric = "source agreement rate; spawn -> three-source-agreed latency; partial-swarm count (must be 0); per-source staleness age_ms"
