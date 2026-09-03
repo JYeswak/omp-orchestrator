@@ -1,0 +1,38 @@
+# Crew questions for Joshua. Pane 1 owns this conversation.
+# Pane 4 could not ntm-send: pane 1 is WORKING (safe_to_dispatch=false, composer has typed "c").
+# Measured 2026-09-03T17:42Z. Do not bounce these back to %9.
+
+[s1]
+open_disagreements_derived = 0
+box_status = "draft"
+approval = ""
+hd_0009 = "HUMAN HALT still on S1.mmd L3"
+freeze = "BUILD FREEZE still on"
+l4omp = "GetState-per-tmux-pane ACCEPTED unachievable (4 omp PIDs LISTEN=0 unix_named=0)"
+
+[[question]]
+n = 1
+ask = "HD-0009: slash start vs launchd vs stay-hand? S1 cannot leave L3 without this."
+need = "one word is enough"
+
+[[question]]
+n = 2
+ask = "S1 approval: wave-2 is 0 open. Sign S1.toml [box.agreement].approval, or keep draft until each surfaces node carries WIRED|DECLARED|TARGET|NONE_ON_PURPOSE?"
+
+[[question]]
+n = 3
+ask = "Freeze: lift for gaq0 only (OC-L2 admitted-violation + build_receipt stop hardcoding claimed_first:true), or freeze until every box diagram is cycle-free?"
+
+[[question]]
+n = 4
+ask = "After S1: start S2, or keep mapping S4-S6 bead lifecycle (accept/deny + class fairness) which still fails frankenmermaid cycle reversal?"
+
+[[question]]
+n = 5
+ask = "Tick 2: once the gate can admit claimed_first:false + violation_reason, append docs/plan/flow/waves/wave-2/gaq0-tick2-unrecordable.json to .flywheel/orchestration-ticks.jsonl — yes or no?"
+
+[monitors]
+do_not_trust = "tick-monitor idle_panes.dispatchable=[]"
+idle_oracle = "ntm --robot-snapshot"
+why_refill_noops = "tick-monitor and ntm disagree, so refill-idle-panes two-surface agreement no-ops"
+standing_wait = "ntm --robot-attention, re-arm after each wake"

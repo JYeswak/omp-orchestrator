@@ -1,0 +1,111 @@
+# Wave 2 reviewer: WildMountain. Box S1. Read-only branch review against the landed S1 diagram.
+# The diagram validation receipt is accepted as user-supplied evidence: exit 0, 38 nodes, 46 edges.
+# This file records semantic disagreements only; it does not edit the S1 owner file.
+
+[[disagreement]]
+box = "S1"
+field = "trigger_today.none"
+owner_says = "NONE MEASURED: no slash, no SessionStart, no launchd; hand-read only"
+reviewer_says = "Reject the absolute absence claim. Current host has SessionStart hooks and a RunAtLoad/KeepAlive launchd plist. The accurate state is: no verified S1-specific start/portal trigger; existing generic hooks and resident supervisor must remain separate edges."
+evidence = "sed -n '344,360p' /Users/josh/.claude/settings.json -> SessionStart hooks; sed -n '40,49p' /Users/josh/Library/LaunchAgents/ai.zeststream.omp-orchestrator.plist -> ProgramArguments plus RunAtLoad=true; no S1-specific portal/start invocation was established"
+severity = "blocker"
+resolution = "resolved-at-7f9195a: S1.mmd distinguishes absent S1-specific slash/portal wiring from existing generic SessionStart and launchd paths; no total-absence claim remains"
+
+[[disagreement]]
+box = "S1"
+field = "L0.identity"
+owner_says = "L0 install target must not be named installer; PATH first hit is /usr/sbin/installer"
+reviewer_says = "Reject this node. The current installer source explicitly owns a target named installer, alongside omp-orchestrator, tick-monitor, and pane-truth. The PATH-first-hit statement is host-specific and has no source-backed portability rule. Replace with a typed binary identity/collision check: planned umbrella identity versus target artifact identity."
+evidence = "sed -n '13,18p;36,48p' crates/installer/src/main.rs -> BINARIES includes installer and the CLI dispatches --check/--install/--version/help; S1.toml:16 names installer as the existing mechanism"
+severity = "major"
+resolution = "resolved-at-7f9195a: command -v ompo is PROJECTED; the diagram distinguishes the ompo umbrella from the internal installer crate, and omp construction evidence is scoped to omp-rpc-session:136"
+
+[[disagreement]]
+box = "S1"
+field = "L1.unprobeable_to_L2"
+owner_says = "UNPROBEABLE is recorded and then proceeds to L2"
+reviewer_says = "Reject silent continuation. Recording UNPROBEABLE is not a positive capability result. The branch must either halt with an explicit owner/remediation or carry an approved degraded-state decision into L2; otherwise the diagram contradicts its own 'never vacuously green' rule and the S1 refusal boundary."
+evidence = "sed -n '18,24p' docs/plan/flow/diagrams/S1.mmd -> UNPROBEABLE and specific ABSENT both flow toward L2; sed -n '503,540p' docs/plan/12-journey.md -> S1 requires typed capability results and refuses incomplete foundation"
+severity = "major"
+resolution = "resolved-at-7f9195a: UNPROBEABLE records first, then requires a named HD degraded-continue decision; absent HD routes to human halt"
+
+[[disagreement]]
+box = "S1"
+field = "L2.controls_missing_to_init"
+owner_says = "Missing AGENTS.md/CLAUDE.md flows directly to init from the foundry template"
+reviewer_says = "Reject automatic init without a trust decision. The S1 contract requires repository identity, trust status, and required control-file decisions before continuation; the proposed template path is an absolute host path. The branch needs an explicit trusted-init decision, source/template identity, backup result, and re-probe before L2 can pass."
+evidence = "sed -n '26,34p' docs/plan/flow/diagrams/S1.mmd; sed -n '43,49p' docs/plan/flow/boxes/S1.toml; sed -n '503,508p' docs/plan/12-journey.md -> inception fields and explicit control/trust boundary"
+severity = "blocker"
+resolution = "resolved-at-7f9195a: missing controls require trusted-init opt-in, template identity, backup, and a stamped-control re-probe before continuation"
+
+[[disagreement]]
+box = "S1"
+field = "L2.hook_mismatch_to_L3"
+owner_says = "Hook identity mismatch rebuilds/reinstalls and then proceeds to L3"
+reviewer_says = "Reject the direct transition. Rebuild/reinstall is a remediation action, not proof. The branch must return to the hook-identity predicate and emit a fresh identity result; only a verified match may reach L3."
+evidence = "sed -n '30,34p' docs/plan/flow/diagrams/S1.mmd -> L2R points directly to L3; sed -n '113,115p' docs/plan/flow/boxes/S1.toml -> the source branch names rebuild/reinstall but does not define the postcondition"
+severity = "major"
+resolution = "resolved-at-7f9195a: hook mismatch remediation returns to an identity re-probe; only a verified match reaches L3"
+
+[[disagreement]]
+box = "S1"
+field = "L4.spawn_to_L5"
+owner_says = "For personas B/C, ntm spawn, WAVE generation, registration, and context pack lead to the portal"
+reviewer_says = "Reject completion without a post-spawn three-authority recheck. Spawn success is not swarm-live. The branch must return to L4 and establish tmux session, tick-monitor OMP status, and Agent Mail roster agreement for the same session/pane identities before L5."
+evidence = "sed -n '41,49p' docs/plan/flow/diagrams/S1.mmd -> L4S points directly to L5; sed -n '60,65p' docs/plan/flow/boxes/S1.toml -> live_definition requires all three sources to agree"
+severity = "blocker"
+resolution = "resolved-at-7f9195a: spawn success requires WAVE/hash/mail completion and a post-spawn live recheck; partial or non-live results refuse or halt"
+
+[[disagreement]]
+box = "S1"
+field = "OUT.inception_to_S2"
+owner_says = "The final branch says inception envelope accepted, to S2"
+reviewer_says = "Reject an acceptance node without naming the persisted artifacts and required fields. S1 must write and validate inception.json plus the S1 FOUNDATION row; acceptance requires schema_version, project_id, repo_identity, control_files, host_capabilities, required_tools, trust_status, and complete epistemic fields before S2 can consume it."
+evidence = "sed -n '52,54p' docs/plan/flow/diagrams/S1.mmd; test -e .omp-orchestrator/inception.json -> missing; sed -n '156,163p' SCHEMAS.toml and sed -n '503,508p' docs/plan/12-journey.md -> required inception fields and readers"
+severity = "blocker"
+resolution = "resolved-at-7f9195a: S1.mmd:68 requires inception.json fields, FOUNDATION.jsonl stage=S1, and jq readback before S2; persistence and readback gates are explicit"
+
+[[disagreement]]
+box = "S1"
+field = "PERSONA.input"
+owner_says = "The diagram derives Persona A/B/C before L0"
+reviewer_says = "Keep the personas as a user-research view, but reject them as an untyped S1 input branch until the intake schema names how persona is derived from requirements. 08-end-users.md defines the personas; S1.toml kernel_input does not carry persona, requirements_ref, or a derivation rule."
+evidence = "sed -n '34,52p' docs/plan/08-end-users.md -> Persona A/B/C definitions; sed -n '19,20p' docs/plan/flow/boxes/S1.toml -> proposed InstallPlan/Probe/EcosystemProbe/SwarmState has no persona or requirements field"
+severity = "major"
+resolution = "resolved-at-7f9195a: typed intake.requirements.fleet derives Persona A/B/C; this is a classification input, not an unmeasured live-state claim"
+
+[[disagreement]]
+box = "S1"
+field = "L5.outcome_type"
+owner_says = "Supply-chain refusal emits OutcomeClass::Refusal"
+reviewer_says = "Reject the introduced type name unless it is backed by a declared S1 schema or existing enum. S1 must use the canonical typed envelope/error taxonomy, not a new unregistered OutcomeClass that no current S1 input/output contract defines."
+evidence = "grep -R -n 'OutcomeClass::Refusal' crates -> no current S1 source contract; sed -n '19,20p' docs/plan/flow/boxes/S1.toml -> proposed outputs do not define OutcomeClass; SCHEMAS.toml has no S1 OutcomeClass artifact row"
+severity = "major"
+resolution = "resolved-at-7f9195a: S1.mmd:13 maps supply-chain refusal to Code::Refused; the prior unregistered OutcomeClass::Refusal gap is removed from the diagram contract"
+
+[[disagreement]]
+box = "S1"
+field = "box.diagram"
+owner_says = "S1.mmd validates with exit 0, 38 nodes, and 46 edges"
+reviewer_says = "Validation alone does not attach the diagram to the S1 box contract. S1.toml has no [box.diagram] table naming the MMD, validation command, or rendered artifact, so the lifecycle registry cannot discover or enforce this diagram."
+evidence = "grep -cF '[box.diagram]' docs/plan/flow/boxes/S1.toml -> 0; user-supplied receipt -> frankenmermaid validate --fail-on warning exit 0, 38 nodes, 46 edges; docs/plan/flow/CONTRACT.md:90-96 requires the box.diagram pointer"
+severity = "blocker"
+resolution = "resolved-at-7f9195a: S1.toml carries [box.diagram]; the supplied receipt is validate 0 with 52 nodes and no cycles, and S1-surfaces.mmd has no GAP labels"
+
+[[disagreement]]
+box = "S1"
+field = "L0.agent_merge_failure_to_L1"
+owner_says = "Agent detected -> merge hooks and skills with per-agent created|merged|already|failed|skipped, then continue to L1"
+reviewer_says = "Reject collapsing failed merge into the same continuation edge as successful or idempotent outcomes. A failed hook/skill merge is an install refusal or degraded state requiring a typed remediation and explicit retry; L1 must not report a healthy system check over a partially applied L0."
+evidence = "sed -n '10,16p' docs/plan/flow/diagrams/S1.mmd -> L0M and L0S both flow to L1 while L0M text includes failed; sed -n '109,110p' docs/plan/flow/boxes/S1.toml -> the branch lists failed with created|merged|already|skipped but no failed-edge outcome"
+severity = "major"
+resolution = "resolved-at-7f9195a: failed agent/skill merge routes to REFUSE or DEGRADED and cannot enter L1 healthy; successful/idempotent statuses remain separate"
+
+[[disagreement]]
+box = "S5a/S6"
+field = "CLASS_FAIRNESS.selector"
+owner_says = "bead-lifecycle.mmd:7-14 routes grade starving to IssueStatus::Grading, research starving to research-needed, and impl work to a PageRank articulation point; this must prevent an impl flood from starving grade or research"
+reviewer_says = "Selector invariant: For every tick whose eligible set contains an IssueStatus::Grading or research-needed bead, the selector MUST choose a bead from the eligible class with the greatest starvation_ticks; choosing impl while either non-impl class has a larger starvation_ticks is a failure."
+evidence = "docs/plan/flow/diagrams/bead-lifecycle.mmd:7-14 -> class branches; crates/loop-queue-filter/src/lib.rs:396-405 -> only status=open/epic filtering plus optional harvest class; crates/loop-queue-filter/src/lib.rs:421-438 -> ordering by milestone/ID or gated/priority/milestone/ID, with no starvation/class-fairness state; crates/bead-availability/src/lib.rs:21-36 -> IssueStatus::Grading; crates/verify-dispatch/src/lib.rs:5-8,394-418 -> verification reads br status and counts only closed, not scheduling; .beads/issues.jsonl:73 -> S6 grading had no dispatcher/packet/consumer and 4 grading plus 43 delivered beads waited for hand-written grades; supplied state says bead-lifecycle.mmd validation currently fails on cycles"
+severity = "blocker"
+resolution = "remaining: the diagram names class fairness, but the selector has no class starvation state or fairness guarantee; bead availability represents Grading but does not select it, and verify-dispatch verifies close status rather than scheduling grade/research work"
