@@ -1,0 +1,2446 @@
+[
+{
+"key": "plan-00",
+"id": "omp-orchestrator-plan-00-04at",
+"title": "plan-00 The brief",
+"parent": null,
+"type": "epic",
+"priority": 1,
+"labels": [
+"00",
+"epic",
+"plan"
+],
+"items": [],
+"readback_ok": true,
+"secs": 0.35
+},
+{
+"key": "plan-01",
+"id": "omp-orchestrator-plan-01-kxwv",
+"title": "plan-01 The idea",
+"parent": null,
+"type": "epic",
+"priority": 1,
+"labels": [
+"01",
+"epic",
+"plan"
+],
+"items": [],
+"readback_ok": true,
+"secs": 0.3
+},
+{
+"key": "plan-02",
+"id": "omp-orchestrator-plan-02-lwdo",
+"title": "plan-02 Every OMP surface (census)",
+"parent": null,
+"type": "epic",
+"priority": 1,
+"labels": [
+"02",
+"epic",
+"plan"
+],
+"items": [],
+"readback_ok": true,
+"secs": 0.31
+},
+{
+"key": "plan-03",
+"id": "omp-orchestrator-plan-03-w3yb",
+"title": "plan-03 Every crate: contract, schema, types",
+"parent": null,
+"type": "epic",
+"priority": 1,
+"labels": [
+"03",
+"epic",
+"plan"
+],
+"items": [],
+"readback_ok": true,
+"secs": 0.25
+},
+{
+"key": "plan-04",
+"id": "omp-orchestrator-plan-04-7wn9",
+"title": "plan-04 FrankenMermaid: generated not drawn",
+"parent": null,
+"type": "epic",
+"priority": 1,
+"labels": [
+"04",
+"epic",
+"plan"
+],
+"items": [],
+"readback_ok": true,
+"secs": 0.25
+},
+{
+"key": "plan-05",
+"id": "omp-orchestrator-plan-05-ovcx",
+"title": "plan-05 Every action and the negative pattern it refuses",
+"parent": null,
+"type": "epic",
+"priority": 1,
+"labels": [
+"05",
+"epic",
+"plan"
+],
+"items": [],
+"readback_ok": true,
+"secs": 0.25
+},
+{
+"key": "plan-06",
+"id": "omp-orchestrator-plan-06-xm0n",
+"title": "plan-06 Testing, validation and gating frameworks",
+"parent": null,
+"type": "epic",
+"priority": 1,
+"labels": [
+"06",
+"epic",
+"plan"
+],
+"items": [],
+"readback_ok": true,
+"secs": 0.23
+},
+{
+"key": "plan-07",
+"id": "omp-orchestrator-plan-07-8jkq",
+"title": "plan-07 Installability: distribution, identity, canonical CLI",
+"parent": null,
+"type": "epic",
+"priority": 1,
+"labels": [
+"07",
+"epic",
+"plan"
+],
+"items": [],
+"readback_ok": true,
+"secs": 0.25
+},
+{
+"key": "plan-08",
+"id": "omp-orchestrator-plan-08-kmbz",
+"title": "plan-08 The end-user journey: another repo, another machine",
+"parent": null,
+"type": "epic",
+"priority": 1,
+"labels": [
+"08",
+"epic",
+"plan"
+],
+"items": [],
+"readback_ok": true,
+"secs": 0.27
+},
+{
+"key": "plan-09",
+"id": "omp-orchestrator-plan-09-bcrn",
+"title": "plan-09 Milestones, done-definitions, validation",
+"parent": null,
+"type": "epic",
+"priority": 1,
+"labels": [
+"09",
+"epic",
+"plan"
+],
+"items": [],
+"readback_ok": true,
+"secs": 0.32
+},
+{
+"key": "plan-10",
+"id": "omp-orchestrator-plan-10-ya1x",
+"title": "plan-10 Prior art mined from the mirror",
+"parent": null,
+"type": "epic",
+"priority": 1,
+"labels": [
+"10",
+"epic",
+"plan"
+],
+"items": [],
+"readback_ok": true,
+"secs": 0.32
+},
+{
+"key": "plan-11",
+"id": "omp-orchestrator-plan-11-vcd7",
+"title": "plan-11 Lifecycle evidence map",
+"parent": null,
+"type": "epic",
+"priority": 1,
+"labels": [
+"11",
+"epic",
+"plan"
+],
+"items": [],
+"readback_ok": true,
+"secs": 0.33
+},
+{
+"key": "plan-12",
+"id": "omp-orchestrator-plan-12-ibpa",
+"title": "plan-12 The dispatchable journey",
+"parent": null,
+"type": "epic",
+"priority": 1,
+"labels": [
+"12",
+"epic",
+"plan"
+],
+"items": [],
+"readback_ok": true,
+"secs": 0.27
+},
+{
+"key": "epic-01-discovery",
+"id": "omp-orchestrator-plan-01-kxwv.1",
+"title": "plan-01 wedge discovery: preregistered falsifiers and gates 8-17 (operator cohort)",
+"parent": "omp-orchestrator-plan-01-kxwv",
+"type": "epic",
+"priority": 1,
+"labels": [
+"01",
+"epic",
+"milestone",
+"plan"
+],
+"items": [],
+"readback_ok": true,
+"secs": 0.24
+},
+{
+"key": "epic-07-installer",
+"id": "omp-orchestrator-jplf.7.1",
+"title": "plan-07 installer workmanship: complete the Rust installer crate (ipg.13 closed short)",
+"parent": "omp-orchestrator-jplf.7",
+"type": "epic",
+"priority": 0,
+"labels": [
+"07",
+"crate",
+"epic",
+"plan"
+],
+"items": [
+"07.23"
+],
+"readback_ok": true,
+"secs": 0.29
+},
+{
+"key": "census-vacuity-gate",
+"id": "omp-orchestrator-plan-02-lwdo.1",
+"title": "Refuse a vacuous inventory census: VACUOUS_INVARIANT_SET on one-distinct-value invariants",
+"parent": "omp-orchestrator-plan-02-lwdo",
+"type": "task",
+"priority": 0,
+"labels": [
+"02",
+"gate",
+"plan"
+],
+"items": [
+"00.8",
+"02.9",
+"06.12"
+],
+"readback_ok": true,
+"secs": 0.25
+},
+{
+"key": "scanner-per-row-invariants",
+"id": "omp-orchestrator-plan-02-lwdo.2",
+"title": "Rewrite omp-inventory-map row invariants per row: contract, not scanner provenance",
+"parent": "omp-orchestrator-plan-02-lwdo",
+"type": "task",
+"priority": 1,
+"labels": [
+"02",
+"crate",
+"plan"
+],
+"items": [
+"02.10"
+],
+"readback_ok": true,
+"secs": 0.27
+},
+{
+"key": "plg-known-good-leg",
+"id": "omp-orchestrator-plan-06-xm0n.1",
+"title": "path-literal-guard: add the adversarial known-good leg (repo_root join, MANIFEST_DIR, /tmp",
+"parent": "omp-orchestrator-plan-06-xm0n",
+"type": "task",
+"priority": 1,
+"labels": [
+"06",
+"gate",
+"plan"
+],
+"items": [
+"00.10",
+"06.5",
+"09.19"
+],
+"readback_ok": true,
+"secs": 0.27
+},
+{
+"key": "known-bad-legs-map-fence",
+"id": "omp-orchestrator-plan-06-xm0n.2",
+"title": "Plant known-bad specimens in omp-inventory-map and commit-build-fence real scan sets",
+"parent": "omp-orchestrator-plan-06-xm0n",
+"type": "task",
+"priority": 1,
+"labels": [
+"06",
+"gate",
+"plan"
+],
+"items": [
+"00.11",
+"06.7"
+],
+"readback_ok": true,
+"secs": 0.31
+},
+{
+"key": "gate-fixture-mutation-legs",
+"id": "omp-orchestrator-plan-06-xm0n.3",
+"title": "Mutation + anti-vacuity legs and claim headers for the four gates still declaring NONE",
+"parent": "omp-orchestrator-plan-06-xm0n",
+"type": "task",
+"priority": 1,
+"labels": [
+"06",
+"gate",
+"plan"
+],
+"items": [
+"00.12",
+"06.3",
+"06.4",
+"06.9"
+],
+"readback_ok": true,
+"secs": 0.26
+},
+{
+"key": "real-hook-mutation-legs",
+"id": "omp-orchestrator-plan-06-xm0n.4",
+"title": "Real-hook mutation legs: mutate production source and commit through the installed hook",
+"parent": "omp-orchestrator-plan-06-xm0n",
+"type": "task",
+"priority": 1,
+"labels": [
+"06",
+"gate",
+"plan"
+],
+"items": [
+"00.13",
+"06.10"
+],
+"readback_ok": true,
+"secs": 0.24
+},
+{
+"key": "inventory-map-addressable",
+"id": "omp-orchestrator-plan-04-7wn9.1",
+"title": "Make omp-inventory-map ADDRESSABLE: --help exits 0, pinned by a cli_contract test",
+"parent": "omp-orchestrator-plan-04-7wn9",
+"type": "task",
+"priority": 1,
+"labels": [
+"04",
+"gate",
+"plan"
+],
+"items": [
+"00.14",
+"04.13",
+"09.17",
+"02.11"
+],
+"readback_ok": true,
+"secs": 0.53
+},
+{
+"key": "q1-q4-buyer",
+"id": "omp-orchestrator-plan-00-04at.1",
+"title": "DECISION Q1-Q4: buyer, workaround cost, outcome baseline/target, timeline + headcount",
+"parent": "omp-orchestrator-plan-00-04at",
+"type": "task",
+"priority": 1,
+"labels": [
+"00",
+"decision",
+"owner-josh",
+"plan"
+],
+"items": [
+"00.22"
+],
+"readback_ok": true,
+"secs": 0.4
+},
+{
+"key": "q5-buy-adopt-build",
+"id": "omp-orchestrator-plan-00-04at.2",
+"title": "DECISION Q5: buy / adopt / build - name the existing tool evaluated and rejected, and why",
+"parent": "omp-orchestrator-plan-00-04at",
+"type": "task",
+"priority": 2,
+"labels": [
+"00",
+"decision",
+"owner-orchestrator",
+"plan"
+],
+"items": [
+"00.23"
+],
+"readback_ok": true,
+"secs": 0.44
+},
+{
+"key": "q6-omp-upgrade-policy",
+"id": "omp-orchestrator-plan-00-04at.3",
+"title": "DECISION Q6: OMP upgrade compatibility policy (host 18.1.2 vs scanner target 18.0.11)",
+"parent": "omp-orchestrator-plan-00-04at",
+"type": "task",
+"priority": 1,
+"labels": [
+"00",
+"decision",
+"owner-orchestrator",
+"plan"
+],
+"items": [
+"00.24"
+],
+"readback_ok": true,
+"secs": 0.41
+},
+{
+"key": "q8-licensing",
+"id": "omp-orchestrator-plan-00-04at.4",
+"title": "DECISION Q8: licensing for us and for what we vendor",
+"parent": "omp-orchestrator-plan-00-04at",
+"type": "task",
+"priority": 2,
+"labels": [
+"00",
+"decision",
+"owner-josh",
+"plan"
+],
+"items": [
+"00.26"
+],
+"readback_ok": true,
+"secs": 0.43
+},
+{
+"key": "q9-declared-only-adoption",
+"id": "omp-orchestrator-plan-00-04at.5",
+"title": "DECISION Q9: adoption path for the six DECLARED ONLY upstream types",
+"parent": "omp-orchestrator-plan-00-04at",
+"type": "task",
+"priority": 2,
+"labels": [
+"00",
+"decision",
+"owner-orchestrator",
+"plan"
+],
+"items": [
+"00.27"
+],
+"readback_ok": true,
+"secs": 0.43
+},
+{
+"key": "q10-kill-criterion",
+"id": "omp-orchestrator-plan-00-04at.6",
+"title": "DECISION Q10 / 8.3: economic kill criterion + decision receipt; K2 and K5 made evaluable",
+"parent": "omp-orchestrator-plan-00-04at",
+"type": "task",
+"priority": 1,
+"labels": [
+"00",
+"decision",
+"owner-josh",
+"plan"
+],
+"items": [
+"00.28"
+],
+"readback_ok": true,
+"secs": 0.32
+},
+{
+"key": "q13-commit-msg-hook",
+"id": "omp-orchestrator-plan-00-04at.7",
+"title": "DECISION Q13: .git/hooks/commit-msg-verification-level.sh - register, rewrite, or retire",
+"parent": "omp-orchestrator-plan-00-04at",
+"type": "task",
+"priority": 1,
+"labels": [
+"00",
+"decision",
+"owner-josh",
+"plan"
+],
+"items": [
+"00.31",
+"11.47"
+],
+"readback_ok": true,
+"secs": 0.29
+},
+{
+"key": "q11-oracle-trilemma",
+"id": "omp-orchestrator-plan-00-04at.8",
+"title": "DECISION Q11: composer-typed differential-oracle trilemma (outside tree/retire/in-tree)",
+"parent": "omp-orchestrator-plan-00-04at",
+"type": "task",
+"priority": 1,
+"labels": [
+"00",
+"decision",
+"owner-josh",
+"plan"
+],
+"items": [
+"00.29"
+],
+"readback_ok": true,
+"secs": 0.29
+},
+{
+"key": "k2-k5-instrumentation",
+"id": "omp-orchestrator-plan-00-04at.9",
+"title": "K2/K5 pilot instrumentation: verification- and tending-minutes ledgers, 30-day baseline",
+"parent": "omp-orchestrator-plan-00-04at",
+"type": "task",
+"priority": 2,
+"labels": [
+"00",
+"measurement",
+"plan"
+],
+"items": [
+"00.32"
+],
+"readback_ok": true,
+"secs": 0.26
+},
+{
+"key": "roster-counts-consume",
+"id": "omp-orchestrator-plan-00-04at.10",
+"title": "Consume HubRosterCounts instead of hand-derived roster evidence",
+"parent": "omp-orchestrator-plan-00-04at",
+"type": "task",
+"priority": 3,
+"labels": [
+"00",
+"plan",
+"wiring"
+],
+"items": [
+"00.38"
+],
+"readback_ok": true,
+"secs": 0.27
+},
+{
+"key": "cost-telemetry",
+"id": "omp-orchestrator-plan-02-lwdo.3",
+"title": "Cost sampling (Q2/S5): wire omp usage, OTLP telemetry-export and the goals token budget",
+"parent": "omp-orchestrator-plan-02-lwdo",
+"type": "task",
+"priority": 2,
+"labels": [
+"02",
+"plan",
+"wiring"
+],
+"items": [
+"00.39",
+"02.17"
+],
+"readback_ok": true,
+"secs": 0.33
+},
+{
+"key": "compaction-events-consume",
+"id": "omp-orchestrator-plan-00-04at.11",
+"title": "Consume SessionBeforeCompactEvent / SessionCompactEvent for context-loss recovery",
+"parent": "omp-orchestrator-plan-00-04at",
+"type": "task",
+"priority": 2,
+"labels": [
+"00",
+"plan",
+"wiring"
+],
+"items": [
+"00.40"
+],
+"readback_ok": true,
+"secs": 0.31
+},
+{
+"key": "plan-check",
+"id": "omp-orchestrator-plan-09-bcrn.1",
+"title": "Build the plan-check crate: PC1-PC8 incl. PC7 pipeline-$? checker, plan-check/v1 envelope",
+"parent": "omp-orchestrator-plan-09-bcrn",
+"type": "task",
+"priority": 1,
+"labels": [
+"09",
+"crate",
+"plan"
+],
+"items": [
+"00.54",
+"09.16",
+"12.44"
+],
+"readback_ok": true,
+"secs": 0.29
+},
+{
+"key": "brief-expected-contents",
+"id": "omp-orchestrator-plan-00-04at.12",
+"title": "00-brief 8.4: per-subsection expected-contents list, prose twin of the scanner expected_*",
+"parent": "omp-orchestrator-plan-00-04at",
+"type": "task",
+"priority": 2,
+"labels": [
+"00",
+"gate",
+"plan"
+],
+"items": [
+"00.58"
+],
+"readback_ok": true,
+"secs": 0.33
+},
+{
+"key": "addressability-figures",
+"id": "omp-orchestrator-plan-00-04at.13",
+"title": "composer-typed + omp-inventory-map addressability/differential-lane figures cite commands",
+"parent": "omp-orchestrator-plan-00-04at",
+"type": "task",
+"priority": 3,
+"labels": [
+"00",
+"measurement",
+"plan"
+],
+"items": [
+"00.64"
+],
+"readback_ok": true,
+"secs": 0.64
+},
+{
+"key": "diagram-generator",
+"id": "omp-orchestrator-plan-04-7wn9.2",
+"title": "Build the diagram generator command that emits Diagrams 1-4 and 6 from data",
+"parent": "omp-orchestrator-plan-04-7wn9",
+"type": "task",
+"priority": 0,
+"labels": [
+"04",
+"command",
+"plan"
+],
+"items": [
+"04.1"
+],
+"readback_ok": true,
+"secs": 0.72
+},
+{
+"key": "diagram-regen",
+"id": "omp-orchestrator-plan-04-7wn9.3",
+"title": "Regenerate the FrankenMermaid diagrams at the current crate count; drop the 16:50 label",
+"parent": "omp-orchestrator-plan-04-7wn9",
+"type": "task",
+"priority": 2,
+"labels": [
+"04",
+"measurement",
+"plan"
+],
+"items": [
+"00.6",
+"04.14"
+],
+"readback_ok": true,
+"secs": 0.36
+},
+{
+"key": "diagram-ci-gate",
+"id": "omp-orchestrator-plan-04-7wn9.4",
+"title": "CI diff gate: regenerated Diagram 1 must match the checked-in artifact",
+"parent": "omp-orchestrator-plan-04-7wn9",
+"type": "task",
+"priority": 0,
+"labels": [
+"04",
+"gate",
+"plan"
+],
+"items": [
+"04.2"
+],
+"readback_ok": true,
+"secs": 0.34
+},
+{
+"key": "writing-contract-lints-2-4-5",
+"id": "omp-orchestrator-plan-00-04at.14",
+"title": "00-brief 6 writing-contract lints for rules 2, 4, 5 (MEASURED/PROJECTED, not-found, verbs)",
+"parent": "omp-orchestrator-plan-00-04at",
+"type": "task",
+"priority": 2,
+"labels": [
+"00",
+"gate",
+"plan"
+],
+"items": [
+"00.51"
+],
+"readback_ok": true,
+"secs": 0.36
+},
+{
+"key": "assembly-freshness-hash",
+"id": "omp-orchestrator-plan-12-ibpa.1",
+"title": "assembly_freshness: content-hash manifest replaces the mtime key; header counts derived",
+"parent": "omp-orchestrator-plan-12-ibpa",
+"type": "task",
+"priority": 1,
+"labels": [
+"12",
+"gate",
+"plan"
+],
+"items": [
+"12.67",
+"00.53"
+],
+"readback_ok": true,
+"secs": 0.36
+},
+{
+"key": "gap-propagation-ratchet",
+"id": "omp-orchestrator-plan-01-kxwv.2",
+"title": "Register the gap-propagation gate as a ratchet (BASELINE only moves down)",
+"parent": "omp-orchestrator-plan-01-kxwv",
+"type": "task",
+"priority": 3,
+"labels": [
+"01",
+"gate",
+"plan"
+],
+"items": [
+"01.50"
+],
+"readback_ok": true,
+"secs": 0.35
+},
+{
+"key": "falsify-typed-separation",
+"id": "omp-orchestrator-plan-01-kxwv.1.1",
+"title": "Preregister and run the typed-separation vs logging-only falsifier",
+"parent": "omp-orchestrator-plan-01-kxwv.1",
+"type": "task",
+"priority": 2,
+"labels": [
+"01",
+"measurement",
+"plan"
+],
+"items": [
+"01.10"
+],
+"readback_ok": true,
+"secs": 0.38
+},
+{
+"key": "gate8-14-operator-cohort",
+"id": "omp-orchestrator-plan-01-kxwv.1.2",
+"title": "Gates 8 + 14: five fleet operators provide a redacted mismatch and a 30-day diary",
+"parent": "omp-orchestrator-plan-01-kxwv.1",
+"type": "task",
+"priority": 1,
+"labels": [
+"01",
+"measurement",
+"plan"
+],
+"items": [
+"01.12",
+"01.18"
+],
+"readback_ok": true,
+"secs": 0.37
+},
+{
+"key": "gate9-13-17-economics",
+"id": "omp-orchestrator-plan-01-kxwv.1.3",
+"title": "Gates 9 + 13 + 17: bottom-up, unit and proportionality economics scorecard for the cohort",
+"parent": "omp-orchestrator-plan-01-kxwv.1",
+"type": "task",
+"priority": 1,
+"labels": [
+"01",
+"measurement",
+"plan"
+],
+"items": [
+"01.13",
+"01.17",
+"01.21"
+],
+"readback_ok": true,
+"secs": 0.48
+},
+{
+"key": "gate10-12-16-buyers",
+"id": "omp-orchestrator-plan-01-kxwv.1.4",
+"title": "Gates 10 + 12 + 16: distribution channel, $500/month LOI after replay, defensibility",
+"parent": "omp-orchestrator-plan-01-kxwv.1",
+"type": "task",
+"priority": 1,
+"labels": [
+"01",
+"measurement",
+"plan"
+],
+"items": [
+"01.14",
+"01.16",
+"01.20"
+],
+"readback_ok": true,
+"secs": 0.41
+},
+{
+"key": "substitution-benchmark",
+"id": "omp-orchestrator-plan-01-kxwv.1.5",
+"title": "Substitution-map hostile test and product benchmark with retained receipts",
+"parent": "omp-orchestrator-plan-01-kxwv.1",
+"type": "task",
+"priority": 1,
+"labels": [
+"01",
+"measurement",
+"plan"
+],
+"items": [
+"01.22"
+],
+"readback_ok": true,
+"secs": 0.45
+},
+{
+"key": "pilot-promotion-review",
+"id": "omp-orchestrator-plan-01-kxwv.1.6",
+"title": "PILOT promotion review: gates 8-17 + brief gates 1-4 & 12, three paid commitments",
+"parent": "omp-orchestrator-plan-01-kxwv.1",
+"type": "task",
+"priority": 3,
+"labels": [
+"01",
+"milestone",
+"plan",
+"terminal"
+],
+"items": [
+"01.24"
+],
+"readback_ok": true,
+"secs": 0.35
+},
+{
+"key": "jsm-topology-check",
+"id": "omp-orchestrator-plan-01-kxwv.3",
+"title": "Check the jsm single-store-plus-symlinks topology at session start instead of assuming it",
+"parent": "omp-orchestrator-plan-01-kxwv",
+"type": "task",
+"priority": 3,
+"labels": [
+"01",
+"gate",
+"plan"
+],
+"items": [
+"01.33"
+],
+"readback_ok": true,
+"secs": 0.43
+},
+{
+"key": "discoverability-surface",
+"id": "omp-orchestrator-plan-07-8jkq.1",
+"title": "Ship discoverability: robot-docs, --info, examples, quickstart, help <topic>, completion",
+"parent": "omp-orchestrator-plan-07-8jkq",
+"type": "task",
+"priority": 2,
+"labels": [
+"07",
+"command",
+"plan"
+],
+"items": [
+"01.38",
+"07.14"
+],
+"readback_ok": true,
+"secs": 0.43
+},
+{
+"key": "surface-map-row-discipline",
+"id": "omp-orchestrator-plan-02-lwdo.4",
+"title": "SURFACE-MAP row discipline gate: WIRE rows carry provenance, RETIRE rows carry evidence",
+"parent": "omp-orchestrator-plan-02-lwdo",
+"type": "task",
+"priority": 0,
+"labels": [
+"02",
+"gate",
+"plan"
+],
+"items": [
+"02.5",
+"02.6"
+],
+"readback_ok": true,
+"secs": 0.32
+},
+{
+"key": "unprobeable-rows",
+"id": "omp-orchestrator-plan-02-lwdo.5",
+"title": "Resolve the 9 UNPROBEABLE-PENDING surface-map rows (3 omp/mux*, 6 thin-reason withdrawals)",
+"parent": "omp-orchestrator-plan-02-lwdo",
+"type": "task",
+"priority": 1,
+"labels": [
+"02",
+"measurement",
+"plan"
+],
+"items": [
+"02.8"
+],
+"readback_ok": true,
+"secs": 0.4
+},
+{
+"key": "reliance-denominator",
+"id": "omp-orchestrator-plan-02-lwdo.6",
+"title": "Extend the reliance-surface denominator to the 14 wrapped binaries (rch, fh, cargo,",
+"parent": "omp-orchestrator-plan-02-lwdo",
+"type": "task",
+"priority": 1,
+"labels": [
+"02",
+"measurement",
+"plan"
+],
+"items": [
+"02.12"
+],
+"readback_ok": true,
+"secs": 0.39
+},
+{
+"key": "severity-auto-major",
+"id": "omp-orchestrator-plan-02-lwdo.7",
+"title": "Second severity defence: a MINOR touching a NUMBERS.toml figure is automatically MAJOR",
+"parent": "omp-orchestrator-plan-02-lwdo",
+"type": "task",
+"priority": 2,
+"labels": [
+"02",
+"gate",
+"plan"
+],
+"items": [
+"02.22"
+],
+"readback_ok": true,
+"secs": 0.35
+},
+{
+"key": "grade-type",
+"id": "omp-orchestrator-jplf.1.1",
+"title": "Introduce the shared Grade type: Verdictlike over Outcome, six dialect impls, fn grade()",
+"parent": "omp-orchestrator-jplf.1",
+"type": "task",
+"priority": 1,
+"labels": [
+"03",
+"crate",
+"plan"
+],
+"items": [
+"05.24",
+"03.6",
+"03.7",
+"03.8"
+],
+"readback_ok": true,
+"secs": 0.37
+},
+{
+"key": "inventory-map-spawn-contract",
+"id": "omp-orchestrator-plan-03-w3yb.1",
+"title": "Route omp-inventory-map's probe spawn through subprocess-contract",
+"parent": "omp-orchestrator-plan-03-w3yb",
+"type": "task",
+"priority": 1,
+"labels": [
+"03",
+"plan",
+"wiring"
+],
+"items": [
+"03.5"
+],
+"readback_ok": true,
+"secs": 0.28
+},
+{
+"key": "ackkind-reexport",
+"id": "omp-orchestrator-jplf.1.2",
+"title": "Re-export the inhabited AckKind, DeliveryClass and ObligationLedger from omp-types",
+"parent": "omp-orchestrator-jplf.1",
+"type": "task",
+"priority": 1,
+"labels": [
+"03",
+"crate",
+"plan"
+],
+"items": [
+"03.10"
+],
+"readback_ok": true,
+"secs": 0.26
+},
+{
+"key": "ack-stage-onto-ackkind",
+"id": "omp-orchestrator-plan-03-w3yb.2",
+"title": "Convert ack-stage's receipt set (TransportReceipt/AckReadback/AckStageResult) onto AckKind",
+"parent": "omp-orchestrator-plan-03-w3yb",
+"type": "task",
+"priority": 2,
+"labels": [
+"03",
+"plan",
+"wiring"
+],
+"items": [
+"03.12"
+],
+"readback_ok": true,
+"secs": 0.28
+},
+{
+"key": "irc-delivery-receipt",
+"id": "omp-orchestrator-plan-04-7wn9.5",
+"title": "Consume upstream IrcDeliveryReceipt so 'missing receipt' names a consumed type",
+"parent": "omp-orchestrator-plan-04-7wn9",
+"type": "task",
+"priority": 1,
+"labels": [
+"04",
+"plan",
+"wiring"
+],
+"items": [
+"04.20"
+],
+"readback_ok": true,
+"secs": 0.28
+},
+{
+"key": "select-ready-unclaimed",
+"id": "omp-orchestrator-plan-05-ovcx.1",
+"title": "A3(b): count ready AND unclaimed separately; never read actionable_count as available work",
+"parent": "omp-orchestrator-plan-05-ovcx",
+"type": "task",
+"priority": 1,
+"labels": [
+"05",
+"gate",
+"plan"
+],
+"items": [
+"05.9"
+],
+"readback_ok": true,
+"secs": 0.32
+},
+{
+"key": "epic-accounting-guards",
+"id": "omp-orchestrator-plan-05-ovcx.2",
+"title": "Epic accounting-node guards: never select a parent for dispatch or close one via a leaf",
+"parent": "omp-orchestrator-plan-05-ovcx",
+"type": "task",
+"priority": 2,
+"labels": [
+"05",
+"gate",
+"plan"
+],
+"items": [
+"05.10",
+"05.29"
+],
+"readback_ok": true,
+"secs": 0.28
+},
+{
+"key": "bypass-records-skip",
+"id": "omp-orchestrator-plan-05-ovcx.3",
+"title": "A6(b): refuse to bypass a guard without recording what the bypass skipped",
+"parent": "omp-orchestrator-plan-05-ovcx",
+"type": "task",
+"priority": 2,
+"labels": [
+"05",
+"gate",
+"plan"
+],
+"items": [
+"05.20"
+],
+"readback_ok": true,
+"secs": 0.31
+},
+{
+"key": "br-comment-docfact",
+"id": "omp-orchestrator-plan-05-ovcx.4",
+"title": "Correct the refuted 'br comment exits 0' claim in dispatch-silence-watch and every bead",
+"parent": "omp-orchestrator-plan-05-ovcx",
+"type": "task",
+"priority": 2,
+"labels": [
+"05",
+"doc-fact",
+"plan",
+"terminal"
+],
+"items": [
+"05.38"
+],
+"readback_ok": true,
+"secs": 0.26
+},
+{
+"key": "claim-header-validator",
+"id": "omp-orchestrator-plan-06-xm0n.5",
+"title": "Claim-header validator: require ENFORCES/STILL PASSES/PROVENANCE, reject guarantee wording",
+"parent": "omp-orchestrator-plan-06-xm0n",
+"type": "task",
+"priority": 2,
+"labels": [
+"06",
+"gate",
+"plan"
+],
+"items": [
+"06.11",
+"05.44"
+],
+"readback_ok": true,
+"secs": 0.28
+},
+{
+"key": "deadman-consumer",
+"id": "omp-orchestrator-plan-05-ovcx.5",
+"title": "Wire dispatcher-deadman as the heartbeat ledger's consumer inside omp-orchestrator",
+"parent": "omp-orchestrator-plan-05-ovcx",
+"type": "task",
+"priority": 0,
+"labels": [
+"05",
+"plan",
+"wiring"
+],
+"items": [
+"05.46"
+],
+"readback_ok": true,
+"secs": 0.26
+},
+{
+"key": "metamorphic-classify",
+"id": "omp-orchestrator-k81x.1",
+"title": "Metamorphic relations MR-1..MR-3 over tick-monitor::classify with input-reached guards",
+"parent": "omp-orchestrator-k81x",
+"type": "task",
+"priority": 2,
+"labels": [
+"06",
+"gate",
+"plan"
+],
+"items": [
+"06.14"
+],
+"readback_ok": true,
+"secs": 0.29
+},
+{
+"key": "inventory-envelope-golden",
+"id": "omp-orchestrator-plan-06-xm0n.6",
+"title": "Golden envelope pin for omp-inventory-map/v1: key set, status vocabulary, versioned regen",
+"parent": "omp-orchestrator-plan-06-xm0n",
+"type": "task",
+"priority": 2,
+"labels": [
+"06",
+"gate",
+"plan"
+],
+"items": [
+"06.15"
+],
+"readback_ok": true,
+"secs": 0.31
+},
+{
+"key": "count-twin-invariant",
+"id": "omp-orchestrator-plan-06-xm0n.7",
+"title": "Count-twin invariant: observed == expected_* OR status UNKNOWN naming the mismatching pair",
+"parent": "omp-orchestrator-plan-06-xm0n",
+"type": "task",
+"priority": 1,
+"labels": [
+"06",
+"gate",
+"plan"
+],
+"items": [
+"06.16"
+],
+"readback_ok": true,
+"secs": 0.35
+},
+{
+"key": "allowance-owner-dies-when",
+"id": "omp-orchestrator-plan-06-xm0n.8",
+"title": "Allowance rows require owner + dies_when; the validator refuses rows without them",
+"parent": "omp-orchestrator-plan-06-xm0n",
+"type": "task",
+"priority": 1,
+"labels": [
+"06",
+"gate",
+"plan"
+],
+"items": [
+"06.18"
+],
+"readback_ok": true,
+"secs": 0.28
+},
+{
+"key": "gate-properties-derived",
+"id": "omp-orchestrator-plan-06-xm0n.9",
+"title": "Derive GATE_PROPERTIES rows for all 10 gate members from the membership clauses",
+"parent": "omp-orchestrator-plan-06-xm0n",
+"type": "task",
+"priority": 1,
+"labels": [
+"06",
+"gate",
+"plan"
+],
+"items": [
+"06.21",
+"06.22",
+"06.23"
+],
+"readback_ok": true,
+"secs": 0.27
+},
+{
+"key": "gate-admission-meta-gate",
+"id": "omp-orchestrator-jplf.4.1",
+"title": "Gate-admission meta-gate: conformance harness over the derived gate set, 06 4 items 1-14",
+"parent": "omp-orchestrator-jplf.4",
+"type": "task",
+"priority": 1,
+"labels": [
+"06",
+"gate",
+"plan",
+"terminal"
+],
+"items": [
+"06.25"
+],
+"readback_ok": true,
+"secs": 0.28
+},
+{
+"key": "two-signal-presence-probe",
+"id": "omp-orchestrator-plan-07-8jkq.2",
+"title": "Two-signal dependency presence probe: PATH-walk vs version probe, tmux -V, UNPROBEABLE",
+"parent": "omp-orchestrator-plan-07-8jkq",
+"type": "task",
+"priority": 2,
+"labels": [
+"07",
+"command",
+"plan"
+],
+"items": [
+"06.27",
+"08.21",
+"10.10",
+"07.38"
+],
+"readback_ok": true,
+"secs": 0.29
+},
+{
+"key": "dependency-missing-refusal",
+"id": "omp-orchestrator-plan-07-8jkq.3",
+"title": "Typed missing-dependency refusal: omp-preflight/v1, DEPENDENCY_MISSING, exit 75",
+"parent": "omp-orchestrator-plan-07-8jkq",
+"type": "task",
+"priority": 0,
+"labels": [
+"07",
+"gate",
+"plan"
+],
+"items": [
+"10.9",
+"07.37"
+],
+"readback_ok": true,
+"secs": 0.29
+},
+{
+"key": "costed-gate-value",
+"id": "omp-orchestrator-plan-06-xm0n.10",
+"title": "DECISION: costed value gate for new gates (4 owner-hours, 30s wall, escaped-instance base)",
+"parent": "omp-orchestrator-plan-06-xm0n",
+"type": "task",
+"priority": 3,
+"labels": [
+"06",
+"decision",
+"owner-josh",
+"plan"
+],
+"items": [
+"06.28"
+],
+"readback_ok": true,
+"secs": 0.26
+},
+{
+"key": "allowed-collisions-blocked",
+"id": "omp-orchestrator-plan-06-xm0n.11",
+"title": "DECISION: restate the ALLOWED_COLLISIONS Observation row as BLOCKED with owner + dies_when",
+"parent": "omp-orchestrator-plan-06-xm0n",
+"type": "task",
+"priority": 2,
+"labels": [
+"06",
+"decision",
+"owner-josh",
+"plan"
+],
+"items": [
+"06.19"
+],
+"readback_ok": true,
+"secs": 0.28
+},
+{
+"key": "umbrella-cli",
+"id": "omp-orchestrator-jplf.7.2",
+"title": "Build the umbrella omp-orchestrator CLI scoping every target as an adapter subcommand",
+"parent": "omp-orchestrator-jplf.7",
+"type": "task",
+"priority": 0,
+"labels": [
+"07",
+"crate",
+"plan"
+],
+"items": [
+"07.6"
+],
+"readback_ok": true,
+"secs": 0.27
+},
+{
+"key": "doctor-command",
+"id": "omp-orchestrator-jplf.7.3",
+"title": "Ship omp-orchestrator doctor [<adapter>] --json: two-band exits, two-tier DEGRADED/ABSENT",
+"parent": "omp-orchestrator-jplf.7",
+"type": "task",
+"priority": 0,
+"labels": [
+"07",
+"command",
+"plan"
+],
+"items": [
+"07.8",
+"08.1",
+"10.4",
+"08.2"
+],
+"readback_ok": true,
+"secs": 0.3
+},
+{
+"key": "health-command",
+"id": "omp-orchestrator-jplf.7.4",
+"title": "Ship omp-orchestrator health as a strict rollup of doctor sharing one classifier",
+"parent": "omp-orchestrator-jplf.7",
+"type": "task",
+"priority": 1,
+"labels": [
+"07",
+"command",
+"plan"
+],
+"items": [
+"07.9"
+],
+"readback_ok": true,
+"secs": 0.26
+},
+{
+"key": "repair-command",
+"id": "omp-orchestrator-jplf.7.5",
+"title": "Ship omp-orchestrator repair through one mutate() chokepoint with byte-exact undo, dry-run",
+"parent": "omp-orchestrator-jplf.7",
+"type": "task",
+"priority": 1,
+"labels": [
+"07",
+"command",
+"plan"
+],
+"items": [
+"07.10",
+"08.3"
+],
+"readback_ok": true,
+"secs": 0.29
+},
+{
+"key": "validate-audit-why",
+"id": "omp-orchestrator-jplf.7.6",
+"title": "Ship the validate / audit / why triad (exit 74 validate, append-only audit, why <id|unit>)",
+"parent": "omp-orchestrator-jplf.7",
+"type": "task",
+"priority": 2,
+"labels": [
+"07",
+"command",
+"plan"
+],
+"items": [
+"07.11",
+"07.12",
+"07.13",
+"08.33"
+],
+"readback_ok": true,
+"secs": 0.31
+},
+{
+"key": "proof-envelope",
+"id": "omp-orchestrator-jplf.7.7",
+"title": "Emit the omp-orchestrator/v1 proof envelope on every adopter command (namespaced probe",
+"parent": "omp-orchestrator-jplf.7",
+"type": "task",
+"priority": 0,
+"labels": [
+"08",
+"crate",
+"plan"
+],
+"items": [
+"07.7",
+"08.8"
+],
+"readback_ok": true,
+"secs": 0.31
+},
+{
+"key": "doctor-capabilities-golden",
+"id": "omp-orchestrator-jplf.7.8",
+"title": "Check in a doctor capabilities golden and fail CI on probe-list drift",
+"parent": "omp-orchestrator-jplf.7",
+"type": "task",
+"priority": 1,
+"labels": [
+"07",
+"gate",
+"plan"
+],
+"items": [
+"07.16"
+],
+"readback_ok": true,
+"secs": 0.27
+},
+{
+"key": "upstream-report",
+"id": "omp-orchestrator-jplf.7.9",
+"title": "Emit class upstream_substrate_issue and ship omp-orchestrator upstream-report",
+"parent": "omp-orchestrator-jplf.7",
+"type": "task",
+"priority": 2,
+"labels": [
+"07",
+"command",
+"plan"
+],
+"items": [
+"07.17"
+],
+"readback_ok": true,
+"secs": 0.27
+},
+{
+"key": "bootstrap-install-sh",
+"id": "omp-orchestrator-jplf.7.1.1",
+"title": "Generate the thin bootstrap install.sh as an untracked, golden-tested release artifact",
+"parent": "omp-orchestrator-jplf.7.1",
+"type": "task",
+"priority": 1,
+"labels": [
+"07",
+"crate",
+"plan"
+],
+"items": [
+"07.24"
+],
+"readback_ok": true,
+"secs": 0.28
+},
+{
+"key": "bootstrap-verify",
+"id": "omp-orchestrator-jplf.7.1.2",
+"title": "Verify the bootstrap before execution: pinned digest or signature, no unsigned fallback",
+"parent": "omp-orchestrator-jplf.7.1",
+"type": "task",
+"priority": 1,
+"labels": [
+"07",
+"gate",
+"plan"
+],
+"items": [
+"07.25"
+],
+"readback_ok": true,
+"secs": 0.31
+},
+{
+"key": "proxy-offline",
+"id": "omp-orchestrator-jplf.7.1.3",
+"title": "Honor HTTPS_PROXY/HTTP_PROXY/NO_PROXY, --proxy and --offline on every installer fetch",
+"parent": "omp-orchestrator-jplf.7.1",
+"type": "task",
+"priority": 2,
+"labels": [
+"07",
+"gate",
+"plan"
+],
+"items": [
+"07.26"
+],
+"readback_ok": true,
+"secs": 0.3
+},
+{
+"key": "version-select-idempotent",
+"id": "omp-orchestrator-jplf.7.1.4",
+"title": "Installer version selection and idempotent repeat-install with fallback reporting",
+"parent": "omp-orchestrator-jplf.7.1",
+"type": "task",
+"priority": 2,
+"labels": [
+"07",
+"gate",
+"plan"
+],
+"items": [
+"07.27"
+],
+"readback_ok": true,
+"secs": 0.31
+},
+{
+"key": "operator-setup",
+"id": "omp-orchestrator-jplf.7.1.5",
+"title": "Operator setup: PATH, completions, hook/skill registration, doctor/health entrypoints",
+"parent": "omp-orchestrator-jplf.7.1",
+"type": "task",
+"priority": 2,
+"labels": [
+"07",
+"plan",
+"wiring"
+],
+"items": [
+"07.28"
+],
+"readback_ok": true,
+"secs": 0.28
+},
+{
+"key": "five-machine-pilot",
+"id": "omp-orchestrator-jplf.7.10",
+"title": "Run the five-person/five-machine pilot and publish the scoreboard receipts",
+"parent": "omp-orchestrator-jplf.7",
+"type": "task",
+"priority": 1,
+"labels": [
+"07",
+"measurement",
+"plan",
+"terminal"
+],
+"items": [
+"07.33"
+],
+"readback_ok": true,
+"secs": 0.29
+},
+{
+"key": "repo-owner-crosscheck",
+"id": "omp-orchestrator-jplf.7.11",
+"title": "Installed binary walks to .git and cross-checks the compiled-in owner declaration",
+"parent": "omp-orchestrator-jplf.7",
+"type": "task",
+"priority": 1,
+"labels": [
+"07",
+"gate",
+"plan"
+],
+"items": [
+"07.35"
+],
+"readback_ok": true,
+"secs": 0.27
+},
+{
+"key": "r11-doctrine-record",
+"id": "omp-orchestrator-plan-07-8jkq.4",
+"title": "Record the four R11 constraints as repo doctrine with a current receipt each",
+"parent": "omp-orchestrator-plan-07-8jkq",
+"type": "task",
+"priority": 2,
+"labels": [
+"07",
+"doc-fact",
+"plan"
+],
+"items": [
+"07.39"
+],
+"readback_ok": true,
+"secs": 0.31
+},
+{
+"key": "actions-to-subcommands",
+"id": "omp-orchestrator-plan-07-8jkq.5",
+"title": "Map actions A1-A11 to binary and subcommand; every --help names its guards and timeouts",
+"parent": "omp-orchestrator-plan-07-8jkq",
+"type": "task",
+"priority": 1,
+"labels": [
+"07",
+"measurement",
+"plan"
+],
+"items": [
+"07.41"
+],
+"readback_ok": true,
+"secs": 0.28
+},
+{
+"key": "init-command",
+"id": "omp-orchestrator-jplf.7.12",
+"title": "Add init --tracker --worker --gates writing .omp-orchestrator/config.toml and work/",
+"parent": "omp-orchestrator-jplf.7",
+"type": "task",
+"priority": 0,
+"labels": [
+"08",
+"command",
+"plan"
+],
+"items": [
+"08.4"
+],
+"readback_ok": true,
+"secs": 0.32
+},
+{
+"key": "verify-run",
+"id": "omp-orchestrator-jplf.7.13",
+"title": "verify --run <run_id> fails closed on missing/mismatched envelope, ledger row or artifact",
+"parent": "omp-orchestrator-jplf.7",
+"type": "task",
+"priority": 0,
+"labels": [
+"08",
+"gate",
+"plan"
+],
+"items": [
+"08.9"
+],
+"readback_ok": true,
+"secs": 0.3
+},
+{
+"key": "file-tracker",
+"id": "omp-orchestrator-jplf.7.14",
+"title": "Ship the file-backed tracker (--tracker=file, one TOML per unit in",
+"parent": "omp-orchestrator-jplf.7",
+"type": "task",
+"priority": 1,
+"labels": [
+"08",
+"crate",
+"plan"
+],
+"items": [
+"08.14"
+],
+"readback_ok": true,
+"secs": 0.3
+},
+{
+"key": "oneshot-worker",
+"id": "omp-orchestrator-jplf.7.15",
+"title": "Build the oneshot worker (TransportKind::OneshotSpawn via subprocess-contract)",
+"parent": "omp-orchestrator-jplf.7",
+"type": "task",
+"priority": 1,
+"labels": [
+"08",
+"crate",
+"plan"
+],
+"items": [
+"08.16"
+],
+"readback_ok": true,
+"secs": 0.4
+},
+{
+"key": "dogfood-scorecard",
+"id": "omp-orchestrator-jplf.7.16",
+"title": "Run the internal dogfood scorecard: doctor <=10 min, <=1 intervention/10 ticks, refusals",
+"parent": "omp-orchestrator-jplf.7",
+"type": "task",
+"priority": 1,
+"labels": [
+"08",
+"measurement",
+"plan"
+],
+"items": [
+"08.28"
+],
+"readback_ok": true,
+"secs": 0.46
+},
+{
+"key": "external-pilot",
+"id": "omp-orchestrator-jplf.7.17",
+"title": "Run the external pilot: 3 clean repos to first tick <=10 min, 0 edits outside",
+"parent": "omp-orchestrator-jplf.7",
+"type": "task",
+"priority": 1,
+"labels": [
+"08",
+"measurement",
+"plan"
+],
+"items": [
+"08.29"
+],
+"readback_ok": true,
+"secs": 0.35
+},
+{
+"key": "serve-order",
+"id": "omp-orchestrator-plan-08-kmbz.1",
+"title": "DECISION: adopt the serve order A (solo) -> B (small team) -> C (fleet operator)",
+"parent": "omp-orchestrator-plan-08-kmbz",
+"type": "task",
+"priority": 2,
+"labels": [
+"08",
+"decision",
+"owner-josh",
+"plan"
+],
+"items": [
+"08.23"
+],
+"readback_ok": true,
+"secs": 0.33
+},
+{
+"key": "human-seconds-per-close",
+"id": "omp-orchestrator-plan-09-bcrn.2",
+"title": "Measure human-seconds per closed bead before and after M4 on the same bead mix",
+"parent": "omp-orchestrator-plan-09-bcrn",
+"type": "task",
+"priority": 2,
+"labels": [
+"09",
+"measurement",
+"plan",
+"terminal"
+],
+"items": [
+"09.20"
+],
+"readback_ok": true,
+"secs": 0.29
+},
+{
+"key": "close-rate-graph-vs-recency",
+"id": "omp-orchestrator-plan-09-bcrn.3",
+"title": "Measure close-rate: graph selection vs recency on a fixed bead set",
+"parent": "omp-orchestrator-plan-09-bcrn",
+"type": "task",
+"priority": 2,
+"labels": [
+"09",
+"measurement",
+"plan",
+"terminal"
+],
+"items": [
+"09.21"
+],
+"readback_ok": true,
+"secs": 0.28
+},
+{
+"key": "bv-absent-typed-refusal",
+"id": "omp-orchestrator-plan-09-bcrn.4",
+"title": "M2 degradation path: bv absent on the host yields a typed selector refusal",
+"parent": "omp-orchestrator-plan-09-bcrn",
+"type": "task",
+"priority": 1,
+"labels": [
+"09",
+"plan",
+"wiring"
+],
+"items": [
+"09.10"
+],
+"readback_ok": true,
+"secs": 0.28
+},
+{
+"key": "sota-preflight-green",
+"id": "omp-orchestrator-plan-10-ya1x.1",
+"title": "Turn the SOTA preflight green: rebuild fh manifest, re-run fh/jsm suggest, retain",
+"parent": "omp-orchestrator-plan-10-ya1x",
+"type": "task",
+"priority": 1,
+"labels": [
+"10",
+"gate",
+"plan"
+],
+"items": [
+"10.11",
+"12.68"
+],
+"readback_ok": true,
+"secs": 0.44
+},
+{
+"key": "unwired-lane-both-directions",
+"id": "omp-orchestrator-plan-10-ya1x.2",
+"title": "Make UNWIRED_LANE_ALLOWANCE fail in both directions (Gap 2 ADOPT)",
+"parent": "omp-orchestrator-plan-10-ya1x",
+"type": "task",
+"priority": 1,
+"labels": [
+"10",
+"gate",
+"plan"
+],
+"items": [
+"10.2"
+],
+"readback_ok": true,
+"secs": 0.36
+},
+{
+"key": "lifecycle-journal-writer",
+"id": "omp-orchestrator-kxe.8",
+"title": "Build the append-only DISPATCH.jsonl packet/lifecycle journal writer (stage_id, targets)",
+"parent": "omp-orchestrator-kxe",
+"type": "task",
+"priority": 0,
+"labels": [
+"12",
+"crate",
+"plan"
+],
+"items": [
+"11.1",
+"12.9"
+],
+"readback_ok": true,
+"secs": 0.39
+},
+{
+"key": "stage-event-emitters",
+"id": "omp-orchestrator-plan-11-vcd7.1",
+"title": "Wire the per-stage lifecycle-event emit sites (S1 intake, S2 FOUNDATION, S3 rounds, S7)",
+"parent": "omp-orchestrator-plan-11-vcd7",
+"type": "task",
+"priority": 2,
+"labels": [
+"11",
+"plan",
+"wiring"
+],
+"items": [
+"11.13",
+"11.18",
+"11.22",
+"11.35"
+],
+"readback_ok": true,
+"secs": 0.32
+},
+{
+"key": "s1-typed-intake",
+"id": "omp-orchestrator-plan-11-vcd7.2",
+"title": "S1 typed intake packet produced by the idea/viability skills and consumed by S2",
+"parent": "omp-orchestrator-plan-11-vcd7",
+"type": "task",
+"priority": 2,
+"labels": [
+"11",
+"plan",
+"wiring"
+],
+"items": [
+"11.10",
+"11.53",
+"11.54"
+],
+"readback_ok": true,
+"secs": 0.33
+},
+{
+"key": "s1-s2-facet-decisions",
+"id": "omp-orchestrator-plan-11-vcd7.3",
+"title": "DECISION: S1/S2 facets - dispatch, reap and grading applicability, or mark n/a",
+"parent": "omp-orchestrator-plan-11-vcd7",
+"type": "task",
+"priority": 3,
+"labels": [
+"11",
+"decision",
+"owner-josh",
+"plan"
+],
+"items": [
+"11.11",
+"11.12",
+"11.14",
+"11.16",
+"11.17",
+"11.19"
+],
+"readback_ok": true,
+"secs": 0.29
+},
+{
+"key": "plan-grade-type-k3",
+"id": "omp-orchestrator-plan-11-vcd7.4",
+"title": "S3 shared typed plan grade with held-out lens and finding-identity comparison (K3)",
+"parent": "omp-orchestrator-plan-11-vcd7",
+"type": "task",
+"priority": 1,
+"labels": [
+"11",
+"crate",
+"plan"
+],
+"items": [
+"11.23"
+],
+"readback_ok": true,
+"secs": 0.33
+},
+{
+"key": "validation-runner-k12",
+"id": "omp-orchestrator-jplf.7.18",
+"title": "Build the K12 validation runner and validation-transcript.json schema (foreign-machine)",
+"parent": "omp-orchestrator-jplf.7",
+"type": "task",
+"priority": 0,
+"labels": [
+"12",
+"crate",
+"plan"
+],
+"items": [
+"11.45",
+"11.33",
+"12.45"
+],
+"readback_ok": true,
+"secs": 0.61
+},
+{
+"key": "validate-rows-assertions",
+"id": "omp-orchestrator-plan-11-vcd7.5",
+"title": "Local assertion legs for the 8 VALIDATE rows and the two ntm template-omission probes",
+"parent": "omp-orchestrator-plan-11-vcd7",
+"type": "task",
+"priority": 2,
+"labels": [
+"11",
+"gate",
+"plan"
+],
+"items": [
+"11.51",
+"11.43"
+],
+"readback_ok": true,
+"secs": 2.41
+},
+{
+"key": "classify-followup-repair",
+"id": "omp-orchestrator-plan-11-vcd7.6",
+"title": "Repair classify_followup false-completion: distinct InProgress; only read-back CLOSED",
+"parent": "omp-orchestrator-plan-11-vcd7",
+"type": "task",
+"priority": 1,
+"labels": [
+"11",
+"gate",
+"plan"
+],
+"items": [
+"11.49"
+],
+"readback_ok": true,
+"secs": 0.45
+},
+{
+"key": "fanout-wave-primitive",
+"id": "omp-orchestrator-kxe.9",
+"title": "Fan-out/fan-in wave primitive: per-target receipts, partial-wave verdict, 1:many falsifier",
+"parent": "omp-orchestrator-kxe",
+"type": "task",
+"priority": 1,
+"labels": [
+"12",
+"crate",
+"plan"
+],
+"items": [
+"11.66",
+"12.35",
+"12.37"
+],
+"readback_ok": true,
+"secs": 0.39
+},
+{
+"key": "per-session-path-keys",
+"id": "omp-orchestrator-plan-11-vcd7.7",
+"title": "Per-session state/pending-dispatch path keys with collision refusal",
+"parent": "omp-orchestrator-plan-11-vcd7",
+"type": "task",
+"priority": 2,
+"labels": [
+"11",
+"gate",
+"plan"
+],
+"items": [
+"11.65"
+],
+"readback_ok": true,
+"secs": 0.29
+},
+{
+"key": "hd-row-k0-k14",
+"id": "omp-orchestrator-plan-11-vcd7.8",
+"title": "Record the K0-K14 staging approval (Joshua 2026-09-02) as an HD row in decisions.jsonl",
+"parent": "omp-orchestrator-plan-11-vcd7",
+"type": "task",
+"priority": 1,
+"labels": [
+"11",
+"doc-fact",
+"plan"
+],
+"items": [
+"11.74"
+],
+"readback_ok": true,
+"secs": 0.33
+},
+{
+"key": "s7-observation-not-completion",
+"id": "omp-orchestrator-plan-11-vcd7.9",
+"title": "S7 facet: bind /vibing-with-ntm observation to the completion consumer, not completion",
+"parent": "omp-orchestrator-plan-11-vcd7",
+"type": "task",
+"priority": 2,
+"labels": [
+"11",
+"plan",
+"wiring"
+],
+"items": [
+"11.60"
+],
+"readback_ok": true,
+"secs": 0.41
+},
+{
+"key": "k14-mining-lane",
+"id": "omp-orchestrator-plan-12-ibpa.2",
+"title": "K14 mining lane: am_mine_skills extractor crate (steps 4-7) + per-project skill manifest",
+"parent": "omp-orchestrator-plan-12-ibpa",
+"type": "task",
+"priority": 2,
+"labels": [
+"12",
+"crate",
+"plan"
+],
+"items": [
+"11.67",
+"12.75",
+"12.76"
+],
+"readback_ok": true,
+"secs": 0.38
+},
+{
+"key": "inception-writer",
+"id": "omp-orchestrator-kxe.10",
+"title": "S1 inception-manifest writer (.omp-orchestrator/inception.json) + S1 foundation gate",
+"parent": "omp-orchestrator-kxe",
+"type": "task",
+"priority": 0,
+"labels": [
+"12",
+"crate",
+"plan"
+],
+"items": [
+"12.12",
+"12.13"
+],
+"readback_ok": true,
+"secs": 0.39
+},
+{
+"key": "cold-host-falsifiers",
+"id": "omp-orchestrator-jplf.7.19",
+"title": "Clean-host falsifiers: cargo install into a scratch CARGO_HOME; S1 on a second host",
+"parent": "omp-orchestrator-jplf.7",
+"type": "task",
+"priority": 1,
+"labels": [
+"12",
+"measurement",
+"plan"
+],
+"items": [
+"12.14",
+"12.56"
+],
+"readback_ok": true,
+"secs": 0.35
+},
+{
+"key": "duel-cross-scoring",
+"id": "omp-orchestrator-plan-12-ibpa.3",
+"title": "Run the adversarial cross-scoring of the six duel gaps and fold the result into the plan",
+"parent": "omp-orchestrator-plan-12-ibpa",
+"type": "task",
+"priority": 3,
+"labels": [
+"12",
+"measurement",
+"plan",
+"terminal"
+],
+"items": [
+"12.19"
+],
+"readback_ok": true,
+"secs": 0.36
+},
+{
+"key": "s2-semantic-omission",
+"id": "omp-orchestrator-plan-12-ibpa.4",
+"title": "S2 semantic-omission experiment: known-good plan plus three mutations",
+"parent": "omp-orchestrator-plan-12-ibpa",
+"type": "task",
+"priority": 2,
+"labels": [
+"12",
+"measurement",
+"plan",
+"terminal"
+],
+"items": [
+"12.27"
+],
+"readback_ok": true,
+"secs": 0.3
+},
+{
+"key": "noise-floor-experiment",
+"id": "omp-orchestrator-plan-12-ibpa.5",
+"title": "Noise-floor experiment: two fresh graders, one clean and one known-dirty fixture, blind",
+"parent": "omp-orchestrator-plan-12-ibpa",
+"type": "task",
+"priority": 2,
+"labels": [
+"12",
+"measurement",
+"plan",
+"terminal"
+],
+"items": [
+"12.30"
+],
+"readback_ok": true,
+"secs": 0.42
+},
+{
+"key": "numbers-s5-s7-figures",
+"id": "omp-orchestrator-plan-12-ibpa.6",
+"title": "Register the S5 and S7 figures in NUMBERS.toml on first run",
+"parent": "omp-orchestrator-plan-12-ibpa",
+"type": "task",
+"priority": 2,
+"labels": [
+"12",
+"measurement",
+"plan",
+"terminal"
+],
+"items": [
+"12.36",
+"12.47"
+],
+"readback_ok": true,
+"secs": 0.34
+},
+{
+"key": "stop-classifier-map",
+"id": "omp-orchestrator-plan-12-ibpa.7",
+"title": "Map upstream unexpected-stop-classifier arms against our PaneState/Liveness taxonomy",
+"parent": "omp-orchestrator-plan-12-ibpa",
+"type": "task",
+"priority": 3,
+"labels": [
+"12",
+"measurement",
+"plan",
+"terminal"
+],
+"items": [
+"12.50"
+],
+"readback_ok": true,
+"secs": 0.29
+},
+{
+"key": "rollback-transcript",
+"id": "omp-orchestrator-jplf.7.20",
+"title": "S8 tested rollback to the prior binary with a rollback transcript",
+"parent": "omp-orchestrator-jplf.7",
+"type": "task",
+"priority": 1,
+"labels": [
+"12",
+"crate",
+"plan"
+],
+"items": [
+"12.53"
+],
+"readback_ok": true,
+"secs": 0.34
+},
+{
+"key": "s9-ledger-gate",
+"id": "omp-orchestrator-plan-12-ibpa.8",
+"title": "S9 decision-ledger gate: refuse missing fields, dangling supersedes, passed review_after",
+"parent": "omp-orchestrator-plan-12-ibpa",
+"type": "task",
+"priority": 1,
+"labels": [
+"12",
+"gate",
+"plan"
+],
+"items": [
+"12.58"
+],
+"readback_ok": true,
+"secs": 0.31
+},
+{
+"key": "s9-binds-stages-consumers",
+"id": "omp-orchestrator-plan-12-ibpa.9",
+"title": "S9 binds_stages consumers: packet builder attaches, grader refuses, amortization promotes",
+"parent": "omp-orchestrator-plan-12-ibpa",
+"type": "task",
+"priority": 2,
+"labels": [
+"12",
+"plan",
+"wiring"
+],
+"items": [
+"12.59",
+"12.60"
+],
+"readback_ok": true,
+"secs": 0.3
+},
+{
+"key": "context-injection-scheduled",
+"id": "omp-orchestrator-plan-12-ibpa.10",
+"title": "DECISION: human context-injection at milestone boundaries is a scheduled loop step",
+"parent": "omp-orchestrator-plan-12-ibpa",
+"type": "task",
+"priority": 3,
+"labels": [
+"12",
+"decision",
+"owner-josh",
+"plan",
+"terminal"
+],
+"items": [
+"12.64"
+],
+"readback_ok": true,
+"secs": 0.29
+},
+{
+"key": "journey-docfacts",
+"id": "omp-orchestrator-plan-12-ibpa.11",
+"title": "12-journey doc-facts: ipg.4 'no coverage document' row; deleted verify_resume_continuity",
+"parent": "omp-orchestrator-plan-12-ibpa",
+"type": "task",
+"priority": 1,
+"labels": [
+"12",
+"doc-fact",
+"plan",
+"terminal"
+],
+"items": [
+"12.69",
+"12.80"
+],
+"readback_ok": true,
+"secs": 0.32
+},
+{
+"key": "k14-run-close",
+"id": "omp-orchestrator-plan-12-ibpa.12",
+"title": "K14.run_close: close-and-publish evidence summary refusing close without all five parts",
+"parent": "omp-orchestrator-plan-12-ibpa",
+"type": "task",
+"priority": 2,
+"labels": [
+"12",
+"command",
+"plan"
+],
+"items": [
+"12.77"
+],
+"readback_ok": true,
+"secs": 0.3
+},
+{
+"key": "convergence-role-gate",
+"id": "omp-orchestrator-plan-12-ibpa.13",
+"title": "Record the in-tree CONVERGENCE.jsonl role gate (capability_regressed) with a known-bad leg",
+"parent": "omp-orchestrator-plan-12-ibpa",
+"type": "task",
+"priority": 1,
+"labels": [
+"12",
+"gate",
+"plan"
+],
+"items": [
+"12.20"
+],
+"readback_ok": true,
+"secs": 0.28
+}
+]

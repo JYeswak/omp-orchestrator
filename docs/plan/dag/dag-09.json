@@ -1,0 +1,459 @@
+{
+  "section": "09-milestones",
+  "source": "docs/plan/09-milestones.md",
+  "item_count": 22,
+  "items": [
+    {
+      "id": "09.1",
+      "title": "Adopt the done-definition template and the four admissibility properties for every milestone",
+      "lines": "L7-L30",
+      "what": "Every milestone is stated as OBSERVABLE/NOT IN SCOPE/STARTING POINT/RISK and its observable must be (1) a command, (2) runnable by a non-builder, (3) readable without interpretation, (4) failing on the pre-milestone tree.",
+      "acceptance_seed": "For each of M1-M7, run the observable on the pre-milestone tree and expect non-zero; PC3 (plan-check) refuses any Mn heading lacking an OBSERVABLE field. Doc states property 4 is the anti-vacuity leg; a milestone whose observable already passes is the vacuity defect.",
+      "priority": 2,
+      "kind": "decision",
+      "existing_beads": [
+        {"id": "omp-orchestrator-t52", "status": "open", "match": "partial", "evidence": "the 16 UNITS only — docs/plan/FOUNDATION.jsonl (9 rows) + the seven OBSERVABLE blocks in docs/plan/09-milestones.md §2 (M1–M7)"},
+        {"id": "omp-orchestrator-7sd", "status": "grading", "match": "partial", "evidence": "this file plus the seven M-observables in 09-milestones §2 are the 16 units convergence is measured on"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "Both beads treat the seven observables as grading units; neither asserts property 4 (fails-on-pre-milestone) is checked for each, and nothing mechanically refuses an observable that is a description rather than a command (that is PC3, item 09.16).",
+      "depends_on": [],
+      "blocks": ["09.2", "09.3", "09.4", "09.5", "09.6", "09.7", "09.8", "09.16"],
+      "terminal": false,
+      "notes": "Decision already taken in the doc; representing it so the integrator can hang PC3/PC5 and the milestone leaves off one node."
+    },
+    {
+      "id": "09.2",
+      "title": "M1: one shared omp-types::PaneObservation crosses the observe→decide seam (compile-time break)",
+      "lines": "L45-L73",
+      "what": "tick-monitor and omp-orchestrator both parse/emit the same omp-types::PaneObservation so a filter change breaks the consumer at compile time; proven by a fixture-driven test through the production parser.",
+      "acceptance_seed": "Run `cargo test -p omp-orchestrator --test pane_state_seam -- --exact tick_monitor_newly_idle_reaches_orchestrator --nocapture` with checked-in fixture crates/omp-orchestrator/tests/fixtures/tick-monitor-newly-idle.json (SHA-256 printed); expect exactly one JSON line {\"fixture\":\"tick-monitor-newly-idle.json\",\"state\":\"NewlyIdle\",\"free_capacity\":true,\"shared_type\":\"PaneObservation\",\"revision\":\"<git sha>\"} and exit 0; test must fail if either crate's public parse/emit signature does not use omp-types::PaneObservation. Source check: `grep -rn \"omp-types\\|omp_types\" crates/*/Cargo.toml | grep -v \"^crates/omp-types/\"` must name both consumers. NOT IN SCOPE: selection, dispatch, ack.",
+      "priority": 0,
+      "kind": "milestone",
+      "existing_beads": [
+        {"id": "omp-orchestrator-phase0-pane-observation-80h", "status": "in_progress", "match": "partial", "evidence": "Define PaneObservation in omp-types as graded pane evidence with explicit Unknown, Working, Idle, and separate dispatch admissibility ... callers remain unmigrated for Phase 1 ... no receiver-receipt or pane-truth migration"},
+        {"id": "omp-orchestrator-tickmonitor-free-capacity-blind-vgf", "status": "in_progress", "match": "partial", "evidence": "tick-monitor reports free_capacity=[] while panes are IDLE — the 178-tick blindness, still live in the observer ... THE FIX LANDED IN omp-orchestrator AND NOT IN tick-monitor"},
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.18", "status": "open", "match": "partial", "evidence": "omp-types depended_on_by = 0 of 25 crates ... The canonical vocabulary shipped with ZERO dependents"},
+        {"id": "omp-orchestrator-jplf.1", "status": "open", "match": "partial", "evidence": "Phase 0: Type Algebra — Close the canonical ClaimStrength, Admission, PaneObservation, and Lifecycle type algebra"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "No bead names the test target `pane_state_seam`, the fixture tick-monitor-newly-idle.json, or the migration of tick-monitor AND omp-orchestrator onto omp-types::PaneObservation. 80h explicitly defers caller migration; measured today only crates/pane-dispatch-ready/Cargo.toml depends on omp-types (grep, 1 consumer, neither tick-monitor nor omp-orchestrator). crates/omp-orchestrator/tests/ has no pane_state_seam.rs and no fixtures/ dir.",
+      "depends_on": ["09.1", "09.9", "external:bead omp-orchestrator-phase0-pane-observation-80h (omp-types PaneObservation exists)", "03.<omp-types canonical vocabulary crate>", "05.<tick-monitor NewlyIdle/free_capacity observe action>"],
+      "blocks": ["09.3"],
+      "terminal": false,
+      "notes": "Doc records a disagreement with brief §4: the free_capacity filter is FIXED in source (-oco); what is open is the seam (parse_observation reads JSON lists + IDLE fallback). Upstream GuestIdleReconcilerCtx is DECLARED only — no item for wire-probing it."
+    },
+    {
+      "id": "09.3",
+      "title": "M2: selection runs through the graph kernel (bv) instead of queue recency, proven differentially",
+      "lines": "L76-L93",
+      "what": "Production selection invokes bv --robot-next (or a recorded executable-equivalent adapter) and a differential test shows graph and recency choose different beads on a blocking-chain fixture.",
+      "acceptance_seed": "Run `cargo test -p omp-orchestrator --test selection_graph -- --exact graph_and_recency_choose_different_beads --nocapture` against crates/omp-orchestrator/tests/fixtures/blocking-chain.json; expect one JSON line {\"fixture\":\"blocking-chain.json\",\"graph_bead\":\"<id>\",\"recency_bead\":\"<different-id>\",\"selected_by\":\"bv\",\"revision\":\"<git sha>\"} and exit 0; must fail if IDs are equal or selected_by != bv; test MUST exercise the real bv --robot-next invocation and assert parsed JSON; a source grep is diagnostic only. NOT IN SCOPE: dispatch.",
+      "priority": 0,
+      "kind": "milestone",
+      "existing_beads": [
+        {"id": "omp-orchestrator-kxe", "status": "in_progress", "match": "partial", "evidence": "triage  /beads-bv  PageRank over the DAG; articulation points, not comfortable leaves ... THE 20 EXTRACTED CRATES ARE THE DISPATCH+VERIFY HALF. The plan/beads/triage half does not exist yet and is the new build."},
+        {"id": "omp-orchestrator-kernel-only-operator-hook-5rh", "status": "blocked", "match": "partial", "evidence": "KERNEL-ONLY operator hook (doc: crates/kernel-only-operator-hook refuses raw br ready with 'use the bv --robot-triage queue kernel')"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "No bead names the selection_graph test target, the blocking-chain.json fixture, a production Command::new(\"bv\") call, or the differential graph-vs-recency leg. Measured: grep `Command::new(\"bv\")|--robot-next` across crates → 0 hits (only the doc's own zero re-confirmed). kxe names triage-by-bv as a pipeline stage without an acceptance for it.",
+      "depends_on": ["09.2", "09.10", "external:bv v0.20.0 at /opt/homebrew/bin/bv (host binary, not in-repo)"],
+      "blocks": ["09.4", "09.21"],
+      "terminal": false,
+      "notes": "NO-CLAIM in doc: invoked ≠ better; the better-ness experiment is item 09.21."
+    },
+    {
+      "id": "09.4",
+      "title": "M3: dispatch returns an acknowledgement or a typed refusal, never a bare success (journaled)",
+      "lines": "L95-L117",
+      "what": "A journaled dispatch whose transport reported success but whose receiver screen did not change yields verdict Refused / receipt not-confirmed; a mutation removing the ack check is rejected by the harness.",
+      "acceptance_seed": "Run `cargo test -p omp-orchestrator --test dispatch_receipt -- --exact known_bad_transport_is_refused --nocapture` with fixture crates/omp-orchestrator/tests/fixtures/transport-success-no-packet.json; expect one JSON line {\"fixture\":\"transport-success-no-packet.json\",\"transport\":\"success\",\"screen_changed\":false,\"verdict\":\"Refused\",\"receipt\":\"not-confirmed\",\"revision\":\"<git sha>\"} and exit 0. Mutation leg: `cargo test -p omp-orchestrator --test dispatch_receipt -- --exact ack_removal_is_rejected --nocapture` against transport-success-no-packet-mutated.json must exit non-zero before the mutation is repaired and 0 when the harness proves the mutation was rejected. Verdict = receiver-side screen evidence (timer reset + content change), not packet arrival. NOT IN SCOPE: detecting worker finished (M4).",
+      "priority": 0,
+      "kind": "milestone",
+      "existing_beads": [
+        {"id": "omp-orchestrator-ack-spine-oj6.3", "status": "in_progress", "match": "partial", "evidence": "known-bad (a) = feed a transport success with NO observational change; assert the spine reports NO delivery ... MUTATION: collapse any two authorities into one check and the corresponding known-bad goes RED"},
+        {"id": "omp-orchestrator-u622", "status": "closed", "match": "partial", "evidence": "K9 tracker readback + ack: three authorities never substitute, dispatch refuses unclaimed beads ... TransportAuthority (it left) -> DeliveryAuthority (it arrived) -> AckAuthority"},
+        {"id": "omp-orchestrator-d6q2", "status": "closed", "match": "partial", "evidence": "K8 receiver observation: independent of sender return, two-capture discrimination, unreadable is ERROR"},
+        {"id": "omp-orchestrator-6q5", "status": "closed", "match": "partial", "evidence": "ntm delivery signals are not a receipt: dispatch trusts sender exit over composer state"},
+        {"id": "omp-orchestrator-receiver-receipt-contract-pwm", "status": "in_progress", "match": "partial", "evidence": "Receiver receipt contract: two-capture delivery evidence ... composer arrival being read as delivery"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "No bead names the dispatch_receipt test target, the two fixtures, the JOURNALED-dispatch requirement (cp-z42vu evidence predates the packet journal), or the ack_removal_is_rejected mutation leg as a named exact test. oj6.3's known-bad (a) is the closest match but lives in ack-spine, not omp-orchestrator, and has no fixture/JSON-line output contract.",
+      "depends_on": ["09.3", "11.<packet journal (11-lifecycle F) — M3 must be demonstrated on a journaled dispatch>", "external:bead omp-orchestrator-ack-spine-oj6.3", "external:bead omp-orchestrator-receiver-receipt-contract-pwm"],
+      "blocks": ["09.5"],
+      "terminal": false,
+      "notes": "Upstream IrcDeliveryReceipt/AsyncJobDeliverySink are DECLARED only; not an item. Risk: receiver-receipt spawns tmux and reads a rendering — ntm 'cod composer not visible' class inherits."
+    },
+    {
+      "id": "09.5",
+      "title": "M4: completion is detected by the loop and closed by a verifier, never by the worker or a human",
+      "lines": "L119-L140",
+      "what": "A recorded completion trace shows human_touch_count 0, close_actor verifier != worker_actor, bead closed; a mutation allowing the worker to close its own bead is rejected.",
+      "acceptance_seed": "Run `cargo test -p ack-spine --test completion_trace -- --exact verifier_closes_without_human --nocapture` against crates/ack-spine/tests/fixtures/m4-completion-trace.json; expect one JSON line {\"trace\":\"m4-completion-trace.json\",\"human_touch_count\":0,\"close_actor\":\"verifier\",\"worker_actor\":\"<different-id>\",\"bead_state\":\"closed\",\"revision\":\"<git sha>\"} and exit 0. Mutation leg: `cargo test -p ack-spine --test completion_trace -- --exact worker_close_is_rejected --nocapture` must exit non-zero if a worker can close its own bead. NOT IN SCOPE: whether the work is good (verify gate), autonomy end-to-end (M5).",
+      "priority": 0,
+      "kind": "milestone",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.19", "status": "in_progress", "match": "partial", "evidence": "Typed completion signal: the worker says done — nothing infers it ... FAILURE 2 — NO COMPLETION SIGNAL EXISTS AT ALL"},
+        {"id": "omp-orchestrator-igwd", "status": "open", "match": "partial", "evidence": "INVARIANT (PROTOCOL L1, falsifiable): A bead never transitions grading → closed without at le[ast one distinct non-implementer actor] ... min_approvals(risk) ≥ 1 distinct actor other than the requester/implementer"},
+        {"id": "omp-orchestrator-qt9r", "status": "open", "match": "partial", "evidence": "8 of 9 closes since autonomous dispatch resumed were closed by their own implementer; the close policy checks only the prefix"},
+        {"id": "omp-orchestrator-eg0m", "status": "in_progress", "match": "partial", "evidence": "ack-spine: the one genuinely unwired gate -- wire its invocation site or retire it"},
+        {"id": "omp-orchestrator-o7gz", "status": "open", "match": "partial", "evidence": "a close is refused unless a machine-checkable grade exists ... exit 2 (false-closed) refuses the close"},
+        {"id": "omp-orchestrator-t784", "status": "grading", "match": "partial", "evidence": "no GRADING status: delivered work awaiting an independent grade has no legal state"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "No bead names the completion_trace test target in ack-spine, the m4-completion-trace.json fixture, or the human_touch_count/close_actor JSON contract. igwd's L1 invariant is the worker_close_is_rejected leg in substance but is scoped to the close transition table, not to an ack-spine trace test; ipg.19 supplies the completion signal but not the verifier-closes path. Doc: FollowUpVerdict::Finished has zero callers outside followup.rs and ack-spine has zero dependents.",
+      "depends_on": ["09.4", "external:bead omp-orchestrator-omp-coverage-mission-ipg.19 (typed completion signal)", "external:bead omp-orchestrator-eg0m (ack-spine wired)", "external:bead omp-orchestrator-igwd (grading→closed quorum)", "11.<S6 grading stage / GRADING status>"],
+      "blocks": ["09.6", "09.20"],
+      "terminal": false,
+      "notes": "RISK per doc: worker-asserted Finished must not become the close condition."
+    },
+    {
+      "id": "09.6",
+      "title": "M5: the loop closes ten beads end to end with no human in the trace (recorded run)",
+      "lines": "L142-L161",
+      "what": "One recorded run closes 10 beads with zero human-originated events and zero unaccounted refusals, each id independently read back via br show.",
+      "acceptance_seed": "Run `cargo test -p omp-orchestrator --test control_loop -- --exact ten_recorded_closes_without_human --nocapture` against crates/omp-orchestrator/tests/fixtures/m5-run.json; expect one JSON line {\"run\":\"m5-run\",\"close_count\":10,\"human_event_count\":0,\"unaccounted_refusals\":0,\"bead_ids\":[\"id-01\"..\"id-10\"],\"independent_readback\":true,\"revision\":\"<git sha>\"} and exit 0; each id must be checked by `br show <id> --json`; a global board count is explicitly insufficient. NOT IN SCOPE: duration (M7), portability (M6).",
+      "priority": 0,
+      "kind": "milestone",
+      "existing_beads": [
+        {"id": "omp-orchestrator-zlqk", "status": "in_progress", "match": "partial", "evidence": "Prove the cron conductor dispatches idle panes unattended: 5 consecutive ticks, zero orchestrator sends"},
+        {"id": "omp-orchestrator-kxe", "status": "in_progress", "match": "partial", "evidence": "4. END-TO-END PROOF on a real repo: the binary takes a plan, produces beads with acceptance criteria, triages, dispatches to a real OMP pane, and verifies a close by GROUND TRUTH (a commit or a bead close with cited evidence). Not a fixture, not a dry run."},
+        {"id": "omp-orchestrator-kxe.1", "status": "in_progress", "match": "partial", "evidence": "The command must be `omp-orchestrator run --once ...` and must emit a real DISPATCHED result containing a receiver receipt"},
+        {"id": "omp-orchestrator-th0z", "status": "in_progress", "match": "partial", "evidence": "L1 every free pane is DISPATCHED or NAMED in the tick receipt ... dispatched[] ∪ refused[] == observed.free_capacity"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "No bead records ten closes from ONE run with human_event_count 0 and per-id br show readback; zlqk proves 5 ticks of dispatch (not closes), kxe proves one close by ground truth, kxe.1 one dispatch. No control_loop test target or m5-run.json fixture exists.",
+      "depends_on": ["09.5", "external:bead omp-orchestrator-zlqk", "external:bead omp-orchestrator-5tn (installed supervisor with claim fence)", "external:bead omp-orchestrator-th0z (orchestration_tick laws)", "11.<claim→send→ack→close lifecycle with GRADING state>"],
+      "blocks": ["09.7", "09.21"],
+      "terminal": false,
+      "notes": "Doc: M5 is the first milestone whose failure invalidates the thesis; 'no evidence for or against it'. Starting-point figures (162 refused ticks, 19/22/3/30 board) are HISTORICAL/UNPROVEN."
+    },
+    {
+      "id": "09.7",
+      "title": "M6: a foreign repository runs the orchestrator on a clean host via cargo install and takes a first tick",
+      "lines": "L163-L213",
+      "what": "On a clean host with no target/, `cargo install --locked --path crates/omp-orchestrator --bin omp-orchestrator` under env -i succeeds and `omp-orchestrator run --repo <foreign-repo fixture> --once` exits 0 with output classified progress (OBSERVATION) or named_refusal (SUPERVISOR_REFUSED).",
+      "acceptance_seed": "Run the L167-L192 script verbatim: `test ! -e target`; env -i cargo install --locked --path crates/omp-orchestrator --bin omp-orchestrator --root $TMPDIR/omp-m6; env -i omp-orchestrator run --repo crates/omp-orchestrator/tests/fixtures/foreign-repo --once >log; grep SUPERVISOR_REFUSED→named_refusal, OBSERVATION→progress, else M6_UNCLASSIFIED_OUTPUT exit 1; then `jq -e '(.install_exit == 0) and (.cache_absent == true) and (.fixture == \"foreign-repo\") and (.first_tick_exit == 0) and (.verdict == \"progress\" or .verdict == \"named_refusal\") and (.revision|type == \"string\") and (.revision|length > 0)' m6.json`. Presence probes must use `tmux -V`, never `tmux --version`.",
+      "priority": 0,
+      "kind": "milestone",
+      "existing_beads": [
+        {"id": "omp-orchestrator-jplf.7", "status": "open", "match": "partial", "evidence": "Phase 6: Installability ... a clean-machine receipt proves installation, an external-repo first-tick receipt proves the real entry path"},
+        {"id": "omp-orchestrator-6hrv", "status": "in_progress", "match": "partial", "evidence": "installer already IS the parity gate and is the one binary not installed ... G1. --install builds the WHOLE WORKSPACE, so any one broken crate blocks installing any binary"},
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.13", "status": "closed", "match": "partial", "evidence": "One-touch install: Rust installer crate, four-way identity proof, standing drift check"},
+        {"id": "omp-orchestrator-7ai", "status": "closed", "match": "partial", "evidence": "4. PROOF OF PORTABILITY: run the binary from a directory that is NOT the repo -- e.g. cd /tmp then invoke it with --repo pointing at a checkout"},
+        {"id": "omp-orchestrator-xuu7", "status": "open", "match": "partial", "evidence": "GOVERNING: nothing depends on control-plane; the product is ONE fully self-contained installable binary"},
+        {"id": "omp-orchestrator-n4q", "status": "in_progress", "match": "partial", "evidence": "On a foreign host at install time, a hung git ... blocks the installer FOREVER"},
+        {"id": "omp-orchestrator-vyud", "status": "open", "match": "partial", "evidence": "cargo test --workspace is red in a clean clone: admission-reason reaches a shell oracle in a sibling repo by relative path"},
+        {"id": "omp-orchestrator-untracked-crates-break-clone-jlb", "status": "in_progress", "match": "partial", "evidence": "a fresh clone has 31 of 50 and cargo metadata fails"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "No bead names the foreign-repo fixture, the env -i `cargo install --locked --path crates/omp-orchestrator` leg, the progress/named_refusal classification, or the m6.json jq predicate. jplf.7's 'external-repo first-tick receipt (R9)' is the same intent at epic granularity with no leaf. 7ai/ipg.13 are closed but proved portability on THIS host, not a clean one (doc: 'installer is isolated in the dependency graph; never attempted').",
+      "depends_on": ["09.6", "09.10", "09.12", "external:bead omp-orchestrator-6hrv", "external:bead omp-orchestrator-vyud (clean clone green)", "external:bead omp-orchestrator-untracked-crates-break-clone-jlb", "07.<doctor/health/repair + clean-machine receipt R8>", "08.<end-user install path>"],
+      "blocks": ["09.8"],
+      "terminal": false,
+      "notes": "Doc refutes the brief's 'tmux exits 0 while failing': the harness's `$?` after a pipe lied (PIPESTATUS=(1 0)). Install leg targets omp-orchestrator package, NOT the installer package."
+    },
+    {
+      "id": "09.8",
+      "title": "M7: the fleet runs unattended for a 24h window with every refusal named and inventoried",
+      "lines": "L215-L226",
+      "what": "An unattended runner drives the foreign-repo fixture for --duration 24h, emits an evidence JSON with ticks>0, zero human events, a non-empty refusal inventory unchanged in kind, and no refusal class recurring above FINDING_THRESHOLD == 3.",
+      "acceptance_seed": "Run `cargo run -p omp-orchestrator --bin omp-orchestrator -- --repo crates/omp-orchestrator/tests/fixtures/foreign-repo --duration 24h --evidence target/milestones/m7.json`; expect exit 0 only after 24h and JSON {\"window_seconds\":86400,\"human_event_count\":0,\"ticks\":<int>0>,\"progress_or_named_refusal\":true,\"max_same_refusal\":3,\"refusal_inventory\":[\"<observed classes>\"],\"revision\":\"<git sha>\"}; a missing tick, unnamed refusal, empty inventory, or recurrence above FINDING_THRESHOLD == 3 exits non-zero. Goodhart guard: inventory must be non-empty and unchanged in kind across the window. NOT IN SCOPE: increasing the window.",
+      "priority": 1,
+      "kind": "milestone",
+      "existing_beads": [
+        {"id": "omp-orchestrator-9he5", "status": "open", "match": "partial", "evidence": "a recurrence counter in the heartbeat emitter ... keyed on (event, status, detail-hash): the first N (N=3) identical rows emit as today; the Nth+1 emits ONE RECURRENCE_HALT row"},
+        {"id": "omp-orchestrator-zlqk", "status": "in_progress", "match": "partial", "evidence": "Prove the cron conductor dispatches idle panes unattended: 5 consecutive ticks, zero orchestrator sends"},
+        {"id": "omp-orchestrator-idle-capacity-never-alarmed-8bw", "status": "in_progress", "match": "partial", "evidence": "Watcher reset its stall counter on idle capacity, so an idle pane never alarmed (3 incidents/shift)"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "No bead names `--duration`/`--evidence` flags, the 24h window, window_seconds/refusal_inventory/max_same_refusal evidence fields, or the exit-non-zero-on-empty-inventory Goodhart guard. Measured: grep `--duration|--evidence|refusal_inventory` across crates → 0 hits; FINDING_THRESHOLD=3 exists only in crates/finding-dispatch/src/lib.rs:45 (pure fn, see 09.13).",
+      "depends_on": ["09.7", "09.13", "external:bead omp-orchestrator-zlqk"],
+      "blocks": [],
+      "terminal": true,
+      "notes": "Starting point (4h19m idle while watchdogs healthy) is HISTORICAL/UNVERIFIED. M7 measures survival only."
+    },
+    {
+      "id": "09.9",
+      "title": "Decide the owner of the free_capacity seam migration (Observation lane REQUIRES A DECISION)",
+      "lines": "L71",
+      "what": "wired_lanes.rs records Observation as 'REQUIRES A DECISION not an allowance' at the free_capacity seam; someone must own the live-seam refactor so a partial migration does not create a third dialect beside tick-monitor's and omp-orchestrator's structs.",
+      "acceptance_seed": "A decision row (docs/decisions.jsonl per 12-journey S9) names the owner and the single migration order (tick-monitor producer then omp-orchestrator consumer, or vice versa); `grep -n 'REQUIRES A DECISION' crates/no-shell-gate/tests/wired_lanes.rs` then names the decision id instead of 'not an allowance'. Falsifier: three PaneObservation-like structs coexisting after M1 lands.",
+      "priority": 1,
+      "kind": "decision",
+      "existing_beads": [
+        {"id": "omp-orchestrator-phase0-pane-observation-80h", "status": "in_progress", "match": "partial", "evidence": "callers remain unmigrated for Phase 1"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "80h defers migration to 'Phase 1' without naming an owner or the migration order; measured crates/no-shell-gate/tests/wired_lanes.rs:702 still reads 'REQUIRES A DECISION not an allowance: ... the free_capacity seam (filter FIXED -oco; seam still open, 09 M1)'. No decision row found (search terms: 'REQUIRES A DECISION', 'Observation' in bead corpus → only via 80h/vgf indirectly).",
+      "depends_on": [],
+      "blocks": ["09.2"],
+      "terminal": false,
+      "notes": "Reversible local decision; per Rule Zero this does not stop the loop — an agent may take it and record it."
+    },
+    {
+      "id": "09.10",
+      "title": "M2 degradation path: bv absent on the host yields a typed refusal, not a hard dependency",
+      "lines": "L91-L93",
+      "what": "bv lives at /opt/homebrew/bin/bv on this host; a foreign host (M6) may lack it, so graph selection must degrade to a typed refusal naming the missing binary rather than block M6.",
+      "acceptance_seed": "Run the selection path with PATH lacking bv (env -i as in M6): expect a typed refusal (e.g. SELECTOR_UNAVAILABLE program=bv) and non-zero exit from the selection stage, never a panic, a silent recency fallback, or a bare success; mutation: hard-coding /opt/homebrew/bin/bv goes RED under path-literal-guard.",
+      "priority": 1,
+      "kind": "wiring",
+      "existing_beads": [
+        {"id": "omp-orchestrator-typed-degraded-dispatch-policy-i0kp", "status": "closed", "match": "partial", "evidence": "Define the admission=stale lifecycle marker, the low-stakes dispatch class permitted when admission is RED, the full-gate requirement for high-stakes work, the fail-fast UNRUN boundary"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "i0kp is a degraded-ADMISSION policy contract (stale gate verdict), not a missing-selector-binary refusal; no bead names bv absence, a selector degradation path, or a typed refusal for it (search terms: 'bv absent', 'degradation', 'robot-next' → 0 beads).",
+      "depends_on": ["09.3"],
+      "blocks": ["09.7"],
+      "terminal": false,
+      "notes": "Doc: 'M2's dependency must be a degradation path with a typed refusal, or M2 blocks M6'. depends_on 09.3 because the refusal arm is meaningless before bv is invoked at all; the integrator may fold it into 09.3's acceptance."
+    },
+    {
+      "id": "09.11",
+      "title": "Ship the failure-preserving board-count probe (br list per status, errexit, non-zero on malformed JSON)",
+      "lines": "L149-L157",
+      "what": "Board counts (open/in_progress/blocked/closed) are re-runnable only via a probe where a br failure or malformed JSON exits non-zero instead of becoming a zero count; prior 19/22/3/30 and 74-bead figures are HISTORICAL/UNPROVEN and must be re-derived before any new snapshot.",
+      "acceptance_seed": "Run the L152-L155 loop; expect four JSON lines {\"status\":\"<s>\",\"count\":N} sorted_keys and exit 0; known-bad: point it at a stalled/absent br and expect non-zero, not {\"count\":0}.",
+      "priority": 3,
+      "kind": "measurement",
+      "existing_beads": [
+        {"id": "omp-orchestrator-kxe.5", "status": "closed", "match": "partial", "evidence": "Board arithmetic and generator claims carry executable acceptance commands, an owner, and a failure result"},
+        {"id": "omp-orchestrator-opsa", "status": "in_progress", "match": "partial", "evidence": "NUMBERS.toml + crates/no-shell-gate/tests/numbers.rs already IS the rigor-atlas rm-evidence-receipts card ... a claim is a row with a hash, a level, and a command"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "The probe exists only as a doc snippet and uses an inline `python3 -c` (the repo forbids .py files; an inline interpreter is the same dependency in spirit and is un-installable on M6's env -i PATH). No NUMBERS.toml row or Rust probe carries the four-status count with fail-closed semantics.",
+      "depends_on": [],
+      "blocks": [],
+      "terminal": false,
+      "notes": "Feeds M5's STARTING POINT only; it is not on the milestone spine. Recommend the integrator route it to a NUMBERS.toml row (opsa) or a jq-only rewrite rather than a new crate."
+    },
+    {
+      "id": "09.12",
+      "title": "Adopt the two-signal check_tool doctor probe with both tests and close the tmux -V allowlist gap",
+      "lines": "L193-L213",
+      "what": "A presence probe that treats non-zero `--version` as ABSENT marks tmux (present, 3.6a, answers only -V) as MISSING; adopt pi_agent_rust doctor.rs's two-signal structure (discovered_path.is_some() + probe_failure_is_known_nonfatal) with both pinned tests, and widen the one-tool allowlist (`if tool.ne(\"sh\")`) so tmux is not a false negative.",
+      "acceptance_seed": "Doctor run on this host reports tmux PRESENT via `tmux -V` (exit 0); a test twin of check_tool_falls_back_when_probe_args_are_unsupported passes for tmux and check_tool_reports_invocation_failure_for_broken_executable passes for a planted broken executable; per-binary probe map records --version answers 8/9 and -V 6/9 (ntm br tmux cargo fh jsm; fails omp bv git). Known-bad: a probe that reads `$?` after `2>&1 | head -1` must be refused (PIPESTATUS trap).",
+      "priority": 1,
+      "kind": "wiring",
+      "existing_beads": [
+        {"id": "omp-orchestrator-jplf.7", "status": "open", "match": "partial", "evidence": "Close doctor, health, repair, clean-machine installation, and external-repository first-tick behavior ... Doctor/health/repair are idempotent and reversible"},
+        {"id": "omp-orchestrator-phcz", "status": "open", "match": "partial", "evidence": "grep is not one program in this fleet: a pattern-syntax claim must name its binary and version"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "No bead names the two-signal check_tool structure, the tmux -V vs --version probe map, or the pi_agent_rust precedent with its two tests (search terms: 'check_tool', 'two-signal', 'tmux -V' → 0 beads; '--version' hits are identity-drift beads 6hrv/5tn/ipg.13, not presence probing). jplf.7 is the epic only.",
+      "depends_on": ["07.<doctor subcommand / presence probe>"],
+      "blocks": ["09.7"],
+      "terminal": false,
+      "notes": "Likely owned by §07 (installability/doctor); listed here because 09 states the ADOPT verdict and the named gap. Integrator should dedupe against 07's doctor item."
+    },
+    {
+      "id": "09.13",
+      "title": "Refusal inventory + recurrence halt at FINDING_THRESHOLD == 3 wired into the unattended runner",
+      "lines": "L219, L223-L226",
+      "what": "The running supervisor must count identical refusals per class, halt-and-name at the 3rd recurrence, and export the non-empty refusal inventory so a silent loop (refusals deleted) and a healthy loop are distinguishable.",
+      "acceptance_seed": "Plant a refusal class that recurs 4 times in the foreign-repo fixture window; expect the runner to exit non-zero with max_same_refusal exceeded and the class named; plant zero refusals and expect non-zero on empty refusal_inventory; `assert_eq!(FINDING_THRESHOLD, 3)` remains in crates/finding-dispatch/tests/recurrence.rs.",
+      "priority": 1,
+      "kind": "wiring",
+      "existing_beads": [
+        {"id": "omp-orchestrator-9he5", "status": "open", "match": "partial", "evidence": "REAP_SWEEP_SKIPPED 458x, DISPATCH_RETRY_BLOCKED 344x, IDLE_UNAUTHORIZED 85x — a trauma-guard counter that halts and names the decision ... the Nth+1 emits ONE RECURRENCE_HALT row carrying count, first_ts, last_ts, the decision the human must make"},
+        {"id": "omp-orchestrator-wire-finding-dispatch-9ms", "status": "in_progress", "match": "partial", "evidence": "Wire finding into the dispatch site: recurring decisions must become beads"},
+        {"id": "omp-orchestrator-finding-l1-bypassable-py3", "status": "in_progress", "match": "partial", "evidence": "FC-L1: must_use does not survive Option<Finding> and unused_must_use is denied nowhere"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "9he5 halts/suppresses in the heartbeat emitter and files a decision; it does not export a refusal_inventory, a max_same_refusal figure, or make the unattended runner exit non-zero on an EMPTY inventory (the Goodhart guard). finding-dispatch already encodes FINDING_THRESHOLD=3 as a pure fn (crates/finding-dispatch/src/lib.rs:45) with recurrence tests; 9ms wires it to dispatch, not to an evidence file.",
+      "depends_on": ["external:bead omp-orchestrator-9he5", "external:bead omp-orchestrator-wire-finding-dispatch-9ms", "06.<finding-dispatch recurrence gate>"],
+      "blocks": ["09.8"],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "09.14",
+      "title": "Apply plan-validation rules PV1–PV8 across docs/plan (numbers carry commands, MEASURED≠PROJECTED, NO-CLAIM, constructs not lines)",
+      "lines": "L228-L265",
+      "what": "Eight checkable rules the document must satisfy: every number derives from a command (PV1), MEASURED/PROJECTED never share a sentence (PV2), every load-bearing claim ends in NO-CLAIM (PV3), every milestone has an admissible observable (PV4), gate headers never say guarantees/proves (PV5), no unstated denominators (PV6), zero≠silence with a named search space (PV7), citations name constructs (PV8).",
+      "acceptance_seed": "Run `grep -ohE '\\b[A-Za-z0-9_./-]+\\.(rs|md|toml|ts|go|jsonl):[0-9]+' docs/plan/[0-9]*.md | wc -l` → 0 outside fences (PV8); `grep -ohE '\\b[0-9]{1,4} (crates|test functions|tests|binary targets|targets|packages|rows|edges|leaves)\\b' docs/plan/[0-9]*.md | wc -l` → 0 or each labelled HISTORICAL (PV1/PV6); `grep -n \"17 used\\|81 JSON\" AGENTS.md` returns only retirement notices at 247/582/615 (PV6); `cargo test -p no-shell-gate -- plan_citations_name_constructs` passes.",
+      "priority": 1,
+      "kind": "decision",
+      "existing_beads": [
+        {"id": "omp-orchestrator-d1n", "status": "open", "match": "partial", "evidence": "Convert every file:line citation in docs/plan/[0-9]*.md (321 at pin 387dadf ... 09-milestones 20 ...) to a CONSTRUCT citation per PV8 ... Route every bare tree count (105 matches ...) through a NUMBERS.toml key or label it HISTORICAL"},
+        {"id": "omp-orchestrator-opsa", "status": "in_progress", "match": "partial", "evidence": "add level + hash to 34 existing rows"},
+        {"id": "omp-orchestrator-kxe.5", "status": "closed", "match": "partial", "evidence": "Every cross-section figure names one authoritative command/registry scope; duplicate values are historical/retracted or removed"},
+        {"id": "omp-orchestrator-round22-drifted-figures-844", "status": "in_progress", "match": "partial", "evidence": "Nine one-line prose corrections in docs/plan/*.md, each a figure or a source citation that no longer reproduces"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "PV1/PV6/PV8 have mechanical owners (d1n, opsa, 844); PV2 (projection verbs in MEASURED sentences), PV3 (NO-CLAIM per load-bearing claim), PV5 (guarantees/proves in gate headers) and PV7 (zero-vs-silence, named search space) have no bead and no lint — they are enforced only by the author's attention until 09.16 ships.",
+      "depends_on": [],
+      "blocks": ["09.16", "09.18"],
+      "terminal": false,
+      "notes": "Doc NO-CLAIM: PV1–PV8 are necessary, not sufficient."
+    },
+    {
+      "id": "09.15",
+      "title": "Capture a fresh per-gate legs report before any new gate-count headline is stated",
+      "lines": "L238-L241, L306, L323",
+      "what": "The brief's 1-of-8/5-of-8 → 2-of-8/4-of-8 gate figures are HISTORICAL/UNPROVEN; a fresh report listing, per gate, known-bad / known-good / mutation / anti-vacuity / ADDRESSABLE must exist before a count is restated.",
+      "acceptance_seed": "A generated ledger (not prose) lists every gate crate with the five legs as booleans and the command that derives each; `grep -c` of gates with all five true is the only admissible headline; an empty gate set is an ERROR.",
+      "priority": 2,
+      "kind": "measurement",
+      "existing_beads": [
+        {"id": "omp-orchestrator-kernel-gate-census-69i", "status": "in_progress", "match": "partial", "evidence": "the resident supervisor and tick-monitor ... must perform a GATE CENSUS every cycle and emit a TYPED NONZERO ESCALATION while any gate lacks a reachable trigger ... gate / ci_ref / src_callers / manifest_deps / reachable trigger?"},
+        {"id": "omp-orchestrator-leht", "status": "open", "match": "partial", "evidence": "the gate census has 25 rows for 65 crates: 40 have no row at all, so the census has no opinion on 61% of the tree"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "69i/leht census reachability (trigger exists) but not the four evidence legs + ADDRESSABLE per gate that PV6/§5/§6 require for a 'gates bite' count; no bead produces the N-of-M report the plan retired.",
+      "depends_on": ["06.<gate matrix / gate census rows for all crates>"],
+      "blocks": ["09.18", "09.22"],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "09.16",
+      "title": "Build the plan-check binary (PC1–PC8) with plan-check/v1 envelope, --help, and a known-bad leg",
+      "lines": "L267-L291",
+      "what": "A Rust binary reading docs/PLAN.md and its sections that fails on: numeral with no command in block (PC1), guarantees/proves/makes impossible in a gate section (PC2), Mn heading without OBSERVABLE (PC3, syntax only), MEASURED sentence with will/would/should (PC4), section without NO-CLAIM (PC5, syntax only), ratio without separately derived denominator (PC6), zero-result with no search space (PC7), path:line citing no construct (PC8); emits {\"schema_version\":\"plan-check/v1\",\"command\":\"doctor\",\"status\":…}; `plan-check --help` names the command that runs it; ships planted-known-bad fixtures.",
+      "acceptance_seed": "`ls crates | grep plan-check` non-empty; `plan-check --help` exits 0 and names its runner; against a fixture with a planted bare number, a planted `guarantees`, and an observable-less milestone, plan-check exits non-zero naming PC1/PC2/PC3 with file:construct; against docs/plan at the pin it emits the plan-check/v1 envelope; known-good-only fixtures are refused as vacuous.",
+      "priority": 1,
+      "kind": "crate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-d1n", "status": "open", "match": "partial", "evidence": "(3) Add a gate leg to crates/no-shell-gate/tests/ — plan_citations_name… ... plus a lint that refuses new ones"},
+        {"id": "omp-orchestrator-8oz8", "status": "in_progress", "match": "partial", "evidence": "preregistration-gate: the falsifier - the only genuinely new crate, wired at the plan-assemble write chokepoint"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "No bead names plan-check, PC1–PC8, the plan-check/v1 envelope, or its known-bad leg (search: 'plan-check', 'plan_check', 'PC1' → 0 beads; glob crates/plan* → only plan-assemble and preregistration-gate). d1n's plan_citations lint realises PC8 (and part of PC1) as a no-shell-gate test leg, not as the ADDRESSABLE binary; 8oz8 gates plan-assemble writes, not plan form. Doc: 'This checker does not exist ... eight rules enforced by the author's attention.'",
+      "depends_on": ["09.1", "09.14", "external:bead omp-orchestrator-d1n (PC8/PC1 leg reusable)", "06.<envelope omp-inventory-map/v1 + ADDRESSABLE rule (brief §3.2/§3.6)>", "external:bead omp-orchestrator-8oz8 (plan-assemble write chokepoint to hang it on)"],
+      "blocks": [],
+      "terminal": false,
+      "notes": "Doc NO-CLAIM: plan-check enforces form; it cannot detect a false MEASURED whose command never ran. Not on the M-spine; it gates the document, not the software."
+    },
+    {
+      "id": "09.17",
+      "title": "Make omp-inventory-map --help ADDRESSABLE (currently CONFIG_ERROR unknown argument --help)",
+      "lines": "L282-L285",
+      "what": "plan-check must satisfy ADDRESSABLE because omp-inventory-map --help returns CONFIG_ERROR unknown argument --help; a correct, undiscoverable gate does not exist.",
+      "acceptance_seed": "`omp-inventory-map --help` exits 0 and names the command that runs the gate; known-bad: a binary whose --help returns CONFIG_ERROR fails the ADDRESSABLE leg of the gate census.",
+      "priority": 2,
+      "kind": "wiring",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.12", "status": "closed", "match": "partial", "evidence": "FrankenMermaid inventory map: every crate's inputs, outputs, invariant, and negative evidence — generated, never drawn"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "ipg.12 built the map; nothing names its --help defect or the ADDRESSABLE requirement for it (search terms: 'omp-inventory-map', '--help', 'ADDRESSABLE' → ipg.12 only, by name). Not re-measured here (read-only pass; binary presence not probed).",
+      "depends_on": [],
+      "blocks": [],
+      "terminal": false,
+      "notes": "Likely §02/§06-owned; listed because 09 cites it as the measured defect motivating PC's --help requirement. Integrator should dedupe."
+    },
+    {
+      "id": "09.18",
+      "title": "Grade the plan on the six-dimension PASS/FAIL rubric, with the self-assessed FAILs recorded",
+      "lines": "L293-L310",
+      "what": "A reviewer scores problem-real / measurement-honest / architecture-sound / gates-bite / adoption-credible / team-tells-on-itself as PASS or FAIL; the authors pre-declare gates-bite FAIL, adoption FAIL, architecture CONTESTED; a reviewer passing all six has not read adversarially.",
+      "acceptance_seed": "A ledger row per dimension with PASS/FAIL, grader != author, pin sha, and the evidence command; at least one FAIL; the row for 'gates actually bite' cites the fresh gate report (09.15), not the retired 2-of-8/4-of-8 figures.",
+      "priority": 2,
+      "kind": "measurement",
+      "existing_beads": [
+        {"id": "omp-orchestrator-t52", "status": "open", "match": "partial", "evidence": "Round 22 of the plan audit under HD-0005: fresh eyes, different family, pinned sha, the 16 units only ... Every finding carries BLOCKER/MAJOR/MINOR, graded_by, and the pin sha"},
+        {"id": "omp-orchestrator-9g5", "status": "closed", "match": "partial", "evidence": "Josh decision: stop condition for the plan convergence audit (0/12 banked after 21 rounds)"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "t52 grades the 16 units by finding severity, not by the six named dimensions with PASS/FAIL and the declared self-assessment; no bead records the rubric verdicts (search terms: 'rubric', 'investor', 'six dimension' → 0 beads).",
+      "depends_on": ["09.14", "09.15", "external:bead omp-orchestrator-t52"],
+      "blocks": [],
+      "terminal": false,
+      "notes": "Doc NO-CLAIM: rubric grades the document, not the software."
+    },
+    {
+      "id": "09.19",
+      "title": "Add a known-good leg to path-literal-guard (it has a known-bad and no known-good)",
+      "lines": "L306",
+      "what": "The self-assessment names path-literal-guard as having a known-bad with no known-good; an over-strict gate gets routed around.",
+      "acceptance_seed": "A fixture tree with zero home-path literals and a NON-EMPTY scan set passes path-literal-guard with exit 0 and a PASS report naming the scanned count; an empty scan set is still an ERROR.",
+      "priority": 2,
+      "kind": "gate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-588v", "status": "open", "match": "partial", "evidence": "path-literal-guard refuses with a hit count where its error belongs: a vacuous scan is indistinguishable from a real violation ... Carry the error through, and name file:line for every hit"},
+        {"id": "omp-orchestrator-calr", "status": "open", "match": "partial", "evidence": "Flagship pre-commit gate passes vacuously on an empty index, violating the repo's own anti-vacuity rule"},
+        {"id": "omp-orchestrator-oej2", "status": "closed", "match": "partial", "evidence": "path-literal-guard scans repo-wide while the wrapper keys on staged: any agent's untracked work blocks every commit"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "588v fixes the error-vs-hit-count reporting and calr the empty-index vacuity; neither adds a known-good (clean, non-empty) fixture leg for path-literal-guard.",
+      "depends_on": [],
+      "blocks": ["09.22"],
+      "terminal": false,
+      "notes": "§06-owned gate; surfaced here because §5 names it as a declared FAIL."
+    },
+    {
+      "id": "09.20",
+      "title": "Measure human-seconds per closed bead before and after M4 on the same bead mix",
+      "lines": "L320",
+      "what": "'Verification is cheaper than review' has no instrumentation; the ratio of human-seconds per closed bead before vs after M4 on the same bead mix is the whole economic argument and is unmeasured.",
+      "acceptance_seed": "A ledger with two cohorts (pre-M4, post-M4) of the same bead mix, human-seconds per close derived from timestamped human-originated events, and the ratio; known-bad: a cohort with zero human events recorded reads as UNMEASURED, not as zero cost.",
+      "priority": 2,
+      "kind": "measurement",
+      "existing_beads": [],
+      "coverage": "MISSING",
+      "gap": "",
+      "depends_on": ["09.5"],
+      "blocks": [],
+      "terminal": true,
+      "notes": "Search terms: 'human-seconds', 'cheaper than review', 'economic' over bead titles+descriptions → 0 hits."
+    },
+    {
+      "id": "09.21",
+      "title": "Measure close-rate: graph selection vs recency on a fixed bead set",
+      "lines": "L321",
+      "what": "'Graph selection beats recency' is settled only by M2's differential test PLUS a measured close-rate comparison on a fixed bead set.",
+      "acceptance_seed": "Two runs over the same fixed bead set, one selecting by bv and one by recency, each reporting closes per window from independent br show readback; known-bad: a run that reports selected_by=bv while Command::new(\"bv\") was never spawned is refused.",
+      "priority": 2,
+      "kind": "measurement",
+      "existing_beads": [],
+      "coverage": "MISSING",
+      "gap": "",
+      "depends_on": ["09.3", "09.6"],
+      "blocks": [],
+      "terminal": true,
+      "notes": "Search terms: 'close-rate', 'close rate', 'recency' → 0 hits."
+    },
+    {
+      "id": "09.22",
+      "title": "Bring all 8 gates to four legs plus ADDRESSABLE with a planted-known-bad campaign per gate",
+      "lines": "L303, L323",
+      "what": "'The gates bite under attack' is settled by every gate having known-bad, known-good, mutation, anti-vacuity legs, being runnable by a documented command, and surviving a planted-known-bad campaign.",
+      "acceptance_seed": "For each gate crate: a documented command runs it; planted known-bad → RED; known-good non-empty → GREEN; empty scan set → ERROR; a mutation disabling the check → RED; the fresh report (09.15) shows 8/8.",
+      "priority": 1,
+      "kind": "gate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-jplf.4", "status": "open", "match": "exact", "evidence": "Every declared gate names a trigger, scope, known-good leg, fires-on-known-bad leg, anti-vacuity behavior, and caller; ratchets only move upward and an independent grader records the result."},
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.18", "status": "open", "match": "partial", "evidence": "Five-leg conformance gate: make every per-crate declaration something cargo test refuses"},
+        {"id": "omp-orchestrator-kernel-gate-census-69i", "status": "in_progress", "match": "partial", "evidence": "the supervisor refuses to report healthy while any gate has no reachable trigger"}
+      ],
+      "coverage": "COVERED",
+      "gap": "",
+      "depends_on": ["09.15", "09.19", "06.<per-gate four legs + ADDRESSABLE>"],
+      "blocks": [],
+      "terminal": false,
+      "notes": "Covered at epic granularity by jplf.4 (Phase 3) whose acceptance enumerates the same legs; the per-gate leaves belong to §06. The planted-known-bad CAMPAIGN (adversarial, per gate) is the phrase no leaf names — integrator may attach it as a leaf under jplf.4."
+    }
+  ],
+  "section_deps": [
+    "03: M1 (09.2) waits on the omp-types canonical-vocabulary crate and the crate chain finding-dispatch → omp-orchestrator → ack-stage → receiver-receipt → tick-monitor that the doc says fixes the milestone order",
+    "05: M1 waits on tick-monitor's NewlyIdle/free_capacity observe action being the producer of the shared type",
+    "06: M7's recurrence halt (09.13), plan-check's envelope/ADDRESSABLE (09.16), the gate-legs report (09.15) and the 8-gate campaign (09.22) all wait on §06's gate matrix; 09.17/09.19 are §06 gates surfaced by §5 of this doc",
+    "07: M6 (09.7) waits on the doctor/presence probe (09.12) and the clean-machine receipt R8 that §07 owns",
+    "08: M6 waits on the end-user install path §08 owns",
+    "11: M3 (09.4) waits on the packet journal (11-lifecycle F) so its observable runs on a JOURNALED dispatch; M4/M5 wait on the S6 grading stage / GRADING status and the claim→send→ack→close lifecycle",
+    "12: the board probe (09.11) and decision rows (09.9) use 12-journey S9's docs/decisions.jsonl schema; 7sd/t52 treat this section's seven observables as convergence units"
+  ],
+  "search_log": [
+    "br list -a --json | jq '.issues | length' → 284 (all statuses)",
+    "jq contains() over title+description for each of 35 terms: milestone→6 (xuu7,t52,7sd,d1n,u1c,j2te); plan-check→0; plan_check→0; pane_state_seam→0; selection_graph→0; dispatch_receipt→0; completion_trace→0; control_loop→0; foreign-repo→1 (eqrf, unrelated); 'foreign host'→1 (n4q); unattended→2 (zlqk,kxe.5); FINDING_THRESHOLD→0; refusal_inventory→0; PaneObservation→5; 'bv --robot-next'→0; Command::new(\"bv\"→0; human_event_count→0; ten_recorded→0; known_bad_transport→0; verifier_closes→0; '--duration 24h'→0; 'cargo install --locked'→0; PV1→0; PC1→0; 'grading rubric'→0; investor→0; omp-types→11; blocking-chain→0; transport-success-no-packet→0; m4-completion→0; m5-run→0; check_tool→0; two-signal→0; 'tmux -V'→0; --version→7 (identity-drift beads, not presence probing)",
+    "br show omp-orchestrator-kxe.1 --json → deps: parent-child kxe only; br show omp-orchestrator-t52 --json → blocks on hsv,193,8k7,ii8,h5q,5by,12d,uvo,7sd,d1n",
+    "grep 'omp-types|omp_types' crates/*/Cargo.toml → 2 files (omp-types itself, pane-dispatch-ready); neither tick-monitor nor omp-orchestrator",
+    "grep 'Command::new(\"bv\")|--robot-next|--duration|FINDING_THRESHOLD|RECURRENCE_HALT' crates → hits only in crates/finding-dispatch (lib.rs:45 FINDING_THRESHOLD=3; tests/recurrence.rs); zero bv spawns, zero --duration",
+    "grep '\"--once\"|\"run\"' crates/omp-orchestrator/src/main.rs → run subcommand + --once present (main.rs:183, :247; tests :3876-3899)",
+    "grep 'REQUIRES A DECISION' crates/no-shell-gate/tests/wired_lanes.rs → :702 Observation row still reads 'REQUIRES A DECISION not an allowance ... seam still open, 09 M1'",
+    "glob crates/omp-orchestrator/tests/* → 9 files, no pane_state_seam/selection_graph/dispatch_receipt/control_loop, no fixtures/ dir; crates/ack-spine/tests/* → no completion_trace.rs; glob crates/plan* → plan-assemble only (no plan-check); crates/preregistration-gate exists"
+  ],
+  "no_claim": "This manifest maps items to beads by title/description text at one read of br list -a; it did not run any milestone observable, did not probe installed binaries (omp-inventory-map --help, doctor), and did not read other sections beyond what 09 cites — so every cross-section ref (03/05/06/07/08/11/12.<...>) is a guess for the integrator to resolve. COVERED for 09.22 is at epic granularity (jplf.4) and does not prove any gate currently has four legs. Bead dependency edges were read for two beads only; existing blocks/parent-child edges on the other cited beads are not enumerated here. Coverage judgments of PARTIAL vs MISSING rest on the 35 search terms listed; a bead using different vocabulary for the same intent could have been missed."
+}

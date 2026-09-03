@@ -1,0 +1,5474 @@
+{
+ "summary": {
+  "items": 567,
+  "relations": {
+   "partial-commented": 250,
+   "filed": 105,
+   "covered": 130,
+   "decision-halt": 19,
+   "merged-into": 62,
+   "not-work": 1
+  },
+  "per_section": {
+   "00-brief": {
+    "partial-commented": 28,
+    "filed": 15,
+    "covered": 13,
+    "decision-halt": 8,
+    "merged-into": 1
+   },
+   "01-idea": {
+    "partial-commented": 21,
+    "covered": 15,
+    "filed": 9,
+    "merged-into": 5
+   },
+   "02-surface-census": {
+    "partial-commented": 13,
+    "filed": 5,
+    "merged-into": 4,
+    "covered": 2
+   },
+   "03-crates": {
+    "partial-commented": 35,
+    "filed": 3,
+    "merged-into": 3,
+    "covered": 2
+   },
+   "04-diagrams": {
+    "filed": 3,
+    "covered": 12,
+    "partial-commented": 4,
+    "merged-into": 2
+   },
+   "05-actions": {
+    "covered": 25,
+    "partial-commented": 16,
+    "filed": 6,
+    "merged-into": 2
+   },
+   "06-gates": {
+    "partial-commented": 8,
+    "merged-into": 9,
+    "covered": 5,
+    "filed": 8,
+    "decision-halt": 2
+   },
+   "07-installability": {
+    "partial-commented": 15,
+    "covered": 2,
+    "filed": 18,
+    "merged-into": 5,
+    "not-work": 1
+   },
+   "08-end-users": {
+    "merged-into": 6,
+    "filed": 6,
+    "partial-commented": 19,
+    "decision-halt": 1,
+    "covered": 2
+   },
+   "09-milestones": {
+    "partial-commented": 15,
+    "filed": 3,
+    "merged-into": 3,
+    "covered": 1
+   },
+   "10-prior-art": {
+    "partial-commented": 4,
+    "filed": 3,
+    "covered": 6,
+    "merged-into": 2
+   },
+   "11-lifecycle": {
+    "filed": 12,
+    "covered": 27,
+    "partial-commented": 27,
+    "decision-halt": 7,
+    "merged-into": 7
+   },
+   "12-journey": {
+    "covered": 18,
+    "partial-commented": 45,
+    "merged-into": 13,
+    "filed": 14,
+    "decision-halt": 1
+   }
+  },
+  "beads_created": 132,
+  "section_epics": 13,
+  "cluster_epics": 2,
+  "decision_beads": 13,
+  "comments_posted": 250,
+  "edges_added": 369,
+  "edges_parent_child_added": 13,
+  "edges_refused_by_br_cycle_guard": [
+   {
+    "dependent": "omp-orchestrator-588v",
+    "dependency": "omp-orchestrator-opsa",
+    "refs": [
+     "08.5 depends_on external:06-gates \u00a71 leg census (which gates have a known-good leg)"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-kxe.1",
+    "dependency": "omp-orchestrator-6hrv",
+    "refs": [
+     "00.18 depends_on 00.17"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-kxe.3",
+    "dependency": "omp-orchestrator-diq0",
+    "refs": [
+     "00.63 depends_on 00.3"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-kxe.3",
+    "dependency": "omp-orchestrator-opsa",
+    "refs": [
+     "01.45 blocks 01.46",
+     "01.46 depends_on 01.45"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-kxe.4",
+    "dependency": "omp-orchestrator-opsa",
+    "refs": [
+     "12.61 depends_on 12.65",
+     "12.65 blocks 12.61"
+    ]
+   }
+  ],
+  "edges_dropped_offline_cycle": [
+   {
+    "dependent": "omp-orchestrator-plan-09-bcrn.4",
+    "dependency": "omp-orchestrator-kxe",
+    "refs": [
+     "09.10 depends_on 09.3"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-jplf.7.1.2",
+    "dependency": "omp-orchestrator-jplf.7.1.1",
+    "refs": [
+     "07.25 depends_on 07.24"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-plan-04-7wn9.3",
+    "dependency": "omp-orchestrator-plan-04-7wn9.2",
+    "refs": [
+     "00.6 depends_on 04.diagram-generator",
+     "04.14 depends_on 04.1"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-plan-07-8jkq.3",
+    "dependency": "omp-orchestrator-jplf.7.3",
+    "refs": [
+     "10.4 blocks 10.9"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-plan-07-8jkq.3",
+    "dependency": "omp-orchestrator-plan-07-8jkq.2",
+    "refs": [
+     "10.9 depends_on 10.10",
+     "10.10 blocks 10.9"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-plan-06-xm0n.5",
+    "dependency": "omp-orchestrator-omp-coverage-mission-ipg.18",
+    "refs": [
+     "05.36 blocks 05.44",
+     "05.44 depends_on 05.36"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-3kpc",
+    "dependency": "omp-orchestrator-kxe.9",
+    "refs": [
+     "12.35 blocks 12.71",
+     "12.71 depends_on 12.35"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-6hrv",
+    "dependency": "omp-orchestrator-jplf.7.1",
+    "refs": [
+     "07.3 depends_on 07.23"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-6hrv",
+    "dependency": "omp-orchestrator-jplf.7.18",
+    "refs": [
+     "11.36 depends_on 11.33",
+     "11.45 blocks 11.36"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-artifact-provenance-writer-absent-w1s9",
+    "dependency": "omp-orchestrator-plan-04-7wn9.2",
+    "refs": [
+     "04.1 blocks 04.15"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-kxe",
+    "dependency": "omp-orchestrator-jplf.7.1",
+    "refs": [
+     "08.11 depends_on external:07-installability (distribution owns the install path)"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-nsx1",
+    "dependency": "omp-orchestrator-plan-12-ibpa.9",
+    "refs": [
+     "12.59 blocks 12.74",
+     "12.60 blocks 12.74",
+     "12.74 depends_on 12.59",
+     "12.74 depends_on 12.60"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+    "dependency": "omp-orchestrator-jplf.7.18",
+    "refs": [
+     "12.72 depends_on 12.45"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+    "dependency": "omp-orchestrator-jplf.7.20",
+    "refs": [
+     "12.72 depends_on 12.53"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-receiver-receipt-contract-pwm",
+    "dependency": "omp-orchestrator-plan-03-w3yb.2",
+    "refs": [
+     "03.12 blocks 03.13",
+     "03.13 depends_on 03.12"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-vyud",
+    "dependency": "omp-orchestrator-jplf.7.1",
+    "refs": [
+     "07.23 blocks 07.36",
+     "07.36 depends_on 07.23"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-vyud",
+    "dependency": "omp-orchestrator-jplf.7.1.1",
+    "refs": [
+     "07.24 blocks 07.36",
+     "07.36 depends_on 07.24"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-vyud",
+    "dependency": "omp-orchestrator-jplf.7.1.2",
+    "refs": [
+     "07.25 blocks 07.36"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-vyud",
+    "dependency": "omp-orchestrator-jplf.7.11",
+    "refs": [
+     "07.35 blocks 07.36",
+     "07.36 depends_on 07.35"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-5tn",
+    "dependency": "omp-orchestrator-6hrv",
+    "refs": [
+     "07.3 blocks external:omp-orchestrator-5tn acceptance 2"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-5tn",
+    "dependency": "omp-orchestrator-kxe.1",
+    "refs": [
+     "00.44 depends_on 12.S5-dispatch"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-6hrv",
+    "dependency": "omp-orchestrator-nsx1",
+    "refs": [
+     "00.30 depends_on 00.62",
+     "00.62 blocks 00.30"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-8nuh",
+    "dependency": "omp-orchestrator-kxe.3",
+    "refs": [
+     "07.1 depends_on 02.surface-census-target-denominator"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-93lo",
+    "dependency": "omp-orchestrator-3kpc",
+    "refs": [
+     "11.85 depends_on 11.82"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-dispatch-from-line-mad1",
+    "dependency": "omp-orchestrator-3kpc",
+    "refs": [
+     "12.6 depends_on 12.89",
+     "12.89 blocks 12.6"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-ewnr",
+    "dependency": "omp-orchestrator-omp-coverage-mission-ipg.18",
+    "refs": [
+     "05.40 depends_on 05.36"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-j2te",
+    "dependency": "omp-orchestrator-588v",
+    "refs": [
+     "05.25 depends_on 05.26",
+     "05.26 blocks 05.25"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-j2te",
+    "dependency": "omp-orchestrator-8zx1",
+    "refs": [
+     "05.25 depends_on 11.S6"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-j2te",
+    "dependency": "omp-orchestrator-dq3i",
+    "refs": [
+     "05.23 blocks 05.25",
+     "05.25 depends_on 05.23"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-kxe",
+    "dependency": "omp-orchestrator-omp-coverage-mission-ipg.19",
+    "refs": [
+     "01.1 depends_on 01.2",
+     "01.2 blocks 01.1"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-leht",
+    "dependency": "omp-orchestrator-kxe.3",
+    "refs": [
+     "00.5 depends_on 03.crate-table"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-nuxd",
+    "dependency": "omp-orchestrator-5tn",
+    "refs": [
+     "05.16 blocks 05.18",
+     "05.18 depends_on 05.16"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-nuxd",
+    "dependency": "omp-orchestrator-kxe.1",
+    "refs": [
+     "00.43 depends_on 12.S5-dispatch"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-omp-coverage-mission-ipg.18",
+    "dependency": "omp-orchestrator-6fot",
+    "refs": [
+     "05.41 blocks 05.42",
+     "05.42 depends_on 05.41"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-omp-coverage-mission-ipg.18",
+    "dependency": "omp-orchestrator-opsa",
+    "refs": [
+     "00.9 depends_on 00.15",
+     "00.9 depends_on 06.gate-matrix"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-omp-coverage-mission-ipg.18",
+    "dependency": "omp-orchestrator-phase0-pane-observation-80h",
+    "refs": [
+     "03.15 blocks 03.16",
+     "03.15 blocks 03.17",
+     "03.17 depends_on 03.15",
+     "05.32 depends_on 09.M1"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+    "dependency": "omp-orchestrator-5tn",
+    "refs": [
+     "04.9 blocks 04.11",
+     "04.11 depends_on 04.9"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+    "dependency": "omp-orchestrator-6hrv",
+    "refs": [
+     "12.72 depends_on 12.52"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+    "dependency": "omp-orchestrator-o7gz",
+    "refs": [
+     "12.72 depends_on 12.40"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-receiver-receipt-contract-pwm",
+    "dependency": "omp-orchestrator-5tn",
+    "refs": [
+     "04.9 blocks 04.17",
+     "04.17 depends_on 04.9",
+     "05.19 blocks 05.22",
+     "05.22 depends_on 05.19"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-receiver-receipt-contract-pwm",
+    "dependency": "omp-orchestrator-omp-coverage-mission-ipg.18",
+    "refs": [
+     "04.17 depends_on 04.4"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-receiver-receipt-contract-pwm",
+    "dependency": "omp-orchestrator-omp-surface-map-41b",
+    "refs": [
+     "01.7 depends_on 01.26"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-receiver-receipt-contract-pwm",
+    "dependency": "omp-orchestrator-phase0-pane-observation-80h",
+    "refs": [
+     "05.1 blocks 05.22",
+     "05.22 depends_on 05.1"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-receiver-receipt-contract-pwm",
+    "dependency": "omp-orchestrator-readiness-l3-motion-window-7523",
+    "refs": [
+     "05.3 blocks 05.22",
+     "05.22 depends_on 05.3"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-t52",
+    "dependency": "omp-orchestrator-diq0",
+    "refs": [
+     "00.4 depends_on 00.3"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-tickmonitor-free-capacity-blind-vgf",
+    "dependency": "omp-orchestrator-phase0-pane-observation-80h",
+    "refs": [
+     "04.7 depends_on 09.<M1 shared-type milestone>",
+     "04.7 depends_on 01.<Phase 0 PaneObservation evidence algebra (phase0-pane-observation-80h)>",
+     "05.1 blocks 05.4",
+     "05.4 depends_on 05.1"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-vyud",
+    "dependency": "omp-orchestrator-2tny",
+    "refs": [
+     "07.31 blocks 07.36",
+     "07.36 depends_on 07.31"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-vyud",
+    "dependency": "omp-orchestrator-6hrv",
+    "refs": [
+     "07.36 depends_on 09.M6",
+     "08.31 depends_on external:09-milestones M6 cold-host proof"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-wire-finding-dispatch-9ms",
+    "dependency": "omp-orchestrator-9he5",
+    "refs": [
+     "12.46 blocks 12.49",
+     "12.49 depends_on 12.46",
+     "12.49 depends_on external:09-milestones M7 observable"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-ywd5",
+    "dependency": "omp-orchestrator-3kpc",
+    "refs": [
+     "11.46 depends_on 11.82",
+     "11.82 blocks 11.46"
+    ]
+   },
+   {
+    "dependent": "omp-orchestrator-ywd5",
+    "dependency": "omp-orchestrator-6hrv",
+    "refs": [
+     "12.52 blocks 12.54",
+     "12.54 depends_on 12.52"
+    ]
+   }
+  ],
+  "edges_skipped": {
+   "same-bead": 169,
+   "decision-endpoint": 97,
+   "closed-endpoint": 6,
+   "existing-not-open": 24,
+   "not-work": 10,
+   "parent-child": 18
+  },
+  "unresolved_refs": [
+   [
+    "00.2",
+    "depends_on",
+    "12.S8-reap"
+   ],
+   [
+    "00.19",
+    "depends_on",
+    "05.action-negative-table"
+   ],
+   [
+    "00.19",
+    "depends_on",
+    "01.sota-bar"
+   ],
+   [
+    "00.32",
+    "depends_on",
+    "12.tick-ledger"
+   ],
+   [
+    "00.34",
+    "depends_on",
+    "02.rpc-event-frames"
+   ],
+   [
+    "00.35",
+    "depends_on",
+    "02.hub-types"
+   ],
+   [
+    "00.38",
+    "depends_on",
+    "02.hub-types"
+   ],
+   [
+    "00.39",
+    "depends_on",
+    "02.rpc-event-frames"
+   ],
+   [
+    "00.40",
+    "depends_on",
+    "02.rpc-event-frames"
+   ],
+   [
+    "00.42",
+    "depends_on",
+    "12.tick-ledger"
+   ],
+   [
+    "00.47",
+    "depends_on",
+    "external:asupersync messaging-fabric feature / upstream issue #46"
+   ],
+   [
+    "00.59",
+    "depends_on",
+    "11.lifecycle-evidence-map"
+   ],
+   [
+    "01.2",
+    "depends_on",
+    "external:omp 18.0.11 --mode=rpc envelope stability (L167)"
+   ],
+   [
+    "01.24",
+    "depends_on",
+    "external:00-brief gates 1-4 (L407,L443)"
+   ],
+   [
+    "01.29",
+    "depends_on",
+    "external:bv v0.20.0 --robot-triage"
+   ],
+   [
+    "01.33",
+    "depends_on",
+    "external:~/.claude skill-topology session-start gate"
+   ],
+   [
+    "01.38",
+    "depends_on",
+    "external:10-prior-art full pass (L318)"
+   ],
+   [
+    "01.44",
+    "depends_on",
+    "external:asupersync pinned revision fa3c01aec feature flags"
+   ],
+   [
+    "02.3",
+    "depends_on",
+    "external:crates/omp-rpc-session (commit 12ea68a) quick path stays green"
+   ],
+   [
+    "02.5",
+    "blocks",
+    "02.26"
+   ],
+   [
+    "02.6",
+    "blocks",
+    "02.26"
+   ],
+   [
+    "02.7",
+    "blocks",
+    "02.26"
+   ],
+   [
+    "02.17",
+    "depends_on",
+    "external:subprocess-contract run_output for the `omp usage` spawn"
+   ],
+   [
+    "02.20",
+    "depends_on",
+    "external:11-lifecycle \u00a711.9 cost pricing"
+   ],
+   [
+    "02.22",
+    "depends_on",
+    "external:no-shell-gate findings_ledger schema"
+   ],
+   [
+    "03.9",
+    "depends_on",
+    "external:asupersync upstream \u2014 un-gate messaging/consumer.rs:1299 fn default() from test-internals, or a Cargo [patch] we own"
+   ],
+   [
+    "05.8",
+    "depends_on",
+    "external:bv --robot-triage ranking"
+   ],
+   [
+    "05.33",
+    "depends_on",
+    "10.reap-only-owned"
+   ],
+   [
+    "05.34",
+    "depends_on",
+    "external:AgentEndEvent.willContinue in dist/types/extensibility/shared-events.d.ts"
+   ],
+   [
+    "05.45",
+    "depends_on",
+    "10.robot-docs-rows"
+   ],
+   [
+    "05.49",
+    "depends_on",
+    "external:hook-certification gauntlet"
+   ],
+   [
+    "06.14",
+    "depends_on",
+    "external:tick-monitor live-capture fixtures (pane-truth-omp-v18-blind-lre closed; tests/monitor.rs VERBATIM captures 2026-08-31)"
+   ],
+   [
+    "07.25",
+    "depends_on",
+    "external:release channel / signing key decision (Josh)"
+   ],
+   [
+    "07.33",
+    "depends_on",
+    "external:Josh names five pilot users/machines"
+   ],
+   [
+    "07.41",
+    "depends_on",
+    "05.actions-A1-A11"
+   ],
+   [
+    "09.3",
+    "depends_on",
+    "external:bv v0.20.0 at /opt/homebrew/bin/bv (host binary, not in-repo)"
+   ],
+   [
+    "09.13",
+    "depends_on",
+    "06.<finding-dispatch recurrence gate>"
+   ],
+   [
+    "10.1",
+    "blocks",
+    "external:cp-z42vu"
+   ],
+   [
+    "10.11",
+    "depends_on",
+    "external:franken-harvest apps/wire/scripts/suites.ts parse repair"
+   ]
+  ],
+  "actor": "DagIntegrator2",
+  "generated": "2026-09-02"
+ },
+ "items": {
+  "00.1": {
+   "bead": "omp-orchestrator-t52",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "milestone",
+   "title": "R1: A-to-Z journey with an OBSERVABLE on every \u00a709 milestone"
+  },
+  "00.2": {
+   "bead": "omp-orchestrator-t00",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "gate",
+   "title": "R2: standing reap-before-refill + repo/doc-hygiene check (not a one-time event)"
+  },
+  "00.3": {
+   "bead": "omp-orchestrator-diq0",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "gate",
+   "title": "R3: PLAN.md freshness/identity gate (13-file path+hash manifest, mtime, reproducible hash)"
+  },
+  "00.4": {
+   "bead": "omp-orchestrator-t52",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "milestone",
+   "title": "R3: investor-attackable single document \u2014 pinned fresh-eyes grading to convergence"
+  },
+  "00.5": {
+   "bead": "omp-orchestrator-leht",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "measurement",
+   "title": "R4: current one-row-per-package contract census over the live workspace_crates figure"
+  },
+  "00.6": {
+   "bead": "omp-orchestrator-plan-04-7wn9.3",
+   "relation": "filed",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "measurement",
+   "title": "R4: regenerate FrankenMermaid diagrams from measured edges at the current crate count",
+   "cluster": "diagram-regen"
+  },
+  "00.7": {
+   "bead": "omp-orchestrator-kxe.3",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "measurement",
+   "title": "R5: regenerate the OMP surface scanner artifact with a revision pin and reconcile slash_commands 799 vs expected 136"
+  },
+  "00.8": {
+   "bead": "omp-orchestrator-plan-02-lwdo.1",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "00-brief",
+   "kind": "gate",
+   "title": "\u00a73.3 fix omp-inventory-map vacuity: 981 rows share ONE must_be_true and ONE negative_evidence",
+   "cluster": "census-vacuity-gate"
+  },
+  "00.9": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "gate",
+   "title": "R6: named G1\u2013G8 proof artifact \u2014 known-bad, known-good, mutation, anti-vacuity, ADDRESSABLE all PASS"
+  },
+  "00.10": {
+   "bead": "omp-orchestrator-plan-06-xm0n.1",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "00-brief",
+   "kind": "gate",
+   "title": "Add a known-good leg to path-literal-guard (the attack-only gate)",
+   "cluster": "plg-known-good-leg"
+  },
+  "00.11": {
+   "bead": "omp-orchestrator-plan-06-xm0n.2",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "00-brief",
+   "kind": "gate",
+   "title": "Add known-bad legs to omp-inventory-map and commit-build-fence (2 of 8 lack one)",
+   "cluster": "known-bad-legs-map-fence"
+  },
+  "00.12": {
+   "bead": "omp-orchestrator-plan-06-xm0n.3",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "00-brief",
+   "kind": "gate",
+   "title": "Add mutation legs to the four gates with NONE: commit-build-fence, kernel-bypass-gate, pre-delete-citation-check, path-literal-guard",
+   "cluster": "gate-fixture-mutation-legs"
+  },
+  "00.13": {
+   "bead": "omp-orchestrator-plan-06-xm0n.4",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "00-brief",
+   "kind": "gate",
+   "title": "Production-hook mutation leg: 0 of 8 gates mutate production source through the real hook; retire fixture-only claims (C38); flip STRIP_TEST_CODE",
+   "cluster": "real-hook-mutation-legs"
+  },
+  "00.14": {
+   "bead": "omp-orchestrator-plan-04-7wn9.1",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "00-brief",
+   "kind": "gate",
+   "title": "ADDRESSABLE: omp-inventory-map --help names the one documented command that runs it; retained receipt",
+   "cluster": "inventory-map-addressable"
+  },
+  "00.15": {
+   "bead": "omp-orchestrator-opsa",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "measurement",
+   "title": "Refresh the gate-leg table with source revision, command, captured output path and SHA-256 before publishing any ratio"
+  },
+  "00.16": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.14",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "00-brief",
+   "kind": "gate",
+   "title": "R7: mirror mining at every gap \u2014 search command + verbatim quote, or a not-found that names its command and argues the search space"
+  },
+  "00.17": {
+   "bead": "omp-orchestrator-6hrv",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "milestone",
+   "title": "R8: clean-machine install receipt proving doctor/health/repair + validate/audit/why with no /Users/josh fallback"
+  },
+  "00.18": {
+   "bead": "omp-orchestrator-kxe.1",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "milestone",
+   "title": "R9: second-machine / clean-repo first-tick receipt naming the adapter and the delivery receipt"
+  },
+  "00.19": {
+   "bead": "omp-orchestrator-arur",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "measurement",
+   "title": "R10: SOTA rubric artifact \u2014 every dimension scored >= 4/5, no action without a negative pattern"
+  },
+  "00.20": {
+   "bead": "omp-orchestrator-gjyi",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "00-brief",
+   "kind": "decision",
+   "title": "R11: requirements written down before dispatch \u2014 enforced, not remembered"
+  },
+  "00.21": {
+   "bead": "omp-orchestrator-nsx1",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "decision",
+   "title": "R12: every operator question answered or registered with an owner \u2014 \u00a78 register kept live with decision receipts"
+  },
+  "00.22": {
+   "bead": "omp-orchestrator-plan-00-04at.1",
+   "relation": "decision-halt",
+   "coverage": "MISSING",
+   "section": "00-brief",
+   "kind": "decision",
+   "title": "Q1\u2013Q4: buyer, current-workaround cost, customer outcome baseline/target, timeline + headcount (owner: Josh)",
+   "cluster": "q1-q4-buyer"
+  },
+  "00.23": {
+   "bead": "omp-orchestrator-plan-00-04at.2",
+   "relation": "decision-halt",
+   "coverage": "MISSING",
+   "section": "00-brief",
+   "kind": "decision",
+   "title": "Q5: buy / adopt / build \u2014 name the existing tool evaluated and rejected, and why (owner: orchestrator)",
+   "cluster": "q5-buy-adopt-build"
+  },
+  "00.24": {
+   "bead": "omp-orchestrator-plan-00-04at.3",
+   "relation": "decision-halt",
+   "coverage": "MISSING",
+   "section": "00-brief",
+   "kind": "decision",
+   "title": "Q6: OMP upgrade compatibility policy \u2014 host omp/18.1.2 vs retained scanner target omp/18.0.11 (owner: orchestrator)",
+   "cluster": "q6-omp-upgrade-policy"
+  },
+  "00.25": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.9",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "decision",
+   "title": "Q7: security posture \u2014 secrets, tokens, blast radius of a dispatch; run the twelve-file census recipe (owner: orchestrator)"
+  },
+  "00.26": {
+   "bead": "omp-orchestrator-plan-00-04at.4",
+   "relation": "decision-halt",
+   "coverage": "MISSING",
+   "section": "00-brief",
+   "kind": "decision",
+   "title": "Q8: licensing for us and for what we vendor (owner: Josh)",
+   "cluster": "q8-licensing"
+  },
+  "00.27": {
+   "bead": "omp-orchestrator-plan-00-04at.5",
+   "relation": "decision-halt",
+   "coverage": "MISSING",
+   "section": "00-brief",
+   "kind": "decision",
+   "title": "Q9: novelty \u2014 adoption path for the six DECLARED ONLY upstream types (owner: orchestrator)",
+   "cluster": "q9-declared-only-adoption"
+  },
+  "00.28": {
+   "bead": "omp-orchestrator-plan-00-04at.6",
+   "relation": "decision-halt",
+   "coverage": "MISSING",
+   "section": "00-brief",
+   "kind": "decision",
+   "title": "Q10 / \u00a78.3: economic kill criterion + decision receipt; K2 and K5 made evaluable (owner: Josh)",
+   "cluster": "q10-kill-criterion"
+  },
+  "00.29": {
+   "bead": "omp-orchestrator-plan-00-04at.8",
+   "relation": "decision-halt",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "decision",
+   "title": "Q11: composer-typed differential-oracle trilemma \u2014 oracle outside the tree, retire the lane, or first exemption; decision receipt",
+   "cluster": "q11-oracle-trilemma"
+  },
+  "00.30": {
+   "bead": "omp-orchestrator-6hrv",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "gate",
+   "title": "Q12 / \u00a73.1: version-presence probe that tries both `--version` and `-V` and never records non-zero as absent; decide pi_agent_rust two-signal adoption"
+  },
+  "00.31": {
+   "bead": "omp-orchestrator-plan-00-04at.7",
+   "relation": "decision-halt",
+   "coverage": "MISSING",
+   "section": "00-brief",
+   "kind": "decision",
+   "title": "Q13: .git/hooks/commit-msg-verification-level.sh \u2014 register, rewrite, or retire (owner: Josh)",
+   "cluster": "q13-commit-msg-hook"
+  },
+  "00.32": {
+   "bead": "omp-orchestrator-plan-00-04at.9",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "00-brief",
+   "kind": "measurement",
+   "title": "K2/K5 pilot instrumentation: verification-minutes and tending-minutes ledgers with a 30-day baseline",
+   "cluster": "k2-k5-instrumentation"
+  },
+  "00.33": {
+   "bead": "omp-orchestrator-yqun",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "gate",
+   "title": "K4 observable: detect any commit landing with a gate disabled and no named allowance row"
+  },
+  "00.34": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "wiring",
+   "title": "K1 / completion row: the supervisor consumes the WIRE-PROVEN agent_end frame (AgentEndEvent.willContinue, SessionStopEvent, isTerminal) instead of inferring done"
+  },
+  "00.35": {
+   "bead": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "measurement",
+   "title": "Receipts gap: measure IrcDeliveryReceipt / AsyncJobDeliverySink reachability before replacing the local receipt contract"
+  },
+  "00.36": {
+   "bead": "omp-orchestrator-ve4w",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "measurement",
+   "title": "Claims gap: Stage1Claim/GlobalClaim ownershipToken+inputWatermark experiment vs the local claim fence"
+  },
+  "00.37": {
+   "bead": "omp-orchestrator-tickmonitor-free-capacity-blind-vgf",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "wiring",
+   "title": "Idle gap: one shared NewlyIdle/ConfirmedIdle type across the tick-monitor\u2192supervisor process seam; evaluate GuestIdleReconcilerCtx"
+  },
+  "00.38": {
+   "bead": "omp-orchestrator-plan-00-04at.10",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "00-brief",
+   "kind": "wiring",
+   "title": "Roster gap: consume HubRosterCounts instead of hand-derived roster evidence",
+   "cluster": "roster-counts-consume"
+  },
+  "00.39": {
+   "bead": "omp-orchestrator-plan-02-lwdo.3",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "00-brief",
+   "kind": "measurement",
+   "title": "Cost gap: instrument cost telemetry via SearchUsage / PerplexityCost / ContextUsage (feeds Q2)",
+   "cluster": "cost-telemetry"
+  },
+  "00.40": {
+   "bead": "omp-orchestrator-plan-00-04at.11",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "00-brief",
+   "kind": "wiring",
+   "title": "Compaction gap: consume SessionBeforeCompactEvent / SessionCompactEvent for context-loss recovery",
+   "cluster": "compaction-events-consume"
+  },
+  "00.41": {
+   "bead": "omp-orchestrator-th0z",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "measurement",
+   "title": "\u00a74 selection row: an independent selection receipt for decide()"
+  },
+  "00.42": {
+   "bead": "omp-orchestrator-9he5",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "measurement",
+   "title": "\u00a74 admission row: a current refusal-rate figure with retained derivation (the 162/4.2h value is historical)"
+  },
+  "00.43": {
+   "bead": "omp-orchestrator-nuxd",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "gate",
+   "title": "\u00a74 transport row: a planted fixture and receipt payload for the cp-z42vu class (send reports success, packet never lands)"
+  },
+  "00.44": {
+   "bead": "omp-orchestrator-5tn",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "00-brief",
+   "kind": "wiring",
+   "title": "\u00a74 actuate row: install the committed claim fence and classify a 402-dead pane as attention, not capacity"
+  },
+  "00.45": {
+   "bead": "omp-orchestrator-asupersync-subprocess-contract-gfb",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "00-brief",
+   "kind": "gate",
+   "title": "\u00a73.4/\u00a73.7 async contract: every spawn through subprocess-contract; &Cx first; process-GROUP kill; drain both pipes; timeout is not a verdict; record the spawn-site/cx-first commands"
+  },
+  "00.46": {
+   "bead": "omp-orchestrator-5cl",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "00-brief",
+   "kind": "measurement",
+   "title": "\u00a73.7 unsafe: 26/26 Cargo lint, 25/26 inner attribute (pane-dispatch-fence binary-only exception); keep crates_forbidding_unsafe a re-run figure"
+  },
+  "00.47": {
+   "bead": "omp-orchestrator-ack-spine-oj6.3",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "decision",
+   "title": "\u00a73.7 omp-types: AckKind/DeliveryClass are blocked upstream (messaging-fabric \u2192 test-internals, issue #46); decide the ack-vocabulary migration and re-measure the type inventory with a parser-backed command"
+  },
+  "00.48": {
+   "bead": "omp-orchestrator-kxe.3",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "measurement",
+   "title": "\u00a73.7 validate the mirror repository denominator (210 .git entries \u2192 validated work-trees) before publishing an N-repositories claim"
+  },
+  "00.49": {
+   "bead": "omp-orchestrator-t784",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "00-brief",
+   "kind": "gate",
+   "title": "\u00a73.7/\u00a73.8-BLOCKER: board_total is LIVE over all five status buckets (incl. grading); cross_section_authority emits CROSS_SECTION_BOARD_AUTHORITY_FAILURE"
+  },
+  "00.50": {
+   "bead": "omp-orchestrator-7sd",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "00-brief",
+   "kind": "doc-fact",
+   "title": "\u00a75 section map: thirteen plan files, disjoint by construction, each serving a named requirement"
+  },
+  "00.51": {
+   "bead": "omp-orchestrator-plan-00-04at.14",
+   "relation": "filed",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "gate",
+   "title": "\u00a76 writing-contract lints: rules 1 (numbers carry commands), 2 (MEASURED/PROJECTED never share a sentence), 3 (NO-CLAIM on load-bearing claims), 4 (no unstated denominators), 5 (no 'guarantees/proves' in gate headers)",
+   "cluster": "writing-contract-lints-2-4-5"
+  },
+  "00.52": {
+   "bead": "omp-orchestrator-jj7v",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "00-brief",
+   "kind": "gate",
+   "title": "\u00a76.1 cross-section authority overlay (CROSS-SECTION-AUTHORITY.jsonl) with its falsifier test"
+  },
+  "00.53": {
+   "bead": "omp-orchestrator-plan-12-ibpa.1",
+   "relation": "merged-into",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "wiring",
+   "title": "\u00a77 the refutation count and the PLAN.md header counts are derived from the \u00a77 table at assembly, never typed twice",
+   "cluster": "assembly-freshness-hash"
+  },
+  "00.54": {
+   "bead": "omp-orchestrator-plan-09-bcrn.1",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "00-brief",
+   "kind": "gate",
+   "title": "\u00a77.2 PC7: a checker that refuses `$?` read after a pipeline in any command cited as evidence (admission item 12: an exit status is not evidence of a successful probe)",
+   "cluster": "plan-check"
+  },
+  "00.55": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.14",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "gate",
+   "title": "\u00a77/\u00a77.1 admission item 13: a bare zero is not a finding \u2014 a not-found must name its command and argue the search space could contain the answer"
+  },
+  "00.56": {
+   "bead": "omp-orchestrator-d1n",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "00-brief",
+   "kind": "gate",
+   "title": "\u00a77 admission item 14: cite the construct, not the line"
+  },
+  "00.57": {
+   "bead": "omp-orchestrator-t52",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "gate",
+   "title": "\u00a77.4 grading packets name the lens and the file only \u2014 never the suspected defect (independence rule, round 3 onward)"
+  },
+  "00.58": {
+   "bead": "omp-orchestrator-plan-00-04at.12",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "00-brief",
+   "kind": "gate",
+   "title": "\u00a78.4 per-subsection expected-contents list \u2014 the prose twin of the scanner's expected_* fields, so an omission is detectable",
+   "cluster": "brief-expected-contents"
+  },
+  "00.59": {
+   "bead": "omp-orchestrator-dispatch-journey-mapping-42na",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "00-brief",
+   "kind": "milestone",
+   "title": "R13: every S1\u2013S9 stage carries the seven-field dispatch contract, mapped through skills, crates, gates and dispatch (\u00a711 evidence map + \u00a712 runbook)"
+  },
+  "00.60": {
+   "bead": "omp-orchestrator-6hrv",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "measurement",
+   "title": "\u00a71.5 GHOST census: re-derive the count of installed binaries whose source is not in the tree we read, with instance list, comparison command and date"
+  },
+  "00.61": {
+   "bead": "omp-orchestrator-kxe.3",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "00-brief",
+   "kind": "measurement",
+   "title": "\u00a73.5 test_files / test_functions registered in NUMBERS.toml and re-run by a gate (the block in the brief is a dated snapshot)"
+  },
+  "00.62": {
+   "bead": "omp-orchestrator-nsx1",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "00-brief",
+   "kind": "wiring",
+   "title": "S9 decision ledger has a WRITER: every owner=josh refusal and every \u00a78 answer lands as a docs/decisions.jsonl row"
+  },
+  "00.63": {
+   "bead": "omp-orchestrator-kxe.3",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "00-brief",
+   "kind": "doc-fact",
+   "title": "Retired figures never resurface: '81 JSON-RPC methods, 17 used', '216 repos', '1 of 8', '5 of 8', '(75 total)', 'no machine-readable version handshake' are refused at assembly"
+  },
+  "00.64": {
+   "bead": "omp-orchestrator-plan-00-04at.13",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "00-brief",
+   "kind": "measurement",
+   "title": "\u00a73.6/\u00a73.5 composer-typed & omp-inventory-map: current addressability + differential-lane figures carry command/output/revision receipts",
+   "cluster": "addressability-figures"
+  },
+  "00.65": {
+   "bead": "omp-orchestrator-untracked-crates-break-clone-jlb",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "00-brief",
+   "kind": "measurement",
+   "title": "\u00a73.2 workspace_crates / built_binaries are LIVE from `cargo metadata --no-deps`, and cargo metadata must succeed on a fresh clone"
+  },
+  "01.1": {
+   "bead": "omp-orchestrator-kxe",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "01-idea",
+   "kind": "milestone",
+   "title": "Wire the one-session wedge: OMP terminal completion \u2192 durable receipt \u2192 typed close/refusal"
+  },
+  "01.2": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "01-idea",
+   "kind": "wiring",
+   "title": "Consume `isTerminal` on RpcSessionEventFrame via `omp --mode=rpc` in the supervisor"
+  },
+  "01.3": {
+   "bead": "omp-orchestrator-ex4",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "01-idea",
+   "kind": "gate",
+   "title": "Prove completion-signal robustness: repeatability, isTerminal\u2261willContinue=false, crash/kill/rate-limit/compaction fixtures"
+  },
+  "01.4": {
+   "bead": "omp-orchestrator-uvo",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "01-idea",
+   "kind": "gate",
+   "title": "Preserve the raw agent_end frame in-repo and hash-gate it via artifact_provenance"
+  },
+  "01.5": {
+   "bead": "omp-orchestrator-tickmonitor-free-capacity-blind-vgf",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "01-idea",
+   "kind": "crate",
+   "title": "Fix idle_panes: NewlyIdle discarded and free_capacity excludes a pane at t=0 (observe/actionable rows)"
+  },
+  "01.6": {
+   "bead": "omp-orchestrator-ack-spine-oj6.1",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "01-idea",
+   "kind": "crate",
+   "title": "Durable receipt proving the SELECTED work was consumed (consume/selection row)"
+  },
+  "01.7": {
+   "bead": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "01-idea",
+   "kind": "crate",
+   "title": "Durable receipt proving delivery to the intended worker (consume/transport row; receipts gap)"
+  },
+  "01.8": {
+   "bead": "omp-orchestrator-y6v5",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "01-idea",
+   "kind": "crate",
+   "title": "Admission fence: DISPATCH_RETRY_BLOCKED must stop latching and name its decision (consume/admission row)"
+  },
+  "01.9": {
+   "bead": "omp-orchestrator-dispatch-exists-unverified-u1c",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "01-idea",
+   "kind": "crate",
+   "title": "Runtime-verify send_and_verify: transport and receiver receipts on the live path (actuate row)"
+  },
+  "01.10": {
+   "bead": "omp-orchestrator-plan-01-kxwv.1.1",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "01-idea",
+   "kind": "measurement",
+   "title": "Falsify typed-separation vs logging-only on false completion/idle, operator minutes, adoption effort (precommitted threshold)",
+   "cluster": "falsify-typed-separation"
+  },
+  "01.11": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.14",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "01-idea",
+   "kind": "decision",
+   "title": "Decide: measure wire paths for the six DECLARED-ONLY gaps (receipts, claims, idle, roster, cost, compaction) or hold them out of scope"
+  },
+  "01.12": {
+   "bead": "omp-orchestrator-plan-01-kxwv.1.2",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "01-idea",
+   "kind": "measurement",
+   "title": "Gate 8 \u2014 reachable population: 5 qualified fleet operators provide a redacted completion/board mismatch",
+   "cluster": "gate8-14-operator-cohort"
+  },
+  "01.13": {
+   "bead": "omp-orchestrator-plan-01-kxwv.1.3",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "01-idea",
+   "kind": "measurement",
+   "title": "Gate 9 \u2014 bottom-up economics: avoided operator cost \u22653\u00d7 annual price for 3 of 5 operators",
+   "cluster": "gate9-13-17-economics"
+  },
+  "01.14": {
+   "bead": "omp-orchestrator-plan-01-kxwv.1.4",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "01-idea",
+   "kind": "measurement",
+   "title": "Gate 10 \u2014 distribution access: 3 of 5 buyers name a reachable channel and accept a concierge introduction",
+   "cluster": "gate10-12-16-buyers"
+  },
+  "01.15": {
+   "bead": "omp-orchestrator-kxe",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "01-idea",
+   "kind": "milestone",
+   "title": "Gate 11 \u2014 first-value path: 4 of 5 redacted replays yield a reviewable completion \u2192 receipt \u2192 typed close/refusal"
+  },
+  "01.16": {
+   "bead": "omp-orchestrator-plan-01-kxwv.1.4",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "01-idea",
+   "kind": "measurement",
+   "title": "Gate 12 \u2014 paid commitment: 3 of 5 economic buyers sign a non-binding $500/month LOI after replay",
+   "cluster": "gate10-12-16-buyers"
+  },
+  "01.17": {
+   "bead": "omp-orchestrator-plan-01-kxwv.1.3",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "01-idea",
+   "kind": "measurement",
+   "title": "Gate 13 \u2014 unit economics: fully loaded recurring cost below one third of $500/month for the cohort",
+   "cluster": "gate9-13-17-economics"
+  },
+  "01.18": {
+   "bead": "omp-orchestrator-plan-01-kxwv.1.2",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "01-idea",
+   "kind": "measurement",
+   "title": "Gate 14 \u2014 recurrence: 4 of 5 operators report the mismatch at least monthly over a 30-day diary",
+   "cluster": "gate8-14-operator-cohort"
+  },
+  "01.19": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.9",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "01-idea",
+   "kind": "gate",
+   "title": "Gate 15 \u2014 rights, security, licensing: written review, no unresolved secret/permission blocker, fail-closed access test"
+  },
+  "01.20": {
+   "bead": "omp-orchestrator-plan-01-kxwv.1.4",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "01-idea",
+   "kind": "measurement",
+   "title": "Gate 16 \u2014 defensibility: 3 of 5 buyers choose the receipt contract over their strongest substitute; retained evidence improves the next replay",
+   "cluster": "gate10-12-16-buyers"
+  },
+  "01.21": {
+   "bead": "omp-orchestrator-plan-01-kxwv.1.3",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "01-idea",
+   "kind": "measurement",
+   "title": "Gate 17 \u2014 proportionality: time/rework reduction \u22653\u00d7 incremental adoption cost for 3 of 5 operators",
+   "cluster": "gate9-13-17-economics"
+  },
+  "01.22": {
+   "bead": "omp-orchestrator-plan-01-kxwv.1.5",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "01-idea",
+   "kind": "measurement",
+   "title": "Substitution-map hostile test and product benchmark: replay one mismatch per substitute with retained receipts",
+   "cluster": "substitution-benchmark"
+  },
+  "01.23": {
+   "bead": "omp-orchestrator-nsx1",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "01-idea",
+   "kind": "decision",
+   "title": "Record the DISCOVER/NARROW disposition, owner and independent viability reviewer as a decision row"
+  },
+  "01.24": {
+   "bead": "omp-orchestrator-plan-01-kxwv.1.6",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "01-idea",
+   "kind": "milestone",
+   "title": "PILOT promotion review: gates 8\u201317 + brief gates 1\u20134 & 12, three paid commitments, rights approval, retained end-to-end receipt",
+   "cluster": "pilot-promotion-review"
+  },
+  "01.25": {
+   "bead": "omp-orchestrator-6hrv",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "01-idea",
+   "kind": "command",
+   "title": "Dependency version probe of every wrapped binary; tmux probed with `-V`, long-flag asymmetry documented"
+  },
+  "01.26": {
+   "bead": "omp-orchestrator-omp-surface-map-41b",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "01-idea",
+   "kind": "gate",
+   "title": "OMP surface drift detection: stored inventory must go typed-STALE/UNKNOWN when omp's envelope or `--mode=rpc` changes"
+  },
+  "01.27": {
+   "bead": "omp-orchestrator-kyq5",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "01-idea",
+   "kind": "crate",
+   "title": "ntm pane identity stable across the dispatch\u2192readback window; receipt binds to the right actor"
+  },
+  "01.28": {
+   "bead": "omp-orchestrator-t784",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "01-idea",
+   "kind": "crate",
+   "title": "br typed close-policy refusal consumed as a type; landed-awaiting-grade is a representable state"
+  },
+  "01.29": {
+   "bead": "omp-orchestrator-78om",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "01-idea",
+   "kind": "gate",
+   "title": "bv `--robot-triage` multi-slice contract: a tick answers multi-part questions in one invocation; never bare `bv`"
+  },
+  "01.30": {
+   "bead": "omp-orchestrator-4ak",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "01-idea",
+   "kind": "gate",
+   "title": "No-.sh/.py gate enumerates from `git ls-files` (authority), never a filesystem walk; exemption list empty"
+  },
+  "01.31": {
+   "bead": "omp-orchestrator-tvu5",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "01-idea",
+   "kind": "measurement",
+   "title": "Measure the cargo shim's effect on `cargo metadata --format-version 1 --no-deps` and toolchain selection (R11 open item)"
+  },
+  "01.32": {
+   "bead": "omp-orchestrator-r73l",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "01-idea",
+   "kind": "gate",
+   "title": "Every surface prefers typed refusal (fh's SERVE_INPUT_STALE shape) over a confident stale answer"
+  },
+  "01.33": {
+   "bead": "omp-orchestrator-plan-01-kxwv.3",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "01-idea",
+   "kind": "gate",
+   "title": "jsm single-store-plus-symlinks invariant checked at session start; installation topology checked, not assumed",
+   "cluster": "jsm-topology-check"
+  },
+  "01.34": {
+   "bead": "omp-orchestrator-6hrv",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "01-idea",
+   "kind": "gate",
+   "title": "Every shipped binary answers a version probe on the conventional flag (no tmux-style asymmetry)"
+  },
+  "01.35": {
+   "bead": "omp-orchestrator-7sd",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "01-idea",
+   "kind": "gate",
+   "title": "Every emitted artifact carries `schema_version` (omp's versioned-envelope floor)"
+  },
+  "01.36": {
+   "bead": "omp-orchestrator-exit-1-overloaded-x1o",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "01-idea",
+   "kind": "gate",
+   "title": "Gates refuse with a typed reason via an exit-code dictionary (\u226511 variants, does-not-mean column); exit 1/2 de-overloaded"
+  },
+  "01.37": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.16",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "01-idea",
+   "kind": "gate",
+   "title": "ADDRESSABLE: one documented command runs each gate and `--help` names it (omp-inventory-map's help emits 158 bytes, exit 1)"
+  },
+  "01.38": {
+   "bead": "omp-orchestrator-plan-07-8jkq.1",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "01-idea",
+   "kind": "command",
+   "title": "Adopt prior-art discoverability: versioned `robot-docs` subcommand, CI asserts schema_version + line_count>20, help independent of workspace lock",
+   "cluster": "discoverability-surface"
+  },
+  "01.39": {
+   "bead": "omp-orchestrator-8ax8",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "01-idea",
+   "kind": "wiring",
+   "title": "The supervisor consumes OMP through its RPC/CLI surface instead of scraping the terminal"
+  },
+  "01.40": {
+   "bead": "omp-orchestrator-calr",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "01-idea",
+   "kind": "gate",
+   "title": "Anti-vacuity leg on every gate; census field values must discriminate (must_be_true/negative_evidence distinct=1 today)"
+  },
+  "01.41": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "01-idea",
+   "kind": "gate",
+   "title": "Every gate ships known-good, known-bad and an AUTOMATED mutation leg through the real hook (no-shell mutation affordance flipped)"
+  },
+  "01.42": {
+   "bead": "omp-orchestrator-588v",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "01-idea",
+   "kind": "gate",
+   "title": "path-literal-guard: known-good/known-bad fixture pair against the real hook with a recorded result"
+  },
+  "01.43": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "01-idea",
+   "kind": "gate",
+   "title": "Make the omp-types vocabulary mandatory: zero dependents \u2192 adopted; 6 Verdict dialects, 17 ack/receipt types in 3 dialects, 4 collisions reconciled"
+  },
+  "01.44": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.14",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "01-idea",
+   "kind": "decision",
+   "title": "Decide ObligationLedger semantics; lift or record the pinned asupersync feature boundary blocking AckKind/DeliveryClass"
+  },
+  "01.45": {
+   "bead": "omp-orchestrator-opsa",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "01-idea",
+   "kind": "gate",
+   "title": "NUMBERS.toml LIVE figures are the authority; every stale figure labelled; every later correction updates the provenance ledger"
+  },
+  "01.46": {
+   "bead": "omp-orchestrator-kxe.3",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "01-idea",
+   "kind": "doc-fact",
+   "title": "Re-derive or keep labelled non-authoritative: 162/4.2h, 6/7/23, 28/25/19/2 board snapshot, 23 scanner tests"
+  },
+  "01.47": {
+   "bead": "omp-orchestrator-o7gz",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "01-idea",
+   "kind": "gate",
+   "title": "Dispatch blast radius: a known-good/known-bad replay cannot close without a matching receipt; wedge stays reviewable and non-autonomous"
+  },
+  "01.48": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.9",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "01-idea",
+   "kind": "gate",
+   "title": "Secrets/tokens: permission-denied and secret-bearing fixtures produce a refusal with zero secret emission"
+  },
+  "01.49": {
+   "bead": "omp-orchestrator-nsx1",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "01-idea",
+   "kind": "decision",
+   "title": "Scope-boundary decision: wedge = one completion/receipt/close; autonomous dispatch, seven gap families, fleet cost, multi-tenant, security claims OUT; narrower thesis needs a new packet"
+  },
+  "01.50": {
+   "bead": "omp-orchestrator-plan-01-kxwv.2",
+   "relation": "filed",
+   "coverage": "PARTIAL",
+   "section": "01-idea",
+   "kind": "gate",
+   "title": "gap-propagation gate: a section arguing an absence must name the adjacent upstream type",
+   "cluster": "gap-propagation-ratchet"
+  },
+  "02.1": {
+   "bead": "omp-orchestrator-kxe.3",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "02-surface-census",
+   "kind": "measurement",
+   "title": "Regenerate the omp-inventory-map scanner artifact against the current workspace, revision-pinned"
+  },
+  "02.2": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.2",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "02-surface-census",
+   "kind": "crate",
+   "title": "Slash-command enumeration: KNOWN count with command, or a typed named reason (R11)"
+  },
+  "02.3": {
+   "bead": "omp-orchestrator-he6",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "02-surface-census",
+   "kind": "decision",
+   "title": "Disposition the five orchestrator-wanted RPC handlers (prompt, steer, get_state, bash, follow_up) with evidence"
+  },
+  "02.4": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.6",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "02-surface-census",
+   "kind": "crate",
+   "title": "Every SCRAPED_OR_OBSERVED_ALTERNATIVE row names an existing alternative; re-classify dap/debug/tools/modes"
+  },
+  "02.5": {
+   "bead": "omp-orchestrator-plan-02-lwdo.4",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "02-surface-census",
+   "kind": "gate",
+   "title": "WIRE rows must carry bead_id, owner, timing and a validation receipt; gate refuses bare WIRE",
+   "cluster": "surface-map-row-discipline"
+  },
+  "02.6": {
+   "bead": "omp-orchestrator-plan-02-lwdo.4",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "02-surface-census",
+   "kind": "gate",
+   "title": "RETIRE requires structured read-only probe evidence (command, exit/result, timestamp, artifact identity); sweep scanner-inherited retires",
+   "cluster": "surface-map-row-discipline"
+  },
+  "02.7": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.10",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "02-surface-census",
+   "kind": "crate",
+   "title": "Per-kind probe instrument as code: subcommand / type_root / rpc_handler / omp_method / declaration"
+  },
+  "02.8": {
+   "bead": "omp-orchestrator-plan-02-lwdo.5",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "02-surface-census",
+   "kind": "measurement",
+   "title": "Resolve the 9 UNPROBEABLE-PENDING rows: 3 omp/mux* naming the broker, 6 thin-reason withdrawals",
+   "cluster": "unprobeable-rows"
+  },
+  "02.9": {
+   "bead": "omp-orchestrator-plan-02-lwdo.1",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "02-surface-census",
+   "kind": "gate",
+   "title": "Anti-vacuity gate on census metadata: refuse a census whose distinct-invariant count is 1 (or below a floor)",
+   "cluster": "census-vacuity-gate"
+  },
+  "02.10": {
+   "bead": "omp-orchestrator-plan-02-lwdo.2",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "02-surface-census",
+   "kind": "crate",
+   "title": "Per-row falsifiable invariants in the scanner; crate rows describe contract, not scanner provenance",
+   "cluster": "scanner-per-row-invariants"
+  },
+  "02.11": {
+   "bead": "omp-orchestrator-plan-04-7wn9.1",
+   "relation": "merged-into",
+   "coverage": "PARTIAL",
+   "section": "02-surface-census",
+   "kind": "crate",
+   "title": "ADDRESSABLE: omp-inventory-map answers --help and its collision check is observable from emitted output, with a retained receipt",
+   "cluster": "inventory-map-addressable"
+  },
+  "02.12": {
+   "bead": "omp-orchestrator-plan-02-lwdo.6",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "02-surface-census",
+   "kind": "measurement",
+   "title": "Extend the reliance-surface denominator: rch, fh, cargo, git, tmux, cass, ubs, caut, dcg, ru, pt, sbh, slb, gh get surface rows and probes",
+   "cluster": "reliance-denominator"
+  },
+  "02.13": {
+   "bead": "omp-orchestrator-78om",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "02-surface-census",
+   "kind": "wiring",
+   "title": "Wire bv --robot-* into S4 selection (loop-queue-filter): 30 WIRE + 18 VALIDATE rows, consumption today is zero"
+  },
+  "02.14": {
+   "bead": "omp-orchestrator-3kpc",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "02-surface-census",
+   "kind": "decision",
+   "title": "Disposition the 22 ntm WIRE rows (claim, mail, locks, handoff, conflicts, agents, template, ...) to CONSUMED or RETIRE-with-probe"
+  },
+  "02.15": {
+   "bead": "omp-orchestrator-v33s",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "02-surface-census",
+   "kind": "wiring",
+   "title": "Wire ee resume / ee pack into dispatch and grading so compaction loss is recovered by the installed tool"
+  },
+  "02.16": {
+   "bead": "omp-orchestrator-kxe.3",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "02-surface-census",
+   "kind": "crate",
+   "title": "SURFACE-MAP.jsonl regeneration: a generator with retained tool version, source revision, write-order field and hash"
+  },
+  "02.17": {
+   "bead": "omp-orchestrator-plan-02-lwdo.3",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "02-surface-census",
+   "kind": "wiring",
+   "title": "Cost sampling (Q2/S5): wire omp usage, telemetry-export OTLP, and the goals token-budget runtime",
+   "cluster": "cost-telemetry"
+  },
+  "02.18": {
+   "bead": "omp-orchestrator-kernel-only-gate-wr2",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "02-surface-census",
+   "kind": "decision",
+   "title": "Decide whether the no-shell rule covers interpreter spawns: six Command::new(\"python3\") sites (Q13)"
+  },
+  "02.19": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "02-surface-census",
+   "kind": "gate",
+   "title": "Positive control must pass on a real surface: one wave row FULLY COVERED, distinguishing broken scan from partial world"
+  },
+  "02.20": {
+   "bead": "omp-orchestrator-8ax8",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "02-surface-census",
+   "kind": "decision",
+   "title": "Decide the typed-consumer topology: session-per-worker for modes/session/task/slash-commands/dap, or explicit (a) per root"
+  },
+  "02.21": {
+   "bead": "omp-orchestrator-t52",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "02-surface-census",
+   "kind": "gate",
+   "title": "graded_by required on every severity row; gate every_severity_row_names_its_grader (adopted)"
+  },
+  "02.22": {
+   "bead": "omp-orchestrator-plan-02-lwdo.7",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "02-surface-census",
+   "kind": "gate",
+   "title": "Second severity defence: any MINOR touching a NUMBERS.toml figure is automatically MAJOR",
+   "cluster": "severity-auto-major"
+  },
+  "02.23": {
+   "bead": "omp-orchestrator-phcz",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "02-surface-census",
+   "kind": "doc-fact",
+   "title": "Census queries name their grep binary/version and escape regex metacharacters (false-zero tooling warning)"
+  },
+  "02.24": {
+   "bead": "omp-orchestrator-crate-reachability-census-44g",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "02-surface-census",
+   "kind": "gate",
+   "title": "Workspace-crate rows: 25 of 26 unconsumed from any measured runtime trigger; omp-types zero dependents \u2014 reachability census owns the disposition"
+  },
+  "03.1": {
+   "bead": "omp-orchestrator-kxe.3",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "measurement",
+   "title": "Re-derive the crate contract table from live cargo metadata (50-package denominator)"
+  },
+  "03.2": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "gate",
+   "title": "One-file lint: every workspace member forbids unsafe by BOTH manifest and crate-root attribute"
+  },
+  "03.3": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.15",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "gate",
+   "title": "Spawn-contract gate: constructing a Command outside subprocess-contract is refused (allowance rows reasoned, none PROVISIONAL)"
+  },
+  "03.4": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.15",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "wiring",
+   "title": "Route omp-rpc-session's OMP child spawn through subprocess-contract and delete its allowance row"
+  },
+  "03.5": {
+   "bead": "omp-orchestrator-plan-03-w3yb.1",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "03-crates",
+   "kind": "wiring",
+   "title": "Route omp-inventory-map's probe spawn through subprocess-contract",
+   "cluster": "inventory-map-spawn-contract"
+  },
+  "03.6": {
+   "bead": "omp-orchestrator-jplf.1.1",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Define `Verdictlike` in omp-types over asupersync `Outcome` (cancellation is a first-class outcome)",
+   "cluster": "grade-type"
+  },
+  "03.7": {
+   "bead": "omp-orchestrator-jplf.1.1",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "03-crates",
+   "kind": "wiring",
+   "title": "Implement `Verdictlike` on every existing *Verdict enum, one crate per change",
+   "cluster": "grade-type"
+  },
+  "03.8": {
+   "bead": "omp-orchestrator-jplf.1.1",
+   "relation": "merged-into",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Write `fn grade(&[&dyn Verdictlike]) -> Grade` so grading stops being prose",
+   "cluster": "grade-type"
+  },
+  "03.9": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.14",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "decision",
+   "title": "Advance the asupersync pin past the messaging-fabric/test-internals boundary (blocked upstream, named as blocked)"
+  },
+  "03.10": {
+   "bead": "omp-orchestrator-jplf.1.2",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Re-export AckKind, DeliveryClass (and ObligationLedger) from omp-types \u2014 the inhabited AckKind, not the graded.rs marker",
+   "cluster": "ackkind-reexport"
+  },
+  "03.11": {
+   "bead": "omp-orchestrator-ack-spine-oj6.3",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "wiring",
+   "title": "Convert ack-spine's Authority triple (Transport/Delivery/AckAuthority) onto AckKind"
+  },
+  "03.12": {
+   "bead": "omp-orchestrator-plan-03-w3yb.2",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "03-crates",
+   "kind": "wiring",
+   "title": "Convert ack-stage's Receipt set (TransportReceipt/AckReadback/AckStageResult) onto AckKind",
+   "cluster": "ack-stage-onto-ackkind"
+  },
+  "03.13": {
+   "bead": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "wiring",
+   "title": "Convert receiver-receipt's dialect (PanePresence/PostSendObservation/ReceiptReason/ReceiptVerdict) onto AckKind"
+  },
+  "03.14": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.14",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "measurement",
+   "title": "Measure whether a tmux pane dispatch can produce an asupersync `Accepted` (the receipt gap may survive the vocabulary)"
+  },
+  "03.15": {
+   "bead": "omp-orchestrator-phase0-pane-observation-80h",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "wiring",
+   "title": "Converge the Observation seam: one PaneObservation/CycleObservation in omp-types consumed by tick-monitor AND omp-orchestrator"
+  },
+  "03.16": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "gate",
+   "title": "Extend omp-inventory-map's type gate: a crate declaring a public type that omp-types exports fails the build"
+  },
+  "03.17": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "measurement",
+   "title": "omp-types adoption ratchet: the canonical vocabulary must have dependents, and the count only rises"
+  },
+  "03.18": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.14",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "wiring",
+   "title": "Replace `Duty` (#[must_use], no ledger) with an ObligationLedger-backed obligation in omp-orchestrator"
+  },
+  "03.19": {
+   "bead": "omp-orchestrator-ywd5",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Give pane-dispatch-fence a library surface (src/lib.rs with typed pub items)"
+  },
+  "03.20": {
+   "bead": "omp-orchestrator-leht",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "wiring",
+   "title": "census_gates derives the control-plane/unextracted crate set from the extraction roster, not a hand-listed 3-name UNEXTRACTED const"
+  },
+  "03.21": {
+   "bead": "omp-orchestrator-815",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "decision",
+   "title": "Extraction contract (815.contract): how a crate moves without losing work in a shared checkout"
+  },
+  "03.22": {
+   "bead": "omp-orchestrator-815",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Land oracle-compare (561 LOC, wave 1): builds and tests green here, [crates.oracle-compare] declared"
+  },
+  "03.23": {
+   "bead": "omp-orchestrator-815",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Land loop-coverage (926 LOC, wave 1): builds and tests green here, [crates.loop-coverage] declared"
+  },
+  "03.24": {
+   "bead": "omp-orchestrator-815",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Land loop-driver (2484 LOC, wave 1): builds and tests green here, [crates.loop-driver] declared"
+  },
+  "03.25": {
+   "bead": "omp-orchestrator-815",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Land fast-dispatch (2292 LOC, wave 1): builds and tests green here, [crates.fast-dispatch] declared"
+  },
+  "03.26": {
+   "bead": "omp-orchestrator-815",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Land omp-idle-dispatch (2183 LOC, wave 1): builds and tests green here, [crates.omp-idle-dispatch] declared"
+  },
+  "03.27": {
+   "bead": "omp-orchestrator-815",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Land fleet-truth (1621 LOC, wave 1): builds and tests green here, [crates.fleet-truth] declared"
+  },
+  "03.28": {
+   "bead": "omp-orchestrator-815",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Land pane-dispatch-ready (1555 LOC, wave 1): builds and tests green here, [crates.pane-dispatch-ready] declared"
+  },
+  "03.29": {
+   "bead": "omp-orchestrator-815",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Land loop-tick (1480 LOC, wave 1): builds and tests green here, [crates.loop-tick] declared"
+  },
+  "03.30": {
+   "bead": "omp-orchestrator-815",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Land fleet-reconcile (1424 LOC, wave 1): builds and tests green here, [crates.fleet-reconcile] declared"
+  },
+  "03.31": {
+   "bead": "omp-orchestrator-815",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Land wired-but-inert-guard (1394 LOC, wave 1): builds and tests green here, [crates.wired-but-inert-guard] declared"
+  },
+  "03.32": {
+   "bead": "omp-orchestrator-815",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Land verify-dispatch (1291 LOC, wave 1): builds and tests green here, [crates.verify-dispatch] declared"
+  },
+  "03.33": {
+   "bead": "omp-orchestrator-815",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Land pane-truth (1247 LOC, wave 1): builds and tests green here, [crates.pane-truth] declared"
+  },
+  "03.34": {
+   "bead": "omp-orchestrator-815",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Land reap-finished-panes (1189 LOC, wave 1): builds and tests green here, [crates.reap-finished-panes] declared"
+  },
+  "03.35": {
+   "bead": "omp-orchestrator-815",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Land dispatcher-deadman (883 LOC, wave 1): builds and tests green here, [crates.dispatcher-deadman] declared"
+  },
+  "03.36": {
+   "bead": "omp-orchestrator-815",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Land ntm-fleet-monitor (3122 LOC, wave 2): builds and tests green here, [crates.ntm-fleet-monitor] declared"
+  },
+  "03.37": {
+   "bead": "omp-orchestrator-815",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Land tick-dispatch (990 LOC, wave 2): builds and tests green here, [crates.tick-dispatch] declared"
+  },
+  "03.38": {
+   "bead": "omp-orchestrator-815",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Land refill-idle-panes (947 LOC, wave 2): builds and tests green here, [crates.refill-idle-panes] declared"
+  },
+  "03.39": {
+   "bead": "omp-orchestrator-815",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Land pane-oracle-diff (741 LOC, wave 2): builds and tests green here, [crates.pane-oracle-diff] declared"
+  },
+  "03.40": {
+   "bead": "omp-orchestrator-815",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Land oracle-pane-state-differential (613 LOC, wave 2): builds and tests green here, [crates.oracle-pane-state-differential] declared"
+  },
+  "03.41": {
+   "bead": "omp-orchestrator-815",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "03-crates",
+   "kind": "crate",
+   "title": "Land fleet-monitor (2569 LOC, wave 3): builds and tests green here, [crates.fleet-monitor] declared"
+  },
+  "03.42": {
+   "bead": "omp-orchestrator-kxe.3",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "03-crates",
+   "kind": "doc-fact",
+   "title": "Register control_plane_unextracted_loc (authoritative source walk, 29,512 vs 28,779 table sum)"
+  },
+  "03.43": {
+   "bead": "omp-orchestrator-kxe.3",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "03-crates",
+   "kind": "doc-fact",
+   "title": "Every NUMBERS.toml key this section cites resolves, and the on-disk denominator matches"
+  },
+  "04.1": {
+   "bead": "omp-orchestrator-plan-04-7wn9.2",
+   "relation": "filed",
+   "coverage": "PARTIAL",
+   "section": "04-diagrams",
+   "kind": "command",
+   "title": "Build the diagram generator command that emits Diagrams 1-4 and 6 from data",
+   "cluster": "diagram-generator"
+  },
+  "04.2": {
+   "bead": "omp-orchestrator-plan-04-7wn9.4",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "04-diagrams",
+   "kind": "gate",
+   "title": "CI diff gate: regenerated Diagram 1 must match the checked-in artifact",
+   "cluster": "diagram-ci-gate"
+  },
+  "04.3": {
+   "bead": "omp-orchestrator-jj7v",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "04-diagrams",
+   "kind": "gate",
+   "title": "Keep the generator_acceptance authority row and cross_section_authority test green"
+  },
+  "04.4": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "04-diagrams",
+   "kind": "milestone",
+   "title": "Convergence milestone: omp-types in-degree 0 -> N and subprocess-contract as universal hub"
+  },
+  "04.5": {
+   "bead": "omp-orchestrator-crate-reachability-census-44g",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "04-diagrams",
+   "kind": "measurement",
+   "title": "Disposition each isolated crate in Diagram 1: WIRE, RETIRE, or a named reason"
+  },
+  "04.6": {
+   "bead": "omp-orchestrator-omp-surface-map-41b",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "04-diagrams",
+   "kind": "decision",
+   "title": "Decide which subset of the 176 unconsumed OMP surface rows is worth wiring"
+  },
+  "04.7": {
+   "bead": "omp-orchestrator-tickmonitor-free-capacity-blind-vgf",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "04-diagrams",
+   "kind": "wiring",
+   "title": "Close the layer-2 SEAM: one shared type across tick-monitor -> omp-orchestrator idle capacity"
+  },
+  "04.8": {
+   "bead": "omp-orchestrator-y6v5",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "04-diagrams",
+   "kind": "wiring",
+   "title": "Layer 3 CONSUME: fence dispatches on a layer-2 'yes' instead of latching DISPATCH_RETRY_BLOCKED"
+  },
+  "04.9": {
+   "bead": "omp-orchestrator-5tn",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "04-diagrams",
+   "kind": "wiring",
+   "title": "Layer 4 ACTUATE: send_and_verify carries the claim beat and stops logging sender success as receipt"
+  },
+  "04.10": {
+   "bead": "omp-orchestrator-ex4",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "04-diagrams",
+   "kind": "gate",
+   "title": "A pane dead on HTTP 402 must classify as attention, never as free capacity"
+  },
+  "04.11": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "04-diagrams",
+   "kind": "wiring",
+   "title": "Layer 5 COMPLETE: typed worker -> conductor completion signal closes 'no path back'"
+  },
+  "04.12": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "04-diagrams",
+   "kind": "gate",
+   "title": "Bring the 6 non-complete gates to four legs (known_bad, known_good, mutation, anti_vacuity)"
+  },
+  "04.13": {
+   "bead": "omp-orchestrator-plan-04-7wn9.1",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "04-diagrams",
+   "kind": "gate",
+   "title": "ADDRESSABLE: omp-inventory-map answers --help and a cli_contract-shaped test pins its surface",
+   "cluster": "inventory-map-addressable"
+  },
+  "04.14": {
+   "bead": "omp-orchestrator-plan-04-7wn9.3",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "04-diagrams",
+   "kind": "measurement",
+   "title": "Regenerate the diagrams from the preserved fresh capture and drop the 16:50-snapshot label",
+   "cluster": "diagram-regen"
+  },
+  "04.15": {
+   "bead": "omp-orchestrator-artifact-provenance-writer-absent-w1s9",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "04-diagrams",
+   "kind": "gate",
+   "title": "artifact-provenance gate: enforce the recorded sha256 of the retained inventory artifacts"
+  },
+  "04.16": {
+   "bead": "omp-orchestrator-6hrv",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "04-diagrams",
+   "kind": "milestone",
+   "title": "Diagram 5 install path B->D: installed binary, doctor with typed FAIL+remedy, health probe"
+  },
+  "04.17": {
+   "bead": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "04-diagrams",
+   "kind": "wiring",
+   "title": "Diagram 5 J->H: no-ack retry as a delivery contract; a timeout yields a typed DeliveryClass"
+  },
+  "04.18": {
+   "bead": "omp-orchestrator-o7gz",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "04-diagrams",
+   "kind": "gate",
+   "title": "Diagram 5 M->N: graded close through the gate ladder before a bead closes with evidence"
+  },
+  "04.19": {
+   "bead": "omp-orchestrator-a92y",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "04-diagrams",
+   "kind": "wiring",
+   "title": "Diagram 5 I: a typed actuate send that exists in a crate"
+  },
+  "04.20": {
+   "bead": "omp-orchestrator-plan-04-7wn9.5",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "04-diagrams",
+   "kind": "wiring",
+   "title": "Consume upstream IrcDeliveryReceipt so 'missing receipt' names a consumed type",
+   "cluster": "irc-delivery-receipt"
+  },
+  "04.21": {
+   "bead": "omp-orchestrator-round22-drifted-figures-844",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "04-diagrams",
+   "kind": "doc-fact",
+   "title": "Route this section's HISTORICAL figures to NUMBERS.toml keys / construct citations"
+  },
+  "05.1": {
+   "bead": "omp-orchestrator-phase0-pane-observation-80h",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "crate",
+   "title": "A1 OBSERVE: typed Observation with PaneState::Unproven as the refusal shape"
+  },
+  "05.2": {
+   "bead": "omp-orchestrator-pane-truth-omp-v18-blind-lre",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A1(a) refuse to score the whole buffer: classify only last_status_line()"
+  },
+  "05.3": {
+   "bead": "omp-orchestrator-readiness-l3-motion-window-7523",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A1(b) refuse a sub-floor gap as evidence: MIN_GAP_SECS=75 on every two-capture path"
+  },
+  "05.4": {
+   "bead": "omp-orchestrator-tickmonitor-free-capacity-blind-vgf",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "crate",
+   "title": "A2 CLASSIFY: Liveness eight arms, four predicates, prev.pane_id checked before use"
+  },
+  "05.5": {
+   "bead": "omp-orchestrator-ex4",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A2 refuse to key liveness on a marker regex: stable_hash authority, Obscured and Dialog arms"
+  },
+  "05.6": {
+   "bead": "omp-orchestrator-ewnr",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A2 how-we-know: exhaustive state match with no wildcard arm, guarded by state-wildcard-lint"
+  },
+  "05.7": {
+   "bead": "omp-orchestrator-kxe",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "crate",
+   "title": "A3 SELECT: empty selection always carries a typed reason (QueueUnreadable, QueueEmptyNeedsJosh)"
+  },
+  "05.8": {
+   "bead": "omp-orchestrator-78om",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A3(a) refuse to cherry-pick by recency of discovery: select by bv graph position"
+  },
+  "05.9": {
+   "bead": "omp-orchestrator-plan-05-ovcx.1",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A3(b) refuse to read actionable_count as available work: count ready AND unclaimed separately",
+   "cluster": "select-ready-unclaimed"
+  },
+  "05.10": {
+   "bead": "omp-orchestrator-plan-05-ovcx.2",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A3(c) refuse to dispatch an accounting node (epic), pinned by epic_exclusion_rule_never_selects_parent",
+   "cluster": "epic-accounting-guards"
+  },
+  "05.11": {
+   "bead": "omp-orchestrator-exit-const-collision-cas",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "05-actions",
+   "kind": "crate",
+   "title": "A4 ADMIT: pane-dispatch-fence with three distinct refusal exit codes and an OS file lock"
+  },
+  "05.12": {
+   "bead": "omp-orchestrator-tickmonitor-free-capacity-blind-vgf",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "05-actions",
+   "kind": "decision",
+   "title": "A4 must-be-true: is_dispatchable is ConfirmedIdle only; NewlyIdle visible but not fillable; add continuation flag"
+  },
+  "05.13": {
+   "bead": "omp-orchestrator-readiness-l1-wedge-blind-46y7",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A4(a) refuse a pane advertised free that is wedged or provider-dead"
+  },
+  "05.14": {
+   "bead": "omp-orchestrator-kxe",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A4(b) refuse to admit on a standing verdict: AuthorizedIdle carries expires_at, enforced at the match site"
+  },
+  "05.15": {
+   "bead": "omp-orchestrator-t784",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "crate",
+   "title": "A5 CLAIM: DispatchPermit or typed refusal; BeadStatus closed set with Unknown carrying the literal"
+  },
+  "05.16": {
+   "bead": "omp-orchestrator-5tn",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "wiring",
+   "title": "A5 refuse to send a packet naming an unclaimed bead \u2014 on every live dispatch authority"
+  },
+  "05.17": {
+   "bead": "omp-orchestrator-ywd5",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "decision",
+   "title": "A5 grow DispatchIntent into ownership token + watermark (Stage1Claim shape) so a stale claim is detectable"
+  },
+  "05.18": {
+   "bead": "omp-orchestrator-nuxd",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "crate",
+   "title": "A6 DISPATCH: TransportReceipt retains raw_json; five TransportReceiptError arms; delivery claim only for NtmRobotSend"
+  },
+  "05.19": {
+   "bead": "omp-orchestrator-5tn",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A6(a) refuse to treat transport success:[N] as delivery; heartbeat must not label a sender return as RECEIVER_RECEIPT"
+  },
+  "05.20": {
+   "bead": "omp-orchestrator-plan-05-ovcx.3",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A6(b) refuse to bypass a guard without recording what the bypass skipped",
+   "cluster": "bypass-records-skip"
+  },
+  "05.21": {
+   "bead": "omp-orchestrator-8ax8",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "05-actions",
+   "kind": "decision",
+   "title": "A6 decide the receipt-capable transport migration (omp --mode=rpc / collab / irc-plane adapter)"
+  },
+  "05.22": {
+   "bead": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "crate",
+   "title": "A7 VERIFY: ReceiptVerdict over 14 named reasons, keyed on the pre-send state, exit 0/1/1/2"
+  },
+  "05.23": {
+   "bead": "omp-orchestrator-dq3i",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A7 refuse to read a timeout, an empty census, or a marker-less read-back as a verdict"
+  },
+  "05.24": {
+   "bead": "omp-orchestrator-jplf.1.1",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "05-actions",
+   "kind": "crate",
+   "title": "A8 GRADE: introduce the Grade type over the 6 Verdict dialects, with a correct-and-unreachable arm",
+   "cluster": "grade-type"
+  },
+  "05.25": {
+   "bead": "omp-orchestrator-j2te",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A8(a) refuse to read the worker's report: a non-implementer re-runs the cited command and stores a transcript"
+  },
+  "05.26": {
+   "bead": "omp-orchestrator-588v",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A8(b) refuse a zero from a tool that cannot distinguish 'no matches' from 'did not run'"
+  },
+  "05.27": {
+   "bead": "omp-orchestrator-igwd",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A9 CLOSE: close_reason must cite a re-runnable command; the readback is enforced and the refusal is written onto the bead"
+  },
+  "05.28": {
+   "bead": "omp-orchestrator-wire-finding-dispatch-9ms",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A9(a) refuse a prose close reason; every named gap becomes a bead mechanically so the refusal cannot scroll past"
+  },
+  "05.29": {
+   "bead": "omp-orchestrator-plan-05-ovcx.2",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A9(b) refuse to close a leaf in a way that closes its parent epic (mirror of epic_exclusion)",
+   "cluster": "epic-accounting-guards"
+  },
+  "05.30": {
+   "bead": "omp-orchestrator-vggs",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A9(c) refuse to close without cited re-run evidence; reconcile every close against the dispatch ledger"
+  },
+  "05.31": {
+   "bead": "omp-orchestrator-t00",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "05-actions",
+   "kind": "wiring",
+   "title": "A10 REAP: a working reaper on every tick plus a reap-record/free-capacity reconciliation"
+  },
+  "05.32": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "crate",
+   "title": "A10 seam: one shared type between tick-monitor's producer field and omp-orchestrator's consumer parser (09 M1)"
+  },
+  "05.33": {
+   "bead": "omp-orchestrator-ywd5",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A10 reap only what you own: key reaping on immutable identity, never on a name match"
+  },
+  "05.34": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "05-actions",
+   "kind": "wiring",
+   "title": "A8/A10 carry the typed completion path as primary (worker says done; SessionStopEventResult.continue), inference as fallback"
+  },
+  "05.35": {
+   "bead": "omp-orchestrator-round22-drifted-figures-844",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "05-actions",
+   "kind": "doc-fact",
+   "title": "doc-fact: A10 states the idle_panes/free_capacity filter defect in the present tense after HEAD fixed it"
+  },
+  "05.36": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A11 REFUSE: Verdict::Clean|Violations plus a separate GateError; EmptyScanSet at the single choke point"
+  },
+  "05.37": {
+   "bead": "omp-orchestrator-1p0u",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A11(a) refuse to refuse with exit 0: census and kill every silent-success surface (installer, exit casts, vacuous hooks)"
+  },
+  "05.38": {
+   "bead": "omp-orchestrator-plan-05-ovcx.4",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "05-actions",
+   "kind": "doc-fact",
+   "title": "A11(a) correct the refuted `br comment exits 0` claim in dispatch-silence-watch's doc comment and every bead that inherited it",
+   "cluster": "br-comment-docfact"
+  },
+  "05.39": {
+   "bead": "omp-orchestrator-r73l",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A11(b) refuse to read a non-zero exit as absence: two independent presence signals, failure arm pinned"
+  },
+  "05.40": {
+   "bead": "omp-orchestrator-ewnr",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A11(c) refuse without naming the satisfying command"
+  },
+  "05.41": {
+   "bead": "omp-orchestrator-6fot",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "A11(d) / property 2: refuse to be over-strict \u2014 every gate has a known-good leg (path-literal-guard had 0)"
+  },
+  "05.42": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "Properties 1+3: every gate has an in-tree fires-on-known-bad leg and a mutation leg with byte-identical restore"
+  },
+  "05.43": {
+   "bead": "omp-orchestrator-calr",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "Property 4: anti-vacuity enforced at each gate's choke point so callers inherit it \u2014 including our own census inventory"
+  },
+  "05.44": {
+   "bead": "omp-orchestrator-plan-06-xm0n.5",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "Property 5: floor-raise wording lint \u2014 no 'guarantees/proves/makes impossible' in a gate header",
+   "cluster": "claim-header-validator"
+  },
+  "05.45": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "Property 6: ADDRESSABLE \u2014 one documented command runs each gate and --help names it (0 of 8 today)"
+  },
+  "05.46": {
+   "bead": "omp-orchestrator-plan-05-ovcx.5",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "05-actions",
+   "kind": "wiring",
+   "title": "5.13 wire dispatcher-deadman as the heartbeat ledger's consumer inside omp-orchestrator",
+   "cluster": "deadman-consumer"
+  },
+  "05.47": {
+   "bead": "omp-orchestrator-ywd5",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "5.13 an ownership marker must name something that dies with its owner (pid outlived process 12.3h; fh C112)"
+  },
+  "05.48": {
+   "bead": "omp-orchestrator-9he5",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "gate",
+   "title": "5.13 a refusal repeated N ticks halts the loop and names the decision (469 rows, one cause)"
+  },
+  "05.49": {
+   "bead": "omp-orchestrator-kernel-only-operator-hook-5rh",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "05-actions",
+   "kind": "wiring",
+   "title": "5.13 operator handrolls (tmux send-keys, task) bypass every ledger: the kernel-only operator hook"
+  },
+  "06.1": {
+   "bead": "omp-orchestrator-opsa",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "06-gates",
+   "kind": "measurement",
+   "title": "Regenerate the \u00a71 per-gate leg table as a machine ledger with command + revision"
+  },
+  "06.2": {
+   "bead": "omp-orchestrator-fence-ci-non-verdict-16l",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "commit-build-fence: add known-bad, mutation, anti-vacuity legs and a claim header"
+  },
+  "06.3": {
+   "bead": "omp-orchestrator-plan-06-xm0n.3",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "kernel-bypass-gate: add mutation and anti-vacuity legs and a claim header",
+   "cluster": "gate-fixture-mutation-legs"
+  },
+  "06.4": {
+   "bead": "omp-orchestrator-plan-06-xm0n.3",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "pre-delete-citation-check: add mutation and anti-vacuity legs and a claim header",
+   "cluster": "gate-fixture-mutation-legs"
+  },
+  "06.5": {
+   "bead": "omp-orchestrator-plan-06-xm0n.1",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "path-literal-guard: add the adversarial known-good leg (repo_root join, MANIFEST_DIR, /tmp)",
+   "cluster": "plg-known-good-leg"
+  },
+  "06.6": {
+   "bead": "omp-orchestrator-588v",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "path-literal-guard: carry the empty-scan ERROR through the hook boundary, name file:line"
+  },
+  "06.7": {
+   "bead": "omp-orchestrator-plan-06-xm0n.2",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "omp-inventory-map: plant a known-bad specimen in the real inventory scan set",
+   "cluster": "known-bad-legs-map-fence"
+  },
+  "06.8": {
+   "bead": "omp-orchestrator-ewnr",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "state-wildcard-lint: file:line refusal, pattern-position scrutinee fix, and a claim header"
+  },
+  "06.9": {
+   "bead": "omp-orchestrator-plan-06-xm0n.3",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "undrained-pipe-lint: add the claim-discipline header (declared None)",
+   "cluster": "gate-fixture-mutation-legs"
+  },
+  "06.10": {
+   "bead": "omp-orchestrator-plan-06-xm0n.4",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "Real-hook mutation legs: mutate production source and commit through the installed hook",
+   "cluster": "real-hook-mutation-legs"
+  },
+  "06.11": {
+   "bead": "omp-orchestrator-plan-06-xm0n.5",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "Claim-header validator: require ENFORCES / STILL PASSES / PROVENANCE, reject 'guarantee'",
+   "cluster": "claim-header-validator"
+  },
+  "06.12": {
+   "bead": "omp-orchestrator-plan-02-lwdo.1",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "VACUOUS_INVARIANT_SET check on the inventory census + named structural-vacuity mode",
+   "cluster": "census-vacuity-gate"
+  },
+  "06.13": {
+   "bead": "omp-orchestrator-vyud",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "Differential oracle discipline: typed DID-NOT-RUN skip, oracle never a runtime dep, retirement record"
+  },
+  "06.14": {
+   "bead": "omp-orchestrator-k81x.1",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "Metamorphic relations MR-1..MR-3 over tick-monitor::classify with input-reached guards",
+   "cluster": "metamorphic-classify"
+  },
+  "06.15": {
+   "bead": "omp-orchestrator-plan-06-xm0n.6",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "Golden envelope pin for omp-inventory-map/v1: key set, closed status vocab, versioned regen",
+   "cluster": "inventory-envelope-golden"
+  },
+  "06.16": {
+   "bead": "omp-orchestrator-plan-06-xm0n.7",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "Count-twin invariant: observed==expected_* OR status UNKNOWN naming the mismatching pair",
+   "cluster": "count-twin-invariant"
+  },
+  "06.17": {
+   "bead": "omp-orchestrator-5cl",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "Forbid-unsafe conformance leg: manifest lints.rust OR source attribute, parsed, executed on the set"
+  },
+  "06.18": {
+   "bead": "omp-orchestrator-plan-06-xm0n.8",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "Allowance rows require owner + dies_when; validator refuses rows without them",
+   "cluster": "allowance-owner-dies-when"
+  },
+  "06.19": {
+   "bead": "omp-orchestrator-plan-06-xm0n.11",
+   "relation": "decision-halt",
+   "coverage": "PARTIAL",
+   "section": "06-gates",
+   "kind": "decision",
+   "title": "Restate the ALLOWED_COLLISIONS Observation row as BLOCKED with boundary, owner, dies_when",
+   "cluster": "allowed-collisions-blocked"
+  },
+  "06.20": {
+   "bead": "omp-orchestrator-xrtc",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "Refuse substring/text-keyed predicates in gate crates; one structure-keyed matcher"
+  },
+  "06.21": {
+   "bead": "omp-orchestrator-plan-06-xm0n.9",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "Derive GATE_PROPERTIES from the three membership clauses; rows for all 10 members",
+   "cluster": "gate-properties-derived"
+  },
+  "06.22": {
+   "bead": "omp-orchestrator-plan-06-xm0n.9",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "06-gates",
+   "kind": "measurement",
+   "title": "Measure and record the six-property rows for installer and porting-gate",
+   "cluster": "gate-properties-derived"
+  },
+  "06.23": {
+   "bead": "omp-orchestrator-plan-06-xm0n.9",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "06-gates",
+   "kind": "measurement",
+   "title": "Measure ADDRESSABLE for all 10 members: --help exits 0 and names the gate command; retain evidence",
+   "cluster": "gate-properties-derived"
+  },
+  "06.24": {
+   "bead": "omp-orchestrator-6nhj",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "Mechanical gate census by trigger reachability with a machine artifact and its own trigger"
+  },
+  "06.25": {
+   "bead": "omp-orchestrator-jplf.4.1",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "Gate-admission meta-gate: conformance harness over the derived gate set, \u00a74 items 1-14",
+   "cluster": "gate-admission-meta-gate"
+  },
+  "06.26": {
+   "bead": "omp-orchestrator-leht",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "Non-zero expected floor on every gate's scan set (\u00a74 item 5), gate-error exit distinct"
+  },
+  "06.27": {
+   "bead": "omp-orchestrator-plan-07-8jkq.2",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "06-gates",
+   "kind": "command",
+   "title": "Doctor probe: presence by path resolution, health by content, per-tool known-unsupported table",
+   "cluster": "two-signal-presence-probe"
+  },
+  "06.28": {
+   "bead": "omp-orchestrator-plan-06-xm0n.10",
+   "relation": "decision-halt",
+   "coverage": "MISSING",
+   "section": "06-gates",
+   "kind": "decision",
+   "title": "Decide the costed value gate for new gates: 4 owner-hours, 30s wall, escaped-instance baseline",
+   "cluster": "costed-gate-value"
+  },
+  "06.29": {
+   "bead": "omp-orchestrator-yqun",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "06-gates",
+   "kind": "wiring",
+   "title": "Every cargo-test ratchet runs on a reachable commit-path trigger (hook or CI)"
+  },
+  "06.30": {
+   "bead": "omp-orchestrator-yqun",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "Installed hook hash matches a build of current HEAD, checked on the commit path"
+  },
+  "06.31": {
+   "bead": "omp-orchestrator-6fot",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "Commit path builds the committed crate, scoped to the committing agent, on the pinned lane"
+  },
+  "06.32": {
+   "bead": "omp-orchestrator-e4wp",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "06-gates",
+   "kind": "gate",
+   "title": "pane-truth selftest: reachable from cargo test and exit status not truncated"
+  },
+  "07.1": {
+   "bead": "omp-orchestrator-8nuh",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "crate",
+   "title": "Generate the canonical release manifest from the Cargo target graph"
+  },
+  "07.2": {
+   "bead": "omp-orchestrator-6hrv",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "measurement",
+   "title": "Emit an artifact-success receipt from cargo build --message-format=json"
+  },
+  "07.3": {
+   "bead": "omp-orchestrator-6hrv",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "gate",
+   "title": "Wire the four-way identity proof as a standing always-on check"
+  },
+  "07.4": {
+   "bead": "omp-orchestrator-1p0u",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "gate",
+   "title": "Ratify: a command that did not perform its work MUST NOT exit 0 (R11 #1)"
+  },
+  "07.5": {
+   "bead": "omp-orchestrator-xuu7",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "07-installability",
+   "kind": "decision",
+   "title": "Decide the aggregator shape: one umbrella binary with adapter subcommands"
+  },
+  "07.6": {
+   "bead": "omp-orchestrator-jplf.7.2",
+   "relation": "filed",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "crate",
+   "title": "Build the umbrella omp-orchestrator CLI scoping every target as an adapter",
+   "cluster": "umbrella-cli"
+  },
+  "07.7": {
+   "bead": "omp-orchestrator-jplf.7.7",
+   "relation": "filed",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "crate",
+   "title": "Enforce the response envelope and namespaced probe ids at construction",
+   "cluster": "proof-envelope"
+  },
+  "07.8": {
+   "bead": "omp-orchestrator-jplf.7.3",
+   "relation": "filed",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "command",
+   "title": "Ship omp-orchestrator doctor [<adapter>] with exit 0/1/2 and DOWN-never-panic",
+   "cluster": "doctor-command"
+  },
+  "07.9": {
+   "bead": "omp-orchestrator-jplf.7.4",
+   "relation": "filed",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "command",
+   "title": "Ship omp-orchestrator health as a strict rollup of doctor sharing one classifier",
+   "cluster": "health-command"
+  },
+  "07.10": {
+   "bead": "omp-orchestrator-jplf.7.5",
+   "relation": "filed",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "command",
+   "title": "Ship omp-orchestrator repair with a single mutate() chokepoint and byte-exact undo",
+   "cluster": "repair-command"
+  },
+  "07.11": {
+   "bead": "omp-orchestrator-jplf.7.6",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "07-installability",
+   "kind": "command",
+   "title": "Ship omp-orchestrator validate <thing> as a pure read with exit 74 on reject",
+   "cluster": "validate-audit-why"
+  },
+  "07.12": {
+   "bead": "omp-orchestrator-jplf.7.6",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "07-installability",
+   "kind": "command",
+   "title": "Ship omp-orchestrator audit: append-only schema-versioned mutation ledger",
+   "cluster": "validate-audit-why"
+  },
+  "07.13": {
+   "bead": "omp-orchestrator-jplf.7.6",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "07-installability",
+   "kind": "command",
+   "title": "Ship omp-orchestrator why <id> with gaps as explicit UNKNOWN nodes",
+   "cluster": "validate-audit-why"
+  },
+  "07.14": {
+   "bead": "omp-orchestrator-plan-07-8jkq.1",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "07-installability",
+   "kind": "command",
+   "title": "Ship --info, examples, quickstart, help <topic>, completion <shell>",
+   "cluster": "discoverability-surface"
+  },
+  "07.15": {
+   "bead": "omp-orchestrator-kxe.3",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "measurement",
+   "title": "Record the ADDRESSABLE replacement receipt for omp-inventory-map"
+  },
+  "07.16": {
+   "bead": "omp-orchestrator-jplf.7.8",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "07-installability",
+   "kind": "gate",
+   "title": "Check in a doctor capabilities golden and fail CI on probe-list drift",
+   "cluster": "doctor-capabilities-golden"
+  },
+  "07.17": {
+   "bead": "omp-orchestrator-jplf.7.9",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "07-installability",
+   "kind": "command",
+   "title": "Emit class upstream_substrate_issue and ship omp-orchestrator upstream-report",
+   "cluster": "upstream-report"
+  },
+  "07.18": {
+   "bead": "omp-orchestrator-exit-1-overloaded-x1o",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "gate",
+   "title": "Ship the exit-code dictionary uniformly across all 48 targets"
+  },
+  "07.19": {
+   "bead": "omp-orchestrator-tvu5",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "gate",
+   "title": "Treat exit 103 with 0 passed/0 failed as REFUSED, blocking in CI"
+  },
+  "07.20": {
+   "bead": "omp-orchestrator-6hrv",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "gate",
+   "title": "Embed build_id via build.rs in every bin crate; installer refuses non-reporting artifacts (R11 #3)"
+  },
+  "07.21": {
+   "bead": "omp-orchestrator-6hrv",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "gate",
+   "title": "Compile in the owning-repo declaration; FOREIGN printed and excluded from drift"
+  },
+  "07.22": {
+   "bead": "omp-orchestrator-6hrv",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "gate",
+   "title": "Print the identity denominator as six named integers with derivation (R11 #2)"
+  },
+  "07.23": {
+   "bead": "omp-orchestrator-jplf.7.1",
+   "relation": "filed",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "crate",
+   "title": "Complete the Rust installer crate per /installer-workmanship",
+   "cluster": "epic-07-installer"
+  },
+  "07.24": {
+   "bead": "omp-orchestrator-jplf.7.1.1",
+   "relation": "filed",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "crate",
+   "title": "Generate the thin bootstrap install.sh as an untracked release artifact, golden-tested (R11 #4)",
+   "cluster": "bootstrap-install-sh"
+  },
+  "07.25": {
+   "bead": "omp-orchestrator-jplf.7.1.2",
+   "relation": "filed",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "gate",
+   "title": "Verify the bootstrap before execution: pinned digest or signature, no unsigned fallback",
+   "cluster": "bootstrap-verify"
+  },
+  "07.26": {
+   "bead": "omp-orchestrator-jplf.7.1.3",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "07-installability",
+   "kind": "gate",
+   "title": "Honor HTTPS_PROXY/HTTP_PROXY/NO_PROXY, --proxy, and --offline on every fetch",
+   "cluster": "proxy-offline"
+  },
+  "07.27": {
+   "bead": "omp-orchestrator-jplf.7.1.4",
+   "relation": "filed",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "gate",
+   "title": "Version selection and idempotent repeat-install",
+   "cluster": "version-select-idempotent"
+  },
+  "07.28": {
+   "bead": "omp-orchestrator-jplf.7.1.5",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "07-installability",
+   "kind": "wiring",
+   "title": "Operator setup: PATH, completions, hook/skill registration, doctor/health entrypoints; SKIPPED never silent",
+   "cluster": "operator-setup"
+  },
+  "07.29": {
+   "bead": "omp-orchestrator-2tny",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "gate",
+   "title": "Migration and removal: detect predecessor by owner/build_id, back up, stay reversible, print uninstall+rollback"
+  },
+  "07.30": {
+   "bead": "omp-orchestrator-6hrv",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "07-installability",
+   "kind": "wiring",
+   "title": "Reserved: installer restart + postcondition for launchd-managed targets"
+  },
+  "07.31": {
+   "bead": "omp-orchestrator-2tny",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "gate",
+   "title": "Post-install acceptance: doctor --json identity line with missing=0 and health exit 0"
+  },
+  "07.32": {
+   "bead": null,
+   "relation": "not-work",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "gate",
+   "title": "Alias of 07.31 (post-install acceptance) \u2014 kept so block references resolve",
+   "why": "alias row kept only so 07 block references resolve"
+  },
+  "07.33": {
+   "bead": "omp-orchestrator-jplf.7.10",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "07-installability",
+   "kind": "measurement",
+   "title": "Run the five-person/five-machine pilot and publish the scoreboard receipts",
+   "cluster": "five-machine-pilot"
+  },
+  "07.34": {
+   "bead": "omp-orchestrator-io3h",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "crate",
+   "title": "Move machine literals to $XDG_CONFIG_HOME/omp-orchestrator/config.toml; unset HOME is a hard error"
+  },
+  "07.35": {
+   "bead": "omp-orchestrator-jplf.7.11",
+   "relation": "filed",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "gate",
+   "title": "Installed binary discovers its repo by walking to .git and cross-checks the compiled-in owner",
+   "cluster": "repo-owner-crosscheck"
+  },
+  "07.36": {
+   "bead": "omp-orchestrator-vyud",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "milestone",
+   "title": "M6 cold-start proof: clean-machine install receipt and external-repo first tick"
+  },
+  "07.37": {
+   "bead": "omp-orchestrator-plan-07-8jkq.3",
+   "relation": "merged-into",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "gate",
+   "title": "Typed missing-dependency refusal (omp-preflight/v1, exit 75) with binary per-adapter availability",
+   "cluster": "dependency-missing-refusal"
+  },
+  "07.38": {
+   "bead": "omp-orchestrator-plan-07-8jkq.2",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "07-installability",
+   "kind": "gate",
+   "title": "Dependency probe records version:UNPROBEABLE for substrates that reject --version (tmux)",
+   "cluster": "two-signal-presence-probe"
+  },
+  "07.39": {
+   "bead": "omp-orchestrator-plan-07-8jkq.4",
+   "relation": "filed",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "doc-fact",
+   "title": "Record the four R11 constraints as repo doctrine with a current receipt",
+   "cluster": "r11-doctrine-record"
+  },
+  "07.40": {
+   "bead": "omp-orchestrator-kxe.3",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "07-installability",
+   "kind": "measurement",
+   "title": "Re-run the 48-target --help matrix with provenance and a SHA-256 receipt"
+  },
+  "07.41": {
+   "bead": "omp-orchestrator-plan-07-8jkq.5",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "07-installability",
+   "kind": "measurement",
+   "title": "Map actions A1-A11 to binary and subcommand; every help names its guards and timeouts",
+   "cluster": "actions-to-subcommands"
+  },
+  "08.1": {
+   "bead": "omp-orchestrator-jplf.7.3",
+   "relation": "merged-into",
+   "coverage": "PARTIAL",
+   "section": "08-end-users",
+   "kind": "command",
+   "title": "Add adopter-facing `doctor --json` with two-tier probes and DEGRADED/ABSENT semantics",
+   "cluster": "doctor-command"
+  },
+  "08.2": {
+   "bead": "omp-orchestrator-jplf.7.3",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "08-end-users",
+   "kind": "gate",
+   "title": "Gate: every ABSENT family probe carries a remediation; specific probes must not invent one",
+   "cluster": "doctor-command"
+  },
+  "08.3": {
+   "bead": "omp-orchestrator-jplf.7.5",
+   "relation": "merged-into",
+   "coverage": "PARTIAL",
+   "section": "08-end-users",
+   "kind": "command",
+   "title": "doctor `--repair` through one mutation chokepoint with byte-identical undo, dry-run, idempotence",
+   "cluster": "repair-command"
+  },
+  "08.4": {
+   "bead": "omp-orchestrator-jplf.7.12",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "08-end-users",
+   "kind": "command",
+   "title": "Add `init --tracker --worker --gates` writing .omp-orchestrator/config.toml and work/",
+   "cluster": "init-command"
+  },
+  "08.5": {
+   "bead": "omp-orchestrator-588v",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "08-end-users",
+   "kind": "gate",
+   "title": "init gate selection refuses gates lacking a known-good leg; no-shell-gate is opt-in only"
+  },
+  "08.6": {
+   "bead": "omp-orchestrator-kxe.1",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "08-end-users",
+   "kind": "command",
+   "title": "Add `tick --once --json` for adopters: observed/dispatched/graded/refusals, UNPROVEN labelled on tick 1"
+  },
+  "08.7": {
+   "bead": "omp-orchestrator-o7gz",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "08-end-users",
+   "kind": "command",
+   "title": "Add `grade`: CLOSED_WITH_EVIDENCE or CLOSE_REFUSED_NO_EVIDENCE with a `why` remediation"
+  },
+  "08.8": {
+   "bead": "omp-orchestrator-jplf.7.7",
+   "relation": "merged-into",
+   "coverage": "PARTIAL",
+   "section": "08-end-users",
+   "kind": "crate",
+   "title": "Emit the omp-orchestrator/v1 proof envelope on every adopter command",
+   "cluster": "proof-envelope"
+  },
+  "08.9": {
+   "bead": "omp-orchestrator-jplf.7.13",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "08-end-users",
+   "kind": "gate",
+   "title": "`verify --run <run_id> [--command]` fails closed on missing/mismatched envelope, ledger row, or artifact",
+   "cluster": "verify-run"
+  },
+  "08.10": {
+   "bead": "omp-orchestrator-exit-1-overloaded-x1o",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "08-end-users",
+   "kind": "gate",
+   "title": "Register and enforce the adopter exit contract: 0 persisted, 2 refused+persisted, 64 usage, 70 proof-unpersisted"
+  },
+  "08.11": {
+   "bead": "omp-orchestrator-kxe",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "08-end-users",
+   "kind": "milestone",
+   "title": "`cargo install omp-orchestrator` yields one binary whose --version prints build_id and target"
+  },
+  "08.12": {
+   "bead": "omp-orchestrator-io3h",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "08-end-users",
+   "kind": "crate",
+   "title": "Replace compile-time CARGO_MANIFEST_DIR repo root with runtime cwd-upward discovery (RepoAdapter::root)"
+  },
+  "08.13": {
+   "bead": "omp-orchestrator-ve4w",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "08-end-users",
+   "kind": "crate",
+   "title": "Define TrackerAdapter {ready, claim (fenced), close(Evidence non-Option)} with the br implementation"
+  },
+  "08.14": {
+   "bead": "omp-orchestrator-jplf.7.14",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "08-end-users",
+   "kind": "crate",
+   "title": "Ship the file-backed tracker (`--tracker=file`, one TOML per unit under .omp-orchestrator/work/)",
+   "cluster": "file-tracker"
+  },
+  "08.15": {
+   "bead": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "08-end-users",
+   "kind": "crate",
+   "title": "Define WorkerAdapter {observe, dispatch, receipt(two Observations)} with tick-monitor/ack-stage/receiver-receipt as the tmux+OMP-v18 impl"
+  },
+  "08.16": {
+   "bead": "omp-orchestrator-jplf.7.15",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "08-end-users",
+   "kind": "decision",
+   "title": "Decide and build the oneshot worker: add TransportKind::OneshotSpawn or make the transcript use TmuxSendKeysLiteral",
+   "cluster": "oneshot-worker"
+  },
+  "08.17": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "08-end-users",
+   "kind": "crate",
+   "title": "Define RepoAdapter {root, identity, gates -> Vec<GateSpec> declaring six properties incl. ADDRESSABLE}"
+  },
+  "08.18": {
+   "bead": "omp-orchestrator-8ax8",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "08-end-users",
+   "kind": "gate",
+   "title": "Vendor contract per WorkerAdapter: a known-good fixture in that vendor's format; at least one non-OMP adapter"
+  },
+  "08.19": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.14",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "08-end-users",
+   "kind": "decision",
+   "title": "Decide type convergence for the adapter seam: one Verdict trait, one ack/receipt dialect, omp-types with dependents"
+  },
+  "08.20": {
+   "bead": "omp-orchestrator-r73l",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "08-end-users",
+   "kind": "gate",
+   "title": "Emit the degradation-ladder refusal codes; a missing dependency degrades a named capability, never a verdict"
+  },
+  "08.21": {
+   "bead": "omp-orchestrator-plan-07-8jkq.2",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "08-end-users",
+   "kind": "gate",
+   "title": "doctor dependency presence uses two independent signals plus a failure-arm test (tmux -V vs --version)",
+   "cluster": "two-signal-presence-probe"
+  },
+  "08.22": {
+   "bead": "omp-orchestrator-kxe.1",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "08-end-users",
+   "kind": "wiring",
+   "title": "Scope `--session`/`--receiver-agent` to the tmux adapter; invalid under any other worker"
+  },
+  "08.23": {
+   "bead": "omp-orchestrator-plan-08-kmbz.1",
+   "relation": "decision-halt",
+   "coverage": "MISSING",
+   "section": "08-end-users",
+   "kind": "decision",
+   "title": "Adopt the serve order A (solo maintainer) -> B (small team) -> C (fleet operator)",
+   "cluster": "serve-order"
+  },
+  "08.24": {
+   "bead": "omp-orchestrator-psf7",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "08-end-users",
+   "kind": "crate",
+   "title": "Write a durable per-unit ledger (.omp-orchestrator/ledger.jsonl) every tick, repo-local"
+  },
+  "08.25": {
+   "bead": "omp-orchestrator-6hrv",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "08-end-users",
+   "kind": "wiring",
+   "title": "Apply the four-way identity proof to the RUNNING supervisor so a stale binary is loud"
+  },
+  "08.26": {
+   "bead": "omp-orchestrator-9he5",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "08-end-users",
+   "kind": "gate",
+   "title": "Refusal budget: halt on repeated identical refusals instead of emitting them unread"
+  },
+  "08.27": {
+   "bead": "omp-orchestrator-nsx1",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "08-end-users",
+   "kind": "gate",
+   "title": "Every refusal is ledger-backed, typed, and visible to `verify --run`"
+  },
+  "08.28": {
+   "bead": "omp-orchestrator-jplf.7.16",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "08-end-users",
+   "kind": "measurement",
+   "title": "Run the internal dogfood scorecard: doctor <=10 min, <=1 intervention/10 ticks, 100% seeded no-evidence closes refused, >=30% human-seconds saved",
+   "cluster": "dogfood-scorecard"
+  },
+  "08.29": {
+   "bead": "omp-orchestrator-jplf.7.17",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "08-end-users",
+   "kind": "measurement",
+   "title": "Run the external pilot: 3 clean repos to first tick <=10 min with 0 edits outside .omp-orchestrator/; 1 non-OMP fixture; every refusal visible",
+   "cluster": "external-pilot"
+  },
+  "08.30": {
+   "bead": "omp-orchestrator-jplf.7",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "08-end-users",
+   "kind": "milestone",
+   "title": "R9 milestone: a foreign repo reaches a graded close with no hand-edit under .omp-orchestrator/ (kill condition)"
+  },
+  "08.31": {
+   "bead": "omp-orchestrator-vyud",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "08-end-users",
+   "kind": "milestone",
+   "title": "Cold start on a second machine: install, doctor, init, first tick with no sibling checkout or control-plane"
+  },
+  "08.32": {
+   "bead": "omp-orchestrator-round22-drifted-figures-844",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "08-end-users",
+   "kind": "doc-fact",
+   "title": "Correct 08's own doc-facts: L12 grep now 1 (a `br init` test arg), L73 site count, L270 phantom construct OPTED_OUT_BY_ADOPTER"
+  },
+  "08.33": {
+   "bead": "omp-orchestrator-jplf.7.6",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "08-end-users",
+   "kind": "command",
+   "title": "Add `why <unit>`: explain a unit's refusal from its ledger rows",
+   "cluster": "validate-audit-why"
+  },
+  "08.34": {
+   "bead": "omp-orchestrator-phcz",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "08-end-users",
+   "kind": "gate",
+   "title": "Writing-contract rules: a not-found must name command + search space; cite constructs, not lines"
+  },
+  "09.1": {
+   "bead": "omp-orchestrator-t52",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "09-milestones",
+   "kind": "decision",
+   "title": "Adopt the done-definition template and the four admissibility properties for every milestone"
+  },
+  "09.2": {
+   "bead": "omp-orchestrator-phase0-pane-observation-80h",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "09-milestones",
+   "kind": "milestone",
+   "title": "M1: one shared omp-types::PaneObservation crosses the observe\u2192decide seam (compile-time break)"
+  },
+  "09.3": {
+   "bead": "omp-orchestrator-kxe",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "09-milestones",
+   "kind": "milestone",
+   "title": "M2: selection runs through the graph kernel (bv) instead of queue recency, proven differentially"
+  },
+  "09.4": {
+   "bead": "omp-orchestrator-ack-spine-oj6.3",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "09-milestones",
+   "kind": "milestone",
+   "title": "M3: dispatch returns an acknowledgement or a typed refusal, never a bare success (journaled)"
+  },
+  "09.5": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "09-milestones",
+   "kind": "milestone",
+   "title": "M4: completion is detected by the loop and closed by a verifier, never by the worker or a human"
+  },
+  "09.6": {
+   "bead": "omp-orchestrator-zlqk",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "09-milestones",
+   "kind": "milestone",
+   "title": "M5: the loop closes ten beads end to end with no human in the trace (recorded run)"
+  },
+  "09.7": {
+   "bead": "omp-orchestrator-6hrv",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "09-milestones",
+   "kind": "milestone",
+   "title": "M6: a foreign repository runs the orchestrator on a clean host via cargo install and takes a first tick"
+  },
+  "09.8": {
+   "bead": "omp-orchestrator-9he5",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "09-milestones",
+   "kind": "milestone",
+   "title": "M7: the fleet runs unattended for a 24h window with every refusal named and inventoried"
+  },
+  "09.9": {
+   "bead": "omp-orchestrator-phase0-pane-observation-80h",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "09-milestones",
+   "kind": "decision",
+   "title": "Decide the owner of the free_capacity seam migration (Observation lane REQUIRES A DECISION)"
+  },
+  "09.10": {
+   "bead": "omp-orchestrator-plan-09-bcrn.4",
+   "relation": "filed",
+   "coverage": "PARTIAL",
+   "section": "09-milestones",
+   "kind": "wiring",
+   "title": "M2 degradation path: bv absent on the host yields a typed refusal, not a hard dependency",
+   "cluster": "bv-absent-typed-refusal"
+  },
+  "09.11": {
+   "bead": "omp-orchestrator-opsa",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "09-milestones",
+   "kind": "measurement",
+   "title": "Ship the failure-preserving board-count probe (br list per status, errexit, non-zero on malformed JSON)"
+  },
+  "09.12": {
+   "bead": "omp-orchestrator-phcz",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "09-milestones",
+   "kind": "wiring",
+   "title": "Adopt the two-signal check_tool doctor probe with both tests and close the tmux -V allowlist gap"
+  },
+  "09.13": {
+   "bead": "omp-orchestrator-9he5",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "09-milestones",
+   "kind": "wiring",
+   "title": "Refusal inventory + recurrence halt at FINDING_THRESHOLD == 3 wired into the unattended runner"
+  },
+  "09.14": {
+   "bead": "omp-orchestrator-opsa",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "09-milestones",
+   "kind": "decision",
+   "title": "Apply plan-validation rules PV1\u2013PV8 across docs/plan (numbers carry commands, MEASURED\u2260PROJECTED, NO-CLAIM, constructs not lines)"
+  },
+  "09.15": {
+   "bead": "omp-orchestrator-kernel-gate-census-69i",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "09-milestones",
+   "kind": "measurement",
+   "title": "Capture a fresh per-gate legs report before any new gate-count headline is stated"
+  },
+  "09.16": {
+   "bead": "omp-orchestrator-plan-09-bcrn.1",
+   "relation": "merged-into",
+   "coverage": "PARTIAL",
+   "section": "09-milestones",
+   "kind": "crate",
+   "title": "Build the plan-check binary (PC1\u2013PC8) with plan-check/v1 envelope, --help, and a known-bad leg",
+   "cluster": "plan-check"
+  },
+  "09.17": {
+   "bead": "omp-orchestrator-plan-04-7wn9.1",
+   "relation": "merged-into",
+   "coverage": "PARTIAL",
+   "section": "09-milestones",
+   "kind": "wiring",
+   "title": "Make omp-inventory-map --help ADDRESSABLE (currently CONFIG_ERROR unknown argument --help)",
+   "cluster": "inventory-map-addressable"
+  },
+  "09.18": {
+   "bead": "omp-orchestrator-t52",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "09-milestones",
+   "kind": "measurement",
+   "title": "Grade the plan on the six-dimension PASS/FAIL rubric, with the self-assessed FAILs recorded"
+  },
+  "09.19": {
+   "bead": "omp-orchestrator-plan-06-xm0n.1",
+   "relation": "merged-into",
+   "coverage": "PARTIAL",
+   "section": "09-milestones",
+   "kind": "gate",
+   "title": "Add a known-good leg to path-literal-guard (it has a known-bad and no known-good)",
+   "cluster": "plg-known-good-leg"
+  },
+  "09.20": {
+   "bead": "omp-orchestrator-plan-09-bcrn.2",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "09-milestones",
+   "kind": "measurement",
+   "title": "Measure human-seconds per closed bead before and after M4 on the same bead mix",
+   "cluster": "human-seconds-per-close"
+  },
+  "09.21": {
+   "bead": "omp-orchestrator-plan-09-bcrn.3",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "09-milestones",
+   "kind": "measurement",
+   "title": "Measure close-rate: graph selection vs recency on a fixed bead set",
+   "cluster": "close-rate-graph-vs-recency"
+  },
+  "09.22": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "09-milestones",
+   "kind": "gate",
+   "title": "Bring all 8 gates to four legs plus ADDRESSABLE with a planted-known-bad campaign per gate"
+  },
+  "10.1": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.14",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "10-prior-art",
+   "kind": "crate",
+   "title": "Adopt locally an ack-bearing receipt and a permit that aborts on Drop (Gap 1 ADAPT)"
+  },
+  "10.2": {
+   "bead": "omp-orchestrator-plan-10-ya1x.2",
+   "relation": "filed",
+   "coverage": "PARTIAL",
+   "section": "10-prior-art",
+   "kind": "gate",
+   "title": "Make UNWIRED_LANE_ALLOWANCE fail in both directions (Gap 2 ADOPT)",
+   "cluster": "unwired-lane-both-directions"
+  },
+  "10.3": {
+   "bead": "omp-orchestrator-6hrv",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "10-prior-art",
+   "kind": "gate",
+   "title": "Stamp git sha + dirty flag and capture runtime binary identity fail-closed (Gap 3 ADOPT)"
+  },
+  "10.4": {
+   "bead": "omp-orchestrator-jplf.7.3",
+   "relation": "merged-into",
+   "coverage": "PARTIAL",
+   "section": "10-prior-art",
+   "kind": "command",
+   "title": "Adopt the canonical doctor shape: two-band exits, derived capabilities, repair text, preflight exemption (Gap 4)",
+   "cluster": "doctor-command"
+  },
+  "10.5": {
+   "bead": "omp-orchestrator-4ak",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "10-prior-art",
+   "kind": "gate",
+   "title": "Prove hook refusal through the real installed hook plus a planted defect (Gap 5 ADOPT)"
+  },
+  "10.6": {
+   "bead": "omp-orchestrator-calr",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "10-prior-art",
+   "kind": "gate",
+   "title": "Refuse an empty scan set as an error, never a pass (Gap 6 ADOPT)"
+  },
+  "10.7": {
+   "bead": "omp-orchestrator-ack-spine-oj6.1",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "10-prior-art",
+   "kind": "crate",
+   "title": "Adopt asupersync Outcome<T,E> and a one-row-per-decision ledger as design inputs (Gap 7 ADAPT)"
+  },
+  "10.8": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "10-prior-art",
+   "kind": "wiring",
+   "title": "Parse and consume OMP agent_end (AgentEndEvent/isTerminal) in the local adapter (Gap 7 / \u00a711.4)"
+  },
+  "10.9": {
+   "bead": "omp-orchestrator-plan-07-8jkq.3",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "10-prior-art",
+   "kind": "crate",
+   "title": "Type the missing external dependency: sentinel, DEPENDENCY_MISSING wire code, in-envelope remediation, per-call-site policy, conformance test (Gap 8)",
+   "cluster": "dependency-missing-refusal"
+  },
+  "10.10": {
+   "bead": "omp-orchestrator-plan-07-8jkq.2",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "10-prior-art",
+   "kind": "crate",
+   "title": "Probe tool presence with two signals: PATH-walk presence separate from version probe, known-nonfatal allowlist, both tests (Gap 9)",
+   "cluster": "two-signal-presence-probe"
+  },
+  "10.11": {
+   "bead": "omp-orchestrator-plan-10-ya1x.1",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "10-prior-art",
+   "kind": "gate",
+   "title": "Turn the SOTA preflight green: rebuild the fh technical manifest and re-run fh suggest + jsm suggest, retaining outputs",
+   "cluster": "sota-preflight-green"
+  },
+  "10.12": {
+   "bead": "omp-orchestrator-kxe.3",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "10-prior-art",
+   "kind": "measurement",
+   "title": "Validate the mirror denominator (210 .git entries) and record per-repo mirror revision identity"
+  },
+  "10.13": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.14",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "10-prior-art",
+   "kind": "command",
+   "title": "Make the prior-art runbook dispatchable: packet schema, immutable result artifact with SHA-256, exit semantics, negative-pattern refusals (\u00a712)"
+  },
+  "10.14": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.14",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "10-prior-art",
+   "kind": "decision",
+   "title": "Record AckKind/DeliveryClass/PublishPermit as a vocabulary mapping; defer fabric adoption as a topology change (\u00a710.9 decision)"
+  },
+  "10.15": {
+   "bead": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "10-prior-art",
+   "kind": "measurement",
+   "title": "Keep cp-z42vu at ADAPT until recipient-level runtime proof exists (Gap 1 boundary, \u00a711.5)"
+  },
+  "11.1": {
+   "bead": "omp-orchestrator-kxe.8",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "crate",
+   "title": "Build the append-only lifecycle-event writer (stage_id/from_stage/to_stage) in omp-orchestrator",
+   "cluster": "lifecycle-journal-writer"
+  },
+  "11.2": {
+   "bead": "omp-orchestrator-nsx1",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "crate",
+   "title": "Build the S9 decision-record writer + fail-closed retrieval (docs/decisions.jsonl)"
+  },
+  "11.3": {
+   "bead": "omp-orchestrator-nsx1",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "Make every stage transition emit an S9 decision handoff (per-stage emitter, not just the writer)"
+  },
+  "11.10": {
+   "bead": "omp-orchestrator-plan-11-vcd7.2",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S1 Inception: typed intake template for an idea/viability packet",
+   "cluster": "s1-typed-intake"
+  },
+  "11.11": {
+   "bead": "omp-orchestrator-plan-11-vcd7.3",
+   "relation": "decision-halt",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "decision",
+   "title": "S1 Inception: decide whether dispatch is meaningful (human decision owner) or mark n/a",
+   "cluster": "s1-s2-facet-decisions"
+  },
+  "11.12": {
+   "bead": "omp-orchestrator-plan-11-vcd7.3",
+   "relation": "decision-halt",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "decision",
+   "title": "S1 Inception: define idea-intake reap (retire/park stale ideas) or mark n/a",
+   "cluster": "s1-s2-facet-decisions"
+  },
+  "11.13": {
+   "bead": "omp-orchestrator-plan-11-vcd7.1",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S1 Inception: emit a lifecycle event for the intake decision",
+   "cluster": "stage-event-emitters"
+  },
+  "11.14": {
+   "bead": "omp-orchestrator-plan-11-vcd7.3",
+   "relation": "decision-halt",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "decision",
+   "title": "S1 Inception: decide whether the viability verdict counts as S1 grading or mark n/a",
+   "cluster": "s1-s2-facet-decisions"
+  },
+  "11.15": {
+   "bead": "omp-orchestrator-7sd",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S2 Planning: plan template whose done-signal is FOUNDATION.jsonl"
+  },
+  "11.16": {
+   "bead": "omp-orchestrator-plan-11-vcd7.3",
+   "relation": "decision-halt",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "decision",
+   "title": "S2 Planning: decide whether plan authoring is dispatched or mark n/a",
+   "cluster": "s1-s2-facet-decisions"
+  },
+  "11.17": {
+   "bead": "omp-orchestrator-plan-11-vcd7.3",
+   "relation": "decision-halt",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "decision",
+   "title": "S2 Planning: decide plan reap (superseded-plan retirement) or mark n/a",
+   "cluster": "s1-s2-facet-decisions"
+  },
+  "11.18": {
+   "bead": "omp-orchestrator-plan-11-vcd7.1",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S2 Planning: emit lifecycle event on FOUNDATION materialization",
+   "cluster": "stage-event-emitters"
+  },
+  "11.19": {
+   "bead": "omp-orchestrator-plan-11-vcd7.3",
+   "relation": "decision-halt",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "decision",
+   "title": "S2 Planning: decide whether S2 has its own build grading distinct from S3 or mark n/a",
+   "cluster": "s1-s2-facet-decisions"
+  },
+  "11.20": {
+   "bead": "omp-orchestrator-t52",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S3 Grading the plan: grading-round packet template"
+  },
+  "11.21": {
+   "bead": "omp-orchestrator-hsv",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "measurement",
+   "title": "S3 Grading the plan: reap = reconcile round findings into FINDINGS.jsonl (FIXED/RETRACTED/DEFERRED)"
+  },
+  "11.22": {
+   "bead": "omp-orchestrator-plan-11-vcd7.1",
+   "relation": "merged-into",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S3 Grading the plan: emit lifecycle event per round (FINDINGS.jsonl is a ledger, not a stage event)",
+   "cluster": "stage-event-emitters"
+  },
+  "11.23": {
+   "bead": "omp-orchestrator-plan-11-vcd7.4",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "crate",
+   "title": "S3 Grading the plan: shared typed plan grade with held-out lens and identity comparison (K3)",
+   "cluster": "plan-grade-type-k3"
+  },
+  "11.24": {
+   "bead": "omp-orchestrator-gjyi",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "gate",
+   "title": "S4 Beads DAG: bead template enforced mechanically (WHAT/WHY/ACCEPTANCE, --actor)"
+  },
+  "11.25": {
+   "bead": "omp-orchestrator-78om",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S4 Beads DAG: wire bv graph ranking into loop-queue-filter/supervisor select (local consumer)"
+  },
+  "11.26": {
+   "bead": "omp-orchestrator-78om",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "gate",
+   "title": "S4 Beads DAG: closed-blocker release + dependency closure visible to agents"
+  },
+  "11.27": {
+   "bead": "omp-orchestrator-kxe",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "crate",
+   "title": "S4 Beads DAG: plan-to-beads materializer + cycle/orphan/digest gate with a caller (K4)"
+  },
+  "11.28": {
+   "bead": "omp-orchestrator-a92y",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S5 Execution: dispatch packet rendered from the 16-field ntm template with typed acceptance"
+  },
+  "11.29": {
+   "bead": "omp-orchestrator-ve4w",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S5 Execution: one dispatch authority behind the claim fence; DISPATCH_FAILED collapse fixed"
+  },
+  "11.30": {
+   "bead": "omp-orchestrator-ve4w",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S5 Execution: heartbeat rows carry stage ids; refill ledger timestamped"
+  },
+  "11.31": {
+   "bead": "omp-orchestrator-8zx1",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "crate",
+   "title": "S6 Grading the work: grading packet template + dispatcher + consumer for the `grading` state"
+  },
+  "11.32": {
+   "bead": "omp-orchestrator-8zx1",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "decision",
+   "title": "S6 Grading the work: rule that a grade must be dispatched to a non-implementer (flip n/a)"
+  },
+  "11.33": {
+   "bead": "omp-orchestrator-jplf.7.18",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S7 Validation: external-validation packet/runner template (K12)",
+   "cluster": "validation-runner-k12"
+  },
+  "11.34": {
+   "bead": "omp-orchestrator-t00",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "crate",
+   "title": "S7 Validation: reap by completion event, not pane sweep (AgentEndEvent parser + consumer)"
+  },
+  "11.35": {
+   "bead": "omp-orchestrator-plan-11-vcd7.1",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S7 Validation: emit lifecycle event with validation transcript artifact",
+   "cluster": "stage-event-emitters"
+  },
+  "11.36": {
+   "bead": "omp-orchestrator-6hrv",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "crate",
+   "title": "S8 Ship: release packet with rollback path (K13)"
+  },
+  "11.37": {
+   "bead": "omp-orchestrator-17pm",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S8 Ship: release/push dispatch as a gated human decision (irreversible+external)"
+  },
+  "11.38": {
+   "bead": "omp-orchestrator-6hrv",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S8 Ship: persisted install manifest as the S8 ledger"
+  },
+  "11.39": {
+   "bead": "omp-orchestrator-6hrv",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "gate",
+   "title": "S8 Ship: independent build evidence (installer four-way identity proof installed and firing)"
+  },
+  "11.40": {
+   "bead": "omp-orchestrator-nsx1",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S9 Human requirements: decision-record schema as a template (L419-L431)"
+  },
+  "11.41": {
+   "bead": "omp-orchestrator-nsx1",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "measurement",
+   "title": "S9 Human requirements: decision rows appended automatically (the writer firing live)"
+  },
+  "11.42": {
+   "bead": "omp-orchestrator-8ax8",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "crate",
+   "title": "Implement the AgentEndEvent parser in omp-rpc-session and a local consumer"
+  },
+  "11.43": {
+   "bead": "omp-orchestrator-plan-11-vcd7.5",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "measurement",
+   "title": "Capture the two ntm template-omission refusal probes (omit objective / omit target)",
+   "cluster": "validate-rows-assertions"
+  },
+  "11.44": {
+   "bead": "omp-orchestrator-dispatch-claim-fence-bhw",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "gate",
+   "title": "Keep the five claim-fence refusal probes as fired tests (MissingSnapshot/ClaimRequired/UnknownStatus/AssignedElsewhere/SnapshotIdMismatch)"
+  },
+  "11.45": {
+   "bead": "omp-orchestrator-jplf.7.18",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "crate",
+   "title": "Build the S7\u2192S8 edge: foreign-machine unattended validation runner + transcript (K12)",
+   "cluster": "validation-runner-k12"
+  },
+  "11.46": {
+   "bead": "omp-orchestrator-ywd5",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "crate",
+   "title": "S4\u2192S5: atomic claim/lease owner with incarnation, expiry, transfer and readback (K5)"
+  },
+  "11.47": {
+   "bead": "omp-orchestrator-plan-00-04at.7",
+   "relation": "decision-halt",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "decision",
+   "title": "Q13: dispose of the untracked commit-msg-verification-level.sh hook (declare hooks outside the rule, port to Rust, or named allowance)",
+   "cluster": "q13-commit-msg-hook"
+  },
+  "11.48": {
+   "bead": "omp-orchestrator-8zx1",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S5\u2192S6: grade packet tied to receipt and bead; receipt is not a grade"
+  },
+  "11.49": {
+   "bead": "omp-orchestrator-plan-11-vcd7.6",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "gate",
+   "title": "Repair classify_followup false-completion: distinct InProgress; only read-back CLOSED yields Finished; only Finished authorizes refill",
+   "cluster": "classify-followup-repair"
+  },
+  "11.50": {
+   "bead": "omp-orchestrator-omp-surface-map-41b",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "Wire the 31 WIRE surface-map rows to their beneficiaries (omp-orchestrator 18, loop-queue-filter 7, installer 4, fleet-composite 1, tick-monitor 1)"
+  },
+  "11.51": {
+   "bead": "omp-orchestrator-plan-11-vcd7.5",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "gate",
+   "title": "Add local assertions for the 8 VALIDATE rows (br:close/create/init/list/schema/sync/update, bv:exit-codes)",
+   "cluster": "validate-rows-assertions"
+  },
+  "11.52": {
+   "bead": "omp-orchestrator-kxe.3",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "gate",
+   "title": "Freeze an immutable SURFACE-MAP snapshot before deriving counts; NUMBERS.toml is the count authority"
+  },
+  "11.53": {
+   "bead": "omp-orchestrator-plan-11-vcd7.2",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S1 Inception facet: /idea-wizard, /dueling-idea-wizards, /brainstorming produce a typed S1 packet",
+   "cluster": "s1-typed-intake"
+  },
+  "11.54": {
+   "bead": "omp-orchestrator-plan-11-vcd7.2",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S1 viability facet: /product-viability-gauntlet verdict stored typed and consumed by S2",
+   "cluster": "s1-typed-intake"
+  },
+  "11.55": {
+   "bead": "omp-orchestrator-7sd",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S2 Planning facet: /planning-workflow output is FOUNDATION.jsonl, judged by S3 not by review prose"
+  },
+  "11.56": {
+   "bead": "omp-orchestrator-th0z",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S2 loop facet: /loop-engineering value bar = product change (Rule Zero) enforced in the tick receipt"
+  },
+  "11.57": {
+   "bead": "omp-orchestrator-78om",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S4 facet: /beads-workflow, /beads-north-star, /beads-br, /beads-bv \u2014 bead schema + close policy + bv consumption mechanical"
+  },
+  "11.58": {
+   "bead": "omp-orchestrator-8ax8",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S5 facet: /ntm, /vibing-with-ntm \u2014 robot surfaces consumed, not scrollback; completion-event adoption"
+  },
+  "11.59": {
+   "bead": "omp-orchestrator-o7gz",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S6 facet: /beads-compliance-and-completion-verification wired as the close refusal (exit 2 = false-closed)"
+  },
+  "11.60": {
+   "bead": "omp-orchestrator-plan-11-vcd7.9",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S7 facet: /vibing-with-ntm observation is not completion \u2014 bind S7 to the completion consumer",
+   "cluster": "s7-observation-not-completion"
+  },
+  "11.61": {
+   "bead": "omp-orchestrator-6hrv",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S8 facet: replace /installer-workmanship (deliverable is install.sh; repo forbids .sh) with the Rust installer + /release-preparations"
+  },
+  "11.62": {
+   "bead": "omp-orchestrator-nsx1",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "S9 facet: /just-say-no-to-process-porn-and-ceremony is an honesty lens, not a ledger \u2014 bind S9 to the writer"
+  },
+  "11.63": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "crate",
+   "title": "Shared Verdict/grade trait in omp-types (six Verdict dialects, zero dependents)"
+  },
+  "11.64": {
+   "bead": "omp-orchestrator-zlyy",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "gate",
+   "title": "Typed CARDINALITY_REFUSED instead of silent .first() on panes and beads"
+  },
+  "11.65": {
+   "bead": "omp-orchestrator-plan-11-vcd7.7",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "gate",
+   "title": "Per-session state/pending-dispatch path keys with collision refusal",
+   "cluster": "per-session-path-keys"
+  },
+  "11.66": {
+   "bead": "omp-orchestrator-kxe.9",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "milestone",
+   "title": "Bounded fan-out: prove or refuse 1:many (process:session:child:bead:pane:receipt)",
+   "cluster": "fanout-wave-primitive"
+  },
+  "11.67": {
+   "bead": "omp-orchestrator-plan-12-ibpa.2",
+   "relation": "filed",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "crate",
+   "title": "K14 mining lane: steps 4-7 (falsifier per candidate, candidate skill emit, held-out replay vs oracle, negative-evidence retention) + closure event chain",
+   "cluster": "k14-mining-lane"
+  },
+  "11.68": {
+   "bead": "omp-orchestrator-agent-mail-native-v14s",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "crate",
+   "title": "Native Agent Mail kernel lane: typed core + daemon adapter + CLI differential oracle"
+  },
+  "11.69": {
+   "bead": "omp-orchestrator-monitor-reads-oracle-y256",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "gate",
+   "title": "Monitor fields kept separate; ORACLE_DISAGREEMENT typed; explicit caller timeout below the 300s NTM deadline preserves cursor"
+  },
+  "11.70": {
+   "bead": "omp-orchestrator-calr",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "gate",
+   "title": "Pre-commit gate three-valued result: CLEAN / VIOLATION / NOTHING_TO_CHECK (empty index is not clean)"
+  },
+  "11.71": {
+   "bead": "omp-orchestrator-xv30",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "gate",
+   "title": "Exit-code audits isolate the command: `$?` after a pipeline is inadmissible evidence (lint or receipt rule)"
+  },
+  "11.72": {
+   "bead": "omp-orchestrator-588v",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "gate",
+   "title": "Resolve path-literal-guard vs state-wildcard-lint inline-test asymmetry (runtime fixture or named gate fix)"
+  },
+  "11.73": {
+   "bead": "omp-orchestrator-1p0u",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "measurement",
+   "title": "Exclude inbox_events_unavailable (fail-closed) from the silent-success census"
+  },
+  "11.74": {
+   "bead": "omp-orchestrator-plan-11-vcd7.8",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "11-lifecycle",
+   "kind": "doc-fact",
+   "title": "Record the K0-K14 staging approval (Joshua 2026-09-02) as an HD row in docs/decisions.jsonl",
+   "cluster": "hd-row-k0-k14"
+  },
+  "11.75": {
+   "bead": "omp-orchestrator-3kpc",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "milestone",
+   "title": "Stage K0-K14 as three waves of beads (A: K0/K5-K9; B: K2/K3/K4/K10-K13; C: K1/K14)"
+  },
+  "11.76": {
+   "bead": "omp-orchestrator-wire-agent-mail-caller-7n5b",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "Wire the first real agent-mail-native caller in the resident supervisor (report_dispatch_result) and prove daemon path + oracle + timeout/cursor rules there"
+  },
+  "11.77": {
+   "bead": "omp-orchestrator-round22-drifted-figures-844",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "doc-fact",
+   "title": "Repair \u00a711's mangled anchors and stale claims (Cargo.toml:Conversely, main.rs:That, main.rs:AgentEndEvent, L108 template count, L620 stale grep)"
+  },
+  "11.78": {
+   "bead": "omp-orchestrator-crate-reachability-census-44g",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "gate",
+   "title": "Prove or retire unproven resident dependencies: pane-dispatch-fence, verify-dispatch, fast-dispatch, tick-dispatch"
+  },
+  "11.79": {
+   "bead": "omp-orchestrator-b5e5",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "measurement",
+   "title": "Observation 1 (S4 logging = Y via .beads/issues.jsonl): keep measured; refuter = br stall on foreign sqlite handle"
+  },
+  "11.80": {
+   "bead": "omp-orchestrator-gcyf",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "measurement",
+   "title": "Observation 2 (S6 logging = Y via bead comments): keep measured; refuter = grader unattributable in comments"
+  },
+  "11.81": {
+   "bead": "omp-orchestrator-8zx1",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "measurement",
+   "title": "Observation 3 (S6 build grading = Y): keep measured; refuter = Y only by hand (2 packets/day), self-close 8/9"
+  },
+  "11.82": {
+   "bead": "omp-orchestrator-3kpc",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "crate",
+   "title": "K0 namespace + identity: typed register with read-back, file-based pane binding"
+  },
+  "11.83": {
+   "bead": "omp-orchestrator-a92y",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "11-lifecycle",
+   "kind": "wiring",
+   "title": "K6 admission/packet: one caller and one event-producing kernel path"
+  },
+  "11.84": {
+   "bead": "omp-orchestrator-observation-state-false-idle-riqd",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "gate",
+   "title": "K8 receiver observation: local observation parser and two-capture proof"
+  },
+  "11.85": {
+   "bead": "omp-orchestrator-93lo",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "gate",
+   "title": "K9 tracker ack: typed NoAckYet/AckRefused with pending-retry preservation; supervisor emits the ACK line"
+  },
+  "11.86": {
+   "bead": "omp-orchestrator-o7gz",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "11-lifecycle",
+   "kind": "gate",
+   "title": "K11 independent grade: production grade type + close-evidence caller (two-person close, actor recorded)"
+  },
+  "12.1": {
+   "bead": "omp-orchestrator-kxe.2",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "12-journey",
+   "kind": "doc-fact",
+   "title": "Normalize S1-S4 headings to `### S<n> \u2014 <name>` so all nine stages match the contract shape"
+  },
+  "12.2": {
+   "bead": "omp-orchestrator-kxe.4",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "decision",
+   "title": "Orchestrator sequences stages by the stage index + Trigger, never by heading order"
+  },
+  "12.3": {
+   "bead": "omp-orchestrator-a92y",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "12-journey",
+   "kind": "wiring",
+   "title": "Dispatch packet carries a Done-signal line (proof command + exit code) and a Stop line"
+  },
+  "12.4": {
+   "bead": "omp-orchestrator-a92y",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "12-journey",
+   "kind": "wiring",
+   "title": "Packet renders the typed acceptance_criteria first and refuses empty required fields with a typed error"
+  },
+  "12.5": {
+   "bead": "omp-orchestrator-a92y",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "12-journey",
+   "kind": "command",
+   "title": "Hand dispatch path uses the same renderer via `dispatch render`, refusing scope-adding traps files"
+  },
+  "12.6": {
+   "bead": "omp-orchestrator-dispatch-from-line-mad1",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "12-journey",
+   "kind": "wiring",
+   "title": "Every packet renderer emits FROM (agent name + pane index + pane_id) and REPLY-VIA lines from resolve_pane_identity"
+  },
+  "12.7": {
+   "bead": "omp-orchestrator-93lo",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "12-journey",
+   "kind": "wiring",
+   "title": "Dispatch site emits the ACK instruction, receiver-derived and generated from the parser's own source"
+  },
+  "12.8": {
+   "bead": "omp-orchestrator-a92y",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "wiring",
+   "title": "Packet carries the stage's Skills and Negative-patterns (traps) as non-normative sections"
+  },
+  "12.9": {
+   "bead": "omp-orchestrator-kxe.8",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "Build the DISPATCH.jsonl packet-journal writer (append-only; ts, wave, bead, targets[], transport, claim_id, receipt{verdict,evidence}, journal_seq)",
+   "cluster": "lifecycle-journal-writer"
+  },
+  "12.10": {
+   "bead": "omp-orchestrator-nsx1",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "S9: typed decision-ledger writer called from owner=josh refusal paths and HD-referencing closes (structural gap 1)"
+  },
+  "12.11": {
+   "bead": "omp-orchestrator-3kpc",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "Per-project fleet namespace: state_path, write lock and project_id keyed per project/session (1:many substrate; structural gap 2)"
+  },
+  "12.12": {
+   "bead": "omp-orchestrator-kxe.10",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "S1: build the inception-manifest writer emitting .omp-orchestrator/inception.json (structural gap 3)",
+   "cluster": "inception-writer"
+  },
+  "12.13": {
+   "bead": "omp-orchestrator-kxe.10",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "gate",
+   "title": "S1 foundation gate: refuse missing/ambiguous identity, missing control-file decision, untrusted instructions as policy, capability claims without a probe",
+   "cluster": "inception-writer"
+  },
+  "12.14": {
+   "bead": "omp-orchestrator-jplf.7.19",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "measurement",
+   "title": "S1 cold-start experiment: fresh temporary repo on a second supported host runs the S1 command",
+   "cluster": "cold-host-falsifiers"
+  },
+  "12.15": {
+   "bead": "omp-orchestrator-7sd",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "12-journey",
+   "kind": "gate",
+   "title": "Materialize FOUNDATION.jsonl (S1-S9) and the foundation_rows gate (contract Fields 8-9; structural gap 4)"
+  },
+  "12.16": {
+   "bead": "omp-orchestrator-ack-spine-oj6.1",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "Byte-exact canonical event spine: every effectful kernel call emits one RFC-8785 JSON event with fixed field order and a previous_event_sha256 chain (structural gap 5, spine half)"
+  },
+  "12.17": {
+   "bead": "omp-orchestrator-ywd5",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "Expiry-bearing leases for panes, agents, sessions and waves, with a reaper for orphaned sessions (structural gap 6)"
+  },
+  "12.18": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.1",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "decision",
+   "title": "Bind the S2\u2192S3 approval handoff to plan-mode's PlanApprovalDetails/ResolvedApprovedPlan reference; no third plan-approval format"
+  },
+  "12.19": {
+   "bead": "omp-orchestrator-plan-12-ibpa.3",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "measurement",
+   "title": "Run the adversarial cross-scoring of the six duel gaps (each family scores the other 0-1000) and fold the %1414 ideation file",
+   "cluster": "duel-cross-scoring"
+  },
+  "12.20": {
+   "bead": "omp-orchestrator-plan-12-ibpa.13",
+   "relation": "filed",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "gate",
+   "title": "CONVERGENCE.jsonl rows carry `role` (hillclimb|capability|held_out) and convergence.rs applies the capability floor (a finding un-converges a banked section)",
+   "cluster": "convergence-role-gate"
+  },
+  "12.21": {
+   "bead": "omp-orchestrator-t52",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "measurement",
+   "title": "Run the withheld held-out lens across all thirteen sections including 12-journey at the end"
+  },
+  "12.22": {
+   "bead": "omp-orchestrator-8oz8",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "gate",
+   "title": "Integrity monitor: an approver that never wrote the gate reviews gate constants/baselines before they run"
+  },
+  "12.23": {
+   "bead": "omp-orchestrator-7sd",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "gate",
+   "title": "F2 I/O-contract gate: a stage output with no resolvable named consumer is refused (BUILT\u2260WIRED by construction)"
+  },
+  "12.24": {
+   "bead": "omp-orchestrator-7sd",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "gate",
+   "title": "F3 crate-ownership gate: each stage names mechanism vs thin caller and a mechanism without a library surface is refused"
+  },
+  "12.25": {
+   "bead": "omp-orchestrator-8oz8",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "gate",
+   "title": "Cheapest-falsifier-first: a milestone's killing experiment is preregistered and run before its beads are created"
+  },
+  "12.26": {
+   "bead": "omp-orchestrator-8oz8",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "S2: plan-foundation validator crate \u2014 plan-to-schema, plan-to-number and plan-to-consumer closure with typed refusals, emitting the S2 FOUNDATION row"
+  },
+  "12.27": {
+   "bead": "omp-orchestrator-plan-12-ibpa.4",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "measurement",
+   "title": "S2 semantic-omission experiment: known-good plan plus three mutations (drop a consumer, bare a figure, cost-less gap) through the validator",
+   "cluster": "s2-semantic-omission"
+  },
+  "12.28": {
+   "bead": "omp-orchestrator-t52",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "S3: typed grade harness \u2014 held-out grader isolation and finding identity across rounds"
+  },
+  "12.29": {
+   "bead": "omp-orchestrator-uvo",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "gate",
+   "title": "S3 foundation gate: refuse evidence without SEVERITY/SEARCH SPACE, rows without new_findings, PASS with open BLOCKER/MAJOR, and single-lens clean rows"
+  },
+  "12.30": {
+   "bead": "omp-orchestrator-plan-12-ibpa.5",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "measurement",
+   "title": "Noise-floor experiment: two fresh graders from different families on one clean and one known-dirty fixture, blind-adjudicated",
+   "cluster": "noise-floor-experiment"
+  },
+  "12.31": {
+   "bead": "omp-orchestrator-kxe",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "S4: plan-to-beads materializer emitting bead IDs, edges, refusal rows and .beads/materialization.json (source_revision, approved_plan_revision, graph_digest)"
+  },
+  "12.32": {
+   "bead": "omp-orchestrator-78om",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "gate",
+   "title": "S4 materialization gate: refuse missing WHAT/WHY/ACCEPTANCE, cycles, parent-accounting work, orphan outputs, unresolved requirement refs and digest mismatch"
+  },
+  "12.33": {
+   "bead": "omp-orchestrator-kxe.1",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "12-journey",
+   "kind": "wiring",
+   "title": "S5 dispatch step runs with no human typing the send: claim \u2192 fence \u2192 packet \u2192 receipt, on the loop and the cron conductor"
+  },
+  "12.34": {
+   "bead": "omp-orchestrator-ack-spine-oj6.3",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "gate",
+   "title": "Plant the cp-z42vu / success:[4] known-bad transport fixture in-tree (receipt-less success refused)"
+  },
+  "12.35": {
+   "bead": "omp-orchestrator-kxe.9",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "Fan-out/fan-in primitive: wave barrier with per-target receipts and a partial-wave verdict (1:many dispatch)",
+   "cluster": "fanout-wave-primitive"
+  },
+  "12.36": {
+   "bead": "omp-orchestrator-plan-12-ibpa.6",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "measurement",
+   "title": "Declare S5 figures in NUMBERS.toml on first run: dispatch_journal_rows, unclaimed_dispatches, fanout_partial_waves",
+   "cluster": "numbers-s5-s7-figures"
+  },
+  "12.37": {
+   "bead": "omp-orchestrator-kxe.9",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "measurement",
+   "title": "S5 falsifiers: per-target receipt on a 3-pane --robot-send, and ntm claim survival across a pane restart",
+   "cluster": "fanout-wave-primitive"
+  },
+  "12.38": {
+   "bead": "omp-orchestrator-78om",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "wiring",
+   "title": "Selection follows the graph (bv PageRank/articulation points) and reconciles bv_next against an independent br snapshot; disagreement refuses"
+  },
+  "12.39": {
+   "bead": "omp-orchestrator-j2te",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "S6: shared `Grade` type in omp-types (bead, verdict PASS|FAIL|UNREACHABLE, rerun_commands[{cmd,exit,transcript_path}], grader_pane\u2260worker_pane, graded_at) plus its SCHEMAS.toml row"
+  },
+  "12.40": {
+   "bead": "omp-orchestrator-o7gz",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "S6: close-evidence-gate crate refusing a close whose reason cites no re-runnable command or path (cp-3k9jq known-bad)"
+  },
+  "12.41": {
+   "bead": "omp-orchestrator-8zx1",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "12-journey",
+   "kind": "wiring",
+   "title": "S6 grading dispatcher: select a grading bead, pick a non-implementer grader pane, send the grade packet with cited ACCEPTANCE and the journal entry"
+  },
+  "12.42": {
+   "bead": "omp-orchestrator-qt9r",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "measurement",
+   "title": "Register S6 figures: self_graded_closes (expect 0), cites_per_close (floor \u22651), grade_type_dependents (expect \u22651)"
+  },
+  "12.43": {
+   "bead": "omp-orchestrator-eg0m",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "measurement",
+   "title": "S6 falsifiers: map 10 real grading disputes onto FindingPriority P0-P3; wire one FollowUpVerdict::Finished end-to-end as the S6 trigger"
+  },
+  "12.44": {
+   "bead": "omp-orchestrator-plan-09-bcrn.1",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "S7: create the `plan-check` crate (\u00a709 \u00a74's PROJECTED validator) as the validation runner's mechanism",
+   "cluster": "plan-check"
+  },
+  "12.45": {
+   "bead": "omp-orchestrator-jplf.7.18",
+   "relation": "merged-into",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "S7: validation runner + validation-transcript.json schema (observable_id, command, output_digest, exit_code, host{os,arch,hash}, started_at, duration, refusals_in_window[]) + SCHEMAS.toml row when the first transcript exists",
+   "cluster": "validation-runner-k12"
+  },
+  "12.46": {
+   "bead": "omp-orchestrator-9he5",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "gate",
+   "title": "Validation-refusal gate: exit-0 with empty output digest refused; host-unrecorded transcripts refused; a refusal class recurring \u22653 in a window escalates (FINDING_THRESHOLD)"
+  },
+  "12.47": {
+   "bead": "omp-orchestrator-plan-12-ibpa.6",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "measurement",
+   "title": "Register S7 figures: validation_transcripts, unattended_window_hours, refusal_classes_escalated",
+   "cluster": "numbers-s5-s7-figures"
+  },
+  "12.48": {
+   "bead": "omp-orchestrator-untracked-crates-break-clone-jlb",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "measurement",
+   "title": "Clean-machine falsifier: build and run `omp-orchestrator --once --repo /tmp/fixture` from a fresh clone or second host (never a worktree)"
+  },
+  "12.49": {
+   "bead": "omp-orchestrator-wire-finding-dispatch-9ms",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "milestone",
+   "title": "M7: run the 24-hour unattended window with the escalation consumer (finding-dispatch) wired"
+  },
+  "12.50": {
+   "bead": "omp-orchestrator-plan-12-ibpa.7",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "measurement",
+   "title": "Map upstream `unexpected-stop-classifier` arms against our PaneState/Liveness taxonomy (prior-art payoff experiment)",
+   "cluster": "stop-classifier-map"
+  },
+  "12.51": {
+   "bead": "omp-orchestrator-jplf.7",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "milestone",
+   "title": "First validation transcript for a milestone (M5) and the cold-host M6 transcript"
+  },
+  "12.52": {
+   "bead": "omp-orchestrator-6hrv",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "S8: persist the install manifest (binary, install_path, sha256, head_at_build, checked_at) with a SCHEMAS.toml row, and embed build_id so the four-way proof is four-way"
+  },
+  "12.53": {
+   "bead": "omp-orchestrator-jplf.7.20",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "S8: tested rollback to the prior binary with a rollback transcript (`.exit_code==0 and .rollback==true`)",
+   "cluster": "rollback-transcript"
+  },
+  "12.54": {
+   "bead": "omp-orchestrator-ywd5",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "wiring",
+   "title": "S8 wire: `installer --check` is invoked by the supervisor/boot path, not a human \u2014 ending the installer crate's DAG isolation"
+  },
+  "12.55": {
+   "bead": "omp-orchestrator-opsa",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "measurement",
+   "title": "Register S8 figures: identity_check_exit (expect 0 at ship), rollback_tests (expect \u22651); install_coverage already registered"
+  },
+  "12.56": {
+   "bead": "omp-orchestrator-jplf.7.19",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "measurement",
+   "title": "Cheapest ship falsifier: `cargo install --locked --path crates/omp-orchestrator` into a scratch CARGO_HOME, then `installer --check`",
+   "cluster": "cold-host-falsifiers"
+  },
+  "12.57": {
+   "bead": "omp-orchestrator-round22-drifted-figures-844",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "doc-fact",
+   "title": "S8 doc-fact: retire the `/Users/josh` fallback at installer main.rs:25 and compile-time roots :16-20 citations (no longer in tree)"
+  },
+  "12.58": {
+   "bead": "omp-orchestrator-plan-12-ibpa.8",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "gate",
+   "title": "S9 decision-ledger gate: refuse a row missing a required field, a `supersedes` to a nonexistent row, or a passed `review_after` without an amortization record (planted HD-9999 known-bad)",
+   "cluster": "s9-ledger-gate"
+  },
+  "12.59": {
+   "bead": "omp-orchestrator-plan-12-ibpa.9",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "S9 amortization consumer: per cycle, promote `binds_stages` rows into AGENTS.md/CLAUDE.md or expire them into beads, reporting `promoted: N, expired: M`",
+   "cluster": "s9-binds-stages-consumers"
+  },
+  "12.60": {
+   "bead": "omp-orchestrator-plan-12-ibpa.9",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "wiring",
+   "title": "S9 consumers: the packet builder attaches `binds_stages` rows to the dispatch packet and the grader refuses an unfalsifiable 'Josh said' without a row id",
+   "cluster": "s9-binds-stages-consumers"
+  },
+  "12.61": {
+   "bead": "omp-orchestrator-kxe.4",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "measurement",
+   "title": "Register `decisions_ledger_rows` in NUMBERS.toml and retire the 'three HD rows' prose (live: 8 rows)"
+  },
+  "12.62": {
+   "bead": "omp-orchestrator-nsx1",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "measurement",
+   "title": "S9 falsifiers: backfill the session's rulings into the schema by hand and inspect fit; wire the reap to propose decision rows from transcript deltas for confirmation"
+  },
+  "12.63": {
+   "bead": "omp-orchestrator-28dq",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "gate",
+   "title": "External-validation loop (loop 3): name the external oracle (the installed OMP binary) and probe it on a schedule, so 'shipped' is not 'the internal gates are green'"
+  },
+  "12.64": {
+   "bead": "omp-orchestrator-plan-12-ibpa.10",
+   "relation": "decision-halt",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "decision",
+   "title": "Treat human context-injection at milestone boundaries as a scheduled loop step, not an interrupt",
+   "cluster": "context-injection-scheduled"
+  },
+  "12.65": {
+   "bead": "omp-orchestrator-opsa",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "12-journey",
+   "kind": "gate",
+   "title": "Claim-registry discipline: every NUMBERS.toml row carries `level` (closed lattice) and a content `hash`; unearned fields structurally hard to write"
+  },
+  "12.66": {
+   "bead": "omp-orchestrator-artifact-provenance-writer-absent-w1s9",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "gate",
+   "title": "SCHEMAS.toml discipline: a declared `writer` must exist in the workspace or the row is marked UNBUILT (registry-wide gate)"
+  },
+  "12.67": {
+   "bead": "omp-orchestrator-plan-12-ibpa.1",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "gate",
+   "title": "assembly_freshness: replace the mtime key with a content-hash manifest of consumed sections so `utime` cannot green the gate",
+   "cluster": "assembly-freshness-hash"
+  },
+  "12.68": {
+   "bead": "omp-orchestrator-plan-10-ya1x.1",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "measurement",
+   "title": "Re-run the jsm skill sweep with a retained artifact (raw output + hash) before any count is used as a gate",
+   "cluster": "sota-preflight-green"
+  },
+  "12.69": {
+   "bead": "omp-orchestrator-plan-12-ibpa.11",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "doc-fact",
+   "title": "Doc-fact: the ipg.4 DISPATCH row and paragraph say 'no coverage document' while docs/inventories/omp_surface_coverage_ipg4.md exists (102 lines)",
+   "cluster": "journey-docfacts"
+  },
+  "12.70": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "gate",
+   "title": "Unify docs/plan/OMP-COVERAGE-TABLE.jsonl to one schema with one row per classified surface (live: 19 rows in two schemas vs 50 classified surfaces)"
+  },
+  "12.71": {
+   "bead": "omp-orchestrator-3kpc",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "milestone",
+   "title": "Wave A milestone (K0, K5, K6, K7, K8, K9): identity \u2192 claim/lease \u2192 admission \u2192 bounded transport \u2192 receiver observation \u2192 tracker ack, exercised end-to-end"
+  },
+  "12.72": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "milestone",
+   "title": "Wave B milestone (K2, K3, K4, K10, K11, K12, K13): plan provenance \u2192 independent grade \u2192 bead DAG \u2192 completion/reap \u2192 artifact grade \u2192 external validation \u2192 ship"
+  },
+  "12.73": {
+   "bead": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "K10: AgentEndEvent consumer plus the finished-pane reaper in Rust (rows Q-R: `isTerminal` alone refused; no refill before authoritative completion)"
+  },
+  "12.74": {
+   "bead": "omp-orchestrator-nsx1",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "milestone",
+   "title": "Wave C milestone (K1, K14): decision ledger consumers, conversation mining, skill promotion, run close"
+  },
+  "12.75": {
+   "bead": "omp-orchestrator-plan-12-ibpa.2",
+   "relation": "merged-into",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "am_mine_skills: deterministic candidate extraction emitting source message IDs, support count, counterexamples, trigger, refusal envelope and held-out eval result; never promote on frequency alone",
+   "cluster": "k14-mining-lane"
+  },
+  "12.76": {
+   "bead": "omp-orchestrator-plan-12-ibpa.2",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "Per-project skill manifest (project ID, query, skill name/version/content hash, trigger, refusal, source message IDs, evidence, held-out result) with JSM discovery never auto-installing or auto-promoting",
+   "cluster": "k14-mining-lane"
+  },
+  "12.77": {
+   "bead": "omp-orchestrator-plan-12-ibpa.12",
+   "relation": "filed",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "command",
+   "title": "K14.run_close: close-and-publish evidence summary (event chain, bead, grade, validation, ship) refusing close without cited evidence or with an unresolved restrictive state",
+   "cluster": "k14-run-close"
+  },
+  "12.78": {
+   "bead": "omp-orchestrator-agent-mail-native-v14s",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "am_status: daemon health, CLI differential health, queued sends, unread/urgent/ack-overdue counts, active reservations and degraded intents as separate typed observations"
+  },
+  "12.79": {
+   "bead": "omp-orchestrator-ntm-mail-pending-cursor-loss-x22h",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "Monitoring contract: typed monitor receipt (both cursor positions, read-state counts, backend daemon|direct, identity, pane index/ID, timeout, wake result) and a wrapper that owns an explicit <300s wake timeout"
+  },
+  "12.80": {
+   "bead": "omp-orchestrator-plan-12-ibpa.11",
+   "relation": "merged-into",
+   "coverage": "MISSING",
+   "section": "12-journey",
+   "kind": "doc-fact",
+   "title": "Doc-fact: reconcile the cursor-continuity prose with f1rn \u2014 `verify_resume_continuity` was deleted (0 refs in tree), so the 'refuse below oldest-available' rule and the 'defended by journey::verify_resume_continuity' disposition are stale",
+   "cluster": "journey-docfacts"
+  },
+  "12.81": {
+   "bead": "omp-orchestrator-3r1r",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "12-journey",
+   "kind": "decision",
+   "title": "Every measured Agent Mail defect resolves to one disposition \u2014 fixed+upstreamed, defended with a typed refusal in agent-mail-native, or a named finding with a reproduction"
+  },
+  "12.82": {
+   "bead": "omp-orchestrator-3r1r",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "Fix `am robot search` at source (`column not found: m.topic`) and upstream it"
+  },
+  "12.83": {
+   "bead": "omp-orchestrator-calr",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "12-journey",
+   "kind": "gate",
+   "title": "Pre-commit gate returns a three-valued result (CLEAN | VIOLATION | NOTHING_TO_CHECK); an empty staged scan is never exit 0"
+  },
+  "12.84": {
+   "bead": "omp-orchestrator-xv30",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "gate",
+   "title": "Exit-code audit discipline: `$?` after a pipeline is inadmissible evidence; grade artifacts must isolate the audited command"
+  },
+  "12.85": {
+   "bead": "omp-orchestrator-ewnr",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "gate",
+   "title": "Resolve the path-literal-guard vs state-wildcard-lint asymmetry on inline test code: runtime-constructed fixture or a named gate fix"
+  },
+  "12.86": {
+   "bead": "omp-orchestrator-1p0u",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "decision",
+   "title": "Decision: `inbox_events_unavailable` is correct fail-closed behaviour and is excluded from the silent-success census"
+  },
+  "12.87": {
+   "bead": "omp-orchestrator-7kxf",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "Bounded recovery: one DispatchKey across claim/send/ack/close with a typed OutcomeUnknown reconciled on next read; no retry after an uncertain receipt (row V)"
+  },
+  "12.88": {
+   "bead": "omp-orchestrator-wbo2",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "12-journey",
+   "kind": "gate",
+   "title": "Layered enforcement of the one rule: no packet reaches a pane except through claim fence \u2192 pane fence \u2192 ACK (rows L-M refusals)"
+  },
+  "12.89": {
+   "bead": "omp-orchestrator-3kpc",
+   "relation": "covered",
+   "coverage": "COVERED",
+   "section": "12-journey",
+   "kind": "crate",
+   "title": "K0 identity: typed register that refuses unknown keys, read-back of every settable field, pane binding via resolve_pane_identity with `legacy-unverified` refused (rows A-B)"
+  },
+  "12.90": {
+   "bead": "omp-orchestrator-round22-drifted-figures-844",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "doc-fact",
+   "title": "Doc-fact: route 12-journey's bare figures through NUMBERS keys (L298 '22 figures' vs live 34; L485 '50 crates' vs live 67; L473 '3 rows' vs 8; L759 plan size)"
+  },
+  "12.91": {
+   "bead": "omp-orchestrator-7sd",
+   "relation": "partial-commented",
+   "coverage": "PARTIAL",
+   "section": "12-journey",
+   "kind": "doc-fact",
+   "title": "Doc-fact: S1's epistemic ledger lacks its KNOWN entry (Field 9 requires KNOWN/UNKNOWN/GAP per stage)"
+  }
+ }
+}

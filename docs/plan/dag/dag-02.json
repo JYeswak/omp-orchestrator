@@ -1,0 +1,485 @@
+{
+  "section": "02-surface-census",
+  "source": "docs/plan/02-surface-census.md",
+  "item_count": 24,
+  "items": [
+    {
+      "id": "02.1",
+      "title": "Regenerate the omp-inventory-map scanner artifact against the current workspace, revision-pinned",
+      "lines": "L3-L25,L393-L404,L95",
+      "what": "INV-2026-08-31 (183 rows, 26 crates, exit 2) is pre-extraction and revision-unpinned; §§1–5 counts must be re-derived from a new scanner run whose artifact carries source revision, tool version, raw+gz SHA-256, and exit code, and the §§1–5 prose then cites only that artifact via NUMBERS.toml keys.",
+      "acceptance_seed": "run `omp-inventory-map doctor` at a pinned HEAD, retain `.flywheel/inventory-artifacts/inv-<date>.txt.gz` with sha256 + revision + omp version; expect NUMBERS.toml [figures.workspace_crates]/[figures.built_binaries] re-derive from it and §§1–5 carry no integer not owned by a key",
+      "priority": 1,
+      "kind": "measurement",
+      "existing_beads": [
+        {"id": "omp-orchestrator-kxe.3", "status": "in_progress", "match": "partial", "evidence": "Reconcile all live plan denominators and provenance claims with NUMBERS.toml ... R19-02-stale-scanner-denominators, R19-07-current-scanner-drift ... R20-02-current-map-identity"},
+        {"id": "omp-orchestrator-jplf.5", "status": "open", "match": "partial", "evidence": "ACCEPTANCE: The current surface inventory re-runs from source, every row has a consumer or named exception, the 42 RPC, 39 subcommand, and 71 type claims are reconciled or corrected"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "kxe.3 reconciles prose to registry values; no bead owns the re-run itself (new retained artifact with revision/tool-version/hash, replacing INV-2026-08-31 as the §§1–5 authority) and the scanner still exits 2 UNKNOWN until 02.2 lands, so any regenerated artifact inherits the non-verdict.",
+      "depends_on": ["02.2", "02.10"],
+      "blocks": [],
+      "terminal": false,
+      "notes": "L95: the retained snapshot predates send_and_verify; the 157 CAPABILITY_NOT_USED classifications are historical until re-run. Owner of the actuator claim is 05/03 (dispatch-exists-unverified-u1c)."
+    },
+    {
+      "id": "02.2",
+      "title": "Slash-command enumeration: KNOWN count with command, or a typed named reason (R11)",
+      "lines": "L134-L153,L41-L49,L933-L938",
+      "what": "The scanner emits slash_commands=0 against expected_slash_commands=136 and one synthetic UNKNOWN_PROBE row, driving status UNKNOWN / exit 2; the census is not complete until enumeration succeeds or the scanner emits a typed reason why it cannot.",
+      "acceptance_seed": "run `omp-inventory-map doctor`; expect counts.slash_commands == a KNOWN integer with the probe command printed (or a typed SLASH_UNENUMERABLE{reason} refusal), no UNKNOWN_PROBE row, and status != UNKNOWN for that twin; known-bad: an empty RPC startup frame still yields UNKNOWN, never 0",
+      "priority": 0,
+      "kind": "crate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.2", "status": "open", "match": "partial", "evidence": "Wave BEADS: task, commands, slash-commands ... SURFACES: task, commands, slash-commands (136 commands)"},
+        {"id": "omp-orchestrator-jplf.5", "status": "open", "match": "partial", "evidence": "must account for the slash-command discrepancy"},
+        {"id": "omp-orchestrator-kxe.3", "status": "in_progress", "match": "partial", "evidence": "R19-00-stale-slash-denominator ... explicitly dispositioned"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "ipg.2 classifies the slash-commands TYPE ROOT (b: scraping) and records '0 of 136'; jplf.5 names the discrepancy; nothing owns making `parse_rpc_slash_commands` (crates/omp-inventory-map/src/lib.rs:1057) return a known value or a typed reason. Search: br list title/desc 'expected_slash' -> 0, 'slash' -> o7gz,jplf,ipg.2,ipg,41b,jplf.5,ncg3,11ou,kxe.3 (none with this acceptance).",
+      "depends_on": [],
+      "blocks": ["02.1"],
+      "terminal": false,
+      "notes": "Also add the missing counts.transport / expected_transport twin (L46-L47) in the same change so all eight row kinds have an observed/expected pair."
+    },
+    {
+      "id": "02.3",
+      "title": "Disposition the five orchestrator-wanted RPC handlers (prompt, steer, get_state, bash, follow_up) with evidence",
+      "lines": "L117-L125,L162-L181,L235-L245,L713-L717",
+      "what": "The 42 rpc_handler rows are the real RPC surface (the '81 methods, 17 used' claim is struck); prompt/steer/bash/follow_up are obtained today via ntm/subprocess-contract/ack ledger and stated as debt — each needs a WIRE (through omp-rpc-session) or RETIRE-with-probe disposition, and AGENTS.md corrected.",
+      "acceptance_seed": "run `omp-rpc-session quick --binary ~/.local/bin/omp` and the he6 enumeration command; expect the 42-method list re-derived from dist/cli.js with per-method call-site citations, the five rows carrying a disposition with structured evidence, and AGENTS.md carrying no '17 of 81'",
+      "priority": 1,
+      "kind": "decision",
+      "existing_beads": [
+        {"id": "omp-orchestrator-he6", "status": "in_progress", "match": "exact", "evidence": "Derive the 17-of-81 OMP RPC utilization list from the installed source ... CORRECTION — derived count supersedes the bead title/body ... The measured result is 42 inbound RPC command methods and 5/42 statically"},
+        {"id": "omp-orchestrator-8ax8", "status": "in_progress", "match": "partial", "evidence": "P5 process-kernel: we orchestrate OMP by reading the terminal it drew -- 0 of 42 RPC methods and 0 of 39 subcommands consumed ... OBJECTIVE: consume one native OMP surface through a loop-owned typed RPC path"},
+        {"id": "omp-orchestrator-omp-surface-map-41b", "status": "in_progress", "match": "partial", "evidence": "Acceptance 4 explicitly NOT met and named ... CLASSIFY EACH UNMAPPED SURFACE as one of: (a) genuinely not ours, (b) we reimplemented it by scraping and should switch, (c) a capability we do not use"},
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.4", "status": "closed", "match": "partial", "evidence": "does --mode=rpc expose a send-with-receipt for a pane we do not own? **NO.** OMP's --mode=rpc is a SINGLE-SESSION transport"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "he6 covers enumeration + AGENTS.md; 8ax8 consumes ONE surface (map now shows get_state/get_messages/get_session_stats/negotiate_protocol/get_available_commands CONSUMED); prompt/steer/bash/follow_up still read 'RETIRE' on scanner classification with no structured probe and no bead deciding session-per-pane WIRE vs RETIRE.",
+      "depends_on": ["external:crates/omp-rpc-session (commit 12ea68a) quick path stays green"],
+      "blocks": ["02.20", "02.19"],
+      "terminal": false,
+      "notes": "ipg.4 test `actual_table_covers_exact_named_surfaces` is RED per Pass7Grader re-execution; its closed status is contested."
+    },
+    {
+      "id": "02.4",
+      "title": "Every SCRAPED_OR_OBSERVED_ALTERNATIVE row names an existing alternative; re-classify dap/debug/tools/modes",
+      "lines": "L230-L261",
+      "what": "18 scanner rows are 'scraped'; each must name a one-sentence alternative that exists today, and the four rows with no alternative (type_root dap, debug, tools, modes) are re-classified to CAPABILITY_NOT_USED so they inherit a real WIRE/RETIRE disposition.",
+      "acceptance_seed": "run `omp-inventory-map doctor` and filter classification==SCRAPED_OR_OBSERVED_ALTERNATIVE; expect every row's reason names a concrete crate/tool (ntm, tick-monitor, subprocess-contract, br/bv, harness memory, omp-rpc-session) and dap/debug/tools/modes are no longer in that class",
+      "priority": 2,
+      "kind": "crate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.6", "status": "open", "match": "partial", "evidence": "Wave VERIFY: eval, if-bench, hindsight, debug, dap ... dap and debug are a typed debugger surface we reimplement with print statements"},
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.1", "status": "open", "match": "partial", "evidence": "Wave PLAN: plan-mode, modes, goals ... modes — REIMPLEMENTED BY SCRAPING"},
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.10", "status": "open", "match": "partial", "evidence": "Wave IO: web, exa, stt, tts, ssh, internal-urls, tools, cli ... tools is the 29-built-in-tools surface plus 3 hidden"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "The waves dispositioned these roots in SURFACE-MAP.jsonl / docs/inventories, but the scanner's own classification (`omp-inventory-map` reason text 'No typed runtime adapter owns <surface>; retain as a named wire candidate') is unchanged and 'alternative must be a thing that exists' is enforced by no gate.",
+      "depends_on": ["02.10"],
+      "blocks": [],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "02.5",
+      "title": "WIRE rows must carry bead_id, owner, timing and a validation receipt; gate refuses bare WIRE",
+      "lines": "L267-L270,L401-L402,L656-L658,L730",
+      "what": "A WIRE disposition is a proposal until it names the bead, owner, and due-time and retains a validation receipt; today the map schema has no such fields and 66 of 67 WIRE rows cite no bead.",
+      "acceptance_seed": "run `jq -s '[.[]|select(.disposition==\"WIRE\" and (.bead_id==null or .owner==null))]|length' docs/plan/SURFACE-MAP.jsonl` -> 0 and a cargo-test leg that goes RED when one WIRE row lacks bead_id (known-bad planted in-tree); positive control: a WIRE row with all fields passes",
+      "priority": 0,
+      "kind": "gate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-gate-wiring-wave3-xvf", "status": "open", "match": "partial", "evidence": "Wave OMP-COVERAGE-WIRING: connect the eleven coverage waves to the supervisor decision loop ... Every wave's output crate has at least one trigger"}
+      ],
+      "coverage": "MISSING",
+      "gap": "xvf wires WIRE *output crates* to the supervisor census (tests/gate_wiring_wave3.rs) but does not require bead_id/owner/timing on the row. SCHEMAS.toml surface_map optional fields are exactly [disposition, validated_by, maps_to_crate, graded_by, batch]. Measured: 1 of 67 WIRE rows contains an 'omp-orchestrator-' id. Search: br list 'validated_by' -> 0, 'bead_id' -> 0, 'WIRE' rows in beads refer to crate retirement (eg0m, x1un), not map rows.",
+      "depends_on": [],
+      "blocks": ["02.26"],
+      "terminal": false,
+      "notes": "Integrator: this is the row type the DAG itself needs — each WIRE row's bead_id should resolve to a bead in this manifest or in 05/11."
+    },
+    {
+      "id": "02.6",
+      "title": "RETIRE requires structured read-only probe evidence (command, exit/result, timestamp, artifact identity); sweep scanner-inherited retires",
+      "lines": "L271-L273,L655-L673,L733-L748,L770-L778,L793-L796",
+      "what": "453 RETIRE rows carry free-text validated_by; the rule is that a retire must record which null it observed (unknown-command = verdict; empty/timeout = UNPROBEABLE-PENDING) with command/exit/timestamp/artifact, and every retire whose only evidence is the scanner's vacuous CAPABILITY_NOT_USED classification must be re-probed or downgraded.",
+      "acceptance_seed": "run a cargo-test leg over SURFACE-MAP.jsonl; expect every RETIRE row to parse into {probe_cmd, exit_or_result, ts, artifact_id, null_kind∈{positive,unexplained}} and the count of retires citing only 'CAPABILITY_NOT_USED'/grep-zero to be 0 (or moved to UNPROBEABLE-PENDING); known-bad: a row with validated_by='retired on a grep-zero plus a label' goes RED",
+      "priority": 0,
+      "kind": "gate",
+      "existing_beads": [],
+      "coverage": "MISSING",
+      "gap": "No bead. Search: br list -a --json title/desc/acceptance for 'validated_by' -> 0, 'UNPROBEABLE' -> 0, 'RETIRE' -> 25 hits all about crate/finding retirement (7kxf, eg0m, kwo9, x1un, actuation-no-caller-upi, 44g...), none about map-row evidence; 'inherited' -> 0. Map query: 614/614 validated_by non-null, 0 rows with structured fields (SCHEMAS.toml declares none).",
+      "depends_on": ["02.7"],
+      "blocks": ["02.26", "02.8"],
+      "terminal": false,
+      "notes": "L716-L717: also refuse VALIDATE rows for surfaces with zero references (set_host_tools) — same gate, second leg."
+    },
+    {
+      "id": "02.7",
+      "title": "Per-kind probe instrument as code: subcommand / type_root / rpc_handler / omp_method / declaration",
+      "lines": "L817-L849,L661-L663",
+      "what": "'Probe' was defined as whatever instrument was in hand; each surface kind needs its own read-only probe (invoke --help; list dist/types/<root> + export symbols; locate handler + its params/returns; live-session probe naming the broker; read the .d.ts) emitted as a typed ProbeKind with required evidence fields.",
+      "acceptance_seed": "run `omp-inventory-map doctor --probe-kinds`; expect every row kind maps to exactly one ProbeKind with a non-empty evidence record, and a type_root row shows file_count+symbol_count (cli -> 54 files/359 symbols at the snapshot); known-bad: a type_root row probed with a CLI-verb instrument is refused",
+      "priority": 1,
+      "kind": "crate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.10", "status": "open", "match": "partial", "evidence": "eight type roots probed with the per-kind instrument. Verdicts: 5 RETIRE / 1 VALIDATE / 1 CONSUMED / 1 (a)-with-future-note"},
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.5", "status": "open", "match": "partial", "evidence": "8 clauses × 4 surfaces, 102 files walked to symbol level"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "Waves applied the per-kind probe by hand (file/symbol counts appear in validated_by strings); omp-inventory-map only implements the subcommand/RPC-startup probes (parse_cli_commands, parse_rpc_slash_commands); no typed ProbeKind exists and the omp_method probe does not name which mux broker answered. Search: 'per-kind' -> 0 beads.",
+      "depends_on": [],
+      "blocks": ["02.6", "02.8", "02.26"],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "02.8",
+      "title": "Resolve the 9 UNPROBEABLE-PENDING rows: 3 omp/mux* naming the broker, 6 thin-reason withdrawals",
+      "lines": "L800-L855,L786-L792,L853-L855",
+      "what": "omp/muxConnect, muxPing, muxRestartServer are pending on the six-mux ambiguity (a live probe must name which broker answered); ntm:status, ntm:summary, br:audit, br:coordination, br:history, bv:agents were withdrawn for thin reasoning and need a real probe.",
+      "acceptance_seed": "run `jq -s '[.[]|select(.disposition==\"UNPROBEABLE-PENDING\")]|length' docs/plan/SURFACE-MAP.jsonl` -> 0, each former row carrying a structured probe (for mux: pgrep -f __omp_worker_lsp_mux count + which pid answered the --mode=rpc envelope)",
+      "priority": 1,
+      "kind": "measurement",
+      "existing_beads": [],
+      "coverage": "MISSING",
+      "gap": "Search: 'UNPROBEABLE' -> 0 beads; 'muxPing' -> 8ax8, 41b (mentions of the null result, no disposition task). Map: 9 rows, validated_by begins 'retired on a grep-zero plus a label' (6) or 'six mux workers live' (3).",
+      "depends_on": ["02.7"],
+      "blocks": [],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "02.9",
+      "title": "Anti-vacuity gate on census metadata: refuse a census whose distinct-invariant count is 1 (or below a floor)",
+      "lines": "L278-L328,L349-L356,L369-L372",
+      "what": "All 183 rows carry identical must_be_true and negative_evidence, so the four-field discipline passed vacuously; a gate leg must load any emitted census and fail when distinct-invariant-count == 1 across >1 rows, with a planted known-bad and a positive control, ported from no-shell-gate's four-leg pattern.",
+      "acceptance_seed": "run `cargo test -p omp-inventory-map -- census_invariants_are_row_specific`; expect RED on the retained INV-2026-08-31 artifact (distinct=1, n=183) and GREEN on a fixture with per-row invariants; empty census -> ERROR not pass",
+      "priority": 0,
+      "kind": "gate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.12", "status": "closed", "match": "partial", "evidence": "EVERY NODE CARRIES FOUR FIELDS ... MUST BE TRUE — the invariant that makes it correct. Not a description; a falsifiable claim."},
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.17", "status": "closed", "match": "partial", "evidence": "ANTI-VACUITY: zero types discovered is an ERROR, never a clean inventory"}
+      ],
+      "coverage": "MISSING",
+      "gap": "ipg.12 (closed) required the four fields but accepted a fixed template — crates/omp-inventory-map/src/lib.rs:1187 and :1384 emit a constant must_be_true vec; types_inventory.rs has an anti-vacuity check for ZERO types only, not for identical invariants. Search: 'distinct' -> 44 beads, none about invariant ratio; 'must_be_true' -> 0; 'vacu' hits (calr, 1p0u, oej2, 588v) are other gates.",
+      "depends_on": [],
+      "blocks": ["02.1"],
+      "terminal": false,
+      "notes": "L365-L367 names an open prior-art search (mirror grep for a distinct-invariant-ratio gate) — that lookup belongs to 10-prior-art (10.x)."
+    },
+    {
+      "id": "02.10",
+      "title": "Per-row falsifiable invariants in the scanner; crate rows describe contract, not scanner provenance",
+      "lines": "L330-L348",
+      "what": "Each row's must_be_true must be something falsifiable about that surface (cli_command:worktree -> 'omp --help lists worktree'; crate:ack-spine -> 'exposes an ack detector reachable from finding-dispatch'); crate rows' inputs/outputs must describe what the crate consumes/promises rather than `cargo metadata` and target names.",
+      "acceptance_seed": "run `omp-inventory-map doctor`; expect distinct must_be_true count == row count (or >= floor set by 02.9) and no crate row whose what_it_provides matches the template 'Workspace crate <name> from cargo metadata'",
+      "priority": 1,
+      "kind": "crate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.12", "status": "closed", "match": "partial", "evidence": "a node missing any of them is itself the finding: INPUTS ... OUTPUTS ... MUST BE TRUE ... NEGATIVE EVIDENCE"}
+      ],
+      "coverage": "MISSING",
+      "gap": "ipg.12 is closed with the templated invariants in place; no open bead rewrites them per row. Search: 'must_be_true' -> 0, 'what_it_provides' -> 0.",
+      "depends_on": ["02.9"],
+      "blocks": ["02.1", "02.4"],
+      "terminal": false,
+      "notes": "Sequenced gate-first per repo doctrine (4ak): 02.9 goes RED on the current scanner, 02.10 turns it GREEN."
+    },
+    {
+      "id": "02.11",
+      "title": "ADDRESSABLE: omp-inventory-map answers --help and its collision check is observable from emitted output, with a retained receipt",
+      "lines": "L369-L390,L372-L378",
+      "what": "`omp-inventory-map --help` returns CONFIG_ERROR and the doctor output contains none of Observation/CONVERGE/Verdict, so the type-collision logic is wired-but-unaddressable; the 13-tests claim has no command/receipt/revision.",
+      "acceptance_seed": "run `omp-inventory-map --help` -> versioned JSON help envelope exit 0; run `omp-inventory-map types --repo .` and `grep -c Observation` on its output -> >0; record the exact scoped test command, exit, and revision in the bead close",
+      "priority": 2,
+      "kind": "crate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.17", "status": "closed", "match": "partial", "evidence": "THE ONE COMMAND (acceptance 1): `omp-inventory-map types --repo .` — generated JSON envelope, exit 2 REFUSED (the gate working; exactly one error)"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "ipg.17 made the collision seam reachable via the `types` subcommand (the doc's 'absent from every byte' claim predates it and should be re-measured), but crates/omp-inventory-map/src/main.rs has no --help handling (grep '\"--help\"' -> 0) and no receipt/revision is attached to the 13-tests claim.",
+      "depends_on": [],
+      "blocks": [],
+      "terminal": false,
+      "notes": "Robot-help contract is the 07-installability / agent-ergonomics bar (07.x)."
+    },
+    {
+      "id": "02.12",
+      "title": "Extend the reliance-surface denominator: rch, fh, cargo, git, tmux, cass, ubs, caut, dcg, ru, pt, sbh, slb, gh get surface rows and probes",
+      "lines": "L466-L502,L549-L553,L584-L611",
+      "what": "The map censuses omp, ntm, br, bv, ee, ms; fourteen installed binaries the system relies on (rch gates every compile via the cargo shim, dcg blocked a session command, fh is R7's mechanism, tmux is pane truth, git is spawned by our crates) have no surface count, so every share is against an unknown denominator.",
+      "acceptance_seed": "run `jq -s 'map(.tool)|unique' docs/plan/SURFACE-MAP.jsonl`; expect the 14 binaries present with subcommand rows probed per 02.7 and dispositioned; NUMBERS.toml gains [figures.surface_map_tools] with the command",
+      "priority": 1,
+      "kind": "measurement",
+      "existing_beads": [
+        {"id": "omp-orchestrator-tvu5", "status": "in_progress", "match": "partial", "evidence": "a cargo exit code is not a build verdict: the RCH shim exits 103 with zero diagnostic lines and every consumer blames the code"},
+        {"id": "omp-orchestrator-jj7v", "status": "open", "match": "partial", "evidence": "Test verdicts depend on which rch worker is picked ... the offloaded cargo is a different oracle from the local one"},
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.14", "status": "open", "match": "partial", "evidence": "Mine the mirror before declaring anything hard — asupersync already solved our receipt gap"}
+      ],
+      "coverage": "MISSING",
+      "gap": "rch/fh beads exist for their defects, none adds them (or the other 12 binaries) as census rows. Search: br list 'SURFACE-MAP' -> ipg.12/16/17/18, 844, kxe.3, kxe.5, cfg5 (none extend tools); 'dcg' -> ipg.13, igk (mentions only); 'tmux' surface rows -> 0.",
+      "depends_on": ["02.7"],
+      "blocks": [],
+      "terminal": false,
+      "notes": "L496-L498 / L601-L603: RCH_ENABLED=false is HISTORICAL; current enablement is owned by tvu5/jj7v, not by this section. L541-L547 python3-spawn coverage is 02.18."
+    },
+    {
+      "id": "02.13",
+      "title": "Wire bv --robot-* into S4 selection (loop-queue-filter): 30 WIRE + 18 VALIDATE rows, consumption today is zero",
+      "lines": "L428-L442,L504-L530,L596-L600,L689-L701",
+      "what": "bv is consumed nowhere; one call to --robot-next named the articulation point nineteen hand-picked waves missed; the 47 real --robot-* flags (next, triage, plan, capabilities, graph, blocker-chain, by-assignee, by-label...) are the S4 selection input and must be invoked and parsed as typed input by loop-queue-filter, with bv's self-describing surfaces (capabilities, exit-codes, insights) adopted as our own bar.",
+      "acceptance_seed": "run `grep -rn 'robot-next\\|robot-triage\\|robot-blocker-chain' crates/loop-queue-filter/src` -> >0 call sites through subprocess-contract; run the selection binary on a live board and expect it to name the same head as `bv --robot-next`; known-bad: unblocks absent is typed Unknown, never 0",
+      "priority": 0,
+      "kind": "wiring",
+      "existing_beads": [
+        {"id": "omp-orchestrator-78om", "status": "in_progress", "match": "partial", "evidence": "bv reports unblocks=None and five P0 beads sat claimable behind a closed 12d ... `unblocks` is ABSENT, not zero"},
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.3", "status": "open", "match": "partial", "evidence": "Wave TRIAGE: registry, capability, discovery. Governing skill /beads-bv -- PageRank over the DAG ... bv reported actionable=8 blocked=0 with unblocks=0 on everything because the graph had NO EDGES"},
+        {"id": "omp-orchestrator-gate-wiring-wave3-xvf", "status": "open", "match": "partial", "evidence": "each new gate/crate from a wave gets a census row in census_gates"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "78om fixes bv's absent-field reading; ipg.3 covers OMP triage roots; xvf registers loop-queue-filter in the census. No bead's acceptance is 'loop-queue-filter invokes bv --robot-*' — the map's loop-queue-filter WIRE row itself says 'zero bv/blocked/dep calls today'. Search: 'robot-next' -> 0, 'robot-\\*' -> 0 beads.",
+      "depends_on": ["external:11-lifecycle S4 select owner (loop-queue-filter) contract"],
+      "blocks": [],
+      "terminal": false,
+      "notes": "L440-L442: bv capabilities/insights/decision-relevant/exit-codes/dependency surfaces are the §07 self-describing bar; adopt the exit-codes registry shape (exit-code-registry-rub, closed) as the consumer side."
+    },
+    {
+      "id": "02.14",
+      "title": "Disposition the 22 ntm WIRE rows (claim, mail, locks, handoff, conflicts, agents, template, ...) to CONSUMED or RETIRE-with-probe",
+      "lines": "L629-L653,L451-L453,L669-L673",
+      "what": "Fifteen ntm surfaces were retired for the session's own defects (unclaimed beads dispatched, no file reservations, handoff to a nonexistent pane, hand-derived roster) and now read WIRE; each must resolve to a consuming crate with a call site or be retired with the named alternative (Agent Mail reservations, br claim, dispatch-claim-fence) and a probe.",
+      "acceptance_seed": "run `jq -s '[.[]|select(.tool==\"ntm\" and .disposition==\"WIRE\")]|length' docs/plan/SURFACE-MAP.jsonl` -> 0; each former row cites either `crates/<owner>/src/...:<line>` invoking that subcommand or a RETIRE probe naming the substitute mechanism",
+      "priority": 1,
+      "kind": "decision",
+      "existing_beads": [
+        {"id": "omp-orchestrator-3kpc", "status": "in_progress", "match": "partial", "evidence": "K0 namespace + identity: typed register with read-back, file-based pane binding, no last_active as work oracle"},
+        {"id": "omp-orchestrator-dispatch-claim-fence-bhw", "status": "closed", "match": "partial", "evidence": "Dispatch refuses a packet naming an unclaimed bead — enforce the middle beat in code"},
+        {"id": "omp-orchestrator-a92y", "status": "open", "match": "partial", "evidence": "0/34 packets today (8 loop + 26 hand) carry a stop condition or a done signal with exit code; 0/34 from a template"},
+        {"id": "omp-orchestrator-2kx2", "status": "in_progress", "match": "partial", "evidence": "am robot reservations returns empty while two live exclusive locks exist"},
+        {"id": "omp-orchestrator-3r1r", "status": "in_progress", "match": "partial", "evidence": "Harden and align the nine measured Agent Mail defects: disposition A/B/C mandatory, no defect stays a note"},
+        {"id": "omp-orchestrator-75l", "status": "closed", "match": "partial", "evidence": "WAVE.md roster names pane ids that do not exist in the live session"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "The defects the retired rows name are owned (claim fence, identity, Agent Mail, template), but the mechanisms chosen are br/Agent Mail rather than ntm claim/lock/mail, so the ntm rows stay WIRE proposals with no bead deciding CONSUME vs RETIRE per row. Search: 'ntm:claim' -> 0, 'ntm template' -> a92y (mention).",
+      "depends_on": ["02.5"],
+      "blocks": [],
+      "terminal": false,
+      "notes": "L649: OMP memories/storage.d.ts Stage1Claim/GlobalClaim do NOT close the bead-claim gap — record as (a) on those rows."
+    },
+    {
+      "id": "02.15",
+      "title": "Wire ee resume / ee pack into dispatch and grading so compaction loss is recovered by the installed tool",
+      "lines": "L555-L580,L604-L605,L686",
+      "what": "Pane %1413 hit 85% context, compacted, and lost its grading task while `ee resume` (installed, 0.14.2, referenced once) is exactly the recovery mechanism; ee:pack and ee:resume are the two ee WIRE rows and must be invoked from the dispatch/redispatch path with a store present.",
+      "acceptance_seed": "run `ee resume --workspace /Users/josh/Developer/omp-orchestrator --json` -> non-error envelope; run the redispatch path after a simulated compaction and expect the packet to carry the `ee pack` context and the grader's partial file; known-bad: workspace_store_missing is a typed refusal, not a skipped step",
+      "priority": 1,
+      "kind": "wiring",
+      "existing_beads": [
+        {"id": "omp-orchestrator-v33s", "status": "open", "match": "partial", "evidence": "No ee store for omp-orchestrator while the sibling store holds today's catches: ee pack returns workspace_store_missing ... Product change: (1) `ee init --workspace ...`"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "v33s creates the store and captures catches; it does not wire `ee resume` into the redispatch path nor require graders to write to files as they go (L575). Search: 'ee resume' -> 0 beads.",
+      "depends_on": ["external:v33s ee init lands"],
+      "blocks": [],
+      "terminal": false,
+      "notes": "ms (61 rows, all RETIRE in the map) is the same shape one level up (L582); no separate item — its retire rows fall under 02.6's evidence sweep."
+    },
+    {
+      "id": "02.16",
+      "title": "SURFACE-MAP.jsonl regeneration: a generator with retained tool version, source revision, write-order field and hash",
+      "lines": "L14-L15,L679-L686,L730",
+      "what": "The 614-row map is hand-assembled by surface-mapping panes; its generator/tool version and source revision were not retained, a merge with no write-order field lost rows (SCHEMAS.toml note), and its identity is only a hash. Regeneration must be one command whose envelope records provenance and whose rows carry the 02.5/02.6 structured fields.",
+      "acceptance_seed": "run `omp-inventory-map surface-map --repo . > docs/plan/SURFACE-MAP.jsonl`; expect a header/meta row with {generator_version, source_rev, omp_version, tool_versions, ts, sha256} and every row a write_order; NUMBERS.toml surface_map_* keys re-derive unchanged; known-bad: a second run at the same rev is byte-identical",
+      "priority": 0,
+      "kind": "crate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-kxe.3", "status": "in_progress", "match": "partial", "evidence": "R20-02-current-map-identity ... R20-11-surface-map-provenance-stale/R20-11-cardinality-citation-drift are explicitly dispositioned"},
+        {"id": "omp-orchestrator-artifact-provenance-writer-absent-w1s9", "status": "open", "match": "partial", "evidence": "SCHEMAS.toml declares an artifact_provenance gate that does not exist: preserved_inventory is documented and unenforced"},
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.12", "status": "closed", "match": "partial", "evidence": "GENERATED, NEVER DRAWN. The diagram is emitted by a crate from measured edges. A hand-drawn diagram is a claim; a generated one is a measurement."}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "ipg.12 generated the crate/OMP inventory (183 rows); the 614-row multi-tool map has no generator (SCHEMAS.toml writer = 'surface-mapping panes'); kxe.3 labels provenance stale rather than producing it; w1s9 names the missing provenance gate generically. Search: 'SURFACE-MAP' -> 9 beads, none titled regeneration.",
+      "depends_on": ["02.5", "02.6", "02.7", "02.12"],
+      "blocks": [],
+      "terminal": false,
+      "notes": "plan-assemble (crates/plan-assemble/src/main.rs:451) and gate_wiring_wave3.rs already consume the file; both must keep parsing the regenerated shape."
+    },
+    {
+      "id": "02.17",
+      "title": "Cost sampling (Q2/S5): wire omp usage, telemetry-export OTLP, and the goals token-budget runtime",
+      "lines": "L102-L115,L705-L709,L883-L886,L900-L905",
+      "what": "Three OMP surfaces price the work we currently reason about from scraped status lines: cli_command:usage (WIRE -> tick-monitor), declaration:telemetry-export.d.ts (OTLP behind OTEL_* env, WIRE -> tick-monitor, moved Q2 from OPEN to sampled), and type_root:goals (VALIDATE; typed budget, (c) unused). Wire one measured cost sample end to end.",
+      "acceptance_seed": "run tick-monitor with OTEL_* set against a live omp pane and `omp usage --json`; expect one typed cost row per pane per tick with provider/tokens/dollars sourced from the surface, not from a status-line regex; known-bad: OTEL unset -> typed CostUnavailable, never 0",
+      "priority": 2,
+      "kind": "wiring",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.1", "status": "open", "match": "partial", "evidence": "GOALS is classified (c) unused-capability-we-should-adopt by two independent measurements today. We track goals in bead prose; OMP has a typed surface for it."}
+      ],
+      "coverage": "MISSING",
+      "gap": "ipg.1 classifies goals; nothing owns wiring any of the three. Search: 'OTEL' -> j2te (unrelated), 'telemetry' -> 8b1 (rch telemetry), 41b (mention); 'usage' cli_command -> 0 beads; the only 39-subcommand consumption path is via subprocess-contract (L111-L115).",
+      "depends_on": ["02.3", "external:subprocess-contract run_output for the `omp usage` spawn"],
+      "blocks": [],
+      "terminal": false,
+      "notes": "Q2 itself is owned by 00-brief (00.x); this item is the surface-side wiring."
+    },
+    {
+      "id": "02.18",
+      "title": "Decide whether the no-shell rule covers interpreter spawns: six Command::new(\"python3\") sites (Q13)",
+      "lines": "L532-L547",
+      "what": "The rule forbids tracked .sh/.py files but not spawning python3; crates spawn it (production: fleet-monitor main.rs:1323 runs loop-queue-filter.py, pane-dispatch-ready main.rs:43 runs any .py path; tests: differential oracles). Either extend the gate to interpreter spawns with named allowance rows, or record the boundary as a decided exception.",
+      "acceptance_seed": "run `grep -rhoE 'Command::new\\(\"(python3|grep|strings)\"\\)' crates/ | sort | uniq -c`; expect production (src/) sites == 0 or each named in an allowance row with a reason and death condition, and a gate leg RED on an unlisted interpreter spawn",
+      "priority": 1,
+      "kind": "decision",
+      "existing_beads": [
+        {"id": "omp-orchestrator-python-oracle-collision-hk1", "status": "closed", "match": "partial", "evidence": "Extraction imports python3-oracle tests the no-shell gate makes unsatisfiable; workspace suite now RED"},
+        {"id": "omp-orchestrator-kernel-only-gate-wr2", "status": "in_progress", "match": "partial", "evidence": "KERNEL-ONLY source gate: refuse a handrolled equivalent of an existing kernel"},
+        {"id": "omp-orchestrator-asupersync-subprocess-contract-gfb", "status": "open", "match": "partial", "evidence": "Zero of 23 extraction crates honour the asupersync subprocess contract; 110 Command sites, killpg 0/12"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "hk1 handled the test-oracle collision; gfb covers spawn discipline, not interpreter policy; no bead answers Q13 (rule scope) or removes the two production python3 spawns. Search: 'python3' -> b5e5, m0c, hk1, xrtc, lfa (none decide scope).",
+      "depends_on": [],
+      "blocks": [],
+      "terminal": false,
+      "notes": "Q13 register is owned by 00-brief; the .git/hooks/*.sh boundary (§11.4) is 11-lifecycle's."
+    },
+    {
+      "id": "02.19",
+      "title": "Positive control must pass on a real surface: one wave row FULLY COVERED, distinguishing broken scan from partial world",
+      "lines": "L888-L896,L957-L963",
+      "what": "No wave root came back FULLY COVERED (ipg.1..ipg.11); the diagnosis 'agent-plane, not a broken scan' is a judgement with no evidence beyond the argument. The mission's positive control needs a genuinely consumed surface (e.g. type_root:jsonrpc via omp-rpc-session) to report FULLY COVERED under the same scan.",
+      "acceptance_seed": "run `cargo test -p omp-inventory-map --test coverage_mission`; expect positive_control_is_fully_covered to pass against a row derived from the live scan (not the ROW fixture), and actual_table_covers_exact_named_surfaces GREEN",
+      "priority": 1,
+      "kind": "gate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg", "status": "open", "match": "partial", "evidence": "POSITIVE CONTROL: at least one surface must come back FULLY COVERED before the table is trustworthy. A table where everything is uncovered is indistinguishable from a broken scan."},
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.4", "status": "closed", "match": "partial", "evidence": "RE-EXECUTED by Pass7Grader ... `cargo test -p omp-inventory-map --test coverage_mission` -> `FAILED. 4 passed; 1 failed`: `actual_table_covers_exact_named_surfaces`"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "The epic states the control; every wave reports it FAILED and diagnoses around it; the test's positive control uses an inline fixture ROW (coverage_mission.rs:22), not a scanned row, and the table test is RED at HEAD dee67b3.",
+      "depends_on": ["02.3"],
+      "blocks": [],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "02.20",
+      "title": "Decide the typed-consumer topology: session-per-worker for modes/session/task/slash-commands/dap, or explicit (a) per root",
+      "lines": "L872-L881,L921-L931,L940-L955,L965-L967,L977-L987",
+      "what": "The orchestrator's primary sensor is a regex over rendered text for pane state (modes 843 symbols, session 499), subagent lifecycle (task, 27 files), command surface (slash-commands 0/136) and debugging (dap); four measured failures share that cause. Adopting any typed surface means holding a session per worker (the §11.9 cost). One decision, recorded, funds or refuses that topology.",
+      "acceptance_seed": "a decision row in docs/decisions.jsonl naming ADOPT{roots, first crate, cost} or REFUSE{reason} for the five roots, and the corresponding map rows flipped from (b) to WIRE-with-bead or (a); if ADOPT, tick-monitor consumes one session/* type through omp-rpc-session and the braille-spinner path for that state is deleted",
+      "priority": 0,
+      "kind": "decision",
+      "existing_beads": [
+        {"id": "omp-orchestrator-8ax8", "status": "in_progress", "match": "partial", "evidence": "we orchestrate OMP by reading the terminal it drew ... pane state from a braille-spinner regex over capture-pane -- a state method exists"},
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.19", "status": "in_progress", "match": "partial", "evidence": "Typed completion signal: the worker says done — nothing infers it"},
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.5", "status": "open", "match": "partial", "evidence": "PANE STATE and SESSION are both (b) reimplemented-by-scraping ... OMP has session and live surfaces"},
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.2", "status": "open", "match": "partial", "evidence": "task: (b) REIMPLEMENTED BY SCRAPING — 27 files covering the agent's ENTIRE subagent lifecycle"},
+        {"id": "omp-orchestrator-ei2i", "status": "open", "match": "partial", "evidence": "P2 control-kernel: the missing estimator -- Bayes posterior over pane state"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "ipg.19 adopts one signal (completion); 8ax8 consumes one surface; the waves classify. The topology decision (session per worker vs pane scraping for third-party panes) has no bead and no decisions.jsonl row (nsx1: S9 has a reader and no writer).",
+      "depends_on": ["02.3", "external:11-lifecycle §11.9 cost pricing"],
+      "blocks": [],
+      "terminal": false,
+      "notes": "Irreversible-external? No — local topology; per RULE ZERO this is a Joshua taste call on product direction, so it halts as ONE named decision rather than being routed around."
+    },
+    {
+      "id": "02.21",
+      "title": "graded_by required on every severity row; gate every_severity_row_names_its_grader (adopted)",
+      "lines": "L989-L1020",
+      "what": "AdvisorNote.advisor shipped the attribution defence this session had invented by hand; graded_by is now required on severity rows with a cargo-test gate that fails on an unattributed row, mutation-verified, with anti-vacuity.",
+      "acceptance_seed": "run `cargo test -p no-shell-gate --test schemas -- every_severity_row_names_its_grader`; expect GREEN; strip graded_by from one CONVERGENCE.jsonl row -> RED naming the line; empty ledger -> ERROR",
+      "priority": 2,
+      "kind": "gate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-t52", "status": "open", "match": "partial", "evidence": "Every finding carries BLOCKER/MAJOR/MINOR, `graded_by`, and the pin sha; a zero names its search space."},
+        {"id": "omp-orchestrator-gcyf", "status": "open", "match": "partial", "evidence": "23/40 closes today name their grader only in prose; comments[].author is josh on all of them, so grader != implementer is unverifiable"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "Built and in cargo test (crates/no-shell-gate/tests/schemas.rs:174; SCHEMAS.toml row 25 lists graded_by) but no bead owns it; t52 requires the field on round-22 findings, gcyf covers bead-close attribution (a different ledger). Integrator may file a closed/doc bead for the record or fold into t52.",
+      "depends_on": [],
+      "blocks": ["02.22"],
+      "terminal": false,
+      "notes": "Test is on the commit path only if the schemas target runs pre-commit; yqun (same-day ratchet breaches, gates off the commit path) is the class risk."
+    },
+    {
+      "id": "02.22",
+      "title": "Second severity defence: any MINOR touching a NUMBERS.toml figure is automatically MAJOR",
+      "lines": "L1000-L1003,L1027-L1029",
+      "what": "Attribution makes downgrading a real defect to MINOR attributable but not impossible; the named second defence — a finding whose text touches a registered figure cannot be MINOR — is still not built.",
+      "acceptance_seed": "run the findings_ledger gate over a FINDINGS.jsonl row with severity=MINOR whose finding cites a `[figures.*]` key or its `appears` file:line; expect RED 'MINOR_ON_REGISTERED_FIGURE'; a MINOR not touching a figure passes",
+      "priority": 2,
+      "kind": "gate",
+      "existing_beads": [],
+      "coverage": "MISSING",
+      "gap": "Search: br list 'MAJOR' -> t52, 9g5, kxe.5 (none build the auto-escalation); 'auto' + 'MAJOR' -> 0; crates/no-shell-gate/tests/findings_ledger.rs validates severity presence only (FINDINGS_ROW_MISSING_SEVERITY).",
+      "depends_on": ["02.21", "external:no-shell-gate findings_ledger schema"],
+      "blocks": [],
+      "terminal": false,
+      "notes": "Level names blocker/concern/nit NOT ADOPTED (L1022-L1025) — recorded decision, cosmetic; no item filed unless 02.20 funds importing the type."
+    },
+    {
+      "id": "02.23",
+      "title": "Census queries name their grep binary/version and escape regex metacharacters (false-zero tooling warning)",
+      "lines": "L54,L1029",
+      "what": "This host's grep is a regex shim; `grep -c '^{' SURFACE-MAP.jsonl` returns 0 while the escaped brace returns 614, so every census query must escape braces/parens or use literal-safe tools and name the binary.",
+      "acceptance_seed": "run the NUMBERS.toml surface_map_rows command (`grep -c . docs/plan/SURFACE-MAP.jsonl`) -> 614 and `grep -c '^\\{'` -> 614; §2 names brace/paren metacharacters with the measured example",
+      "priority": 2,
+      "kind": "doc-fact",
+      "existing_beads": [
+        {"id": "omp-orchestrator-phcz", "status": "open", "match": "exact", "evidence": "grep is not one program in this fleet: a pattern-syntax claim must name its binary and version ... grep --version -> grep (pi-uu-grep) 0.2.0 <-- a HARNESS SHIM"},
+        {"id": "omp-orchestrator-round22-drifted-figures-844", "status": "in_progress", "match": "exact", "evidence": "10. §2.2 names brace/paren metacharacters, with the measured `^{` → 0 vs `^\\{` → 614 as the example"}
+      ],
+      "coverage": "COVERED",
+      "gap": "",
+      "depends_on": [],
+      "blocks": [],
+      "terminal": true,
+      "notes": ""
+    },
+    {
+      "id": "02.24",
+      "title": "Workspace-crate rows: 25 of 26 unconsumed from any measured runtime trigger; omp-types zero dependents — reachability census owns the disposition",
+      "lines": "L199-L215,L75-L83,L263-L276",
+      "what": "The scanner classifies our own crates CAPABILITY_NOT_USED because nothing consumes them from a measured trigger; every crate must carry WIRE or NAMED_REASON via the kernel-baked crate-reachability census (two axes: manifest caller, runtime trigger), with typed nonzero refusal in decide().",
+      "acceptance_seed": "run the supervisor census (`cargo test -p omp-orchestrator --test census_membership`); expect every crate on disk to have a census row, subprocess-contract REACHABLE and no-shell-gate TRIGGERED as positive controls, and zero crates with neither caller nor trigger and no NAMED_REASON",
+      "priority": 0,
+      "kind": "gate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-crate-reachability-census-44g", "status": "in_progress", "match": "exact", "evidence": "Crate reachability census: announce loudly every crate with zero callers and no runtime trigger ... The supervisor must refuse to report healthy while any crate has neither a manifest caller nor a runtime trigger"},
+        {"id": "omp-orchestrator-leht", "status": "open", "match": "exact", "evidence": "the gate census has 25 rows for 65 crates: 40 have no row at all, so the census has no opinion on 61% of the tree"},
+        {"id": "omp-orchestrator-kernel-gate-census-69i", "status": "in_progress", "match": "partial", "evidence": "Kernel-baked gate census: the supervisor refuses to report healthy while any gate has no reachable trigger"},
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.18", "status": "open", "match": "partial", "evidence": "omp-types depended_on_by = 0 of 25 crates ... LEG 4 canonical omp-types redeclaration"},
+        {"id": "omp-orchestrator-6nhj", "status": "in_progress", "match": "partial", "evidence": "re-run the gate reachability census -- five of six could not fire, and nobody has re-checked since"}
+      ],
+      "coverage": "COVERED",
+      "gap": "",
+      "depends_on": [],
+      "blocks": ["02.16"],
+      "terminal": false,
+      "notes": "The scanner's `orphan_disposition` (NAMED_REASON 175 / WIRE 8, no third value) and the supervisor census must agree; 02.16 should emit crate rows from the census, not a second list."
+    }
+  ],
+  "section_deps": [
+    "03-crates: crate rows (02.24) and the omp-rpc-session consumer that flips rpc_handler rows (02.3, 02.19) are built there; the census only measures them.",
+    "05-actions / 11-lifecycle: send_and_verify + receiver receipt (L95) and the S4 select owner (02.13) and §11.9 session-per-worker cost (02.20) are defined there; this section's classifications stay HISTORICAL until the actuator exists.",
+    "06-gates: the four-leg gate pattern (known-bad, positive control, anti-vacuity, mutation) that 02.5/02.6/02.9/02.22 port from no-shell-gate.",
+    "00-brief: Q2 (cost) and Q13 (rule scope) registers that 02.17 and 02.18 answer; R7/R11/R14 requirement ids cited here.",
+    "10-prior-art: the mirror grep for a distinct-invariant-ratio gate named open at L365-L367."
+  ],
+  "search_log": [
+    "br list -a --json -> 284 rows under .issues (read from /tmp/dag02-beads.json)",
+    "br show <id> --json for 40 candidate beads (ipg, ipg.1-19, 41b, he6, 44g, 69i, leht, 1p0u, opsa, 844, d1n, kxe.3, m3c, xvf, calr, r73l, xrtc, phcz, v33s, 78om, gcyf, 6nhj, jplf.5, 8ax8, jlb, o7gz, t52)",
+    "jq regex over title+description+acceptance: 'anti-vacu' 90+ hits; 'SURFACE-MAP' 9; 'RETIRE' 25 (crate/finding retirement, none map-row); 'validated_by' 0; 'UNPROBEABLE' 0; 'robot-next' 0; 'robot-\\*' 0; 'ee resume' 0; 'dcg' 2; 'slash' 9; 'expected_slash' 0; 'per-kind' 0; 'telemetry' 2; 'OTEL' 1; 'goals' 16; 'AdvisorSeverity' 0; 'graded_by' 2; 'python3' 5; 'muxPing' 2; 'NUMBERS.toml' 12; 'must_be_true' 0; 'orphan_disposition' 0; 'type_root' 0; 'rpc_handler' 0; 'engaged' 0",
+    "grep NUMBERS.toml 'surface_map_|surface_engaged' -> 9 keys (rows, engaged_pct, consumed, wire, validate, retire, unprobeable_pending, engaged_rows, unmapped_rows)",
+    "jq over docs/plan/SURFACE-MAP.jsonl: 614 rows; dispositions CONSUMED 52 / WIRE 67 / VALIDATE 33 / RETIRE 453 / UNPROBEABLE-PENDING 9; tools omp 183, ntm 114, ee 111, bv 76, ms 61, br 46, + 23 single crate rows; WIRE by tool bv 30 / ntm 22 / omp 10 / br 3 / ee 2; WIRE rows containing an 'omp-orchestrator-' bead id: 1 of 67; fields present on all rows: surface, tool, kind, batch, maps_to_crate, disposition, validated_by, graded_by",
+    "grep crates/ 'SURFACE-MAP.jsonl|surface_map|UNPROBEABLE|expected_slash|distinct_invariant|Command::new(\"python3\")' -> consumers: plan-assemble main.rs:451, omp-orchestrator tests/gate_wiring_wave3.rs:14, no-shell-gate tests/porting_gate.rs:91; python3 spawns in fleet-monitor src/main.rs:1323, pane-dispatch-ready src/main.rs:43, fast-dispatch src/lib.rs:347/663 + tests",
+    "grep crates/omp-inventory-map 'distinct.*must_be_true|anti.?vacu' -> types_inventory.rs zero-types anti-vacuity only; lib.rs:1187,1384 constant must_be_true; main.rs has no '--help' handling",
+    "grep crates/;SCHEMAS.toml 'every_severity_row_names_its_grader|auto.?MAJOR' -> no-shell-gate/tests/schemas.rs:174 exists; no auto-MAJOR"
+  ],
+  "no_claim": "This manifest maps items to beads by title/description/acceptance text and to repo state by grep at the current checkout (not a pinned sha); it does not establish that any COVERED bead's implementation is correct, that closed beads (ipg.4, ipg.12, ipg.17) survive the Pass7Grader re-executions that reopened siblings, or that the 614-row map's dispositions are right — only that the required evidence shape is absent. The 42 rpc_handler and 136 expected slash counts are inherited from the retained snapshot, not re-run here. Cross-section refs (00/03/05/06/10/11.x) are guesses at sibling numbering for the integrator to resolve."
+}

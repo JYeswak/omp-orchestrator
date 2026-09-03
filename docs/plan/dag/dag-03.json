@@ -1,0 +1,1477 @@
+{
+ "section": "03-crates",
+ "source": "docs/plan/03-crates.md",
+ "item_count": 43,
+ "items": [
+  {
+   "id": "03.1",
+   "title": "Re-derive the crate contract table from live cargo metadata (50-package denominator)",
+   "lines": "L10-L11,L61,L100-L101",
+   "what": "The 26-row contract table is a 2026-08-31 snapshot; every workspace package returned by cargo metadata must have a source-derived contract row or an explicit UNDECLARED cell.",
+   "acceptance_seed": "cargo metadata --no-deps | jq '.packages|length' equals the number of crate rows in 03-crates.md; cargo test -p no-shell-gate --test crate_contract_inventory green (the R4 gate refuses an uncovered package).",
+   "priority": 1,
+   "kind": "measurement",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-kxe.3",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "cargo metadata --no-deps --format-version 1 package count, ls -1 crates | wc -l ... have one authoritative scope and no contradictory current duplicate"
+    },
+    {
+     "id": "omp-orchestrator-cfg5",
+     "status": "open",
+     "match": "partial",
+     "evidence": "Package inventory (2): every_metadata_package_has_exactly_one_inventory_row, planted_package_is_red_until_its_row_exists"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "No bead asks for the 03-crates table itself to gain a row per current package; kxe.3 reconciles denominators, cfg5 records the inventory gate failing in a clean clone. Disk today: 67 crate dirs vs the doc's '50 workspace packages' and NUMBERS.toml workspace_crates_on_disk expect=65.",
+   "depends_on": [],
+   "blocks": [
+    "03.43"
+   ],
+   "terminal": false,
+   "notes": "crates/no-shell-gate/tests/crate_contract_inventory.rs is the enforcing gate ('the document must cover every workspace package returned by cargo metadata'). 21 crates on disk have no row in this section: admission-reason, agent-mail-native, asupersync-conformance, bead-availability, bead-holder, cargo-lane-budget, convergence-stamp, crate-soundness-verify, extraction-roster, inbox-monitor, loop-switch, omp-surface-consumption, orchestration-tick-gate, plan-assemble, porting-gate, preregistration-gate, response-envelope-check, scratch-home, sender-identity, silent-success-census, staged-build-gate."
+  },
+  {
+   "id": "03.2",
+   "title": "One-file lint: every workspace member forbids unsafe by BOTH manifest and crate-root attribute",
+   "lines": "L92-L94,L325,L344",
+   "what": "Turn the manifest+attribute coincidence into an invariant so a future crate that keeps one mechanism and drops the other fails the build.",
+   "acceptance_seed": "cargo test -p no-shell-gate --test <unsafe_forbid> iterates cargo-metadata packages, asserts [lints.rust] unsafe_code=\"forbid\" (or lints.workspace=true inheriting the workspace table) AND #![forbid(unsafe_code)] at src/lib.rs|main.rs; planted crate missing either mechanism -> RED naming crate and mechanism; zero packages scanned -> ERROR.",
+   "priority": 1,
+   "kind": "gate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.18",
+     "status": "open",
+     "match": "partial",
+     "evidence": "FIRES-ON-KNOWN-BAD, one specimen per leg ... a crate missing forbid(unsafe_code)"
+    },
+    {
+     "id": "omp-orchestrator-5cl",
+     "status": "grading",
+     "match": "partial",
+     "evidence": "A gate asserts 20 of 20 by reading Cargo.toml, not a doc claim. MUTATION: remove the lint from one crate -> gate RED"
+    },
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.16",
+     "status": "open",
+     "match": "partial",
+     "evidence": "forbid(unsafe_code) is mandatory — a crate that will not compile under the lint is a FINDING"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "5cl is manifest-only and scoped to the 20 extraction crates; ipg.18 leg 3 names the specimen but is an open epic-sized bead; porting_gate.rs clause 3 checks manifest substring 'unsafe_code' per crate but check_all_ports() has no caller; crate-soundness-verify checks the attribute but derive_crates() parses quoted members and the root manifest uses members=[\"crates/*\"] ([INFERENCE] it returns 'derived crate set is empty'). Nothing asserts BOTH mechanisms for EVERY member.",
+   "depends_on": [],
+   "blocks": [],
+   "terminal": false,
+   "notes": "Root Cargo.toml now carries [workspace.lints.rust] unsafe_code=\"forbid\"; a member using lints.workspace=true has no literal in its own manifest, so NUMBERS.toml figures.crates_forbidding_unsafe (grep -l on Cargo.toml) undercounts by design — the lint must accept inheritance as the manifest mechanism."
+  },
+  {
+   "id": "03.3",
+   "title": "Spawn-contract gate: constructing a Command outside subprocess-contract is refused (allowance rows reasoned, none PROVISIONAL)",
+   "lines": "L157-L162,L283-L293,L345-L346",
+   "what": "Make subprocess-contract the only reachable door for process spawning: the source-aware gate exists; drive its PROVISIONAL allowance rows to zero and keep it wired.",
+   "acceptance_seed": "cargo test -p no-shell-gate --test spawn_contract green with SPAWN_ALLOWANCE containing no row whose reason says PROVISIONAL; planted crate with Command::new and no subprocess-contract dep -> RED naming it.",
+   "priority": 0,
+   "kind": "gate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.15",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "FIRES-ON-KNOWN-BAD: add a crate with a raw Command::new and no subprocess-contract dependency; the gate NAMES it ... THE 29 SITES GET TRIAGED"
+    },
+    {
+     "id": "omp-orchestrator-asupersync-subprocess-contract-gfb",
+     "status": "open",
+     "match": "partial",
+     "evidence": "Every crate in the 23-set that spawns a subprocess routes it through ONE shared helper"
+    },
+    {
+     "id": "omp-orchestrator-iad",
+     "status": "closed",
+     "match": "partial",
+     "evidence": "Each crate either depends on subprocess-contract and routes every spawn through bounded_output ... OR carries an allowance row naming a REAL reason"
+    },
+    {
+     "id": "omp-orchestrator-m3c",
+     "status": "closed",
+     "match": "partial",
+     "evidence": "Route census + gate-crate subprocess spawns through subprocess-contract"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "crates/no-shell-gate/tests/spawn_contract.rs exists (doc L159) but SPAWN_ALLOWANCE still carries five PROVISIONAL rows (installer, dispatch-silence-watch, tick-monitor, omp-rpc-session, receiver-receipt 'ALLOWANCE IS WEAK'); the gate is a routing floor (manifest dep), not per-call-site proof (its own header). The doc's L288 variant — the omp-inventory-map type gate acquiring the Command rule — is not built; two gates now pin overlapping facts.",
+   "depends_on": [
+    "03.4",
+    "03.5"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "Doc L162: 'its current invocation and coverage remain registry-owned'. Related open work: fr6 (32 pid-only child.kill sites), n4q (installer 6 unbounded spawns)."
+  },
+  {
+   "id": "03.4",
+   "title": "Route omp-rpc-session's OMP child spawn through subprocess-contract and delete its allowance row",
+   "lines": "L123-L125,L345-L346",
+   "what": "A leaf that spawns is a leaf that reimplemented the boundary: omp-rpc-session spawns `omp --mode=rpc` (lib.rs:136 Command::new) with no path-dep on subprocess-contract.",
+   "acceptance_seed": "grep -c 'subprocess-contract' crates/omp-rpc-session/Cargo.toml -> 1; the omp-rpc-session row is gone from SPAWN_ALLOWANCE; a child that outlives the deadline yields RunError::Timeout, never a Malformed/Unknown frame verdict.",
+   "priority": 1,
+   "kind": "wiring",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.15",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "THE 29 SITES GET TRIAGED, each to one of: routed through subprocess-contract, or DEADLOCK-SAFE with the reason stated"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "No bead names omp-rpc-session; spawn_contract.rs records it as 'PROVISIONAL, recorded as debt: 3 sites spawning the OMP RPC child, which is exactly the cancellable-work-with-a-deadline case the contract exists for'.",
+   "depends_on": [],
+   "blocks": [
+    "03.3"
+   ],
+   "terminal": false,
+   "notes": "Search: grep 'omp-rpc-session.*subprocess-contract' over all bead text -> 0 hits."
+  },
+  {
+   "id": "03.5",
+   "title": "Route omp-inventory-map's probe spawn through subprocess-contract",
+   "lines": "L123-L125,L346",
+   "what": "omp-inventory-map spawns OMP CLI probes (lib.rs:1566 Command::new(program)) with no subprocess-contract path-dep and — unlike omp-rpc-session — no SPAWN_ALLOWANCE row.",
+   "acceptance_seed": "grep -c 'subprocess-contract' crates/omp-inventory-map/Cargo.toml -> 1 and the probe routes through run_output/bounded_output with a named deadline const; a hung `omp` probe maps to ProbeState::Unknown via typed TIMEOUT, never an empty-but-Known envelope.",
+   "priority": 1,
+   "kind": "wiring",
+   "existing_beads": [],
+   "coverage": "MISSING",
+   "gap": "",
+   "depends_on": [],
+   "blocks": [
+    "03.3"
+   ],
+   "terminal": false,
+   "notes": "Search: 'omp-inventory-map.*subprocess|subprocess.*omp-inventory-map' over all bead text -> 0 hits. UNRUN: whether spawn_contract.rs currently flags this site (it is absent from SPAWN_ALLOWANCE) was not executed — cargo is out of scope for this pass."
+  },
+  {
+   "id": "03.6",
+   "title": "Define `Verdictlike` in omp-types over asupersync `Outcome` (cancellation is a first-class outcome)",
+   "lines": "L253-L270",
+   "what": "One trait — fn outcome(&self)->Outcome<(),VerdictError>; fn subject(&self)->&str — so verdict enums become composable and countable without a seventh invented enum.",
+   "acceptance_seed": "crates/omp-types/src exports pub trait Verdictlike and VerdictError; a test maps a killed child to Outcome::Cancelled and asserts it is not Err; cargo test -p omp-types green.",
+   "priority": 1,
+   "kind": "crate",
+   "existing_beads": [],
+   "coverage": "MISSING",
+   "gap": "",
+   "depends_on": [],
+   "blocks": [
+    "03.7"
+   ],
+   "terminal": false,
+   "notes": "Search: 'Verdictlike' over all bead text -> 0 hits. ipg.17 (closed) recorded 'Grade ABSENT <- the gap that makes grading prose' as a finding but its acceptance was inventory-only. Doc no-claim L352: the trait 'has not been written'."
+  },
+  {
+   "id": "03.7",
+   "title": "Implement `Verdictlike` on every existing *Verdict enum, one crate per change",
+   "lines": "L268-L270",
+   "what": "Each verdict enum keeps its variants and gains one impl (doc counted six; live `grep -RhoE '^pub enum [A-Za-z_0-9]*Verdict'` today lists 15 distinct names / 19 declarations across 17 files).",
+   "acceptance_seed": "for every file matched by grep -RlE '^pub enum [A-Za-z_0-9]*Verdict' crates --include='*.rs' (excluding tests/fixtures), an `impl Verdictlike for` exists; each crate depends on omp-types; per-crate path-scoped commits.",
+   "priority": 2,
+   "kind": "wiring",
+   "existing_beads": [],
+   "coverage": "MISSING",
+   "gap": "",
+   "depends_on": [
+    "03.6"
+   ],
+   "blocks": [
+    "03.8",
+    "03.17"
+   ],
+   "terminal": false,
+   "notes": "Live list: AckVerdict, AckWaitVerdict, CloseReasonVerdict, CrateVerdict, FenceVerdict, FollowUpVerdict, GateVerdict(x2), HolderVerdict, MonitorVerdict, OracleCompareVerdict, ReceiptVerdict, SilenceVerdict, TickVerdict, Verdict(x4), WaveVerdict. NUMBERS.toml figures.verdict_types owns the count."
+  },
+  {
+   "id": "03.8",
+   "title": "Write `fn grade(&[&dyn Verdictlike]) -> Grade` so grading stops being prose",
+   "lines": "L204-L209,L269-L270",
+   "what": "With every verdict behind one trait, a supervisor can reduce AckVerdict+ReceiptVerdict+FenceVerdict to one countable Grade instead of a hand-written match per pair.",
+   "acceptance_seed": "omp-types (or a consumer) exports Grade and grade(); a test grades a mixed slice containing one Cancelled outcome and asserts Cancelled is neither Pass nor Fail; the supervisor emits a Grade in its tick row.",
+   "priority": 2,
+   "kind": "crate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-8zx1",
+     "status": "open",
+     "match": "partial",
+     "evidence": "S6 grading has no dispatcher, packet, or consumer for the grading state"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "8zx1 is the grading PROCESS (who grades, packet shape); nothing files the TYPE a grade can be.",
+   "depends_on": [
+    "03.7"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "Doc: 'That is why grading is prose — not because nobody wrote the grader, but because there is no type a grade could be.'"
+  },
+  {
+   "id": "03.9",
+   "title": "Advance the asupersync pin past the messaging-fabric/test-internals boundary (blocked upstream, named as blocked)",
+   "lines": "L234-L245,L277-L281,L314-L323",
+   "what": "AckKind/DeliveryClass live behind `messaging-fabric`, which at rev fa3c01aec needs `test-internals` (consumer.rs:1299 default impl) — unreachable without reintroducing the production leak upstream #46 closed.",
+   "acceptance_seed": "crates/omp-types/Cargo.toml pins an asupersync rev where `cargo build -p omp-types --features messaging-fabric` compiles without test-internals; the test ack_vocabulary_is_documented_as_unreachable is deleted in the same commit.",
+   "priority": 1,
+   "kind": "decision",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.14",
+     "status": "open",
+     "match": "partial",
+     "evidence": "re-derive ack-spine against asupersync's AckKind + DeliveryClass + PublishPermit before writing more of it. Either adopt them, or state with the measurement why a pane-dispatch boundary cannot use them"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "ipg.14 asks adopt-or-explain; no bead tracks the upstream feature boundary or the pin advance itself. Blocked on an external change (upstream un-gates the default impl) or a fork/patch decision.",
+   "depends_on": [
+    "external:asupersync upstream — un-gate messaging/consumer.rs:1299 fn default() from test-internals, or a Cargo [patch] we own"
+   ],
+   "blocks": [
+    "03.10"
+   ],
+   "terminal": false,
+   "notes": "Search: 'messaging-fabric|test-internals' over all bead text -> 0 hits. Doc L281: 'Until step (1) lands, the ack collapse is blocked, and named as blocked, not scheduled.'"
+  },
+  {
+   "id": "03.10",
+   "title": "Re-export AckKind, DeliveryClass (and ObligationLedger) from omp-types — the inhabited AckKind, not the graded.rs marker",
+   "lines": "L223-L241,L272-L280,L299-L301",
+   "what": "Step (2) of the ack collapse: pub use the messaging vocabulary once reachable; asupersync declares two AckKinds and obligation/graded.rs:790 is uninhabited.",
+   "acceptance_seed": "grep -nE '^pub use' crates/omp-types/src/lib.rs includes AckKind and DeliveryClass from asupersync::messaging (class.rs), and ObligationLedger; a test constructs AckKind::Accepted (compile-time proof the re-export is the inhabited enum).",
+   "priority": 1,
+   "kind": "crate",
+   "existing_beads": [],
+   "coverage": "MISSING",
+   "gap": "",
+   "depends_on": [
+    "03.9"
+   ],
+   "blocks": [
+    "03.11",
+    "03.18"
+   ],
+   "terminal": false,
+   "notes": "Doc L234-L241 records the two-AckKind trap. UNMEASURED here: whether ObligationLedger is also behind messaging-fabric or only unadopted (omp-types/Cargo.toml comment names only AckKind/DeliveryClass as gated)."
+  },
+  {
+   "id": "03.11",
+   "title": "Convert ack-spine's Authority triple (Transport/Delivery/AckAuthority) onto AckKind",
+   "lines": "L211-L216,L272-L280",
+   "what": "Step (3a): ack-spine speaks the Authority dialect; map Accepted=transport success from ntm JSON, Served=bead-comment ack read back; one crate per change so a bad conversion is bisectable.",
+   "acceptance_seed": "crates/ack-spine depends on omp-types; AckSummary/StepLedger rows carry AckKind; ack-spine's existing readback tests pass unchanged; cargo test -p ack-spine green.",
+   "priority": 2,
+   "kind": "wiring",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-ack-spine-oj6.3",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Ack spine: the three authorities must not substitute for each other"
+    },
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.14",
+     "status": "open",
+     "match": "partial",
+     "evidence": "re-derive ack-spine against asupersync's AckKind + DeliveryClass + PublishPermit"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "oj6.3 enforces non-substitution among the three home-grown authorities; nothing converts them to the upstream vocabulary. Blocked on 03.10.",
+   "depends_on": [
+    "03.10"
+   ],
+   "blocks": [
+    "03.12"
+   ],
+   "terminal": false,
+   "notes": "Committed/Recoverable are 'distinctions we currently cannot express at all' (L276)."
+  },
+  {
+   "id": "03.12",
+   "title": "Convert ack-stage's Receipt set (TransportReceipt/AckReadback/AckStageResult) onto AckKind",
+   "lines": "L211-L216,L279-L280",
+   "what": "Step (3b) of the sequenced collapse, after ack-spine.",
+   "acceptance_seed": "crates/ack-stage depends on omp-types; AckStageInput/AckStageResult carry AckKind instead of a parallel receipt enum; cargo test -p ack-stage green.",
+   "priority": 2,
+   "kind": "wiring",
+   "existing_beads": [],
+   "coverage": "MISSING",
+   "gap": "",
+   "depends_on": [
+    "03.11"
+   ],
+   "blocks": [
+    "03.13"
+   ],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "03.13",
+   "title": "Convert receiver-receipt's dialect (PanePresence/PostSendObservation/ReceiptReason/ReceiptVerdict) onto AckKind",
+   "lines": "L211-L216,L279-L280,L354-L357",
+   "what": "Step (3c), last in the chain; carries the UNMEASURED risk that a tmux pane can never produce an `Accepted`.",
+   "acceptance_seed": "crates/receiver-receipt depends on omp-types; ReceiptVerdict implements Verdictlike and its delivery classification maps onto AckKind or a documented non-mapping; cargo test -p receiver-receipt green.",
+   "priority": 2,
+   "kind": "wiring",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-receiver-receipt-contract-pwm",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Receiver receipt contract: two-capture delivery evidence"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "pwm defines the two-capture contract in the existing dialect; no bead migrates the dialect.",
+   "depends_on": [
+    "03.12",
+    "03.14"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "03.14",
+   "title": "Measure whether a tmux pane dispatch can produce an asupersync `Accepted` (the receipt gap may survive the vocabulary)",
+   "lines": "L354-L357",
+   "what": "Doc NO-CLAIM: --mode=rpc is single-session and cannot address a third-party pane; whether the messaging vocabulary applies at the pane boundary is UNMEASURED.",
+   "acceptance_seed": "A written measurement (mirror citation or explicit not-found per ipg.14 acceptance 1) stating, with a command, whether a pane-dispatch boundary can emit AckKind::Accepted; if not, the receipt design records the non-mapping before 03.13 starts.",
+   "priority": 2,
+   "kind": "measurement",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.14",
+     "status": "open",
+     "match": "partial",
+     "evidence": "every current UNMEASURED / 'hard' / 'no alternative' claim ... answered with either a mirror citation (repo, path, line) or an explicit 'searched, not found'"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "ipg.14 covers the class (mining pass over every UNMEASURED claim); this specific claim is not enumerated anywhere.",
+   "depends_on": [],
+   "blocks": [
+    "03.13"
+   ],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "03.15",
+   "title": "Converge the Observation seam: one PaneObservation/CycleObservation in omp-types consumed by tick-monitor AND omp-orchestrator",
+   "lines": "L188-L195,L283-L287",
+   "what": "tick-monitor and omp-orchestrator each declare an incompatible `pub struct Observation`; the seam is the direct cause of the BROKEN free_capacity row (162 refused ticks). types_inventory.rs holds a DECISION row (CONVERGE, 4 migration steps) and refuses the collision until it lands.",
+   "acceptance_seed": "grep -RnE '^pub struct Observation\\b' crates/tick-monitor/src crates/omp-orchestrator/src -> 0; both Cargo.toml list omp-types; omp-inventory-map's type gate passes with no Observation collision and the SeamDecision row is retired; vgf's NewlyIdle test passes against the shared type.",
+   "priority": 0,
+   "kind": "wiring",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-phase0-pane-observation-80h",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Define PaneObservation in omp-types as graded pane evidence ... callers remain unmigrated for Phase 1"
+    },
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.17",
+     "status": "closed",
+     "match": "partial",
+     "evidence": "THE Observation COLLISION GETS A DECISION, not an allowance row: one shared type across the tick-monitor -> omp-orchestrator seam"
+    },
+    {
+     "id": "omp-orchestrator-tickmonitor-free-capacity-blind-vgf",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "free_capacity is computed from ITS OWN predicate -- ConfirmedIdle OR NewlyIdle -- never from the dispatchable filter"
+    },
+    {
+     "id": "omp-orchestrator-jplf.1",
+     "status": "open",
+     "match": "partial",
+     "evidence": "Close the canonical ClaimStrength, Admission, PaneObservation, and Lifecycle type algebra"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "Steps 2-4 of the recorded migration (tick-monitor aliases PaneObservation; omp-orchestrator::decide() consumes CycleObservation built from producer types; old names die) have no bead — 80h explicitly leaves callers unmigrated and jplf.2 does not name the seam. Live today: tick-monitor/src/lib.rs:657 and omp-orchestrator/src/lib.rs:214 both declare Observation; omp-orchestrator does not depend on omp-types.",
+   "depends_on": [
+    "external:omp-orchestrator-phase0-pane-observation-80h (PaneObservation exported from omp-types)"
+   ],
+   "blocks": [
+    "03.16",
+    "03.17"
+   ],
+   "terminal": false,
+   "notes": "Doc: 'the highest-value single row in the inventory' (ipg.17 acc 3). Related: observation-identity-output-sequence-nqvk adds identity to the same struct — sequence it after convergence or it re-declares on one side."
+  },
+  {
+   "id": "03.16",
+   "title": "Extend omp-inventory-map's type gate: a crate declaring a public type that omp-types exports fails the build",
+   "lines": "L283-L293",
+   "what": "Duplicate-of-canonical: widen ALLOWED_COLLISIONS/SeamDecision logic from name-vs-name across crates to name-vs-omp-types-export-set, so the vocabulary cannot be re-invented locally.",
+   "acceptance_seed": "cargo test -p omp-inventory-map with a planted crate declaring `pub enum Outcome` -> RED naming the crate and omp-types; a crate that merely re-exports omp-types passes; the omp-types export set is read from source, not hand-listed.",
+   "priority": 1,
+   "kind": "gate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.18",
+     "status": "open",
+     "match": "partial",
+     "evidence": "FIRES-ON-KNOWN-BAD, one specimen per leg ... a crate redeclaring a canonical type, and a name collision"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "ipg.18 names the leg inside a five-leg epic; nothing extends types_inventory.rs specifically. types_inventory.rs:1005-1010 records that no-shell-gate's COLLISION_ALLOWANCE and omp-inventory-map's ALLOWED_COLLISIONS 'independently pin the same fact' with nothing enforcing agreement — a single shared source 'does not exist yet'.",
+   "depends_on": [],
+   "blocks": [],
+   "terminal": false,
+   "notes": "Doc L290-L293 NO-CLAIM: 'This raises a floor, it does not guarantee coherence — the gate matches names'."
+  },
+  {
+   "id": "03.17",
+   "title": "omp-types adoption ratchet: the canonical vocabulary must have dependents, and the count only rises",
+   "lines": "L218-L221,L295-L305",
+   "what": "omp-types shipped with ZERO dependents ('shipped and unadopted'); today exactly one crate (pane-dispatch-ready) lists it.",
+   "acceptance_seed": "grep -l 'omp-types' crates/*/Cargo.toml | wc -l registered as a NUMBERS.toml ratchet (level+hash per opsa) that may only rise; every crate declaring a *Verdict or Observation type is a dependent.",
+   "priority": 2,
+   "kind": "measurement",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.18",
+     "status": "open",
+     "match": "partial",
+     "evidence": "omp-types depended_on_by = 0 of 25 crates ... available and mandatory nowhere"
+    },
+    {
+     "id": "omp-orchestrator-jplf.1",
+     "status": "open",
+     "match": "partial",
+     "evidence": "Every later phase must cite one shared vocabulary instead of redeclaring state"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "No ratchet figure exists; adoption happens crate-by-crate through 03.7/03.11-13/03.15.",
+   "depends_on": [
+    "03.7",
+    "03.15"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "omp-types now also depends on subprocess-contract (edge absent from the doc's 18-edge list)."
+  },
+  {
+   "id": "03.18",
+   "title": "Replace `Duty` (#[must_use], no ledger) with an ObligationLedger-backed obligation in omp-orchestrator",
+   "lines": "L299-L301",
+   "what": "A dropped Duty leaked an obligation that survived 162 refused ticks; asupersync's reserve->commit-or-abort ledger is the upstream answer.",
+   "acceptance_seed": "omp-orchestrator's Duty/Discharged pair is backed by an ObligationLedger reservation with ObligationId; a test drops a reserved obligation and asserts the ledger reports it aborted/leaked (typed), not silently gone.",
+   "priority": 1,
+   "kind": "wiring",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.14",
+     "status": "open",
+     "match": "partial",
+     "evidence": "Our Duty type has #[must_use] but no two-phase reservation and no ledger, so a dropped Duty leaks an obligation that only a human notices"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "ipg.14 names the gap as a finding in a mining-discipline bead; no bead does the replacement.",
+   "depends_on": [
+    "03.10"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "Search: '\\bDuty\\b' over all bead text -> 2 hits (ipg.14, dvx3-closed)."
+  },
+  {
+   "id": "03.19",
+   "title": "Give pane-dispatch-fence a library surface (src/lib.rs with typed pub items)",
+   "lines": "L83,L347",
+   "what": "The only workspace member with no src/lib.rs and zero pub items; its contract is UNDECLARED and untestable from outside the binary, while omp-orchestrator relies on its admission behaviour.",
+   "acceptance_seed": "crates/pane-dispatch-fence/src/lib.rs exists exporting the fence verdict/lock types; grep -c '^pub ' > 0; the NAMED_ZEROS row for pane-dispatch-fence in omp-inventory-map/types_inventory.rs is removed and its stale-zero check passes; main.rs is a thin caller.",
+   "priority": 1,
+   "kind": "crate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-ywd5",
+     "status": "open",
+     "match": "partial",
+     "evidence": "crates/pane-dispatch-fence/src/main.rs:100-104 (lock keyed on {session}.{pane} — a REUSABLE name"
+    },
+    {
+     "id": "omp-orchestrator-wbo2",
+     "status": "open",
+     "match": "partial",
+     "evidence": "'no packet reaches a pane except through claim fence → pane fence → ACK' ... sealed AdmittedSend + source lint + hook + census row"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "ywd5/wbo2 change the fence's semantics (incarnation lease, layered enforcement) but neither states 'add a library surface'; ipg.17 (closed) only recorded it as a NAMED ZERO.",
+   "depends_on": [],
+   "blocks": [],
+   "terminal": false,
+   "notes": "Verified on disk: crates/pane-dispatch-fence/src contains main.rs only."
+  },
+  {
+   "id": "03.20",
+   "title": "census_gates derives the control-plane/unextracted crate set from the extraction roster, not a hand-listed 3-name UNEXTRACTED const",
+   "lines": "L402-L411",
+   "what": "The census was 'a frozen snapshot of a planned workspace naming 3 of the 20 missing crates arbitrarily'; the doc says naming all twenty is the fix and NUMBERS.toml carries the count.",
+   "acceptance_seed": "crates/omp-orchestrator/src/lib.rs has no `const UNEXTRACTED` literal list; GateReachability::NotExtracted rows are produced from docs/inventories/extraction_roster.json (extraction_targets) so a roster change changes the census without a source edit; anti-vacuity: an unreadable roster is a typed refusal.",
+   "priority": 1,
+   "kind": "wiring",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-leht",
+     "status": "open",
+     "match": "partial",
+     "evidence": "the gate census has 25 rows for 65 crates: 40 have no row at all ... There is no variant for 'this crate was never asked'"
+    },
+    {
+     "id": "omp-orchestrator-crate-reachability-census-44g",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "extend the kernel-baked census from GATES to EVERY CRATE ... from cargo metadata edges, never grep"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "Both widen the census; neither replaces the UNEXTRACTED const (lib.rs:781 still lists fleet-truth, oracle-compare, oracle-pane-state-differential) with the roster the Phase-A work created.",
+   "depends_on": [],
+   "blocks": [],
+   "terminal": false,
+   "notes": "All three listed names are on disk today, so the const is dead code that falls through (lib.rs:787)."
+  },
+  {
+   "id": "03.21",
+   "title": "Extraction contract (815.contract): how a crate moves without losing work in a shared checkout",
+   "lines": "L477,L489-L496",
+   "what": "Prerequisite of every extraction child: the move hazard is uncommitted work in a shared checkout; acceptance per child is the same three commands (builds here, tests pass here, [crates.x] block present — wired_lanes.rs already refuses an undeclared crate).",
+   "acceptance_seed": "A machine-checked porting gate (porting_gate.rs clauses 1-5) plus a written move procedure requiring an Agent Mail file reservation and path-scoped commit before any crate copy; `cargo test -p no-shell-gate --test porting_gate` runs check_all_ports over the workspace (today check_all_ports has no caller).",
+   "priority": 1,
+   "kind": "decision",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-815",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "PHASE B -- EXTRACT, ONLY AFTER THE TERMINAL LIST IS RATIFIED ... B1-B7"
+    },
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.16",
+     "status": "open",
+     "match": "partial",
+     "evidence": "A porting checklist exists as a GATE, not a document — the six clauses above, machine-checked, refusing a landing that misses any"
+    },
+    {
+     "id": "omp-orchestrator-workspace-load-gate-of3",
+     "status": "closed",
+     "match": "partial",
+     "evidence": "A broken workspace manifest silently disables the no-shell gate; extraction has no per-copy load check"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "815.1 (the contract child) is a tombstone; porting_gate.rs exists with five clauses but its workspace-wide check_all_ports() is never invoked by a test [grep: 1 definition, 0 callers]; the shared-checkout reservation/path-scoped-commit rule lives in AGENTS.md prose, not in a clause.",
+   "depends_on": [],
+   "blocks": [
+    "03.22",
+    "03.23",
+    "03.24",
+    "03.25",
+    "03.26",
+    "03.27",
+    "03.28",
+    "03.29",
+    "03.30",
+    "03.31",
+    "03.32",
+    "03.33",
+    "03.34",
+    "03.35",
+    "03.36",
+    "03.37",
+    "03.38",
+    "03.39",
+    "03.40",
+    "03.41"
+   ],
+   "terminal": false,
+   "notes": "815's denominator moved: Phase B now targets the roster's 18 extraction_targets (all control-plane-only names), while the 20 crates §3.10 names are on disk and tracked (git ls-files > 0 for all 20)."
+  },
+  {
+   "id": "03.22",
+   "title": "Land oracle-compare (561 LOC, wave 1): builds and tests green here, [crates.oracle-compare] declared",
+   "lines": "L369-L393,L436-L458,L489-L492",
+   "what": "Per-child acceptance the doc fixes for every extraction: the crate builds in this workspace, its own tests pass here, and OMP-SURFACE-MAP.toml carries a [crates.oracle-compare] block. articulation point, unblocks 3; smallest leaf — cheapest falsifier first.",
+   "acceptance_seed": "cargo build -p oracle-compare && cargo test -p oracle-compare exit 0 from a clean clone; grep -c '^\\[crates.oracle-compare\\]' OMP-SURFACE-MAP.toml -> 1 (true today); git ls-files crates/oracle-compare non-empty (true today); test count not below the control-plane count.",
+   "priority": 0,
+   "kind": "crate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-815",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "B1. cargo build --workspace --release green with every extracted crate present. B2. cargo test --workspace green. Per-crate test counts reported BEFORE and AFTER"
+    },
+    {
+     "id": "omp-orchestrator-815.2",
+     "status": "tombstone",
+     "match": "exact",
+     "evidence": "Extract oracle-compare (561 LOC) from control-plane"
+    },
+    {
+     "id": "omp-orchestrator-untracked-crates-break-clone-jlb",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Track the 19 crates/* directories that exist on this disk and in no git commit"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "The per-crate child omp-orchestrator-815.2 is a tombstone (deleted with delete_reason=delete, no rationale — see mde); 815 Phase B's denominator is now the roster's 18 control-plane-only targets, which excludes oracle-compare (an overlap already on disk). Build/test greenness here is UNRUN in this pass; diq0 reports 17 failing suites and cfg5 23 clean-clone failures workspace-wide.",
+   "depends_on": [
+    "03.21"
+   ],
+   "blocks": [
+    "03.37",
+    "03.39",
+    "03.40"
+   ],
+   "terminal": false,
+   "notes": "On disk: yes; [crates.oracle-compare] block: yes; tracked: yes. No tests/ dir on disk (tracked_files=2). Live Cargo.toml drift: tick-dispatch/pane-oracle-diff/oracle-pane-state-differential/refill-idle-panes all path-dep on it (doc: 3 dependents; now 4)."
+  },
+  {
+   "id": "03.23",
+   "title": "Land loop-coverage (926 LOC, wave 1): builds and tests green here, [crates.loop-coverage] declared",
+   "lines": "L369-L393,L436-L458,L489-L492",
+   "what": "Per-child acceptance the doc fixes for every extraction: the crate builds in this workspace, its own tests pass here, and OMP-SURFACE-MAP.toml carries a [crates.loop-coverage] block. gates the deepest chain (ntm-fleet-monitor -> fleet-monitor, 5,691 LOC).",
+   "acceptance_seed": "cargo build -p loop-coverage && cargo test -p loop-coverage exit 0 from a clean clone; grep -c '^\\[crates.loop-coverage\\]' OMP-SURFACE-MAP.toml -> 1 (true today); git ls-files crates/loop-coverage non-empty (true today); test count not below the control-plane count.",
+   "priority": 0,
+   "kind": "crate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-815",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "B1. cargo build --workspace --release green with every extracted crate present. B2. cargo test --workspace green. Per-crate test counts reported BEFORE and AFTER"
+    },
+    {
+     "id": "omp-orchestrator-815.3",
+     "status": "tombstone",
+     "match": "exact",
+     "evidence": "Extract loop-coverage (926 LOC) from control-plane"
+    },
+    {
+     "id": "omp-orchestrator-untracked-crates-break-clone-jlb",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Track the 19 crates/* directories that exist on this disk and in no git commit"
+    },
+    {
+     "id": "omp-orchestrator-content-citation-ordering-r3h",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "EITHER its citations are re-pointed at artifacts that exist here, OR the crate is removed from this repo until its precursors land"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "The per-crate child omp-orchestrator-815.3 is a tombstone (deleted with delete_reason=delete, no rationale — see mde); 815 Phase B's denominator is now the roster's 18 control-plane-only targets, which excludes loop-coverage (an overlap already on disk). Build/test greenness here is UNRUN in this pass; diq0 reports 17 failing suites and cfg5 23 clean-clone failures workspace-wide.",
+   "depends_on": [
+    "03.21"
+   ],
+   "blocks": [
+    "03.36"
+   ],
+   "terminal": false,
+   "notes": "On disk: yes; [crates.loop-coverage] block: yes; tracked: yes. No tests/ dir on disk; inline tests only. content-citation-ordering-r3h: a Cargo leaf but a CONTENT non-leaf (~13 citations into files not here; 5 failing tests at filing)."
+  },
+  {
+   "id": "03.24",
+   "title": "Land loop-driver (2484 LOC, wave 1): builds and tests green here, [crates.loop-driver] declared",
+   "lines": "L369-L393,L436-L458,L489-L492",
+   "what": "Per-child acceptance the doc fixes for every extraction: the crate builds in this workspace, its own tests pass here, and OMP-SURFACE-MAP.toml carries a [crates.loop-driver] block.",
+   "acceptance_seed": "cargo build -p loop-driver && cargo test -p loop-driver exit 0 from a clean clone; grep -c '^\\[crates.loop-driver\\]' OMP-SURFACE-MAP.toml -> 1 (true today); git ls-files crates/loop-driver non-empty (true today); test count not below the control-plane count.",
+   "priority": 1,
+   "kind": "crate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-815",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "B1. cargo build --workspace --release green with every extracted crate present. B2. cargo test --workspace green. Per-crate test counts reported BEFORE and AFTER"
+    },
+    {
+     "id": "omp-orchestrator-815.5",
+     "status": "tombstone",
+     "match": "exact",
+     "evidence": "Extract loop-driver (2484 LOC) from control-plane"
+    },
+    {
+     "id": "omp-orchestrator-untracked-crates-break-clone-jlb",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Track the 19 crates/* directories that exist on this disk and in no git commit"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "The per-crate child omp-orchestrator-815.5 is a tombstone (deleted with delete_reason=delete, no rationale — see mde); 815 Phase B's denominator is now the roster's 18 control-plane-only targets, which excludes loop-driver (an overlap already on disk). Build/test greenness here is UNRUN in this pass; diq0 reports 17 failing suites and cfg5 23 clean-clone failures workspace-wide.",
+   "depends_on": [
+    "03.21"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "On disk: yes; [crates.loop-driver] block: yes; tracked: yes. Live Cargo.toml adds path-deps loop-switch + subprocess-contract (loop-switch is absent from the doc)."
+  },
+  {
+   "id": "03.25",
+   "title": "Land fast-dispatch (2292 LOC, wave 1): builds and tests green here, [crates.fast-dispatch] declared",
+   "lines": "L369-L393,L436-L458,L489-L492",
+   "what": "Per-child acceptance the doc fixes for every extraction: the crate builds in this workspace, its own tests pass here, and OMP-SURFACE-MAP.toml carries a [crates.fast-dispatch] block.",
+   "acceptance_seed": "cargo build -p fast-dispatch && cargo test -p fast-dispatch exit 0 from a clean clone; grep -c '^\\[crates.fast-dispatch\\]' OMP-SURFACE-MAP.toml -> 1 (true today); git ls-files crates/fast-dispatch non-empty (true today); test count not below the control-plane count.",
+   "priority": 1,
+   "kind": "crate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-815",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "B1. cargo build --workspace --release green with every extracted crate present. B2. cargo test --workspace green. Per-crate test counts reported BEFORE and AFTER"
+    },
+    {
+     "id": "omp-orchestrator-815.6",
+     "status": "tombstone",
+     "match": "exact",
+     "evidence": "Extract fast-dispatch (2292 LOC) from control-plane"
+    },
+    {
+     "id": "omp-orchestrator-untracked-crates-break-clone-jlb",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Track the 19 crates/* directories that exist on this disk and in no git commit"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "The per-crate child omp-orchestrator-815.6 is a tombstone (deleted with delete_reason=delete, no rationale — see mde); 815 Phase B's denominator is now the roster's 18 control-plane-only targets, which excludes fast-dispatch (an overlap already on disk). Build/test greenness here is UNRUN in this pass; diq0 reports 17 failing suites and cfg5 23 clean-clone failures workspace-wide.",
+   "depends_on": [
+    "03.21"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "On disk: yes; [crates.fast-dispatch] block: yes; tracked: yes. Live Cargo.toml adds path-deps loop-switch + subprocess-contract."
+  },
+  {
+   "id": "03.26",
+   "title": "Land omp-idle-dispatch (2183 LOC, wave 1): builds and tests green here, [crates.omp-idle-dispatch] declared",
+   "lines": "L369-L393,L436-L458,L489-L492",
+   "what": "Per-child acceptance the doc fixes for every extraction: the crate builds in this workspace, its own tests pass here, and OMP-SURFACE-MAP.toml carries a [crates.omp-idle-dispatch] block.",
+   "acceptance_seed": "cargo build -p omp-idle-dispatch && cargo test -p omp-idle-dispatch exit 0 from a clean clone; grep -c '^\\[crates.omp-idle-dispatch\\]' OMP-SURFACE-MAP.toml -> 1 (true today); git ls-files crates/omp-idle-dispatch non-empty (true today); test count not below the control-plane count.",
+   "priority": 1,
+   "kind": "crate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-815",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "B1. cargo build --workspace --release green with every extracted crate present. B2. cargo test --workspace green. Per-crate test counts reported BEFORE and AFTER"
+    },
+    {
+     "id": "omp-orchestrator-815.7",
+     "status": "tombstone",
+     "match": "exact",
+     "evidence": "Extract omp-idle-dispatch (2183 LOC) from control-plane"
+    },
+    {
+     "id": "omp-orchestrator-untracked-crates-break-clone-jlb",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Track the 19 crates/* directories that exist on this disk and in no git commit"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "The per-crate child omp-orchestrator-815.7 is a tombstone (deleted with delete_reason=delete, no rationale — see mde); 815 Phase B's denominator is now the roster's 18 control-plane-only targets, which excludes omp-idle-dispatch (an overlap already on disk). Build/test greenness here is UNRUN in this pass; diq0 reports 17 failing suites and cfg5 23 clean-clone failures workspace-wide.",
+   "depends_on": [
+    "03.21"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "On disk: yes; [crates.omp-idle-dispatch] block: yes; tracked: yes. Doc LOC differs between §3.9 (1667) and §3.10 (2183). Live Cargo.toml adds subprocess-contract."
+  },
+  {
+   "id": "03.27",
+   "title": "Land fleet-truth (1621 LOC, wave 1): builds and tests green here, [crates.fleet-truth] declared",
+   "lines": "L369-L393,L436-L458,L489-L492",
+   "what": "Per-child acceptance the doc fixes for every extraction: the crate builds in this workspace, its own tests pass here, and OMP-SURFACE-MAP.toml carries a [crates.fleet-truth] block.",
+   "acceptance_seed": "cargo build -p fleet-truth && cargo test -p fleet-truth exit 0 from a clean clone; grep -c '^\\[crates.fleet-truth\\]' OMP-SURFACE-MAP.toml -> 1 (true today); git ls-files crates/fleet-truth non-empty (true today); test count not below the control-plane count.",
+   "priority": 1,
+   "kind": "crate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-815",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "B1. cargo build --workspace --release green with every extracted crate present. B2. cargo test --workspace green. Per-crate test counts reported BEFORE and AFTER"
+    },
+    {
+     "id": "omp-orchestrator-815.4",
+     "status": "tombstone",
+     "match": "exact",
+     "evidence": "Extract fleet-truth (1621 LOC) from control-plane"
+    },
+    {
+     "id": "omp-orchestrator-untracked-crates-break-clone-jlb",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Track the 19 crates/* directories that exist on this disk and in no git commit"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "The per-crate child omp-orchestrator-815.4 is a tombstone (deleted with delete_reason=delete, no rationale — see mde); 815 Phase B's denominator is now the roster's 18 control-plane-only targets, which excludes fleet-truth (an overlap already on disk). Build/test greenness here is UNRUN in this pass; diq0 reports 17 failing suites and cfg5 23 clean-clone failures workspace-wide.",
+   "depends_on": [
+    "03.21"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "On disk: yes; [crates.fleet-truth] block: yes; tracked: yes. "
+  },
+  {
+   "id": "03.28",
+   "title": "Land pane-dispatch-ready (1555 LOC, wave 1): builds and tests green here, [crates.pane-dispatch-ready] declared",
+   "lines": "L369-L393,L436-L458,L489-L492",
+   "what": "Per-child acceptance the doc fixes for every extraction: the crate builds in this workspace, its own tests pass here, and OMP-SURFACE-MAP.toml carries a [crates.pane-dispatch-ready] block.",
+   "acceptance_seed": "cargo build -p pane-dispatch-ready && cargo test -p pane-dispatch-ready exit 0 from a clean clone; grep -c '^\\[crates.pane-dispatch-ready\\]' OMP-SURFACE-MAP.toml -> 1 (true today); git ls-files crates/pane-dispatch-ready non-empty (true today); test count not below the control-plane count.",
+   "priority": 1,
+   "kind": "crate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-815",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "B1. cargo build --workspace --release green with every extracted crate present. B2. cargo test --workspace green. Per-crate test counts reported BEFORE and AFTER"
+    },
+    {
+     "id": "omp-orchestrator-815.8",
+     "status": "tombstone",
+     "match": "exact",
+     "evidence": "Extract pane-dispatch-ready (1555 LOC) from control-plane"
+    },
+    {
+     "id": "omp-orchestrator-untracked-crates-break-clone-jlb",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Track the 19 crates/* directories that exist on this disk and in no git commit"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "The per-crate child omp-orchestrator-815.8 is a tombstone (deleted with delete_reason=delete, no rationale — see mde); 815 Phase B's denominator is now the roster's 18 control-plane-only targets, which excludes pane-dispatch-ready (an overlap already on disk). Build/test greenness here is UNRUN in this pass; diq0 reports 17 failing suites and cfg5 23 clean-clone failures workspace-wide.",
+   "depends_on": [
+    "03.21"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "On disk: yes; [crates.pane-dispatch-ready] block: yes; tracked: yes. Only crate depending on omp-types today."
+  },
+  {
+   "id": "03.29",
+   "title": "Land loop-tick (1480 LOC, wave 1): builds and tests green here, [crates.loop-tick] declared",
+   "lines": "L369-L393,L436-L458,L489-L492",
+   "what": "Per-child acceptance the doc fixes for every extraction: the crate builds in this workspace, its own tests pass here, and OMP-SURFACE-MAP.toml carries a [crates.loop-tick] block.",
+   "acceptance_seed": "cargo build -p loop-tick && cargo test -p loop-tick exit 0 from a clean clone; grep -c '^\\[crates.loop-tick\\]' OMP-SURFACE-MAP.toml -> 1 (true today); git ls-files crates/loop-tick non-empty (true today); test count not below the control-plane count.",
+   "priority": 1,
+   "kind": "crate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-815",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "B1. cargo build --workspace --release green with every extracted crate present. B2. cargo test --workspace green. Per-crate test counts reported BEFORE and AFTER"
+    },
+    {
+     "id": "omp-orchestrator-815.9",
+     "status": "tombstone",
+     "match": "exact",
+     "evidence": "Extract loop-tick (1480 LOC) from control-plane"
+    },
+    {
+     "id": "omp-orchestrator-untracked-crates-break-clone-jlb",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Track the 19 crates/* directories that exist on this disk and in no git commit"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "The per-crate child omp-orchestrator-815.9 is a tombstone (deleted with delete_reason=delete, no rationale — see mde); 815 Phase B's denominator is now the roster's 18 control-plane-only targets, which excludes loop-tick (an overlap already on disk). Build/test greenness here is UNRUN in this pass; diq0 reports 17 failing suites and cfg5 23 clean-clone failures workspace-wide.",
+   "depends_on": [
+    "03.21"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "On disk: yes; [crates.loop-tick] block: yes; tracked: yes. "
+  },
+  {
+   "id": "03.30",
+   "title": "Land fleet-reconcile (1424 LOC, wave 1): builds and tests green here, [crates.fleet-reconcile] declared",
+   "lines": "L369-L393,L436-L458,L489-L492",
+   "what": "Per-child acceptance the doc fixes for every extraction: the crate builds in this workspace, its own tests pass here, and OMP-SURFACE-MAP.toml carries a [crates.fleet-reconcile] block.",
+   "acceptance_seed": "cargo build -p fleet-reconcile && cargo test -p fleet-reconcile exit 0 from a clean clone; grep -c '^\\[crates.fleet-reconcile\\]' OMP-SURFACE-MAP.toml -> 1 (true today); git ls-files crates/fleet-reconcile non-empty (true today); test count not below the control-plane count.",
+   "priority": 1,
+   "kind": "crate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-815",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "B1. cargo build --workspace --release green with every extracted crate present. B2. cargo test --workspace green. Per-crate test counts reported BEFORE and AFTER"
+    },
+    {
+     "id": "omp-orchestrator-815.10",
+     "status": "tombstone",
+     "match": "exact",
+     "evidence": "Extract fleet-reconcile (1424 LOC) from control-plane"
+    },
+    {
+     "id": "omp-orchestrator-untracked-crates-break-clone-jlb",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Track the 19 crates/* directories that exist on this disk and in no git commit"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "The per-crate child omp-orchestrator-815.10 is a tombstone (deleted with delete_reason=delete, no rationale — see mde); 815 Phase B's denominator is now the roster's 18 control-plane-only targets, which excludes fleet-reconcile (an overlap already on disk). Build/test greenness here is UNRUN in this pass; diq0 reports 17 failing suites and cfg5 23 clean-clone failures workspace-wide.",
+   "depends_on": [
+    "03.21"
+   ],
+   "blocks": [
+    "03.38"
+   ],
+   "terminal": false,
+   "notes": "On disk: yes; [crates.fleet-reconcile] block: yes; tracked: yes. "
+  },
+  {
+   "id": "03.31",
+   "title": "Land wired-but-inert-guard (1394 LOC, wave 1): builds and tests green here, [crates.wired-but-inert-guard] declared",
+   "lines": "L369-L393,L436-L458,L489-L492",
+   "what": "Per-child acceptance the doc fixes for every extraction: the crate builds in this workspace, its own tests pass here, and OMP-SURFACE-MAP.toml carries a [crates.wired-but-inert-guard] block.",
+   "acceptance_seed": "cargo build -p wired-but-inert-guard && cargo test -p wired-but-inert-guard exit 0 from a clean clone; grep -c '^\\[crates.wired-but-inert-guard\\]' OMP-SURFACE-MAP.toml -> 1 (true today); git ls-files crates/wired-but-inert-guard non-empty (true today); test count not below the control-plane count.",
+   "priority": 1,
+   "kind": "crate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-815",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "B1. cargo build --workspace --release green with every extracted crate present. B2. cargo test --workspace green. Per-crate test counts reported BEFORE and AFTER"
+    },
+    {
+     "id": "omp-orchestrator-815.11",
+     "status": "tombstone",
+     "match": "exact",
+     "evidence": "Extract wired-but-inert-guard (1394 LOC) from control-plane"
+    },
+    {
+     "id": "omp-orchestrator-untracked-crates-break-clone-jlb",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Track the 19 crates/* directories that exist on this disk and in no git commit"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "The per-crate child omp-orchestrator-815.11 is a tombstone (deleted with delete_reason=delete, no rationale — see mde); 815 Phase B's denominator is now the roster's 18 control-plane-only targets, which excludes wired-but-inert-guard (an overlap already on disk). Build/test greenness here is UNRUN in this pass; diq0 reports 17 failing suites and cfg5 23 clean-clone failures workspace-wide.",
+   "depends_on": [
+    "03.21"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "On disk: yes; [crates.wired-but-inert-guard] block: yes; tracked: yes. "
+  },
+  {
+   "id": "03.32",
+   "title": "Land verify-dispatch (1291 LOC, wave 1): builds and tests green here, [crates.verify-dispatch] declared",
+   "lines": "L369-L393,L436-L458,L489-L492",
+   "what": "Per-child acceptance the doc fixes for every extraction: the crate builds in this workspace, its own tests pass here, and OMP-SURFACE-MAP.toml carries a [crates.verify-dispatch] block.",
+   "acceptance_seed": "cargo build -p verify-dispatch && cargo test -p verify-dispatch exit 0 from a clean clone; grep -c '^\\[crates.verify-dispatch\\]' OMP-SURFACE-MAP.toml -> 1 (true today); git ls-files crates/verify-dispatch non-empty (true today); test count not below the control-plane count.",
+   "priority": 1,
+   "kind": "crate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-815",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "B1. cargo build --workspace --release green with every extracted crate present. B2. cargo test --workspace green. Per-crate test counts reported BEFORE and AFTER"
+    },
+    {
+     "id": "omp-orchestrator-815.12",
+     "status": "tombstone",
+     "match": "exact",
+     "evidence": "Extract verify-dispatch (1291 LOC) from control-plane"
+    },
+    {
+     "id": "omp-orchestrator-untracked-crates-break-clone-jlb",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Track the 19 crates/* directories that exist on this disk and in no git commit"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "The per-crate child omp-orchestrator-815.12 is a tombstone (deleted with delete_reason=delete, no rationale — see mde); 815 Phase B's denominator is now the roster's 18 control-plane-only targets, which excludes verify-dispatch (an overlap already on disk). Build/test greenness here is UNRUN in this pass; diq0 reports 17 failing suites and cfg5 23 clean-clone failures workspace-wide.",
+   "depends_on": [
+    "03.21"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "On disk: yes; [crates.verify-dispatch] block: yes; tracked: yes. "
+  },
+  {
+   "id": "03.33",
+   "title": "Land pane-truth (1247 LOC, wave 1): builds and tests green here, [crates.pane-truth] declared",
+   "lines": "L369-L393,L436-L458,L489-L492",
+   "what": "Per-child acceptance the doc fixes for every extraction: the crate builds in this workspace, its own tests pass here, and OMP-SURFACE-MAP.toml carries a [crates.pane-truth] block.",
+   "acceptance_seed": "cargo build -p pane-truth && cargo test -p pane-truth exit 0 from a clean clone; grep -c '^\\[crates.pane-truth\\]' OMP-SURFACE-MAP.toml -> 1 (true today); git ls-files crates/pane-truth non-empty (true today); test count not below the control-plane count.",
+   "priority": 1,
+   "kind": "crate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-815",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "B1. cargo build --workspace --release green with every extracted crate present. B2. cargo test --workspace green. Per-crate test counts reported BEFORE and AFTER"
+    },
+    {
+     "id": "omp-orchestrator-815.13",
+     "status": "tombstone",
+     "match": "exact",
+     "evidence": "Extract pane-truth (1247 LOC) from control-plane"
+    },
+    {
+     "id": "omp-orchestrator-untracked-crates-break-clone-jlb",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Track the 19 crates/* directories that exist on this disk and in no git commit"
+    },
+    {
+     "id": "omp-orchestrator-e4wp",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "pane-truth: ExitCode::from(selftest(&rules) as u8) truncates"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "The per-crate child omp-orchestrator-815.13 is a tombstone (deleted with delete_reason=delete, no rationale — see mde); 815 Phase B's denominator is now the roster's 18 control-plane-only targets, which excludes pane-truth (an overlap already on disk). Build/test greenness here is UNRUN in this pass; diq0 reports 17 failing suites and cfg5 23 clean-clone failures workspace-wide.",
+   "depends_on": [
+    "03.21"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "On disk: yes; [crates.pane-truth] block: yes; tracked: yes. "
+  },
+  {
+   "id": "03.34",
+   "title": "Land reap-finished-panes (1189 LOC, wave 1): builds and tests green here, [crates.reap-finished-panes] declared",
+   "lines": "L369-L393,L436-L458,L489-L492",
+   "what": "Per-child acceptance the doc fixes for every extraction: the crate builds in this workspace, its own tests pass here, and OMP-SURFACE-MAP.toml carries a [crates.reap-finished-panes] block.",
+   "acceptance_seed": "cargo build -p reap-finished-panes && cargo test -p reap-finished-panes exit 0 from a clean clone; grep -c '^\\[crates.reap-finished-panes\\]' OMP-SURFACE-MAP.toml -> 1 (true today); git ls-files crates/reap-finished-panes non-empty (true today); test count not below the control-plane count.",
+   "priority": 1,
+   "kind": "crate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-815",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "B1. cargo build --workspace --release green with every extracted crate present. B2. cargo test --workspace green. Per-crate test counts reported BEFORE and AFTER"
+    },
+    {
+     "id": "omp-orchestrator-815.14",
+     "status": "tombstone",
+     "match": "exact",
+     "evidence": "Extract reap-finished-panes (1189 LOC) from control-plane"
+    },
+    {
+     "id": "omp-orchestrator-untracked-crates-break-clone-jlb",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Track the 19 crates/* directories that exist on this disk and in no git commit"
+    },
+    {
+     "id": "omp-orchestrator-t00",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "reap-finished-panes wraps a control-plane bash script that cannot exist here; the supervisor refuses every tick — port the reaper to Rust"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "The per-crate child omp-orchestrator-815.14 is a tombstone (deleted with delete_reason=delete, no rationale — see mde); 815 Phase B's denominator is now the roster's 18 control-plane-only targets, which excludes reap-finished-panes (an overlap already on disk). Build/test greenness here is UNRUN in this pass; diq0 reports 17 failing suites and cfg5 23 clean-clone failures workspace-wide.",
+   "depends_on": [
+    "03.21"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "On disk: yes; [crates.reap-finished-panes] block: yes; tracked: yes. t00/n4xg: wraps a control-plane bash script the no-shell rule deleted; the supervisor refuses every tick until ported."
+  },
+  {
+   "id": "03.35",
+   "title": "Land dispatcher-deadman (883 LOC, wave 1): builds and tests green here, [crates.dispatcher-deadman] declared",
+   "lines": "L369-L393,L436-L458,L489-L492",
+   "what": "Per-child acceptance the doc fixes for every extraction: the crate builds in this workspace, its own tests pass here, and OMP-SURFACE-MAP.toml carries a [crates.dispatcher-deadman] block.",
+   "acceptance_seed": "cargo build -p dispatcher-deadman && cargo test -p dispatcher-deadman exit 0 from a clean clone; grep -c '^\\[crates.dispatcher-deadman\\]' OMP-SURFACE-MAP.toml -> 1 (true today); git ls-files crates/dispatcher-deadman non-empty (true today); test count not below the control-plane count.",
+   "priority": 1,
+   "kind": "crate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-815",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "B1. cargo build --workspace --release green with every extracted crate present. B2. cargo test --workspace green. Per-crate test counts reported BEFORE and AFTER"
+    },
+    {
+     "id": "omp-orchestrator-815.15",
+     "status": "tombstone",
+     "match": "exact",
+     "evidence": "Extract dispatcher-deadman (883 LOC) from control-plane"
+    },
+    {
+     "id": "omp-orchestrator-untracked-crates-break-clone-jlb",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Track the 19 crates/* directories that exist on this disk and in no git commit"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "The per-crate child omp-orchestrator-815.15 is a tombstone (deleted with delete_reason=delete, no rationale — see mde); 815 Phase B's denominator is now the roster's 18 control-plane-only targets, which excludes dispatcher-deadman (an overlap already on disk). Build/test greenness here is UNRUN in this pass; diq0 reports 17 failing suites and cfg5 23 clean-clone failures workspace-wide.",
+   "depends_on": [
+    "03.21"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "On disk: yes; [crates.dispatcher-deadman] block: yes; tracked: yes. "
+  },
+  {
+   "id": "03.36",
+   "title": "Land ntm-fleet-monitor (3122 LOC, wave 2): builds and tests green here, [crates.ntm-fleet-monitor] declared",
+   "lines": "L369-L393,L436-L458,L489-L492",
+   "what": "Per-child acceptance the doc fixes for every extraction: the crate builds in this workspace, its own tests pass here, and OMP-SURFACE-MAP.toml carries a [crates.ntm-fleet-monitor] block. blocked on loop-coverage.",
+   "acceptance_seed": "cargo build -p ntm-fleet-monitor && cargo test -p ntm-fleet-monitor exit 0 from a clean clone; grep -c '^\\[crates.ntm-fleet-monitor\\]' OMP-SURFACE-MAP.toml -> 1 (true today); git ls-files crates/ntm-fleet-monitor non-empty (true today); test count not below the control-plane count.",
+   "priority": 1,
+   "kind": "crate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-815",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "B1. cargo build --workspace --release green with every extracted crate present. B2. cargo test --workspace green. Per-crate test counts reported BEFORE and AFTER"
+    },
+    {
+     "id": "omp-orchestrator-815.16",
+     "status": "tombstone",
+     "match": "exact",
+     "evidence": "Extract ntm-fleet-monitor (3122 LOC) from control-plane"
+    },
+    {
+     "id": "omp-orchestrator-untracked-crates-break-clone-jlb",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Track the 19 crates/* directories that exist on this disk and in no git commit"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "The per-crate child omp-orchestrator-815.16 is a tombstone (deleted with delete_reason=delete, no rationale — see mde); 815 Phase B's denominator is now the roster's 18 control-plane-only targets, which excludes ntm-fleet-monitor (an overlap already on disk). Build/test greenness here is UNRUN in this pass; diq0 reports 17 failing suites and cfg5 23 clean-clone failures workspace-wide.",
+   "depends_on": [
+    "03.21",
+    "03.23"
+   ],
+   "blocks": [
+    "03.41"
+   ],
+   "terminal": false,
+   "notes": "On disk: yes; [crates.ntm-fleet-monitor] block: yes; tracked: yes. Doc LOC 3122; largest of the set."
+  },
+  {
+   "id": "03.37",
+   "title": "Land tick-dispatch (990 LOC, wave 2): builds and tests green here, [crates.tick-dispatch] declared",
+   "lines": "L369-L393,L436-L458,L489-L492",
+   "what": "Per-child acceptance the doc fixes for every extraction: the crate builds in this workspace, its own tests pass here, and OMP-SURFACE-MAP.toml carries a [crates.tick-dispatch] block. blocked on oracle-compare.",
+   "acceptance_seed": "cargo build -p tick-dispatch && cargo test -p tick-dispatch exit 0 from a clean clone; grep -c '^\\[crates.tick-dispatch\\]' OMP-SURFACE-MAP.toml -> 1 (true today); git ls-files crates/tick-dispatch non-empty (true today); test count not below the control-plane count.",
+   "priority": 1,
+   "kind": "crate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-815",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "B1. cargo build --workspace --release green with every extracted crate present. B2. cargo test --workspace green. Per-crate test counts reported BEFORE and AFTER"
+    },
+    {
+     "id": "omp-orchestrator-815.17",
+     "status": "tombstone",
+     "match": "exact",
+     "evidence": "Extract tick-dispatch (990 LOC) from control-plane"
+    },
+    {
+     "id": "omp-orchestrator-untracked-crates-break-clone-jlb",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Track the 19 crates/* directories that exist on this disk and in no git commit"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "The per-crate child omp-orchestrator-815.17 is a tombstone (deleted with delete_reason=delete, no rationale — see mde); 815 Phase B's denominator is now the roster's 18 control-plane-only targets, which excludes tick-dispatch (an overlap already on disk). Build/test greenness here is UNRUN in this pass; diq0 reports 17 failing suites and cfg5 23 clean-clone failures workspace-wide.",
+   "depends_on": [
+    "03.21",
+    "03.22"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "On disk: yes; [crates.tick-dispatch] block: yes; tracked: yes. "
+  },
+  {
+   "id": "03.38",
+   "title": "Land refill-idle-panes (947 LOC, wave 2): builds and tests green here, [crates.refill-idle-panes] declared",
+   "lines": "L369-L393,L436-L458,L489-L492",
+   "what": "Per-child acceptance the doc fixes for every extraction: the crate builds in this workspace, its own tests pass here, and OMP-SURFACE-MAP.toml carries a [crates.refill-idle-panes] block. blocked on fleet-reconcile.",
+   "acceptance_seed": "cargo build -p refill-idle-panes && cargo test -p refill-idle-panes exit 0 from a clean clone; grep -c '^\\[crates.refill-idle-panes\\]' OMP-SURFACE-MAP.toml -> 1 (true today); git ls-files crates/refill-idle-panes non-empty (true today); test count not below the control-plane count.",
+   "priority": 1,
+   "kind": "crate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-815",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "B1. cargo build --workspace --release green with every extracted crate present. B2. cargo test --workspace green. Per-crate test counts reported BEFORE and AFTER"
+    },
+    {
+     "id": "omp-orchestrator-815.18",
+     "status": "tombstone",
+     "match": "exact",
+     "evidence": "Extract refill-idle-panes (947 LOC) from control-plane"
+    },
+    {
+     "id": "omp-orchestrator-untracked-crates-break-clone-jlb",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Track the 19 crates/* directories that exist on this disk and in no git commit"
+    },
+    {
+     "id": "omp-orchestrator-ve4w",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "cron refill sent oj6.3 into control-plane %1389 (wrong Target)"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "The per-crate child omp-orchestrator-815.18 is a tombstone (deleted with delete_reason=delete, no rationale — see mde); 815 Phase B's denominator is now the roster's 18 control-plane-only targets, which excludes refill-idle-panes (an overlap already on disk). Build/test greenness here is UNRUN in this pass; diq0 reports 17 failing suites and cfg5 23 clean-clone failures workspace-wide.",
+   "depends_on": [
+    "03.21",
+    "03.30"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "On disk: yes; [crates.refill-idle-panes] block: yes; tracked: yes. Live Cargo.toml path-deps: subprocess-contract, fleet-reconcile, dispatch-claim-fence, oracle-compare (doc: fleet-reconcile only). ve4w: cron refill is control-plane's binary."
+  },
+  {
+   "id": "03.39",
+   "title": "Land pane-oracle-diff (741 LOC, wave 2): builds and tests green here, [crates.pane-oracle-diff] declared",
+   "lines": "L369-L393,L436-L458,L489-L492",
+   "what": "Per-child acceptance the doc fixes for every extraction: the crate builds in this workspace, its own tests pass here, and OMP-SURFACE-MAP.toml carries a [crates.pane-oracle-diff] block. blocked on oracle-compare.",
+   "acceptance_seed": "cargo build -p pane-oracle-diff && cargo test -p pane-oracle-diff exit 0 from a clean clone; grep -c '^\\[crates.pane-oracle-diff\\]' OMP-SURFACE-MAP.toml -> 1 (true today); git ls-files crates/pane-oracle-diff non-empty (true today); test count not below the control-plane count.",
+   "priority": 1,
+   "kind": "crate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-815",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "B1. cargo build --workspace --release green with every extracted crate present. B2. cargo test --workspace green. Per-crate test counts reported BEFORE and AFTER"
+    },
+    {
+     "id": "omp-orchestrator-815.19",
+     "status": "tombstone",
+     "match": "exact",
+     "evidence": "Extract pane-oracle-diff (741 LOC) from control-plane"
+    },
+    {
+     "id": "omp-orchestrator-untracked-crates-break-clone-jlb",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Track the 19 crates/* directories that exist on this disk and in no git commit"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "The per-crate child omp-orchestrator-815.19 is a tombstone (deleted with delete_reason=delete, no rationale — see mde); 815 Phase B's denominator is now the roster's 18 control-plane-only targets, which excludes pane-oracle-diff (an overlap already on disk). Build/test greenness here is UNRUN in this pass; diq0 reports 17 failing suites and cfg5 23 clean-clone failures workspace-wide.",
+   "depends_on": [
+    "03.21",
+    "03.22"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "On disk: yes; [crates.pane-oracle-diff] block: yes; tracked: yes. "
+  },
+  {
+   "id": "03.40",
+   "title": "Land oracle-pane-state-differential (613 LOC, wave 2): builds and tests green here, [crates.oracle-pane-state-differential] declared",
+   "lines": "L369-L393,L436-L458,L489-L492",
+   "what": "Per-child acceptance the doc fixes for every extraction: the crate builds in this workspace, its own tests pass here, and OMP-SURFACE-MAP.toml carries a [crates.oracle-pane-state-differential] block. blocked on oracle-compare.",
+   "acceptance_seed": "cargo build -p oracle-pane-state-differential && cargo test -p oracle-pane-state-differential exit 0 from a clean clone; grep -c '^\\[crates.oracle-pane-state-differential\\]' OMP-SURFACE-MAP.toml -> 1 (true today); git ls-files crates/oracle-pane-state-differential non-empty (true today); test count not below the control-plane count.",
+   "priority": 1,
+   "kind": "crate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-815",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "B1. cargo build --workspace --release green with every extracted crate present. B2. cargo test --workspace green. Per-crate test counts reported BEFORE and AFTER"
+    },
+    {
+     "id": "omp-orchestrator-815.20",
+     "status": "tombstone",
+     "match": "exact",
+     "evidence": "Extract oracle-pane-state-differential (613 LOC) from control-plane"
+    },
+    {
+     "id": "omp-orchestrator-untracked-crates-break-clone-jlb",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Track the 19 crates/* directories that exist on this disk and in no git commit"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "The per-crate child omp-orchestrator-815.20 is a tombstone (deleted with delete_reason=delete, no rationale — see mde); 815 Phase B's denominator is now the roster's 18 control-plane-only targets, which excludes oracle-pane-state-differential (an overlap already on disk). Build/test greenness here is UNRUN in this pass; diq0 reports 17 failing suites and cfg5 23 clean-clone failures workspace-wide.",
+   "depends_on": [
+    "03.21",
+    "03.22"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "On disk: yes; [crates.oracle-pane-state-differential] block: yes; tracked: yes. "
+  },
+  {
+   "id": "03.41",
+   "title": "Land fleet-monitor (2569 LOC, wave 3): builds and tests green here, [crates.fleet-monitor] declared",
+   "lines": "L369-L393,L436-L458,L489-L492",
+   "what": "Per-child acceptance the doc fixes for every extraction: the crate builds in this workspace, its own tests pass here, and OMP-SURFACE-MAP.toml carries a [crates.fleet-monitor] block. blocked on ntm-fleet-monitor -> loop-coverage.",
+   "acceptance_seed": "cargo build -p fleet-monitor && cargo test -p fleet-monitor exit 0 from a clean clone; grep -c '^\\[crates.fleet-monitor\\]' OMP-SURFACE-MAP.toml -> 1 (true today); git ls-files crates/fleet-monitor non-empty (true today); test count not below the control-plane count.",
+   "priority": 1,
+   "kind": "crate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-815",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "B1. cargo build --workspace --release green with every extracted crate present. B2. cargo test --workspace green. Per-crate test counts reported BEFORE and AFTER"
+    },
+    {
+     "id": "omp-orchestrator-815.21",
+     "status": "tombstone",
+     "match": "exact",
+     "evidence": "Extract fleet-monitor (2569 LOC) from control-plane"
+    },
+    {
+     "id": "omp-orchestrator-untracked-crates-break-clone-jlb",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Track the 19 crates/* directories that exist on this disk and in no git commit"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "The per-crate child omp-orchestrator-815.21 is a tombstone (deleted with delete_reason=delete, no rationale — see mde); 815 Phase B's denominator is now the roster's 18 control-plane-only targets, which excludes fleet-monitor (an overlap already on disk). Build/test greenness here is UNRUN in this pass; diq0 reports 17 failing suites and cfg5 23 clean-clone failures workspace-wide.",
+   "depends_on": [
+    "03.21",
+    "03.36"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "On disk: yes; [crates.fleet-monitor] block: yes; tracked: yes. Live Cargo.toml adds subprocess-contract."
+  },
+  {
+   "id": "03.42",
+   "title": "Register control_plane_unextracted_loc (authoritative source walk, 29,512 vs 28,779 table sum)",
+   "lines": "L523-L533",
+   "what": "BLOCKER resolution: the hand-maintained AGENTS.md table sum is the defect; the live walk is authoritative and registered.",
+   "acceptance_seed": "grep -n '^\\[figures.control_plane_unextracted_loc\\]' NUMBERS.toml -> 1 row with a command and zero_is_real=true (true today at NUMBERS.toml:215).",
+   "priority": 3,
+   "kind": "doc-fact",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-kxe.3",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Every [figures.*] command in NUMBERS.toml runs from the repository and its expect matches the command output"
+    }
+   ],
+   "coverage": "COVERED",
+   "gap": "",
+   "depends_on": [],
+   "blocks": [],
+   "terminal": true,
+   "notes": "Holds on disk: NUMBERS.toml:215-220, expect=0, note 'the previous 29,512 total was the source corpus, not an unextracted count'. Nothing to file; listed so the integrator does not re-file it."
+  },
+  {
+   "id": "03.43",
+   "title": "Every NUMBERS.toml key this section cites resolves, and the on-disk denominator matches",
+   "lines": "L92,L100-L101,L171-L172,L180-L185,L197-L201,L325,L328-L331,L344,L515-L519",
+   "what": "Section 03 froze no integers; it delegates workspace_crates, path_dependency_edges, public_enums, public_structs, colliding_type_names, verdict_types, crates_forbidding_unsafe, unsafe_source_attributes, unsafe_both_mechanisms, forbid_unsafe_authoritative to the registry.",
+   "acceptance_seed": "grep -cE '^\\[figures\\.(workspace_crates|path_dependency_edges|public_enums|public_structs|colliding_type_names|verdict_types|crates_forbidding_unsafe|unsafe_source_attributes|unsafe_both_mechanisms|forbid_unsafe_authoritative)\\]' NUMBERS.toml -> 10 (true today); cargo test -p no-shell-gate --test numbers green.",
+   "priority": 3,
+   "kind": "doc-fact",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-kxe.3",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Every [figures.*] command in NUMBERS.toml runs from the repository and its expect matches the command output, except explicitly LIVE values"
+    },
+    {
+     "id": "omp-orchestrator-round22-drifted-figures-844",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "03-crates.md:341 ... the command contains a literal U+2026 inside the ERE, so it answers 0"
+    },
+    {
+     "id": "omp-orchestrator-opsa",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "add level + hash to 34 existing rows"
+    }
+   ],
+   "coverage": "COVERED",
+   "gap": "",
+   "depends_on": [
+    "03.1"
+   ],
+   "blocks": [],
+   "terminal": true,
+   "notes": "All 10 keys present (verified by grep). Drift observed: figures.workspace_crates_on_disk expect=65 while `ls -1 crates | wc -l` = 67 today and the doc says 50 packages (L10); figures.unsafe_both_mechanisms is a python3 -c one-liner inside a repo whose no-shell gate forbids tracked .py (the command is a registry string, not a file — noting, not claiming a violation)."
+  }
+ ],
+ "section_deps": [
+  "00: every denominator in this section is delegated to NUMBERS.toml (00-brief §3 / registry conventions); 03.1 and 03.43 wait on the registry's level+hash discipline (opsa) rather than freezing integers here",
+  "06: behavioural conformance of the derived contracts 'is the gate section's problem, not this one's' (L43-L45); the gates 03.2, 03.3, 03.16 land in no-shell-gate/omp-inventory-map but their invocation/CI wiring is 06's",
+  "external:asupersync upstream — the ack collapse (03.9-03.13, 03.18) is blocked on the messaging-fabric/test-internals feature boundary at rev fa3c01aec"
+ ],
+ "search_log": [
+  "br list -a --json -> 284 rows under .issues",
+  "br show omp-orchestrator-<id> --json x40 (815, h71g, p0fw, k4sc, r3h, ipg.14/15/16/17/18, xuu7, gfb, m3c, 5cl, jplf.1/2/4, 80h, sxz, vgf, nqvk, leht, 44g, jlb, 6gq, eqrf, 0hwn, diq0, cfg5, n4q, fr6, iad, r73l, 58u2, x1un, kxe.3, opsa, d1n, 844, vyud) -> all returned",
+  "jq over .beads/issues.jsonl for ^omp-orchestrator-815\\. -> 21 rows, all status=tombstone (815.1 contract + 815.2..815.21 per-crate)",
+  "regex over title+description+acceptance of all 284: 'Verdictlike' -> 0; 'AckKind' -> 2 (ipg.17, ipg.14); 'DeliveryClass' -> 2; 'ObligationLedger' -> 2; 'messaging-fabric|test-internals' -> 0; 'Observation.*(seam|converge|collision)|CycleObservation' -> 1 (ipg.17); 'pane-dispatch-fence' -> 13; 'unsafe_code|forbid\\(unsafe_code\\)' -> 28; 'omp-types' -> 11; 'omp-rpc-session.*subprocess-contract' -> 0; 'omp-inventory-map.*subprocess' -> 0; 'types_inventory|ALLOWED_COLLISIONS|duplicate-of-canonical' -> 0; '\\bDuty\\b' -> 2; 'extraction contract|815\\.contract|shared checkout' -> 6; 'census_gates|UNEXTRACTED' -> 8; 'control_plane_unextracted_loc|unextracted_crates|workspace_crates_on_disk' -> 1 (jlb)",
+  "ls -d crates/*/ | wc -l -> 67; doc names 26 (table) + 20 (§3.9) = 46, all present on disk; 21 on disk not in doc",
+  "grep '^\\[crates\\.' OMP-SURFACE-MAP.toml -> 53 blocks; 14 disk crates without a block (none of them section-03 crates)",
+  "grep -RhoE '^pub enum [A-Za-z_0-9]*Verdict' crates --include='*.rs' -> 19 declarations / 15 distinct names (doc: six)",
+  "grep -RnE '^pub struct Observation\\b' crates --include='*.rs' -> 2 (tick-monitor/src/lib.rs:657, omp-orchestrator/src/lib.rs:214)",
+  "grep -l omp-types crates/*/Cargo.toml -> 1 dependent (pane-dispatch-ready) (doc: zero)",
+  "grep Command::new crates/omp-rpc-session/src crates/omp-inventory-map/src -> 2 real spawn sites (lib.rs:136, lib.rs:1566); neither manifest lists subprocess-contract",
+  "grep '^\\[figures\\.<10 keys>\\]' NUMBERS.toml -> 10/10 present; workspace_crates_on_disk expect=65",
+  "grep check_all_ports crates/no-shell-gate -> 1 definition, 0 callers",
+  "git ls-files crates/<each of 20> | wc -l -> all > 0 (jlb's 19 untracked are now tracked); tests/ dir absent for loop-coverage and oracle-compare"
+ ],
+ "no_claim": "This manifest does not establish: (a) that any crate builds or its tests pass here — cargo was not run (UNRUN; diq0/cfg5 say the workspace is red); (b) whether spawn_contract.rs currently flags omp-inventory-map's un-allowed spawn site; (c) that crate-soundness-verify actually fails on the members=[\"crates/*\"] glob — read from source, not executed ([INFERENCE]); (d) whether ObligationLedger is gated behind messaging-fabric like AckKind; (e) whether the 21 tombstoned 815.N children should be revived or re-filed — the integrator decides; (f) coverage of the 21 on-disk crates the doc omits — they are notes on 03.1, not items, because the section never asks for them; (g) that the doc's 18-edge graph is current — live Cargo.toml edges differ (loop-switch, subprocess-contract, dispatch-claim-fence added) and NUMBERS.toml path_dependency_edges is LIVE by design."
+}

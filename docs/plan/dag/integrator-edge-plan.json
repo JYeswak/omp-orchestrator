@@ -1,0 +1,3527 @@
+{
+ "accepted": [
+  {
+   "dependent": "omp-orchestrator-6hrv",
+   "dependency": "omp-orchestrator-phcz",
+   "from_refs": [
+    "09.7 depends_on 09.12",
+    "09.12 blocks 09.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-6hrv",
+   "dependency": "omp-orchestrator-plan-09-bcrn.4",
+   "from_refs": [
+    "09.7 depends_on 09.10",
+    "09.10 blocks 09.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-6hrv",
+   "dependency": "omp-orchestrator-untracked-crates-break-clone-jlb",
+   "from_refs": [
+    "09.7 depends_on external:bead omp-orchestrator-untracked-crates-break-clone-jlb"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-6hrv",
+   "dependency": "omp-orchestrator-vyud",
+   "from_refs": [
+    "00.17 depends_on 07.clean-clone-green",
+    "09.7 depends_on external:bead omp-orchestrator-vyud (clean clone green)",
+    "09.7 depends_on 07.<doctor/health/repair + clean-machine receipt R8>",
+    "09.7 depends_on 08.<end-user install path>"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-6hrv",
+   "dependency": "omp-orchestrator-zlqk",
+   "from_refs": [
+    "09.6 blocks 09.7",
+    "09.7 depends_on 09.6"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-9he5",
+   "dependency": "omp-orchestrator-6hrv",
+   "from_refs": [
+    "09.7 blocks 09.8",
+    "09.8 depends_on 09.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-9he5",
+   "dependency": "omp-orchestrator-wire-finding-dispatch-9ms",
+   "from_refs": [
+    "09.13 depends_on external:bead omp-orchestrator-wire-finding-dispatch-9ms"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-9he5",
+   "dependency": "omp-orchestrator-zlqk",
+   "from_refs": [
+    "09.8 depends_on external:bead omp-orchestrator-zlqk"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-ack-spine-oj6.3",
+   "dependency": "omp-orchestrator-kxe",
+   "from_refs": [
+    "09.3 blocks 09.4",
+    "09.4 depends_on 09.3"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-ack-spine-oj6.3",
+   "dependency": "omp-orchestrator-kxe.8",
+   "from_refs": [
+    "09.4 depends_on 11.<packet journal (11-lifecycle F) \u2014 M3 must be demonstrated on a journaled dispatch>"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-ack-spine-oj6.3",
+   "dependency": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "from_refs": [
+    "09.4 depends_on external:bead omp-orchestrator-receiver-receipt-contract-pwm"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kernel-gate-census-69i",
+   "dependency": "omp-orchestrator-plan-06-xm0n.9",
+   "from_refs": [
+    "09.15 depends_on 06.<gate matrix / gate census rows for all crates>"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe",
+   "dependency": "omp-orchestrator-phase0-pane-observation-80h",
+   "from_refs": [
+    "09.2 blocks 09.3",
+    "09.3 depends_on 09.2"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe",
+   "dependency": "omp-orchestrator-plan-09-bcrn.4",
+   "from_refs": [
+    "09.3 depends_on 09.10"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "dependency": "omp-orchestrator-jplf.4.1",
+   "from_refs": [
+    "09.22 depends_on 06.<per-gate four legs + ADDRESSABLE>"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "dependency": "omp-orchestrator-kernel-gate-census-69i",
+   "from_refs": [
+    "09.15 blocks 09.22",
+    "09.22 depends_on 09.15"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "dependency": "omp-orchestrator-plan-06-xm0n.1",
+   "from_refs": [
+    "00.9 depends_on 00.10",
+    "00.10 blocks 00.9",
+    "09.19 blocks 09.22",
+    "09.22 depends_on 09.19"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "dependency": "omp-orchestrator-8zx1",
+   "from_refs": [
+    "09.5 depends_on 11.<S6 grading stage / GRADING status>"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "dependency": "omp-orchestrator-ack-spine-oj6.3",
+   "from_refs": [
+    "09.4 blocks 09.5",
+    "09.5 depends_on 09.4"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "dependency": "omp-orchestrator-eg0m",
+   "from_refs": [
+    "09.5 depends_on external:bead omp-orchestrator-eg0m (ack-spine wired)"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "dependency": "omp-orchestrator-igwd",
+   "from_refs": [
+    "09.5 depends_on external:bead omp-orchestrator-igwd (grading\u2192closed quorum)"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-phase0-pane-observation-80h",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "from_refs": [
+    "09.2 depends_on 05.<tick-monitor NewlyIdle/free_capacity observe action>"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-phcz",
+   "dependency": "omp-orchestrator-plan-07-8jkq.3",
+   "from_refs": [
+    "09.12 depends_on 07.<doctor subcommand / presence probe>"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-09-bcrn.1",
+   "dependency": "omp-orchestrator-8oz8",
+   "from_refs": [
+    "09.16 depends_on external:bead omp-orchestrator-8oz8 (plan-assemble write chokepoint to hang it on)"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-09-bcrn.1",
+   "dependency": "omp-orchestrator-plan-06-xm0n.6",
+   "from_refs": [
+    "09.16 depends_on 06.<envelope omp-inventory-map/v1 + ADDRESSABLE rule (brief \u00a73.2/\u00a73.6)>"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-09-bcrn.2",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "from_refs": [
+    "09.5 blocks 09.20",
+    "09.20 depends_on 09.5"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-09-bcrn.3",
+   "dependency": "omp-orchestrator-kxe",
+   "from_refs": [
+    "09.3 blocks 09.21",
+    "09.21 depends_on 09.3"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-09-bcrn.3",
+   "dependency": "omp-orchestrator-zlqk",
+   "from_refs": [
+    "09.6 blocks 09.21",
+    "09.21 depends_on 09.6"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-t52",
+   "dependency": "omp-orchestrator-kernel-gate-census-69i",
+   "from_refs": [
+    "09.15 blocks 09.18",
+    "09.18 depends_on 09.15"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-zlqk",
+   "dependency": "omp-orchestrator-5tn",
+   "from_refs": [
+    "09.6 depends_on external:bead omp-orchestrator-5tn (installed supervisor with claim fence)"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-zlqk",
+   "dependency": "omp-orchestrator-8zx1",
+   "from_refs": [
+    "09.6 depends_on 11.<claim\u2192send\u2192ack\u2192close lifecycle with GRADING state>"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-zlqk",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "from_refs": [
+    "09.5 blocks 09.6",
+    "09.6 depends_on 09.5"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-zlqk",
+   "dependency": "omp-orchestrator-th0z",
+   "from_refs": [
+    "09.6 depends_on external:bead omp-orchestrator-th0z (orchestration_tick laws)"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.4.1",
+   "dependency": "omp-orchestrator-plan-06-xm0n.1",
+   "from_refs": [
+    "06.5 blocks 06.25"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.4.1",
+   "dependency": "omp-orchestrator-plan-06-xm0n.2",
+   "from_refs": [
+    "06.7 blocks 06.25"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.4.1",
+   "dependency": "omp-orchestrator-plan-06-xm0n.3",
+   "from_refs": [
+    "06.3 blocks 06.25",
+    "06.4 blocks 06.25",
+    "06.9 blocks 06.25"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.4.1",
+   "dependency": "omp-orchestrator-plan-06-xm0n.4",
+   "from_refs": [
+    "06.10 blocks 06.25"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.4.1",
+   "dependency": "omp-orchestrator-plan-06-xm0n.5",
+   "from_refs": [
+    "06.11 blocks 06.25",
+    "06.25 depends_on 06.11"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.4.1",
+   "dependency": "omp-orchestrator-plan-06-xm0n.8",
+   "from_refs": [
+    "06.18 blocks 06.25",
+    "06.25 depends_on 06.18"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.4.1",
+   "dependency": "omp-orchestrator-plan-06-xm0n.9",
+   "from_refs": [
+    "06.21 blocks 06.25",
+    "06.23 blocks 06.25",
+    "06.25 depends_on 06.21",
+    "06.25 depends_on 06.23"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.1.1",
+   "dependency": "omp-orchestrator-jplf.7.1.2",
+   "from_refs": [
+    "07.24 depends_on 07.25"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.1.5",
+   "dependency": "omp-orchestrator-plan-07-8jkq.1",
+   "from_refs": [
+    "07.14 blocks 07.28",
+    "07.28 depends_on 07.14"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.10",
+   "dependency": "omp-orchestrator-jplf.7.5",
+   "from_refs": [
+    "07.33 depends_on 07.10"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.12",
+   "dependency": "omp-orchestrator-jplf.7.14",
+   "from_refs": [
+    "08.4 depends_on 08.14",
+    "08.14 blocks 08.4"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.12",
+   "dependency": "omp-orchestrator-jplf.7.15",
+   "from_refs": [
+    "08.4 depends_on 08.16",
+    "08.16 blocks 08.4"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.12",
+   "dependency": "omp-orchestrator-jplf.7.3",
+   "from_refs": [
+    "08.1 blocks 08.4"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.12",
+   "dependency": "omp-orchestrator-jplf.7.7",
+   "from_refs": [
+    "08.4 depends_on 08.8",
+    "08.8 blocks 08.4"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.13",
+   "dependency": "omp-orchestrator-jplf.7.7",
+   "from_refs": [
+    "08.8 blocks 08.9",
+    "08.9 depends_on 08.8"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.16",
+   "dependency": "omp-orchestrator-jplf.7.13",
+   "from_refs": [
+    "08.9 blocks 08.28",
+    "08.28 depends_on 08.9"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.16",
+   "dependency": "omp-orchestrator-jplf.7.3",
+   "from_refs": [
+    "08.28 depends_on 08.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.17",
+   "dependency": "omp-orchestrator-jplf.7.13",
+   "from_refs": [
+    "08.9 blocks 08.29"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.17",
+   "dependency": "omp-orchestrator-jplf.7.16",
+   "from_refs": [
+    "08.29 depends_on 08.28"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.18",
+   "dependency": "omp-orchestrator-plan-09-bcrn.1",
+   "from_refs": [
+    "12.44 blocks 12.45",
+    "12.45 depends_on 12.44"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.19",
+   "dependency": "omp-orchestrator-kxe.10",
+   "from_refs": [
+    "12.12 blocks 12.14",
+    "12.14 depends_on 12.12"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.20",
+   "dependency": "omp-orchestrator-jplf.7.19",
+   "from_refs": [
+    "12.56 blocks 12.53"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.3",
+   "dependency": "omp-orchestrator-jplf.7.2",
+   "from_refs": [
+    "07.6 blocks 07.8",
+    "07.8 depends_on 07.6"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.3",
+   "dependency": "omp-orchestrator-jplf.7.7",
+   "from_refs": [
+    "07.8 depends_on 07.7",
+    "08.1 depends_on 08.8",
+    "08.8 blocks 08.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.3",
+   "dependency": "omp-orchestrator-plan-07-8jkq.2",
+   "from_refs": [
+    "08.1 depends_on 08.21",
+    "08.21 blocks 08.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.4",
+   "dependency": "omp-orchestrator-jplf.7.2",
+   "from_refs": [
+    "07.6 blocks 07.9"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.4",
+   "dependency": "omp-orchestrator-jplf.7.3",
+   "from_refs": [
+    "07.8 blocks 07.9",
+    "07.9 depends_on 07.8"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.4",
+   "dependency": "omp-orchestrator-jplf.7.7",
+   "from_refs": [
+    "07.7 blocks 07.9"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.5",
+   "dependency": "omp-orchestrator-jplf.7.12",
+   "from_refs": [
+    "08.3 depends_on 08.4"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.5",
+   "dependency": "omp-orchestrator-jplf.7.2",
+   "from_refs": [
+    "07.6 blocks 07.10"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.5",
+   "dependency": "omp-orchestrator-jplf.7.3",
+   "from_refs": [
+    "07.10 depends_on 07.8",
+    "08.1 blocks 08.3",
+    "08.3 depends_on 08.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.5",
+   "dependency": "omp-orchestrator-jplf.7.6",
+   "from_refs": [
+    "07.10 depends_on 07.12",
+    "07.11 blocks 07.10",
+    "07.12 blocks 07.10"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.5",
+   "dependency": "omp-orchestrator-jplf.7.7",
+   "from_refs": [
+    "07.7 blocks 07.10"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.6",
+   "dependency": "omp-orchestrator-jplf.7.2",
+   "from_refs": [
+    "07.6 blocks 07.11",
+    "07.6 blocks 07.12",
+    "07.6 blocks 07.13",
+    "07.11 depends_on 07.6",
+    "07.12 depends_on 07.6",
+    "07.13 depends_on 07.6"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.7",
+   "dependency": "omp-orchestrator-jplf.7.2",
+   "from_refs": [
+    "07.7 depends_on 07.6"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.8",
+   "dependency": "omp-orchestrator-jplf.7.3",
+   "from_refs": [
+    "07.16 depends_on 07.8"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.8",
+   "dependency": "omp-orchestrator-jplf.7.7",
+   "from_refs": [
+    "07.16 depends_on 07.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.9",
+   "dependency": "omp-orchestrator-jplf.7.3",
+   "from_refs": [
+    "07.8 blocks 07.17",
+    "07.17 depends_on 07.8"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.9",
+   "dependency": "omp-orchestrator-kxe.8",
+   "from_refs": [
+    "12.9 blocks 12.35",
+    "12.35 depends_on 12.9"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.9",
+   "dependency": "omp-orchestrator-plan-11-vcd7.7",
+   "from_refs": [
+    "11.65 blocks 11.66",
+    "11.66 depends_on 11.65"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-00-04at.13",
+   "dependency": "omp-orchestrator-plan-04-7wn9.1",
+   "from_refs": [
+    "00.64 depends_on 00.14"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-01-kxwv.1.3",
+   "dependency": "omp-orchestrator-plan-01-kxwv.1.2",
+   "from_refs": [
+    "01.12 blocks 01.13",
+    "01.13 depends_on 01.12"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-01-kxwv.1.3",
+   "dependency": "omp-orchestrator-plan-01-kxwv.1.5",
+   "from_refs": [
+    "01.13 depends_on 01.22",
+    "01.21 depends_on 01.22",
+    "01.22 blocks 01.13",
+    "01.22 blocks 01.21"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-01-kxwv.1.4",
+   "dependency": "omp-orchestrator-plan-01-kxwv.1.2",
+   "from_refs": [
+    "01.12 blocks 01.14",
+    "01.14 depends_on 01.12"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-01-kxwv.1.4",
+   "dependency": "omp-orchestrator-plan-01-kxwv.1.5",
+   "from_refs": [
+    "01.20 depends_on 01.22",
+    "01.22 blocks 01.20"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-01-kxwv.1.5",
+   "dependency": "omp-orchestrator-plan-01-kxwv.1.2",
+   "from_refs": [
+    "01.12 blocks 01.22",
+    "01.22 depends_on 01.12"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-01-kxwv.1.6",
+   "dependency": "omp-orchestrator-plan-01-kxwv.1.2",
+   "from_refs": [
+    "01.24 depends_on 01.12",
+    "01.24 depends_on 01.18"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-01-kxwv.1.6",
+   "dependency": "omp-orchestrator-plan-01-kxwv.1.3",
+   "from_refs": [
+    "01.24 depends_on 01.13",
+    "01.24 depends_on 01.17",
+    "01.24 depends_on 01.21"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-01-kxwv.1.6",
+   "dependency": "omp-orchestrator-plan-01-kxwv.1.4",
+   "from_refs": [
+    "01.16 blocks 01.24",
+    "01.24 depends_on 01.14",
+    "01.24 depends_on 01.16",
+    "01.24 depends_on 01.20"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-01-kxwv.1.6",
+   "dependency": "omp-orchestrator-plan-01-kxwv.1.5",
+   "from_refs": [
+    "01.24 depends_on 01.22"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-02-lwdo.2",
+   "dependency": "omp-orchestrator-plan-02-lwdo.1",
+   "from_refs": [
+    "02.10 depends_on 02.9"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-02-lwdo.5",
+   "dependency": "omp-orchestrator-plan-02-lwdo.4",
+   "from_refs": [
+    "02.6 blocks 02.8"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-04-7wn9.2",
+   "dependency": "omp-orchestrator-plan-04-7wn9.1",
+   "from_refs": [
+    "04.13 blocks 04.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-04-7wn9.2",
+   "dependency": "omp-orchestrator-plan-04-7wn9.3",
+   "from_refs": [
+    "04.1 depends_on 04.14"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-04-7wn9.4",
+   "dependency": "omp-orchestrator-plan-04-7wn9.2",
+   "from_refs": [
+    "04.1 blocks 04.2",
+    "04.2 depends_on 04.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-05-ovcx.5",
+   "dependency": "omp-orchestrator-plan-05-ovcx.1",
+   "from_refs": [
+    "05.9 blocks 05.46",
+    "05.46 depends_on 05.9"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-06-xm0n.5",
+   "dependency": "omp-orchestrator-plan-06-xm0n.9",
+   "from_refs": [
+    "06.11 depends_on 06.21",
+    "06.21 blocks 06.11"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-06-xm0n.6",
+   "dependency": "omp-orchestrator-plan-02-lwdo.1",
+   "from_refs": [
+    "06.15 depends_on 06.12"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-06-xm0n.7",
+   "dependency": "omp-orchestrator-plan-02-lwdo.1",
+   "from_refs": [
+    "06.12 blocks 06.16"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-07-8jkq.1",
+   "dependency": "omp-orchestrator-jplf.7.2",
+   "from_refs": [
+    "07.6 blocks 07.14",
+    "07.14 depends_on 07.6"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-07-8jkq.1",
+   "dependency": "omp-orchestrator-plan-06-xm0n.9",
+   "from_refs": [
+    "01.38 depends_on 06.addressable-discoverability-spec"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-07-8jkq.2",
+   "dependency": "omp-orchestrator-plan-07-8jkq.3",
+   "from_refs": [
+    "07.38 depends_on 07.37"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-07-8jkq.3",
+   "dependency": "omp-orchestrator-jplf.7.7",
+   "from_refs": [
+    "07.37 depends_on 07.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-07-8jkq.4",
+   "dependency": "omp-orchestrator-jplf.7.1.1",
+   "from_refs": [
+    "07.39 depends_on 07.24"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-07-8jkq.5",
+   "dependency": "omp-orchestrator-jplf.7.2",
+   "from_refs": [
+    "07.41 depends_on 07.6"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-09-bcrn.1",
+   "dependency": "omp-orchestrator-jplf.4.1",
+   "from_refs": [
+    "00.54 depends_on 06.admission-checklist"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-11-vcd7.1",
+   "dependency": "omp-orchestrator-jplf.7.18",
+   "from_refs": [
+    "11.35 depends_on 11.33"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-11-vcd7.1",
+   "dependency": "omp-orchestrator-kxe.8",
+   "from_refs": [
+    "11.13 depends_on 11.1",
+    "11.18 depends_on 11.1",
+    "11.22 depends_on 11.1",
+    "11.35 depends_on 11.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-11-vcd7.2",
+   "dependency": "omp-orchestrator-kxe.10",
+   "from_refs": [
+    "11.10 depends_on 12.S1-runbook-fields"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-12-ibpa.12",
+   "dependency": "omp-orchestrator-jplf.7.18",
+   "from_refs": [
+    "12.45 blocks 12.77",
+    "12.77 depends_on 12.45"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-12-ibpa.6",
+   "dependency": "omp-orchestrator-jplf.7.18",
+   "from_refs": [
+    "12.45 blocks 12.47",
+    "12.47 depends_on 12.45"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-12-ibpa.6",
+   "dependency": "omp-orchestrator-kxe.8",
+   "from_refs": [
+    "12.9 blocks 12.36",
+    "12.36 depends_on 12.9"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.1.1",
+   "dependency": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "from_refs": [
+    "05.22 blocks 05.24",
+    "05.24 depends_on 05.22"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.4.1",
+   "dependency": "omp-orchestrator-ewnr",
+   "from_refs": [
+    "06.8 blocks 06.25"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.4.1",
+   "dependency": "omp-orchestrator-fence-ci-non-verdict-16l",
+   "from_refs": [
+    "06.2 blocks 06.25"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.4.1",
+   "dependency": "omp-orchestrator-leht",
+   "from_refs": [
+    "06.26 blocks 06.25"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.1",
+   "dependency": "omp-orchestrator-6hrv",
+   "from_refs": [
+    "07.23 depends_on external:omp-orchestrator-6hrv"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.1",
+   "dependency": "omp-orchestrator-8nuh",
+   "from_refs": [
+    "07.23 depends_on 07.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.1",
+   "dependency": "omp-orchestrator-installer-dep-uncommitted-txl",
+   "from_refs": [
+    "07.23 depends_on external:omp-orchestrator-installer-dep-uncommitted-txl"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.1",
+   "dependency": "omp-orchestrator-n4q",
+   "from_refs": [
+    "07.23 depends_on external:omp-orchestrator-n4q"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.1.1",
+   "dependency": "omp-orchestrator-8nuh",
+   "from_refs": [
+    "07.1 blocks 07.24"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.1.2",
+   "dependency": "omp-orchestrator-6hrv",
+   "from_refs": [
+    "07.21 blocks 07.25"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.1.4",
+   "dependency": "omp-orchestrator-6hrv",
+   "from_refs": [
+    "07.27 depends_on 07.3"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.10",
+   "dependency": "omp-orchestrator-2tny",
+   "from_refs": [
+    "07.33 depends_on 07.31"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.10",
+   "dependency": "omp-orchestrator-vyud",
+   "from_refs": [
+    "07.33 depends_on 07.36",
+    "07.36 blocks 07.33"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.11",
+   "dependency": "omp-orchestrator-6hrv",
+   "from_refs": [
+    "07.35 depends_on 07.21"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.12",
+   "dependency": "omp-orchestrator-588v",
+   "from_refs": [
+    "08.4 depends_on 08.5",
+    "08.5 blocks 08.4"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.13",
+   "dependency": "omp-orchestrator-psf7",
+   "from_refs": [
+    "08.9 depends_on 08.24",
+    "08.24 blocks 08.9"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.14",
+   "dependency": "omp-orchestrator-ve4w",
+   "from_refs": [
+    "08.13 blocks 08.14",
+    "08.14 depends_on 08.13"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.15",
+   "dependency": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "from_refs": [
+    "08.15 blocks 08.16",
+    "08.16 depends_on 08.15"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.16",
+   "dependency": "omp-orchestrator-kxe.1",
+   "from_refs": [
+    "08.28 depends_on 08.6"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.16",
+   "dependency": "omp-orchestrator-o7gz",
+   "from_refs": [
+    "08.28 depends_on 08.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.17",
+   "dependency": "omp-orchestrator-8ax8",
+   "from_refs": [
+    "08.18 blocks 08.29",
+    "08.29 depends_on 08.18"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.17",
+   "dependency": "omp-orchestrator-nsx1",
+   "from_refs": [
+    "08.27 blocks 08.29",
+    "08.29 depends_on 08.27"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.17",
+   "dependency": "omp-orchestrator-r73l",
+   "from_refs": [
+    "08.20 blocks 08.29",
+    "08.29 depends_on 08.20"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.17",
+   "dependency": "omp-orchestrator-vyud",
+   "from_refs": [
+    "08.29 depends_on 08.31",
+    "08.31 blocks 08.29"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.18",
+   "dependency": "omp-orchestrator-6hrv",
+   "from_refs": [
+    "11.45 depends_on 11.39"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.19",
+   "dependency": "omp-orchestrator-untracked-crates-break-clone-jlb",
+   "from_refs": [
+    "12.48 blocks 12.56"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.2",
+   "dependency": "omp-orchestrator-8nuh",
+   "from_refs": [
+    "07.6 depends_on 07.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.20",
+   "dependency": "omp-orchestrator-6hrv",
+   "from_refs": [
+    "12.52 blocks 12.53",
+    "12.53 depends_on 12.52"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.3",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "from_refs": [
+    "08.1 depends_on 08.17",
+    "08.17 blocks 08.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.6",
+   "dependency": "omp-orchestrator-exit-1-overloaded-x1o",
+   "from_refs": [
+    "07.18 blocks 07.11"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.6",
+   "dependency": "omp-orchestrator-psf7",
+   "from_refs": [
+    "08.24 blocks 08.33",
+    "08.33 depends_on 08.24"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.6",
+   "dependency": "omp-orchestrator-tvu5",
+   "from_refs": [
+    "07.11 depends_on 07.19"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.7",
+   "dependency": "omp-orchestrator-8nuh",
+   "from_refs": [
+    "07.1 blocks 07.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.7",
+   "dependency": "omp-orchestrator-psf7",
+   "from_refs": [
+    "08.8 depends_on 08.24",
+    "08.24 blocks 08.8"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.10",
+   "dependency": "omp-orchestrator-3kpc",
+   "from_refs": [
+    "12.11 blocks 12.12",
+    "12.12 depends_on 12.11"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.8",
+   "dependency": "omp-orchestrator-93lo",
+   "from_refs": [
+    "12.7 blocks 12.9",
+    "12.9 depends_on 12.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.8",
+   "dependency": "omp-orchestrator-a92y",
+   "from_refs": [
+    "12.3 blocks 12.9",
+    "12.4 blocks 12.9",
+    "12.9 depends_on 12.3",
+    "12.9 depends_on 12.4"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.9",
+   "dependency": "omp-orchestrator-3kpc",
+   "from_refs": [
+    "12.11 blocks 12.35",
+    "12.35 depends_on 12.11"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.9",
+   "dependency": "omp-orchestrator-ywd5",
+   "from_refs": [
+    "12.17 blocks 12.35",
+    "12.35 depends_on 12.17"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.9",
+   "dependency": "omp-orchestrator-zlyy",
+   "from_refs": [
+    "11.64 blocks 11.66",
+    "11.66 depends_on 11.64"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-00-04at.12",
+   "dependency": "omp-orchestrator-diq0",
+   "from_refs": [
+    "00.58 depends_on 00.3"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-01-kxwv.1.1",
+   "dependency": "omp-orchestrator-8oz8",
+   "from_refs": [
+    "01.10 depends_on external:omp-orchestrator-8oz8 preregistration-gate"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-01-kxwv.1.1",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "from_refs": [
+    "01.10 depends_on 01.2"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-01-kxwv.1.3",
+   "dependency": "omp-orchestrator-kxe",
+   "from_refs": [
+    "01.15 blocks 01.17",
+    "01.15 blocks 01.21",
+    "01.17 depends_on 01.15",
+    "01.21 depends_on 01.15"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-01-kxwv.1.4",
+   "dependency": "omp-orchestrator-kxe",
+   "from_refs": [
+    "01.15 blocks 01.16",
+    "01.15 blocks 01.20",
+    "01.16 depends_on 01.15",
+    "01.20 depends_on 01.15"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-01-kxwv.1.5",
+   "dependency": "omp-orchestrator-kxe",
+   "from_refs": [
+    "01.22 depends_on 01.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-01-kxwv.1.6",
+   "dependency": "omp-orchestrator-kxe",
+   "from_refs": [
+    "01.24 depends_on 01.15"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-01-kxwv.1.6",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.9",
+   "from_refs": [
+    "01.19 blocks 01.24",
+    "01.24 depends_on 01.19"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-02-lwdo.4",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.10",
+   "from_refs": [
+    "02.6 depends_on 02.7",
+    "02.7 blocks 02.6"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-02-lwdo.5",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.10",
+   "from_refs": [
+    "02.7 blocks 02.8",
+    "02.8 depends_on 02.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-02-lwdo.6",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.10",
+   "from_refs": [
+    "02.12 depends_on 02.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-02-lwdo.7",
+   "dependency": "omp-orchestrator-t52",
+   "from_refs": [
+    "02.21 blocks 02.22",
+    "02.22 depends_on 02.21"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-03-w3yb.2",
+   "dependency": "omp-orchestrator-ack-spine-oj6.3",
+   "from_refs": [
+    "03.11 blocks 03.12",
+    "03.12 depends_on 03.11"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-04-7wn9.2",
+   "dependency": "omp-orchestrator-jj7v",
+   "from_refs": [
+    "04.3 blocks 04.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-04-7wn9.2",
+   "dependency": "omp-orchestrator-kxe.3",
+   "from_refs": [
+    "04.1 depends_on 02.<omp-inventory-map census is current and addressable>"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-04-7wn9.3",
+   "dependency": "omp-orchestrator-artifact-provenance-writer-absent-w1s9",
+   "from_refs": [
+    "04.15 blocks 04.14"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-04-7wn9.3",
+   "dependency": "omp-orchestrator-leht",
+   "from_refs": [
+    "00.6 depends_on 00.5"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-04-7wn9.4",
+   "dependency": "omp-orchestrator-28dq",
+   "from_refs": [
+    "04.2 depends_on external:06 gate.yml admission lane must be able to run (see omp-orchestrator-28dq / gate-no-runner-j58 lineage)"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-05-ovcx.1",
+   "dependency": "omp-orchestrator-kxe",
+   "from_refs": [
+    "05.7 blocks 05.9",
+    "05.9 depends_on 05.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-05-ovcx.2",
+   "dependency": "omp-orchestrator-igwd",
+   "from_refs": [
+    "05.27 blocks 05.29",
+    "05.29 depends_on 05.27"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-05-ovcx.2",
+   "dependency": "omp-orchestrator-kxe",
+   "from_refs": [
+    "05.7 blocks 05.10",
+    "05.10 depends_on 05.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-05-ovcx.3",
+   "dependency": "omp-orchestrator-vggs",
+   "from_refs": [
+    "05.20 depends_on 05.30",
+    "05.30 blocks 05.20"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-05-ovcx.5",
+   "dependency": "omp-orchestrator-5tn",
+   "from_refs": [
+    "05.16 blocks 05.46",
+    "05.46 depends_on 05.16"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-05-ovcx.5",
+   "dependency": "omp-orchestrator-ywd5",
+   "from_refs": [
+    "05.46 depends_on 05.47",
+    "05.47 blocks 05.46"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-06-xm0n.4",
+   "dependency": "omp-orchestrator-yqun",
+   "from_refs": [
+    "06.10 depends_on 06.30",
+    "06.30 blocks 06.10"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-06-xm0n.9",
+   "dependency": "omp-orchestrator-6nhj",
+   "from_refs": [
+    "06.21 depends_on 06.24",
+    "06.24 blocks 06.21"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-07-8jkq.1",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.16",
+   "from_refs": [
+    "01.37 blocks 01.38",
+    "01.38 depends_on 01.37"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-07-8jkq.3",
+   "dependency": "omp-orchestrator-exit-1-overloaded-x1o",
+   "from_refs": [
+    "07.37 depends_on 07.18"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-07-8jkq.4",
+   "dependency": "omp-orchestrator-1p0u",
+   "from_refs": [
+    "07.39 depends_on 07.4"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-07-8jkq.4",
+   "dependency": "omp-orchestrator-6hrv",
+   "from_refs": [
+    "07.39 depends_on 07.22",
+    "07.39 depends_on 07.20"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-07-8jkq.5",
+   "dependency": "omp-orchestrator-kxe.3",
+   "from_refs": [
+    "07.40 blocks 07.41",
+    "07.41 depends_on 07.40"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-11-vcd7.1",
+   "dependency": "omp-orchestrator-7sd",
+   "from_refs": [
+    "11.18 depends_on 11.15"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-11-vcd7.4",
+   "dependency": "omp-orchestrator-7sd",
+   "from_refs": [
+    "11.23 depends_on 11.15"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-11-vcd7.4",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "from_refs": [
+    "11.63 blocks 11.23"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-11-vcd7.6",
+   "dependency": "omp-orchestrator-8ax8",
+   "from_refs": [
+    "11.49 depends_on 11.42"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-11-vcd7.9",
+   "dependency": "omp-orchestrator-t00",
+   "from_refs": [
+    "11.60 depends_on 11.34"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-12-ibpa.1",
+   "dependency": "omp-orchestrator-diq0",
+   "from_refs": [
+    "00.53 depends_on 00.3"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-12-ibpa.12",
+   "dependency": "omp-orchestrator-6hrv",
+   "from_refs": [
+    "12.52 blocks 12.77",
+    "12.77 depends_on 12.52"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-12-ibpa.12",
+   "dependency": "omp-orchestrator-ack-spine-oj6.1",
+   "from_refs": [
+    "12.16 blocks 12.77",
+    "12.77 depends_on 12.16"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-12-ibpa.12",
+   "dependency": "omp-orchestrator-o7gz",
+   "from_refs": [
+    "12.40 blocks 12.77",
+    "12.77 depends_on 12.40"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-12-ibpa.2",
+   "dependency": "omp-orchestrator-agent-mail-native-v14s",
+   "from_refs": [
+    "11.67 depends_on 11.68"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-12-ibpa.4",
+   "dependency": "omp-orchestrator-8oz8",
+   "from_refs": [
+    "12.26 blocks 12.27",
+    "12.27 depends_on 12.26"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-12-ibpa.5",
+   "dependency": "omp-orchestrator-t52",
+   "from_refs": [
+    "12.28 blocks 12.30",
+    "12.30 depends_on 12.28"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-12-ibpa.6",
+   "dependency": "omp-orchestrator-opsa",
+   "from_refs": [
+    "12.36 depends_on 12.65",
+    "12.47 depends_on 12.65",
+    "12.65 blocks 12.36",
+    "12.65 blocks 12.47"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-12-ibpa.8",
+   "dependency": "omp-orchestrator-nsx1",
+   "from_refs": [
+    "12.10 blocks 12.58",
+    "12.58 depends_on 12.10"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-12-ibpa.9",
+   "dependency": "omp-orchestrator-a92y",
+   "from_refs": [
+    "12.3 blocks 12.60",
+    "12.60 depends_on 12.3"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-plan-12-ibpa.9",
+   "dependency": "omp-orchestrator-nsx1",
+   "from_refs": [
+    "12.10 blocks 12.59",
+    "12.10 blocks 12.60",
+    "12.59 depends_on 12.10",
+    "12.60 depends_on 12.10"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-2tny",
+   "dependency": "omp-orchestrator-jplf.7.1",
+   "from_refs": [
+    "07.23 blocks 07.29",
+    "07.29 depends_on 07.23"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-2tny",
+   "dependency": "omp-orchestrator-jplf.7.3",
+   "from_refs": [
+    "07.31 depends_on 07.8"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-2tny",
+   "dependency": "omp-orchestrator-jplf.7.4",
+   "from_refs": [
+    "07.31 depends_on 07.9"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-3kpc",
+   "dependency": "omp-orchestrator-plan-11-vcd7.8",
+   "from_refs": [
+    "11.74 blocks 11.75",
+    "11.75 depends_on 11.74"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-588v",
+   "dependency": "omp-orchestrator-jplf.1.1",
+   "from_refs": [
+    "05.24 blocks 05.26",
+    "05.26 depends_on 05.24"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-6hrv",
+   "dependency": "omp-orchestrator-jplf.7.2",
+   "from_refs": [
+    "00.17 depends_on 07.canonical-cli-triads"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-6hrv",
+   "dependency": "omp-orchestrator-jplf.7.3",
+   "from_refs": [
+    "00.30 depends_on 07.doctor-health-repair",
+    "04.16 depends_on 07.<installability: doctor/health command contract>"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-8ax8",
+   "dependency": "omp-orchestrator-kxe.9",
+   "from_refs": [
+    "11.42 depends_on 11.66"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-8oz8",
+   "dependency": "omp-orchestrator-kxe.10",
+   "from_refs": [
+    "12.12 blocks 12.26",
+    "12.26 depends_on 12.12"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-9he5",
+   "dependency": "omp-orchestrator-jplf.7.18",
+   "from_refs": [
+    "12.45 blocks 12.46",
+    "12.46 depends_on 12.45"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-9he5",
+   "dependency": "omp-orchestrator-plan-05-ovcx.5",
+   "from_refs": [
+    "05.48 depends_on 05.46"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-a92y",
+   "dependency": "omp-orchestrator-plan-11-vcd7.5",
+   "from_refs": [
+    "11.43 blocks 11.28"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-ack-spine-oj6.1",
+   "dependency": "omp-orchestrator-kxe.8",
+   "from_refs": [
+    "12.9 blocks 12.16",
+    "12.16 depends_on 12.9"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-ack-spine-oj6.3",
+   "dependency": "omp-orchestrator-jplf.1.2",
+   "from_refs": [
+    "03.10 blocks 03.11",
+    "03.11 depends_on 03.10"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-exit-1-overloaded-x1o",
+   "dependency": "omp-orchestrator-jplf.7.7",
+   "from_refs": [
+    "08.8 blocks 08.10",
+    "08.10 depends_on 08.8"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-igwd",
+   "dependency": "omp-orchestrator-jplf.1.1",
+   "from_refs": [
+    "05.27 depends_on 05.24"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-j2te",
+   "dependency": "omp-orchestrator-jplf.1.1",
+   "from_refs": [
+    "05.24 blocks 05.25",
+    "05.25 depends_on 05.24"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe",
+   "dependency": "omp-orchestrator-plan-01-kxwv.1.2",
+   "from_refs": [
+    "01.12 blocks 01.15",
+    "01.15 depends_on 01.12"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.1",
+   "dependency": "omp-orchestrator-jplf.7.12",
+   "from_refs": [
+    "08.4 blocks 08.6",
+    "08.6 depends_on 08.4"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.1",
+   "dependency": "omp-orchestrator-jplf.7.15",
+   "from_refs": [
+    "08.16 blocks 08.6"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.1",
+   "dependency": "omp-orchestrator-jplf.7.7",
+   "from_refs": [
+    "08.6 depends_on 08.8",
+    "08.8 blocks 08.6"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.3",
+   "dependency": "omp-orchestrator-jplf.7.2",
+   "from_refs": [
+    "07.6 blocks 07.15"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.3",
+   "dependency": "omp-orchestrator-plan-02-lwdo.1",
+   "from_refs": [
+    "00.7 depends_on 00.8",
+    "00.8 blocks 00.7",
+    "02.9 blocks 02.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.3",
+   "dependency": "omp-orchestrator-plan-02-lwdo.2",
+   "from_refs": [
+    "02.1 depends_on 02.10",
+    "02.10 blocks 02.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.3",
+   "dependency": "omp-orchestrator-plan-02-lwdo.4",
+   "from_refs": [
+    "02.16 depends_on 02.5",
+    "02.16 depends_on 02.6"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.3",
+   "dependency": "omp-orchestrator-plan-02-lwdo.6",
+   "from_refs": [
+    "02.16 depends_on 02.12"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-nsx1",
+   "dependency": "omp-orchestrator-jplf.7.13",
+   "from_refs": [
+    "08.27 depends_on 08.9"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-nsx1",
+   "dependency": "omp-orchestrator-kxe.8",
+   "from_refs": [
+    "11.3 depends_on 11.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-nsx1",
+   "dependency": "omp-orchestrator-plan-12-ibpa.12",
+   "from_refs": [
+    "12.74 depends_on 12.77",
+    "12.77 blocks 12.74"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-nsx1",
+   "dependency": "omp-orchestrator-plan-12-ibpa.2",
+   "from_refs": [
+    "12.74 depends_on 12.75",
+    "12.74 depends_on 12.76",
+    "12.75 blocks 12.74",
+    "12.76 blocks 12.74"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-o7gz",
+   "dependency": "omp-orchestrator-jplf.7.6",
+   "from_refs": [
+    "08.7 depends_on 08.33",
+    "08.33 blocks 08.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-o7gz",
+   "dependency": "omp-orchestrator-jplf.7.7",
+   "from_refs": [
+    "08.8 blocks 08.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.14",
+   "dependency": "omp-orchestrator-jplf.1.2",
+   "from_refs": [
+    "03.10 blocks 03.18",
+    "03.18 depends_on 03.10"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.14",
+   "dependency": "omp-orchestrator-jplf.4.1",
+   "from_refs": [
+    "00.55 depends_on 06.admission-checklist"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.14",
+   "dependency": "omp-orchestrator-plan-10-ya1x.1",
+   "from_refs": [
+    "10.11 blocks 10.13",
+    "10.13 depends_on 10.11"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.15",
+   "dependency": "omp-orchestrator-plan-03-w3yb.1",
+   "from_refs": [
+    "03.3 depends_on 03.5",
+    "03.5 blocks 03.3"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "dependency": "omp-orchestrator-jplf.1.1",
+   "from_refs": [
+    "03.7 blocks 03.17",
+    "03.17 depends_on 03.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "dependency": "omp-orchestrator-jplf.1.2",
+   "from_refs": [
+    "04.4 depends_on external:00-brief \u00a73.7 asupersync pin fa3c01aec unblocks the AckKind/DeliveryClass/ObligationLedger half of omp-types"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "dependency": "omp-orchestrator-plan-04-7wn9.1",
+   "from_refs": [
+    "00.9 depends_on 00.14",
+    "00.14 blocks 00.9"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "dependency": "omp-orchestrator-plan-06-xm0n.2",
+   "from_refs": [
+    "00.9 depends_on 00.11",
+    "00.11 blocks 00.9"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "dependency": "omp-orchestrator-plan-06-xm0n.3",
+   "from_refs": [
+    "00.9 depends_on 00.12",
+    "00.12 blocks 00.9"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "dependency": "omp-orchestrator-plan-06-xm0n.4",
+   "from_refs": [
+    "00.9 depends_on 00.13",
+    "00.13 blocks 00.9"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "dependency": "omp-orchestrator-plan-06-xm0n.9",
+   "from_refs": [
+    "04.12 depends_on 06.<gate census authority rows for the 8 gates>"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "dependency": "omp-orchestrator-jplf.1.2",
+   "from_refs": [
+    "04.11 depends_on external:asupersync ObligationLedger half of omp-types (00-brief \u00a73.7)"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.6",
+   "dependency": "omp-orchestrator-plan-02-lwdo.2",
+   "from_refs": [
+    "02.4 depends_on 02.10",
+    "02.10 blocks 02.4"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-opsa",
+   "dependency": "omp-orchestrator-jplf.7.20",
+   "from_refs": [
+    "12.53 blocks 12.55",
+    "12.55 depends_on 12.53"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-opsa",
+   "dependency": "omp-orchestrator-plan-06-xm0n.9",
+   "from_refs": [
+    "06.1 depends_on 06.21",
+    "06.21 blocks 06.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-r73l",
+   "dependency": "omp-orchestrator-jplf.7.3",
+   "from_refs": [
+    "08.20 depends_on 08.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-r73l",
+   "dependency": "omp-orchestrator-jplf.7.7",
+   "from_refs": [
+    "08.20 depends_on 08.8"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-r73l",
+   "dependency": "omp-orchestrator-plan-07-8jkq.2",
+   "from_refs": [
+    "05.39 depends_on 10.gap9-two-signal-presence"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "dependency": "omp-orchestrator-jplf.1.2",
+   "from_refs": [
+    "04.17 depends_on external:asupersync fa3c01aec AckKind/DeliveryClass (00-brief \u00a73.7)"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "dependency": "omp-orchestrator-plan-04-7wn9.5",
+   "from_refs": [
+    "04.20 blocks 04.17"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-t52",
+   "dependency": "omp-orchestrator-plan-12-ibpa.13",
+   "from_refs": [
+    "12.20 blocks 12.21",
+    "12.20 blocks 12.28",
+    "12.21 depends_on 12.20",
+    "12.28 depends_on 12.20"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-uvo",
+   "dependency": "omp-orchestrator-plan-12-ibpa.13",
+   "from_refs": [
+    "12.29 depends_on 12.20"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-ve4w",
+   "dependency": "omp-orchestrator-kxe.8",
+   "from_refs": [
+    "11.30 depends_on 11.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-vyud",
+   "dependency": "omp-orchestrator-plan-07-8jkq.3",
+   "from_refs": [
+    "07.36 depends_on 07.37",
+    "07.37 blocks 07.36"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-yqun",
+   "dependency": "omp-orchestrator-plan-06-xm0n.8",
+   "from_refs": [
+    "00.33 depends_on 06.allowance-rows"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-17pm",
+   "dependency": "omp-orchestrator-nsx1",
+   "from_refs": [
+    "11.37 depends_on 11.2"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-1p0u",
+   "dependency": "omp-orchestrator-exit-1-overloaded-x1o",
+   "from_refs": [
+    "07.18 blocks 07.4"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-1p0u",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "from_refs": [
+    "05.36 blocks 05.37",
+    "05.37 depends_on 05.36"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-1p0u",
+   "dependency": "omp-orchestrator-tvu5",
+   "from_refs": [
+    "07.4 depends_on 07.19"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-2tny",
+   "dependency": "omp-orchestrator-6hrv",
+   "from_refs": [
+    "07.29 depends_on 07.21",
+    "07.31 depends_on 07.2",
+    "07.31 depends_on 07.3",
+    "07.31 depends_on 07.22"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-2tny",
+   "dependency": "omp-orchestrator-8nuh",
+   "from_refs": [
+    "07.31 depends_on 07.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-31lo",
+   "dependency": "omp-orchestrator-6hrv",
+   "from_refs": [
+    "07.3 blocks external:omp-orchestrator-31lo acceptance 6"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-3kpc",
+   "dependency": "omp-orchestrator-93lo",
+   "from_refs": [
+    "12.71 depends_on 12.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-3kpc",
+   "dependency": "omp-orchestrator-dispatch-from-line-mad1",
+   "from_refs": [
+    "12.71 depends_on 12.6"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-3kpc",
+   "dependency": "omp-orchestrator-wbo2",
+   "from_refs": [
+    "12.88 blocks 12.71"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-3kpc",
+   "dependency": "omp-orchestrator-ywd5",
+   "from_refs": [
+    "12.17 blocks 12.71",
+    "12.71 depends_on 12.17"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-588v",
+   "dependency": "omp-orchestrator-calr",
+   "from_refs": [
+    "05.26 depends_on 05.43",
+    "05.43 blocks 05.26"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-588v",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "from_refs": [
+    "01.41 blocks 01.42",
+    "01.42 depends_on 01.41",
+    "08.5 depends_on 08.17",
+    "08.17 blocks 08.5"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-588v",
+   "dependency": "omp-orchestrator-opsa",
+   "from_refs": [
+    "08.5 depends_on external:06-gates \u00a71 leg census (which gates have a known-good leg)"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-5tn",
+   "dependency": "omp-orchestrator-a92y",
+   "from_refs": [
+    "04.19 blocks 04.9"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-5tn",
+   "dependency": "omp-orchestrator-ex4",
+   "from_refs": [
+    "04.9 depends_on 04.10",
+    "04.10 blocks 04.9"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-5tn",
+   "dependency": "omp-orchestrator-exit-const-collision-cas",
+   "from_refs": [
+    "05.11 blocks 05.16",
+    "05.16 depends_on 05.11"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-5tn",
+   "dependency": "omp-orchestrator-nuxd",
+   "from_refs": [
+    "05.18 blocks 05.19",
+    "05.19 depends_on 05.18"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-5tn",
+   "dependency": "omp-orchestrator-readiness-l1-wedge-blind-46y7",
+   "from_refs": [
+    "05.13 blocks 05.16",
+    "05.16 depends_on 05.13"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-5tn",
+   "dependency": "omp-orchestrator-y6v5",
+   "from_refs": [
+    "04.8 blocks 04.9",
+    "04.9 depends_on 04.8"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-6fot",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "from_refs": [
+    "05.41 depends_on 05.36"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-6hrv",
+   "dependency": "omp-orchestrator-8nuh",
+   "from_refs": [
+    "07.2 depends_on 07.1",
+    "07.20 depends_on 07.1",
+    "07.22 depends_on 07.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-6nhj",
+   "dependency": "omp-orchestrator-yqun",
+   "from_refs": [
+    "06.29 blocks 06.24"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-78om",
+   "dependency": "omp-orchestrator-gjyi",
+   "from_refs": [
+    "11.57 depends_on 11.24"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-78om",
+   "dependency": "omp-orchestrator-kxe",
+   "from_refs": [
+    "05.8 depends_on 05.7",
+    "12.31 blocks 12.32",
+    "12.32 depends_on 12.31"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-8ax8",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "from_refs": [
+    "01.2 blocks 01.39",
+    "01.39 depends_on 01.2"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-8ax8",
+   "dependency": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "from_refs": [
+    "08.15 blocks 08.18",
+    "08.18 depends_on 08.15"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-8nuh",
+   "dependency": "omp-orchestrator-untracked-crates-break-clone-jlb",
+   "from_refs": [
+    "07.1 depends_on external:omp-orchestrator-untracked-crates-break-clone-jlb (cargo metadata must succeed in a fresh clone)"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-8zx1",
+   "dependency": "omp-orchestrator-93lo",
+   "from_refs": [
+    "11.85 blocks 11.48"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-8zx1",
+   "dependency": "omp-orchestrator-a92y",
+   "from_refs": [
+    "11.31 depends_on 11.28",
+    "12.41 depends_on 12.3"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-8zx1",
+   "dependency": "omp-orchestrator-j2te",
+   "from_refs": [
+    "12.39 blocks 12.41"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-8zx1",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "from_refs": [
+    "11.63 blocks 11.48"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-a92y",
+   "dependency": "omp-orchestrator-y6v5",
+   "from_refs": [
+    "04.19 depends_on 04.8"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-ack-spine-oj6.1",
+   "dependency": "omp-orchestrator-y6v5",
+   "from_refs": [
+    "01.6 depends_on 01.8"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-arur",
+   "dependency": "omp-orchestrator-t52",
+   "from_refs": [
+    "00.19 depends_on 09.sota-rubric"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-asupersync-subprocess-contract-gfb",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.15",
+   "from_refs": [
+    "00.45 depends_on 03.subprocess-contract"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-calr",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "from_refs": [
+    "05.43 depends_on 05.36"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-diq0",
+   "dependency": "omp-orchestrator-6hrv",
+   "from_refs": [
+    "00.3 depends_on 07.four-way-identity"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-dispatch-exists-unverified-u1c",
+   "dependency": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "from_refs": [
+    "01.7 blocks 01.9",
+    "01.9 depends_on 01.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-dispatch-exists-unverified-u1c",
+   "dependency": "omp-orchestrator-y6v5",
+   "from_refs": [
+    "01.9 depends_on 01.8"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-dq3i",
+   "dependency": "omp-orchestrator-5tn",
+   "from_refs": [
+    "05.23 depends_on 05.19"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-dq3i",
+   "dependency": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "from_refs": [
+    "05.22 blocks 05.23",
+    "05.23 depends_on 05.22"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-ex4",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "from_refs": [
+    "01.2 blocks 01.3",
+    "01.3 depends_on 01.2"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-ex4",
+   "dependency": "omp-orchestrator-tickmonitor-free-capacity-blind-vgf",
+   "from_refs": [
+    "05.5 depends_on 05.4"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-exit-1-overloaded-x1o",
+   "dependency": "omp-orchestrator-exit-const-collision-cas",
+   "from_refs": [
+    "07.18 depends_on external:omp-orchestrator-exit-const-collision-cas"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-exit-const-collision-cas",
+   "dependency": "omp-orchestrator-tickmonitor-free-capacity-blind-vgf",
+   "from_refs": [
+    "05.11 depends_on 05.4"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-igwd",
+   "dependency": "omp-orchestrator-j2te",
+   "from_refs": [
+    "05.25 blocks 05.27",
+    "05.27 depends_on 05.25"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-io3h",
+   "dependency": "omp-orchestrator-k4sc",
+   "from_refs": [
+    "07.34 depends_on external:omp-orchestrator-k4sc"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7",
+   "dependency": "omp-orchestrator-o7gz",
+   "from_refs": [
+    "08.7 blocks 08.30",
+    "08.30 depends_on 08.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7",
+   "dependency": "omp-orchestrator-untracked-crates-break-clone-jlb",
+   "from_refs": [
+    "12.48 blocks 12.51",
+    "12.51 depends_on 12.48"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7",
+   "dependency": "omp-orchestrator-zlqk",
+   "from_refs": [
+    "12.51 depends_on external:09-milestones M5/M6 observables"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe",
+   "dependency": "omp-orchestrator-8oz8",
+   "from_refs": [
+    "12.25 blocks 12.31",
+    "12.26 blocks 12.31",
+    "12.31 depends_on 12.25"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe",
+   "dependency": "omp-orchestrator-io3h",
+   "from_refs": [
+    "08.11 depends_on 08.12",
+    "08.12 blocks 08.11"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe",
+   "dependency": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "from_refs": [
+    "01.1 depends_on 01.7",
+    "01.7 blocks 01.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe",
+   "dependency": "omp-orchestrator-t52",
+   "from_refs": [
+    "12.28 blocks 12.31"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe",
+   "dependency": "omp-orchestrator-uvo",
+   "from_refs": [
+    "01.1 depends_on 01.4"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.1",
+   "dependency": "omp-orchestrator-6hrv",
+   "from_refs": [
+    "00.18 depends_on 00.17"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.1",
+   "dependency": "omp-orchestrator-93lo",
+   "from_refs": [
+    "12.33 depends_on 12.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.1",
+   "dependency": "omp-orchestrator-nuxd",
+   "from_refs": [
+    "00.18 depends_on 00.43",
+    "00.43 blocks 00.18"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.1",
+   "dependency": "omp-orchestrator-psf7",
+   "from_refs": [
+    "08.6 depends_on 08.24",
+    "08.24 blocks 08.6"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.1",
+   "dependency": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "from_refs": [
+    "00.18 depends_on 08.adapter-contract",
+    "08.6 depends_on 08.15",
+    "08.15 blocks 08.6",
+    "08.15 blocks 08.22",
+    "08.22 depends_on 08.15"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.3",
+   "dependency": "omp-orchestrator-8nuh",
+   "from_refs": [
+    "07.40 depends_on 07.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.3",
+   "dependency": "omp-orchestrator-crate-reachability-census-44g",
+   "from_refs": [
+    "02.24 blocks 02.16"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.3",
+   "dependency": "omp-orchestrator-diq0",
+   "from_refs": [
+    "00.63 depends_on 00.3"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.3",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.10",
+   "from_refs": [
+    "02.16 depends_on 02.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.3",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.2",
+   "from_refs": [
+    "02.1 depends_on 02.2",
+    "02.2 blocks 02.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.3",
+   "dependency": "omp-orchestrator-opsa",
+   "from_refs": [
+    "01.45 blocks 01.46",
+    "01.46 depends_on 01.45"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-kxe.4",
+   "dependency": "omp-orchestrator-opsa",
+   "from_refs": [
+    "12.61 depends_on 12.65",
+    "12.65 blocks 12.61"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-leht",
+   "dependency": "omp-orchestrator-untracked-crates-break-clone-jlb",
+   "from_refs": [
+    "00.5 depends_on 00.65",
+    "00.65 blocks 00.5"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-monitor-reads-oracle-y256",
+   "dependency": "omp-orchestrator-agent-mail-native-v14s",
+   "from_refs": [
+    "11.68 blocks 11.69",
+    "11.69 depends_on 11.68"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-nsx1",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "from_refs": [
+    "12.72 blocks 12.74",
+    "12.74 depends_on 12.72"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-nsx1",
+   "dependency": "omp-orchestrator-psf7",
+   "from_refs": [
+    "08.27 depends_on 08.24"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-nsx1",
+   "dependency": "omp-orchestrator-r73l",
+   "from_refs": [
+    "08.27 depends_on 08.20"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-nuxd",
+   "dependency": "omp-orchestrator-exit-const-collision-cas",
+   "from_refs": [
+    "05.11 blocks 05.18",
+    "05.18 depends_on 05.11"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-o7gz",
+   "dependency": "omp-orchestrator-8zx1",
+   "from_refs": [
+    "04.18 depends_on 11.<lifecycle close policy / S6 grading stage>",
+    "11.59 depends_on 11.31"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-o7gz",
+   "dependency": "omp-orchestrator-j2te",
+   "from_refs": [
+    "12.39 blocks 12.40",
+    "12.40 depends_on 12.39"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-o7gz",
+   "dependency": "omp-orchestrator-kxe.1",
+   "from_refs": [
+    "08.6 blocks 08.7",
+    "08.7 depends_on 08.6"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-o7gz",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "from_refs": [
+    "04.12 blocks 04.18",
+    "04.18 depends_on 04.12",
+    "11.86 depends_on 11.63"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-o7gz",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "from_refs": [
+    "04.11 blocks 04.18",
+    "04.18 depends_on 04.11"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-o7gz",
+   "dependency": "omp-orchestrator-psf7",
+   "from_refs": [
+    "08.7 depends_on 08.24",
+    "08.24 blocks 08.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "dependency": "omp-orchestrator-6nhj",
+   "from_refs": [
+    "05.42 depends_on 06.gate-census"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "dependency": "omp-orchestrator-crate-reachability-census-44g",
+   "from_refs": [
+    "04.5 blocks 04.4"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "dependency": "omp-orchestrator-io3h",
+   "from_refs": [
+    "08.12 blocks 08.17",
+    "08.17 depends_on 08.12"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "dependency": "omp-orchestrator-jplf.1",
+   "from_refs": [
+    "04.4 depends_on 01.<Phase 0 type algebra epic jplf.1>"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "dependency": "omp-orchestrator-tickmonitor-free-capacity-blind-vgf",
+   "from_refs": [
+    "05.32 depends_on 05.4"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "dependency": "omp-orchestrator-3kpc",
+   "from_refs": [
+    "12.71 blocks 12.72",
+    "12.72 depends_on 12.71"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "dependency": "omp-orchestrator-8oz8",
+   "from_refs": [
+    "12.26 blocks 12.72",
+    "12.72 depends_on 12.26"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "dependency": "omp-orchestrator-ack-spine-oj6.1",
+   "from_refs": [
+    "10.8 depends_on 10.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "dependency": "omp-orchestrator-j2te",
+   "from_refs": [
+    "12.39 blocks 12.72",
+    "12.72 depends_on 12.39"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "dependency": "omp-orchestrator-kxe",
+   "from_refs": [
+    "12.31 blocks 12.72",
+    "12.72 depends_on 12.31"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "dependency": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "from_refs": [
+    "04.17 blocks 04.11"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "dependency": "omp-orchestrator-t52",
+   "from_refs": [
+    "12.28 blocks 12.72",
+    "12.72 depends_on 12.28"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "dependency": "omp-orchestrator-tickmonitor-free-capacity-blind-vgf",
+   "from_refs": [
+    "00.34 depends_on 00.37",
+    "00.37 blocks 00.34"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-surface-map-41b",
+   "dependency": "omp-orchestrator-6hrv",
+   "from_refs": [
+    "01.25 blocks 01.26",
+    "01.26 depends_on 01.25"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-omp-surface-map-41b",
+   "dependency": "omp-orchestrator-kxe.3",
+   "from_refs": [
+    "11.50 depends_on 11.52",
+    "11.52 blocks 11.50"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-psf7",
+   "dependency": "omp-orchestrator-io3h",
+   "from_refs": [
+    "08.24 depends_on 08.12"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-qt9r",
+   "dependency": "omp-orchestrator-j2te",
+   "from_refs": [
+    "12.39 blocks 12.42",
+    "12.42 depends_on 12.39"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-qt9r",
+   "dependency": "omp-orchestrator-o7gz",
+   "from_refs": [
+    "12.40 blocks 12.42",
+    "12.42 depends_on 12.40"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-qt9r",
+   "dependency": "omp-orchestrator-opsa",
+   "from_refs": [
+    "12.42 depends_on 12.65",
+    "12.65 blocks 12.42"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-readiness-l1-wedge-blind-46y7",
+   "dependency": "omp-orchestrator-ex4",
+   "from_refs": [
+    "05.5 blocks 05.13",
+    "05.13 depends_on 05.5"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-readiness-l1-wedge-blind-46y7",
+   "dependency": "omp-orchestrator-readiness-l3-motion-window-7523",
+   "from_refs": [
+    "05.3 blocks 05.13",
+    "05.13 depends_on 05.3"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-readiness-l3-motion-window-7523",
+   "dependency": "omp-orchestrator-phase0-pane-observation-80h",
+   "from_refs": [
+    "05.3 depends_on 05.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "dependency": "omp-orchestrator-kyq5",
+   "from_refs": [
+    "01.7 depends_on 01.27",
+    "01.27 blocks 01.7"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "dependency": "omp-orchestrator-nuxd",
+   "from_refs": [
+    "05.18 blocks 05.22",
+    "05.22 depends_on 05.18"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.14",
+   "from_refs": [
+    "03.13 depends_on 03.14",
+    "03.14 blocks 03.13",
+    "10.1 blocks 10.15",
+    "10.15 depends_on 10.1"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-round22-drifted-figures-844",
+   "dependency": "omp-orchestrator-opsa",
+   "from_refs": [
+    "12.90 depends_on 12.65"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-t00",
+   "dependency": "omp-orchestrator-8ax8",
+   "from_refs": [
+    "11.34 depends_on 11.42",
+    "11.42 blocks 11.34"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-t00",
+   "dependency": "omp-orchestrator-diq0",
+   "from_refs": [
+    "00.2 depends_on 00.3"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-t00",
+   "dependency": "omp-orchestrator-igwd",
+   "from_refs": [
+    "05.27 blocks 05.31",
+    "05.31 depends_on 05.27"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-t00",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "from_refs": [
+    "05.31 depends_on 05.32",
+    "05.32 blocks 05.31"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-t00",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "from_refs": [
+    "05.31 depends_on 05.34",
+    "05.34 blocks 05.31",
+    "10.8 blocks 11.K10-completion-reap"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-t00",
+   "dependency": "omp-orchestrator-tickmonitor-free-capacity-blind-vgf",
+   "from_refs": [
+    "05.4 blocks 05.31",
+    "05.31 depends_on 05.4"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-t00",
+   "dependency": "omp-orchestrator-ywd5",
+   "from_refs": [
+    "05.31 depends_on 05.33",
+    "05.33 blocks 05.31"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-t52",
+   "dependency": "omp-orchestrator-8zx1",
+   "from_refs": [
+    "00.57 depends_on 12.S6-grade-packet"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-th0z",
+   "dependency": "omp-orchestrator-78om",
+   "from_refs": [
+    "00.41 depends_on 12.S4-select"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-tvu5",
+   "dependency": "omp-orchestrator-exit-1-overloaded-x1o",
+   "from_refs": [
+    "07.18 blocks 07.19",
+    "07.19 depends_on 07.18"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-vggs",
+   "dependency": "omp-orchestrator-igwd",
+   "from_refs": [
+    "05.30 depends_on 05.27"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-vggs",
+   "dependency": "omp-orchestrator-j2te",
+   "from_refs": [
+    "05.25 blocks 05.30",
+    "05.30 depends_on 05.25"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-vyud",
+   "dependency": "omp-orchestrator-io3h",
+   "from_refs": [
+    "07.34 blocks 07.36",
+    "07.36 depends_on 07.34",
+    "08.12 blocks 08.31",
+    "08.31 depends_on 08.12"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-vyud",
+   "dependency": "omp-orchestrator-kxe",
+   "from_refs": [
+    "08.11 blocks 08.31",
+    "08.31 depends_on 08.11"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-wbo2",
+   "dependency": "omp-orchestrator-ywd5",
+   "from_refs": [
+    "12.88 depends_on 12.17"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-wire-agent-mail-caller-7n5b",
+   "dependency": "omp-orchestrator-3kpc",
+   "from_refs": [
+    "11.82 blocks 11.76"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-wire-agent-mail-caller-7n5b",
+   "dependency": "omp-orchestrator-agent-mail-native-v14s",
+   "from_refs": [
+    "11.68 blocks 11.76",
+    "11.76 depends_on 11.68"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-wire-finding-dispatch-9ms",
+   "dependency": "omp-orchestrator-igwd",
+   "from_refs": [
+    "05.28 depends_on 05.27"
+   ]
+  },
+  {
+   "dependent": "omp-orchestrator-y6v5",
+   "dependency": "omp-orchestrator-tickmonitor-free-capacity-blind-vgf",
+   "from_refs": [
+    "01.5 blocks 01.8",
+    "01.8 depends_on 01.5",
+    "04.7 blocks 04.8",
+    "04.8 depends_on 04.7"
+   ]
+  }
+ ],
+ "dropped": [
+  {
+   "dependent": "omp-orchestrator-plan-09-bcrn.4",
+   "dependency": "omp-orchestrator-kxe",
+   "from_refs": [
+    "09.10 depends_on 09.3"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-jplf.7.1.2",
+   "dependency": "omp-orchestrator-jplf.7.1.1",
+   "from_refs": [
+    "07.25 depends_on 07.24"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-plan-04-7wn9.3",
+   "dependency": "omp-orchestrator-plan-04-7wn9.2",
+   "from_refs": [
+    "00.6 depends_on 04.diagram-generator",
+    "04.14 depends_on 04.1"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-plan-07-8jkq.3",
+   "dependency": "omp-orchestrator-jplf.7.3",
+   "from_refs": [
+    "10.4 blocks 10.9"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-plan-07-8jkq.3",
+   "dependency": "omp-orchestrator-plan-07-8jkq.2",
+   "from_refs": [
+    "10.9 depends_on 10.10",
+    "10.10 blocks 10.9"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-plan-06-xm0n.5",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "from_refs": [
+    "05.36 blocks 05.44",
+    "05.44 depends_on 05.36"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-3kpc",
+   "dependency": "omp-orchestrator-kxe.9",
+   "from_refs": [
+    "12.35 blocks 12.71",
+    "12.71 depends_on 12.35"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-6hrv",
+   "dependency": "omp-orchestrator-jplf.7.1",
+   "from_refs": [
+    "07.3 depends_on 07.23"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-6hrv",
+   "dependency": "omp-orchestrator-jplf.7.18",
+   "from_refs": [
+    "11.36 depends_on 11.33",
+    "11.45 blocks 11.36"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-artifact-provenance-writer-absent-w1s9",
+   "dependency": "omp-orchestrator-plan-04-7wn9.2",
+   "from_refs": [
+    "04.1 blocks 04.15"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-kxe",
+   "dependency": "omp-orchestrator-jplf.7.1",
+   "from_refs": [
+    "08.11 depends_on external:07-installability (distribution owns the install path)"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-nsx1",
+   "dependency": "omp-orchestrator-plan-12-ibpa.9",
+   "from_refs": [
+    "12.59 blocks 12.74",
+    "12.60 blocks 12.74",
+    "12.74 depends_on 12.59",
+    "12.74 depends_on 12.60"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "dependency": "omp-orchestrator-jplf.7.18",
+   "from_refs": [
+    "12.72 depends_on 12.45"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "dependency": "omp-orchestrator-jplf.7.20",
+   "from_refs": [
+    "12.72 depends_on 12.53"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "dependency": "omp-orchestrator-plan-03-w3yb.2",
+   "from_refs": [
+    "03.12 blocks 03.13",
+    "03.13 depends_on 03.12"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-vyud",
+   "dependency": "omp-orchestrator-jplf.7.1",
+   "from_refs": [
+    "07.23 blocks 07.36",
+    "07.36 depends_on 07.23"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-vyud",
+   "dependency": "omp-orchestrator-jplf.7.1.1",
+   "from_refs": [
+    "07.24 blocks 07.36",
+    "07.36 depends_on 07.24"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-vyud",
+   "dependency": "omp-orchestrator-jplf.7.1.2",
+   "from_refs": [
+    "07.25 blocks 07.36"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-vyud",
+   "dependency": "omp-orchestrator-jplf.7.11",
+   "from_refs": [
+    "07.35 blocks 07.36",
+    "07.36 depends_on 07.35"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-5tn",
+   "dependency": "omp-orchestrator-6hrv",
+   "from_refs": [
+    "07.3 blocks external:omp-orchestrator-5tn acceptance 2"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-5tn",
+   "dependency": "omp-orchestrator-kxe.1",
+   "from_refs": [
+    "00.44 depends_on 12.S5-dispatch"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-6hrv",
+   "dependency": "omp-orchestrator-nsx1",
+   "from_refs": [
+    "00.30 depends_on 00.62",
+    "00.62 blocks 00.30"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-8nuh",
+   "dependency": "omp-orchestrator-kxe.3",
+   "from_refs": [
+    "07.1 depends_on 02.surface-census-target-denominator"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-93lo",
+   "dependency": "omp-orchestrator-3kpc",
+   "from_refs": [
+    "11.85 depends_on 11.82"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-dispatch-from-line-mad1",
+   "dependency": "omp-orchestrator-3kpc",
+   "from_refs": [
+    "12.6 depends_on 12.89",
+    "12.89 blocks 12.6"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-ewnr",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "from_refs": [
+    "05.40 depends_on 05.36"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-j2te",
+   "dependency": "omp-orchestrator-588v",
+   "from_refs": [
+    "05.25 depends_on 05.26",
+    "05.26 blocks 05.25"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-j2te",
+   "dependency": "omp-orchestrator-8zx1",
+   "from_refs": [
+    "05.25 depends_on 11.S6"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-j2te",
+   "dependency": "omp-orchestrator-dq3i",
+   "from_refs": [
+    "05.23 blocks 05.25",
+    "05.25 depends_on 05.23"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-kxe",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "from_refs": [
+    "01.1 depends_on 01.2",
+    "01.2 blocks 01.1"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-leht",
+   "dependency": "omp-orchestrator-kxe.3",
+   "from_refs": [
+    "00.5 depends_on 03.crate-table"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-nuxd",
+   "dependency": "omp-orchestrator-5tn",
+   "from_refs": [
+    "05.16 blocks 05.18",
+    "05.18 depends_on 05.16"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-nuxd",
+   "dependency": "omp-orchestrator-kxe.1",
+   "from_refs": [
+    "00.43 depends_on 12.S5-dispatch"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "dependency": "omp-orchestrator-6fot",
+   "from_refs": [
+    "05.41 blocks 05.42",
+    "05.42 depends_on 05.41"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "dependency": "omp-orchestrator-opsa",
+   "from_refs": [
+    "00.9 depends_on 00.15",
+    "00.9 depends_on 06.gate-matrix"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "dependency": "omp-orchestrator-phase0-pane-observation-80h",
+   "from_refs": [
+    "03.15 blocks 03.16",
+    "03.15 blocks 03.17",
+    "03.17 depends_on 03.15",
+    "05.32 depends_on 09.M1"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "dependency": "omp-orchestrator-5tn",
+   "from_refs": [
+    "04.9 blocks 04.11",
+    "04.11 depends_on 04.9"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "dependency": "omp-orchestrator-6hrv",
+   "from_refs": [
+    "12.72 depends_on 12.52"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-omp-coverage-mission-ipg.19",
+   "dependency": "omp-orchestrator-o7gz",
+   "from_refs": [
+    "12.72 depends_on 12.40"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "dependency": "omp-orchestrator-5tn",
+   "from_refs": [
+    "04.9 blocks 04.17",
+    "04.17 depends_on 04.9",
+    "05.19 blocks 05.22",
+    "05.22 depends_on 05.19"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "dependency": "omp-orchestrator-omp-coverage-mission-ipg.18",
+   "from_refs": [
+    "04.17 depends_on 04.4"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "dependency": "omp-orchestrator-omp-surface-map-41b",
+   "from_refs": [
+    "01.7 depends_on 01.26"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "dependency": "omp-orchestrator-phase0-pane-observation-80h",
+   "from_refs": [
+    "05.1 blocks 05.22",
+    "05.22 depends_on 05.1"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-receiver-receipt-contract-pwm",
+   "dependency": "omp-orchestrator-readiness-l3-motion-window-7523",
+   "from_refs": [
+    "05.3 blocks 05.22",
+    "05.22 depends_on 05.3"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-t52",
+   "dependency": "omp-orchestrator-diq0",
+   "from_refs": [
+    "00.4 depends_on 00.3"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-tickmonitor-free-capacity-blind-vgf",
+   "dependency": "omp-orchestrator-phase0-pane-observation-80h",
+   "from_refs": [
+    "04.7 depends_on 09.<M1 shared-type milestone>",
+    "04.7 depends_on 01.<Phase 0 PaneObservation evidence algebra (phase0-pane-observation-80h)>",
+    "05.1 blocks 05.4",
+    "05.4 depends_on 05.1"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-vyud",
+   "dependency": "omp-orchestrator-2tny",
+   "from_refs": [
+    "07.31 blocks 07.36",
+    "07.36 depends_on 07.31"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-vyud",
+   "dependency": "omp-orchestrator-6hrv",
+   "from_refs": [
+    "07.36 depends_on 09.M6",
+    "08.31 depends_on external:09-milestones M6 cold-host proof"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-wire-finding-dispatch-9ms",
+   "dependency": "omp-orchestrator-9he5",
+   "from_refs": [
+    "12.46 blocks 12.49",
+    "12.49 depends_on 12.46",
+    "12.49 depends_on external:09-milestones M7 observable"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-ywd5",
+   "dependency": "omp-orchestrator-3kpc",
+   "from_refs": [
+    "11.46 depends_on 11.82",
+    "11.82 blocks 11.46"
+   ],
+   "reason": "would-close-cycle"
+  },
+  {
+   "dependent": "omp-orchestrator-ywd5",
+   "dependency": "omp-orchestrator-6hrv",
+   "from_refs": [
+    "12.52 blocks 12.54",
+    "12.54 depends_on 12.52"
+   ],
+   "reason": "would-close-cycle"
+  }
+ ],
+ "skipped": {
+  "same-bead": 169,
+  "decision-endpoint": 97,
+  "closed-endpoint": 6,
+  "existing-not-open": 24,
+  "not-work": 10,
+  "parent-child": 18
+ },
+ "skiplog": [
+  [
+   "existing-not-open",
+   "00.36",
+   "depends_on",
+   "00.44",
+   "omp-orchestrator-ve4w",
+   "omp-orchestrator-5tn"
+  ],
+  [
+   "existing-not-open",
+   "00.59",
+   "depends_on",
+   "12.S1-S9-runbook",
+   "omp-orchestrator-dispatch-journey-mapping-42na",
+   "omp-orchestrator-7sd"
+  ],
+  [
+   "existing-not-open",
+   "01.1",
+   "depends_on",
+   "01.28",
+   "omp-orchestrator-kxe",
+   "omp-orchestrator-t784"
+  ],
+  [
+   "existing-not-open",
+   "01.28",
+   "blocks",
+   "01.1",
+   "omp-orchestrator-kxe",
+   "omp-orchestrator-t784"
+  ],
+  [
+   "existing-not-open",
+   "01.47",
+   "depends_on",
+   "01.28",
+   "omp-orchestrator-o7gz",
+   "omp-orchestrator-t784"
+  ],
+  [
+   "existing-not-open",
+   "05.15",
+   "depends_on",
+   "05.7",
+   "omp-orchestrator-t784",
+   "omp-orchestrator-kxe"
+  ],
+  [
+   "existing-not-open",
+   "05.15",
+   "blocks",
+   "05.16",
+   "omp-orchestrator-5tn",
+   "omp-orchestrator-t784"
+  ],
+  [
+   "existing-not-open",
+   "05.15",
+   "blocks",
+   "05.18",
+   "omp-orchestrator-nuxd",
+   "omp-orchestrator-t784"
+  ],
+  [
+   "existing-not-open",
+   "05.16",
+   "depends_on",
+   "05.15",
+   "omp-orchestrator-5tn",
+   "omp-orchestrator-t784"
+  ],
+  [
+   "existing-not-open",
+   "05.18",
+   "depends_on",
+   "05.15",
+   "omp-orchestrator-nuxd",
+   "omp-orchestrator-t784"
+  ],
+  [
+   "existing-not-open",
+   "08.6",
+   "depends_on",
+   "08.13",
+   "omp-orchestrator-kxe.1",
+   "omp-orchestrator-ve4w"
+  ],
+  [
+   "existing-not-open",
+   "08.7",
+   "depends_on",
+   "08.13",
+   "omp-orchestrator-o7gz",
+   "omp-orchestrator-ve4w"
+  ],
+  [
+   "existing-not-open",
+   "08.13",
+   "depends_on",
+   "external:03-crates (subprocess-contract as the br transport)",
+   "omp-orchestrator-ve4w",
+   "omp-orchestrator-omp-coverage-mission-ipg.15"
+  ],
+  [
+   "existing-not-open",
+   "08.13",
+   "blocks",
+   "08.6",
+   "omp-orchestrator-kxe.1",
+   "omp-orchestrator-ve4w"
+  ],
+  [
+   "existing-not-open",
+   "08.13",
+   "blocks",
+   "08.7",
+   "omp-orchestrator-o7gz",
+   "omp-orchestrator-ve4w"
+  ],
+  [
+   "existing-not-open",
+   "11.25",
+   "depends_on",
+   "11.15",
+   "omp-orchestrator-78om",
+   "omp-orchestrator-7sd"
+  ],
+  [
+   "existing-not-open",
+   "11.27",
+   "depends_on",
+   "11.15",
+   "omp-orchestrator-kxe",
+   "omp-orchestrator-7sd"
+  ],
+  [
+   "existing-not-open",
+   "11.29",
+   "depends_on",
+   "11.46",
+   "omp-orchestrator-ve4w",
+   "omp-orchestrator-ywd5"
+  ],
+  [
+   "existing-not-open",
+   "11.46",
+   "blocks",
+   "11.29",
+   "omp-orchestrator-ve4w",
+   "omp-orchestrator-ywd5"
+  ],
+  [
+   "existing-not-open",
+   "11.48",
+   "depends_on",
+   "11.29",
+   "omp-orchestrator-8zx1",
+   "omp-orchestrator-ve4w"
+  ],
+  [
+   "existing-not-open",
+   "12.15",
+   "blocks",
+   "12.26",
+   "omp-orchestrator-8oz8",
+   "omp-orchestrator-7sd"
+  ],
+  [
+   "existing-not-open",
+   "12.15",
+   "blocks",
+   "12.31",
+   "omp-orchestrator-kxe",
+   "omp-orchestrator-7sd"
+  ],
+  [
+   "existing-not-open",
+   "12.26",
+   "depends_on",
+   "12.15",
+   "omp-orchestrator-8oz8",
+   "omp-orchestrator-7sd"
+  ],
+  [
+   "existing-not-open",
+   "12.31",
+   "depends_on",
+   "12.15",
+   "omp-orchestrator-kxe",
+   "omp-orchestrator-7sd"
+  ]
+ ]
+}

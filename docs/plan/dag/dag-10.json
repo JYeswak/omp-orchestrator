@@ -1,0 +1,324 @@
+{
+  "section": "10-prior-art",
+  "source": "docs/plan/10-prior-art.md",
+  "item_count": 15,
+  "positive_control": "Doc L301-304 says asupersync is 'already our binding dependency, so the workspace already compiles against' it, and L310 says the pending-dispatch fence was 'hand-rolled'. Confirmed on disk 2026-09-02: 18 of 67 crate manifests pin `asupersync = { git = \"https://github.com/Dicklesworthstone/asupersync\", rev = \"fa3c01aec\" }` (incl. crates/omp-types/Cargo.toml:20); crates/pane-dispatch-fence/src/main.rs exists and imports asupersync::Cx (L3-6). Second control: L74 says the allowance list lives locally — crates/no-shell-gate/tests/wired_lanes.rs:30 declares `const UNWIRED_LANE_ALLOWANCE`.",
+  "items": [
+    {
+      "id": "10.1",
+      "title": "Adopt locally an ack-bearing receipt and a permit that aborts on Drop (Gap 1 ADAPT)",
+      "lines": "L50-L62, L299-L320",
+      "what": "Dispatch emits no typed acknowledgement boundary and the pending-dispatch marker outlives the process that wrote it; adapt asupersync's PublishReceipt/AckKind + PublishPermit Drop-abort shape locally without importing the fabric.",
+      "acceptance_seed": "A dispatch step yields a receipt type carrying an ack boundary (Accepted/Committed/... not a bool); a permit type is #[must_use] and its Drop aborts the pending claim so a marker cannot survive its owner; known-bad: kill the process between reserve and send, expect no live marker on the next tick (today: marker lives until PENDING_DISPATCH_MAX_AGE_SECS=600 expires it).",
+      "priority": 1,
+      "kind": "crate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.14", "status": "open", "match": "partial", "evidence": "ACCEPTANCE 2: 'The receipt design specifically: re-derive ack-spine against asupersync's AckKind + DeliveryClass + PublishPermit before writing more of it. Either adopt them, or state with the measurement why a pane-dispatch boundary cannot use them.'"},
+        {"id": "omp-orchestrator-7kxf", "status": "open", "match": "partial", "evidence": "'Give each phase its own small state enum with an inhabited Unknown, thread ONE DispatchKey through claim/send/ack/close' — the typed how-far-did-it-get boundary, not a Drop-abort permit"},
+        {"id": "omp-orchestrator-ywd5", "status": "open", "match": "partial", "evidence": "'Mint a non-reusable incarnation per occupancy ... re-check it IMMEDIATELY before every send / claim / close' — ownership named per occupant, adjacent to C112 but no permit/Drop semantics"},
+        {"id": "omp-orchestrator-zlyy", "status": "open", "match": "partial", "evidence": "'DISPATCH_INTENT_EXPIRED age_secs=601 (ACK unread for 593s)' — the marker lifecycle defect the permit would remove"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "No local permit type whose Drop aborts the claim: crates/omp-orchestrator/src/main.rs:1756 `PENDING_DISPATCH_MAX_AGE_SECS: u64 = 600` and crates/refill-idle-panes/src/main.rs:267 `clear_pending_marker` release the marker by deadline or explicit call, never by ownership; `grep -rn 'impl Drop' crates/pane-dispatch-fence crates/ack-spine crates/omp-orchestrator/src` -> 0. No local AckKind-shaped receipt: crates/omp-inventory-map/src/types_inventory.rs:322-332 records AckKind as PresentUpstreamBlocked. Mirror copy source: asupersync/src/messaging/fabric.rs:1913 `pub struct PublishReceipt`, :1944-1945 `#[must_use = \"a PublishPermit must be sent or explicitly aborted\"] pub struct PublishPermit`; asupersync/src/messaging/class.rs:83 `pub enum AckKind`, :17 `pub enum DeliveryClass`.",
+      "depends_on": ["10.14"],
+      "blocks": ["10.15", "external:cp-z42vu"],
+      "terminal": false,
+      "notes": "Doc verdict is ADAPT (local shape), not import: the upstream `messaging-fabric` feature does not compile at rev fa3c01aec (crates/omp-types/Cargo.toml:12-19). ipg.14 acceptance 2 is the direct owner; 7kxf/ywd5 are rigor-atlas prescriptions filed 2026-09-02 that overlap and should be reconciled with it rather than duplicated."
+    },
+    {
+      "id": "10.2",
+      "title": "Make UNWIRED_LANE_ALLOWANCE fail in both directions (Gap 2 ADOPT)",
+      "lines": "L66-L76",
+      "what": "An allowance row must fail when its lane is undeclared AND when the lane has since acquired a caller, so the list shrinks and cannot outlive the defect it records.",
+      "acceptance_seed": "cargo test -p no-shell-gate --test wired_lanes: a planted allowance row for a lane that HAS a production caller goes RED naming the lane ('IS now invoked ... Remove the declaration'); a four-combination unit test (wired/unwired x declared/undeclared) exists; today only the undeclared direction is refused.",
+      "priority": 1,
+      "kind": "gate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-unwired-lane-conformance-6cd", "status": "closed", "match": "partial", "evidence": "'const UNWIRED_LANE_ALLOWANCE: &[(&str, &str)] = &[]; An EMPTY allowlist. An exception is a NAMED ROW WITH A REASON, not silence.' — one direction only"},
+        {"id": "omp-orchestrator-a3p", "status": "closed", "match": "partial", "evidence": "'2. UNWIRED_LANE_ALLOWANCE ships EMPTY. Any entry requires a reason string; an entry without one is a compile or test error' — no clause for an entry whose lane is now wired"},
+        {"id": "omp-orchestrator-0hk", "status": "closed", "match": "partial", "evidence": "'DECLARED_LANES covers one lane while the workspace has more; the wired-lane suite is vacuously green' — derivation fix, not the reverse-direction refusal"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "crates/no-shell-gate/tests/wired_lanes.rs:384-390 `check_wiring`: `Some(hit) => hits.push(hit)` accepts a caller for an allowlisted lane silently; only the count assert at :429-433 ('wired hits must account for every lane minus the named allowances') would trip, without naming the lane, and no test exercises that direction (tests at :447-559 cover planted-unwired, comments, empty scan, row validity, self-naming). The allowance is 3 rows (:30-33), not empty. Mirror copy source: franken_lean/crates/fln-conformance/tests/contract_roots.rs:285-288 (doc: 'a declared lane that has since been wired ALSO fails'), :755-772 `fn allowance_verdict` ('{lane} IS now invoked by a gate, but it is still declared unwired in UNWIRED_LANE_ALLOWANCE ({reason}). Remove the declaration'), :776-777 `fn allowance_verdict_fails_in_both_directions`.",
+      "depends_on": [],
+      "blocks": [],
+      "terminal": false,
+      "notes": "Same shape should be applied to SURFACE_ALLOWANCE / FORBID_ALLOWANCE / COLLISION_ALLOWANCE (wired_lanes.rs:613-631 validate rows only) and crates/finding/tests/finding_contract.rs:473-476 already names the waiver-outlives-reason failure (FC-L5, bead finding-l5-waiver-no-expiry-jex)."
+    },
+    {
+      "id": "10.3",
+      "title": "Stamp git sha + dirty flag and capture runtime binary identity fail-closed (Gap 3 ADOPT)",
+      "lines": "L80-L90",
+      "what": "An installed binary must prove which source built it (sha + dirty) and gates must refuse when they cannot name the binary they measured.",
+      "acceptance_seed": "omp-orchestrator --version prints build_id=<sha>[-dirty]; installer --check exits 1 on any HEAD/artifact/--version/running mismatch; pre-push-gate refuses a receipt whose writer_build_id differs from the running binary.",
+      "priority": 1,
+      "kind": "gate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.13", "status": "closed", "match": "exact", "evidence": "'One-touch install: Rust installer crate, four-way identity proof, standing drift check' ... 'HEAD = 94ac507. Installed supervisor = build_id 9a61acd. TWENTY-THREE COMMITS BEHIND.'"},
+        {"id": "omp-orchestrator-receipt-writer-identity-gum", "status": "closed", "match": "exact", "evidence": "'The receipt stamps its writer's identity: writer_build_id=<OMP_BUILD_ID> (already derived in crates/omp-orchestrator/build.rs — git HEAD sha plus -dirty), and verify REFUSES a receipt whose writer_build_id it cannot match against the running b[inary]'"},
+        {"id": "omp-orchestrator-6hrv", "status": "in_progress", "match": "partial", "evidence": "'installer already IS the parity gate and is the one binary not installed: close its five gaps' — G1 per-target build, G2 restart action"}
+      ],
+      "coverage": "COVERED",
+      "gap": "",
+      "depends_on": [],
+      "blocks": [],
+      "terminal": false,
+      "notes": "On disk: crates/omp-orchestrator/build.rs:37-63 derives OMP_BUILD_ID from git HEAD and appends `-dirty`; crates/installer/src/lib.rs:5-8 four-way identity; crates/no-shell-gate/src/bin/pre-push-gate.rs:427-441 refuses a receipt with absent/mismatched writer_build_id (fail closed); crates/ack-spine/src/heartbeat.rs:33-40 HeartbeatRow carries build_id (the runtime identity capture). Mirror source: beads_rust/build.rs:43 VERGEN_GIT_DIRTY; frankensqlite/crates/fsqlite-e2e/tests/bd_wsw3p_concurrent_write_showcase.rs:846 `fn running_binary_identity`. Local derivation is hand-rolled git, not vergen; equivalent output. Remaining install gaps are 6hrv's, owned by section 07."
+    },
+    {
+      "id": "10.4",
+      "title": "Adopt the canonical doctor shape: two-band exits, derived capabilities, repair text, preflight exemption (Gap 4)",
+      "lines": "L94-L104",
+      "what": "An umbrella `doctor` that stays runnable while the workspace is broken, with a typed exit enum in two bands (domain verdicts 0-6, sysexits 64/66/73/74), a machine-derived capabilities list, and a runnable repair string in every failing probe.",
+      "acceptance_seed": "omp-orchestrator doctor --json works from a checkout with a broken crate (no cargo metadata dependency); exit codes come from one enum with FixFailedRolledBack=3 semantics; `doctor capabilities --json` is derived from the probe table and a checked-in golden diff fails on drift; every FAIL probe carries a repair string an operator can paste.",
+      "priority": 1,
+      "kind": "command",
+      "existing_beads": [
+        {"id": "omp-orchestrator-jplf.7", "status": "open", "match": "partial", "evidence": "'WHAT: Close doctor, health, repair, clean-machine installation ... ACCEPTANCE: Doctor/health/repair are idempotent and reversible' — epic; no exit enum, capabilities derivation, repair text, or preflight-exemption leaf"},
+        {"id": "omp-orchestrator-exit-code-registry-rub", "status": "closed", "match": "partial", "evidence": "'Register every exit code this workspace emits (12 distinct) ... one row per code with: code, emitting crates, what it MEANS, what it does NOT mean' — registry, not a doctor exit band"},
+        {"id": "omp-orchestrator-exit-1-overloaded-x1o", "status": "open", "match": "partial", "evidence": "'Exit 1 and exit 2 each carry three unrelated meanings' — the collision a two-band enum removes"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "No umbrella doctor: crates/omp-orchestrator/src/main.rs:366-368 usage() offers only `run` and `close-readback`; per-crate ad-hoc doctors exist (crates/omp-inventory-map/src/main.rs:24-34, crates/omp-rpc-session/src/main.rs:41-99, returning an `ok` bool) with no shared exit enum; `grep -rn 'DoctorExitCode\\|doctor capabilities\\|FixFailedRolledBack' crates` -> 0; no bead names two-band exits, derived capabilities golden, or repair text (br search 'two.band|sysexits|DoctorExitCode|capabilities.v1|derived capabilities' -> 0 matching, 'runnable repair|repair string' -> 0). Mirror copy source: beads_rust/src/cli/commands/doctor_subsystems/exit_codes.rs:51-59 `pub enum DoctorExitCode` (FixFailedRolledBack = 3), capabilities_doctor.rs:1-9,50,149 (`br.doctor.capabilities.v1`, write_scopes/env_vars/fixers/detectors/derived exit_codes), eidetic_engine_cli/src/cache/hotset.rs (runnable `repair` string).",
+      "depends_on": ["07.doctor-health-repair-triad"],
+      "blocks": ["10.9"],
+      "terminal": false,
+      "notes": "The doc makes this 'the spine of 07-installability.md' (L104); 07 L128-186 specifies the doctor/health/repair triad and L219-223 the capabilities golden. Leaves belong to 07; this row exists so the integrator wires the ADOPT decision to them. The historical CONFIG_ERROR on `--help` is NO-CLAIM (L96)."
+    },
+    {
+      "id": "10.5",
+      "title": "Prove hook refusal through the real installed hook plus a planted defect (Gap 5 ADOPT)",
+      "lines": "L108-L118",
+      "what": "Tests must copy the real .git/hooks/pre-commit into a lab repository and drive a real git commit against a planted defect, not exercise a fixture.",
+      "acceptance_seed": "cargo test -p no-shell-gate --test gate_reachability: copies .git/hooks/pre-commit into a scratch git repo with a staged bad.sh and expects a nonzero refusal naming it; cargo test -p commit-build-fence --test hook drives `git commit` through the installed hook and expects refusal while a build is registered.",
+      "priority": 1,
+      "kind": "gate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-4ak", "status": "closed", "match": "exact", "evidence": "'PLANTED KNOWN-BAD: a fixture tree with one .sh turns it RED; deleting that file turns it GREEN; both asserted in the SAME run. MUTATION: delete the .sh pattern from the matcher and leg 2 must go RED'"},
+        {"id": "omp-orchestrator-gate-wiring-wave1-wbu", "status": "closed", "match": "exact", "evidence": "'one multi-call pre-commit hook binary ... installed at .git/hooks/pre-commit ... 4. A staged .sh triggers the no-shell-gate refusal'"},
+        {"id": "omp-orchestrator-receipt-writer-identity-gum", "status": "closed", "match": "partial", "evidence": "'a stale copy of the binary is still writing receipts' — the installed-artifact drift the freshness leg guards"}
+      ],
+      "coverage": "COVERED",
+      "gap": "",
+      "depends_on": [],
+      "blocks": [],
+      "terminal": false,
+      "notes": "On disk: crates/no-shell-gate/tests/gate_reachability.rs:190-211 copies the REAL installed hook into a lab repo with planted bad.sh; crates/commit-build-fence/tests/hook.rs:55-133 drives real `git commit` through the installed fence; crates/no-shell-gate/tests/commit_message.rs:48-69 drives `git commit` through the copied binary; crates/no-shell-gate/tests/hook_freshness.rs:103-140 refuses a stale installed hook. Mirror: franken_lean/crates/fln-conformance/tests/evidence_finalization.rs, franken_lean/scripts/git-hooks/test_projection_guard.sh:202-212, franken_lean/ci/VERIFICATION_MANIFEST.jsonl. Hook chaining (mirror :202-212) is N/A here by design: one multi-gate binary (wbu). Note gate_reachability runs the copied hook directly, not via git commit; the git-commit path is covered by commit_message.rs and commit-build-fence."
+    },
+    {
+      "id": "10.6",
+      "title": "Refuse an empty scan set as an error, never a pass (Gap 6 ADOPT)",
+      "lines": "L122-L140",
+      "what": "Every scanner/gate must report a zero-input scan as ERROR with a named reason, and emitted evidence must name its own vacuity.",
+      "acceptance_seed": ".git/hooks/pre-commit on an empty index exits nonzero with a named 'nothing was checked' reason (today: 'MULTI-GATE: no staged files to check', exit 0); path-literal-guard reports the empty-scan error instead of '0 hardcoded ... literal(s)'.",
+      "priority": 0,
+      "kind": "gate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-calr", "status": "open", "match": "exact", "evidence": "'Flagship pre-commit gate passes vacuously on an empty index, violating the repo's own anti-vacuity rule' ... '.git/hooks/pre-commit -> \"MULTI-GATE: no staged files to check\"; echo $? -> 0'"},
+        {"id": "omp-orchestrator-588v", "status": "open", "match": "exact", "evidence": "'path-literal-guard: 0 hardcoded home-path literal(s):' -- ZERO hits, an empty file list, and still a refusal ... an UNSCANNED set reports exactly like a scanned one'"},
+        {"id": "omp-orchestrator-1p0u", "status": "in_progress", "match": "partial", "evidence": "'Silent-success census: ten surfaces reported green while doing nothing; one defect shape, ten sites'"},
+        {"id": "omp-orchestrator-a3p", "status": "closed", "match": "partial", "evidence": "'6. POSITIVE CONTROL on the caller search ... A zero from a pattern that can never match is not evidence of absence.'"}
+      ],
+      "coverage": "COVERED",
+      "gap": "",
+      "depends_on": [],
+      "blocks": [],
+      "terminal": false,
+      "notes": "Shape already present locally: crates/no-shell-gate/tests/wired_lanes.rs:334-336,375-380 ('ERROR: production caller scan set is empty'), Census::try_new non-empty (omp-orchestrator lib.rs:1816). Mirror Shape 1 (doc L140): asupersync/src/messaging/jetstream.rs:2460 `waiter_fairness_mode: \"vacuous_zero_wait_refusal\"` — the emitted record names its own vacuity; calr is the open flagship instance."
+    },
+    {
+      "id": "10.7",
+      "title": "Adopt asupersync Outcome<T,E> and a one-row-per-decision ledger as design inputs (Gap 7 ADAPT)",
+      "lines": "L144-L156",
+      "what": "Use the upstream Outcome (Ok<Err<Cancelled<Panicked) instead of Result, and record each supervision decision as one typed, test-assertable row.",
+      "acceptance_seed": "omp-types re-exports asupersync::types::Outcome and its constructibility test passes; ack-spine emits exactly one typed row per dispatch step and a deleted emission turns the step-count leg RED.",
+      "priority": 1,
+      "kind": "crate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.17", "status": "closed", "match": "exact", "evidence": "'Outcome PRESENT, but only in tick-monitor and unrelated to asupersync's Outcome ... Four of the six absent types ALREADY EXIST in asupersync at the rev we pin'"},
+        {"id": "omp-orchestrator-ack-spine-oj6.1", "status": "in_progress", "match": "exact", "evidence": "'Ack spine (a): asupersync step ledger — one typed row per dispatch step ... a repeated untyped log line carries no state -- a row per step with a typed outcome is readable'"}
+      ],
+      "coverage": "COVERED",
+      "gap": "",
+      "depends_on": [],
+      "blocks": [],
+      "terminal": false,
+      "notes": "On disk: crates/omp-types/src/lib.rs:93 `pub use asupersync::types::{Outcome, OutcomeError, PanicPayload, Severity, join_outcomes}`. Mirror: asupersync/src/types/outcome.rs:218 `pub enum Outcome<T, E>`; asupersync/src/supervision.rs:3323 `pub struct EvidenceEntry`. tick-monitor still declares its own `Outcome` (lib.rs:81) — collision recorded in the type inventory, owned by section 03."
+    },
+    {
+      "id": "10.8",
+      "title": "Parse and consume OMP agent_end (AgentEndEvent/isTerminal) in the local adapter (Gap 7 / §11.4)",
+      "lines": "L156-L158, L245, L263-L265",
+      "what": "The wire-proven OMP completion frame is neither parsed by omp-rpc-session nor consumed by the supervisor; remaining work is adapter/event consumption, not a new completion type.",
+      "acceptance_seed": "omp-rpc-session parses {\"type\":\"agent_end\",\"isTerminal\":true} into a typed AgentEnd frame (today it is RpcFrame::Unknown); the resident supervisor's completion path consumes it (or records a measured refusal that --mode=rpc cannot reach a third-party pane) and a planted non-terminal frame is NOT treated as completion.",
+      "priority": 1,
+      "kind": "wiring",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.19", "status": "in_progress", "match": "partial", "evidence": "'A TYPED COMPLETION SIGNAL, emitted BY THE WORKER ... Signal via the bead; the pane may be gone by the time anyone reads it.' — a tracker-row protocol; it neither parses nor consumes the OMP agent_end frame"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "No AgentEndEvent parser or consumer: crates/omp-rpc-session/src/lib.rs:418-423 `enum RpcFrame { Ready, Response, Unknown, Malformed }` (an agent_end frame lands in Unknown, see :1366-1369 test for `future_frame`); `grep -rn 'agent_end\\|AgentEnd\\|willContinue\\|isTerminal' crates` hits only plan-lint tests (no-shell-gate/tests/gap_propagation.rs, citation_integrity.rs) and prose; docs/plan/11-lifecycle.md:213-215 records 'NOT IMPLEMENTED for AgentEndEvent' / 'NOT CONSUMED'. br search 'agent_end|AgentEndEvent|willContinue' -> 0 beads. Upstream source is the installed OMP package (§11.1), not the mirror: extensibility/shared-events.d.ts `interface AgentEndEvent`, modes/rpc/rpc-types.d.ts `RpcSessionEventFrame`; captured frame .flywheel/inventory-artifacts/agent-end-raw-frame.json.gz (sha256 d8bd80c6...).",
+      "depends_on": ["10.7"],
+      "blocks": ["11.K10-completion-reap"],
+      "terminal": false,
+      "notes": "DECISION CONFLICT for the integrator: doc L156 says the mirror result 'does not justify inventing a new completion protocol because OMP supplies a separate candidate', while ipg.19 (in_progress) builds a bead-comment completion row (ack-spine/src/completion.rs `CompletionOutcome`). Both may be needed (ipg.19 survives pane death; agent_end frees capacity immediately) but nothing records that decision. NO-CLAIM carried from omp-types lib.rs:59-62: --mode=rpc is single-session and cannot address a third-party pane, so consumer reachability for fleet panes is UNMEASURED."
+    },
+    {
+      "id": "10.9",
+      "title": "Type the missing external dependency: sentinel, DEPENDENCY_MISSING wire code, in-envelope remediation, per-call-site policy, conformance test (Gap 8)",
+      "lines": "L162-L174",
+      "what": "When ntm/br/bv/tmux/omp is absent the CLI must return a typed sentinel with a stable wire code and a remediation string, degrade per call site explicitly, and pin the exit taxonomy in a conformance test.",
+      "acceptance_seed": "With ntm removed from PATH, `omp-orchestrator run --once` (or doctor) exits with the registered DEPENDENCY_MISSING code and an envelope carrying {required:\"ntm\", probed:[...], install:\"...\"}; a conformance test asserts the code for each named dependency; a call site that can degrade (e.g. bv absent -> unranked queue) says so in its row.",
+      "priority": 1,
+      "kind": "crate",
+      "existing_beads": [],
+      "coverage": "MISSING",
+      "gap": "Searched br (title+description): 'NotInstalled|DEPENDENCY_MISSING|per-adapter|adapter scop' -> 1 hit (leht, a gate census, unrelated); 'sentinel' -> 0; 'remediation|install hint' -> 0 relevant. Local code: `grep -rn 'ErrNotInstalled\\|NotInstalled\\|DEPENDENCY_MISSING' crates` -> only crates/omp-orchestrator/src/lib.rs:241,297,309 `GateReachability::NotInstalled` (a GATE census state, not an external tool dependency); external-tool absence surfaces as an untyped string: crates/pane-dispatch-ready/src/main.rs:263-266 `BoundedOutcome::Unspawned(error) => eprintln!(...)`, crates/tick-monitor/src/lib.rs:134-150 `Outcome::SpawnFailed { message }`; `grep -rln 'DEPENDENCY_MISSING\\|preflight.dependency' crates docs` -> only docs/plan/07-installability.md:443-447 (a PROJECTED envelope, exit 75) and this section. Mirror copy source: ntm/internal/bv/bv.go:32 `var ErrNotInstalled = errors.New(\"bv is not installed\")`, ntm/internal/cass/client.go:13, ntm/internal/caut/client.go:14, ntm/docs/robot-action-handoff-contract.md:379 `ErrCodeDependencyMissing = \"DEPENDENCY_MISSING\"`, ntm/internal/cli/bugs.go (remediation in envelope), ntm/internal/alerts/generator.go (per-call-site degradation), ntm/internal/cli/robot_registry_conformance_test.go (exit taxonomy pinned).",
+      "depends_on": ["10.10"],
+      "blocks": [],
+      "terminal": false,
+      "notes": "Exit number must be registered in the exit-code registry (exit-code-registry-rub closed) — 07 proposes 75, which pane-dispatch-fence already uses for EXIT_BUSY (main.rs:16) and bead exit-const-collision-cas records as multiply bound; pick a fresh code. Natural home: crates/subprocess-contract (typed Unspawned -> DependencyMissing) so every caller inherits it."
+    },
+    {
+      "id": "10.10",
+      "title": "Probe tool presence with two signals: PATH-walk presence separate from version probe, known-nonfatal allowlist, both tests (Gap 9)",
+      "lines": "L178-L196",
+      "what": "A present binary must not be marked absent because its chosen version flag fails; separate which_tool (presence) from the version probe and forgive only a named failure.",
+      "acceptance_seed": "Two tests: check_tool falls back to PRESENT when the probe args are unsupported (a stub binary that exits 1 with an 'illegal option' banner is reported present, version unknown); check_tool reports INVOCATION FAILURE for a broken executable (a stub that cannot exec). tmux stays on `-V` (tmux --version exits 1 on this workstation, L189-191).",
+      "priority": 2,
+      "kind": "crate",
+      "existing_beads": [],
+      "coverage": "MISSING",
+      "gap": "Searched br: 'which_tool|probe|tmux -V|PresenceOnly' -> 17 hits, none about tool-presence probing; 'Q12|two-signal|pi_agent_rust' -> 0; 'presence|version probe|version flag' -> 0 relevant. Local code: crates/pane-dispatch-ready/src/main.rs:255-267 folds any `tmux -V` non-success/timeout/unspawned into `tmux_unhealthy = true` (absent and present-but-flag-failed collapse); crates/installer/src/lib.rs:447-451 returns None on any non-Completed `--version` probe; the only presence lookup is crates/omp-surface-consumption/src/main.rs:37-51 `sh -c \"command -v omp\"` (shells out, trusts exit code). tmux named gap (L196) is avoided locally by using `-V` at crates/fleet-truth/src/main.rs:416 and pane-dispatch-ready main.rs:256. Mirror copy source: pi_agent_rust/src/doctor.rs:924 `fn check_tool`, :1052-1064 `fn probe_failure_is_known_nonfatal` (allowlist = `sh --version` only, :1057), :1066-1079 `fn which_tool` (PATH walk via std::env::split_paths), tests :13948 `check_tool_falls_back_when_probe_args_are_unsupported`, :13964 `check_tool_reports_invocation_failure_for_broken_executable`.",
+      "depends_on": [],
+      "blocks": ["10.9"],
+      "terminal": false,
+      "notes": "00-brief.md:820 Q12 is OPEN: who owns the inherited pi_agent_rust tmux-missing defect if we adopt the probe — adopting the pattern adopts the bug; the local adoption must extend the allowlist (or configure `tmux -V`) and record that decision."
+    },
+    {
+      "id": "10.11",
+      "title": "Turn the SOTA preflight green: rebuild the fh technical manifest and re-run fh suggest + jsm suggest, retaining outputs",
+      "lines": "L21-L30",
+      "what": "The required preflight is red: fh refuses SEARCH_INDEX_STALE and `fh technical-manifest --check` fails TSX_ITEMS_PARSE_FAILED at apps/wire/scripts/suites.ts; jsm suggest was offline. Owner: integrator.",
+      "acceptance_seed": "fh suggest \"delivery receipt ack permit\" --json returns success:true (no SEARCH_INDEX_STALE); fh technical-manifest --check exits 0 with no TSX_ITEMS_PARSE_FAILED; jsm suggest returns non-generic picks; all three outputs retained under .flywheel/ with sha256.",
+      "priority": 1,
+      "kind": "gate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.14", "status": "open", "match": "partial", "evidence": "NO-CLAIM 2: '`fh serve` was STALE at the time of this search (SERVE_INPUT_STALE ...). Re-run through fh before treating this list as complete.' — records the staleness, does not task repairing it"}
+      ],
+      "coverage": "MISSING",
+      "gap": "Searched br: 'technical-manifest|SEARCH_INDEX_STALE|TSX_ITEMS|fh suggest|SOTA preflight|jsm suggest' -> 1 hit (ipg.14, a NO-CLAIM only). Re-measured 2026-09-02 from the repo root: `fh suggest ... --json` -> {\"success\":false,\"failure_kind\":\"SEARCH_INDEX_STALE\",\"error\":{\"message\":\"published key f2845efff917afd4 differs from current 294c7abede5f2892\"}} (exit_code 3); `fh technical-manifest --check` -> `[FAIL] TSX_ITEMS_PARSE_FAILED: apps/wire/scripts/suites.ts is not a complete TypeScript file (unterminated quoted string)`. The failing file lives in the fh repo (~/Developer/franken-harvest), not here.",
+      "depends_on": ["external:franken-harvest apps/wire/scripts/suites.ts parse repair"],
+      "blocks": ["10.13"],
+      "terminal": false,
+      "notes": "Every Gap 1-9 search in this section ran filesystem-only because of this (L28); ipg.14 acceptance 1's mining pass cannot claim completeness until it is green."
+    },
+    {
+      "id": "10.12",
+      "title": "Validate the mirror denominator (210 .git entries) and record per-repo mirror revision identity",
+      "lines": "L21, L28, L36, L224",
+      "what": "Classify the 210 filesystem .git entries as work-trees/linked worktrees/nested/submodules, and record full mirror commit IDs per cited repo, so §10.1's provenance row stops saying 'unavailable'.",
+      "acceptance_seed": "A retained ledger row per cited mirror repo {repo, git_head, snapshot_date} and one denominator row {entries:210, validated_worktrees:N, method}; NUMBERS.toml (or the plan ledger) cites it; §10.1 no longer says full commit IDs were unavailable.",
+      "priority": 2,
+      "kind": "measurement",
+      "existing_beads": [
+        {"id": "omp-orchestrator-kxe.3", "status": "in_progress", "match": "partial", "evidence": "'6. Round-20 findings ... R20-01-mirror-denominator ... R20-07-revision-and-mirror-provenance ... are explicitly dispositioned.' — scope is 'sections 00–03, 06–08, and 11'; section 10 is not in scope"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "kxe.3 dispositions the mirror-denominator findings for sections 01 and 07 but its stated scope excludes 10-prior-art, and no bead records per-repo mirror HEADs for the constructs cited here (asupersync, franken_lean, beads_rust, frankensqlite, pi_agent_rust, ntm, eidetic_engine_cli). br search 'denominator|210|work-tree' -> 22 hits, only kxe.3 names the mirror.",
+      "depends_on": [],
+      "blocks": [],
+      "terminal": false,
+      "notes": "Cheap: `for r in asupersync franken_lean beads_rust frankensqlite pi_agent_rust ntm eidetic_engine_cli; do git -C $M/$r rev-parse HEAD; done` plus `find . -maxdepth 2 -mindepth 2 -name .git -exec test -f {}/HEAD \\;` classification."
+    },
+    {
+      "id": "10.13",
+      "title": "Make the prior-art runbook dispatchable: packet schema, immutable result artifact with SHA-256, exit semantics, negative-pattern refusals (§12)",
+      "lines": "L279-L295",
+      "what": "A re-derivation of any citation/absence must produce {gap_id, command, input, source_root, source_revision, result, verdict, no_claim}, record its hash, exit 0 only when the artifact exists and verdict is ADOPT/ADAPT/REJECT, and refuse the eight named negative patterns.",
+      "acceptance_seed": "Given a packet with an empty --include or a wrong-language extension filter the runbook exits nonzero naming the pattern; given a valid replay it writes the artifact, prints its sha256, exits 0; a planted 'not found' without a recorded command is refused as an unscoped negative.",
+      "priority": 2,
+      "kind": "command",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.14", "status": "open", "match": "partial", "evidence": "'3. FIRES-ON-KNOWN-BAD: a bead containing \"UNMEASURED\" or \"we don't know\" with no adjacent mirror citation or explicit not-found is FLAGGED. Ship the specimen in-tree.' and '4. POSITIVE CONTROL: at least one gap must come back genuinely NOT FOUND' — the discipline, not the artifact/exit contract"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "No artifact writer or exit contract exists: `grep -rn 'gap_id\\|source_revision\\|no_claim_scope' crates` -> 0; the only retained replay is the ephemeral .flywheel/grade-evidence/r13-10-prior-art.md.gz (L56, L148, L182). The adjacent-upstream-type gate exists (crates/no-shell-gate/tests/gap_propagation.rs:14-55) but the UNMEASURED-without-citation lint of ipg.14 acceptance 3 does not (`grep -rn 'UNMEASURED' crates/no-shell-gate/tests` -> 0 lint hits). br search 'runbook|dispatch packet|gap_id' -> 16 hits, none for the prior-art runbook (kxe.2/kxe.4 own the 12-journey S1-S9 runbooks).",
+      "depends_on": ["10.11"],
+      "blocks": [],
+      "terminal": false,
+      "notes": "Rule Zero caution: this artifact's only consumer is another agent. Keep it to the smallest shape that can refuse a false zero (a lint leg + the JSON schema), not a new crate; the four false-zero mechanisms at L46 are the known-bad fixtures."
+    },
+    {
+      "id": "10.14",
+      "title": "Record AckKind/DeliveryClass/PublishPermit as a vocabulary mapping; defer fabric adoption as a topology change (§10.9 decision)",
+      "lines": "L299-L320",
+      "what": "The doc decides: name the mapping from our three ack dialects to asupersync's types, do not import them now, because adoption means restructuring the dispatch path around the fabric.",
+      "acceptance_seed": "omp-types documents the dialect->AckKind mapping table and asserts the upstream types are reachable-or-named-unreachable (test ack_vocabulary_is_documented_as_unreachable); the type inventory lists DeliveryClass/AckKind as PresentUpstreamBlocked with the exact blocker.",
+      "priority": 2,
+      "kind": "decision",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.17", "status": "closed", "match": "exact", "evidence": "'DeliveryClass ABSENT <- asupersync has it ... AckKind ABSENT <- asupersync has it: \"acknowledgement boundary reached\" ... We invented three ack dialects for a vocabulary we already depend on.'"},
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.14", "status": "open", "match": "partial", "evidence": "'Recorded as a vocabulary mapping, not a type import' is this bead's first payoff; its acceptance 2 keeps the adopt-or-state-why question open"}
+      ],
+      "coverage": "COVERED",
+      "gap": "",
+      "depends_on": [],
+      "blocks": ["10.1"],
+      "terminal": false,
+      "notes": "On disk: crates/omp-types/src/lib.rs:33-62 mapping table (AckKind variant -> the authority we reinvented) with NO-CLAIM; crates/omp-types/Cargo.toml:12-19 names the blocker (messaging-fabric requires test-internals at fa3c01aec, consumer.rs:1299); crates/omp-inventory-map/src/types_inventory.rs:304-332 PresentUpstreamBlocked rows. Discovered prerequisite NOT asked by the doc and NOT in any bead (br search 'messaging-fabric|test-internals|consumer.rs' -> 0): bumping the asupersync pin or reporting the default-impl leak upstream is what would let the mapping become an import; filing upstream is a public action -> Josh. Mirror: asupersync/src/messaging/class.rs:17 DeliveryClass, :83 AckKind; fabric.rs:1944 PublishPermit must_use."
+    },
+    {
+      "id": "10.15",
+      "title": "Keep cp-z42vu at ADAPT until recipient-level runtime proof exists (Gap 1 boundary, §11.5)",
+      "lines": "L62, L267-L271",
+      "what": "The OMP receipt is transport-injection prior art only; the receipts verdict cannot move past ADAPT until a receiver-level (two-capture) delivery proof is measured at runtime.",
+      "acceptance_seed": "One live dispatch produces a receiver receipt row (PostSendObservation two-capture, ReceiptVerdict) independent of sender exit; until then the plan's receipts row stays ADAPT / DECLARED ONLY.",
+      "priority": 1,
+      "kind": "measurement",
+      "existing_beads": [
+        {"id": "omp-orchestrator-receiver-receipt-contract-pwm", "status": "in_progress", "match": "exact", "evidence": "'define the receiver-receipt contract for PanePresence, PostSendObservation, ReceiptReason, ReceiptVerdict ... state the two-capture evidence floor and the non-delivery boundaries'"},
+        {"id": "omp-orchestrator-d6q2", "status": "closed", "match": "exact", "evidence": "'K8 receiver observation: independent of sender return, two-capture discrimination, unreadable is ERROR'"},
+        {"id": "omp-orchestrator-ack-stage-qhl", "status": "closed", "match": "partial", "evidence": "'Build the ACK stage: receiver-receipt verdicts have no consumer'"}
+      ],
+      "coverage": "COVERED",
+      "gap": "",
+      "depends_on": ["10.1"],
+      "blocks": [],
+      "terminal": true,
+      "notes": "This is the measurement that flips Gap 1's verdict; the kernel (K8) is built and the contract is in progress. Runtime proof on the live fleet is owned by 05/11 (dispatch journey), not this section."
+    }
+  ],
+  "section_deps": [
+    "07-installability: Gap 4's leaves (doctor/health/repair triad, two-band exits, capabilities golden, dependency-missing envelope) are specified there; §10 only records ADOPT, so 10.4 and 10.9 cannot close before 07's doctor spec is filed.",
+    "11-lifecycle / 05-actions: Gap 7's consumer (K10 agent_end parser + reap edge) and Gap 1's recipient-level runtime proof (S5/S6 receipts) are lifecycle-owned; 10.8 and 10.15 are the §10 ends of those edges.",
+    "03-crates: the tick-monitor/omp-types `Outcome` name collision and the six Verdict dialects (ipg.17) must resolve before 10.1's local receipt type can be the single vocabulary.",
+    "external:franken-harvest: the SOTA preflight (10.11) is red until apps/wire/scripts/suites.ts parses; every mirror search claim in this section is filesystem-only until then."
+  ],
+  "search_log": [
+    "br list -a --json -> 284 rows under .issues (closed 95, open 94, in_progress 88, grading 5, blocked 2)",
+    "br title+desc regex 'prior.art|mirror|what would jeff|10-prior' -> 26; 'AckKind|DeliveryClass|PublishPermit|PublishReceipt|Drop-abort|C112' -> 5 (ipg.14, ipg.17, zlyy relevant)",
+    "br 'allowance|UNWIRED' -> 51 (6cd, a3p, 0hk relevant); 'outlive|both directions|since been wired|now wired' -> 24, none for the reverse-direction allowance verdict",
+    "br 'vergen|GIT_DIRTY|dirty flag|tree.digest' -> 20; 'identity proof|drift check|binary identity' -> 5 (ipg.13, 6hrv)",
+    "br 'doctor' in title -> 0; in description -> 18 (jplf.7 relevant); 'two.band|sysexits|DoctorExitCode|capabilities.v1|derived capabilities' -> 3 exit-collision beads only; 'capabilit(y|ies) (snapshot|list|golden)|doctor capabilities' -> 0; 'runnable repair|repair string' -> 0; 'preflight exempt|broken workspace' -> 1 (of3)",
+    "br 'lab repo|real git commit|planted|installed hook|fixture' -> 67 (4ak, wbu relevant)",
+    "br 'vacuo|anti-vacuity' -> 137 (calr, 588v, 1p0u, a3p relevant)",
+    "br 'agent_end|AgentEndEvent|willContinue' -> 0; 'Outcome<|Panicked|EvidenceEntry|supervision' -> 2 unrelated; ipg.19 found via 'completion'",
+    "br 'NotInstalled|DEPENDENCY_MISSING|per-adapter|adapter scop' -> 1 (leht, unrelated); 'sentinel' -> 0; 'remediation|install hint' -> 5 unrelated",
+    "br 'which_tool|probe|tmux -V|PresenceOnly' -> 17 unrelated; 'Q12|two-signal|pi_agent_rust' -> 0; 'presence|version probe|version flag' -> 0 relevant",
+    "br 'technical-manifest|SEARCH_INDEX_STALE|TSX_ITEMS|fh suggest|SOTA preflight|jsm suggest' -> 1 (ipg.14 NO-CLAIM only); 'messaging-fabric|test-internals|consumer.rs' -> 0",
+    "br 'runbook|dispatch packet|gap_id' -> 16 (kxe.2, kxe.4 own 12-journey runbooks; none for §12); 'denominator|210|work-tree' -> 22 (kxe.3 relevant); 'z42vu' -> 10 (pwm, d6q2, qhl relevant)",
+    "grep crates 'UNWIRED_LANE_ALLOWANCE' -> 12 files; wired_lanes.rs check_wiring :384-390 accepts allowlisted-but-wired silently",
+    "grep crates 'AckKind|DeliveryClass|PublishPermit|PublishReceipt|ObligationLedger|impl Drop' -> types only in omp-types/omp-inventory-map docs; no Drop in pane-dispatch-fence/ack-spine/omp-orchestrator",
+    "grep crates 'running_binary|current_exe|writer_build_id|four-way|drift.check' -> installer, pre-push-gate, heartbeat hits (Gap 3 present)",
+    "grep crates 'doctor|Doctor' -> per-crate doctors in omp-inventory-map, omp-rpc-session only; omp-orchestrator usage() has no doctor",
+    "grep crates 'hooks/pre-commit|.git/hooks|\"commit\"' -> gate_reachability.rs:190-211, commit-build-fence/tests/hook.rs, commit_message.rs, hook_freshness.rs (Gap 5 present)",
+    "grep crates 'agent_end|AgentEnd|willContinue|mode=rpc|isTerminal' -> omp-rpc-session RpcFrame has no agent_end arm; hits are plan-lint tests",
+    "grep crates 'ErrNotInstalled|NotInstalled|DEPENDENCY_MISSING|which_tool|probe_failure_is_known_nonfatal|PresenceOnly' -> only GateReachability::NotInstalled (gate census)",
+    "grep crates '\"-V\"|\"--version\"|command -v|split_paths' -> tmux -V at fleet-truth:416, pane-dispatch-ready:256; no PATH-walk presence fn",
+    "grep -l '^asupersync' crates/*/Cargo.toml | wc -l -> 18 (positive control); ls crates | wc -l -> 67",
+    "fh suggest 'delivery receipt ack permit' --json -> SEARCH_INDEX_STALE (published f2845eff vs current 294c7abe); fh technical-manifest --check -> [FAIL] TSX_ITEMS_PARSE_FAILED apps/wire/scripts/suites.ts",
+    "mirror pins: franken_lean contract_roots.rs:288 UNWIRED_LANE_ALLOWANCE, :755 allowance_verdict, :777 allowance_verdict_fails_in_both_directions; beads_rust exit_codes.rs:51 DoctorExitCode, :59 FixFailedRolledBack=3; capabilities_doctor.rs:1 br.doctor.capabilities.v1; pi_agent_rust doctor.rs:924/:1052/:1066/:13948/:13964; ntm bv.go:32, cass/client.go:13, caut/client.go:14, robot-action-handoff-contract.md:379; asupersync fabric.rs:1913/:1944-1945, class.rs:17/:83, outcome.rs:218, supervision.rs:3323, jetstream.rs:2460; beads_rust build.rs:43; frankensqlite bd_wsw3p...rs:846"
+  ],
+  "no_claim": "This manifest establishes bead representation and on-disk presence/absence at the 2026-09-02 tree, not runtime behaviour: no cargo build/test was run, `br show` dependency edges were not read, and mirror line numbers are for the current mirror snapshot whose per-repo HEADs are unrecorded (item 10.12). It cannot establish whether the asupersync messaging-fabric feature compiles at a newer rev, whether OMP --mode=rpc can reach fleet panes (Gap 7 consumer reachability is UNMEASURED), or whether kxe.3/7kxf/ywd5 will be rescoped to absorb the partial items rather than new beads being filed. Sibling sections' item numbers referenced in depends_on/blocks (07.doctor-health-repair-triad, 11.K10-completion-reap) are guesses for the integrator to resolve."
+}

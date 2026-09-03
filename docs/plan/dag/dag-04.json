@@ -1,0 +1,434 @@
+{
+  "section": "04-diagrams",
+  "source": "docs/plan/04-diagrams.md",
+  "item_count": 21,
+  "items": [
+    {
+      "id": "04.1",
+      "title": "Build the diagram generator command that emits Diagrams 1-4 and 6 from data",
+      "lines": "L28-L35,L280-L290,L416,L425-L428",
+      "what": "A single command that regenerates Diagram 1/2/6 from the omp-inventory-map census (path-depends-on, consumes, transport edges) and Diagram 3/4 from the 00-brief control-loop and gate-leg tables, so the diagram set is a rendering of an edge list with a command behind it; it becomes omp-inventory-map's second consumer (consumes count 1 -> 2).",
+      "acceptance_seed": "run <generator> --out docs/plan/04-diagrams.md (or a sibling artifact); expect the mermaid blocks for Diagrams 1,2,4,6 to be byte-identical on a second run and every edge in Diagram 1 to equal one path-depends-on edge in the live omp-inventory-map output; Diagram 5 stays hand-written and labelled PROJECTED.",
+      "priority": 0,
+      "kind": "command",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.12", "status": "closed", "match": "partial", "evidence": "GENERATED FROM `cargo metadata` + trigger scan + spawn census, emitted as a mermaid graph AND a table. Re-runnable by one command whose output is pasted beside the diagram."},
+        {"id": "omp-orchestrator-kxe.5", "status": "closed", "match": "partial", "evidence": "Reconcile cross-section plan authority, board arithmetic, generator acceptance, and completion claims"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "ipg.12 delivered the omp-inventory-map scanner (the census JSON + its own mermaid), not the command that regenerates THIS section's diagram set; the doc says at L33 'That command does not exist today' and the registry row generator_acceptance carries status PROJECTED with notes 'The generator itself remains PROJECTED'. No open bead owns building it.",
+      "depends_on": ["02.<omp-inventory-map census is current and addressable>", "04.14"],
+      "blocks": ["04.2", "04.15"],
+      "terminal": false,
+      "notes": "Registry row docs/plan/CROSS-SECTION-AUTHORITY.jsonl authority_key=generator_acceptance names owner BlueLantern, consumer 'future diagram generator and CI freshness check'. Prior art named at L299-L307: frankenmermaid monorepo (fm-parser, fm-render-*, fm-cli) and beads_rust `br dep --format mermaid` (render_dep_tree_mermaid) in the mirror — the delta to build is the generator-as-gate, not a renderer."
+    },
+    {
+      "id": "04.2",
+      "title": "CI diff gate: regenerated Diagram 1 must match the checked-in artifact",
+      "lines": "L31-L35,L288-L290,L306-L307",
+      "what": "A CI/admission job runs the generator and fails the merge when the crate DAG moved but the checked-in Diagram 1 did not; its RED leg is explicit: change one measured crate edge, regenerate, require the artifact diff to fail.",
+      "acceptance_seed": "add a path dependency between two workspace crates in a scratch commit, run the gate; expect nonzero exit naming the changed edge; revert, expect exit 0. Anti-vacuity: an empty edge set is an ERROR.",
+      "priority": 0,
+      "kind": "gate",
+      "existing_beads": [],
+      "coverage": "MISSING",
+      "gap": "",
+      "depends_on": ["04.1", "external:06 gate.yml admission lane must be able to run (see omp-orchestrator-28dq / gate-no-runner-j58 lineage)"],
+      "blocks": [],
+      "terminal": false,
+      "notes": "Searched bead titles+descriptions for 'diagram', 'mermaid', 'generator', 'CI diff' — only ipg.12/d1n/kxe.5/dmpv/ipg.15 hit and none is this gate. The failure result is already named: CROSS_SECTION_GENERATOR_ACCEPTANCE_FAILURE ('missing owner, command, or changed-edge RED leg')."
+    },
+    {
+      "id": "04.3",
+      "title": "Keep the generator_acceptance authority row and cross_section_authority test green",
+      "lines": "L280-L286",
+      "what": "The registry row 'generator_acceptance' in docs/plan/CROSS-SECTION-AUTHORITY.jsonl carries owner BlueLantern, the acceptance command `cargo test --quiet -p no-shell-gate --test cross_section_authority`, and the failure result; the row's status flips PROJECTED -> EXISTS only when 04.1/04.2 land.",
+      "acceptance_seed": "run `cargo test --quiet -p no-shell-gate --test cross_section_authority`; expect 7/7 pass on the local worker; `jq -c 'select(.authority_key==\"generator_acceptance\")' docs/plan/CROSS-SECTION-AUTHORITY.jsonl` prints one row with owner, acceptance_command, failure_result non-empty.",
+      "priority": 1,
+      "kind": "gate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-kxe.5", "status": "closed", "match": "exact", "evidence": "Reconcile cross-section plan authority, board arithmetic, generator acceptance, and completion claims so every cross-section statement has one current source and a runnable falsifier."},
+        {"id": "omp-orchestrator-jj7v", "status": "open", "match": "partial", "evidence": "`cargo test -p no-shell-gate --test cross_section_authority` on `joshs-brain` -> `FAILED. 0 passed; 7 failed`, every leg `CROSS-SECTION-AUTHORITY.jsonl must exist: Os { code: 2, kind: NotFound }`"}
+      ],
+      "coverage": "COVERED",
+      "gap": "",
+      "depends_on": [],
+      "blocks": ["04.1"],
+      "terminal": false,
+      "notes": "Row verified present in the file (65 rows). jj7v records that the verdict depends on the rch worker chosen; the row and the test exist, the reproducibility of the verdict is jj7v's problem, not this section's."
+    },
+    {
+      "id": "04.4",
+      "title": "Convergence milestone: omp-types in-degree 0 -> N and subprocess-contract as universal hub",
+      "lines": "L101-L129",
+      "what": "The measurable target this diagram sets: crates converge onto omp-types (today in-degree 0, zero dependents) and subprocess-contract (in-degree 4 of 26, 22 crates do not route through it against 29 raw spawn sites); the scoreboard is the in-degree of those two nodes in a re-run of the exact path-depends-on extraction.",
+      "acceptance_seed": "re-run the path-depends-on extraction over live omp-inventory-map output and count in-degree; expect omp-types > 0 and subprocess-contract in-degree == number of crates with any Command::new site (allowance rows carrying reasons for the rest).",
+      "priority": 0,
+      "kind": "milestone",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.18", "status": "open", "match": "partial", "evidence": "omp-types depended_on_by = 0 of 25 crates ... The canonical vocabulary shipped with ZERO dependents ... a crate redeclaring a canonical type [FIRES-ON-KNOWN-BAD specimen]"},
+        {"id": "omp-orchestrator-asupersync-subprocess-contract-gfb", "status": "open", "match": "partial", "evidence": "Zero of 23 extraction crates honour the asupersync subprocess contract; 110 Command sites, killpg 0/12"},
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.17", "status": "closed", "match": "partial", "evidence": "SIX VERDICT TYPES, NO SHARED TRAIT ... SEVENTEEN TYPES IN THE ACK/RECEIPT VOCABULARY, SPLIT ACROSS TWO INCOMPATIBLE DIALECTS"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "No bead states the in-degree scoreboard (omp-types > 0, subprocess-contract hub) as its acceptance; ipg.18 refuses redeclaration but does not require adoption, gfb routes spawns but is not phrased as a Diagram-1 in-degree measurement.",
+      "depends_on": ["external:00-brief §3.7 asupersync pin fa3c01aec unblocks the AckKind/DeliveryClass/ObligationLedger half of omp-types", "01.<Phase 0 type algebra epic jplf.1>"],
+      "blocks": [],
+      "terminal": false,
+      "notes": "Figures are marked HISTORICAL as of 2026-09-02 (L101,L112,L115); the live denominator is NUMBERS.toml / 03-crates."
+    },
+    {
+      "id": "04.5",
+      "title": "Disposition each isolated crate in Diagram 1: WIRE, RETIRE, or a named reason",
+      "lines": "L101-L109,L118-L121,L340-L341",
+      "what": "9 of 26 crates (historical) appear nowhere in the path-depends-on DAG, including installer and omp-inventory-map; each needs a recorded disposition rather than silent presence, and five roots with no composition point is the structural finding.",
+      "acceptance_seed": "run the crate-reachability census; expect every crate with zero inbound edges and no runtime trigger to carry a disposition row (WIRE|RETIRE|reason) and the check to exit nonzero for any undispositioned orphan.",
+      "priority": 1,
+      "kind": "measurement",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.12", "status": "closed", "match": "partial", "evidence": "ORPHAN CLASS IS EXPLICIT: nodes with zero inbound edges AND no runtime trigger render distinctly and are listed separately with a required disposition per crate — WIRE, RETIRE, or a named reason to keep."},
+        {"id": "omp-orchestrator-crate-reachability-census-44g", "status": "in_progress", "match": "exact", "evidence": "Crate reachability census: announce loudly every crate with zero callers and no runtime trigger"}
+      ],
+      "coverage": "COVERED",
+      "gap": "",
+      "depends_on": [],
+      "blocks": ["04.4"],
+      "terminal": false,
+      "notes": "installer's disposition is owned by 04.16 / 07; omp-inventory-map's is resolved by 04.1 (it gains a consumer)."
+    },
+    {
+      "id": "04.6",
+      "title": "Decide which subset of the 176 unconsumed OMP surface rows is worth wiring",
+      "lines": "L133-L178",
+      "what": "Diagram 2 shows 25 of 26 crates consume zero OMP surface and the only consumer is the scanner observing itself; the section explicitly says choosing the subset to wire is a design act it cannot perform.",
+      "acceptance_seed": "produce the classification table: every census row classified (a) not ours / (b) reimplemented-by-scraping, switch / (c) unused capability; expect at least one MAPPED row as positive control and Diagram 2's consumes edge count to rise above 7 once any (b) row is adopted.",
+      "priority": 1,
+      "kind": "decision",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-surface-map-41b", "status": "in_progress", "match": "exact", "evidence": "CLASSIFY EACH UNMAPPED SURFACE as one of: (a) genuinely not ours, (b) we reimplemented it by scraping and should switch, (c) a capability we do not use and should."},
+        {"id": "omp-orchestrator-8ax8", "status": "in_progress", "match": "exact", "evidence": "Per-crate table: for each scraped behaviour, name the typed OMP alternative ... adopt it, or state the reason not to ... Land at least ONE typed adoption with a real caller."},
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg", "status": "open", "match": "partial", "evidence": "MISSION: 100% OMP surface coverage in asupersync-native, cancel-correct crates"}
+      ],
+      "coverage": "COVERED",
+      "gap": "",
+      "depends_on": ["02.<surface census rows and classifications are current>"],
+      "blocks": [],
+      "terminal": false,
+      "notes": "Row counts (183/157/18/8) are HISTORICAL (L173); the 23:01 capture holds 981 rows (L430)."
+    },
+    {
+      "id": "04.7",
+      "title": "Close the layer-2 SEAM: one shared type across tick-monitor -> omp-orchestrator idle capacity",
+      "lines": "L187,L193,L210,L322,L343",
+      "what": "Diagram 3 layer 2 (ACTIONABLE) is dashed: the filter is fixed (-oco) but the producer's is_free_capacity/NewlyIdle field and the consumer's parser agree only by convention across a process boundary with no shared type (09 M1); upstream GuestIdleReconcilerCtx (collab/guest.d.ts:9-30) is declared only and has no measured path into the local filter.",
+      "acceptance_seed": "one type crosses the boundary (tick-monitor emits it, omp-orchestrator decide() consumes it, no string re-parse); mutation: rename the producer field, expect a compile error not a silent empty free_capacity; either GuestIdleReconcilerCtx is consumed with a real caller or the reason it cannot be is recorded.",
+      "priority": 0,
+      "kind": "wiring",
+      "existing_beads": [
+        {"id": "omp-orchestrator-tickmonitor-free-capacity-blind-vgf", "status": "in_progress", "match": "partial", "evidence": "tick-monitor reports free_capacity=[] while panes are IDLE — the 178-tick blindness, still live in the observer"},
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.17", "status": "closed", "match": "partial", "evidence": "THE `Observation` COLLISION GETS A DECISION, not an allowance row: one shared type across the tick-monitor -> omp-orchestrator seam, or a stated reason why the producer and consumer must diverge."},
+        {"id": "omp-orchestrator-transition-to-idle-misread-oco", "status": "closed", "match": "partial", "evidence": "tick-monitor scores a WORKING->IDLE transition as LIVE, hiding a newly-idle pane from dispatch"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "ipg.17 closed with the seam decision as an acceptance clause but the section (2026-09-01) still measures the seam OPEN; no open bead owns the shared type as its deliverable, and no bead mentions GuestIdleReconcilerCtx (search: 0 hits).",
+      "depends_on": ["09.<M1 shared-type milestone>", "01.<Phase 0 PaneObservation evidence algebra (phase0-pane-observation-80h)>"],
+      "blocks": ["04.8"],
+      "terminal": false,
+      "notes": "The doc is explicit that layer 3 must not be fixed before layer 2 (L216-L218)."
+    },
+    {
+      "id": "04.8",
+      "title": "Layer 3 CONSUME: fence dispatches on a layer-2 'yes' instead of latching DISPATCH_RETRY_BLOCKED",
+      "lines": "L188,L194,L210,L213-L228",
+      "what": "162 refused ticks over 4.2h all carrying DISPATCH_RETRY_BLOCKED; the fence refuses correctly given a layer-2 answer that never says yes, and after mj8w it claims once then latches; fixing layer 3 alone would convert refusals into unfenced dispatches.",
+      "acceptance_seed": "with a confirmed-idle pane and a claimable ready bead, 5 consecutive supervisor ticks produce at most one DISPATCH_RETRY_BLOCKED before a DISPATCHED row whose bead is in_progress; known-bad: an unclaimed bead is still refused with typed ClaimRequired.",
+      "priority": 0,
+      "kind": "wiring",
+      "existing_beads": [
+        {"id": "omp-orchestrator-y6v5", "status": "in_progress", "match": "exact", "evidence": "the supervisor claims once, then latches on DISPATCH_RETRY_BLOCKED for 8 cycles with 77 ready ... a pending-dispatch marker is written and never cleared"},
+        {"id": "omp-orchestrator-mj8w", "status": "closed", "match": "partial", "evidence": "the supervisor can select and dispatch but cannot CLAIM: it refuses every unclaimed head forever"},
+        {"id": "omp-orchestrator-9he5", "status": "open", "match": "partial", "evidence": "DISPATCH_RETRY_BLOCKED 344x ... a trauma-guard counter that halts and names the decision"},
+        {"id": "omp-orchestrator-dispatch-claim-fence-bhw", "status": "closed", "match": "partial", "evidence": "Dispatch refuses a packet naming an unclaimed bead — enforce the middle beat in code"}
+      ],
+      "coverage": "COVERED",
+      "gap": "",
+      "depends_on": ["04.7"],
+      "blocks": ["04.9"],
+      "terminal": false,
+      "notes": "NO-CLAIM at L226-L228: 162/4.2h is one window on one machine, not a rate."
+    },
+    {
+      "id": "04.9",
+      "title": "Layer 4 ACTUATE: send_and_verify carries the claim beat and stops logging sender success as receipt",
+      "lines": "L189,L195,L210",
+      "what": "The resident supervisor (launchd build 9a61acd) emits via ntm --robot-send without the claim beat and records sender success as RECEIVER_RECEIPT; the heartbeat ledger shows 131 DISPATCHED rows for bead 815 to a dead pane; delivery proof remains open.",
+      "acceptance_seed": "install from a committed HEAD containing dispatch_claim_fence; 20 consecutive heartbeat ticks contain zero DISPATCHED rows whose bead is open; a send with no receiver-side evidence is recorded as a typed refusal, never as receipt.",
+      "priority": 0,
+      "kind": "wiring",
+      "existing_beads": [
+        {"id": "omp-orchestrator-5tn", "status": "in_progress", "match": "exact", "evidence": "Installed supervisor re-sent bead 815 to a 402-dead pane 131x in 247 min: install the claim fence and prove it ... 131 were `DISPATCHED pane=%1408 bead=omp-orchestrator-815 RECEIVER_RECEIPT=ntm_robot_send`"},
+        {"id": "omp-orchestrator-zlyy", "status": "open", "match": "partial", "evidence": "Every dispatch reads DISPATCH_FAILED and a delivered, ACKed bead is re-dispatched to the same pane: four kernel defects in send_and_verify/marker/select/claim-owner"},
+        {"id": "omp-orchestrator-93lo", "status": "in_progress", "match": "partial", "evidence": "Every dispatch omitted the ACK protocol: ack-stage can never confirm delivery"},
+        {"id": "omp-orchestrator-wbo2", "status": "open", "match": "partial", "evidence": "'no packet reaches a pane except through claim fence → pane fence → ACK' is enforced at one layer (doctrine) and bypassed at three (supervisor send_and_verify main.rs:1223, cron refill-idle-panes, hand packets)"},
+        {"id": "omp-orchestrator-6q5", "status": "closed", "match": "partial", "evidence": "ntm delivery signals are not a receipt: dispatch trusts sender exit over composer state"}
+      ],
+      "coverage": "COVERED",
+      "gap": "",
+      "depends_on": ["04.8", "04.10"],
+      "blocks": ["04.11", "04.17"],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "04.10",
+      "title": "A pane dead on HTTP 402 must classify as attention, never as free capacity",
+      "lines": "L210",
+      "what": "Layer 4's live defect: the pane was dead on HTTP 402 with the idle glyph still rendered, so the observer reported free capacity and the supervisor refilled it 131 times.",
+      "acceptance_seed": "run `cargo test -p tick-monitor -- provider_error_pane_is_attention_not_capacity`; expect classify to yield needs_attention()=true, is_free_capacity()=false on the verbatim 402 fixture and IDLE on the same fixture minus the 402 block.",
+      "priority": 0,
+      "kind": "gate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-ex4", "status": "in_progress", "match": "exact", "evidence": "A pane dead on HTTP 402 credits reads as IDLE/free capacity and gets refilled forever ... `classify` yields a state whose `needs_attention()` is true and `is_free_capacity()`/`is_dispatchable()` are false"}
+      ],
+      "coverage": "COVERED",
+      "gap": "",
+      "depends_on": [],
+      "blocks": ["04.9"],
+      "terminal": false,
+      "notes": "00-brief §4 carries the derivation command per L210."
+    },
+    {
+      "id": "04.11",
+      "title": "Layer 5 COMPLETE: typed worker -> conductor completion signal closes 'no path back'",
+      "lines": "L190,L196,L213-L215,L328,L339,L369-L371",
+      "what": "No crate receives a completion; Diagram 3's fifth link and Diagram 6's only feedback channel (polling a board a human updated) are the same absence: the worker must say done with bead id, verdict, evidence ref and freed-capacity claim, surviving pane death via a durable tracker row.",
+      "acceptance_seed": "a worker finishing normally produces a completion row without the conductor polling; a worker dying mid-task produces no completion row and the silence detector fires as a distinct outcome (Finished vs SilentPastDeadline never one arm).",
+      "priority": 0,
+      "kind": "wiring",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.19", "status": "in_progress", "match": "exact", "evidence": "Typed completion signal: the worker says done — nothing infers it ... There is no worker->conductor \"done\" path in this system."},
+        {"id": "omp-orchestrator-wire-agent-mail-caller-7n5b", "status": "in_progress", "match": "partial", "evidence": "Wire one real caller: durable Agent Mail dispatch-result notification in omp-orchestrator"},
+        {"id": "omp-orchestrator-followup-stage-180", "status": "closed", "match": "partial", "evidence": "Build the FOLLOW-UP stage: nothing notices dispatched-then-silent"}
+      ],
+      "coverage": "COVERED",
+      "gap": "",
+      "depends_on": ["04.9", "external:asupersync ObligationLedger half of omp-types (00-brief §3.7)"],
+      "blocks": ["04.18"],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "04.12",
+      "title": "Bring the 6 non-complete gates to four legs (known_bad, known_good, mutation, anti_vacuity)",
+      "lines": "L232-L270",
+      "what": "Diagram 4: only no-shell-gate and undrained-pipe-lint have all four legs; 4 of 8 have no mutation leg, 2 of 8 no known-bad, path-literal-guard no known-good; the doc's own rule is that an attack-only suite ships an over-strict gate that gets routed around.",
+      "acceptance_seed": "for each gate crate `grep -rli` for known_bad, known_good, mutation, anti_vacuity over its tests returns >=1 file each, and `cargo test -p <gate>` runs each leg; a gate missing any leg is refused by the conformance test rather than reported.",
+      "priority": 1,
+      "kind": "gate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.18", "status": "open", "match": "partial", "evidence": "FIRES-ON-KNOWN-BAD, one specimen per leg ... KNOWN-GOOD IS MANDATORY PER LEG ... ANTI-VACUITY PER LEG ... MUTATION: break each leg's predicate in turn"},
+        {"id": "omp-orchestrator-6nhj", "status": "in_progress", "match": "partial", "evidence": "P3 eval-harness: re-run the gate reachability census -- five of six could not fire, and nobody has re-checked since"},
+        {"id": "omp-orchestrator-588v", "status": "open", "match": "partial", "evidence": "path-literal-guard refuses with a hit count where its error belongs: a vacuous scan is indistinguishable from a real violation"},
+        {"id": "omp-orchestrator-fence-ci-non-verdict-16l", "status": "in_progress", "match": "partial", "evidence": "commit-build-fence CI job cannot produce a verdict — wrong argv AND no registration store on a fresh checkout"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "ipg.18 legs are per-crate declarations (wired/declared/unsafe/canonical-type/collision), not the per-gate test-leg matrix; no bead requires mutation legs for kernel-bypass-gate, pre-delete-citation-check, commit-build-fence, path-literal-guard, or a known-good for path-literal-guard. Current authority is 06-gates §1, so the integrator should defer the item to 06 if it files it there.",
+      "depends_on": ["06.<gate census authority rows for the 8 gates>"],
+      "blocks": ["04.18"],
+      "terminal": false,
+      "notes": "Counts at L237-L249 are a 2026-09-01 snapshot; test_functions is tracked in NUMBERS.toml [figures.test_functions] (L258)."
+    },
+    {
+      "id": "04.13",
+      "title": "ADDRESSABLE: omp-inventory-map answers --help and a cli_contract-shaped test pins its surface",
+      "lines": "L272-L279,L292-L298",
+      "what": "A sixth gate property fell out of this section and nothing measures it: `omp-inventory-map --help` returned a CONFIG_ERROR (historical) and the current debug probe emits 158 bytes at exit 1; a gate nobody can invoke has a firing rate of zero regardless of test count; the borrow is franken_markdown's tests/cli_contract.rs shape.",
+      "acceptance_seed": "run `omp-inventory-map --help`; expect exit 0 and a usage block naming every subcommand/flag; a test in the crate asserts the advertised surface and goes RED when a flag is removed; ADDRESSABLE becomes a column in the Diagram 4 / 06 gate-leg table with a retained command/output/revision receipt.",
+      "priority": 1,
+      "kind": "gate",
+      "existing_beads": [],
+      "coverage": "MISSING",
+      "gap": "",
+      "depends_on": [],
+      "blocks": ["04.1"],
+      "terminal": false,
+      "notes": "Searched 'ADDRESSABLE' (3 hits: 3kpc, hsv, mad1 — none about inventory-map --help), '--help' (9 hits, all OMP/am/supervisor surfaces), 'cli_contract' (0). L272 says no current ADDRESSABLE pass is claimed without a retained receipt."
+    },
+    {
+      "id": "04.14",
+      "title": "Regenerate the diagrams from the preserved fresh capture and drop the 16:50-snapshot label",
+      "lines": "L16-L23,L402-L432",
+      "what": "The diagrams are built from the earlier 544,697-byte inv.txt.gz capture while the brief cites the 3,032,388-byte 23:01 capture (981 rows vs 176); §4.7 records this as labelled-but-NOT-corrected, blocked on the generator.",
+      "acceptance_seed": "run the generator against `.flywheel/inventory-artifacts/omp-inventory-map-2026-08-31.json.gz` (or a live scan); expect Diagram 2 row counts to match d['counts'] of that input and the 'sourced from the 16:50 capture' label to be removed by the same commit.",
+      "priority": 2,
+      "kind": "measurement",
+      "existing_beads": [],
+      "coverage": "MISSING",
+      "gap": "",
+      "depends_on": ["04.1"],
+      "blocks": [],
+      "terminal": false,
+      "notes": "Searched 'inv.txt' (0), 'inventory-artifacts' (uvo, w1s9 — both about provenance hashing, not regeneration)."
+    },
+    {
+      "id": "04.15",
+      "title": "artifact-provenance gate: enforce the recorded sha256 of the retained inventory artifacts",
+      "lines": "L16-L23,L418",
+      "what": "L418 states the compressed hashes of inv.txt.gz and omp-inventory-map-2026-08-31.json.gz are 'enforced by the artifact-provenance gate'; bead w1s9 measures that SCHEMAS.toml declares the writer and no such gate exists in the workspace — a doc-fact conflict that must resolve to either a built+wired gate or an UNGATED label.",
+      "acceptance_seed": "run `cargo test -p no-shell-gate -- artifact_provenance`; expect pass on intact members, RED naming the member on a corrupted copy, RED on an empty member set; or L418 reads 'UNGATED — sha recorded, not enforced'.",
+      "priority": 1,
+      "kind": "gate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-artifact-provenance-writer-absent-w1s9", "status": "open", "match": "exact", "evidence": "SCHEMAS.toml declares an artifact_provenance gate that does not exist: preserved_inventory is documented and unenforced ... Either the writer EXISTS and runs, or the `writer` field says what actually writes it."},
+        {"id": "omp-orchestrator-uvo", "status": "in_progress", "match": "partial", "evidence": "claim `.flywheel/inventory-artifacts/agent-end-raw-frame.json.gz` is \"hash-gated by artifact_provenance\" — no such gate/crate exists and SCHEMAS.toml has no row. Either build the gate leg ... or relabel the four claims UNGATED"}
+      ],
+      "coverage": "COVERED",
+      "gap": "",
+      "depends_on": [],
+      "blocks": ["04.14"],
+      "terminal": false,
+      "notes": "L418 is a doc-fact that contradicts w1s9's measurement; the integrator should attach this line to w1s9 as a fifth prose site."
+    },
+    {
+      "id": "04.16",
+      "title": "Diagram 5 install path B->D: installed binary, doctor with typed FAIL+remedy, health probe",
+      "lines": "L315-L319,L340-L341",
+      "what": "PROJECTED nodes B (install binary, no .sh/.py), C (doctor typed FAIL with remedy, operator re-runs), D (health: ntm/br/bv/tmux/git reachable) are unbuilt; installer is one of the orphan crates and does not compile from a clean checkout.",
+      "acceptance_seed": "on a foreign machine: install the binary, run `orchestrator doctor` and expect a typed FAIL naming a remedy when a dependency is missing and PASS otherwise; `orchestrator health` lists ntm, br, bv, tmux, git each with reachable=true.",
+      "priority": 1,
+      "kind": "milestone",
+      "existing_beads": [
+        {"id": "omp-orchestrator-6hrv", "status": "in_progress", "match": "exact", "evidence": "installer already IS the parity gate and is the one binary not installed: close its five gaps, do not rebuild it"},
+        {"id": "omp-orchestrator-installer-dep-uncommitted-txl", "status": "blocked", "match": "partial", "evidence": "installer does not compile from a clean checkout — its subprocess-contract dep is uncommitted in someone's working tree"},
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.13", "status": "closed", "match": "partial", "evidence": "One-touch install: Rust installer crate, four-way identity proof, standing drift check"},
+        {"id": "omp-orchestrator-kxe", "status": "in_progress", "match": "partial", "evidence": "The lifecycle binary: plan -> beads -> bv triage -> OMP dispatch -> verify -> close"}
+      ],
+      "coverage": "COVERED",
+      "gap": "",
+      "depends_on": ["07.<installability: doctor/health command contract>"],
+      "blocks": [],
+      "terminal": false,
+      "notes": "Whole projected journey is owned by 12-journey / 07-installability; this section only asserts B-D are unbuilt."
+    },
+    {
+      "id": "04.17",
+      "title": "Diagram 5 J->H: no-ack retry as a delivery contract; a timeout yields a typed DeliveryClass",
+      "lines": "L325-L326,L339,L345-L350",
+      "what": "The hardest link: receiver receipt with ack within budget, retry on no-ack, governed by the binding async contract (&Cx first, checkpoint in loops, region-owned tasks, kill the process group, drain both pipes) — a timeout on J must produce a typed DeliveryClass, never a silent re-dispatch.",
+      "acceptance_seed": "send to a pane that never acks; expect exactly one typed timeout verdict carrying DeliveryClass/AckKind and a bounded retry path that re-enters the claim fence, and zero DISPATCHED rows re-sent to the same pane without a new claim.",
+      "priority": 0,
+      "kind": "wiring",
+      "existing_beads": [
+        {"id": "omp-orchestrator-receiver-receipt-contract-pwm", "status": "in_progress", "match": "partial", "evidence": "define the receiver-receipt contract for PanePresence, PostSendObservation, ReceiptReason, ReceiptVerdict, ComposerEvidence, and NonDeliveryEscalation; state the two-capture evidence floor"},
+        {"id": "omp-orchestrator-iis6", "status": "in_progress", "match": "partial", "evidence": "The ACK wait is 30s: a busy worker reads identical to an unreachable one"},
+        {"id": "omp-orchestrator-7kxf", "status": "open", "match": "partial", "evidence": "claim→send→ack→close has no idempotency key and no OutcomeUnknown ... one DispatchKey across phases, typed Unknown reconciled on next read"},
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.14", "status": "open", "match": "partial", "evidence": "re-derive ack-spine against asupersync's AckKind + DeliveryClass + PublishPermit before writing more of it"},
+        {"id": "omp-orchestrator-ack-spine-oj6.3", "status": "in_progress", "match": "partial", "evidence": "Ack spine: the three authorities must not substitute for each other"}
+      ],
+      "coverage": "PARTIAL",
+      "gap": "No single bead names the J->H retry edge with 'timeout -> typed DeliveryClass, never silent re-dispatch' as acceptance; the pieces (receipt contract, ack budget, saga Unknown, DeliveryClass adoption) are spread across five beads with no edge tying them to a retry path.",
+      "depends_on": ["04.9", "04.4", "external:asupersync fa3c01aec AckKind/DeliveryClass (00-brief §3.7)"],
+      "blocks": ["04.11"],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "04.18",
+      "title": "Diagram 5 M->N: graded close through the gate ladder before a bead closes with evidence",
+      "lines": "L329-L331,L340",
+      "what": "Node M (graded close, gate ladder, 6 properties) exists at 1-of-8 leg coverage and N (bead closed with evidence) has no enforced path; a FAIL must route back to the claim fence.",
+      "acceptance_seed": "close a bead whose cited command fails; expect the close refused with a typed reason (exit 2) by a non-implementer grader; a passing bead closes with evidence rows the reader can re-execute.",
+      "priority": 0,
+      "kind": "gate",
+      "existing_beads": [
+        {"id": "omp-orchestrator-o7gz", "status": "open", "match": "partial", "evidence": "S6 close gate: the plan's own grading skill ... never ran — wire its single-bead false-closed tripwire (exit 2) as the close refusal"},
+        {"id": "omp-orchestrator-8zx1", "status": "open", "match": "partial", "evidence": "S6 grading has no dispatcher, packet, or consumer for the grading state"},
+        {"id": "omp-orchestrator-igwd", "status": "open", "match": "partial", "evidence": "bead close has no transition table and no quorum — prefix-only check admits implementer self-close 8/9"},
+        {"id": "omp-orchestrator-j2te", "status": "open", "match": "partial", "evidence": "may_credit(close) -> Credit | ReexecuteFirst{reason} requires a non-implementer ReexecReceipt"},
+        {"id": "omp-orchestrator-t784", "status": "grading", "match": "partial", "evidence": "no GRADING status: delivered work awaiting an independent grade has no legal state"}
+      ],
+      "coverage": "COVERED",
+      "gap": "",
+      "depends_on": ["04.11", "04.12", "11.<lifecycle close policy / S6 grading stage>"],
+      "blocks": [],
+      "terminal": true,
+      "notes": "Terminal for this section: N is the end of the projected journey."
+    },
+    {
+      "id": "04.19",
+      "title": "Diagram 5 I: a typed actuate send that exists in a crate",
+      "lines": "L324,L339",
+      "what": "Node I (actuate, typed send) is listed among the nodes that do not exist in any crate; today send_and_verify renders 4 of 16 template fields and three senders bypass the fence.",
+      "acceptance_seed": "every packet reaching a pane is a sealed AdmittedSend produced by one function; a packet carrying no stop condition/done signal is refused at construction; 0 direct ntm --robot-send call sites outside it.",
+      "priority": 1,
+      "kind": "wiring",
+      "existing_beads": [
+        {"id": "omp-orchestrator-a92y", "status": "open", "match": "exact", "evidence": "send_and_verify renders 4 of 16 template fields and drops the typed acceptance_criteria: 0/34 packets today ... carry a stop condition or a done signal with exit code"},
+        {"id": "omp-orchestrator-wbo2", "status": "open", "match": "exact", "evidence": "sealed AdmittedSend + source lint + hook + census row + lock-owner check, each annotated with the escape it closes"},
+        {"id": "omp-orchestrator-actuation-no-caller-upi", "status": "open", "match": "partial", "evidence": "dispatch-actuation has no inbound edge: wire it or retire it"}
+      ],
+      "coverage": "COVERED",
+      "gap": "",
+      "depends_on": ["04.8"],
+      "blocks": ["04.9"],
+      "terminal": false,
+      "notes": ""
+    },
+    {
+      "id": "04.20",
+      "title": "Consume upstream IrcDeliveryReceipt so 'missing receipt' names a consumed type",
+      "lines": "L367-L375",
+      "what": "Diagram 6 shows P-->C receiver-receipt/ComposerEvidence only 'when observed'; the callout states IrcDeliveryReceipt (tools/hub/types.d.ts) exists upstream and is UNCONSUMED — the transport can express a receipt we never read.",
+      "acceptance_seed": "grep crates/*/src for IrcDeliveryReceipt (or its RPC method) returns >=1 real caller in the receipt path, and a send over the hub transport records the upstream receipt as receiver evidence rather than sender exit; or a recorded reason why pane transport cannot use it.",
+      "priority": 1,
+      "kind": "wiring",
+      "existing_beads": [
+        {"id": "omp-orchestrator-omp-coverage-mission-ipg.4", "status": "closed", "match": "partial", "evidence": "Wave DISPATCH: irc, collab, jsonrpc, mcp, launch, exec, subprocess"}
+      ],
+      "coverage": "MISSING",
+      "gap": "",
+      "depends_on": ["04.6"],
+      "blocks": ["04.17"],
+      "terminal": false,
+      "notes": "Searched 'IrcDeliveryReceipt' in all bead text: 0 hits. ipg.4 (closed) is the irc coverage wave but never names the type; treated as MISSING for this specific consumption."
+    },
+    {
+      "id": "04.21",
+      "title": "Route this section's HISTORICAL figures to NUMBERS.toml keys / construct citations",
+      "lines": "L92,L101,L112,L115,L170,L173,L257-L258,L272-L276,L377,L430",
+      "what": "Ten figures in this section are hand-marked HISTORICAL as of 2026-09-02 (17/26 crates, 9 orphans, 183/157 rows, 409 tests, 13 tests, 544,697 bytes, 176 vs 981 rows); the plan-wide rule converts bare counts to NUMBERS keys and file:line cites to constructs with a lint refusing new ones.",
+      "acceptance_seed": "run the plan citation/figure lint over docs/plan/04-diagrams.md; expect zero bare tree counts outside a NUMBERS key and zero unmarked file:line cites (d1n lists 5 in this section).",
+      "priority": 2,
+      "kind": "doc-fact",
+      "existing_beads": [
+        {"id": "omp-orchestrator-d1n", "status": "open", "match": "exact", "evidence": "Convert every `file:line` citation in `docs/plan/[0-9]*.md` (321 at pin 387dadf; per-section: ... 04-diagrams 5 ...) ... Route every bare tree count ... to NUMBERS keys ... plus a lint that refuses new ones"},
+        {"id": "omp-orchestrator-round22-drifted-figures-844", "status": "in_progress", "match": "partial", "evidence": "Nine drifted plan figures with no registry row"},
+        {"id": "omp-orchestrator-opsa", "status": "in_progress", "match": "partial", "evidence": "NUMBERS.toml is rm-evidence-receipts at 2 of 3 legs: add level + hash to 34 existing rows"}
+      ],
+      "coverage": "COVERED",
+      "gap": "",
+      "depends_on": [],
+      "blocks": [],
+      "terminal": false,
+      "notes": "Once 04.1 lands, these figures become generator output and the HISTORICAL tags disappear with them."
+    }
+  ],
+  "section_deps": [
+    "02: Diagrams 1, 2 and 6 take their node set from the omp-inventory-map census; a stale or unaddressable census means no live diagram",
+    "00: Diagrams 3 and 4 are rendered from the 00-brief §3.5 control-loop table and §4 gate-leg table; those tables are the edge lists",
+    "06: Diagram 4's current census authority is 06-gates §1; the four-leg matrix item (04.12) should live there if 06 already files it",
+    "09: the layer-2 seam (04.7) is milestone M1 in 09",
+    "07/12: Diagram 5 is the projected journey owned by 12-journey; install nodes B-D are 07's contract",
+    "03: crate count and in-degree denominators are 03-crates / NUMBERS.toml, not this section's historical 26"
+  ],
+  "search_log": [
+    "br list -a --json -> 282 issues (saved to /tmp/dag04-beads.json)",
+    "jq text search 'mermaid' -> 1 (ipg.12); 'diagram' -> 2 (d1n, ipg.12); 'generator' -> 4 (ipg.15, ipg.12, dmpv, kxe.5)",
+    "jq text search 'ADDRESSABLE' -> 3 (3kpc, hsv, mad1; none about inventory-map --help); '--help' -> 9 (none about inventory-map); 'cli_contract' -> 0",
+    "jq text search 'IrcDeliveryReceipt' -> 0; 'GuestIdleReconcilerCtx' -> 0; 'in-degree' -> 0; 'generator_acceptance' -> 0; 'cross_section_authority' -> 1 (jj7v)",
+    "jq text search 'inv.txt' -> 0; 'inventory-artifacts' -> 2 (uvo, w1s9); 'artifact.provenance' -> 3 (12d, uvo, w1s9); 'DeliveryClass' -> 2 (ipg.17, ipg.14); 'NewlyIdle' -> 8; 'omp-types' -> 11",
+    "br show --json on: ipg.12 kxe.5 w1s9 vgf i0kp ipg.19 ipg.18 6hrv pwm 5tn 9he5 y6v5 d1n 844 jj7v 8ax8 uvo ex4 ipg.14 ipg.17 41b gfb",
+    "jq over docs/plan/CROSS-SECTION-AUTHORITY.jsonl (65 rows) -> generator_acceptance row present, status PROJECTED, owner BlueLantern"
+  ],
+  "no_claim": "This manifest maps the section to beads by text match; it does not verify that any COVERED bead's acceptance has been run, that omp-inventory-map --help is or is not fixed today (L272 says a 158-byte exit-1 probe, unreceipted), or that the cross_section_authority test passes on the local rch worker (jj7v shows worker-dependent verdicts). Item numbering for other sections (00/02/03/06/07/09/11/12) is a guess for the integrator to resolve. Diagram 5 is PROJECTED by the doc's own label; its nodes E/F/G/K were not made items because F exists and E/G/K are owned by 04.7/04.8/12-journey."
+}

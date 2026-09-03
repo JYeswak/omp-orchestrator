@@ -1,0 +1,2170 @@
+{
+ "section": "00-brief",
+ "source": "docs/plan/00-brief.md",
+ "item_count": 65,
+ "items": [
+  {
+   "id": "00.1",
+   "title": "R1: A-to-Z journey with an OBSERVABLE on every §09 milestone",
+   "lines": "L21-L25,L122",
+   "what": "Close R1 by proving §09 exists and every milestone (M1-M7) carries a checkable OBSERVABLE block, covering gates, crates, schema, types, validation and per-milestone done.",
+   "acceptance_seed": "For each M1-M7 in docs/plan/09-milestones.md §2, an OBSERVABLE block with a command + expected result exists; t52-style unit grading reads the 7 blocks and finds zero missing.",
+   "priority": 1,
+   "kind": "milestone",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-jplf",
+     "status": "open",
+     "match": "partial",
+     "evidence": "Root epic for omp-orchestrator ... Types -> Kernels -> Lifecycle -> Gates -> OMP Surface -> Measurement -> Installability -> Governance"
+    },
+    {
+     "id": "omp-orchestrator-t52",
+     "status": "open",
+     "match": "partial",
+     "evidence": "the seven `OBSERVABLE` blocks in `docs/plan/09-milestones.md` §2 (M1–M7)"
+    },
+    {
+     "id": "omp-orchestrator-kernel-lifecycle-journey-g7fn",
+     "status": "open",
+     "match": "partial",
+     "evidence": "Define the A-to-Z project lifecycle as a kernel-backed journey from inception through planning, grading, beads, claim/reservation, NTM dispatch"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "No bead asserts the closure predicate itself (every milestone carries an OBSERVABLE); t52 reads the seven blocks as grading units but does not refuse a milestone without one.",
+   "depends_on": [
+    "09.milestone-observables"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "R1 is the umbrella; its real work is 09's milestone table."
+  },
+  {
+   "id": "00.2",
+   "title": "R2: standing reap-before-refill + repo/doc-hygiene check (not a one-time event)",
+   "lines": "L27-L29,L123",
+   "what": "R2 is NOT CLOSED: the reap happened once (28/25/19/2). Closing needs a standing check that reap precedes refill plus a filesystem/doc-structure hygiene predicate; the §7.3 staleness predicate is the named candidate.",
+   "acceptance_seed": "A named gate refuses a dispatch tick whose reap stage did not run (reap-finished-panes receipt older than the tick) and refuses a doc tree that violates the docs/plan layout; fires on a planted missing-reap fixture.",
+   "priority": 1,
+   "kind": "gate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-wire-reap-finished-panes-caller-9wd",
+     "status": "closed",
+     "match": "partial",
+     "evidence": "Wire reap-finished-panes into run cycle"
+    },
+    {
+     "id": "omp-orchestrator-t00",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "reap-finished-panes wraps a control-plane bash script that cannot exist here; the supervisor refuses every tick — port the reaper to Rust"
+    },
+    {
+     "id": "omp-orchestrator-8nuh",
+     "status": "open",
+     "match": "partial",
+     "evidence": "the supervisor aborts every tick at reap-finished-panes before decide(): source passes --repo, the installed reaper rejects it"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "Reaper wiring beads exist; no bead states the standing invariant 'no refill without a prior reap receipt' as a gate, and none covers the repo-hygiene / doc-management-structure half of R2 (searched: 'reap refill', 'hygiene', 'doc structure', 'repo hygiene').",
+   "depends_on": [
+    "12.S8-reap",
+    "00.3"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "Brief L123 names the §7.3 staleness predicate as the candidate mechanism, hence dependency on 00.3."
+  },
+  {
+   "id": "00.3",
+   "title": "R3: PLAN.md freshness/identity gate (13-file path+hash manifest, mtime, reproducible hash)",
+   "lines": "L31-L36,L124,L703-L728",
+   "what": "Closure predicate for R3: every one of the 13 plan sources is in the assembled manifest with path+hash, no source mtime newer than docs/PLAN.md, and a reassembly reproduces the recorded output hash (07's four-way identity check applied to a document).",
+   "acceptance_seed": "cargo test -p no-shell-gate --test assembly_freshness passes AND the assembly stamp carries 13 path:sha256 rows AND re-running plan-assemble yields the same PLAN.md hash; a planted newer section makes it RED.",
+   "priority": 1,
+   "kind": "gate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-diq0",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "the tree is not green: 17 failing suites behind a receipt claiming 0 (assembly_freshness listed among failing suites)"
+    },
+    {
+     "id": "omp-orchestrator-8oz8",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "The check runs inside the Rust `plan-assemble` write path immediately before it materializes `docs/PLAN.md`. That is the chokepoint"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "Tree evidence: crates/no-shell-gate/tests/assembly_freshness.rs exists with mtime leg (the_assembly_is_not_stale_against_its_sections), stamp leg (the_plan_embeds_every_round_and_stamp) and tracked-assembler leg — so brief L727 'it is not built' is stale. Missing: the path+hash manifest leg and the reproduce-hash leg; no bead owns this gate as work (searched: 'freshness', 'mtime', 'manifest hash', 'reassembl', 'assembly_freshness').",
+   "depends_on": [
+    "07.four-way-identity"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "Integrator: the brief text at L124/L727 should be corrected to cite assembly_freshness.rs; the remaining gap is the identity (hash) half."
+  },
+  {
+   "id": "00.4",
+   "title": "R3: investor-attackable single document — pinned fresh-eyes grading to convergence",
+   "lines": "L31-L36,L124,L140-L142",
+   "what": "Beat up and grade the one plan document until it passes an investor test: fresh-eyes rounds on a pinned sha with a stop condition (HD-0004) and a publishability-bar README companion.",
+   "acceptance_seed": "docs/plan/CONVERGENCE.jsonl shows two consecutive fresh-eyes rounds with zero BLOCKER and zero MAJOR at a pinned sha (per HD-0004); a /readme-writing companion exists and cites the same pin.",
+   "priority": 1,
+   "kind": "milestone",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-t52",
+     "status": "open",
+     "match": "exact",
+     "evidence": "Round 22 of the plan audit under HD-0005: fresh eyes, different family, pinned sha, the 16 units only"
+    },
+    {
+     "id": "omp-orchestrator-9g5",
+     "status": "closed",
+     "match": "exact",
+     "evidence": "Josh decides the stop condition for the plan convergence audit, and the decision is written as row HD-0004"
+    },
+    {
+     "id": "omp-orchestrator-kxe.6",
+     "status": "closed",
+     "match": "exact",
+     "evidence": "Assert convergence gate status non-vacuously"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "Grading loop is covered (t52 open, 9g5 closed). The R3 clause 'full /skill:readme-writing companion that would pass our github repo publishability bar' has no bead (searched 'README' 7 unrelated, 'publishab' 0, 'investor' 0).",
+   "depends_on": [
+    "00.3",
+    "00.22"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "00.22 (Q1-Q4) blocks an investor pass: §8 says the doc names no buyer, cost, outcome, timeline."
+  },
+  {
+   "id": "00.5",
+   "title": "R4: current one-row-per-package contract census over the live workspace_crates figure",
+   "lines": "L38-L40,L125",
+   "what": "§03's 26-row table is a pre-extraction snapshot; record a current one-row-per-package census (contract, schema I/O, typed interfaces, deps) keyed to NUMBERS.toml [figures.workspace_crates].",
+   "acceptance_seed": "cargo test -p no-shell-gate --test crate_contract_inventory passes with row count == `cargo metadata --no-deps` package count; zero packages without a contract row.",
+   "priority": 1,
+   "kind": "measurement",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-leht",
+     "status": "open",
+     "match": "partial",
+     "evidence": "the gate census has 25 rows for 65 crates: 40 have no row at all, so the census has no opinion on 61% of the tree"
+    },
+    {
+     "id": "omp-orchestrator-kxe.3",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Every `[figures.*]` command in NUMBERS.toml runs from the repository and its `expect` matches the command output"
+    },
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.12",
+     "status": "closed",
+     "match": "partial",
+     "evidence": "a single generated inventory map — a FrankenMermaid diagram plus the table behind it — showing how every crate interacts"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "leht covers the GATE census denominator; no bead owns the per-package CONTRACT census at the current package count (tree has crates/no-shell-gate/tests/crate_contract_inventory.rs, cited only as a failing suite in diq0).",
+   "depends_on": [
+    "03.crate-table",
+    "00.65"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.6",
+   "title": "R4: regenerate FrankenMermaid diagrams from measured edges at the current crate count",
+   "lines": "L38-L40,L125,L255-L280,L579-L580",
+   "what": "§04's ≥6 diagrams are snapshot-bound (18 path-depends-on edges, 26 crates); regenerate from cargo metadata, never drawn; target-state diagrams captioned PROJECTED.",
+   "acceptance_seed": "Diagram generator run at HEAD emits edges equal to `cargo metadata` path-dep edges (NUMBERS path_dependency_edges); a hand-edited edge makes the diagram gate RED.",
+   "priority": 2,
+   "kind": "measurement",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.12",
+     "status": "closed",
+     "match": "exact",
+     "evidence": "FrankenMermaid inventory map: every crate's inputs, outputs, invariant, and negative evidence — generated, never drawn"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "ipg.12 is closed against a 20-crate snapshot; nothing re-runs it against the live package count (brief L125 'also snapshot-bound').",
+   "depends_on": [
+    "00.5",
+    "04.diagram-generator"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.7",
+   "title": "R5: regenerate the OMP surface scanner artifact with a revision pin and reconcile slash_commands 799 vs expected 136",
+   "lines": "L42,L126,L217-L235",
+   "what": "The only hash-anchored scanner output (3,032,388 B, sha 876809f0…) predates extraction, targets omp/18.0.11, recorded no commit, and exits 2 UNKNOWN because slash_commands=799 != expected_slash_commands=136.",
+   "acceptance_seed": "omp-inventory-map doctor run from a recorded commit against the declared OMP version exits 0 with status OK; expected_* twins match discovered counts; artifact sha256 + commit recorded in NUMBERS.toml.",
+   "priority": 0,
+   "kind": "measurement",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-jplf.5",
+     "status": "open",
+     "match": "partial",
+     "evidence": "The current surface inventory re-runs from source, every row has a consumer or named exception, the 42 RPC, 39 subcommand, and 71 type claims are reconciled or corrected"
+    },
+    {
+     "id": "omp-orchestrator-kxe.3",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Round 16/19/20 fresh readers independently found stale counts for workspace crates, test files/functions, slash commands, scanner rows"
+    },
+    {
+     "id": "omp-orchestrator-omp-surface-map-41b",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Map every OMP lifecycle surface to a crate — measured: we consume ZERO of it"
+    },
+    {
+     "id": "omp-orchestrator-he6",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Derive the 17-of-81 OMP RPC utilization list from the installed source"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "jplf.5 is a phase epic (owns leaves); no leaf names the regeneration + 799/136 reconciliation + revision pin. he6 (in_progress) still chases the 81/17 figure the brief RETIRED at L233 — integrator should reconcile.",
+   "depends_on": [
+    "00.8",
+    "00.24"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "Depends on 00.24 only in that the reconciliation must name which OMP version it targets; 00.8 blocks because a regenerated artifact with vacuous rows cannot close R5."
+  },
+  {
+   "id": "00.8",
+   "title": "§3.3 fix omp-inventory-map vacuity: 981 rows share ONE must_be_true and ONE negative_evidence",
+   "lines": "L237-L253",
+   "what": "The scanner's own rows fail the anti-vacuity property required of every gate: all 981 rows carry identical must_be_true and negative_evidence values.",
+   "acceptance_seed": "Re-run the §3.3 extraction command on a fresh artifact: distinct must_be_true and distinct negative_evidence each >= number of row kinds (8), and a per-crate row differs from a cli_command row.",
+   "priority": 0,
+   "kind": "gate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.12",
+     "status": "closed",
+     "match": "partial",
+     "evidence": "showing how every crate interacts: inputs, outputs, what must be true for it to be correct, and the negative evidence that would refute it"
+    }
+   ],
+   "coverage": "MISSING",
+   "gap": "ipg.12 closed claiming per-crate must-be-true/negative-evidence; §3.3 measured 1 distinct value across all 981 rows, refuting delivery. No open bead (searched 'must_be_true' 0, 'negative_evidence' 0, 'vacuity inventory' — none names the scanner rows).",
+   "depends_on": [],
+   "blocks": [
+    "00.7"
+   ],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.9",
+   "title": "R6: named G1–G8 proof artifact — known-bad, known-good, mutation, anti-vacuity, ADDRESSABLE all PASS",
+   "lines": "L44-L45,L127,L282-L320,L378-L386",
+   "what": "R6 is OPEN until §06's gate matrix produces a retained artifact (command, revision, output path, sha256) showing every gate G1-G8 passing all legs including the sixth property ADDRESSABLE.",
+   "acceptance_seed": "A committed artifact lists G1-G8 with per-leg test-function citations and PASS; cargo test -p no-shell-gate --test gate_properties passes with zero `None` rows; deleting any cited test makes it RED.",
+   "priority": 0,
+   "kind": "gate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-jplf.4",
+     "status": "open",
+     "match": "partial",
+     "evidence": "Every declared gate names a trigger, scope, known-good leg, fires-on-known-bad leg, anti-vacuity behavior, and caller"
+    },
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.18",
+     "status": "open",
+     "match": "partial",
+     "evidence": "one conformance test with five legs, so every per-crate declaration this repo has written becomes something `cargo test` REFUSES"
+    },
+    {
+     "id": "omp-orchestrator-6nhj",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "which of our gates can actually fire, on this machine, today?"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "Epic + reachability census exist; no leaf produces the all-legs PASS artifact, and gate_properties.rs (tree) still records six `None` rows. Specific leg gaps are items 00.10-00.14.",
+   "depends_on": [
+    "00.10",
+    "00.11",
+    "00.12",
+    "00.13",
+    "00.14",
+    "00.15",
+    "06.gate-matrix"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.10",
+   "title": "Add a known-good leg to path-literal-guard (the attack-only gate)",
+   "lines": "L319,L384-L386",
+   "what": "path-literal-guard has 3 tests, 1 known-bad, 0 known-good: an attack-only suite ships an over-strict gate that gets routed around.",
+   "acceptance_seed": "A test feeds a clean crate tree with no home-path literal and asserts the gate passes; mutating the scanner to always refuse makes that test RED.",
+   "priority": 1,
+   "kind": "gate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-588v",
+     "status": "open",
+     "match": "partial",
+     "evidence": "path-literal-guard refuses with a hit count where its error belongs: a vacuous scan is indistinguishable from a real violation"
+    },
+    {
+     "id": "omp-orchestrator-oej2",
+     "status": "closed",
+     "match": "partial",
+     "evidence": "path-literal-guard scans repo-wide while the wrapper keys on staged"
+    }
+   ],
+   "coverage": "MISSING",
+   "gap": "588v is the anti-vacuity/actionability leg, oej2 the scope; no bead adds the known-good leg (searched 'known-good path-literal-guard').",
+   "depends_on": [],
+   "blocks": [
+    "00.9"
+   ],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.11",
+   "title": "Add known-bad legs to omp-inventory-map and commit-build-fence (2 of 8 lack one)",
+   "lines": "L312,L316,L384",
+   "what": "Two gates have no planted defect they must catch.",
+   "acceptance_seed": "Each crate gains a test that plants the defect class the gate exists for and asserts a typed refusal; removing the detection makes it RED.",
+   "priority": 1,
+   "kind": "gate",
+   "existing_beads": [],
+   "coverage": "MISSING",
+   "gap": "No bead (searched 'commit-build-fence known' — 7 hits, none adds a known-bad leg; 'inventory-map' — none).",
+   "depends_on": [],
+   "blocks": [
+    "00.9"
+   ],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.12",
+   "title": "Add mutation legs to the four gates with NONE: commit-build-fence, kernel-bypass-gate, pre-delete-citation-check, path-literal-guard",
+   "lines": "L316-L319,L382-L383",
+   "what": "4 of 8 gates have no mutation mechanism at all.",
+   "acceptance_seed": "Each gate has a named mutation test whose RED transcript (sha before/after restore) is in the close comment, per the d1n pattern.",
+   "priority": 1,
+   "kind": "gate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.18",
+     "status": "open",
+     "match": "partial",
+     "evidence": "Five-leg conformance gate"
+    }
+   ],
+   "coverage": "MISSING",
+   "gap": "ipg.18 covers per-crate declarations, not per-gate mutation legs; no bead names these four gates' mutation legs.",
+   "depends_on": [],
+   "blocks": [
+    "00.9"
+   ],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.13",
+   "title": "Production-hook mutation leg: 0 of 8 gates mutate production source through the real hook; retire fixture-only claims (C38); flip STRIP_TEST_CODE",
+   "lines": "L334-L338,L366,L378-L382,L636",
+   "what": "The honest mutation count is zero: FIXTURE legs (undrained-pipe-lint, state-wildcard-lint) violate fh row C38, no-shell-gate's STRIP_TEST_CODE affordance is never flipped, and franken_lean (mirror) shows real `git commit` against the real hook as precedent.",
+   "acceptance_seed": "At least one gate's test drives the installed pre-commit hook against a mutated production source file and observes a refusal, then restores byte-identically; no-shell-gate has a test that flips STRIP_TEST_CODE and goes RED.",
+   "priority": 1,
+   "kind": "gate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-8jli",
+     "status": "closed",
+     "match": "partial",
+     "evidence": "Sweep: an any() over a disjunction cannot detect a substitution among its alternatives"
+    },
+    {
+     "id": "omp-orchestrator-yqun",
+     "status": "open",
+     "match": "partial",
+     "evidence": "4 ratchets certified green on 2026-09-02 were breached by same-day commits ... none of them runs on the commit path"
+    }
+   ],
+   "coverage": "MISSING",
+   "gap": "No bead targets mutation THROUGH THE REAL HOOK or the C38 fixture-drift objection (searched 'mutation hook', 'mutation production', 'STRIP_TEST_CODE' 0, 'C38' 2 unrelated).",
+   "depends_on": [
+    "10.franken_lean-real-hook-precedent"
+   ],
+   "blocks": [
+    "00.9"
+   ],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.14",
+   "title": "ADDRESSABLE: omp-inventory-map --help names the one documented command that runs it; retained receipt",
+   "lines": "L444-L454",
+   "what": "Sixth gate property born from the scanner refusing --help with CONFIG_ERROR; current binary emits 158 help bytes and exits 1; no ADDRESSABLE pass artifact exists.",
+   "acceptance_seed": "`omp-inventory-map --help` exits 0 and its text contains the literal `doctor` invocation; a receipt (command, revision, output sha256) is committed; a gate refuses a gate crate whose --help omits its run command.",
+   "priority": 2,
+   "kind": "gate",
+   "existing_beads": [],
+   "coverage": "MISSING",
+   "gap": "No bead (searched 'addressable' 3 unrelated, '--help' 9 unrelated).",
+   "depends_on": [],
+   "blocks": [
+    "00.9"
+   ],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.15",
+   "title": "Refresh the gate-leg table with source revision, command, captured output path and SHA-256 before publishing any ratio",
+   "lines": "L304-L308,L340-L343",
+   "what": "Every 0/8, 1/8, 2/8, 4/8 ratio is a round-10 snapshot with unretained provenance and MUST NOT be read as current.",
+   "acceptance_seed": "A NUMBERS.toml row per leg-count carries command + revision + output hash; the ratios in 00-brief/06-gates cite those keys or are labelled HISTORICAL.",
+   "priority": 2,
+   "kind": "measurement",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-opsa",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "NUMBERS.toml is rm-evidence-receipts at 2 of 3 legs: add level + hash to 34 existing rows"
+    },
+    {
+     "id": "omp-orchestrator-kxe.3",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Reconcile live plan denominators and provenance"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "opsa adds level+hash to existing rows; no row exists for the leg table itself.",
+   "depends_on": [],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.16",
+   "title": "R7: mirror mining at every gap — search command + verbatim quote, or a not-found that names its command and argues the search space",
+   "lines": "L47-L48,L128,L581-L582,L640-L647",
+   "what": "Every gap in §10 must cite the mirror repo/file/line or state `searched <pattern>, no prior art found` with a search space that could have contained the answer (three false-zero mechanisms measured).",
+   "acceptance_seed": "cargo test -p no-shell-gate --test gap_propagation passes; a planted 'UNMEASURED' with no adjacent citation is FLAGGED; at least one genuine NOT FOUND exists as positive control.",
+   "priority": 1,
+   "kind": "gate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.14",
+     "status": "open",
+     "match": "exact",
+     "evidence": "before writing \"UNMEASURED\", \"hard\", \"no alternative exists\", or inventing a mechanism, SEARCH THE MIRROR ... FIRES-ON-KNOWN-BAD ... POSITIVE CONTROL: at least one gap must come back genuinely NOT FOUND"
+    },
+    {
+     "id": "omp-orchestrator-t52",
+     "status": "open",
+     "match": "partial",
+     "evidence": "a zero names its search space"
+    }
+   ],
+   "coverage": "COVERED",
+   "gap": "",
+   "depends_on": [
+    "10.prior-art-gap-table"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.17",
+   "title": "R8: clean-machine install receipt proving doctor/health/repair + validate/audit/why with no /Users/josh fallback",
+   "lines": "L50-L51,L129,L832",
+   "what": "R8 is OPEN until §07 attaches a receipt from a machine that is not this one showing the canonical CLI triads work and no home-path fallback exists (K3).",
+   "acceptance_seed": "On a clean host: install from a tagged commit; `<bin> doctor`, `health`, `repair`, `validate`, `audit`, `why` each exit 0 with typed envelopes; path-literal-guard reports 0 home-path literals; receipt (host id, commit, sha256s) committed.",
+   "priority": 0,
+   "kind": "milestone",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-jplf.7",
+     "status": "open",
+     "match": "partial",
+     "evidence": "Doctor/health/repair are idempotent and reversible, a clean-machine receipt proves installation"
+    },
+    {
+     "id": "omp-orchestrator-6hrv",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "installer already IS the parity gate and is the one binary not installed: close its five gaps"
+    },
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.13",
+     "status": "closed",
+     "match": "partial",
+     "evidence": "One-touch install: Rust installer crate, four-way identity proof, standing drift check"
+    },
+    {
+     "id": "omp-orchestrator-7ai",
+     "status": "closed",
+     "match": "partial",
+     "evidence": "Installable from anywhere: no hardcoded repo or home paths"
+    },
+    {
+     "id": "omp-orchestrator-vyud",
+     "status": "open",
+     "match": "partial",
+     "evidence": "cargo test --workspace is red in a clean clone"
+    },
+    {
+     "id": "omp-orchestrator-xuu7",
+     "status": "open",
+     "match": "partial",
+     "evidence": "the product is ONE fully self-contained installable binary"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "Epic-level acceptance only; no leaf produces the clean-machine receipt, and the canonical-cli-scoping triads (doctor/health/repair, validate/audit/why) have no bead (searched 'validate audit why' 0, 'clean-machine' only jplf/jplf.7).",
+   "depends_on": [
+    "07.canonical-cli-triads",
+    "07.clean-clone-green",
+    "00.30"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.18",
+   "title": "R9: second-machine / clean-repo first-tick receipt naming the adapter and the delivery receipt",
+   "lines": "L53-L54,L130",
+   "what": "R9 is OPEN until §08 attaches a receipt of a foreign repo on another machine completing one tick through the real entry path.",
+   "acceptance_seed": "In a repo that is not omp-orchestrator, on a second host: one supervisor tick selects, dispatches, and records a receiver receipt; the receipt names the adapter and the delivery receipt id; independently re-read.",
+   "priority": 0,
+   "kind": "milestone",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-jplf.7",
+     "status": "open",
+     "match": "partial",
+     "evidence": "an external-repo first-tick receipt proves the real entry path"
+    },
+    {
+     "id": "omp-orchestrator-kxe.1",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Run subcommand: exercise resident lifecycle once ... Ground truth must show the packet arrived and the receiver transitioned to working"
+    },
+    {
+     "id": "omp-orchestrator-zlqk",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Prove the cron conductor dispatches idle panes unattended: 5 consecutive ticks, zero orchestrator sends"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "kxe.1/zlqk prove ticks in THIS repo on THIS machine; no leaf covers a foreign repo on a second machine (searched 'second machine', 'first-tick', 'foreign repo').",
+   "depends_on": [
+    "00.17",
+    "08.adapter-contract",
+    "00.43"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.19",
+   "title": "R10: SOTA rubric artifact — every dimension scored >= 4/5, no action without a negative pattern",
+   "lines": "L56-L60,L131",
+   "what": "R10 is OPEN until §09 attaches a thresholded rubric score covering idea, why, binaries wrapped, actions+negatives, map, and design specs at or above the wrapped binaries' bar.",
+   "acceptance_seed": "A committed rubric artifact lists every SOTA dimension with a score and evidence; a gate refuses any dimension < 4/5 and any §05 action lacking a negative-pattern refusal.",
+   "priority": 1,
+   "kind": "measurement",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-arur",
+     "status": "open",
+     "match": "partial",
+     "evidence": "five personas grade our four kinds against the rigor-atlas prescriptions, and restore a commit-rate value bar"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "arur grades against rigor-atlas prescriptions, not §09's SOTA rubric with a >=4/5 threshold; no action/negative-mapping completeness check (searched 'rubric' 1 unrelated, 'SOTA' 2).",
+   "depends_on": [
+    "09.sota-rubric",
+    "05.action-negative-table",
+    "01.sota-bar"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.20",
+   "title": "R11: requirements written down before dispatch — enforced, not remembered",
+   "lines": "L62-L66,L132,L3-L12",
+   "what": "R11 is closed by this file's existence; its standing form is that a requirement or finding living only in chat/scrollback is refused and becomes a bead mechanically.",
+   "acceptance_seed": "A finding class stated in a pane is refused by the loop until `br create --actor` produces a bead; gjyi's known-bad (a pattern only in scrollback) is caught.",
+   "priority": 1,
+   "kind": "decision",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-gjyi",
+     "status": "open",
+     "match": "exact",
+     "evidence": "every finding becomes a bead mechanically; findings in chat are refused, --actor mandatory on every write ... the exact medium 00-brief.md:3-6 says requirements die in"
+    }
+   ],
+   "coverage": "COVERED",
+   "gap": "",
+   "depends_on": [],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.21",
+   "title": "R12: every operator question answered or registered with an owner — §8 register kept live with decision receipts",
+   "lines": "L68-L74,L133,L786-L790,L849-L852",
+   "what": "The §2 table is the only discharge mechanism; §8 registers 13 questions (11 OPEN, Q9 ANSWER MOVED, Q10 PARTIAL) and 5 kill criteria. Each must end in an answer or a decision receipt.",
+   "acceptance_seed": "Every Q1-Q13 row names owner + status; each closed row cites a docs/decisions.jsonl HD-row; a gate refuses a §8 row with no owner.",
+   "priority": 1,
+   "kind": "decision",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-jplf.8",
+     "status": "open",
+     "match": "partial",
+     "evidence": "Close requirement and claim registries ... ADRs for irreversible decisions ... Every requirement and claim points to a current artifact and verifier"
+    },
+    {
+     "id": "omp-orchestrator-nsx1",
+     "status": "open",
+     "match": "partial",
+     "evidence": "S9 has a reader and no writer: docs/decisions.jsonl got 0 rows today against 188 owner=josh refusals"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "Register exists as prose; no leaf keeps Q1-Q13 as owned decisions with receipts; the S9 writer (nsx1) is the mechanism every decision receipt needs.",
+   "depends_on": [
+    "00.62"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.22",
+   "title": "Q1–Q4: buyer, current-workaround cost, customer outcome baseline/target, timeline + headcount (owner: Josh)",
+   "lines": "L810-L813",
+   "what": "No buyer is named in thirteen sections; the only cost figure is 'cost real time'; no outcome, timeline or headcount anywhere.",
+   "acceptance_seed": "docs/decisions.jsonl gains HD rows for Q1-Q4 with a named buyer, a measured workaround cost, a baseline→target outcome, and a timeline/headcount; §8 rows flip from OPEN to ANSWERED citing them.",
+   "priority": 1,
+   "kind": "decision",
+   "existing_beads": [],
+   "coverage": "MISSING",
+   "gap": "Searched 'who pays' 0, 'buyer' 3 unrelated, 'workaround' 4 unrelated, 'headcount' 0, 'timeline' 1 unrelated, 'Josh decision' 4 unrelated.",
+   "depends_on": [
+    "00.62"
+   ],
+   "blocks": [
+    "00.4",
+    "00.28",
+    "00.32"
+   ],
+   "terminal": false,
+   "notes": "Human decision — a blocker that must HALT and be named, not routed around."
+  },
+  {
+   "id": "00.23",
+   "title": "Q5: buy / adopt / build — name the existing tool evaluated and rejected, and why (owner: orchestrator)",
+   "lines": "L814",
+   "what": "§10 mines the mirror for patterns, never for a substitute for the whole orchestrator.",
+   "acceptance_seed": "A §10 subsection names >=1 candidate substitute (mirror or external) with a search command, an evaluation, and a rejection reason or adoption; decision receipt row.",
+   "priority": 2,
+   "kind": "decision",
+   "existing_beads": [],
+   "coverage": "MISSING",
+   "gap": "Searched 'buy, adopt' 0, 'substitute' 12 unrelated (ack-authority sense).",
+   "depends_on": [
+    "10.prior-art-gap-table",
+    "00.62"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.24",
+   "title": "Q6: OMP upgrade compatibility policy — host omp/18.1.2 vs retained scanner target omp/18.0.11 (owner: orchestrator)",
+   "lines": "L104,L815",
+   "what": "No compatibility policy governs what happens when OMP changes under us; the census artifact and the host already disagree by a minor version.",
+   "acceptance_seed": "A written policy names the pinned OMP version the scanner and adapters target, the re-census trigger on version change, and a gate that refuses a census artifact whose omp version != installed `omp --version`.",
+   "priority": 1,
+   "kind": "decision",
+   "existing_beads": [],
+   "coverage": "MISSING",
+   "gap": "Searched '18.1.2' 0, 'omp version' 0, 'compatib' 9 unrelated.",
+   "depends_on": [
+    "00.62"
+   ],
+   "blocks": [
+    "00.7"
+   ],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.25",
+   "title": "Q7: security posture — secrets, tokens, blast radius of a dispatch; run the twelve-file census recipe (owner: orchestrator)",
+   "lines": "L797-L806,L816",
+   "what": "No section states the security posture; the §8.2 recipe counts security/secret/credential/token/licens occurrences across 01-12 and asserts nothing until run.",
+   "acceptance_seed": "The census recipe is run at a pinned sha and its per-file output recorded; a §-level security posture (secret handling, token scope, dispatch blast radius) is written with a NO-CLAIM; decision receipt row.",
+   "priority": 1,
+   "kind": "decision",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.9",
+     "status": "open",
+     "match": "partial",
+     "evidence": "Wave SECURITY: secrets, security, extensibility, config"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "ipg.9 covers OMP's security MODULES as surface; nothing states OUR posture or runs the recipe (searched 'security posture' 0, 'blast radius' 7 unrelated, 'secret' 4).",
+   "depends_on": [
+    "00.62"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.26",
+   "title": "Q8: licensing for us and for what we vendor (owner: Josh)",
+   "lines": "L817",
+   "what": "No licensing statement anywhere; the same census recipe is the only source of a future count.",
+   "acceptance_seed": "A LICENSE decision row + a vendored-dependency license inventory (cargo metadata licenses) committed; §8 Q8 cites it.",
+   "priority": 2,
+   "kind": "decision",
+   "existing_beads": [],
+   "coverage": "MISSING",
+   "gap": "Searched 'licens' 1 unrelated.",
+   "depends_on": [
+    "00.62"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.27",
+   "title": "Q9: novelty — adoption path for the six DECLARED ONLY upstream types (owner: orchestrator)",
+   "lines": "L818,L486-L503",
+   "what": "The completion protocol's precedent-free claim is refuted (WIRE-PROVEN); novelty remains open for receipts, claims, idle, roster, cost, compaction until each has a reachability result.",
+   "acceptance_seed": "Each of the six gaps in §3.8 carries a measured wire-path result (REACHABLE / NOT REACHABLE with command) and an adopt/keep-local decision row.",
+   "priority": 2,
+   "kind": "decision",
+   "existing_beads": [],
+   "coverage": "MISSING",
+   "gap": "Searched 'novel' 0; per-gap beads are items 00.35-00.40.",
+   "depends_on": [
+    "00.35",
+    "00.36",
+    "00.37",
+    "00.38",
+    "00.39",
+    "00.40",
+    "00.62"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.28",
+   "title": "Q10 / §8.3: economic kill criterion + decision receipt; K2 and K5 made evaluable (owner: Josh)",
+   "lines": "L822,L824-L834",
+   "what": "§09 carries technical kill conditions; no economic criterion or receipt exists. K2 (verification cost > review replaced) and K5 (tending > work) are OPEN/UNVERIFIED with a 30-day pilot definition.",
+   "acceptance_seed": "docs/decisions.jsonl carries an HD row stating the economic kill criterion with observable + owner; K1-K5 each name a data source that exists.",
+   "priority": 1,
+   "kind": "decision",
+   "existing_beads": [],
+   "coverage": "MISSING",
+   "gap": "Searched 'kill criteri' 0, 'verification minutes' 0, 'tending' 0.",
+   "depends_on": [
+    "00.22",
+    "00.62",
+    "00.32"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.29",
+   "title": "Q11: composer-typed differential-oracle trilemma — oracle outside the tree, retire the lane, or first exemption; decision receipt",
+   "lines": "L424-L442,L819",
+   "what": "The differential test can only ever skip because the no-.py rule deleted its oracle; a permanently-unrunnable test is indistinguishable from a pass in any aggregate count.",
+   "acceptance_seed": "An HD row records the chosen option; either the oracle is a release artifact fetched by the test (and the test runs cases > 0), the lane is deleted with a named reason, or the exemption list gains one entry with its gate leg.",
+   "priority": 1,
+   "kind": "decision",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-python-oracle-collision-hk1",
+     "status": "closed",
+     "match": "partial",
+     "evidence": "decide and implement how the extracted crates keep their differential ORACLE in a repo whose gate forbids the oracle's language ... Missing external files/interpreters now produce a loud skip with 0 cases"
+    },
+    {
+     "id": "omp-orchestrator-kwo9",
+     "status": "closed",
+     "match": "partial",
+     "evidence": "five gates built-but-unwired (ack-spine, ack-stage, composer-typed, finding, receiver-receipt)"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "hk1 closed on 'loud skip, dev-only diagnostics' — the exact state the brief says is indistinguishable from passing; no decision receipt chooses among the three options (searched 'decision receipt' 0, 'composer-typed' 9).",
+   "depends_on": [
+    "00.62"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.30",
+   "title": "Q12 / §3.1: version-presence probe that tries both `--version` and `-V` and never records non-zero as absent; decide pi_agent_rust two-signal adoption",
+   "lines": "L165-L176,L203-L208,L820",
+   "what": "No single flag covers the 9 wrapped binaries (--version 8/9, -V 6/9); pi_agent_rust doctor.rs check_tool gates on status.success() and would record tmux as MISSING. Adopting the pattern adopts the bug.",
+   "acceptance_seed": "doctor probe loop over the 9 binaries records all 9 PRESENT with version strings (tmux via -V); a planted non-zero-but-present binary fixture is reported PRESENT-with-stderr, not MISSING; HD row records adopt/except for pi_agent_rust.",
+   "priority": 1,
+   "kind": "gate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-6hrv",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Four-way: git rev-parse HEAD == build_id in the artifact's strings == what --version reports == what the RUNNING PROCESS reports"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "installer's four-way identity uses --version on OUR binary; no bead covers the multi-binary presence probe with dual spelling or the pi_agent_rust decision (searched 'version probe' 0, 'pi_agent_rust' 0, '-V ' 2 unrelated).",
+   "depends_on": [
+    "07.doctor-health-repair",
+    "00.62"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.31",
+   "title": "Q13: .git/hooks/commit-msg-verification-level.sh — register, rewrite, or retire (owner: Josh)",
+   "lines": "L821",
+   "what": "An untracked .sh hook policy exists outside the no-shell gate's reach; no option chosen, no owner deadline, no receipt.",
+   "acceptance_seed": "HD row records the option; if rewrite: a Rust hook replaces it and hook_freshness covers it; if retire: the file is gone and the policy text is deleted or moved.",
+   "priority": 2,
+   "kind": "decision",
+   "existing_beads": [],
+   "coverage": "MISSING",
+   "gap": "Searched 'commit-msg-verification' 0. Related but distinct: ipg.18 notes .git/hooks/commit-msg is Mach-O.",
+   "depends_on": [
+    "00.62"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.32",
+   "title": "K2/K5 pilot instrumentation: verification-minutes and tending-minutes ledgers with a 30-day baseline",
+   "lines": "L831,L834",
+   "what": "K2 fires if verification minutes / review minutes replaced > 1.0 and K5 if tending minutes / verified work minutes > 1.0, two consecutive weekly windows; neither numerator nor denominator is instrumented.",
+   "acceptance_seed": "The tick/review ledger records timestamped verification and tending events; a weekly rollup prints both ratios; a planted week with ratio 1.2 fires the criterion.",
+   "priority": 2,
+   "kind": "measurement",
+   "existing_beads": [],
+   "coverage": "MISSING",
+   "gap": "Searched 'verification minutes' 0, 'tending' 0.",
+   "depends_on": [
+    "00.22",
+    "12.tick-ledger"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.33",
+   "title": "K4 observable: detect any commit landing with a gate disabled and no named allowance row",
+   "lines": "L833",
+   "what": "'The gates get routed around' must be measurable as a commit-path fact, not a suspicion.",
+   "acceptance_seed": "A gate over `git log` at HEAD refuses when a commit skipped hooks (--no-verify / missing hook receipt) unless an allowance row names it; a planted --no-verify commit in a fixture repo is RED.",
+   "priority": 1,
+   "kind": "gate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-yqun",
+     "status": "open",
+     "match": "partial",
+     "evidence": "4 ratchets certified green on 2026-09-02 were breached by same-day commits ... none of them runs on the commit path"
+    },
+    {
+     "id": "omp-orchestrator-six-reds-deec6e8-tub",
+     "status": "open",
+     "match": "partial",
+     "evidence": "pushed with --no-verify and NO receipt"
+    },
+    {
+     "id": "omp-orchestrator-28dq",
+     "status": "open",
+     "match": "partial",
+     "evidence": "CI oracle runs no cargo test and no clippy: gate.yml is four self-gates"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "Beads record instances of routing-around; none defines K4's detector (gate-disabled + no allowance row) as a standing observable.",
+   "depends_on": [
+    "06.allowance-rows"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.34",
+   "title": "K1 / completion row: the supervisor consumes the WIRE-PROVEN agent_end frame (AgentEndEvent.willContinue, SessionStopEvent, isTerminal) instead of inferring done",
+   "lines": "L136,L492,L528,L536,L830",
+   "what": "One raw agent_end frame with isTerminal:true crossed --mode=rpc; the supervisor does not consume it. The remaining kill condition is failed adoption, not inability to build a completion protocol.",
+   "acceptance_seed": "Supervisor tick log shows a bead transitioned on receipt of an agent_end/session_stop frame from --mode=rpc (frame id cited), with no terminal scrape involved; a replayed frame fixture drives the same transition in a test.",
+   "priority": 0,
+   "kind": "wiring",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.19",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Typed completion signal: the worker says done — nothing infers it ... Signal via the bead; the pane may be gone by the time anyone reads it"
+    },
+    {
+     "id": "omp-orchestrator-8ax8",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Land at least ONE typed adoption with a real caller. `--mode=rpc` and `negotiate_protocol` exist today"
+    },
+    {
+     "id": "omp-orchestrator-kxe.4",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Session-stop and completion event names match the current OMP/RPC surface or carry a command-backed retraction"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "ipg.19 chose a bead-row completion signal before the RPC frame was observed; no bead names the agent_end/SessionStopEvent wire path as the consumption mechanism (searched 'agent_end' 0, 'willContinue' 0, 'SessionStopEvent' 0, 'isTerminal' 0).",
+   "depends_on": [
+    "02.rpc-event-frames",
+    "00.37"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.35",
+   "title": "Receipts gap: measure IrcDeliveryReceipt / AsyncJobDeliverySink reachability before replacing the local receipt contract",
+   "lines": "L135,L138,L493,L530",
+   "what": "Upstream declares a delivery receipt type; no wire path is measured. cp-z42vu remains a defect in what WE consume.",
+   "acceptance_seed": "A probe over --mode=rpc records whether an IrcDeliveryReceipt frame is ever emitted for a hub send (REACHABLE with frame, or NOT REACHABLE with command + capture); decision row adopt/keep-local.",
+   "priority": 2,
+   "kind": "measurement",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-receiver-receipt-contract-pwm",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Receiver receipt contract: two-capture delivery evidence"
+    },
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.14",
+     "status": "open",
+     "match": "partial",
+     "evidence": "asupersync already solved our receipt gap"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "Local receipt contract is owned; no bead measures the upstream type's wire path (searched 'IrcDeliveryReceipt' 0, 'AsyncJobDeliverySink' 0).",
+   "depends_on": [
+    "02.hub-types"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.36",
+   "title": "Claims gap: Stage1Claim/GlobalClaim ownershipToken+inputWatermark experiment vs the local claim fence",
+   "lines": "L494",
+   "what": "Upstream declares a claim with ownership token; adoption is an experiment, the local claim fence remains necessary.",
+   "acceptance_seed": "A spike records whether ownershipToken/inputWatermark are reachable from this process; if yes, one dispatch uses it behind the local fence; decision row.",
+   "priority": 2,
+   "kind": "measurement",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-ve4w",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Two live dispatch authorities, no shared claim fence"
+    },
+    {
+     "id": "omp-orchestrator-wbo2",
+     "status": "open",
+     "match": "partial",
+     "evidence": "no packet reaches a pane except through claim fence → pane fence → ACK"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "Local fence covered (ve4w/5tn/wbo2); upstream adoption experiment unfiled (searched 'Stage1Claim' 0).",
+   "depends_on": [
+    "00.44"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.37",
+   "title": "Idle gap: one shared NewlyIdle/ConfirmedIdle type across the tick-monitor→supervisor process seam; evaluate GuestIdleReconcilerCtx",
+   "lines": "L495,L523,L529",
+   "what": "The producer has typed predicates while parse_observation consumes JSON lists plus a state==IDLE fallback; no shared type crosses the seam (SEAM OPEN).",
+   "acceptance_seed": "One Rust type (serde) is emitted by tick-monitor and deserialized by the supervisor; the state==IDLE fallback is deleted; a fixture with NewlyIdle=true, dispatchable=[] is dispatched exactly once.",
+   "priority": 0,
+   "kind": "wiring",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-tickmonitor-free-capacity-blind-vgf",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "free_capacity is computed from ITS OWN predicate -- ConfirmedIdle OR NewlyIdle -- never from the dispatchable filter"
+    },
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.19",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "the observer kept the bug the decider removed"
+    },
+    {
+     "id": "omp-orchestrator-a832",
+     "status": "open",
+     "match": "partial",
+     "evidence": "tick_monitor_liveness: stateful fuzz of the two-capture rule and capacity partition"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "vgf fixes the producer predicate; no bead makes the consumer read a shared type or evaluates GuestIdleReconcilerCtx (searched 'GuestIdle' 0).",
+   "depends_on": [],
+   "blocks": [
+    "00.34"
+   ],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.38",
+   "title": "Roster gap: consume HubRosterCounts instead of hand-derived roster evidence",
+   "lines": "L496",
+   "what": "A roster schema exists upstream; hand-derived roster evidence (WAVE.md pane ids that did not exist) remains unclosed.",
+   "acceptance_seed": "The supervisor's fleet roster is read from HubRosterCounts (or a measured NOT REACHABLE with command); a roster naming a nonexistent pane is refused.",
+   "priority": 3,
+   "kind": "wiring",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-75l",
+     "status": "closed",
+     "match": "partial",
+     "evidence": "WAVE.md roster names pane ids that do not exist in the live session"
+    },
+    {
+     "id": "omp-orchestrator-gfm6",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "A bead cannot name which agent holds it or whether that agent is alive"
+    }
+   ],
+   "coverage": "MISSING",
+   "gap": "Searched 'HubRosterCounts' 0; 'roster' hits are identity/reservation defects, not the upstream type.",
+   "depends_on": [
+    "02.hub-types"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.39",
+   "title": "Cost gap: instrument cost telemetry via SearchUsage / PerplexityCost / ContextUsage (feeds Q2)",
+   "lines": "L497",
+   "what": "Cost types are declared upstream, no wire path measured; Q2 remains an instrumentation question and no cost telemetry may be claimed.",
+   "acceptance_seed": "A probe records whether ContextUsage/SearchUsage frames arrive over rpc for one session; if yes, a per-tick cost row lands in the ledger.",
+   "priority": 3,
+   "kind": "measurement",
+   "existing_beads": [],
+   "coverage": "MISSING",
+   "gap": "Searched 'PerplexityCost' 0, 'cost' 40 (none about telemetry).",
+   "depends_on": [
+    "02.rpc-event-frames"
+   ],
+   "blocks": [
+    "00.22"
+   ],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.40",
+   "title": "Compaction gap: consume SessionBeforeCompactEvent / SessionCompactEvent for context-loss recovery",
+   "lines": "L498",
+   "what": "A typed compaction hook exists upstream; context-loss recovery is unproven — the brief itself exists because scrollback dies.",
+   "acceptance_seed": "The supervisor logs a compaction event for a pane and re-issues the pane's active packet header after it; a replayed SessionCompactEvent fixture drives the re-issue in a test.",
+   "priority": 2,
+   "kind": "wiring",
+   "existing_beads": [],
+   "coverage": "MISSING",
+   "gap": "Searched 'compact' 5 unrelated.",
+   "depends_on": [
+    "02.rpc-event-frames"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.41",
+   "title": "§4 selection row: an independent selection receipt for decide()",
+   "lines": "L524",
+   "what": "consume—selection is UNVERIFIED: no independent receipt records which head decide() picked and why.",
+   "acceptance_seed": "Each tick writes a selection receipt {tick_id, candidates, chosen, rule} that an independent reader can replay against the bv ranking of the same sha; a fixture where the rule would pick B but the receipt says A is RED.",
+   "priority": 1,
+   "kind": "measurement",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-th0z",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Gate the orchestration contract: build the orchestration_tick test target its six laws all cite"
+    },
+    {
+     "id": "omp-orchestrator-31lo",
+     "status": "open",
+     "match": "partial",
+     "evidence": "The live supervisor never reads the loop switch"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "th0z gates the tick contract; no bead records a selection receipt (searched 'selection receipt' 0).",
+   "depends_on": [
+    "12.S4-select"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.42",
+   "title": "§4 admission row: a current refusal-rate figure with retained derivation (the 162/4.2h value is historical)",
+   "lines": "L525,L534",
+   "what": "Admission is FENCED but its only rate figure has no retained derivation.",
+   "acceptance_seed": "A NUMBERS.toml LIVE row derives refused_ticks / total_ticks from the tick ledger with the command; the brief cites the key instead of a number.",
+   "priority": 2,
+   "kind": "measurement",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-9he5",
+     "status": "open",
+     "match": "partial",
+     "evidence": "REAP_SWEEP_SKIPPED 458x, DISPATCH_RETRY_BLOCKED 344x, IDLE_UNAUTHORIZED 85x"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "9he5 counts refusals as a defect; nothing registers the rate as a derived figure.",
+   "depends_on": [
+    "12.tick-ledger"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.43",
+   "title": "§4 transport row: a planted fixture and receipt payload for the cp-z42vu class (send reports success, packet never lands)",
+   "lines": "L526,L530,L534",
+   "what": "consume—transport is UNVERIFIED; the repository has no planted fixture or receipt payload for a send that lies.",
+   "acceptance_seed": "A test plants a transport that returns success without delivering; ack-stage/receiver-receipt classify it NOT DELIVERED; the live path carries the fixture's receipt payload shape.",
+   "priority": 1,
+   "kind": "gate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-nuxd",
+     "status": "open",
+     "match": "partial",
+     "evidence": "ack_stage_assess: fuzz transport x receiver x ack-readback composition incl. 20 live near-miss ACK seeds"
+    },
+    {
+     "id": "omp-orchestrator-d6q2",
+     "status": "closed",
+     "match": "partial",
+     "evidence": "K8 receiver observation: independent of sender return, two-capture discrimination"
+    },
+    {
+     "id": "omp-orchestrator-59wv",
+     "status": "closed",
+     "match": "partial",
+     "evidence": "K7 bounded native transport"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "Kernels exist and fuzz is planned; no planted cp-z42vu fixture in the live path is named by any bead.",
+   "depends_on": [
+    "12.S5-dispatch"
+   ],
+   "blocks": [
+    "00.18"
+   ],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.44",
+   "title": "§4 actuate row: install the committed claim fence and classify a 402-dead pane as attention, not capacity",
+   "lines": "L527,L538",
+   "what": "The launchd-resident supervisor sent one unclaimed bead 131x to a 402-dead pane, each logged as success — the actuate layer running without the claim beat.",
+   "acceptance_seed": "Reinstalled supervisor from a committed HEAD refuses an unclaimed head with CLAIM_REQUIRED and never lists a 402 pane as free_capacity; ledger over 5 ticks shows zero re-sends.",
+   "priority": 0,
+   "kind": "wiring",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-5tn",
+     "status": "in_progress",
+     "match": "exact",
+     "evidence": "Installed supervisor re-sent bead 815 to a 402-dead pane 131x in 247 min: install the claim fence and prove it"
+    },
+    {
+     "id": "omp-orchestrator-ex4",
+     "status": "in_progress",
+     "match": "exact",
+     "evidence": "A pane dead on HTTP 402 credits reads as IDLE/free capacity and gets refilled forever"
+    },
+    {
+     "id": "omp-orchestrator-ve4w",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Two live dispatch authorities, no shared claim fence"
+    },
+    {
+     "id": "omp-orchestrator-zlyy",
+     "status": "open",
+     "match": "partial",
+     "evidence": "a delivered, ACKed bead is re-dispatched to the same pane"
+    }
+   ],
+   "coverage": "COVERED",
+   "gap": "",
+   "depends_on": [
+    "12.S5-dispatch"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.45",
+   "title": "§3.4/§3.7 async contract: every spawn through subprocess-contract; &Cx first; process-GROUP kill; drain both pipes; timeout is not a verdict; record the spawn-site/cx-first commands",
+   "lines": "L255-L280,L456-L463,L108-L109",
+   "what": "subprocess-contract is the boundary everything that spawns should route through; the 29-spawn-site / 12-of-14 cx-first figures are UNVERIFIED with no retained command.",
+   "acceptance_seed": "cargo test -p no-shell-gate --test spawn_contract and --test group_kill pass; ASUPERSYNC-CONFORMANCE table regenerated from source with raw_command=0 per crate or a named exception; NUMBERS rows for spawning_crates carry the command.",
+   "priority": 0,
+   "kind": "gate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-asupersync-subprocess-contract-gfb",
+     "status": "in_progress",
+     "match": "exact",
+     "evidence": "Zero of 23 extraction crates honour the asupersync subprocess contract; 110 Command sites, killpg 0/12"
+    },
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.15",
+     "status": "in_progress",
+     "match": "exact",
+     "evidence": "Generate the asupersync conformance table and triage all 29 raw spawn sites"
+    },
+    {
+     "id": "omp-orchestrator-fr6",
+     "status": "in_progress",
+     "match": "exact",
+     "evidence": "32 pid-only child.kill() sites: a deadline that spares grandchildren poisons the NEXT attempt too"
+    },
+    {
+     "id": "omp-orchestrator-m3c",
+     "status": "closed",
+     "match": "exact",
+     "evidence": "Route census + gate-crate subprocess spawns through subprocess-contract (deadline + group-kill + drain)"
+    }
+   ],
+   "coverage": "COVERED",
+   "gap": "",
+   "depends_on": [
+    "03.subprocess-contract"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "asupersync pin 0.4.9 / rev fa3c01aec (L108, L460) is the dependency this item conforms to; NUMBERS has spawning_crates."
+  },
+  {
+   "id": "00.46",
+   "title": "§3.7 unsafe: 26/26 Cargo lint, 25/26 inner attribute (pane-dispatch-fence binary-only exception); keep crates_forbidding_unsafe a re-run figure",
+   "lines": "L404-L422,L464",
+   "what": "The false-zero grep experiment must never support a claim; the source-aware snapshot is authoritative until re-run.",
+   "acceptance_seed": "NUMBERS.toml keys crates_forbidding_unsafe / unsafe_source_attributes / forbid_unsafe_authoritative match their commands at HEAD; the pane-dispatch-fence exception is a named row.",
+   "priority": 1,
+   "kind": "measurement",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-5cl",
+     "status": "grading",
+     "match": "exact",
+     "evidence": "All 20 crates forbid unsafe (only 2 do today)"
+    }
+   ],
+   "coverage": "COVERED",
+   "gap": "",
+   "depends_on": [],
+   "blocks": [],
+   "terminal": false,
+   "notes": "NUMBERS.toml already has crates_forbidding_unsafe, unsafe_source_attributes, unsafe_both_mechanisms, forbid_unsafe_authoritative."
+  },
+  {
+   "id": "00.47",
+   "title": "§3.7 omp-types: AckKind/DeliveryClass are blocked upstream (messaging-fabric → test-internals, issue #46); decide the ack-vocabulary migration and re-measure the type inventory with a parser-backed command",
+   "lines": "L465-L470",
+   "what": "Half the vocabulary that would collapse the three ack dialects is unavailable at an upstream feature boundary; omp-types has zero dependents; the 51/79/4/6/17 type figures are grep-derived and MUST NOT drive closure.",
+   "acceptance_seed": "An HD row records the migration path (wait for upstream / vendor the enums / keep local); a parser or build-graph command re-derives public_enums, public_structs, colliding_type_names, verdict_types with output hash; omp-types gains >=1 dependent or is retired.",
+   "priority": 1,
+   "kind": "decision",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.17",
+     "status": "closed",
+     "match": "partial",
+     "evidence": "AckKind ABSENT <- asupersync has it: \"acknowledgement boundary reached\""
+    },
+    {
+     "id": "omp-orchestrator-ack-spine-oj6.3",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Ack spine: the three authorities must not substitute for each other"
+    },
+    {
+     "id": "omp-orchestrator-jplf.1",
+     "status": "open",
+     "match": "partial",
+     "evidence": "Close the canonical ClaimStrength, Admission, PaneObservation, and Lifecycle type algebra"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "ipg.17's AckKind row says 'asupersync has it' without the feature-boundary block the brief measured; no bead owns the migration decision or the parser-backed re-measurement (searched 'AckKind' 2, 'messaging-fabric' 0, 'dialect' 2).",
+   "depends_on": [
+    "external:asupersync messaging-fabric feature / upstream issue #46",
+    "03.omp-types-contract",
+    "00.62"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.48",
+   "title": "§3.7 validate the mirror repository denominator (210 .git entries → validated work-trees) before publishing an N-repositories claim",
+   "lines": "L474-L483,L95",
+   "what": "216 is RETIRED; 210 is a filesystem-entry snapshot, not a repository count.",
+   "acceptance_seed": "A recorded pass resolves each candidate with `git rev-parse --is-inside-work-tree`, excludes bare/non-worktree entries, and records candidate list, exclusions, revision and output hash; the glossary's '210' cites it.",
+   "priority": 3,
+   "kind": "measurement",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-kxe.3",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Round-20 findings ... R20-01-mirror-denominator ... are explicitly dispositioned"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "kxe.3 dispositions the drift finding; nobody runs the validation pass (searched 'rev-parse' 7 unrelated, 'mirror 210' 1 unrelated).",
+   "depends_on": [],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.49",
+   "title": "§3.7/§3.8-BLOCKER: board_total is LIVE over all five status buckets (incl. grading); cross_section_authority emits CROSS_SECTION_BOARD_AUTHORITY_FAILURE",
+   "lines": "L484-L485,L869-L896",
+   "what": "Every hand-summed board total (75/74/79/93/95) was an under-enumerated set; the registry's duplicate-key gate caught a concurrent append.",
+   "acceptance_seed": "cargo test --quiet -p no-shell-gate --test cross_section_authority passes; the five-bucket enumeration command runs and its sum is never quoted as a constant.",
+   "priority": 2,
+   "kind": "gate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-kxe.5",
+     "status": "closed",
+     "match": "exact",
+     "evidence": "Reconcile cross-section plan authority claims"
+    },
+    {
+     "id": "omp-orchestrator-t784",
+     "status": "grading",
+     "match": "partial",
+     "evidence": "no GRADING status: delivered work awaiting an independent grade has no legal state"
+    },
+    {
+     "id": "omp-orchestrator-kxe.3",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "R20-00-board-snapshot-stale"
+    }
+   ],
+   "coverage": "COVERED",
+   "gap": "",
+   "depends_on": [],
+   "blocks": [],
+   "terminal": true,
+   "notes": "Tree: crates/no-shell-gate/tests/cross_section_authority.rs; NUMBERS.toml board_total key. jj7v reports the registry NotFound on an rch worker — a runner defect, not a coverage gap."
+  },
+  {
+   "id": "00.50",
+   "title": "§5 section map: thirteen plan files, disjoint by construction, each serving a named requirement",
+   "lines": "L543-L561",
+   "what": "The assembled PLAN.md is built from 00-12; the section files are the source of truth and the map is the only R→section binding.",
+   "acceptance_seed": "NUMBERS plan_sections == 13; every 01-12 file's header names the requirement(s) it serves per the §5 table; a section with no requirement is refused (scope creep, L10).",
+   "priority": 3,
+   "kind": "doc-fact",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-kxe.5",
+     "status": "closed",
+     "match": "exact",
+     "evidence": "Reconcile cross-section plan authority claims"
+    },
+    {
+     "id": "omp-orchestrator-7sd",
+     "status": "grading",
+     "match": "partial",
+     "evidence": "Materialize docs/plan/FOUNDATION.jsonl (S1-S9)"
+    }
+   ],
+   "coverage": "COVERED",
+   "gap": "",
+   "depends_on": [],
+   "blocks": [],
+   "terminal": true,
+   "notes": ""
+  },
+  {
+   "id": "00.51",
+   "title": "§6 writing-contract lints: rules 1 (numbers carry commands), 2 (MEASURED/PROJECTED never share a sentence), 3 (NO-CLAIM on load-bearing claims), 4 (no unstated denominators), 5 (no 'guarantees/proves' in gate headers)",
+   "lines": "L565-L578",
+   "what": "Each rule has already been violated at cost; only rule 1 and the citation rule have a mechanical refuser.",
+   "acceptance_seed": "A lint over docs/plan/[0-9]*.md refuses: a bare count with no NUMBERS key; a sentence containing both MEASURED and PROJECTED; a load-bearing section with no NO-CLAIM; a ratio with no denominator; 'guarantees|proves|makes impossible' in a gate heading — each with a planted known-bad.",
+   "priority": 2,
+   "kind": "gate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-d1n",
+     "status": "open",
+     "match": "partial",
+     "evidence": "105 bare counts -> NUMBERS keys, plus a lint that refuses new ones"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "Rule 1 covered by d1n + numbers.rs/retired_figures.rs (tree); NUMBERS has no_claim_blocks but rules 2, 4, 5 have no lint and no bead (searched 'MEASURED PROJECTED' 4 unrelated, 'guarantee' 16 unrelated, 'floor-raise' 1 unrelated, 'denominator' 17 unrelated).",
+   "depends_on": [],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.52",
+   "title": "§6.1 cross-section authority overlay (CROSS-SECTION-AUTHORITY.jsonl) with its falsifier test",
+   "lines": "L586-L608",
+   "what": "One current authority scope per cross-section claim: owner, authority command, independent acceptance command, failure result; EXISTS/PROJECTED/UNPROVEN/HISTORICAL never laundered.",
+   "acceptance_seed": "cargo test --quiet -p no-shell-gate --test cross_section_authority passes; a planted row with a collapsed authority/acceptance pair is RED.",
+   "priority": 2,
+   "kind": "gate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-kxe.5",
+     "status": "closed",
+     "match": "exact",
+     "evidence": "Reconcile cross-section plan authority claims"
+    },
+    {
+     "id": "omp-orchestrator-jj7v",
+     "status": "open",
+     "match": "partial",
+     "evidence": "cross_section_authority registry NotFound"
+    }
+   ],
+   "coverage": "COVERED",
+   "gap": "",
+   "depends_on": [],
+   "blocks": [],
+   "terminal": true,
+   "notes": ""
+  },
+  {
+   "id": "00.53",
+   "title": "§7 the refutation count and the PLAN.md header counts are derived from the §7 table at assembly, never typed twice",
+   "lines": "L620-L626",
+   "what": "The self-correction section could not count its own corrections (five vs eight vs nine).",
+   "acceptance_seed": "plan-assemble derives refutations/open-questions/engaged-% from their tables; a header count that disagrees with its table makes assembly refuse.",
+   "priority": 3,
+   "kind": "wiring",
+   "existing_beads": [],
+   "coverage": "PARTIAL",
+   "gap": "[INFERENCE] assembly_freshness.rs header comment (tree, L20-22) says the header 'publishes generated counts — refutations, open questions, engaged percentage'; no bead owns the derivation and no test asserts header==table (searched 'refutation' 1 unrelated, 'header assembl' 2 unrelated).",
+   "depends_on": [
+    "00.3"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.54",
+   "title": "§7.2 PC7: a checker that refuses `$?` read after a pipeline in any command cited as evidence (admission item 12: an exit status is not evidence of a successful probe)",
+   "lines": "L184-L215,L654-L660,L674-L699",
+   "what": "The conductor repeated the pipeline-laundering error twenty minutes after documenting it; the rule cannot be held by discipline. Specified in 09-milestones as PC7, not built.",
+   "acceptance_seed": "A lint over docs/plan and bead evidence blocks refuses `... | ... ; echo $?` patterns unless PIPESTATUS is cited; the §3.1 and §7.2 transcripts are the known-bad fixtures.",
+   "priority": 1,
+   "kind": "gate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-phcz",
+     "status": "open",
+     "match": "partial",
+     "evidence": "`$?` read after a pipe -> the pipeline's status, not the subject's ... a pattern-syntax claim must name its binary and version"
+    },
+    {
+     "id": "omp-orchestrator-xv30",
+     "status": "open",
+     "match": "partial",
+     "evidence": "10 wrong-input verdicts today ... grade-pin typed refusal, gate rule 8 is doctrine only"
+    },
+    {
+     "id": "omp-orchestrator-tvu5",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "a cargo exit code is not a build verdict"
+    }
+   ],
+   "coverage": "MISSING",
+   "gap": "The failure family is filed (phcz/xv30/tvu5) but no bead builds PC7 (searched 'PC7' 0, 'PIPESTATUS' 1 unrelated, 'pipeline $?' 6 unrelated).",
+   "depends_on": [
+    "09.PC7",
+    "06.admission-checklist"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.55",
+   "title": "§7/§7.1 admission item 13: a bare zero is not a finding — a not-found must name its command and argue the search space could contain the answer",
+   "lines": "L640-L647,L657",
+   "what": "Three false-zero mechanisms (--include filter, wrong-language extension, too-narrow space) each produce a confident not-found indistinguishable from a real one.",
+   "acceptance_seed": "A lint over docs/plan refuses 'no prior art found' / 'not found' / a count of 0 without an adjacent command and scope statement; ipg.14's FIRES-ON-KNOWN-BAD specimen is RED.",
+   "priority": 2,
+   "kind": "gate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-omp-coverage-mission-ipg.14",
+     "status": "open",
+     "match": "partial",
+     "evidence": "a bead containing \"UNMEASURED\" or \"we don't know\" with no adjacent mirror citation or explicit not-found is FLAGGED"
+    },
+    {
+     "id": "omp-orchestrator-t52",
+     "status": "open",
+     "match": "partial",
+     "evidence": "a zero names its search space"
+    },
+    {
+     "id": "omp-orchestrator-8ax8",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "a zero from a grep must be proven with a positive control"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "Applied per-bead protocol; no repo-wide lint over the plan text, and admission item 13 is not registered in 06's checklist by any bead.",
+   "depends_on": [
+    "06.admission-checklist"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.56",
+   "title": "§7 admission item 14: cite the construct, not the line",
+   "lines": "L649-L652,L657",
+   "what": "Three agents cited adjacent lines for different constructs; a line number is unverifiable alone and does not survive a reformat.",
+   "acceptance_seed": "cargo test -p no-shell-gate -- plan_citations_name_constructs passes; every file:line cite in docs/plan/[0-9]*.md names a fn/const/struct/heading or is marked (line at <sha>).",
+   "priority": 1,
+   "kind": "gate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-d1n",
+     "status": "open",
+     "match": "exact",
+     "evidence": "Convert every `file:line` citation in `docs/plan/[0-9]*.md` (321 at pin 387dadf ...) to a CONSTRUCT citation per PV8"
+    }
+   ],
+   "coverage": "COVERED",
+   "gap": "",
+   "depends_on": [
+    "06.admission-checklist"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": "Tree also has plan_citations.rs, line_cite_rot.rs, citation_integrity.rs."
+  },
+  {
+   "id": "00.57",
+   "title": "§7.4 grading packets name the lens and the file only — never the suspected defect (independence rule, round 3 onward)",
+   "lines": "L730-L770",
+   "what": "Three of four round-1 headline findings were seeded by the conductor's own prompts; seeded independence is worth a code review, not a fresh pair of eyes.",
+   "acceptance_seed": "The S6 grade-packet template has lens + file fields and no free-text 'check whether X' field; a lint refuses a grading packet naming a defect; t52's packets conform.",
+   "priority": 2,
+   "kind": "gate",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-t52",
+     "status": "open",
+     "match": "partial",
+     "evidence": "`role: \"fresh_eyes\"`, `lens`, `graded_by`"
+    },
+    {
+     "id": "omp-orchestrator-8zx1",
+     "status": "open",
+     "match": "partial",
+     "evidence": "S6 grading has no dispatcher, packet, or consumer for the grading state"
+    },
+    {
+     "id": "omp-orchestrator-o7gz",
+     "status": "open",
+     "match": "partial",
+     "evidence": "wire its single-bead false-closed tripwire (exit 2) as the close refusal"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "t52 encodes lens for round 22; 8zx1 builds the S6 packet — neither states the no-seeding rule as a refusal (searched 'seeded' 4 unrelated, 'lens' 4).",
+   "depends_on": [
+    "12.S6-grade-packet"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.58",
+   "title": "§8.4 per-subsection expected-contents list — the prose twin of the scanner's expected_* fields, so an omission is detectable",
+   "lines": "L836-L847,L854-L859",
+   "what": "Every §7 refutation is an error of commission; the one omission caught was caught only by the scanner's expected_* twin. Prose has no twin mechanism; the fix is proposed and not built.",
+   "acceptance_seed": "Each 01-12 section carries a machine-readable expected-contents list; a gate refuses a section missing a listed heading; a planted deleted subsection is RED.",
+   "priority": 2,
+   "kind": "gate",
+   "existing_beads": [],
+   "coverage": "MISSING",
+   "gap": "Searched 'expected-contents' 0, 'expected_' 0.",
+   "depends_on": [
+    "00.3"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.59",
+   "title": "R13: every S1–S9 stage carries the seven-field dispatch contract, mapped through skills, crates, gates and dispatch (§11 evidence map + §12 runbook)",
+   "lines": "L76-L80,L134",
+   "what": "The full idea-to-shipped lifecycle must be walked down the crates and skills so dispatch, reap, logging and build grading each have a template and a caller.",
+   "acceptance_seed": "docs/plan/FOUNDATION.jsonl has 9 rows (S1-S9) each with the seven contract fields; cargo test -p no-shell-gate --test foundation_rows passes; every live packet from send_and_verify renders all template fields (a92y RED case).",
+   "priority": 0,
+   "kind": "milestone",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-dispatch-journey-mapping-42na",
+     "status": "in_progress",
+     "match": "exact",
+     "evidence": "byte-exact dispatch journey mapping: S1-S9 stage to contract to kernel symbol, with the comms/mail hole named"
+    },
+    {
+     "id": "omp-orchestrator-7sd",
+     "status": "grading",
+     "match": "exact",
+     "evidence": "Materialize docs/plan/FOUNDATION.jsonl (S1-S9) from 12-journey's F1-F5 + K/U/G blocks"
+    },
+    {
+     "id": "omp-orchestrator-kxe.2",
+     "status": "in_progress",
+     "match": "exact",
+     "evidence": "Complete S1-S4 dispatchable runbook foundations"
+    },
+    {
+     "id": "omp-orchestrator-kxe.4",
+     "status": "in_progress",
+     "match": "exact",
+     "evidence": "Reconcile S5-S9 runbook schemas and ledgers"
+    },
+    {
+     "id": "omp-orchestrator-a92y",
+     "status": "open",
+     "match": "partial",
+     "evidence": "send_and_verify renders 4 of 16 template fields ... 0/34 from a template"
+    },
+    {
+     "id": "omp-orchestrator-jplf.3",
+     "status": "open",
+     "match": "partial",
+     "evidence": "Close the observe, select, dispatch, verify, and reap lifecycle stages as one typed journey"
+    }
+   ],
+   "coverage": "COVERED",
+   "gap": "",
+   "depends_on": [
+    "12.S1-S9-runbook",
+    "11.lifecycle-evidence-map"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.60",
+   "title": "§1.5 GHOST census: re-derive the count of installed binaries whose source is not in the tree we read, with instance list, comparison command and date",
+   "lines": "L102-L103",
+   "what": "The historical count of four ghosts retained no instance list, source-tree result, comparison command or date, so it is non-authoritative.",
+   "acceptance_seed": "A recorded command compares every installed omp-orchestrator binary (build_id) against `git ls-files`/HEAD and lists GHOST/FOREIGN instances with date; the glossary row cites it or is marked HISTORICAL.",
+   "priority": 2,
+   "kind": "measurement",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-6hrv",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "A binary whose owning repo is not THIS one reports FOREIGN"
+    },
+    {
+     "id": "omp-orchestrator-2tny",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "the live supervisor binary was unlinked while running: every liveness surface reported healthy, only ls told the truth"
+    },
+    {
+     "id": "omp-orchestrator-kxe.5",
+     "status": "closed",
+     "match": "partial",
+     "evidence": "R21-07-pane-truth-ghost-obsolete"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "installer's FOREIGN detection is the mechanism; no bead records the census (searched 'ghost' 2 — ipg.18 uses GHOST in the surface-map sense).",
+   "depends_on": [
+    "07.installer-identity"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.61",
+   "title": "§3.5 test_files / test_functions registered in NUMBERS.toml and re-run by a gate (the block in the brief is a dated snapshot)",
+   "lines": "L282-L303",
+   "what": "The counts moved three times inside one session; a living count must be a registry key with its command.",
+   "acceptance_seed": "NUMBERS.toml [figures.test_files] and [figures.test_functions] commands run at HEAD and match `expect` (or are LIVE); numbers.rs passes.",
+   "priority": 3,
+   "kind": "measurement",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-kxe.3",
+     "status": "in_progress",
+     "match": "exact",
+     "evidence": "Every `[figures.*]` command in NUMBERS.toml runs from the repository and its `expect` matches the command output"
+    }
+   ],
+   "coverage": "COVERED",
+   "gap": "",
+   "depends_on": [],
+   "blocks": [],
+   "terminal": true,
+   "notes": "NUMBERS.toml has test_files and test_functions keys (verified by reading the file)."
+  },
+  {
+   "id": "00.62",
+   "title": "S9 decision ledger has a WRITER: every owner=josh refusal and every §8 answer lands as a docs/decisions.jsonl row",
+   "lines": "L133,L788-L790,L819-L822",
+   "what": "Every Q-row above says 'no decision receipt'; S9 has a reader and no writer, so human decisions live in scrollback.",
+   "acceptance_seed": "A supervisor refusal with owner=josh emits an HD row (or a typed refusal if the ledger is unwritable); 188 refusals → >0 rows; a Q closure cites its HD id.",
+   "priority": 0,
+   "kind": "wiring",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-nsx1",
+     "status": "open",
+     "match": "exact",
+     "evidence": "S9 has a reader and no writer: docs/decisions.jsonl got 0 rows today against 188 owner=josh refusals"
+    },
+    {
+     "id": "omp-orchestrator-9he5",
+     "status": "open",
+     "match": "partial",
+     "evidence": "a trauma-guard counter that halts and names the decision"
+    }
+   ],
+   "coverage": "COVERED",
+   "gap": "",
+   "depends_on": [
+    "12.S9-decision-ledger"
+   ],
+   "blocks": [
+    "00.21",
+    "00.22",
+    "00.23",
+    "00.24",
+    "00.25",
+    "00.26",
+    "00.27",
+    "00.28",
+    "00.29",
+    "00.30",
+    "00.31",
+    "00.47"
+   ],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.63",
+   "title": "Retired figures never resurface: '81 JSON-RPC methods, 17 used', '216 repos', '1 of 8', '5 of 8', '(75 total)', 'no machine-readable version handshake' are refused at assembly",
+   "lines": "L233-L235,L395-L402,L474-L483,L484",
+   "what": "Each retired figure was quoted downstream after retirement; every section quoting one must be corrected at assembly.",
+   "acceptance_seed": "cargo test -p no-shell-gate --test retired_figures passes with each retired literal in its list; a planted '81 JSON-RPC' in a section is RED; he6 is re-scoped or closed against the retirement.",
+   "priority": 2,
+   "kind": "doc-fact",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-kxe.3",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Reconcile live plan denominators and provenance"
+    },
+    {
+     "id": "omp-orchestrator-round22-drifted-figures-844",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Nine drifted plan figures with no registry row"
+    },
+    {
+     "id": "omp-orchestrator-he6",
+     "status": "in_progress",
+     "match": "partial",
+     "evidence": "Derive the 17-of-81 OMP RPC utilization list from the installed source"
+    }
+   ],
+   "coverage": "PARTIAL",
+   "gap": "retired_figures.rs exists in the tree; no bead confirms its list covers all six retired figures, and he6 (in_progress) still pursues the retired 81/17 figure.",
+   "depends_on": [
+    "00.3"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.64",
+   "title": "§3.6/§3.5 composer-typed & omp-inventory-map: current addressability + differential-lane figures carry command/output/revision receipts",
+   "lines": "L451,L424-L442",
+   "what": "Both 'current' figures in these paragraphs (28 test markers; 158 help bytes exit 1; the permanently-skipping differential) are stated without a retained receipt.",
+   "acceptance_seed": "NUMBERS rows for omp_inventory_map_tests and composer_typed_differential_cases carry command + hash; the differential row is 0 cases → labelled UNRUNNABLE until 00.29 lands.",
+   "priority": 3,
+   "kind": "measurement",
+   "existing_beads": [],
+   "coverage": "MISSING",
+   "gap": "Searched 'inventory-map' 7 unrelated to receipts; folded from 00.14/00.29 provenance gaps.",
+   "depends_on": [
+    "00.14",
+    "00.29"
+   ],
+   "blocks": [],
+   "terminal": false,
+   "notes": ""
+  },
+  {
+   "id": "00.65",
+   "title": "§3.2 workspace_crates / built_binaries are LIVE from `cargo metadata --no-deps`, and cargo metadata must succeed on a fresh clone",
+   "lines": "L229",
+   "what": "The brief freezes no crate integer; the scanner snapshot is historical; a fresh clone had 31 of 50 crates and cargo metadata failed.",
+   "acceptance_seed": "On a fresh clone: `cargo metadata --format-version 1 --no-deps` exits 0; NUMBERS [figures.workspace_crates] and [figures.built_binaries] commands run there and match.",
+   "priority": 1,
+   "kind": "measurement",
+   "existing_beads": [
+    {
+     "id": "omp-orchestrator-untracked-crates-break-clone-jlb",
+     "status": "in_progress",
+     "match": "exact",
+     "evidence": "Untracked crates make the plan's figures unreproducible: a fresh clone has 31 of 50 and cargo metadata fails"
+    },
+    {
+     "id": "omp-orchestrator-cfg5",
+     "status": "open",
+     "match": "partial",
+     "evidence": "Clean clone HEAD 7e6b70a: 23 tests fail on tree-stale workspace metadata drift"
+    }
+   ],
+   "coverage": "COVERED",
+   "gap": "",
+   "depends_on": [],
+   "blocks": [
+    "00.5"
+   ],
+   "terminal": false,
+   "notes": ""
+  }
+ ],
+ "section_deps": [
+  "09: R1 and R10 close only when 09-milestones carries per-milestone OBSERVABLE blocks and the SOTA rubric artifact (items 00.1, 00.19); PC7 is specified there (00.54)",
+  "06: R6 closes only when 06-gates' matrix yields the G1-G8 all-legs artifact and registers admission items 12-14 (00.9, 00.54-00.56)",
+  "07: R8 closes only when 07-installability attaches the clean-machine receipt and the four-way identity predicate the PLAN.md freshness gate reuses (00.17, 00.3, 00.30, 00.60)",
+  "08: R9 closes only when 08-end-users attaches the foreign-repo first-tick receipt (00.18)",
+  "02: R5 and the seven upstream-type gaps depend on 02-surface-census regenerating the scanner and naming the RPC event frames (00.7, 00.34-00.40)",
+  "10: R7 and Q5 depend on 10-prior-art's per-gap search table and the franken_lean real-hook precedent (00.16, 00.23, 00.13)",
+  "11/12: R13 and every decision receipt depend on 12-journey's S1-S9 runbook, the S9 ledger writer, and 11-lifecycle's evidence map (00.59, 00.62)",
+  "03/04: R4 depends on 03's per-package contract table and 04's diagram generator (00.5, 00.6)"
+ ],
+ "search_log": [
+  "br list -a --json | search ('freshness',): 12 hits",
+  "br list -a --json | search ('plan-assemble',): 8 hits",
+  "br list -a --json | search ('PLAN.md',): 4 hits",
+  "br list -a --json | search ('stale', 'assembl'): 4 hits",
+  "br list -a --json | search ('reassembl',): 0 hits",
+  "br list -a --json | search ('mtime',): 4 hits",
+  "br list -a --json | search ('manifest', 'hash'): 5 hits",
+  "br list -a --json | search ('reap', 'refill'): 13 hits",
+  "br list -a --json | search ('staleness',): 8 hits",
+  "br list -a --json | search ('doc structure',): 0 hits",
+  "br list -a --json | search ('repo hygiene',): 0 hits",
+  "br list -a --json | search ('hygiene',): 2 hits",
+  "br list -a --json | search ('one-row-per',): 0 hits",
+  "br list -a --json | search ('contract census',): 0 hits",
+  "br list -a --json | search ('census', 'crate'): 41 hits",
+  "br list -a --json | search ('cargo metadata',): 22 hits",
+  "br list -a --json | search ('slash',): 9 hits",
+  "br list -a --json | search ('expected_slash',): 0 hits",
+  "br list -a --json | search ('inventory-map',): 7 hits",
+  "br list -a --json | search ('scanner',): 9 hits",
+  "br list -a --json | search ('known-good',): 70 hits",
+  "br list -a --json | search ('known_good',): 0 hits",
+  "br list -a --json | search ('mutation', 'hook'): 21 hits",
+  "br list -a --json | search ('mutation', 'production'): 26 hits",
+  "br list -a --json | search ('addressable',): 3 hits",
+  "br list -a --json | search ('--help',): 9 hits",
+  "br list -a --json | search ('path-literal-guard', 'known'): 12 hits",
+  "br list -a --json | search ('G1',): 2 hits",
+  "br list -a --json | search ('all-legs',): 0 hits",
+  "br list -a --json | search ('four legs',): 2 hits",
+  "br list -a --json | search ('six properties',): 0 hits",
+  "br list -a --json | search ('leg table',): 0 hits",
+  "br list -a --json | search ('clean machine',): 0 hits",
+  "br list -a --json | search ('clean-machine',): 2 hits",
+  "br list -a --json | search ('second machine',): 1 hits",
+  "br list -a --json | search ('second-machine',): 0 hits",
+  "br list -a --json | search ('first tick',): 1 hits",
+  "br list -a --json | search ('first-tick',): 2 hits",
+  "br list -a --json | search ('foreign repo',): 1 hits",
+  "br list -a --json | search ('doctor', 'health', 'repair'): 15 hits",
+  "br list -a --json | search ('validate', 'audit', 'why'): 0 hits",
+  "br list -a --json | search ('/Users/josh', 'fallback'): 7 hits",
+  "br list -a --json | search ('rubric',): 1 hits",
+  "br list -a --json | search ('SOTA',): 2 hits",
+  "br list -a --json | search ('seven-field',): 2 hits",
+  "br list -a --json | search ('seven field',): 2 hits",
+  "br list -a --json | search ('dispatch contract',): 0 hits",
+  "br list -a --json | search ('S1-S9',): 2 hits",
+  "br list -a --json | search ('S1–S9',): 1 hits",
+  "br list -a --json | search ('PC7',): 0 hits",
+  "br list -a --json | search ('pipeline', '$?'): 6 hits",
+  "br list -a --json | search ('PIPESTATUS',): 1 hits",
+  "br list -a --json | search ('bare zero',): 1 hits",
+  "br list -a --json | search ('not-found',): 1 hits",
+  "br list -a --json | search ('search space',): 1 hits",
+  "br list -a --json | search ('cite the construct',): 0 hits",
+  "br list -a --json | search ('construct, not',): 0 hits",
+  "br list -a --json | search ('expected-contents',): 0 hits",
+  "br list -a --json | search ('expected_',): 0 hits",
+  "br list -a --json | search ('lens',): 4 hits",
+  "br list -a --json | search ('seeded',): 4 hits",
+  "br list -a --json | search ('who pays',): 0 hits",
+  "br list -a --json | search ('buyer',): 3 hits",
+  "br list -a --json | search ('workaround',): 4 hits",
+  "br list -a --json | search ('headcount',): 0 hits",
+  "br list -a --json | search ('timeline',): 1 hits",
+  "br list -a --json | search ('buy, adopt',): 0 hits",
+  "br list -a --json | search ('substitute',): 12 hits",
+  "br list -a --json | search ('compatib',): 9 hits",
+  "br list -a --json | search ('18.1.2',): 0 hits",
+  "br list -a --json | search ('omp version',): 0 hits",
+  "br list -a --json | search ('security posture',): 0 hits",
+  "br list -a --json | search ('blast radius',): 7 hits",
+  "br list -a --json | search ('secret',): 4 hits",
+  "br list -a --json | search ('licens',): 1 hits",
+  "br list -a --json | search ('novel',): 0 hits",
+  "br list -a --json | search ('composer-typed',): 9 hits",
+  "br list -a --json | search ('pi_agent_rust',): 0 hits",
+  "br list -a --json | search ('commit-msg-verification',): 0 hits",
+  "br list -a --json | search ('kill criteri',): 0 hits",
+  "br list -a --json | search ('verification minutes',): 0 hits",
+  "br list -a --json | search ('tending',): 0 hits",
+  "br list -a --json | search ('allowance',): 33 hits",
+  "br list -a --json | search ('routed around',): 18 hits",
+  "br list -a --json | search ('--no-verify',): 7 hits",
+  "br list -a --json | search ('bypass', 'hook'): 15 hits",
+  "br list -a --json | search ('--version',): 7 hits",
+  "br list -a --json | search ('-V ',): 2 hits",
+  "br list -a --json | search ('version probe',): 0 hits",
+  "br list -a --json | search ('ghost',): 2 hits",
+  "br list -a --json | search ('mirror', '210'): 1 hits",
+  "br list -a --json | search ('216',): 4 hits",
+  "br list -a --json | search ('rev-parse',): 7 hits",
+  "br list -a --json | search ('board_total',): 0 hits",
+  "br list -a --json | search ('board',): 7 hits",
+  "br list -a --json | search ('must_be_true',): 0 hits",
+  "br list -a --json | search ('negative_evidence',): 0 hits",
+  "br list -a --json | search ('vacuity', 'inventory'): 10 hits",
+  "br list -a --json | search ('AckKind',): 2 hits",
+  "br list -a --json | search ('dialect',): 2 hits",
+  "br list -a --json | search ('omp-types',): 11 hits",
+  "br list -a --json | search ('messaging-fabric',): 0 hits",
+  "br list -a --json | search ('Verdict', 'trait'): 1 hits",
+  "br list -a --json | search ('spawn sites',): 3 hits",
+  "br list -a --json | search ('cx first',): 16 hits",
+  "br list -a --json | search ('cx_first',): 1 hits",
+  "br list -a --json | search ('NewlyIdle',): 8 hits",
+  "br list -a --json | search ('ConfirmedIdle',): 2 hits",
+  "br list -a --json | search ('idle_panes',): 3 hits",
+  "br list -a --json | search ('decide()',): 10 hits",
+  "br list -a --json | search ('selection receipt',): 0 hits",
+  "br list -a --json | search ('selection',): 8 hits",
+  "br list -a --json | search ('cp-z42vu',): 10 hits",
+  "br list -a --json | search ('planted', 'transport'): 4 hits",
+  "br list -a --json | search ('402',): 6 hits",
+  "br list -a --json | search ('claim fence',): 3 hits",
+  "br list -a --json | search ('agent_end',): 0 hits",
+  "br list -a --json | search ('willContinue',): 0 hits",
+  "br list -a --json | search ('SessionStopEvent',): 0 hits",
+  "br list -a --json | search ('IrcDeliveryReceipt',): 0 hits",
+  "br list -a --json | search ('AsyncJobDeliverySink',): 0 hits",
+  "br list -a --json | search ('Stage1Claim',): 0 hits",
+  "br list -a --json | search ('GuestIdle',): 0 hits",
+  "br list -a --json | search ('HubRosterCounts',): 0 hits",
+  "br list -a --json | search ('roster',): 19 hits",
+  "br list -a --json | search ('PerplexityCost',): 0 hits",
+  "br list -a --json | search ('cost',): 40 hits",
+  "br list -a --json | search ('compact',): 5 hits",
+  "br list -a --json | search ('completion', 'rpc'): 3 hits",
+  "br list -a --json | search ('isTerminal',): 0 hits",
+  "br list -a --json | search ('--mode=rpc',): 2 hits",
+  "br list -a --json | search ('rpc', 'supervisor'): 2 hits",
+  "br list -a --json | search ('MEASURED', 'PROJECTED'): 4 hits",
+  "br list -a --json | search ('NO-CLAIM',): 225 hits",
+  "br list -a --json | search ('denominator',): 17 hits",
+  "br list -a --json | search ('guarantee',): 16 hits",
+  "br list -a --json | search ('floor-raise',): 1 hits",
+  "br list -a --json | search ('diagram',): 2 hits",
+  "br list -a --json | search ('gap_propagation',): 0 hits",
+  "br list -a --json | search ('gap-propagation',): 0 hits",
+  "br list -a --json | search ('numbers.rs',): 7 hits",
+  "br list -a --json | search ('NUMBERS.toml',): 11 hits",
+  "br list -a --json | search ('retired_figures',): 0 hits",
+  "br list -a --json | search ('convergence',): 10 hits",
+  "br list -a --json | search ('schemas',): 12 hits",
+  "br list -a --json | search ('Josh decision',): 4 hits",
+  "br list -a --json | search ('refutation',): 1 hits",
+  "br list -a --json | search ('header', 'assembl'): 2 hits",
+  "br list -a --json | search ('open question',): 2 hits",
+  "br list -a --json | search ('owner', 'deadline'): 5 hits",
+  "br list -a --json | search ('decision receipt',): 0 hits",
+  "br list -a --json | search ('decisions.jsonl',): 6 hits",
+  "br list -a --json | search ('assembly_freshness',): 3 hits",
+  "br list -a --json | search ('gate_properties',): 0 hits",
+  "br list -a --json | search ('gate_reachability',): 1 hits",
+  "br list -a --json | search ('citation_integrity',): 0 hits",
+  "br list -a --json | search ('line_cite_rot',): 1 hits",
+  "br list -a --json | search ('foundation_rows',): 1 hits",
+  "br list -a --json | search ('crate_contract_inventory',): 1 hits",
+  "br list -a --json | search ('STRIP_TEST_CODE',): 0 hits",
+  "br list -a --json | search ('C38',): 2 hits",
+  "br list -a --json | search ('fixture', 'drift'): 10 hits",
+  "br list -a --json | search ('commit-build-fence', 'known'): 7 hits",
+  "br list -a --json | search ('thirteen',): 1 hits",
+  "br list -a --json | search ('plan_sections',): 0 hits",
+  "br list -a --json | search ('requirement registr',): 1 hits",
+  "br list -a --json | search ('R12',): 0 hits",
+  "br list -a --json | search ('R11',): 0 hits",
+  "br list -a --json | search ('R13',): 0 hits",
+  "br list -a --json | search ('brief',): 7 hits",
+  "br list -a --json | search ('00-brief',): 4 hits",
+  "br list -a --json | search ('README',): 7 hits",
+  "br list -a --json | search ('publishab',): 0 hits",
+  "br list -a --json | search ('investor',): 0 hits",
+  "br list -a --json | search ('kill',): 62 hits",
+  "br list -a --json | jq '.issues|length' -> 284 rows loaded into kernel; all searches are case-insensitive substring over title+description",
+  "br show omp-orchestrator-python-oracle-collision-hk1 --json -> closed; last comments: 'loud skip with 0 cases', Python/shell comparisons dev-only",
+  "glob crates/no-shell-gate/tests/*.rs -> 40 files incl. assembly_freshness.rs, gate_properties.rs, gap_propagation.rs, numbers.rs, retired_figures.rs, cross_section_authority.rs, plan_citations.rs, line_cite_rot.rs, citation_integrity.rs, crate_contract_inventory.rs, foundation_rows.rs, spawn_contract.rs, group_kill.rs",
+  "grep assembly_freshness.rs for sha|hash|manifest -> 0 hash/manifest legs; tests: the_assembly_is_not_stale_against_its_sections, the_detector_measures_real_files_and_a_real_direction, the_plan_embeds_every_round_and_stamp, the_assembler_is_tracked_in_repo_not_in_tmp",
+  "grep gate_properties.rs #[test] -> every_claimed_property_cites_a_test_that_exists, a_declared_absence_is_recorded_rather_than_left_blank (six None rows), no_property_is_claimed_twice_for_one_crate",
+  "read NUMBERS.toml [figures.*] keys -> 34 keys incl. workspace_crates, built_binaries, crates_forbidding_unsafe, test_files, test_functions, board_total, no_claim_blocks, public_enums, public_structs, colliding_type_names, verdict_types, plan_sections, spawning_crates"
+ ],
+ "no_claim": "This manifest maps brief items to beads by title/description text and a handful of tree files; it does not verify that any bead's acceptance was actually met, that a 'closed' bead delivered what its title claims (00.8 shows one closed bead refuted by the brief's own measurement), or that the tree tests named here pass at HEAD (diq0/17pm/tub report several RED). Coverage of §3.8 upstream types is judged against bead text only — no OMP wire was probed. The brief contradicts itself on the installer exit code (L200-201 vs L686-688); this manifest follows §7.2 (installer exits 1 correctly) and does not file the L201 claim. Prose-only paragraphs (§7 narrative, §3.7 fh SERVE_INPUT_STALE model, glossary definitions that name no build) were deliberately not itemized. The Python kernel is shared with sibling Dag agents; item composition used namespaced variables, but the first search helper was clobbered mid-session and 171 of the logged searches predate the reload (results were re-checked where they fed a coverage verdict)."
+}

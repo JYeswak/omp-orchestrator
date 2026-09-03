@@ -1,0 +1,1350 @@
+[
+ {
+  "key": "census-vacuity-gate",
+  "section": "02",
+  "kind": "gate",
+  "items": [
+   "00.8",
+   "02.9",
+   "06.12"
+  ],
+  "title": "Refuse a vacuous inventory census: VACUOUS_INVARIANT_SET when must_be_true/negative_evidence have one distinct value",
+  "priority": 0
+ },
+ {
+  "key": "scanner-per-row-invariants",
+  "section": "02",
+  "kind": "crate",
+  "items": [
+   "02.10"
+  ],
+  "title": "Rewrite omp-inventory-map row invariants per row: contract, not scanner provenance",
+  "priority": 1
+ },
+ {
+  "key": "plg-known-good-leg",
+  "section": "06",
+  "kind": "gate",
+  "items": [
+   "00.10",
+   "06.5",
+   "09.19"
+  ],
+  "title": "path-literal-guard: add the adversarial known-good leg (repo_root join, MANIFEST_DIR, /tmp)",
+  "priority": 1
+ },
+ {
+  "key": "known-bad-legs-map-fence",
+  "section": "06",
+  "kind": "gate",
+  "items": [
+   "00.11",
+   "06.7"
+  ],
+  "title": "Plant known-bad specimens for omp-inventory-map and commit-build-fence in their real scan sets",
+  "priority": 1
+ },
+ {
+  "key": "gate-fixture-mutation-legs",
+  "section": "06",
+  "kind": "gate",
+  "items": [
+   "00.12",
+   "06.3",
+   "06.4",
+   "06.9"
+  ],
+  "title": "kernel-bypass-gate, pre-delete-citation-check, commit-build-fence, undrained-pipe-lint: mutation + anti-vacuity legs and claim headers",
+  "priority": 1
+ },
+ {
+  "key": "real-hook-mutation-legs",
+  "section": "06",
+  "kind": "gate",
+  "items": [
+   "00.13",
+   "06.10"
+  ],
+  "title": "Real-hook mutation legs: mutate production source and commit through the installed hook for all 8 gates",
+  "priority": 1
+ },
+ {
+  "key": "inventory-map-addressable",
+  "section": "04",
+  "kind": "gate",
+  "items": [
+   "00.14",
+   "04.13",
+   "09.17",
+   "02.11"
+  ],
+  "title": "Make omp-inventory-map ADDRESSABLE: --help exits 0 naming the documented command, pinned by a cli_contract test",
+  "priority": 1
+ },
+ {
+  "key": "q1-q4-buyer",
+  "section": "00",
+  "kind": "decision",
+  "decision": true,
+  "owner": "josh",
+  "items": [
+   "00.22"
+  ],
+  "title": "DECISION Q1-Q4: buyer, current-workaround cost, customer outcome baseline/target, timeline + headcount",
+  "priority": 1
+ },
+ {
+  "key": "q5-buy-adopt-build",
+  "section": "00",
+  "kind": "decision",
+  "decision": true,
+  "owner": "orchestrator",
+  "items": [
+   "00.23"
+  ],
+  "title": "DECISION Q5: buy / adopt / build - name the existing tool evaluated and rejected, and why",
+  "priority": 2
+ },
+ {
+  "key": "q6-omp-upgrade-policy",
+  "section": "00",
+  "kind": "decision",
+  "decision": true,
+  "owner": "orchestrator",
+  "items": [
+   "00.24"
+  ],
+  "title": "DECISION Q6: OMP upgrade compatibility policy (host omp/18.1.2 vs scanner target omp/18.0.11)",
+  "priority": 1
+ },
+ {
+  "key": "q8-licensing",
+  "section": "00",
+  "kind": "decision",
+  "decision": true,
+  "owner": "josh",
+  "items": [
+   "00.26"
+  ],
+  "title": "DECISION Q8: licensing for us and for what we vendor",
+  "priority": 2
+ },
+ {
+  "key": "q9-declared-only-adoption",
+  "section": "00",
+  "kind": "decision",
+  "decision": true,
+  "owner": "orchestrator",
+  "items": [
+   "00.27"
+  ],
+  "title": "DECISION Q9: adoption path for the six DECLARED ONLY upstream types",
+  "priority": 2
+ },
+ {
+  "key": "q10-kill-criterion",
+  "section": "00",
+  "kind": "decision",
+  "decision": true,
+  "owner": "josh",
+  "items": [
+   "00.28"
+  ],
+  "title": "DECISION Q10 / 8.3: economic kill criterion + decision receipt; K2 and K5 made evaluable",
+  "priority": 1
+ },
+ {
+  "key": "q13-commit-msg-hook",
+  "section": "00",
+  "kind": "decision",
+  "decision": true,
+  "owner": "josh",
+  "items": [
+   "00.31",
+   "11.47"
+  ],
+  "title": "DECISION Q13: .git/hooks/commit-msg-verification-level.sh - register, rewrite, or retire",
+  "priority": 1
+ },
+ {
+  "key": "q11-oracle-trilemma",
+  "section": "00",
+  "kind": "decision",
+  "decision": true,
+  "owner": "josh",
+  "items": [
+   "00.29"
+  ],
+  "title": "DECISION Q11: composer-typed differential-oracle trilemma (oracle outside the tree, retire the lane, or in-tree)",
+  "priority": 1
+ },
+ {
+  "key": "k2-k5-instrumentation",
+  "section": "00",
+  "kind": "measurement",
+  "items": [
+   "00.32"
+  ],
+  "title": "K2/K5 pilot instrumentation: verification-minutes and tending-minutes ledgers with a 30-day baseline",
+  "priority": 2
+ },
+ {
+  "key": "roster-counts-consume",
+  "section": "00",
+  "kind": "wiring",
+  "items": [
+   "00.38"
+  ],
+  "title": "Consume HubRosterCounts instead of hand-derived roster evidence",
+  "priority": 3
+ },
+ {
+  "key": "cost-telemetry",
+  "section": "02",
+  "kind": "wiring",
+  "items": [
+   "00.39",
+   "02.17"
+  ],
+  "title": "Cost sampling (Q2/S5): wire omp usage, telemetry-export OTLP and the goals token budget via SearchUsage/PerplexityCost/ContextUsage",
+  "priority": 2
+ },
+ {
+  "key": "compaction-events-consume",
+  "section": "00",
+  "kind": "wiring",
+  "items": [
+   "00.40"
+  ],
+  "title": "Consume SessionBeforeCompactEvent / SessionCompactEvent for context-loss recovery",
+  "priority": 2
+ },
+ {
+  "key": "plan-check",
+  "section": "09",
+  "kind": "crate",
+  "items": [
+   "00.54",
+   "09.16",
+   "12.44"
+  ],
+  "title": "Build the plan-check crate: PC1-PC8 incl. PC7 pipeline-$? checker, plan-check/v1 envelope, --help, known-bad leg",
+  "priority": 1
+ },
+ {
+  "key": "brief-expected-contents",
+  "section": "00",
+  "kind": "gate",
+  "items": [
+   "00.58"
+  ],
+  "title": "00-brief 8.4: per-subsection expected-contents list as the prose twin of the scanner's expected_* fields",
+  "priority": 2
+ },
+ {
+  "key": "addressability-figures",
+  "section": "00",
+  "kind": "measurement",
+  "items": [
+   "00.64"
+  ],
+  "title": "composer-typed and omp-inventory-map addressability + differential-lane figures carry their command",
+  "priority": 3
+ },
+ {
+  "key": "diagram-generator",
+  "section": "04",
+  "kind": "command",
+  "items": [
+   "04.1"
+  ],
+  "title": "Build the diagram generator command that emits Diagrams 1-4 and 6 from data",
+  "priority": 0
+ },
+ {
+  "key": "diagram-regen",
+  "section": "04",
+  "kind": "measurement",
+  "items": [
+   "00.6",
+   "04.14"
+  ],
+  "title": "Regenerate the FrankenMermaid diagrams at the current crate count from the preserved capture; drop the 16:50 label",
+  "priority": 2
+ },
+ {
+  "key": "diagram-ci-gate",
+  "section": "04",
+  "kind": "gate",
+  "items": [
+   "04.2"
+  ],
+  "title": "CI diff gate: regenerated Diagram 1 must match the checked-in artifact",
+  "priority": 0
+ },
+ {
+  "key": "writing-contract-lints-2-4-5",
+  "section": "00",
+  "kind": "gate",
+  "items": [
+   "00.51"
+  ],
+  "title": "00-brief 6 writing-contract lints for rules 2, 4, 5 (MEASURED/PROJECTED separation, not-found names its command, no guarantee verbs)",
+  "priority": 2
+ },
+ {
+  "key": "assembly-freshness-hash",
+  "section": "12",
+  "kind": "gate",
+  "items": [
+   "12.67",
+   "00.53"
+  ],
+  "title": "assembly_freshness: content-hash manifest of consumed sections replaces the mtime key; header counts derived from the 7 table",
+  "priority": 1
+ },
+ {
+  "key": "gap-propagation-ratchet",
+  "section": "01",
+  "kind": "gate",
+  "items": [
+   "01.50"
+  ],
+  "title": "Register the gap-propagation gate as a ratchet: BASELINE only moves down, absence claims name the adjacent upstream type",
+  "priority": 3
+ },
+ {
+  "key": "epic-01-discovery",
+  "section": "01",
+  "kind": "milestone",
+  "epic_children": [
+   "falsify-typed-separation",
+   "gate8-14-operator-cohort",
+   "gate9-13-17-economics",
+   "gate10-12-16-buyers",
+   "substitution-benchmark",
+   "pilot-promotion-review"
+  ],
+  "items": [],
+  "title": "plan-01 wedge discovery: preregistered falsifiers and gates 8-17 (external operator cohort)",
+  "priority": 1
+ },
+ {
+  "key": "falsify-typed-separation",
+  "section": "01",
+  "kind": "measurement",
+  "items": [
+   "01.10"
+  ],
+  "parent_key": "epic-01-discovery",
+  "title": "Preregister and run the typed-separation vs logging-only falsifier (false completion/idle, operator minutes, adoption effort)",
+  "priority": 2
+ },
+ {
+  "key": "gate8-14-operator-cohort",
+  "section": "01",
+  "kind": "measurement",
+  "items": [
+   "01.12",
+   "01.18"
+  ],
+  "parent_key": "epic-01-discovery",
+  "title": "Gates 8 + 14: five qualified fleet operators provide a redacted mismatch and a 30-day recurrence diary",
+  "priority": 1
+ },
+ {
+  "key": "gate9-13-17-economics",
+  "section": "01",
+  "kind": "measurement",
+  "items": [
+   "01.13",
+   "01.17",
+   "01.21"
+  ],
+  "parent_key": "epic-01-discovery",
+  "title": "Gates 9 + 13 + 17: bottom-up economics, unit economics and proportionality scorecard for the operator cohort",
+  "priority": 1
+ },
+ {
+  "key": "gate10-12-16-buyers",
+  "section": "01",
+  "kind": "measurement",
+  "items": [
+   "01.14",
+   "01.16",
+   "01.20"
+  ],
+  "parent_key": "epic-01-discovery",
+  "title": "Gates 10 + 12 + 16: distribution channel, $500/month LOI after replay, defensibility over the strongest substitute",
+  "priority": 1
+ },
+ {
+  "key": "substitution-benchmark",
+  "section": "01",
+  "kind": "measurement",
+  "items": [
+   "01.22"
+  ],
+  "parent_key": "epic-01-discovery",
+  "title": "Substitution-map hostile test and product benchmark: replay one mismatch per substitute with retained receipts",
+  "priority": 1
+ },
+ {
+  "key": "pilot-promotion-review",
+  "section": "01",
+  "kind": "milestone",
+  "items": [
+   "01.24"
+  ],
+  "parent_key": "epic-01-discovery",
+  "terminal": true,
+  "title": "PILOT promotion review: gates 8-17 + brief gates 1-4 & 12, three paid commitments, rights approval, retained evidence",
+  "priority": 3
+ },
+ {
+  "key": "jsm-topology-check",
+  "section": "01",
+  "kind": "gate",
+  "items": [
+   "01.33"
+  ],
+  "title": "Check the jsm single-store-plus-symlinks topology at session start instead of assuming it",
+  "priority": 3
+ },
+ {
+  "key": "discoverability-surface",
+  "section": "07",
+  "kind": "command",
+  "items": [
+   "01.38",
+   "07.14"
+  ],
+  "title": "Ship the discoverability surface: versioned robot-docs, --info, examples, quickstart, help <topic>, completion <shell>",
+  "priority": 2
+ },
+ {
+  "key": "surface-map-row-discipline",
+  "section": "02",
+  "kind": "gate",
+  "items": [
+   "02.5",
+   "02.6"
+  ],
+  "title": "SURFACE-MAP row discipline gate: WIRE rows carry bead_id/owner/timing/receipt; RETIRE rows carry structured probe evidence",
+  "priority": 0
+ },
+ {
+  "key": "unprobeable-rows",
+  "section": "02",
+  "kind": "measurement",
+  "items": [
+   "02.8"
+  ],
+  "title": "Resolve the 9 UNPROBEABLE-PENDING surface-map rows (3 omp/mux* naming the broker, 6 thin-reason withdrawals)",
+  "priority": 1
+ },
+ {
+  "key": "reliance-denominator",
+  "section": "02",
+  "kind": "measurement",
+  "items": [
+   "02.12"
+  ],
+  "title": "Extend the reliance-surface denominator to rch, fh, cargo, git, tmux, cass, ubs, caut, dcg, ru, pt, sbh, slb, gh",
+  "priority": 1
+ },
+ {
+  "key": "severity-auto-major",
+  "section": "02",
+  "kind": "gate",
+  "items": [
+   "02.22"
+  ],
+  "title": "Second severity defence: any MINOR finding touching a NUMBERS.toml figure is automatically MAJOR",
+  "priority": 2
+ },
+ {
+  "key": "grade-type",
+  "section": "03",
+  "kind": "crate",
+  "items": [
+   "05.24",
+   "03.6",
+   "03.7",
+   "03.8"
+  ],
+  "parent": "omp-orchestrator-jplf.1",
+  "title": "Introduce the shared Grade type: Verdictlike over asupersync Outcome, impls on the six Verdict dialects, fn grade() with an unreachable arm",
+  "priority": 1
+ },
+ {
+  "key": "inventory-map-spawn-contract",
+  "section": "03",
+  "kind": "wiring",
+  "items": [
+   "03.5"
+  ],
+  "title": "Route omp-inventory-map's probe spawn through subprocess-contract",
+  "priority": 1
+ },
+ {
+  "key": "ackkind-reexport",
+  "section": "03",
+  "kind": "crate",
+  "items": [
+   "03.10"
+  ],
+  "parent": "omp-orchestrator-jplf.1",
+  "title": "Re-export the inhabited AckKind, DeliveryClass and ObligationLedger from omp-types once the asupersync pin advances",
+  "priority": 1
+ },
+ {
+  "key": "ack-stage-onto-ackkind",
+  "section": "03",
+  "kind": "wiring",
+  "items": [
+   "03.12"
+  ],
+  "title": "Convert ack-stage's receipt set (TransportReceipt/AckReadback/AckStageResult) onto AckKind",
+  "priority": 2
+ },
+ {
+  "key": "irc-delivery-receipt",
+  "section": "04",
+  "kind": "wiring",
+  "items": [
+   "04.20"
+  ],
+  "title": "Consume upstream IrcDeliveryReceipt so 'missing receipt' names a consumed type",
+  "priority": 1
+ },
+ {
+  "key": "select-ready-unclaimed",
+  "section": "05",
+  "kind": "gate",
+  "items": [
+   "05.9"
+  ],
+  "title": "A3(b): count ready AND unclaimed separately; refuse to read actionable_count as available work",
+  "priority": 1
+ },
+ {
+  "key": "epic-accounting-guards",
+  "section": "05",
+  "kind": "gate",
+  "items": [
+   "05.10",
+   "05.29"
+  ],
+  "title": "Epic accounting-node guards: never select a parent for dispatch, never close a parent through a leaf close",
+  "priority": 2
+ },
+ {
+  "key": "bypass-records-skip",
+  "section": "05",
+  "kind": "gate",
+  "items": [
+   "05.20"
+  ],
+  "title": "A6(b): refuse to bypass a guard without recording what the bypass skipped",
+  "priority": 2
+ },
+ {
+  "key": "br-comment-docfact",
+  "section": "05",
+  "kind": "doc-fact",
+  "items": [
+   "05.38"
+  ],
+  "terminal": true,
+  "title": "Correct the refuted 'br comment exits 0' claim in dispatch-silence-watch's doc comment and every bead that repeats it",
+  "priority": 2
+ },
+ {
+  "key": "claim-header-validator",
+  "section": "06",
+  "kind": "gate",
+  "items": [
+   "06.11",
+   "05.44"
+  ],
+  "title": "Claim-header validator: require ENFORCES / STILL PASSES / PROVENANCE and reject guarantee/proves/makes-impossible wording",
+  "priority": 2
+ },
+ {
+  "key": "deadman-consumer",
+  "section": "05",
+  "kind": "wiring",
+  "items": [
+   "05.46"
+  ],
+  "title": "Wire dispatcher-deadman as the heartbeat ledger's consumer inside omp-orchestrator",
+  "priority": 0
+ },
+ {
+  "key": "metamorphic-classify",
+  "section": "06",
+  "kind": "gate",
+  "items": [
+   "06.14"
+  ],
+  "parent": "omp-orchestrator-k81x",
+  "title": "Metamorphic relations MR-1..MR-3 over tick-monitor::classify with input-reached guards",
+  "priority": 2
+ },
+ {
+  "key": "inventory-envelope-golden",
+  "section": "06",
+  "kind": "gate",
+  "items": [
+   "06.15"
+  ],
+  "title": "Golden envelope pin for omp-inventory-map/v1: key set, closed status vocabulary, versioned regeneration",
+  "priority": 2
+ },
+ {
+  "key": "count-twin-invariant",
+  "section": "06",
+  "kind": "gate",
+  "items": [
+   "06.16"
+  ],
+  "title": "Count-twin invariant: observed == expected_* OR status UNKNOWN naming the mismatching pair",
+  "priority": 1
+ },
+ {
+  "key": "allowance-owner-dies-when",
+  "section": "06",
+  "kind": "gate",
+  "items": [
+   "06.18"
+  ],
+  "title": "Allowance rows require owner + dies_when; the validator refuses rows without them",
+  "priority": 1
+ },
+ {
+  "key": "gate-properties-derived",
+  "section": "06",
+  "kind": "gate",
+  "items": [
+   "06.21",
+   "06.22",
+   "06.23"
+  ],
+  "title": "Derive GATE_PROPERTIES from the three membership clauses: six-property rows for all 10 members incl. installer/porting-gate and measured ADDRESSABLE",
+  "priority": 1
+ },
+ {
+  "key": "gate-admission-meta-gate",
+  "section": "06",
+  "kind": "gate",
+  "items": [
+   "06.25"
+  ],
+  "parent": "omp-orchestrator-jplf.4",
+  "terminal": true,
+  "title": "Gate-admission meta-gate: conformance harness over the derived gate set, 06 4 items 1-14",
+  "priority": 1
+ },
+ {
+  "key": "two-signal-presence-probe",
+  "section": "07",
+  "kind": "command",
+  "items": [
+   "06.27",
+   "08.21",
+   "10.10",
+   "07.38"
+  ],
+  "title": "Two-signal dependency presence probe: PATH-walk presence separate from version probe, tmux -V map, version:UNPROBEABLE, known-unsupported table",
+  "priority": 2
+ },
+ {
+  "key": "dependency-missing-refusal",
+  "section": "07",
+  "kind": "gate",
+  "items": [
+   "10.9",
+   "07.37"
+  ],
+  "title": "Typed missing-dependency refusal: omp-preflight/v1 envelope, DEPENDENCY_MISSING wire code, exit 75, per-adapter availability and in-envelope remediation",
+  "priority": 0
+ },
+ {
+  "key": "costed-gate-value",
+  "section": "06",
+  "kind": "decision",
+  "decision": true,
+  "owner": "josh",
+  "items": [
+   "06.28"
+  ],
+  "title": "DECISION: the costed value gate for new gates (4 owner-hours, 30s wall, escaped-instance baseline)",
+  "priority": 3
+ },
+ {
+  "key": "allowed-collisions-blocked",
+  "section": "06",
+  "kind": "decision",
+  "decision": true,
+  "owner": "josh",
+  "items": [
+   "06.19"
+  ],
+  "title": "DECISION: restate the ALLOWED_COLLISIONS Observation row as BLOCKED with boundary, owner, dies_when",
+  "priority": 2
+ },
+ {
+  "key": "umbrella-cli",
+  "section": "07",
+  "kind": "crate",
+  "items": [
+   "07.6"
+  ],
+  "parent": "omp-orchestrator-jplf.7",
+  "title": "Build the umbrella omp-orchestrator CLI scoping every target as an adapter subcommand",
+  "priority": 0
+ },
+ {
+  "key": "doctor-command",
+  "section": "07",
+  "kind": "command",
+  "items": [
+   "07.8",
+   "08.1",
+   "10.4",
+   "08.2"
+  ],
+  "parent": "omp-orchestrator-jplf.7",
+  "title": "Ship omp-orchestrator doctor [<adapter>] --json: two-band exits 0/1/2, two-tier probes, DEGRADED/ABSENT with remediation, derived capabilities, DOWN-never-panic",
+  "priority": 0
+ },
+ {
+  "key": "health-command",
+  "section": "07",
+  "kind": "command",
+  "items": [
+   "07.9"
+  ],
+  "parent": "omp-orchestrator-jplf.7",
+  "title": "Ship omp-orchestrator health as a strict rollup of doctor sharing one classifier",
+  "priority": 1
+ },
+ {
+  "key": "repair-command",
+  "section": "07",
+  "kind": "command",
+  "items": [
+   "07.10",
+   "08.3"
+  ],
+  "parent": "omp-orchestrator-jplf.7",
+  "title": "Ship omp-orchestrator repair / doctor --repair through a single mutate() chokepoint with byte-exact undo, dry-run and idempotence",
+  "priority": 1
+ },
+ {
+  "key": "validate-audit-why",
+  "section": "07",
+  "kind": "command",
+  "items": [
+   "07.11",
+   "07.12",
+   "07.13",
+   "08.33"
+  ],
+  "parent": "omp-orchestrator-jplf.7",
+  "title": "Ship the validate / audit / why triad: pure-read validate (exit 74), append-only audit ledger, why <id|unit> with explicit UNKNOWN nodes",
+  "priority": 2
+ },
+ {
+  "key": "proof-envelope",
+  "section": "08",
+  "kind": "crate",
+  "items": [
+   "07.7",
+   "08.8"
+  ],
+  "parent": "omp-orchestrator-jplf.7",
+  "title": "Emit the omp-orchestrator/v1 proof envelope on every adopter command; namespaced probe ids and =N detail enforced at construction",
+  "priority": 0
+ },
+ {
+  "key": "doctor-capabilities-golden",
+  "section": "07",
+  "kind": "gate",
+  "items": [
+   "07.16"
+  ],
+  "parent": "omp-orchestrator-jplf.7",
+  "title": "Check in a doctor capabilities golden and fail CI on probe-list drift",
+  "priority": 1
+ },
+ {
+  "key": "upstream-report",
+  "section": "07",
+  "kind": "command",
+  "items": [
+   "07.17"
+  ],
+  "parent": "omp-orchestrator-jplf.7",
+  "title": "Emit class upstream_substrate_issue and ship omp-orchestrator upstream-report",
+  "priority": 2
+ },
+ {
+  "key": "epic-07-installer",
+  "section": "07",
+  "kind": "crate",
+  "parent": "omp-orchestrator-jplf.7",
+  "items": [
+   "07.23"
+  ],
+  "epic_children": [
+   "bootstrap-install-sh",
+   "bootstrap-verify",
+   "proxy-offline",
+   "version-select-idempotent",
+   "operator-setup"
+  ],
+  "title": "plan-07 installer workmanship: complete the Rust installer crate (ipg.13 closed short of the contract)",
+  "priority": 0
+ },
+ {
+  "key": "bootstrap-install-sh",
+  "section": "07",
+  "kind": "crate",
+  "items": [
+   "07.24"
+  ],
+  "parent_key": "epic-07-installer",
+  "title": "Generate the thin bootstrap install.sh as an untracked release artifact, golden-tested (R11 #4)",
+  "priority": 1
+ },
+ {
+  "key": "bootstrap-verify",
+  "section": "07",
+  "kind": "gate",
+  "items": [
+   "07.25"
+  ],
+  "parent_key": "epic-07-installer",
+  "title": "Verify the bootstrap before execution: pinned digest or signature, no unsigned fallback",
+  "priority": 1
+ },
+ {
+  "key": "proxy-offline",
+  "section": "07",
+  "kind": "gate",
+  "items": [
+   "07.26"
+  ],
+  "parent_key": "epic-07-installer",
+  "title": "Honor HTTPS_PROXY/HTTP_PROXY/NO_PROXY, --proxy and --offline on every installer fetch",
+  "priority": 2
+ },
+ {
+  "key": "version-select-idempotent",
+  "section": "07",
+  "kind": "gate",
+  "items": [
+   "07.27"
+  ],
+  "parent_key": "epic-07-installer",
+  "title": "Installer version selection and idempotent repeat-install with fallback reporting",
+  "priority": 2
+ },
+ {
+  "key": "operator-setup",
+  "section": "07",
+  "kind": "wiring",
+  "items": [
+   "07.28"
+  ],
+  "parent_key": "epic-07-installer",
+  "title": "Operator setup: PATH, completions, hook/skill registration, doctor/health entrypoints; SKIPPED never silent",
+  "priority": 2
+ },
+ {
+  "key": "five-machine-pilot",
+  "section": "07",
+  "kind": "measurement",
+  "items": [
+   "07.33"
+  ],
+  "parent": "omp-orchestrator-jplf.7",
+  "terminal": true,
+  "title": "Run the five-person/five-machine pilot and publish the scoreboard receipts",
+  "priority": 1
+ },
+ {
+  "key": "repo-owner-crosscheck",
+  "section": "07",
+  "kind": "gate",
+  "items": [
+   "07.35"
+  ],
+  "parent": "omp-orchestrator-jplf.7",
+  "title": "Installed binary discovers its repo by walking to .git and cross-checks the compiled-in owner declaration",
+  "priority": 1
+ },
+ {
+  "key": "r11-doctrine-record",
+  "section": "07",
+  "kind": "doc-fact",
+  "items": [
+   "07.39"
+  ],
+  "title": "Record the four R11 constraints as repo doctrine with a current receipt each",
+  "priority": 2
+ },
+ {
+  "key": "actions-to-subcommands",
+  "section": "07",
+  "kind": "measurement",
+  "items": [
+   "07.41"
+  ],
+  "title": "Map actions A1-A11 to binary and subcommand; every --help names its guards and timeouts",
+  "priority": 1
+ },
+ {
+  "key": "init-command",
+  "section": "08",
+  "kind": "command",
+  "items": [
+   "08.4"
+  ],
+  "parent": "omp-orchestrator-jplf.7",
+  "title": "Add init --tracker --worker --gates writing .omp-orchestrator/config.toml and work/",
+  "priority": 0
+ },
+ {
+  "key": "verify-run",
+  "section": "08",
+  "kind": "gate",
+  "items": [
+   "08.9"
+  ],
+  "parent": "omp-orchestrator-jplf.7",
+  "title": "verify --run <run_id> [--command] fails closed on missing/mismatched envelope, ledger row or artifact",
+  "priority": 0
+ },
+ {
+  "key": "file-tracker",
+  "section": "08",
+  "kind": "crate",
+  "items": [
+   "08.14"
+  ],
+  "parent": "omp-orchestrator-jplf.7",
+  "title": "Ship the file-backed tracker (--tracker=file, one TOML per unit under .omp-orchestrator/work/)",
+  "priority": 1
+ },
+ {
+  "key": "oneshot-worker",
+  "section": "08",
+  "kind": "crate",
+  "items": [
+   "08.16"
+  ],
+  "parent": "omp-orchestrator-jplf.7",
+  "title": "Build the oneshot worker (TransportKind::OneshotSpawn via subprocess-contract) after recording the transport decision in-bead",
+  "priority": 1
+ },
+ {
+  "key": "dogfood-scorecard",
+  "section": "08",
+  "kind": "measurement",
+  "items": [
+   "08.28"
+  ],
+  "parent": "omp-orchestrator-jplf.7",
+  "title": "Run the internal dogfood scorecard: doctor <=10 min, <=1 intervention/10 ticks, 100% seeded no-evidence closes refused",
+  "priority": 1
+ },
+ {
+  "key": "external-pilot",
+  "section": "08",
+  "kind": "measurement",
+  "items": [
+   "08.29"
+  ],
+  "parent": "omp-orchestrator-jplf.7",
+  "title": "Run the external pilot: 3 clean repos to first tick <=10 min with 0 edits outside .omp-orchestrator/, 1 non-OMP worker",
+  "priority": 1
+ },
+ {
+  "key": "serve-order",
+  "section": "08",
+  "kind": "decision",
+  "decision": true,
+  "owner": "josh",
+  "items": [
+   "08.23"
+  ],
+  "title": "DECISION: adopt the serve order A (solo maintainer) -> B (small team) -> C (fleet operator)",
+  "priority": 2
+ },
+ {
+  "key": "human-seconds-per-close",
+  "section": "09",
+  "kind": "measurement",
+  "items": [
+   "09.20"
+  ],
+  "terminal": true,
+  "title": "Measure human-seconds per closed bead before and after M4 on the same bead mix",
+  "priority": 2
+ },
+ {
+  "key": "close-rate-graph-vs-recency",
+  "section": "09",
+  "kind": "measurement",
+  "items": [
+   "09.21"
+  ],
+  "terminal": true,
+  "title": "Measure close-rate: graph selection vs recency on a fixed bead set",
+  "priority": 2
+ },
+ {
+  "key": "bv-absent-typed-refusal",
+  "section": "09",
+  "kind": "wiring",
+  "items": [
+   "09.10"
+  ],
+  "title": "M2 degradation path: bv absent on the host yields a typed selector refusal, not a hard dependency",
+  "priority": 1
+ },
+ {
+  "key": "sota-preflight-green",
+  "section": "10",
+  "kind": "gate",
+  "items": [
+   "10.11",
+   "12.68"
+  ],
+  "title": "Turn the SOTA preflight green with retained artifacts: rebuild the fh technical manifest, re-run fh suggest + jsm suggest/sweep (raw output + hash)",
+  "priority": 1
+ },
+ {
+  "key": "unwired-lane-both-directions",
+  "section": "10",
+  "kind": "gate",
+  "items": [
+   "10.2"
+  ],
+  "title": "Make UNWIRED_LANE_ALLOWANCE fail in both directions (Gap 2 ADOPT)",
+  "priority": 1
+ },
+ {
+  "key": "lifecycle-journal-writer",
+  "section": "12",
+  "kind": "crate",
+  "items": [
+   "11.1",
+   "12.9"
+  ],
+  "parent": "omp-orchestrator-kxe",
+  "title": "Build the append-only DISPATCH.jsonl packet/lifecycle journal writer (ts, wave, bead, targets[], transport, claim_id, stage_id/from_stage/to_stage)",
+  "priority": 0
+ },
+ {
+  "key": "stage-event-emitters",
+  "section": "11",
+  "kind": "wiring",
+  "items": [
+   "11.13",
+   "11.18",
+   "11.22",
+   "11.35"
+  ],
+  "title": "Wire the per-stage lifecycle-event emit sites: S1 intake decision, S2 FOUNDATION materialization, S3 per round, S7 validation transcript",
+  "priority": 2
+ },
+ {
+  "key": "s1-typed-intake",
+  "section": "11",
+  "kind": "wiring",
+  "items": [
+   "11.10",
+   "11.53",
+   "11.54"
+  ],
+  "title": "S1 typed intake packet: idea/viability template produced by /idea-wizard, /brainstorming, /product-viability-gauntlet and consumed by S2",
+  "priority": 2
+ },
+ {
+  "key": "s1-s2-facet-decisions",
+  "section": "11",
+  "kind": "decision",
+  "decision": true,
+  "owner": "josh",
+  "items": [
+   "11.11",
+   "11.12",
+   "11.14",
+   "11.16",
+   "11.17",
+   "11.19"
+  ],
+  "title": "DECISION: S1/S2 facets - dispatch, reap and grading applicability for inception and planning, or mark n/a",
+  "priority": 3
+ },
+ {
+  "key": "plan-grade-type-k3",
+  "section": "11",
+  "kind": "crate",
+  "items": [
+   "11.23"
+  ],
+  "title": "S3 shared typed plan grade with held-out lens and finding-identity comparison (K3)",
+  "priority": 1
+ },
+ {
+  "key": "validation-runner-k12",
+  "section": "12",
+  "kind": "crate",
+  "items": [
+   "11.45",
+   "11.33",
+   "12.45"
+  ],
+  "parent": "omp-orchestrator-jplf.7",
+  "title": "Build the K12 validation runner: foreign-machine unattended packet/runner template and validation-transcript.json schema with its SCHEMAS.toml row",
+  "priority": 0
+ },
+ {
+  "key": "validate-rows-assertions",
+  "section": "11",
+  "kind": "gate",
+  "items": [
+   "11.51",
+   "11.43"
+  ],
+  "title": "Local assertion legs for the 8 VALIDATE rows (br close/create/init/list/schema/sync/update, bv exit codes) and the two ntm template-omission refusal probes",
+  "priority": 2
+ },
+ {
+  "key": "classify-followup-repair",
+  "section": "11",
+  "kind": "gate",
+  "items": [
+   "11.49"
+  ],
+  "title": "Repair classify_followup false-completion: distinct InProgress; only a read-back CLOSED yields Finished",
+  "priority": 1
+ },
+ {
+  "key": "fanout-wave-primitive",
+  "section": "12",
+  "kind": "crate",
+  "items": [
+   "11.66",
+   "12.35",
+   "12.37"
+  ],
+  "parent": "omp-orchestrator-kxe",
+  "title": "Fan-out/fan-in wave primitive: per-target receipts, partial-wave verdict, prove-or-refuse 1:many with the 3-pane --robot-send and claim-survival falsifiers",
+  "priority": 1
+ },
+ {
+  "key": "per-session-path-keys",
+  "section": "11",
+  "kind": "gate",
+  "items": [
+   "11.65"
+  ],
+  "title": "Per-session state/pending-dispatch path keys with collision refusal",
+  "priority": 2
+ },
+ {
+  "key": "hd-row-k0-k14",
+  "section": "11",
+  "kind": "doc-fact",
+  "items": [
+   "11.74"
+  ],
+  "title": "Record the K0-K14 staging approval (Joshua 2026-09-02) as an HD row in docs/decisions.jsonl",
+  "priority": 1
+ },
+ {
+  "key": "s7-observation-not-completion",
+  "section": "11",
+  "kind": "wiring",
+  "items": [
+   "11.60"
+  ],
+  "title": "S7 facet: bind /vibing-with-ntm observation to the completion consumer - observation is not completion",
+  "priority": 2
+ },
+ {
+  "key": "k14-mining-lane",
+  "section": "12",
+  "kind": "crate",
+  "items": [
+   "11.67",
+   "12.75",
+   "12.76"
+  ],
+  "title": "K14 mining lane: am_mine_skills extractor crate (steps 4-7: falsifier per candidate, candidate skill emit, held-out replay) + per-project skill manifest",
+  "priority": 2
+ },
+ {
+  "key": "inception-writer",
+  "section": "12",
+  "kind": "crate",
+  "items": [
+   "12.12",
+   "12.13"
+  ],
+  "parent": "omp-orchestrator-kxe",
+  "title": "S1 inception-manifest writer emitting .omp-orchestrator/inception.json with the S1 foundation gate (refuse missing/ambiguous identity, missing control-file decision, untrusted instructions)",
+  "priority": 0
+ },
+ {
+  "key": "cold-host-falsifiers",
+  "section": "12",
+  "kind": "measurement",
+  "items": [
+   "12.14",
+   "12.56"
+  ],
+  "parent": "omp-orchestrator-jplf.7",
+  "title": "Clean-host falsifiers: cargo install --locked into a scratch CARGO_HOME, and the S1 command on a fresh repo on a second supported host",
+  "priority": 1
+ },
+ {
+  "key": "duel-cross-scoring",
+  "section": "12",
+  "kind": "measurement",
+  "items": [
+   "12.19"
+  ],
+  "terminal": true,
+  "title": "Run the adversarial cross-scoring of the six duel gaps (each family scores the other 0-1000) and fold the result into the plan",
+  "priority": 3
+ },
+ {
+  "key": "s2-semantic-omission",
+  "section": "12",
+  "kind": "measurement",
+  "items": [
+   "12.27"
+  ],
+  "terminal": true,
+  "title": "S2 semantic-omission experiment: known-good plan plus three mutations (drop a consumer, bare a figure, cost-less stage)",
+  "priority": 2
+ },
+ {
+  "key": "noise-floor-experiment",
+  "section": "12",
+  "kind": "measurement",
+  "items": [
+   "12.30"
+  ],
+  "terminal": true,
+  "title": "Noise-floor experiment: two fresh graders from different families on one clean and one known-dirty fixture, blind",
+  "priority": 2
+ },
+ {
+  "key": "numbers-s5-s7-figures",
+  "section": "12",
+  "kind": "measurement",
+  "items": [
+   "12.36",
+   "12.47"
+  ],
+  "terminal": true,
+  "title": "Register the S5 and S7 figures in NUMBERS.toml on first run (dispatch_journal_rows, unclaimed_dispatches, fanout_partial_waves, validation_transcripts, unattended_window_hours, refusal_classes_escalated)",
+  "priority": 2
+ },
+ {
+  "key": "stop-classifier-map",
+  "section": "12",
+  "kind": "measurement",
+  "items": [
+   "12.50"
+  ],
+  "terminal": true,
+  "title": "Map upstream unexpected-stop-classifier arms against our PaneState/Liveness taxonomy",
+  "priority": 3
+ },
+ {
+  "key": "rollback-transcript",
+  "section": "12",
+  "kind": "crate",
+  "items": [
+   "12.53"
+  ],
+  "parent": "omp-orchestrator-jplf.7",
+  "title": "S8 tested rollback to the prior binary with a rollback transcript (.exit_code==0 and .rollback==true)",
+  "priority": 1
+ },
+ {
+  "key": "s9-ledger-gate",
+  "section": "12",
+  "kind": "gate",
+  "items": [
+   "12.58"
+  ],
+  "title": "S9 decision-ledger gate: refuse a row missing a required field, a supersedes to a nonexistent row, or a passed review_after",
+  "priority": 1
+ },
+ {
+  "key": "s9-binds-stages-consumers",
+  "section": "12",
+  "kind": "wiring",
+  "items": [
+   "12.59",
+   "12.60"
+  ],
+  "title": "S9 binds_stages consumers: packet builder attaches rows, grader refuses without them, per-cycle amortization promotes or expires them",
+  "priority": 2
+ },
+ {
+  "key": "context-injection-scheduled",
+  "section": "12",
+  "kind": "decision",
+  "decision": true,
+  "owner": "josh",
+  "items": [
+   "12.64"
+  ],
+  "terminal": true,
+  "title": "DECISION: treat human context-injection at milestone boundaries as a scheduled loop step, not an interrupt",
+  "priority": 3
+ },
+ {
+  "key": "journey-docfacts",
+  "section": "12",
+  "kind": "doc-fact",
+  "items": [
+   "12.69",
+   "12.80"
+  ],
+  "terminal": true,
+  "title": "12-journey doc-facts: ipg.4 DISPATCH row says 'no coverage document' vs docs/inventories; cursor-continuity prose still asserts the deleted verify_resume_continuity",
+  "priority": 1
+ },
+ {
+  "key": "k14-run-close",
+  "section": "12",
+  "kind": "command",
+  "items": [
+   "12.77"
+  ],
+  "title": "K14.run_close: close-and-publish evidence summary (event chain, bead, grade, validation, ship) refusing close without all five",
+  "priority": 2
+ },
+ {
+  "key": "convergence-role-gate",
+  "section": "12",
+  "kind": "gate",
+  "items": [
+   "12.20"
+  ],
+  "title": "CONVERGENCE.jsonl rows carry role (hillclimb|capability|held_out) and convergence.rs enforces capability_regressed - record the in-tree gate and its known-bad leg",
+  "priority": 1
+ }
+]
