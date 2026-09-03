@@ -97,6 +97,82 @@ One row per tick. A tick without a row did not happen.
 dispatched nor refused scores ZERO regardless of what else it did — which is the Rule Zero test
 applied to the orchestrator instead of to the product.
 
+## Presence — a MISSING row, and why the anchor is not in the ledger
+
+`4wmo` made an INVALID row loud. This makes a MISSING one loud, and neither implies the other:
+
+```
+row present + invalid  ->  4wmo catches it
+row absent             ->  the presence check below
+```
+
+**Measured 2026-09-02:** `.flywheel/orchestration-ticks.jsonl` was absent from disk AND HEAD
+while roughly fifteen ticks ran. By this document's own words — *"a tick without a row did not
+happen"* — no orchestrator tick had ever been recorded, and the six laws were gated against
+fixtures the whole time. The validator checks rows that EXIST; a tick that emitted nothing
+produced no row, no violation, and no signal.
+
+### The writer
+
+`omp-orchestrator` calls `write_tick_receipt` **once, unconditionally, immediately after
+`decide()` and before the decision match**. Every arm of that match returns and several return
+early, so a writer placed inside the arms is a writer the next arm inherits as absent — which is
+exactly the state above. The row is built by `orchestration-tick-gate`'s own `build_receipt`, so
+the crate that validates the shape also produces it, and OC-L1 holds by construction: every
+observed free pane the decision did not name becomes a refusal carrying the decision class.
+
+A figure the tick cannot measure is `null`, never `0`. `observed.dead` is null today because
+`PaneObservation` carries no dead flag, and `not_done` says so in the row.
+
+### The anchor is EXTERNAL, and tick continuity was rejected
+
+`psf7` left this open. A **field cannot detect its own absence**: if the anchor lives in the
+artifact being checked, an artifact that stopped being written has no anchor either, and an empty
+ledger reads exactly like a healthy one.
+
+Tick-number continuity is rejected for the reason the bead itself gave — a restart or a second
+orchestrator legitimately breaks monotonicity, so a continuity check would fire on correct
+behaviour and be disabled within a day. Measured: three of the ledger's eight rows carry
+`tick=1`, because `--once` resets the counter.
+
+The clock used instead is `write_heartbeat`'s ledger
+(`~/.local/state/flywheel/omp-orchestrator.heartbeat.jsonl`), which is written on a **different
+code path** from the row — so suppressing the row writer does not suppress the clock, which is
+what makes a fires-on-known-bad leg possible at all.
+
+```bash
+orchestration-tick-gate --ledger .flywheel/orchestration-ticks.jsonl \
+  --heartbeat ~/.local/state/flywheel/omp-orchestrator.heartbeat.jsonl
+# exit 0 = PRESENT then CLEAN | exit 3 = GAP | exit 2 = the clock itself is unreadable
+```
+
+A gap is a heartbeat row whose `status` is in the declared `TICK_OUTCOME_STATUSES` allowlist and
+whose `ts_unix` is newer than the newest ledger row's `ts`. `CYCLE_STARTED` is deliberately NOT an
+outcome: a cycle that began owes no row yet, and a detector that fires on the healthy path gets
+routed around. An unlisted future outcome **under-reports** rather than manufacturing a gap; that
+direction is chosen and asserted.
+
+An unreadable or empty clock is an ERROR, not a pass. A check that cannot run must not report
+absence of a gap — that is the same silence the whole section removes.
+
+### The division of labour, measured
+
+A tick that ERRORS before `parse_observation` never reaches the writer. Observed tonight on a real
+run: a tick ended `SUPERVISOR_REFUSED` from the outer driver, the ledger stayed at seven rows, and
+`--heartbeat` answered
+`TICK_ROWS_MISSING outcomes_since_last_row=1 newest_outcome=SUPERVISOR_REFUSED`.
+
+That is the design, not a hole in it: such a row would have to **invent** an `observed` block, and
+a fabricated observation in the one artifact whose purpose is auditability is worse than an absent
+row that something else names. **The writer covers every tick that reached a decision; the gap
+detector covers the rest.**
+
+### NOT retro-filled
+
+Ticks before `6bdb0a2` remain UNRECORDED in row 3's `not_done` and are not backfilled. Rows 6-8
+are machine-written by ticks that actually ran on 2026-09-03; rows 1-5 remain the hand-written
+ones, and the split is legible from the timestamps.
+
 ## Non-Coverage
 
 This contract does not decide WHICH bead is next — that is `bv`'s job and `beads-north-star`'s

@@ -15,6 +15,7 @@ use agent_mail_native::journey::{
 };
 use agent_mail_native::{MailClient, MailError};
 use asupersync::process::{Command, Output};
+use orchestration_tick_gate::{append_receipt, build_receipt, PaneDisposition, Receipt};
 use asupersync::runtime::RuntimeBuilder;
 use asupersync::time::{sleep, timeout};
 use asupersync::Cx;
@@ -122,6 +123,35 @@ impl std::fmt::Display for OmpQuickError {
 }
 
 impl std::error::Error for OmpQuickError {}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CloseRequest {
+    bead: String,
+    reason: String,
+}
+
+fn parse_close_readback_args(args: &[String]) -> Result<Option<CloseRequest>, String> {
+    if args.first().map(String::as_str) != Some("close-readback") {
+        return Ok(None);
+    }
+    if args.len() != 4 || args.get(2).map(String::as_str) != Some("--reason") {
+        return Err(
+            "CONFIG_REFUSED close-readback requires BEAD --reason REASON".to_owned(),
+        );
+    }
+    let bead = args[1].trim();
+    if bead.is_empty() {
+        return Err("CONFIG_REFUSED close-readback bead is empty".to_owned());
+    }
+    let reason = args[3].trim();
+    if reason.is_empty() {
+        return Err("CONFIG_REFUSED close-readback reason is empty".to_owned());
+    }
+    Ok(Some(CloseRequest {
+        bead: bead.to_owned(),
+        reason: reason.to_owned(),
+    }))
+}
 
 impl Config {
     fn from_args(args: &[String]) -> Result<Self, String> {
@@ -321,7 +351,7 @@ impl Config {
     }
 }
 fn usage() -> &'static str {
-    "usage: omp-orchestrator [run] [--once|--max-ticks N] [--repo PATH] [--session NAME] [--interval-secs N] [--receiver-agent NAME] [--omp-quick] [--omp-binary PATH]\n       `run` is the explicit resident lifecycle entrypoint (observe -> ready queue -> dispatch -> receiver receipt); the flag-only form is unchanged for launchd"
+    "usage: omp-orchestrator [run] [--once|--max-ticks N] [--repo PATH] [--session NAME] [--interval-secs N] [--receiver-agent NAME] [--omp-quick] [--omp-binary PATH]\n       close-readback BEAD --reason REASON\n       run is the explicit resident lifecycle entrypoint (observe -> ready queue -> dispatch -> receiver receipt); the flag-only form is unchanged for launchd"
 }
 
 fn now_unix() -> u64 {
@@ -1569,6 +1599,77 @@ async fn send_and_verify(
         sleep(cx.now_for_observability(), RECEIPT_POLL).await;
     }
 }
+/// psf7: emit this tick's receipt row into the orchestration ledger.
+///
+/// The row is built by `orchestration-tick-gate`'s own builder rather than assembled here,
+/// so the crate that VALIDATES the shape also produces it. A builder that could emit a row
+/// its sibling validator refuses would put an operator in front of a violation they did not
+/// write and cannot fix, and the observed response to that is deletion.
+///
+/// # `not_done` is populated, and it is the honest part
+///
+/// This row is written BEFORE the decision executes, so it records what was DECIDED. The
+/// bead's NON-GOAL is explicit that presence is not truth: `not_done` names exactly that
+/// boundary rather than leaving a reader to assume the dispatch landed.
+fn write_tick_receipt(
+    config: &Config,
+    tick: u64,
+    observation: &Observation,
+    decision: &SupervisorDecision,
+) -> Result<(), String> {
+    let free: Vec<String> = observation
+        .panes
+        .iter()
+        .filter(|pane| pane.is_free_capacity)
+        .map(|pane| pane.pane_id.clone())
+        .collect();
+    let attention = observation
+        .panes
+        .iter()
+        .filter(|pane| pane.awaits_human)
+        .count() as u64;
+    // NOT MEASURABLE HERE. `PaneObservation` carries pane_id/state/liveness/
+    // is_dispatchable/is_free_capacity/is_working/awaits_human and NO dead flag -- read
+    // from `lib.rs`, not assumed. Emitting 0 would put a fabricated figure in the ledger,
+    // so the row carries `null` and `not_done` says why.
+    let dead: Option<u64> = None;
+
+    // The DECISION's own disposition, and only for a pane the decision actually named.
+    // Everything else falls to the builder's fallback refusal, which carries the decision
+    // class as its reason -- so a refusal always says WHICH decision left the pane alone.
+    let label = decision_label(decision);
+    let dispositions = match decision {
+        SupervisorDecision::Dispatch { pane, .. } => vec![PaneDisposition::Refused {
+            pane: pane.clone(),
+            reason: format!(
+                "decision={label}; selected for dispatch, outcome not yet observed at row time"
+            ),
+        }],
+        _other => Vec::new(),
+    };
+
+    let receipt = build_receipt(&mut Receipt {
+            ts: now_unix() as u64,
+            tick: tick,
+            free_capacity: &free,
+            attention: attention,
+            dead: dead,
+            source: "omp-orchestrator supervisor observation (tick-monitor + br ready)",
+            dispositions: &dispositions,
+            fallback_reason: &format!("decision={label}; this tick did not dispatch to this pane"),
+            claims: vec![serde_json::json!({
+            "figure": format!("free_capacity={} attention={attention} dead={}", free.len(), match dead { Some(count) => count.to_string(), None => "unmeasured".to_owned() }),
+            "command": "./target/debug/omp-orchestrator --once --session <session> (this row's own tick)",
+        })],
+            not_done: vec![
+            serde_json::json!("observed.dead is null: PaneObservation carries no dead flag, so this tick could not measure it"),
+            serde_json::json!("the dispatch OUTCOME: this row is written before the decision executes, so it records what was DECIDED. ack-spine steps and the heartbeat record what happened"),
+        ],
+        });
+    let path = config.repo.join(".flywheel/orchestration-ticks.jsonl");
+    append_receipt(&path, &receipt)
+}
+
 fn write_heartbeat(config: &Config, tick: u64, status: &str, detail: &str) -> Result<(), String> {
     if let Some(parent) = config.heartbeat_ledger.parent() {
         fs::create_dir_all(parent).map_err(|error| {
@@ -2850,6 +2951,29 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     let decision = decide(&observation, &authorization);
     file_supervisor_finding(cx, config, tick, &decision).await?;
 
+    // psf7: THE TICK ROW IS WRITTEN HERE, ONCE, UNCONDITIONALLY, BEFORE THE MATCH.
+    //
+    // Every arm below returns, and several return early. A writer placed inside the arms is
+    // a writer a future arm inherits as ABSENT — which is exactly the state this bead was
+    // filed about: `.flywheel/orchestration-ticks.jsonl` was missing from disk AND HEAD
+    // while roughly fifteen ticks ran, so by the contract's own words no tick had happened.
+    // The first five rows were hand-written afterwards by the same agent that failed to
+    // write the first ten.
+    //
+    // A row here describes the DECISION, not its execution, and says so in `not_done`. That
+    // is the honest split: the dispatch outcome is recorded by the ack-spine steps and the
+    // heartbeat, and a row claiming an outcome it has not yet observed would be a fabricated
+    // one in the single artifact whose purpose is auditability.
+    //
+    // A write failure is NOT fatal to the tick. The row is evidence; refusing to supervise
+    // because evidence could not be filed would trade a silent ledger for a stalled fleet.
+    // It is loud on stderr and recorded in the heartbeat, which is the clock the presence
+    // check reads — so a persistently failing writer surfaces as a GAP, not as nothing.
+    if let Err(error) = write_tick_receipt(config, tick, &observation, &decision) {
+        eprintln!("TICK_ROW_NOT_WRITTEN tick={tick} detail=\"{error}\"");
+        write_heartbeat(config, tick, "TICK_ROW_NOT_WRITTEN", &error)?;
+    }
+
     match decision {
         SupervisorDecision::AwaitingHuman { panes } => {
             // The one refusal a human MUST see, because no amount of looping clears
@@ -3112,6 +3236,25 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     Ok(())
 }
 
+/// A stable label for every decision class, EXHAUSTIVE so a new variant must choose.
+///
+/// Deliberately not `finding_key`, which answers a different question and returns `None` for
+/// `Dispatch` -- a tick row whose reason read `decision=none` would be undiagnosable.
+fn decision_label(decision: &SupervisorDecision) -> &'static str {
+    match decision {
+        SupervisorDecision::AwaitingHuman { .. } => "awaiting-human",
+        SupervisorDecision::Dispatch { .. } => "dispatch",
+        SupervisorDecision::GateUnwired { .. } => "gate-unwired",
+        SupervisorDecision::EscalateIdleIncident { .. } => "idle-incident",
+        SupervisorDecision::MonitorBlind { .. } => "monitor-blind",
+        SupervisorDecision::QueueUnreadable { .. } => "queue-unreadable",
+        SupervisorDecision::WorkspaceUnloaded { .. } => "workspace-unloaded",
+        SupervisorDecision::AuthorizedIdle { .. } => "authorized-idle",
+        SupervisorDecision::QueueEmptyNeedsJosh { .. } => "queue-empty",
+        SupervisorDecision::SupervisedWorking { .. } => "supervised-working",
+    }
+}
+
 fn finding_key(decision: &SupervisorDecision) -> Option<&'static str> {
     match decision {
         SupervisorDecision::AwaitingHuman { .. } => Some("awaiting-human"),
@@ -3238,9 +3381,38 @@ async fn run_supervisor(cx: &Cx, config: Config) -> Result<(), String> {
     }
 }
 
+fn close_readback_exit(outcome: CloseReadback) -> std::process::ExitCode {
+    match outcome {
+        CloseReadback::Closed { status } => {
+            println!("CLOSE_READBACK CLOSED status={status}");
+            std::process::ExitCode::SUCCESS
+        }
+        CloseReadback::PolicyRefused { refusal } => {
+            eprintln!("CLOSE_READBACK POLICY_REFUSED {refusal}");
+            std::process::ExitCode::from(1)
+        }
+        CloseReadback::Unread { detail } => {
+            eprintln!("CLOSE_READBACK UNREAD {detail}");
+            std::process::ExitCode::from(2)
+        }
+    }
+}
+
 fn main() -> std::process::ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
-    let config = match Config::from_args(&args) {
+    let close_request = match parse_close_readback_args(&args) {
+        Ok(request) => request,
+        Err(error) => {
+            eprintln!("{error}");
+            return std::process::ExitCode::from(2);
+        }
+    };
+    let config_args = if close_request.is_some() {
+        Vec::new()
+    } else {
+        args.clone()
+    };
+    let config = match Config::from_args(&config_args) {
         Ok(config) => config,
         Err(error) if error == usage() || error.starts_with("omp-orchestrator ") => {
             println!("{error}");
@@ -3258,6 +3430,23 @@ fn main() -> std::process::ExitCode {
             return std::process::ExitCode::from(1);
         }
     };
+    if let Some(request) = close_request {
+        let outcome = runtime.block_on(async {
+            let cx = Cx::current()
+                .ok_or_else(|| "SUPERVISOR_REFUSED no runtime context".to_owned())?;
+            Ok::<CloseReadback, String>(
+                close_and_read_back(&cx, &config, &request.bead, &request.reason).await,
+            )
+        });
+        return match outcome {
+            Ok(outcome) => close_readback_exit(outcome),
+            Err(error) => {
+                eprintln!("SUPERVISOR_REFUSED {error}");
+                std::process::ExitCode::from(2)
+            }
+        };
+    }
+
     let result = runtime.block_on(async move {
         let cx = Cx::current().ok_or_else(|| "SUPERVISOR_REFUSED no runtime context".to_owned())?;
         if config.omp_quick {
@@ -4685,5 +4874,30 @@ exit 2
             }
             other => panic!("tracker read failure must be unread, got {other:?}"),
         }
+    }
+    #[test]
+    fn close_readback_cli_parses_explicit_bead_and_reason() {
+        let args = [
+            "close-readback".to_owned(),
+            "omp-orchestrator-example".to_owned(),
+            "--reason".to_owned(),
+            "DONE: verified".to_owned(),
+        ];
+        let request = parse_close_readback_args(&args)
+            .expect("well-formed close-readback args")
+            .expect("close-readback request");
+        assert_eq!(request.bead, "omp-orchestrator-example");
+        assert_eq!(request.reason, "DONE: verified");
+    }
+
+    #[test]
+    fn close_readback_cli_refuses_missing_reason() {
+        let args = [
+            "close-readback".to_owned(),
+            "omp-orchestrator-example".to_owned(),
+        ];
+        let error = parse_close_readback_args(&args)
+            .expect_err("a close without an explicit reason must refuse");
+        assert!(error.contains("--reason"), "{error}");
     }
 }

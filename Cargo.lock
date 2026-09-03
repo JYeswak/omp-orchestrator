@@ -1242,6 +1242,7 @@ dependencies = [
  "finding-dispatch",
  "ntm-fleet-monitor",
  "omp-rpc-session",
+ "orchestration-tick-gate",
  "receiver-receipt",
  "serde_json",
  "subprocess-contract",

@@ -7,6 +7,8 @@
 //! wiring concern.
 
 use serde_json::Value;
+use std::fmt;
+use std::io::Write;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -245,4 +247,325 @@ pub fn law_code(error: &str) -> &str {
 #[must_use]
 pub fn default_ledger_path(repo_root: &Path) -> PathBuf {
     repo_root.join(".flywheel/orchestration-ticks.jsonl")
+}
+
+// ---------------------------------------------------------------------------------------
+// psf7 — the WRITER, and the gap detector that makes a MISSING row loud
+// ---------------------------------------------------------------------------------------
+
+/// Heartbeat statuses that mean A TICK REACHED AN OUTCOME and therefore owed a row.
+///
+/// DECLARED, never inferred. A gap detector keyed on "any heartbeat" would fire on
+/// `CYCLE_STARTED` — a cycle that began and was still running owes nothing yet — and a
+/// detector that fires on the healthy path is a detector that gets routed around. Measured
+/// over the newest 4,000 rows of the live ledger 2026-09-02: `CYCLE_STARTED` 1119,
+/// `SUPERVISOR_REFUSED` 482, `DISPATCH_RETRY_BLOCKED` 373, `SUPERVISED_WORKING` 99,
+/// `IDLE_UNAUTHORIZED` 88, `DISPATCH_RESULT_RECORDED` 85, `DISPATCH_CLAIMED` 51.
+///
+/// A status absent from this list contributes NOTHING, which is the honest failure
+/// direction: an unlisted new outcome under-reports the gap rather than manufacturing one.
+/// `gap_status_coverage` names that limit as a test rather than leaving it implied.
+pub const TICK_OUTCOME_STATUSES: &[&str] = &[
+    "AWAITING_HUMAN",
+    "DISPATCH_CLAIMED",
+    "DISPATCH_RESULT_RECORDED",
+    "GATE_UNWIRED",
+    "IDLE_UNAUTHORIZED",
+    "SUPERVISED_WORKING",
+    "SUPERVISOR_REFUSED",
+];
+
+/// A NAMED gap: tick outcomes happened after the newest recorded row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TickGap {
+    /// How many tick-outcome heartbeats are newer than the newest ledger row.
+    pub outcomes_since_last_row: usize,
+    /// The newest such heartbeat's status, so the gap names what went unrecorded.
+    pub newest_status: String,
+    /// Its `ts_unix`.
+    pub newest_ts: u64,
+    /// Its `tick`, which is the orchestrator's own counter and NOT the anchor.
+    pub newest_tick: u64,
+    /// The newest ledger row's `ts`, or `None` when the ledger is empty or absent —
+    /// the case that was previously indistinguishable from a healthy fleet.
+    pub last_row_ts: Option<u64>,
+}
+
+impl fmt::Display for TickGap {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let anchor = match self.last_row_ts {
+            Some(ts) => format!("last_row_ts={ts}"),
+            None => "last_row_ts=NONE (ledger empty or absent)".to_owned(),
+        };
+        write!(
+            formatter,
+            "TICK_ROWS_MISSING outcomes_since_last_row={} {anchor} \
+             newest_outcome={} newest_ts={} newest_tick={} \
+             detail=\"the external heartbeat clock recorded tick outcomes that no ledger row \
+             describes; a tick without a row did not happen\"",
+            self.outcomes_since_last_row, self.newest_status, self.newest_ts, self.newest_tick
+        )
+    }
+}
+
+/// Compare the ledger against an EXTERNAL clock and name any gap.
+///
+/// # Why the anchor is not in the ledger
+///
+/// `psf7` left item 2 open — tick-number continuity, or a timestamp against dispatch
+/// evidence — and flagged the honest answer as possibly needing an external clock. It does.
+/// **A field cannot detect its own absence.** If the anchor lives in the artifact being
+/// checked, an artifact that stopped being written has no anchor either, and an empty ledger
+/// reads exactly like a healthy one. That is the whole defect.
+///
+/// Tick-number continuity is REJECTED for the reason the bead itself gave: a restart or a
+/// second orchestrator legitimately breaks monotonicity, so a continuity check would fire on
+/// correct behaviour and be disabled within a day.
+///
+/// The clock used instead is `write_heartbeat`'s ledger, which is
+/// * written on a DIFFERENT code path from the tick row, so suppressing the row writer does
+///   not suppress the clock — which is exactly what makes a fires-on-known-bad leg possible;
+/// * machine-local and untracked, so this is a RUNTIME check and not a commit-time gate.
+///
+/// Returns `None` when nothing is owed. `heartbeat` rows lacking `status` or `ts_unix` are
+/// skipped explicitly rather than defaulted.
+///
+/// HONEST NOTE on that skip: it is DEFENCE IN DEPTH, not the sole guard, and a mutation
+/// proved it. Replacing the `let Some(ts) = … else { continue }` with `unwrap_or(0)` left
+/// every test GREEN — because `0 <= floor` holds for every floor, so a defaulted row is
+/// skipped by the floor comparison anyway. The earlier comment here claimed the default
+/// would "silently shrink the gap"; that was wrong and is corrected. The explicit form is
+/// kept because it survives a future change to the floor comparison, and
+/// `a_clock_row_without_a_timestamp_contributes_nothing` asserts the OUTCOME rather than
+/// pretending to pin the mechanism.
+#[must_use]
+pub fn detect_gap(ledger: &[Value], heartbeat: &[Value]) -> Option<TickGap> {
+    let last_row_ts = ledger
+        .iter()
+        .filter_map(|row| row.get("ts").and_then(Value::as_u64))
+        .max();
+    let floor = last_row_ts.unwrap_or(0);
+
+    let mut newest: Option<(u64, u64, String)> = None;
+    let mut count = 0usize;
+    for row in heartbeat {
+        let Some(status) = row.get("status").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(ts) = row.get("ts_unix").and_then(Value::as_u64) else {
+            continue;
+        };
+        if ts <= floor || !TICK_OUTCOME_STATUSES.contains(&status) {
+            continue;
+        }
+        count += 1;
+        let tick = row.get("tick").and_then(Value::as_u64).unwrap_or(0);
+        if newest.as_ref().is_none_or(|(seen, _, _)| ts > *seen) {
+            newest = Some((ts, tick, status.to_owned()));
+        }
+    }
+
+    let (newest_ts, newest_tick, newest_status) = newest?;
+    Some(TickGap {
+        outcomes_since_last_row: count,
+        newest_status,
+        newest_ts,
+        newest_tick,
+        last_row_ts,
+    })
+}
+
+/// One pane's disposition in a tick, as the row records it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PaneDisposition {
+    /// Work was sent, naming the bead. `claimed_first` is asserted by OC-L2 and is
+    /// therefore not a caller-supplied boolean here: a builder that let a caller pass
+    /// `false` would emit a row the validator refuses.
+    Dispatched {
+        /// The pane the packet went to.
+        pane: String,
+        /// The bead named in the packet, which MUST already be claimed.
+        bead: String,
+        /// The receipt observed after the send.
+        receipt: String,
+    },
+    /// No work was sent, and the reason is mandatory — OC-L1 refuses a blank one.
+    Refused {
+        /// The pane that was left alone.
+        pane: String,
+        /// Why, in the operator's terms.
+        reason: String,
+    },
+}
+
+/// Build one receipt from what the tick actually observed.
+///
+/// Every free pane appears exactly once by CONSTRUCTION: the builder takes the free set and
+/// the dispositions, and any free pane without a disposition becomes a refusal carrying
+/// `fallback_reason`. That is deliberate — OC-L1 would otherwise be violated by a decision
+/// arm that simply forgot a pane, and a row that fails validation is a row an operator
+/// deletes rather than fixes.
+///
+/// `claims` rows are pass-through and self-reported. Per this bead's NON-GOAL that is the
+/// honesty boundary: `4wmo` checks shape, `detect_gap` checks presence, and neither checks
+/// truth.
+///
+/// # Why a struct and not ten positional arguments
+///
+/// It WAS ten, and clippy said so (`too many arguments (10/7)`). In a ledger writer that is
+/// not a style complaint: `attention` and `dead` are adjacent integers, so a swapped pair
+/// compiles, passes every test, and writes a FABRICATED figure into the one artifact whose
+/// purpose is auditability. Named fields make that swap unspellable.
+pub struct Receipt<'a> {
+    /// Wall clock for the row, in epoch seconds.
+    pub ts: u64,
+    /// The orchestrator's own tick counter. NOT the gap anchor — it resets per process.
+    pub tick: u64,
+    /// Panes observed as free capacity. Every one is named exactly once in the output.
+    pub free_capacity: &'a [String],
+    /// Panes blocked on a human answer.
+    pub attention: u64,
+    /// Dead panes, or `None` when the caller could not measure it. Never coerce to 0.
+    pub dead: Option<u64>,
+    /// What produced the observation, so the row is reproducible.
+    pub source: &'a str,
+    /// What the decision did with the panes it named.
+    pub dispositions: &'a [PaneDisposition],
+    /// The reason attached to any free pane the decision did not name.
+    pub fallback_reason: &'a str,
+    /// Self-reported measured claims, each carrying a producing command (OC-L4).
+    pub claims: Vec<Value>,
+    /// What this row does NOT establish. The honesty boundary, stated in the row.
+    pub not_done: Vec<Value>,
+}
+
+#[must_use]
+pub fn build_receipt(receipt: &mut Receipt<'_>) -> Value {
+    let Receipt {
+        ts,
+        tick,
+        free_capacity,
+        attention,
+        dead,
+        source,
+        dispositions,
+        fallback_reason,
+        claims,
+        not_done,
+    } = receipt;
+    let (ts, tick, attention, dead) = (*ts, *tick, *attention, *dead);
+    let (free_capacity, source, fallback_reason) = (*free_capacity, *source, *fallback_reason);
+    let dispositions: &[PaneDisposition] = dispositions;
+    let claims = std::mem::take(claims);
+    let not_done = std::mem::take(not_done);
+    let mut dispatched = Vec::new();
+    let mut refused = Vec::new();
+    let mut named = BTreeSet::new();
+
+    for disposition in dispositions {
+        match disposition {
+            PaneDisposition::Dispatched {
+                pane,
+                bead,
+                receipt,
+            } => {
+                // A disposition for a pane that was NOT observed free is dropped rather
+                // than emitted: OC-L1 refuses "named but not observed free", and silently
+                // emitting it would make the writer produce an invalid row.
+                if !free_capacity.iter().any(|free| free == pane) {
+                    continue;
+                }
+                if !named.insert(pane.clone()) {
+                    continue;
+                }
+                dispatched.push(serde_json::json!({
+                    "pane": pane,
+                    "bead": bead,
+                    "claimed_first": true,
+                    "receipt": receipt,
+                }));
+            }
+            PaneDisposition::Refused { pane, reason } => {
+                if !free_capacity.iter().any(|free| free == pane) {
+                    continue;
+                }
+                if !named.insert(pane.clone()) {
+                    continue;
+                }
+                let reason = if reason.trim().is_empty() {
+                    fallback_reason
+                } else {
+                    reason.as_str()
+                };
+                refused.push(serde_json::json!({ "pane": pane, "reason": reason }));
+            }
+        }
+    }
+    for pane in free_capacity {
+        if named.insert(pane.clone()) {
+            refused.push(serde_json::json!({ "pane": pane, "reason": fallback_reason }));
+        }
+    }
+
+    serde_json::json!({
+        "ts": ts,
+        "tick": tick,
+        "observed": {
+            "free_capacity": free_capacity,
+            "attention": attention,
+            // `null`, NOT 0, when the caller cannot measure it. A zero here would be a
+            // fabricated figure in the one artifact whose purpose is auditability, and it
+            // is the same class as coercing an UNKNOWN into a negative answer.
+            "dead": match dead { Some(count) => Value::from(count), None => Value::Null },
+            "source": source,
+        },
+        "dispatched": dispatched,
+        "refused": refused,
+        "landed": {},
+        "not_done": not_done,
+        "claims": claims,
+        "destructive": [],
+    })
+}
+
+/// Append one receipt durably: temp file in the SAME directory, fsync, rename.
+///
+/// The same discipline the cursor writer uses, for the same reason — a torn JSONL line is
+/// an invalid row, and an invalid row is what `4wmo` refuses. A crash mid-append must leave
+/// the ledger readable, so the append is: read, extend, write-temp, fsync, rename.
+pub fn append_receipt(path: &Path, receipt: &Value) -> Result<(), String> {
+    let line = serde_json::to_string(receipt)
+        .map_err(|error| format!("TICK_ROW_SERIALIZE_FAILED {error}"))?;
+    if line.contains('\n') {
+        return Err("TICK_ROW_SERIALIZE_FAILED row contains a newline; JSONL requires one physical line".to_owned());
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("TICK_ROW_WRITE_FAILED path={} has no parent", path.display()))?;
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("TICK_ROW_WRITE_FAILED create_parent {error}"))?;
+    let mut body = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(format!("TICK_ROW_WRITE_FAILED read {error}")),
+    };
+    if !body.is_empty() && !body.ends_with('\n') {
+        body.push('\n');
+    }
+    body.push_str(&line);
+    body.push('\n');
+
+    let temp = path.with_extension(format!("jsonl.tmp.{}", std::process::id()));
+    {
+        let mut file = fs::File::create(&temp)
+            .map_err(|error| format!("TICK_ROW_WRITE_FAILED create_temp {error}"))?;
+        file.write_all(body.as_bytes())
+            .map_err(|error| format!("TICK_ROW_WRITE_FAILED write {error}"))?;
+        file.sync_all()
+            .map_err(|error| format!("TICK_ROW_WRITE_FAILED fsync {error}"))?;
+    }
+    fs::rename(&temp, path).map_err(|error| {
+        let _ = fs::remove_file(&temp);
+        format!("TICK_ROW_WRITE_FAILED rename {error}")
+    })
 }

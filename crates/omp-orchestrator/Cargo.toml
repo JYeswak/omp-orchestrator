@@ -22,6 +22,7 @@ path = "src/lib.rs"
 ack-spine = { path = "../ack-spine" }
 ack-stage = { path = "../ack-stage" }
 agent-mail-native = { path = "../agent-mail-native" }
+orchestration-tick-gate = { path = "../orchestration-tick-gate" }
 asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", rev = "fa3c01aec" }
 dispatch-claim-fence = { path = "../dispatch-claim-fence" }
 dispatch-silence-watch = { path = "../dispatch-silence-watch" }
