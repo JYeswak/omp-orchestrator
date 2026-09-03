@@ -62,6 +62,11 @@ pub enum ReceiptReason {
     },
     /// The authoritative br comments read-back has no matching ACK line.
     AckReadbackMissing,
+    /// The ACK line names a pane different from the dispatched pane.
+    AckPaneMismatch {
+        expected: String,
+        got: String,
+    },
     IdleUnchanged,
     PostBecameIdle,
     TimerDidNotReset {
@@ -104,6 +109,9 @@ impl fmt::Display for ReceiptReason {
                 write!(f, "unproven_transport transport={transport}")
             }
             Self::AckReadbackMissing => f.write_str("ack_readback_missing"),
+            Self::AckPaneMismatch { expected, got } => {
+                write!(f, "ACK_PANE_MISMATCH expected={expected} got={got}")
+            }
             Self::IdleUnchanged => f.write_str("idle_unchanged"),
             Self::PostBecameIdle => f.write_str("post_became_idle"),
             Self::TimerDidNotReset {

@@ -195,6 +195,8 @@ pub enum AckReadbackError {
     NotAnArray,
     MissingText(usize),
     WrongTextType(usize),
+    /// The read-back contained zero ACK rows; an empty census is an ERROR.
+    EmptyAckCensus,
 }
 
 impl fmt::Display for AckReadbackError {
@@ -204,10 +206,65 @@ impl fmt::Display for AckReadbackError {
             Self::NotAnArray => f.write_str("comments JSON is not an array"),
             Self::MissingText(index) => write!(f, "comment row {index} has no text"),
             Self::WrongTextType(index) => write!(f, "comment row {index} text is not a string"),
+            Self::EmptyAckCensus => f.write_str("ACK_CENSUS_EMPTY"),
         }
     }
 }
 
+fn ack_token(bead_id: &str) -> &str {
+    bead_id.rsplit('-').next().unwrap_or(bead_id)
+}
+
+fn ack_prefix(bead_id: &str, pane_id: &str) -> String {
+    format!("ACK {} on {pane_id} -- ", ack_token(bead_id))
+}
+
+/// Render the single ACK instruction shared by the parser and receiver packets.
+///
+/// The receiver resolves both the Agent Mail name and `$TMUX_PANE`; the sender
+/// supplies neither value. The output is instruction text, not an executed command.
+#[must_use]
+pub fn ack_instruction(bead_id: &str) -> String {
+    format!(
+        "br comments add {bead_id} --actor \"$(agent name you resolve yourself)\" \"ACK {} on $TMUX_PANE -- agent=<same name> title=$(tmux display-message -p -t \"$TMUX_PANE\" '#{{pane_title}}')\"",
+        ack_token(bead_id)
+    )
+}
+
+/// What the ACK parser learned about one bead/pane read-back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AckReadbackVerdict {
+    /// A strict ACK line matched the expected bead and pane.
+    Matched { comment: String },
+    /// No parseable ACK line was present for this bead.
+    Missing,
+    /// An ACK for this bead named a different pane than the dispatch target.
+    AckPaneMismatch { expected: String, got: String },
+}
+
+impl AckReadbackVerdict {
+    /// A stable label for logs and refusal routing.
+    #[must_use]
+    pub const fn label(&self) -> &'static str {
+        match self {
+            Self::Matched { .. } => "ACK_MATCHED",
+            Self::Missing => "ACK_MISSING",
+            Self::AckPaneMismatch { .. } => "ACK_PANE_MISMATCH",
+        }
+    }
+}
+
+impl fmt::Display for AckReadbackVerdict {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Matched { comment } => write!(f, "ACK_MATCHED comment={comment}"),
+            Self::Missing => f.write_str("ACK_MISSING"),
+            Self::AckPaneMismatch { expected, got } => {
+                write!(f, "ACK_PANE_MISMATCH expected={expected} got={got}")
+            }
+        }
+    }
+}
 impl AckReadback {
     /// Parse `br comments list <id> --json` without trimming comment text.
     pub fn from_comments_json(
@@ -218,6 +275,9 @@ impl AckReadback {
         let value: Value = serde_json::from_slice(bytes)
             .map_err(|error| AckReadbackError::InvalidJson(error.to_string()))?;
         let rows = value.as_array().ok_or(AckReadbackError::NotAnArray)?;
+        if rows.is_empty() {
+            return Err(AckReadbackError::EmptyAckCensus);
+        }
         let mut comments = Vec::with_capacity(rows.len());
         for (index, row) in rows.iter().enumerate() {
             let text = row
@@ -239,13 +299,38 @@ impl AckReadback {
         self.matching_comment_for(&self.bead_id, &self.pane_id)
     }
 
+    /// Classify a read-back ACK against the dispatched bead and pane.
+    pub fn match_verdict_for(&self, bead_id: &str, pane_id: &str) -> AckReadbackVerdict {
+        if self.bead_id != bead_id {
+            return AckReadbackVerdict::Missing;
+        }
+        let prefix = format!("ACK {} on ", ack_token(bead_id));
+        for comment in &self.comments {
+            let Some(rest) = comment.strip_prefix(&prefix) else {
+                continue;
+            };
+            let Some((got, _)) = rest.split_once(" -- ") else {
+                continue;
+            };
+            if got != pane_id {
+                return AckReadbackVerdict::AckPaneMismatch {
+                    expected: pane_id.to_owned(),
+                    got: got.to_owned(),
+                };
+            }
+            return AckReadbackVerdict::Matched {
+                comment: comment.clone(),
+            };
+        }
+        AckReadbackVerdict::Missing
+    }
+
     /// Match only a read-back bound to the stage's bead and pane.
     pub fn matching_comment_for(&self, bead_id: &str, pane_id: &str) -> Option<&str> {
         if self.bead_id != bead_id || self.pane_id != pane_id {
             return None;
         }
-        let token = bead_id.rsplit('-').next().unwrap_or(bead_id);
-        let prefix = format!("ACK {token} on {pane_id} -- ");
+        let prefix = ack_prefix(bead_id, pane_id);
         self.comments
             .iter()
             .find(|comment| comment.starts_with(&prefix))
@@ -273,6 +358,7 @@ pub struct AckStageResult {
     pub delivery: ReceiptVerdict,
     pub transport: TransportReceipt,
     pub ack_comment: Option<String>,
+    pub ack_verdict: AckReadbackVerdict,
 }
 
 impl AckStageResult {
@@ -305,25 +391,36 @@ pub fn assess(input: &AckStageInput) -> AckStageResult {
         }
         (_, receiver) => receiver,
     };
-    let ack_comment = input
+    let ack_verdict = input
         .ack
-        .matching_comment_for(&input.bead_id, &input.pane_id)
-        .map(ToOwned::to_owned);
-    let delivery =
-        if matches!(delivery, ReceiptVerdict::ReceiptConfirmed { .. }) && ack_comment.is_none() {
-            ReceiptVerdict::Indeterminate {
-                pane_id: input.pane_id.clone(),
-                reason: ReceiptReason::AckReadbackMissing,
-            }
-        } else {
-            delivery
-        };
+        .match_verdict_for(&input.bead_id, &input.pane_id);
+    let ack_comment = match &ack_verdict {
+        AckReadbackVerdict::Matched { comment } => Some(comment.clone()),
+        AckReadbackVerdict::Missing | AckReadbackVerdict::AckPaneMismatch { .. } => None,
+    };
+    let delivery = if let AckReadbackVerdict::AckPaneMismatch { expected, got } = &ack_verdict {
+        ReceiptVerdict::Indeterminate {
+            pane_id: expected.clone(),
+            reason: ReceiptReason::AckPaneMismatch {
+                expected: expected.clone(),
+                got: got.clone(),
+            },
+        }
+    } else if matches!(&delivery, ReceiptVerdict::ReceiptConfirmed { .. }) && ack_comment.is_none() {
+        ReceiptVerdict::Indeterminate {
+            pane_id: input.pane_id.clone(),
+            reason: ReceiptReason::AckReadbackMissing,
+        }
+    } else {
+        delivery
+    };
     let action = decide(&delivery, input.attempts_so_far);
     AckStageResult {
         action,
         delivery,
         transport: input.transport.clone(),
         ack_comment,
+        ack_verdict,
     }
 }
 
@@ -687,5 +784,98 @@ mod tests {
         );
         assert_eq!(action.label(), "AWAIT_HUMAN");
         assert!(!action.is_retry());
+    }
+    #[test]
+    fn ack_instruction_is_parser_compatible_and_receiver_derived() {
+        let instruction = ack_instruction("omp-orchestrator-ack-stage-qhl");
+        assert_eq!(
+            instruction,
+            r#"br comments add omp-orchestrator-ack-stage-qhl --actor "$(agent name you resolve yourself)" "ACK qhl on $TMUX_PANE -- agent=<same name> title=$(tmux display-message -p -t "$TMUX_PANE" '#{pane_title}')""#
+        );
+        assert!(!instruction.contains("%1413"));
+        assert!(!instruction.contains("GreenFrog"));
+        assert!(instruction.contains(" -- "));
+        assert!(instruction.contains(r#"-t "$TMUX_PANE" '#{pane_title}'"#));
+    }
+
+    #[test]
+    fn rendered_ack_round_trips_through_matching_comment_for() {
+        let instruction = ack_instruction("omp-orchestrator-ack-stage-qhl")
+            .replace("$(agent name you resolve yourself)", "GreenFrog")
+            .replace("<same name>", "GreenFrog")
+            .replace("$TMUX_PANE", "%1413");
+        assert!(instruction.contains("ACK qhl on %1413 -- agent=GreenFrog"));
+        let rendered_comment = "ACK qhl on %1413 -- agent=GreenFrog title=omp-orchestrator__cod_1";
+        let readback = AckReadback {
+            bead_id: "omp-orchestrator-ack-stage-qhl".into(),
+            pane_id: "%1413".into(),
+            comments: vec![rendered_comment.into()],
+        };
+        assert_eq!(
+            readback.matching_comment_for("omp-orchestrator-ack-stage-qhl", "%1413"),
+            Some(rendered_comment)
+        );
+    }
+
+    #[test]
+    fn dropping_ack_separator_breaks_the_round_trip() {
+        let malformed = "ACK qhl on %1413 agent=GreenFrog title=omp-orchestrator__cod_1";
+        let readback = AckReadback {
+            bead_id: "omp-orchestrator-ack-stage-qhl".into(),
+            pane_id: "%1413".into(),
+            comments: vec![malformed.into()],
+        };
+        assert_eq!(
+            readback.matching_comment_for("omp-orchestrator-ack-stage-qhl", "%1413"),
+            None,
+            "the parser and instruction must share the required separator"
+        );
+    }
+
+    #[test]
+    fn mismatched_ack_pane_is_a_typed_refusal() {
+        let readback = ack(&["ACK qhl on %1414 -- agent=Other title=wrong-pane"]);
+        assert_eq!(
+            readback.match_verdict_for("omp-orchestrator-ack-stage-qhl", "%1413"),
+            AckReadbackVerdict::AckPaneMismatch {
+                expected: "%1413".into(),
+                got: "%1414".into(),
+            }
+        );
+        let result = assess(&AckStageInput {
+            bead_id: "omp-orchestrator-ack-stage-qhl".into(),
+            pane_id: "%1413".into(),
+            transport: ntm(),
+            pre_send: idle(),
+            post_send: PostSendObservation::Present(working()),
+            ack: readback,
+            attempts_so_far: 0,
+        });
+        assert_eq!(
+            result.ack_verdict,
+            AckReadbackVerdict::AckPaneMismatch {
+                expected: "%1413".into(),
+                got: "%1414".into(),
+            }
+        );
+        assert!(matches!(
+            result.delivery,
+            ReceiptVerdict::Indeterminate {
+                reason: ReceiptReason::AckPaneMismatch { .. },
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn an_empty_ack_census_is_an_error() {
+        let error = AckReadback::from_comments_json(
+            "omp-orchestrator-ack-stage-qhl",
+            "%1413",
+            br#"[]"#,
+        )
+        .expect_err("zero ACK rows must be loud");
+        assert_eq!(error, AckReadbackError::EmptyAckCensus);
+        assert!(error.to_string().contains("ACK_CENSUS_EMPTY"));
     }
 }
