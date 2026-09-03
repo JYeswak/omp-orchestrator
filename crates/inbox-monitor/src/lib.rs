@@ -471,7 +471,7 @@ pub struct Event {
 /// Unknown keys are tolerated on purpose — a future `am` adding a field must not turn this
 /// monitor blind. A MISSING key is the hard error, because that is the direction that
 /// fabricates data.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EventPage {
     /// The events in this page, oldest first.
     pub events: Vec<Event>,
@@ -479,10 +479,107 @@ pub struct EventPage {
     pub has_more: bool,
     /// The cursor to pass as `--after` on the next call.
     pub next_cursor: u64,
-    /// The oldest cursor the durable feed can still replay from.
-    pub oldest_available_cursor: u64,
+    /// The oldest cursor the durable feed can still replay from, or `None` when this
+    /// recipient has NO retained events at all.
+    ///
+    /// # MEASURED, 2026-09-03: the key is present and EXPLICITLY NULL for a fresh recipient
+    ///
+    /// ```text
+    /// am inbox-events --agent SwiftBeacon --limit 200 --json   (registered seconds earlier)
+    /// -> {"events":[],"next_cursor":0,"has_more":false,
+    ///     "oldest_available_cursor":null,"tail_cursor":0}
+    /// ```
+    ///
+    /// This field was `u64` and the page therefore FAILED TO PARSE, which the binary
+    /// reported as `UNREACHABLE [indeterminate] — invalid type: null, expected u64`. Every
+    /// newly registered agent was in that state until its first delivery: a monitor
+    /// announcing that it could not observe Agent Mail, about a daemon that answered
+    /// correctly. That is a FALSE RESTRICTIVE, and an over-strict gate is worse than none
+    /// because it gets routed around.
+    ///
+    /// `None` is therefore a first-class measured value, not a defaulted absence, and
+    /// [`classify`] treats it as "there is no floor to be below" — see the guard there.
+    pub oldest_available_cursor: Option<u64>,
     /// The current durable tail.
     pub tail_cursor: u64,
+}
+
+impl EventPage {
+    /// The delivery position this page PROVES, or `None` when it proves none.
+    ///
+    /// # The measured defect this exists to prevent
+    ///
+    /// A recipient with no retained events answers `next_cursor: 0` beside
+    /// `oldest_available_cursor: null`. Zero is not a position in this feed — every real
+    /// cursor measured is `>= 1` (2058, 5741, 6016) — it is the ABSENCE of one, wearing an
+    /// integer.
+    ///
+    /// Persisting it is how a fresh recipient's very FIRST message becomes a cursor fault.
+    /// Measured end to end, 2026-09-03, on an agent registered minutes earlier:
+    ///
+    /// ```text
+    /// t0  inbox-monitor --agent SwiftBeacon        -> clear,  next_cursor 0, cursor file := 0
+    /// t1  am mail send --to SwiftBeacon (id 41433) -> first delivery lands at cursor 6016
+    /// t2  inbox-monitor --watch                    -> CURSOR BELOW FLOOR (exit 15):
+    ///                                                 persisted 0 < oldest_available 6016
+    /// ```
+    ///
+    /// The verdict was correct about its own inputs and useless to its reader: the watch
+    /// woke on the right event, 10 s after arming, and then reported a state fault instead
+    /// of MAIL WAITING. Every newly registered agent's first message would have done this.
+    /// An over-strict guard that fires on the known-good path is worse than no guard,
+    /// because it is the one that gets routed around.
+    ///
+    /// The repair is upstream of the guard, not inside it: never persist a position the feed
+    /// did not have. `None` here leaves the cursor file absent, and an absent cursor is the
+    /// BASELINE [`classify`] already treats as neither ahead of the tail nor below the floor.
+    #[must_use]
+    pub fn provable_position(&self) -> Option<u64> {
+        // Two conditions, and they are one fact seen from both ends: an empty feed has no
+        // floor AND no next position. Either alone is enough to refuse, and requiring both
+        // to be present is what makes a future `am` that reports only one of them safe.
+        if self.oldest_available_cursor.is_none() || self.next_cursor == 0 {
+            None
+        } else {
+            Some(self.next_cursor)
+        }
+    }
+}
+
+/// The wire shape, before the one nullable field is interpreted.
+///
+/// `Option<Option<u64>>` is the double-option, and it is here for one reason: it keeps BOTH
+/// halves of the contract above. A key that is ABSENT deserializes to the outer `None` and
+/// is refused as a hard error; a key that is present and `null` deserializes to `Some(None)`
+/// and is the measured empty-feed state. A plain `Option<u64>` would have collapsed those
+/// two into each other, quietly re-admitting the missing-key fabrication this struct's doc
+/// forbids.
+///
+/// `deserialize_with` is REQUIRED and is not decoration: `#[serde(default)]` alone does not
+/// produce this behaviour. Derived `Option<T>` maps an explicit `null` straight to `None` at
+/// the outer level, so the first attempt at this fix reported
+/// `missing field \`oldest_available_cursor\`` about a payload that carried the key — the
+/// same false restrictive in a new costume, caught by running the binary against the live
+/// daemon rather than by reasoning about serde. [`double_option`] forces the inner
+/// `Option<u64>` to absorb the null so only true absence reaches the outer layer.
+#[derive(Deserialize)]
+struct EventPageWire {
+    events: Vec<Event>,
+    has_more: bool,
+    next_cursor: u64,
+    #[serde(default, deserialize_with = "double_option")]
+    oldest_available_cursor: Option<Option<u64>>,
+    tail_cursor: u64,
+}
+
+/// Deserialize a present-but-nullable field into `Some(inner)`, leaving the outer `None` to
+/// mean "the key was absent" — which `#[serde(default)]` supplies and nothing else can.
+fn double_option<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
 }
 
 /// A typed parse failure. Never silently a default.
@@ -504,9 +601,21 @@ impl std::error::Error for ParseError {}
 
 /// Parse `am inbox-events --json` output.
 pub fn parse_event_page(json: &str) -> Result<EventPage, ParseError> {
-    serde_json::from_str(json).map_err(|error| ParseError {
+    let wire: EventPageWire = serde_json::from_str(json).map_err(|error| ParseError {
         what: "am inbox-events",
         detail: error.to_string(),
+    })?;
+    // ABSENT is still fatal. Only an explicit null is a value.
+    let oldest_available_cursor = wire.oldest_available_cursor.ok_or_else(|| ParseError {
+        what: "am inbox-events",
+        detail: "missing field `oldest_available_cursor`".to_string(),
+    })?;
+    Ok(EventPage {
+        events: wire.events,
+        has_more: wire.has_more,
+        next_cursor: wire.next_cursor,
+        oldest_available_cursor,
+        tail_cursor: wire.tail_cursor,
     })
 }
 
@@ -720,12 +829,23 @@ pub fn classify(
 
         // Strictly below this recipient's oldest retained event. Equal to the floor is a
         // legitimate full replay, so the comparison is `<` and never `<=`.
-        if persisted < page.oldest_available_cursor {
-            return MonitorVerdict::CursorBelowFloor {
-                persisted,
-                oldest_available: page.oldest_available_cursor,
-                tail: page.tail_cursor,
-            };
+        //
+        // A `None` floor is NOT a fault and must never be coerced into one. It means the
+        // recipient has no retained events at all (measured: `oldest_available_cursor: null`
+        // beside `tail_cursor: 0` and `events: []` for an agent registered seconds earlier),
+        // so there is no position a stored cursor could be below — the set of positions the
+        // guard compares against is empty. Reaching here with a `Some(persisted)` over an
+        // empty feed also means `persisted <= tail_cursor == 0`, which the regression guard
+        // above already accepted, so the only stored value that survives to this point is 0
+        // itself. Nothing to refuse.
+        if let Some(floor) = page.oldest_available_cursor {
+            if persisted < floor {
+                return MonitorVerdict::CursorBelowFloor {
+                    persisted,
+                    oldest_available: floor,
+                    tail: page.tail_cursor,
+                };
+            }
         }
     }
 
@@ -753,6 +873,264 @@ pub fn classify(
     }
 
     MonitorVerdict::Clear
+}
+
+// ---------------------------------------------------------------------------------------
+// The blocking watch — the wake this crate exists to provide
+// ---------------------------------------------------------------------------------------
+
+/// `WatchTimedOut` — a bounded wake was asked for and the bound elapsed with NO arrival.
+///
+/// A SIXTH distinct number, and the reason it is not [`EXIT_CLEAR`] is the whole point of
+/// the mode. A one-shot run that reads both surfaces and finds nothing owed has answered
+/// its question: "is anything waiting right now?" — no. That is a legitimate zero and it
+/// exits 0. A `--watch` run asks a DIFFERENT question: "block until something arrives."
+/// When its ceiling elapses, that question was never answered. Nothing arrived *within the
+/// window we were willing to wait*, which is not the same claim as "the mailbox is empty"
+/// and is emphatically not success.
+///
+/// The concrete supervisor shape this protects: `inbox-monitor --watch && drain_mail`. With
+/// a clean timeout exiting 0, that composition runs `drain_mail` every time the wake DOESN'T
+/// fire — the exact inversion. And a supervisor that loops on 17 to re-arm the wait can do
+/// so without ever confusing it with 13, which says the monitor could not look at all.
+///
+/// **A timeout is not a verdict.** 17 carries no claim about the mailbox beyond "no arrival
+/// was observed inside the bound, and every poll in that bound could see".
+pub const EXIT_WATCH_TIMED_OUT: u8 = 17;
+
+/// How many CONSECUTIVE unobservable polls establish blindness in a watch.
+///
+/// Not 1, and not "never". At 1, a single transient refusal — a daemon restart, one dropped
+/// connection — aborts a five-minute wake, and an operator whose wake dies on every daemon
+/// blip stops using the wake. At "never", a permanently dead daemon is indistinguishable
+/// from a quiet mailbox for the whole window, which is the "quietest when blindest" defect
+/// this crate was built to remove. Three consecutive failures at the poll cadence is a
+/// condition, not a blip, and it is reported through the SAME
+/// [`MonitorVerdict::Unreachable`] the one-shot uses, so the exit code and the remedy line
+/// are identical whichever mode found it.
+pub const WATCH_BLIND_STREAK: u32 = 3;
+
+/// What one poll of a watch decided about whether to keep waiting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WatchStep {
+    /// Report this poll's verdict now and stop waiting.
+    Stop,
+    /// Keep waiting. `consecutive_blind` is the updated unobservable streak, which the
+    /// caller must carry into the next call — it is the state this decision is made against.
+    Wait {
+        /// Unobservable polls in a row, as of this poll. Zero after any successful read.
+        consecutive_blind: u32,
+    },
+}
+
+/// Decide, for one poll of a watch, whether the wait is over.
+///
+/// Pure and exhaustive over [`MonitorVerdict`], so the watch loop's whole policy is
+/// testable with no daemon, no clock, and no subprocess. The wildcard that a `_ =>` arm
+/// would introduce is exactly what must not exist here: a newly added verdict silently
+/// inheriting "keep waiting" would make a future loud fact invisible for the whole window.
+///
+/// * [`MonitorVerdict::Clear`] — the ONLY verdict that keeps a watch waiting, and it resets
+///   the blind streak: a poll that read both surfaces is proof the monitor can see.
+/// * [`MonitorVerdict::MailWaiting`] — the wake. Stop.
+/// * [`MonitorVerdict::CursorRegressed`] / [`MonitorVerdict::CursorBelowFloor`] /
+///   [`MonitorVerdict::AuthoritiesDisagree`] — loud facts that polling harder cannot
+///   resolve. Each would simply repeat on every remaining poll, so continuing would spend
+///   the whole window re-deriving a conclusion already reached. Stop.
+/// * [`MonitorVerdict::Unreachable`] — tolerate up to `blind_streak_limit - 1` in a row,
+///   then stop. See [`WATCH_BLIND_STREAK`].
+#[must_use]
+pub fn watch_step(
+    verdict: &MonitorVerdict,
+    consecutive_blind: u32,
+    blind_streak_limit: u32,
+) -> WatchStep {
+    match verdict {
+        MonitorVerdict::Clear => WatchStep::Wait {
+            consecutive_blind: 0,
+        },
+        MonitorVerdict::MailWaiting { .. }
+        | MonitorVerdict::CursorRegressed { .. }
+        | MonitorVerdict::CursorBelowFloor { .. }
+        | MonitorVerdict::AuthoritiesDisagree { .. } => WatchStep::Stop,
+        MonitorVerdict::Unreachable { .. } => {
+            let streak = consecutive_blind.saturating_add(1);
+            // `.max(1)` so a caller passing 0 cannot build a watch that tolerates blindness
+            // forever — the degenerate limit collapses to "stop on the first blind poll",
+            // which is restrictive, rather than to "never stop", which is silent.
+            if streak >= blind_streak_limit.max(1) {
+                WatchStep::Stop
+            } else {
+                WatchStep::Wait {
+                    consecutive_blind: streak,
+                }
+            }
+        }
+    }
+}
+
+/// How a bounded watch ended.
+///
+/// Three terminals, and the split between the last two is the one that matters: a bound
+/// that elapsed while the monitor COULD see is a different fact from a bound that elapsed
+/// while it could not, and folding them together would let a dead daemon masquerade as a
+/// quiet mailbox for exactly as long as the operator was willing to wait.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WatchOutcome {
+    /// A poll produced a verdict the operator must answer, inside the bound. Carries it
+    /// verbatim, so a watch and a one-shot report the SAME verdict with the SAME code.
+    Settled {
+        /// The verdict that ended the wait.
+        verdict: MonitorVerdict,
+        /// How many polls it took, so a wake's latency is readable from the artifact.
+        polls: u32,
+        /// Seconds from the first poll to the settling one.
+        waited_secs: u64,
+    },
+    /// The bound elapsed, every poll was REACHABLE, and every one said `Clear`.
+    ///
+    /// The legitimate zero of a watch — and still NOT [`MonitorVerdict::Clear`]. See
+    /// [`EXIT_WATCH_TIMED_OUT`].
+    TimedOut {
+        /// Polls completed inside the bound. Zero would mean the bound was shorter than one
+        /// read, which is a caller error and is reported as such rather than as a quiet pass.
+        polls: u32,
+        /// Seconds actually waited.
+        waited_secs: u64,
+        /// The ceiling the caller asked for, beside what was actually spent.
+        bound_secs: u64,
+    },
+    /// The bound elapsed with the TRAILING polls unobservable — blind, but never for
+    /// [`WATCH_BLIND_STREAK`] in a row, so the streak rule never fired.
+    ///
+    /// This is the shape that would otherwise be reported as a clean timeout, and it is the
+    /// one that must not be: the window ended without a wake AND the last thing the monitor
+    /// knew was that it could not see. It exits [`EXIT_UNREACHABLE`], identically to a
+    /// one-shot that could not look, because that is the same fact.
+    TimedOutBlind {
+        /// The last unobservable verdict, so the remedy line is the specific one.
+        verdict: MonitorVerdict,
+        /// Polls completed inside the bound.
+        polls: u32,
+        /// Seconds actually waited.
+        waited_secs: u64,
+        /// The ceiling the caller asked for.
+        bound_secs: u64,
+        /// How many unobservable polls the window ended on.
+        trailing_blind: u32,
+    },
+}
+
+impl WatchOutcome {
+    /// The process exit code. The ONLY place a watch terminal becomes an integer.
+    #[must_use]
+    pub fn exit_code(&self) -> u8 {
+        match self {
+            // Identical to the one-shot's code for the same verdict — a wake that found mail
+            // and a poll that found mail are the same fact and must not differ by mode.
+            WatchOutcome::Settled { verdict, .. } => verdict.exit_code(),
+            WatchOutcome::TimedOut { .. } => EXIT_WATCH_TIMED_OUT,
+            WatchOutcome::TimedOutBlind { .. } => EXIT_UNREACHABLE,
+        }
+    }
+
+    /// The stable machine label for the watch TERMINAL, emitted beside the verdict label.
+    #[must_use]
+    pub fn label(&self) -> &'static str {
+        match self {
+            WatchOutcome::Settled { .. } => "watch_settled",
+            WatchOutcome::TimedOut { .. } => "watch_timed_out",
+            WatchOutcome::TimedOutBlind { .. } => "watch_timed_out_blind",
+        }
+    }
+
+    /// The label that goes in the row's `verdict` field.
+    ///
+    /// A clean timeout deliberately does NOT report `clear` here. The row is the artifact an
+    /// operator greps months later, and `verdict: "clear"` on a run that was asked to block
+    /// for a wake is a false negative written to disk.
+    #[must_use]
+    pub fn verdict_label(&self) -> &'static str {
+        match self {
+            WatchOutcome::Settled { verdict, .. } | WatchOutcome::TimedOutBlind { verdict, .. } => {
+                verdict.label()
+            }
+            WatchOutcome::TimedOut { .. } => "watch_timed_out",
+        }
+    }
+
+    /// The verdict that ended the wait, when a poll produced one.
+    #[must_use]
+    pub fn verdict(&self) -> Option<&MonitorVerdict> {
+        match self {
+            WatchOutcome::Settled { verdict, .. } | WatchOutcome::TimedOutBlind { verdict, .. } => {
+                Some(verdict)
+            }
+            WatchOutcome::TimedOut { .. } => None,
+        }
+    }
+
+    /// May a run ending in this watch terminal advance the persisted cursor?
+    ///
+    /// Positive and exhaustive, for the same reason [`MonitorVerdict::advances_cursor`] is.
+    #[must_use]
+    pub fn advances_cursor(&self) -> bool {
+        match self {
+            WatchOutcome::Settled { verdict, .. } => verdict.advances_cursor(),
+            // Every poll read both surfaces and every one was clear, so the position is as
+            // proven as any one-shot `Clear`.
+            WatchOutcome::TimedOut { .. } => true,
+            // The window ended blind. Advancing here would move the cursor past events no
+            // successful read ever saw.
+            WatchOutcome::TimedOutBlind { .. } => false,
+        }
+    }
+
+    /// The line a human reads.
+    #[must_use]
+    pub fn human_line(&self) -> String {
+        match self {
+            WatchOutcome::Settled {
+                verdict,
+                polls,
+                waited_secs,
+            } => format!(
+                "{} [watch settled after {polls} poll(s), {waited_secs}s]",
+                verdict.human_line()
+            ),
+            WatchOutcome::TimedOut {
+                polls,
+                waited_secs,
+                bound_secs,
+            } => format!(
+                "inbox-monitor: WATCH TIMED OUT — no arrival in {waited_secs}s of a \
+                 {bound_secs}s bound across {polls} reachable poll(s). This is NOT 'the \
+                 inbox is empty' (that is exit {EXIT_CLEAR}, from a one-shot run) and NOT \
+                 'could not look' (exit {EXIT_UNREACHABLE}). The wake did not fire inside \
+                 the window; re-arm the wait or raise --timeout"
+            ),
+            WatchOutcome::TimedOutBlind {
+                verdict,
+                polls,
+                waited_secs,
+                bound_secs,
+                trailing_blind,
+            } => format!(
+                "inbox-monitor: WATCH ENDED BLIND — the {bound_secs}s bound elapsed after \
+                 {waited_secs}s and {polls} poll(s), and the last {trailing_blind} could not \
+                 observe. NOT a clean timeout: no wake fired AND the monitor was blind when \
+                 the window closed, so nothing may be concluded about the mailbox. \
+                 Underlying: {}",
+                verdict.human_line()
+            ),
+        }
+    }
+}
+
+impl fmt::Display for WatchOutcome {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.label())
+    }
 }
 
 // ---------------------------------------------------------------------------------------

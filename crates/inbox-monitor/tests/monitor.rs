@@ -16,14 +16,26 @@
 //! attack-only suite ships an over-strict gate, and an over-strict gate gets routed around.
 
 use inbox_monitor::{
-    DaemonArm, UnreachableReason,
     classify, cursor_path_in, iso8601_utc, ledger_path_in, parse_event_page, parse_inbox_rows,
-    read_cursor, resolve_pane, state_dir_in, unread, write_cursor_atomic, ConfigError, InboxRow,
-    MonitorVerdict, EXIT_CLEAR, EXIT_CURSOR_BELOW_FLOOR, EXIT_CURSOR_REGRESSED, EXIT_MAIL_WAITING,
-    EXIT_UNREACHABLE,
+    read_cursor, resolve_pane, state_dir_in, unread, watch_step, write_cursor_atomic, ConfigError,
+    DaemonArm, EventPage, InboxRow, MonitorVerdict, UnreachableReason, WatchOutcome, WatchStep,
+    EXIT_AUTHORITIES_DISAGREE, EXIT_CLEAR, EXIT_CURSOR_BELOW_FLOOR, EXIT_CURSOR_REGRESSED,
+    EXIT_MAIL_WAITING, EXIT_UNREACHABLE, EXIT_WATCH_TIMED_OUT, WATCH_BLIND_STREAK,
 };
 use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex};
+
+/// The floor a fixture page carries, asserted present.
+///
+/// `oldest_available_cursor` became `Option<u64>` when a live measurement showed the daemon
+/// answers `null` for a recipient with no retained events. Every fixture here is a page from
+/// a recipient that HAS events, so `None` in these tests would mean the fixture stopped
+/// describing the surface — which is a test bug, and `expect` says so rather than letting the
+/// assertion pass against a defaulted zero.
+fn floor_of(page: &EventPage) -> u64 {
+    page.oldest_available_cursor
+        .expect("every fixture page in this suite is from a recipient WITH retained events")
+}
 
 // ---------------------------------------------------------------------------------------
 // Fixtures — the REAL key sets, taken from the shared contract and confirmed live against
@@ -180,7 +192,7 @@ fn item2_cursor_durability_no_replay_and_no_gap() {
         "a resume cursor beyond the tail would silently skip events"
     );
     assert!(
-        after_restart >= page.oldest_available_cursor,
+        after_restart >= floor_of(&page),
         "a resume cursor below the oldest retained cursor means the feed has already \
          discarded events we never saw"
     );
@@ -411,7 +423,7 @@ fn a_cursor_ahead_of_the_tail_is_a_regression_not_a_clear_run() {
     );
     // KNOWN GOOD: behind the tail is an ordinary resume.
     assert_eq!(
-        classify(&page, &[], Some(page.oldest_available_cursor), DaemonArm::NotConsulted),
+        classify(&page, &[], Some(floor_of(&page)), DaemonArm::NotConsulted),
         MonitorVerdict::Clear
     );
     // KNOWN GOOD: never positioned is not a regression.
@@ -484,7 +496,7 @@ fn snowy_canyon_page() -> inbox_monitor::EventPage {
 fn a_cursor_below_the_recipient_floor_is_blindness_not_a_clear_run() {
     let page = snowy_canyon_page();
     // Instrument check before the claim: the fixture really does carry the measured floor.
-    assert_eq!(page.oldest_available_cursor, 5147);
+    assert_eq!(floor_of(&page), 5147);
     assert_eq!(page.tail_cursor, 5165);
     assert!(page.events.is_empty());
 
@@ -590,7 +602,7 @@ fn a_first_run_with_no_persisted_cursor_is_a_baseline_not_below_floor() {
     // FIRES-ON-KNOWN-BAD control, so the leg above is not passing because the comparison is
     // dead: the SAME page with a stored position one below the floor does fault.
     assert!(matches!(
-        classify(&page, &[], Some(page.oldest_available_cursor - 1), DaemonArm::NotConsulted),
+        classify(&page, &[], Some(floor_of(&page) - 1), DaemonArm::NotConsulted),
         MonitorVerdict::CursorBelowFloor { .. }
     ));
 }
@@ -619,7 +631,7 @@ fn a_cursor_inside_the_window_still_reports_mail_or_clear_normally() {
     // BOUNDARY, and it is the one that decides `<` versus `<=`: exactly AT the floor is a
     // legitimate full replay of everything retained, not a fault.
     assert_eq!(
-        classify(&page, &[], Some(page.oldest_available_cursor), DaemonArm::NotConsulted),
+        classify(&page, &[], Some(floor_of(&page)), DaemonArm::NotConsulted),
         MonitorVerdict::Clear,
         "equal to the floor is a full replay, so the comparison must be strict"
     );
@@ -631,7 +643,7 @@ fn a_cursor_inside_the_window_still_reports_mail_or_clear_normally() {
     // And the fault is still one step away in each direction, so neither boundary is passing
     // because the checks are dead.
     assert!(matches!(
-        classify(&page, &[], Some(page.oldest_available_cursor - 1), DaemonArm::NotConsulted),
+        classify(&page, &[], Some(floor_of(&page) - 1), DaemonArm::NotConsulted),
         MonitorVerdict::CursorBelowFloor { .. }
     ));
     assert!(matches!(
@@ -651,7 +663,7 @@ fn a_missing_json_key_is_a_parse_error_not_a_default() {
     let good = parse_event_page(EVENT_PAGE_JSON).expect("the complete contract payload must parse");
     assert_eq!(good.next_cursor, 5059);
     assert_eq!(good.tail_cursor, 5059);
-    assert_eq!(good.oldest_available_cursor, 2058);
+    assert_eq!(floor_of(&good), 2058);
     assert!(good.has_more);
     assert_eq!(good.events.len(), 1);
     let event = &good.events[0];
@@ -1056,7 +1068,7 @@ fn y256_a_cursor_fault_still_outranks_a_disagreement() {
     let below = classify(
         &page,
         &cli,
-        Some(page.oldest_available_cursor - 1),
+        Some(floor_of(&page) - 1),
         DaemonArm::Unread(999),
     );
     assert!(
@@ -1150,4 +1162,302 @@ fn y256_the_beads_own_premise_was_a_consuming_read() {
     assert_ne!(MEASURED_DAEMON_UNREAD, MEASURED_CLI_UNREAD);
     // 32 read + 96 unread = 128 total: the arithmetic the non-mutating read returned.
     assert_eq!(32 + MEASURED_DAEMON_UNREAD, 128);
+}
+
+// ---------------------------------------------------------------------------------------
+// The blocking watch — the wake, and the two ways a bound can elapse
+// ---------------------------------------------------------------------------------------
+
+/// The MEASURED payload for a recipient with no retained delivery events, byte for byte from
+/// `am inbox-events --agent SwiftBeacon --limit 200 --json` on 2026-09-03, seconds after that
+/// agent was registered.
+///
+/// This exact body used to make the binary print
+/// `UNREACHABLE [indeterminate] — invalid type: null, expected u64`, which is a monitor
+/// announcing it cannot see about a daemon that answered correctly.
+const EMPTY_FEED_JSON: &str = r#"{
+  "events": [],
+  "next_cursor": 0,
+  "has_more": false,
+  "oldest_available_cursor": null,
+  "tail_cursor": 0
+}"#;
+
+#[test]
+fn a_fresh_recipients_empty_feed_parses_and_proves_no_position() {
+    let page = parse_event_page(EMPTY_FEED_JSON).expect(
+        "an explicitly-null oldest_available_cursor is the MEASURED empty-feed shape and must \
+         parse; refusing it reports UNREACHABLE about a healthy daemon",
+    );
+    assert!(page.events.is_empty());
+    assert!(!page.has_more);
+    assert_eq!(page.next_cursor, 0);
+    assert_eq!(page.tail_cursor, 0);
+    assert_eq!(
+        page.oldest_available_cursor, None,
+        "null must survive as None, not become a zero floor"
+    );
+
+    // The whole point of the type change: no position is proven, so nothing is persisted.
+    assert_eq!(
+        page.provable_position(),
+        None,
+        "next_cursor 0 over an empty feed is the ABSENCE of a position; persisting it is what \
+         turned a fresh recipient's first message into CURSOR BELOW FLOOR"
+    );
+
+    // KNOWN GOOD, so the predicate is not vacuously None everywhere: a page from a recipient
+    // that HAS events proves its next position.
+    let populated = parse_event_page(EVENT_PAGE_JSON).expect("the measured page must parse");
+    assert_eq!(populated.provable_position(), Some(populated.next_cursor));
+    assert_eq!(populated.provable_position(), Some(5059));
+
+    // FIRES ON KNOWN BAD: an ABSENT key is still fatal. The double-option exists so that
+    // tolerating an explicit null did not re-admit the missing-key fabrication.
+    let absent = EMPTY_FEED_JSON.replace("\"oldest_available_cursor\"", "\"oldest_available\"");
+    let refused = parse_event_page(&absent)
+        .expect_err("a MISSING oldest_available_cursor must stay a hard error");
+    assert!(
+        refused.to_string().contains("oldest_available_cursor"),
+        "the refusal must name the field, got {refused}"
+    );
+}
+
+#[test]
+fn an_absent_floor_is_not_a_cursor_fault() {
+    let empty = parse_event_page(EMPTY_FEED_JSON).expect("the empty feed must parse");
+
+    // KNOWN GOOD: there is no position a stored cursor could be below, so no fault. A guard
+    // that fired here would fire on every freshly registered agent — the known-good path.
+    assert_eq!(
+        classify(&empty, &[], Some(0), DaemonArm::Unread(0)),
+        MonitorVerdict::Clear
+    );
+    assert_eq!(
+        classify(&empty, &[], None, DaemonArm::Unread(0)),
+        MonitorVerdict::Clear
+    );
+
+    // FIRES ON KNOWN BAD, so the leg above is not passing because the floor guard is dead:
+    // with a floor PRESENT, a position below it is still refused.
+    let floored = parse_event_page(SNOWY_CANYON_PAGE_JSON).expect("the measured page must parse");
+    assert!(matches!(
+        classify(&floored, &[], Some(floor_of(&floored) - 1), DaemonArm::NotConsulted),
+        MonitorVerdict::CursorBelowFloor { .. }
+    ));
+}
+
+#[test]
+fn only_clear_keeps_a_watch_waiting() {
+    // KNOWN GOOD: the one verdict that means "nothing owed yet" is the one that waits, and it
+    // RESETS the blind streak — a successful read is proof the monitor can see.
+    assert_eq!(
+        watch_step(&MonitorVerdict::Clear, 2, WATCH_BLIND_STREAK),
+        WatchStep::Wait {
+            consecutive_blind: 0
+        }
+    );
+
+    // FIRES ON KNOWN BAD: every loud verdict stops the wait. A wildcard arm that let a new
+    // verdict inherit "keep waiting" would make a loud fact invisible for the whole window,
+    // so all four are named here rather than sampled.
+    for loud in [
+        MonitorVerdict::MailWaiting {
+            unread: 1,
+            oldest_from: "QuietBeacon".to_string(),
+            oldest_subject: "s".to_string(),
+        },
+        MonitorVerdict::CursorRegressed {
+            persisted: 6027,
+            tail: 6026,
+        },
+        MonitorVerdict::CursorBelowFloor {
+            persisted: 0,
+            oldest_available: 6016,
+            tail: 6017,
+        },
+        MonitorVerdict::AuthoritiesDisagree {
+            daemon_unread: 96,
+            cli_unread: 20,
+        },
+    ] {
+        assert_eq!(
+            watch_step(&loud, 0, WATCH_BLIND_STREAK),
+            WatchStep::Stop,
+            "{loud:?} must end the wait"
+        );
+    }
+}
+
+#[test]
+fn blindness_must_be_established_before_it_ends_a_watch() {
+    let blind = MonitorVerdict::Unreachable {
+        detail: "connect: Connection refused (os error 61)".to_string(),
+        reason: UnreachableReason::Absent,
+    };
+
+    // KNOWN GOOD: one blip does not abort a five-minute wake. A wake that dies on every
+    // daemon restart is a wake nobody arms.
+    assert_eq!(
+        watch_step(&blind, 0, WATCH_BLIND_STREAK),
+        WatchStep::Wait {
+            consecutive_blind: 1
+        }
+    );
+    assert_eq!(
+        watch_step(&blind, 1, WATCH_BLIND_STREAK),
+        WatchStep::Wait {
+            consecutive_blind: 2
+        }
+    );
+
+    // FIRES ON KNOWN BAD: the third consecutive failure is a condition, not a blip, and the
+    // watch must stop being quiet about it.
+    assert_eq!(
+        watch_step(&blind, 2, WATCH_BLIND_STREAK),
+        WatchStep::Stop
+    );
+    assert_eq!(WATCH_BLIND_STREAK, 3);
+
+    // The degenerate limit must collapse to RESTRICTIVE, never to "tolerate forever": a zero
+    // threshold that meant "never stop" is how a dead daemon becomes a quiet mailbox.
+    assert_eq!(watch_step(&blind, 0, 0), WatchStep::Stop);
+}
+
+#[test]
+fn a_watch_timeout_is_neither_clear_nor_unreachable() {
+    let timed_out = WatchOutcome::TimedOut {
+        polls: 21,
+        waited_secs: 45,
+        bound_secs: 45,
+    };
+
+    // The three facts a supervisor must be able to tell apart from the integer alone:
+    // "nothing is owed right now" (0), "no arrival inside the bound" (17), "could not look"
+    // (13). Folding 17 into 0 makes `inbox-monitor --watch && drain_mail` run the drain every
+    // time the wake did NOT fire.
+    assert_eq!(timed_out.exit_code(), EXIT_WATCH_TIMED_OUT);
+    assert_eq!(timed_out.exit_code(), 17);
+    assert_ne!(timed_out.exit_code(), EXIT_CLEAR);
+    assert_ne!(timed_out.exit_code(), EXIT_UNREACHABLE);
+    assert_ne!(timed_out.exit_code(), EXIT_MAIL_WAITING);
+    assert!(
+        (5..=63).contains(&EXIT_WATCH_TIMED_OUT),
+        "17 must live in the unallocated band the exit-code registry reserves"
+    );
+
+    // And the ARTIFACT must not say `clear` either. The row is what an operator greps months
+    // later; `verdict: "clear"` on a run that was asked to block is a false negative on disk.
+    assert_eq!(timed_out.verdict_label(), "watch_timed_out");
+    assert_ne!(timed_out.verdict_label(), MonitorVerdict::Clear.label());
+    assert_eq!(timed_out.label(), "watch_timed_out");
+    assert_eq!(timed_out.verdict(), None);
+    // Every poll read both surfaces, so the position is as proven as any one-shot Clear.
+    assert!(timed_out.advances_cursor());
+
+    let line = timed_out.human_line();
+    assert!(line.contains("NOT 'the inbox is empty'"), "got {line}");
+    assert!(line.contains("21 reachable poll(s)"), "got {line}");
+}
+
+#[test]
+fn a_window_that_ends_blind_is_unreachable_not_a_clean_timeout() {
+    let blind_verdict = MonitorVerdict::Unreachable {
+        detail: "nothing answered on the MCP endpoint".to_string(),
+        reason: UnreachableReason::Absent,
+    };
+    let ended_blind = WatchOutcome::TimedOutBlind {
+        verdict: blind_verdict.clone(),
+        polls: 2,
+        waited_secs: 1,
+        bound_secs: 1,
+        trailing_blind: 2,
+    };
+
+    // FIRES ON KNOWN BAD: the bound elapsed AND the monitor was blind when it did. Reporting
+    // that as a clean timeout is the exact conflation this crate exists to refuse — a dead
+    // daemon masquerading as a quiet mailbox for as long as the operator was willing to wait.
+    assert_eq!(ended_blind.exit_code(), EXIT_UNREACHABLE);
+    assert_ne!(ended_blind.exit_code(), EXIT_WATCH_TIMED_OUT);
+    assert_ne!(ended_blind.exit_code(), EXIT_CLEAR);
+    assert_eq!(ended_blind.label(), "watch_timed_out_blind");
+    assert_ne!(
+        ended_blind.label(),
+        WatchOutcome::TimedOut {
+            polls: 2,
+            waited_secs: 1,
+            bound_secs: 1
+        }
+        .label(),
+        "the two ways a bound can elapse must be distinguishable in the ledger"
+    );
+    assert_eq!(ended_blind.verdict(), Some(&blind_verdict));
+    assert!(
+        !ended_blind.advances_cursor(),
+        "advancing here moves the cursor past events no successful read ever saw"
+    );
+    assert!(
+        ended_blind.human_line().contains("NOT a clean timeout"),
+        "got {}",
+        ended_blind.human_line()
+    );
+}
+
+#[test]
+fn a_settled_watch_reports_exactly_the_one_shot_code() {
+    // A wake that found mail and a one-shot that found mail are the SAME fact. If the two
+    // modes disagreed on the integer, every supervisor would need to know which mode ran.
+    for verdict in [
+        MonitorVerdict::MailWaiting {
+            unread: 2,
+            oldest_from: "QuietBeacon".to_string(),
+            oldest_subject: "DONE bead-xyz".to_string(),
+        },
+        MonitorVerdict::Unreachable {
+            detail: "refused".to_string(),
+            reason: UnreachableReason::Absent,
+        },
+        MonitorVerdict::CursorRegressed {
+            persisted: 6027,
+            tail: 6026,
+        },
+        MonitorVerdict::CursorBelowFloor {
+            persisted: 0,
+            oldest_available: 6016,
+            tail: 6017,
+        },
+        MonitorVerdict::AuthoritiesDisagree {
+            daemon_unread: 96,
+            cli_unread: 20,
+        },
+    ] {
+        let settled = WatchOutcome::Settled {
+            verdict: verdict.clone(),
+            polls: 5,
+            waited_secs: 5,
+        };
+        assert_eq!(
+            settled.exit_code(),
+            verdict.exit_code(),
+            "a settled watch must not re-code {verdict:?}"
+        );
+        assert_eq!(settled.verdict_label(), verdict.label());
+        assert_eq!(settled.advances_cursor(), verdict.advances_cursor());
+    }
+
+    // Instrument check, so the loop above is not comparing two identical constants: the codes
+    // it walked really are different from each other.
+    assert_eq!(
+        [
+            EXIT_MAIL_WAITING,
+            EXIT_UNREACHABLE,
+            EXIT_CURSOR_REGRESSED,
+            EXIT_CURSOR_BELOW_FLOOR,
+            EXIT_AUTHORITIES_DISAGREE,
+        ]
+        .len(),
+        5
+    );
+    assert_ne!(EXIT_MAIL_WAITING, EXIT_UNREACHABLE);
+    assert_ne!(EXIT_CURSOR_BELOW_FLOOR, EXIT_AUTHORITIES_DISAGREE);
 }

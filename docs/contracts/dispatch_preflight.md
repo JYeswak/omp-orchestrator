@@ -122,3 +122,64 @@ S1 hands S2 exactly one thing, and it is currently **absent on disk**: the `Ince
 ## NO-CLAIM
 
 This document is a **preflight and a taxonomy, not a gate**. Six of the ten truth-conditions are enforced by an orchestrator remembering to check them, which is precisely the fragility `DP-A0` describes. The escape-route list is measured from **one session on one machine**; it is a floor on what agents invent, never a ceiling. And naming a detector is not building one: of the twelve rows, `DP-E6` has a real gate that currently cannot go green, `DP-E9`'s gate refuses the honest record, and the remaining ten are checked by hand or not at all.
+
+## §D5 — The completion notification, and why a bead comment is not one
+
+A dispatch is a round trip. Everything above answers the outbound half; this answers the
+return leg, which was carried by **a human walking to the conductor's pane to say a worker
+had finished** — the load-bearing defect of an orchestration project.
+
+`DP-N1` **A worker pane MUST send mail when it finishes a bead**, from its own cwd with its
+own registered agent name as `--from`:
+
+```
+am mail send --project users-josh-developer-omp-orchestrator \
+  --from <THIS_PANE_AGENT> --to PlumTiger \
+  --subject 'DONE <bead-id>: <one clause>' \
+  --body '<what changed, the sha, the verification command and its result>'
+```
+
+`DP-N2` **Subject convention: `DONE <bead-id>: <clause>`.** The bead id is in the SUBJECT
+because `am inbox --unread --json` returns `subject` and does **not** return bodies unless
+asked — so the conductor learns *which bead closed* from the row it already has, with no
+second fetch. Blocked instead of done: `BLOCKED <bead-id>: <what is needed>`.
+
+`DP-N3` **A bead comment alone is NOT a notification.** Nobody reads bead comments on a
+timer, so a comment must be *polled* to be seen, and the measured cost of
+polling-as-notification here is `ATTENTION.txt`: **178 consecutive ticks from one writer with
+zero readers**. Write the comment too — it is the audit trail — but the mail is the push.
+
+`DP-N4` **The conductor's wake is `inbox-monitor --watch`, and it must be RUNNING, not
+occasionally invoked.** `inbox-monitor --agent PlumTiger --watch --timeout 300 --interval 5`
+blocks and exits `12` (MAIL WAITING) naming the sender and subject on stderr; measured
+latency from `am mail send` returning to exit 12 is **under one second** (2026-09-03: polls
+1–4 clear, send at T+5.0s, poll 5 settled). Terminals are distinct on purpose: `17` = the
+bound elapsed with every poll REACHABLE (no arrival — *not* an empty inbox, which is `0`),
+`13` = could not observe (a dead daemon must never read as a quiet mailbox).
+
+**MEASURED, and it is why "running" is not a style preference:** the unread window is
+**about 100 seconds**. A message delivered to a fresh mailbox at t0 read `unread` /
+`ack-required` immediately and `read` / `read-unacked` at t0+100s **with zero reads by
+anything in between** (`TealHarbor`, msg 41444, 2026-09-03T21:33Z). `inbox-monitor` itself is
+not the consumer — a full run over `OliveHarbor` reported MAIL WAITING and left both rows
+unread. So a conductor that samples its inbox every few minutes will honestly report `clear`
+about completions it never saw. Cause of the auto-read is **UNMEASURED**; the window is not.
+
+`DP-N5` **A worker MUST NOT rely on the conductor noticing.** The four escape routes in
+§D4 have a fifth cousin: finishing work, writing a bead comment, and going idle. That is
+indistinguishable from a wedged pane, and the recovery is a human.
+
+## Validation
+
+```
+cd /Users/josh/Developer/omp-orchestrator && \
+printf 'notify ids=%s installed=%s arch=%s watch_exit=%s\n' \
+  "$(grep -c '^`DP-N' docs/contracts/dispatch_preflight.md)" \
+  "$(command -v inbox-monitor >/dev/null && echo yes || echo NO)" \
+  "$(file -b "$(command -v inbox-monitor)" 2>/dev/null | cut -d, -f1)" \
+  "$(inbox-monitor --agent PlumTiger --watch --timeout 1 --interval 1 >/dev/null 2>&1; echo $?)"
+```
+Measured 2026-09-03T21:3xZ: `notify ids=5 installed=yes arch=Mach-O 64-bit executable arm64
+watch_exit=17`. `watch_exit=17` is the honest reading of a one-second bound over a mailbox
+with nothing arriving — **not** `0`, which would say the inbox is empty, and **not** `13`,
+which would say the monitor was blind. Re-run it with mail waiting and it is `12`.
