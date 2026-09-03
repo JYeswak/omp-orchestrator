@@ -1,0 +1,88 @@
+{
+  "tick": 2,
+  "ts": 1788452039,
+  "observed": {
+    "source": "tick-monitor observe --session omp-orchestrator (kernel, two-capture) + ntm --robot-snapshot + am robot agents/reservations; NO capture-pane",
+    "attention": 0,
+    "dead": 0,
+    "free_capacity": [
+      "%7",
+      "%8",
+      "%9"
+    ],
+    "liveness": "CONFIRMED_IDLE on %7/%9 at gap_secs=102; %8 confirmed one tick later. NEWLY_IDLE was NOT treated as dispatchable."
+  },
+  "claims": [
+    {
+      "command": "tick-monitor observe --session omp-orchestrator",
+      "figure": "commit e77dd04 detected within 368s; dispatchable went []->[%7,%9]->[%8]->[] across four captures"
+    },
+    {
+      "command": "launchctl list | grep -i zeststream; ps -o args -p 38194",
+      "figure": "ai.zeststream.omp-orchestrator is NOT loaded; the one live supervisor is --repo /Users/josh/Developer/control-plane, 12h44m, ppid 1"
+    },
+    {
+      "command": "crontab -l | grep -E 'controller-tick|fast-dispatch|loop-driver|refill-idle|fleet-monitor|reap-finished|challenge'",
+      "figure": "0 matches - all seven orchestration cron lanes absent"
+    },
+    {
+      "command": "cd /Users/josh/Developer/omp-orchestrator && fleet-monitor --self --report-only",
+      "figure": "scanned control-plane panes 1-4; ADMISSION_VERDICT rc=1; check.sh overall=FAIL; UNRUN shellcheck/drift/tests/mutation"
+    },
+    {
+      "command": "am robot agents --json | jq .count",
+      "figure": "36 agents, freshest last_active 1h ago, all idle, while tick-monitor showed 3 panes WORKING - the mail roster is not a liveness authority"
+    },
+    {
+      "command": "br update <id> --assignee pane{2,3,4}-%{7,8,9} --status in_progress --actor pane1-omp-claude",
+      "figure": "3 beads claimed BEFORE this row was accepted; the tick gate refused the first attempt with OC-L2 'dispatch names unclaimed bead' x3 - the fourth rule enforced in code, and I had delegated the claim to the receiver"
+    }
+  ],
+  "dispatched": [
+    {
+      "pane": "%9",
+      "bead": "omp-orchestrator-s1-wave2-nonauthor-grade-oaqh",
+      "op_id": "oaqh-grade-pane4-1",
+      "payload_sha256": "ccb79e1073acf7d9550ad9e3ae6178cdcf782bcb52dbd5f98dc1311a6816066d",
+      "receipt": "IDLE->WORKING t=47 LIVE",
+      "ack_required": "ACK oaqh on %9 --"
+    },
+    {
+      "pane": "%7",
+      "bead": "omp-orchestrator-fleet-monitor-self-wrong-session-betc",
+      "op_id": "betc-diag-pane2-1",
+      "receipt": "IDLE->WORKING t=29 LIVE",
+      "ack_required": "ACK betc on %7 --"
+    },
+    {
+      "pane": "%8",
+      "bead": "omp-orchestrator-antiidle-loop-unwired-this-repo-fqhv",
+      "op_id": "fqhv-p1-pane3-1",
+      "receipt": "IDLE->WORKING t=18",
+      "ack_required": "ACK fqhv on %8 --"
+    }
+  ],
+  "refused": [],
+  "landed": {
+    "commits": [
+      "bee0e69 pane-1 S1 wave-2 answers + OMP column attack",
+      "e77dd04 S1 owner answers: wave-1 10 open -> 0, open_disagreements derived"
+    ],
+    "beads_filed": [
+      "omp-orchestrator-s1-wave2-nonauthor-grade-oaqh (P1 grading)",
+      "omp-orchestrator-antiidle-loop-unwired-this-repo-fqhv (P0)",
+      "omp-orchestrator-fleet-monitor-self-wrong-session-betc (P1)"
+    ],
+    "mail": "am mail send from PlumTiger to WildMountain,WildStone,BlackMeadow,SilverOtter, ack-required, topic s1-grading"
+  },
+  "destructive": [],
+  "not_done": [
+    "%8 was NEWLY_IDLE at the first capture and held back one tick until CONFIRMED_IDLE; %6 is the orchestrator pane and is never a dispatch target. Neither is a refused[] row: OC-L1 admits only panes observed free, named exactly once.",
+    "REFUSED, and it has no pane so it cannot live in refused[]: launchctl bootstrap of ai.zeststream.omp-orchestrator. OMP_EXCLUDE_PANES is %1396,%1397,%1424 while live panes are %5-%9, so loading as written would let the supervisor select the conductor; and admission is RED so it would refuse every cycle. Escalated to Joshua on fqhv, NOT executed.",
+    "NO ACK RECEIVED YET from any of the three panes. The dispatch receipt is an idle->working transition, which proves DELIVERY, not reading and not progress. Until an 'ACK <token> on <pane> --' comment exists, ack-stage rates all three as Indeterminate/AckReadbackMissing.",
+    "the anti-idle LOOP is still unwired: this tick was performed BY AN AGENT, by hand, through the kernels. That is exactly the failure mode AGENTS.md's post-mortem names - manual orchestration load-bearing while the automated conductor is absent. Filing fqhv does not fix it.",
+    "prerequisite P2 of fqhv is untouched: the admission chain is RED (check.sh FAIL + 4 UNRUN gates) and no typed DEGRADED dispatch lane exists, so even a correctly-scoped supervisor would refuse every cycle.",
+    "pane->agent-name identity is still unresolved (gfm6, kyq5): these three dispatches name PANES, not agents, because the mail roster is 1h stale and env AGENT_NAME collides across panes. Rule four's claim-before-dispatch was delegated to the receiver instead of enforced by the sender.",
+    "the first version of THIS ROW was refused by orchestration-tick-gate with 6 violations (3x OC-L1, 3x OC-L2). Recorded because a gate that fires on its author is the only evidence that it bites."
+  ]
+}
