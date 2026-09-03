@@ -212,7 +212,7 @@ class = "verdict_type"
 wave = 2
 owner = "SnowyCanyon"
 reviewers = ["WildStone", "WildMountain", "AmberGate", "BlueLantern", "SilverWolf", "QuietRidge"]
-open_disagreements = 4                # DERIVED, not typed: grep -c '^resolution = ""' over waves/wave-1/*-S1.toml waves/wave-2/*-S1.toml. Wave-1 S1 is now 0 open (AmberGate 4, BlueLantern 3, QuietRidge 3, SilverWolf 0 all answered by the owner); the 4 remaining are pane-1's own wave-2 rows, held open because owner==author and they need a non-author verdict per the grading gate.
+open_disagreements = 0                # DERIVED 2026-09-03T16:08Z WORKTREE (pre-commit of oaqh grade), not typed: python count of lines starting resolution = "" over waves/wave-1/*-S1.toml waves/wave-2/*-S1.toml -> 0. Prior 4 were pane1-S1.toml OMP-column rows; non-author %9 WildStone filled all four. TREE will equal this once the grade commit lands.
 status = "draft"
 approval = ""
 
