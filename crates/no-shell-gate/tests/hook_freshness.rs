@@ -143,6 +143,203 @@ fn the_installed_hook_is_not_older_than_the_source_it_enforces() {
     );
 }
 
+/// Literals a landed commit introduced into the hook's source, and that commit.
+///
+/// The FIRST row is a POSITIVE CONTROL and must always be PRESENT. Without it a
+/// broken probe — wrong path, unreadable file, an encoding that never matches —
+/// reports every row absent and is indistinguishable from a genuinely empty hook.
+const LANDED_HOOK_LITERALS: &[(&str, &str)] = &[
+    ("NOTHING_TO_CHECK", "POSITIVE CONTROL: present in every hook since 93537c8"),
+    ("GATE_SECTION_HELD", "c10a96a fix(pre-commit): serialize the gate section"),
+    ("STAGED_BUILD_GATE_REFUSED", "4e1df0b feat(gates): wire staged-build-gate"),
+];
+
+/// Staleness the fleet has ACCEPTED, each row naming the bead that removes it.
+///
+/// # Why an allowance and not a green
+///
+/// This is `franken_lean`'s `UNWIRED_LANE_ALLOWANCE` aimed at the enforcement
+/// layer. A decision recorded only in a bead comment is invisible to the code it
+/// governs, so the test cannot tell an accepted gap from an unnoticed one and
+/// reports the same verdict for both. The row makes the decision legible where the
+/// check runs.
+///
+/// **It must shrink.** A row whose literal is now PRESENT fails
+/// [`the_installed_hook_matches_the_content_of_the_source_it_enforces`], so wiring
+/// the gate FORCES the row's deletion and nobody has to remember.
+const ACCEPTED_STALENESS: &[(&str, &str, &str)] = &[
+    (
+        "GATE_SECTION_HELD",
+        "omp-orchestrator-g5e0",
+        "SnowyCanyon 2026-09-03 ~02:0xZ: HEAD's hook makes GATE 7 build each touched \
+         crate LOCALLY on every commit. Joshua 01:5xZ: local rust builds destroy the \
+         machine, builds only on contabo. The gate-section gap is accepted OVER a \
+         local build per commit. Unblocks when g5e0 acceptance 2 lands.",
+    ),
+    (
+        "STAGED_BUILD_GATE_REFUSED",
+        "omp-orchestrator-g5e0",
+        "Same ruling: this literal IS gate 7, the local-build gate itself.",
+    ),
+];
+
+/// Is `needle` present in `haystack`? Byte search, so it works on a Mach-O.
+fn contains_bytes(haystack: &[u8], needle: &str) -> bool {
+    let needle = needle.as_bytes();
+    haystack.windows(needle.len()).any(|window| window == needle)
+}
+
+/// THE CONTENT LEG. Mtime freshness is not content freshness, and this file's own
+/// header said the content-addressed version was "not built".
+///
+/// # The measured laundering, 2026-09-02
+///
+/// The mtime leg above was GREEN — `4 passed; 0 failed` — while the installed hook
+/// provably lacked two landed, mutation-verified gates:
+///
+/// ```text
+/// hook   mtime 2026-09-02T19:29:21     source mtime 2026-09-02T19:00:06   -> mtime leg GREEN
+/// strings .git/hooks/pre-commit | grep -c GATE_SECTION_HELD          -> 0   (c10a96a)
+/// strings .git/hooks/pre-commit | grep -c STAGED_BUILD_GATE_REFUSED  -> 0   (4e1df0b)
+/// strings .git/hooks/pre-commit | grep -c NOTHING_TO_CHECK           -> 3   (positive control)
+/// ```
+///
+/// The 19:29 mtime came from a **revert by `cp`**: copying an OLD binary over the
+/// hook stamps a NEW mtime on OLD content. So a revert — a legitimate, deliberate
+/// operation — launders staleness into freshness, and the gate written to catch
+/// "forgot to rebuild" cannot see "rebuilt, then replaced with an older build".
+/// That is the same shape as `os.utime` on `PLAN.md`, except nobody was gaming it.
+///
+/// # Why literal probes rather than a rebuild
+///
+/// The header rejected the content-addressed form because building inside a test is
+/// recursive and slow. Probing the installed binary for literals a commit
+/// introduced needs no build at all: `git log -S <literal>` names the commit, and
+/// the string is either in the Mach-O or it is not.
+///
+/// # What this does NOT do
+///
+/// It proves the named literals are present, NOT that the hook was built from this
+/// exact tree — a change that adds no new literal is invisible here, and the
+/// hand-maintained row list carries the same weakness `HOOK_SOURCE_CRATES` names
+/// above. It raises the floor from "a timestamp" to "these specific gates are in
+/// the binary", which is what an operator actually needs to know.
+#[test]
+fn the_installed_hook_matches_the_content_of_the_source_it_enforces() {
+    let root = repo_root();
+    let hook = root.join(".git/hooks/pre-commit");
+
+    let Ok(bytes) = std::fs::read(&hook) else {
+        eprintln!(
+            "SKIP the_installed_hook_matches_the_content_of_the_source_it_enforces: \
+             no readable hook at {} — nothing is enforcing pre-commit here",
+            hook.display()
+        );
+        return;
+    };
+
+    assert!(
+        !bytes.is_empty(),
+        "ANTI-VACUITY: the installed hook is zero bytes; an empty probe target \
+         reports every literal absent and would read as total staleness"
+    );
+
+    let mut absent: Vec<(&str, &str)> = Vec::new();
+    let mut present: Vec<&str> = Vec::new();
+    for (literal, provenance) in LANDED_HOOK_LITERALS {
+        if contains_bytes(&bytes, literal) {
+            present.push(literal);
+        } else {
+            absent.push((literal, provenance));
+        }
+    }
+
+    // POSITIVE CONTROL. A probe that finds nothing is broken, and a broken probe
+    // must not be readable as "the hook is missing everything".
+    let (control, _) = LANDED_HOOK_LITERALS
+        .first()
+        .expect("ANTI-VACUITY: the literal list is empty, so this leg checks nothing");
+    assert!(
+        present.contains(control),
+        "PROBE BROKEN, not a staleness finding: the positive control {control:?} is \
+         absent from {}. Every other verdict from this leg is therefore unreadable — \
+         fix the probe before believing any absence.",
+        hook.display()
+    );
+
+    // Leg 3 of the ratchet: an allowance row that is no longer needed FAILS, so
+    // wiring a gate forces its row to be deleted.
+    for (literal, bead, _) in ACCEPTED_STALENESS {
+        assert!(
+            !contains_bytes(&bytes, literal),
+            "STALE ALLOWANCE ROW: {literal:?} is NOW PRESENT in the installed hook, \
+             so its ACCEPTED_STALENESS row (bead {bead}) is obsolete. Delete the row. \
+             An allowance that outlives its reason is how advisory-first becomes \
+             permanent silence."
+        );
+    }
+
+    let undeclared: Vec<String> = absent
+        .iter()
+        .filter(|(literal, _)| {
+            !ACCEPTED_STALENESS
+                .iter()
+                .any(|(declared, _, _)| declared == literal)
+        })
+        .map(|(literal, provenance)| format!("  {literal} — introduced by {provenance}"))
+        .collect();
+
+    assert!(
+        undeclared.is_empty(),
+        "THE INSTALLED HOOK IS STALE BY CONTENT, and the mtime leg cannot see it.\n\
+         \n\
+         hook: {}\n\
+         absent literals, each from a LANDED commit:\n\
+         {}\n\
+         \n\
+         A `cp` of an older binary stamps a new mtime on old content, so mtime\n\
+         freshness proves nothing here. Either rebuild and reinstall the hook, or —\n\
+         if the gap is deliberate — add a row to ACCEPTED_STALENESS naming the bead\n\
+         that removes it. A decision that lives only in a bead comment is invisible\n\
+         to this check.\n\
+         \n\
+         Repair:\n\
+           cargo build --release --bin pre-commit-gate\n\
+           cp <target>/release/pre-commit-gate .git/hooks/pre-commit",
+        hook.display(),
+        undeclared.join("\n"),
+    );
+}
+
+/// Every accepted-staleness row must name a real bead and a real reason.
+///
+/// An allowance whose row says "TODO" is a permanent exception wearing a process
+/// costume, which is the failure mode the row list exists to prevent.
+#[test]
+fn every_accepted_staleness_row_names_a_bead_and_a_reason() {
+    assert!(
+        !LANDED_HOOK_LITERALS.is_empty(),
+        "ANTI-VACUITY: no literals declared, so the content leg checks nothing"
+    );
+    for (literal, bead, reason) in ACCEPTED_STALENESS {
+        assert!(
+            bead.starts_with("omp-orchestrator-") && bead.len() > "omp-orchestrator-".len(),
+            "row {literal:?} must name the bead that removes it, got {bead:?}"
+        );
+        assert!(
+            reason.len() > 40,
+            "row {literal:?} must say WHO ruled and WHY, not {reason:?}"
+        );
+        assert!(
+            LANDED_HOOK_LITERALS
+                .iter()
+                .any(|(declared, _)| declared == literal),
+            "row {literal:?} is not in LANDED_HOOK_LITERALS, so nothing ever probes \
+             for it and the row can never expire"
+        );
+    }
+}
+
 /// The SAME staleness class, aimed at the pre-push hook — which had no leg at all
 /// until 2026-09-02.
 ///
