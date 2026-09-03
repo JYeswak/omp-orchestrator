@@ -216,3 +216,12 @@ reviewer_says = "ACCEPTED as an open cross-cutting gap. The map correctly separa
 evidence = "this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:13-14,21-22,28-29,35-36; this-repo:crates/subprocess-contract/src/lib.rs:3-9,82-139; this-repo:crates/installer/src/lib.rs:10-13,118-146"
 severity = "major"
 resolution = "remaining; installer zero-Cx and L4 region-owned spawn remain unresolved; evidence=S1-surfaces.mmd:11,19"
+
+[[disagreement]]
+box = "S1"
+field = "L3.contract_artifacts.wave_0_validation"
+owner_says = "L3's wave-0 Validation command is an executable stand-in for LAW-L3-SINGLE-ARRAY and same_object_identity."
+reviewer_says = "REJECTED: the stand-in cannot prove shared renderer state while the ompo runner and l3_step_parity invariant suite are absent; retain TARGET, DECLARED, and UNPROVEN until the real suite executes."
+evidence = "command=command -v ompo plus test -e crates/ompo-start/src/steps.rs and crates/ompo-start/tests/l3_step_parity.rs; output=OMPO=absent; crates/ompo-start/src/steps.rs=absent; crates/ompo-start/tests/l3_step_parity.rs=absent; sibling=docs/contracts/s1_l3_walkthrough.md:11-13,39-40"
+severity = "major"
+resolution = "refuted(wave-0 stand-in cannot exercise object identity or shared Vec<Step> without the runner and suite)"
