@@ -18,35 +18,96 @@ A named but missing suite is intentional Wave-0 state, not a passing implementat
 
 | ID | Property | Description |
 |---|---|---|
-| L2-IDENTITY | authority | Repository identity includes canonical root, repository marker, and source revision; a path alone is insufficient. |
-| L2-TRUST | refusal | Existing AGENTS.md, CLAUDE.md, hooks, and registries are foreign policy until an explicit init decision authorizes changes. |
-| L2-SNAPSHOT | recovery | Every target write has a before hash, verbatim backup or equivalent durable snapshot, and an action row. |
-| L2-INCEPTION | output | inception.json contains schema_version, project_id, repo_identity, control_files, host_capabilities, required_tools, and trust_status. |
-| L2-FOUNDATION | lineage | The S1 FOUNDATION.jsonl row names the inception artifact in output_refs and records known, unknown, and gaps without blank epistemic cells. |
-| L2-REPROBE | postcondition | Init re-runs the relevant doctor predicates; failed readback halts and never advances to L3. |
-| L2-SCOPE | bounded work | Ecosystem probes run by explicit scope and retain UNKNOWN/UNPROBEABLE results; skipped checks are not green. |
-| L2-IDEMPOTENCE | conditional law | Same repository identity, control-file hashes, template hash, and probe inputs produce zero second-run writes; state drift reopens the decision. |
+| `L2-IDENTITY` | authority | Repository identity includes canonical root, repository marker, and source revision; a path alone is insufficient. |
+| `L2-TRUST` | refusal | Existing AGENTS.md, CLAUDE.md, hooks, and registries are foreign policy until an explicit init decision authorizes changes. |
+| `L2-SNAPSHOT` | recovery | Every target write has a before hash, verbatim backup or equivalent durable snapshot, and an action row. |
+| `L2-INCEPTION` | output | inception.json contains schema_version, project_id, repo_identity, control_files, host_capabilities, required_tools, and trust_status. |
+| `L2-FOUNDATION` | lineage | The S1 FOUNDATION.jsonl row names the inception artifact in output_refs and records known, unknown, and gaps without blank epistemic cells. |
+| `L2-REPROBE` | postcondition | Init re-runs the relevant doctor predicates; failed readback halts and never advances to L3. |
+| `L2-SCOPE` | bounded work | Ecosystem probes run by explicit scope and retain UNKNOWN/UNPROBEABLE results; skipped checks are not green. |
+| `L2-IDEMPOTENCE` | conditional law | Same repository identity, control-file hashes, template hash, and probe inputs produce zero second-run writes; state drift reopens the decision. |
 
 ### Properties
 
-- L2P-IDENTITY-BEFORE-WRITE: identity and trust are resolved before any control-file write.
-- L2P-NO-FOREIGN-OVERWRITE: missing or unstamped policy files require explicit trusted-init; absence of opt-in is a human halt.
-- L2P-BACKUP-BEFORE-HASH: the target's before hash is recorded and backed up before mutation.
-- L2P-INCEPTION-COMPLETE: all required inception fields are present, and each value is classified known, unknown, or gap.
-- L2P-FOUNDATION-LINK: the S1 FOUNDATION row and inception manifest refer to each other through stable output/input references.
-- L2P-REPROBE: init success is a fresh post-write observation, not the write call's return value.
-- L2P-CONDITIONAL-IDEMPOTENCE: no second write is required only when the complete observed pre-state matches; a tool upgrade or policy drift is a legitimate new repair case.
-- L2P-SCOPE-UNKNOWN: an ecosystem doctor scoped to topology/convergence does not claim host policy or hooks were checked.
+- `L2P-IDENTITY-BEFORE-WRITE`: identity and trust are resolved before any control-file write.
+- `L2P-NO-FOREIGN-OVERWRITE`: missing or unstamped policy files require explicit trusted-init; absence of opt-in is a human halt.
+- `L2P-BACKUP-BEFORE-HASH`: the target's before hash is recorded and backed up before mutation.
+- `L2P-INCEPTION-COMPLETE`: all required inception fields are present, and each value is classified known, unknown, or gap.
+- `L2P-FOUNDATION-LINK`: the S1 FOUNDATION row and inception manifest refer to each other through stable output/input references.
+- `L2P-REPROBE`: init success is a fresh post-write observation, not the write call's return value.
+- `L2P-CONDITIONAL-IDEMPOTENCE`: no second write is required only when the complete observed pre-state matches; a tool upgrade or policy drift is a legitimate new repair case.
+- `L2P-SCOPE-UNKNOWN`: an ecosystem doctor scoped to topology/convergence does not claim host policy or hooks were checked.
 
 ## Laws
 
-- LAW-L2-IDENTITY — foreign or ambiguous repository identity refuses before mutation. Test: s1_l2_ecosystem_contract.rs::ambiguous_identity_halts.
-- LAW-L2-TRUSTED-INIT — an unstamped foreign AGENTS.md/CLAUDE.md without opt-in emits a human halt and writes nothing. Test: s1_l2_ecosystem_contract.rs::foreign_policy_without_opt_in_is_read_only.
-- LAW-L2-BACKUP — trusted init records before hash and durable backup before writing a target. Test: s1_l2_ecosystem_contract.rs::init_backup_precedes_write.
-- LAW-L2-INCEPTION — accepted init writes every required inception field and the S1 FOUNDATION row. Test: s1_l2_ecosystem_contract.rs::inception_and_foundation_are_linked.
-- LAW-L2-REPROBE — init must re-run doctor predicates and halt when the stamped state does not read back. Test: s1_l2_ecosystem_contract.rs::failed_reprobe_halts.
-- LAW-L2-CONDITIONAL-IDEMPOTENCE — same complete observed state produces zero second-run writes, while changed policy/tool/daemon state is re-evaluated. Test: s1_l2_ecosystem_contract.rs::same_hash_noop_but_drift_reopens.
-- LAW-L2-SCOPE — scoped topology/convergence checks do not imply policy, hook, or repository identity checks. Test: s1_l2_ecosystem_contract.rs::scope_preserves_unknowns.
+- `LAW-L2-IDENTITY` — foreign or ambiguous repository identity refuses before mutation. Test: `l2_ecosystem.rs::identity_includes_root_and_revision`.
+- `LAW-L2-TRUSTED-INIT` — unstamped foreign policy without opt-in emits a human halt and writes nothing. Test: `l2_ecosystem.rs::foreign_policy_without_opt_in_is_read_only`.
+- `LAW-L2-BACKUP` — trusted init records before hash and durable backup before writing a target. Test: `l2_ecosystem.rs::init_backup_precedes_write`.
+- `LAW-L2-INCEPTION` — accepted init writes every required inception field and the S1 FOUNDATION row. Test: `l2_ecosystem.rs::inception_and_foundation_are_linked`.
+- `LAW-L2-REPROBE` — init re-runs doctor predicates and halts when stamped state does not read back. Test: `l2_ecosystem.rs::failed_reprobe_halts_l3`.
+- `LAW-L2-CONDITIONAL-IDEMPOTENCE` — same complete state produces zero second-run writes; drift reopens review. Test: `l2_ecosystem.rs::second_init_is_zero_writes_given_identical_hashes`.
+- `LAW-L2-SCOPE` — scoped topology/convergence checks do not imply policy, hooks, or identity checks. Test: `l2_ecosystem.rs::scope_preserves_unknowns`.
+
+## Build Inventory
+
+Every row below is one L2 build item. The S1 build remains frozen; these are the complete implementation rows, not a launch authorization.
+
+| ID | Build item | Run -> expect |
+|---|---|---|
+| `L2-BUILD-IDENTITY` | repository identity envelope | Run identity resolution; expect canonical root, source revision, project id, and host identity. |
+| `L2-BUILD-GIT-REPO` | git repository check | Run git rev-parse --show-toplevel; expect a real repo or a typed halt. |
+| `L2-BUILD-REMOTE-PERSONA-A` | local-only remote rule | Run Persona A with no remote; expect explicit remote_optional=true and continuation. |
+| `L2-BUILD-REMOTE-PERSONA-BC` | fleet remote rule | Run Persona B/C with no remote; expect a named remediation/halt before shared dispatch. |
+| `L2-BUILD-AGENTS-STAMP` | AGENTS.md stamp check | Run the control-file probe; expect stamp identity, source revision, and status. |
+| `L2-BUILD-CLAUDE-STAMP` | CLAUDE.md stamp check | Run the control-file probe; expect stamp identity, source revision, and status. |
+| `L2-BUILD-BEADS` | .beads initialization check | Run the tracker probe; expect project identity and writable state or remediation. |
+| `L2-BUILD-RUST-TOOLCHAIN` | rust-toolchain.toml check | Run the pin probe; expect declared toolchain identity or remediation. |
+| `L2-BUILD-HOOK-HEAD` | hook identity check | Run hook source/HEAD comparison; expect identity match or repair-required result. |
+| `L2-BUILD-CARGO-MEMBERS` | Cargo member check | Run cargo metadata without building; expect declared members and no load error. |
+| `L2-BUILD-AGENT-MAIL` | Agent Mail registration check | Run project/agent readback; expect registered identity or explicit remediation. |
+| `L2-BUILD-RCH-LANE` | repo-to-RCH lane check | Run scoped RCH topology/convergence doctor; expect lane mapping or explicit UNKNOWN. |
+| `L2-BUILD-TRUSTED-INIT-OPTIN` | trusted-init decision gate | Run foreign-policy init without consent; expect no write and HUMAN_HALT. |
+| `L2-BUILD-TEMPLATE-IDENTITY` | template identity capture | Run opted-in init; expect template path, source hash, and template revision before write. |
+| `L2-BUILD-BACKUP` | before-hash backup | Run opted-in init; expect target before hashes and durable backups before writes. |
+| `L2-BUILD-INCEPTION-FOUNDATION` | inception and FOUNDATION writer | Run accepted init; expect inception.json and FOUNDATION.jsonl stage=S1 linked by refs. |
+| `L2-BUILD-REPROBE` | post-init re-probe | Run accepted init; expect the same identity/control/tool predicates re-evaluated. |
+| `L2-BUILD-HALT-NOT-TAKEN` | failed re-probe halt | Run init with a mutation that does not take; expect halt and no L3 advancement. |
+
+## Test Inventory
+
+Every row below is one L2 test item. Each has a named test and a branch-specific known-bad leg.
+
+| ID | Named test | Run -> expect; known-bad |
+|---|---|---|
+| `L2-TEST-IDENTITY` | l2_ecosystem.rs::identity_includes_root_and_revision | Run foreign-root fixture; expect identity mismatch, not acceptance. |
+| `L2-TEST-GIT-REPO` | l2_ecosystem.rs::non_repo_halts | Run outside git; expect typed halt with remediation. |
+| `L2-TEST-REMOTE-A` | l2_ecosystem.rs::persona_a_allows_local_only_remote | Run Persona A without remote; expect explicit optional branch. |
+| `L2-TEST-REMOTE-BC` | l2_ecosystem.rs::persona_bc_requires_remote | Run Persona B/C without remote; expect halt/remediation. |
+| `L2-TEST-AGENTS-STAMP` | l2_ecosystem.rs::agents_stamp_is_verified | Run wrong AGENTS stamp; expect mismatch, not stamped. |
+| `L2-TEST-CLAUDE-STAMP` | l2_ecosystem.rs::claude_stamp_is_verified | Run wrong CLAUDE stamp; expect mismatch, not stamped. |
+| `L2-TEST-BEADS` | l2_ecosystem.rs::beads_project_is_present | Run missing .beads; expect remediation/halt. |
+| `L2-TEST-RUST-TOOLCHAIN` | l2_ecosystem.rs::toolchain_pin_is_present | Run missing/invalid rust-toolchain.toml; expect remediation. |
+| `L2-TEST-HOOK-HEAD` | l2_ecosystem.rs::hook_identity_matches_head | Run stale hook; expect mismatch and repair-required. |
+| `L2-TEST-CARGO-MEMBERS` | l2_ecosystem.rs::cargo_members_are_loadable | Run malformed member fixture; expect metadata failure, not empty success. |
+| `L2-TEST-AGENT-MAIL` | l2_ecosystem.rs::agent_mail_registration_reads_back | Run unregistered project; expect explicit remediation. |
+| `L2-TEST-RCH-LANE` | l2_ecosystem.rs::rch_lane_unknown_is_preserved | Run no repo convergence record; expect UNKNOWN, not absent or green. |
+| `L2-TEST-TRUSTED-INIT` | l2_ecosystem.rs::foreign_policy_without_opt_in_is_read_only | Run unstamped foreign AGENTS.md without opt-in; expect HUMAN_HALT and zero writes. |
+| `L2-TEST-TEMPLATE-IDENTITY` | l2_ecosystem.rs::trusted_init_records_template_identity | Run wrong template hash; expect refusal before write. |
+| `L2-TEST-BACKUP` | l2_ecosystem.rs::init_backup_precedes_write | Run backup failure fixture; expect no target write. |
+| `L2-TEST-INCEPTION-FOUNDATION` | l2_ecosystem.rs::inception_and_foundation_are_linked | Run missing field/ref fixture; expect validation failure. |
+| `L2-TEST-REPROBE-SUCCESS` | l2_ecosystem.rs::successful_init_requires_reprobe | Run valid opt-in init; expect post-write probe evidence before success. |
+| `L2-TEST-REPROBE-FAIL` | l2_ecosystem.rs::failed_reprobe_halts_l3 | Run init where stamp/readback remains wrong; expect halt, not L3. |
+| `L2-TEST-IDEMPOTENT-SAME` | l2_ecosystem.rs::second_init_is_zero_writes_given_identical_hashes | Run init twice without drift; expect second write count 0. |
+| `L2-TEST-IDEMPOTENT-DRIFT` | l2_ecosystem.rs::second_init_reopens_on_policy_hash_drift | Change policy hash between runs; expect repair/review, not no-op. |
+| `L2-TEST-EPISTEMIC-COMPLETE` | l2_ecosystem.rs::inception_has_no_blank_epistemic_cells | Run blank known/unknown/gap fixture; expect validation failure. |
+| `L2-TEST-ATOMIC-ROLLBACK` | l2_ecosystem.rs::partial_init_rolls_back_atomically | Fail FOUNDATION append after inception write; expect prior state restored. |
+
+## Dispatch Preflight (L2)
+
+1. **How it flows:** FILE each L2 build/test bead with one run-X-expect-Y acceptance; CLAIM it to the L2 lane; PACKET its exact repository/trust scope; ADMISSION checks S1 approval and build prerequisites; SEND only after that verdict; RECEIPT and ACK establish delivery; OBSERVE the result; VERIFY with the named non-author test; RECORD the lifecycle evidence.
+2. **What must be true:** L1 supplies typed probe outcomes; repository identity is stable; policy trust is explicit; the bead names a known-bad fixture; the required RCH lane and external source identities are available; no init writes occur without backup and a readback path.
+3. **If automated:** bv selects the bead, bead-availability confirms it is claimable, a single mutation authority performs writes, and the post-init doctor re-probes inception/control files before the next stage. UNKNOWN or UNPROBEABLE is preserved and blocks healthy continuation.
+4. **Escape route:** an agent treats a successful template write as proof of a trusted ecosystem, skips the before-hash backup or FOUNDATION readback, and advances on the write return code. The foreign-policy/no-opt-in and failed-reprobe tests must make that path fail closed.
 
 ## Upstream Reference and Boundary
 
@@ -58,24 +119,24 @@ RCH's live doctor exposes the boundary L2 needs: rch doctor --reliability --scop
 
 ## Authority / Recovery / Ordering
 
-- L2R-IDENTITY: establish repo root, source revision, project id, and host capability provenance first.
-- L2R-TRUST: existing policy is read-only until trusted_init=true is an explicit decision tied to the repository identity.
-- L2R-BACKUP: take the target before hash and backup before any write; backup failure refuses the operation.
-- L2R-INIT: write inception and FOUNDATION artifacts atomically or leave the prior state intact.
-- L2R-REPROBE: re-run the same control-file and tool probes after writes; mismatch halts.
-- L2R-UNDO: restore the run's before snapshot by run id, verify hashes, and expose partial recovery as a refusal.
-- L2R-IDEMPOTENCE: compare complete before-state hashes and probe inputs, not merely invocation count.
+- `L2R-IDENTITY`: establish repo root, source revision, project id, and host capability provenance first.
+- `L2R-TRUST`: existing policy is read-only until trusted_init=true is an explicit decision tied to the repository identity.
+- `L2R-BACKUP`: take the target before hash and backup before any write; backup failure refuses the operation.
+- `L2R-INIT`: write inception and FOUNDATION artifacts atomically or leave the prior state intact.
+- `L2R-REPROBE`: re-run the same control-file and tool probes after writes; mismatch halts.
+- `L2R-UNDO`: restore the run's before snapshot by run id, verify hashes, and expose partial recovery as a refusal.
+- `L2R-IDEMPOTENCE`: compare complete before-state hashes and probe inputs, not merely invocation count.
 
 ## Observability
 
 | ID | Row | Source | Freshness | Known-bad |
 |---|---|---|---|---|
-| L2-OBS-IDENTITY | repo identity | inception.repo_identity plus source revision | per run | path reused for a different repository |
-| L2-OBS-TRUST | trust decision | trusted_init, policy hashes, decision id | per init attempt | foreign policy changed without opt-in |
-| L2-OBS-WRITE | backup/write audit | run id, target, before/after hash, backup path | per mutation | target changed with no before hash |
-| L2-OBS-READBACK | post-init state | inception.json, FOUNDATION S1 row, re-probe report | after every init | write returned success but re-probe fails |
+| `OBS-L2-IDENTITY` | repo identity | inception.repo_identity plus source revision | per run | path reused for a different repository |
+| `OBS-L2-TRUST` | trust decision | trusted_init, policy hashes, decision id | per init attempt | foreign policy changed without opt-in |
+| `OBS-L2-WRITE` | backup/write audit | run id, target, before/after hash, backup path | per mutation | target changed with no before hash |
+| `OBS-L2-READBACK` | post-init state | inception.json, FOUNDATION S1 row, re-probe report | after every init | write returned success but re-probe fails |
 
-Metric: L2-METRIC-INIT-READBACK-FAILURE-RATE = failed post-init readbacks divided by init attempts, partitioned by trusted_init and state-drift reason. The required floor is 0 for the same-state partition; drift-triggered refusal is not a false success.
+Metric: `MET-L2-INIT-READBACK-FAILURE-RATE` = failed post-init readbacks divided by init attempts, partitioned by trusted_init and state-drift reason. The required floor is 0 for the same-state partition; drift-triggered refusal is not a false success.
 
 ## VIOLATION — where shipped code contradicts this law
 

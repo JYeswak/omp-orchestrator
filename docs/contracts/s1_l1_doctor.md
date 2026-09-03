@@ -18,13 +18,13 @@ A named but missing suite is intentional Wave-0 state, not a passing implementat
 
 | ID | Property | Description |
 |---|---|---|
-| L1-INPUT | evidence | One probe has name, family, presence observation, version observation, scope, and provenance. |
-| L1-VERDICT | typed result | Verdict is OK, ABSENT_FAMILY, ABSENT_SPECIFIC, UNPROBEABLE, STALE, PAUSED, or UNMEASURED; no missing value becomes OK. |
-| L1-REPAIR | authority | Every repair enters one mutate() chokepoint, with a run directory, backup, before hash, after hash, and action record. |
-| L1-UNDO | recovery | undo <run-id> restores the recorded pre-mutation bytes or database snapshot, and reports the result. |
-| L1-IDEMPOTENCE | conditional law | Same scope plus identical before-state hashes and unchanged probe inputs yields zero repair mutations on the next doctor run. |
-| L1-DRIFT | re-evaluation | A changed version, daemon state, scope, or before hash invalidates the no-op premise; the doctor must re-probe and may repair. |
-| L1-SCOPE | bounded work | A scoped run executes only named probe families; skipped probes are explicit, never silently green. |
+| `L1-INPUT` | evidence | One probe has name, family, presence observation, version observation, scope, and provenance. |
+| `L1-VERDICT` | typed result | Verdict is OK, ABSENT_FAMILY, ABSENT_SPECIFIC, UNPROBEABLE, STALE, PAUSED, or UNMEASURED; no missing value becomes OK. |
+| `L1-REPAIR` | authority | Every repair enters one mutate() chokepoint, with a run directory, backup, before hash, after hash, and action record. |
+| `L1-UNDO` | recovery | undo <run-id> restores the recorded pre-mutation bytes or database snapshot, and reports the result. |
+| `L1-IDEMPOTENCE` | conditional law | Same scope plus identical before-state hashes and unchanged probe inputs yields zero repair mutations on the next doctor run. |
+| `L1-DRIFT` | re-evaluation | A changed version, daemon state, scope, or before hash invalidates the no-op premise; the doctor must re-probe and may repair. |
+| `L1-SCOPE` | bounded work | A scoped run executes only named probe families; skipped probes are explicit, never silently green. |
 
 ## Probe Verdict Type
 
@@ -48,37 +48,100 @@ The exhaustive wire shape is: ProbeVerdict{OK|ABSENT_FAMILY|ABSENT_SPECIFIC|UNPR
 
 ### Verdict properties
 
-- L1P-EXHAUSTIVE-ARMS: every probe result is exactly one of the seven arms above; absence of a matching arm is a decode/instrument error.
-- L1P-WRONG-VERSION-STALE: presence plus a wrong version is STALE, never OK, ABSENT_SPECIFIC, or UNPROBEABLE.
-- L1P-UNRUN-NOT-REFUSED: timeout, no-record, and instrument-error observations are UNMEASURED and never Refused.
-- L1P-PAUSED-DISTINCT: an explicit operator pause is PAUSED, not UNPROBEABLE, so resume intent is preserved.
-- L1P-HD-NAMED: only an explicit named HD may convert UNPROBEABLE, STALE, PAUSED, or UNMEASURED into degraded continuation; the enum arm and reason remain visible.
+- `L1P-EXHAUSTIVE-ARMS`: every probe result is exactly one of the seven arms above; absence of a matching arm is a decode/instrument error.
+- `L1P-WRONG-VERSION-STALE`: presence plus a wrong version is STALE, never OK, ABSENT_SPECIFIC, or UNPROBEABLE.
+- `L1P-UNRUN-NOT-REFUSED`: timeout, no-record, and instrument-error observations are UNMEASURED and never Refused.
+- `L1P-PAUSED-DISTINCT`: an explicit operator pause is PAUSED, not UNPROBEABLE, so resume intent is preserved.
+- `L1P-HD-NAMED`: only an explicit named HD may convert UNPROBEABLE, STALE, PAUSED, or UNMEASURED into degraded continuation; the enum arm and reason remain visible.
 
 ### Verdict laws
 
-- LAW-L1-VERDICT-EXHAUSTIVE — the decoder cannot silently map an unknown result to OK or Refused. Test: s1_l1_doctor_contract.rs::unknown_arm_is_instrument_error.
-- LAW-L1-UNRUN — a timeout produces UNMEASURED with run_state=UNRUN and never Pass or Refused. Test: s1_l1_doctor_contract.rs::timeout_is_unrun.
-- LAW-L1-WRONG-VERSION — a present tool below the version floor produces STALE. Test: s1_l1_doctor_contract.rs::wrong_version_is_stale.
-- LAW-L1-PAUSED — an explicit pause produces PAUSED and retains pause intent. Test: s1_l1_doctor_contract.rs::paused_is_not_unprobeable.
-- LAW-L1-UNKNOWN — no authoritative record produces UNMEASURED with reason_code=UNKNOWN_NO_RECORD, not UNPROBEABLE. Test: s1_l1_doctor_contract.rs::unknown_record_is_unmeasured.
+- `LAW-L1-VERDICT-EXHAUSTIVE` — the decoder cannot silently map an unknown result to OK or Refused. Test: `l1_doctor.rs::unknown_arm_is_instrument_error`.
+- `LAW-L1-UNRUN` — a timeout produces UNMEASURED with run_state=UNRUN and never Pass or Refused. Test: `l1_doctor.rs::timeout_is_unrun`.
+- `LAW-L1-WRONG-VERSION` — a present tool below the version floor produces STALE. Test: `l1_doctor.rs::wrong_version_is_stale`.
+- `LAW-L1-PAUSED` — an explicit pause produces PAUSED and retains pause intent. Test: `l1_doctor.rs::paused_is_not_unprobeable`.
+- `LAW-L1-UNKNOWN` — no authoritative record produces UNMEASURED with reason_code=UNKNOWN_NO_RECORD, not UNPROBEABLE. Test: `l1_doctor.rs::unknown_record_is_unmeasured`.
 
 ### Properties
 
-- L1P-TWO-SIGNALS: a tool is OK only when presence and version evidence both satisfy the required contract.
-- L1P-UNKNOWN-LOUD: UNPROBEABLE, STALE, PAUSED, and UNMEASURED remain typed outcomes and carry a reason plus next action.
-- L1P-ONE-MUTATOR: no fixer writes outside the mutation chokepoint.
-- L1P-BEFORE-HASH: every reversible file mutation records the exact pre-state hash before writing a backup or applying the operation.
-- L1P-CONDITIONAL-IDEMPOTENCE: zero actions is required only when the second run observes the same scope, probe inputs, and before-state hash tuple as the first run's post-state. It is not a promise that a doctor never acts twice.
-- L1P-REPAIR-THEN-REPROBE: a repair is not a healthy verdict; the same probe must be run again before L1 advances.
+- `L1P-TWO-SIGNALS`: a tool is OK only when presence and version evidence both satisfy the required contract.
+- `L1P-UNKNOWN-LOUD`: UNPROBEABLE, STALE, PAUSED, and UNMEASURED remain typed outcomes and carry a reason plus next action.
+- `L1P-ONE-MUTATOR`: no fixer writes outside the mutation chokepoint.
+- `L1P-BEFORE-HASH`: every reversible file mutation records the exact pre-state hash before writing a backup or applying the operation.
+- `L1P-CONDITIONAL-IDEMPOTENCE`: zero actions is required only when the second run observes the same scope, probe inputs, and before-state hash tuple as the first run's post-state. It is not a promise that a doctor never acts twice.
+- `L1P-REPAIR-THEN-REPROBE`: a repair is not a healthy verdict; the same probe must be run again before L1 advances.
 
 ## Laws
 
-- LAW-L1-SCOPED-PROBE — a scoped doctor emits only the requested probe families and preserves explicit skipped/unmeasured outcomes. Test: s1_l1_doctor_contract.rs::scope_does_not_vacuously_pass_skipped_probes.
-- LAW-L1-TWO-SIGNALS — a present tool at the wrong version is not OK. Test: s1_l1_doctor_contract.rs::wrong_version_is_not_ok.
-- LAW-L1-MUTATE-AUDIT — a repair records run id, before hash, backup, after hash, and one action row through the chokepoint. Test: s1_l1_doctor_contract.rs::repair_has_verbatim_backup_and_action.
-- LAW-L1-CONDITIONAL-IDEMPOTENCE — identical post-repair state and probe inputs produce zero second-run repair actions; changed state is allowed to produce a new action. Test: s1_l1_doctor_contract.rs::same_hash_noop_but_drift_repairs.
-- LAW-L1-UNDO — undo restores every touched target to its recorded before hash. Test: s1_l1_doctor_contract.rs::undo_restores_before_hash.
-- LAW-L1-REPROBE — a repair cannot advance on its pre-repair verdict. Test: s1_l1_doctor_contract.rs::repair_requires_fresh_probe.
+- `LAW-L1-SCOPED-PROBE` — a scoped doctor emits only requested probe families and preserves explicit skipped/unmeasured outcomes. Test: `l1_doctor.rs::scope_does_not_vacuously_pass_skipped_probes`.
+- `LAW-L1-TWO-SIGNALS` — a present tool at the wrong version is not OK. Test: `l1_doctor.rs::wrong_version_is_stale`.
+- `LAW-L1-MUTATE-AUDIT` — a repair records run id, before hash, backup, after hash, and one action row. Test: `l1_doctor.rs::repair_records_before_hash_backup_after_hash`.
+- `LAW-L1-CONDITIONAL-IDEMPOTENCE` — identical post-repair state and probe inputs produce zero second-run actions; changed state reopens repair. Test: `l1_doctor.rs::second_repair_is_zero_actions_given_identical_hashes`.
+- `LAW-L1-UNDO` — undo restores every touched target to its recorded before hash. Test: `l1_doctor.rs::undo_restores_before_hash`.
+- `LAW-L1-REPROBE` — a repair cannot advance on its pre-repair verdict. Test: `l1_doctor.rs::failed_reprobe_blocks_l2`.
+
+## Build Inventory
+
+Every row below is one L1 build item. The listed command is the acceptance shape for the future build; no L1 crate is built in this readiness pass. fh is intentionally excluded from the eleven-probe set after Joshua removed it at f735cfd.
+
+| ID | Build item | Run -> expect |
+|---|---|---|
+| `L1-BUILD-DOCTOR` | DoctorReport runner and JSON envelope | Run ompo doctor --json; expect schema, run id, scope, probes, verdicts, remediation, and next action. |
+| `L1-BUILD-SCOPE` | Explicit probe-family scope | Run ompo doctor --scope system; expect only requested probes and explicit skipped/unmeasured rows. |
+| `L1-BUILD-PROBE-TMUX` | tmux probe | Run tmux --version; expect presence plus version evidence. |
+| `L1-BUILD-PROBE-NTM` | ntm probe | Run ntm --version or supported health; expect version/presence or UNPROBEABLE, never guessed OK. |
+| `L1-BUILD-PROBE-BR` | br probe | Run br --version; expect presence plus required version. |
+| `L1-BUILD-PROBE-BV` | bv probe | Run bv --version or supported health; expect presence plus required version. |
+| `L1-BUILD-PROBE-AGENT-MAIL` | Agent Mail probe | Run the supported health/version probe; expect endpoint identity and version or typed absence. |
+| `L1-BUILD-PROBE-SOCRATICODE` | socraticode/qdrant probe | Run the supported health probe; expect service and index state, not a process-only assumption. |
+| `L1-BUILD-PROBE-RCH` | rch plus repo-lane probe | Run rch doctor scoped to topology/convergence; expect lane identity and explicit UNKNOWN when no repo record exists. |
+| `L1-BUILD-PROBE-GIT` | git probe | Run git rev-parse --show-toplevel; expect repository identity or ABSENT_FAMILY. |
+| `L1-BUILD-PROBE-DISK` | disk versus mint-floor probe | Run the read-only disk/mint probe; expect measured capacity and remediation, never a guessed green. |
+| `L1-BUILD-PROBE-FRANKENMERMAID` | frankenmermaid probe | Run frankenmermaid --version or health; expect presence and version. |
+| `L1-BUILD-PROBE-TOOLCHAIN` | toolchain-pin probe | Read rust-toolchain.toml and supported toolchain identity; expect pin or remediation. |
+| `L1-BUILD-TWO-SIGNALS` | presence AND version evaluator | Run a present wrong-version fixture; expect STALE, never OK or ABSENT. |
+| `L1-BUILD-VERDICT` | ProbeVerdict seven-arm wire type | Run the vv9h contract; expect OK, ABSENT_FAMILY, ABSENT_SPECIFIC, UNPROBEABLE, STALE, PAUSED, or UNMEASURED with run state/reason. |
+| `L1-BUILD-REMEDIATION` | per-ABSENT remediation table | Run every absent-family/specific case; expect a non-empty remediation or requiredness-driven halt. |
+| `L1-BUILD-EXIT` | two-band exit envelope | Run healthy and refusing probes; expect exit 0 for healthy and nonzero typed outcome without conflating UNRUN with refusal. |
+| `L1-BUILD-MUTATE` | repair mutation chokepoint | Run a repair; expect before hash, verbatim backup, after hash, and one action record. |
+| `L1-BUILD-UNDO` | undo/restore path | Run undo for a repair run; expect restored bytes to match the recorded before hash. |
+| `L1-BUILD-REPROBE-IDEMPOTENCE` | post-repair re-probe and conditional idempotence | Run repair twice with unchanged hashes, then after a changed hash; expect zero second actions only in the unchanged case and a reopened repair after drift. |
+
+## Test Inventory
+
+Every row below is one L1 test item. Each name is the future single-pass test function and each known-bad leg is mandatory.
+
+| ID | Named test | Run -> expect; known-bad |
+|---|---|---|
+| `L1-TEST-PROBE-TMUX` | l1_doctor.rs::tmux_probe_emits_two_signals | Run tmux fixture; expect presence/version row; wrong version is STALE. |
+| `L1-TEST-PROBE-NTM` | l1_doctor.rs::ntm_probe_is_typed | Run ntm probe fixture; expect version or UNPROBEABLE; unsupported answer must not be OK. |
+| `L1-TEST-PROBE-BR` | l1_doctor.rs::br_probe_emits_two_signals | Run br fixture; expect presence/version; missing binary is ABSENT with remediation. |
+| `L1-TEST-PROBE-BV` | l1_doctor.rs::bv_probe_emits_two_signals | Run bv fixture; expect presence/version; wrong version is STALE. |
+| `L1-TEST-PROBE-AGENT-MAIL` | l1_doctor.rs::agent_mail_probe_is_scoped | Run endpoint fixture; expect endpoint/version; unavailable endpoint is ABSENT or UNMEASURED, never guessed OK. |
+| `L1-TEST-PROBE-SOCRATICODE` | l1_doctor.rs::socraticode_probe_preserves_unknown | Run service fixture with no index record; expect UNMEASURED UNKNOWN_NO_RECORD. |
+| `L1-TEST-PROBE-RCH` | l1_doctor.rs::rch_probe_reports_lane_state | Run RCH topology fixture; expect explicit repo UNKNOWN when no record exists. |
+| `L1-TEST-PROBE-GIT` | l1_doctor.rs::git_probe_rejects_non_repo | Run outside a repo; expect ABSENT_FAMILY with remediation. |
+| `L1-TEST-PROBE-DISK` | l1_doctor.rs::disk_probe_reports_floor | Run low-floor fixture; expect typed pressure/remediation, not green. |
+| `L1-TEST-PROBE-FRANKENMERMAID` | l1_doctor.rs::frankenmermaid_probe_emits_two_signals | Run wrong-version fixture; expect STALE. |
+| `L1-TEST-PROBE-TOOLCHAIN` | l1_doctor.rs::toolchain_probe_requires_pin | Run missing/invalid pin fixture; expect ABSENT_SPECIFIC plus remediation. |
+| `L1-TEST-TWO-SIGNAL` | l1_doctor.rs::wrong_version_is_stale | Run present tool below floor; expect STALE, not OK or absent. |
+| `L1-TEST-VERDICT-ARMS` | l1_doctor.rs::every_probe_verdict_has_branch | Run all seven-arm fixtures; expect each declared branch and no default green. |
+| `L1-TEST-TIMEOUT-UNRUN` | l1_doctor.rs::timeout_is_unmeasured_unrun | Run timeout fixture; expect UNMEASURED run_state=UNRUN, never Pass or Refused. |
+| `L1-TEST-ABSENT-REMEDIATION` | l1_doctor.rs::every_absent_has_remediation | Run absent family and absent specific fixtures; expect remediation or requiredness halt. |
+| `L1-TEST-EXIT-LATTICE` | l1_doctor.rs::exit_bands_match_verdicts | Run healthy/refused/unrun fixtures; expect exit lattice to preserve distinctions. |
+| `L1-TEST-MUTATE-BACKUP` | l1_doctor.rs::repair_records_before_hash_backup_after_hash | Run repair fixture; expect backup/action evidence; delete backup leg must fail. |
+| `L1-TEST-UNDO` | l1_doctor.rs::undo_restores_before_hash | Run repair then undo; expect byte/hash restoration; tampered backup must refuse. |
+| `L1-TEST-IDEMPOTENT-SAME` | l1_doctor.rs::second_repair_is_zero_actions_given_identical_hashes | Run repair twice without drift; expect second action count 0. |
+| `L1-TEST-IDEMPOTENT-DRIFT` | l1_doctor.rs::second_repair_reopens_on_changed_before_hash | Change a target hash between runs; expect a new repair action, not a false no-op. |
+| `L1-TEST-REPROBE-HALT` | l1_doctor.rs::failed_reprobe_blocks_l2 | Make repair readback fail; expect L2 not reached. |
+| `L1-TEST-SCOPE-UNKNOWN` | l1_doctor.rs::scope_does_not_vacuously_pass_unknown | Omit a requested probe record; expect UNMEASURED/UNKNOWN, not Pass. |
+
+## Dispatch Preflight (L1)
+
+1. **How it flows:** FILE the build/test bead with run-X-expect-Y acceptance; CLAIM it to the L1 lane; PACKET its exact contract row; ADMISSION checks the current freeze and required predecessor; SEND only after admission; RECEIPT and ACK establish delivery; OBSERVE the worker result; VERIFY with the named non-author test; RECORD the lifecycle event and evidence.
+2. **What must be true:** the contract row, named test, upstream source identity, RCH lane, current repo revision, and known-bad fixture must all be present; no build may start while its acceptance or source pin is missing.
+3. **If automated:** bv selects the ready row, bead-availability confirms claimability, dispatch-claim-fence confirms assignment, and the L1 gate reads the typed report before allowing the next edge. A missing or UNKNOWN oracle is a refusal to advance, not an empty queue.
+4. **Escape route:** an agent reports OK from presence alone when the version probe is UNPROBEABLE, collapsing UNPROBEABLE/STALE into green. The two-signal test and L1P-UNRUN-NOT-REFUSED are the detector.
 
 ## Upstream Reference and the Idempotence Attack
 
@@ -94,23 +157,23 @@ RCH supplies the topology/convergence doctor precedent. rch doctor --help expose
 
 ## Authority / Recovery / Ordering
 
-- L1R-SCOPE: the caller supplies a scope; the report names requested, run, skipped, and unmeasured probes.
-- L1R-REFUSE: wrong-version, stale, paused, unprobeable, or missing-family results do not advance as healthy.
-- L1R-MUTATE: only the doctor repair session may call the chokepoint; a fixer cannot write directly.
-- L1R-BACKUP: backup is created from the before bytes and verified before the operation is accepted.
-- L1R-REPROBE: repair returns to the same probe predicate; a post-repair report is required.
-- L1R-UNDO: undo is selected by run id, rechecks the recorded artifact, restores in reverse action order, and reports partial failure.
+- `L1R-SCOPE`: the caller supplies a scope; the report names requested, run, skipped, and unmeasured probes.
+- `L1R-REFUSE`: wrong-version, stale, paused, unprobeable, or missing-family results do not advance as healthy.
+- `L1R-MUTATE`: only the doctor repair session may call the chokepoint; a fixer cannot write directly.
+- `L1R-BACKUP`: backup is created from the before bytes and verified before the operation is accepted.
+- `L1R-REPROBE`: repair returns to the same probe predicate; a post-repair report is required.
+- `L1R-UNDO`: undo is selected by run id, rechecks the recorded artifact, restores in reverse action order, and reports partial failure.
 
 ## Observability
 
 | ID | Row | Source | Freshness | Known-bad |
 |---|---|---|---|---|
-| L1-OBS-PROBE | probe evidence | report row: presence, version, scope, source revision | per run | present tool with wrong version |
-| L1-OBS-VERDICT | typed verdict | report row: verdict, reason_code, next_command | per run | missing reason or missing next action |
-| L1-OBS-MUTATION | repair audit | .doctor/runs/<id>/actions.jsonl with before/after hashes | per repair run | mutation without backup/action row |
-| L1-OBS-UNDO | recovery result | undo envelope plus restored hash comparisons | per undo run | restored bytes differ from before hash |
+| `OBS-L1-PROBE` | probe evidence | report row: presence, version, scope, source revision | per run | present tool with wrong version |
+| `OBS-L1-VERDICT` | typed verdict | report row: verdict, reason_code, next_command | per run | missing reason or missing next action |
+| `OBS-L1-MUTATION` | repair audit | .doctor/runs/<id>/actions.jsonl with before/after hashes | per repair run | mutation without backup/action row |
+| `OBS-L1-UNDO` | recovery result | undo envelope plus restored hash comparisons | per undo run | restored bytes differ from before hash |
 
-Metric: L1-METRIC-REPAIR-ACTION-RATE = repair action count per doctor run, partitioned by same_observation versus state_drift; the required floor is 0 only for the same-observation partition. A nonzero action rate after drift is not a failure.
+Metric: `MET-L1-REPAIR-ACTION-RATE` = repair action count per doctor run, partitioned by same_observation versus state_drift; the required floor is 0 only for the same-observation partition. A nonzero action rate after drift is not a failure.
 
 ## VIOLATION — where shipped code contradicts this law
 
@@ -173,7 +236,7 @@ This contract pins the L1 law and cites an upstream implementation/test shape. I
 
 | ID | Sibling | Rejection | Result |
 |---|---|---|---|
-| XATTACK-L3-IDEMPOTENCE | docs/contracts/s1_l3_walkthrough.md:34,43 | REJECTED as current proof, not as a future law: L3P-IDEMPOTENT names a second ompo start state-reporting law, but no production source or runner currently enforces it. | The command found only sibling-contract references; crates/omp-orchestrator had no implementation or consumer hit. |
+| `XATTACK-L3-IDEMPOTENCE` | docs/contracts/s1_l3_walkthrough.md:34,43 | REJECTED as current proof, not as a future law: L3P-IDEMPOTENT names a second ompo start state-reporting law, but no production source or runner currently enforces it. | The command found only sibling-contract references; crates/omp-orchestrator had no implementation or consumer hit. |
 
 Command run:
 
