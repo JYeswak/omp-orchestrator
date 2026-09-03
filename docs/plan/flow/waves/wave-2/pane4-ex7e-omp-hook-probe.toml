@@ -1,0 +1,176 @@
+# ex7e HD-0012 probe. Pane 4. Do not land in S1.toml from this pane — row-set for pane 1.
+# PROBE ONLY. No hook built. 2026-09-03. WORKTREE then committed.
+
+probed_at = "2026-09-03T20:35Z"
+bead = "omp-orchestrator-hook-surface-probe-ex7e"
+hd = "HD-0012"
+no_hook_built = true
+
+# --- surfaces ---
+# 1 omp types (installed v18.0.11)
+# 2 live omp grok profile config
+# 3 ~/.claude/settings.json
+# 4 ~/.codex/hooks.json
+# 5 control-plane/hooks_certified.toml
+
+omp_types_hooks = "/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/extensibility/hooks/"
+omp_capability_hook = "/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/capability/hook.d.ts"
+omp_hook_table = "/Users/josh/.omp/profiles/<profile>/agent/config.yml"
+omp_hook_table_grok = "/Users/josh/.omp/profiles/grok/agent/config.yml"
+omp_extensions_dir = "/Users/josh/.omp/omp-extensions"
+project_omp_hooks_dir = "ABSENT" # this-repo .omp and .pi missing
+native_hooks_slash_dir = "ABSENT at user+project; loader still names .omp/.pi hooks/"
+
+cozo = false
+# grep -rl cozo --include=Cargo.toml across control-plane zestgraph-hook-substrates,
+# omp-orchestrator, and this probe: no Cargo.toml cozo dep. Joshua's recollection is false.
+zestgraph_hook_substrates_asupersync_rev = "fa3c01aec6c77c6652c7a754e8e009287daa5323"
+# matches this repo workspace pin fa3c01aec
+
+# --- UNKNOWN vs UNPROBEABLE ---
+# UNKNOWN = nobody looked.
+# UNPROBEABLE = looked; probe failed; failure recorded.
+# ABSENT = looked; path does not exist.
+# The old S1-HOOK-OMP-PANES row was UNKNOWN. After this probe it is MEASURED.
+# Do not keep UNKNOWN on a looked-at field. Do not use UNPROBEABLE for ABSENT.
+
+unknown_vs_unprobeable = "UNPROBEABLE-for-failed-probe-with-recorded-failure; UNKNOWN-only-before-look; this-table-was-UNKNOWN-now-MEASURED"
+
+# --- authority ---
+# Claude/Codex live hooks: control-plane/hooks_certified.toml is authoritative.
+# S1 12-field table is a SUBSET (id event matcher class fail_mode binary policy_file
+# source_commit language stage certified harm_class). CP adds binary_sha256,
+# stage1_substrate, asupersync_rev, latency, command_sha256.
+# Two registries writing one ~/.claude/settings.json is the two-authorities failure.
+# S1 Claude/Codex rows should CITE CP ids, not duplicate.
+# OMP is a different table (profile config.yml extensions:) and is NOT in CP registry.
+
+certified_false_vs_unattempted = "neither-wrong-if-labelled: CP certified=false means soak-unrun after registration; S1 UNATTEMPTED means never entered six stages. Collapsing them made S1 look considered-and-rejected."
+
+control_plane_rows = 16
+control_plane_certified_true = 0
+
+# --- live omp grok extensions (9). Same list on claude/codex/glm/muse profiles. ---
+# Default ~/.omp/agent/config.yml has NO extensions — profile is required.
+
+[[omp_extension]]
+id = "observational-tool-result"
+event = "tool_result"
+path = "/Users/josh/.omp/omp-extensions/observational-tool-result.ts"
+class = "advisory"
+language = "typescript"
+certified = "UNATTEMPTED"
+
+[[omp_extension]]
+id = "dcg-tool-bridge"
+event = "tool_call,user_bash"
+path = "/Users/josh/.omp/omp-extensions/dcg-tool-bridge.ts"
+class = "gate"
+language = "typescript"
+binary_behind = "/Users/josh/.local/bin/dcg"
+certified = "UNATTEMPTED"
+
+[[omp_extension]]
+id = "ee-failure-journal"
+event = "tool_result"
+path = "/Users/josh/.omp/omp-extensions/ee-failure-journal.ts"
+class = "advisory"
+language = "typescript"
+certified = "UNATTEMPTED"
+
+[[omp_extension]]
+id = "zeststream-cast-spawn-cap"
+event = "tool_call,user_bash"
+path = "/Users/josh/.omp/omp-extensions/zeststream-cast-spawn-cap.ts"
+class = "gate"
+language = "typescript"
+certified = "UNATTEMPTED"
+
+[[omp_extension]]
+id = "skill-topology-session-start"
+event = "session_start"
+path = "/Users/josh/.omp/omp-extensions/skill-topology-session-start.ts"
+class = "advisory"
+language = "typescript"
+certified = "UNATTEMPTED"
+
+[[omp_extension]]
+id = "ee-ambient-session-start"
+event = "session_start"
+path = "/Users/josh/.omp/omp-extensions/ee-ambient-session-start.ts"
+class = "advisory"
+language = "typescript"
+certified = "UNATTEMPTED"
+
+[[omp_extension]]
+id = "zestgraph-danger-gate"
+event = "tool_call"
+path = "/Users/josh/.omp/omp-extensions/zestgraph-danger-gate.ts"
+class = "gate"
+language = "typescript"
+binary_behind = "/Users/josh/.local/bin/zestgraph-danger-gate"
+certified = "UNATTEMPTED"
+
+[[omp_extension]]
+id = "slb-guard-fail-closed"
+event = "tool_call"
+path = "/Users/josh/.omp/omp-extensions/slb-guard-fail-closed.ts"
+class = "gate"
+language = "typescript"
+binary_behind = "/Users/josh/.local/bin/slb-guard-fail-closed"
+certified = "UNATTEMPTED"
+
+[[omp_extension]]
+id = "rch-mutator"
+event = "tool_call"
+path = "/Users/josh/.omp/omp-extensions/rch-mutator.ts"
+class = "advisory"
+language = "typescript"
+binary_behind = "/Users/josh/.local/bin/rch"
+certified = "UNATTEMPTED"
+
+# API events available (HookAPI) not all wired:
+# session_start session_before_switch session_switch session_before_branch session_branch
+# session_before_compact session.compacting session_compact session_shutdown
+# session_before_tree session_tree context before_agent_start agent_start agent_end
+# turn_start turn_end auto_compaction_start auto_compaction_end auto_retry_start
+# auto_retry_end ttsr_triggered todo_reminder tool_call tool_result
+# live subset: tool_call tool_result session_start user_bash
+
+# --- .sh hooks still live (geography escape; do not fix this pass) ---
+# Claude Stop: /Users/josh/.claude/scripts/finding-bead-gate.sh
+# Codex PreToolUse: /Users/josh/Developer/control-plane/bin/zeststream-cast-spawn-cap.sh
+# Codex PostToolUse: /Users/josh/Developer/control-plane/bin/codex-command-failure-journal.sh
+sh_hooks_live = 3
+
+# --- coverage levels ---
+# binary-level: pipe JSON into a binary. not done this pass.
+# hook-level: live session intercept+refuse. HD-0012 forbids installing a probe hook.
+binary_level = 0
+hook_level = 0
+
+# --- wrapper hole ---
+# OMP HookToolWrapper wraps AgentTool.execute and forwards full input.command.
+# dcg-tool-bridge sends that whole string to dcg. The argv-head hole lives in the
+# BINARY (danger-gate registry: argv-head match). timeout/nice/env wrappers remain
+# a binary-layer hole inherited by omp, not introduced by the omp table.
+wrapper_hole = "present:inherited-from-binaries-argv-head"
+
+# --- row-set for pane 1 (do not apply here) ---
+# Replace S1-HOOK-OMP-PANES UNKNOWN fields with MEASURED values below.
+# certified stays UNATTEMPTED (never entered /hook-certification six stages).
+
+[[row_for_pane1]]
+id = "S1-HOOK-OMP-PANES"
+event = "omp tool_call / tool_result / session_start / user_bash"
+matcher = "per-extension; bash for gates; write/edit for observational"
+class = "mixed gate+advisory"
+fail_mode = "UNMEASURED-per-extension"
+binary = "9 TypeScript factories under ~/.omp/omp-extensions; several spawn ~/.local/bin/*"
+policy_file = "/Users/josh/.omp/profiles/<profile>/agent/config.yml"
+source_commit = "UNKNOWN"
+language = "typescript"
+stage = "live-unattempted"
+certified = "UNATTEMPTED"
+harm_class = "gates can block tool_call; advisories capture only"
+measured = "grok/claude/codex/glm/muse profiles each list the same 9 extensions. Default ~/.omp/agent/config.yml has zero. Project .omp ABSENT."
