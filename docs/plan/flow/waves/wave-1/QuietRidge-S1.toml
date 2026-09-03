@@ -15,3 +15,12 @@ reviewer_says = "The row claims three installer flags and a no-caller state but 
 evidence = "sed -n '13,18p;35,50p' crates/installer/src/main.rs"
 severity = "major"
 resolution = ""
+
+[[disagreement]]
+box = "S1"
+field = "trigger_target"
+owner_says = "omp-orchestrator:start and ompo install are the current start commands."
+reviewer_says = "The installed OMP surface is omp/18.1.5 and its help exposes omp launch plus --mode=rpc; omp start --help is accepted as a message-shaped invocation but is not listed as a CLI verb. The trigger must distinguish the planned ompo wrapper from the installed OMP command, or mark the wrapper MISSING."
+evidence = "omp --version; omp --help | sed -n '1,12p'; omp start --help | sed -n '1,6p'"
+severity = "major"
+resolution = ""
