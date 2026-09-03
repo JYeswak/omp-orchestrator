@@ -70,7 +70,12 @@ fn render_capture(lines: &[Vec<Fragment>], spin_bump: u8, timer_bump: u16) -> St
         for f in line {
             let rendered = match f {
                 Fragment::Spinner(i) => render(&Fragment::Spinner(i.wrapping_add(spin_bump) % 0xFF)),
-                Fragment::Timer { n, unit } => render(&Fragment::Timer { n: n.saturating_add(timer_bump), unit: *unit }),
+                // Only a token the kernel READS as a timer is animation; `5632x` is content, and
+                // bumping it is the harness inventing a change the pane never made (first fuzz
+                // run, 2026-09-03: fired in <1s on exactly that — a harness bug, kept as a seed).
+                Fragment::Timer { n, unit } if matches!(['s', 'm', 'h', 'S', 'M', 'H', 'x', 'd'][usize::from(*unit % 8)], 's' | 'm' | 'h') => {
+                    render(&Fragment::Timer { n: n.saturating_add(timer_bump), unit: *unit })
+                }
                 other => render(other),
             };
             out.push_str(&rendered);
