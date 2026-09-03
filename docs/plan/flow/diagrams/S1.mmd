@@ -1,54 +1,67 @@
 flowchart TD
-  IN["S1 human start: install then doctor then ecosystem then walkthrough then swarm-live then portal"] --> TODAY{"trigger_today?"}
-  TODAY -->|"none MEASURED 2026-09-03"| NONE["REFUSED as a live entry: no slash, no SessionStart, no launchd. Hand-read only"]
-  TODAY -->|"target: curl one-liner then ompo then slash start"| PERSONA{"persona from 08-end-users?"}
+  IN["S1 human start"] --> TODAY{"S1-specific trigger wired?"}
+  TODAY -->|"no: generic SessionStart and launchd run exist; slash start and portal --check do not"| HAND["entry is hand or generic supervisor"]
+  TODAY -->|"yes: ompo then slash start then SessionStart portal --check"| INTAKE
+  HAND --> INTAKE
+  INTAKE["intake.requirements.fleet none=A, 1to8=B, else=C"] --> L0
 
-  PERSONA -->|A solo gates-only| L0
-  PERSONA -->|B small-team receipts| L0
-  PERSONA -->|C fleet operator| L0
+  L0["L0 publish name ompo. Internal crate may be installer"] --> L0PATH{"command -v ompo first hit equals dest?"}
+  L0PATH -->|no| RPATH["REFUSE name collision. Receipt lists every PATH hit"]
+  L0PATH -->|yes| L0CX["subprocess-contract run_output and Cx"]
+  L0CX --> L0Q1{"SHA256 independent channel plus cosign?"}
+  L0Q1 -->|fail| R0["REFUSE supply chain"]
+  L0Q1 -->|ok| L0Q2{"agent detected?"}
+  L0Q2 -->|no| L1
+  L0Q2 -->|yes| L0M{"merge result?"}
+  L0M -->|created or merged or already or skipped| L1
+  L0M -->|failed| R0M["REFUSE or DEGRADED. Not L1 healthy"]
 
-  L0["L0 install: binary MUST NOT be named installer. PATH first hit is /usr/sbin/installer"] --> L0Q1{"SHA256 plus cosign?"}
-  L0Q1 -->|fail| R0["REFUSE supply chain. OutcomeClass::Refusal"]
-  L0Q1 -->|ok| L0Q2{"agent detected: claude, codex, omp, agy, cursor?"}
-  L0Q2 -->|yes| L0M["merge hooks and skills with timestamped backup: created or merged or already or failed or skipped"]
-  L0Q2 -->|no| L0S["skipped for that agent"]
-  L0M --> L1
-  L0S --> L1
-
-  L1["L1 doctor: two signals per probe. SOTA is br doctor mutate chokepoint plus undo by before_hash"] --> L1Q{"probe family?"}
+  L1["L1 doctor PATH plus version. OMP panes RpcRequest::GetState"] --> L1Q{"probe?"}
   L1Q -->|OK| L2
-  L1Q -->|UNPROBEABLE e.g. tmux rejects --version| L1U["record UNPROBEABLE. Never vacuously green"]
-  L1Q -->|ABSENT specific e.g. br or tmux| L1I["informational. Do not invent an install command"]
-  L1Q -->|ABSENT family e.g. tracker.any| L1H["HUMAN HALT with the named remediation command"]
-  L1U --> L2
-  L1I --> L2
+  L1Q -->|UNPROBEABLE| L1U["record UNPROBEABLE"]
+  L1U --> L1UH{"named HD degraded-continue?"}
+  L1UH -->|no| H1U["HUMAN HALT S9"]
+  L1UH -->|yes| L2
+  L1Q -->|ABSENT specific| L1FAM{"family probe?"}
+  L1FAM -->|OK| L2
+  L1FAM -->|ABSENT family| L1H["HUMAN HALT named remediation"]
+  L1Q -->|ABSENT family| L1H
 
-  L2["L2 ecosystem: git remote, AGENTS.md, CLAUDE.md, .beads, hook identity vs HEAD"] --> L2Q1{"git remote configured?"}
-  L2Q1 -->|no| R2["HALT. 305-commit public-remote trauma"]
-  L2Q1 -->|yes| L2Q2{"AGENTS.md and CLAUDE.md present and stamped?"}
-  L2Q2 -->|no| L2I["init writes from foundry template. Idempotent"]
+  L2["L2 ecosystem"] --> L2Q1{"git repository?"}
+  L2Q1 -->|no| R2R["HALT need git repo"]
+  L2Q1 -->|yes remote optional for persona A| L2Q2{"AGENTS.md CLAUDE.md stamped?"}
+  L2Q2 -->|no| L2T{"trusted-init opted in?"}
+  L2T -->|no| H2I["HUMAN HALT do not overwrite foreign policy"]
+  L2T -->|yes| L2I["init template identity plus backup"]
+  L2I --> L2Q2B{"re-probe stamped?"}
+  L2Q2B -->|no| H2F["HALT init did not take"]
+  L2Q2B -->|yes| L2Q3
   L2Q2 -->|yes| L2Q3{"hook identity equals HEAD?"}
-  L2I --> L2Q3
-  L2Q3 -->|no| L2R["rebuild on the lane, reinstall hook. IDENTITY MISMATCH"]
   L2Q3 -->|yes| L3
-  L2R --> L3
+  L2Q3 -->|no| L2R["rebuild and reinstall hook"]
+  L2R --> L2Q3B{"re-probe identity equals HEAD?"}
+  L2Q3B -->|no| H2H["HALT still mismatch"]
+  L2Q3B -->|yes| L3
 
   L3["L3 walkthrough"] --> L3Q{"HD-0009 decided?"}
-  L3Q -->|no decision empty| H9["HUMAN HALT S9 HD-0009: frankentui plus --json vs --json-only"]
-  L3Q -->|yes| L3W["identical step list for TUI and --json: step, status, reason_code, next_command"]
+  L3Q -->|no| H9["HUMAN HALT S9 HD-0009"]
+  L3Q -->|yes| L3W["identical TUI and --json steps"]
   L3W --> L4
 
-  L4["L4 swarm live? Three sources must agree: tmux has-session AND tick-monitor OMP status AND Agent Mail roster"] --> L4Q{"sources?"}
-  L4Q -->|disagree| L4D["NOT live. The disagreement is the finding. Do not spawn"]
+  L4["L4 live tmux plus tick-monitor two-capture plus Agent Mail plus GetState"] --> L4Q{"sources agree?"}
+  L4Q -->|disagree| H4["HUMAN HALT name source"]
   L4Q -->|agree live| L5
-  L4Q -->|agree not live and persona A| L4A["skip spawn. Portal is gates-only. 08-end-users A before B before C"]
-  L4Q -->|agree not live and persona B or C| L4H{"HD-0010 decided?"}
-  L4H -->|no| H10["HUMAN HALT S9 HD-0010: agent mix"]
-  L4H -->|yes| L4S["ntm spawn then WAVE.md generated from tmux list-panes then macro_start_session then pack"]
+  L4Q -->|not live persona A| L4A["no spawn. Portal gates-only"]
   L4A --> L5
-  L4S --> L5
-  L4D --> H4["HUMAN HALT: name the disagreeing source"]
+  L4Q -->|not live persona B or C| L4H{"HD-0010?"}
+  L4H -->|no| H10["HUMAN HALT S9 HD-0010"]
+  L4H -->|yes| L4S["ntm spawn --assign --cass-context via Cx"]
+  L4S --> L4SF{"spawn WAVE hash mail pack all ok?"}
+  L4SF -->|no| R4S["REFUSE partial swarm"]
+  L4SF -->|yes| L4Q2{"post-spawn live?"}
+  L4Q2 -->|no| H4S["HALT spawned not live"]
+  L4Q2 -->|yes| L5
 
-  L5["L5 portal --json: session, panes, bv queue, admission, gates, THE ONE NEXT ACTION"] --> L5Q{"decision owed to Joshua?"}
-  L5Q -->|yes| H5["HUMAN HALT S9: one named decision. Loop does not guess"]
-  L5Q -->|no| OUT["inception envelope accepted, to S2"]
+  L5["L5 portal JSON plus liveness per source plus one_next_action"] --> L5Q{"decision owed?"}
+  L5Q -->|yes| H5["HUMAN HALT S9"]
+  L5Q -->|no| OUT["write inception.json required fields then S2"]

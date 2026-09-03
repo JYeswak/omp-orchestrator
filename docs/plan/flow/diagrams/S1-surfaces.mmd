@@ -1,42 +1,23 @@
 flowchart TD
-  S1["S1 human-start. kind=tool KNOW. Secondary process-kernel for L4 spawn. Invariant: after any L0 that reaches a terminal, command -v of the published name is either the new verified artifact or the prior artifact, never a third PATH hit, and a receipt names which."]
+  S1["S1 surfaces. kind=tool. Invariant PROJECTED: after L0, command -v ompo first executable is dest or prior, never a third hit. Today installer verifies a supplied absolute path."]
 
   S1 --> L0
   S1 --> L1
   S1 --> L4
   S1 --> L5
 
-  L0["L0 install"] --> L0OMP{"OMP surface?"}
-  L0OMP -->|"none. crates spawn br git tmux cargo. Command::new omp = 0 files"| L0OMPG["GAP: L0 does not speak OMP RPC"]
-  L0 --> L0NTM{"NTM surface?"}
-  L0NTM -->|"none. install is pre-session"| L0NTMOK["correct: no pane yet"]
-  L0 --> L0CX{"Asupersync?"}
-  L0CX -->|"crates/installer: zero Cx, zero Scope, std::process"| L0CXG["GAP: detached spawn. Required: and Cx first, Scope, kill process GROUP, drain both pipes, timeout is not a verdict"]
-  L0 --> L0RIGOR["rigor: inode-durability KNOW atp/install.sh:870. no-cache-post-write KNOW dsr github.sh:345. fail-closed enum. PATH first hit is /usr/sbin/installer"]
+  L0["L0 install"] --> L0OMP["OMP: none on purpose. Pre-session. omp-rpc-session Command::new omp at lib.rs:136 is the later child, not the installer"]
+  L0 --> L0NTM["NTM: none. No pane yet"]
+  L0 --> L0CX["Asupersync: subprocess-contract::run_output and Cx, process group kill, drain both pipes. Installer std::process is the current caller to replace"]
 
-  L1["L1 doctor"] --> L1OMP{"OMP?"}
-  L1OMP -->|"get_state exists in installed omp/18 RPC. we consume 0 of 42"| L1OMPG["GAP: doctor scrapes PATH instead of omp get_state"]
-  L1 --> L1NTM{"NTM?"}
-  L1NTM -->|"ntm --robot-snapshot is the fleet census"| L1NTMOK["USE: snapshot for session presence, not brew ntm"]
-  L1 --> L1CX{"Asupersync?"}
-  L1CX -->|"every probe is a bounded child"| L1CXOK["REQUIRED: bounded plus checkpoint. UNPROBEABLE never green. tmux rejects --version"]
+  L1["L1 doctor"] --> L1OMP["OMP: RpcRequest::GetState get_session_stats via omp-rpc-session for OMP children only. omp/18.1.6 --mode=rpc"]
+  L1 --> L1NTM["NTM: ntm --robot-snapshot v1.31.0 session presence"]
+  L1 --> L1CX["Asupersync: every probe bounded through run_output. Timeout is RunError::Timeout not a subject verdict. tmux -V not --version"]
 
-  L4["L4 swarm live?"] --> L4OMP{"OMP?"}
-  L4OMP -->|"39 CLI, 42 RPC, muxConnect muxPing muxRestartServer unused"| L4OMPG["GAP: live-definition scrapes status-line paint. Protocol would remove spinner classifier"]
-  L4 --> L4NTM{"NTM?"}
-  L4NTM -->|"spawn --assign --cass-context. WAVE.md from tmux list-panes"| L4NTMOK["USE: ntm spawn is the only legal create. Hand WAVE.md is forbidden"]
-  L4 --> L4CX{"Asupersync?"}
-  L4CX -->|"supervisor later uses Cx. L4 wrapper is none"| L4CXG["GAP: no region-owned spawn wrapper. Detached ntm children are the measured orphan class"]
+  L4["L4 swarm"] --> L4OMP["OMP: GetState plus GetSessionStats on each OMP pane. Not a spinner regex"]
+  L4 --> L4NTM["NTM: ntm spawn --assign --cass-context. WAVE.md from tmux list-panes. Retain spawn response, pane id, WAVE hash, mail register, pack receipt"]
+  L4 --> L4CX["Asupersync: spawn ntm through subprocess-contract and Cx. Same group-kill contract as installer"]
 
-  L5["L5 portal"] --> L5OMP{"OMP?"}
-  L5OMP -->|"get_state plus get_session_stats exist"| L5OMPG["GAP: portal would scrape again"]
-  L5 --> L5NTM{"NTM?"}
-  L5NTM -->|"snapshot plus attention plus bv queue"| L5NTMOK["USE: robot snapshot is THE ONE NEXT ACTION input"]
-  L5 --> L5CX{"Asupersync?"}
-  L5CX -->|"observe loop needs Cx checkpoint"| L5CXOK["REQUIRED: no detached portal poll"]
-
-  AGREE["3-pane agree bar: every L0-L5 node names OMP use-or-gap, NTM use-or-gap, Cx use-or-gap. HD-0009 empty is HUMAN HALT not a skip. Do not start S2 until pane 1 and pane 2 ACK this file."]
-  L0RIGOR --> AGREE
-  L1CXOK --> AGREE
-  L4NTMOK --> AGREE
-  L5NTMOK --> AGREE
+  L5["L5 portal"] --> L5OMP["OMP: GetState plus GetSessionStats. Does not replace NTM or Agent Mail"]
+  L5 --> L5NTM["NTM: snapshot plus bv queue as one_next_action input"]
+  L5 --> L5CX["Asupersync: portal observe uses Cx checkpoint. No detached poll"]

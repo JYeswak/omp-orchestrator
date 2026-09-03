@@ -11,13 +11,13 @@
 id = "S1"
 name = "human start: install -> system check -> ecosystem check -> walkthrough -> swarm live? -> portal"
 status = "draft"
-trigger_today = "none"
+trigger_today = "generic SessionStart plus launchd ai.zeststream.omp-orchestrator run exist; S1-specific slash start and portal --check are not wired"
 trigger_target = "curl one-liner (prebuilt binary, no .sh in tree) -> ompo install; then slash:/omp-orchestrator:start; SessionStart hook -> ompo portal --check --json; launchd -> ompo run"
 crate = "installer"
 crate_status = "exists-no-caller"
 bead = "omp-orchestrator-plf.7.2 (umbrella), plf.7.3 (doctor), lf.7.12 (init), kxe.10 (inception), f.7.1.5 (operator setup)"
-kernel_input = "PROPOSED InstallPlan{platform, dest, agents[], hooks_to_merge[], skills[]} | Probe{name, present, version, remediation} | EcosystemProbe | SwarmState{session, panes[{id, agent, model, registered}], sources_agree}"
-kernel_output = "PROPOSED InstallReport{agent -> created|merged|already|failed|skipped, backups[]} | DoctorReport{ok|degraded|absent} | Inception{project_id, identity, control_file_decision} | SpawnPlan{agents[], pack} | PortalRow{session, panes, queue_by_bv, admission, gates, decisions_owed}"
+kernel_input = "PROPOSED InstallPlan{platform, dest_name=ompo, agents[], hooks_to_merge[], skills[]} | Probe{name, family, present, version, remediation} | intake.requirements.fleet -> persona A|B|C | EcosystemProbe | SwarmState{session, panes, sources_agree}"
+kernel_output = "PROPOSED InstallReport{agent -> created|merged|already|failed|skipped, backups[], path_hits[]} | DoctorReport{ok|degraded|absent|unprobeable} | Inception{schema_version, project_id, repo_identity, control_files, host_capabilities, required_tools, trust_status} | PortalRow{session, panes, queue_by_bv, admission, gates, liveness_per_source, one_next_action, decisions_owed}"
 event_row = "LifecycleEvent{stage_from=HUMAN, stage_to=S1.<L0..L5>, actor, pane, incarnation, outcome, reason_code, blocker}"
 validator = "installer --check identity (this-repo:crates/installer/src/lib.rs:86 IDENTITY MISMATCH); doctor two-band exit (plf.7.3); crate-atom-gate d3gm over the umbrella"
 sota_standard = "installer-workmanship 24 non-negotiables (skill ~/.claude/skills/installer-workmanship/SKILL.md) implemented in Rust; three-source liveness (tmux + tick-monitor + Agent Mail agree) per AGENTS.md One Rule"
@@ -106,23 +106,28 @@ hook = "ai.zeststream.omp-orchestrator -> ompo run; reaper"
 status = "paused; reaper unwired"
 
 branches = [
-  "L0 checksum/cosign FAIL -> refuse (supply chain)",
-  "L0 agent detected -> merge hooks + skills with backup; per-agent created|merged|already|failed|skipped",
-  "L0 PATH first hit is /usr/sbin/installer -> binary MUST NOT be named installer",
-  "L1 ABSENT family -> halt with the named remediation command",
-  "L1 ABSENT specific -> informational, do not invent an install command",
-  "L1 UNPROBEABLE -> recorded, never vacuously green",
-  "L2 no git remote -> halt",
-  "L2 AGENTS.md/CLAUDE.md missing or unstamped -> init writes from template",
-  "L2 hook identity != HEAD -> rebuild on lane, reinstall",
+  "L0 checksum/cosign FAIL or missing checksum -> refuse supply chain",
+  "L0 command -v ompo first hit != dest -> refuse name collision with PATH hits listed",
+  "L0 agent merge created|merged|already|skipped -> L1",
+  "L0 agent merge failed -> refuse or degraded, not L1 healthy",
+  "L1 ABSENT family -> halt with named remediation",
+  "L1 ABSENT specific -> family probe required before L2",
+  "L1 UNPROBEABLE -> halt unless named HD degraded-continue",
+  "L2 no git repository -> halt",
+  "L2 repo without remote is allowed for persona A local-only",
+  "L2 missing AGENTS.md/CLAUDE.md without trusted-init opt-in -> halt do not overwrite",
+  "L2 trusted-init -> template with identity plus backup then re-probe; re-probe fail -> halt",
+  "L2 hook identity != HEAD -> rebuild reinstall then re-probe; still mismatch -> halt",
   "L3 HD-0009 empty -> HUMAN HALT S9",
-  "L4 live (3 sources agree) -> portal",
-  "L4 not live and persona A -> skip spawn; portal is gates-only",
-  "L4 not live and persona B or C -> HD-0010 then spawn -> register -> pack -> portal",
-  "L4 sources disagree -> NOT live; the disagreement is the finding",
-  "L5 decision owed to Joshua -> LOOP HALTS, one named decision",
+  "L4 sources disagree -> HALT name the source",
+  "L4 live -> L5",
+  "L4 not live persona A -> portal gates-only no spawn",
+  "L4 not live persona B or C -> HD-0010 then ntm spawn --assign --cass-context via Cx",
+  "L4 spawn partial -> refuse; post-spawn not live -> halt",
+  "L5 decision owed -> HUMAN HALT S9",
+  "L5 else write inception.json required fields then S2",
 ]
-no_claim = "Draft from the orchestrator's measurement + Joshua's stated preference; not yet approved. Umbrella crate MISSING (not in the crate field — CONTRACT requires one dir or MISSING). Nothing in L1-L5 is built. HD-0009..0012 decision fields are empty. Diagram landed 0ea808a; Wave 1 four sections added 2026-09-03 by pane 4 so the box is reviewable. Disagreement rows in waves/wave-1/*-S1.toml remain unresolved until the owner answers them."
+no_claim = "HD-0009..0012 still empty. L1-L5 crates unbuilt. command -v ompo identity is the target contract; installer today verifies a supplied absolute path (WildStone). omp-rpc-session Command::new(omp) and GetState exist; L0 installer still does not speak OMP. subprocess-contract is the L0/L4 Cx path to adopt, not yet called from installer."
 
 # ---- Wave 1 sections (were 0/4; QuietRidge, SilverWolf, BlueLantern filed that as blocker) ----
 [[box.measurement]]
@@ -196,15 +201,17 @@ resolves = "crate=installer now; umbrella stays in no_claim until plf.7.2 exists
 class = "wired_caller"
 
 [box.agreement]
-wave = 1
+wave = 2
 owner = "SnowyCanyon"
-reviewers = ["AmberGate", "BlueLantern", "SilverWolf", "QuietRidge"]
+reviewers = ["WildStone", "WildMountain", "AmberGate", "BlueLantern", "SilverWolf", "QuietRidge"]
 open_disagreements = 12
 status = "draft"
 approval = ""
 
 [box.diagram]
 mmd = "docs/plan/flow/diagrams/S1.mmd"
+surfaces = "docs/plan/flow/diagrams/S1-surfaces.mmd"
 validate_exit = 0
 svg = "docs/plan/flow/diagrams/S1.svg"
-commit = "0ea808a"
+nodes = 52
+edges = 60
