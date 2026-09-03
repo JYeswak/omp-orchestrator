@@ -1,0 +1,654 @@
+{
+  "pmap": {
+    "0.0": "%5",
+    "%5": "0.0",
+    "0.1": "%6",
+    "%6": "0.1",
+    "0.2": "%7",
+    "%7": "0.2",
+    "0.3": "%8",
+    "%8": "0.3",
+    "0.4": "%9",
+    "%9": "0.4"
+  },
+  "n": 7,
+  "samples": [
+    {
+      "i": 1,
+      "pair_dt": 19.29,
+      "t_gap": 45,
+      "t_observed_at": 1788459900,
+      "t_dispatchable": [],
+      "t_free": [],
+      "ntm_cursor": 324812,
+      "ntm_sources": {
+        "work_coordination": {
+          "name": "work_coordination",
+          "available": true,
+          "fresh": true,
+          "reason_code": "health:ok",
+          "age_ms": 15019,
+          "updated_at": "2026-09-03T18:24:56.501614Z"
+        }
+      },
+      "panes": {
+        "0.0": {
+          "tmux": "%5",
+          "tick": {
+            "state": "UNPROVEN",
+            "liveness": "UNPROVEN",
+            "why": "capture_unrecognised",
+            "timer": 0
+          },
+          "ntm": {
+            "state": "idle",
+            "age": 2551,
+            "type": "user"
+          }
+        },
+        "0.1": {
+          "tmux": "%6",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 780
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp-claude"
+          }
+        },
+        "0.2": {
+          "tmux": "%7",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 300
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp"
+          }
+        },
+        "0.3": {
+          "tmux": "%8",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 60
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp"
+          }
+        },
+        "0.4": {
+          "tmux": "%9",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 60
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp-grok"
+          }
+        }
+      }
+    },
+    {
+      "i": 2,
+      "pair_dt": 21.64,
+      "t_gap": 27,
+      "t_observed_at": 1788459927,
+      "t_dispatchable": [],
+      "t_free": [],
+      "ntm_cursor": 324814,
+      "ntm_sources": {
+        "work_coordination": {
+          "name": "work_coordination",
+          "available": true,
+          "fresh": true,
+          "reason_code": "health:ok",
+          "age_ms": 13656,
+          "updated_at": "2026-09-03T18:25:27.487115Z"
+        }
+      },
+      "panes": {
+        "0.0": {
+          "tmux": "%5",
+          "tick": {
+            "state": "UNPROVEN",
+            "liveness": "UNPROVEN",
+            "why": "capture_unrecognised",
+            "timer": 0
+          },
+          "ntm": {
+            "state": "idle",
+            "age": 2582,
+            "type": "user"
+          }
+        },
+        "0.1": {
+          "tmux": "%6",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 780
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp-claude"
+          }
+        },
+        "0.2": {
+          "tmux": "%7",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 300
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp"
+          }
+        },
+        "0.3": {
+          "tmux": "%8",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 120
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp"
+          }
+        },
+        "0.4": {
+          "tmux": "%9",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 120
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp-grok"
+          }
+        }
+      }
+    },
+    {
+      "i": 3,
+      "pair_dt": 21.42,
+      "t_gap": 30,
+      "t_observed_at": 1788459957,
+      "t_dispatchable": [],
+      "t_free": [],
+      "ntm_cursor": 324818,
+      "ntm_sources": {
+        "work_coordination": {
+          "name": "work_coordination",
+          "available": true,
+          "fresh": true,
+          "reason_code": "health:ok",
+          "age_ms": 13637,
+          "updated_at": "2026-09-03T18:25:57.12725Z"
+        }
+      },
+      "panes": {
+        "0.0": {
+          "tmux": "%5",
+          "tick": {
+            "state": "UNPROVEN",
+            "liveness": "UNPROVEN",
+            "why": "capture_unrecognised",
+            "timer": 0
+          },
+          "ntm": {
+            "state": "idle",
+            "age": 2611,
+            "type": "user"
+          }
+        },
+        "0.1": {
+          "tmux": "%6",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 840
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp-claude"
+          }
+        },
+        "0.2": {
+          "tmux": "%7",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 360
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp"
+          }
+        },
+        "0.3": {
+          "tmux": "%8",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 120
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp"
+          }
+        },
+        "0.4": {
+          "tmux": "%9",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 120
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp-grok"
+          }
+        }
+      }
+    },
+    {
+      "i": 4,
+      "pair_dt": 12.28,
+      "t_gap": 29,
+      "t_observed_at": 1788459986,
+      "t_dispatchable": [],
+      "t_free": [],
+      "ntm_cursor": 324822,
+      "ntm_sources": {
+        "work_coordination": {
+          "name": "work_coordination",
+          "available": true,
+          "fresh": true,
+          "reason_code": "health:ok",
+          "age_ms": 4440,
+          "updated_at": "2026-09-03T18:26:26.579598Z"
+        }
+      },
+      "panes": {
+        "0.0": {
+          "tmux": "%5",
+          "tick": {
+            "state": "UNPROVEN",
+            "liveness": "UNPROVEN",
+            "why": "capture_unrecognised",
+            "timer": 0
+          },
+          "ntm": {
+            "state": "idle",
+            "age": 2636,
+            "type": "user"
+          }
+        },
+        "0.1": {
+          "tmux": "%6",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 840
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp-claude"
+          }
+        },
+        "0.2": {
+          "tmux": "%7",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 360
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp"
+          }
+        },
+        "0.3": {
+          "tmux": "%8",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 180
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp"
+          }
+        },
+        "0.4": {
+          "tmux": "%9",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 180
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp-grok"
+          }
+        }
+      }
+    },
+    {
+      "i": 5,
+      "pair_dt": 12.29,
+      "t_gap": 20,
+      "t_observed_at": 1788460006,
+      "t_dispatchable": [],
+      "t_free": [],
+      "ntm_cursor": 324824,
+      "ntm_sources": {
+        "work_coordination": {
+          "name": "work_coordination",
+          "available": true,
+          "fresh": true,
+          "reason_code": "health:ok",
+          "age_ms": 4484,
+          "updated_at": "2026-09-03T18:26:46.864322Z"
+        }
+      },
+      "panes": {
+        "0.0": {
+          "tmux": "%5",
+          "tick": {
+            "state": "UNPROVEN",
+            "liveness": "UNPROVEN",
+            "why": "capture_unrecognised",
+            "timer": 0
+          },
+          "ntm": {
+            "state": "idle",
+            "age": 2656,
+            "type": "user"
+          }
+        },
+        "0.1": {
+          "tmux": "%6",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 900
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp-claude"
+          }
+        },
+        "0.2": {
+          "tmux": "%7",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 420
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp"
+          }
+        },
+        "0.3": {
+          "tmux": "%8",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 180
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp"
+          }
+        },
+        "0.4": {
+          "tmux": "%9",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "UNPROVEN",
+            "why": "gap_too_short",
+            "timer": 180
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp-grok"
+          }
+        }
+      }
+    },
+    {
+      "i": 6,
+      "pair_dt": 19.63,
+      "t_gap": 21,
+      "t_observed_at": 1788460027,
+      "t_dispatchable": [],
+      "t_free": [],
+      "ntm_cursor": 324826,
+      "ntm_sources": {
+        "work_coordination": {
+          "name": "work_coordination",
+          "available": true,
+          "fresh": true,
+          "reason_code": "health:ok",
+          "age_ms": 11226,
+          "updated_at": "2026-09-03T18:27:08.239681Z"
+        }
+      },
+      "panes": {
+        "0.0": {
+          "tmux": "%5",
+          "tick": {
+            "state": "UNPROVEN",
+            "liveness": "UNPROVEN",
+            "why": "capture_unrecognised",
+            "timer": 0
+          },
+          "ntm": {
+            "state": "idle",
+            "age": 2678,
+            "type": "user"
+          }
+        },
+        "0.1": {
+          "tmux": "%6",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 900
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp-claude"
+          }
+        },
+        "0.2": {
+          "tmux": "%7",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 420
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp"
+          }
+        },
+        "0.3": {
+          "tmux": "%8",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 180
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp"
+          }
+        },
+        "0.4": {
+          "tmux": "%9",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "UNPROVEN",
+            "why": "gap_too_short",
+            "timer": 180
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp-grok"
+          }
+        }
+      }
+    },
+    {
+      "i": 7,
+      "pair_dt": 20.22,
+      "t_gap": 27,
+      "t_observed_at": 1788460054,
+      "t_dispatchable": [],
+      "t_free": [],
+      "ntm_cursor": 324826,
+      "ntm_sources": {
+        "work_coordination": {
+          "name": "work_coordination",
+          "available": true,
+          "fresh": true,
+          "reason_code": "health:ok",
+          "age_ms": 37855,
+          "updated_at": "2026-09-03T18:27:08.239681Z"
+        }
+      },
+      "panes": {
+        "0.0": {
+          "tmux": "%5",
+          "tick": {
+            "state": "UNPROVEN",
+            "liveness": "UNPROVEN",
+            "why": "capture_unrecognised",
+            "timer": 0
+          },
+          "ntm": {
+            "state": "idle",
+            "age": 2678,
+            "type": "user"
+          }
+        },
+        "0.1": {
+          "tmux": "%6",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 960
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp-claude"
+          }
+        },
+        "0.2": {
+          "tmux": "%7",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 420
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp"
+          }
+        },
+        "0.3": {
+          "tmux": "%8",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 240
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp"
+          }
+        },
+        "0.4": {
+          "tmux": "%9",
+          "tick": {
+            "state": "WORKING",
+            "liveness": "LIVE",
+            "why": "",
+            "timer": 240
+          },
+          "ntm": {
+            "state": "busy",
+            "age": 0,
+            "type": "omp-grok"
+          }
+        }
+      }
+    }
+  ]
+}

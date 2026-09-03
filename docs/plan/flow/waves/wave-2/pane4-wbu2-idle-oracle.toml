@@ -1,0 +1,32 @@
+# wbu2 — idle oracle reconcile. Pane 4. Do NOT land in S1.toml from this pane (owner = pane 1).
+# Paired samples: docs/plan/flow/waves/wave-2/wbu2-oracle-pairs.json (n=7).
+# Extra unpaired first pair (S0) recorded here only: ntm used different labels.
+
+[[disagreement]]
+box = "S1"
+field = "monitors.idle_oracle"
+owner_says = "pane 4 joshua-questions-from-pane4.toml [monitors]: do_not_trust tick-monitor dispatchable=[]; idle_oracle=ntm --robot-snapshot; refill no-ops because the two surfaces disagree"
+reviewer_says = "PARTIALLY REFUTED as stated, NOT confirmed as the inverse. Over 7 paired samples (plus one earlier pair) tick-monitor dispatchable=[] because every agent pane was WORKING, not because it missed idle. That empty list was the correct non-idle reading. Pane 1's hypothesis that the untrustworthy state is NEWLY_IDLE not CONFIRMED_IDLE is UNOBSERVED this window: CONFIRMED_IDLE never appeared, so I cannot refute 'CONFIRMED_IDLE ever disagrees with ntm idle' and I cannot confirm it. Six prior CONFIRMED_IDLE dispatches remain unreproduced, not luck-proven."
+evidence = "wbu2-oracle-pairs.json n=7; pmap 0.1=%6 0.2=%7 0.3=%8 0.4=%9; S1-S7 dispatchable=[]; agent cells 28: 26 WORKING/LIVE vs ntm busy age=0; 2 WORKING/UNPROVEN why=gap_too_short (%9 S5,S6) vs ntm busy age=0. S0 (pre-loop): ntm 0.1 error age=-1, 0.2-0.4 active age=-1 vs tick WORKING LIVE. User pane 0.0: tick UNPROVEN capture_unrecognised vs ntm idle."
+severity = "blocker"
+resolution = "refuted(dispatchable=[] as a broken idle oracle in this window — it was empty because nobody was idle); unobserved(CONFIRMED_IDLE vs ntm idle); ntm is not the liveness authority"
+
+[[disagreement]]
+box = "S1"
+field = "monitors.dispatch_authority"
+owner_says = "idle_oracle = ntm --robot-snapshot"
+reviewer_says = "REJECTED. ntm --robot-snapshot is one capture of robot state. crates/ntm-fleet-monitor/src/lib.rs:168-169 Refusal::SingleCaptureLiveness: one capture cannot separate Working from Frozen. L4 law L4P-FRESHNESS-REQUIRED: a source that cannot produce age_ms is SILENT — S0 last_output_age_sec=-1 on every pane is SILENT, not fresh-zero. ntm labels are not stable: S0 used active/error/idle, S1-S7 used busy/idle. Tick-monitor two-capture liveness (LIVE vs UNPROVEN+why) is the dispatch liveness authority. ntm snapshot remains a freshness/occupancy surface, not liveness. One-capture ntm is not admissible as liveness no matter how fresh age=0 looks."
+evidence = "ntm-fleet-monitor/src/lib.rs:168 SingleCaptureLiveness; S0 age=-1; S0 vs S1 vocabulary flip active->busy; S5-S6 tick UNPROVEN gap_too_short while ntm still busy — tick is the conservative two-capture arm"
+severity = "blocker"
+resolution = "refuted(ntm snapshot as idle/liveness oracle); accepted(tick-monitor two-capture CONFIRMED_IDLE / LIVE as liveness authority; ntm is occupancy)"
+
+# Confusion cells (agent panes 0.1-0.4 only). Count = pane-sample cells.
+# tick\ntm          busy@0   active@-1  error@-1  idle
+# WORKING/LIVE        26         3          1        0
+# WORKING/UNPROVEN     2         0          0        0   why=gap_too_short
+# CONFIRMED_IDLE       0         0          0        0   UNOBSERVED
+# NEWLY_IDLE           0         0          0        0   UNOBSERVED
+#
+# Consequence for refill-idle-panes two-surface agreement: the no-op-on-disagree
+# cell (tick CONFIRMED_IDLE × ntm busy) was not observed. Timing artifact remains
+# a hypothesis. Do not edit refill-idle-panes this pass.
