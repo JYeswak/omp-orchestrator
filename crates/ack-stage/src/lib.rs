@@ -511,6 +511,155 @@ pub fn decide(verdict: &ReceiptVerdict, attempts_so_far: u32) -> AckAction {
     }
 }
 
+/// **What the supervisor should PUBLISH about one dispatch.**
+///
+/// # The measured collapse, `zlyy`
+///
+/// `send_and_verify` returns `Result<AckStageResult, String>` and the ledger renders every
+/// `Err` as `status=DISPATCH_FAILED` (`omp-orchestrator/src/main.rs:3293`). Two of the three
+/// non-delivered outcomes are NOT failures:
+///
+/// - `ACK_STAGE_INDETERMINATE` — the codex/tmux transport is indeterminate BY CONSTRUCTION
+///   (see `assess` above: a confirmed receiver signal on a transport that cannot support a
+///   delivery claim is downgraded to `Indeterminate`). The packet very likely arrived.
+/// - `ACK_STAGE_RETRY_BLOCKED` — the 30s window elapsed. `main.rs`'s own comment at that
+///   site says *"the ack is late, not absent"*, and sets `owes_human=false`.
+///
+/// Measured on `io3h -> %1414`, 2026-09-02 23:55:08Z: `DISPATCH_FAILED
+/// detail=ACK_STAGE_INDETERMINATE reason=unproven_transport`, four seconds before the
+/// worker's own `ACK io3h on %1414 -- starting...` landed in the tracker. The word was
+/// false, and it is the loop's public status word.
+///
+/// # This type invents NOTHING
+///
+/// Every variant is a projection of fields `AckStageResult` already carries —
+/// `is_confirmed()`, `transport.supports_delivery_claim()`, `action`, `ack_verdict`. It
+/// lives HERE, in the crate that owns the ack vocabulary, rather than in a new crate,
+/// because `omp-types`' header names the alternative as the measured defect: *"Six
+/// independent `Verdict` types … none composable, none countable."* A seventh would be the
+/// same mistake with a better excuse.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DispatchVerdict {
+    /// Delivery is PROVEN: a matched ACK on a transport that can carry a delivery claim.
+    Delivered(AckStageResult),
+    /// The transport cannot prove delivery. Not a failure — an unprovable success.
+    Indeterminate {
+        /// Why proof is unavailable, from `ReceiptReason`.
+        reason: String,
+        /// Which transport could not carry the claim.
+        transport: TransportKind,
+    },
+    /// The ACK window elapsed without a matched read-back. Late, not absent.
+    AckPending {
+        /// How long the window was.
+        after_secs: u64,
+        /// What distinguishes this pane's state, for the next reader.
+        discriminator: String,
+    },
+    /// The send itself was refused or never ran: `TIMEOUT program=tmux`, a spawn error.
+    Failed(String),
+}
+
+impl DispatchVerdict {
+    /// The status word the ledger publishes.
+    ///
+    /// `DISPATCH_FAILED` appears for `Failed` and NOWHERE ELSE. That single property is
+    /// this type's reason to exist; a test asserts it across every variant.
+    pub const fn status_word(&self) -> &'static str {
+        match self {
+            Self::Delivered(_) => "DISPATCH_DELIVERED",
+            Self::Indeterminate { .. } => "DISPATCH_INDETERMINATE",
+            Self::AckPending { .. } => "ACK_PENDING",
+            Self::Failed(_) => "DISPATCH_FAILED",
+        }
+    }
+
+    /// Is this a refused send — the only case a human should read as a failure?
+    pub const fn is_failure(&self) -> bool {
+        matches!(self, Self::Failed(_))
+    }
+
+    /// May the supervisor treat the packet as having reached the pane?
+    ///
+    /// TRUE for `Delivered` and `AckPending` (the pane holds it; the ACK is late) and
+    /// FALSE for `Indeterminate` — which is the conservative direction, because an
+    /// unprovable transport must not authorize a delivery claim. Deliberately NOT the
+    /// negation of [`Self::is_failure`]: three states, not two.
+    pub const fn packet_is_with_the_receiver(&self) -> bool {
+        matches!(self, Self::Delivered(_) | Self::AckPending { .. })
+    }
+
+    /// The detail field, for the ledger row.
+    pub fn detail(&self) -> String {
+        match self {
+            Self::Delivered(result) => format!(
+                "action={} verdict={} transport={}",
+                result.action.label(),
+                result.delivery.label(),
+                result.transport.kind().label()
+            ),
+            Self::Indeterminate { reason, transport } => {
+                format!("reason={reason} transport={}", transport.label())
+            }
+            Self::AckPending {
+                after_secs,
+                discriminator,
+            } => format!("after={after_secs}s {discriminator}"),
+            Self::Failed(detail) => detail.clone(),
+        }
+    }
+}
+
+/// Project one assessed stage into the verdict the ledger should publish.
+///
+/// # Order of the arms is the whole contract
+///
+/// 1. `is_confirmed()` — ack-stage's OWN definition of proven delivery. Consulted first so
+///    this function can never be more generous than the crate it projects.
+/// 2. A transport that cannot support a delivery claim is INDETERMINATE, whatever the
+///    receiver classifier saw. This mirrors `assess`'s downgrade rather than re-deriving
+///    it; the two must not be able to disagree.
+/// 3. A retry that is out of budget after a bounded window is `AckPending` — late, not
+///    absent — and carries the window so a reader can see what was waited for.
+/// 4. Everything left is a genuine no-receipt outcome.
+///
+/// A transport-level refusal never reaches here: the caller has no `AckStageResult` to
+/// project, and constructs [`DispatchVerdict::Failed`] directly.
+pub fn classify_dispatch(result: &AckStageResult, window_secs: u64) -> DispatchVerdict {
+    if result.is_confirmed() {
+        return DispatchVerdict::Delivered(result.clone());
+    }
+    let transport = result.transport.kind();
+    if !result.transport.supports_delivery_claim() {
+        return DispatchVerdict::Indeterminate {
+            reason: result.delivery.label().to_owned(),
+            transport,
+        };
+    }
+    match &result.action {
+        AckAction::Retry { attempt, .. } => DispatchVerdict::AckPending {
+            after_secs: window_secs,
+            discriminator: format!("attempt={attempt}"),
+        },
+        AckAction::RetryExhausted { attempts, .. } => DispatchVerdict::AckPending {
+            after_secs: window_secs,
+            discriminator: format!("attempts={attempts}"),
+        },
+        AckAction::RecordReceipt { .. } => DispatchVerdict::Indeterminate {
+            reason: result.delivery.label().to_owned(),
+            transport,
+        },
+        AckAction::Unstick { reason, .. } | AckAction::AwaitHuman { reason, .. } => {
+            DispatchVerdict::Failed(format!(
+                "action={} reason={reason:?}",
+                result.action.label()
+            ))
+        }
+        AckAction::AbandonDeadPane { pane_id } => {
+            DispatchVerdict::Failed(format!("action=abandon_dead_pane pane={pane_id}"))
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
