@@ -2,7 +2,12 @@
 
 //! Specimen-based legs for the kernel-bypass gate (bead -ilt acceptance 1-3).
 
-use kernel_bypass_gate::{lint_source, strip_line_comment};
+use std::path::{Path, PathBuf};
+
+use kernel_bypass_gate::{
+    blank_block_comments, debt_verdict, lint_source, lint_workspace, strip_line_comment,
+    SystemicBypassAllowance, BYPASS_DEBT, KERNEL_REGISTRY,
+};
 
 /// KNOWN-BAD: a raw tmux send-keys outside the kernel crate -> RED naming the kernel.
 #[test]
@@ -94,7 +99,10 @@ fn kernel_crate_comments_pass() {
 fn documented() {}
 ";
     let hits = lint_source("crates/tick-monitor/src/main.rs", source);
-    assert!(hits.is_empty(), "kernel crate's own comments pass: {hits:?}");
+    assert!(
+        hits.is_empty(),
+        "kernel crate's own comments pass: {hits:?}"
+    );
 }
 
 #[test]
@@ -102,6 +110,259 @@ fn strip_preserves_string_content_with_slashes() {
     // A string containing // must NOT be stripped as a comment.
     let line = r#"    let url = "https://example.com"; // this is a comment"#;
     let stripped = strip_line_comment(line);
-    assert!(stripped.contains("https://example.com"), "string content preserved");
+    assert!(
+        stripped.contains("https://example.com"),
+        "string content preserved"
+    );
     assert!(!stripped.contains("this is a comment"), "comment stripped");
+}
+
+/// KNOWN-GOOD on the SHIPPED path: `lint_workspace` must honour the allowlist.
+///
+/// This is the leg whose absence was the defect. The specimen legs above all call
+/// `lint_source`; CI calls `lint_workspace`, which had a private near-duplicate matcher
+/// that discarded the registry's owning-crate column. The tested path allowlisted
+/// `tick-monitor`'s own calls and the shipped path did not, so no leg in this file could
+/// have caught it — and the dead-code warning naming the unused allowlist resolver was
+/// printed in every CI log for twelve runs.
+#[test]
+fn workspace_scan_honours_the_allowlist_and_still_flags_outsiders() {
+    let root = scratch_tree("allowlist");
+    write_crate_source(
+        &root,
+        "tick-monitor",
+        "observe.rs",
+        "fn observe() { Command::new(\"tmux\").arg(\"list-panes\"); }\n",
+    );
+    write_crate_source(
+        &root,
+        "some-consumer",
+        "handroll.rs",
+        "fn observe() { Command::new(\"tmux\").arg(\"list-panes\"); }\n",
+    );
+
+    let report = lint_workspace(&root);
+
+    assert_eq!(
+        report.scanned.len(),
+        2,
+        "positive control: both files must be scanned, else the zero below is vacuous"
+    );
+    let flagged: Vec<&str> = report
+        .violations
+        .iter()
+        .map(|bypass| bypass.file.as_str())
+        .collect();
+    assert!(
+        flagged.iter().all(|file| !file.contains("tick-monitor")),
+        "the owning crate's own call must be allowlisted on the shipped path: {flagged:?}"
+    );
+    assert_eq!(
+        report.violations.len(),
+        1,
+        "the outsider's handroll must still be flagged: {flagged:?}"
+    );
+    std::fs::remove_dir_all(&root).ok();
+}
+
+/// SELF-IMMUNITY: the gate's own source must produce ZERO bypasses.
+///
+/// MEASURED 2026-09-02, run 33585450134: seven of eighty-one rows were this crate's own
+/// registry. The needles are now assembled with `concat!`, so the value is whole while
+/// this file's text never contains one contiguously. This leg is what keeps that true —
+/// the first split left THREE survivors hiding in the human-readable kernel-name column,
+/// and only a count assertion found them.
+#[test]
+fn gate_own_source_is_immune_to_its_own_needles() {
+    let src = repo_root().join("crates/kernel-bypass-gate/src");
+    let mut scanned = 0usize;
+    let mut hits = Vec::new();
+    for entry in std::fs::read_dir(&src).expect("gate src dir").flatten() {
+        let path = entry.path();
+        if path.extension().is_some_and(|ext| ext == "rs") {
+            let text = std::fs::read_to_string(&path).expect("read gate source");
+            scanned += 1;
+            hits.extend(lint_source(&path.display().to_string(), &text));
+        }
+    }
+    assert!(
+        scanned >= 2,
+        "positive control: expected lib.rs and main.rs, scanned {scanned}"
+    );
+    assert!(
+        hits.is_empty(),
+        "the gate must not flag its own declaration: {hits:?}"
+    );
+}
+
+/// The `REGISTRY_HOME`-free exemption is safe only while this crate never spawns.
+///
+/// The gate cannot scan itself for a real handroll (its needles are split), so that
+/// coverage moves HERE. A gate crate is a pure text linter; the moment it grows a
+/// subprocess this leg refuses, and the exemption's precondition is enforced rather
+/// than promised.
+#[test]
+fn gate_crate_never_spawns_a_subprocess() {
+    let src = repo_root().join("crates/kernel-bypass-gate/src");
+    for entry in std::fs::read_dir(&src).expect("gate src dir").flatten() {
+        let path = entry.path();
+        if !path.extension().is_some_and(|ext| ext == "rs") {
+            continue;
+        }
+        let text = std::fs::read_to_string(&path).expect("read gate source");
+        for (index, line) in text.lines().enumerate() {
+            let code = strip_line_comment(line);
+            assert!(
+                !code.contains("process::Command"),
+                "{}:{} imports a subprocess; the self-immunity exemption is void",
+                path.display(),
+                index + 1
+            );
+        }
+    }
+}
+
+/// BLOCK COMMENTS: prose inside `/* … */` must not register as a caller.
+#[test]
+fn block_comment_prose_does_not_trigger() {
+    let source = "\
+/* The old way was Command::new(\"tmux\") plus a raw
+   tmux capture-pane and a br ready pipeline. */
+fn documented() {}
+";
+    let blanked = blank_block_comments(source);
+    assert_eq!(
+        blanked.lines().count(),
+        source.lines().count(),
+        "blanking must preserve line count so line numbers stay honest"
+    );
+    let hits = lint_source("crates/my-crate/src/lib.rs", source);
+    assert!(hits.is_empty(), "block-comment prose must not fire: {hits:?}");
+}
+
+/// A `/*` inside a `//` line comment must not open a block and swallow real code.
+#[test]
+fn line_comment_cannot_open_a_block_comment() {
+    let source = "\
+// a slash-star /* lives in this line comment
+fn handroll() { Command::new(\"tmux\").arg(\"kill-server\"); }
+";
+    let hits = lint_source("crates/my-crate/src/lib.rs", source);
+    assert_eq!(
+        hits.len(),
+        1,
+        "the real handroll on line 2 must survive blanking: {hits:?}"
+    );
+    assert_eq!(hits[0].line, 2, "line number preserved through blanking");
+}
+
+/// The ratchet refuses in BOTH directions, and refuses an undeclared pattern outright.
+#[test]
+fn ratchet_refuses_new_debt_slack_and_undeclared() {
+    let root = scratch_tree("ratchet");
+    write_crate_source(
+        &root,
+        "some-consumer",
+        "handroll.rs",
+        "fn a() { Command::new(\"tmux\").arg(\"x\"); }\nfn b() { Command::new(\"tmux\").arg(\"y\"); }\n",
+    );
+    let report = lint_workspace(&root);
+    assert_eq!(report.violations.len(), 2, "positive control: two sites");
+
+    let pattern = KERNEL_REGISTRY
+        .iter()
+        .find(|(_, kernel, _)| *kernel == "tick-monitor pane access")
+        .expect("spawn-tmux row")
+        .0;
+    let row = |ceiling| {
+        vec![SystemicBypassAllowance {
+            pattern,
+            owner: "josh",
+            dies_when: "never, this is a fixture",
+            ceiling,
+        }]
+    };
+
+    assert!(
+        debt_verdict(&report, &row(2)).is_pass(),
+        "an exact ceiling passes"
+    );
+    let over = debt_verdict(&report, &row(1));
+    assert!(!over.is_pass(), "a live count above the ceiling refuses");
+    assert!(
+        format!("{}", over.faults[0]).starts_with("NEW_BYPASS"),
+        "over-count is NEW_BYPASS: {:?}",
+        over.faults
+    );
+    let under = debt_verdict(&report, &row(3));
+    assert!(!under.is_pass(), "a ceiling with slack refuses");
+    assert!(
+        format!("{}", under.faults[0]).starts_with("CEILING_HAS_SLACK"),
+        "under-count is CEILING_HAS_SLACK: {:?}",
+        under.faults
+    );
+    let undeclared = debt_verdict(&report, &[]);
+    assert!(!undeclared.is_pass(), "no row at all refuses");
+    assert!(
+        format!("{}", undeclared.faults[0]).starts_with("UNDECLARED_PATTERN"),
+        "an absent row is UNDECLARED_PATTERN: {:?}",
+        undeclared.faults
+    );
+    let zeroed = debt_verdict(&report, &row(0));
+    assert!(
+        format!("{}", zeroed.faults[0]).starts_with("EMPTY_ROW"),
+        "a zero ceiling must be deleted, not zeroed: {:?}",
+        zeroed.faults
+    );
+    std::fs::remove_dir_all(&root).ok();
+}
+
+/// WIRING / REAL TREE: the shipped ledger must balance against the shipped workspace.
+///
+/// This is the leg that makes the ledger self-maintaining: `cargo test -p
+/// kernel-bypass-gate` and `cargo run -p kernel-bypass-gate -- .` render the SAME verdict
+/// from the SAME functions, so the two-leg design cannot drift the way the tested and
+/// shipped matchers just did.
+#[test]
+fn real_workspace_ledger_balances() {
+    let report = lint_workspace(&repo_root());
+    assert!(
+        report.scanned.len() > 100,
+        "positive control: expected the whole workspace, scanned {}",
+        report.scanned.len()
+    );
+    let verdict = debt_verdict(&report, BYPASS_DEBT);
+    assert!(
+        verdict.is_pass(),
+        "the ledger no longer describes the tree; each row names its own edit:\n{}",
+        verdict
+            .faults
+            .iter()
+            .map(|fault| format!("  {fault}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}
+
+fn repo_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("repo root")
+}
+
+/// A per-test tree under the session scratch home, per AGENTS.md's scratch rule.
+fn scratch_tree(job: &str) -> PathBuf {
+    let base = std::env::var("HOME").expect("HOME");
+    let root = PathBuf::from(base)
+        .join(".local/state/zeststream/scratch/omp-orchestrator/kernel-bypass-gate")
+        .join(format!("{job}-{}", std::process::id()));
+    std::fs::create_dir_all(&root).expect("scratch tree");
+    root
+}
+
+fn write_crate_source(root: &Path, crate_name: &str, file: &str, body: &str) {
+    let dir = root.join("crates").join(crate_name).join("src");
+    std::fs::create_dir_all(&dir).expect("crate src dir");
+    std::fs::write(dir.join(file), body).expect("write source");
 }

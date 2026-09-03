@@ -5,17 +5,37 @@
 # red/green battery — so the gate fires in CI even when a change is never
 # exercised by a local `cargo test`, and locally even when CI is skipped.
 #
-# TOOLCHAIN PARITY (2026-09-02). Every job carries a `Rust toolchain` step for
-# one measured reason: `gh run list --limit 200` returned 67 runs and 67
-# failures, and three independently-failing jobs all died at
-# `error[E0554]: #![feature] may not be used on the stable release channel`
-# compiling `asupersync`. The runner default is stable; this workspace is
-# nightly. `rust-toolchain.toml` now pins the channel and the rustup shim honours
-# it on any `cargo` invocation — the step exists so that a toolchain-install
-# failure is attributed to ITSELF rather than surfacing as a mysterious gate
-# failure, which is the same reason `Workspace loads` is its own step. GitHub
-# Actions does not resolve YAML anchors, so the step is repeated per job rather
-# than shared.
+# TOOLCHAIN PARITY (2026-09-02, CORRECTED 2026-09-03). Every job carries a
+# `Rust toolchain` step for one measured reason: `gh run list --limit 200`
+# returned 67 runs and 67 failures, and three independently-failing jobs all
+# died at `error[E0554]: #![feature] may not be used on the stable release
+# channel` compiling `asupersync`.
+#
+# RETRACTED: "The runner default is stable; this workspace is nightly." That was
+# true on 2026-09-02 and is false now. `asupersync` never required nightly — its
+# DEFAULT feature set did (`default = ["proc-macros", "nightly-outcome-try"]`).
+# The workspace now depends with `default-features = false, features =
+# ["proc-macros"]` through one root `[workspace.dependencies]` entry, and
+# `rust-toolchain.toml` pins **stable**. Measured 2026-09-03 by the
+# AsupersyncStable lane on rustc 1.98.0: `cargo check --workspace --all-targets`
+# exits 0 with no E0554, and every package this workflow builds compiles on
+# stable with tests included. The runner default and the pin now AGREE, which is
+# the strongest form of parity available — the previous arrangement made the daily
+# push depend on a dated nightly that gets garbage-collected.
+#
+# The STEPS are unchanged and stay: they run `rustup show active-toolchain` plus
+# `cargo --version` / `rustc --version` and install no literal channel string, so
+# they are channel-agnostic and survived the flip untouched. They exist so that a
+# toolchain resolution failure is attributed to ITSELF rather than surfacing as a
+# mysterious gate failure, which is the same reason `Workspace loads` is its own
+# step. GitHub Actions does not resolve YAML anchors, so the step is repeated per
+# job rather than shared.
+#
+# NOT BUILT HERE, DELIBERATELY: `crates/loop-driver` does not compile on EITHER
+# channel (E0599 — `asupersync::Cx::for_request()` is upstream-gated behind
+# `cfg(any(test, feature = "test-internals"))`). No job below builds it. Do not
+# add a `cargo check --workspace` job without fixing that first; it would go red
+# immediately and read as a regression from the stable flip, which it is not.
 name: gate
 
 on:
@@ -23,6 +43,26 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+
+# ONE RUN PER PUSH, AND ONLY THE LATEST ONE.
+#
+# MEASURED: runs 33580661749 (2026-09-02T01:45:50Z) and 33580723669 (01:46:51Z) started
+# **61 seconds apart**, and both ran all ten jobs to completion at ~20 minutes each. The
+# older verdict was worthless the moment the newer sha existed, and it cost ~200 job-
+# minutes to produce.
+#
+# `cancel-in-progress` is safe HERE for a specific reason, not as a default: every job in
+# this workflow scans the WHOLE CHECKED-OUT TREE, so a later commit's verdict strictly
+# covers the earlier commit's tree. It would NOT be safe for a per-commit test matrix,
+# where cancelling loses a verdict nothing else reproduces.
+#
+# Also measured, because it is the question this file gets asked: pushing N commits fires
+# ONE run, not N. `on.push` keys on the push EVENT, which carries every commit in the
+# delivery. Run 33583861505 covered 11 commits (`git rev-list --count 8e8050e88..deec6e865`
+# -> 11) and run 33585450134 covered 5. So the 300-commit backlog is one run.
+concurrency:
+  group: gate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   no-shell-gate:
@@ -43,9 +83,40 @@ jobs:
           # next one gets starved silently. Cost: a full clone per job -- negligible
           # beside the ~12min asupersync git fetch each job already pays.
           fetch-depth: 0
-      # Was `rustup toolchain install stable --profile minimal`, which installed
-      # the WRONG compiler explicitly and was the only job that said anything
-      # about a toolchain at all — the other nine inherited the runner default.
+      # THE RUN COST IS A COLD GIT FETCH, NOT THE GATES.
+      #
+      # `asupersync` is a GIT dependency (`crates/*/Cargo.toml`: `asupersync = { git =
+      # "https://github.com/Dicklesworthstone/asupersync", rev = "fa3c01aec" }`), and the
+      # comment above puts that fetch at ~12 minutes PER JOB. Ten jobs paid it
+      # independently on every one of the last twelve runs, which is most of the 17-25
+      # minute wall time — the gates themselves are text scans over a checkout and take
+      # seconds. `Downloaded thiserror v2.0.20` appearing in the log is the tell: nothing
+      # was cached.
+      #
+      # Caching `target/` cannot manufacture a false verdict, which is the failure this
+      # repo actually fears. Every gate re-reads the checked-out tree at RUNTIME, and
+      # `actions/checkout` writes fresh mtimes on every source file, so cargo's fingerprint
+      # comparison rebuilds anything whose source is newer than its cached artifact. The
+      # error direction is a needless rebuild, never a stale scan.
+      - name: Cargo cache — registry, git DB and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cargo/git/checkouts/
+            target/
+          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ github.job }}-
+            cargo-${{ runner.os }}-
+      # Was `rustup toolchain install stable --profile minimal`, and on 2026-09-02
+      # that installed the wrong compiler while being the only job that said
+      # anything about a toolchain at all — the other nine inherited the runner
+      # default silently. RETRACTED as of 2026-09-03: stable is no longer the wrong
+      # compiler, it is the pin. What was actually wrong was naming a channel here
+      # instead of deferring to `rust-toolchain.toml`, and that is still wrong.
       - name: Rust toolchain (pinned by rust-toolchain.toml)
         run: |
           rustup show active-toolchain
@@ -80,6 +151,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # full history — see the no-shell-gate job for why
+      - name: Cargo cache — registry, git DB and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cargo/git/checkouts/
+            target/
+          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ github.job }}-
+            cargo-${{ runner.os }}-
       - name: Rust toolchain (pinned by rust-toolchain.toml)
         run: |
           cargo --version
@@ -91,6 +175,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # full history — see the no-shell-gate job for why
+      - name: Cargo cache — registry, git DB and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cargo/git/checkouts/
+            target/
+          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ github.job }}-
+            cargo-${{ runner.os }}-
       - name: Rust toolchain (pinned by rust-toolchain.toml)
         run: |
           cargo --version
@@ -104,6 +201,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # full history — see the no-shell-gate job for why
+      - name: Cargo cache — registry, git DB and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cargo/git/checkouts/
+            target/
+          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ github.job }}-
+            cargo-${{ runner.os }}-
       - name: Rust toolchain (pinned by rust-toolchain.toml)
         run: |
           cargo --version
@@ -117,6 +227,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # full history — see the no-shell-gate job for why
+      - name: Cargo cache — registry, git DB and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cargo/git/checkouts/
+            target/
+          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ github.job }}-
+            cargo-${{ runner.os }}-
       - name: Rust toolchain (pinned by rust-toolchain.toml)
         run: |
           cargo --version
@@ -134,6 +257,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # full history — see the no-shell-gate job for why
+      - name: Cargo cache — registry, git DB and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cargo/git/checkouts/
+            target/
+          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ github.job }}-
+            cargo-${{ runner.os }}-
       - name: Rust toolchain (pinned by rust-toolchain.toml)
         run: |
           cargo --version
@@ -149,6 +285,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # full history — see the no-shell-gate job for why
+      - name: Cargo cache — registry, git DB and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cargo/git/checkouts/
+            target/
+          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ github.job }}-
+            cargo-${{ runner.os }}-
       - name: Rust toolchain (pinned by rust-toolchain.toml)
         run: |
           cargo --version
@@ -163,6 +312,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # full history — see the no-shell-gate job for why
+      - name: Cargo cache — registry, git DB and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cargo/git/checkouts/
+            target/
+          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ github.job }}-
+            cargo-${{ runner.os }}-
       - name: Rust toolchain (pinned by rust-toolchain.toml)
         run: |
           cargo --version
@@ -177,6 +339,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # full history — see the no-shell-gate job for why
+      - name: Cargo cache — registry, git DB and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cargo/git/checkouts/
+            target/
+          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ github.job }}-
+            cargo-${{ runner.os }}-
       - name: Rust toolchain (pinned by rust-toolchain.toml)
         run: |
           cargo --version
@@ -194,6 +369,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # full history — see the no-shell-gate job for why
+      - name: Cargo cache — registry, git DB and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cargo/git/checkouts/
+            target/
+          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ github.job }}-
+            cargo-${{ runner.os }}-
       - name: Rust toolchain (pinned by rust-toolchain.toml)
         run: |
           cargo --version
