@@ -12,6 +12,7 @@ unsafe_code = "forbid"
 
 [dependencies]
 lifecycle-event = { path = "../lifecycle-event", default-features = false }
+lifecycle-monitor = { path = "../lifecycle-monitor" }
 
 [dev-dependencies]
 tempfile = "3"

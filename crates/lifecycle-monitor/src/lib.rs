@@ -323,6 +323,16 @@ pub fn observe_all(
     Ok(out)
 }
 
+/// Independent post-fact read of the journal. Does not go through `emit_host`.
+///
+/// The writer's readback proves the write path. This proves the artifact still
+/// exists when a *different* crate opens the file. Empty is ERROR.
+pub fn verify_artifact(path: &Path) -> Result<usize, MonitorError> {
+    let rows = parse_rows(path)?;
+    Ok(rows.len())
+}
+
+
 /// Gate: claimed write whose readback fails MUST refuse.
 pub fn gate_claimed_write_readback(
     journal: &DurableJournal,
@@ -469,4 +479,23 @@ mod tests {
         let err = observe_layer(&path, Layer::L2, 60_000).expect_err("no reason");
         assert!(matches!(err, MonitorError::MissingReason { .. }));
     }
+
+    #[test]
+    fn verify_artifact_reads_without_the_writer() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("lifecycle.jsonl");
+        std::fs::write(
+            &path,
+            r#"{"schema":"omp.lifecycle_event.v1","layer":"L5","stage_from":"S1.L4","stage_to":"S1.L5","actor":"test","outcome":"emitted","reason_code":"PORTAL_ROW","ts_unix":1}
+"#,
+        )
+        .unwrap();
+        let n = verify_artifact(&path).expect("independent read");
+        assert_eq!(n, 1);
+        std::fs::write(&path, "").unwrap();
+        let err = verify_artifact(&path).expect_err("empty after truncate");
+        assert!(matches!(err, MonitorError::EmptyScan { .. }));
+    }
 }
+
+

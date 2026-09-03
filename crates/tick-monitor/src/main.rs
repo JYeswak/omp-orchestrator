@@ -15,6 +15,7 @@ use lifecycle_event::{
     default_host_journal, default_repo_journal, DurableJournal, Layer, LifecycleEvent, Outcome,
     ReasonCode,
 };
+use lifecycle_monitor::{load_metrics, observe_layer, verify_artifact};
 use std::path::Path;
 #[used]
 static BUILD_ID_MARKER: &[u8] = concat!("build_id=", env!("OMP_BUILD_ID")).as_bytes();
@@ -446,11 +447,32 @@ fn emit_l4(args: &[String], outcome: Outcome, reason: &str) {
         .first()
         .map(|repo| default_repo_journal(Path::new(repo)))
         .unwrap_or_else(default_host_journal);
-    match DurableJournal::open(path)
+    match DurableJournal::open(&path)
         .and_then(|journal| lifecycle_event::emit_one_host(&journal, event))
     {
         Ok(_) => {}
         Err(error) => eprintln!("LIFECYCLE_EVENT_EMIT_FAILED layer=L4 detail={error}"),
+    }
+    let stall = args
+        .iter()
+        .position(|a| a == "--repo")
+        .and_then(|i| args.get(i + 1))
+        .map(PathBuf::from)
+        .map(|repo| repo.join("METRICS.toml"))
+        .filter(|p| p.is_file())
+        .and_then(|p| load_metrics(&p).ok())
+        .and_then(|specs| {
+            specs
+                .into_iter()
+                .find(|s| s.layer == Layer::L4)
+                .map(|s| s.stall_after_ms)
+        })
+        .unwrap_or(75_000);
+    if let Err(error) = observe_layer(&path, Layer::L4, stall) {
+        eprintln!("LIFECYCLE_MONITOR_L4 {error}");
+    }
+    if let Err(error) = verify_artifact(&path) {
+        eprintln!("LIFECYCLE_ARTIFACT_UNVERIFIED layer=L4 detail={error}");
     }
 }
 

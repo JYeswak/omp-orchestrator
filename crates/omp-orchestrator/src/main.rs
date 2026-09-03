@@ -49,6 +49,7 @@ use lifecycle_event::{
     default_repo_journal, emit as emit_lifecycle, DurableJournal, Layer, LifecycleEvent, Outcome,
     ReasonCode,
 };
+use lifecycle_monitor::{load_metrics, observe_layer, verify_artifact};
 
 const DEFAULT_INTERVAL: Duration = Duration::from_secs(90);
 const DEFAULT_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
@@ -1803,6 +1804,36 @@ async fn emit_s1_l3_l5(cx: &Cx, config: &Config, decision: &SupervisorDecision) 
     }
 }
 
+fn observe_s1_after_emit(config: &Config) {
+    let journal = default_repo_journal(&config.repo);
+    let metrics_path = config.repo.join("METRICS.toml");
+    let specs = match load_metrics(&metrics_path) {
+        Ok(specs) => specs,
+        Err(error) => {
+            eprintln!("LIFECYCLE_METRICS_UNREAD {error}");
+            return;
+        }
+    };
+    for layer in [Layer::L3, Layer::L5] {
+        let stall = specs
+            .iter()
+            .find(|s| s.layer == layer)
+            .map(|s| s.stall_after_ms)
+            .unwrap_or(60_000);
+        if let Err(error) = observe_layer(&journal, layer, stall) {
+            eprintln!(
+                "LIFECYCLE_MONITOR_{} {error}",
+                layer.as_str()
+            );
+        }
+    }
+    match verify_artifact(&journal) {
+        Ok(n) => println!("LIFECYCLE_ARTIFACT_VERIFIED rows={n}"),
+        Err(error) => eprintln!("LIFECYCLE_ARTIFACT_UNVERIFIED {error}"),
+    }
+}
+
+
 fn write_tick_receipt(
     config: &Config,
     tick: u64,
@@ -3216,6 +3247,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     let decision = decide(&observation, &authorization);
     file_supervisor_finding(cx, config, tick, &decision).await?;
     emit_s1_l3_l5(cx, config, &decision).await;
+    observe_s1_after_emit(config);
 
     // psf7: THE TICK ROW IS WRITTEN HERE, ONCE, UNCONDITIONALLY, BEFORE THE MATCH.
     //

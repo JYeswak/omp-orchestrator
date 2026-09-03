@@ -15,6 +15,7 @@ use std::process::ExitCode;
 use lifecycle_event::{
     default_host_journal, emit_one, DurableJournal, Layer, LifecycleEvent, Outcome, ReasonCode,
 };
+use lifecycle_monitor::verify_artifact;
 
 fn read_bounded_stdin() -> io::Result<Vec<u8>> {
     let mut input = Vec::with_capacity(4096);
@@ -153,6 +154,9 @@ async fn emit_l2(cx: &Cx, decision: &Decision) {
     };
     if let Err(error) = emit_one(cx, &journal, event).await {
         eprintln!("LIFECYCLE_EVENT_EMIT_FAILED layer=L2 detail={error}");
+    }
+    if let Err(error) = verify_artifact(journal.path()) {
+        eprintln!("LIFECYCLE_ARTIFACT_UNVERIFIED layer=L2 detail={error}");
     }
 }
 
