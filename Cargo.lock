@@ -537,6 +537,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4583a4551df46e2792f82ceeac45e850d2e2d5debba0b91f102385cda5b11f06"
 
 [[package]]
+name = "decision-ledger"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "der"
 version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1246,6 +1253,7 @@ dependencies = [
  "asupersync",
  "bead-holder",
  "composer-typed",
+ "decision-ledger",
  "dispatch-claim-fence",
  "dispatch-silence-watch",
  "finding",

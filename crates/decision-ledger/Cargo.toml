@@ -1,0 +1,23 @@
+[package]
+name = "decision-ledger"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "The S9 human-decision writer: append the question so it stops being lost"
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "decision_ledger"
+path = "src/lib.rs"
+
+[[bin]]
+name = "decision-ledger"
+path = "src/main.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+serde_json = "1"

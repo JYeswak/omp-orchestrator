@@ -25,8 +25,8 @@ use dispatch_claim_fence::{authorize, parse_br_show_json, BeadSnapshot, Dispatch
 use dispatch_silence_watch::SilenceVerdict;
 use ntm_fleet_monitor::parse_activity_json;
 use omp_orchestrator::{
-    applicable, census_gates, decide, read_idle_authorization, GateCensus, Observation,
-    PaneObservation, QueueState, SupervisorDecision,
+    applicable, census_gates, decide, dispatch_packet, read_idle_authorization, GateCensus,
+    Observation, PaneObservation, QueueState, SupervisorDecision,
 };
 use omp_rpc_session::{
     run_session, OmpCommand, RpcError, RpcSessionConfig, NO_CLAIM_BOUNDARY, OMP_RPC_SCHEMA_VERSION,
@@ -41,7 +41,7 @@ use std::collections::BTreeSet;
 use std::env;
 use ack_spine::ledger::StepKind;
 use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use subprocess_contract::run_output;
@@ -136,6 +136,77 @@ impl std::error::Error for OmpQuickError {}
 struct CloseRequest {
     bead: String,
     reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DispatchRenderRequest {
+    bead: String,
+    pane: String,
+    why_now: Option<String>,
+    traps_file: Option<PathBuf>,
+}
+
+fn parse_dispatch_render_args(args: &[String]) -> Result<Option<DispatchRenderRequest>, String> {
+    if args.first().map(String::as_str) != Some("dispatch") {
+        return Ok(None);
+    }
+    if args.get(1).map(String::as_str) != Some("render") {
+        return Err("CONFIG_REFUSED dispatch requires the render subcommand".to_owned());
+    }
+    let mut bead = None;
+    let mut pane = None;
+    let mut why_now = None;
+    let mut traps_file = None;
+    let mut index = 2;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--bead" => {
+                index += 1;
+                bead = Some(
+                    args.get(index)
+                        .ok_or_else(|| "CONFIG_REFUSED --bead requires an id".to_owned())?
+                        .clone(),
+                );
+            }
+            "--pane" => {
+                index += 1;
+                pane = Some(
+                    args.get(index)
+                        .ok_or_else(|| "CONFIG_REFUSED --pane requires an id".to_owned())?
+                        .clone(),
+                );
+            }
+            "--why-now" => {
+                index += 1;
+                why_now = Some(
+                    args.get(index)
+                        .ok_or_else(|| "CONFIG_REFUSED --why-now requires text".to_owned())?
+                        .clone(),
+                );
+            }
+            "--traps-file" => {
+                index += 1;
+                traps_file = Some(PathBuf::from(
+                    args.get(index)
+                        .ok_or_else(|| "CONFIG_REFUSED --traps-file requires a path".to_owned())?,
+                ));
+            }
+            other => return Err(format!("CONFIG_REFUSED unknown dispatch argument {other}")),
+        }
+        index += 1;
+    }
+    let bead = bead
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "CONFIG_REFUSED dispatch render requires --bead".to_owned())?;
+    let pane = pane
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "CONFIG_REFUSED dispatch render requires --pane".to_owned())?;
+    Ok(Some(DispatchRenderRequest {
+        bead,
+        pane,
+        why_now,
+        traps_file,
+    }))
 }
 
 fn parse_close_readback_args(args: &[String]) -> Result<Option<CloseRequest>, String> {
@@ -364,7 +435,7 @@ impl Config {
     }
 }
 fn usage() -> &'static str {
-    "usage: omp-orchestrator [run] [--once|--max-ticks N] [--repo PATH] [--session NAME] [--interval-secs N] [--receiver-agent NAME] [--omp-quick] [--omp-binary PATH]\n       close-readback BEAD --reason REASON\n       run is the explicit resident lifecycle entrypoint (observe -> ready queue -> dispatch -> receiver receipt); the flag-only form is unchanged for launchd"
+    "usage: omp-orchestrator [run] [--once|--max-ticks N] [--repo PATH] [--session NAME] [--interval-secs N] [--receiver-agent NAME] [--omp-quick] [--omp-binary PATH]\n       close-readback BEAD --reason REASON\n       dispatch render --bead BEAD --pane %N [--why-now TEXT] [--traps-file PATH]\n       run is the explicit resident lifecycle entrypoint (observe -> ready queue -> dispatch -> receiver receipt); dispatch render emits the same packet without transport"
 }
 
 fn now_unix() -> u64 {
@@ -1394,21 +1465,14 @@ async fn send_and_verify(
     before: &[u8],
     tick: u64,
 ) -> Result<AckStageResult, String> {
-    let title = snapshot.title();
-    let body = snapshot.description();
-    let handoff = snapshot
-        .assignee()
-        .filter(|owner| owner.starts_with("supervisor:"))
-        .map(|owner| {
-            format!(
-                "Handoff: {owner} holds this bead for dispatch admission. Before working, claim it as {receiver_agent}: br update {bead} --assignee {receiver_agent} --status in_progress --actor {receiver_agent}.\n"
-            )
-        })
-        .unwrap_or_default();
-    let packet = format!(
-        "Objective: complete bead {bead}.\nTarget repository: {}\n{handoff}\n=== {title} ===\n{body}\n",
-        config.repo.display()
-    );
+    let packet = dispatch_packet::render_with_pane(
+        snapshot,
+        &config.repo,
+        Some(pane),
+        None,
+        None,
+    )
+    .map_err(|error| format!("DISPATCH_PACKET_REFUSED bead={bead} pane={pane} error={error}"))?;
     let staged = env::temp_dir().join(format!(
         "omp-orchestrator-dispatch-{}-{}-{}.txt",
         std::process::id(),
@@ -1779,6 +1843,53 @@ fn write_heartbeat(config: &Config, tick: u64, status: &str, detail: &str) -> Re
                 config.heartbeat_ledger.display()
             )
         })?;
+    // ── S9: the human-decision ledger, wired HERE and nowhere else ──────────
+    //
+    // `nsx1`: `docs/decisions.jsonl` had a READER and no writer. The only code that
+    // touched it read it, to cite HD-0001 (see the comment at the tick-loop guard
+    // below). Meanwhile this function wrote 594 human-addressed rows on 2026-09-02
+    // alone — 188 `GATE_UNWIRED`, 305 `SUPERVISOR_REFUSED`, 101
+    // `DISPATCH_RESULT_RECORDED` whose detail named `owner=josh` or `AWAIT_HUMAN` —
+    // and every decision they asked for lived in pane scrollback, a bead comment, or
+    // a progress file.
+    //
+    // THE FUNNEL IS THE POINT. There are 42 `write_heartbeat` call sites; patching
+    // the two that happened to fire today would leave the next refusal shape
+    // unrecorded, which is the hand-maintained-list defect this repo keeps paying
+    // for. One call here covers `GATE_UNWIRED`, `DISPATCH_BLOCKED … owner=josh`,
+    // `MONITOR_BLIND`, `ACK_STAGE_RETRY_BLOCKED action=AWAIT_HUMAN`, and any future
+    // shape — `classify_heartbeat` returns `None` for rows that address nobody, and
+    // carries an UNCLASSIFIED request rather than dropping a row it did not expect.
+    //
+    // A LEDGER FAILURE MUST NOT KILL A TICK. The decision ledger is a record, not a
+    // gate: refusing the heartbeat because the record failed would convert a
+    // bookkeeping fault into a fleet outage. So the outcome is REPORTED on stderr and
+    // the tick proceeds — and it is reported, not swallowed, because a writer that
+    // fails silently is the defect this whole bead is about.
+    if let Some(request) = decision_ledger::classify_heartbeat(status, detail, now_unix()) {
+        let ledger = config.repo.join("docs/decisions.jsonl");
+        match decision_ledger::append_request(&ledger, &request) {
+            // Deduped is the common case by design: 188 identical ticks are ONE
+            // question. Silent, or the log becomes the thing it replaced.
+            Ok(outcome) if !outcome.wrote() => {}
+            Ok(outcome) => {
+                let _ = writeln!(
+                    io::stderr(),
+                    "S9_REQUEST_RECORDED id={} blocking={} question={}",
+                    outcome.id(),
+                    request.blocking,
+                    request.question
+                );
+            }
+            Err(error) => {
+                let _ = writeln!(
+                    io::stderr(),
+                    "S9_REQUEST_UNRECORDED status={status} blocking={} detail={error}",
+                    request.blocking
+                );
+            }
+        }
+    }
     Ok(())
 }
 /// How long a pending-dispatch marker may block the whole loop before the loop
@@ -3472,6 +3583,43 @@ async fn run_supervisor(cx: &Cx, config: Config) -> Result<(), String> {
         }
         sleep(cx.now_for_observability(), config.interval).await;
     }
+}
+
+async fn render_dispatch_command(
+    cx: &Cx,
+    config: &Config,
+    request: &DispatchRenderRequest,
+) -> Result<String, String> {
+    let snapshot = load_bead_snapshot(cx, config, &request.bead).await?;
+    let traps = request
+        .traps_file
+        .as_deref()
+        .map(fs::read_to_string)
+        .transpose()
+        .map_err(|error| {
+            format!(
+                "PACKET_RENDER_REFUSED bead={} pane={} traps_file={} error={error}",
+                request.bead,
+                request.pane,
+                request
+                    .traps_file
+                    .as_deref()
+                    .map_or_else(|| "<none>".to_owned(), |path| path.display().to_string())
+            )
+        })?;
+    dispatch_packet::render_with_pane(
+        &snapshot,
+        &config.repo,
+        Some(&request.pane),
+        request.why_now.as_deref(),
+        traps.as_deref(),
+    )
+    .map_err(|error| {
+        format!(
+            "PACKET_RENDER_REFUSED bead={} pane={} error={error}",
+            request.bead, request.pane
+        )
+    })
 }
 
 fn close_readback_exit(outcome: CloseReadback) -> std::process::ExitCode {
