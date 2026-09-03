@@ -16,16 +16,21 @@ flowchart TD
   L0M -->|created or merged or already or skipped| L1
   L0M -->|failed| R0M["REFUSE or DEGRADED. Not L1 healthy"]
 
-  L1["L1 doctor PATH plus version. OMP panes RpcRequest::GetState"] --> L1Q{"probe?"}
-  L1Q -->|OK| L2
-  L1Q -->|UNPROBEABLE| L1U["record UNPROBEABLE"]
-  L1U --> L1UH{"named HD degraded-continue?"}
-  L1UH -->|no| H1U["HUMAN HALT S9"]
-  L1UH -->|yes| L2
-  L1Q -->|ABSENT specific| L1FAM{"family probe?"}
+  L1["L1 doctor PATH plus version. OMP panes RpcRequest::GetState"] --> L1Q{"probe attempted and returned a verdict?"}
+  L1Q --> L1V["ProbeVerdict{OK | ABSENT_FAMILY | ABSENT_SPECIFIC | UNPROBEABLE | STALE | PAUSED | UNMEASURED{UNRUN}}"]
+  L1V -->|OK| L2
+  L1V -->|ABSENT_SPECIFIC| L1FAM{"family probe / optionality?"}
   L1FAM -->|OK| L2
-  L1FAM -->|ABSENT family| L1H["HUMAN HALT named remediation"]
-  L1Q -->|ABSENT family| L1H
+  L1FAM -->|ABSENT_FAMILY| L1H["HUMAN HALT named remediation"]
+  L1V -->|ABSENT_FAMILY| L1H
+  L1V -->|UNPROBEABLE| L1U["record arm + reason; timeout is not a subject refusal"]
+  L1V -->|STALE| L1U
+  L1V -->|PAUSED| L1U
+  L1V -->|"UNMEASURED (run_state=UNRUN or INSTRUMENT_ERROR)"| L1U
+  L1U --> L1UH{"named HD degraded-continue?"}
+  L1UH -->|no| H1U["HUMAN HALT preserve arm and reason"]
+  L1UH -->|yes| L2
+
 
   L2["L2 ecosystem"] --> L2Q1{"git repository?"}
   L2Q1 -->|no| R2R["HALT need git repo"]

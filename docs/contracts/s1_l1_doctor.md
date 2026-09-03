@@ -26,6 +26,42 @@ A named but missing suite is intentional Wave-0 state, not a passing implementat
 | L1-DRIFT | re-evaluation | A changed version, daemon state, scope, or before hash invalidates the no-op premise; the doctor must re-probe and may repair. |
 | L1-SCOPE | bounded work | A scoped run executes only named probe families; skipped probes are explicit, never silently green. |
 
+## Probe Verdict Type
+
+ProbeVerdict is one seven-arm semantic enum. The UNMEASURED arm carries a run_state and reason_code so timeout and instrument failures remain Unrun-like without becoming a false refusal.
+
+| Arm | Emitted when | Branch behaviour |
+|---|---|---|
+| OK | Presence and required version/identity both pass | CONTINUE to L2. |
+| ABSENT_FAMILY | No member of a required tool family is present | HUMAN_HALT with named remediation; an optional family may be INFO only when optionality is explicit. |
+| ABSENT_SPECIFIC | The family exists but the named tool is absent | INFO plus remediation when optional; HUMAN_HALT when the specific tool is required. Never relabel as OK. |
+| UNPROBEABLE | The probe was attempted, but the subject cannot answer through the supported interface | HUMAN_HALT unless a named HD explicitly authorizes DEGRADED_CONTINUE; the verdict remains UNPROBEABLE. |
+| STALE | The subject answered, but the version, identity, or evidence age is outside the required floor | Re-probe/remediate and HUMAN_HALT by default; only a named HD may authorize DEGRADED_CONTINUE for a non-critical probe. A present wrong-version tool lands here, not OK or ABSENT. |
+| PAUSED | The lane or service explicitly reports an intentional pause | HUMAN_HALT with resume/remediation by default; a named HD may authorize DEGRADED_CONTINUE. PAUSED is distinct from inability to answer because it carries operator intent. |
+| UNMEASURED | No valid subject observation exists: timeout, no record, skipped probe, or probe-instrument failure | Carry run_state=UNRUN for timeout/no-record and reason_code; HUMAN_HALT by default, with named-HD DEGRADED_CONTINUE as the only override. UNMEASURED is never Pass or Refused. |
+
+UNKNOWN and UNPROBEABLE remain distinct. UNKNOWN means no authoritative observation exists, so it is represented as UNMEASURED with reason_code=UNKNOWN_NO_RECORD; RCH's repo-convergence status=unknown with total=0 is this case. UNPROBEABLE means an attempt reached the subject and the subject could not answer. Collapsing them would turn an absent measurement into a claim about the subject.
+
+Timeout follows crate-atom-gate/src/lib.rs:56-57: a timeout is Unrun, never Pass or Refused. An instrument failure is also UNMEASURED with run_state=INSTRUMENT_ERROR, never a subject refusal. The branch may halt, but the verdict must preserve that the measurement did not run.
+
+The exhaustive wire shape is: ProbeVerdict{OK|ABSENT_FAMILY|ABSENT_SPECIFIC|UNPROBEABLE|STALE|PAUSED|UNMEASURED{run_state=UNRUN|INSTRUMENT_ERROR,reason_code}}. No seventh-arm default is permitted; an unknown wire arm is an instrument/decode error and must halt.
+
+### Verdict properties
+
+- L1P-EXHAUSTIVE-ARMS: every probe result is exactly one of the seven arms above; absence of a matching arm is a decode/instrument error.
+- L1P-WRONG-VERSION-STALE: presence plus a wrong version is STALE, never OK, ABSENT_SPECIFIC, or UNPROBEABLE.
+- L1P-UNRUN-NOT-REFUSED: timeout, no-record, and instrument-error observations are UNMEASURED and never Refused.
+- L1P-PAUSED-DISTINCT: an explicit operator pause is PAUSED, not UNPROBEABLE, so resume intent is preserved.
+- L1P-HD-NAMED: only an explicit named HD may convert UNPROBEABLE, STALE, PAUSED, or UNMEASURED into degraded continuation; the enum arm and reason remain visible.
+
+### Verdict laws
+
+- LAW-L1-VERDICT-EXHAUSTIVE — the decoder cannot silently map an unknown result to OK or Refused. Test: s1_l1_doctor_contract.rs::unknown_arm_is_instrument_error.
+- LAW-L1-UNRUN — a timeout produces UNMEASURED with run_state=UNRUN and never Pass or Refused. Test: s1_l1_doctor_contract.rs::timeout_is_unrun.
+- LAW-L1-WRONG-VERSION — a present tool below the version floor produces STALE. Test: s1_l1_doctor_contract.rs::wrong_version_is_stale.
+- LAW-L1-PAUSED — an explicit pause produces PAUSED and retains pause intent. Test: s1_l1_doctor_contract.rs::paused_is_not_unprobeable.
+- LAW-L1-UNKNOWN — no authoritative record produces UNMEASURED with reason_code=UNKNOWN_NO_RECORD, not UNPROBEABLE. Test: s1_l1_doctor_contract.rs::unknown_record_is_unmeasured.
+
 ### Properties
 
 - L1P-TWO-SIGNALS: a tool is OK only when presence and version evidence both satisfy the required contract.
@@ -99,21 +135,24 @@ python3 - <<'PY'
 from pathlib import Path
 mutate = Path('/Volumes/ZestData/dicklesworthstone-mirror/beads_rust/src/cli/commands/doctor_subsystems/mutate.rs').read_text()
 test = Path('/Volumes/ZestData/dicklesworthstone-mirror/beads_rust/tests/e2e_doctor_chokepoint.rs').read_text()
+contract = Path('docs/contracts/s1_l1_doctor.md').read_text()
+need_arms = ['OK', 'ABSENT_FAMILY', 'ABSENT_SPECIFIC', 'UNPROBEABLE', 'STALE', 'PAUSED', 'UNMEASURED']
 need_mutate = ['pub fn mutate', 'before_hash', 'after_hash', 'write_verbatim_backup', 'actions_file']
 need_test = ['fn chokepoint_idempotence', 'actions_2.is_empty()', 'doctor", "undo']
+assert all(x in contract for x in need_arms), 'L1 verdict arms missing'
 assert all(x in mutate for x in need_mutate), 'L1 mutate anchors missing'
 assert all(x in test for x in need_test), 'L1 idempotence/undo anchors missing'
 unchanged = (('sha256:a', 'sha256:b'), ('tool@1', 'daemon:up'))
 drifted = (('sha256:b', 'sha256:c'), ('tool@2', 'daemon:up'))
 assert unchanged[0][1] == 'sha256:b' and unchanged[1] == ('tool@1', 'daemon:up')
 assert drifted != unchanged
-print('L1_CONTRACT_VALIDATION PASS conditional_idempotence=state_bound mutate=anchored undo=anchored production_suite=MISSING')
+print('L1_CONTRACT_VALIDATION PASS arms=7 timeout=unmeasured_unrun conditional_idempotence=state_bound mutate=anchored undo=anchored production_suite=MISSING')
 PY
 ```
 
 Output:
 
-    L1_CONTRACT_VALIDATION PASS conditional_idempotence=state_bound mutate=anchored undo=anchored production_suite=MISSING
+    L1_CONTRACT_VALIDATION PASS arms=7 timeout=unmeasured_unrun conditional_idempotence=state_bound mutate=anchored undo=anchored production_suite=MISSING
 
 ## Cross-References
 
