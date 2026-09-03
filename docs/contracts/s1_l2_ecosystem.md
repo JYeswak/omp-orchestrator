@@ -50,7 +50,7 @@ A named but missing suite is intentional Wave-0 state, not a passing implementat
 
 ## Build Inventory
 
-Every row below is one L2 build item. The S1 build remains frozen; these are the complete implementation rows, not a launch authorization.
+Every row below is one L2 build item. The WORKTREE inventory count is 18 BUILD rows and 22 TEST rows; these are the complete implementation rows, not a launch authorization. No figure is a TREE claim.
 
 | ID | Build item | Run -> expect |
 |---|---|---|
@@ -81,7 +81,7 @@ Every row below is one L2 test item. Each has a named test and a branch-specific
 |---|---|---|
 | `L2-TEST-IDENTITY` | l2_ecosystem.rs::identity_includes_root_and_revision | Run foreign-root fixture; expect identity mismatch, not acceptance. |
 | `L2-TEST-GIT-REPO` | l2_ecosystem.rs::non_repo_halts | Run outside git; expect typed halt with remediation. |
-| `L2-TEST-REMOTE-A` | l2_ecosystem.rs::persona_a_allows_local_only_remote | Run Persona A without remote; expect explicit optional branch. |
+| `L2-TEST-REMOTE-A` | l2_ecosystem.rs::persona_a_allows_local_only_remote | Run Persona A without remote; expect allowed remote_optional=true continuation (known-good). Then run the same fixture as Persona B/C without remote; expect REMOTE_REQUIRED refusal and zero writes (known-bad). |
 | `L2-TEST-REMOTE-BC` | l2_ecosystem.rs::persona_bc_requires_remote | Run Persona B/C without remote; expect halt/remediation. |
 | `L2-TEST-AGENTS-STAMP` | l2_ecosystem.rs::agents_stamp_is_verified | Run wrong AGENTS stamp; expect mismatch, not stamped. |
 | `L2-TEST-CLAUDE-STAMP` | l2_ecosystem.rs::claude_stamp_is_verified | Run wrong CLAUDE stamp; expect mismatch, not stamped. |
@@ -95,9 +95,9 @@ Every row below is one L2 test item. Each has a named test and a branch-specific
 | `L2-TEST-TEMPLATE-IDENTITY` | l2_ecosystem.rs::trusted_init_records_template_identity | Run wrong template hash; expect refusal before write. |
 | `L2-TEST-BACKUP` | l2_ecosystem.rs::init_backup_precedes_write | Run backup failure fixture; expect no target write. |
 | `L2-TEST-INCEPTION-FOUNDATION` | l2_ecosystem.rs::inception_and_foundation_are_linked | Run missing field/ref fixture; expect validation failure. |
-| `L2-TEST-REPROBE-SUCCESS` | l2_ecosystem.rs::successful_init_requires_reprobe | Run valid opt-in init; expect post-write probe evidence before success. |
+| `L2-TEST-REPROBE-SUCCESS` | l2_ecosystem.rs::successful_init_requires_reprobe | Run valid opt-in init; expect post-write probe evidence before success. KNOWN-BAD: return success without a fresh readback; expect test failure. |
 | `L2-TEST-REPROBE-FAIL` | l2_ecosystem.rs::failed_reprobe_halts_l3 | Run init where stamp/readback remains wrong; expect halt, not L3. |
-| `L2-TEST-IDEMPOTENT-SAME` | l2_ecosystem.rs::second_init_is_zero_writes_given_identical_hashes | Run init twice without drift; expect second write count 0. |
+| `L2-TEST-IDEMPOTENT-SAME` | l2_ecosystem.rs::second_init_is_zero_writes_given_identical_hashes | Run init twice without drift; expect second write count 0. KNOWN-BAD: change policy hash between runs; expect repair/review, not no-op. |
 | `L2-TEST-IDEMPOTENT-DRIFT` | l2_ecosystem.rs::second_init_reopens_on_policy_hash_drift | Change policy hash between runs; expect repair/review, not no-op. |
 | `L2-TEST-EPISTEMIC-COMPLETE` | l2_ecosystem.rs::inception_has_no_blank_epistemic_cells | Run blank known/unknown/gap fixture; expect validation failure. |
 | `L2-TEST-ATOMIC-ROLLBACK` | l2_ecosystem.rs::partial_init_rolls_back_atomically | Fail FOUNDATION append after inception write; expect prior state restored. |
@@ -168,17 +168,17 @@ need_test = ['fn chokepoint_idempotence', 'actions_2.is_empty()', 'doctor", "und
 assert all(x in s1 for x in need_s1), 'L2 S1 anchors missing'
 assert all(x in mutate for x in need_mutate), 'L2 mutation anchors missing'
 assert all(x in test for x in need_test), 'L2 recovery/idempotence anchors missing'
-first = {'repo': 'sha:a', 'policy': 'sha:p', 'template': 'sha:t', 'probe': 'tool@1'}
-second_same = dict(first)
-second_drift = {**first, 'probe': 'tool@2'}
-assert second_same == first and second_drift != first
-print('L2_CONTRACT_VALIDATION PASS trusted_init=anchored inception_foundation=anchored reprobe=anchored conditional_idempotence=state_bound production_suite=MISSING')
+def repair_writes(previous_state, observed_state):
+    return 0 if previous_state == observed_state else 1
+assert repair_writes({'policy': 'sha:p'}, {'policy': 'sha:p'}) == 0
+assert repair_writes({'policy': 'sha:p'}, {'policy': 'sha:q'}) == 1
+print('L2_CONTRACT_VALIDATION PASS trusted_init=anchored inception_foundation=anchored reprobe=anchored conditional_idempotence=state_bound drift_leg=injected production_suite=MISSING')
 PY
 ```
 
 Output:
 
-    L2_CONTRACT_VALIDATION PASS trusted_init=anchored inception_foundation=anchored reprobe=anchored conditional_idempotence=state_bound production_suite=MISSING
+    L2_CONTRACT_VALIDATION PASS trusted_init=anchored inception_foundation=anchored reprobe=anchored conditional_idempotence=state_bound drift_leg=injected production_suite=MISSING
 
 ## Cross-References
 

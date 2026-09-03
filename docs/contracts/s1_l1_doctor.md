@@ -28,7 +28,7 @@ A named but missing suite is intentional Wave-0 state, not a passing implementat
 
 ## Probe Verdict Type
 
-ProbeVerdict is one seven-arm semantic enum. The UNMEASURED arm carries a run_state and reason_code so timeout and instrument failures remain Unrun-like without becoming a false refusal.
+ProbeVerdict is one seven-arm semantic enum (PROJECTED from vv9h). The UNMEASURED arm carries a run_state and reason_code so timeout and instrument failures remain Unrun-like without becoming a false refusal.
 
 | Arm | Emitted when | Branch behaviour |
 |---|---|---|
@@ -82,7 +82,7 @@ The exhaustive wire shape is: ProbeVerdict{OK|ABSENT_FAMILY|ABSENT_SPECIFIC|UNPR
 
 ## Build Inventory
 
-Every row below is one L1 build item. The listed command is the acceptance shape for the future build; no L1 crate is built in this readiness pass. fh is intentionally excluded from the eleven-probe set after Joshua removed it at f735cfd.
+Every row below is one L1 build item. The WORKTREE inventory count is 20 BUILD rows and 22 TEST rows; the eleven-probe count is WORKTREE S1.toml:39-40; fh is intentionally excluded after Joshua removed it at f735cfd. The listed command is the acceptance shape for the future build; no L1 crate is built in this readiness pass.
 
 | ID | Build item | Run -> expect |
 |---|---|---|
@@ -100,7 +100,7 @@ Every row below is one L1 build item. The listed command is the acceptance shape
 | `L1-BUILD-PROBE-FRANKENMERMAID` | frankenmermaid probe | Run frankenmermaid --version or health; expect presence and version. |
 | `L1-BUILD-PROBE-TOOLCHAIN` | toolchain-pin probe | Read rust-toolchain.toml and supported toolchain identity; expect pin or remediation. |
 | `L1-BUILD-TWO-SIGNALS` | presence AND version evaluator | Run a present wrong-version fixture; expect STALE, never OK or ABSENT. |
-| `L1-BUILD-VERDICT` | ProbeVerdict seven-arm wire type | Run the vv9h contract; expect OK, ABSENT_FAMILY, ABSENT_SPECIFIC, UNPROBEABLE, STALE, PAUSED, or UNMEASURED with run state/reason. |
+| `L1-BUILD-VERDICT` | ProbeVerdict seven-arm wire type (PROJECTED; vv9h) | Run the vv9h contract; expect OK, ABSENT_FAMILY, ABSENT_SPECIFIC, UNPROBEABLE, STALE, PAUSED, or UNMEASURED with run state/reason. |
 | `L1-BUILD-REMEDIATION` | per-ABSENT remediation table | Run every absent-family/specific case; expect a non-empty remediation or requiredness-driven halt. |
 | `L1-BUILD-EXIT` | two-band exit envelope | Run healthy and refusing probes; expect exit 0 for healthy and nonzero typed outcome without conflating UNRUN with refusal. |
 | `L1-BUILD-MUTATE` | repair mutation chokepoint | Run a repair; expect before hash, verbatim backup, after hash, and one action record. |
@@ -117,7 +117,7 @@ Every row below is one L1 test item. Each name is the future single-pass test fu
 | `L1-TEST-PROBE-NTM` | l1_doctor.rs::ntm_probe_is_typed | Run ntm probe fixture; expect version or UNPROBEABLE; unsupported answer must not be OK. |
 | `L1-TEST-PROBE-BR` | l1_doctor.rs::br_probe_emits_two_signals | Run br fixture; expect presence/version; missing binary is ABSENT with remediation. |
 | `L1-TEST-PROBE-BV` | l1_doctor.rs::bv_probe_emits_two_signals | Run bv fixture; expect presence/version; wrong version is STALE. |
-| `L1-TEST-PROBE-AGENT-MAIL` | l1_doctor.rs::agent_mail_probe_is_scoped | Run endpoint fixture; expect endpoint/version; unavailable endpoint is ABSENT or UNMEASURED, never guessed OK. |
+| `L1-TEST-PROBE-AGENT-MAIL` | l1_doctor.rs::agent_mail_probe_is_scoped | Run endpoint fixture with an unresponsive endpoint; expect UNMEASURED/UNKNOWN_NO_RECORD. KNOWN-BAD: present endpoint with no version response must not be OK. |
 | `L1-TEST-PROBE-SOCRATICODE` | l1_doctor.rs::socraticode_probe_preserves_unknown | Run service fixture with no index record; expect UNMEASURED UNKNOWN_NO_RECORD. |
 | `L1-TEST-PROBE-RCH` | l1_doctor.rs::rch_probe_reports_lane_state | Run RCH topology fixture; expect explicit repo UNKNOWN when no record exists. |
 | `L1-TEST-PROBE-GIT` | l1_doctor.rs::git_probe_rejects_non_repo | Run outside a repo; expect ABSENT_FAMILY with remediation. |
@@ -125,13 +125,13 @@ Every row below is one L1 test item. Each name is the future single-pass test fu
 | `L1-TEST-PROBE-FRANKENMERMAID` | l1_doctor.rs::frankenmermaid_probe_emits_two_signals | Run wrong-version fixture; expect STALE. |
 | `L1-TEST-PROBE-TOOLCHAIN` | l1_doctor.rs::toolchain_probe_requires_pin | Run missing/invalid pin fixture; expect ABSENT_SPECIFIC plus remediation. |
 | `L1-TEST-TWO-SIGNAL` | l1_doctor.rs::wrong_version_is_stale | Run present tool below floor; expect STALE, not OK or absent. |
-| `L1-TEST-VERDICT-ARMS` | l1_doctor.rs::every_probe_verdict_has_branch | Run all seven-arm fixtures; expect each declared branch and no default green. |
+| `L1-TEST-VERDICT-ARMS` | l1_doctor.rs::every_probe_verdict_has_branch | Run all seven-arm fixtures (PROJECTED from vv9h); expect each declared branch. KNOWN-BAD: inject an unknown arm; expect decode/instrument error, never default green. |
 | `L1-TEST-TIMEOUT-UNRUN` | l1_doctor.rs::timeout_is_unmeasured_unrun | Run timeout fixture; expect UNMEASURED run_state=UNRUN, never Pass or Refused. |
-| `L1-TEST-ABSENT-REMEDIATION` | l1_doctor.rs::every_absent_has_remediation | Run absent family and absent specific fixtures; expect remediation or requiredness halt. |
-| `L1-TEST-EXIT-LATTICE` | l1_doctor.rs::exit_bands_match_verdicts | Run healthy/refused/unrun fixtures; expect exit lattice to preserve distinctions. |
+| `L1-TEST-ABSENT-REMEDIATION` | l1_doctor.rs::every_absent_has_remediation | Run absent family and absent specific fixtures; expect remediation or requiredness halt. KNOWN-BAD: emit ABSENT with empty remediation; expect test failure. |
+| `L1-TEST-EXIT-LATTICE` | l1_doctor.rs::exit_bands_match_verdicts | Run healthy/refused/unrun fixtures; expect distinct exit bands. KNOWN-BAD: map UNRUN to Refused; expect test failure. |
 | `L1-TEST-MUTATE-BACKUP` | l1_doctor.rs::repair_records_before_hash_backup_after_hash | Run repair fixture; expect backup/action evidence; delete backup leg must fail. |
 | `L1-TEST-UNDO` | l1_doctor.rs::undo_restores_before_hash | Run repair then undo; expect byte/hash restoration; tampered backup must refuse. |
-| `L1-TEST-IDEMPOTENT-SAME` | l1_doctor.rs::second_repair_is_zero_actions_given_identical_hashes | Run repair twice without drift; expect second action count 0. |
+| `L1-TEST-IDEMPOTENT-SAME` | l1_doctor.rs::second_repair_is_zero_actions_given_identical_hashes | Run repair twice without drift; expect second action count 0. KNOWN-BAD: change target before-hash between runs; expect a new action, not zero. |
 | `L1-TEST-IDEMPOTENT-DRIFT` | l1_doctor.rs::second_repair_reopens_on_changed_before_hash | Change a target hash between runs; expect a new repair action, not a false no-op. |
 | `L1-TEST-REPROBE-HALT` | l1_doctor.rs::failed_reprobe_blocks_l2 | Make repair readback fail; expect L2 not reached. |
 | `L1-TEST-SCOPE-UNKNOWN` | l1_doctor.rs::scope_does_not_vacuously_pass_unknown | Omit a requested probe record; expect UNMEASURED/UNKNOWN, not Pass. |
@@ -151,9 +151,9 @@ The scout's idempotence assertion is correct only with its fixture precondition.
 
 The mutation authority is explicit in the same upstream source: src/cli/commands/doctor_subsystems/mutate.rs:574-714 defines mutate; :595-598 computes before_hash; :643-648 writes and verifies a verbatim backup; :652-659 makes dry-run return the before hash without mutation; :671-704 computes after_hash and appends one action record. src/cli/commands/doctor.rs:265-308 creates .doctor/runs/<run-id>/ and its action file. The round-trip contract and undo evidence are tests/e2e_doctor_chokepoint.rs:327-344 and :435-488.
 
-Refutation of the unconditional claim: the actual test names its premise second --repair is a no-op only after the first repair has made the fixture healthy. A changed before hash or probe input is not the same state. The shipped law we adopt is L1P-CONDITIONAL-IDEMPOTENCE, not a second run always performs zero actions.
+Refutation: e2e_doctor_chokepoint.rs:622-697 proves zero second actions only after the first run leaves a healthy fixture; changed hash or probe input reopens repair. Adopt `L1P-CONDITIONAL-IDEMPOTENCE`, not global zero actions.
 
-RCH supplies the topology/convergence doctor precedent. rch doctor --help exposes --reliability and scoped values topology, convergence, pressure, triage, and others. The measured read-only command rch doctor --reliability --scope topology,convergence --json --no-self-healing --no-hook-auto-start logged scope application at rch/src/doctor.rs:1145, ran only the two requested probe families, returned worker topology passes, and returned repo convergence as explicit status=unknown, total=0 information rather than a false pass. L1 must carry the same scope and unknown discipline.
+RCH's doctor exposes scoped reliability probes: --scope topology,convergence runs only those families and reports repo convergence status=unknown when records are absent. That UNKNOWN discipline is required here.
 
 ## Authority / Recovery / Ordering
 
@@ -205,17 +205,17 @@ need_test = ['fn chokepoint_idempotence', 'actions_2.is_empty()', 'doctor", "und
 assert all(x in contract for x in need_arms), 'L1 verdict arms missing'
 assert all(x in mutate for x in need_mutate), 'L1 mutate anchors missing'
 assert all(x in test for x in need_test), 'L1 idempotence/undo anchors missing'
-unchanged = (('sha256:a', 'sha256:b'), ('tool@1', 'daemon:up'))
-drifted = (('sha256:b', 'sha256:c'), ('tool@2', 'daemon:up'))
-assert unchanged[0][1] == 'sha256:b' and unchanged[1] == ('tool@1', 'daemon:up')
-assert drifted != unchanged
-print('L1_CONTRACT_VALIDATION PASS arms=7 timeout=unmeasured_unrun conditional_idempotence=state_bound mutate=anchored undo=anchored production_suite=MISSING')
+def repair_actions(previous_after_hash, observed_before_hash):
+    return 0 if previous_after_hash == observed_before_hash else 1
+assert repair_actions('sha256:b', 'sha256:b') == 0
+assert repair_actions('sha256:b', 'sha256:c') == 1
+print('L1_CONTRACT_VALIDATION PASS arms=7 timeout=unmeasured_unrun conditional_idempotence=state_bound drift_leg=injected mutate=anchored undo=anchored production_suite=MISSING')
 PY
 ```
 
 Output:
 
-    L1_CONTRACT_VALIDATION PASS arms=7 timeout=unmeasured_unrun conditional_idempotence=state_bound mutate=anchored undo=anchored production_suite=MISSING
+    L1_CONTRACT_VALIDATION PASS arms=7 timeout=unmeasured_unrun conditional_idempotence=state_bound drift_leg=injected mutate=anchored undo=anchored production_suite=MISSING
 
 ## Cross-References
 
