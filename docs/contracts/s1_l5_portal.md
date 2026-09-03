@@ -145,6 +145,39 @@ L5_PORTAL_STANDIN status=CLEAN
 - `mirror:beads_rust/src/sync/mod.rs:507-509` — `fsync_pinned_parent`
 - `mirror:franken_lean/ci/CONVERGENCE_GOVERNANCE_POLICY.json` — gate/workstream/WIP step-ledger (governance analogue, not the portal schema)
 
+## Work breakdown (filed, not claimed)
+
+18 build (13 IDs + fsync-file + fsync-parent + rename + FOUNDATION append + decisions_owed) + 6 test. Gate `omp-orchestrator-gate-s1-l5-w44h` depends on each.
+
+**Expectation collision:** this layer does **not** grow `expected_duration`. Journey `--delta` stays `UNMEASURABLE` until `omp-orchestrator-s1-expectation-perf-registry-xkr6` ships a duration-capable row. `NUMBERS.toml` `[figures.*]` cannot express duration. `decisions_owed.age_s` is age of a HD row, not an SLO. Two schemas would be worse than none — L5 defers.
+
+| kind | id | title |
+|---|---|---|
+| build | `omp-orchestrator-s1-l5-schema-ciay` | L5-SCHEMA |
+| build | `omp-orchestrator-s1-l5-hash-jbmy` | L5-HASH |
+| build | `omp-orchestrator-s1-l5-source-van0` | L5-SOURCE |
+| build | `omp-orchestrator-s1-l5-alert-cqwo` | L5-ALERT |
+| build | `omp-orchestrator-s1-l5-one-next-qcev` | L5-ONE-NEXT |
+| build | `omp-orchestrator-s1-l5-inception-y80i` | L5-INCEPTION |
+| build | `omp-orchestrator-s1-l5-readback-3tek` | L5-READBACK |
+| build | `omp-orchestrator-s1-l5-cursor-enjg` | L5-CURSOR |
+| build | `omp-orchestrator-s1-l5-obs-schema-bbc8` | L5-OBS-SCHEMA |
+| build | `omp-orchestrator-s1-l5-obs-hash-ub2l` | L5-OBS-HASH |
+| build | `omp-orchestrator-s1-l5-obs-sources-1o28` | L5-OBS-SOURCES |
+| build | `omp-orchestrator-s1-l5-obs-readback-zi3x` | L5-OBS-READBACK |
+| build | `omp-orchestrator-s1-l5-metric-readback-fqgi` | L5-METRIC-READBACK-OK |
+| build | `omp-orchestrator-s1-l5-fsync-file-q7jz` | fsync file |
+| build | `omp-orchestrator-s1-l5-fsync-parent-u7qq` | fsync parent |
+| build | `omp-orchestrator-s1-l5-rename-v809` | temp+rename |
+| build | `omp-orchestrator-s1-l5-foundation-append-y6yg` | FOUNDATION.jsonl stage=S1 |
+| build | `omp-orchestrator-s1-l5-decisions-owed-4tq2` | decisions_owed with age |
+| test | `omp-orchestrator-s1-l5-test-envelope-wryz` | missing envelope field |
+| test | `omp-orchestrator-s1-l5-test-one-next-rhro` | one_next object |
+| test | `omp-orchestrator-s1-l5-test-readback-refuse-8vy2` | write 0 + readback fail => REFUSE |
+| test | `omp-orchestrator-s1-l5-test-fsync-parent-nsyg` | parent fsync |
+| test | `omp-orchestrator-s1-l5-test-hash-self-d8kk` | hash excludes self |
+| test | `omp-orchestrator-s1-l5-test-crash-inject-p0jn` | crash between write and rename |
+
 ## NO-CLAIM
 
 An envelope copied from ntm/am/bv is not a portal. `data_hash` on bv is 16 hex chars today, not SHA-256 of a portal row — copy the *role* (content hash), not the width. Parent-dir fsync is cited from beads_rust; this repo has no writer. `exists = none` remains.

@@ -139,6 +139,40 @@ L4_LIVENESS_STANDIN status=CLEAN
 - `docs/contracts/receiver_receipt_contract.md` — idle→working is delivery, not liveness of the swarm
 - oaqh grade `3b35442` — GetState-per-pane unachievable; not an L4 source
 
+## Work breakdown (filed, not claimed)
+
+20 build (13 IDs + 3 ntm-source wiring + 4 spawn receipts) + 5 test. Gate `omp-orchestrator-gate-s1-l4-hs15` depends on each.
+
+| kind | id | title |
+|---|---|---|
+| build | `omp-orchestrator-s1-l4-src-ntm-2yrg` | L4-SRC-NTM |
+| build | `omp-orchestrator-s1-l4-src-tick-1u9f` | L4-SRC-TICK |
+| build | `omp-orchestrator-s1-l4-src-mail-fols` | L4-SRC-MAIL |
+| build | `omp-orchestrator-s1-l4-silent-gbyo` | L4-SILENT |
+| build | `omp-orchestrator-s1-l4-live-hw99` | L4-LIVE |
+| build | `omp-orchestrator-s1-l4-not-live-8r0r` | L4-NOT-LIVE |
+| build | `omp-orchestrator-s1-l4-spawn-ol44` | L4-SPAWN |
+| build | `omp-orchestrator-s1-l4-cx-i0mv` | L4-CX |
+| build | `omp-orchestrator-s1-l4-obs-ntm-xl56` | L4-OBS-NTM |
+| build | `omp-orchestrator-s1-l4-obs-tick-17nw` | L4-OBS-TICK |
+| build | `omp-orchestrator-s1-l4-obs-mail-l2de` | L4-OBS-MAIL |
+| build | `omp-orchestrator-s1-l4-obs-agree-l7ve` | L4-OBS-AGREE |
+| build | `omp-orchestrator-s1-l4-metric-silent-vdxb` | L4-METRIC-SILENT-COUNT |
+| build | `omp-orchestrator-s1-l4-wire-ntm-session-x11g` | wire session into ntm sources.sources |
+| build | `omp-orchestrator-s1-l4-wire-ntm-tick-kqxr` | wire tick-monitor into ntm sources.sources |
+| build | `omp-orchestrator-s1-l4-wire-ntm-mail-ts01` | wire agent-mail into ntm sources.sources |
+| build | `omp-orchestrator-s1-l4-spawn-wave-hash-om7m` | WAVE.md hash |
+| build | `omp-orchestrator-s1-l4-spawn-mail-reg-b8z3` | mail registration |
+| build | `omp-orchestrator-s1-l4-spawn-pack-fx1u` | pack receipt |
+| build | `omp-orchestrator-s1-l4-spawn-recheck-hcik` | post-spawn live recheck |
+| test | `omp-orchestrator-s1-l4-test-silent-third-8qd7` | two fresh + one SILENT => NOT_LIVE |
+| test | `omp-orchestrator-s1-l4-test-three-fresh-3feu` | three fresh agree => LIVE |
+| test | `omp-orchestrator-s1-l4-test-no-tmux-raw-d9d7` | no bool tmux source |
+| test | `omp-orchestrator-s1-l4-test-missing-gap-z7dj` | missing gap_secs is SILENT |
+| test | `omp-orchestrator-s1-l4-test-cancelled-qoac` | Cancelled named |
+
+Escape route for an L4 build bead: treat `work_coordination` as the third liveness source because it already has `available/fresh/reason_code/age_ms`. That is the wiring-gap cousin of `LAW-L4-NO-TMUX-RAW` (defaulting a sourceless field). Detector: `sources.sources` keys must include session, tick-monitor, and agent-mail — `work_coordination` does not count.
+
 ## NO-CLAIM
 
 Copying ntm's per-source object does not put tick-monitor or Agent Mail into `sources.sources`. A green stand-in on fixtures does not make the swarm live. `wrapper none` is still the spawn path. This contract does not lift BUILD FREEZE and does not edit `orchestration-tick-gate` (gaq0 stays open).

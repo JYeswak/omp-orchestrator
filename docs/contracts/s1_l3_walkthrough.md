@@ -143,6 +143,30 @@ L3_PARITY_STANDIN status=CLEAN
 - `docs/contracts/lifecycle_contract.md` — pane lifecycle; not this walkthrough
 - scout PortalObservabilityLineage — no TUI/JSON analogue in the mirror
 
+## Work breakdown (filed, not claimed)
+
+12 build + 5 test. Gate `omp-orchestrator-gate-s1-l3-z8hz` depends on each (`br dep add GATE bead`). Assignee none.
+
+| kind | id | title |
+|---|---|---|
+| build | `omp-orchestrator-s1-l3-array-zr1g` | L3-ARRAY |
+| build | `omp-orchestrator-s1-l3-step-kymv` | L3-STEP |
+| build | `omp-orchestrator-s1-l3-tui-l7k8` | L3-TUI |
+| build | `omp-orchestrator-s1-l3-json-my9i` | L3-JSON |
+| build | `omp-orchestrator-s1-l3-hd0009-lo3g` | L3-HD0009 |
+| build | `omp-orchestrator-s1-l3-skipped-t4k9` | L3-SKIPPED (no view() drop) |
+| build | `omp-orchestrator-s1-l3-next-0ne8` | L3-NEXT |
+| build | `omp-orchestrator-s1-l3-obs-count-st8w` | L3-OBS-COUNT |
+| build | `omp-orchestrator-s1-l3-obs-parity-xar6` | L3-OBS-PARITY |
+| build | `omp-orchestrator-s1-l3-obs-cursor-jb5m` | L3-OBS-CURSOR |
+| build | `omp-orchestrator-s1-l3-obs-hd0009-n5tt` | L3-OBS-HD0009 |
+| build | `omp-orchestrator-s1-l3-metric-divergent-hli2` | L3-METRIC-DIVERGENT-IDS |
+| test | `omp-orchestrator-s1-l3-test-ordered-ids-2tex` | LAW-L3-ORDERED-IDS (set-equality trap) |
+| test | `omp-orchestrator-s1-l3-test-single-array-8igs` | LAW-L3-SINGLE-ARRAY |
+| test | `omp-orchestrator-s1-l3-test-skip-stays-lvg8` | LAW-L3-SKIP-STAYS |
+| test | `omp-orchestrator-s1-l3-test-hd0009-halt-zw1r` | LAW-L3-HD0009-HALT |
+| test | `omp-orchestrator-s1-l3-test-idempotent-l4xs` | LAW-L3-IDEMPOTENT |
+
 ## NO-CLAIM
 
 This file pins an algebra for two renderers over one array. It does not ship `ompo start`, does not decide HD-0009, and does not prove a future Rust test exists. The Validation stand-in proves the law against four fixture dicts. `exists = none` remains true until a crate and a wired caller exist.
