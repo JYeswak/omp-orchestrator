@@ -68,9 +68,10 @@ are **zero unqualified WORKS rows**:
 | consume | selection | **UNVERIFIED** — no durable receipt here proves the selected work was consumed |
 | consume | transport | **UNVERIFIED** — no durable receipt here proves delivery to the intended worker |
 | consume | admission (decide()) | **FENCED** — the cited report is DISPATCH_RETRY_BLOCKED |
-| actuate | dispatch | **AVAILABLE, NOT VERIFIED** — `send_and_verify` exists at `crates/omp-orchestrator/src/main.rs:961` (the bead's pre-drift address was `:714`) and the tick calls it at `:2481` (pre-drift `:1461`); transport and receiver receipts remain unproven. The gap is runtime verification, not source existence |
+| actuate | dispatch | **AVAILABLE, NOT VERIFIED** — `send_and_verify` exists at `crates/omp-orchestrator/src/main.rs:1321` and is called at `:3025` in the current tracked HEAD (the earlier `:714`/`:1461` addresses were pre-drift); transport and receiver receipts remain unproven. The gap is runtime verification, not source existence |
 | complete | worker says done | **AVAILABLE, NOT WIRED** — OMP exposes AgentEndEvent.willContinue on RpcSessionEventFrame; the local loop does not consume it |
 
+**Runnable verification acceptance:** before promoting this row to `VERIFIED`, run `omp-orchestrator run --once --repo /Users/josh/Developer/omp-orchestrator --session omp-orchestrator --receiver-agent <registered-agent>`. Expect either `TRANSPORT_RECEIPT_CAPTURED` followed by a same-tick receiver outcome (`DISPATCHED` with `RECEIVER_RECEIPT`/`ACK_ACTION`) with both heartbeat rows retained, or a named typed refusal with its owner/next action; a sender-success line alone is not delivery proof.
 > *Upstream type for this gap: `GuestIdleReconcilerCtx` (DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 A single shared predicate, used to answer two different questions, produced a coherent but wrong local

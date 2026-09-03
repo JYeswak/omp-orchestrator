@@ -41,7 +41,7 @@ SUPERVISOR_REFUSED GATE_UNWIRED
 
 **The actuator exists; first autonomous dispatch remains unverified.** Round 15's Rule-Zero wording was a category error, and the current plan corrects it:
 
-> `actuate | dispatch | AVAILABLE, NOT VERIFIED — send_and_verify exists at crates/omp-orchestrator/src/main.rs:961 and is called at :2481; the earlier :714/:1461 addresses are pre-drift; transport and receiver receipts remain unproven`
+> `actuate | dispatch | AVAILABLE, NOT VERIFIED — send_and_verify exists at crates/omp-orchestrator/src/main.rs:1321 and is called at :3025 in the current tracked HEAD; transport and receiver receipts remain unproven`
 
 That is the product risk. Everything else is downstream of proving the existing actuator against a live, reversible target and retaining both transport and receiver receipts. **When choosing between two tasks, pick the one that produces that proof.**
 
