@@ -14,7 +14,7 @@ This contract defines the complete Wave 0 readiness boundary for S1 L0: the inst
 
 ## Stable Values
 
-The stable-ID set is 16 L0 values plus 9 invariant values = 25. Every one is covered by a build row, test row, or an explicit documentation-only marker in the matrix below.
+WORKTREE stable-ID set: 16 L0 values plus 9 invariant values = 25. Every one is covered by a build row, test row, or an explicit documentation-only marker in the matrix below.
 
 | ID | Meaning |
 |---|---|
@@ -71,7 +71,7 @@ Each law has a real test symbol. The test file name is deliberately `l0_install.
 
 ## Build Matrix
 
-A build row is one discrete implementation unit that one agent can complete in one pass. `bead key` is the stable title prefix used by the corresponding unclaimed build bead.
+A build row is one discrete implementation unit that one agent can complete in one pass. WORKTREE matrix totals are 15 build rows, 22 test rows, 6 laws, and 25 stable IDs; `bead key` is the stable title prefix used by the corresponding unclaimed build bead.
 
 | Row | Build item | IDs covered | Re-runnable acceptance |
 |---|---|---|---|
@@ -150,59 +150,44 @@ Test: `T01=omp-orchestrator-s1-l0-t01-o34w`, `T02=omp-orchestrator-s1-l0-t02-mau
 
 ## Validation
 
-One pasteable document-level readiness check. It does not run the future installer; it proves that no L0 law, stable ID, test row, or test falsifier is missing from this matrix.
+C01 FIXED: this check does not read or grep `docs/contracts/s1_l0_install.md`; it reads the independent bead tracker and the L0 gate dependency projection. It proves filed-row acceptance coverage, not document prose or runtime implementation.
 
 ```bash
 set -eu
-bytes="$(wc -c < docs/contracts/s1_l0_install.md | tr -d ' ')"
-stable_ids="$(grep -Eo '`(L0|INV-L0)-[A-Z0-9-]+`' docs/contracts/s1_l0_install.md | sort -u | wc -l | tr -d ' ')"
-build_rows="$(grep -c '^| B[0-9][0-9] ' docs/contracts/s1_l0_install.md)"
-test_rows="$(grep -c '^| T[0-9][0-9] ' docs/contracts/s1_l0_install.md)"
-laws="$(grep -c '^- \*\*`LAW-L0-' docs/contracts/s1_l0_install.md)"
-named_law_tests="$(grep -c '^- \*\*`LAW-L0-.*l0_install.rs::' docs/contracts/s1_l0_install.md)"
-known_bad="$(grep -c 'expect .*RED\|expect .*refusal\|expect .*REFUSED\|expect .*restrictive\|expect .*ERROR' docs/contracts/s1_l0_install.md)"
-beads="$(grep -Eo 'omp-orchestrator-s1-l0-[bt][0-9][0-9]-[a-z0-9]+' docs/contracts/s1_l0_install.md | sort -u | wc -l | tr -d ' ')"
-test "$stable_ids" -eq 25
-test "$beads" -eq 37
-test "$build_rows" -eq 15
-test "$test_rows" -eq 22
-test "$laws" -eq 6
-test "$named_law_tests" -eq 6
-test "$known_bad" -ge 22
-grep -q '^## Dispatch Preflight for L0$' docs/contracts/s1_l0_install.md
-grep -q 'FILE → CLAIM → PACKET → ADMISSION → SEND → RECEIPT → ACK → OBSERVE → VERIFY → RECORD' docs/contracts/s1_l0_install.md
-grep -q 'DP-GAP-1' docs/contracts/s1_l0_install.md
-grep -q 'install(1)' docs/contracts/s1_l0_install.md
-grep -q 'F_FULLFSYNC' docs/contracts/s1_l0_install.md
-printf 'L0_MATRIX PASS bytes=%s stable_ids=%s build_rows=%s test_rows=%s laws=%s named_law_tests=%s known_bad_rows=%s beads=%s\n' "$bytes" "$stable_ids" "$build_rows" "$test_rows" "$laws" "$named_law_tests" "$known_bad" "$beads"
+rows="$(br list --json | jq '[.issues[] | select((.title|startswith("[L0-B")) or (.title|startswith("[L0-T")))] | length')"
+missing="$(br list --json | jq '[.issues[] | select(((.title|startswith("[L0-B")) or (.title|startswith("[L0-T"))) and ((.acceptance_criteria // .acceptance // "") == ""))] | length')"
+deps="$(br dep list omp-orchestrator-gate-s1-l0-jtgw --json | jq '[.[] | select(.depends_on_id | startswith("omp-orchestrator-s1-l0-b") or startswith("omp-orchestrator-s1-l0-t"))] | length')"
+test "$rows" -eq 37
+test "$missing" -eq 0
+test "$deps" -eq 37
+printf 'WORKTREE_EXTERNAL_INPUT L0_EXTERNAL_MATRIX PASS row_beads=%s acceptance_missing=%s gate_matrix_dependencies=%s\n' "$rows" "$missing" "$deps"
 ```
 
-Pasted output after the matrix and all bead keys are recorded:
+Pasted output (`WORKTREE`, external tracker inputs):
 
 ```text
-L0_MATRIX PASS bytes=25549 stable_ids=25 build_rows=15 test_rows=22 laws=6 named_law_tests=6 known_bad_rows=23 beads=37
+WORKTREE_EXTERNAL_INPUT L0_EXTERNAL_MATRIX PASS row_beads=37 acceptance_missing=0 gate_matrix_dependencies=37
 ```
-
 ## Rotation Lap 1 Axis (c): named-test denominator
 
-Pane 4's generator keys on backticked `file.rs::function` tokens. Before: `contract.named_test total=32 covered=11 missing=21 doc_only=0`; L0 contributed zero. After normalizing all 22 test rows and law/invariant references to `l0_install.rs::<function>`, the same generator reported:
-
+Pane 4's generator keys on backticked `file.rs::function` tokens. WORKTREE before: `contract.named_test total=32 covered=11 missing=21 doc_only=0`; L0 contributed zero. After normalizing all 22 WORKTREE test rows and law/invariant references to `l0_install.rs::<function>`, the same generator reported:
+WORKTREE generator output:
 ```text
 S1_REQUIREMENTS=478 COVERED=72 MISSING=406 DOC_ONLY=0
 contract.named_test total=58 covered=33 missing=25 doc_only=0
 ```
 
-Delta: total `+26`, covered `+22`, missing `+4`, doc-only unchanged. L0 adds 22 covered rows; four law-only symbols remain MISSING. Generator output was restored and is not this change.
+WORKTREE delta: total `+26`, covered `+22`, missing `+4`, doc-only unchanged. L0 adds 22 covered rows; four law-only symbols remain MISSING. Generator output was restored and is not this change.
 ## Rotation Lap 1 Axis (c): known-bad audit
 
-Denominator: 81 test/law rows (`L0=22 L1=22 L2=22 L3=5 L4=5 L5=5`) plus one L0 self-scan leg = 82. `NAMED-AND-PLAUSIBLE=71`, `UNNAMED=9`.
+WORKTREE denominator: 81 test/law rows (`L0=22 L1=22 L2=22 L3=5 L4=5 L5=5`) plus one L0 self-scan leg = 82. Initial WORKTREE `NAMED-AND-PLAUSIBLE=71`, `UNNAMED=9`; L0 itself has no unnamed leg because all six laws map to concrete T rows.
 
 | Row | Target | Bucket | Falsifier/result |
 |---|---|---|---|
-| C01 | L0 Validation self-scan for its own evidence | WOULD_PASS | `origin=SELF_SATISFYING`; a validator reading its own `REJECTED`/matrix text can pass without testing the subject. |
+| C01 | L0 Validation self-scan for own evidence | FIXED (was WOULD_PASS; origin=SELF_SATISFYING) | Validation now reads the external bead tracker and gate dependency projection; no self-grep. |
 | C02 | `s1_l2_ecosystem.md` `L2-TEST-REMOTE-A` | WOULD_PASS | Persona A without a remote is an allowed branch; the named condition is accepted, so it is not a bad leg. |
 
-Taxonomy attack: `SELF_SATISFYING` is a strict subset of `NAMED-BUT-WOULD-PASS`; both allow green without subject failure. Collapse loses no verdict information, so C01 retains `origin=SELF_SATISFYING`. Final: `WOULD_PASS=2`, `SELF_SATISFYING=0`, `BUCKET_VERDICT=collapse`.
+Taxonomy attack: `SELF_SATISFYING` is a strict subset of `NAMED-BUT-WOULD-PASS`; both allow green without subject failure. C01 is now FIXED by external validation; C02 remains the one sibling-owned WOULD_PASS row. Historical buckets were `WOULD_PASS=2`, `SELF_SATISFYING=0`; current `WOULD_PASS=1`, `SELF_SATISFYING=0`, verdict `collapse`.
 ## Cross-Attack Retained from Wave 0
 
 Static `/usr/bin/install` measurement: `_fsync`, `_fcntl`, and `_rename` exist; arm64e code renames, reopens the destination, and fsyncs the destination fd, but has no parent-directory sync path or `F_FULLFSYNC` command. `dtruss` was denied by macOS SIP, so runtime tracing is UNMEASURED.
