@@ -872,19 +872,126 @@ async fn reconcile_completions(
 ///
 /// Returns `None` on any failure, and the caller SKIPS rather than emitting. A
 /// completion row that no tracker state supports is worse than a late one.
-async fn load_close_state(cx: &Cx, config: &Config, bead: &str) -> Option<(String, Option<String>)> {
-    let args = vec!["show".to_owned(), bead.to_owned(), "--json".to_owned()];
-    let output = invoke(cx, config, &config.br, &args).await.ok()?;
-    let bytes = require_success(&config.br, output).ok()?;
-    let parsed: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
-    let row = parsed.as_array()?.first()?;
-    let status = row.get("status")?.as_str()?.to_owned();
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum CloseReadback {
+    Closed { status: String },
+    PolicyRefused { refusal: String },
+    Unread { detail: String },
+}
+
+fn parse_tracker_close_state(payload: &str) -> Result<(String, Option<String>), String> {
+    let parsed: Value = serde_json::from_str(payload)
+        .map_err(|error| format!("tracker JSON malformed: {error}"))?;
+    let rows = match &parsed {
+        Value::Array(rows) => rows,
+        Value::Object(object) => object
+            .get("issues")
+            .and_then(Value::as_array)
+            .ok_or_else(|| "tracker JSON object has no issues array".to_owned())?,
+        _ => return Err("tracker JSON must be a bare row list or an issues wrapper".to_owned()),
+    };
+    let row = rows
+        .first()
+        .ok_or_else(|| "tracker JSON contains no bead row".to_owned())?;
+    let status = row
+        .get("status")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "tracker bead row has no string status".to_owned())?
+        .to_owned();
     let close_reason = row
         .get("close_reason")
-        .and_then(|value| value.as_str())
+        .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .map(ToOwned::to_owned);
-    Some((status, close_reason))
+    Ok((status, close_reason))
+}
+
+fn parse_tracker_status(payload: &str) -> Result<String, String> {
+    parse_tracker_close_state(payload).map(|(status, _)| status)
+}
+
+fn process_output_text(program: &str, output: &Output) -> String {
+    let status = output
+        .status
+        .code()
+        .map_or_else(|| "signal".to_owned(), |code| code.to_string());
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+    let emitted = match (stdout.is_empty(), stderr.is_empty()) {
+        (true, true) => String::new(),
+        (false, true) => format!("stdout={stdout}"),
+        (true, false) => format!("stderr={stderr}"),
+        (false, false) => format!("stderr={stderr} stdout={stdout}"),
+    };
+    if emitted.is_empty() {
+        format!("{program} exited={status}")
+    } else {
+        format!("{program} exited={status} {emitted}")
+    }
+}
+
+async fn close_and_read_back(
+    cx: &Cx,
+    config: &Config,
+    bead: &str,
+    reason: &str,
+) -> CloseReadback {
+    let close_args = vec![
+        "close".to_owned(),
+        bead.to_owned(),
+        "--reason".to_owned(),
+        reason.to_owned(),
+        "--json".to_owned(),
+    ];
+    let close = match invoke(cx, config, &config.br, &close_args).await {
+        Ok(output) => output,
+        Err(detail) => {
+            return CloseReadback::Unread {
+                detail: format!("close command unreadable: {detail}"),
+            }
+        }
+    };
+    if !close.status.success() {
+        return CloseReadback::PolicyRefused {
+            refusal: process_output_text(&config.br, &close),
+        };
+    }
+
+    let show_args = vec!["show".to_owned(), bead.to_owned(), "--json".to_owned()];
+    let show = match invoke(cx, config, &config.br, &show_args).await {
+        Ok(output) => output,
+        Err(detail) => {
+            return CloseReadback::Unread {
+                detail: format!("tracker readback unreadable: {detail}"),
+            }
+        }
+    };
+    if !show.status.success() {
+        return CloseReadback::Unread {
+            detail: process_output_text(&config.br, &show),
+        };
+    }
+    let payload = String::from_utf8_lossy(&show.stdout);
+    match parse_tracker_close_state(&payload) {
+        Ok((status, _)) if status == "closed" => CloseReadback::Closed { status },
+        Ok((status, _)) => CloseReadback::Unread {
+            detail: format!("tracker readback status={status}; expected closed"),
+        },
+        Err(detail) => CloseReadback::Unread { detail },
+    }
+}
+async fn load_close_state(
+    cx: &Cx,
+    config: &Config,
+    bead: &str,
+) -> Option<(String, Option<String>)> {
+    let args = vec!["show".to_owned(), bead.to_owned(), "--json".to_owned()];
+    let output = invoke(cx, config, &config.br, &args).await.ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let payload = String::from_utf8_lossy(&output.stdout);
+    parse_tracker_close_state(&payload).ok()
 }
 
 /// `key=value` up to the next space or quote, from a heartbeat detail string.
@@ -4499,5 +4606,84 @@ exit 2
             assert!(ledger.contains("FINDING_FILED"));
             assert!(ledger.contains("bead_id=finding-supervisor-"));
         });
+    }
+    #[test]
+    fn close_readback_pins_bare_show_and_wrapped_list_shapes() {
+        assert_eq!(
+            parse_tracker_status(r#"[{"id":"bead","status":"closed"}]"#)
+                .expect("br show bare list"),
+            "closed"
+        );
+        assert_eq!(
+            parse_tracker_status(r#"{"issues":[{"id":"bead","status":"open"}]}"#)
+                .expect("br list issues wrapper"),
+            "open"
+        );
+    }
+
+    #[test]
+    fn close_readback_reports_refusal_text_from_nonzero_close() {
+        let temp = tempfile::tempdir().expect("refusal fixture");
+        let br = executable_reaper(
+            &temp,
+            "#!/bin/sh\nif [ \"$1\" = close ]; then printf '%s\n' 'BR_POLICY_REFUSED blocked bead' >&2; exit 7; fi\nprintf '%s\n' '[{\"id\":\"bead\",\"status\":\"closed\"}]'\n",
+        );
+        let mut config = fixture_config(temp.path().join("heartbeat.jsonl"));
+        config.br = br.display().to_string();
+        let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
+        let result = runtime.block_on(async {
+            let cx = Cx::current().expect("runtime context");
+            close_and_read_back(&cx, &config, "bead", "prose reason")
+                .await
+        });
+        match result {
+            CloseReadback::PolicyRefused { refusal } => {
+                assert!(refusal.contains("BR_POLICY_REFUSED"), "{refusal}");
+                assert!(refusal.contains("exited=7"), "{refusal}");
+            }
+            other => panic!("nonzero close must be policy-refused, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn close_readback_reports_closed_after_successful_close() {
+        let temp = tempfile::tempdir().expect("closed fixture");
+        let br = executable_reaper(
+            &temp,
+            "#!/bin/sh\nif [ \"$1\" = close ]; then exit 0; fi\nprintf '%s\n' '[{\"id\":\"bead\",\"status\":\"closed\",\"close_reason\":\"DONE: verified\"}]'\n",
+        );
+        let mut config = fixture_config(temp.path().join("heartbeat.jsonl"));
+        config.br = br.display().to_string();
+        let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
+        let result = runtime.block_on(async {
+            let cx = Cx::current().expect("runtime context");
+            close_and_read_back(&cx, &config, "bead", "DONE: verified")
+                .await
+        });
+        assert_eq!(result, CloseReadback::Closed { status: "closed".to_owned() });
+    }
+
+    #[test]
+    fn close_readback_reports_unread_when_tracker_read_fails() {
+        let temp = tempfile::tempdir().expect("unread fixture");
+        let br = executable_reaper(
+            &temp,
+            "#!/bin/sh\nif [ \"$1\" = close ]; then exit 0; fi\nprintf '%s\n' 'BR_TRACKER_UNREADABLE' >&2\nexit 9\n",
+        );
+        let mut config = fixture_config(temp.path().join("heartbeat.jsonl"));
+        config.br = br.display().to_string();
+        let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
+        let result = runtime.block_on(async {
+            let cx = Cx::current().expect("runtime context");
+            close_and_read_back(&cx, &config, "bead", "DONE: verified")
+                .await
+        });
+        match result {
+            CloseReadback::Unread { detail } => {
+                assert!(detail.contains("BR_TRACKER_UNREADABLE"), "{detail}");
+                assert!(detail.contains("exited=9"), "{detail}");
+            }
+            other => panic!("tracker read failure must be unread, got {other:?}"),
+        }
     }
 }
