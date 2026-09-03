@@ -112,10 +112,13 @@ fn holder_snapshot(binary: &str) -> (String, String, String) {
         None
     };
     let pid = marked_pid.or_else(|| {
-        let output = Command::new("/usr/sbin/lsof")
-            .args(["-t", &candidate])
-            .output()
-            .ok()?;
+        let mut command = Command::new("/usr/sbin/lsof");
+        command.args(["-t", &candidate]);
+        let output = match subprocess_contract::bounded_output(&mut command, ORACLE_TIMEOUT) {
+            subprocess_contract::BoundedOutcome::Completed(output) => output,
+            subprocess_contract::BoundedOutcome::TimedOut
+            | subprocess_contract::BoundedOutcome::Unspawned(_) => return None,
+        };
         String::from_utf8_lossy(&output.stdout)
             .lines()
             .find(|line| line.trim().parse::<u32>().is_ok())
@@ -124,11 +127,14 @@ fn holder_snapshot(binary: &str) -> (String, String, String) {
     let Some(pid) = pid else {
         return ("none".into(), "none".into(), "none".into());
     };
-    let Ok(ps) = Command::new("/bin/ps")
-        .args(["-o", "etime=", "-o", "command=", "-p", &pid])
-        .output()
-    else {
-        return (pid, "unknown".into(), "unknown".into());
+    let mut ps_command = Command::new("/bin/ps");
+    ps_command.args(["-o", "etime=", "-o", "command=", "-p", &pid]);
+    let ps = match subprocess_contract::bounded_output(&mut ps_command, ORACLE_TIMEOUT) {
+        subprocess_contract::BoundedOutcome::Completed(output) => output,
+        subprocess_contract::BoundedOutcome::TimedOut
+        | subprocess_contract::BoundedOutcome::Unspawned(_) => {
+            return (pid, "unknown".into(), "unknown".into());
+        }
     };
     let detail = String::from_utf8_lossy(&ps.stdout).trim().to_owned();
     if detail.is_empty() {

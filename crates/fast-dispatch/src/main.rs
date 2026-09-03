@@ -16,16 +16,17 @@
 mod dispatch_cli_contract;
 use fast_dispatch::{
     admission_fresh_pass, cargo_lane_timeout_secs, classify_invoker, is_conductor_routed,
-    select_free_panes, session_repo_dir, strip_ansi, wedge_reason, AdmissionConfig, FastDispatchRules,
-    SelectError, CORPUS_FIRST_CONTRACT,
+    select_free_panes, session_repo_dir, strip_ansi, wedge_reason, AdmissionConfig,
+    FastDispatchRules, SelectError, CORPUS_FIRST_CONTRACT,
 };
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitCode, Stdio};
-use std::time::{Duration, Instant};
+use std::process::{Command, ExitCode};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use subprocess_contract::{bounded_output, bounded_output_stdin, bounded_status, BoundedOutcome};
 
 #[path = "scheduled_lane_telemetry.rs"]
 mod scheduled_lane_telemetry;
@@ -108,72 +109,21 @@ impl Drop for DispatchLock {
 }
 
 fn pid_alive(pid: &str) -> bool {
-    pid.parse::<i32>()
-        .ok()
-        .map(|p| Command::new("kill").args(["-0", &p.to_string()]).status())
-        .and_then(|r| r.ok())
-        .map(|s| s.success())
-        .unwrap_or(false)
+    let Ok(pid) = pid.parse::<i32>() else {
+        return false;
+    };
+    let mut command = Command::new("kill");
+    command.args(["-0", &pid.to_string()]);
+    matches!(
+        bounded_status(&mut command, Duration::from_secs(2)),
+        BoundedOutcome::Completed(output) if output.status.success()
+    )
 }
 
 fn run_timeout(mut cmd: Command, timeout: Duration) -> Option<std::process::Output> {
-    cmd.stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    #[cfg(unix)]
-    std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
-    let mut child = cmd.spawn().ok()?;
-    let mut stdout = child.stdout.take()?;
-    let mut stderr = child.stderr.take()?;
-    let stdout_reader = std::thread::spawn(move || {
-        let mut bytes = Vec::new();
-        stdout.read_to_end(&mut bytes).map(|_| bytes)
-    });
-    let stderr_reader = std::thread::spawn(move || {
-        let mut bytes = Vec::new();
-        stderr.read_to_end(&mut bytes).map(|_| bytes)
-    });
-    let start = Instant::now();
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                let stdout = stdout_reader.join().ok()?.ok()?;
-                let stderr = stderr_reader.join().ok()?.ok()?;
-                return Some(std::process::Output {
-                    status,
-                    stdout,
-                    stderr,
-                });
-            }
-            Ok(None) if start.elapsed() >= timeout => {
-                let killed_group = Command::new("/bin/kill")
-                    .args(["-KILL", &format!("-{}", child.id())])
-                    .status()
-                    .is_ok_and(|status| status.success());
-                if !killed_group {
-                    let _ = child.kill();
-                }
-                let status = child.wait().ok()?;
-                let stdout = stdout_reader.join().ok()?.ok()?;
-                let stderr = stderr_reader.join().ok()?.ok()?;
-                return Some(std::process::Output {
-                    status,
-                    stdout,
-                    stderr,
-                });
-            }
-            Ok(None) => std::thread::sleep(Duration::from_millis(50)),
-            Err(_) => {
-                let _ = Command::new("/bin/kill")
-                    .args(["-KILL", &format!("-{}", child.id())])
-                    .status();
-                let _ = child.kill();
-                let _ = child.wait();
-                let _ = stdout_reader.join();
-                let _ = stderr_reader.join();
-                return None;
-            }
-        }
+    match bounded_output(&mut cmd, timeout) {
+        BoundedOutcome::Completed(output) => Some(output),
+        BoundedOutcome::TimedOut | BoundedOutcome::Unspawned(_) => None,
     }
 }
 
@@ -331,30 +281,11 @@ fn composer_occupied(raw_tail: &str) -> bool {
     if !Path::new(&script).is_file() {
         return true;
     }
-    let mut cmd = Command::new("python3");
-    cmd.arg(&script);
-    cmd.stdin(Stdio::piped());
-    cmd.stdout(Stdio::null());
-    cmd.stderr(Stdio::null());
-    let mut child = match cmd.spawn() {
-        Ok(c) => c,
-        Err(_) => return true,
-    };
-    if let Some(mut stdin) = child.stdin.take() {
-        let _ = stdin.write_all(raw_tail.as_bytes());
-    }
-    let start = Instant::now();
-    loop {
-        match child.try_wait() {
-            Ok(Some(st)) => return st.success(),
-            Ok(None) if start.elapsed() >= Duration::from_secs(10) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return true;
-            }
-            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
-            Err(_) => return true,
-        }
+    let mut command = Command::new("python3");
+    command.arg(script);
+    match bounded_output_stdin(&mut command, Duration::from_secs(10), raw_tail.as_bytes()) {
+        BoundedOutcome::Completed(output) => output.status.success(),
+        BoundedOutcome::TimedOut | BoundedOutcome::Unspawned(_) => true,
     }
 }
 
@@ -400,39 +331,37 @@ fn br_ready_filtered(repo_dir: &Path, filter: &Path) -> String {
     let mut br = Command::new("br");
     br.args(["ready", "--limit", "0", "--json"])
         .current_dir(repo_dir);
-    let out = run_timeout(br, Duration::from_secs(60));
-    let json = out
-        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+    let json = run_timeout(br, Duration::from_secs(60))
+        .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
         .unwrap_or_default();
-    let mut filt = Command::new(filter);
-    filt.arg("").env("HARVEST_EXCLUDE", "1").current_dir(repo_dir);
-    filt.stdin(Stdio::piped());
-    filt.stdout(Stdio::piped());
-    filt.stderr(Stdio::null());
-    let mut child = match filt.spawn() {
-        Ok(c) => c,
-        Err(_) => return String::new(),
-    };
-    if let Some(mut stdin) = child.stdin.take() {
-        let _ = stdin.write_all(json.as_bytes());
-    }
-    let start = Instant::now();
-    loop {
-        match child.try_wait() {
-            Ok(Some(_)) => {
-                return child
-                    .wait_with_output()
-                    .ok()
-                    .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
-                    .unwrap_or_default();
-            }
-            Ok(None) if start.elapsed() >= Duration::from_secs(60) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return String::new();
-            }
-            Ok(None) => std::thread::sleep(Duration::from_millis(50)),
-            Err(_) => return String::new(),
+    let mut filter_command = Command::new(filter);
+    filter_command
+        .arg("")
+        .env("HARVEST_EXCLUDE", "1")
+        .current_dir(repo_dir);
+    match bounded_output_stdin(
+        &mut filter_command,
+        Duration::from_secs(60),
+        json.as_bytes(),
+    ) {
+        BoundedOutcome::Completed(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout).into_owned()
+        }
+        BoundedOutcome::Completed(output) => {
+            eprintln!(
+                "fast-dispatch: ready filter exited {:?}: {}",
+                output.status.code(),
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+            String::new()
+        }
+        BoundedOutcome::TimedOut => {
+            eprintln!("fast-dispatch: ready filter timed out");
+            String::new()
+        }
+        BoundedOutcome::Unspawned(error) => {
+            eprintln!("fast-dispatch: ready filter could not spawn: {error}");
+            String::new()
         }
     }
 }
@@ -1032,29 +961,25 @@ fn live_tick(rules: FastDispatchRules) -> ExitCode {
                     .env("HARVEST_EXCLUDE", "1")
                     .env("QUEUE_COOLDOWN_COMMIT", "1")
                     .current_dir(&d);
-                filt.stdin(Stdio::piped());
-                filt.stdout(Stdio::null());
-                filt.stderr(Stdio::null());
-                if let Ok(mut child) = filt.spawn() {
-                    if let Some(mut stdin) = child.stdin.take() {
-                        let _ = stdin.write_all(&out.stdout);
-                    }
-                    let start = Instant::now();
-                    loop {
-                        match child.try_wait() {
-                            Ok(Some(_)) => {
-                                let _ = child.wait();
-                                break;
-                            }
-                            Ok(None) if start.elapsed() >= Duration::from_secs(60) => {
-                                let _ = child.kill();
-                                let _ = child.wait();
-                                break;
-                            }
-                            Ok(None) => std::thread::sleep(Duration::from_millis(50)),
-                            Err(_) => break,
-                        }
-                    }
+                let cooldown = bounded_output_stdin(
+                    &mut filt,
+                    Duration::from_secs(60),
+                    &out.stdout,
+                );
+                if !matches!(
+                    &cooldown,
+                    BoundedOutcome::Completed(output) if output.status.success()
+                ) {
+                    ledger_write(
+                        &ledger_path,
+                        &json!({
+                            "ts": ts(),
+                            "event": "queue_cooldown_filter_refused",
+                            "repo": repo,
+                            "detail": format!("{cooldown:?}"),
+                        })
+                        .to_string(),
+                    );
                 }
             }
             ledger_write(

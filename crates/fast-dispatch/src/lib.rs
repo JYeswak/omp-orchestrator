@@ -331,7 +331,8 @@ pub fn wedge_reason(tail_plain: &str, composer_occupied: bool) -> Option<&'stati
 mod tests {
     use super::*;
     use std::fs;
-    use std::process::{Command, Stdio};
+    use std::process::Command;
+    use subprocess_contract::{bounded_output, bounded_status, BoundedOutcome};
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum OracleStatus {
@@ -340,14 +341,13 @@ mod tests {
     }
 
     fn oracle_status() -> OracleStatus {
-        match Command::new("python3")
-            .arg("--version")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-        {
-            Ok(status) if status.success() => OracleStatus::Ready,
-            _ => OracleStatus::MissingInterpreter,
+        let mut command = Command::new("python3");
+        command.arg("--version");
+        match bounded_status(&mut command, std::time::Duration::from_secs(5)) {
+            BoundedOutcome::Completed(output) if output.status.success() => OracleStatus::Ready,
+            BoundedOutcome::Completed(_)
+            | BoundedOutcome::TimedOut
+            | BoundedOutcome::Unspawned(_) => OracleStatus::MissingInterpreter,
         }
     }
 
@@ -653,14 +653,16 @@ mod tests {
         };
         let ts = "2026-08-26T16:00:00Z";
         let rust = parse_completed_ts_utc(ts).expect("parse");
-        let py = std::process::Command::new("python3")
-            .args([
-                "-c",
-                "import datetime,sys; t=datetime.datetime.strptime(sys.argv[1],'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=datetime.timezone.utc); print(t.timestamp())",
-                ts,
-            ])
-            .output()
-            .expect("python");
+        let mut py_command = Command::new("python3");
+        py_command.args([
+            "-c",
+            "import datetime,sys; t=datetime.datetime.strptime(sys.argv[1],'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=datetime.timezone.utc); print(t.timestamp())",
+            ts,
+        ]);
+        let py = match bounded_output(&mut py_command, std::time::Duration::from_secs(5)) {
+            BoundedOutcome::Completed(output) => output,
+            other => panic!("python differential must complete: {other:?}"),
+        };
         let py: f64 = String::from_utf8_lossy(&py.stdout)
             .trim()
             .parse()

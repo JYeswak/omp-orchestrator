@@ -6,12 +6,10 @@ use fleet_composite::{
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
 use std::io::{self, Read};
-#[cfg(unix)]
-use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, ExitCode, Stdio};
-use std::thread;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::process::{Command, ExitCode};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use subprocess_contract::{bounded_output, BoundedOutcome};
 
 const EXIT_USAGE: u8 = 2;
 /// A repository or `$HOME` could not be resolved; distinct from usage errors.
@@ -81,120 +79,32 @@ fn run_command(
     timeout: Duration,
 ) -> CommandOutput {
     let mut command = Command::new(program);
-    command
-        .args(args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    #[cfg(unix)]
-    CommandExt::process_group(&mut command, 0);
+    command.args(args);
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
     }
-    let mut child = match command.spawn() {
-        Ok(child) => child,
-        Err(error) => {
-            return CommandOutput {
-                stdout: String::new(),
-                stderr: String::new(),
-                status: None,
-                error: Some(format!("spawn {program}: {error}")),
-            };
-        }
-    };
-
-    // Drain both pipes concurrently: waiting for a verbose `br --json` process without readers
-    // can deadlock once a pipe buffer fills.  The child remains owned by this function and is
-    // reaped on every path, including timeout and wait failure.
-    let stdout_pipe = child.stdout.take().expect("stdout was configured as piped");
-    let stderr_pipe = child.stderr.take().expect("stderr was configured as piped");
-    let stdout_thread = thread::spawn(move || {
-        let mut bytes = Vec::new();
-        let mut pipe = stdout_pipe;
-        let _ = pipe.read_to_end(&mut bytes);
-        bytes
-    });
-    let stderr_thread = thread::spawn(move || {
-        let mut bytes = Vec::new();
-        let mut pipe = stderr_pipe;
-        let _ = pipe.read_to_end(&mut bytes);
-        bytes
-    });
-
-    // Polling gives the binary an explicit timeout and kills a timed-out child rather than
-    // leaving a detached process behind.
-    let started = Instant::now();
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                return collect_output(child, status.code(), None, stdout_thread, stderr_thread);
-            }
-            Ok(None) => {
-                if started.elapsed() >= timeout {
-                    let signal_error = terminate_process_group(&mut child);
-                    let error = signal_error.map_or_else(
-                        || format!("{program} timed out after {}s", timeout.as_secs()),
-                        |signal_error| {
-                            format!(
-                                "{program} timed out after {}s; process-group signal failed: {signal_error}",
-                                timeout.as_secs()
-                            )
-                        },
-                    );
-                    return collect_output(child, None, Some(error), stdout_thread, stderr_thread);
-                }
-                thread::sleep(Duration::from_millis(10));
-            }
-            Err(error) => {
-                let signal_error = terminate_process_group(&mut child);
-                let message = signal_error.map_or_else(
-                    || format!("wait {program}: {error}"),
-                    |signal_error| {
-                        format!(
-                            "wait {program}: {error}; process-group signal failed: {signal_error}"
-                        )
-                    },
-                );
-                return collect_output(child, None, Some(message), stdout_thread, stderr_thread);
-            }
-        }
-    }
-}
-
-fn terminate_process_group(child: &mut Child) -> Option<String> {
-    #[cfg(unix)]
-    {
-        let target = format!("-{}", child.id());
-        match Command::new("/bin/kill").args(["-TERM", &target]).status() {
-            Ok(status) if status.success() => None,
-            Ok(status) => Some(format!("kill -TERM {target} exited {:?}", status.code())),
-            Err(error) => Some(format!("spawn kill -TERM {target}: {error}")),
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        child
-            .kill()
-            .err()
-            .map(|error| format!("kill child: {error}"))
-    }
-}
-
-fn collect_output(
-    mut child: Child,
-    status: Option<i32>,
-    error: Option<String>,
-    stdout_thread: thread::JoinHandle<Vec<u8>>,
-    stderr_thread: thread::JoinHandle<Vec<u8>>,
-) -> CommandOutput {
-    let wait_error = child.wait().err();
-    let stdout = stdout_thread.join().unwrap_or_default();
-    let stderr = stderr_thread.join().unwrap_or_default();
-    CommandOutput {
-        stdout: String::from_utf8_lossy(&stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&stderr).into_owned(),
-        status,
-        error: error
-            .or_else(|| wait_error.map(|wait_error| format!("collect child output: {wait_error}"))),
+    match bounded_output(&mut command, timeout) {
+        BoundedOutcome::Completed(output) => CommandOutput {
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            status: output.status.code(),
+            error: None,
+        },
+        BoundedOutcome::TimedOut => CommandOutput {
+            stdout: String::new(),
+            stderr: String::new(),
+            status: None,
+            error: Some(format!(
+                "{program} timed out after {}s; process group was terminated",
+                timeout.as_secs()
+            )),
+        },
+        BoundedOutcome::Unspawned(error) => CommandOutput {
+            stdout: String::new(),
+            stderr: String::new(),
+            status: None,
+            error: Some(format!("spawn {program}: {error}")),
+        },
     }
 }
 

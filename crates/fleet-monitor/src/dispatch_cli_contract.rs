@@ -23,13 +23,13 @@ pub fn handle(binary: &str, args: &[String]) -> Option<ExitCode> {
 fn oracle_output() -> Result<String, String> {
     let oracle = std::env::var_os("DISPATCH_STALL_ORACLE")
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("CONTROL_PLANE_REPO").map(|root| PathBuf::from(root).join("bin/dispatch-stall-profile.sh")))
+        .or_else(|| {
+            std::env::var_os("CONTROL_PLANE_REPO")
+                .map(|root| PathBuf::from(root).join("bin/dispatch-stall-profile.sh"))
+        })
         .unwrap_or_else(|| PathBuf::from("dispatch-stall-profile"));
     let mut command = Command::new("/bin/bash");
-    command
-        .arg(oracle)
-        .arg("--check")
-        .stdin(Stdio::null());
+    command.arg(oracle).arg("--check").stdin(Stdio::null());
 
     // Use the shared bounded runner: it drains both pipes concurrently, kills the
     // entire process group on deadline, and keeps timeout distinct from output.
@@ -111,10 +111,13 @@ fn holder_snapshot(binary: &str) -> (String, String, String) {
         None
     };
     let pid = marked_pid.or_else(|| {
-        let output = Command::new("/usr/sbin/lsof")
-            .args(["-t", &candidate])
-            .output()
-            .ok()?;
+        let mut command = Command::new("/usr/sbin/lsof");
+        command.args(["-t", &candidate]);
+        let output = match subprocess_contract::bounded_output(&mut command, ORACLE_TIMEOUT) {
+            subprocess_contract::BoundedOutcome::Completed(output) => output,
+            subprocess_contract::BoundedOutcome::TimedOut
+            | subprocess_contract::BoundedOutcome::Unspawned(_) => return None,
+        };
         String::from_utf8_lossy(&output.stdout)
             .lines()
             .find(|line| line.trim().parse::<u32>().is_ok())
@@ -123,11 +126,14 @@ fn holder_snapshot(binary: &str) -> (String, String, String) {
     let Some(pid) = pid else {
         return ("none".into(), "none".into(), "none".into());
     };
-    let Ok(ps) = Command::new("/bin/ps")
-        .args(["-o", "etime=", "-o", "command=", "-p", &pid])
-        .output()
-    else {
-        return (pid, "unknown".into(), "unknown".into());
+    let mut ps_command = Command::new("/bin/ps");
+    ps_command.args(["-o", "etime=", "-o", "command=", "-p", &pid]);
+    let ps = match subprocess_contract::bounded_output(&mut ps_command, ORACLE_TIMEOUT) {
+        subprocess_contract::BoundedOutcome::Completed(output) => output,
+        subprocess_contract::BoundedOutcome::TimedOut
+        | subprocess_contract::BoundedOutcome::Unspawned(_) => {
+            return (pid, "unknown".into(), "unknown".into());
+        }
     };
     let detail = String::from_utf8_lossy(&ps.stdout).trim().to_owned();
     if detail.is_empty() {

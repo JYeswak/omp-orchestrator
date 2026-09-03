@@ -2,8 +2,8 @@
 
 use std::path::PathBuf;
 use std::process::Command;
-use std::time::Instant;
-
+use std::time::{Duration, Instant};
+use subprocess_contract::bounded_status;
 
 /// Records one scheduled invocation when the owning process exits.
 ///
@@ -30,8 +30,8 @@ impl Drop for Run {
             .map(PathBuf::from)
             .or_else(|| std::env::var_os("CONTROL_PLANE_REPO").map(|root| PathBuf::from(root).join("bin/lib/scheduled-lane-telemetry.sh")));
         let Some(helper) = helper else { return; };
-        let _ = Command::new(helper)
-            .args(["--record", self.lane, &elapsed, "0"])
-            .status();
+        let mut command = Command::new(helper);
+        command.args(["--record", self.lane, &elapsed, "0"]);
+        let _ = bounded_status(&mut command, Duration::from_secs(5));
     }
 }

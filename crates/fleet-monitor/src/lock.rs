@@ -36,6 +36,8 @@ use fs2::FileExt;
 use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Duration;
+use subprocess_contract::{bounded_output, BoundedOutcome};
 
 /// What happened when we tried to take the run lock.
 #[derive(Debug)]
@@ -89,7 +91,9 @@ pub struct OsHolderLookup;
 impl HolderLookup for OsHolderLookup {
     fn holders(&self, lock_path: &Path) -> Vec<String> {
         // lsof returns rc=1 with no matches, so OUTPUT is the predicate, never rc==0.
-        if let Ok(out) = Command::new("lsof").arg("-t").arg(lock_path).output() {
+        let mut lsof = Command::new("lsof");
+        lsof.args(["-t"]).arg(lock_path);
+        if let BoundedOutcome::Completed(out) = bounded_output(&mut lsof, Duration::from_secs(5)) {
             let pids: Vec<String> = String::from_utf8_lossy(&out.stdout)
                 .lines()
                 .map(str::trim)
@@ -103,7 +107,9 @@ impl HolderLookup for OsHolderLookup {
         // FALLBACK ONLY: other live processes running this lane. Cannot see an inheriting child,
         // which is precisely why it is the fallback and not the primary.
         let me = std::process::id().to_string();
-        if let Ok(out) = Command::new("pgrep").arg("-f").arg("fleet-monitor").output() {
+        let mut pgrep = Command::new("pgrep");
+        pgrep.args(["-f", "fleet-monitor"]);
+        if let BoundedOutcome::Completed(out) = bounded_output(&mut pgrep, Duration::from_secs(5)) {
             return String::from_utf8_lossy(&out.stdout)
                 .lines()
                 .map(str::trim)
@@ -115,7 +121,12 @@ impl HolderLookup for OsHolderLookup {
     }
 
     fn elapsed(&self, pid: &str) -> Option<String> {
-        let out = Command::new("ps").arg("-p").arg(pid).arg("-o").arg("etime=").output().ok()?;
+        let mut ps = Command::new("ps");
+        ps.args(["-p", pid, "-o", "etime="]);
+        let out = match bounded_output(&mut ps, Duration::from_secs(5)) {
+            BoundedOutcome::Completed(output) => output,
+            BoundedOutcome::TimedOut | BoundedOutcome::Unspawned(_) => return None,
+        };
         let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
         if s.is_empty() {
             None

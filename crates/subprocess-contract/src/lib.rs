@@ -396,6 +396,7 @@ mod tests {
     use super::*;
     use asupersync::runtime::RuntimeBuilder;
     use asupersync::types::CancelKind;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
     use std::process::{Command as StdCommand, Stdio as StdStdio};
     use std::thread;
@@ -410,7 +411,6 @@ mod tests {
             .unwrap_or(false)
     }
 
-    static LAST_SLEEP_PID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
     #[test]
     fn sleep_child_past_deadline_is_timedout_never_completed() {
@@ -674,5 +674,79 @@ mod tests {
             marker.display()
         );
         let _ = std::fs::remove_file(&marker);
+    }
+    fn descendants(root: u32) -> BTreeSet<u32> {
+        let output = StdCommand::new("/bin/ps")
+            .args(["-axo", "pid=,ppid=,comm="])
+            .output()
+            .expect("process census");
+        let mut children = BTreeMap::<u32, Vec<u32>>::new();
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            let mut fields = line.split_whitespace();
+            let Some(pid) = fields.next().and_then(|value| value.parse::<u32>().ok()) else {
+                continue;
+            };
+            let Some(ppid) = fields.next().and_then(|value| value.parse::<u32>().ok()) else {
+                continue;
+            };
+            if fields.next().is_some_and(|command| command.ends_with("/ps") || command == "ps") {
+                continue;
+            }
+            children.entry(ppid).or_default().push(pid);
+        }
+        let mut pending = vec![root];
+        let mut descendants = BTreeSet::new();
+        while let Some(parent) = pending.pop() {
+            for child in children.get(&parent).into_iter().flatten() {
+                if descendants.insert(*child) {
+                    pending.push(*child);
+                }
+            }
+        }
+        descendants
+    }
+
+    #[test]
+    fn process_count_returns_to_baseline_after_contract_runs() {
+        let root = std::process::id();
+        let before = descendants(root);
+
+        let mut fast = StdCommand::new("/bin/sh");
+        fast.args(["-c", "printf stdout; printf stderr >&2"]);
+        assert!(matches!(
+            bounded_output(&mut fast, std::time::Duration::from_secs(5)),
+            BoundedOutcome::Completed(_)
+        ));
+
+        let mut noisy = StdCommand::new("/bin/sh");
+        noisy.args([
+            "-c",
+            "/usr/bin/head -c 131072 /dev/zero; /usr/bin/head -c 131072 /dev/zero >&2",
+        ]);
+        assert!(matches!(
+            bounded_output(&mut noisy, std::time::Duration::from_secs(5)),
+            BoundedOutcome::Completed(_)
+        ));
+
+        let mut slow = StdCommand::new("/bin/sh");
+        slow.args(["-c", "sleep 30"]);
+        assert!(matches!(
+            bounded_output(&mut slow, std::time::Duration::from_millis(250)),
+            BoundedOutcome::TimedOut
+        ));
+
+        let deadline = Instant::now() + std::time::Duration::from_secs(3);
+        loop {
+            let after = descendants(root);
+            if after == before {
+                return;
+            }
+            if Instant::now() >= deadline {
+                panic!(
+                    "subprocess contract left descendants: before={before:?} after={after:?}"
+                );
+            }
+            thread::sleep(std::time::Duration::from_millis(25));
+        }
     }
 }

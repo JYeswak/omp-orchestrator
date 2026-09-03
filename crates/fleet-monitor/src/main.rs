@@ -25,11 +25,11 @@
 #[path = "dispatch_cli_contract.rs"]
 mod dispatch_cli_contract;
 use ntm_fleet_monitor::{parse_activity_json, ActivityError, ActivitySnapshot};
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::os::unix::process::CommandExt;
-use std::process::{Child, Command, ExitCode, Output, Stdio};
+use std::process::{Command, ExitCode};
 use std::time::Duration;
+use subprocess_contract::{bounded_output, bounded_output_stdin, bounded_status, BoundedOutcome};
 
 #[path = "scheduled_lane_telemetry.rs"]
 mod scheduled_lane_telemetry;
@@ -37,8 +37,8 @@ mod scheduled_lane_telemetry;
 use fleet_monitor::{
     attention_end_cursor, attention_wake_reason, invoker_from_chain, json_escape, lock,
     ntm_list_census_line, ntm_list_is_empty, observe_scan_set, pane_liveness, parse_ancestor_rows,
-    publish_failure_detail, publish_invocation, raw_open_count, safe_panes, FleetMonitorInvoker, LivenessState,
-    ObserveRules, ObserveScan, RunDeadline, EXIT_CANNOT_OBSERVE,
+    publish_failure_detail, publish_invocation, raw_open_count, safe_panes, FleetMonitorInvoker,
+    LivenessState, ObserveRules, ObserveScan, RunDeadline, EXIT_CANNOT_OBSERVE,
 };
 
 const USAGE: &str = "usage: fleet-monitor [status [--json]|why [--json]|capabilities [--json]|robot-docs guide|--all|--self] [--dispatch|--report-only] [--selftest] [--topology-only]";
@@ -84,9 +84,6 @@ enum NtmActivityOutcome {
         stderr_bytes: usize,
     },
     SpawnFailed {
-        kind: io::ErrorKind,
-    },
-    IoFailed {
         kind: io::ErrorKind,
     },
     OutputLimitExceeded {
@@ -193,15 +190,17 @@ fn discovered_repo_bin() -> PathBuf {
 }
 
 fn ts() -> String {
-    // UTC ISO-8601 without pulling a date dependency: ask the system `date`, exactly as the shell
-    // did, so the two implementations stamp rows identically.
-    Command::new("date")
-        .args(["-u", "+%Y-%m-%dT%H:%M:%SZ"])
-        .output()
-        .ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string())
+    let mut command = Command::new("date");
+    command.args(["-u", "+%Y-%m-%dT%H:%M:%SZ"]);
+    let text = match bounded_output(&mut command, Duration::from_secs(5)) {
+        BoundedOutcome::Completed(output) => String::from_utf8_lossy(&output.stdout).trim().to_owned(),
+        BoundedOutcome::TimedOut | BoundedOutcome::Unspawned(_) => String::new(),
+    };
+    if text.is_empty() {
+        "1970-01-01T00:00:00Z".to_owned()
+    } else {
+        text
+    }
 }
 
 /// Every verdict line goes to STDOUT at column 0 (fh G1). stderr carries usage errors only.
@@ -249,10 +248,15 @@ fn invoker_detect() -> FleetMonitorInvoker {
         if pid <= 1 {
             break;
         }
-        let Ok(out) =
-            Command::new("ps").arg("-p").arg(pid.to_string()).arg("-o").arg("uid=,ppid=,comm=").output()
-        else {
-            break;
+        let mut command = Command::new("ps");
+        command
+            .arg("-p")
+            .arg(pid.to_string())
+            .arg("-o")
+            .arg("uid=,ppid=,comm=");
+        let out = match bounded_output(&mut command, Duration::from_secs(5)) {
+            BoundedOutcome::Completed(output) => output,
+            BoundedOutcome::TimedOut | BoundedOutcome::Unspawned(_) => break,
         };
         let line = String::from_utf8_lossy(&out.stdout).trim().to_string();
         if line.is_empty() {
@@ -517,106 +521,44 @@ fn resolve_repos(cfg: &Cfg) -> Result<Vec<String>, &'static str> {
 }
 
 fn run_capture(cmd: &mut Command) -> String {
-    cmd.output()
-        .map(|o| {
-            let mut s = String::from_utf8_lossy(&o.stdout).to_string();
-            s.push_str(&String::from_utf8_lossy(&o.stderr));
-            s
-        })
-        .unwrap_or_default()
+    match bounded_output(cmd, Duration::from_secs(120)) {
+        BoundedOutcome::Completed(output) => {
+            let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
+            text.push_str(&String::from_utf8_lossy(&output.stderr));
+            text
+        }
+        BoundedOutcome::TimedOut | BoundedOutcome::Unspawned(_) => String::new(),
+    }
 }
 
 const NTM_ACTIVITY_OUTPUT_LIMIT: usize = 16 * 1024 * 1024;
-
-#[derive(Debug)]
-enum PipeReadOutcome {
-    Complete(Vec<u8>),
-    LimitExceeded { stream: &'static str, bytes: usize },
-    Failed { kind: io::ErrorKind },
-}
-
-fn read_pipe<R: Read>(reader: R, stream: &'static str) -> PipeReadOutcome {
-    let mut bytes = Vec::new();
-    match reader
-        .take((NTM_ACTIVITY_OUTPUT_LIMIT + 1) as u64)
-        .read_to_end(&mut bytes)
-    {
-        Ok(_) if bytes.len() > NTM_ACTIVITY_OUTPUT_LIMIT => {
-            PipeReadOutcome::LimitExceeded { stream, bytes: bytes.len() }
-        }
-        Ok(_) => PipeReadOutcome::Complete(bytes),
-        Err(error) => PipeReadOutcome::Failed { kind: error.kind() },
-    }
-}
-
-fn join_pipe(
-    reader: std::thread::JoinHandle<PipeReadOutcome>,
-) -> Result<Vec<u8>, NtmActivityOutcome> {
-    match reader.join() {
-        Ok(PipeReadOutcome::Complete(bytes)) => Ok(bytes),
-        Ok(PipeReadOutcome::LimitExceeded { stream, bytes }) => {
-            Err(NtmActivityOutcome::OutputLimitExceeded { stream, bytes })
-        }
-        Ok(PipeReadOutcome::Failed { kind }) => Err(NtmActivityOutcome::IoFailed { kind }),
-        Err(_) => Err(NtmActivityOutcome::IoFailed {
-            kind: io::ErrorKind::Other,
-        }),
-    }
-}
-
-/// Stop the probe's process group, then reap the direct child.
-///
-/// NTM is an external process and may retain descendants that inherit the
-/// capture pipes. Killing only the direct child would leave the reader joins
-/// unbounded. `process_group(0)` gives this invocation its own group; the
-/// platform `kill` utility is used here because this crate forbids unsafe code.
-fn terminate_and_reap(child: &mut Child) -> Result<(), NtmActivityOutcome> {
-    let group = Command::new("/bin/kill")
-        .args(["-KILL", &format!("-{}", child.id())])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map_err(|error| NtmActivityOutcome::IoFailed { kind: error.kind() })?;
-    if !group.success() {
-        let _ = child.kill();
-        return child
-            .wait()
-            .map(|_| ())
-            .map_err(|error| NtmActivityOutcome::IoFailed { kind: error.kind() });
-    }
-    child
-        .wait()
-        .map(|_| ())
-        .map_err(|error| NtmActivityOutcome::IoFailed { kind: error.kind() })
-}
-
-fn join_pipes(
-    stdout_reader: std::thread::JoinHandle<PipeReadOutcome>,
-    stderr_reader: std::thread::JoinHandle<PipeReadOutcome>,
-) -> Result<(Vec<u8>, Vec<u8>), NtmActivityOutcome> {
-    let stdout = join_pipe(stdout_reader);
-    let stderr = join_pipe(stderr_reader);
-    match (stdout, stderr) {
-        (Ok(stdout), Ok(stderr)) => Ok((stdout, stderr)),
-        (Err(outcome), _) | (_, Err(outcome)) => Err(outcome),
-    }
-}
-
 fn pane_selector(cfg: &Cfg, repo: &str) -> Result<String, NtmActivityOutcome> {
     let target = format!("{repo}:0");
-    let output = Command::new(&cfg.tmux_bin)
+    let mut command = Command::new(&cfg.tmux_bin);
+    command
         .env("TMUX_TMPDIR", &cfg.tmux_tmpdir)
-        .args(["list-panes", "-t", &target, "-F", "#{pane_index}"])
-        .output()
-        .map_err(|error| NtmActivityOutcome::SpawnFailed { kind: error.kind() })?;
+        .args(["list-panes", "-t", &target, "-F", "#{pane_index}"]);
+    let output = match bounded_output(&mut command, cfg.ntm_activity_timeout) {
+        BoundedOutcome::Completed(output) => output,
+        BoundedOutcome::TimedOut => {
+            return Err(NtmActivityOutcome::TimedOut {
+                seconds: cfg.ntm_activity_timeout.as_secs().max(1),
+                stdout_bytes: 0,
+                stderr_bytes: 0,
+            });
+        }
+        BoundedOutcome::Unspawned(error) => {
+            return Err(NtmActivityOutcome::SpawnFailed { kind: error.kind() });
+        }
+    };
     if !output.status.success() {
         return Err(NtmActivityOutcome::PaneEnumerationFailed {
             code: output.status.code(),
             signal: std::os::unix::process::ExitStatusExt::signal(&output.status),
         });
     }
-    let text = String::from_utf8_lossy(&output.stdout);
-    let panes: Vec<_> = text
+    let output_text = String::from_utf8_lossy(&output.stdout).into_owned();
+    let panes: Vec<_> = output_text
         .lines()
         .map(str::trim)
         .filter(|pane| !pane.is_empty() && pane.chars().all(|c| c.is_ascii_digit()))
@@ -876,11 +818,11 @@ fn aux_lane(cfg: &Cfg, script: &str, args: &[&str], event: &str) {
         .arg("--")
         .arg(&bin)
         .args(args)
-        .env("FLEET_STATE_DIR", &cfg.state_dir)
-        .output();
-    let outcome = classify_aux_lane_outcome(&out, seconds);
-    if let Ok(o) = &out {
-        let mut text = String::from_utf8_lossy(&o.stdout).to_string();
+        .env("FLEET_STATE_DIR", &cfg.state_dir);
+    let output = bounded_output(&mut command, Duration::from_secs(seconds));
+    let outcome = classify_aux_lane_outcome(&output, seconds);
+    if let BoundedOutcome::Completed(o) = &output {
+        let mut text = String::from_utf8_lossy(&o.stdout).into_owned();
         text.push_str(&String::from_utf8_lossy(&o.stderr));
         if !text.trim().is_empty() {
             print!("{text}");
@@ -916,11 +858,15 @@ fn aux_lane(cfg: &Cfg, script: &str, args: &[&str], event: &str) {
     }
 }
 
-fn classify_aux_lane_outcome(result: &std::io::Result<Output>, seconds: u64) -> AuxLaneOutcome {
+fn classify_aux_lane_outcome(result: &BoundedOutcome, seconds: u64) -> AuxLaneOutcome {
     match result {
-        Err(error) => AuxLaneOutcome::SpawnFailed { kind: error.kind() },
-        Ok(output) => {
-            let mut text = String::from_utf8_lossy(&output.stdout).to_string();
+        BoundedOutcome::Unspawned(error) => AuxLaneOutcome::SpawnFailed { kind: error.kind() },
+        BoundedOutcome::TimedOut => AuxLaneOutcome::DeadlineReached {
+            code: None,
+            seconds,
+        },
+        BoundedOutcome::Completed(output) => {
+            let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
             text.push_str(&String::from_utf8_lossy(&output.stderr));
             if text.lines().any(|line| line.starts_with("DEADLINE lane=")) {
                 return AuxLaneOutcome::DeadlineReached {
@@ -944,47 +890,59 @@ fn aux_lane_budget_seconds(remaining: Duration, configured: Duration) -> Option<
 }
 
 fn run_shell_lane(cfg: &Cfg, script: &str, args: &[&str], envs: &[(&str, &str)]) -> i32 {
-    let mut c = Command::new("/bin/bash");
-    c.arg(cfg.cp_bin.join(script)).args(args);
-    for (k, v) in envs {
-        c.env(k, v);
+    let mut command = Command::new("/bin/bash");
+    command.arg(cfg.cp_bin.join(script)).args(args);
+    for (key, value) in envs {
+        command.env(key, value);
     }
-    c.stdout(Stdio::inherit()).stderr(Stdio::inherit());
-    c.status().ok().and_then(|s| s.code()).unwrap_or(-1)
+    match bounded_status(&mut command, Duration::from_secs(120)) {
+        BoundedOutcome::Completed(output) => output.status.code().unwrap_or(-1),
+        BoundedOutcome::TimedOut | BoundedOutcome::Unspawned(_) => -1,
+    }
 }
-
-/// ⛔ THE PUBLISH INVOCATION. NO OUTER TIMEOUT — see the crate docs. `check.sh --publish` owns the
+/// ⛔ THE PUBLISH INVOCATION. NO OUTER TIMEOUT — see the crate docs. check.sh --publish owns the
 /// private-run + complete-candidate + atomic-promotion contract and its own deadline; an outer
 /// kill produces no ledger row at all and was measured to kill healthy in-budget runs.
 fn admission_refresh(cfg: &Cfg) {
     let check_sh = cfg.cp_bin.join("check.sh");
     if !check_sh.exists() {
-        say(&format!("[{}] ADMISSION_VERDICT refresh UNRUN: {} is absent", ts(), check_sh.display()));
+        say(&format!(
+            "[{}] ADMISSION_VERDICT refresh UNRUN: {} is absent",
+            ts(),
+            check_sh.display()
+        ));
         return;
     }
-    let fresh: u64 = env_or("FM_STANDING_FRESH_SECONDS", "1500").parse().unwrap_or(1500);
+    let fresh: u64 = env_or("FM_STANDING_FRESH_SECONDS", "1500")
+        .parse()
+        .unwrap_or(1500);
     let deadline: u64 = env_or("FM_ADMISSION_REFRESH_DEADLINE_SECONDS", &fresh.to_string())
         .parse()
         .unwrap_or(fresh);
     let inv = publish_invocation(&check_sh, &cfg.state_dir, &cfg.ledger, fresh, deadline);
 
-    let mut cmd = Command::new(&inv.bin);
-    cmd.args(&inv.args);
-    for (k, v) in &inv.env {
-        cmd.env(k, v);
+    let mut command = Command::new(&inv.bin);
+    command.args(&inv.args);
+    for (key, value) in &inv.env {
+        command.env(key, value);
     }
-    let out = cmd.output();
-    let rc = out.as_ref().map(|o| o.status.code().unwrap_or(-1)).unwrap_or(-1);
-    let text = out
-        .as_ref()
-        .map(|o| {
-            let mut s = String::from_utf8_lossy(&o.stdout).to_string();
-            s.push_str(&String::from_utf8_lossy(&o.stderr));
-            s
-        })
-        .unwrap_or_default();
-
-    cfg.log("admission_verdict_refresh", &format!(r#""rc":{rc}"#));
+    let out = bounded_output(
+        &mut command,
+        Duration::from_secs(deadline.saturating_add(30).max(1)),
+    );
+    let rc = match &out {
+        BoundedOutcome::Completed(output) => output.status.code().unwrap_or(-1),
+        BoundedOutcome::TimedOut | BoundedOutcome::Unspawned(_) => -1,
+    };
+    let text = match &out {
+        BoundedOutcome::Completed(output) => {
+            let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
+            text.push_str(&String::from_utf8_lossy(&output.stderr));
+            text
+        }
+        BoundedOutcome::TimedOut => "TIMEOUT reason=admission_refresh_deadline".to_owned(),
+        BoundedOutcome::Unspawned(error) => format!("UNSPAWNED reason={error}"),
+    };
     match rc {
         0 => say(&format!("[{}] ADMISSION_VERDICT refreshed PASS", ts())),
         75 => say(&format!(
@@ -1003,7 +961,10 @@ fn admission_refresh(cfg: &Cfg) {
 }
 
 fn attention_wait(cfg: &Cfg) -> String {
-    let cursor = std::fs::read_to_string(&cfg.cursor_f).unwrap_or_default().trim().to_string();
+    let cursor = std::fs::read_to_string(&cfg.cursor_f)
+        .unwrap_or_default()
+        .trim()
+        .to_string();
     let mut cmd = Command::new("timeout");
     cmd.arg("400")
         .arg(&cfg.ntm_bin)
@@ -1204,24 +1165,31 @@ fn queue_filter_count(cfg: &Cfg, repo_dir: &Path, br_json: &str) -> u64 {
         }
         _ => {
             let mut c = Command::new("python3");
-            c.arg(cfg.cp_bin.join("loop-queue-filter.py")).arg("--count").arg("");
+            c.arg(cfg.cp_bin.join("loop-queue-filter.py"))
+                .arg("--count")
+                .arg("");
             c
         }
     };
-    cmd.current_dir(repo_dir).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
-    let Ok(mut child) = cmd.spawn() else { return 0 };
-    if let Some(mut si) = child.stdin.take() {
-        let _ = si.write_all(br_json.as_bytes());
+    cmd.current_dir(repo_dir);
+    match bounded_output_stdin(&mut cmd, Duration::from_secs(60), br_json.as_bytes()) {
+        BoundedOutcome::Completed(output) if output.status.success() => String::from_utf8_lossy(&output.stdout)
+            .trim()
+            .parse::<u64>()
+            .unwrap_or(0),
+        BoundedOutcome::Completed(_) | BoundedOutcome::TimedOut | BoundedOutcome::Unspawned(_) => 0,
     }
-    let Ok(out) = child.wait_with_output() else { return 0 };
-    String::from_utf8_lossy(&out.stdout).trim().parse::<u64>().unwrap_or(0)
 }
 
 fn dispatch_handoff(cfg: &Cfg, found: u64) {
     let dispatch_log = cfg.state_dir.join("fleet-monitor-dispatch.log");
-    say(&format!("[{}] actionable fleet state found — invoking gated controller tick", ts()));
+    say(&format!(
+        "[{}] actionable fleet state found — invoking gated controller tick",
+        ts()
+    ));
     let t = env_or("FLEET_DISPATCH_TIMEOUT", "900");
-    let rc = Command::new("timeout")
+    let mut command = Command::new("timeout");
+    command
         .arg(&t)
         .arg("/bin/bash")
         .arg(cfg.cp_bin.join("controller-tick.sh"))
@@ -1230,14 +1198,15 @@ fn dispatch_handoff(cfg: &Cfg, found: u64) {
                 .create(true)
                 .append(true)
                 .open(&dispatch_log)
-                .map(Stdio::from)
-                .unwrap_or_else(|_| Stdio::null()),
+                .map(std::process::Stdio::from)
+                .unwrap_or_else(|_| std::process::Stdio::null()),
         )
-        .stderr(Stdio::null())
-        .status()
-        .ok()
-        .and_then(|s| s.code())
-        .unwrap_or(-1);
+        .stderr(std::process::Stdio::null());
+    let timeout_secs = t.parse::<u64>().unwrap_or(900).max(1);
+    let rc = match bounded_status(&mut command, Duration::from_secs(timeout_secs)) {
+        BoundedOutcome::Completed(output) => output.status.code().unwrap_or(-1),
+        BoundedOutcome::TimedOut | BoundedOutcome::Unspawned(_) => -1,
+    };
     cfg.log(
         "dispatch_handoff",
         &format!(
@@ -1364,31 +1333,54 @@ mod tests {
 
     #[test]
     fn rule_aux_lane_outcomes_preserve_completion_deadline_signal_and_spawn_failure() {
-        let completed = Command::new("/bin/sh").arg("-c").arg("exit 0").output().unwrap();
+        let completed = {
+            let mut command = Command::new("/bin/sh");
+            command.args(["-c", "exit 0"]);
+            match bounded_output(&mut command, Duration::from_secs(5)) {
+                BoundedOutcome::Completed(output) => output,
+                other => panic!("fast auxiliary fixture must complete: {other:?}"),
+            }
+        };
         assert_eq!(
-            classify_aux_lane_outcome(&Ok(completed), 2),
+            classify_aux_lane_outcome(&BoundedOutcome::Completed(completed), 2),
             AuxLaneOutcome::Completed { code: 0 }
         );
 
-        let deadline = Command::new("/bin/sh")
-            .arg("-c")
-            .arg("printf 'DEADLINE lane=x exceeded_s=2\\n'; exit 143")
-            .output()
-            .unwrap();
+        let deadline = {
+            let mut command = Command::new("/bin/sh");
+            command.args(["-c", "printf 'DEADLINE lane=x exceeded_s=2\n'; exit 143"]);
+            match bounded_output(&mut command, Duration::from_secs(5)) {
+                BoundedOutcome::Completed(output) => output,
+                other => panic!("deadline auxiliary fixture must complete: {other:?}"),
+            }
+        };
         assert_eq!(
-            classify_aux_lane_outcome(&Ok(deadline), 2),
-            AuxLaneOutcome::DeadlineReached { code: Some(143), seconds: 2 }
+            classify_aux_lane_outcome(&BoundedOutcome::Completed(deadline), 2),
+            AuxLaneOutcome::DeadlineReached {
+                code: Some(143),
+                seconds: 2
+            }
         );
 
-        let signalled = Command::new("/bin/sh").arg("-c").arg("kill -TERM $$").output().unwrap();
+        let signalled = {
+            let mut command = Command::new("/bin/sh");
+            command.args(["-c", "kill -TERM $$"]);
+            match bounded_output(&mut command, Duration::from_secs(5)) {
+                BoundedOutcome::Completed(output) => output,
+                other => panic!("signalled auxiliary fixture must complete: {other:?}"),
+            }
+        };
         assert!(matches!(
-            classify_aux_lane_outcome(&Ok(signalled), 2),
+            classify_aux_lane_outcome(&BoundedOutcome::Completed(signalled), 2),
             AuxLaneOutcome::Signalled { signal: Some(15) }
         ));
 
+        let unspawned = BoundedOutcome::Unspawned(io::Error::from(io::ErrorKind::NotFound));
         assert!(matches!(
-            classify_aux_lane_outcome(&Err(io::Error::from(io::ErrorKind::NotFound)), 2),
-            AuxLaneOutcome::SpawnFailed { kind: io::ErrorKind::NotFound }
+            classify_aux_lane_outcome(&unspawned, 2),
+            AuxLaneOutcome::SpawnFailed {
+                kind: io::ErrorKind::NotFound
+            }
         ));
     }
 
