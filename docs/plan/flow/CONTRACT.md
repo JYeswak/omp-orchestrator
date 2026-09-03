@@ -122,6 +122,92 @@ readiness number itself is still not regenerable from a clean clone
 (`MATRIX_FROM_HEAD=no:untracked-generator`), so until that is fixed no closure figure is
 reproducible by anyone but this working copy.
 
+## Wave 3 amendment — ATLAS ARC GOVERNS, AND NO AUTO-REFILL UNTIL THE PROCESS IS PROVEN
+
+Two rulings from Joshua on 2026-09-03, in order. The first replaces the sequencing above; the
+second constrains the dispatch lane the product exists to automate.
+
+### 1. Atlas Arc supersedes the hand-written sequencing (HD-0014)
+
+> *"yeah use that new proces i just pasted"* … *"that was mined from jeff's plans — lets follow it
+> more closely than my hand written work."*
+
+The second sentence is operative: it ranks the mined Dicklesworthstone process **above Joshua's own
+hand-written instructions**, which includes the Wave-2 authorization to build S1 first. **R1,
+breadth before depth, is now binding:**
+
+```
+max(section_maturity) - median(section_maturity) <= 1
+
+MEASURED 2026-09-03 — VIOLATED at 2:
+S1      meas=6  gap=10  contracts=1  diagram=2  beadrefs=273  MATURITY=4
+S2..S9  meas=5-8 gap=9-19 contracts=0 diagram=1 beadrefs=0-3  MATURITY=2
+```
+
+**No `CRITICAL_PATH_EXCEPTION` is recorded.** One was recommended; the ruling makes it unnecessary,
+because the order it would have excepted is itself superseded. The gate now in force: *no further S1
+depth until all twelve section records carry purpose, inputs, outputs, dependencies, consumers,
+unknowns, non-goals and source pointers.* Two S1 builds are **suspended, not cancelled** — the L0
+install suite and `crates/s1-coverage`; landed work is retained.
+
+**A partial refutation is recorded with the adoption.** Atlas Arc asserts later sections *"remain
+empty"*. Measured, they do not: each carries 5–8 measurements, 9–19 gaps, an agreement block and a
+diagram. The accurate statement is narrower — **S1 alone has a contracts block and bead ownership.**
+The *mechanism* diagnosis stands on our own prior numbers rather than the document's authority:
+`GROWTH_PER_COMMIT=19.22` against `CLOSURE_PER_COMMIT=0`, and a freeze whose exit condition closed a
+cycle.
+
+**Known blocker on the mechanical half:** only three `.md` files were provided. `scripts/arc.py` was
+not, so `init`, `lint`, `status` and `certify-plan` **cannot run** and `BUILD_READY` is **UNRUN**,
+not failed — per Atlas Arc's own rule an unavailable tool is UNKNOWN, never a pass. `arc.py` is also
+Python, which the one rule forbids as a tracked file; it lives in the skill directory outside this
+repo, as the readme-update validator does.
+
+### 2. No auto-refill (binding)
+
+> *"we dont want to automatically refill panes with work without being approved — we have to reap
+> every update and get docs updated — we dont want auto refill until our process is proven."*
+
+**This is not less automation. Notification is wanted; actuation is not.** A pane finishing must
+reach the conductor as a loud event — Joshua has been serving as that event all session, which is
+the defect being fixed. What the conductor does next is a judgement:
+
+```
+pane finishes → LOUD notification → conductor REAPS → docs updated → approval → dispatch
+```
+
+Every arrow is a stop, not a pass-through. `refill-idle-panes --plan` may **propose**; it may not
+send. A plan is a proposal for a human, never an authorization, and the selector must carry an
+explicit `APPROVAL_REQUIRED` marker so a downstream actuator cannot mistake one for the other.
+`inbox-monitor` (mail → loud blocker) is therefore fully in scope; the refill lane stops at a plan.
+
+**Measured state of every auto-dispatch path into this repo, 2026-09-03:**
+
+- **cron** — 50 uncommented rows; **zero** dispatch into `omp-orchestrator`. The two matching a
+  dispatch-shaped pattern are `cfs-honesty-tick` and control-plane's `tick-ledger-identity-check`,
+  both other projects. Every `refill` / `controller-tick` / `loop-driver` / `fast-dispatch` row named
+  in `AGENTS.md`'s post-mortem is **commented out**, so that section is STALE for this repo.
+- **launchd** — 18 plists exist; exactly **one** is loaded:
+  `ai.zeststream.omp-orchestrator.control-plane`, running
+  `omp-orchestrator --repo …/control-plane --session control-plane`, `RunAtLoad=True KeepAlive=True`.
+  It points at **control-plane, not here.** `ai.zeststream.omp-orchestrator.plist` exists on disk and
+  is loaded **zero** times.
+
+So "can anything auto-refill this session right now" is **NO**, measured rather than assumed. The
+constraint is satisfied by **absence, which is not enforcement** — nothing prevents loading the plist
+or uncommenting a row.
+
+**Why this sequencing is right and not timidity.** The product's claim is that an idle worker beside
+a ready queue is the conductor's failure. But measured tonight in this repo: a selector that returns
+`UNMEASURABLE` and cannot select, a `fleet-monitor --self` that resolves the wrong session, an
+uninstalled `inbox-monitor`, three blocking waits that each failed for a different reason, and a
+conductor that published five instrument-produced readings. Automating dispatch on top of that would
+industrialise the errors.
+
+**NO-CLAIM.** This records a policy and a measurement; it installs no gate. Nothing refuses a
+dispatch that lacks recorded approval, so the constraint is honoured by convention — the enforcement
+class this repo distrusts most.
+
 
 Every box file gains four sections. A box without all four is not reviewable.
 
