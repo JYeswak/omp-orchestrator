@@ -62,6 +62,114 @@ const _: () = assert!(
     "a build deadline under one minute refuses honest builds and will be routed around"
 );
 
+/// The environment a LOCAL build must run under, and the cargo it must run.
+///
+/// # Why this is in the kernel and not at a call site
+///
+/// MEASURED 2026-09-02, after SnowyCanyon installed this gate on the live checkout and
+/// reverted it: BlueLantern's one-crate `dispatch-claim-fence` commit spent **247 seconds**
+/// inside the hook, and `rch queue` showed the gate's `cargo build -p dispatch-claim-fence`
+/// placed on **contabo-4** in `sync_up` — a remote worker, on a lane that is not this repo's.
+///
+/// The cause is two lines, and both were MINE:
+///
+/// 1. `cargo_bin()` returned a bare `"cargo"`. On this machine
+///    `which cargo` resolves to `$HOME/.rch/shims/cargo`, a **POSIX shell script**, while the
+///    real toolchain is the Mach-O at `$HOME/.cargo/bin/cargo`. A bare name resolves to the
+///    shim, so "build one warm crate" became sync_up plus remote codegen on whatever worker
+///    the scheduler picked.
+/// 2. Nothing pinned `RCH_ENABLED=false`.
+///
+/// **My first implementation of the hook's gate had BOTH guards**, with the comment *"RCH
+/// offload turns a local build into a remote one whose failure modes are not this gate's
+/// subject."* Then I rewrote the gate to INVOKE this binary rather than reimplement its
+/// loop — the right call on the KERNEL-ONLY rule — and the rewrite silently dropped the
+/// guards, because they lived at the call site I deleted. No test could see it: every test
+/// exercises the lib, and the env only matters on the spawn.
+///
+/// So the guard now lives HERE, where the spawn is, and no caller can forget it. That also
+/// fixes direct invocation, which had the same defect and was never measured.
+///
+/// NO-CLAIM: this removes the remote-placement cause. It does NOT address the second half
+/// of `g5e0` — a per-crate build inside the shared `.git/index.lock` serialises five
+/// writers even when it is fast and local.
+#[must_use]
+pub fn local_build_env() -> Vec<(&'static str, String)> {
+    vec![
+        // The gate measures whether the STAGED code compiles. A remote build measures the
+        // scheduler as well, and reports its failures as the code's.
+        ("RCH_ENABLED", "false".to_owned()),
+        // The gate must not be the thing that refuses for disk pressure; that is a
+        // different verdict with a different owner.
+        ("CARGO_MINT_MIN_CONTAINER_PCT", "0".to_owned()),
+        // Resolve the toolchain EXPLICITLY, so a bare name cannot reach the shim.
+        ("CARGO", local_cargo()),
+    ]
+}
+
+/// The real cargo, never the shim.
+///
+/// An explicit `$CARGO` wins, because a caller naming its toolchain is making a decision.
+/// Otherwise `$HOME/.cargo/bin/cargo` when it exists — measured to be the Mach-O while the
+/// `PATH` entry is a shell script. A bare `"cargo"` is the last resort and is honestly
+/// wrong on this machine; it is kept only so a host without a rustup layout still runs.
+#[must_use]
+pub fn local_cargo() -> String {
+    let explicit = std::env::var("CARGO").ok();
+    let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
+    resolve_cargo(explicit.as_deref(), home.as_deref())
+}
+
+/// The resolution as a PURE function of its inputs. This is the testable seam.
+///
+/// It exists because two mutations of the env-reading version did NOT bite: under
+/// `cargo test` the harness sets `$CARGO` to the real toolchain, so the wrapper returns
+/// from the explicit arm and never reaches the fallback the mutations changed. A leg that
+/// cannot drive the arm it claims to pin proves nothing — the same defect shape as a pin
+/// keyed on source text.
+///
+/// `home_is_real` is a predicate rather than a filesystem probe so a test can drive the
+/// "rustup layout absent" arm on a machine that has one.
+#[must_use]
+pub fn resolve_cargo(explicit: Option<&str>, home: Option<&Path>) -> String {
+    resolve_cargo_with(explicit, home, &|candidate| candidate.is_file())
+}
+
+/// [`resolve_cargo`] with the existence check injected.
+#[must_use]
+pub fn resolve_cargo_with(
+    explicit: Option<&str>,
+    home: Option<&Path>,
+    exists: &dyn Fn(&Path) -> bool,
+) -> String {
+    if let Some(explicit) = explicit.map(str::trim) {
+        // An explicit toolchain wins — EXCEPT a shim, which is the one value a caller
+        // never means. `$CARGO` is set by the shim itself when it re-enters cargo.
+        if !explicit.is_empty() && !is_rch_shim(explicit) {
+            return explicit.to_owned();
+        }
+    }
+    if let Some(home) = home {
+        let candidate = home.join(".cargo/bin/cargo");
+        if exists(&candidate) {
+            return candidate.to_string_lossy().into_owned();
+        }
+    }
+    // Honestly wrong on this machine, and kept only so a host without a rustup layout
+    // still runs. A caller on this fleet always has the HOME arm.
+    "cargo".to_owned()
+}
+
+/// Is this cargo path an RCH shim? A shim is not a toolchain.
+///
+/// Keyed on the shim DIRECTORY rather than on the file being a script, because the check
+/// must work for a path that does not exist yet — a refusal that can only be made after
+/// the spawn is a refusal made too late.
+#[must_use]
+pub fn is_rch_shim(cargo: &str) -> bool {
+    cargo.contains("/.rch/shims/")
+}
+
 /// WHOSE staged paths the gate is about to read.
 ///
 /// # The prerequisite this bead was blocked on, and why it did not need building

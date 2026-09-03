@@ -138,13 +138,23 @@ fn evaluate_crate(repo: &Path, name: &str) -> CrateVerdict {
     let mut command = Command::new(cargo_bin());
     command
         .current_dir(repo)
-        .env("CARGO_TARGET_DIR", &target_dir)
+        .env("CARGO_TARGET_DIR", &target_dir);
+    // PIN THE LOCAL BUILD. Measured: without this the shim offloaded a one-crate build to
+    // contabo-4 in sync_up and held a pre-commit hook for 247 seconds. The pins live in the
+    // kernel so no caller — including the pre-commit hook and any direct invocation — can
+    // drop them in a refactor, which is exactly how they were lost once already.
+    for (key, value) in staged_build_gate::local_build_env() {
+        command.env(key, value);
+    }
+    command
         .arg("build")
         .arg("--quiet")
         .arg("-p")
         .arg(&package);
-    match subprocess_contract::bounded_output(&mut command, Duration::from_secs(BUILD_DEADLINE_SECS))
-    {
+    match subprocess_contract::bounded_output(
+        &mut command,
+        Duration::from_secs(BUILD_DEADLINE_SECS),
+    ) {
         subprocess_contract::BoundedOutcome::Completed(output) => {
             let stderr = String::from_utf8_lossy(&output.stderr);
             match classify_cargo_invocation(true, output.status.code(), &stderr) {
@@ -193,8 +203,14 @@ fn package_name(manifest: &Path) -> Option<String> {
     None
 }
 
+/// The cargo this gate builds with — the kernel's resolution, never a bare name.
+///
+/// This function used to be `env::var("CARGO").unwrap_or("cargo")`, and on this machine a
+/// bare `cargo` is `$HOME/.rch/shims/cargo`, a POSIX shell script that offloads the
+/// build to a remote worker. Measured cost: 247 seconds inside a pre-commit hook for one
+/// warm crate, placed on `contabo-4` in `sync_up`. See [`staged_build_gate::local_cargo`].
 fn cargo_bin() -> String {
-    std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned())
+    staged_build_gate::local_cargo()
 }
 
 fn repo_root() -> Result<PathBuf, String> {

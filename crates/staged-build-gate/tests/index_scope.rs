@@ -154,3 +154,138 @@ fn from_env_agrees_with_classify_on_the_live_variable() {
         assert_eq!(IndexScope::from_env(), IndexScope::NotUnderHook);
     }
 }
+
+// -----------------------------------------------------------------------------------
+// g5e0 — the 247-second cause: a bare `cargo` is the RCH shim on this machine
+// -----------------------------------------------------------------------------------
+
+/// MEASURED 2026-09-02 on the live checkout, after this gate was installed and reverted:
+///
+/// ```text
+/// which cargo            -> $HOME/.rch/shims/cargo   POSIX shell script
+/// $HOME/.cargo/bin/cargo -> Mach-O 64-bit executable arm64
+/// cmp                 -> NOT the same file
+/// rch queue           -> cargo build -p dispatch-claim-fence on contabo-4, sync_up
+/// hook wall time      -> 247s for ONE warm crate
+/// ```
+/// Machine-independent on purpose: `is_rch_shim` keys on the `/.rch/shims/` segment,
+/// and a hardcoded author-home literal is what `path-literal-guard` exists to refuse.
+const MEASURED_SHIM: &str = "/home/agent/.rch/shims/cargo";
+
+#[test]
+fn a_shim_path_is_recognised_and_a_real_toolchain_is_not() {
+    assert!(
+        staged_build_gate::is_rch_shim(MEASURED_SHIM),
+        "the measured shim path must be recognised"
+    );
+    // KNOWN-GOOD ARM: a real toolchain must NOT be flagged, or the resolver would refuse
+    // every cargo and the gate could never build anything.
+    for real in [
+        "/home/agent/.cargo/bin/cargo",
+        "/opt/homebrew/bin/cargo",
+        "cargo",
+    ] {
+        assert!(
+            !staged_build_gate::is_rch_shim(real),
+            "{real} is a toolchain, not a shim"
+        );
+    }
+}
+
+#[test]
+fn the_resolver_drives_all_three_arms_and_never_yields_the_shim() {
+    // THE LEG THAT MUTATION FORCED. Two mutations of the env-reading wrapper did not bite,
+    // because `cargo test` sets $CARGO to the real toolchain and the wrapper returned from
+    // the explicit arm before reaching the fallback they changed. The pure seam lets each
+    // arm be driven.
+    let home = std::path::Path::new("/home/agent");
+    let present = |_: &std::path::Path| true;
+    let absent = |_: &std::path::Path| false;
+
+    // ARM 1 — an explicit real toolchain wins.
+    assert_eq!(
+        staged_build_gate::resolve_cargo_with(Some("/opt/rust/bin/cargo"), Some(home), &present),
+        "/opt/rust/bin/cargo"
+    );
+    // ARM 1b — an explicit SHIM is refused and falls through. `$CARGO` is set by the shim
+    // itself when it re-enters cargo, so honouring it would make the offload sticky.
+    assert_eq!(
+        staged_build_gate::resolve_cargo_with(Some(MEASURED_SHIM), Some(home), &present),
+        "/home/agent/.cargo/bin/cargo"
+    );
+    // ARM 2 — no explicit value, rustup layout present.
+    assert_eq!(
+        staged_build_gate::resolve_cargo_with(None, Some(home), &present),
+        "/home/agent/.cargo/bin/cargo"
+    );
+    // ARM 3 — no layout at all. Honestly returns a bare name and says so in the doc.
+    assert_eq!(
+        staged_build_gate::resolve_cargo_with(None, Some(home), &absent),
+        "cargo"
+    );
+    assert_eq!(staged_build_gate::resolve_cargo_with(None, None, &present), "cargo");
+    // And whitespace is not a toolchain.
+    assert_eq!(
+        staged_build_gate::resolve_cargo_with(Some("   "), Some(home), &present),
+        "/home/agent/.cargo/bin/cargo"
+    );
+
+    // NO ARM may yield the shim.
+    for (explicit, h, e) in [
+        (Some(MEASURED_SHIM), Some(home), &present as &dyn Fn(&std::path::Path) -> bool),
+        (Some(MEASURED_SHIM), Some(home), &absent as &dyn Fn(&std::path::Path) -> bool),
+        (Some(MEASURED_SHIM), None, &present as &dyn Fn(&std::path::Path) -> bool),
+    ] {
+        let got = staged_build_gate::resolve_cargo_with(explicit, h, e);
+        assert!(!staged_build_gate::is_rch_shim(&got), "yielded {got:?}");
+    }
+}
+
+#[test]
+fn the_resolved_cargo_is_never_the_shim() {
+    // The whole defect in one assertion. `cargo_bin` used to be
+    // `env::var("CARGO").unwrap_or("cargo")`, and a bare name resolves through `PATH` to
+    // the shim.
+    let resolved = staged_build_gate::local_cargo();
+    assert!(
+        !staged_build_gate::is_rch_shim(&resolved),
+        "resolved {resolved:?} is a shim; a gate must measure a LOCAL build"
+    );
+    // Under `cargo test` the harness sets $CARGO to the real toolchain, so this run
+    // exercises the explicit-CARGO arm. Stated rather than left as an accident.
+    if let Ok(explicit) = std::env::var("CARGO") {
+        if !staged_build_gate::is_rch_shim(&explicit) {
+            assert_eq!(resolved, explicit.trim());
+        }
+    }
+}
+
+#[test]
+fn the_local_build_env_pins_every_offload_switch() {
+    // FIRES-ON-KNOWN-BAD for the refactor that already happened: the hook's first
+    // implementation pinned these at its own call site, the KERNEL-ONLY rewrite deleted
+    // that call site, and no test could see the loss because the env only matters on the
+    // spawn. The pins now live in the kernel and this leg names each one.
+    let env = staged_build_gate::local_build_env();
+    assert!(!env.is_empty(), "ANTI-VACUITY: an empty pin set pins nothing");
+    let keys: std::collections::BTreeSet<&str> = env.iter().map(|(k, _)| *k).collect();
+    for required in ["RCH_ENABLED", "CARGO_MINT_MIN_CONTAINER_PCT", "CARGO"] {
+        assert!(keys.contains(required), "the pin set must carry {required}");
+    }
+    let lookup = |key: &str| -> String {
+        env.iter()
+            .find(|(k, _)| *k == key)
+            .map(|(_, v)| v.clone())
+            .expect("present")
+    };
+    assert_eq!(lookup("RCH_ENABLED"), "false", "remote offload must be OFF");
+    assert_eq!(
+        lookup("CARGO_MINT_MIN_CONTAINER_PCT"),
+        "0",
+        "the gate must not refuse for disk pressure; that is a different verdict"
+    );
+    assert!(
+        !staged_build_gate::is_rch_shim(&lookup("CARGO")),
+        "the pinned CARGO must not be the shim"
+    );
+}
