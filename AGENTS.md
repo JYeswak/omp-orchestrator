@@ -18,6 +18,61 @@ The exemption list is empty. There is deliberately no `check.sh` carve-out — t
 let **160 scripts and 60,467 lines** accrete in the repo this substrate is extracted from.
 ---
 
+## The zero-worktree policy (binding, Joshua 2026-09-03)
+
+**All work happens on `main`, in this one checkout, saved to `main`.** No worktrees. No branches.
+Concurrency is managed by **file reservations**, not by giving each agent its own copy of the tree.
+
+> *"we have a zero worktree policy — all work MUST happen on main — no exceptions. worktrees and
+> branches cause shit to not get saved."* — Joshua, 2026-09-03
+
+**The one exception, stated exactly:** a **test** may create a worktree **if it deletes it**. The
+worktree must not outlive the test that made it. Nothing else may create one — not a build, not a
+lane, not an agent wanting a clean tree, not a "temporary" experiment.
+
+**Measured at the time of the ruling.** Compliant on the branch/worktree axis and **not** on the
+axis the policy actually protects:
+
+```
+git rev-parse --abbrev-ref HEAD  -> main
+git worktree list                -> 1 entry (this checkout)
+git branch                       -> (empty)
+git stash list                   -> 0
+git grep -n 'worktree add' -- crates/* .flywheel/* docs/*  -> 0 hits
+```
+
+So there is nothing to rationalise away. But `git status --porcelain` returned **123 modified and
+17 untracked files**, against **331 commits unpushed**. That is the failure mode in its real form:
+not a stray branch, but work sitting in a working copy that no commit and no clone can see. The
+heaviest concentrations were `crates/no-shell-gate` (23), `crates/agent-mail-native` (10),
+`crates/ack-spine` (6).
+
+**Why this is the same defect the session already measured three times.** Every TREE-vs-WORKTREE
+correction in this file is an instance of it: `rows = 62` published from a working copy where a
+fresh clone measured **17**; `PX-DONE-1` resting on an untracked `.git/s1_cov.py` so the coverage
+matrix cannot regenerate on a clean checkout; a grader reporting `22 passed / 3 failed` for a commit
+whose tree passes, because `cargo` read the worktree. **A worktree is a private reality**, and a
+branch is a durable one. The policy removes the second and this rule names the first.
+
+**Operational consequences, not aspirations:**
+
+- **Commit path-scoped and often.** `git add -- <paths> && git commit -- <paths>` — BOTH pathspecs,
+  per the commit rules below. A shared index means a bare `commit` sweeps a peer's unfinished work.
+- **A figure derived from an uncommitted file is not a figure.** Label it `WORKTREE` and say so, or
+  commit the file first. This is already the rule; the policy is why it exists.
+- **Untracked evidence cited by a bead is unreproducible.** Pane 4 measured 25 untracked wave-2
+  files that every convergence figure in `S1.toml` cited. The beads were individually sound and
+  collectively invisible.
+- **`git ls-files` reads the INDEX.** It reports files that are staged and not committed, so it is
+  not proof that work landed. Verify with `git ls-tree -r HEAD`.
+
+**NO-CLAIM.** This is a policy with **no gate behind it yet**. Nothing in-tree refuses a
+`git worktree add`, and `.git/hooks/` cannot see one being created in another checkout. It is
+enforced by every agent reading this file, which is exactly the enforcement class this repo
+distrusts — and it stays that way until a hook or gate exists, which is a separate bead.
+
+---
+
 ## Scratch homes
 
 Work that outlives the command that created it MUST use the session-scoped
@@ -1500,3 +1555,27 @@ strongest receipt available, per the receiver-receipt contract. No `capture-pane
   handrolling in a shell, which is how all five above happened. That needs a `PreToolUse` hook and
   is a separate bead. **The source gate must say so in its own output** rather than implying
   coverage it does not have.
+
+## Hook coverage window (binding)
+
+A PreToolUse hook table is read when an agent session starts. Installing or changing a hook does
+not retrofit already-running agents. A session that predates the installation is UNCOVERED until
+it restarts; zero denials is not evidence that the hook ran.
+
+Hook evidence has two separate levels. Piping a JSON event into a hook binary proves only the
+binary decision. Hook-level coverage requires a real tool call from the agent session that the
+hook intercepts and denies. A report may claim interception only when that real call was refused;
+binary probes must be labelled binary-only.
+
+The local kernel-only hook records a per-session invocation count in its shadow ledger. Run
+kernel-only-operator-hook --liveness SESSION_ID BASH_CALLS after the configured threshold
+KERNEL_ONLY_HOOK_LIVENESS_THRESHOLD (default 10). It emits HOOK_LIVENESS UNCOVERED and exits 1
+when Bash calls reach the threshold with zero recorded hook invocations. COVERED, PARTIAL, and
+UNKNOWN remain distinct outcomes. Shadow ledger evidence is diagnostic, not hook certification.
+
+The installed rch-lane-bind binary at /Users/josh/.local/bin/rch-lane-bind is outside this repo.
+Its stdin probe cannot prove that the Claude PreToolUse table intercepted a live call, and this
+repo does not claim fresh-session coverage from a stale session. The measured wrapper limitation
+is named rather than hidden: timeout, nice, env, time, stdbuf, and xargs wrappers may bypass a
+resolver that inspects only the command-position token. Until a real intercepted probe closes
+that class, wrapped invocations remain UNMEASURED/UNSAFE for coverage claims.
