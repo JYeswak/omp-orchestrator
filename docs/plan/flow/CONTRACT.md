@@ -23,7 +23,7 @@ kernel_output = "ClaimAttempt | ClaimRefused{blockers} (PROPOSED)"              
 event_row = "LifecycleEvent{stage_from=S4, stage_to=S5a, actor, pane, incarnation, outcome, reason_code=CLAIM_REFUSED, blocker={chain}}"
 validator = "bead-lint (2lqd) before claim; attempt-claim is the readiness test"
 sota_standard = "PageRank over the dependency DAG; work the articulation points"
-sota_cite = "mirror:beads_rust/<path>:L? | this-repo:<path>:L? | fh:<row-id>"   # every cite VERIFIED: sed -n / ls / fh why
+sota_cite = "mirror:beads_rust/<path>:L? | this-repo:<path>:L?"   # every cite VERIFIED by re-running sed -n / ls. fh is NOT a citation authority.
 skill = "/beads-bv, /beads-north-star"
 branches = [
   "epic -> REFUSED accounting node (05.10)",
@@ -39,8 +39,11 @@ no_claim = "what this box does not establish"
 - `mirror:<repo>/<path>` — under `/Volumes/ZestData/dicklesworthstone-mirror/`, and `ls` confirms it. A
   path under OUR `crates/` is never a mirror cite (measured tonight: a scout labelled `ack-spine` and
   `no-shell-gate` as `mirror:beads_rust/...` — fabricated; refused).
-- `fh:<row>` — only if `fh why <row>` resolves. **fh is STALE right now** (`SEARCH_INDEX_STALE`,
-  `digest_missing_today`, index lock held by the fh swarm); say so in the row and cite source instead.
+- `fh:<row>` is **NO LONGER A VALID CITATION**. Ruled out by Joshua 2026-09-03: chronically stale
+  (`SEARCH_INDEX_STALE`, `digest_missing_today`, and an independent `fh doctor` returning
+  `DAILY_SCHEDULE_CARDINALITY_DRIFT` — expected one 05:15 invocation, found 0), and its `fh-ledger`
+  row was the SOLE red gate in the admission chain, so a stale index was blocking every dispatch.
+  Cite source directly. A row whose only support is an `fh` id is unsupported and is refused.
 - `branches` = the enum arms of the crate's real verdict/action types (`AckAction`, `ReceiptReason`,
   `PaneState`, `Liveness`, `ClosePrefix`, `DispatchAdmissibility`, ...) verbatim, plus the human-halt arm.
 

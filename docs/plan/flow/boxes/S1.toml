@@ -21,7 +21,7 @@ kernel_output = "PROPOSED InstallReport{agent -> created|merged|already|failed|s
 event_row = "LifecycleEvent{stage_from=HUMAN, stage_to=S1.<L0..L5>, actor, pane, incarnation, outcome, reason_code, blocker}"
 validator = "installer --check identity (this-repo:crates/installer/src/lib.rs:86 IDENTITY MISMATCH); doctor two-band exit (plf.7.3); crate-atom-gate d3gm over the umbrella"
 sota_standard = "installer-workmanship 24 non-negotiables (skill ~/.claude/skills/installer-workmanship/SKILL.md) implemented in Rust; three-source liveness (tmux + tick-monitor + Agent Mail agree) per AGENTS.md One Rule"
-sota_cite = "this-repo:AGENTS.md (One Rule, vibing-with-ntm section); skill:installer-workmanship/SKILL.md; mirror:destructive_command_guard/install.sh (gold-standard installer, feature list pending BinGates extraction); fh STALE tonight (SEARCH_INDEX_STALE) - no fh row cited"
+sota_cite = "this-repo:AGENTS.md (One Rule, vibing-with-ntm section); skill:installer-workmanship/SKILL.md; mirror:destructive_command_guard/install.sh (gold-standard installer, feature list pending BinGates extraction). NO fh ROW IS CITED AND NONE MAY BE: Joshua removed fh as a requirement 2026-09-03."
 skill = "/omp-orchestrator:start (portal), :tick, :worker, :grade, :halt - thin wrappers over ompo <verb> --json; /installer-workmanship; /frankentui (walkthrough TUI, decision HD-0009)"
 
 # layers - each is a substage with its own crate, checks, and hooks
@@ -36,7 +36,7 @@ exists = "crates/installer: four verbs --check/--install <target>/--version/-h|-
 id = "L1"
 name = "system check"
 command = "ompo doctor"
-checks = ["tmux >= 3.6", "ntm built from source (never brew)", "br", "bv", "agent-mail :8765", "socraticode/qdrant", "rch + lane row for this repo", "git", "disk vs mint floor", "frankenmermaid", "fh (+STALE banner)", "toolchain pin present on the lane"]
+checks = ["tmux >= 3.6", "ntm built from source (never brew)", "br", "bv", "agent-mail :8765", "socraticode/qdrant", "rch + lane row for this repo", "git", "disk vs mint floor", "frankenmermaid", "toolchain pin present on the lane"]
 rules = ["two signals per probe (PATH presence + version)", "UNPROBEABLE for tools that reject --version (tmux)", "every ABSENT carries a remediation", "two-band exit"]
 exists = "none"
 
