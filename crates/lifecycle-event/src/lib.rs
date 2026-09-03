@@ -22,6 +22,7 @@
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
@@ -192,6 +193,10 @@ impl LifecycleEvent {
     }
 
     pub fn to_json_line(&self) -> String {
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
         let mut map = serde_json::Map::new();
         map.insert("schema".into(), json!(SCHEMA));
         map.insert("layer".into(), json!(self.layer.as_str()));
@@ -200,6 +205,7 @@ impl LifecycleEvent {
         map.insert("actor".into(), json!(self.actor));
         map.insert("outcome".into(), json!(self.outcome.as_str()));
         map.insert("reason_code".into(), json!(self.reason_code.as_str()));
+        map.insert("ts_unix".into(), json!(ts));
         if !self.pane.is_empty() {
             map.insert("pane".into(), json!(self.pane));
         }
@@ -216,6 +222,7 @@ impl LifecycleEvent {
         }
         Value::Object(map).to_string()
     }
+
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

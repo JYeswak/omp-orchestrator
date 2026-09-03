@@ -1,0 +1,21 @@
+[package]
+license.workspace = true
+name = "lifecycle-monitor"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "S1 observability monitor: read lifecycle-event journals, anti-vacuity empty scan, metric home"
+
+[[bin]]
+name = "lifecycle-monitor"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+lifecycle-event = { path = "../lifecycle-event", default-features = false }
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"

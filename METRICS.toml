@@ -1,0 +1,70 @@
+# METRICS.toml — S1 runtime expectation home.
+#
+# WHY NOT NUMBERS.toml: that file is command → count (or LIVE). A duration or
+# ratio floor is not a command-derived figure; stuffing SLOs there would be a
+# schema migration, already refused by docs/contracts/expectation_registry.md
+# (EXP-RUNTIME-HOME).
+#
+# WHY NOT the S1.toml metric prose row: pane 1 owns S1.toml; a threshold that
+# lives only in a box comment cannot be loaded by a monitor.
+#
+# WHY A SIBLING: one [[metric]] per layer, loadable, with unit + floor +
+# stall_after_ms. Matches EXP-RUNTIME-HOME in spirit; committed at repo root so
+# a clone can see it (`.omp-orchestrator/` is runtime, not the declaration).
+
+schema_id = "omp-orchestrator.s1.metrics"
+schema_version = 1
+
+[[metric]]
+id = "L0-METRIC"
+layer = "L0"
+unit = "ratio"
+floor = 1.0
+stall_after_ms = 300000
+source = "docs/contracts/s1_l0_install.md"
+note = "parent_fsync_successes / atomic_rename_attempts; T22 known-bad floor"
+
+[[metric]]
+id = "MET-L1-REPAIR-ACTION-RATE"
+layer = "L1"
+unit = "count"
+floor = 0.0
+stall_after_ms = 120000
+source = "docs/contracts/s1_l1_doctor.md"
+note = "same-observation partition floor 0"
+
+[[metric]]
+id = "MET-L2-INIT-READBACK-FAILURE-RATE"
+layer = "L2"
+unit = "ratio"
+floor = 0.0
+stall_after_ms = 120000
+source = "docs/contracts/s1_l2_ecosystem.md"
+note = "same-state partition floor 0"
+
+[[metric]]
+id = "L3-METRIC-DIVERGENT-IDS"
+layer = "L3"
+unit = "count"
+floor = 0.0
+stall_after_ms = 60000
+source = "docs/contracts/s1_l3_walkthrough.md"
+note = "TUI vs JSON ordered-id mismatches; any positive fails"
+
+[[metric]]
+id = "L4-METRIC-SILENT-COUNT"
+layer = "L4"
+unit = "count"
+floor = 0.0
+stall_after_ms = 75000
+source = "docs/contracts/s1_l4_liveness.md"
+note = "silent liveness source count; any silent => not-live"
+
+[[metric]]
+id = "L5-METRIC-READBACK-OK"
+layer = "L5"
+unit = "flag"
+floor = 1.0
+stall_after_ms = 60000
+source = "docs/contracts/s1_l5_portal.md"
+note = "inception readback; absent file => 0"
