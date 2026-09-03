@@ -1,0 +1,3557 @@
+# Atlas Arc R3 dispositions. Pane 1 integrates. Do not treat as plan-assemble evidence.
+# rows=269
+
+[[row]]
+id = "WAVE-wave-1/AmberGate-S5a-S5b-S7-S8.toml#001-S5a-all"
+surface = "wave.disagreement.resolution"
+box = "S5a"
+severity_in = "minor"
+disposition = "ASSUME_REVERSIBLY"
+reason = "reviewer asserting-correct; owner_says stands; falsifier=re-run measurements"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S5a-S5b-S7-S8.toml"
+stable_ids = ["wave-1/AmberGate-S5a-S5b-S7-S8.toml:all", "S5a"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/AmberGate-S5a-S5b-S7-S8.toml#002-S5a-kernel_output"
+surface = "wave.disagreement.resolution"
+box = "S5a"
+severity_in = "minor"
+disposition = "ASSUME_REVERSIBLY"
+reason = "additive cite of existing DispatchIntent; not a Joshua question"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S5a-S5b-S7-S8.toml"
+stable_ids = ["wave-1/AmberGate-S5a-S5b-S7-S8.toml:kernel_output", "S5a"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/AmberGate-S5a-S5b-S7-S8.toml#003-S5b-all"
+surface = "wave.disagreement.resolution"
+box = "S5b"
+severity_in = "minor"
+disposition = "ASSUME_REVERSIBLY"
+reason = "reviewer asserting-correct"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S5a-S5b-S7-S8.toml"
+stable_ids = ["wave-1/AmberGate-S5a-S5b-S7-S8.toml:all", "S5b"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/AmberGate-S5a-S5b-S7-S8.toml#004-S5b-kernel_output"
+surface = "wave.disagreement.resolution"
+box = "S5b"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "four-arm DispatchIntent exists in ack-stage and the box does not cite it"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S5a-S5b-S7-S8.toml"
+stable_ids = ["wave-1/AmberGate-S5a-S5b-S7-S8.toml:kernel_output", "S5b"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/AmberGate-S5a-S5b-S7-S8.toml#005-S7-crate_status"
+surface = "wave.disagreement.resolution"
+box = "S7"
+severity_in = "blocker"
+disposition = "BLOCKS_PLAN"
+reason = "crate_status=wired while two of eight gates are absent from the installed binary"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S5a-S5b-S7-S8.toml"
+stable_ids = ["wave-1/AmberGate-S5a-S5b-S7-S8.toml:crate_status", "S7"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/AmberGate-S5a-S5b-S7-S8.toml#006-S7-branches"
+surface = "wave.disagreement.resolution"
+box = "S7"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "reading-hazard note; seven GATE banners vs eight gates; owner amends prose"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S5a-S5b-S7-S8.toml"
+stable_ids = ["wave-1/AmberGate-S5a-S5b-S7-S8.toml:branches", "S7"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/AmberGate-S5a-S5b-S7-S8.toml#007-S8-all"
+surface = "wave.disagreement.resolution"
+box = "S8"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "asserting-correct plus additive headline"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S5a-S5b-S7-S8.toml"
+stable_ids = ["wave-1/AmberGate-S5a-S5b-S7-S8.toml:all", "S8"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/AmberGate-S5a-S5b-S7-S8.toml#008-S8-crate_status"
+surface = "wave.disagreement.resolution"
+box = "S8"
+severity_in = "minor"
+disposition = "ASSUME_REVERSIBLY"
+reason = "installed-vs-in-repo nuance; crate_status stays exists-no-caller"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S5a-S5b-S7-S8.toml"
+stable_ids = ["wave-1/AmberGate-S5a-S5b-S7-S8.toml:crate_status", "S8"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/AmberGate-S6a-S6b-S6c.toml#009-S6a-all"
+surface = "wave.disagreement.resolution"
+box = "S6a"
+severity_in = "minor"
+disposition = "ASSUME_REVERSIBLY"
+reason = "asserting-correct"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S6a-S6b-S6c.toml"
+stable_ids = ["wave-1/AmberGate-S6a-S6b-S6c.toml:all", "S6a"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/AmberGate-S6a-S6b-S6c.toml#010-S6a-measurement"
+surface = "wave.disagreement.resolution"
+box = "S6a"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "stale: S6a now has 16 gap rows so the four sections exist"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S6a-S6b-S6c.toml"
+stable_ids = ["wave-1/AmberGate-S6a-S6b-S6c.toml:measurement", "S6a"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/AmberGate-S6a-S6b-S6c.toml#011-S6b-crate_status"
+surface = "wave.disagreement.resolution"
+box = "S6b"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "dispatch-silence-watch is wired; exists-no-caller is false"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S6a-S6b-S6c.toml"
+stable_ids = ["wave-1/AmberGate-S6a-S6b-S6c.toml:crate_status", "S6b"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/AmberGate-S6a-S6b-S6c.toml#012-S6b-branches"
+surface = "wave.disagreement.resolution"
+box = "S6b"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "FollowUpAction 2 arms vs FollowUpVerdict 6; box under-names the lattice"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S6a-S6b-S6c.toml"
+stable_ids = ["wave-1/AmberGate-S6a-S6b-S6c.toml:branches", "S6b"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/AmberGate-S6a-S6b-S6c.toml#013-S6c-all"
+surface = "wave.disagreement.resolution"
+box = "S6c"
+severity_in = "minor"
+disposition = "ASSUME_REVERSIBLY"
+reason = "asserting-correct"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S6a-S6b-S6c.toml"
+stable_ids = ["wave-1/AmberGate-S6a-S6b-S6c.toml:all", "S6c"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/AmberGate-S6a-S6b-S6c.toml#014-S6c-kernel_output"
+surface = "wave.disagreement.resolution"
+box = "S6c"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "Grade type does not exist under crates/; box names a fiction"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S6a-S6b-S6c.toml"
+stable_ids = ["wave-1/AmberGate-S6a-S6b-S6c.toml:kernel_output", "S6c"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/AmberGate-S6a-S6b-S6c.toml#015-S6c-crate"
+surface = "wave.disagreement.resolution"
+box = "S6c"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "reap-finished-panes implementation is out of this repo"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S6a-S6b-S6c.toml"
+stable_ids = ["wave-1/AmberGate-S6a-S6b-S6c.toml:crate", "S6c"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/AmberGate-S9.toml#016-S9-crate_status"
+surface = "wave.disagreement.resolution"
+box = "S9"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "decision-ledger has a supervisor caller; exists-no-caller is false"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S9.toml"
+stable_ids = ["wave-1/AmberGate-S9.toml:crate_status", "S9"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/AmberGate-S9.toml#017-S9-crate_status"
+surface = "wave.disagreement.resolution"
+box = "S9"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "opposing point on the same change; keep hook-wired not plain wired"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S9.toml"
+stable_ids = ["wave-1/AmberGate-S9.toml:crate_status", "S9"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/AmberGate-S9.toml#018-S9-measurement"
+surface = "wave.disagreement.resolution"
+box = "S9"
+severity_in = "blocker"
+disposition = "ASSUME_REVERSIBLY"
+reason = "stale: S9 now has 16 gap rows"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S9.toml"
+stable_ids = ["wave-1/AmberGate-S9.toml:measurement", "S9"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/AmberGate-S9.toml#019-S9-branches"
+surface = "wave.disagreement.resolution"
+box = "S9"
+severity_in = "minor"
+disposition = "ASSUME_REVERSIBLY"
+reason = "richer arms are a map amend, not a human halt"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S9.toml"
+stable_ids = ["wave-1/AmberGate-S9.toml:branches", "S9"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S2.toml#020-S2-crate_status"
+surface = "wave.disagreement.resolution"
+box = "S2"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "pre-commit path vs claimed crate_status wiring"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S2.toml"
+stable_ids = ["wave-1/BlueLantern-S2.toml:crate_status", "S2"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S2.toml#021-S2-hook"
+surface = "wave.disagreement.resolution"
+box = "S2"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "hook schema is HOOK-SCHEMA-CORE 10 fields (vnp2); do not ask Joshua"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S2.toml"
+stable_ids = ["wave-1/BlueLantern-S2.toml:hook", "S2"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S2.toml#022-S2-agreement"
+surface = "wave.disagreement.resolution"
+box = "S2"
+severity_in = "major"
+disposition = "DEFER_TO_BEAD"
+reason = "owner recounts open_disagreements after this wave"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S2.toml"
+stable_ids = ["wave-1/BlueLantern-S2.toml:agreement", "S2"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S3.toml#023-S3-kernel_input"
+surface = "wave.disagreement.resolution"
+box = "S3"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "18 markdown files vs 13 numbered sections; kernel_input is wrong"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S3.toml"
+stable_ids = ["wave-1/BlueLantern-S3.toml:kernel_input", "S3"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S3.toml#024-S3-gap_class_coverage"
+surface = "wave.disagreement.resolution"
+box = "S3"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "16-class walk is CONTRACT.md; owner amends the gap list"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S3.toml"
+stable_ids = ["wave-1/BlueLantern-S3.toml:gap_class_coverage", "S3"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S3.toml#025-S3-hook_schema"
+surface = "wave.disagreement.resolution"
+box = "S3"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "hook schema 10-field core"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S3.toml"
+stable_ids = ["wave-1/BlueLantern-S3.toml:hook_schema", "S3"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S3.toml#026-S3-agreement"
+surface = "wave.disagreement.resolution"
+box = "S3"
+severity_in = "major"
+disposition = "DEFER_TO_BEAD"
+reason = "owner recounts agreement"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S3.toml"
+stable_ids = ["wave-1/BlueLantern-S3.toml:agreement", "S3"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S4.toml#027-S4-kernel_input_citation"
+surface = "wave.disagreement.resolution"
+box = "S4"
+severity_in = "major"
+disposition = "DEFER_TO_BEAD"
+reason = "owner supplies path:line citation"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S4.toml"
+stable_ids = ["wave-1/BlueLantern-S4.toml:kernel_input_citation", "S4"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S4.toml#028-S4-measurement_command"
+surface = "wave.disagreement.resolution"
+box = "S4"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "measurement command is not executable (literal x / Rust expr)"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S4.toml"
+stable_ids = ["wave-1/BlueLantern-S4.toml:measurement_command", "S4"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S4.toml#029-S4-hook_schema"
+surface = "wave.disagreement.resolution"
+box = "S4"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "hook schema 10-field core"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S4.toml"
+stable_ids = ["wave-1/BlueLantern-S4.toml:hook_schema", "S4"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S4.toml#030-S4-agreement"
+surface = "wave.disagreement.resolution"
+box = "S4"
+severity_in = "major"
+disposition = "DEFER_TO_BEAD"
+reason = "owner recounts agreement"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S4.toml"
+stable_ids = ["wave-1/BlueLantern-S4.toml:agreement", "S4"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S6a.toml#031-S6a-branches"
+surface = "wave.disagreement.resolution"
+box = "S6a"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "verbatim enum arms is CONTRACT; owner splits the grouped string"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S6a.toml"
+stable_ids = ["wave-1/BlueLantern-S6a.toml:branches", "S6a"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S6a.toml#032-S6a-hook"
+surface = "wave.disagreement.resolution"
+box = "S6a"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "missing hook row becomes an explicit absence row, not a Joshua call"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S6a.toml"
+stable_ids = ["wave-1/BlueLantern-S6a.toml:hook", "S6a"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S6a.toml#033-S6a-agreement"
+surface = "wave.disagreement.resolution"
+box = "S6a"
+severity_in = "major"
+disposition = "DEFER_TO_BEAD"
+reason = "owner recounts agreement"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S6a.toml"
+stable_ids = ["wave-1/BlueLantern-S6a.toml:agreement", "S6a"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S6b.toml#034-S6b-classify_followup"
+surface = "wave.disagreement.resolution"
+box = "S6b"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "classify_followup exists outside the focused scan; owner_says is false"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S6b.toml"
+stable_ids = ["wave-1/BlueLantern-S6b.toml:classify_followup", "S6b"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S6b.toml#035-S6b-wired_caller_measurement"
+surface = "wave.disagreement.resolution"
+box = "S6b"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "textual caller count is not trigger reachability"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S6b.toml"
+stable_ids = ["wave-1/BlueLantern-S6b.toml:wired_caller_measurement", "S6b"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S6b.toml#036-S6b-hook"
+surface = "wave.disagreement.resolution"
+box = "S6b"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "explicit [[box.hook]] absence row"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S6b.toml"
+stable_ids = ["wave-1/BlueLantern-S6b.toml:hook", "S6b"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S6c.toml#037-S6c-branches"
+surface = "wave.disagreement.resolution"
+box = "S6c"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "MISSING Grade is a gap not a branch; owner moves it"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S6c.toml"
+stable_ids = ["wave-1/BlueLantern-S6c.toml:branches", "S6c"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S6c.toml#038-S6c-grade_boundary"
+surface = "wave.disagreement.resolution"
+box = "S6c"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "GradeResult::Pass/Fix exist; Grade-missing claim is false as stated"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S6c.toml"
+stable_ids = ["wave-1/BlueLantern-S6c.toml:grade_boundary", "S6c"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S6c.toml#039-S6c-hook"
+surface = "wave.disagreement.resolution"
+box = "S6c"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "explicit hook absence"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S6c.toml"
+stable_ids = ["wave-1/BlueLantern-S6c.toml:hook", "S6c"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S7.toml#040-S7-gap_class_schema"
+surface = "wave.disagreement.resolution"
+box = "S7"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "class vocabulary is CONTRACT.md; owner renames"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S7.toml"
+stable_ids = ["wave-1/BlueLantern-S7.toml:gap_class_schema", "S7"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S7.toml#041-S7-hook_schema"
+surface = "wave.disagreement.resolution"
+box = "S7"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "reachability is not certification; absence row"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S7.toml"
+stable_ids = ["wave-1/BlueLantern-S7.toml:hook_schema", "S7"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S7.toml#042-S7-agreement"
+surface = "wave.disagreement.resolution"
+box = "S7"
+severity_in = "major"
+disposition = "DEFER_TO_BEAD"
+reason = "owner recounts agreement"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S7.toml"
+stable_ids = ["wave-1/BlueLantern-S7.toml:agreement", "S7"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S8.toml#043-S8-crate"
+surface = "wave.disagreement.resolution"
+box = "S8"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "semicolon-composite crate field violates one-crate row shape"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S8.toml"
+stable_ids = ["wave-1/BlueLantern-S8.toml:crate", "S8"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S8.toml#044-S8-wired_caller"
+surface = "wave.disagreement.resolution"
+box = "S8"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "validator names installer --check with no producing command"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S8.toml"
+stable_ids = ["wave-1/BlueLantern-S8.toml:wired_caller", "S8"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S8.toml#045-S8-hook"
+surface = "wave.disagreement.resolution"
+box = "S8"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "auto-install HUMAN is GAP-S8-18; this row is only the absence schema"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S8.toml"
+stable_ids = ["wave-1/BlueLantern-S8.toml:hook", "S8"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S9.toml#046-S9-gap_class_schema"
+surface = "wave.disagreement.resolution"
+box = "S9"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "class vocabulary"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S9.toml"
+stable_ids = ["wave-1/BlueLantern-S9.toml:gap_class_schema", "S9"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S9.toml#047-S9-trigger_target"
+surface = "wave.disagreement.resolution"
+box = "S9"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "trigger_target=launchd:decision-ledger while gate/consumer refs are zero"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S9.toml"
+stable_ids = ["wave-1/BlueLantern-S9.toml:trigger_target", "S9"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/BlueLantern-S9.toml#048-S9-hook"
+surface = "wave.disagreement.resolution"
+box = "S9"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "human-halt IS the trigger; no hook"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S9.toml"
+stable_ids = ["wave-1/BlueLantern-S9.toml:hook", "S9"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/QuietRidge-S2.toml#049-S2-gap_inventory"
+surface = "wave.disagreement.resolution"
+box = "S2"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "16-class walk"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S2.toml"
+stable_ids = ["wave-1/QuietRidge-S2.toml:gap_inventory", "S2"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/QuietRidge-S2.toml#050-S2-agreement.approval"
+surface = "wave.disagreement.resolution"
+box = "S2"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "blank approval writes MISSING; not a Joshua interrupt"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S2.toml"
+stable_ids = ["wave-1/QuietRidge-S2.toml:agreement.approval", "S2"]
+would_have_asked_joshua = true
+moved_off_human = true
+
+[[row]]
+id = "WAVE-wave-1/QuietRidge-S3.toml#051-S3-gap_inventory"
+surface = "wave.disagreement.resolution"
+box = "S3"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "16-class walk"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S3.toml"
+stable_ids = ["wave-1/QuietRidge-S3.toml:gap_inventory", "S3"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/QuietRidge-S3.toml#052-S3-sota_cite"
+surface = "wave.disagreement.resolution"
+box = "S3"
+severity_in = "major"
+disposition = "DEFER_TO_BEAD"
+reason = "owner adds :L<n> to sota_cite"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S3.toml"
+stable_ids = ["wave-1/QuietRidge-S3.toml:sota_cite", "S3"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/QuietRidge-S4.toml#053-S4-gap_inventory"
+surface = "wave.disagreement.resolution"
+box = "S4"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "16-class walk"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S4.toml"
+stable_ids = ["wave-1/QuietRidge-S4.toml:gap_inventory", "S4"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/QuietRidge-S4.toml#054-S4-sota_cite"
+surface = "wave.disagreement.resolution"
+box = "S4"
+severity_in = "major"
+disposition = "DEFER_TO_BEAD"
+reason = "owner adds :L<n>"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S4.toml"
+stable_ids = ["wave-1/QuietRidge-S4.toml:sota_cite", "S4"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/QuietRidge-S5a.toml#055-S5a-event_row"
+surface = "wave.disagreement.resolution"
+box = "S5a"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "LifecycleEvent omits required incarnation"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S5a.toml"
+stable_ids = ["wave-1/QuietRidge-S5a.toml:event_row", "S5a"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/QuietRidge-S5a.toml#056-S5a-branches"
+surface = "wave.disagreement.resolution"
+box = "S5a"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "strip prose arrows from branch strings"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S5a.toml"
+stable_ids = ["wave-1/QuietRidge-S5a.toml:branches", "S5a"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/QuietRidge-S5b.toml#057-S5b-gap_inventory"
+surface = "wave.disagreement.resolution"
+box = "S5b"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "16-class walk"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S5b.toml"
+stable_ids = ["wave-1/QuietRidge-S5b.toml:gap_inventory", "S5b"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/QuietRidge-S5b.toml#058-S5b-kernel_output"
+surface = "wave.disagreement.resolution"
+box = "S5b"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "additive type cite"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S5b.toml"
+stable_ids = ["wave-1/QuietRidge-S5b.toml:kernel_output", "S5b"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/QuietRidge-S6a.toml#059-S6a-branches"
+surface = "wave.disagreement.resolution"
+box = "S6a"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "split collapsed ReceiptReason"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S6a.toml"
+stable_ids = ["wave-1/QuietRidge-S6a.toml:branches", "S6a"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/QuietRidge-S6a.toml#060-S6a-agreement.approval"
+surface = "wave.disagreement.resolution"
+box = "S6a"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "approval blank -> MISSING"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S6a.toml"
+stable_ids = ["wave-1/QuietRidge-S6a.toml:agreement.approval", "S6a"]
+would_have_asked_joshua = true
+moved_off_human = true
+
+[[row]]
+id = "WAVE-wave-1/QuietRidge-S6b.toml#061-S6b-kernel_output"
+surface = "wave.disagreement.resolution"
+box = "S6b"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "classify_followup exists; same falsifier as row 34"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S6b.toml"
+stable_ids = ["wave-1/QuietRidge-S6b.toml:kernel_output", "S6b"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/QuietRidge-S6b.toml#062-S6b-agreement.approval"
+surface = "wave.disagreement.resolution"
+box = "S6b"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "approval blank -> MISSING"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S6b.toml"
+stable_ids = ["wave-1/QuietRidge-S6b.toml:agreement.approval", "S6b"]
+would_have_asked_joshua = true
+moved_off_human = true
+
+[[row]]
+id = "WAVE-wave-1/QuietRidge-S6c.toml#063-S6c-event_row"
+surface = "wave.disagreement.resolution"
+box = "S6c"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "event_row omits actor, pane, incarnation"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S6c.toml"
+stable_ids = ["wave-1/QuietRidge-S6c.toml:event_row", "S6c"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/QuietRidge-S6c.toml#064-S6c-branches"
+surface = "wave.disagreement.resolution"
+box = "S6c"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "VerifyDispatchRule absent from branches"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S6c.toml"
+stable_ids = ["wave-1/QuietRidge-S6c.toml:branches", "S6c"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/QuietRidge-S9.toml#065-S9-event_row"
+surface = "wave.disagreement.resolution"
+box = "S9"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "S9 event_row omits actor, pane, incarnation"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S9.toml"
+stable_ids = ["wave-1/QuietRidge-S9.toml:event_row", "S9"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/QuietRidge-S9.toml#066-S9-bead"
+surface = "wave.disagreement.resolution"
+box = "S9"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "bead field names 12.58 while validator also names 12.59"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S9.toml"
+stable_ids = ["wave-1/QuietRidge-S9.toml:bead", "S9"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/SilverWolf-S1.toml#067-S1-wave1_sections"
+surface = "wave.disagreement.resolution"
+box = "S1"
+severity_in = "blocker"
+disposition = "ASSUME_REVERSIBLY"
+reason = "stale: S1 now has measurement+10 gaps"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/SilverWolf-S1.toml"
+stable_ids = ["wave-1/SilverWolf-S1.toml:wave1_sections", "S1"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/SilverWolf-S1.toml#068-S1-sota_cite"
+surface = "wave.disagreement.resolution"
+box = "S1"
+severity_in = "major"
+disposition = "DEFER_TO_BEAD"
+reason = "owner adds line cite or drops the gold-standard claim"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/SilverWolf-S1.toml"
+stable_ids = ["wave-1/SilverWolf-S1.toml:sota_cite", "S1"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/SilverWolf-S2.toml#069-S2-all"
+surface = "wave.disagreement.resolution"
+box = "S2"
+severity_in = "minor"
+disposition = "OUT_OF_SCOPE"
+reason = "survey row: no disagreement found; empty resolution is not an unknown"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/SilverWolf-S2.toml"
+stable_ids = ["wave-1/SilverWolf-S2.toml:all", "S2"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/SilverWolf-S3.toml#070-S3-all"
+surface = "wave.disagreement.resolution"
+box = "S3"
+severity_in = "minor"
+disposition = "OUT_OF_SCOPE"
+reason = "survey row: no disagreement found"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/SilverWolf-S3.toml"
+stable_ids = ["wave-1/SilverWolf-S3.toml:all", "S3"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/SilverWolf-S4.toml#071-S4-all"
+surface = "wave.disagreement.resolution"
+box = "S4"
+severity_in = "minor"
+disposition = "OUT_OF_SCOPE"
+reason = "survey row: no disagreement found"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/SilverWolf-S4.toml"
+stable_ids = ["wave-1/SilverWolf-S4.toml:all", "S4"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/SilverWolf-S5a.toml#072-S5a-all"
+surface = "wave.disagreement.resolution"
+box = "S5a"
+severity_in = "minor"
+disposition = "OUT_OF_SCOPE"
+reason = "survey row: no disagreement found"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/SilverWolf-S5a.toml"
+stable_ids = ["wave-1/SilverWolf-S5a.toml:all", "S5a"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/SilverWolf-S5b.toml#073-S5b-event_row"
+surface = "wave.disagreement.resolution"
+box = "S5b"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "no PaneIncarnation/AgentIncarnation symbol in source"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/SilverWolf-S5b.toml"
+stable_ids = ["wave-1/SilverWolf-S5b.toml:event_row", "S5b"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/SilverWolf-S5b.toml#074-S5b-wave1_sections"
+surface = "wave.disagreement.resolution"
+box = "S5b"
+severity_in = "minor"
+disposition = "OUT_OF_SCOPE"
+reason = "survey row: no disagreement found"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/SilverWolf-S5b.toml"
+stable_ids = ["wave-1/SilverWolf-S5b.toml:wave1_sections", "S5b"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/SilverWolf-S7.toml#075-S7-crate"
+surface = "wave.disagreement.resolution"
+box = "S7"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "composite crate field"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/SilverWolf-S7.toml"
+stable_ids = ["wave-1/SilverWolf-S7.toml:crate", "S7"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/SilverWolf-S7.toml#076-S7-bead"
+surface = "wave.disagreement.resolution"
+box = "S7"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "two semicolon-separated bead ids"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/SilverWolf-S7.toml"
+stable_ids = ["wave-1/SilverWolf-S7.toml:bead", "S7"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/SilverWolf-S8.toml#077-S8-crate"
+surface = "wave.disagreement.resolution"
+box = "S8"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "composite crate field"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/SilverWolf-S8.toml"
+stable_ids = ["wave-1/SilverWolf-S8.toml:crate", "S8"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-1/SilverWolf-S8.toml#078-S8-bead"
+surface = "wave.disagreement.resolution"
+box = "S8"
+severity_in = "major"
+disposition = "BLOCKS_PLAN"
+reason = "two semicolon-separated bead ids"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/SilverWolf-S8.toml"
+stable_ids = ["wave-1/SilverWolf-S8.toml:bead", "S8"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-2/pane4-jt1i-citations.toml#079-S1-cite.beads-rust-cli-paths-unprefixed"
+surface = "wave.disagreement.resolution"
+box = "S1"
+severity_in = "major"
+disposition = "DEFER_TO_BEAD"
+reason = "owner prefixes mirror:beads_rust/ on doctor.rs paths"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-2/pane4-jt1i-citations.toml"
+stable_ids = ["wave-2/pane4-jt1i-citations.toml:cite.beads-rust-cli-paths-unprefixed", "S1"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-2/pane4-jt1i-citations.toml#080-S1-cite.bare-src-main-without-crate"
+surface = "wave.disagreement.resolution"
+box = "S1"
+severity_in = "major"
+disposition = "DEFER_TO_BEAD"
+reason = "owner prefixes crate on bare src/main.rs"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-2/pane4-jt1i-citations.toml"
+stable_ids = ["wave-2/pane4-jt1i-citations.toml:cite.bare-src-main-without-crate", "S1"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-2/pane4-jt1i-citations.toml#081-S1-cite.mirror-truncated-ellipsis"
+surface = "wave.disagreement.resolution"
+box = "S1"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "truncated mirror ellipsis already refused by CONTRACT.md"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-2/pane4-jt1i-citations.toml"
+stable_ids = ["wave-2/pane4-jt1i-citations.toml:cite.mirror-truncated-ellipsis", "S1"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-2/pane4-jt1i-citations.toml#082-S1-cite.dropped-leading-j-on-jplf-family"
+surface = "wave.disagreement.resolution"
+box = "S1"
+severity_in = "blocker"
+disposition = "BLOCKS_PLAN"
+reason = "leading j dropped on jplf.* family; real ids are omp-orchestrator-jplf.7.*"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-2/pane4-jt1i-citations.toml"
+stable_ids = ["wave-2/pane4-jt1i-citations.toml:cite.dropped-leading-j-on-jplf-family", "S1"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-2/pane4-jt1i-citations.toml#083-S1-figure.unlabelled-in-owner-files"
+surface = "wave.disagreement.resolution"
+box = "S1"
+severity_in = "minor"
+disposition = "ASSUME_REVERSIBLY"
+reason = "unlabelled figure in owner files; not a halt"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-2/pane4-jt1i-citations.toml"
+stable_ids = ["wave-2/pane4-jt1i-citations.toml:figure.unlabelled-in-owner-files", "S1"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "WAVE-wave-2/pane4-qibn-hook-count.toml#084-S1-box.hook.certified_false_vs_unattempted"
+surface = "wave.disagreement.resolution"
+box = "S1"
+severity_in = "major"
+disposition = "ASSUME_REVERSIBLY"
+reason = "certified=false vs UNATTEMPTED already amended in S1.toml hook rows"
+evidence = "resolution=\"\" in docs/plan/flow/waves/wave-2/pane4-qibn-hook-count.toml"
+stable_ids = ["wave-2/pane4-qibn-hook-count.toml:box.hook.certified_false_vs_unattempted", "S1"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S1-01"
+surface = "box.gap"
+box = "S1"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "HD-0014 adopted Atlas Arc; S1 is authorized to build; this is unbuilt work with named beads"
+evidence = "L1-L5 crates do not exist (ompo doctor/init/start/portal)"
+resolves = "jplf.7.3 doctor, jplf.7.12 init, kxe.10 inception, jplf.7.2 umbrella — AFTER diagram+HD approval, not before"
+stable_ids = ["docs/plan/flow/boxes/S1.toml#gap1", "class:wired_caller"]
+would_have_asked_joshua = true
+moved_off_human = true
+
+[[row]]
+id = "GAP-S1-02"
+surface = "box.gap"
+box = "S1"
+severity_in = "gap"
+disposition = "ASSUME_REVERSIBLY"
+reason = "install as ompo; falsifier=command -v installer points at /usr/sbin after install"
+evidence = "installer crate name collides with /usr/sbin/installer"
+resolves = "install as ompo or omp-orchestrator; never a PATH verb named installer"
+stable_ids = ["docs/plan/flow/boxes/S1.toml#gap2", "class:hook"]
+would_have_asked_joshua = true
+moved_off_human = true
+
+[[row]]
+id = "GAP-S1-03"
+surface = "box.gap"
+box = "S1"
+severity_in = "gap"
+disposition = "ASSUME_REVERSIBLY"
+reason = "accept diagram 0ea808a skip-spawn branch; falsifier=S1.mmd lacks persona A skip"
+evidence = "Persona A (08-end-users solo, gates-only) had no skip-swarm branch"
+resolves = "diagram 0ea808a adds L4 not-live + persona A -> skip spawn; owner must accept or reject that branch"
+stable_ids = ["docs/plan/flow/boxes/S1.toml#gap3", "class:diagram"]
+would_have_asked_joshua = true
+moved_off_human = true
+
+[[row]]
+id = "GAP-S1-04"
+surface = "box.gap"
+box = "S1"
+severity_in = "gap"
+disposition = "ASSUME_REVERSIBLY"
+reason = "spine.mmd is canonical (renderer source); boxes/S1.toml and 12-journey cite it"
+evidence = "three S1 names: 12-journey Inception vs boxes/S1 human-start vs spine.mmd S1 inception"
+resolves = "pane 1 picks one spine; the other two cite it"
+stable_ids = ["docs/plan/flow/boxes/S1.toml#gap4", "class:verdict_type"]
+would_have_asked_joshua = true
+moved_off_human = true
+
+[[row]]
+id = "GAP-S1-05"
+surface = "box.gap"
+box = "S1"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no LifecycleEvent writer for L0-L5"
+resolves = "kxe.8 journal at the install/doctor/spawn chokepoints"
+stable_ids = ["docs/plan/flow/boxes/S1.toml#gap5", "class:event_row"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S1-06"
+surface = "box.gap"
+box = "S1"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "L1 doctor SOTA is br doctor mutate()+undo by before_hash; ompo doctor is none"
+resolves = "jplf.7.3 copies beads_rust tests/e2e_doctor_chokepoint.rs contract: backup keyed by before_hash, undo restores it, second repair is zero actions"
+stable_ids = ["docs/plan/flow/boxes/S1.toml#gap6", "class:oracle"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S1-07"
+surface = "box.gap"
+box = "S1"
+severity_in = "gap"
+disposition = "DEFER_TO_BEAD"
+reason = "HD-0009 is answered (frankentui+json); remaining work is the spawn trigger bead"
+evidence = "SessionStart hook is 0; launchd paused; slash start does not exist"
+resolves = "trigger_target after HD-0009; today remains none"
+stable_ids = ["docs/plan/flow/boxes/S1.toml#gap7", "class:hook"]
+would_have_asked_joshua = true
+moved_off_human = true
+
+[[row]]
+id = "GAP-S1-08"
+surface = "box.gap"
+box = "S1"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "crate field was unparseable composite; umbrella still MISSING"
+resolves = "crate=installer now; umbrella stays in no_claim until jplf.7.2 exists"
+stable_ids = ["docs/plan/flow/boxes/S1.toml#gap8", "class:wired_caller"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S1-09"
+surface = "box.gap"
+box = "S1"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "the eight box-hook rows carry surface/hook/status, not the twelve certified fields (id, event, matcher, class, fail_mode, binary, policy_file, source_commit, language, stage, certi"
+resolves = "one 12-field row per hook naming its future hooks_certified.toml id and /hook-certification stage; NOT written with placeholders, because a filled certificate with no certification"
+stable_ids = ["docs/plan/flow/boxes/S1.toml#gap9", "class:hook"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S1-10"
+surface = "box.gap"
+box = "S1"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "S1 has no registered refusal type: Code::Refused has 0 call sites and no enum Code exists in crates/*/src, while 31 files already declare their own Refusal/Outcome/Verdict enum aga"
+resolves = "name an existing in-workspace type (e.g. ntm_fleet_monitor::Refusal at src/lib.rs:161) or block on the controller-tick extraction (loop-coverage:233,581), and add the SCHEMAS.toml "
+stable_ids = ["docs/plan/flow/boxes/S1.toml#gap10", "class:verdict_type"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S2-01"
+surface = "box.gap"
+box = "S2"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "S2 writes no LifecycleEvent row; the plan can change with no journal entry"
+resolves = "kxe.8 journal writer + vcd7.1 emit site at plan-assemble's write chokepoint"
+stable_ids = ["docs/plan/flow/boxes/S2.toml#gap1", "class:event_row"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S2-02"
+surface = "box.gap"
+box = "S2"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "HYPOTHESES.jsonl holds 1 row for a 7969-line plan: preregistration exists as a gate, not as a practice; 235 FINDINGS have no hypothesis they refute or support"
+resolves = "plan-check (bcrn.1) PC-n: every section's load-bearing claims map to a hypothesis row or the section is UNPREREGISTERED"
+stable_ids = ["docs/plan/flow/boxes/S2.toml#gap2", "class:oracle"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S2-03"
+surface = "box.gap"
+box = "S2"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no machine-readable plan items: the only structured form of 01-12 is the hand-made docs/plan/dag/dag-NN.json (567 items)"
+resolves = "plan-materialize (n92x) extract stage regenerates them from the sections; differential against the hand manifests"
+stable_ids = ["docs/plan/flow/boxes/S2.toml#gap3", "class:oracle"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S2-04"
+surface = "box.gap"
+box = "S2"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "docs/PLAN.md can be hand-edited; plan-assemble is not the sole writer, so assembly_freshness measures mtimes, not authorship"
+resolves = "PLAN.md generated-only: a content-hash manifest of consumed sections (12.67) replaces the mtime key; hand edits refused by the pre-commit gate"
+stable_ids = ["docs/plan/flow/boxes/S2.toml#gap4", "class:gate_trip"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S2-05"
+surface = "box.gap"
+box = "S2"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no claim row (L1) for 'the plan is assembled from its sections'; no SLO (L2); no fuzz target on the section parser (L5); no wired-caller test (atom 9)"
+resolves = "registries/claims.toml row; slo.yaml row for plan-assemble; fuzz/fuzz_targets/plan_assemble_sections.rs; WIRED_CALLERS in plan-assemble"
+stable_ids = ["docs/plan/flow/boxes/S2.toml#gap5", "class:claim_row"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S2-06"
+surface = "box.gap"
+box = "S2"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no Verdict-typed output: plan-assemble exits, it does not return a Verdictlike over Outcome"
+resolves = "lf.1.1 Grade/Verdictlike in omp-types, adopted by plan-assemble"
+stable_ids = ["docs/plan/flow/boxes/S2.toml#gap6", "class:verdict_type"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S2-07"
+surface = "box.gap"
+box = "S2"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "S2 -> S3 edge is hand-written (11.5): nothing types 'the plan is ready to grade'"
+resolves = "plan-assemble emits PlanAssembled{content_hash, sections[]} consumed by plan-check as its input"
+stable_ids = ["docs/plan/flow/boxes/S2.toml#gap7", "class:event_row"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S2-08"
+surface = "box.gap"
+box = "S2"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no per-box diagram; branches exist only as prose strings"
+resolves = "docs/plan/flow/diagrams/S2.mmd from branches; frankenmermaid validate --fail-on warning"
+stable_ids = ["docs/plan/flow/boxes/S2.toml#gap8", "class:diagram"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S2-09"
+surface = "box.gap"
+box = "S2"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no hook row: the pre-commit gate is the only hook, and it is per-clone and hand-installed (588v)"
+resolves = "hooks_certified.toml row for the pre-commit dispatcher with source_commit + stage; ompo install --hooks writes it"
+stable_ids = ["docs/plan/flow/boxes/S2.toml#gap9", "class:gate"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S3-01"
+surface = "box.gap"
+box = "S3"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no crate at all: plan-check (bcrn.1) does not exist, so every branch in this box is PROPOSED and nothing enforces a round's validity"
+resolves = "bcrn.1 lands crates/plan-check with a lib+bin reading CONVERGENCE.jsonl and the round files"
+stable_ids = ["docs/plan/flow/boxes/S3.toml#gap1", "class:verdict_type"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S3-02"
+surface = "box.gap"
+box = "S3"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no LifecycleEvent row: a round is recorded by an agent hand-appending to a .jsonl, so a round that was never run and a round that found nothing are indistinguishable in the ledger"
+resolves = "kxe.8 journal writer emitting one row per round with stage_from=S2 stage_to=S3"
+stable_ids = ["docs/plan/flow/boxes/S3.toml#gap2", "class:event_row"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S3-03"
+surface = "box.gap"
+box = "S3"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "the ledger disagrees with the files and nothing notices: CONVERGENCE.jsonl has rounds [8,9,10,12,13,14,15,22] while round files exist for 16-24. 42 of 87 rows have no gate state."
+resolves = "plan-check reconciling the two sources and refusing a round file with no ledger row (and vice versa)"
+stable_ids = ["docs/plan/flow/boxes/S3.toml#gap3", "class:oracle"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S3-04"
+surface = "box.gap"
+box = "S3"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no claim row (L1) for 'two consecutive zero-finding rounds bank a section', and no strength lattice entry for what a round's verdict is worth"
+resolves = "registries/claims.toml with a claim row whose justifier is at least as strong as the claim"
+stable_ids = ["docs/plan/flow/boxes/S3.toml#gap4", "class:claim_row"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S3-05"
+surface = "box.gap"
+box = "S3"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no SLO (L2): a grading round has no p95, no budget, and no safe_mode_trigger, so 24 rounds over two days is invisible as a cost"
+resolves = "slo.yaml row keyed on the grading lane once plan-check exists"
+stable_ids = ["docs/plan/flow/boxes/S3.toml#gap5", "class:slo"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S3-06"
+surface = "box.gap"
+box = "S3"
+severity_in = "gap"
+disposition = "ASSUME_REVERSIBLY"
+reason = "HD-0002 already: Josh is the buyer and the external loop; do not re-ask"
+evidence = "no named external oracle (L3): the grade's correctness is judged by the same fleet that produced the plan. There is no out-of-our-control arbiter for 'is this plan good'"
+resolves = "an external validation signal per loop-engineering's third loop; until then S3's verdict is internal agreement, which the Charter explicitly says is not the bar"
+stable_ids = ["docs/plan/flow/boxes/S3.toml#gap6", "class:oracle"]
+would_have_asked_joshua = true
+moved_off_human = true
+
+[[row]]
+id = "GAP-S3-07"
+surface = "box.gap"
+box = "S3"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no gate that trips (L4): nothing refuses a round that reuses a spent lens or whose grader authored the section, though both facts are IN the round rows"
+resolves = "plan-check with a fires-on-known-bad leg planting a reused lens and asserting RED"
+stable_ids = ["docs/plan/flow/boxes/S3.toml#gap7", "class:gate_trip"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S3-08"
+surface = "box.gap"
+box = "S3"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no fuzz target (L5): the round-row parser is a parser and has none"
+resolves = "crates/plan-check/fuzz/fuzz_targets/plan_check_round_row.rs asserting the stated invariants, not absence of panic"
+stable_ids = ["docs/plan/flow/boxes/S3.toml#gap8", "class:fuzz"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S3-09"
+surface = "box.gap"
+box = "S3"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no wired caller (atom 9): even once plan-check exists, no trigger is defined. Rounds are dispatched by hand from pane 1"
+resolves = "a WIRED_CALLERS row naming either the pre-commit chain or the supervisor tick, proved by reachability"
+stable_ids = ["docs/plan/flow/boxes/S3.toml#gap9", "class:wired_caller"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S3-10"
+surface = "box.gap"
+box = "S3"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no hook: nothing fires on a round file being written, so a malformed round row lands and is discovered by a reader"
+resolves = "a Rust PostToolUse hook certified per control-plane/hooks_certified.toml; see [[box.hook]] below"
+stable_ids = ["docs/plan/flow/boxes/S3.toml#gap10", "class:hook"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S3-11"
+surface = "box.gap"
+box = "S3"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "measurement gap: 'new_findings' is self-reported by the grader with no re-execution, and round 15 produced 4 verified FALSE POSITIVES out of 23 blockers"
+resolves = "the verify-before-record rule becoming machine-checked: a finding row must cite a command and its output"
+stable_ids = ["docs/plan/flow/boxes/S3.toml#gap11", "class:measurement"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S3-12"
+surface = "box.gap"
+box = "S3"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+reason = "by-design non-gap; retain stated so it is not read as omission"
+evidence = "NOT NEEDED, stated so it is not mistaken for an omission: formal proof (L6) and an ecosystem lock (L7) do not apply to a grading round — there is no theorem and no cross-repo pin h"
+resolves = "n/a by design; revisit if plan-check acquires a decision procedure worth proving"
+stable_ids = ["docs/plan/flow/boxes/S3.toml#gap12", "class:gate"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S4-01"
+surface = "box.gap"
+box = "S4"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no crate: plan-materialize (n92x) and bead-lint (2lqd) do not exist, so the plan->bead arrow is entirely hand-run. This is Joshua's NO-GO in one row"
+resolves = "n92x lands plan-materialize reading crate-atom-gate --report --json; 2lqd lands bead-lint"
+stable_ids = ["docs/plan/flow/boxes/S4.toml#gap1", "class:verdict_type"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S4-02"
+surface = "box.gap"
+box = "S4"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "the report exists and has never been produced: no crate-atom-gate check or --report has run over the 69 real packages, because a lane build is ELF and this host is arm64"
+resolves = "sor6's cross-compile lane, OR running the report ON the lane and consuming its JSON rather than its binary"
+stable_ids = ["docs/plan/flow/boxes/S4.toml#gap2", "class:measurement"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S4-03"
+surface = "box.gap"
+box = "S4"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no LifecycleEvent row for a filed bead: nothing records that (crate, part) became bead X, so a duplicate filing is only visible by reading the tracker"
+resolves = "kxe.8 journal writer + an emit site in plan-materialize at the filing chokepoint"
+stable_ids = ["docs/plan/flow/boxes/S4.toml#gap3", "class:event_row"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S4-04"
+surface = "box.gap"
+box = "S4"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "the ceilings are unreconciled: allowances.toml was seeded by a second instrument, so the first real report is EXPECTED to refuse with CEILING_HAS_SLACK or CEILING_BREACHED wherever"
+resolves = "one live crate-atom-gate check, then lowering each ceiling to the measured live count"
+stable_ids = ["docs/plan/flow/boxes/S4.toml#gap4", "class:oracle"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S4-05"
+surface = "box.gap"
+box = "S4"
+severity_in = "gap"
+disposition = "ASSUME_REVERSIBLY"
+reason = "accept internal atom-correctness until an out-of-tree arbiter is named; falsifier=named oracle row"
+evidence = "no external oracle (L3): the materializer would be graded by the same report it files from. Nothing outside our control says the 9-part atom is the right atom"
+resolves = "naming an out-of-tree arbiter for crate shape, or accepting that atom-correctness is internal doctrine and saying so in the claim row"
+stable_ids = ["docs/plan/flow/boxes/S4.toml#gap5", "class:oracle"]
+would_have_asked_joshua = true
+moved_off_human = true
+
+[[row]]
+id = "GAP-S4-06"
+surface = "box.gap"
+box = "S4"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no claim row (L1) for 'a bead generated from a schema cannot be malformed against that schema'"
+resolves = "registries/claims.toml row with strength invariant and a justifier at least as strong"
+stable_ids = ["docs/plan/flow/boxes/S4.toml#gap6", "class:claim_row"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S4-07"
+surface = "box.gap"
+box = "S4"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no SLO (L2): filing 621 cells worth of beads has no budget and no safe_mode_trigger, and a materializer that files hundreds of beads is a fleet-scale event"
+resolves = "slo.yaml row bounding beads-filed-per-run with a trigger that halts rather than floods"
+stable_ids = ["docs/plan/flow/boxes/S4.toml#gap7", "class:slo"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S4-08"
+surface = "box.gap"
+box = "S4"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no gate that trips (L4) on the materializer's own output: nothing refuses a bead that lacks a crate: or arrow: label, which is exactly what 2lqd is for. Measured: 3 of 434 beads wo"
+resolves = "bead-lint with a fires-on-known-bad leg planting a label-less bead and asserting RED"
+stable_ids = ["docs/plan/flow/boxes/S4.toml#gap8", "class:gate_trip"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S4-09"
+surface = "box.gap"
+box = "S4"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no fuzz target (L5): the report JSON reader in plan-materialize will be a parser and has none"
+resolves = "crates/plan-materialize/fuzz/fuzz_targets/plan_materialize_report_row.rs"
+stable_ids = ["docs/plan/flow/boxes/S4.toml#gap9", "class:fuzz"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S4-10"
+surface = "box.gap"
+box = "S4"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no wired caller (atom 9) for either future crate, and none for lifecycle-arrow-gate which is meant to read flow.toml"
+resolves = "WIRED_CALLERS rows proved by reachability; x226 is the bead that would consume flow.toml"
+stable_ids = ["docs/plan/flow/boxes/S4.toml#gap10", "class:wired_caller"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S4-11"
+surface = "box.gap"
+box = "S4"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no hook: a bead can be created by any agent with br create, bypassing the materializer and its schema entirely. That is how 431 of 434 unlabelled beads exist"
+resolves = "a Rust hook on the bead-write path; see [[box.hook]]"
+stable_ids = ["docs/plan/flow/boxes/S4.toml#gap11", "class:hook"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S4-12"
+surface = "box.gap"
+box = "S4"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "no lock (L7): plan-materialize would read crate-atom-gate's report across a crate boundary with no pinned revision, so a report shape change silently changes what gets filed"
+resolves = "a constellation-style pin of the report schema version, checked at load"
+stable_ids = ["docs/plan/flow/boxes/S4.toml#gap12", "class:lock"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S4-13"
+surface = "box.gap"
+box = "S4"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+reason = "by-design non-gap; retain stated so it is not read as omission"
+evidence = "NOT NEEDED, stated so it is not read as an omission: formal proof (L6) does not apply — there is no theorem in 'file a bead per missing part'"
+resolves = "n/a by design"
+stable_ids = ["docs/plan/flow/boxes/S4.toml#gap13", "class:gate"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5a-01"
+surface = "box.gap"
+box = "S5a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "crate-atom part 3 / verdict_type: loop-queue-filter returns RunOutput{stdout, stderr, code}; no typed ClaimAttempt or ClaimRefused exists"
+resolves = "MISSING — create the selection verdict type and make the supervisor consume it before launchd dispatch"
+stable_ids = ["docs/plan/flow/boxes/S5a.toml#gap1", "class:verdict_type"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5a-02"
+surface = "box.gap"
+box = "S5a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "crate-atom part 5 / fuzz: no selector-specific fuzz target exercises malformed br/bv rows, claimability, or epic filtering"
+resolves = "MISSING — add a fuzz target for the selector input and its refusal lattice"
+stable_ids = ["docs/plan/flow/boxes/S5a.toml#gap2", "class:fuzz"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5a-03"
+surface = "box.gap"
+box = "S5a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "crate-atom part 6 / claim_row: 2ceb has no durable claim-strength row for the selection decision"
+resolves = "MISSING — add a claims registry row naming the selector evidence and its justifier"
+stable_ids = ["docs/plan/flow/boxes/S5a.toml#gap3", "class:claim_row"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5a-04"
+surface = "box.gap"
+box = "S5a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "crate-atom part 7 / slo: no SLO row states selection latency, freshness, or refusal behavior"
+resolves = "MISSING — add an SLO row for the launchd selection path with an owner and breach action"
+stable_ids = ["docs/plan/flow/boxes/S5a.toml#gap4", "class:slo"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5a-05"
+surface = "box.gap"
+box = "S5a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "crate-atom part 8 / oracle: BV and br are inputs but no named, persisted selection oracle compares their identity and rank"
+resolves = "MISSING — write a selection oracle row and retain the br/bv snapshot pair"
+stable_ids = ["docs/plan/flow/boxes/S5a.toml#gap5", "class:oracle"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5a-06"
+surface = "box.gap"
+box = "S5a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "crate-atom part 9 / wired_caller: the supervisor parses br ready FIFO and does not invoke loop-queue-filter, bead-availability, or fast-dispatch"
+resolves = "omp-orchestrator-2ceb — replace FIFO selection in run_cycle with the ranked selector and a real attempt-claim"
+stable_ids = ["docs/plan/flow/boxes/S5a.toml#gap6", "class:wired_caller"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5a-07"
+surface = "box.gap"
+box = "S5a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "L1 claim: the selection-to-claim transition has no append-only claim event row"
+resolves = "MISSING — add the S4-to-S5a lifecycle journal writer and emit site"
+stable_ids = ["docs/plan/flow/boxes/S5a.toml#gap7", "class:claim_row"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5a-08"
+surface = "box.gap"
+box = "S5a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "L2 slo: no measured S5a service-level floor is registered"
+resolves = "MISSING — add the S5a SLO and its breach ledger"
+stable_ids = ["docs/plan/flow/boxes/S5a.toml#gap8", "class:slo"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5a-09"
+surface = "box.gap"
+box = "S5a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "L3 oracle: no independent comparison proves BV-ranked output agrees with the claimable br snapshot"
+resolves = "MISSING — persist both outputs and compare bead id, rank, status, and assignee"
+stable_ids = ["docs/plan/flow/boxes/S5a.toml#gap9", "class:oracle"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5a-10"
+surface = "box.gap"
+box = "S5a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "L4 gate_trip: no live gate refuses a supervisor bypass that selects raw br ready FIFO"
+resolves = "omp-orchestrator-2ceb — wire the selector gate into the launchd path with a FIFO mutation leg"
+stable_ids = ["docs/plan/flow/boxes/S5a.toml#gap10", "class:gate_trip"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5a-11"
+surface = "box.gap"
+box = "S5a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "L5 fuzz: the selector's malformed-input and boundary cases have no fuzz corpus"
+resolves = "MISSING — add selector fuzz targets and retain crashing inputs"
+stable_ids = ["docs/plan/flow/boxes/S5a.toml#gap11", "class:fuzz"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5a-12"
+surface = "box.gap"
+box = "S5a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "L6 formal: no formal invariant states that a selected bead must be open, unclaimed, non-epic, and BV-ranked"
+resolves = "MISSING — write a formal or executable invariant over the selection relation"
+stable_ids = ["docs/plan/flow/boxes/S5a.toml#gap12", "class:formal"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5a-13"
+surface = "box.gap"
+box = "S5a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "L7 lock: selection has no lease or atomic claim primitive before the candidate leaves S5a"
+resolves = "ywd5 plus the S5b claim fence — bind the selected bead to an incarnation before dispatch"
+stable_ids = ["docs/plan/flow/boxes/S5a.toml#gap13", "class:lock"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5a-14"
+surface = "box.gap"
+box = "S5a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "diagram: the original row had no branch diagram; the new S5a diagram is the resolving artifact"
+resolves = "docs/plan/flow/diagrams/S5a.mmd validated with frankenmermaid"
+stable_ids = ["docs/plan/flow/boxes/S5a.toml#gap14", "class:diagram"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5a-15"
+surface = "box.gap"
+box = "S5a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "hook: no certified Rust hook row exists for pre-dispatch BV/claim selection"
+resolves = "MISSING — add the S5a row to control-plane/hooks_certified.toml and pass /hook-certification"
+stable_ids = ["docs/plan/flow/boxes/S5a.toml#gap15", "class:gate"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5a-16"
+surface = "box.gap"
+box = "S5a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "event_row: no durable S4-to-S5a lifecycle transition row is emitted when selection begins or refuses"
+resolves = "MISSING — lifecycle journal writer and selector emit site carrying rank, claim attempt, outcome, and blocker chain"
+stable_ids = ["docs/plan/flow/boxes/S5a.toml#gap16", "class:event_row"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5b-01"
+surface = "box.gap"
+box = "S5b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "crate-atom part 2 / bin: dispatch-claim-fence is a library-only mechanism; no dedicated binary owns its admission invocation"
+resolves = "MISSING — add or name the thin caller that exposes the claim-fence decision without duplicating the kernel"
+stable_ids = ["docs/plan/flow/boxes/S5b.toml#gap1", "class:gate_trip"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5b-02"
+surface = "box.gap"
+box = "S5b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "crate-atom part 5 / fuzz: no fuzz target covers DispatchIntent, BeadSnapshot, or ClaimFenceError identity mutations"
+resolves = "MISSING — add a dispatch-claim-fence fuzz target and preserve malformed snapshots"
+stable_ids = ["docs/plan/flow/boxes/S5b.toml#gap2", "class:fuzz"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5b-03"
+surface = "box.gap"
+box = "S5b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "crate-atom part 6 / claim_row: ywd5 has no durable claim-strength row for the permission boundary"
+resolves = "MISSING — add a claims registry row naming the claim evidence and justifier"
+stable_ids = ["docs/plan/flow/boxes/S5b.toml#gap3", "class:claim_row"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5b-04"
+surface = "box.gap"
+box = "S5b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "crate-atom part 7 / slo: no S5b SLO covers authorization latency or packet-preflight refusal rate"
+resolves = "MISSING — add an S5b SLO row with owner and breach action"
+stable_ids = ["docs/plan/flow/boxes/S5b.toml#gap4", "class:slo"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5b-05"
+surface = "box.gap"
+box = "S5b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "crate-atom part 8 / oracle: no external oracle compares claim state, packet digest, target pane, and transport identity"
+resolves = "MISSING — persist the pre-send snapshot and compare it to the dispatch receipt"
+stable_ids = ["docs/plan/flow/boxes/S5b.toml#gap5", "class:oracle"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5b-06"
+surface = "box.gap"
+box = "S5b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "L1 claim: DispatchPermit is not itself a durable lifecycle claim row"
+resolves = "kxe.8 plus the lifecycle journal writer — emit a claim-to-dispatch row with bead, pane, agent, and incarnation"
+stable_ids = ["docs/plan/flow/boxes/S5b.toml#gap6", "class:claim_row"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5b-07"
+surface = "box.gap"
+box = "S5b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "L2 slo: no registered S5b service-level floor exists"
+resolves = "MISSING — register the claim-fence and packet-preflight SLO"
+stable_ids = ["docs/plan/flow/boxes/S5b.toml#gap7", "class:slo"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5b-08"
+surface = "box.gap"
+box = "S5b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "L3 oracle: the permit has no independent post-send transport oracle"
+resolves = "receiver-receipt and ack-stage must consume the dispatch receipt without treating permit success as delivery"
+stable_ids = ["docs/plan/flow/boxes/S5b.toml#gap8", "class:oracle"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5b-09"
+surface = "box.gap"
+box = "S5b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "L4 gate_trip: no standalone conformance gate proves the live caller cannot bypass authorize before rendering"
+resolves = "MISSING — add a caller mutation leg that removes authorize_bead_dispatch_as and must go RED"
+stable_ids = ["docs/plan/flow/boxes/S5b.toml#gap9", "class:gate_trip"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5b-10"
+surface = "box.gap"
+box = "S5b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "L5 fuzz: packet field and transport-boundary fuzz coverage is absent"
+resolves = "MISSING — fuzz PacketError and transport selection against malformed snapshots"
+stable_ids = ["docs/plan/flow/boxes/S5b.toml#gap10", "class:fuzz"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5b-11"
+surface = "box.gap"
+box = "S5b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "L6 formal: no formal invariant connects a permit to the exact bead, pane, agent, and incarnation"
+resolves = "MISSING — encode the identity relation as an executable or formal invariant"
+stable_ids = ["docs/plan/flow/boxes/S5b.toml#gap11", "class:formal"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5b-12"
+surface = "box.gap"
+box = "S5b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "L7 lock: pane-dispatch-fence exists but no direct caller was found in the S5b supervisor path"
+resolves = "MISSING — wire the fence before the first transport side effect and retain its refusal"
+stable_ids = ["docs/plan/flow/boxes/S5b.toml#gap12", "class:lock"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5b-13"
+surface = "box.gap"
+box = "S5b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "event_row: no durable S5a-to-S5b transition row is emitted at the authorization boundary"
+resolves = "MISSING — lifecycle journal writer and dispatch intent emission at the caller"
+stable_ids = ["docs/plan/flow/boxes/S5b.toml#gap13", "class:event_row"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5b-14"
+surface = "box.gap"
+box = "S5b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "diagram: the original row had no S5b branch diagram"
+resolves = "docs/plan/flow/diagrams/S5b.mmd validated with frankenmermaid"
+stable_ids = ["docs/plan/flow/boxes/S5b.toml#gap14", "class:diagram"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S5b-15"
+surface = "box.gap"
+box = "S5b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "hook: no certified Rust hook row exists for claim-fence and packet-preflight admission"
+resolves = "MISSING — add the S5b row to control-plane/hooks_certified.toml and pass /hook-certification"
+stable_ids = ["docs/plan/flow/boxes/S5b.toml#gap15", "class:gate"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6a-01"
+surface = "box.gap"
+box = "S6a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+reason = "by-design non-gap; retain stated so it is not read as omission"
+evidence = "atom:lib status=PRESENT; receiver-receipt source owns the classifier"
+resolves = "none; retain crates/receiver-receipt/src/lib.rs as the lib authority"
+stable_ids = ["docs/plan/flow/boxes/S6a.toml#gap1", "class:lib"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6a-02"
+surface = "box.gap"
+box = "S6a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:bin status=MISSING; receiver-receipt has no dedicated operator binary"
+resolves = "add a thin binary or record an explicit non-applicability allowance"
+stable_ids = ["docs/plan/flow/boxes/S6a.toml#gap2", "class:bin"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6a-03"
+surface = "box.gap"
+box = "S6a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:verdict_type status=PRESENT; ReceiptVerdict exists, but AckIncarnationMismatch is absent"
+resolves = "land the planned typed incarnation mismatch reason in the receipt owner"
+stable_ids = ["docs/plan/flow/boxes/S6a.toml#gap3", "class:verdict_type(atom 3)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6a-04"
+surface = "box.gap"
+box = "S6a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+reason = "by-design non-gap; retain stated so it is not read as omission"
+evidence = "atom:tests status=PRESENT; unit and integration tests exist"
+resolves = "none for presence; keep a known-good and mutation leg for each receipt arm"
+stable_ids = ["docs/plan/flow/boxes/S6a.toml#gap4", "class:tests"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6a-05"
+surface = "box.gap"
+box = "S6a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:fuzz_target status=MISSING; no receipt parser fuzz target is declared"
+resolves = "add a bounded parser fuzz target and a crash-free corpus gate"
+stable_ids = ["docs/plan/flow/boxes/S6a.toml#gap5", "class:fuzz_target"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6a-06"
+surface = "box.gap"
+box = "S6a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:claim_row status=MISSING; no claim-registry row names receipt ownership"
+resolves = "add a claim row naming the receipt invariant and its independent evidence"
+stable_ids = ["docs/plan/flow/boxes/S6a.toml#gap6", "class:claim_row(atom 6)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6a-07"
+surface = "box.gap"
+box = "S6a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:slo_row status=MISSING; receipt latency and stale-read SLO are not registered"
+resolves = "add an SLO row with a measured observation window and refusal budget"
+stable_ids = ["docs/plan/flow/boxes/S6a.toml#gap7", "class:slo_row(atom 7)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6a-08"
+surface = "box.gap"
+box = "S6a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:oracle status=PRESENT only as pane-truth dev authority; live delivery oracle remains unproven"
+resolves = "name and run an independent receiver/transport oracle without upgrading tmux glyphs"
+stable_ids = ["docs/plan/flow/boxes/S6a.toml#gap8", "class:oracle(atom 8)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6a-09"
+surface = "box.gap"
+box = "S6a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:wired_caller status=PARTIAL; ack-stage calls the classifier but no ywd5 incarnation caller exists"
+resolves = "wire the same pane/incarnation identity through the production ACK caller"
+stable_ids = ["docs/plan/flow/boxes/S6a.toml#gap9", "class:wired_caller(atom 9)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6a-10"
+surface = "box.gap"
+box = "S6a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L1 evidence claim is missing for the current 16-arm inventory and the planned 17th arm"
+resolves = "record the source command, timestamp, and owner in the claim registry"
+stable_ids = ["docs/plan/flow/boxes/S6a.toml#gap10", "class:claim_evidence(L1)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6a-11"
+surface = "box.gap"
+box = "S6a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L2 SLO is missing for bounded ACK read-back freshness"
+resolves = "register the receipt-window SLO and measure it on the real observer path"
+stable_ids = ["docs/plan/flow/boxes/S6a.toml#gap11", "class:slo(L2)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6a-12"
+surface = "box.gap"
+box = "S6a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L3 external oracle is incomplete for transport delivery"
+resolves = "run a separate accepted-delivery oracle and preserve its evidence"
+stable_ids = ["docs/plan/flow/boxes/S6a.toml#gap12", "class:oracle(L3)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6a-13"
+surface = "box.gap"
+box = "S6a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L4 gate trip is missing for incarnation mismatch"
+resolves = "add a production gate that refuses mismatched ACK identity before recording receipt"
+stable_ids = ["docs/plan/flow/boxes/S6a.toml#gap13", "class:gate_trip(L4)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6a-14"
+surface = "box.gap"
+box = "S6a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L5 fuzz evidence is missing for ACK comment parsing"
+resolves = "add fuzz and malformed-comment mutation legs"
+stable_ids = ["docs/plan/flow/boxes/S6a.toml#gap14", "class:fuzz(L5)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6a-15"
+surface = "box.gap"
+box = "S6a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L6 formal invariant is missing for receipt identity preservation"
+resolves = "state and mechanically check that pane and incarnation are preserved across ACK projection"
+stable_ids = ["docs/plan/flow/boxes/S6a.toml#gap15", "class:formal(L6)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6a-16"
+surface = "box.gap"
+box = "S6a"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L7 lock/lease boundary is missing; pane id alone remains reusable"
+resolves = "land the incarnation lease fence only after the freeze lifts and ywd5 is approved"
+stable_ids = ["docs/plan/flow/boxes/S6a.toml#gap16", "class:lock(L7)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6b-01"
+surface = "box.gap"
+box = "S6b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+reason = "by-design non-gap; retain stated so it is not read as omission"
+evidence = "atom:lib status=PRESENT; dispatch-silence-watch owns the silence classifier"
+resolves = "none; retain crates/dispatch-silence-watch/src/lib.rs as the lib authority"
+stable_ids = ["docs/plan/flow/boxes/S6b.toml#gap1", "class:lib"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6b-02"
+surface = "box.gap"
+box = "S6b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:bin status=MISSING; the focused crate does not expose the required operator entrypoint"
+resolves = "add a thin bounded binary or name the consuming supervisor as the sole binary owner"
+stable_ids = ["docs/plan/flow/boxes/S6b.toml#gap2", "class:bin"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6b-03"
+surface = "box.gap"
+box = "S6b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:verdict_type status=PRESENT; SilenceVerdict exists, classify_followup does not"
+resolves = "define the missing typed follow-up projection or explicitly bind the stage to SilenceVerdict"
+stable_ids = ["docs/plan/flow/boxes/S6b.toml#gap3", "class:verdict_type(atom 3)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6b-04"
+surface = "box.gap"
+box = "S6b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:tests status=PARTIAL; classifier tests exist but no production caller contract test is cited"
+resolves = "add a caller-level test that proves br read-back reaches the supervisor decision"
+stable_ids = ["docs/plan/flow/boxes/S6b.toml#gap4", "class:tests"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6b-05"
+surface = "box.gap"
+box = "S6b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:fuzz_target status=MISSING; tracker comment parsing has no fuzz target"
+resolves = "add bounded malformed-output fuzz coverage"
+stable_ids = ["docs/plan/flow/boxes/S6b.toml#gap5", "class:fuzz_target"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6b-06"
+surface = "box.gap"
+box = "S6b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:claim_row status=MISSING; silence ownership is not in the claim registry"
+resolves = "register the authoritative tracker read-back claim"
+stable_ids = ["docs/plan/flow/boxes/S6b.toml#gap6", "class:claim_row(atom 6)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6b-07"
+surface = "box.gap"
+box = "S6b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:slo_row status=MISSING; dispatch deadline and read-back freshness have no SLO row"
+resolves = "register the deadline and escalation SLO with a measured clock source"
+stable_ids = ["docs/plan/flow/boxes/S6b.toml#gap7", "class:slo_row(atom 7)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6b-08"
+surface = "box.gap"
+box = "S6b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:oracle status=MISSING; tracker read-back is the method but not an independent oracle"
+resolves = "define an independent ledger/comment oracle and reconcile it with the classifier"
+stable_ids = ["docs/plan/flow/boxes/S6b.toml#gap8", "class:oracle(atom 8)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6b-09"
+surface = "box.gap"
+box = "S6b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:wired_caller status=PARTIAL; four textual hits include caller and self references, not a wiring proof"
+resolves = "prove one production caller with a positive-control dispatch and no-caller gate"
+stable_ids = ["docs/plan/flow/boxes/S6b.toml#gap9", "class:wired_caller(atom 9)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6b-10"
+surface = "box.gap"
+box = "S6b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L1 evidence claim is missing for the stage transition and actor identity"
+resolves = "record the stage, bead, actor, pane, and read-back evidence in a claim row"
+stable_ids = ["docs/plan/flow/boxes/S6b.toml#gap10", "class:claim_evidence(L1)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6b-11"
+surface = "box.gap"
+box = "S6b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L2 SLO is missing for silence deadline and escalation latency"
+resolves = "register and measure the bounded deadline"
+stable_ids = ["docs/plan/flow/boxes/S6b.toml#gap11", "class:slo(L2)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6b-12"
+surface = "box.gap"
+box = "S6b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L3 independent oracle is missing for comment persistence"
+resolves = "re-read the tracker through a separate durable evidence path"
+stable_ids = ["docs/plan/flow/boxes/S6b.toml#gap12", "class:oracle(L3)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6b-13"
+surface = "box.gap"
+box = "S6b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L4 gate trip is missing for tracker error versus silent deadline"
+resolves = "make TrackerError a production refusal before follow-up action"
+stable_ids = ["docs/plan/flow/boxes/S6b.toml#gap13", "class:gate_trip(L4)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6b-14"
+surface = "box.gap"
+box = "S6b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L5 fuzz evidence is missing for attribution block parsing"
+resolves = "fuzz malformed br comments and preserve the refusal corpus"
+stable_ids = ["docs/plan/flow/boxes/S6b.toml#gap14", "class:fuzz(L5)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6b-15"
+surface = "box.gap"
+box = "S6b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L6 formal state invariant is missing for reassignment and silence precedence"
+resolves = "state and check that reassignment dominates any stale silence result"
+stable_ids = ["docs/plan/flow/boxes/S6b.toml#gap15", "class:formal(L6)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6b-16"
+surface = "box.gap"
+box = "S6b"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L7 lock boundary is missing between dispatch epoch and follow-up read"
+resolves = "bind the read-back to the dispatch identity before classifying silence"
+stable_ids = ["docs/plan/flow/boxes/S6b.toml#gap16", "class:lock(L7)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6c-01"
+surface = "box.gap"
+box = "S6c"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+reason = "by-design non-gap; retain stated so it is not read as omission"
+evidence = "atom:lib status=PRESENT; verify-dispatch owns the status verifier"
+resolves = "none; retain crates/verify-dispatch/src/lib.rs as the kernel"
+stable_ids = ["docs/plan/flow/boxes/S6c.toml#gap1", "class:lib"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6c-02"
+surface = "box.gap"
+box = "S6c"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:bin status=PRESENT in the verify-dispatch package, but no production caller is established"
+resolves = "wire the binary into the supervisor or record why it remains an external lane"
+stable_ids = ["docs/plan/flow/boxes/S6c.toml#gap2", "class:bin"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6c-03"
+surface = "box.gap"
+box = "S6c"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:verdict_type status=PARTIAL; CloseReasonVerdict exists but Grade is missing"
+resolves = "land the typed Grade contract and compose it with CloseReasonVerdict"
+stable_ids = ["docs/plan/flow/boxes/S6c.toml#gap3", "class:verdict_type(atom 3)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6c-04"
+surface = "box.gap"
+box = "S6c"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:tests status=PRESENT; tests exercise verify rules, not a full verify-grade-close journey"
+resolves = "add a caller-level positive control and mutation close test"
+stable_ids = ["docs/plan/flow/boxes/S6c.toml#gap4", "class:tests"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6c-05"
+surface = "box.gap"
+box = "S6c"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:fuzz_target status=MISSING for tracker close read-back and grade parsing"
+resolves = "add bounded fuzz coverage for malformed close rows and grade payloads"
+stable_ids = ["docs/plan/flow/boxes/S6c.toml#gap5", "class:fuzz_target"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6c-06"
+surface = "box.gap"
+box = "S6c"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:claim_row status=MISSING for independent grading custody"
+resolves = "register grader identity, evidence, and mutation result as a claim"
+stable_ids = ["docs/plan/flow/boxes/S6c.toml#gap6", "class:claim_row(atom 6)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6c-07"
+surface = "box.gap"
+box = "S6c"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:slo_row status=MISSING for verify, grade, and close latency"
+resolves = "register bounded verification and close-read-back SLOs"
+stable_ids = ["docs/plan/flow/boxes/S6c.toml#gap7", "class:slo_row(atom 7)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6c-08"
+surface = "box.gap"
+box = "S6c"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:oracle status=PARTIAL; br status is ground truth but no independent grade oracle is wired"
+resolves = "define and run the independent acceptance rerun oracle"
+stable_ids = ["docs/plan/flow/boxes/S6c.toml#gap8", "class:oracle(atom 8)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6c-09"
+surface = "box.gap"
+box = "S6c"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:wired_caller status=MISSING; focused caller count is textual and not a reachable invocation proof"
+resolves = "wire verify-dispatch into the supervisor and add a positive-control trigger test"
+stable_ids = ["docs/plan/flow/boxes/S6c.toml#gap9", "class:wired_caller(atom 9)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6c-10"
+surface = "box.gap"
+box = "S6c"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L1 evidence claim is missing for the second-agent grading handoff"
+resolves = "record grader, command, SHA, mutation, and cited paths in the claim registry"
+stable_ids = ["docs/plan/flow/boxes/S6c.toml#gap10", "class:claim_evidence(L1)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6c-11"
+surface = "box.gap"
+box = "S6c"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L2 SLO is missing for bounded grade and close progression"
+resolves = "register the maximum age and escalation action"
+stable_ids = ["docs/plan/flow/boxes/S6c.toml#gap11", "class:slo(L2)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6c-12"
+surface = "box.gap"
+box = "S6c"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L3 independent oracle is incomplete for acceptance satisfaction"
+resolves = "rerun the bead acceptance from a different agent and preserve the output"
+stable_ids = ["docs/plan/flow/boxes/S6c.toml#gap12", "class:oracle(L3)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6c-13"
+surface = "box.gap"
+box = "S6c"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L4 gate trip is missing for self-grade and prose-close refusal"
+resolves = "route all close decisions through the typed grade and CloseReasonVerdict gates"
+stable_ids = ["docs/plan/flow/boxes/S6c.toml#gap13", "class:gate_trip(L4)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6c-14"
+surface = "box.gap"
+box = "S6c"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L5 fuzz evidence is missing for close-reason and grade parsers"
+resolves = "add malformed-input fuzz and regression corpus cases"
+stable_ids = ["docs/plan/flow/boxes/S6c.toml#gap14", "class:fuzz(L5)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6c-15"
+surface = "box.gap"
+box = "S6c"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L6 formal invariant is missing for non-author grading and sanctioned prefix"
+resolves = "state and check grader disjointness and prefix exhaustiveness"
+stable_ids = ["docs/plan/flow/boxes/S6c.toml#gap15", "class:formal(L6)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S6c-16"
+surface = "box.gap"
+box = "S6c"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L7 lease/lock boundary is missing for verify-grade-close custody"
+resolves = "bind verification and close effects to the dispatch identity before any close write"
+stable_ids = ["docs/plan/flow/boxes/S6c.toml#gap16", "class:lock(L7)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S7-01"
+surface = "box.gap"
+box = "S7"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+reason = "by-design non-gap; retain stated so it is not read as omission"
+evidence = "atom.1.lib: PRESENT — typed Rust dispatcher logic exists"
+resolves = "none; preserve source-backed kernel"
+stable_ids = ["docs/plan/flow/boxes/S7.toml#gap1", "class:atom.1.lib"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S7-02"
+surface = "box.gap"
+box = "S7"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+reason = "by-design non-gap; retain stated so it is not read as omission"
+evidence = "atom.2.bin: PRESENT — pre-commit-gate is a Rust binary target"
+resolves = "none; retain the installed hook identity proof"
+stable_ids = ["docs/plan/flow/boxes/S7.toml#gap2", "class:atom.2.bin"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S7-03"
+surface = "box.gap"
+box = "S7"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+reason = "by-design non-gap; retain stated so it is not read as omission"
+evidence = "atom.3.verdict_type: PRESENT — PreCommitOutcome and downstream typed verdicts have closed arms"
+resolves = "none; keep the arm inventory exhaustive"
+stable_ids = ["docs/plan/flow/boxes/S7.toml#gap3", "class:atom.3.verdict_type"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S7-04"
+surface = "box.gap"
+box = "S7"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+reason = "by-design non-gap; retain stated so it is not read as omission"
+evidence = "atom.4.tests: PRESENT — no-shell-gate has 40 integration test files and the two downstream gates add test targets"
+resolves = "none; d3gm must keep the gate tests attributable"
+stable_ids = ["docs/plan/flow/boxes/S7.toml#gap4", "class:atom.4.tests"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S7-05"
+surface = "box.gap"
+box = "S7"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom.5.fuzz: MISSING — the four root fuzz targets do not target this dispatcher or its staged-set parser"
+resolves = "MISSING: add a dispatcher/staged-set fuzz target or a named d3gm allowance with a ratcheting ceiling"
+stable_ids = ["docs/plan/flow/boxes/S7.toml#gap5", "class:atom.5.fuzz"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S7-06"
+surface = "box.gap"
+box = "S7"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom.6.claim: MISSING — no claim registry row states the dispatcher contract"
+resolves = "MISSING: add a claims registry row with a stronger justifier and source pin"
+stable_ids = ["docs/plan/flow/boxes/S7.toml#gap6", "class:atom.6.claim"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S7-07"
+surface = "box.gap"
+box = "S7"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom.7.slo: MISSING — no slo.yaml row covers validation latency or refusal completeness"
+resolves = "MISSING: add a validation SLO row with a measured command and threshold"
+stable_ids = ["docs/plan/flow/boxes/S7.toml#gap7", "class:atom.7.slo"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S7-08"
+surface = "box.gap"
+box = "S7"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom.8.oracle: MISSING — no independent external oracle compares the dispatcher result"
+resolves = "MISSING: add a named external/differential oracle and run it from the gate"
+stable_ids = ["docs/plan/flow/boxes/S7.toml#gap8", "class:atom.8.oracle"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S7-09"
+surface = "box.gap"
+box = "S7"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom.9.wired_caller: PARTIAL — the installed hook reaches the dispatcher, but an independent reachability assertion for all eight lanes is absent"
+resolves = "d3gm: add a WIRED_CALLERS reachability test with a positive control and a dead-lane mutation"
+stable_ids = ["docs/plan/flow/boxes/S7.toml#gap9", "class:atom.9.wired_caller"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S7-10"
+surface = "box.gap"
+box = "S7"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor.L1.claim_row: MISSING — the gate's load-bearing claim is not registered"
+resolves = "MISSING: register the claim row and its source-backed justifier"
+stable_ids = ["docs/plan/flow/boxes/S7.toml#gap10", "class:claim_row(L1)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S7-11"
+surface = "box.gap"
+box = "S7"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor.L2.slo: MISSING — no performance floor is registered for this tick-path validation"
+resolves = "MISSING: add the SLO row and a bounded measurement command"
+stable_ids = ["docs/plan/flow/boxes/S7.toml#gap11", "class:slo(L2)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S7-12"
+surface = "box.gap"
+box = "S7"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor.L3.oracle: MISSING — RCH admission is an execution route, not a correctness oracle"
+resolves = "MISSING: name and invoke an independent correctness oracle"
+stable_ids = ["docs/plan/flow/boxes/S7.toml#gap12", "class:oracle(L3)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S7-13"
+surface = "box.gap"
+box = "S7"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor.L4.gate_trip: PARTIAL — source has refusal and anti-vacuity branches, but a current eight-lane good/bad/mutation matrix is not proven"
+resolves = "d3gm: publish the eight-lane matrix with known-good, known-bad, mutation, and empty-scan legs"
+stable_ids = ["docs/plan/flow/boxes/S7.toml#gap13", "class:gate_trip(L4)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S7-14"
+surface = "box.gap"
+box = "S7"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor.L5.fuzz: MISSING — no dispatcher fuzz corpus or target"
+resolves = "MISSING: add fuzz/fuzz_targets/pre_commit_dispatcher.rs and seed the empty/deletion paths"
+stable_ids = ["docs/plan/flow/boxes/S7.toml#gap14", "class:fuzz(L5)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S7-15"
+surface = "box.gap"
+box = "S7"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor.L6.formal: MISSING — no formal artifact checks the staged-set-to-verdict invariant"
+resolves = "MISSING: add a formal/conformance witness or explicitly escalate the assurance decision"
+stable_ids = ["docs/plan/flow/boxes/S7.toml#gap15", "class:formal(L6)"]
+would_have_asked_joshua = true
+moved_off_human = true
+
+[[row]]
+id = "GAP-S7-16"
+surface = "box.gap"
+box = "S7"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor.L7.lock: PARTIAL — commit serialization and staged-set TOCTOU recheck exist, but cross-process lock coverage is not independently proven"
+resolves = "MISSING: add a lock contention race leg and a certified lock row"
+stable_ids = ["docs/plan/flow/boxes/S7.toml#gap16", "class:lock(L7)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S7-17"
+surface = "box.gap"
+box = "S7"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+reason = "by-design non-gap; retain stated so it is not read as omission"
+evidence = "diagram: PRESENT — one node per branch, validate_exit=0, rendered SVG exists"
+resolves = "none; x226 must consume the generated diagram rather than a hand-edited branch list"
+stable_ids = ["docs/plan/flow/boxes/S7.toml#gap17", "class:diagram"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S7-18"
+surface = "box.gap"
+box = "S7"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "hook: PARTIAL — the local hook is Rust/Mach-O and reaches the dispatcher, but its hooks_certified.toml row and six-stage certification evidence are not present in this repository"
+resolves = "MISSING: add the certified hook row, source commit, policy file, and /hook-certification stage receipt"
+stable_ids = ["docs/plan/flow/boxes/S7.toml#gap18", "class:hook"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S7-19"
+surface = "box.gap"
+box = "S7"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+reason = "by-design non-gap; retain stated so it is not read as omission"
+evidence = "measurement: PRESENT for this Wave 1 pass — every owned numeric claim above has a command, timestamp, and actor"
+resolves = "none for this pass; future measurements must refresh moving RCH and hook state"
+stable_ids = ["docs/plan/flow/boxes/S7.toml#gap19", "class:measurement"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S8-01"
+surface = "box.gap"
+box = "S8"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+reason = "by-design non-gap; retain stated so it is not read as omission"
+evidence = "atom.1.lib: PRESENT — installer identity and placement logic exists in typed Rust"
+resolves = "none; preserve the source-backed kernel"
+stable_ids = ["docs/plan/flow/boxes/S8.toml#gap1", "class:atom.1.lib"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S8-02"
+surface = "box.gap"
+box = "S8"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+reason = "by-design non-gap; retain stated so it is not read as omission"
+evidence = "atom.2.bin: PRESENT — installer has a Rust binary target"
+resolves = "none; retain the CLI target and identity marker"
+stable_ids = ["docs/plan/flow/boxes/S8.toml#gap2", "class:atom.2.bin"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S8-03"
+surface = "box.gap"
+box = "S8"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+reason = "by-design non-gap; retain stated so it is not read as omission"
+evidence = "atom.3.verdict_type: PRESENT — RestartPostcondition and CargoBuildOutcome are typed"
+resolves = "none; keep all refusal and inconclusive arms distinct"
+stable_ids = ["docs/plan/flow/boxes/S8.toml#gap3", "class:atom.3.verdict_type"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S8-04"
+surface = "box.gap"
+box = "S8"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom.4.tests: MISSING — no crates/installer/tests target; inline unit tests do not satisfy the external contract target"
+resolves = "jplf.7.20: add a real install-over-existing-artifact and rollback integration target"
+stable_ids = ["docs/plan/flow/boxes/S8.toml#gap4", "class:atom.4.tests"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S8-05"
+surface = "box.gap"
+box = "S8"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom.5.fuzz: MISSING — no installer identity or rollback fuzz target"
+resolves = "MISSING: add fuzz/fuzz_targets/installer_identity.rs or a named d3gm allowance"
+stable_ids = ["docs/plan/flow/boxes/S8.toml#gap5", "class:atom.5.fuzz"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S8-06"
+surface = "box.gap"
+box = "S8"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom.6.claim: MISSING — no claim registry row for identity-safe replacement"
+resolves = "MISSING: register the identity and rollback claim with a stronger justifier"
+stable_ids = ["docs/plan/flow/boxes/S8.toml#gap6", "class:atom.6.claim"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S8-07"
+surface = "box.gap"
+box = "S8"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom.7.slo: MISSING — no install or rollback SLO row"
+resolves = "MISSING: add bounded install latency and rollback completion SLOs"
+stable_ids = ["docs/plan/flow/boxes/S8.toml#gap7", "class:atom.7.slo"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S8-08"
+surface = "box.gap"
+box = "S8"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom.8.oracle: MISSING — no independent artifact oracle compares predecessor and installed bytes/build IDs"
+resolves = "sor6 plus MISSING: add a cross-platform artifact oracle and receipt hash"
+stable_ids = ["docs/plan/flow/boxes/S8.toml#gap8", "class:atom.8.oracle"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S8-09"
+surface = "box.gap"
+box = "S8"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom.9.wired_caller: MISSING — installer is hand-invocable but no in-repo caller or reachability assertion consumes it"
+resolves = "6hrv/jplf.7: add a real install caller and a positive-control reachability test"
+stable_ids = ["docs/plan/flow/boxes/S8.toml#gap9", "class:atom.9.wired_caller"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S8-10"
+surface = "box.gap"
+box = "S8"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor.L1.claim_row: MISSING — install identity is not registered as a load-bearing claim"
+resolves = "MISSING: add the claim row and source pin"
+stable_ids = ["docs/plan/flow/boxes/S8.toml#gap10", "class:claim_row(L1)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S8-11"
+surface = "box.gap"
+box = "S8"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor.L2.slo: MISSING — no measured install/rollback performance floor"
+resolves = "MISSING: add the SLO row and bounded measurement"
+stable_ids = ["docs/plan/flow/boxes/S8.toml#gap11", "class:slo(L2)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S8-12"
+surface = "box.gap"
+box = "S8"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor.L3.oracle: MISSING — RCH placement is not a correctness oracle"
+resolves = "MISSING: add an independent artifact identity/rollback oracle"
+stable_ids = ["docs/plan/flow/boxes/S8.toml#gap12", "class:oracle(L3)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S8-13"
+surface = "box.gap"
+box = "S8"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor.L4.gate_trip: PARTIAL — source refuses identity drift and build failures, but no current rollback transcript proves the end-to-end gate trip"
+resolves = "jplf.7.20: run the rollback acceptance with exit_code=0 and rollback=true"
+stable_ids = ["docs/plan/flow/boxes/S8.toml#gap13", "class:gate_trip(L4)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S8-14"
+surface = "box.gap"
+box = "S8"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor.L5.fuzz: MISSING — no adversarial predecessor/build-id corpus"
+resolves = "MISSING: add installer fuzz inputs for foreign, unknown, and mismatched artifacts"
+stable_ids = ["docs/plan/flow/boxes/S8.toml#gap14", "class:fuzz(L5)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S8-15"
+surface = "box.gap"
+box = "S8"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor.L6.formal: MISSING — no formal invariant for preserve-before-replace and identity refusal"
+resolves = "MISSING: add a formal/conformance witness or escalate the assurance decision"
+stable_ids = ["docs/plan/flow/boxes/S8.toml#gap15", "class:formal(L6)"]
+would_have_asked_joshua = true
+moved_off_human = true
+
+[[row]]
+id = "GAP-S8-16"
+surface = "box.gap"
+box = "S8"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor.L7.lock: PARTIAL — .build_in_flight is checked, but cross-process ownership and rollback locking are not independently proven"
+resolves = "MISSING: add a lock contention test and certified ownership row"
+stable_ids = ["docs/plan/flow/boxes/S8.toml#gap16", "class:lock(L7)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S8-17"
+surface = "box.gap"
+box = "S8"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+reason = "by-design non-gap; retain stated so it is not read as omission"
+evidence = "diagram: PRESENT — one node per branch, validate_exit=0, rendered SVG exists"
+resolves = "none; x226 must consume the generated branch diagram"
+stable_ids = ["docs/plan/flow/boxes/S8.toml#gap17", "class:diagram"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S8-18"
+surface = "box.gap"
+box = "S8"
+severity_in = "gap"
+disposition = "HUMAN_DECISION"
+reason = "automatic installation is irreversible harm-class; Joshua must authorize the hook"
+evidence = "hook: MISSING — installer has no certified hook row or automatic invocation path"
+resolves = "MISSING: add a Rust certified install hook only if Joshua approves automatic installation"
+stable_ids = ["docs/plan/flow/boxes/S8.toml#gap18", "class:hook"]
+would_have_asked_joshua = true
+moved_off_human = false
+
+[[row]]
+id = "GAP-S8-19"
+surface = "box.gap"
+box = "S8"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+reason = "by-design non-gap; retain stated so it is not read as omission"
+evidence = "measurement: PRESENT for this Wave 1 pass — every owned numeric claim above has a command, timestamp, and actor"
+resolves = "none for this pass; refresh moving RCH and artifact state before approval"
+stable_ids = ["docs/plan/flow/boxes/S8.toml#gap19", "class:measurement"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S9-01"
+surface = "box.gap"
+box = "S9"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+reason = "by-design non-gap; retain stated so it is not read as omission"
+evidence = "atom:lib status=PRESENT; decision-ledger owns append and error types"
+resolves = "none; retain crates/decision-ledger/src/lib.rs as the ledger kernel"
+stable_ids = ["docs/plan/flow/boxes/S9.toml#gap1", "class:lib"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S9-02"
+surface = "box.gap"
+box = "S9"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:bin status=MISSING; no dedicated decision-ledger operator binary is registered"
+resolves = "add a thin durable append/read binary or name the supervisor as the binary owner"
+stable_ids = ["docs/plan/flow/boxes/S9.toml#gap2", "class:bin"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S9-03"
+surface = "box.gap"
+box = "S9"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+reason = "by-design non-gap; retain stated so it is not read as omission"
+evidence = "atom:verdict_type status=PRESENT; AppendOutcome and LedgerError are exhaustive"
+resolves = "none for current arms; add a typed consumer verdict only if the ledger contract requires it"
+stable_ids = ["docs/plan/flow/boxes/S9.toml#gap3", "class:verdict_type(atom 3)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S9-04"
+surface = "box.gap"
+box = "S9"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+reason = "by-design non-gap; retain stated so it is not read as omission"
+evidence = "atom:tests status=PRESENT; append and malformed-row behavior are tested"
+resolves = "none for presence; add a production consumer journey when the gate is wired"
+stable_ids = ["docs/plan/flow/boxes/S9.toml#gap4", "class:tests"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S9-05"
+surface = "box.gap"
+box = "S9"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:fuzz_target status=MISSING for malformed ledger line and decision payload parsing"
+resolves = "add bounded fuzz coverage for JSONL row boundaries"
+stable_ids = ["docs/plan/flow/boxes/S9.toml#gap5", "class:fuzz_target"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S9-06"
+surface = "box.gap"
+box = "S9"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:claim_row status=MISSING for owner-routed decision custody"
+resolves = "register each decision question with owner, evidence, and resolution"
+stable_ids = ["docs/plan/flow/boxes/S9.toml#gap6", "class:claim_row(atom 6)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S9-07"
+surface = "box.gap"
+box = "S9"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:slo_row status=MISSING for append durability and decision read latency"
+resolves = "register append/read durability and bounded consumer SLOs"
+stable_ids = ["docs/plan/flow/boxes/S9.toml#gap7", "class:slo_row(atom 7)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S9-08"
+surface = "box.gap"
+box = "S9"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:oracle status=MISSING; no independent consumer oracle checks that the supervisor honored a row"
+resolves = "add a third-party read-back or decision replay oracle"
+stable_ids = ["docs/plan/flow/boxes/S9.toml#gap8", "class:oracle(atom 8)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S9-09"
+surface = "box.gap"
+box = "S9"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "atom:wired_caller status=PARTIAL; supervisor calls classify_heartbeat but gate 12.58 and consumer 12.59 are absent"
+resolves = "wire both named gate and consumer and add a reachable positive-control trigger"
+stable_ids = ["docs/plan/flow/boxes/S9.toml#gap9", "class:wired_caller(atom 9)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S9-10"
+surface = "box.gap"
+box = "S9"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L1 evidence claim is missing for owner=josh halt decisions"
+resolves = "record the decision question, owner, and evidence as a durable claim row"
+stable_ids = ["docs/plan/flow/boxes/S9.toml#gap10", "class:claim_evidence(L1)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S9-11"
+surface = "box.gap"
+box = "S9"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L2 SLO is missing for decision append and read-back"
+resolves = "register and measure bounded ledger latency"
+stable_ids = ["docs/plan/flow/boxes/S9.toml#gap11", "class:slo(L2)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S9-12"
+surface = "box.gap"
+box = "S9"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L3 independent oracle is missing for honoring the decision"
+resolves = "replay the row through the consuming decision path and compare outcome"
+stable_ids = ["docs/plan/flow/boxes/S9.toml#gap12", "class:oracle(L3)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S9-13"
+surface = "box.gap"
+box = "S9"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L4 gate trip is missing for owner=josh blocking decisions"
+resolves = "wire the gate before any dispatch decision and fail closed on unreadable rows"
+stable_ids = ["docs/plan/flow/boxes/S9.toml#gap13", "class:gate_trip(L4)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S9-14"
+surface = "box.gap"
+box = "S9"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L5 fuzz evidence is missing for malformed decision rows"
+resolves = "fuzz JSONL parsing and dedupe keys"
+stable_ids = ["docs/plan/flow/boxes/S9.toml#gap14", "class:fuzz(L5)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S9-15"
+surface = "box.gap"
+box = "S9"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L6 formal invariant is missing for monotonic IDs and dedupe"
+resolves = "state and check no unreadable or duplicate row can fork the ID space"
+stable_ids = ["docs/plan/flow/boxes/S9.toml#gap15", "class:formal(L6)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "GAP-S9-16"
+surface = "box.gap"
+box = "S9"
+severity_in = "gap"
+disposition = "OUT_OF_SCOPE"
+seventh = "UNBUILT"
+reason = "known answer, unbuilt work; forcing R3 here manufactures uncertainty"
+evidence = "rigor:L7 lock boundary is missing for concurrent append and consume"
+resolves = "bind append and read to the durable ledger ownership/locking contract"
+stable_ids = ["docs/plan/flow/boxes/S9.toml#gap16", "class:lock(L7)"]
+would_have_asked_joshua = false
+moved_off_human = false
+
+[[row]]
+id = "HOOK-S1-HOOK-OMP-PANES-harm_class"
+surface = "S1.toml[[box.hook]]"
+box = "S1"
+severity_in = "UNKNOWN"
+disposition = "BLOCKS_BUILD"
+reason = "harm_class cannot be assigned before fail_mode is exercised; HD-0012 already ordered probe-first so this is not HUMAN_DECISION. Named bead: hook-design-contract-vnp2 / omp pane hook probe."
+evidence = "S1.toml S1-HOOK-OMP-PANES harm_class=\"UNKNOWN\" with comment 'cannot be assigned before fail_mode is exercised'. Other seven hook rows have assigned harm_class."
+stable_ids = ["S1-HOOK-OMP-PANES", "docs/plan/flow/boxes/S1.toml:harm_class"]
+would_have_asked_joshua = true
+moved_off_human = true
+
+[[row]]
+id = "HD-HD-0009-EMPTY-FIRST-ROW"
+surface = "docs/decisions.jsonl"
+box = "S9"
+severity_in = "empty-decision"
+disposition = "OUT_OF_SCOPE"
+reason = "not an open unknown: a later answers= row in the same ledger records Joshua's decision. Empty first row is a dual-row ledger defect (DEF-002), not a question."
+evidence = "HD-0009 appears twice: decision=\"\" then a non-empty answers row"
+stable_ids = ["HD-0009", "docs/decisions.jsonl"]
+would_have_asked_joshua = true
+moved_off_human = true
+
+[[row]]
+id = "HD-HD-0010-EMPTY-FIRST-ROW"
+surface = "docs/decisions.jsonl"
+box = "S9"
+severity_in = "empty-decision"
+disposition = "OUT_OF_SCOPE"
+reason = "not an open unknown: a later answers= row in the same ledger records Joshua's decision. Empty first row is a dual-row ledger defect (DEF-002), not a question."
+evidence = "HD-0010 appears twice: decision=\"\" then a non-empty answers row"
+stable_ids = ["HD-0010", "docs/decisions.jsonl"]
+would_have_asked_joshua = true
+moved_off_human = true
+
+[[row]]
+id = "HD-HD-0011-EMPTY-FIRST-ROW"
+surface = "docs/decisions.jsonl"
+box = "S9"
+severity_in = "empty-decision"
+disposition = "OUT_OF_SCOPE"
+reason = "not an open unknown: a later answers= row in the same ledger records Joshua's decision. Empty first row is a dual-row ledger defect (DEF-002), not a question."
+evidence = "HD-0011 appears twice: decision=\"\" then a non-empty answers row"
+stable_ids = ["HD-0011", "docs/decisions.jsonl"]
+would_have_asked_joshua = true
+moved_off_human = true
+
+[[row]]
+id = "HD-HD-0012-EMPTY-FIRST-ROW"
+surface = "docs/decisions.jsonl"
+box = "S9"
+severity_in = "empty-decision"
+disposition = "OUT_OF_SCOPE"
+reason = "not an open unknown: a later answers= row in the same ledger records Joshua's decision. Empty first row is a dual-row ledger defect (DEF-002), not a question."
+evidence = "HD-0012 appears twice: decision=\"\" then a non-empty answers row"
+stable_ids = ["HD-0012", "docs/decisions.jsonl"]
+would_have_asked_joshua = true
+moved_off_human = true
+
+[[row]]
+id = "HD-HD-0013-EMPTY-FIRST-ROW"
+surface = "docs/decisions.jsonl"
+box = "S9"
+severity_in = "empty-decision"
+disposition = "OUT_OF_SCOPE"
+reason = "not an open unknown: a later answers= row in the same ledger records Joshua's decision. Empty first row is a dual-row ledger defect (DEF-002), not a question."
+evidence = "HD-0013 appears twice: decision=\"\" then a non-empty answers row"
+stable_ids = ["HD-0013", "docs/decisions.jsonl"]
+would_have_asked_joshua = true
+moved_off_human = true
+
+[[row]]
+id = "HD-HD-0014-EMPTY-FIRST-ROW"
+surface = "docs/decisions.jsonl"
+box = "S9"
+severity_in = "empty-decision"
+disposition = "OUT_OF_SCOPE"
+reason = "not an open unknown: a later answers= row in the same ledger records Joshua's decision. Empty first row is a dual-row ledger defect (DEF-002), not a question."
+evidence = "HD-0014 appears twice: decision=\"\" then a non-empty answers row"
+stable_ids = ["HD-0014", "docs/decisions.jsonl"]
+would_have_asked_joshua = true
+moved_off_human = true
+
+[[row]]
+id = "HD-0014-DISPATCH-CLAIMED-OPEN"
+surface = "docs/decisions.jsonl"
+box = "S9"
+severity_in = "dispatch-error"
+disposition = "OUT_OF_SCOPE"
+reason = "dispatch said HD-0014 is a genuine HUMAN_DECISION still open. False. Answer row: ADOPT ATLAS ARC; R1 breadth-before-depth binding; S1-first superseded."
+evidence = "docs/decisions.jsonl last HD-0014 object has decider=Joshua and a non-empty decision"
+stable_ids = ["HD-0014"]
+would_have_asked_joshua = true
+moved_off_human = true

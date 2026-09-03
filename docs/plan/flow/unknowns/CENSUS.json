@@ -1,0 +1,43 @@
+{
+  "bead": "omp-orchestrator-arc-typed-unknowns-02ai",
+  "pane": "%9",
+  "measured_at": "2026-09-03T14:10Z",
+  "instruments": {
+    "wave_resolution_empty_toml_parser": 84,
+    "wave_resolution_empty_regex_resolution_eq_quote": "72 (undercounts missing-key rows)",
+    "wave_resolution_filled": "not re-typed; prefixes are accepted*|resolved-at-* family; escalated=0",
+    "box_gaps": 177,
+    "S1_hook_UNKNOWN_fields": 1,
+    "HD_empty_first_rows_with_later_answer": 6,
+    "HD_0014_dispatch_claimed_open": 1
+  },
+  "UNKNOWNS_FOUND": 269,
+  "TYPED": 269,
+  "counts_effective_incl_seventh": {
+    "ASSUME_REVERSIBLY": 45,
+    "BLOCKS_PLAN": 28,
+    "DEFER_TO_BEAD": 12,
+    "OUT_OF_SCOPE": 32,
+    "UNBUILT": 150,
+    "HUMAN_DECISION": 1,
+    "BLOCKS_BUILD": 1
+  },
+  "counts_r3_six_only": {
+    "ASSUME_REVERSIBLY": 45,
+    "BLOCKS_PLAN": 28,
+    "DEFER_TO_BEAD": 12,
+    "OUT_OF_SCOPE": 32,
+    "HUMAN_DECISION": 1,
+    "BLOCKS_BUILD": 1
+  },
+  "UNBUILT": 150,
+  "MOVED_OFF_HUMAN_DECISION": 20,
+  "HUMAN_DECISION": 1,
+  "UNTYPEABLE": 0,
+  "SEVENTH_CLASS": "UNBUILT",
+  "seventh_rationale": "Most [[box.gap]] rows have a known answer (named bead, MISSING+wire, retain). R3's six buckets would manufacture uncertainty and idle panes on unanswerable questions. UNBUILT is not an unknown.",
+  "attack_on_assertion": "Pane 1 asserted every gap row is typeable now. True for the 20 by-design + 5 assume/human S1/S3/S4/S8 rows. False as R3-six for the rest:  they are unbuilt work. Seventh class is required.",
+  "HD_0014": "DECIDED (Atlas Arc). Not HUMAN_DECISION. Dispatch claim retracted by this census.",
+  "S1_open_disagreements_claim": "S1.toml [box.agreement] open_disagreements=0 derived from grep resolution empty on S1 wave files. This census found 8 empty S1 wave resolutions (WAVE 067-068, 079-084). Checker self-defeat.",
+  "validator": "frankenmermaid validate docs/plan/flow/unknowns/R3-disposition.mmd --fail-on warning -> exit 0"
+}

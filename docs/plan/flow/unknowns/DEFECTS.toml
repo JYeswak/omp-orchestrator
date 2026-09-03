@@ -1,0 +1,169 @@
+# Atlas Arc R3 DEF-* rows. Pane 1 integrates. Not FINDINGS.jsonl.
+
+[[def]]
+id = "DEF-001"
+severity = "P0"
+class = "self-referential-checker"
+failure_consequence = "Box reads as wave-closed while 8 disagreements are unanswered; graders idle or skip S1."
+minimal_repair = "Pane 1: recompute open_disagreements from a comment-stripped parser over ALL wave files matching box=S1, including pane4-* names that do not match *-S1.toml."
+owner = "pane-1"
+status = "open"
+verification_method = "python toml-table parse of waves/**/*.toml where box==S1 and resolution==\"\"; expect count == open_disagreements"
+evidence = "S1.toml claims open_disagreements=0 via grep -c '^resolution = \"\"$' over wave-1/*-S1.toml wave-2/*-S1.toml. Census listed 8 empty S1 resolution rows. Same family as AGENTS.md comment-defeats-needle."
+affected_ids = ["S1.toml:[box.agreement].open_disagreements", "WAVE wave-1/SilverWolf-S1.toml", "WAVE wave-2/pane4-jt1i-citations.toml", "WAVE wave-2/pane4-qibn-hook-count.toml"]
+
+[[def]]
+id = "DEF-002"
+severity = "P0"
+class = "dual-authority-ledger"
+failure_consequence = "Joshua remains the glue. HD-0014 (Atlas Arc vs S1-first) was re-presented as open in this dispatch after it was decided."
+minimal_repair = "Pane 1: project answers= onto the original id (supersede in place) so a scan of decision==\"\" cannot see a decided row. Do not append a third row."
+owner = "pane-1"
+status = "open"
+verification_method = "for each HD-id, exactly one object with that id, decision non-empty, or an explicit status=open field"
+evidence = "Each of HD-0009..0014 has an empty-decision first object AND a later answers= object with Joshua's decision. A reader taking first-row or decision==\"\" as open re-asks Joshua questions he already answered."
+affected_ids = ["HD-0009", "HD-0010", "HD-0011", "HD-0012", "HD-0013", "HD-0014", "docs/decisions.jsonl"]
+
+[[def]]
+id = "DEF-003"
+severity = "P0"
+class = "instrument-produced-reading"
+failure_consequence = "Adversary wastes a HUMAN slot on a decided question; Atlas R1 breadth work stalls waiting for a ruling that already exists."
+minimal_repair = "Treat HD-0014 as decided. Do not file another HD. Cite the answers row."
+owner = "pane-1"
+status = "open"
+verification_method = "python jsonl: objects with id==HD-0014 and nonempty decision >= 1"
+evidence = "Dispatch: 'HD-0014 is open and is a genuine HUMAN_DECISION'. Ledger last object for HD-0014: decider=Joshua, decision=ADOPT ATLAS ARC. Fifth instrument reading of the night (dispatch author's own list) plus this sixth."
+affected_ids = ["HD-0014"]
+
+[[def]]
+id = "DEF-004"
+severity = "P0"
+class = "unanswered-falsifier"
+failure_consequence = "S7 looks WIRED while installed binary cannot fire the named gates — the exact AGENTS.md unread-red / unwired-gate class."
+minimal_repair = "Owner fills resolution=accepted and crate_status=hook-wired-partial, or refuted with strings/nm on the installed binary showing all eight gates."
+owner = "S7-box-owner"
+status = "open"
+verification_method = "resolution nonempty AND either installed-binary gate census == 8 or crate_status no longer 'wired'"
+evidence = "Empty-resolution BLOCKER: owner_says crate_status=wired; reviewer: two of eight gates not in the installed binary. Wave cannot close. Map reads protected."
+affected_ids = ["S7", "wave-1/AmberGate-S5a-S5b-S7-S8.toml crate_status"]
+
+[[def]]
+id = "DEF-005"
+severity = "P0"
+class = "manufactured-uncertainty"
+failure_consequence = "R3 six-bucket typing without UNBUILT recreates the freeze cycle: unknown forever because the only closer is code, and code was frozen because of unknowns."
+minimal_repair = "Adopt UNBUILT as the seventh class. Pane 1 integrates. Do not open HD rows for 'should we add a fuzz target'."
+owner = "pane-1"
+status = "open"
+verification_method = "CENSUS.json UNBUILT count regenerates from box.gap resolves-not-none"
+evidence = "157 of 177 gaps resolve to named beads / MISSING+wire / add-fuzz / register-claim. They are UNBUILT. Forcing BLOCKS_PLAN/HUMAN on them is how panes idle on unanswerable questions."
+affected_ids = ["[[box.gap]] x177"]
+
+[[def]]
+id = "DEF-006"
+severity = "P1"
+class = "untyped-disposition"
+failure_consequence = "Waves cannot close. Agreement.status cannot leave draft without lying."
+minimal_repair = "Owners fill accepted|refuted(evidence)|escalated(HD-id) using DISPOSITIONS.jsonl as the proposed type, not as an edit to the wave file (R4: pane 1 integrates)."
+owner = "pane-1"
+status = "open"
+verification_method = "count resolution==\"\" over waves/**/*.toml; target 0"
+evidence = "84 empty resolution fields (toml parse). escalated=0. CONTRACT.md: a wave closes when every row has a resolution. 88 was the day-old figure; 84 is now."
+affected_ids = ["docs/plan/flow/waves/** resolution=\"\""]
+
+[[def]]
+id = "DEF-007"
+severity = "P1"
+class = "stale-human-block"
+failure_consequence = "Agents re-ask HD-0009 (frankentui) and HD-0010 (spawn mix) instead of building L3/L4."
+minimal_repair = "Pane 1 amends the comment to cite the answer rows. approval stays empty/MISSING until the functional floor, not until those HDs."
+owner = "pane-1"
+status = "open"
+verification_method = "S1.toml no longer claims HD-0009..0012 decision empty"
+evidence = "S1.toml:339 comment: 'HD-0009..HD-0012 all carry decision=\"\"'. False at census time: all four have Joshua answer rows. Approval still blank, which is correct as a status bit, but the reason cited is a decided-question."
+affected_ids = ["S1.toml:[box.agreement].approval", "HD-0009", "HD-0010", "HD-0011", "HD-0012"]
+
+[[def]]
+id = "DEF-008"
+severity = "P1"
+class = "unknown-without-disposition"
+failure_consequence = "Hook table looks incomplete; agents ask Joshua what harm_class to write, which would fabricate a certificate."
+minimal_repair = "Keep UNKNOWN until fail_mode is exercised (BLOCKS_BUILD). Do not fill. Wire the omp-hook probe bead; after fail_mode observed, assign harm_class from the measured refusal."
+owner = "hook-probe-bead"
+status = "open"
+verification_method = "harm_class remains UNKNOWN or becomes a measured value after a fail_mode exercise; never inferred"
+evidence = "Only remaining S1.toml field with the literal UNKNOWN. Comment: cannot assign before fail_mode exercised. HD-0012 already: probe first."
+affected_ids = ["S1-HOOK-OMP-PANES.harm_class"]
+
+[[def]]
+id = "DEF-009"
+severity = "P1"
+class = "dropped-identifier"
+failure_consequence = "Dispatch packets name unclaimable beads; claim-before-dispatch fence cannot project them."
+minimal_repair = "Owner accepted-and-landed with corrected ids; do not ask Joshua what the id is."
+owner = "S1-box-owner"
+status = "open"
+verification_method = "grep -n 'plf\\.7' docs/plan/flow -- excludes the correct jplf.7 form; expect 0 dropped-j hits in box/wave files after integrate"
+evidence = "Empty-resolution BLOCKER: leading j dropped on jplf family. Real ids omp-orchestrator-jplf.7.*. Map points at beads that do not exist."
+affected_ids = ["omp-orchestrator-jplf.7.2", "omp-orchestrator-jplf.7.3", "omp-orchestrator-jplf.7.12", "wave-2/pane4-jt1i-citations.toml"]
+
+[[def]]
+id = "DEF-010"
+severity = "P2"
+class = "row-shape-violation"
+failure_consequence = "lifecycle-arrow-gate cannot key a box to a crate; MISSING/UNWIRED census splits wrong."
+minimal_repair = "One crate per box; extras in no_claim or a second box. Not a HUMAN."
+owner = "S7-owner,S8-owner"
+status = "open"
+verification_method = "crate field contains no ';' in boxes/S7.toml and S8.toml"
+evidence = "SilverWolf+BlueLantern empty-resolution majors: crate and bead fields carry semicolon-separated composites. CONTRACT.md row shape is one crate directory or MISSING, one bead or no bead."
+affected_ids = ["S7.crate", "S8.crate", "S7.bead", "S8.bead"]
+
+[[def]]
+id = "DEF-011"
+severity = "P2"
+class = "blank-vs-MISSING"
+failure_consequence = "Blank and missing and pending-Joshua collapse into one unreadable state."
+minimal_repair = "ASSUME_REVERSIBLY write MISSING. Do not ping Joshua to fill a sentinel."
+owner = "pane-1"
+status = "open"
+verification_method = "no approval=\"\" in boxes/*.toml; either MISSING or HD-00NN"
+evidence = "CONTRACT unknown=literal MISSING. Several approvals are \"\". QuietRidge filed this; resolution empty. S7/S8 already write MISSING."
+affected_ids = ["S2.approval", "S3.approval", "S4.approval", "S5a.approval", "S5b.approval", "wave QuietRidge agreement.approval"]
+
+[[def]]
+id = "DEF-012"
+severity = "P2"
+class = "schema-drift"
+failure_consequence = "Owners cannot fill hook rows without fabricating certificates (the failure the table exists to prevent)."
+minimal_repair = "One schema. Until vnp2 is re-opened with measurable fields, ASSUME 10-field core; harm_class stays optional/UNKNOWN (DEF-008)."
+owner = "pane-1"
+status = "open"
+verification_method = "CONTRACT.md and S1.toml gap 09 name the same required field set"
+evidence = "Wave rows still demand 12 certified fields including policy_file/harm_class. vnp2 refused the 10-field cut because source_commit=3/16 and matcher=13/16. Two authorities for the same table."
+affected_ids = ["HOOK-SCHEMA-CORE", "S1.toml 12-field gap", "vnp2"]
+
+[[def]]
+id = "DEF-013"
+severity = "P3"
+class = "stale-review"
+failure_consequence = "Owners chase ghosts; waves look more open than they are."
+minimal_repair = "ASSUME_REVERSIBLY accepted-stale; pane 1 marks resolution when integrating."
+owner = "pane-1"
+status = "open"
+verification_method = "those three rows get resolution starting accepted or stale("
+evidence = "Three empty-resolution blockers/majors say the box is not reviewable for missing measurement/gap sections. Those boxes now have 16/16/10 gaps."
+affected_ids = ["WAVE-010 S6a four-sections", "WAVE-018 S9 four-sections", "WAVE-067 S1 wave1_sections"]
+
+[[def]]
+id = "DEF-014"
+severity = "P3"
+class = "survey-empty-resolution"
+failure_consequence = "Empty-resolution census inflates UNKNOWNS_FOUND with non-questions."
+minimal_repair = "resolution=accepted (no change). OUT_OF_SCOPE as unknown."
+owner = "SilverWolf-or-pane-1"
+status = "open"
+verification_method = "those 5 files have nonempty resolution"
+evidence = "5 rows titled no disagreement found still have resolution=\"\". CONTRACT requires a resolution. Filling accepted is clerical, not an unknown."
+affected_ids = ["SilverWolf-S2", "SilverWolf-S3", "SilverWolf-S4", "SilverWolf-S5a", "SilverWolf-S5b wave1_sections"]

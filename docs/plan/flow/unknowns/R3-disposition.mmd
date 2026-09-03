@@ -1,0 +1,13 @@
+%% R3 unknown-disposition machine (Atlas Arc). Not a process. The typing function.
+flowchart TD
+  U[surface row looks unknown] --> Q1{Is it a question\nwith no known answer?}
+  Q1 -->|no: survey / already answered HD| OOS[OUT_OF_SCOPE]
+  Q1 -->|no: named bead / MISSING+wire| UB[UNBUILT seventh]
+  Q1 -->|yes| Q2{Does the map go\nwrong if we proceed?}
+  Q2 -->|yes, evidence in-tree| BP[BLOCKS_PLAN]
+  Q2 -->|yes, at a chokepoint| BB[BLOCKS_BUILD]
+  Q2 -->|no| Q3{Can a falsifiable\nassumption close it?}
+  Q3 -->|yes| AR[ASSUME_REVERSIBLY]
+  Q3 -->|no, work item exists| DB[DEFER_TO_BEAD]
+  Q3 -->|no, irreversible / buyer| HD[HUMAN_DECISION]
+  HD --> RARE[HUMAN must be rare\nthis census: 1]
