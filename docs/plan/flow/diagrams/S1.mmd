@@ -1,0 +1,54 @@
+flowchart TD
+  IN["S1 human start: install then doctor then ecosystem then walkthrough then swarm-live then portal"] --> TODAY{"trigger_today?"}
+  TODAY -->|"none MEASURED 2026-09-03"| NONE["REFUSED as a live entry: no slash, no SessionStart, no launchd. Hand-read only"]
+  TODAY -->|"target: curl one-liner then ompo then slash start"| PERSONA{"persona from 08-end-users?"}
+
+  PERSONA -->|A solo gates-only| L0
+  PERSONA -->|B small-team receipts| L0
+  PERSONA -->|C fleet operator| L0
+
+  L0["L0 install: binary MUST NOT be named installer. PATH first hit is /usr/sbin/installer"] --> L0Q1{"SHA256 plus cosign?"}
+  L0Q1 -->|fail| R0["REFUSE supply chain. OutcomeClass::Refusal"]
+  L0Q1 -->|ok| L0Q2{"agent detected: claude, codex, omp, agy, cursor?"}
+  L0Q2 -->|yes| L0M["merge hooks and skills with timestamped backup: created or merged or already or failed or skipped"]
+  L0Q2 -->|no| L0S["skipped for that agent"]
+  L0M --> L1
+  L0S --> L1
+
+  L1["L1 doctor: two signals per probe. SOTA is br doctor mutate chokepoint plus undo by before_hash"] --> L1Q{"probe family?"}
+  L1Q -->|OK| L2
+  L1Q -->|UNPROBEABLE e.g. tmux rejects --version| L1U["record UNPROBEABLE. Never vacuously green"]
+  L1Q -->|ABSENT specific e.g. br or tmux| L1I["informational. Do not invent an install command"]
+  L1Q -->|ABSENT family e.g. tracker.any| L1H["HUMAN HALT with the named remediation command"]
+  L1U --> L2
+  L1I --> L2
+
+  L2["L2 ecosystem: git remote, AGENTS.md, CLAUDE.md, .beads, hook identity vs HEAD"] --> L2Q1{"git remote configured?"}
+  L2Q1 -->|no| R2["HALT. 305-commit public-remote trauma"]
+  L2Q1 -->|yes| L2Q2{"AGENTS.md and CLAUDE.md present and stamped?"}
+  L2Q2 -->|no| L2I["init writes from foundry template. Idempotent"]
+  L2Q2 -->|yes| L2Q3{"hook identity equals HEAD?"}
+  L2I --> L2Q3
+  L2Q3 -->|no| L2R["rebuild on the lane, reinstall hook. IDENTITY MISMATCH"]
+  L2Q3 -->|yes| L3
+  L2R --> L3
+
+  L3["L3 walkthrough"] --> L3Q{"HD-0009 decided?"}
+  L3Q -->|no decision empty| H9["HUMAN HALT S9 HD-0009: frankentui plus --json vs --json-only"]
+  L3Q -->|yes| L3W["identical step list for TUI and --json: step, status, reason_code, next_command"]
+  L3W --> L4
+
+  L4["L4 swarm live? Three sources must agree: tmux has-session AND tick-monitor OMP status AND Agent Mail roster"] --> L4Q{"sources?"}
+  L4Q -->|disagree| L4D["NOT live. The disagreement is the finding. Do not spawn"]
+  L4Q -->|agree live| L5
+  L4Q -->|agree not live and persona A| L4A["skip spawn. Portal is gates-only. 08-end-users A before B before C"]
+  L4Q -->|agree not live and persona B or C| L4H{"HD-0010 decided?"}
+  L4H -->|no| H10["HUMAN HALT S9 HD-0010: agent mix"]
+  L4H -->|yes| L4S["ntm spawn then WAVE.md generated from tmux list-panes then macro_start_session then pack"]
+  L4A --> L5
+  L4S --> L5
+  L4D --> H4["HUMAN HALT: name the disagreeing source"]
+
+  L5["L5 portal --json: session, panes, bv queue, admission, gates, THE ONE NEXT ACTION"] --> L5Q{"decision owed to Joshua?"}
+  L5Q -->|yes| H5["HUMAN HALT S9: one named decision. Loop does not guess"]
+  L5Q -->|no| OUT["inception envelope accepted, to S2"]
