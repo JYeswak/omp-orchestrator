@@ -58,6 +58,11 @@ fn every_crate_on_disk_has_exactly_one_census_row() {
     let root = repo_root();
     let disk = crates_on_disk(&root);
     let census = census_gates(&root);
+    println!(
+        "census membership: crates_on_disk={} census_rows={}",
+        disk.len(),
+        census.rows.len()
+    );
 
     assert!(
         disk.len() > 20,
