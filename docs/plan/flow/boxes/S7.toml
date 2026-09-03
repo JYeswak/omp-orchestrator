@@ -1,0 +1,38 @@
+[[box]]
+id = "S7"
+name = "validation: eight-gate pre-commit dispatcher"
+trigger_today = "hook:pre-commit"
+trigger_target = "hook:git pre-commit"
+crate = "no-shell-gate; crate-atom-gate; staged-build-gate"
+crate_status = "wired"
+bead = "omp-orchestrator-d3gm; omp-orchestrator-929j"
+kernel_input = "staged paths, staged deletions, repository root, crate facts, and bounded RCH build admission"
+kernel_output = "PreCommitOutcome::{Clean, Violation, NothingToCheck} | crate_atom_gate::GateVerdict::{Pass, Refused, Unrun, InstrumentError} | staged_build_gate::CargoBuildOutcome::{Pass, BuildFailed, BuildInconclusive, NotApplicable}"
+event_row = "LifecycleEvent{stage_from=S6c, stage_to=S7, actor, pane, incarnation, repo, staged_paths, outcome, gate, reason_code}"
+validator = "The installed pre-commit hook reaches pre-registration and plan-assemble prechecks, then six staged-set gates; GATE 7 is staged-build-gate and GATE 8 is crate-atom-gate. RCH admission is required for cargo lanes; the live lane verdict is recorded outside this pure box."
+sota_standard = "A validation runner must fail closed on an applicable violation, distinguish an unrun instrument from a refusal, and reject an empty scan rather than calling it clean."
+sota_cite = "this-repo:crates/no-shell-gate/src/bin/pre-commit-gate.rs:L1; this-repo:crates/no-shell-gate/src/bin/pre-commit-gate.rs:L3; this-repo:crates/no-shell-gate/src/bin/pre-commit-gate.rs:L22; this-repo:crates/no-shell-gate/src/bin/pre-commit-gate.rs:L94; this-repo:crates/no-shell-gate/src/bin/pre-commit-gate.rs:L300; this-repo:crates/crate-atom-gate/src/lib.rs:L50; this-repo:crates/crate-atom-gate/src/lib.rs:L322; this-repo:crates/staged-build-gate/src/lib.rs:L311; runtime:.git/hooks/pre-commit is Mach-O arm64 and strings includes crates/no-shell-gate/src/bin/pre-commit-gate.rs; runtime:rch admit cargo test -p crate-atom-gate => offload; FH_STATUS: STALE SEARCH_INDEX_STALE"
+skill = "/oracle-gates, /testing-conformance-harnesses, /rch"
+branches = [
+  "PreCommitOutcome::Clean",
+  "PreCommitOutcome::Violation",
+  "PreCommitOutcome::NothingToCheck",
+  "crate_atom_gate::GateVerdict::Pass",
+  "crate_atom_gate::GateVerdict::Refused",
+  "crate_atom_gate::GateVerdict::Unrun",
+  "crate_atom_gate::GateVerdict::InstrumentError",
+  "staged_build_gate::CargoBuildOutcome::Pass",
+  "staged_build_gate::CargoBuildOutcome::BuildFailed",
+  "staged_build_gate::CargoBuildOutcome::BuildInconclusive",
+  "staged_build_gate::CargoBuildOutcome::NotApplicable",
+  "precheck: preregistration-gate refusal",
+  "precheck: plan-assemble-build refusal",
+  "gate: no-shell-gate",
+  "gate: path-literal-guard",
+  "gate: undrained-pipe-lint",
+  "gate: orchestration-tick-gate",
+  "gate: state-wildcard-lint",
+  "gate: pre-delete-citation-check",
+  "human-halt: owner=josh resolves an unfixable validation refusal",
+]
+no_claim = "This box records the dispatcher and hook reachability; it does not claim that every gate is semantically complete, that RCH is healthy on every tick, or that a passing validation proves downstream lifecycle success."
