@@ -213,9 +213,9 @@ wave = 2
 owner = "SnowyCanyon"
 reviewers = ["WildStone", "WildMountain", "AmberGate", "BlueLantern", "SilverWolf", "QuietRidge"]
 open_disagreements = 0                # DERIVED: grep -h -c '^resolution = ""$' over waves/wave-1/*-S1.toml waves/wave-2/*-S1.toml -> 0. NECESSARY, NOT SUFFICIENT -- see CONTRACT.md:82-113. Alone this number is evidence of nothing.
-rows = 62                             # DERIVED: grep -c '^[[disagreement]]' over both waves' S1 files -> wave-1 12 (AmberGate 4, BlueLantern 3, QuietRidge 3, SilverWolf 2), wave-2 50 (WildStone 24, WildMountain 12, pane1 14).
-rejections = 25                       # reviewer rows opening REJECT/REFUTED: wave-1 = 0 of 12 (a SURVEY, not a review), wave-2 = 25 of 50 (WildMountain 9, WildStone 12, pane1 4). The wave-1 zero is the failed wave.
-refutations = 3                       # clause (b) is now MET, by pane 4 at 6238c0f + waves/wave-2/pane4-41li-cross.toml: (1) S1.toml:63 raw tmux is not a liveness source; (2) the owner's 'ntm sources needs no design' claim -- live snapshot carries ONE source and no degraded[]; (3) the scout's bv --robot-triage `meta` key -- absent, only data_hash/generated_at/triage/usage_hints. All three refuted an instruction the OWNER or a scout wrote, which is the point of the clause. One row is an honest NULL (sibling contracts had not landed) rather than a manufactured objection.
+rows = 62                             # WORKTREE ONLY -- and that is a defect, tracked as omp-orchestrator-wave2-evidence-untracked-kwmu. Measured 2026-09-03T18:2xZ: WildStone-S1.toml (24 rows), WildMountain-S1.toml (11), WildStone-bead-lifecycle.toml and joshua-questions-from-pane4.toml are ALL UNTRACKED. From HEAD a fresh clone measures rows = 17 (pane1-S1.toml 14 + pane4-41li-cross.toml 3), not 62. A sha names a TREE; grep read the working directory. Re-derive from `git ls-tree -r HEAD` once kwmu lands.
+rejections = 25                       # WORKTREE ONLY, same caveat. wave-1 = 0 of 12 (a SURVEY, not a review); wave-2 = 25 of 50 (WildMountain 9, WildStone 12, pane1 4). TREE-visible today: 4.
+refutations = 3                       # TREE-visible: 2 (pane4-41li-cross.toml). A FOURTH real refutation exists and the counter CANNOT SEE IT: pane 2 rejected pane 4's L3 stand-in as prose inside docs/contracts/s1_l0_install.md:158 rather than as a wave resolution row, so `grep -c '^resolution = "refuted'` misses it. Declared-in-prose, invisible-to-the-checker -- the same class as an unwired gate, one level up. Pane 2 owes the machine-readable half; the prose stays.
 status = "draft"                      # REVERTED FROM "converged" BY JOSHUA, 2026-09-03: "s1 is not converged - you can't claim converged when s1 is still missing massive functionality" and "converged wrongly is worse than no convergence". Both new clauses fail: (b) refutations = 0, and the FUNCTIONAL FLOOR -- S1.toml:41,49,57,65,72 read exists = "none" for L1, L2, L3, L4's wrapper and L5. The prior flip (a9ea672) certified agreement about a MAP as if it were working software. It was wrong and it is retracted.
 approval = ""                         # BLOCKED ON JOSHUA regardless: approval is an HD row id and HD-0009..HD-0012 all carry decision="". Build S1 fully in waves and prove it across the lifecycle BEFORE S2 (Joshua, 2026-09-03).
 
@@ -229,9 +229,9 @@ edges = 60
 
 # ---- CONTRACTS. One per layer. A layer without a contract is not buildable in its wave.
 [box.contracts]
-L0 = "docs/contracts/s1_l0_install.md"                  # 16,415 B, landed by pane 2 (bead 6gh6)
-L1 = "MISSING"                                          # bead d9rv, pane3-%8, in_progress
-L2 = "MISSING"                                          # bead d9rv, pane3-%8, in_progress
+L0 = "docs/contracts/s1_l0_install.md"                  # 17,609 B / 185 lines, pane 2 (bead 6gh6) at 8de39a5. 14 stable L0-* IDs, 4 OBS-L0-* rows. Validation output pasted: S1_L0_CONTRACT PASS bytes=17609 stable_ids=14 observability_rows=4 invariant_suite=declared falsifier=measured_parent_sync
+L1 = "docs/contracts/s1_l1_doctor.md"                   # 12,423 B, landed by pane 3 (bead d9rv) at b009db0
+L2 = "docs/contracts/s1_l2_ecosystem.md"                # 11,945 B, pane 3 at b009db0
 L3 = "docs/contracts/s1_l3_walkthrough.md"              # 9,430 B, pane 4 (41li) at 6238c0f. LAW-L3-ORDERED-IDS
 L4 = "docs/contracts/s1_l4_liveness.md"                 # 10,122 B, pane 4 at 6238c0f. LAW-L4-SILENT-NOT-LIVE, LAW-L4-NO-TMUX-RAW, LAW-L4-MAP-TICK
 L5 = "docs/contracts/s1_l5_portal.md"                   # 9,447 B, pane 4 at 6238c0f. inception ABSENT -> readback REFUSE
