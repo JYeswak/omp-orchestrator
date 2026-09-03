@@ -187,13 +187,12 @@ fn refill_build_id() -> String {
     })
 }
 
-fn pending_marker_base(session: &str) -> PathBuf {
+fn pending_marker_base() -> PathBuf {
     std::env::var_os("OMP_PENDING_DISPATCH")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             PathBuf::from(env_or("HOME", ""))
-                .join(".local/state/flywheel")
-                .join(format!("omp-orchestrator-{session}.pending-dispatch"))
+                .join(".local/state/flywheel/omp-orchestrator.pending-dispatch")
         })
 }
 
@@ -584,7 +583,7 @@ fn run(apply: bool) -> ExitCode {
     }
 
     let assignments = plan(&panes, &picks, max);
-    let pending_base = pending_marker_base(&session);
+    let pending_base = pending_marker_base();
     let (mut sent, mut skipped) = (0usize, 0usize);
     for Assignment { pane, bead } in &assignments {
         let packet = match render_packet(bead, footer.as_deref(), &target) {
