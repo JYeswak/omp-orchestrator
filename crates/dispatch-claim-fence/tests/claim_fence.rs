@@ -1,5 +1,6 @@
 use dispatch_claim_fence::{
-    authorize, parse_br_show_json, BeadSnapshot, ClaimFenceError, DispatchIntent, DispatchPermit,
+    authorize, parse_br_show_json, BeadSnapshot, ClaimFenceError, ClaimRemedy, DispatchIntent,
+    DispatchLedgerEvidence, DispatchPermit,
 };
 
 fn bead(id: &str, status: &str, assignee: Option<&str>) -> BeadSnapshot {
@@ -110,4 +111,95 @@ fn br_show_json_is_parsed_into_typed_snapshot() {
     assert_eq!(snapshot.id(), "5rh");
     assert_eq!(snapshot.status_label(), "in_progress");
     assert_eq!(snapshot.assignee(), Some("BlueLantern"));
+}
+fn claim_required_error() -> ClaimFenceError {
+    authorize(
+        &DispatchIntent::bead("u1c", "BlueLantern"),
+        Some(&bead("u1c", "open", Some("BlueLantern"))),
+    )
+    .expect_err("open plus assigned must refuse before dispatch")
+}
+
+fn assert_both_remedies(rendered: &str) {
+    assert!(rendered.contains("mutually_exclusive=true"), "{rendered}");
+    assert!(
+        rendered.contains("br update u1c --assignee BlueLantern --status in_progress"),
+        "missing claim remedy: {rendered}"
+    );
+    assert!(
+        rendered.contains("br update u1c --assignee \"\" --status open"),
+        "missing full release remedy: {rendered}"
+    );
+}
+
+#[test]
+fn no_dispatch_row_selects_release_remedy_and_names_claim_alternative() {
+    let error = claim_required_error();
+    let advice = error
+        .claim_required_advice(DispatchLedgerEvidence::Absent)
+        .expect("claim-required errors have actionable advice");
+
+    assert_eq!(advice.remedy(), ClaimRemedy::ReleaseFully);
+    let rendered = advice.to_string();
+    assert!(rendered.contains("dispatch_ledger=ABSENT"), "{rendered}");
+    assert!(rendered.contains("next_action=release_fully"), "{rendered}");
+    assert_both_remedies(&rendered);
+}
+
+#[test]
+fn dispatch_row_selects_claim_remedy_and_names_release_alternative() {
+    let error = claim_required_error();
+    let advice = error
+        .claim_required_advice(DispatchLedgerEvidence::Present)
+        .expect("claim-required errors have actionable advice");
+
+    assert_eq!(advice.remedy(), ClaimRemedy::CompleteClaim);
+    let rendered = advice.to_string();
+    assert!(rendered.contains("dispatch_ledger=PRESENT"), "{rendered}");
+    assert!(
+        rendered.contains("next_action=complete_claim"),
+        "{rendered}"
+    );
+    assert_both_remedies(&rendered);
+}
+
+#[test]
+fn absent_ledger_evidence_does_not_guess_a_branch() {
+    let error = claim_required_error();
+    let advice = error
+        .claim_required_advice(DispatchLedgerEvidence::Unavailable {
+            reason: "ledger read failed".to_owned(),
+        })
+        .expect("claim-required errors retain an evidence-unknown advice");
+
+    assert_eq!(advice.remedy(), ClaimRemedy::EvidenceUnavailable);
+    let rendered = advice.to_string();
+    assert!(
+        rendered.contains("dispatch_ledger=UNAVAILABLE"),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains("next_action=inspect_dispatch_ledger"),
+        "{rendered}"
+    );
+    assert_both_remedies(&rendered);
+}
+
+#[test]
+fn legal_claim_has_no_claim_required_remedy() {
+    let result = authorize(
+        &DispatchIntent::bead("u1c", "BlueLantern"),
+        Some(&bead("u1c", "in_progress", Some("BlueLantern"))),
+    );
+    assert!(
+        result.is_ok(),
+        "legal claim must remain admissible: {result:?}"
+    );
+    assert!(
+        result
+            .err()
+            .and_then(|error| error.claim_required_advice(DispatchLedgerEvidence::Absent))
+            .is_none(),
+        "legal claim must not emit a remedy"
+    );
 }

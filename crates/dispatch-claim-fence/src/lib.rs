@@ -428,6 +428,83 @@ pub enum DispatchPermit {
     },
 }
 
+/// Evidence from the durable dispatch ledger for the claimed bead.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DispatchLedgerEvidence {
+    Present,
+    Absent,
+    Unavailable { reason: String },
+}
+
+impl std::fmt::Display for DispatchLedgerEvidence {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Present => formatter.write_str("PRESENT"),
+            Self::Absent => formatter.write_str("ABSENT"),
+            Self::Unavailable { reason } => write!(formatter, "UNAVAILABLE reason={reason}"),
+        }
+    }
+}
+
+/// The mutually exclusive next action for an `open` + assigned refusal.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ClaimRemedy {
+    CompleteClaim,
+    ReleaseFully,
+    EvidenceUnavailable,
+}
+
+impl std::fmt::Display for ClaimRemedy {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::CompleteClaim => "COMPLETE_CLAIM",
+            Self::ReleaseFully => "RELEASE_FULLY",
+            Self::EvidenceUnavailable => "EVIDENCE_UNAVAILABLE",
+        })
+    }
+}
+
+/// An actionable refusal that retains both mutually exclusive remedies.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ClaimRequiredAdvice {
+    bead_id: String,
+    assignee: String,
+    evidence: DispatchLedgerEvidence,
+    remedy: ClaimRemedy,
+    claim_command: String,
+    release_command: String,
+}
+
+impl ClaimRequiredAdvice {
+    pub fn remedy(&self) -> ClaimRemedy {
+        self.remedy
+    }
+
+    pub fn evidence(&self) -> &DispatchLedgerEvidence {
+        &self.evidence
+    }
+}
+
+impl std::fmt::Display for ClaimRequiredAdvice {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "CLAIM_REQUIRED_ACTIONABLE bead={} assignee={} dispatch_ledger={} remedy={} mutually_exclusive=true complete_claim={} release_fully={} next_action={}",
+            self.bead_id,
+            self.assignee,
+            self.evidence,
+            self.remedy,
+            self.claim_command,
+            self.release_command,
+            match self.remedy {
+                ClaimRemedy::CompleteClaim => "complete_claim",
+                ClaimRemedy::ReleaseFully => "release_fully",
+                ClaimRemedy::EvidenceUnavailable => "inspect_dispatch_ledger",
+            }
+        )
+    }
+}
+
 /// Claim-fence rejection. Every rejected bead includes the observed status and
 /// a command that would make the claim explicit and actionable.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -471,6 +548,41 @@ impl ClaimFenceError {
             }
             _ => None,
         }
+    }
+
+    /// Attach dispatch-ledger evidence to an `open` + assigned refusal.
+    /// `Present` selects completing the claim; `Absent` selects a full release;
+    /// `Unavailable` preserves both choices without guessing.
+    pub fn claim_required_advice(
+        &self,
+        evidence: DispatchLedgerEvidence,
+    ) -> Option<ClaimRequiredAdvice> {
+        let Self::ClaimRequired {
+            bead_id,
+            actual_assignee,
+            expected_agent,
+            ..
+        } = self
+        else {
+            return None;
+        };
+        let assignee = actual_assignee
+            .as_deref()
+            .unwrap_or("unassigned")
+            .to_owned();
+        let remedy = match evidence {
+            DispatchLedgerEvidence::Present => ClaimRemedy::CompleteClaim,
+            DispatchLedgerEvidence::Absent => ClaimRemedy::ReleaseFully,
+            DispatchLedgerEvidence::Unavailable { .. } => ClaimRemedy::EvidenceUnavailable,
+        };
+        Some(ClaimRequiredAdvice {
+            bead_id: bead_id.clone(),
+            assignee,
+            evidence,
+            remedy,
+            claim_command: claim_command(bead_id, expected_agent),
+            release_command: release_command(bead_id),
+        })
     }
 
     /// Stable machine-readable reason label.
@@ -664,6 +776,9 @@ fn require_named_operation(operation: &str, receiver_agent: &str) -> Result<(), 
 
 fn claim_command(bead_id: &str, receiver_agent: &str) -> String {
     format!("br update {bead_id} --assignee {receiver_agent} --status in_progress")
+}
+fn release_command(bead_id: &str) -> String {
+    format!("br update {bead_id} --assignee \"\" --status open")
 }
 
 fn normalize_optional(value: Option<&str>) -> Option<String> {
