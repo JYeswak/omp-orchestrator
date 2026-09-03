@@ -864,10 +864,10 @@ pub struct ReservationConflict {
 /// Typed result from check_file_reservation_conflicts.
 ///
 /// This is intentionally separate from the advisory `am robot reservations` roster.
-/// That external CLI defaults to selected-agent scope unless `--all` is supplied,
-/// so its `all_active` field is not a global guard snapshot. The conflict endpoint
-/// is the guard-safe read: it must identify its database snapshot and cannot turn
-/// an empty or malformed response into permission to edit.
+/// That external CLI can use selected-agent scope; only `--all` explicitly requests every
+/// agent, so `all_active` is not a guard-global snapshot unless `--all` is present. The
+/// conflict endpoint is the guard-safe read: it must identify its database snapshot and
+/// cannot turn an empty or malformed response into permission to edit.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReservationConflictReport {
     conflict_free: bool,
