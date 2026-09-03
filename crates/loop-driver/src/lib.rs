@@ -6,6 +6,7 @@
 //! its advisory lock directly: the locked `File` is private to an RAII type,
 //! Rust opens it close-on-exec, and `Drop` releases it.
 
+use asupersync::Cx;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
@@ -13,7 +14,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Output, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use subprocess_contract::{bounded_output, BoundedOutcome};
+use subprocess_contract::{bounded_output, spawn_group, try_wait, BoundedOutcome};
 pub const EXIT_CONCURRENT: i32 = 75;
 pub const EXIT_DEADLINE: i32 = 124;
 pub const SCHEDULE_INTERVAL_SECONDS: u64 = 1_200;
@@ -1508,6 +1509,7 @@ fn unique_lock(label: &str) -> PathBuf {
 }
 
 fn spawn_holder(
+    cx: &Cx,
     exe: &Path,
     lock: &Path,
     hold: &str,
@@ -1523,7 +1525,7 @@ fn spawn_holder(
     for (k, v) in extra_env {
         cmd.env(k, v);
     }
-    let mut child = cmd.spawn().expect("spawn holder");
+    let mut child = spawn_group(cx, &mut cmd).expect("spawn holder");
     let mut line = String::new();
     if let Some(stdout) = child.stdout.as_mut() {
         use std::io::BufRead;
@@ -1538,6 +1540,7 @@ fn spawn_holder(
 }
 
 fn probe(
+    cx: &Cx,
     exe: &Path,
     lock: &Path,
     extra_env: &[(&str, &str)],
@@ -1553,28 +1556,30 @@ fn probe(
     for (k, v) in extra_env {
         cmd.env(k, v);
     }
-    let output = cmd.output().expect("probe");
-    (
-        output.status.code().unwrap_or(99),
-        String::from_utf8_lossy(&output.stdout).into_owned(),
-    )
+    let _ = cx.checkpoint();
+    match bounded_output(&mut cmd, Duration::from_secs(5)) {
+        BoundedOutcome::Completed(output) => (
+            output.status.code().unwrap_or(99),
+            String::from_utf8_lossy(&output.stdout).into_owned(),
+        ),
+        BoundedOutcome::TimedOut => (EXIT_DEADLINE, String::new()),
+        BoundedOutcome::Unspawned(_) => (99, String::new()),
+    }
 }
-
 /// Plants a CPU-burning LIVE holder and a sleeping WEDGED holder.
 /// Leg (a) LIVE is load-bearing: without it, always-crying-wedge would pass.
 pub fn selftest_holder_liveness(exe: &Path) -> LoopDriverRunOutput {
     let mut fails = 0u32;
     let mut lines = Vec::new();
-
+    let cx = Cx::for_request();
     // (a) genuinely working holder
     let live_lock = unique_lock("live");
-    let mut live = spawn_holder(exe, &live_lock, "--hold-lock-working", &[]);
+    let mut live = spawn_holder(&cx, exe, &live_lock, "--hold-lock-working", &[]);
     std::thread::sleep(Duration::from_millis(1500));
-    let (rc, out) = probe(exe, &live_lock, &[], &[]);
-    let live_still = Command::new("/bin/kill")
-        .args(["-0", &live.id().to_string()])
-        .status()
-        .is_ok_and(|s| s.success());
+    let (rc, out) = probe(&cx, exe, &live_lock, &[], &[]);
+    let mut live_probe = Command::new("/bin/kill");
+    live_probe.args(["-0", &live.id().to_string()]);
+    let live_still = os_status(&mut live_probe).is_some_and(|status| status.success());
     if rc != EXIT_CONCURRENT || !out.contains("holder_liveness=LIVE") || !live_still {
         fails += 1;
         lines.push(format!(
@@ -1588,14 +1593,13 @@ pub fn selftest_holder_liveness(exe: &Path) -> LoopDriverRunOutput {
 
     // (b) wedged holder older than bound is WEDGED+killed
     let wedge_lock = unique_lock("wedge");
-    let mut wedge = spawn_holder(exe, &wedge_lock, "--hold-lock", &[]);
+    let mut wedge = spawn_holder(&cx, exe, &wedge_lock, "--hold-lock", &[]);
     std::thread::sleep(Duration::from_millis(1500));
-    let (rc, out) = probe(exe, &wedge_lock, &[], &[]);
+    let (rc, out) = probe(&cx, exe, &wedge_lock, &[], &[]);
     std::thread::sleep(Duration::from_millis(200));
-    let wedge_alive = Command::new("/bin/kill")
-        .args(["-0", &wedge.id().to_string()])
-        .status()
-        .is_ok_and(|s| s.success());
+    let mut wedge_probe = Command::new("/bin/kill");
+    wedge_probe.args(["-0", &wedge.id().to_string()]);
+    let wedge_alive = os_status(&mut wedge_probe).is_some_and(|status| status.success());
     let wedged_named =
         out.contains("holder_liveness=WEDGED") || out.contains("LOOP_DRIVER_HOLDER_WEDGED");
     let killed = !wedge_alive || out.contains("killed=1") || out.contains("LOCK_ACQUIRED");
@@ -1620,10 +1624,10 @@ pub fn selftest_holder_liveness(exe: &Path) -> LoopDriverRunOutput {
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
-    let mut wall_child = wall.spawn().expect("wall holder");
+    let mut wall_child = spawn_group(&cx, &mut wall).expect("wall holder");
     let start = Instant::now();
     let (status, stdout) = loop {
-        if let Some(status) = wall_child.try_wait().ok().flatten() {
+        if let Some(status) = try_wait(&cx, &mut wall_child).ok().flatten() {
             let mut buf = Vec::new();
             if let Some(mut s) = wall_child.stdout.take() {
                 let _ = s.read_to_end(&mut buf);
@@ -1651,19 +1655,19 @@ pub fn selftest_holder_liveness(exe: &Path) -> LoopDriverRunOutput {
 
     // Mutation: bound off, wedge leg does not kill
     let mut_lock = unique_lock("mut");
-    let mut mutant_holder = spawn_holder(exe, &mut_lock, "--hold-lock", &[]);
+    let mut mutant_holder = spawn_holder(&cx, exe, &mut_lock, "--hold-lock", &[]);
     std::thread::sleep(Duration::from_millis(1500));
     let (rc, out) = probe(
+        &cx,
         exe,
         &mut_lock,
         &[("LOOP_DRIVER_DISABLE_WALL_BOUND", "1")],
         &["--mutation", "--disable-rule", "wall_bound"],
     );
     std::thread::sleep(Duration::from_millis(100));
-    let mutant_alive = Command::new("/bin/kill")
-        .args(["-0", &mutant_holder.id().to_string()])
-        .status()
-        .is_ok_and(|s| s.success());
+    let mut mutant_probe = Command::new("/bin/kill");
+    mutant_probe.args(["-0", &mutant_holder.id().to_string()]);
+    let mutant_alive = os_status(&mut mutant_probe).is_some_and(|status| status.success());
     if mutant_alive && (out.contains("WEDGED") || rc == EXIT_CONCURRENT) {
         lines.push(
             "MUTATION RED wall_bound: disabling the bound leaves the planted wedge alive".into(),

@@ -1050,6 +1050,7 @@ dependencies = [
 name = "loop-driver"
 version = "0.1.0"
 dependencies = [
+ "asupersync",
  "chrono",
  "loop-switch",
  "serde",

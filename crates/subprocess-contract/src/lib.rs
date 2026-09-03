@@ -73,6 +73,40 @@ fn configure_group(command: &mut Command) {
         .kill_on_drop(true);
 }
 
+fn checkpoint_io(cx: &Cx) -> std::io::Result<()> {
+    checkpoint(cx).map_err(|error| {
+        std::io::Error::new(std::io::ErrorKind::Interrupted, error.to_string())
+    })
+}
+
+/// Spawn a long-lived process-group child for callers that must observe it while running.
+///
+/// This is the only escape hatch from the complete-child helpers: it checkpoints before spawn,
+/// creates a fresh process group, and returns the child to the owning caller. Callers MUST keep
+/// stdout/stderr inherited or drain every configured pipe themselves; use run_output when a
+/// complete captured result is sufficient.
+pub fn spawn_group(
+    cx: &Cx,
+    command: &mut std::process::Command,
+) -> std::io::Result<std::process::Child> {
+    checkpoint_io(cx)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt as _;
+        command.process_group(0);
+    }
+    command.spawn()
+}
+
+/// Check a long-lived child once while honoring the caller's cancellation context.
+pub fn try_wait(
+    cx: &Cx,
+    child: &mut std::process::Child,
+) -> std::io::Result<Option<std::process::ExitStatus>> {
+    checkpoint_io(cx)?;
+    child.try_wait()
+}
+
 /// Spawn a child in its own process group and capture both output streams.
 ///
 /// `&Cx` is first so cancellation is owned by the caller's region. The

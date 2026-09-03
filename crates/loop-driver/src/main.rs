@@ -226,12 +226,7 @@ fn main() -> ExitCode {
                     .stdin(std::process::Stdio::null())
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null());
-                #[cfg(unix)]
-                {
-                    use std::os::unix::process::CommandExt;
-                    sleep_cmd.process_group(0);
-                }
-                let child = sleep_cmd.spawn();
+                let child = subprocess_contract::spawn_group(&asupersync::Cx::for_request(), &mut sleep_cmd);
                 match child {
                     Ok(child) => {
                         println!("CHILD_RUNNING pid={}", child.id());
