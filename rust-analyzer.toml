@@ -1,0 +1,6 @@
+# rust-analyzer reads this at the workspace root. check-on-save fired `cargo check --workspace`
+# on EVERY agent save; the rch shim intercepted each one unpinned and the scheduler placed some on
+# zestdata-local -- this machine -- while four agents edited (measured 2026-09-03: six rust-analyzer
+# instances, two workspace checks in flight, Joshua: "local rust builds destroy my machine").
+# Verdicts come from the pinned lane on demand (RCH_WORKER=contabo-3), never from a save hook.
+checkOnSave = false
