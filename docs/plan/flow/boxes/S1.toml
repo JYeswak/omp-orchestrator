@@ -1,0 +1,121 @@
+# S1 — human start. DRAFT, PENDING JOSHUA'S APPROVAL (2026-09-03, orchestrator pane 1).
+# Joshua's stated preference, verbatim intent: "layered - installable binary with friendly process -
+# checks system, checks ecosystem, walks a user through installing it. once installed, its triggered
+# through slash commands (skills) that start up a scripted process and instructs agents how to follow
+# it. easy ways to liven it up and enter the 'portal'. is swarm already live or not - if not it needs
+# to ask what types agents - and spawn an ntm session with appropriate agents and context packs. it
+# needs to check agents.md and claude.md, check / install hooks. what hooks - every layer defined."
+# Approval state: status = "draft"; decisions HD-0009..HD-0012 in docs/decisions.jsonl gate the pin.
+
+[[box]]
+id = "S1"
+name = "human start: install -> system check -> ecosystem check -> walkthrough -> swarm live? -> portal"
+status = "draft"
+trigger_today = "none"
+trigger_target = "curl one-liner (prebuilt binary, no .sh in tree) -> ompo install; then slash:/omp-orchestrator:start; SessionStart hook -> ompo portal --check --json; launchd -> ompo run"
+crate = "installer (crates/installer, 3 flags, 0 tests, no caller) + umbrella MISSING"
+crate_status = "exists-no-caller"
+bead = "omp-orchestrator-plf.7.2 (umbrella), plf.7.3 (doctor), lf.7.12 (init), kxe.10 (inception), f.7.1.5 (operator setup)"
+kernel_input = "PROPOSED InstallPlan{platform, dest, agents[], hooks_to_merge[], skills[]} | Probe{name, present, version, remediation} | EcosystemProbe | SwarmState{session, panes[{id, agent, model, registered}], sources_agree}"
+kernel_output = "PROPOSED InstallReport{agent -> created|merged|already|failed|skipped, backups[]} | DoctorReport{ok|degraded|absent} | Inception{project_id, identity, control_file_decision} | SpawnPlan{agents[], pack} | PortalRow{session, panes, queue_by_bv, admission, gates, decisions_owed}"
+event_row = "LifecycleEvent{stage_from=HUMAN, stage_to=S1.<L0..L5>, actor, pane, incarnation, outcome, reason_code, blocker}"
+validator = "installer --check identity (this-repo:crates/installer/src/lib.rs:86 IDENTITY MISMATCH); doctor two-band exit (plf.7.3); crate-atom-gate d3gm over the umbrella"
+sota_standard = "installer-workmanship 24 non-negotiables (skill ~/.claude/skills/installer-workmanship/SKILL.md) implemented in Rust; three-source liveness (tmux + tick-monitor + Agent Mail agree) per AGENTS.md One Rule"
+sota_cite = "this-repo:AGENTS.md (One Rule, vibing-with-ntm section); skill:installer-workmanship/SKILL.md; mirror:destructive_command_guard/install.sh (gold-standard installer, feature list pending BinGates extraction); fh STALE tonight (SEARCH_INDEX_STALE) - no fh row cited"
+skill = "/omp-orchestrator:start (portal), :tick, :worker, :grade, :halt - thin wrappers over ompo <verb> --json; /installer-workmanship; /frankentui (walkthrough TUI, decision HD-0009)"
+
+# layers - each is a substage with its own crate, checks, and hooks
+[[box.layer]]
+id = "L0"
+name = "install"
+command = "ompo install"
+checks = ["platform -> triple", "preflight disk/perms/net", "mkdir lock", "SHA256 + cosign", "install -m 0755", "completions", "PATH", "agent detection: claude, codex, omp/pi, agy, cursor", "hook merge with timestamped backup", "skill install ~/.claude/skills + ~/.codex/skills", "summary per agent", "uninstall"]
+exists = "crates/installer --check/--install/--bin-dir only"
+
+[[box.layer]]
+id = "L1"
+name = "system check"
+command = "ompo doctor"
+checks = ["tmux >= 3.6", "ntm built from source (never brew)", "br", "bv", "agent-mail :8765", "socraticode/qdrant", "rch + lane row for this repo", "git", "disk vs mint floor", "frankenmermaid", "fh (+STALE banner)", "toolchain pin present on the lane"]
+rules = ["two signals per probe (PATH presence + version)", "UNPROBEABLE for tools that reject --version (tmux)", "every ABSENT carries a remediation", "two-band exit"]
+exists = "none"
+
+[[box.layer]]
+id = "L2"
+name = "ecosystem check"
+command = "ompo doctor --repo / ompo init"
+checks = ["git remote configured (305-commit trauma)", "AGENTS.md + CLAUDE.md present and stamped (foundry STAMP-MANIFEST)", ".beads initialized", "rust-toolchain.toml", "registries/ (claims, arrows)", ".git/hooks/pre-commit identity == HEAD", "Cargo members", "Agent Mail project registered", "rch lane row"]
+init_writes = ["AGENTS.md from /Users/josh/Developer/foundry/flywheel/AGENTS.md.template", ".omp-orchestrator/config.toml", ".omp-orchestrator/inception.json"]
+exists = "template exists in foundry; crate none"
+
+[[box.layer]]
+id = "L3"
+name = "walkthrough"
+command = "ompo start (TUI for humans, --json for agents)"
+rules = ["identical step list both modes", "each step {step, status, reason_code, next_command}", "idempotent; re-run reports state"]
+decision = "HD-0009"
+exists = "none"
+
+[[box.layer]]
+id = "L4"
+name = "swarm live?"
+command = "ompo start step / ompo portal"
+live_definition = "tmux has-session AND tick-monitor observe sees OMP status lines AND Agent Mail roster - all three agree, else NOT live"
+not_live = ["ask agent types/counts/models (decision HD-0010)", "ntm spawn <session> --cc N:model --cod N:model --assign --cass-context <repo>", "WAVE.md GENERATED from tmux list-panes, never typed", "macro_start_session per pane", "context pack: ntm send -t tick_zero"]
+exists = "ntm spawn/--assign/--cass-context/templates exist; wrapper none"
+
+[[box.layer]]
+id = "L5"
+name = "portal"
+command = "ompo portal --json via /omp-orchestrator:start"
+row = "session, panes, queue depth by bv, admission, gates red/green, decisions owed to Joshua, THE ONE NEXT ACTION"
+exists = "none"
+
+# hooks - every layer
+[[box.hook]]
+surface = "git pre-commit"
+hook = "no-shell-gate multi-gate dispatcher (8 gates)"
+status = "wired, per-clone, hand-installed; identity via 588v"
+[[box.hook]]
+surface = "claude SessionStart"
+hook = "ompo portal --check --json"
+status = "0 (today: zestgraph topology gate only)"
+[[box.hook]]
+surface = "claude PreToolUse(Bash)"
+hook = "kernel-only-operator-hook (--shadow today), dcg, rch shim"
+status = "partial"
+[[box.hook]]
+surface = "claude PostToolUse"
+hook = "zestgraph-capture; ee capture (eeManaged=0)"
+status = "partial"
+[[box.hook]]
+surface = "claude Stop"
+hook = "close-check + REFUSE Stop while an in_progress bead held by this agent has no STAGE: comment since dispatch (decision HD-0011)"
+status = "zestgraph-close-check exists; bead-stage clause 0"
+[[box.hook]]
+surface = "codex ~/.codex/hooks.json"
+hook = "mirror of the above (4 Pre / 2 Post today)"
+status = "partial"
+[[box.hook]]
+surface = "omp (pi) panes"
+hook = "UNMEASURED - dist/types/extensibility, capability exist; whether a profile takes hooks is unknown (decision HD-0012: probe first)"
+status = "unmeasured"
+[[box.hook]]
+surface = "launchd"
+hook = "ai.zeststream.omp-orchestrator -> ompo run; reaper"
+status = "paused; reaper unwired"
+
+branches = [
+  "L0 checksum/cosign FAIL -> refuse (supply chain)",
+  "L0 agent detected -> merge hooks + skills with backup; per-agent created|merged|already|failed|skipped",
+  "L1 ABSENT -> halt with the named install step for the human",
+  "L1 UNPROBEABLE -> recorded, never vacuously green",
+  "L2 no git remote -> halt",
+  "L2 AGENTS.md/CLAUDE.md missing or unstamped -> init writes from template",
+  "L2 hook identity != HEAD -> rebuild on lane, reinstall",
+  "L4 live (3 sources agree) -> portal",
+  "L4 not live -> ask agent types -> spawn -> register -> pack -> portal",
+  "L4 sources disagree -> NOT live; the disagreement is the finding",
+  "L5 decision owed to Joshua -> LOOP HALTS, one named decision",
+]
+no_claim = "Draft from the orchestrator's measurement + Joshua's stated preference; not yet approved, not yet AmberGate's row (AmberGate owns S1-S4 in the walk and may disagree - a disagreement is a finding). Nothing in this row is built; the trigger census it rests on (launchd/crontab/settings.json/.git/hooks/~/.local/bin) was measured 2026-09-03 and is in the chat transcript, not yet in a ledger."
