@@ -12,7 +12,7 @@
 //! that a send RETURNED rather than that a message ARRIVED, and as a
 //! `build_id` that never re-derives: **a derived value that cannot vary is not
 //! derived.** Here the consequence is specific — a bead closed with a prose
-//! reason, which the tracker's policy REFUSES, would still have been reported as
+//! reason, which the local classifier REFUSES but direct `br` stores, would still have been reported as
 //! `MUTATION-VERIFIED-or-equivalent` by the follow-up stage.
 //!
 //! # Why `Unread` is a first-class verdict and not an error
@@ -30,10 +30,17 @@
 //! tracker failure with a policy refusal — that distinction belongs to
 //! `classify_followup`'s `tracker_readable` input, which is checked first and
 //! outranks everything.
+//!
+//! The installed `br 0.4.1` command accepts and stores arbitrary close-reason
+//! strings; it is not the validator. The four-token set below is the policy
+//! enforced by this classifier for callers that pass a reason through it.
+//! Direct `br close` calls bypass this module, which is why the live closed-row
+//! census is a required separate control rather than proof that `br` refused a
+//! bad close.
 
 use std::fmt;
 
-/// A close-reason prefix the tracker's policy sanctions.
+/// A close-reason prefix the local close-policy classifier admits.
 ///
 /// # What this does NOT mean
 ///
@@ -97,9 +104,9 @@ pub enum CloseReasonVerdict {
         prefix: ClosePrefix,
     },
     /// A reason is present and begins with none of the sanctioned prefixes. The
-    /// tracker's policy refuses this, and the refusal scrolls past in-pane while
-    /// the agent believes the close landed — which is why the status must be read
-    /// back rather than inferred from the command appearing to succeed.
+    /// local classifier refuses this. The tracker command itself stores arbitrary
+    /// reasons, so a direct tracker close can bypass this verdict; the status must
+    /// be read back rather than inferred from the command appearing to succeed.
     PolicyRefused {
         /// The first whitespace-delimited token, so the caller can name what was
         /// written instead of echoing an entire prose paragraph into a log line.
@@ -142,8 +149,8 @@ impl fmt::Display for CloseReasonVerdict {
             Self::PolicyRefused { leading } => write!(
                 formatter,
                 "CLOSE_REASON_POLICY_REFUSED leading={leading} -- a reason must start with one of \
-                 MUTATION-VERIFIED, DONE, APPROVED, WONTFIX; the tracker refuses prose and the \
-                 refusal scrolls past, so read the status back"
+                 MUTATION-VERIFIED, DONE, APPROVED, WONTFIX; the local guard refuses this, but a \
+                 direct br close bypasses it, so read the status back"
             ),
             Self::Empty => write!(
                 formatter,
@@ -158,7 +165,7 @@ impl fmt::Display for CloseReasonVerdict {
     }
 }
 
-/// Classify a close reason against the policy.
+/// Classify a close reason against the local four-prefix policy.
 ///
 /// `None` means the caller did not read the reason and yields
 /// [`CloseReasonVerdict::Unread`] — never a verified verdict.
@@ -193,7 +200,10 @@ mod tests {
     #[test]
     fn every_sanctioned_prefix_is_accepted() {
         for prefix in ClosePrefix::ALL {
-            let reason = format!("{prefix}: re-ran the suite, 28 passed / 0 failed", prefix = prefix);
+            let reason = format!(
+                "{prefix}: re-ran the suite, 28 passed / 0 failed",
+                prefix = prefix
+            );
             let verdict = classify_close_reason(Some(&reason));
             assert_eq!(
                 verdict,
@@ -227,9 +237,9 @@ mod tests {
         );
     }
 
-    /// A lowercase prefix is NOT the prefix. The tracker's policy is
-    /// case-sensitive, and accepting `done:` here while the tracker refuses it
-    /// would make this classifier disagree with the authority it models.
+    /// A lowercase prefix is NOT the prefix. The local classifier is
+    /// case-sensitive, and accepting `done:` here would widen the enforced set
+    /// without changing the documented policy.
     #[test]
     fn a_lowercase_prefix_is_refused() {
         assert_eq!(
@@ -259,7 +269,10 @@ mod tests {
 
     #[test]
     fn an_empty_reason_is_distinct_from_an_unread_one() {
-        assert_eq!(classify_close_reason(Some("   ")), CloseReasonVerdict::Empty);
+        assert_eq!(
+            classify_close_reason(Some("   ")),
+            CloseReasonVerdict::Empty
+        );
         assert_ne!(
             classify_close_reason(Some("   ")),
             classify_close_reason(None),

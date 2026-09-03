@@ -620,6 +620,7 @@ mod tests {
             StepKind::GradeRequested,
             StepKind::GradeReceived,
             StepKind::Closed,
+            StepKind::ClosedWithoutGrade,
             StepKind::Redispatched,
             StepKind::AckReadBack,
         ];
