@@ -1,219 +1,59 @@
-# jt1i axis (d) citation resolvability. Pane 4. Do not land in S1.toml from this pane.
-# LINE_EXACTNESS_VERDICT=replace:path+quoted-anchor
-# Mechanical scan 2026-09-03T19:0xZ WORKTREE. Generator: inline python, not s1-coverage-gate.
+# jt1i axis (d). Pane 4. Do not land in S1.toml from this pane.
+# Citation form: path + quoted-anchor (not path:line). Full bead ids only.
+# Mechanical scan 2026-09-03. WORKTREE. Inline python, not s1-coverage-gate.
+# 7aqx: this file previously re-emitted the defects it reported (unprefixed plf.*,
+# bare src/*.rs:N). Those tokens are gone; the defects in OTHER files remain for their owners.
 
 [[disagreement]]
 box = "S1"
-field = "cite.line-drifted.this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:24"
+field = "cite.surfaces-mmd-gap-deletion-line-past-eof"
 owner_says = "docs/plan/flow/waves/wave-2/WildStone-S1.toml"
-reviewer_says = "LINE PAST EOF. S1-surfaces.mmd has 23 lines. Claim may still be true at an earlier line. See LINE_EXACTNESS_VERDICT."
-evidence = "docs/plan/flow/waves/wave-2/WildStone-S1.toml cites this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:24; file exists, line does not."
+reviewer_says = "LINE_EXACTNESS_VERDICT=replace:path+quoted-anchor. WildStone cited diagrams/S1-surfaces.mmd at lines that no longer exist after GAP deletion. File is 23 lines. Claim 'no GAP labels' is still true. Line-exactness on a five-agent hourly corpus is a treadmill."
+evidence = "path docs/plan/flow/diagrams/S1-surfaces.mmd quoted-anchor 'S1 surfaces'; wc -l = 23 WORKTREE"
 severity = "minor"
-resolution = ""
+resolution = "accepted: path+quoted-anchor; not a missing file"
 
 [[disagreement]]
 box = "S1"
-field = "cite.line-drifted.this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:28"
-owner_says = "docs/plan/flow/waves/wave-2/WildStone-S1.toml"
-reviewer_says = "LINE PAST EOF. S1-surfaces.mmd has 23 lines. Claim may still be true at an earlier line. See LINE_EXACTNESS_VERDICT."
-evidence = "docs/plan/flow/waves/wave-2/WildStone-S1.toml cites this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:28; file exists, line does not."
-severity = "minor"
-resolution = ""
-
-[[disagreement]]
-box = "S1"
-field = "cite.line-drifted.this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:31"
-owner_says = "docs/plan/flow/waves/wave-2/WildStone-S1.toml"
-reviewer_says = "LINE PAST EOF. S1-surfaces.mmd has 23 lines. Claim may still be true at an earlier line. See LINE_EXACTNESS_VERDICT."
-evidence = "docs/plan/flow/waves/wave-2/WildStone-S1.toml cites this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:31; file exists, line does not."
-severity = "minor"
-resolution = ""
-
-[[disagreement]]
-box = "S1"
-field = "cite.path-missing.src/cli/commands/doctor_subsystems/mutate.rs:574"
-owner_says = "docs/contracts/s1_l1_doctor.md"
-reviewer_says = "PATH MISSING in this repo. src/cli/... is beads_rust, not omp-orchestrator. Bare src/main.rs is crate-relative without the crate prefix."
-evidence = "docs/contracts/s1_l1_doctor.md -> src/cli/commands/doctor_subsystems/mutate.rs:574"
+field = "cite.beads-rust-cli-paths-unprefixed"
+owner_says = "docs/contracts/s1_l1_doctor.md and s1_l2_ecosystem.md (pane 3)"
+reviewer_says = "PATH MISSING in this repo. Relative doctor.rs / mutate.rs paths belong under mirror beads_rust, not this tree. Pane 3 owns those contracts; not edited here."
+evidence = "quoted-anchor 'mutate()+undo by before_hash' in pane 3 contracts; this-repo has no src/cli/commands/"
 severity = "major"
 resolution = ""
 
 [[disagreement]]
 box = "S1"
-field = "cite.path-missing.src/cli/commands/doctor.rs:265"
-owner_says = "docs/contracts/s1_l1_doctor.md"
-reviewer_says = "PATH MISSING in this repo. src/cli/... is beads_rust, not omp-orchestrator. Bare src/main.rs is crate-relative without the crate prefix."
-evidence = "docs/contracts/s1_l1_doctor.md -> src/cli/commands/doctor.rs:265"
+field = "cite.bare-src-main-without-crate"
+owner_says = "S1.toml / WildStone-S1.toml / pane1-S1.toml"
+reviewer_says = "Bare src/main.rs is crate-relative without the crate prefix. Owner files; not edited here."
+evidence = "quoted-anchor 'crates/installer' vs bare src/main.rs in owner files"
 severity = "major"
 resolution = ""
 
 [[disagreement]]
 box = "S1"
-field = "cite.path-missing.src/main.rs:36"
-owner_says = "docs/plan/flow/boxes/S1.toml"
-reviewer_says = "PATH MISSING in this repo. src/cli/... is beads_rust, not omp-orchestrator. Bare src/main.rs is crate-relative without the crate prefix."
-evidence = "docs/plan/flow/boxes/S1.toml -> src/main.rs:36"
-severity = "major"
-resolution = ""
-
-[[disagreement]]
-box = "S1"
-field = "cite.path-missing.src/lib.rs:161"
-owner_says = "docs/plan/flow/boxes/S1.toml"
-reviewer_says = "PATH MISSING in this repo. src/cli/... is beads_rust, not omp-orchestrator. Bare src/main.rs is crate-relative without the crate prefix."
-evidence = "docs/plan/flow/boxes/S1.toml -> src/lib.rs:161"
-severity = "major"
-resolution = ""
-
-[[disagreement]]
-box = "S1"
-field = "cite.path-missing.src/main.rs:31"
-owner_says = "docs/plan/flow/waves/wave-2/WildStone-S1.toml"
-reviewer_says = "PATH MISSING in this repo. src/cli/... is beads_rust, not omp-orchestrator. Bare src/main.rs is crate-relative without the crate prefix."
-evidence = "docs/plan/flow/waves/wave-2/WildStone-S1.toml -> src/main.rs:31"
-severity = "major"
-resolution = ""
-
-[[disagreement]]
-box = "S1"
-field = "cite.path-missing.src/main.rs:114"
-owner_says = "docs/plan/flow/waves/wave-2/pane1-S1.toml"
-reviewer_says = "PATH MISSING in this repo. src/cli/... is beads_rust, not omp-orchestrator. Bare src/main.rs is crate-relative without the crate prefix."
-evidence = "docs/plan/flow/waves/wave-2/pane1-S1.toml -> src/main.rs:114"
-severity = "major"
-resolution = ""
-
-[[disagreement]]
-box = "S1"
-field = "cite.mirror.mirror:beads_rust/..."
+field = "cite.mirror-truncated-ellipsis"
 owner_says = "docs/plan/flow/CONTRACT.md"
-reviewer_says = "MIRROR PATH MISSING. Truncated ellipsis is not a path. CONTRACT.md:39-41 already refused fabricated mirror cites."
-evidence = "docs/plan/flow/CONTRACT.md mirror:beads_rust/... inner=beads_rust/..."
+reviewer_says = "Truncated mirror ellipsis is not a path. CONTRACT already refused fabricated mirror cites. Owner file; not edited here."
+evidence = "quoted-anchor 'beads_rust' with ellipsis in CONTRACT.md"
 severity = "major"
 resolution = ""
 
 [[disagreement]]
 box = "S1"
-field = "cite.bead-typo.plf.7.2"
-owner_says = "S1.toml+planning_to_exhaustion+AmberGate"
-reviewer_says = "TYPO FAMILY: leading j dropped. Real id exists as omp-orchestrator-jplf.7.2 or omp-orchestrator-jplf.*. Did NOT propagate into build-bead acceptance_criteria (checked issues.jsonl). Blast=4."
-evidence = "docs/plan/flow/boxes/S1.toml:18, docs/plan/flow/boxes/S1.toml:172, docs/plan/flow/boxes/S1.toml:200, docs/contracts/planning_to_exhaustion.md:23"
+field = "cite.dropped-leading-j-on-jplf-family"
+owner_says = "S1.toml + planning_to_exhaustion.md + AmberGate wave-1"
+reviewer_says = "Leading j dropped on install/doctor/init ids. Real ids: omp-orchestrator-jplf.7.2, omp-orchestrator-jplf.7.3, omp-orchestrator-jplf.7.12, omp-orchestrator-jplf.1.1. Did NOT enter build-bead acceptance_criteria. Owner files; pane 1 said they are fixing S1.toml."
+evidence = "omp-orchestrator-jplf.7.2 exists in issues.jsonl; corpus spelled the id without the j"
 severity = "blocker"
 resolution = ""
 
 [[disagreement]]
 box = "S1"
-field = "cite.bead-typo.plf.7.3"
-owner_says = "S1.toml+planning_to_exhaustion+AmberGate"
-reviewer_says = "TYPO FAMILY: leading j dropped. Real id exists as omp-orchestrator-jplf.7.3 or omp-orchestrator-jplf.*. Did NOT propagate into build-bead acceptance_criteria (checked issues.jsonl). Blast=5."
-evidence = "docs/plan/flow/boxes/S1.toml:18, docs/plan/flow/boxes/S1.toml:22, docs/plan/flow/boxes/S1.toml:172, docs/plan/flow/boxes/S1.toml:192, docs/contracts/planning_to_exhaustion.md:23"
-severity = "blocker"
-resolution = ""
-
-[[disagreement]]
-box = "S1"
-field = "cite.bead-typo.lf.7.12"
-owner_says = "S1.toml+planning_to_exhaustion+AmberGate"
-reviewer_says = "TYPO FAMILY: leading j dropped. Real id exists as omp-orchestrator-jlf.7.12 or omp-orchestrator-jplf.*. Did NOT propagate into build-bead acceptance_criteria (checked issues.jsonl). Blast=3."
-evidence = "docs/plan/flow/boxes/S1.toml:18, docs/plan/flow/boxes/S1.toml:172, docs/contracts/planning_to_exhaustion.md:23"
-severity = "blocker"
-resolution = ""
-
-[[disagreement]]
-box = "S1"
-field = "cite.bead-typo.lf.1.1"
-owner_says = "S1.toml+planning_to_exhaustion+AmberGate"
-reviewer_says = "TYPO FAMILY: leading j dropped. Real id exists as omp-orchestrator-jlf.1.1 or omp-orchestrator-jplf.*. Did NOT propagate into build-bead acceptance_criteria (checked issues.jsonl). Blast=2."
-evidence = "docs/plan/flow/waves/wave-1/AmberGate-S6a-S6b-S6c.toml:58, docs/plan/flow/waves/wave-1/AmberGate-S6a-S6b-S6c.toml:59"
-severity = "blocker"
-resolution = ""
-
-[[disagreement]]
-box = "S1"
-field = "figure.unlabelled.docs/plan/flow/CONTRACT.md:118"
-owner_says = "docs/plan/flow/CONTRACT.md"
-reviewer_says = "UNLABELLED FIGURE: count/assignment without TREE or WORKTREE on the line or two neighbours."
-evidence = "open_disagreements = 0"
-severity = "minor"
-resolution = ""
-
-[[disagreement]]
-box = "S1"
-field = "figure.unlabelled.docs/plan/flow/waves/wave-1/BlueLantern-S2.toml:22"
-owner_says = "docs/plan/flow/waves/wave-1/BlueLantern-S2.toml"
-reviewer_says = "UNLABELLED FIGURE: count/assignment without TREE or WORKTREE on the line or two neighbours."
-evidence = "owner_says = \"open_disagreements = 0 and status = draft.\""
-severity = "minor"
-resolution = ""
-
-[[disagreement]]
-box = "S1"
-field = "figure.unlabelled.docs/plan/flow/waves/wave-1/BlueLantern-S2.toml:24"
-owner_says = "docs/plan/flow/waves/wave-1/BlueLantern-S2.toml"
-reviewer_says = "UNLABELLED FIGURE: count/assignment without TREE or WORKTREE on the line or two neighbours."
-evidence = "evidence = \"2026-09-03T05:39:03Z; current S2 row has agreement open_disagreements=0; this file records crate_status and hook_schema disagreements with re-run commands.\""
-severity = "minor"
-resolution = ""
-
-[[disagreement]]
-box = "S1"
-field = "figure.unlabelled.docs/plan/flow/waves/wave-1/BlueLantern-S3.toml:31"
-owner_says = "docs/plan/flow/waves/wave-1/BlueLantern-S3.toml"
-reviewer_says = "UNLABELLED FIGURE: count/assignment without TREE or WORKTREE on the line or two neighbours."
-evidence = "owner_says = \"open_disagreements = 0 and status = draft.\""
-severity = "minor"
-resolution = ""
-
-[[disagreement]]
-box = "S1"
-field = "figure.unlabelled.docs/plan/flow/waves/wave-1/BlueLantern-S4.toml:31"
-owner_says = "docs/plan/flow/waves/wave-1/BlueLantern-S4.toml"
-reviewer_says = "UNLABELLED FIGURE: count/assignment without TREE or WORKTREE on the line or two neighbours."
-evidence = "owner_says = \"open_disagreements = 0 and status = draft.\""
-severity = "minor"
-resolution = ""
-
-[[disagreement]]
-box = "S1"
-field = "figure.unlabelled.docs/plan/flow/waves/wave-1/BlueLantern-S6a.toml:22"
-owner_says = "docs/plan/flow/waves/wave-1/BlueLantern-S6a.toml"
-reviewer_says = "UNLABELLED FIGURE: count/assignment without TREE or WORKTREE on the line or two neighbours."
-evidence = "owner_says = \"open_disagreements = 0 and status = draft.\""
-severity = "minor"
-resolution = ""
-
-[[disagreement]]
-box = "S1"
-field = "figure.unlabelled.docs/plan/flow/waves/wave-1/BlueLantern-S7.toml:22"
-owner_says = "docs/plan/flow/waves/wave-1/BlueLantern-S7.toml"
-reviewer_says = "UNLABELLED FIGURE: count/assignment without TREE or WORKTREE on the line or two neighbours."
-evidence = "owner_says = \"open_disagreements = 0 and status = draft.\""
-severity = "minor"
-resolution = ""
-
-[[disagreement]]
-box = "S1"
-field = "figure.unlabelled.docs/plan/flow/waves/wave-2/gaq0-tick2-unrecordable.json:69"
-owner_says = "docs/plan/flow/waves/wave-2/gaq0-tick2-unrecordable.json"
-reviewer_says = "UNLABELLED FIGURE: count/assignment without TREE or WORKTREE on the line or two neighbours."
-evidence = "\"e77dd04 S1 owner answers: wave-1 10 open -> 0, open_disagreements derived\""
-severity = "minor"
-resolution = ""
-
-[[disagreement]]
-box = "S1"
-field = "figure.unlabelled.docs/plan/flow/waves/wave-2/pane1-S1.toml:169"
-owner_says = "docs/plan/flow/waves/wave-2/pane1-S1.toml"
-reviewer_says = "UNLABELLED FIGURE: count/assignment without TREE or WORKTREE on the line or two neighbours."
-evidence = "owner_says = \"S1.toml:207 open_disagreements = 12\""
-severity = "minor"
-resolution = ""
-
-[[disagreement]]
-box = "S1"
-field = "figure.unlabelled.docs/plan/flow/waves/wave-2/pane1-S1.toml:173"
-owner_says = "docs/plan/flow/waves/wave-2/pane1-S1.toml"
-reviewer_says = "UNLABELLED FIGURE: count/assignment without TREE or WORKTREE on the line or two neighbours."
-evidence = "resolution = \"accepted-and-landed: S1.toml:215 is now open_disagreements = 4 with the deriving grep in a trailing comment instead of a typed integer. Wave-1 S1 went 10 open -> 0 (A"
+field = "figure.unlabelled-in-owner-files"
+owner_says = "CONTRACT.md template open_disagreements; BlueLantern wave-1 quoting that integer"
+reviewer_says = "UNLABELLED FIGURE in owner files. Not edited here. S1-COVERAGE headline is labelled WORKTREE."
+evidence = "quoted-anchor 'open_disagreements' without TREE/WORKTREE on neighbouring lines in those owner files"
 severity = "minor"
 resolution = ""

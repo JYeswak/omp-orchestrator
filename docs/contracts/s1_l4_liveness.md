@@ -35,11 +35,11 @@ L4 answers "is the swarm live?" with three freshness-bearing sources. Live requi
 
 ## Laws
 
-- **LAW-L4-THREE-FRESH** — live iff NTM, tick-monitor, and Agent Mail each have `available && fresh` and equal pane sets. *Test:* `l4_liveness.rs::live_requires_three_fresh_agreeing`.
-- **LAW-L4-SILENT-NOT-LIVE** — known-bad: two fresh-agreeing sources + one SILENT ⇒ `NotLive`. *Test:* `l4_liveness.rs::silent_third_is_not_live`.
-- **LAW-L4-NO-TMUX-RAW** — a `LiveVerdict` constructor that takes a `bool` from `tmux has-session` does not compile / is not part of the API. *Test:* `l4_liveness.rs::no_bool_tmux_source`.
-- **LAW-L4-MAP-TICK** — `age_ms = gap_secs * 1000`; `gap_secs` absent ⇒ SILENT, not `age_ms=0`. Zero is a measured freshness, not a default. *Test:* `l4_liveness.rs::missing_gap_is_silent`.
-- **LAW-L4-SPAWN-CX** — spawn child is region-owned; `Cancelled` and `Panicked` are recorded outcomes. *Test:* TARGET `l4_liveness.rs::spawn_cancelled_is_named`.
+- **`LAW-L4-THREE-FRESH`** — live iff NTM, tick-monitor, and Agent Mail each have `available && fresh` and equal pane sets. *Test:* `l4_liveness.rs::live_requires_three_fresh_agreeing`.
+- **`LAW-L4-SILENT-NOT-LIVE`** — known-bad: two fresh-agreeing sources + one SILENT ⇒ `NotLive`. *Test:* `l4_liveness.rs::silent_third_is_not_live`.
+- **`LAW-L4-NO-TMUX-RAW`** — a `LiveVerdict` constructor that takes a `bool` from `tmux has-session` does not compile / is not part of the API. *Test:* `l4_liveness.rs::no_bool_tmux_source`.
+- **`LAW-L4-MAP-TICK`** — `age_ms = gap_secs * 1000`; `gap_secs` absent ⇒ SILENT, not `age_ms=0`. Zero is a measured freshness, not a default. *Test:* `l4_liveness.rs::missing_gap_is_silent`.
+- **`LAW-L4-SPAWN-CX`** — spawn child is region-owned; `Cancelled` and `Panicked` are recorded outcomes. *Test:* TARGET `l4_liveness.rs::spawn_cancelled_is_named`.
 
 ## Authority / Recovery / Ordering
 
@@ -103,12 +103,24 @@ def verdict(sources):
     panes = [tuple(v["panes"]) for v in sources.values()]
     return "LIVE" if all(p == panes[0] for p in panes) else "NOT_LIVE"
 
+# Algebra fixture (known-bad shape).
 good = {"ntm":{"available":True,"fresh":True,"panes":["%7","%8"]},"tick":{"available":True,"fresh":True,"panes":["%7","%8"]},"mail":{"available":True,"fresh":True,"panes":["%7","%8"]}}
 silent = dict(good, mail=None)
 print("three_fresh", verdict(good))
 print("two_plus_silent", verdict(silent))
 assert verdict(good) == "LIVE"
 assert verdict(silent) == "NOT_LIVE"
+
+# SYSTEM not fixture: map live snapshot. work_coordination is NOT tick or mail.
+# Missing tick/mail keys are SILENT. One populated source cannot be LIVE.
+live_mapped = {
+    "ntm": {"available": True, "fresh": True, "panes": ["x"]} if src else None,
+    "tick": None if "tick_monitor" not in src else {"available": True, "fresh": True, "panes": ["x"]},
+    "mail": None if "agent_mail" not in src else {"available": True, "fresh": True, "panes": ["x"]},
+}
+print("live_mapped_keys", {k: (v is not None) for k,v in live_mapped.items()})
+print("live_snapshot_verdict", verdict(live_mapped))
+assert verdict(live_mapped) == "NOT_LIVE", "live ntm snapshot without tick_monitor+agent_mail must be NOT_LIVE"
 print("L4_LIVENESS_STANDIN status=CLEAN")
 PY
 ```
