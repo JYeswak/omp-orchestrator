@@ -4,182 +4,213 @@ Bead: `omp-orchestrator-s1w0-l0-install-contract-6gh6`
 
 ## Purpose
 
-This contract defines the L0 human-start install boundary: detect the supported host triple, verify a prebuilt `ompo` artifact, reject destination-name collisions, install atomically, persist the installed identity, merge per-agent hooks and skills with recoverable backups, and emit a typed lifecycle event, durable install report, monitor observation, and gate verdict. It binds fail-closed behavior for tampered artifacts, unsupported hosts, ambiguous PATH ownership, incomplete atomic replacement, failed durability synchronization, and hook-merge rollback; it is a design contract for S1 L0, not an assertion that the current installer already implements every operation.
+This contract defines the complete Wave 0 readiness boundary for S1 L0: the install CLI must resolve a supported host triple, verify a prebuilt artifact through SHA-256, minisign, and sigstore policy, stage and atomically publish it with file and parent-directory durability, refuse PATH collisions, detect all ten supported agent families, merge hooks with timestamped backup and restore-on-failure, install skills, emit a per-agent summary and typed observability, prove identity on readback, and uninstall without residue. This file is the build/test matrix, not an implementation claim; S1 cannot advance while any matrix row is MISSING.
 
 ## Contract Artifacts
 
-1. Canonical artifact: proposed `.omp-orchestrator/work/s1/l0/install-report.json`, the `InstallReport` JSON envelope named by the S1 L0 box. It records host triple, artifact digest and signature verdicts, destination, per-agent merge outcomes, backups, path hits, event reason code, and the installed build identity.
-2. Install runner: planned `ompo install --json`, with the existing identity-check surface in `crates/installer/src/main.rs` and `crates/installer/src/lib.rs` as the first consumer seam. The runner is not present as a complete L0 implementation in this wave.
-3. Invariant suite: planned `tests/s1_l0_install_contract.rs`; until the crate exists, the in-document invariant suite below is the review oracle and the Validation command checks that the contract names every required law, refusal, observability row, and falsifier.
+1. Canonical target: `InstallPlan` -> `InstallReport`, proposed at `.omp-orchestrator/work/s1/l0/install-report.json`; the report carries artifact identity, verification, destination, path hits, agents, backups, event reason code, and uninstall result.
+2. Runner target: `ompo install --json`, `ompo install --check`, `ompo uninstall --json`; the current identity seam is `crates/installer/src/lib.rs:3-8` and its CLI seam is `crates/installer/src/main.rs:20-39`.
+3. Invariant suite target: `tests/l0_install.rs`. No crate or test file is created in this wave; the matrix and named falsifiers are the readiness gate.
 
 ## Stable Values
 
-Every value below is a stable citation vocabulary for the L0 implementation and its reviewers.
+The stable-ID set is 16 L0 values plus 9 invariant values = 25. Every one is covered by a build row, test row, or an explicit documentation-only marker in the matrix below.
 
-| ID | Value | Property |
-|---|---|---|
-| `L0-PLATFORM-TRIPLE` | `x86_64-apple-darwin`, `aarch64-apple-darwin`, `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-gnu` | Supported host triples; musl-to-gnu fallback is explicit, never guessed. |
-| `L0-VERIFY-SHA256` | SHA-256 digest | Mandatory artifact identity check; mismatch refuses installation. |
-| `L0-VERIFY-MINISIGN` | Per-version minisign key id | Signature check; `--require-minisign` turns an unavailable/invalid signature into refusal. |
-| `L0-VERIFY-SIGSTORE` | Cosign version plus certificate-identity regexp | OIDC identity check, with the documented local-key fallback policy. |
-| `L0-ATOMIC-RENAME` | Complete temporary artifact then rename | The destination is never published from a partial stream. |
-| `L0-DURABILITY-PARENT` | Parent-directory `fsync` after rename | The rename is not reported durable until the containing directory is synchronized. |
-| `L0-DURABILITY-FULLFSYNC` | macOS `F_FULLFSYNC` on the relevant descriptor | The macOS durability strengthening is explicit; inability to complete it is a typed refusal, not a warning. |
-| `L0-PATH-COLLISION` | Explicit destination ownership | A bare `installer` name cannot silently resolve to `/usr/sbin/installer`; collision is non-interactive refusal. |
-| `L0-HOOK-MERGE` | Backup, merge, restore-on-failure | Per-agent hook/skill changes are reversible and attributable. |
-| `L0-EVENT` | `LifecycleEvent` with `stage_to=S1.L0` | Every attempt has a writer, actor, pane, incarnation, outcome, and non-empty reason code. |
-| `L0-REPORT` | `InstallReport` | The durable artifact is written before success is exposed. |
-| `L0-MONITOR` | `PortalRow` / install identity check | A subsequent monitor reads the report and installed identity, not a guessed PATH state. |
-| `L0-GATE` | Checksum, signature, collision, and identity gates | Each gate has a named known-bad leg and refuses the corresponding unsafe state. |
-| `L0-METRIC` | `parent_fsync_successes / atomic_rename_attempts` | Durability coverage; target floor is `1.0` for successful installs. |
-
-## Operations
-
-1. **Detect.** Derive the host triple from `uname -s` and `uname -m`. Accept only `L0-PLATFORM-TRIPLE`; use the measured musl-to-gnu fallback only where the upstream rule permits it. Record the selected triple and fallback decision.
-2. **Verify.** Require the SHA-256 check. Run the minisign and sigstore checks according to policy, recording version, key/certificate identity, and whether a fallback was used. A digest mismatch is `L0-VERIFY-SHA256` refusal; it is never a warning followed by install.
-3. **Resolve destination.** Resolve the explicit `ompo` destination and enumerate PATH hits before writing. If another executable owns the requested bare name, return `L0-PATH-COLLISION` and list the hits; do not prompt or overwrite.
-4. **Publish atomically.** Stream the verified archive into a same-directory temporary file, set mode `0755`, synchronize the file, rename the complete file into place, then synchronize the containing directory. On macOS perform `L0-DURABILITY-FULLFSYNC` as well. Any failed required synchronization produces `L0_DURABILITY_REFUSED` and no success report.
-5. **Merge.** Merge hooks and skills for each detected agent. Create timestamped backups before each mutation. If any merge fails, restore the affected prior state and emit `L0_HOOK_MERGE_ROLLBACK`; a partial merge is not `merged`.
-6. **Prove identity.** Read back the installed artifact identity and compare it with the source HEAD/build id/version/process identity already defined by `crates/installer/src/lib.rs`. A mismatch is restrictive.
-7. **Observe and record.** Write the `LifecycleEvent` and `InstallReport`, then expose the monitor row and gate verdict. The event reason code is selected from the typed set below; empty or prose-only reason codes are invalid.
-
-### Typed event reason codes
-
-`L0_INSTALL_SUCCEEDED`, `L0_PLATFORM_REFUSED`, `L0_SHA256_REFUSED`, `L0_MINISIGN_REFUSED`, `L0_SIGSTORE_REFUSED`, `L0_PATH_COLLISION`, `L0_ATOMIC_PUBLISH_REFUSED`, `L0_DURABILITY_REFUSED`, `L0_HOOK_MERGE_ROLLBACK`, and `L0_IDENTITY_MISMATCH`.
+| ID | Meaning |
+|---|---|
+| `L0-PLATFORM-TRIPLE` | Supported Darwin/Linux triples and explicit musl-to-gnu fallback. |
+| `L0-VERIFY-SHA256` | Mandatory digest verification; tamper refuses. |
+| `L0-VERIFY-MINISIGN` | Per-version minisign verification and required-signature policy. |
+| `L0-VERIFY-SIGSTORE` | Cosign version, OIDC identity, and local-key policy. |
+| `L0-ATOMIC-RENAME` | Complete same-directory staging followed by rename. |
+| `L0-DURABILITY-PARENT` | Parent-directory synchronization after rename. |
+| `L0-DURABILITY-FULLFSYNC` | macOS `F_FULLFSYNC` durability strengthening. |
+| `L0-PATH-COLLISION` | Non-interactive refusal of a conflicting destination/PATH owner. |
+| `L0-HOOK-MERGE` | Per-agent hook merge, timestamped backup, and restore-on-failure. |
+| `L0-SKILLS` | Skill installation for every detected agent. |
+| `L0-UNINSTALL` | Removal of every L0-owned path with no residue. |
+| `L0-EVENT` | Lifecycle event with actor, pane, incarnation, outcome, and reason code. |
+| `L0-REPORT` | Durable report written before success is exposed. |
+| `L0-MONITOR` | Monitor reads report and installed identity. |
+| `L0-GATE` | Verification, collision, identity, and observability verdict gate. |
+| `L0-METRIC` | `parent_fsync_successes / atomic_rename_attempts`. |
+| `INV-L0-TRIPLE` | Unsupported/ambiguous host cannot publish. |
+| `INV-L0-CHECKSUM` | One changed artifact byte produces a restrictive refusal. |
+| `INV-L0-SIGNATURE` | Required signature failure is restrictive and typed. |
+| `INV-L0-COLLISION` | Conflicting destination cannot be overwritten silently. |
+| `INV-L0-ATOMIC` | Partial staging never becomes the published destination. |
+| `INV-L0-DURABILITY` | File sync, parent sync, and macOS full sync are required. |
+| `INV-L0-ROLLBACK` | Failed merge restores exact pre-merge bytes. |
+| `INV-L0-IDENTITY` | Installed identity agrees with build/source/process readback. |
+| `INV-L0-OBSERVABILITY` | Event, report, monitor row, and gate verdict precede success. |
 
 ## Invariant Suite
 
-The future `tests/s1_l0_install_contract.rs` MUST exercise these invariants against the real runner, not a fixture-only copy:
+The future `tests/l0_install.rs` is the executable suite; these invariant rows map directly to test-matrix rows.
 
-- **`INV-L0-TRIPLE`** — an unsupported or ambiguous host is a typed refusal and cannot reach publication.
-- **`INV-L0-CHECKSUM`** — mutating one artifact byte changes the measured digest and produces `L0_SHA256_REFUSED`; no destination artifact or success event is emitted.
-- **`INV-L0-SIGNATURE`** — a required signature failure produces its typed refusal; best-effort mode is recorded distinctly and never relabeled valid.
-- **`INV-L0-COLLISION`** — a destination with a conflicting PATH owner refuses non-interactively and lists the collision.
-- **`INV-L0-ATOMIC`** — an interrupted or failed stream leaves no published partial destination; only the complete temporary artifact may be renamed.
-- **`INV-L0-DURABILITY`** — a successful rename is preceded by file synchronization and followed by parent-directory synchronization; macOS also requires `F_FULLFSYNC` under `L0-DURABILITY-FULLFSYNC`.
-- **`INV-L0-ROLLBACK`** — a failure during any agent merge restores the pre-merge bytes and reports every backup and restore action.
-- **`INV-L0-IDENTITY`** — the installed artifact's digest/build id/version/process identity agree; one mismatch is restrictive.
-- **`INV-L0-OBSERVABILITY`** — every attempt writes one event with a non-empty reason code, one report artifact, one monitor-readable row, and one gate verdict before it can be called successful.
+- `INV-L0-TRIPLE` — unsupported/ambiguous host cannot publish. Test: `tests/l0_install.rs::platform_triple_matrix` (T01).
+- `INV-L0-CHECKSUM` — one changed artifact byte produces a restrictive refusal. Test: `tests/l0_install.rs::tampered_sha256_refuses` (T03).
+- `INV-L0-SIGNATURE` — required signature failure is restrictive and typed. Test: `tests/l0_install.rs::required_minisign_missing_refuses` (T04), `cosign_below_cve_floor_refuses` (T05), and `sigstore_identity_mismatch_refuses` (T06).
+- `INV-L0-COLLISION` — conflicting destination cannot be overwritten silently. Test: `tests/l0_install.rs::bare_installer_path_collision_refuses` (T11).
+- `INV-L0-ATOMIC` — partial staging never becomes the published destination. Test: `tests/l0_install.rs::staging_failure_leaves_no_destination` (T07) and `atomic_publish_renames_complete_artifact` (T08).
+- `INV-L0-DURABILITY` — file sync, parent sync, and macOS full sync are required. Test: `tests/l0_install.rs::parent_directory_fsync_is_required` (T09), `fullfsync_failure_is_restrictive` (T10), and `durability_metric_counts_missing_parent_sync` (T22).
+- `INV-L0-ROLLBACK` — failed merge restores exact pre-merge bytes. Test: `tests/l0_install.rs::hook_merge_failure_restores_before_hash` (T15).
+- `INV-L0-IDENTITY` — installed identity agrees with build/source/process readback. Test: `tests/l0_install.rs::installed_identity_must_match_readback` (T18).
+- `INV-L0-OBSERVABILITY` — event, report, monitor row, and gate verdict precede success. Test: `tests/l0_install.rs::event_and_report_precede_success` (T20), `known_bad_legs_name_reason` (T21), and `per_agent_summary_is_complete` (T17).
 
-## Laws
+## Laws and Named Proof Tests
 
-- **`LAW-L0-FAIL-CLOSED`** — no failed verification, collision, merge, identity, or durability operation may produce `L0_INSTALL_SUCCEEDED`. *Test:* `tests/s1_l0_install_contract.rs::failed_precondition_is_restrictive`.
-- **`LAW-L0-ATOMIC-DURABLE`** — publication is complete temporary write, file synchronization, rename, parent-directory `fsync`, then macOS `F_FULLFSYNC`; a missing step is not durable. *Test:* `tests/s1_l0_install_contract.rs::publication_requires_both_sync_boundaries`.
-- **`LAW-L0-RESTORE`** — a failed merge restores the exact pre-merge state and leaves a cited backup. *Test:* `tests/s1_l0_install_contract.rs::merge_failure_restores_before_hash`.
-- **`LAW-L0-REPORT-BEFORE-SUCCESS`** — event and report writes precede the success verdict and contain the same attempt identity. *Test:* `tests/s1_l0_install_contract.rs::success_requires_event_and_report`.
-- **`LAW-L0-OBSERVABLE-REFUSAL`** — each known-bad gate leg emits its reason code, monitor row, and gate verdict; an exit code without the message is insufficient. *Test:* `tests/s1_l0_install_contract.rs::known_bad_legs_name_reason`.
+Each law has a real test symbol. The test file name is deliberately `l0_install.rs`, matching the build matrix and the acceptance form required by the S1 review bar.
 
-## Observability Rows
+- **`LAW-L0-FAIL-CLOSED`** — no failed verification, collision, merge, identity, or durability operation can produce success. *Test:* `tests/l0_install.rs::failed_precondition_is_restrictive`.
+- **`LAW-L0-ATOMIC-DURABLE`** — publication is complete staging, file synchronization, rename, parent-directory `fsync`, and macOS `F_FULLFSYNC`; a missing step is not durable. *Test:* `tests/l0_install.rs::publication_requires_both_sync_boundaries`.
+- **`LAW-L0-RESTORE`** — a failed merge restores the exact pre-merge bytes and leaves a cited backup. *Test:* `tests/l0_install.rs::merge_failure_restores_before_hash`.
+- **`LAW-L0-REPORT-BEFORE-SUCCESS`** — event and report writes precede the success verdict and share one attempt identity. *Test:* `tests/l0_install.rs::success_requires_event_and_report`.
+- **`LAW-L0-OBSERVABLE-REFUSAL`** — every known-bad leg emits a reason code, monitor row, and gate verdict; an exit code alone is insufficient. *Test:* `tests/l0_install.rs::known_bad_legs_name_reason`.
+- **`LAW-L0-IDENTITY-READBACK`** — success requires installed identity readback to match the verified build identity. *Test:* `tests/l0_install.rs::installed_identity_must_match_readback`.
 
-These are the four required L0 rows. A row is not complete unless its writer, durable artifact, monitor, gate, and known-bad leg are named.
+## Build Matrix
 
-| Row | Writer and reason code | Artifact written | Monitor | Gate and known-bad leg |
+A build row is one discrete implementation unit that one agent can complete in one pass. `bead key` is the stable title prefix used by the corresponding unclaimed build bead.
+
+| Row | Build item | IDs covered | Re-runnable acceptance |
+|---|---|---|---|
+| B01 | Platform triple resolver and musl-to-gnu fallback | `L0-PLATFORM-TRIPLE` | Run the platform resolver over the four supported tuples plus an unsupported tuple; expect four typed selections, one explicit fallback, and one refusal. |
+| B02 | Artifact staging and bounded verified stream | `INV-L0-ATOMIC` | Run staging with a complete archive and an interrupted stream; expect only the complete stream to produce a same-directory temporary artifact eligible for rename. |
+| B03 | SHA-256 verifier | `L0-VERIFY-SHA256`, `INV-L0-CHECKSUM` | Run the verifier against the pinned digest and a one-byte mutation; expect PASS, then `L0_SHA256_REFUSED` with no destination write. |
+| B04 | Minisign verifier and required-signature policy | `L0-VERIFY-MINISIGN`, `INV-L0-SIGNATURE` | Run with a valid `.minisig`, absent `.minisig` under `--require-minisign`, and invalid signature; expect valid PASS and typed restrictive failures. |
+| B05 | Sigstore/cosign verifier and CVE floor | `L0-VERIFY-SIGSTORE`, `INV-L0-SIGNATURE` | Run with an allowed cosign version/identity and versions below the CVE-2026-22703 floor; expect allowed PASS and `L0_SIGSTORE_REFUSED`. |
+| B06 | Atomic destination publication | `L0-ATOMIC-RENAME`, `INV-L0-ATOMIC` | Run publication into a destination while observing the directory; expect a complete artifact only after rename and no partial destination on failure. |
+| B07 | File, parent-directory, and macOS full synchronization | `L0-DURABILITY-PARENT`, `L0-DURABILITY-FULLFSYNC`, `INV-L0-DURABILITY`, `L0-METRIC` | Run with successful and injected failed sync calls; expect success only after file sync, parent `fsync`, and macOS `F_FULLFSYNC`, with the metric updated. |
+| B08 | Explicit destination and PATH-collision refusal | `L0-PATH-COLLISION`, `INV-L0-COLLISION` | Run with bare `installer` resolving to `/usr/sbin/installer` and with an owned destination; expect collision refusal listing all path hits and no overwrite. |
+| B09 | Ten-agent family detection | `L0-EVENT`, `L0-MONITOR` | Run detection with all ten supported agent families and an empty host; expect ten named results and an explicit empty-set error, never inferred success. |
+| B10 | Hook merge transaction and backup/restore | `L0-HOOK-MERGE`, `INV-L0-ROLLBACK` | Run a successful merge and a failure after the first mutation; expect timestamped backups and exact restoration on failure. |
+| B11 | Skill installation for detected agents | `L0-SKILLS` | Run with the ten-agent detection fixture and one unsupported agent; expect one per-agent skill outcome and no silent omission. |
+| B12 | Per-agent summary and durable report | `L0-REPORT`, `INV-L0-OBSERVABILITY` | Run install with mixed `created|merged|already|failed|skipped` outcomes; expect one report containing every agent, backup, path hit, digest, and outcome before success. |
+| B13 | Installed identity readback | `INV-L0-IDENTITY` | Run readback against matching and mismatching build id/version/process identity; expect PASS only for the matching tuple. |
+| B14 | Uninstall transaction and residue census | `L0-UNINSTALL` | Run uninstall after a full install and after a partial install; expect every L0-owned path absent and the report to list any refused residue. |
+| B15 | Lifecycle event, monitor, and gate writer | `L0-EVENT`, `L0-MONITOR`, `L0-GATE`, `INV-L0-OBSERVABILITY` | Run success and each known-bad path; expect one event with a set reason code, one report, one monitor row, and one gate verdict before any success result. |
+
+## Test Matrix and Known-Bad Legs
+
+Every test row has a named function, a grader-runnable acceptance, and an input that MUST turn the test RED. A test without its bad leg is not evidence.
+
+| Row | Named test (`tests/l0_install.rs::<name>`) | IDs/laws | Known-bad input that must turn RED; acceptance |
+|---|---|---|---|
+| T01 | `platform_triple_matrix` | `L0-PLATFORM-TRIPLE`, `INV-L0-TRIPLE` | Unsupported OS/architecture tuple; run the resolver and expect `L0_PLATFORM_REFUSED`, not a guessed target. |
+| T02 | `musl_fallback_requires_gnu_artifact` | `L0-PLATFORM-TRIPLE` | Musl host with only the gnu fallback artifact absent; expect explicit fallback refusal, not a silently mislabeled binary. |
+| T03 | `tampered_sha256_refuses` | `L0-VERIFY-SHA256`, `INV-L0-CHECKSUM`, `LAW-L0-FAIL-CLOSED` | Flip one artifact byte; expect `L0_SHA256_REFUSED`, no rename, no success event. |
+| T04 | `required_minisign_missing_refuses` | `L0-VERIFY-MINISIGN`, `INV-L0-SIGNATURE` | Remove `.minisig` with `--require-minisign`; expect `L0_MINISIGN_REFUSED`, not warning or PASS. |
+| T05 | `cosign_below_cve_floor_refuses` | `L0-VERIFY-SIGSTORE`, `INV-L0-SIGNATURE` | Supply cosign below the CVE-2026-22703 floor; expect `L0_SIGSTORE_REFUSED` naming the version. |
+| T06 | `sigstore_identity_mismatch_refuses` | `L0-VERIFY-SIGSTORE`, `INV-L0-SIGNATURE` | Supply a valid signature with a wrong certificate identity; expect restrictive identity refusal. |
+| T07 | `staging_failure_leaves_no_destination` | `L0-ATOMIC-RENAME`, `INV-L0-ATOMIC` | Interrupt the archive stream before completion; expect no published destination and a failed staging result. |
+| T08 | `atomic_publish_renames_complete_artifact` | `L0-ATOMIC-RENAME`, `INV-L0-ATOMIC`, `LAW-L0-ATOMIC-DURABLE` | Mutate the temporary artifact after its digest check; expect the publish guard to refuse rather than rename stale bytes. |
+| T09 | `parent_directory_fsync_is_required` | `L0-DURABILITY-PARENT`, `INV-L0-DURABILITY`, `LAW-L0-ATOMIC-DURABLE` | Inject a parent `fsync` failure after rename; expect `L0_DURABILITY_REFUSED` and no success verdict. |
+| T10 | `fullfsync_failure_is_restrictive` | `L0-DURABILITY-FULLFSYNC`, `INV-L0-DURABILITY`, `LAW-L0-ATOMIC-DURABLE` | Inject macOS `F_FULLFSYNC` failure; expect restrictive refusal, never a downgraded PASS. |
+| T11 | `bare_installer_path_collision_refuses` | `L0-PATH-COLLISION`, `INV-L0-COLLISION`, `LAW-L0-FAIL-CLOSED` | Put `/usr/sbin/installer` first on PATH; expect collision refusal naming that path and no overwrite. |
+| T12 | `ten_agent_detection_is_complete` | `L0-EVENT`, `L0-MONITOR` | Hide one of the ten agent families; expect the missing family in the typed result and a non-success summary. |
+| T13 | `zero_agents_is_error_not_clean` | `L0-EVENT`, `L0-GATE`, `LAW-L0-OBSERVABLE-REFUSAL` | Detect zero agents; expect an empty-scan ERROR with reason code, not `clean`, PASS, or a zero-agent success report. |
+| T14 | `hook_backup_matches_mutations` | `L0-HOOK-MERGE`, `INV-L0-ROLLBACK` | Make the number of backups differ from files mutated; expect the invariant to turn RED and identify the mismatch. |
+| T15 | `hook_merge_failure_restores_before_hash` | `L0-HOOK-MERGE`, `INV-L0-ROLLBACK`, `LAW-L0-RESTORE` | Fail the second hook write; expect byte-identical restoration of the first file and a cited backup. |
+| T16 | `skill_install_covers_detected_agents` | `L0-SKILLS` | Make one detected agent's skill destination unwritable; expect that agent `failed` and no all-agents success. |
+| T17 | `per_agent_summary_is_complete` | `L0-REPORT`, `INV-L0-OBSERVABILITY` | Drop one detected agent from the report; expect the completeness assertion to turn RED. |
+| T18 | `installed_identity_must_match_readback` | `INV-L0-IDENTITY`, `LAW-L0-IDENTITY-READBACK` | Alter installed build id after publication; expect `L0_IDENTITY_MISMATCH` and restrictive exit. |
+| T19 | `uninstall_leaves_no_owned_paths` | `L0-UNINSTALL` | Leave one owned hook, skill, binary, or report path behind; expect residue census RED with the exact path. |
+| T20 | `event_and_report_precede_success` | `L0-EVENT`, `L0-REPORT`, `INV-L0-OBSERVABILITY`, `LAW-L0-REPORT-BEFORE-SUCCESS` | Fail event or report write immediately before success; expect success to be refused and no success verdict emitted. |
+| T21 | `known_bad_legs_name_reason` | `L0-GATE`, `INV-L0-OBSERVABILITY`, `LAW-L0-OBSERVABLE-REFUSAL` | Suppress the reason code or monitor row on a checksum/collision failure; expect the observability law to turn RED. |
+| T22 | `durability_metric_counts_missing_parent_sync` | `L0-METRIC`, `INV-L0-DURABILITY` | Record an atomic rename without a successful parent sync; expect coverage below `1.0` and a RED metric verdict, never a passing zero. |
+
+## Four L0 Observability Rows
+
+| Row | Writer/reason code | Artifact | Monitor | Gate and known-bad |
 |---|---|---|---|---|
-| `OBS-L0-EVENT` | `ompo install`; one of the typed `L0_*` reason codes, including `L0_INSTALL_SUCCEEDED` | `LifecycleEvent` with `stage_from=HUMAN`, `stage_to=S1.L0`, actor, pane, incarnation, outcome, reason_code, blocker | `ompo portal --check --json` reads the event identity | Empty reason code or event-after-success mutation must be red; require `L0_OBSERVABILITY_REFUSED`. |
-| `OBS-L0-ARTIFACT` | Install runner after report assembly | `.omp-orchestrator/work/s1/l0/install-report.json` with digest, signatures, destination, backups, path hits, and identity | Portal row reports artifact path and hash, or `ARTIFACT_MISSING` | Delete/truncate the report after install; monitor must refuse `L0_REPORT_MISSING`, never display healthy. |
-| `OBS-L0-MONITOR` | Portal/identity observer after the install transaction | Monitor snapshot records source, installed identity, and observation timestamp | `ompo portal --check --json` plus the existing installer identity-check seam | Point monitor at a different binary or stale report; it must report `L0_IDENTITY_MISMATCH`, not green. |
-| `OBS-L0-GATE` | Checksum/signature/path/identity gate at the publication chokepoint | Gate verdict cites the attempt id and failing reason code | The L0 portal row carries the gate verdict | Flip one artifact byte; checksum MUST refuse, not warn. Run with a conflicting PATH owner; collision MUST refuse. |
+| `OBS-L0-EVENT` | Install runner; typed `L0_*` reason code | `LifecycleEvent` with `stage_to=S1.L0` | `ompo journey --expected --json` / portal reader | Empty reason code is RED; T21 must fail. |
+| `OBS-L0-REPORT` | Report writer after transaction assembly | `.omp-orchestrator/work/s1/l0/install-report.json` | Report hash and identity readback | Missing/truncated report is `L0_REPORT_MISSING`; T17/T20 must fail. |
+| `OBS-L0-MONITOR` | Portal/identity observer | Monitor snapshot with source and timestamp | `ompo portal --check --json` target | Stale or foreign identity is `L0_IDENTITY_MISMATCH`; T18/T21 must fail. |
+| `OBS-L0-GATE` | Verification/collision/identity gate | Verdict naming attempt id and reason | Gate output consumed by S1 chain | Tampered checksum, zero agents, or PATH shadow must refuse; T03/T11/T13 must fail. |
 
-## Durability Falsifier
+**Metric:** `L0_DURABILITY_COVERAGE = parent_fsync_successes / atomic_rename_attempts`. Successful installs require `1.0`; T22 is the known-bad floor test.
 
-The bead's scout reports that `mirror:destructive_command_guard/install.sh:1708-1712` uses a tar stream, temporary file, mode `0755`, and `install -m 0755`, but does not `fsync` the parent directory. The opposing measurement is `mirror:beads_rust/src/sync/mod.rs:507-509`, where `fsync_pinned_parent()` is invoked by the `PostRename` hook at `:2425`.
+## Bead Manifest
 
-I attacked the claim against the host's `/usr/bin/install`, rather than adopting either repository's prose. Measured outputs:
+Every matrix row has one filed, unclaimed bead. The acceptance in each bead repeats the row's `Run X; expect Y` command and, for every test row, its known-bad input:
 
-- `file -b /usr/bin/install` reports a universal x86_64/arm64e Mach-O.
-- `nm -u /usr/bin/install` imports `_fsync`, `_fcntl`, and `_rename`.
-- arm64e disassembly shows the replacement path calling `_rename` at `0x10000190c`, reopening the target file at `0x100001928`, and the data-copy path calling `_fsync` at `0x10000237c` with the destination file descriptor. All six `_open` call sites were enumerated; no `_openat` import or parent-directory open path was present. The two `_fcntl` call sites use command `9`, not macOS `F_FULLFSYNC` (`51`).
-- A runtime `dtruss` attempt was refused by macOS SIP: `dtrace: failed to initialize dtrace: DTrace requires additional privileges`. That runtime arm is therefore `UNMEASURED`, not negative evidence.
+Build: `B01=omp-orchestrator-s1-l0-b01-3vro`, `B02=omp-orchestrator-s1-l0-b02-grg4`, `B03=omp-orchestrator-s1-l0-b03-pp2o`, `B04=omp-orchestrator-s1-l0-b04-a6nx`, `B05=omp-orchestrator-s1-l0-b05-qsyg`, `B06=omp-orchestrator-s1-l0-b06-vz1p`, `B07=omp-orchestrator-s1-l0-b07-h6pu`, `B08=omp-orchestrator-s1-l0-b08-u7tm`, `B09=omp-orchestrator-s1-l0-b09-x282`, `B10=omp-orchestrator-s1-l0-b10-3r1g`, `B11=omp-orchestrator-s1-l0-b11-uegf`, `B12=omp-orchestrator-s1-l0-b12-rmr2`, `B13=omp-orchestrator-s1-l0-b13-ebyw`, `B14=omp-orchestrator-s1-l0-b14-f2jh`, `B15=omp-orchestrator-s1-l0-b15-ucvv`.
 
-**Result: CONFIRMED for the contract boundary.** macOS `install(1)` has a file-level `fsync` path, but the measured binary does not provide the required post-rename parent-directory synchronization or `F_FULLFSYNC` step. The L0 requirement to perform both is not cargo cult. Keep `L0-DURABILITY-PARENT` and `L0-DURABILITY-FULLFSYNC`; if either cannot complete, refuse success. The remaining no-claim is runtime syscall tracing under SIP, not the static call-path result.
+Test: `T01=omp-orchestrator-s1-l0-t01-o34w`, `T02=omp-orchestrator-s1-l0-t02-mauc`, `T03=omp-orchestrator-s1-l0-t03-26ou`, `T04=omp-orchestrator-s1-l0-t04-kqne`, `T05=omp-orchestrator-s1-l0-t05-xe16`, `T06=omp-orchestrator-s1-l0-t06-3ga8`, `T07=omp-orchestrator-s1-l0-t07-ab3a`, `T08=omp-orchestrator-s1-l0-t08-aqao`, `T09=omp-orchestrator-s1-l0-t09-jx83`, `T10=omp-orchestrator-s1-l0-t10-6idp`, `T11=omp-orchestrator-s1-l0-t11-andf`, `T12=omp-orchestrator-s1-l0-t12-6t0k`, `T13=omp-orchestrator-s1-l0-t13-kvw6`, `T14=omp-orchestrator-s1-l0-t14-pccb`, `T15=omp-orchestrator-s1-l0-t15-tzul`, `T16=omp-orchestrator-s1-l0-t16-m61c`, `T17=omp-orchestrator-s1-l0-t17-sado`, `T18=omp-orchestrator-s1-l0-t18-sk8h`, `T19=omp-orchestrator-s1-l0-t19-shc0`, `T20=omp-orchestrator-s1-l0-t20-i6ki`, `T21=omp-orchestrator-s1-l0-t21-f6si`, `T22=omp-orchestrator-s1-l0-t22-bsfy`.
 
-## Metric
+## Dispatch Preflight for L0
 
-**`L0_DURABILITY_COVERAGE = parent_fsync_successes / atomic_rename_attempts`.** Count only attempts with a complete verified artifact and a successful atomic rename. A successful install may be reported only at `1.0`; any lower value is a red L0 gate and must identify the attempts lacking the parent-directory synchronization.
+The required path is:
+
+```text
+FILE → CLAIM → PACKET → ADMISSION → SEND → RECEIPT → ACK → OBSERVE → VERIFY → RECORD
+```
+
+1. **How the L0 build bead flows:** `br create` files the row with WHAT/WHY/acceptance and known-bad leg; a future wave claims it only as `in_progress` and assigned; the packet carries the exact row, target path, acceptance, stop condition, and `ACK <token> on <pane> --`; admission requires a fresh two-capture pane verdict and clean reservation; `ntm --robot-send` is the only send; receipt is the `IDLE→WORKING` transition; the receiver writes the ACK comment; monitors observe the run and report; a non-author grader reruns the acceptance and known-bad leg; the row is recorded only with cited evidence. This pass files and orders beads but claims none.
+2. **What must be true:** every bead has re-runnable acceptance (preventing `DP-GAP-1`), is assigned before packet send, names its ACK, has a fresh admission verdict, carries an idempotent operation id, and has a ledger row able to represent refusal. The L0 gate depends on every L0 row bead, so no build bead is ordered ahead of an unfiled prerequisite.
+3. **If automated:** the gate consumes the matrix row set, checks that every row has one bead, one acceptance, one test function or explicit build acceptance, and one known-bad leg for test rows; the dispatcher reads `bv` rather than FIFO, claims before sending, records ACK/receipt/observe evidence, and refuses empty or stale scans. Automation is not a substitute for a non-author grade.
+4. **L0 escape route:** an agent will call `install(1)` and declare durability satisfied without proving parent-directory sync; it may also count a checksum warning as verification, treat zero agents as clean, or report a successful hook merge after a partial write. T09/T10, T13, T15, and T21 are the concrete tripwires.
 
 ## Validation
 
-One pasteable pre-code contract check. It exercises the in-document invariant suite and verifies that the required runner, stable vocabulary, four observability rows, falsifier, and refusal legs are present; it does not pretend to execute the future installer.
+One pasteable document-level readiness check. It does not run the future installer; it proves that no L0 law, stable ID, test row, or test falsifier is missing from this matrix.
 
 ```bash
 set -eu
 bytes="$(wc -c < docs/contracts/s1_l0_install.md | tr -d ' ')"
-ids="$(grep -Eo '`L0-[A-Z0-9-]+`' docs/contracts/s1_l0_install.md | sort -u | wc -l | tr -d ' ')"
-rows="$(grep -c '^| `OBS-L0-' docs/contracts/s1_l0_install.md)"
-test "$bytes" -le 25600
-test "$ids" -ge 5
-test "$rows" -eq 4
-grep -q '^## Purpose$' docs/contracts/s1_l0_install.md
-grep -q '^## Contract Artifacts$' docs/contracts/s1_l0_install.md
-grep -q '^## Invariant Suite$' docs/contracts/s1_l0_install.md
-grep -q '^## Observability Rows$' docs/contracts/s1_l0_install.md
-grep -q '^## Cross-Attack: L3 sibling$' docs/contracts/s1_l0_install.md
-grep -q '^## Cross-References$' docs/contracts/s1_l0_install.md
-grep -q '^## NO-CLAIM$' docs/contracts/s1_l0_install.md
-grep -q '^Bead: `omp-orchestrator-s1w0-l0-install-contract-6gh6`$' docs/contracts/s1_l0_install.md
-grep -q 'L0-DURABILITY-PARENT' docs/contracts/s1_l0_install.md
-grep -q 'L0-DURABILITY-FULLFSYNC' docs/contracts/s1_l0_install.md
-grep -q 'REJECTED (`L3-ARRAY`' docs/contracts/s1_l0_install.md
-grep -q 'OMPO=absent' docs/contracts/s1_l0_install.md
-test -f crates/installer/src/lib.rs
-test -f crates/installer/src/main.rs
-printf 'S1_L0_CONTRACT PASS bytes=%s stable_ids=%s observability_rows=%s invariant_suite=declared falsifier=measured_parent_sync\n' "$bytes" "$ids" "$rows"
+stable_ids="$(grep -Eo '`(L0|INV-L0)-[A-Z0-9-]+`' docs/contracts/s1_l0_install.md | sort -u | wc -l | tr -d ' ')"
+build_rows="$(grep -c '^| B[0-9][0-9] ' docs/contracts/s1_l0_install.md)"
+test_rows="$(grep -c '^| T[0-9][0-9] ' docs/contracts/s1_l0_install.md)"
+laws="$(grep -c '^- \*\*`LAW-L0-' docs/contracts/s1_l0_install.md)"
+named_law_tests="$(grep -c '^- \*\*`LAW-L0-.*tests/l0_install.rs::' docs/contracts/s1_l0_install.md)"
+known_bad="$(grep -c 'expect .*RED\|expect .*refusal\|expect .*REFUSED\|expect .*restrictive\|expect .*ERROR' docs/contracts/s1_l0_install.md)"
+beads="$(grep -Eo 'omp-orchestrator-s1-l0-[bt][0-9][0-9]-[a-z0-9]+' docs/contracts/s1_l0_install.md | sort -u | wc -l | tr -d ' ')"
+test "$stable_ids" -eq 25
+test "$beads" -eq 37
+test "$build_rows" -eq 15
+test "$test_rows" -eq 22
+test "$laws" -eq 6
+test "$named_law_tests" -eq 6
+test "$known_bad" -ge 22
+grep -q '^## Dispatch Preflight for L0$' docs/contracts/s1_l0_install.md
+grep -q 'FILE → CLAIM → PACKET → ADMISSION → SEND → RECEIPT → ACK → OBSERVE → VERIFY → RECORD' docs/contracts/s1_l0_install.md
+grep -q 'DP-GAP-1' docs/contracts/s1_l0_install.md
+grep -q 'install(1)' docs/contracts/s1_l0_install.md
+grep -q 'F_FULLFSYNC' docs/contracts/s1_l0_install.md
+printf 'L0_MATRIX PASS bytes=%s stable_ids=%s build_rows=%s test_rows=%s laws=%s named_law_tests=%s known_bad_rows=%s beads=%s\n' "$bytes" "$stable_ids" "$build_rows" "$test_rows" "$laws" "$named_law_tests" "$known_bad" "$beads"
 ```
 
-Pasted output after the cross-attack row is added:
+Pasted output after the matrix and all bead keys are recorded:
 
 ```text
-S1_L0_CONTRACT PASS bytes=17609 stable_ids=14 observability_rows=4 invariant_suite=declared falsifier=measured_parent_sync
+L0_MATRIX PASS bytes=24928 stable_ids=25 build_rows=15 test_rows=22 laws=6 named_law_tests=6 known_bad_rows=22 beads=37
 ```
 
-## Cross-Attack: L3 sibling
+## Cross-Attack Retained from Wave 0
 
-Non-owner review target: `docs/contracts/s1_l3_walkthrough.md:11-13,39-40`. L3 names `ompo start`
-and `crates/ompo-start/tests/l3_step_parity.rs` as TARGET/DECLARED and calls `same_object_identity`
-the wave-0 executable stand-in for `LAW-L3-SINGLE-ARRAY`.
+The `/usr/bin/install` static attack remains part of this contract. `nm -u /usr/bin/install` measured `_fsync`, `_fcntl`, and `_rename`; arm64e disassembly showed rename, target reopen, and destination-file `fsync`, but no parent-directory synchronization path and no `F_FULLFSYNC` command (the fcntl command was 9, not 51). A `dtruss` runtime probe was denied by macOS SIP, so runtime syscall tracing is `UNMEASURED`, not negative evidence. The L0 contract therefore requires both parent-directory sync and `F_FULLFSYNC`; calling `install(1)` alone is not proof.
 
-Command run from this repository root:
-
-```bash
-if command -v ompo >/dev/null 2>&1; then echo 'OMPO=present'; else echo 'OMPO=absent'; fi
-for p in crates/ompo-start/src/steps.rs crates/ompo-start/tests/l3_step_parity.rs; do
-  if test -e "$p"; then echo "$p=present"; else echo "$p=absent"; fi
-done
-```
-
-Output:
-
-```text
-OMPO=absent
-crates/ompo-start/src/steps.rs=absent
-crates/ompo-start/tests/l3_step_parity.rs=absent
-```
-
-**REJECTED (`L3-ARRAY` / `LAW-L3-SINGLE-ARRAY` validation claim):** the named wave-0 stand-in cannot
-exercise object identity or prove that two renderers borrow one `Vec<Step>` while both the runner and
-the invariant suite are absent. The sibling correctly labels the implementation TARGET and the suite
-DECLARED, but calling its future validation a current executable stand-in overstates the evidence. L3
-must retain `exists = none` and `UNPROVEN` until the real runner and suite execute against the same
-production step source. This is a falsifier attempt and a non-owner rejection, not an opinion.
+The prior non-owner L3 cross-attack is retained: `command -v ompo` and existence checks for `crates/ompo-start/src/steps.rs` and `crates/ompo-start/tests/l3_step_parity.rs` returned `OMPO=absent` and all paths absent. That rejected L3's claimed wave-0 object-identity stand-in as unable to prove shared renderer state before its runner and suite exist.
 
 ## Cross-References
 
-- `docs/plan/flow/boxes/S1.toml:10-25` — S1 L0 trigger, `InstallPlan`, `InstallReport`, `LifecycleEvent`, validator, and observability standard.
-- `docs/plan/flow/CONTRACT.md:84-113` — retired zero-disagreement rule and the four-clause refutation standard.
-- `crates/installer/src/main.rs:20-39` — current installer CLI seam and its explicit check/install verbs.
-- `crates/installer/src/lib.rs:3-8` — current four-way identity contract and restrictive mismatch rule.
-- `crates/installer/Cargo.toml:1-19` — current installer package and `subprocess-contract` dependency.
-- `mirror:destructive_command_guard/install.sh:805-826` — platform triple detection.
-- `mirror:destructive_command_guard/install.sh:851-858` — musl-to-gnu fallback.
-- `mirror:destructive_command_guard/install.sh:946-969` — PATH collision detection.
-- `mirror:destructive_command_guard/install.sh:1265-1295` — SHA-256 verification.
-- `mirror:destructive_command_guard/install.sh:1304-1349` — minisign verification.
-- `mirror:destructive_command_guard/install.sh:1385-1445` — sigstore verification.
-- `mirror:destructive_command_guard/install.sh:1708-1712` — atomic install sequence.
-- `mirror:destructive_command_guard/install.sh:1797-1798` — timestamped backup.
-- `mirror:destructive_command_guard/install.sh:1862-2024` — per-agent hook merge and restore boundary.
-- `mirror:beads_rust/src/sync/mod.rs:507-509` and `:2425` — parent synchronization after rename.
+- `docs/plan/flow/boxes/S1.toml:10-25,246-275` — L0 inputs/outputs, observability rows, metric, and known-bad requirements.
+- `docs/plan/flow/CONTRACT.md:84-113` — zero open rows is necessary only; non-owner refutation, owner refutation, falsifier, and `exists = none` floor.
+- `docs/contracts/dispatch_preflight.md:17-34,36-67,73-90` — lifecycle path, `DP-GAP-1`, automation preconditions, and escape routes.
+- `crates/installer/src/main.rs:20-39` — current CLI seam.
+- `crates/installer/src/lib.rs:3-8` — current four-way identity seam.
+- `crates/crate-atom-gate/src/lib.rs:63-65,169-176,464-479` — current tick-path-only SLO trigger that later work must widen.
+- `docs/contracts/s1_l3_walkthrough.md:11-13,39-40` — sibling target rejected by the retained cross-attack.
+- `mirror:destructive_command_guard/install.sh:805-826,851-858` — platform detection and fallback.
+- `mirror:destructive_command_guard/install.sh:946-969` — PATH collision.
+- `mirror:destructive_command_guard/install.sh:1265-1295` — SHA-256.
+- `mirror:destructive_command_guard/install.sh:1304-1349` — minisign.
+- `mirror:destructive_command_guard/install.sh:1385-1445` — sigstore.
+- `mirror:destructive_command_guard/install.sh:1708-1712` — staging/atomic install.
+- `mirror:destructive_command_guard/install.sh:1797-1798,1862-2024` — backup and agent hook merge.
+- `mirror:beads_rust/src/sync/mod.rs:507-509,2425` — parent synchronization after rename.
 
 ## NO-CLAIM
 
-This document does not establish that `ompo install --json`, the report path, portal monitor, event writer, parent-directory synchronization, or the invariant suite exists in the current binary; those are the L0 build targets. The static `/usr/bin/install` analysis confirms the absence of a parent-directory `fsync`/`F_FULLFSYNC` path in the measured arm64e call graph, but runtime syscall tracing was unavailable under macOS SIP. The document does not establish end-to-end S1 liveness, hook certification, signature-provider availability, or that a successful local contract check means the future installer works. The cross-attack section is required before this contract is committed; a zero-refutation wave is not convergence.
+This contract does not establish that the installer, `ompo` commands, report writer, event writer, monitor, gate, SLO trigger, or `tests/l0_install.rs` exists or works. It establishes the complete build/test work required before L0 can close. The matrix's document validation is not a runtime proof. No crate code, Cargo manifest, workflow, installer source, or S2 work is authorized by this document. A build row is not complete until its implementation is wired, its acceptance is rerun, its known-good and mutation evidence exist where applicable, and a non-author grades it.
