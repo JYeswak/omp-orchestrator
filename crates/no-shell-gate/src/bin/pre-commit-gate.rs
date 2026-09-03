@@ -299,6 +299,25 @@ fn main() -> ExitCode {
     }
 
     validate_staged_tick_ledger(&repo_root, &mut refusals);
+
+    // ── GATE 7: staged-build-gate (929j) ────────────────────────────────
+    //
+    // WIRED LAST on purpose: it is the only gate that COMPILES anything, so every cheap
+    // refusal above must have had its say first. A commit refused for a tracked `.sh`
+    // should not first pay for a cargo build.
+    //
+    // BOUNDED BY THE INDEX GIT HANDED US, not by a new mechanism. A path-scoped commit
+    // (`git commit -- <paths>`, the form AGENTS.md mandates) makes git build a temporary
+    // index and point GIT_INDEX_FILE at it, so the staged set here IS the committing
+    // agent's own pathspec. The bead's 603-second measurement came from invoking the
+    // binary directly, where GIT_INDEX_FILE is unset and the shared index is read.
+    //
+    // On a shared index the gate REFUSES INSTANTLY rather than compiling peers' crates.
+    // That is the argument against the "cap the wall time" option: a timed-out scan
+    // reports the same shape as a completed one, so a broken crate passes whenever peers
+    // have staged enough work.
+    staged_build_gate_on_commit_path(&repo_root, &staged, &mut refusals);
+
     if refusals.is_empty() {
         // ── nh5: THE TOCTOU RECHECK ─────────────────────────────────────
         //
@@ -760,4 +779,129 @@ fn round_trip_check(editmsg_path: &std::path::Path) -> Option<String> {
     // false-refused %1409. Best-effort — failing to remove it must not fail the commit.
     let _ = std::fs::remove_file(&msg_src);
     None
+}
+
+/// GATE 7 — compile the crates THIS commit touches, and nothing else.
+///
+/// # It INVOKES the kernel; it does not reimplement it
+///
+/// `staged-build-gate`'s binary already owns the per-crate driver: the staged-vs-worktree
+/// divergence check, the bounded build, the RCH-shim exit-103 distinction, and the refusal
+/// rendering. `6fot`'s 12 tests and three mutation sets are the correctness authority for
+/// all of it. A second copy of that loop here would be one that drifts, so this function
+/// classifies the index, spawns the binary, and maps its exit code.
+///
+/// **The child inherits `GIT_INDEX_FILE`, which is the whole trick.** Inside a path-scoped
+/// commit that variable points at git's temporary index, so `git diff --cached` in the child
+/// returns the committing agent's own pathspec — measured, not assumed.
+///
+/// # `--no-verify` is named in the output, deliberately
+///
+/// A bypass nobody can name is a bypass everybody uses. Every refusal here says how to
+/// bypass it, so an agent under time pressure reaches for the visible escape rather than
+/// deleting the gate.
+fn staged_build_gate_on_commit_path(
+    repo_root: &Path,
+    staged: &[String],
+    refusals: &mut Vec<String>,
+) {
+    let scope = staged_build_gate::IndexScope::from_env();
+    if let Some(refusal) = scope.refusal() {
+        // NOT a silent skip and NOT a build. An unattributable staged set is an INSTANT
+        // refusal with a one-flag remedy — which is the argument against capping the wall
+        // time instead: a timed-out scan reports the same shape as a completed one, so a
+        // broken crate passes whenever peers have staged enough work.
+        refusals.push(format!("staged-build-gate: {refusal}"));
+        return;
+    }
+
+    // Cheap pre-check so a docs-only commit never spawns cargo at all. The binary would
+    // reach the same verdict; doing it here keeps GATE_NOT_APPLICABLE free.
+    let touched = match staged_build_gate::classify_scope(staged) {
+        staged_build_gate::StagedScope::NotApplicable => {
+            eprintln!(
+                "staged-build-gate: GATE_NOT_APPLICABLE index={} -- no staged path lives under crates/",
+                scope.label()
+            );
+            return;
+        }
+        staged_build_gate::StagedScope::Crates(crates) => crates,
+    };
+    eprintln!(
+        "staged-build-gate: index={} crates_evaluated={} [{}]",
+        scope.label(),
+        touched.len(),
+        touched.iter().cloned().collect::<Vec<_>>().join(", ")
+    );
+
+    let Some(binary) = staged_build_gate_binary(repo_root) else {
+        // FAIL CLOSED. A missing gate binary is not permission to commit; that is the
+        // exact shape of a gate invoked by nothing reading as protection.
+        refusals.push(
+            "staged-build-gate: STAGED_BUILD_GATE_ERROR reason=BINARY_ABSENT \
+             detail=\"neither $HOME/.local/bin/staged-build-gate nor target/debug/staged-build-gate \
+             exists, so the crates this commit touches were NOT built\" \
+             next_action=cargo-build-p-staged-build-gate -- bypass visibly with `git commit --no-verify`"
+                .to_owned(),
+        );
+        return;
+    };
+
+    let mut command = std::process::Command::new(&binary);
+    command.current_dir(repo_root);
+    // The deadline is per-crate inside the binary; this outer bound covers the whole run
+    // plus one crate's grace, so a wedged child cannot hold the commit open forever.
+    let outer = std::time::Duration::from_secs(
+        staged_build_gate::BUILD_DEADLINE_SECS * (touched.len() as u64) + 30,
+    );
+    match subprocess_contract::bounded_output(&mut command, outer) {
+        subprocess_contract::BoundedOutcome::Completed(output) => {
+            let text = format!(
+                "{}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            if output.status.success() {
+                for line in text.lines().filter(|l| !l.trim().is_empty()) {
+                    eprintln!("staged-build-gate: {line}");
+                }
+                return;
+            }
+            for line in text.lines().filter(|l| !l.trim().is_empty()) {
+                refusals.push(format!(
+                    "staged-build-gate: {line} -- bypass visibly with `git commit --no-verify`"
+                ));
+            }
+            if text.trim().is_empty() {
+                // ANTI-VACUITY: a nonzero exit with no output must not become a silent
+                // refusal with no reason, which is indistinguishable from a crash.
+                refusals.push(format!(
+                    "staged-build-gate: STAGED_BUILD_GATE_ERROR reason=NO_OUTPUT exit={:?} \
+                     detail=\"the gate refused and said nothing; treat as unproven\"",
+                    output.status.code()
+                ));
+            }
+        }
+        subprocess_contract::BoundedOutcome::TimedOut => refusals.push(format!(
+            "staged-build-gate: STAGED_BUILD_GATE_REFUSED reason=OUTER_DEADLINE deadline_secs={} \
+             detail=\"a timeout is not a verdict; the crates this commit touches are UNPROVEN\" \
+             -- bypass visibly with `git commit --no-verify`",
+            outer.as_secs()
+        )),
+        subprocess_contract::BoundedOutcome::Unspawned(error) => refusals.push(format!(
+            "staged-build-gate: STAGED_BUILD_GATE_ERROR reason=UNSPAWNED detail=\"{error}\" \
+             -- bypass visibly with `git commit --no-verify`"
+        )),
+    }
+}
+
+/// The gate binary the fleet actually has. Installed copy first, build output second.
+fn staged_build_gate_binary(repo_root: &Path) -> Option<std::path::PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(home) = std::env::var_os("HOME") {
+        candidates.push(Path::new(&home).join(".local/bin/staged-build-gate"));
+    }
+    candidates.push(repo_root.join("target/debug/staged-build-gate"));
+    candidates.push(repo_root.join("target/release/staged-build-gate"));
+    candidates.into_iter().find(|path| path.is_file())
 }

@@ -46,6 +46,7 @@
 //! measured at 99% full, and `git worktree` is forbidden repo-wide.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 
 /// Seconds a single per-crate build may take before the gate refuses.
 ///
@@ -60,6 +61,132 @@ const _: () = assert!(
     BUILD_DEADLINE_SECS >= 60,
     "a build deadline under one minute refuses honest builds and will be routed around"
 );
+
+/// WHOSE staged paths the gate is about to read.
+///
+/// # The prerequisite this bead was blocked on, and why it did not need building
+///
+/// `929j` recorded a 603-second first run: the gate compiled a peer's `installer` because
+/// `git diff --cached` in a shared checkout returns every writer's staged paths, and named
+/// four candidate mechanisms for bounding the scan to the committing agent.
+///
+/// **None was needed. Git already provides it.** Measured 2026-09-02 in a scratch repo with
+/// two files staged by "different writers" and a hook that printed its own environment:
+///
+/// ```text
+/// git commit -- A/f          GIT_INDEX_FILE=.git/next-index-43322.lock   diff --cached -> A/f
+/// git commit --only -- A/f   GIT_INDEX_FILE=.git/next-index-95340.lock   diff --cached -> A/f
+/// git commit                 GIT_INDEX_FILE=.git/index                   diff --cached -> A/f B/f
+/// git commit -a              GIT_INDEX_FILE=.git/index.lock              diff --cached -> A/f B/f
+/// ```
+///
+/// A **path-scoped** commit makes git build a TEMPORARY index containing only the pathspec
+/// and point `GIT_INDEX_FILE` at it for the duration of the hook. `AGENTS.md` already
+/// mandates exactly that form — *"path-scoped with an explicit list, never `-A`"* — so on
+/// the commit path the scan is bounded by construction.
+///
+/// **The 603 seconds came from invoking the BINARY directly**, where `GIT_INDEX_FILE` is
+/// unset, the shared index is read, and nine peers' paths arrive as if they were the
+/// caller's. The blocker was a property of the measurement, not of the gate.
+///
+/// # Why (d) — "cap the wall time and scan the whole index" — is wrong
+///
+/// It was offered as the cheap option and it is the vacuity defect with a deadline: a run
+/// that times out reports the same shape as a run that checked everything, so a broken
+/// crate passes whenever four peers happen to have staged enough work. It also leaves
+/// commit latency a function of other agents' behaviour, which is the denial of service the
+/// bead named. [`IndexScope::Shared`] refuses INSTANTLY instead, and names the remedy.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IndexScope {
+    /// Git built a temporary index for a path-scoped commit. The staged set IS the
+    /// committing agent's own pathspec, and the path it points at is carried so a refusal
+    /// can be diagnosed without re-deriving it.
+    Scoped(String),
+    /// The main index, shared by every writer in this checkout. The staged set cannot be
+    /// attributed, so building it is somebody else's compile on this agent's clock.
+    Shared(String),
+    /// `GIT_INDEX_FILE` is unset: not running under a git hook at all — a direct
+    /// invocation. Named separately from `Shared` because the REMEDY differs: a direct
+    /// caller should pass its own paths, while a committer should scope its commit.
+    NotUnderHook,
+}
+
+impl IndexScope {
+    /// Classify from the value of `GIT_INDEX_FILE`.
+    ///
+    /// The rule is "set, and NOT the main index or its lock" rather than "matches
+    /// `next-index`". The observed name is `next-index-<pid>.lock`, but keying on that
+    /// literal would bind this gate to one git version's temp-file naming; keying on
+    /// *"not the main index"* captures the property that matters — git only overrides
+    /// `GIT_INDEX_FILE` when it has built a partial index. `git commit -a` is correctly
+    /// classified `Shared` because it points at `.git/index.lock`, the main index's lock.
+    #[must_use]
+    pub fn classify(git_index_file: Option<&str>) -> Self {
+        let Some(raw) = git_index_file.map(str::trim).filter(|v| !v.is_empty()) else {
+            return IndexScope::NotUnderHook;
+        };
+        let name = Path::new(raw)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(raw);
+        if name == "index" || name == "index.lock" {
+            IndexScope::Shared(raw.to_owned())
+        } else {
+            IndexScope::Scoped(raw.to_owned())
+        }
+    }
+
+    /// Read it from the process environment.
+    #[must_use]
+    pub fn from_env() -> Self {
+        match std::env::var("GIT_INDEX_FILE") {
+            Ok(value) => IndexScope::classify(Some(&value)),
+            Err(_) => IndexScope::NotUnderHook,
+        }
+    }
+
+    /// The stable machine label for the emitted line.
+    #[must_use]
+    pub fn label(&self) -> &'static str {
+        match self {
+            IndexScope::Scoped(_) => "scoped",
+            IndexScope::Shared(_) => "shared",
+            IndexScope::NotUnderHook => "not-under-hook",
+        }
+    }
+
+    /// May the gate build what this index holds?
+    ///
+    /// `Scoped` only. Both other values mean the staged set is unattributable, and a gate
+    /// that compiles unattributable work converts one writer's staging into every other
+    /// writer's commit latency.
+    #[must_use]
+    pub fn may_build(&self) -> bool {
+        matches!(self, IndexScope::Scoped(_))
+    }
+
+    /// The typed refusal for a scope the gate will not build, with its remedy.
+    #[must_use]
+    pub fn refusal(&self) -> Option<String> {
+        match self {
+            IndexScope::Scoped(_) => None,
+            IndexScope::Shared(path) => Some(format!(
+                "STAGED_BUILD_GATE_REFUSED reason=INDEX_NOT_SCOPED index={path} \
+                 detail=\"this is the SHARED index, so the staged set cannot be attributed to \
+                 the committing agent and building it would compile peers' work on your clock \
+                 (measured: 603s for one staged file). Commit path-scoped: \
+                 `git commit -- <paths>`. Bypass visibly with `git commit --no-verify`.\""
+            )),
+            IndexScope::NotUnderHook => Some(format!(
+                "STAGED_BUILD_GATE_REFUSED reason=NOT_UNDER_HOOK index={path} \
+                 detail=\"GIT_INDEX_FILE is unset, so this is a direct invocation reading the \
+                 shared index rather than a commit's own pathspec. Pass the paths to check, or \
+                 run this through the pre-commit hook.\"",
+                path = "<unset>"
+            )),
+        }
+    }
+}
 
 /// What the staged set means for this gate.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -223,7 +350,9 @@ pub enum GateVerdict {
     /// Every touched crate built.
     Pass { crates: Vec<String> },
     /// At least one crate did not admit the commit.
-    Refused { rows: BTreeMap<String, CrateVerdict> },
+    Refused {
+        rows: BTreeMap<String, CrateVerdict>,
+    },
     /// Crates were touched and NONE resolved to a build target. Separated from
     /// `Refused` because it indicts the gate's own parser rather than the commit,
     /// and the remedy is therefore different.
@@ -361,14 +490,18 @@ pub fn render_refusal(rows: &BTreeMap<String, CrateVerdict>) -> String {
     for (name, verdict) in rows {
         let detail = match verdict {
             CrateVerdict::BuildFailed { code, first_error } => {
-                let code = code.map(|c| c.to_string()).unwrap_or_else(|| "signal".into());
+                let code = code
+                    .map(|c| c.to_string())
+                    .unwrap_or_else(|| "signal".into());
                 format!("exit={code} first_error=\"{first_error}\"")
             }
             CrateVerdict::Diverged { paths } => format!("diverged_paths={}", paths.join(",")),
             CrateVerdict::TimedOut { deadline_secs } => format!("deadline_secs={deadline_secs}"),
             CrateVerdict::Unspawned { detail } => format!("detail=\"{detail}\""),
             CrateVerdict::BuildInconclusive { code, stderr_tail } => {
-                let code = code.map(|c| c.to_string()).unwrap_or_else(|| "signal".into());
+                let code = code
+                    .map(|c| c.to_string())
+                    .unwrap_or_else(|| "signal".into());
                 format!("exit={code} stderr_tail=\"{stderr_tail}\"")
             }
             CrateVerdict::NoTarget | CrateVerdict::Pass => String::new(),
@@ -418,7 +551,10 @@ mod tests {
     fn a_commit_touching_no_crate_is_not_applicable_not_a_pass() {
         let scope = classify_scope(&["docs/plan/00-brief.md", "AGENTS.md"]);
         assert_eq!(scope, StagedScope::NotApplicable);
-        assert_eq!(fold(&BTreeSet::new(), BTreeMap::new()), GateVerdict::NotApplicable);
+        assert_eq!(
+            fold(&BTreeSet::new(), BTreeMap::new()),
+            GateVerdict::NotApplicable
+        );
     }
 
     /// ANTI-VACUITY, the case the bead names: crates touched, zero targets resolved.
@@ -493,7 +629,10 @@ error[E0601]: `main` function not found in crate `plan_assemble`
         assert!(text.contains("crate=plan-assemble"), "{text}");
         assert!(text.contains("reason=BUILD_FAILED"), "{text}");
         assert!(text.contains("entry macros support only"), "{text}");
-        assert!(text.contains("next_action=fix-the-crate-or-unstage-it"), "{text}");
+        assert!(
+            text.contains("next_action=fix-the-crate-or-unstage-it"),
+            "{text}"
+        );
     }
 
     /// The downstream `E0601` must not be reported as the cause. The entry macro
@@ -505,7 +644,9 @@ error[E0601]: `main` function not found in crate `plan_assemble`
 error[E0601]: `main` function not found in crate `plan_assemble`
 error: asupersync entry macros support only `()` or `Result<(), E>` return types
 ";
-        assert!(first_cargo_error(reordered).unwrap().starts_with("error[E0601]"));
+        assert!(first_cargo_error(reordered)
+            .unwrap()
+            .starts_with("error[E0601]"));
         // And a location line must never be mistaken for the error: it is indented,
         // and a `contains("error")` scan would have returned the filename.
         let only_location = "  --> crates/plan-assemble/src/main.rs:258:20\n";
@@ -537,7 +678,10 @@ error: asupersync entry macros support only `()` or `Result<(), E>` return types
         };
         assert!(!inconclusive.admits(), "still refuses the commit");
         assert_eq!(inconclusive.label(), "BUILD_INCONCLUSIVE");
-        assert_eq!(inconclusive.next_action(), "fix-the-build-toolchain-then-re-run");
+        assert_eq!(
+            inconclusive.next_action(),
+            "fix-the-build-toolchain-then-re-run"
+        );
         assert_ne!(
             inconclusive.next_action(),
             CrateVerdict::BuildFailed {
@@ -579,7 +723,12 @@ error: asupersync entry macros support only `()` or `Result<(), E>` return types
             },
         ] {
             assert!(!verdict.admits(), "{} must not admit", verdict.label());
-            assert_ne!(verdict.next_action(), "none", "{} owes a remedy", verdict.label());
+            assert_ne!(
+                verdict.next_action(),
+                "none",
+                "{} owes a remedy",
+                verdict.label()
+            );
         }
         assert!(CrateVerdict::Pass.admits());
     }
@@ -689,11 +838,8 @@ error: asupersync entry macros support only `()` or `Result<(), E>` return types
     }
     #[test]
     fn shared_classifier_distinguishes_code_failure_infrastructure_refusal_and_no_call() {
-        let compiler = classify_cargo_invocation(
-            true,
-            Some(101),
-            "error[E0601]: main function not found\n",
-        );
+        let compiler =
+            classify_cargo_invocation(true, Some(101), "error[E0601]: main function not found\n");
         assert!(matches!(
             compiler,
             CargoBuildOutcome::BuildFailed { code: Some(101), ref first_error } if first_error.starts_with("error[E0601]")
