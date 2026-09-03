@@ -15,11 +15,11 @@ trigger_today = "generic SessionStart plus launchd ai.zeststream.omp-orchestrato
 trigger_target = "curl one-liner (prebuilt binary, no .sh in tree) -> ompo install; then slash:/omp-orchestrator:start; SessionStart hook -> ompo portal --check --json; launchd -> ompo run"
 crate = "installer"
 crate_status = "exists-no-caller"
-bead = "omp-orchestrator-plf.7.2 (umbrella), plf.7.3 (doctor), lf.7.12 (init), kxe.10 (inception), f.7.1.5 (operator setup)"
+bead = "omp-orchestrator-jplf.7.2 (umbrella), jplf.7.3 (doctor), jplf.7.12 (init), kxe.10 (inception), jplf.7.1.5 (operator setup)"
 kernel_input = "PROPOSED InstallPlan{platform, dest_name=ompo, agents[], hooks_to_merge[], skills[]} | Probe{name, family, present, version, remediation} | intake.requirements.fleet -> persona A|B|C | EcosystemProbe | SwarmState{session, panes, sources_agree}"
 kernel_output = "PROPOSED InstallReport{agent -> created|merged|already|failed|skipped, backups[], path_hits[]} | DoctorReport{ok|degraded|absent|unprobeable} | Inception{schema_version, project_id, repo_identity, control_files, host_capabilities, required_tools, trust_status} | PortalRow{session, panes, queue_by_bv, admission, gates, liveness_per_source, one_next_action, decisions_owed}"
 event_row = "LifecycleEvent{stage_from=HUMAN, stage_to=S1.<L0..L5>, actor, pane, incarnation, outcome, reason_code, blocker}"
-validator = "installer --check identity (this-repo:crates/installer/src/lib.rs:86 IDENTITY MISMATCH); doctor two-band exit (plf.7.3); crate-atom-gate d3gm over the umbrella"
+validator = "installer --check identity (this-repo:crates/installer/src/lib.rs:86 IDENTITY MISMATCH); doctor two-band exit (jplf.7.3); crate-atom-gate d3gm over the umbrella"
 sota_standard = "installer-workmanship 24 non-negotiables (skill ~/.claude/skills/installer-workmanship/SKILL.md) implemented in Rust; three-source liveness (tmux + tick-monitor + Agent Mail agree) per AGENTS.md One Rule"
 sota_cite = "this-repo:AGENTS.md (One Rule, vibing-with-ntm section); skill:installer-workmanship/SKILL.md; mirror:destructive_command_guard/install.sh (gold-standard installer, feature list pending BinGates extraction). NO fh ROW IS CITED AND NONE MAY BE: Joshua removed fh as a requirement 2026-09-03."
 skill = "/omp-orchestrator:start (portal), :tick, :worker, :grade, :halt - thin wrappers over ompo <verb> --json; /installer-workmanship; /frankentui (walkthrough TUI, decision HD-0009)"
@@ -110,7 +110,7 @@ policy_file = ""
 source_commit = ""
 language = "rust"
 stage = "live"
-certified = false
+certified = "UNATTEMPTED"   # pane 4 refuted `false`: it reads as considered-and-rejected; never-attempted is the honest value. ZERO of 27 measured hook instances has entered /hook-certification.
 harm_class = "blocks a commit"
 measured = "ls -l + file .git/hooks/pre-commit; per-clone and untracked, so a fresh checkout has NO hook"
 note = "The only surface measured to have changed an agent's behaviour rather than described it: it refused this orchestrator twice on 2026-09-03 (OC-L2 dispatch-before-claim, OC-L1 malformed tick row). PX-STAMP adds a ninth gate here."
@@ -126,7 +126,7 @@ policy_file = ""
 source_commit = ""
 language = "mixed/UNMEASURED"
 stage = "live"
-certified = false
+certified = "UNATTEMPTED"   # pane 4 refuted `false`: it reads as considered-and-rejected; never-attempted is the honest value. ZERO of 27 measured hook instances has entered /hook-certification.
 harm_class = "blocks a tool call"
 measured = "9 matchers / 11 hooks. Prior row named THREE binaries; the live table has eleven."
 note = "dcg denied two pane-1 commands today (an env grep, a git checkout). AGENTS.md's rule applies: a denied probe is UNKNOWN, never a negative result."
@@ -142,7 +142,7 @@ policy_file = ""
 source_commit = ""
 language = "UNMEASURED"
 stage = "live"
-certified = false
+certified = "UNATTEMPTED"   # pane 4 refuted `false`: it reads as considered-and-rejected; never-attempted is the honest value. ZERO of 27 measured hook instances has entered /hook-certification.
 harm_class = "none known; capture only"
 measured = "2 matchers / 2 hooks -- the prior row's 'partial' was directionally right"
 
@@ -157,7 +157,7 @@ policy_file = ""
 source_commit = ""
 language = "rust x3 + SHELL x1 -- see harm_class"
 stage = "live"
-certified = false
+certified = "UNATTEMPTED"   # pane 4 refuted `false`: it reads as considered-and-rejected; never-attempted is the honest value. ZERO of 27 measured hook instances has entered /hook-certification.
 harm_class = "blocks a session close; AND CARRIES A LIVE .sh HOOK against AGENTS.md's 'No .sh hook, ever'"
 measured = "1 matcher / 4 hooks. finding-bead-gate.sh is under ~/.claude/, outside the tree, so the no-shell gate that walks git ls-files cannot see it -- the same geography escape as PX-E14."
 note = "HD-0011's clause -- REFUSE Stop while an in_progress bead held by this agent has no STAGE comment since dispatch -- is still 0 of 4. The four live hooks do something else."
@@ -173,7 +173,7 @@ policy_file = ""
 source_commit = ""
 language = "UNMEASURED"
 stage = "live"
-certified = false
+certified = "UNATTEMPTED"   # pane 4 refuted `false`: it reads as considered-and-rejected; never-attempted is the honest value. ZERO of 27 measured hook instances has entered /hook-certification.
 harm_class = "none known"
 measured = "1 matcher / 2 hooks. The prior row said '0 (today: zestgraph topology gate only)' -- the count was wrong AND the target (ompo portal --check --json) does not exist."
 
@@ -188,7 +188,7 @@ policy_file = "~/.codex/hooks.json"
 source_commit = ""
 language = "UNMEASURED"
 stage = "live"
-certified = false
+certified = "UNATTEMPTED"   # pane 4 refuted `false`: it reads as considered-and-rejected; never-attempted is the honest value. ZERO of 27 measured hook instances has entered /hook-certification.
 harm_class = "blocks a tool call"
 measured = "PreToolUse 4, PostToolUse 2 -- the prior row's '4 Pre / 2 Post' was CORRECT and is the only prior count that survived re-measurement"
 
@@ -203,7 +203,7 @@ policy_file = ""
 source_commit = ""
 language = "UNKNOWN"
 stage = "unmeasured"
-certified = false
+certified = "UNATTEMPTED"   # pane 4 refuted `false`: it reads as considered-and-rejected; never-attempted is the honest value. ZERO of 27 measured hook instances has entered /hook-certification.
 harm_class = "UNKNOWN"
 measured = "NOT MEASURED. dist/types/extensibility and dist/types/capability exist in the installed bundle; whether an omp profile accepts hooks at all is unknown. Decision HD-0012 says probe first."
 note = "UNKNOWN is the correct value here. Filling these fields by inference would be the fabricated-certificate failure this table exists to avoid."
@@ -219,7 +219,7 @@ policy_file = "~/Library/LaunchAgents/ai.zeststream.omp-orchestrator.plist"
 source_commit = ""
 language = "rust"
 stage = "on-disk, NOT LOADED"
-certified = false
+certified = "UNATTEMPTED"   # pane 4 refuted `false`: it reads as considered-and-rejected; never-attempted is the honest value. ZERO of 27 measured hook instances has entered /hook-certification.
 harm_class = "dispatches work into panes"
 measured = "launchctl list | grep -c 'ai.zeststream.omp-orchestrator$' -> 0, while the plist IS on disk. The only loaded sibling is ai.zeststream.omp-orchestrator.control-plane, PID 38194, --repo control-plane, 12h44m."
 note = "Blocked on fqhv P1: OMP_EXCLUDE_PANES is %1396,%1397,%1424 while live panes are %5-%9, so loading it as written invites the supervisor to dispatch into the conductor. Role-based exclusion needs a supervisor binary change."
@@ -288,7 +288,7 @@ by = "pane-4"
 
 [[box.gap]]
 what = "L1-L5 crates do not exist (ompo doctor/init/start/portal)"
-resolves = "plf.7.3 doctor, lf.7.12 init, kxe.10 inception, plf.7.2 umbrella — AFTER diagram+HD approval, not before"
+resolves = "jplf.7.3 doctor, jplf.7.12 init, kxe.10 inception, jplf.7.2 umbrella — AFTER diagram+HD approval, not before"
 class = "wired_caller"
 [[box.gap]]
 what = "installer crate name collides with /usr/sbin/installer"
@@ -308,7 +308,7 @@ resolves = "kxe.8 journal at the install/doctor/spawn chokepoints"
 class = "event_row"
 [[box.gap]]
 what = "L1 doctor SOTA is br doctor mutate()+undo by before_hash; ompo doctor is none"
-resolves = "plf.7.3 copies beads_rust tests/e2e_doctor_chokepoint.rs contract: backup keyed by before_hash, undo restores it, second repair is zero actions"
+resolves = "jplf.7.3 copies beads_rust tests/e2e_doctor_chokepoint.rs contract: backup keyed by before_hash, undo restores it, second repair is zero actions"
 class = "oracle"
 [[box.gap]]
 what = "SessionStart hook is 0; launchd paused; slash start does not exist"
@@ -316,10 +316,10 @@ resolves = "trigger_target after HD-0009; today remains none"
 class = "hook"
 [[box.gap]]
 what = "crate field was unparseable composite; umbrella still MISSING"
-resolves = "crate=installer now; umbrella stays in no_claim until plf.7.2 exists"
+resolves = "crate=installer now; umbrella stays in no_claim until jplf.7.2 exists"
 class = "wired_caller"
 [[box.gap]]
-what = "the eight [[box.hook]] rows carry surface/hook/status, not the twelve certified fields (id, event, matcher, class, fail_mode, binary, policy_file, source_commit, language, stage, certified, harm_class)"
+what = "the eight box-hook rows carry surface/hook/status, not the twelve certified fields (id, event, matcher, class, fail_mode, binary, policy_file, source_commit, language, stage, certified, harm_class)"
 resolves = "one 12-field row per hook naming its future hooks_certified.toml id and /hook-certification stage; NOT written with placeholders, because a filled certificate with no certification is worse than a missing row (BlueLantern wave-1 hook_schema)"
 class = "hook"
 [[box.gap]]
