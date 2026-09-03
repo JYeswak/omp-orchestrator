@@ -783,6 +783,7 @@ mod tests {
             !got.contains(&"b6249a5".to_owned()),
             "an unmarked SHA is out of scope by design: {got:?}"
         );
+        // Set-valued by design: any numeric token is invalid as a SHA; no specific value is expected.
         assert!(
             !got.iter().any(|s| s == "200000" || s == "750"),
             "a number is not a SHA: {got:?}"

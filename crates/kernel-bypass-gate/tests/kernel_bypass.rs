@@ -20,9 +20,10 @@ fn send_work(pane: &str, msg: &str) {
         !hits.is_empty(),
         "raw tmux send-keys outside tick-monitor must be flagged"
     );
-    assert!(
-        hits.iter().any(|b| b.kernel.contains("dispatch") || b.kernel.contains("tick-monitor")),
-        "the violation must NAME the kernel: {hits:?}"
+    assert_eq!(
+        hits[0].kernel,
+        "tick-monitor pane access",
+        "the violation must NAME the exact kernel: {hits:?}"
     );
 }
 
@@ -43,9 +44,10 @@ fn file_gap(context: &str) -> String {
         !hits.is_empty(),
         "bare br create outside the kernel crate must be flagged"
     );
-    assert!(
-        hits.iter().any(|b| b.kernel.contains("omp-orchestrator") || b.kernel.contains("beads")),
-        "the violation must NAME the kernel: {hits:?}"
+    assert_eq!(
+        hits[0].kernel,
+        "beads-workflow bead filing",
+        "the violation must NAME the exact kernel: {hits:?}"
     );
 }
 
