@@ -1,0 +1,38 @@
+[[box]]
+id = "S5b"
+name = "claim to dispatch: fenced packet render and transport admission"
+trigger_today = "hand"
+trigger_target = "launchd:omp-orchestrator run"
+crate = "dispatch-claim-fence"
+crate_status = "wired"
+bead = "omp-orchestrator-ywd5"
+kernel_input = "DispatchIntent::{Bead, Broadcast, Correction} plus BeadSnapshot, receiver agent, pane, and transport identity; arms are this-repo:crates/dispatch-claim-fence/src/lib.rs:L394-L407"
+kernel_output = "DispatchPermit::{Bead, Broadcast, Correction} | ClaimFenceError::{MissingBeadId, MissingReceiverAgent, MissingOperation, MissingSnapshot, SnapshotIdMismatch, ClaimRequired, AssignedElsewhere, UnknownStatus, AssigneeIdentity} | PacketError::{PacketFieldMissing, PacketAddsScope}"
+event_row = "LifecycleEvent{stage_from=S5a, stage_to=S5b, actor, pane, agent, bead, incarnation, packet_hash, transport, outcome, reason_code}"
+validator = "authorize_bead_dispatch_as is called from this-repo:crates/omp-orchestrator/src/main.rs:L1228-L1247 and L1399-L1422; render_with_pane validates packet fields at this-repo:crates/omp-orchestrator/src/dispatch_packet.rs:L153-L183; transports are selected at main.rs:L1489-L1529; pane fence and sender identity remain supporting inputs"
+sota_standard = "Claim visibility precedes dispatch; authorize immediately before packet construction, render the complete bead contract, and treat the permit as permission rather than a transport receipt"
+sota_cite = "this-repo:docs/plan/12-journey.md:L318-L326; this-repo:crates/dispatch-claim-fence/src/lib.rs:L389-L448,L526-L560; this-repo:crates/omp-orchestrator/src/main.rs:L1228-L1247,L1399-L1422,L1458-L1529; this-repo:crates/omp-orchestrator/src/dispatch_packet.rs:L5-L13,L153-L183 (sed -n verified; fh unavailable: SEARCH_INDEX_STALE/digest_missing_today)"
+skill = "/human-in-the-loop, /race-condition-hunting"
+branches = [
+  "DispatchIntent::Bead -> authorize the named bead for the receiver",
+  "DispatchIntent::Broadcast -> permit only the named broadcast operation",
+  "DispatchIntent::Correction -> permit only the named correction operation",
+  "DispatchPermit::Bead -> packet construction may proceed; no delivery claim",
+  "DispatchPermit::Broadcast -> packet construction may proceed; no delivery claim",
+  "DispatchPermit::Correction -> packet construction may proceed; no delivery claim",
+  "ClaimFenceError::MissingBeadId -> REFUSED",
+  "ClaimFenceError::MissingReceiverAgent -> REFUSED",
+  "ClaimFenceError::MissingOperation -> REFUSED",
+  "ClaimFenceError::MissingSnapshot -> REFUSED",
+  "ClaimFenceError::SnapshotIdMismatch -> REFUSED",
+  "ClaimFenceError::ClaimRequired -> REFUSED until the receiver claim is explicit",
+  "ClaimFenceError::AssignedElsewhere -> REFUSED",
+  "ClaimFenceError::UnknownStatus -> REFUSED",
+  "ClaimFenceError::AssigneeIdentity -> REFUSED until identity resolves",
+  "PacketError::PacketFieldMissing -> REFUSED before transport",
+  "PacketError::PacketAddsScope -> REFUSED before transport",
+  "TransportKind::NtmRobotSend -> retain per-target transport receipt",
+  "TransportKind::TmuxSendKeysLiteral -> retain measurement but do not claim delivery",
+  "human-halt: an unresolved claim, identity, or packet contradiction stops dispatch",
+]
+no_claim = "This box now has a real production authorize caller, unlike the first draft. It proves permission and packet preflight only; it does not prove transport delivery, receiver acknowledgement, pane liveness, exactly-once execution, grading, or close. The S5a selector remains unwired because the supervisor still obtains candidates from br ready FIFO."

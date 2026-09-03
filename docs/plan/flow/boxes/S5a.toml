@@ -1,0 +1,33 @@
+[[box]]
+id = "S5a"
+name = "select: BV-ranked ready work, non-epic, unclaimed, claim attempted"
+trigger_today = "hand"
+trigger_target = "launchd:omp-orchestrator run"
+crate = "loop-queue-filter"
+crate_status = "exists-no-caller"
+bead = "omp-orchestrator-2ceb"
+kernel_input = "S4 materialized graph + br ready --json + bv --robot-triage/--robot-next + live attempt-claim; raw br ready parsing is this-repo:crates/omp-orchestrator/src/main.rs:L610-L624 and selector input handling is this-repo:crates/loop-queue-filter/src/lib.rs:L382-L400"
+kernel_output = "RunOutput{stdout, stderr, code} plus Availability::{Available, Blocked, Unknown}; typed ClaimAttempt is PROPOSED"
+event_row = "LifecycleEvent{stage_from=S4, stage_to=S5a, actor, pane, bead, rank, claim_attempt, outcome, reason_code, blocker_chain}"
+validator = "bead-availability IssueStatus/Availability/BlockerState/Unblocks rows; attempt-claim is the readiness test; exclude epics, non-open status, and already-assigned rows"
+sota_standard = "PageRank over the dependency DAG chooses articulation points; br ready appearance is not claimability, so the selector must attempt the claim and retain the refusal chain"
+sota_cite = "this-repo:docs/plan/12-journey.md:L312-L318; this-repo:crates/bead-availability/src/lib.rs:L21-L28,L78-L99; this-repo:crates/loop-queue-filter/src/lib.rs:L382-L425; this-repo:crates/omp-orchestrator/src/main.rs:L610-L624 (sed -n verified; fh unavailable: SEARCH_INDEX_STALE/digest_missing_today)"
+skill = "/beads-bv, /beads-north-star"
+branches = [
+  "IssueStatus::Open -> candidate input; claim attempt is required",
+  "IssueStatus::InProgress -> REFUSED already claimed/in flight",
+  "IssueStatus::Grading -> REFUSED awaiting independent grade",
+  "IssueStatus::Blocked -> REFUSED with blocker chain",
+  "IssueStatus::Closed -> REFUSED terminal",
+  "IssueStatus::Unknown -> REFUSED unrecognized tracker state",
+  "BlockerState::Blocking -> retain blocker evidence",
+  "BlockerState::Released -> do not treat stale edge as a blocker",
+  "BlockerState::StaleEdge -> refuse or reconcile before selection",
+  "Availability::Available -> claim attempt may proceed",
+  "Availability::Blocked -> claim attempt refused",
+  "Availability::Unknown -> claimability unproven; refuse",
+  "Unblocks::Known{count} -> retain known dependent count",
+  "Unblocks::Unknown{reason} -> retain unknown reason; never coerce to zero",
+  "human-halt: claim refusal names the blocker chain and waits for owner action",
+]
+no_claim = "This box maps selection and claimability only. It does not prove that a selected bead was dispatched, delivered, acknowledged, graded, or closed. loop-queue-filter, bead-availability, and fast-dispatch exist, but the current supervisor path reads br ready FIFO rather than invoking these selectors; that is the S5a wiring gap."
