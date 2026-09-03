@@ -147,13 +147,14 @@ pub fn render(
     why_now: Option<&str>,
     traps: Option<&str>,
 ) -> Result<String, PacketError> {
-    render_with_pane(snapshot, target, None, why_now, traps)
+    render_with_pane(snapshot, target, None, None, why_now, traps)
 }
 
 pub fn render_with_pane(
     snapshot: &BeadSnapshot,
     target: &Path,
     pane: Option<&str>,
+    receiver_agent: Option<&str>,
     why_now: Option<&str>,
     traps: Option<&str>,
 ) -> Result<String, PacketError> {
@@ -185,9 +186,15 @@ pub fn render_with_pane(
         .assignee()
         .filter(|owner| owner.starts_with("supervisor:"))
         .map_or_else(String::new, |owner| {
-            format!(
-                "Handoff: {owner} holds this bead; the receiver must claim it before working.\n"
-            )
+            let action = receiver_agent.and_then(nonempty).map_or_else(
+                || "the receiver must claim it before working".to_owned(),
+                |receiver| {
+                    format!(
+                        "claim it as {receiver}: br update {bead} --assignee {receiver} --status in_progress --actor {receiver}"
+                    )
+                },
+            );
+            format!("Handoff: {owner} holds this bead; {action}.\n")
         });
     let pane_line = pane
         .and_then(nonempty)

@@ -1469,6 +1469,7 @@ async fn send_and_verify(
         snapshot,
         &config.repo,
         Some(pane),
+        Some(receiver_agent),
         None,
         None,
     )
@@ -3611,6 +3612,7 @@ async fn render_dispatch_command(
         &snapshot,
         &config.repo,
         Some(&request.pane),
+        None,
         request.why_now.as_deref(),
         traps.as_deref(),
     )
@@ -3648,7 +3650,14 @@ fn main() -> std::process::ExitCode {
             return std::process::ExitCode::from(2);
         }
     };
-    let config_args = if close_request.is_some() {
+    let dispatch_request = match parse_dispatch_render_args(&args) {
+        Ok(request) => request,
+        Err(error) => {
+            eprintln!("{error}");
+            return std::process::ExitCode::from(2);
+        }
+    };
+    let config_args = if close_request.is_some() || dispatch_request.is_some() {
         Vec::new()
     } else {
         args.clone()
@@ -3671,6 +3680,24 @@ fn main() -> std::process::ExitCode {
             return std::process::ExitCode::from(1);
         }
     };
+    if let Some(request) = dispatch_request {
+        let outcome = runtime.block_on(async {
+            let cx = Cx::current()
+                .ok_or_else(|| "SUPERVISOR_REFUSED no runtime context".to_owned())?;
+            render_dispatch_command(&cx, &config, &request).await
+        });
+        return match outcome {
+            Ok(packet) => {
+                print!("{packet}");
+                std::process::ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::ExitCode::from(1)
+            }
+        };
+    }
+
     if let Some(request) = close_request {
         let outcome = runtime.block_on(async {
             let cx = Cx::current()

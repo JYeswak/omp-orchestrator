@@ -1,5 +1,5 @@
 use dispatch_claim_fence::BeadSnapshot;
-use omp_orchestrator::dispatch_packet::{render, PacketError};
+use omp_orchestrator::dispatch_packet::{render, render_with_pane, PacketError};
 use std::path::Path;
 
 fn bead(id: &str, description: &str, acceptance: &str) -> BeadSnapshot {
@@ -98,4 +98,26 @@ fn traps_that_add_acceptance_scope_are_refused() {
     assert!(error
         .to_string()
         .contains("br update 8e1g --acceptance-criteria"));
+}
+#[test]
+fn pane_and_supervisor_handoff_are_carried() {
+    let snapshot = BeadSnapshot::new_with_acceptance(
+        "handoff",
+        "packet fixture",
+        "body",
+        "Run cargo test; expect exit 0",
+        "open",
+        Some("supervisor:123"),
+    );
+    let packet = render_with_pane(
+        &snapshot,
+        Path::new("/repo"),
+        Some("%1414"),
+        None,
+        None,
+        None,
+    )
+        .expect("pane packet should render");
+    assert!(packet.contains("Pane: %1414"), "{packet}");
+    assert!(packet.contains("Handoff: supervisor:123"), "{packet}");
 }
