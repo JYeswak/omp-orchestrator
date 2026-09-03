@@ -40,6 +40,7 @@ use omp_orchestrator::{
     PRE_LEHT_BLOCKING_ROWS,
 };
 use std::path::PathBuf;
+use std::fs;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -96,6 +97,56 @@ fn every_crate_on_disk_has_exactly_one_census_row() {
     let before = names.len();
     names.dedup();
     assert_eq!(before, names.len(), "duplicate census rows");
+}
+#[test]
+fn a_new_cargo_manifest_gets_one_row_and_removal_withdraws_it() {
+    let temp = tempfile::tempdir().expect("create census fixture");
+    let crates = temp.path().join("crates");
+    fs::create_dir_all(&crates).expect("create crates directory");
+    let baseline = census_gates(temp.path());
+    let candidate = crates.join("planted-membership");
+    fs::create_dir_all(&candidate).expect("create planted crate directory");
+    fs::write(
+        candidate.join("Cargo.toml"),
+        "[package]\nname = \"planted-membership\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .expect("write planted manifest");
+
+    let planted = census_gates(temp.path());
+    assert_eq!(
+        planted.rows.len(),
+        baseline.rows.len() + 1,
+        "a new Cargo directory must add exactly one census row"
+    );
+    let row = planted
+        .rows
+        .iter()
+        .find(|row| row.gate == "planted-membership")
+        .expect("planted crate must be visible in the census");
+    match &row.reachability {
+        GateReachability::Unreachable { reason } => {
+            assert!(
+                reason.contains("manifest dependency"),
+                "unexpected verdict: {reason}"
+            );
+        }
+        other => panic!("caller-less planted crate must name its absent trigger: {other:?}"),
+    }
+
+    fs::remove_dir_all(&candidate).expect("remove planted crate directory");
+    let restored = census_gates(temp.path());
+    assert_eq!(
+        restored.rows.len(),
+        baseline.rows.len(),
+        "removing the planted crate must restore the original census count"
+    );
+    assert!(
+        restored
+            .rows
+            .iter()
+            .all(|row| row.gate != "planted-membership"),
+        "removed crate must not leave a census row behind"
+    );
 }
 
 /// ACCEPTANCE 4, KNOWN-GOOD. **A membership fix must not change a single verdict.**
