@@ -9,7 +9,7 @@ flowchart TD
   L0PATH -->|no| RPATH["REFUSE name collision. Receipt lists every PATH hit"]
   L0PATH -->|yes| L0CX["subprocess-contract run_output and Cx"]
   L0CX --> L0Q1{"SHA256 independent channel plus cosign?"}
-  L0Q1 -->|fail| R0["REFUSE supply chain"]
+  L0Q1 -->|fail| R0["REFUSE supply chain. Code::Refused"]
   L0Q1 -->|ok| L0Q2{"agent detected?"}
   L0Q2 -->|no| L1
   L0Q2 -->|yes| L0M{"merge result?"}
@@ -64,4 +64,4 @@ flowchart TD
 
   L5["L5 portal JSON plus liveness per source plus one_next_action"] --> L5Q{"decision owed?"}
   L5Q -->|yes| H5["HUMAN HALT S9"]
-  L5Q -->|no| OUT["write inception.json required fields then S2"]
+  L5Q -->|no| OUT["write inception.json required fields AND append FOUNDATION.jsonl stage=S1 AND jq readback then S2"]
