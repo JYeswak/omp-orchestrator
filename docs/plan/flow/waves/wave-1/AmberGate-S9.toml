@@ -1,0 +1,41 @@
+# Reviewer: AmberGate. Box: S9 (owner SilverWolf). Wave 1.
+#
+# DECLARED CONFLICT OF INTEREST: I wrote crates/decision-ledger and wired it (685fe79).
+# I am reviewing a box about my own crate, so every `evidence` line is a command that can
+# be re-run AGAINST me, and the second row below is filed against my own work.
+
+[[disagreement]]
+box = "S9"
+field = "crate_status"
+owner_says = "exists-no-caller"
+reviewer_says = "decision-ledger has a caller. It is invoked from write_heartbeat in the supervisor -- deliberately at the FUNNEL rather than at the two sites that fired today, so all 42 heartbeat call sites are covered by one call. 1 src reference, 1 manifest dependent."
+evidence = "git grep -cE 'decision_ledger::|use decision_ledger' -- 'crates/omp-orchestrator/src/*' -> 1 file ; git grep -ln 'decision-ledger = { path' -- 'crates/*/Cargo.toml' -> 1 (crates/omp-orchestrator/Cargo.toml) ; git log --oneline -1 685fe79 -> 'feat(decision-ledger): S9 had a reader and no writer -- append the question so it stops being lost'"
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S9"
+field = "crate_status"
+owner_says = "exists-no-caller"
+reviewer_says = "SECOND AND OPPOSING POINT, filed against my own change: plain 'wired' would overclaim in the other direction. The call site is compiled into a binary that cannot run here -- the supervisor is PAUSED (launchctl bootout 03:17Z) and cannot be rebuilt for arm64 until sor6. The honest value is 'wired (source only; not live -- no arm64 lane)'. Both plain values are wrong, in opposite directions."
+evidence = "file -b target/debug/decision-ledger -> 'ELF 64-bit LSB pie executable, x86-64' while uname -m -> arm64 ; ./target/debug/decision-ledger -> 'cannot execute binary file' ; the supervisor's launchd job was booted out at 03:17Z and its plist is intact"
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S9"
+field = "measurement"
+owner_says = "(no [[box.measurement]] and no [[box.gap]] section present)"
+reviewer_says = "the box is not reviewable under the wave-1 addendum until all four sections exist. The physics are available and I ran them, so they are recorded here rather than left for wave 2: the ledger holds 12 rows, four of which are hand-appended requests with an empty decider, and NONE was written by the crate."
+evidence = "wc -l docs/decisions.jsonl -> 12 ; python3 read -> HD-0009..0012 decider='' decision=EMPTY, recorded_by names the hand-append and its reason ; git grep -n 'decisions.jsonl' -- 'crates/*/src/*' | grep -v '///|//!' -> ONE hit and it is a comment at crates/omp-orchestrator/src/main.rs:2897"
+severity = "blocker"
+resolution = ""
+
+[[disagreement]]
+box = "S9"
+field = "branches"
+owner_says = "8 branch strings"
+reviewer_says = "the crate's real arms are richer than eight and the box should name them verbatim per the citation rule: AppendOutcome has 2 (Appended L80, Deduped L86) and LedgerError has 5 (Unreadable, Malformed, NotWritable, NoSuchRequest, MissingField), plus classify_heartbeat's four dispositions (gate:<name>, gate:tick-monitor, bead:<id>, status:<STATUS> UNCLASSIFIED) and the None arm for a row addressing nobody. The UNCLASSIFIED arm matters most: a classifier that drops the case it did not anticipate is exactly how S9 acquired a reader and no writer."
+evidence = "python3 walk of crates/decision-ledger/src/lib.rs -> pub enum AppendOutcome at L78 (2 arms: L80, L86); pub enum LedgerError at L105 (5 arms) ; classify_heartbeat's arms readable in the same file"
+severity = "minor"
+resolution = ""

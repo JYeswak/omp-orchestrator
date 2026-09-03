@@ -1,0 +1,71 @@
+# Reviewer: AmberGate. Boxes: S6a, S6b, S6c (owner SilverWolf). Wave 1.
+# One file for the three because my rows on them share evidence.
+
+# ── S6a ───────────────────────────────────────────────────────────────────────
+
+[[disagreement]]
+box = "S6a"
+field = "all"
+owner_says = "13 branches naming ReceiptReason/AckAction/ReceiptVerdict, and a MISSING row for an expected 17th receipt reason AckIncarnationMismatch pending ywd5"
+reviewer_says = "CORRECT, and it RETIRES a disagreement I filed earlier against the packet. I reported 'ReceiptReason has 16 arms, not 17'. S6a's framing is better than both readings: 16 exist and a 17th is EXPECTED and named. I re-counted and agree on 16; the box's MISSING row is the right shape for the absent one."
+evidence = "python3 walk from 'pub enum ReceiptReason' at crates/receiver-receipt/src/lib.rs:L43 to its closing brace -> 16 arms (MissingPostObservation L44 … ObservationWindowTooShort L83) ; grep -n '17' docs/plan/flow/boxes/S6a.toml -> L28 'MISSING expected 17th receipt reason AckIncarnationMismatch until ywd5 lands'"
+severity = "minor"
+resolution = ""
+
+[[disagreement]]
+box = "S6a"
+field = "measurement"
+owner_says = "(no [[box.measurement]] or [[box.gap]] section)"
+reviewer_says = "not reviewable under the wave-1 addendum until the four sections exist. Physics I ran that belong in it: the two-capture floor is a named const at 75 seconds, and receiver-receipt has 1 src reference plus 3 manifest dependents, so 'wired' is right."
+evidence = "sed -n '224p' crates/receiver-receipt/src/lib.rs -> 'pub const OBSERVATION_WINDOW_MIN_SECS: u64 = 75;' ; sed -n '37p' crates/pane-dispatch-ready/src/lib.rs -> 'pub const TWO_CAPTURE_MIN_SECS: u64 = omp_types::MIN_TWO_CAPTURE_INTERVAL_SECS;' ; git grep -ln 'receiver-receipt = { path' -- 'crates/*/Cargo.toml' -> 3"
+severity = "major"
+resolution = ""
+
+# ── S6b ───────────────────────────────────────────────────────────────────────
+
+[[disagreement]]
+box = "S6b"
+field = "crate_status"
+owner_says = "exists-no-caller"
+reviewer_says = "dispatch-silence-watch IS wired: 1 src reference and 1 manifest dependent, and the supervisor calls run_silence_watch on the dispatch path."
+evidence = "git grep -cE 'dispatch_silence_watch::|use dispatch_silence_watch' -- 'crates/omp-orchestrator/src/*' -> 1 ; git grep -ln 'dispatch-silence-watch = { path' -- 'crates/*/Cargo.toml' -> 1 ; git grep -n run_silence_watch -- crates/omp-orchestrator/src/main.rs -> present on the dispatch path"
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S6b"
+field = "branches"
+owner_says = "8 branch strings"
+reviewer_says = "FollowUpAction is TWO arms while FollowUpVerdict is SIX, and the box should say so, because the narrowing is the finding: the crate can report WHY and the caller can only act on WHETHER. Also worth a gap row: the STAGE:/BLOCKED: bead-comment convention this box's trigger depends on has NO parser anywhere in the tree, so the typed path does not exist."
+evidence = "python3 walk of crates/ack-spine/src/followup.rs -> FollowUpVerdict at L22 with 6 arms (Finished L37, VerdictPosted L42, InProgress L50, SilentPastDeadline L56, Reassigned L61, TrackerError L66); FollowUpAction at L246 with 2 (Healthy L248, NeedsFollowUp L250) ; classify_followup at L156"
+severity = "major"
+resolution = ""
+
+# ── S6c ───────────────────────────────────────────────────────────────────────
+
+[[disagreement]]
+box = "S6c"
+field = "all"
+owner_says = "crate = verify-dispatch, crate_status = exists-no-caller"
+reviewer_says = "CORRECT and independently confirmed. All three crates in this box have zero callers by both readers. I assert the row is right rather than leaving the box unreviewed."
+evidence = "for c in verify-dispatch dispatcher-deadman reap-finished-panes: git grep -cE '<snake>::|use <snake>' -- 'crates/omp-orchestrator/src/*' -> 0,0,0 and git grep -ln '<c> = { path' -- 'crates/*/Cargo.toml' -> 0,0,0 ; positive control on the same readers: subprocess-contract -> 43 manifest dependents"
+severity = "minor"
+resolution = ""
+
+[[disagreement]]
+box = "S6c"
+field = "kernel_output"
+owner_says = "(a Grade type is named in the packet as lf.1.1)"
+reviewer_says = "Grade DOES NOT EXIST as a Rust type anywhere under crates/. The nearest real type is ack-spine's CloseReasonVerdict (4 arms) with ClosePrefix (4 arms) as its input vocabulary. If the box cites Grade it should carry the literal MISSING plus what resolves it (lf.1.1)."
+evidence = "searched 'pub enum Grade|pub struct Grade|pub fn Grade' across crates/*/src/* -> MISSING ; python3 walk -> ClosePrefix at crates/ack-spine/src/close_reason.rs:L54 (MutationVerified L56, Done L58, Approved L60, WontFix L62); CloseReasonVerdict at L100 (Verified L102, PolicyRefused L110, Empty L116, Unread L119)"
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S6c"
+field = "crate"
+owner_says = "reap-finished-panes is one of this box's crates"
+reviewer_says = "it is worse than unwired and the box should say so: its implementation is OUT OF TREE. The supervisor's own plist records it as a wrapper around a 324-line control-plane bash reaper that cannot exist in this repo under the no-.sh rule, so the crate is a shell with its logic elsewhere."
+evidence = "plutil -p ~/Library/LaunchAgents/ai.zeststream.omp-orchestrator.plist -> OMP_REAP_SWEEP = 'unavailable:reap-finished-panes is a wrapper around control-plane 324-line bash reaper which cannot exist in this repo'"
+severity = "major"
+resolution = ""

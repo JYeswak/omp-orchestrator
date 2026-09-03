@@ -1,0 +1,83 @@
+# Reviewer: AmberGate. Boxes: S5a, S5b (owner BlueLantern) and S7, S8 (owner GreenFrog).
+# Wave 1. I owned S7 and S8 in the first dispatch, so my rows on them are a handover of
+# what I measured, not a second opinion formed from reading their file.
+
+# ── S5a: I re-ran BlueLantern's cites and they hold ──────────────────────────
+
+[[disagreement]]
+box = "S5a"
+field = "all"
+owner_says = "6 measurements, 16 gaps, 15 branches; br ready = 92 rows / 17 P0; br ready read at main.rs:L611,L614,L621; the three selector crates exist with no caller"
+reviewer_says = "ASSERTING CORRECT. I re-ran every checkable measurement and each reproduced exactly, including the live tracker numbers at a different minute than the owner's stamp. This is the best-evidenced box in the set: every measurement carries its own `date -u` inside the command, which is a better convention than my own boxes use and I am adopting it."
+evidence = "br ready --json | count/p0/first -> count=92 p0=17 first=omp-orchestrator-content-citation-ordering-r3h (owner stamped 05:29:27Z, I re-ran at 05:3xZ, identical) ; sed -n '611p;614p;621p' crates/omp-orchestrator/src/main.rs -> all three are QUEUE_UNREADABLE 'br ready' strings ; loop-queue-filter / bead-availability / fast-dispatch -> src refs 0/0/0, manifest deps 0/0/0"
+severity = "minor"
+resolution = ""
+
+[[disagreement]]
+box = "S5a"
+field = "kernel_output"
+owner_says = "(loop-queue-filter's output)"
+reviewer_says = "one addition rather than a correction: K3 of zlyy is a WIRING job and the box should say so, because loop-queue-filter ALREADY implements the cooldown the selector needs -- a per-bead map with TTL, a commit step, epic exclusion and priority ordering -- and has zero callers. Writing a second cooldown would be the handroll that keeps the kernel broken."
+evidence = "crates/loop-queue-filter/src/lib.rs: cooldown load/apply at L452-L508, commit step L454-L492, epic exclusion L399, open-only L398, priority ordering L432-L439 ; grep -c 'cooldown|COOLDOWN|DISPATCH_CLAIMED|age_secs' -> 39 hits"
+severity = "minor"
+resolution = ""
+
+# ── S5b ──────────────────────────────────────────────────────────────────────
+
+[[disagreement]]
+box = "S5b"
+field = "all"
+owner_says = "6 measurements, 15 gaps, 20 branches; authorize_bead_dispatch_as at L1225,L1228,L1421,L4503; render_with_pane present; five supporting crates exist"
+reviewer_says = "ASSERTING CORRECT on every cite I could re-run. Three of the four line cites resolve verbatim; I did not check L4503."
+evidence = "sed -n '1225p;1228p;1421p' crates/omp-orchestrator/src/main.rs -> the call, the fn definition, and the second call, all as claimed ; ls crates/{dispatch-claim-fence,pane-dispatch-fence,composer-typed,sender-identity,tick-monitor} -> all exist"
+severity = "minor"
+resolution = ""
+
+[[disagreement]]
+box = "S5b"
+field = "kernel_output"
+owner_says = "(the dispatch verdict)"
+reviewer_says = "the four-arm typed verdict now EXISTS and the box should cite it: ack-stage::DispatchVerdict{Delivered|Indeterminate|AckPending|Failed} plus classify_dispatch, landed 85c5892 with 7 legs and 5 biting mutations. It is NOT yet wired -- send_and_verify still returns Result<_, String> and the ledger still renders every Err as DISPATCH_FAILED -- so the row should read 'type landed, projection unwired (zlyy K1 second half)'."
+evidence = "python3 walk of crates/ack-stage/src/lib.rs -> pub enum DispatchVerdict at L543 with 4 arms, classify_dispatch at L648 ; git log --oneline -1 85c5892 ; measured on io3h -> %1414: DISPATCH_FAILED detail=ACK_STAGE_INDETERMINATE published 23:55:08Z, four seconds BEFORE the worker's own ACK landed"
+severity = "major"
+resolution = ""
+
+# ── S7: handover of what I measured while I owned it ────────────────────────
+
+[[disagreement]]
+box = "S7"
+field = "crate_status"
+owner_says = "wired"
+reviewer_says = "hook-wired, and TWO OF THE EIGHT GATES ARE NOT IN THE INSTALLED BINARY. The chain in source has 8 invocations; the installed Mach-O predates GATE 7 (c10a96a) and GATE 8 (4e1df0b). So 'wired' is true of the source and false of what git executes, and the distinction is the box's most important fact."
+evidence = "strings .git/hooks/pre-commit | grep -c GATE_SECTION_HELD -> 0 ; grep -c STAGED_BUILD_GATE_REFUSED -> 0 ; positive control grep -c NOTHING_TO_CHECK -> 3 ; the staleness is recorded as named rows in crates/no-shell-gate/tests/hook_freshness.rs ACCEPTED_STALENESS citing g5e0"
+severity = "blocker"
+resolution = ""
+
+[[disagreement]]
+box = "S7"
+field = "branches"
+owner_says = "20 branch strings"
+reviewer_says = "reading hazard worth naming in the row: there are SEVEN 'GATE n' banners and EIGHT+ invocations. There is no GATE 6 banner -- validate_staged_tick_ledger is invoked unbannered at L301 (fn L379), preregistration-gate unbannered at L121 (fn L579), plus round_trip_check at L780 and the nh5 TOCTOU recheck at L327. A reader counting banners finds 7 and concludes one is missing."
+evidence = "python3 scan of crates/no-shell-gate/src/bin/pre-commit-gate.rs for 'GATE \\d+' banners -> L128,141,197,212,260,303,321 (seven; no GATE 6) ; the unbannered invocations at L121 and L301"
+severity = "major"
+resolution = ""
+
+# ── S8 ───────────────────────────────────────────────────────────────────────
+
+[[disagreement]]
+box = "S8"
+field = "all"
+owner_says = "crate = installer; staged-build-gate, crate_status = exists-no-caller"
+reviewer_says = "ASSERTING CORRECT on the status, with one addition: the box's headline fact should be that S8 CANNOT COMPLETE ON THIS FLEET, not that its crate lacks a caller. No enabled rch worker produces a Mach-O arm64, so install is a halted human step and every downstream consequence (paused supervisor, two stale hook gates, no arm64 ack-spine) follows from that one fact."
+evidence = "file -b on a lane-built binary -> 'ELF 64-bit LSB pie executable, x86-64' with uname -m -> arm64 ; ~/.config/rch/workers.toml -> joshs-brain and zestdata-local enabled=false, four contabo enabled=true ; the cross-compile lane compiles the whole graph incl. asupersync and fails at LINK on 'unable to find dynamic system library objc / iconv' (sor6 leg 3)"
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S8"
+field = "crate_status"
+owner_says = "exists-no-caller"
+reviewer_says = "same nuance I filed on S1: an INSTALLED installer binary exists at ~/.local/bin/installer (659272 bytes, build_id ad31898) with no automated trigger on this machine. In-repo callers are zero; the reachability answer is machine-scoped and the row should name the machine."
+evidence = "ls -la ~/.local/bin/installer -> 659272 bytes ; installer --version -> 'installer 0.1.0 build_id=ad31898873c1497cff63e026d6de28b6f80715cb' ; 0 manifest dependents, 0 hook-byte occurrences, 0 plists, 0 crontab lines"
+severity = "minor"
+resolution = ""

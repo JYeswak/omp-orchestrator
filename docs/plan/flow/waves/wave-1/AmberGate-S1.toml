@@ -1,0 +1,38 @@
+# Reviewer: AmberGate. Box: S1 (owner SnowyCanyon, b6e3aaa). Wave 1.
+# Every `evidence` line was RE-RUN by me at 2026-09-03T05:1xZ, not read off the box.
+
+[[disagreement]]
+box = "S1"
+field = "crate"
+owner_says = "installer (crates/installer, 3 flags, 0 tests, no caller) + umbrella MISSING"
+reviewer_says = "the test count is wrong: 11 in-module #[test] exist. What IS true is that there is no crates/installer/tests/ directory, so crate-atom-gate part 4 remains MISSING for it. Suggested value: '0 tests/ legs, 11 in-module #[test]' -- '0 tests' reads as untested and the crate is not."
+evidence = "grep -rc '#[test]' crates/installer/src/*.rs | awk -F: '{s+=$2} END{print s}' -> 11 ; ls crates/installer/tests -> absent ; cargo metadata targets -> installer(lib), installer(bin), build-script-build(custom-build)"
+severity = "minor"
+resolution = ""
+
+[[disagreement]]
+box = "S1"
+field = "crate_status"
+owner_says = "exists-no-caller"
+reviewer_says = "true for IN-REPO callers and incomplete as a part-9 reachability claim: an INSTALLED binary exists and is an invocation surface. The status may stay exists-no-caller, but the row should record the installed artifact AND the machine, because a hook or a plist is per-clone and a fresh checkout answers differently."
+evidence = "git grep -ln 'installer = { path' -- 'crates/*/Cargo.toml' -> 0 ; strings .git/hooks/pre-commit | grep -c installer -> 0 ; grep -l installer ~/Library/LaunchAgents/*.plist -> 0 ; crontab -l | grep -c installer -> 0 ; BUT ls -la ~/.local/bin/installer -> 659272 bytes and `installer --version` -> 'installer 0.1.0 build_id=ad31898873c1497cff63e026d6de28b6f80715cb'"
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S1"
+field = "crate"
+owner_says = "a census plus a second component inside one field: 'installer (...) + umbrella MISSING'"
+reviewer_says = "the field is not machine-readable. CONTRACT.md says crate = 'a dir under crates/, or MISSING', and lifecycle-arrow-gate (x226) reads this file -- a parenthetical cannot resolve to a directory. Suggested: crate = 'installer', with the umbrella's absence moved into no_claim beside the other MISSING findings. Same class as a defect I fixed in my own S2 this wave (an elided cite path): correct content in a field whose shape a machine consumes."
+evidence = "sed -n '10,34p' docs/plan/flow/CONTRACT.md -> row shape 'crate = \"loop-queue-filter\"  # a dir under crates/, or MISSING' ; CONTRACT.md L7-8 -> 'lifecycle-arrow-gate (bead x226) reads flow.toml; a box without a crate is MISSING'"
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S1"
+field = "all"
+owner_says = "(the remainder of the row)"
+reviewer_says = "VERIFIED CORRECT, so the three rows above are the whole of my objection. S1's source cite resolves exactly, and its HD-0009..0012 rows are honest about my own crate's absence rather than glossing it. That is Rule Zero observed correctly and it independently corroborates S9's finding."
+evidence = "sed -n '86p' crates/installer/src/lib.rs -> 'IDENTITY MISMATCH for {binary}: HEAD={head} build_id={build_id} version={version}' ; python3 read docs/decisions.jsonl -> 12 rows; HD-0009..0012 recorded_by='hand-append: decision-ledger writer landed 685fe79 but no Mach-O exists under the 2026-09-03 no-local-build ruling', decider='', decision=EMPTY"
+severity = "minor"
+resolution = ""
