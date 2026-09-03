@@ -1,0 +1,26 @@
+[[box]]
+id = 'S6b'
+name = 'work in progress: tracker-visible stage, block, and silence state'
+trigger_today = 'hand'
+trigger_target = 'launchd:dispatch-silence-watch'
+crate = 'dispatch-silence-watch'
+crate_status = 'exists-no-caller'
+bead = 'omp-orchestrator-11.49'
+kernel_input = 'bead comments read through br, dispatch timestamp, assignee, pane observation, and finding payload'
+kernel_output = 'SilenceVerdict::{VerdictPosted, SilentPastDeadline, Reassigned, TrackerError} or TrackerRead::{Read, TrackerError}; classify_followup typed enum is MISSING in this target'
+event_row = 'LifecycleEvent{stage_from=S6a, stage_to=S6b, actor, bead, pane, agent, incarnation, stage, block_reason, finding_id, silence_verdict, outcome, reason_code}'
+validator = 'dispatch-silence-watch reads a real br comments attribution block; tracker failure is an error, not an empty verdict; finding records the actionable gap'
+sota_standard = 'In-progress work is observable in the tracker and silence is classified from authoritative read-back, never from pane quiet alone'
+sota_cite = 'this-repo:crates/dispatch-silence-watch/src/lib.rs:L27-L50,L174-L205 | this-repo:crates/finding/src/lib.rs:L1-L42 | this-repo:docs/plan/11-lifecycle.md:L49-L74 (fh STALE: SEARCH_INDEX_STALE; source citations used)'
+skill = '/dispatching-parallel-agents, /beads-compliance-and-completion-verification, /agent-mail'
+branches = [
+  'SilenceVerdict::VerdictPosted',
+  'SilenceVerdict::SilentPastDeadline',
+  'SilenceVerdict::Reassigned',
+  'SilenceVerdict::TrackerError',
+  'TrackerRead::Read',
+  'TrackerRead::TrackerError',
+  'MISSING typed classify_followup enum in current target',
+  'human-halt: STAGE or BLOCKED row requires owner=josh action before dispatch continuation',
+]
+no_claim = 'This box defines tracker-visible work and silence outcomes; it does not claim that dispatch-silence-watch or finding has a production caller, that a pane is live, or that a posted comment means the work is complete.'

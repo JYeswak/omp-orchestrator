@@ -1,0 +1,28 @@
+[[box]]
+id = 'S6c'
+name = 'verify grade close: independent evidence to sanctioned bead closure'
+trigger_today = 'hand'
+trigger_target = 'launchd:verify-dispatch'
+crate = 'verify-dispatch'
+crate_status = 'exists-no-caller'
+bead = 'omp-orchestrator-lf.1.1'
+kernel_input = 'bead status, close_reason, comments, independent verifier identity, mutation result, deadman delivery ledger, and finished-pane captures'
+kernel_output = 'MISSING typed Grade and CloseReasonVerdict; current close authority is ClosePrefix::{MutationVerified, Done, Approved, WontFix}'
+event_row = 'LifecycleEvent{stage_from=S6b, stage_to=S6c, verifier, grader, bead, mutation, evidence_paths, close_prefix, close_reason, outcome, reason_code}'
+validator = 'verify-dispatch must read bead status rather than pane self-report; dispatcher-deadman detects eligible work without a packet; reap-finished-panes requires stable non-empty captures and FREE readiness'
+sota_standard = 'A bead closes only after a different agent reruns acceptance, cites evidence, and uses a sanctioned close prefix; a self-report is not verification'
+sota_cite = 'this-repo:crates/verify-dispatch/src/lib.rs:L1-L45 | this-repo:crates/dispatcher-deadman/src/lib.rs:L15-L30 | this-repo:crates/reap-finished-panes/src/lib.rs:L139-L174 | this-repo:crates/ack-spine/src/close_reason.rs:L53-L93 (fh STALE: SEARCH_INDEX_STALE; source citations used)'
+skill = '/beads-compliance-and-completion-verification, /verification-before-completion, /testing-golden-artifacts'
+branches = [
+  'ClosePrefix::MutationVerified',
+  'ClosePrefix::Done',
+  'ClosePrefix::Approved',
+  'ClosePrefix::WontFix',
+  'ReapPaneDecision::Reaped{awaiting_human}',
+  'ReapPaneDecision::Working',
+  'ReapPaneDecision::Changing',
+  'ReapPaneDecision::Empty',
+  'MISSING Grade type and CloseReasonVerdict symbol in current target',
+  'human-halt: verifier or grader refuses evidence, mutation, identity, or close prefix',
+]
+no_claim = 'The current target has no Grade or CloseReasonVerdict symbols and no caller for verify-dispatch; this box maps the required close boundary without claiming that verification or grading is wired.'

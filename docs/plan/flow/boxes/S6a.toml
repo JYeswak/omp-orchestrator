@@ -1,0 +1,31 @@
+[[box]]
+id = 'S6a'
+name = 'receipt ACK: independent post-observation carries custody identity'
+trigger_today = 'hand'
+trigger_target = 'launchd:receiver-receipt'
+crate = 'receiver-receipt'
+crate_status = 'wired'
+bead = 'omp-orchestrator-elq6'
+kernel_input = 'pre-observation, post-observation, pane identity, transport evidence, timer/hash delta, and ACK line; ReceiptReason begins at crates/receiver-receipt/src/lib.rs:L43'
+kernel_output = 'ReceiptVerdict::{ReceiptConfirmed, NoReceipt, Dead, Indeterminate} plus ack-stage::AckAction'
+event_row = 'LifecycleEvent{stage_from=S5b, stage_to=S6a, actor, pane, incarnation, pre_capture_hash, post_capture_hash, timer_delta, ack, receipt_verdict, reason_code}'
+validator = 'receiver-receipt requires two captures at the observation window; ack-stage refuses pane/identity disagreement before recording receipt'
+sota_standard = 'A sender permit is not a receipt; receipt requires an independent post-observation and the ACK must carry the same custody identity as the dispatch'
+sota_cite = 'this-repo:crates/receiver-receipt/src/lib.rs:L43-L110,L149-L180 | this-repo:crates/ack-stage/src/lib.rs:L429-L455 | this-repo:crates/tick-monitor/src/lib.rs:L227-L257,L443-L485 (fh STALE: SEARCH_INDEX_STALE; source citations used)'
+skill = '/verification, /condition-based-waiting, /testing-conformance-harnesses'
+branches = [
+  'ReceiptVerdict::ReceiptConfirmed',
+  'ReceiptVerdict::NoReceipt',
+  'ReceiptVerdict::Dead',
+  'ReceiptVerdict::Indeterminate',
+  'AckAction::RecordReceipt',
+  'AckAction::Retry',
+  'AckAction::Unstick',
+  'AckAction::AwaitHuman',
+  'AckAction::AbandonDeadPane',
+  'AckAction::RetryExhausted',
+  'ReceiptReason::{MissingPostObservation, PaneIdMismatch, DialogOpen, WedgedUnsubmitted, EmptyPaneListNoDeathClaim, ObservationNotWorking, StableContentUnchanged, UnprovenTransport, AckReadbackMissing, AckPaneMismatch, IdleUnchanged, PostBecameIdle, TimerDidNotReset, TimerResetButStableContentUnchanged, TimerTooLargeAfterIdle, ObservationWindowTooShort}',
+  'MISSING expected 17th receipt reason AckIncarnationMismatch until ywd5 lands',
+  'human-halt: receipt is indeterminate or ACK identity disagrees and owner action is required',
+]
+no_claim = 'Current receiver-receipt has 16 ReceiptReason arms and checks pane identity; the planned AckIncarnationMismatch arm is not present because ywd5 was released before implementation. Receipt confirmation still does not prove code execution, semantic completion, or exactly-once delivery.'

@@ -1,0 +1,26 @@
+[[box]]
+id = 'S9'
+name = 'decision ledger: durable owner-routed halt and resolution record'
+trigger_today = 'hand'
+trigger_target = 'launchd:decision-ledger'
+crate = 'decision-ledger'
+crate_status = 'exists-no-caller'
+bead = 'omp-orchestrator-12.58'
+kernel_input = 'question, context, evidence paths, owner, requested decision, and prior ledger rows from docs/decisions.jsonl'
+kernel_output = 'AppendOutcome::{Appended{id}, Deduped{id}} or LedgerError::{Unreadable, Malformed, NotWritable, NoSuchRequest, MissingField}'
+event_row = 'LifecycleEvent{stage_from=S8, stage_to=S9, ledger_id, owner, question, evidence, decision, status, outcome, reason_code}'
+validator = 'decision-ledger append is atomic and deduplicated; ledger read errors are restrictive; gate 12.58 and consumer 12.59 are not currently wired'
+sota_standard = 'A human decision is a durable state transition: append once, preserve evidence, route owner=josh halts, and never treat an unreadable ledger as empty'
+sota_cite = 'this-repo:crates/decision-ledger/src/lib.rs:L78-L123,L226-L240 | this-repo:docs/decisions.jsonl:L1 | this-repo:docs/plan/12-journey.md:L1012-L1025 (fh STALE: SEARCH_INDEX_STALE; source citations used)'
+skill = '/decision-ledger, /human-in-the-loop, /gate-truth-separation'
+branches = [
+  'AppendOutcome::Appended{id}',
+  'AppendOutcome::Deduped{id}',
+  'LedgerError::Unreadable{path,detail}',
+  'LedgerError::Malformed{line,detail}',
+  'LedgerError::NotWritable{path,detail}',
+  'LedgerError::NoSuchRequest{id}',
+  'LedgerError::MissingField{field}',
+  'human-halt: owner=josh must resolve a decision row before any refused path resumes',
+]
+no_claim = 'The decision-ledger crate and file exist, but the gate and consumer are not wired in this target; a row on disk does not prove that the supervisor read it or honored its decision.'
