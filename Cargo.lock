@@ -210,6 +210,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "bead-holder"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "subprocess-contract",
+]
+
+[[package]]
 name = "bincode-next"
 version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
