@@ -1,0 +1,35 @@
+[[disagreement]]
+box = "S3"
+field = "kernel_input"
+owner_says = "kernel_input names docs/plan/*.md as 18 sections."
+reviewer_says = "The live tree distinguishes 13 numbered plan sections from 18 total markdown files. Calling all 18 files sections imports five support artifacts into the S3 input without naming that distinction."
+evidence = "2026-09-03T05:29:27Z; br/plan inventory measured 13 numbered sections; sed -n '544,550p' docs/plan/12-journey.md defines S2 output and sed -n '616,623p' defines S3 input."
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S3"
+field = "gap_class_coverage"
+owner_says = "The comment says all 13 classes were walked and the current gap list is complete."
+reviewer_says = "Wave 1 requires a 16-class walk: 9 crate-atom parts plus 7 rigor classes. The current S3 gap list has 12 rows and does not explicitly account for atom.1.lib, atom.2.bin, atom.3.verdict, or atom.4.tests as present/not-needed states."
+evidence = "2026-09-03T05:39:03Z; grep count for S3 gaps=12; sed -n '70,77p' docs/plan/flow/CONTRACT.md defines the 9+7 checklist."
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S3"
+field = "hook_schema"
+owner_says = "plan-round-row-lint is described with future_certified_id and gauntlet_stage."
+reviewer_says = "The required certified hook row uses id, event, matcher, class, fail_mode, binary, policy_file, source_commit, language, stage, certified, and harm_class. S3 omits policy_file, source_commit, and certified and uses gauntlet_stage instead of stage."
+evidence = "sed -n '153,164p' docs/plan/flow/boxes/S3.toml; sed -n '98,104p' docs/plan/flow/CONTRACT.md; sed -n '1,20p' /Users/josh/Developer/control-plane/hooks_certified.toml."
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S3"
+field = "agreement"
+owner_says = "open_disagreements = 0 and status = draft."
+reviewer_says = "The 16-class coverage and hook-schema issues are open in this reviewer ledger; zero is only the owner's pre-review count."
+evidence = "2026-09-03T05:39:03Z; current S3 agreement row reports zero while this review records two substantive disagreements."
+severity = "major"
+resolution = ""

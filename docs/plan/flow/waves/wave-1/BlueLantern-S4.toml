@@ -1,0 +1,35 @@
+[[disagreement]]
+box = "S4"
+field = "kernel_input_citation"
+owner_says = "The crate-atom-gate report shape is cited to crates/crate-atom-gate/src/main.rs without a line."
+reviewer_says = "The contract requires a resolvable path:line citation for every source claim. The emitter is at main.rs:L83-L123, while the nine Part arms are in lib.rs:L50-L85; the current kernel_input citation cannot be independently re-run to a line."
+evidence = "sed -n '83,108p' crates/crate-atom-gate/src/main.rs; sed -n '50,85p' crates/crate-atom-gate/src/lib.rs; sed -n '36,45p' docs/plan/flow/CONTRACT.md."
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S4"
+field = "measurement_command"
+owner_says = "The report cell count is measured by 'cargo metadata ... | jq ... x crate_atom_gate::Part::ALL length'."
+reviewer_says = "That is not one executable command: the literal x and Rust expression are not connected to a shell tool. It cannot produce the claimed 69 x 9 value as written, and the row needs a re-runnable command with an explicit JSON count and a separately derived Part::ALL count."
+evidence = "sed -n '64,69p' docs/plan/flow/boxes/S4.toml; sed -n '50,85p' crates/crate-atom-gate/src/lib.rs; the command text contains the literal non-command token x."
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S4"
+field = "hook_schema"
+owner_says = "The bead-label-schema-gate row uses future_certified_id and gauntlet_stage."
+reviewer_says = "The Wave 1 certified Rust hook schema requires id, event, matcher, class, fail_mode, binary, policy_file, source_commit, language, stage, certified, and harm_class. S4 uses non-schema future_certified_id, omits policy_file/source_commit/certified, and does not provide the required stage field."
+evidence = "sed -n '160,171p' docs/plan/flow/boxes/S4.toml; sed -n '98,104p' docs/plan/flow/CONTRACT.md; sed -n '1,20p' /Users/josh/Developer/control-plane/hooks_certified.toml."
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S4"
+field = "agreement"
+owner_says = "open_disagreements = 0 and status = draft."
+reviewer_says = "The un-runnable measurement and unresolved citation are open in this review; the zero count must be reconciled in the owner agreement."
+evidence = "2026-09-03T05:39:03Z; S4 has measurement=5, gap=13, agreement=1, diagram=1; this review records two source/command disagreements."
+severity = "major"
+resolution = ""

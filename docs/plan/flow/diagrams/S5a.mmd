@@ -1,0 +1,50 @@
+flowchart TD
+  start([S5a selection])
+  open["IssueStatus::Open"]
+  inprogress["IssueStatus::InProgress"]
+  grading["IssueStatus::Grading"]
+  blocked["IssueStatus::Blocked"]
+  closed["IssueStatus::Closed"]
+  unknown["IssueStatus::Unknown"]
+  blocking["BlockerState::Blocking"]
+  released["BlockerState::Released"]
+  stale["BlockerState::StaleEdge"]
+  available["Availability::Available"]
+  unavailable["Availability::Blocked"]
+  unknown_avail["Availability::Unknown"]
+  known["Unblocks::Known"]
+  unknown_unblocks["Unblocks::Unknown"]
+  halt["human-halt"]
+  candidate([claim attempt])
+  refuse([REFUSED])
+  stop([STOP])
+  start --> open
+  start --> inprogress
+  start --> grading
+  start --> blocked
+  start --> closed
+  start --> unknown
+  start --> blocking
+  start --> released
+  start --> stale
+  start --> available
+  start --> unavailable
+  start --> unknown_avail
+  start --> known
+  start --> unknown_unblocks
+  start --> halt
+  open --> candidate
+  released --> candidate
+  available --> candidate
+  known --> candidate
+  unknown_unblocks --> candidate
+  blocking --> refuse
+  stale --> refuse
+  inprogress --> refuse
+  grading --> refuse
+  blocked --> refuse
+  closed --> refuse
+  unknown --> refuse
+  unavailable --> refuse
+  unknown_avail --> refuse
+  halt --> stop

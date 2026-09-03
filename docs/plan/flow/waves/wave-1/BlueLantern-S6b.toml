@@ -1,0 +1,26 @@
+[[disagreement]]
+box = "S6b"
+field = "classify_followup"
+owner_says = "classify_followup typed enum is MISSING in this target, and the focused scan returned zero matches."
+reviewer_says = "The focused scan is too narrow and its conclusion is false for the target: FollowUpVerdict exists at ack-spine/src/followup.rs:L22-L67 and classify_followup is defined at L156-L166. The box must distinguish dispatch-silence-watch's SilenceVerdict from the existing ack-spine follow-up classifier instead of calling the typed enum missing."
+evidence = "sed -n '22,67p;156,166p' crates/ack-spine/src/followup.rs; sed -n '1,26p' docs/plan/flow/boxes/S6b.toml; the owner command searched only dispatch-silence-watch/src and omp-orchestrator/src."
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S6b"
+field = "wired_caller_measurement"
+owner_says = "Four textual watch-call sites establish the focused caller count."
+reviewer_says = "Textual matches are not trigger reachability. The measurement must name which of the four matches is the production caller, which are self/docs references, and whether the launchd target dispatch-silence-watch actually exists and fires."
+evidence = "grep -R -l 'run_silence_watch\\|dispatch-silence-watch' crates/omp-orchestrator/src crates/dispatch-silence-watch/src; sed -n '1425,1455p' crates/omp-orchestrator/src/main.rs; command -v dispatch-silence-watch || true."
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S6b"
+field = "hook"
+owner_says = "The box has no certified Rust hook row."
+reviewer_says = "Because the box claims a tracker-visible stage and launchd silence trigger, its future hook/trigger identity must be explicit or the absence must be a named gap. The current box has no [[box.hook]] section and therefore no id, policy_file, source_commit, stage, or certified field."
+evidence = "2026-09-03T05:39:03Z; S6b measurement=5, gap=16, agreement=1, diagram=1 but no hook row; sed -n '98,104p' docs/plan/flow/CONTRACT.md."
+severity = "major"
+resolution = ""

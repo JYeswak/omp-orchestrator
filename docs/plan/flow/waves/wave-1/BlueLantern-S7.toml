@@ -1,0 +1,26 @@
+[[disagreement]]
+box = "S7"
+field = "gap_class_schema"
+owner_says = "The gap walk uses classes atom.1.lib through atom.9.wired_caller and claim_row(L1), slo(L2), etc."
+reviewer_says = "The addendum's documented class vocabulary is event_row, claim_row, slo, oracle, gate_trip, fuzz, formal, lock, wired_caller, verdict_type, diagram, hook, and measurement. S7's atom.* and claim_evidence/slo_row/oracle(L3) spellings are not the declared class values; x226 cannot mechanically compare them without a schema amendment."
+evidence = "sed -n '70,77p' docs/plan/flow/CONTRACT.md; sed -n '83,159p' docs/plan/flow/boxes/S7.toml."
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S7"
+field = "hook_schema"
+owner_says = "S7 is wired through the installed Rust/Mach-O pre-commit hook."
+reviewer_says = "Reachability is not certification. S7 names no [[box.hook]] row, so it does not identify the required hooks_certified.toml id, event, matcher, class, fail_mode, binary, policy_file, source_commit, language, stage, certified, or harm_class for the claimed hook."
+evidence = "2026-09-03T05:39:03Z; S7 has measurement=6, gap=19, agreement=1, diagram=1 and no hook row; sed -n '98,104p' docs/plan/flow/CONTRACT.md; sed -n '1,20p' /Users/josh/Developer/control-plane/hooks_certified.toml."
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S7"
+field = "agreement"
+owner_says = "open_disagreements = 0 and status = draft."
+reviewer_says = "The class vocabulary and hook identity are open review disagreements; the owner must answer them before the box can converge."
+evidence = "sed -n '161,171p' docs/plan/flow/boxes/S7.toml; this reviewer file records two disagreements with source re-runs."
+severity = "major"
+resolution = ""

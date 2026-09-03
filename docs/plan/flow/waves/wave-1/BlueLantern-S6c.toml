@@ -1,0 +1,26 @@
+[[disagreement]]
+box = "S6c"
+field = "branches"
+owner_says = "The branch list includes a MISSING Grade type marker alongside the real close/reap arms."
+reviewer_says = "A missing Grade type is not an enum arm and cannot be a branch. It belongs in a gap/no_claim. The real branch inventory must contain only ClosePrefix, ReapPaneDecision, and CloseReasonVerdict arms plus the human-halt arm."
+evidence = "sed -n '16,30p' docs/plan/flow/boxes/S6c.toml; sed -n '53,63p;98,120p' crates/ack-spine/src/close_reason.rs; sed -n '139,164p' crates/reap-finished-panes/src/lib.rs."
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S6c"
+field = "grade_boundary"
+owner_says = "The box says Grade is missing and uses a focused caller count as evidence."
+reviewer_says = "The source contains GradeResult::Pass and GradeResult::Fix{name} at ntm-fleet-monitor/src/bead_lifecycle/model.rs:L303-L307, while a separate shared Grade type is absent. The row must name that distinction instead of treating all grading vocabulary as missing."
+evidence = "sed -n '303,307p' crates/ntm-fleet-monitor/src/bead_lifecycle/model.rs; grep -R -n -E 'struct Grade|enum Grade|type Grade' crates/verify-dispatch/src crates/ntm-fleet-monitor/src; sed -n '99,120p' crates/ack-spine/src/close_reason.rs."
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S6c"
+field = "hook"
+owner_says = "No certified hook row is listed for verify-grade-close."
+reviewer_says = "The absence must be explicit in a [[box.hook]] row with the required Rust certification fields, or the box must state why this stage has no hook. The current row leaves the trigger/certification boundary implicit."
+evidence = "2026-09-03T05:39:03Z; S6c has measurement=5, gap=16, agreement=1, diagram=1 and no hook row; sed -n '98,104p' docs/plan/flow/CONTRACT.md."
+severity = "major"
+resolution = ""

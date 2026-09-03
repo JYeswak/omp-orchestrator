@@ -1,0 +1,26 @@
+[[disagreement]]
+box = "S1"
+field = "wave1_sections"
+owner_says = "S1 is a draft human-start row with layered hooks and branches."
+reviewer_says = "S1 has no [[box.measurement]], [[box.gap]], [box.agreement], or [box.diagram] section, so it is not reviewable under the Wave 1 addendum."
+evidence = "2026-09-03T05:39:03Z; grep counts for docs/plan/flow/boxes/S1.toml were measurement=0, gap=0, agreement=0, diagram=0; addendum is this-repo:docs/plan/flow/CONTRACT.md:L54-L96."
+severity = "blocker"
+resolution = ""
+
+[[disagreement]]
+box = "S1"
+field = "hook_schema"
+owner_says = "Seven hook rows describe surface, hook, and status."
+reviewer_says = "Those rows use the pre-addendum surface/hook/status shape and do not carry the required certified Rust fields id, event, matcher, class, fail_mode, binary, policy_file, source_commit, language, stage, certified, and harm_class."
+evidence = "sed -n '74,106p' docs/plan/flow/boxes/S1.toml; sed -n '98,104p' docs/plan/flow/CONTRACT.md; the latter is the required control-plane/hooks_certified.toml schema."
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S1"
+field = "crate"
+owner_says = "crate = installer (...) + umbrella MISSING and crate_status = exists-no-caller."
+reviewer_says = "The contract permits one crate directory or the literal MISSING; a semicolon/composite crate field cannot be resolved to one cargo package. The complete umbrella remains MISSING and must be separated from installer evidence."
+evidence = "sed -n '13,21p' docs/plan/flow/CONTRACT.md; sed -n '10,18p' docs/plan/flow/boxes/S1.toml; ls crates/installer and no umbrella crate directory."
+severity = "major"
+resolution = ""

@@ -1,0 +1,26 @@
+[[disagreement]]
+box = "S8"
+field = "crate"
+owner_says = "crate = installer; staged-build-gate and crate_status = exists-no-caller."
+reviewer_says = "The base contract permits one crate directory or MISSING. The semicolon composite cannot be resolved as one package and conflates installer ownership with the staged-build classifier. Use installer as the primary crate and name staged-build-gate as a supporting validator."
+evidence = "sed -n '13,21p' docs/plan/flow/CONTRACT.md; sed -n '1,14p' docs/plan/flow/boxes/S8.toml; ls crates/installer crates/staged-build-gate."
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S8"
+field = "wired_caller"
+owner_says = "The installer is exists-no-caller and hand-invocable."
+reviewer_says = "The row's validator claims installer --check and RCH admission, but no command in the measurement set proves a reachable caller or launchd consumer. The install/rollback trigger is explicitly hand, so crate_status must remain honest and the missing caller must be represented as a gap, not implied by the validator prose."
+evidence = "2026-09-03T05:39:03Z; S8 measurement=8 and crate_status=exists-no-caller; command -v installer || true; grep -R -n -E 'installer --(check|install)|cargo run.*installer' crates .github || true."
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S8"
+field = "hook"
+owner_says = "The install path has no certified hook row because automatic installation needs Joshua approval."
+reviewer_says = "That decision is reasonable, but the absence must be represented by a Wave 1 hook row with literal MISSING fields or by a named hook gap. Without it, the Rust-only certification boundary is not machine-readable."
+evidence = "sed -n '93,169p' docs/plan/flow/boxes/S8.toml; sed -n '98,104p' docs/plan/flow/CONTRACT.md."
+severity = "major"
+resolution = ""

@@ -1,0 +1,26 @@
+[[disagreement]]
+box = "S9"
+field = "gap_class_schema"
+owner_says = "The gap walk uses lib, bin, tests, fuzz_target, slo_row, and other atom-specific class values."
+reviewer_says = "The Wave 1 addendum documents the class vocabulary as event_row, claim_row, slo, oracle, gate_trip, fuzz, formal, lock, wired_caller, verdict_type, diagram, hook, and measurement. S9's class spellings are not the declared values and cannot be consumed uniformly by the convergence checker without a schema amendment."
+evidence = "sed -n '70,77p' docs/plan/flow/CONTRACT.md; sed -n '63,126p' docs/plan/flow/boxes/S9.toml."
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S9"
+field = "trigger_target"
+owner_says = "trigger_target = launchd:decision-ledger."
+reviewer_says = "The row's own measurement says the decision gate and consumer references have zero production matches, and no launchd unit is cited or re-run. The target must be MISSING/hand until a real launchd caller is identified, or it needs a source-backed unit citation."
+evidence = "sed -n '49,60p' docs/plan/flow/boxes/S9.toml; grep -R -n -E 'decision-ledger|decision_ledger|12\\.58|12\\.59' ~/Library/LaunchAgents crates/omp-orchestrator/src crates/decision-ledger/src || true."
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S9"
+field = "hook"
+owner_says = "No hook row is needed for the decision ledger."
+reviewer_says = "S9 is a human-halt path invoked by every stage. The absence of a certified Rust hook/consumer must be explicit in the Wave 1 contract: either add [[box.hook]] with the future certified row and MISSING fields, or add a hook gap naming why the stage remains hand-only."
+evidence = "2026-09-03T05:39:03Z; S9 has measurement=5, gap=16, agreement=1, diagram=1 and no [[box.hook]] row; sed -n '98,104p' docs/plan/flow/CONTRACT.md; sed -n '449,479p' docs/plan/12-journey.md."
+severity = "major"
+resolution = ""

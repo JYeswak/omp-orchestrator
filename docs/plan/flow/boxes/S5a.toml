@@ -31,3 +31,142 @@ branches = [
   "human-halt: claim refusal names the blocker chain and waits for owner action",
 ]
 no_claim = "This box maps selection and claimability only. It does not prove that a selected bead was dispatched, delivered, acknowledged, graded, or closed. loop-queue-filter, bead-availability, and fast-dispatch exist, but the current supervisor path reads br ready FIFO rather than invoking these selectors; that is the S5a wiring gap."
+
+[[box.measurement]]
+claim = "br ready currently exposes 92 rows, 17 P0 rows, and starts with a P0 row"
+command = "date -u +%Y-%m-%dT%H:%M:%SZ; br ready --json | jq -c '{count:length,p0:map(select(.priority==0))|length,first:{id:.[0].id,priority:.[0].priority}}'"
+value = "2026-09-03T05:29:27Z; count=92; p0=17; first=omp-orchestrator-content-citation-ordering-r3h priority=0"
+measured_at = "2026-09-03T05:29:27Z"
+by = "BlueLantern"
+
+[[box.measurement]]
+claim = "BV computes an actionable next item independently of br ready ordering"
+command = "date -u +%Y-%m-%dT%H:%M:%SZ; bv --robot-next | jq -c '{id,title,actionable,phase2_ready,data_hash}'"
+value = "2026-09-03T05:29:27Z; id=omp-orchestrator-tickmonitor-free-capacity-blind-vgf; actionable=true; phase2_ready=true; data_hash=02f93ef85ec49a24"
+measured_at = "2026-09-03T05:29:27Z"
+by = "BlueLantern"
+
+[[box.measurement]]
+claim = "The three selector crates exist and the supervisor source names br ready but no bv command"
+command = '''date -u +%Y-%m-%dT%H:%M:%SZ; for p in crates/loop-queue-filter crates/bead-availability crates/fast-dispatch; do test -d "$p" && printf '%s=exists\n' "$p" || printf '%s=MISSING\n' "$p"; done; grep -n -F 'br ready' crates/omp-orchestrator/src/main.rs || true; grep -n -F 'bv --robot' crates/omp-orchestrator/src/main.rs || true'''
+value = "2026-09-03T05:29:27Z; all three exist; br ready at main.rs:L611,L614,L621; no bv --robot match"
+measured_at = "2026-09-03T05:29:27Z"
+by = "BlueLantern"
+
+[[box.measurement]]
+claim = "The selected audit bead is open, P0, unassigned, and dependency-free"
+command = "date -u +%Y-%m-%dT%H:%M:%SZ; br show --json 2ceb | jq -c '.[0] | {id,status,assignee,priority,dependencies}'"
+value = "2026-09-03T05:29:07Z; id=omp-orchestrator-2ceb; status=open; assignee=null; priority=0; dependencies=null"
+measured_at = "2026-09-03T05:29:07Z"
+by = "BlueLantern"
+
+[[box.measurement]]
+claim = "The S5a row carries 15 explicit branch nodes"
+command = "sed -n '16,31p' docs/plan/flow/boxes/S5a.toml | grep -c '^  \"'"
+value = "15"
+measured_at = "2026-09-03T05:29:00Z"
+by = "BlueLantern"
+
+[[box.gap]]
+what = "crate-atom part 3 / verdict_type: loop-queue-filter returns RunOutput{stdout, stderr, code}; no typed ClaimAttempt or ClaimRefused exists"
+resolves = "MISSING — create the selection verdict type and make the supervisor consume it before launchd dispatch"
+class = "verdict_type"
+[[box.gap]]
+what = "crate-atom part 5 / fuzz: no selector-specific fuzz target exercises malformed br/bv rows, claimability, or epic filtering"
+resolves = "MISSING — add a fuzz target for the selector input and its refusal lattice"
+class = "fuzz"
+[[box.gap]]
+what = "crate-atom part 6 / claim_row: 2ceb has no durable claim-strength row for the selection decision"
+resolves = "MISSING — add a claims registry row naming the selector evidence and its justifier"
+class = "claim_row"
+[[box.gap]]
+what = "crate-atom part 7 / slo: no SLO row states selection latency, freshness, or refusal behavior"
+resolves = "MISSING — add an SLO row for the launchd selection path with an owner and breach action"
+class = "slo"
+[[box.gap]]
+what = "crate-atom part 8 / oracle: BV and br are inputs but no named, persisted selection oracle compares their identity and rank"
+resolves = "MISSING — write a selection oracle row and retain the br/bv snapshot pair"
+class = "oracle"
+[[box.gap]]
+what = "crate-atom part 9 / wired_caller: the supervisor parses br ready FIFO and does not invoke loop-queue-filter, bead-availability, or fast-dispatch"
+resolves = "omp-orchestrator-2ceb — replace FIFO selection in run_cycle with the ranked selector and a real attempt-claim"
+class = "wired_caller"
+[[box.gap]]
+what = "L1 claim: the selection-to-claim transition has no append-only claim event row"
+resolves = "MISSING — add the S4-to-S5a lifecycle journal writer and emit site"
+class = "claim_row"
+[[box.gap]]
+what = "L2 slo: no measured S5a service-level floor is registered"
+resolves = "MISSING — add the S5a SLO and its breach ledger"
+class = "slo"
+[[box.gap]]
+what = "L3 oracle: no independent comparison proves BV-ranked output agrees with the claimable br snapshot"
+resolves = "MISSING — persist both outputs and compare bead id, rank, status, and assignee"
+class = "oracle"
+[[box.gap]]
+what = "L4 gate_trip: no live gate refuses a supervisor bypass that selects raw br ready FIFO"
+resolves = "omp-orchestrator-2ceb — wire the selector gate into the launchd path with a FIFO mutation leg"
+class = "gate_trip"
+[[box.gap]]
+what = "L5 fuzz: the selector's malformed-input and boundary cases have no fuzz corpus"
+resolves = "MISSING — add selector fuzz targets and retain crashing inputs"
+class = "fuzz"
+[[box.gap]]
+what = "L6 formal: no formal invariant states that a selected bead must be open, unclaimed, non-epic, and BV-ranked"
+resolves = "MISSING — write a formal or executable invariant over the selection relation"
+class = "formal"
+[[box.gap]]
+what = "L7 lock: selection has no lease or atomic claim primitive before the candidate leaves S5a"
+resolves = "ywd5 plus the S5b claim fence — bind the selected bead to an incarnation before dispatch"
+class = "lock"
+[[box.gap]]
+what = "diagram: the original row had no branch diagram; the new S5a diagram is the resolving artifact"
+resolves = "docs/plan/flow/diagrams/S5a.mmd validated with frankenmermaid"
+class = "diagram"
+[[box.gap]]
+what = "hook: no certified Rust hook row exists for pre-dispatch BV/claim selection"
+resolves = "MISSING — add the S5a row to control-plane/hooks_certified.toml and pass /hook-certification"
+class = "hook"
+
+[box.agreement]
+wave = 1
+owner = "BlueLantern"
+reviewers = ["AmberGate", "SilverWolf", "QuietRidge"]
+open_disagreements = 0
+status = "draft"
+approval = ""
+debate = [
+  "SilverWolf draft: loop-queue-filter is the primary crate and exists-no-caller; retained after source review.",
+  "BlueLantern: the actual supervisor source reads br ready at main.rs:L610-L624 and has no bv command; the FIFO bypass is an explicit gap, not an inferred absence.",
+  "BlueLantern: IssueStatus alone was incomplete for this box; Availability, BlockerState, and Unblocks arms are all recorded.",
+]
+
+[box.diagram]
+mmd = "docs/plan/flow/diagrams/S5a.mmd"
+validate_exit = 0
+
+[[box.hook]]
+id = "MISSING"
+event = "PreToolUse"
+matcher = "S5a selection before launchd dispatch"
+class = "gate"
+fail_mode = "fail-closed"
+binary = "MISSING"
+policy_file = "MISSING"
+source_commit = "MISSING"
+language = "rust"
+stage = "MISSING"
+certified = false
+harm_class = "wrong-bead-dispatch"
+
+[[box.measurement]]
+claim = "S5a branch diagram passes frankenmermaid validation with no warning-or-higher diagnostic"
+command = "date -u +%Y-%m-%dT%H:%M:%SZ; frankenmermaid validate docs/plan/flow/diagrams/S5a.mmd --fail-on warning"
+value = "2026-09-03T05:34:25Z; exit=0; Valid flowchart; diagnostics=1 info-only layout dispatch"
+measured_at = "2026-09-03T05:34:25Z"
+by = "BlueLantern"
+
+[[box.gap]]
+what = "event_row: no durable S4-to-S5a lifecycle transition row is emitted when selection begins or refuses"
+resolves = "MISSING — lifecycle journal writer and selector emit site carrying rank, claim attempt, outcome, and blocker chain"
+class = "event_row"

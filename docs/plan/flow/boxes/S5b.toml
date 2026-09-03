@@ -36,3 +36,137 @@ branches = [
   "human-halt: an unresolved claim, identity, or packet contradiction stops dispatch",
 ]
 no_claim = "This box now has a real production authorize caller, unlike the first draft. It proves permission and packet preflight only; it does not prove transport delivery, receiver acknowledgement, pane liveness, exactly-once execution, grading, or close. The S5a selector remains unwired because the supervisor still obtains candidates from br ready FIFO."
+
+[[box.measurement]]
+claim = "The production dispatch path calls authorize_bead_dispatch_as four times in source, including the live call"
+command = "date -u +%Y-%m-%dT%H:%M:%SZ; grep -n -F 'authorize_bead_dispatch_as' crates/omp-orchestrator/src/main.rs"
+value = "2026-09-03T05:29:45Z; matches at L1225,L1228,L1421,L4503; production call at L1421"
+measured_at = "2026-09-03T05:29:45Z"
+by = "BlueLantern"
+
+[[box.measurement]]
+claim = "Packet rendering and both transport forms are present in the live source"
+command = "date -u +%Y-%m-%dT%H:%M:%SZ; grep -n -F 'render_with_pane' crates/omp-orchestrator/src/main.rs crates/omp-orchestrator/src/dispatch_packet.rs; grep -n -E 'robot-send|send-keys' crates/omp-orchestrator/src/main.rs | head -n 8"
+value = "2026-09-03T05:29:45Z; render_with_pane matches=4; transport evidence includes tmux send-keys and --robot-send"
+measured_at = "2026-09-03T05:29:45Z"
+by = "BlueLantern"
+
+[[box.measurement]]
+claim = "All five supporting S5b crates exist on disk"
+command = '''date -u +%Y-%m-%dT%H:%M:%SZ; for p in crates/dispatch-claim-fence crates/pane-dispatch-fence crates/composer-typed crates/sender-identity crates/tick-monitor; do test -d "$p" && printf '%s=exists\n' "$p" || printf '%s=MISSING\n' "$p"; done'''
+value = "2026-09-03T05:29:45Z; dispatch-claim-fence=exists; pane-dispatch-fence=exists; composer-typed=exists; sender-identity=exists; tick-monitor=exists"
+measured_at = "2026-09-03T05:29:45Z"
+by = "BlueLantern"
+
+[[box.measurement]]
+claim = "The ywd5 claim-fence bead is currently an open, unassigned P0 with no dependencies"
+command = "date -u +%Y-%m-%dT%H:%M:%SZ; br show --json ywd5 | jq -c '.[0] | {status,assignee,priority,dependencies}'"
+value = "2026-09-03T05:29:45Z; status=open; assignee=null; priority=0; dependencies=null"
+measured_at = "2026-09-03T05:29:45Z"
+by = "BlueLantern"
+
+[[box.measurement]]
+claim = "The S5b row carries 20 explicit branch nodes"
+command = "sed -n '16,36p' docs/plan/flow/boxes/S5b.toml | grep -c '^  \"'"
+value = "20"
+measured_at = "2026-09-03T05:29:00Z"
+by = "BlueLantern"
+
+[[box.gap]]
+what = "crate-atom part 2 / bin: dispatch-claim-fence is a library-only mechanism; no dedicated binary owns its admission invocation"
+resolves = "MISSING — add or name the thin caller that exposes the claim-fence decision without duplicating the kernel"
+class = "gate_trip"
+[[box.gap]]
+what = "crate-atom part 5 / fuzz: no fuzz target covers DispatchIntent, BeadSnapshot, or ClaimFenceError identity mutations"
+resolves = "MISSING — add a dispatch-claim-fence fuzz target and preserve malformed snapshots"
+class = "fuzz"
+[[box.gap]]
+what = "crate-atom part 6 / claim_row: ywd5 has no durable claim-strength row for the permission boundary"
+resolves = "MISSING — add a claims registry row naming the claim evidence and justifier"
+class = "claim_row"
+[[box.gap]]
+what = "crate-atom part 7 / slo: no S5b SLO covers authorization latency or packet-preflight refusal rate"
+resolves = "MISSING — add an S5b SLO row with owner and breach action"
+class = "slo"
+[[box.gap]]
+what = "crate-atom part 8 / oracle: no external oracle compares claim state, packet digest, target pane, and transport identity"
+resolves = "MISSING — persist the pre-send snapshot and compare it to the dispatch receipt"
+class = "oracle"
+[[box.gap]]
+what = "L1 claim: DispatchPermit is not itself a durable lifecycle claim row"
+resolves = "kxe.8 plus the lifecycle journal writer — emit a claim-to-dispatch row with bead, pane, agent, and incarnation"
+class = "claim_row"
+[[box.gap]]
+what = "L2 slo: no registered S5b service-level floor exists"
+resolves = "MISSING — register the claim-fence and packet-preflight SLO"
+class = "slo"
+[[box.gap]]
+what = "L3 oracle: the permit has no independent post-send transport oracle"
+resolves = "receiver-receipt and ack-stage must consume the dispatch receipt without treating permit success as delivery"
+class = "oracle"
+[[box.gap]]
+what = "L4 gate_trip: no standalone conformance gate proves the live caller cannot bypass authorize before rendering"
+resolves = "MISSING — add a caller mutation leg that removes authorize_bead_dispatch_as and must go RED"
+class = "gate_trip"
+[[box.gap]]
+what = "L5 fuzz: packet field and transport-boundary fuzz coverage is absent"
+resolves = "MISSING — fuzz PacketError and transport selection against malformed snapshots"
+class = "fuzz"
+[[box.gap]]
+what = "L6 formal: no formal invariant connects a permit to the exact bead, pane, agent, and incarnation"
+resolves = "MISSING — encode the identity relation as an executable or formal invariant"
+class = "formal"
+[[box.gap]]
+what = "L7 lock: pane-dispatch-fence exists but no direct caller was found in the S5b supervisor path"
+resolves = "MISSING — wire the fence before the first transport side effect and retain its refusal"
+class = "lock"
+[[box.gap]]
+what = "event_row: no durable S5a-to-S5b transition row is emitted at the authorization boundary"
+resolves = "MISSING — lifecycle journal writer and dispatch intent emission at the caller"
+class = "event_row"
+[[box.gap]]
+what = "diagram: the original row had no S5b branch diagram"
+resolves = "docs/plan/flow/diagrams/S5b.mmd validated with frankenmermaid"
+class = "diagram"
+[[box.gap]]
+what = "hook: no certified Rust hook row exists for claim-fence and packet-preflight admission"
+resolves = "MISSING — add the S5b row to control-plane/hooks_certified.toml and pass /hook-certification"
+class = "hook"
+
+[box.agreement]
+wave = 1
+owner = "BlueLantern"
+reviewers = ["AmberGate", "SilverWolf", "QuietRidge"]
+open_disagreements = 0
+status = "draft"
+approval = ""
+debate = [
+  "SilverWolf draft: dispatch-claim-fence is exists-no-caller; BlueLantern re-ran main.rs and found authorize_bead_dispatch_as called by the production prepare path at L1421, so crate_status is wired.",
+  "BlueLantern: DispatchPermit and ClaimFenceError are distinct output boundaries; the row now lists every arm rather than collapsing ClaimFenceError into one branch.",
+  "BlueLantern: transport permit, packet rendering, pane lock, and receiver evidence remain separate claims; this box does not upgrade any one into delivery proof.",
+]
+
+[box.diagram]
+mmd = "docs/plan/flow/diagrams/S5b.mmd"
+validate_exit = 0
+
+[[box.hook]]
+id = "MISSING"
+event = "PreToolUse"
+matcher = "S5b claim and packet admission before transport"
+class = "gate"
+fail_mode = "fail-closed"
+binary = "MISSING"
+policy_file = "MISSING"
+source_commit = "MISSING"
+language = "rust"
+stage = "MISSING"
+certified = false
+harm_class = "unclaimed-or-wrong-pane-dispatch"
+
+[[box.measurement]]
+claim = "S5b branch diagram passes frankenmermaid validation with no warning-or-higher diagnostic"
+command = "date -u +%Y-%m-%dT%H:%M:%SZ; frankenmermaid validate docs/plan/flow/diagrams/S5b.mmd --fail-on warning"
+value = "2026-09-03T05:34:25Z; exit=0; Valid flowchart; diagnostics=1 info-only layout dispatch"
+measured_at = "2026-09-03T05:34:25Z"
+by = "BlueLantern"

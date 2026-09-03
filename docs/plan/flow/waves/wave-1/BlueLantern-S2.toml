@@ -1,0 +1,26 @@
+[[disagreement]]
+box = "S2"
+field = "crate_status"
+owner_says = "plan-assemble is wired."
+reviewer_says = "The cited pre-commit path invokes validate_staged_preregistration and validate_plan_assemble_build in no-shell-gate; it does not invoke the plan-assemble crate binary. The row must distinguish a hook-local checker from a reachable plan-assemble caller, or cite the actual plan-assemble invocation."
+evidence = "sed -n '121,126p;579,579p;645,650p' crates/no-shell-gate/src/bin/pre-commit-gate.rs; grep -R -n -E 'cargo (run|test).*plan-assemble|plan_assemble' crates/*/src crates/*/Cargo.toml."
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S2"
+field = "hook"
+owner_says = "The future hook is described by future_certified_id, gauntlet_stage, and note."
+reviewer_says = "The Wave 1 hook schema requires id, event, matcher, class, fail_mode, binary, policy_file, source_commit, language, stage, certified, and harm_class. S2's hook omits id, policy_file, source_commit, stage, and certified and uses gauntlet_stage instead of stage."
+evidence = "sed -n '145,155p' docs/plan/flow/boxes/S2.toml; sed -n '98,104p' docs/plan/flow/CONTRACT.md; sed -n '1,20p' /Users/josh/Developer/control-plane/hooks_certified.toml."
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S2"
+field = "agreement"
+owner_says = "open_disagreements = 0 and status = draft."
+reviewer_says = "This review adds two open source/schema disagreements, so the owner's Wave 1 agreement cannot remain a zero-disagreement claim after the review ledger is incorporated."
+evidence = "2026-09-03T05:39:03Z; current S2 row has agreement open_disagreements=0; this file records crate_status and hook_schema disagreements with re-run commands."
+severity = "major"
+resolution = ""

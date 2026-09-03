@@ -1,0 +1,26 @@
+[[disagreement]]
+box = "S6a"
+field = "branches"
+owner_says = "The ReceiptReason inventory is one grouped branch string plus a planned MISSING AckIncarnationMismatch."
+reviewer_says = "The contract requires branches to be the real enum arms verbatim. Grouping 16 ReceiptReason arms into one string prevents x226 from checking arm completeness; the future MISSING arm is not a real enum arm and belongs in a gap/no_claim, not the branch inventory."
+evidence = "sed -n '43,89p' crates/receiver-receipt/src/lib.rs; sed -n '16,29p' docs/plan/flow/boxes/S6a.toml; sed -n '36,45p' docs/plan/flow/CONTRACT.md."
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S6a"
+field = "hook"
+owner_says = "The box has receiver-receipt and ACK measurements but no certified hook row."
+reviewer_says = "The Wave 1 hook requirement needs a named future hooks_certified.toml row when a hook is part of the path. S6a has no [[box.hook]] record for the ACK/read-back trigger, so the future Rust hook identity and six-stage status are untracked."
+evidence = "2026-09-03T05:39:03Z; current S6a hook-row count was not present in the box; sed -n '98,104p' docs/plan/flow/CONTRACT.md defines the certified Rust hook requirement."
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S6a"
+field = "agreement"
+owner_says = "open_disagreements = 0 and status = draft."
+reviewer_says = "The grouped branch inventory and missing hook identity are open review disagreements; the owner must answer them in Wave 2."
+evidence = "2026-09-03T05:39:03Z; S6a has measurement=5, gap=16, agreement=1, diagram=1; this reviewer ledger records two disagreements."
+severity = "major"
+resolution = ""

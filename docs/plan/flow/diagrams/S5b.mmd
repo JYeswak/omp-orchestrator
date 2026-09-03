@@ -1,0 +1,60 @@
+flowchart TD
+  start([S5b claim to dispatch])
+  intent_bead["DispatchIntent::Bead"]
+  intent_broadcast["DispatchIntent::Broadcast"]
+  intent_correction["DispatchIntent::Correction"]
+  permit_bead["DispatchPermit::Bead"]
+  permit_broadcast["DispatchPermit::Broadcast"]
+  permit_correction["DispatchPermit::Correction"]
+  missing_bead["ClaimFenceError::MissingBeadId"]
+  missing_receiver["ClaimFenceError::MissingReceiverAgent"]
+  missing_operation["ClaimFenceError::MissingOperation"]
+  missing_snapshot["ClaimFenceError::MissingSnapshot"]
+  snapshot_mismatch["ClaimFenceError::SnapshotIdMismatch"]
+  claim_required["ClaimFenceError::ClaimRequired"]
+  assigned_elsewhere["ClaimFenceError::AssignedElsewhere"]
+  unknown_status["ClaimFenceError::UnknownStatus"]
+  identity["ClaimFenceError::AssigneeIdentity"]
+  packet_missing["PacketError::PacketFieldMissing"]
+  packet_scope["PacketError::PacketAddsScope"]
+  ntm["TransportKind::NtmRobotSend"]
+  tmux["TransportKind::TmuxSendKeysLiteral"]
+  halt["human-halt"]
+  permit([packet may proceed])
+  refuse([REFUSED])
+  measure([retain transport measurement])
+  stop([STOP])
+  start --> intent_bead
+  start --> intent_broadcast
+  start --> intent_correction
+  start --> missing_bead
+  start --> missing_receiver
+  start --> missing_operation
+  start --> missing_snapshot
+  start --> snapshot_mismatch
+  start --> claim_required
+  start --> assigned_elsewhere
+  start --> unknown_status
+  start --> identity
+  start --> packet_missing
+  start --> packet_scope
+  intent_bead --> permit_bead
+  intent_broadcast --> permit_broadcast
+  intent_correction --> permit_correction
+  permit_bead --> permit
+  permit_broadcast --> permit
+  permit_correction --> permit
+  ntm --> measure
+  tmux --> measure
+  missing_bead --> refuse
+  missing_receiver --> refuse
+  missing_operation --> refuse
+  missing_snapshot --> refuse
+  snapshot_mismatch --> refuse
+  claim_required --> refuse
+  assigned_elsewhere --> refuse
+  unknown_status --> refuse
+  identity --> refuse
+  packet_missing --> refuse
+  packet_scope --> refuse
+  halt --> stop
