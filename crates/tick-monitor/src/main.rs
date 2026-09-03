@@ -11,6 +11,11 @@ use std::path::PathBuf;
 use std::process::exit;
 use std::time::Duration;
 use tick_monitor::*;
+use lifecycle_event::{
+    default_host_journal, default_repo_journal, DurableJournal, Layer, LifecycleEvent, Outcome,
+    ReasonCode,
+};
+use std::path::Path;
 #[used]
 static BUILD_ID_MARKER: &[u8] = concat!("build_id=", env!("OMP_BUILD_ID")).as_bytes();
 const TMUX_TIMEOUT: Duration = Duration::from_secs(10);
@@ -422,9 +427,30 @@ fn observe(args: &[String]) -> i32 {
     match observe_core(args) {
         Ok(json) => {
             println!("{json}");
+            emit_l4(args, Outcome::Emitted, "OBSERVE_OK");
             0
         }
-        Err(code) => code,
+        Err(code) => {
+            emit_l4(args, Outcome::Refused, "OBSERVE_REFUSED");
+            code
+        }
+    }
+}
+
+fn emit_l4(args: &[String], outcome: Outcome, reason: &str) {
+    let Ok(code) = ReasonCode::new(reason) else {
+        return;
+    };
+    let event = LifecycleEvent::new(Layer::L4, "S1.L3", "S1.L4", "tick-monitor", outcome, code);
+    let path = flags(args, "--repo")
+        .first()
+        .map(|repo| default_repo_journal(Path::new(repo)))
+        .unwrap_or_else(default_host_journal);
+    match DurableJournal::open(path)
+        .and_then(|journal| lifecycle_event::emit_one_host(&journal, event))
+    {
+        Ok(_) => {}
+        Err(error) => eprintln!("LIFECYCLE_EVENT_EMIT_FAILED layer=L4 detail={error}"),
     }
 }
 

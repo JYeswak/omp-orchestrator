@@ -45,6 +45,10 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use subprocess_contract::run_output;
+use lifecycle_event::{
+    default_repo_journal, emit as emit_lifecycle, DurableJournal, Layer, LifecycleEvent, Outcome,
+    ReasonCode,
+};
 
 const DEFAULT_INTERVAL: Duration = Duration::from_secs(90);
 const DEFAULT_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
@@ -1743,6 +1747,62 @@ async fn send_and_verify(
 /// This row is written BEFORE the decision executes, so it records what was DECIDED. The
 /// bead's NON-GOAL is explicit that presence is not truth: `not_done` names exactly that
 /// boundary rather than leaving a reader to assume the dispatch landed.
+async fn emit_s1_l3_l5(cx: &Cx, config: &Config, decision: &SupervisorDecision) {
+    let reason = match decision {
+        SupervisorDecision::GateUnwired { .. } => "GATE_UNWIRED",
+        SupervisorDecision::Dispatch { .. } => "DISPATCH",
+        SupervisorDecision::EscalateIdleIncident { .. } => "ESCALATE_IDLE",
+        SupervisorDecision::MonitorBlind { .. } => "MONITOR_BLIND",
+        SupervisorDecision::QueueUnreadable { .. } => "QUEUE_UNREADABLE",
+        SupervisorDecision::AwaitingHuman { .. } => "AWAITING_HUMAN",
+        SupervisorDecision::WorkspaceUnloaded { .. } => "WORKSPACE_UNLOADED",
+        SupervisorDecision::AuthorizedIdle { .. } => "AUTHORIZED_IDLE",
+        SupervisorDecision::QueueEmptyNeedsJosh { .. } => "QUEUE_EMPTY",
+        SupervisorDecision::SupervisedWorking { .. } => "SUPERVISED_WORKING",
+    };
+    let Ok(code) = ReasonCode::new(reason) else {
+        return;
+    };
+    let outcome = match decision {
+        SupervisorDecision::Dispatch { .. } | SupervisorDecision::SupervisedWorking { .. } => {
+            Outcome::Emitted
+        }
+        SupervisorDecision::AuthorizedIdle { .. } => Outcome::Idle,
+        _ => Outcome::Refused,
+    };
+    let l3 = LifecycleEvent::new(
+        Layer::L3,
+        "S1.L2",
+        "S1.L3",
+        "omp-orchestrator",
+        outcome,
+        code.clone(),
+    )
+    .with_step("decide", "Passed", "match SupervisorDecision");
+    let Ok(portal_code) = ReasonCode::new(reason) else {
+        return;
+    };
+    let l5 = LifecycleEvent::new(
+        Layer::L5,
+        "S1.L4",
+        "S1.L5",
+        "omp-orchestrator",
+        outcome,
+        portal_code,
+    );
+    let path = default_repo_journal(&config.repo);
+    let journal = match DurableJournal::open(path) {
+        Ok(journal) => journal,
+        Err(error) => {
+            eprintln!("LIFECYCLE_EVENT_EMIT_FAILED layer=L3,L5 detail={error}");
+            return;
+        }
+    };
+    if let Err(error) = emit_lifecycle(cx, &journal, &[l3, l5]).await {
+        eprintln!("LIFECYCLE_EVENT_EMIT_FAILED layer=L3,L5 detail={error}");
+    }
+}
+
 fn write_tick_receipt(
     config: &Config,
     tick: u64,
@@ -3155,6 +3215,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     );
     let decision = decide(&observation, &authorization);
     file_supervisor_finding(cx, config, tick, &decision).await?;
+    emit_s1_l3_l5(cx, config, &decision).await;
 
     // psf7: THE TICK ROW IS WRITTEN HERE, ONCE, UNCONDITIONALLY, BEFORE THE MATCH.
     //

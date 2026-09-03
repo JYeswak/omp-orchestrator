@@ -37,6 +37,7 @@ subprocess-contract = { path = "../subprocess-contract" }
 receiver-receipt = { path = "../receiver-receipt" }
 ntm-fleet-monitor = { path = "../ntm-fleet-monitor" }
 serde_json = "1"
+lifecycle-event = { path = "../lifecycle-event" }
 
 [lints.rust]
 unsafe_code = "forbid"

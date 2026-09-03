@@ -1,0 +1,26 @@
+[package]
+license.workspace = true
+name = "lifecycle-event"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "S1 LifecycleEvent writer: typed row, durable JSONL, readback-enforced emit"
+
+[[bin]]
+name = "lifecycle-event"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[features]
+default = ["cx"]
+cx = ["dep:asupersync"]
+
+[dependencies]
+asupersync = { workspace = true, optional = true }
+serde_json = "1"
+
+[dev-dependencies]
+asupersync = { workspace = true }
+tempfile = "3"

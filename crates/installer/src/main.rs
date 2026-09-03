@@ -6,6 +6,10 @@
 //! Single writer per file: SilverWolf owns main.rs; pane 1 owns lib.rs.
 
 use installer::RepoOwnership;
+use lifecycle_event::{
+    default_repo_journal, DurableJournal, Layer, LifecycleEvent, Outcome, ReasonCode,
+};
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::ExitCode;
 #[used]
@@ -80,7 +84,11 @@ fn parse_cli_args(raw_args: Vec<String>) -> Result<(Vec<String>, PathBuf), Strin
         }
     }
     let bin_dir = explicit_bin_dir
-        .or_else(|| std::env::var_os("INSTALL_BIN_DIR").filter(|value| !value.is_empty()).map(PathBuf::from))
+        .or_else(|| {
+            std::env::var_os("INSTALL_BIN_DIR")
+                .filter(|value| !value.is_empty())
+                .map(PathBuf::from)
+        })
         .or_else(|| dirs_home().map(|home| home.join(".local/bin")))
         .ok_or_else(|| "INSTALL_BIN_DIR, --bin-dir, or HOME must be set".to_owned())?;
     Ok((positional, bin_dir))
@@ -151,8 +159,13 @@ fn run_check(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
             "INSTALLER: {unavailable} artifact(s) have unavailable source ownership — excluded from drift denominator"
         );
     }
-    println!(
-        "INSTALLER IDENTITY OK: {owned}/{owned} binaries consistent with HEAD {head_short}"
+    println!("INSTALLER IDENTITY OK: {owned}/{owned} binaries consistent with HEAD {head_short}");
+    emit_s1(
+        repo_root,
+        Layer::L1,
+        "S1.L1",
+        Outcome::Emitted,
+        "IDENTITY_OK",
     );
     ExitCode::SUCCESS
 }
@@ -162,10 +175,8 @@ fn run_install(repo_root: &PathBuf, bin_dir: &PathBuf, target: &str) -> ExitCode
         eprintln!("INSTALLER BLOCKED: {error}");
         return ExitCode::from(75);
     }
-    let Some((crate_name, binary_name)) = BINARIES
-        .iter()
-        .find(|(_, name)| *name == target)
-        .copied()
+    let Some((crate_name, binary_name)) =
+        BINARIES.iter().find(|(_, name)| *name == target).copied()
     else {
         eprintln!("INSTALLER ERROR: unknown target {target:?}; expected one of omp-orchestrator, tick-monitor, pane-truth, installer");
         return ExitCode::from(2);
@@ -189,8 +200,7 @@ fn run_install(repo_root: &PathBuf, bin_dir: &PathBuf, target: &str) -> ExitCode
             return ExitCode::from(2);
         }
     };
-    let cargo = std::env::var("CARGO")
-        .unwrap_or_else(|_| "~/.cargo/bin/cargo".to_owned());
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "~/.cargo/bin/cargo".to_owned());
     let cargo = shellexpand_path(&cargo);
     if let Err(error) = installer::build_target(repo_root, &cargo, crate_name, &head) {
         eprintln!("INSTALLER BUILD REFUSED: {error}");
@@ -204,13 +214,25 @@ fn run_install(repo_root: &PathBuf, bin_dir: &PathBuf, target: &str) -> ExitCode
             return ExitCode::from(1);
         }
     }
-    match installer::restart_and_verify(binary_name, &bin_dir.join(binary_name), &head, before_start) {
+    match installer::restart_and_verify(
+        binary_name,
+        &bin_dir.join(binary_name),
+        &head,
+        before_start,
+    ) {
         Ok(outcome) => println!("  RESTART {binary_name}: {outcome}"),
         Err(error) => {
             eprintln!("INSTALLER RESTART FAILED: {error}");
             return ExitCode::from(1);
         }
     }
+    emit_s1(
+        repo_root,
+        Layer::L0,
+        "S1.L0",
+        Outcome::Emitted,
+        "INSTALL_VERIFIED",
+    );
     println!("INSTALLER: target {binary_name} installed and verified");
     ExitCode::SUCCESS
 }
@@ -222,6 +244,24 @@ fn shellexpand_path(path: &str) -> String {
         }
     }
     path.to_owned()
+}
+
+fn emit_s1(repo_root: &Path, layer: Layer, stage_to: &str, outcome: Outcome, reason: &str) {
+    let Ok(code) = ReasonCode::new(reason) else {
+        eprintln!("LIFECYCLE_EVENT_EMIT_FAILED layer={} detail=missing reason_code", layer.as_str());
+        return;
+    };
+    let event = LifecycleEvent::new(layer, "HUMAN", stage_to, "installer", outcome, code);
+    let path = default_repo_journal(repo_root);
+    match DurableJournal::open(path).and_then(|journal| {
+        lifecycle_event::emit_one_host(&journal, event)
+    }) {
+        Ok(_) => {}
+        Err(error) => eprintln!(
+            "LIFECYCLE_EVENT_EMIT_FAILED layer={} detail={error}",
+            layer.as_str()
+        ),
+    }
 }
 #[cfg(test)]
 mod tests {

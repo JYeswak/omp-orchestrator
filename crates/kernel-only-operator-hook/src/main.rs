@@ -12,6 +12,9 @@ use kernel_only_operator_hook::{
 use std::io::{self, Read};
 use std::path::PathBuf;
 use std::process::ExitCode;
+use lifecycle_event::{
+    default_host_journal, emit_one, DurableJournal, Layer, LifecycleEvent, Outcome, ReasonCode,
+};
 
 fn read_bounded_stdin() -> io::Result<Vec<u8>> {
     let mut input = Vec::with_capacity(4096);
@@ -115,6 +118,7 @@ fn run_hook(input: Vec<u8>, shadow_mode: bool, predecessor: Option<PathBuf>) -> 
             };
         };
         let decision = evaluate(&cx, &input).await;
+        emit_l2(&cx, &decision).await;
         if shadow_mode {
             shadow_output_with_context(&cx, &input, &decision, predecessor.as_deref()).await
         } else {
@@ -123,8 +127,37 @@ fn run_hook(input: Vec<u8>, shadow_mode: bool, predecessor: Option<PathBuf>) -> 
     })
 }
 
+async fn emit_l2(cx: &Cx, decision: &Decision) {
+    let (outcome, reason) = match decision.permission {
+        Permission::Allow => (Outcome::Emitted, "HOOK_ALLOW"),
+        Permission::Deny => (Outcome::Refused, "HOOK_DENY"),
+    };
+    let Ok(code) = ReasonCode::new(reason) else {
+        return;
+    };
+    let event = LifecycleEvent::new(
+        Layer::L2,
+        "S1.L1",
+        "S1.L2",
+        "kernel-only-operator-hook",
+        outcome,
+        code,
+    )
+    .with_blocker(decision.reason.clone());
+    let journal = match DurableJournal::open(default_host_journal()) {
+        Ok(journal) => journal,
+        Err(error) => {
+            eprintln!("LIFECYCLE_EVENT_EMIT_FAILED layer=L2 detail={error}");
+            return;
+        }
+    };
+    if let Err(error) = emit_one(cx, &journal, event).await {
+        eprintln!("LIFECYCLE_EVENT_EMIT_FAILED layer=L2 detail={error}");
+    }
+}
+
 fn usage() -> &'static str {
-    "usage: kernel-only-operator-hook [--shadow [--compare-predecessor ABSOLUTE_EXECUTABLE]|--capabilities|--selftest|--version]"
+    "usage: kernel-only-operator-hook [--shadow [--compare-predecessor ABSOLUTE_EXECUTABLE]|--capabilities|--selftest|--liveness SESSION_ID BASH_CALLS|--version]"
 }
 
 fn parse_hook_args(args: &[String]) -> Result<(bool, Option<PathBuf>), String> {
@@ -159,7 +192,38 @@ fn parse_hook_args(args: &[String]) -> Result<(bool, Option<PathBuf>), String> {
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.len() == 1 {
+    if args.first().map(String::as_str) == Some("--liveness") {
+        if args.len() != 3 {
+            eprintln!("{}\n--liveness requires SESSION_ID BASH_CALLS", usage());
+            return ExitCode::from(2);
+        }
+        let bash_calls = match args[2].parse::<u64>() {
+            Ok(calls) => calls,
+            Err(error) => {
+                eprintln!("{}\ninvalid Bash call count: {error}", usage());
+                return ExitCode::from(2);
+            }
+        };
+        let threshold = std::env::var("KERNEL_ONLY_HOOK_LIVENESS_THRESHOLD")
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .filter(|value| *value > 0)
+            .unwrap_or(10);
+        return match shadow::liveness_report(&args[1], bash_calls, threshold) {
+            Ok(report) => {
+                println!("{report}");
+                if report.starts_with("HOOK_LIVENESS UNCOVERED") {
+                    ExitCode::from(1)
+                } else {
+                    ExitCode::SUCCESS
+                }
+            }
+            Err(error) => {
+                eprintln!("HOOK_LIVENESS UNKNOWN error={error}");
+                ExitCode::from(2)
+            }
+        };
+    } else if args.len() == 1 {
         match args[0].as_str() {
             "--capabilities" => {
                 println!("{}", capabilities());
