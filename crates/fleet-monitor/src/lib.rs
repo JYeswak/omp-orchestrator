@@ -61,8 +61,14 @@ pub struct FleetMonitorInvoker {
 }
 
 impl FleetMonitorInvoker {
-    pub const MANUAL: FleetMonitorInvoker = FleetMonitorInvoker { invoker: "MANUAL", proof: "unproven" };
-    pub const SCHEDULED: FleetMonitorInvoker = FleetMonitorInvoker { invoker: "SCHEDULED", proof: "cron_parent" };
+    pub const MANUAL: FleetMonitorInvoker = FleetMonitorInvoker {
+        invoker: "MANUAL",
+        proof: "unproven",
+    };
+    pub const SCHEDULED: FleetMonitorInvoker = FleetMonitorInvoker {
+        invoker: "SCHEDULED",
+        proof: "cron_parent",
+    };
 }
 
 /// One ancestor row: `uid ppid comm`, nearest ancestor first.
@@ -96,7 +102,11 @@ pub fn parse_ancestor_rows(text: &str) -> Vec<FleetMonitorAncestorRow> {
         let (Ok(uid), Ok(ppid)) = (uid.parse::<u32>(), ppid.parse::<u32>()) else {
             continue;
         };
-        out.push(FleetMonitorAncestorRow { uid, ppid, comm: comm.to_string() });
+        out.push(FleetMonitorAncestorRow {
+            uid,
+            ppid,
+            comm: comm.to_string(),
+        });
     }
     out
 }
@@ -151,39 +161,69 @@ impl LivenessState {
 /// chain does.
 pub fn pane_liveness(text: &str) -> FleetMonitorLiveness {
     if text.is_empty() {
-        return FleetMonitorLiveness { state: LivenessState::Unproven, reason: "empty_capture" };
+        return FleetMonitorLiveness {
+            state: LivenessState::Unproven,
+            reason: "empty_capture",
+        };
     }
     // WEDGED FIRST: a pane present but unable to accept work.
     if text.contains("Press up to edit queued messages") {
-        return FleetMonitorLiveness { state: LivenessState::Wedged, reason: "queued_unsubmitted" };
+        return FleetMonitorLiveness {
+            state: LivenessState::Wedged,
+            reason: "queued_unsubmitted",
+        };
     }
     if text.contains("Restart to update") {
-        return FleetMonitorLiveness { state: LivenessState::Wedged, reason: "restart_required" };
+        return FleetMonitorLiveness {
+            state: LivenessState::Wedged,
+            reason: "restart_required",
+        };
     }
     // OMP leaves an old prompt footer in the capture while work is in flight. Its spinner,
     // elapsed-status row, interrupt hint, or active status line therefore MUST outrank every
     // prompt/footer marker below; otherwise the monitor invents idle capacity beside live work.
     if omp_busy_re().is_match(text) {
-        return FleetMonitorLiveness { state: LivenessState::Busy, reason: "omp_working_marker" };
+        return FleetMonitorLiveness {
+            state: LivenessState::Busy,
+            reason: "omp_working_marker",
+        };
     }
     // `grep -Eiq '(^|[[:space:]│])Ready([[:space:]│]|$)'` — case-insensitive, bounded by
     // whitespace or the box-drawing glyph the TUIs frame their footer with.
     if ready_footer_re().is_match(text) {
-        return FleetMonitorLiveness { state: LivenessState::Live, reason: "ready_footer" };
+        return FleetMonitorLiveness {
+            state: LivenessState::Live,
+            reason: "ready_footer",
+        };
     }
     if working_footer_re().is_match(text) {
-        return FleetMonitorLiveness { state: LivenessState::Live, reason: "working_footer" };
+        return FleetMonitorLiveness {
+            state: LivenessState::Live,
+            reason: "working_footer",
+        };
     }
     if codex_worked_re().is_match(text) {
-        return FleetMonitorLiveness { state: LivenessState::Live, reason: "codex_worked_footer" };
+        return FleetMonitorLiveness {
+            state: LivenessState::Live,
+            reason: "codex_worked_footer",
+        };
     }
     if omp_prompt_re().is_match(text) {
-        return FleetMonitorLiveness { state: LivenessState::Live, reason: "omp_prompt_footer" };
+        return FleetMonitorLiveness {
+            state: LivenessState::Live,
+            reason: "omp_prompt_footer",
+        };
     }
     if text.contains("Esc:cancel") {
-        return FleetMonitorLiveness { state: LivenessState::Live, reason: "grok_prompt_footer" };
+        return FleetMonitorLiveness {
+            state: LivenessState::Live,
+            reason: "grok_prompt_footer",
+        };
     }
-    FleetMonitorLiveness { state: LivenessState::Unproven, reason: "no_ready_or_working_marker" }
+    FleetMonitorLiveness {
+        state: LivenessState::Unproven,
+        reason: "no_ready_or_working_marker",
+    }
 }
 
 fn ready_footer_re() -> &'static regex::Regex {
@@ -207,7 +247,7 @@ fn omp_busy_re() -> &'static regex::Regex {
         regex::Regex::new(
             r"(?m)(⟨esc⟩|^\s*[⠋⠙⠹⠸⠼⠦⠧⠇⠏]\s+(?:Working(?:\s|$)|[0-9]+[smhd](?:\s|$))|^\s*⎋\s+\S)",
         )
-            .expect("static regex")
+        .expect("static regex")
     })
 }
 
@@ -235,7 +275,10 @@ pub fn safe_panes(activity_json: &str) -> Vec<String> {
         if p.get("safe_to_dispatch").and_then(|b| b.as_bool()) != Some(true) {
             continue;
         }
-        let pane = p.get("pane").filter(|x| !x.is_null()).or_else(|| p.get("pane_index"));
+        let pane = p
+            .get("pane")
+            .filter(|x| !x.is_null())
+            .or_else(|| p.get("pane_index"));
         match pane {
             Some(serde_json::Value::Number(n)) => out.push(n.to_string()),
             Some(serde_json::Value::String(s)) => out.push(s.clone()),
@@ -261,7 +304,10 @@ pub fn attention_end_cursor(att: &str) -> String {
 pub fn attention_wake_reason(att: &str) -> String {
     serde_json::from_str::<serde_json::Value>(att)
         .ok()
-        .and_then(|d| d.get("wake_reason").and_then(|w| w.as_str().map(str::to_string)))
+        .and_then(|d| {
+            d.get("wake_reason")
+                .and_then(|w| w.as_str().map(str::to_string))
+        })
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "none".to_string())
 }
@@ -275,9 +321,14 @@ pub fn raw_open_count(br_json: &str) -> u64 {
     let rows = if let Some(a) = v.as_array() {
         a.clone()
     } else {
-        v.get("issues").and_then(|x| x.as_array()).cloned().unwrap_or_default()
+        v.get("issues")
+            .and_then(|x| x.as_array())
+            .cloned()
+            .unwrap_or_default()
     };
-    rows.iter().filter(|r| r.get("status").and_then(|s| s.as_str()) == Some("open")).count() as u64
+    rows.iter()
+        .filter(|r| r.get("status").and_then(|s| s.as_str()) == Some("open"))
+        .count() as u64
 }
 
 /// JSON string escaping for ledger rows (the shell's `topology_json_escape`).
@@ -315,7 +366,10 @@ pub struct RunDeadline {
 
 impl RunDeadline {
     pub fn new(budget: Duration) -> Self {
-        RunDeadline { start: Instant::now(), budget }
+        RunDeadline {
+            start: Instant::now(),
+            budget,
+        }
     }
     pub fn expired(&self) -> bool {
         self.start.elapsed() >= self.budget
@@ -334,10 +388,14 @@ pub fn discover_repos(ntm_list_output: &str, developer_root: &Path) -> Vec<Strin
     let mut out = Vec::new();
     for line in ntm_list_output.lines() {
         let t = line.trim();
-        let Some((name, _)) = t.split_once(':') else { continue };
+        let Some((name, _)) = t.split_once(':') else {
+            continue;
+        };
         let name = name.trim();
         if name.is_empty()
-            || !name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+            || !name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
         {
             continue;
         }
@@ -359,7 +417,9 @@ pub const NTM_LIST_EMPTY_BANNER: &str = "No tmux sessions";
 /// Distinct from "sessions listed, none currently idle" — that is a drained fleet.
 pub fn ntm_list_is_empty(text: &str) -> bool {
     let t = text.trim();
-    t.is_empty() || t.to_ascii_lowercase().contains(&NTM_LIST_EMPTY_BANNER.to_ascii_lowercase())
+    t.is_empty()
+        || t.to_ascii_lowercase()
+            .contains(&NTM_LIST_EMPTY_BANNER.to_ascii_lowercase())
 }
 
 /// Shell-identical census line so the differential grades both sides over the same bytes.
@@ -398,7 +458,11 @@ pub enum ObserveScan {
 }
 
 /// Live observe census. An empty `ntm list` is CANNOT_OBSERVE, never `fleet_clear`.
-pub fn observe_scan_set(ntm_list_output: &str, developer_root: &Path, rules: ObserveRules) -> ObserveScan {
+pub fn observe_scan_set(
+    ntm_list_output: &str,
+    developer_root: &Path,
+    rules: ObserveRules,
+) -> ObserveScan {
     if ntm_list_is_empty(ntm_list_output) {
         if !rules.empty_scan {
             return ObserveScan::Repos(Vec::new());
@@ -408,6 +472,100 @@ pub fn observe_scan_set(ntm_list_output: &str, developer_root: &Path, rules: Obs
         };
     }
     ObserveScan::Repos(discover_repos(ntm_list_output, developer_root))
+}
+
+/// `--self` scope resolution: the session that contains the CALLING PANE.
+///
+/// A silent wrong answer here is strictly worse than a refusal, because the scope selects the
+/// fleet whose standing admission verdict this lane is the only scheduled writer of. So there is
+/// no fallback arm: every unresolvable input is a NAMED refusal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SelfScope {
+    Session { session: String, pane_id: String },
+    Refused { reason: &'static str },
+}
+
+/// True for a tmux PANE ID (`%12`), false for a pane INDEX (`2`) or anything else.
+///
+/// This is the bead `omp-orchestrator-kyq5` guard made explicit: pane ids and pane indices are
+/// DIFFERENT NAMESPACES, and a join that silently accepts one where it needs the other can never
+/// match. Accepting `2` here would let this resolver key on a value that is not an identity.
+fn is_pane_id(candidate: &str) -> bool {
+    let Some(digits) = candidate.strip_prefix('%') else {
+        return false;
+    };
+    !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())
+}
+
+/// Resolve `--self` by joining the calling pane's id against a pane->session census.
+///
+/// `pane_id` is `$TMUX_PANE`. `census` is `tmux list-panes -a -F '#{pane_id} #{session_name}'`:
+/// one row per pane, pane id first, session name the remainder (tmux session names may contain
+/// spaces, so the remainder is taken whole rather than as a second token).
+///
+/// BOTH SIDES OF THIS JOIN ARE PANE IDS. The prior implementation joined a filesystem directory
+/// name against tmux session names, which is why it resolved another project's fleet.
+pub fn resolve_self_session(pane_id: Option<&str>, census: &str) -> SelfScope {
+    let pane_id = match pane_id.map(str::trim) {
+        Some(pane) if !pane.is_empty() => pane,
+        // No calling pane identity at all: a scheduled invocation with no pane. UNKNOWN, not "the
+        // first session in a list", and not "whatever repo my cwd happens to sit in".
+        _ => {
+            return SelfScope::Refused {
+                reason: "self_pane_unset",
+            }
+        }
+    };
+    if !is_pane_id(pane_id) {
+        return SelfScope::Refused {
+            reason: "self_pane_id_not_a_pane_id",
+        };
+    }
+    if census.trim().is_empty() {
+        // An empty scan set is an ERROR, never a pass: we cannot see the fleet, so we cannot know.
+        return SelfScope::Refused {
+            reason: "self_pane_census_unavailable",
+        };
+    }
+    let mut found: Option<&str> = None;
+    for row in census.lines() {
+        // Only leading space and a stray CR come off. A full `trim()` would eat the separator on
+        // `"%6 "`, turning "pane present, session name blank" into "pane absent" — two different
+        // refusals, and the wrong one hides a tmux format bug.
+        let row = row.trim_start().trim_end_matches('\r');
+        let Some((candidate, session)) = row.split_once(char::is_whitespace) else {
+            continue;
+        };
+        if candidate != pane_id {
+            continue;
+        }
+        let session = session.trim();
+        if session.is_empty() {
+            return SelfScope::Refused {
+                reason: "self_session_name_empty",
+            };
+        }
+        match found {
+            Some(previous) if previous != session => {
+                // Pane ids are server-unique, so this cannot happen in normal operation. If it
+                // ever does, the identity is not an identity and guessing is not available.
+                return SelfScope::Refused {
+                    reason: "self_pane_ambiguous",
+                };
+            }
+            _ => found = Some(session),
+        }
+    }
+    match found {
+        Some(session) => SelfScope::Session {
+            session: session.to_string(),
+            pane_id: pane_id.to_string(),
+        },
+        // The census was readable and the pane is not in it: stale or wrong tmux server.
+        None => SelfScope::Refused {
+            reason: "self_pane_not_in_census",
+        },
+    }
 }
 
 pub const EXIT_CANNOT_OBSERVE: i32 = 78;
@@ -437,9 +595,18 @@ pub fn publish_invocation(
         env: vec![
             ("CHECK_SH_LEDGER".into(), private.display().to_string()),
             ("CHECK_SH_PUBLISH_LEDGER".into(), live.display().to_string()),
-            ("CHECK_SH_PUBLISH_EVENT_LEDGER".into(), ledger.display().to_string()),
-            ("CHECK_SH_PUBLISH_FRESH_SECONDS".into(), fresh_seconds.to_string()),
-            ("CHECK_SH_PUBLISH_DEADLINE_SECONDS".into(), deadline_seconds.to_string()),
+            (
+                "CHECK_SH_PUBLISH_EVENT_LEDGER".into(),
+                ledger.display().to_string(),
+            ),
+            (
+                "CHECK_SH_PUBLISH_FRESH_SECONDS".into(),
+                fresh_seconds.to_string(),
+            ),
+            (
+                "CHECK_SH_PUBLISH_DEADLINE_SECONDS".into(),
+                deadline_seconds.to_string(),
+            ),
         ],
         args: vec!["--publish".into()],
     }
@@ -476,8 +643,16 @@ mod tests {
     #[test]
     fn rule_scheduled_requires_uid0_ppid1_cron() {
         let chain = vec![
-            FleetMonitorAncestorRow { uid: 501, ppid: 4242, comm: "/bin/bash".into() },
-            FleetMonitorAncestorRow { uid: 0, ppid: 1, comm: "/usr/sbin/cron".into() },
+            FleetMonitorAncestorRow {
+                uid: 501,
+                ppid: 4242,
+                comm: "/bin/bash".into(),
+            },
+            FleetMonitorAncestorRow {
+                uid: 0,
+                ppid: 1,
+                comm: "/usr/sbin/cron".into(),
+            },
         ];
         assert_eq!(
             invoker_from_chain(&chain),
@@ -489,7 +664,11 @@ mod tests {
     #[test]
     fn rule_forged_cron_argv_is_not_scheduled() {
         // The measured attack: a cron-SHAPED name from a non-root detached shell.
-        let chain = vec![FleetMonitorAncestorRow { uid: 501, ppid: 1, comm: "/usr/sbin/cron".into() }];
+        let chain = vec![FleetMonitorAncestorRow {
+            uid: 501,
+            ppid: 1,
+            comm: "/usr/sbin/cron".into(),
+        }];
         assert_eq!(
             invoker_from_chain(&chain),
             FleetMonitorInvoker::MANUAL,
@@ -509,7 +688,11 @@ mod tests {
     #[test]
     fn rule_unparseable_ps_rows_are_dropped() {
         let rows = parse_ancestor_rows("0 1 /usr/sbin/cron\ngarbage\n501 x /bin/sh\n");
-        assert_eq!(rows.len(), 1, "RULE ps_parse_strict: only fully-parseable rows survive");
+        assert_eq!(
+            rows.len(),
+            1,
+            "RULE ps_parse_strict: only fully-parseable rows survive"
+        );
         assert_eq!(invoker_from_chain(&rows), FleetMonitorInvoker::SCHEDULED);
     }
 
@@ -656,7 +839,11 @@ mod tests {
     #[test]
     fn rule_raw_count_counts_only_open() {
         let j = r#"[{"status":"open"},{"status":"closed"},{"status":"open"}]"#;
-        assert_eq!(raw_open_count(j), 2, "RULE raw_open: only status=open rows count");
+        assert_eq!(
+            raw_open_count(j),
+            2,
+            "RULE raw_open: only status=open rows count"
+        );
     }
 
     #[test]
@@ -682,8 +869,16 @@ mod tests {
     #[test]
     fn rule_end_cursor_extracted() {
         let j = r#"{"cursor_info":{"end_cursor":"67890"}}"#;
-        assert_eq!(attention_end_cursor(j), "67890", "RULE cursor: end_cursor is read for resume");
-        assert_eq!(attention_end_cursor("{}"), "", "RULE cursor_absent: missing cursor is empty");
+        assert_eq!(
+            attention_end_cursor(j),
+            "67890",
+            "RULE cursor: end_cursor is read for resume"
+        );
+        assert_eq!(
+            attention_end_cursor("{}"),
+            "",
+            "RULE cursor_absent: missing cursor is empty"
+        );
     }
 
     // ── PUBLISH CONTRACT ───────────────────────────────────────────────────────────────────
@@ -751,14 +946,22 @@ mod tests {
         let tmp = std::env::temp_dir().join(format!("fm-empty-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&tmp);
         assert_eq!(
-            observe_scan_set("No tmux sessions running", &tmp, ObserveRules { empty_scan: true }),
+            observe_scan_set(
+                "No tmux sessions running",
+                &tmp,
+                ObserveRules { empty_scan: true }
+            ),
             ObserveScan::CannotObserve {
                 reason: "empty_ntm_list"
             },
             "RULE empty_ntm_list: live observe must not log fleet_clear on an empty ntm list"
         );
         assert_eq!(
-            observe_scan_set("No tmux sessions running", &tmp, ObserveRules { empty_scan: false }),
+            observe_scan_set(
+                "No tmux sessions running",
+                &tmp,
+                ObserveRules { empty_scan: false }
+            ),
             ObserveScan::Repos(Vec::new()),
             "RULE empty_ntm_list_mutation: disabling the guard collapses empty list to drained"
         );
@@ -801,7 +1004,10 @@ mod tests {
             "RULE run_deadline: a zero budget is immediately expired so a hung run cannot silence the lane"
         );
         let d = RunDeadline::new(Duration::from_secs(600));
-        assert!(!d.expired(), "RULE run_deadline_headroom: a fresh budget is not expired");
+        assert!(
+            !d.expired(),
+            "RULE run_deadline_headroom: a fresh budget is not expired"
+        );
     }
 
     #[test]
@@ -810,6 +1016,179 @@ mod tests {
             json_escape(r#"a"b\c"#),
             r#"a\"b\\c"#,
             "RULE json_escape: a ledger row must stay parseable when a repo name carries a quote"
+        );
+    }
+
+    // ── SELF SCOPE (--self must name the CALLING PANE's session) ───────────────────────────
+    /// The live shape, measured: `tmux list-panes -a -F '#{pane_id} #{session_name}'` on the
+    /// omp-orchestrator host, 2026-09-03. `%5..%9` are this session, `%0..%4` another.
+    const CENSUS: &str = "\
+%0 control-plane
+%1 control-plane
+%2 control-plane
+%3 control-plane
+%4 control-plane
+%5 omp-orchestrator
+%6 omp-orchestrator
+%7 omp-orchestrator
+%8 omp-orchestrator
+%9 omp-orchestrator
+";
+
+    #[test]
+    fn rule_self_scope_resolves_the_calling_panes_session() {
+        // KNOWN-GOOD leg. Every other test here asserts a refusal; without this one the gate is
+        // attack-only and would be over-strict.
+        assert_eq!(
+            resolve_self_session(Some("%6"), CENSUS),
+            SelfScope::Session {
+                session: "omp-orchestrator".into(),
+                pane_id: "%6".into()
+            },
+            "RULE self_scope_good: the pane that called must select the session containing it"
+        );
+        // A pane in the OTHER session must select the OTHER session — proves the join actually
+        // discriminates rather than returning a constant.
+        assert_eq!(
+            resolve_self_session(Some("%2"), CENSUS),
+            SelfScope::Session {
+                session: "control-plane".into(),
+                pane_id: "%2".into()
+            },
+            "RULE self_scope_discriminates: a different calling pane must select a different session"
+        );
+    }
+
+    #[test]
+    fn rule_self_scope_refuses_when_the_pane_is_unset() {
+        // The scheduled shape: no pane at all. The measured defect resolved another project's
+        // fleet here (`betc`) because it keyed on the cwd instead.
+        for absent in [None, Some(""), Some("   ")] {
+            assert_eq!(
+                resolve_self_session(absent, CENSUS),
+                SelfScope::Refused {
+                    reason: "self_pane_unset"
+                },
+                "RULE self_scope_unset: no calling pane is UNKNOWN, never the first session listed"
+            );
+        }
+    }
+
+    #[test]
+    fn rule_self_scope_refuses_a_pane_index() {
+        // bead omp-orchestrator-kyq5: pane INDEX and pane ID are different namespaces. `2` is the
+        // index of `%7` in this session, so silently accepting it would be a wrong answer, not a
+        // missing one.
+        assert_eq!(
+            resolve_self_session(Some("2"), CENSUS),
+            SelfScope::Refused {
+                reason: "self_pane_id_not_a_pane_id"
+            },
+            "RULE self_scope_namespace: a pane index must be refused, never joined as a pane id"
+        );
+        assert_eq!(
+            resolve_self_session(Some("%"), CENSUS),
+            SelfScope::Refused {
+                reason: "self_pane_id_not_a_pane_id"
+            },
+            "RULE self_scope_namespace: a bare sigil is not a pane id"
+        );
+        assert_eq!(
+            resolve_self_session(Some("%6x"), CENSUS),
+            SelfScope::Refused {
+                reason: "self_pane_id_not_a_pane_id"
+            },
+            "RULE self_scope_namespace: a pane id is %<digits> and nothing else"
+        );
+    }
+
+    #[test]
+    fn rule_self_scope_refuses_an_empty_census() {
+        // An empty scan set is an ERROR. tmux unreachable, timed out, or nonzero all arrive here.
+        for blank in ["", "\n", "   \n\t\n"] {
+            assert_eq!(
+                resolve_self_session(Some("%6"), blank),
+                SelfScope::Refused {
+                    reason: "self_pane_census_unavailable"
+                },
+                "RULE self_scope_empty_census: an unreadable census is UNKNOWN, never a resolution"
+            );
+        }
+    }
+
+    #[test]
+    fn rule_self_scope_refuses_a_pane_absent_from_the_census() {
+        assert_eq!(
+            resolve_self_session(Some("%999"), CENSUS),
+            SelfScope::Refused {
+                reason: "self_pane_not_in_census"
+            },
+            "RULE self_scope_absent: a pane the server does not know is UNKNOWN, not session #1"
+        );
+    }
+
+    #[test]
+    fn rule_self_scope_refuses_an_ambiguous_pane_id() {
+        assert_eq!(
+            resolve_self_session(Some("%6"), "%6 alpha\n%6 beta\n"),
+            SelfScope::Refused {
+                reason: "self_pane_ambiguous"
+            },
+            "RULE self_scope_ambiguous: two sessions claiming one pane id means the identity is not one"
+        );
+        // A duplicated IDENTICAL row is not ambiguity; refusing it would be over-strict.
+        assert_eq!(
+            resolve_self_session(Some("%6"), "%6 alpha\n%6 alpha\n"),
+            SelfScope::Session {
+                session: "alpha".into(),
+                pane_id: "%6".into()
+            },
+            "RULE self_scope_dup_ok: a repeated identical row is still one answer"
+        );
+    }
+
+    #[test]
+    fn rule_self_scope_keeps_session_names_with_spaces_whole() {
+        assert_eq!(
+            resolve_self_session(Some("%6"), "%6 my session\n"),
+            SelfScope::Session {
+                session: "my session".into(),
+                pane_id: "%6".into()
+            },
+            "RULE self_scope_whole_name: tmux session names may contain spaces; truncating one would select a session that does not exist"
+        );
+        assert_eq!(
+            resolve_self_session(Some("%6"), "%6 \n"),
+            SelfScope::Refused {
+                reason: "self_session_name_empty"
+            },
+            "RULE self_scope_blank_name: an empty session name is UNKNOWN, not a match"
+        );
+    }
+
+    #[test]
+    fn rule_self_scope_never_falls_back_to_the_first_row() {
+        // The measured defect's SHAPE: an answer that is not the calling pane's. `%6` sits on the
+        // last row here, so a "first session wins" or "any session will do" implementation passes
+        // the other tests and fails this one.
+        let census = "%1 first-listed\n%2 second-listed\n%6 omp-orchestrator\n";
+        let resolved = resolve_self_session(Some("%6"), census);
+        assert_eq!(
+            resolved,
+            SelfScope::Session {
+                session: "omp-orchestrator".into(),
+                pane_id: "%6".into()
+            },
+            "RULE self_scope_no_first_row_fallback: the calling pane's row wins regardless of position"
+        );
+        // And with the calling pane's row REMOVED, the same census must refuse rather than serve
+        // one of the rows that is still there.
+        assert_eq!(
+            resolve_self_session(Some("%6"), "%1 first-listed\n%2 second-listed\n"),
+            SelfScope::Refused {
+                reason: "self_pane_not_in_census"
+            },
+            "RULE self_scope_no_first_row_fallback: a populated census without the calling pane is still UNKNOWN"
         );
     }
 }

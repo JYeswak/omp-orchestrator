@@ -37,8 +37,9 @@ mod scheduled_lane_telemetry;
 use fleet_monitor::{
     attention_end_cursor, attention_wake_reason, invoker_from_chain, json_escape, lock,
     ntm_list_census_line, ntm_list_is_empty, observe_scan_set, pane_liveness, parse_ancestor_rows,
-    publish_failure_detail, publish_invocation, raw_open_count, safe_panes, FleetMonitorInvoker,
-    LivenessState, ObserveRules, ObserveScan, RunDeadline, EXIT_CANNOT_OBSERVE,
+    publish_failure_detail, publish_invocation, raw_open_count, resolve_self_session, safe_panes,
+    FleetMonitorInvoker, LivenessState, ObserveRules, ObserveScan, RunDeadline, SelfScope,
+    EXIT_CANNOT_OBSERVE,
 };
 
 const USAGE: &str = "usage: fleet-monitor [status [--json]|why [--json]|capabilities [--json]|robot-docs guide|--all|--self] [--dispatch|--report-only] [--selftest] [--topology-only]";
@@ -56,7 +57,6 @@ struct Cfg {
     tmux_bin: PathBuf,
     tmux_tmpdir: PathBuf,
     ntm_activity_timeout: Duration,
-    self_repo: String,
     invoker: FleetMonitorInvoker,
     deadline: RunDeadline,
     aux_lane_timeout: Duration,
@@ -105,8 +105,12 @@ impl AuxLaneOutcome {
     fn ledger_rc(self) -> i32 {
         match self {
             Self::Completed { code } => code,
-            Self::Signalled { .. } | Self::DeadlineReached { code: None, .. } | Self::SpawnFailed { .. } => -1,
-            Self::DeadlineReached { code: Some(code), .. } => code,
+            Self::Signalled { .. }
+            | Self::DeadlineReached { code: None, .. }
+            | Self::SpawnFailed { .. } => -1,
+            Self::DeadlineReached {
+                code: Some(code), ..
+            } => code,
         }
     }
 
@@ -155,7 +159,10 @@ fn configured_tmux_tmpdir() -> PathBuf {
     if let Some(path) = std::env::var_os("FLEET_TMUX_TMPDIR").filter(|v| !v.is_empty()) {
         return PathBuf::from(path);
     }
-    match std::env::var_os("HOME").filter(|v| !v.is_empty()).map(PathBuf::from) {
+    match std::env::var_os("HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+    {
         Some(home) => home.join(".tmux-sockets"),
         None => {
             eprintln!("fleet-monitor: HOME is unset; cannot resolve the default tmux socket dir; set FLEET_TMUX_TMPDIR");
@@ -173,7 +180,10 @@ fn discovered_repo_bin() -> PathBuf {
         std::process::exit(64);
     });
     loop {
-        if [".git", ".beads"].iter().any(|marker| current.join(marker).exists()) {
+        if [".git", ".beads"]
+            .iter()
+            .any(|marker| current.join(marker).exists())
+        {
             return current.join("bin");
         }
         match current.parent() {
@@ -213,7 +223,11 @@ fn append_ledger(ledger: &Path, row: &str) {
     if let Some(p) = ledger.parent() {
         let _ = std::fs::create_dir_all(p);
     }
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(ledger) {
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(ledger)
+    {
         let _ = writeln!(f, "{row}");
     }
 }
@@ -264,7 +278,11 @@ fn invoker_detect() -> FleetMonitorInvoker {
         }
         rows.push_str(&line);
         rows.push('\n');
-        let Some(next) = line.split_whitespace().nth(1).and_then(|s| s.parse::<u32>().ok()) else {
+        let Some(next) = line
+            .split_whitespace()
+            .nth(1)
+            .and_then(|s| s.parse::<u32>().ok())
+        else {
             break;
         };
         pid = next;
@@ -313,7 +331,9 @@ fn main() -> ExitCode {
         }
     };
 
-    let home = std::env::var_os("HOME").filter(|v| !v.is_empty()).map(PathBuf::from);
+    let home = std::env::var_os("HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from);
     let state_dir = match std::env::var_os("FLEET_STATE_DIR").filter(|v| !v.is_empty()) {
         Some(path) => PathBuf::from(path),
         None => match &home {
@@ -334,12 +354,6 @@ fn main() -> ExitCode {
             }
         },
     };
-    let self_repo = cp_bin
-        .parent()
-        .and_then(|p| p.file_name())
-        .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| "control-plane".to_string());
-
     let cfg = Cfg {
         scope_self,
         dispatch,
@@ -357,12 +371,13 @@ fn main() -> ExitCode {
                 .unwrap_or(30),
         ),
         developer_root,
-        self_repo,
         invoker: invoker_detect(),
         // REQUIREMENT C: the run's own wall-clock deadline. A wedged instance held the lock for
         // 2h21m at 0.0% CPU today and silenced the lane; a bounded run cannot do that.
         deadline: RunDeadline::new(Duration::from_secs(
-            env_or("FLEET_RUN_DEADLINE_SECONDS", "1500").parse().unwrap_or(1500),
+            env_or("FLEET_RUN_DEADLINE_SECONDS", "1500")
+                .parse()
+                .unwrap_or(1500),
         )),
         aux_lane_timeout: Duration::from_secs(
             env_or("FLEET_AUX_LANE_TIMEOUT_SECONDS", "120")
@@ -386,7 +401,10 @@ fn main() -> ExitCode {
     let lock_path = cfg.state_dir.join("fleet-monitor.run.lock");
     let _guard = match lock::acquire(&lock_path, &lock::OsHolderLookup) {
         lock::LockOutcome::Acquired(g) => g,
-        lock::LockOutcome::Busy { holder_pid, holder_elapsed } => {
+        lock::LockOutcome::Busy {
+            holder_pid,
+            holder_elapsed,
+        } => {
             say(&format!(
                 "[{}] CONCURRENT_RUN_SKIPPED — fleet-monitor already running (pid={holder_pid} elapsed={holder_elapsed}); refusing to stack. rc=0",
                 ts()
@@ -429,21 +447,63 @@ fn main() -> ExitCode {
             ));
             cfg.log(
                 "cannot_observe",
-                &format!(r#""reason":"{}","code":{EXIT_CANNOT_OBSERVE}"#, json_escape(reason)),
+                &format!(
+                    r#""reason":"{}","code":{EXIT_CANNOT_OBSERVE}"#,
+                    json_escape(reason)
+                ),
             );
             return ExitCode::from(EXIT_CANNOT_OBSERVE as u8);
         }
     };
 
+    // `--self` used to resolve SILENTLY off the cwd. A silent wrong answer here points the whole
+    // observe lane at another project's fleet, so the resolution is now a LOUD typed line naming
+    // the pane it joined on. The refusal arm exits via CANNOT_OBSERVE above.
+    if cfg.scope_self {
+        say(&format!(
+            "[{}] SELF_SCOPE session={} pane={}",
+            ts(),
+            repos.join(","),
+            self_pane_env()
+        ));
+        cfg.log(
+            "self_scope_resolved",
+            &format!(
+                r#""session":"{}","pane":"{}""#,
+                json_escape(&repos.join(",")),
+                json_escape(&self_pane_env())
+            ),
+        );
+    }
+
     // Git topology stays in the shell this pass (see module docs) and is a bounded diagnostic.
     if topology_only {
-        let rc = run_shell_lane(&cfg, "fleet-monitor.sh", &[], &[("FLEET_TOPOLOGY_ONLY", "1")]);
-        return if rc == 0 { ExitCode::SUCCESS } else { ExitCode::from(rc as u8) };
+        let rc = run_shell_lane(
+            &cfg,
+            "fleet-monitor.sh",
+            &[],
+            &[("FLEET_TOPOLOGY_ONLY", "1")],
+        );
+        return if rc == 0 {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::from(rc as u8)
+        };
     }
 
     // ── AUXILIARY REPORT LANES (pass-through) ──────────────────────────────────────────────
-    aux_lane(&cfg, "ci-orphan-reaper.sh", &["--report"], "ci_orphan_reaper_report");
-    aux_lane(&cfg, "agent-mail-log-cap.sh", &["--apply"], "agent_mail_log_cap");
+    aux_lane(
+        &cfg,
+        "ci-orphan-reaper.sh",
+        &["--report"],
+        "ci_orphan_reaper_report",
+    );
+    aux_lane(
+        &cfg,
+        "agent-mail-log-cap.sh",
+        &["--apply"],
+        "agent_mail_log_cap",
+    );
 
     // ── ADMISSION VERDICT REFRESH ──────────────────────────────────────────────────────────
     admission_refresh(&cfg);
@@ -458,7 +518,10 @@ fn main() -> ExitCode {
 
     // ── 1. BLOCK on the whole fleet ────────────────────────────────────────────────────────
     let wake = attention_wait(&cfg);
-    say(&format!("[{}] fleet wait returned: wake_reason={wake}", ts()));
+    say(&format!(
+        "[{}] fleet wait returned: wake_reason={wake}",
+        ts()
+    ));
 
     // ── 2. IDLE PANES WITH READY WORK ──────────────────────────────────────────────────────
     let (found, liveness_blocked) = idle_scan(&cfg, &repos);
@@ -469,7 +532,10 @@ fn main() -> ExitCode {
                 "[{}] no live idle-pane/ready-work pairs; liveness blocked {liveness_blocked} candidate pane(s).",
                 ts()
             ));
-            cfg.log("fleet_liveness_blocked", &format!(r#""panes":{liveness_blocked}"#));
+            cfg.log(
+                "fleet_liveness_blocked",
+                &format!(r#""panes":{liveness_blocked}"#),
+            );
         } else {
             say(&format!(
                 "[{}] no idle-pane/ready-work pairs. Fleet is either busy or genuinely drained.",
@@ -507,7 +573,10 @@ fn resolve_repos(cfg: &Cfg) -> Result<Vec<String>, &'static str> {
         return Ok(list.split_whitespace().map(str::to_string).collect());
     }
     if cfg.scope_self {
-        return Ok(vec![cfg.self_repo.clone()]);
+        return match resolve_self_scope(cfg) {
+            SelfScope::Session { session, .. } => Ok(vec![session]),
+            SelfScope::Refused { reason } => Err(reason),
+        };
     }
     let out = run_capture(
         Command::new(&cfg.ntm_bin)
@@ -517,6 +586,50 @@ fn resolve_repos(cfg: &Cfg) -> Result<Vec<String>, &'static str> {
     match observe_scan_set(&out, &cfg.developer_root, ObserveRules::from_env()) {
         ObserveScan::CannotObserve { reason } => Err(reason),
         ObserveScan::Repos(repos) => Ok(repos),
+    }
+}
+
+/// The calling pane's id, as the process actually sees it.
+///
+/// `FLEET_SELF_PANE` exists only so the refusal legs can be exercised by mutation without
+/// detaching a real pane; `$TMUX_PANE` is the real identity.
+fn self_pane_env() -> String {
+    std::env::var("FLEET_SELF_PANE")
+        .or_else(|_| std::env::var("TMUX_PANE"))
+        .unwrap_or_default()
+}
+
+/// Gather the live inputs for `--self` and hand them to the pure join.
+///
+/// The identity is the CALLING PANE. It is NOT the cwd, NOT the install prefix, and NOT the first
+/// session tmux happens to list.
+fn resolve_self_scope(cfg: &Cfg) -> SelfScope {
+    let pane_id = self_pane_env();
+    let census = self_pane_census(cfg);
+    resolve_self_session(Some(pane_id.as_str()), &census)
+}
+
+/// `pane_id -> session_name` for every pane on the configured tmux server.
+///
+/// Only stdout is read: a tmux error message on stderr must not be parsed as census rows, or an
+/// unreachable server would look like a pane that is simply missing.
+fn self_pane_census(cfg: &Cfg) -> String {
+    let mut command = Command::new(&cfg.tmux_bin);
+    command
+        .env("TMUX_TMPDIR", &cfg.tmux_tmpdir)
+        .args([
+            "list-panes",
+            "-a",
+            "-F",
+            "#{pane_id} #{session_name}",
+        ]);
+    match bounded_output(&mut command, cfg.ntm_activity_timeout) {
+        BoundedOutcome::Completed(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout).into_owned()
+        }
+        // A nonzero exit, a timeout, or an unspawnable tmux are all UNKNOWN. Returning empty makes
+        // the pure join refuse with `self_pane_census_unavailable` instead of guessing.
+        _ => String::new(),
     }
 }
 
@@ -569,9 +682,7 @@ fn pane_selector(cfg: &Cfg, repo: &str) -> Result<String, NtmActivityOutcome> {
     Ok(panes.join(","))
 }
 
-/// Run the NTM activity probe with a real wall bound and both pipes drained concurrently.
-/// `Command::output()` is not sufficient here: a chatty probe can fill one pipe while the parent
-/// polls the child, recreating the pipe deadlock this monitor is meant to report rather than hide.
+/// Run the NTM activity probe through the shared process-group and dual-pipe kernel.
 fn run_ntm_activity(cfg: &Cfg, repo: &str) -> NtmActivityOutcome {
     let selectors = match pane_selector(cfg, repo) {
         Ok(selectors) => selectors,
@@ -582,95 +693,36 @@ fn run_ntm_activity(cfg: &Cfg, repo: &str) -> NtmActivityOutcome {
         .arg(format!("--robot-activity={repo}"))
         .arg("--panes")
         .arg(selectors)
-        .env("TMUX_TMPDIR", &cfg.tmux_tmpdir)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    command.process_group(0);
-    let mut child = match command.spawn() {
-        Ok(child) => child,
-        Err(error) => return NtmActivityOutcome::SpawnFailed { kind: error.kind() },
-    };
-    let Some(stdout) = child.stdout.take() else {
-        let _ = terminate_and_reap(&mut child);
-        return NtmActivityOutcome::IoFailed {
-            kind: io::ErrorKind::Other,
-        };
-    };
-    let Some(stderr) = child.stderr.take() else {
-        let _ = terminate_and_reap(&mut child);
-        return NtmActivityOutcome::IoFailed {
-            kind: io::ErrorKind::Other,
-        };
-    };
-    let stdout_reader = std::thread::spawn(move || {
-        let mut bytes = Vec::new();
-        match stdout
-            .take((NTM_ACTIVITY_OUTPUT_LIMIT + 1) as u64)
-            .read_to_end(&mut bytes)
-        {
-            Ok(_) if bytes.len() > NTM_ACTIVITY_OUTPUT_LIMIT => {
-                PipeReadOutcome::LimitExceeded { stream: "stdout", bytes: bytes.len() }
-            }
-            Ok(_) => PipeReadOutcome::Complete(bytes),
-            Err(error) => PipeReadOutcome::Failed { kind: error.kind() },
-        }
-    });
-    let stderr_reader = std::thread::spawn(move || {
-        let mut bytes = Vec::new();
-        match stderr
-            .take((NTM_ACTIVITY_OUTPUT_LIMIT + 1) as u64)
-            .read_to_end(&mut bytes)
-        {
-            Ok(_) if bytes.len() > NTM_ACTIVITY_OUTPUT_LIMIT => {
-                PipeReadOutcome::LimitExceeded { stream: "stderr", bytes: bytes.len() }
-            }
-            Ok(_) => PipeReadOutcome::Complete(bytes),
-            Err(error) => PipeReadOutcome::Failed { kind: error.kind() },
-        }
-    });
-
-    let deadline = std::time::Instant::now() + cfg.ntm_activity_timeout;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) if std::time::Instant::now() < deadline => {
-                std::thread::sleep(Duration::from_millis(25));
-            }
-            Ok(None) => {
-                if let Err(outcome) = terminate_and_reap(&mut child) {
-                    return outcome;
-                }
-                let (stdout, stderr) = match join_pipes(stdout_reader, stderr_reader) {
-                    Ok(pipes) => pipes,
-                    Err(outcome) => return outcome,
-                };
-                return NtmActivityOutcome::TimedOut {
-                    seconds: cfg.ntm_activity_timeout.as_secs().max(1),
-                    stdout_bytes: stdout.len(),
-                    stderr_bytes: stderr.len(),
+        .env("TMUX_TMPDIR", &cfg.tmux_tmpdir);
+    match bounded_output(&mut command, cfg.ntm_activity_timeout) {
+        BoundedOutcome::Completed(output) => {
+            if output.stdout.len() > NTM_ACTIVITY_OUTPUT_LIMIT {
+                return NtmActivityOutcome::OutputLimitExceeded {
+                    stream: "stdout",
+                    bytes: output.stdout.len(),
                 };
             }
-            Err(error) => {
-                if let Err(outcome) = terminate_and_reap(&mut child) {
-                    return outcome;
-                }
-                let _ = join_pipes(stdout_reader, stderr_reader);
-                return NtmActivityOutcome::IoFailed { kind: error.kind() };
+            if output.stderr.len() > NTM_ACTIVITY_OUTPUT_LIMIT {
+                return NtmActivityOutcome::OutputLimitExceeded {
+                    stream: "stderr",
+                    bytes: output.stderr.len(),
+                };
+            }
+            NtmActivityOutcome::Completed {
+                code: output.status.code(),
+                signal: std::os::unix::process::ExitStatusExt::signal(&output.status),
+                stdout: output.stdout,
+                stderr: output.stderr,
             }
         }
-    };
-    let (stdout, stderr) = match join_pipes(stdout_reader, stderr_reader) {
-        Ok(pipes) => pipes,
-        Err(outcome) => return outcome,
-    };
-    NtmActivityOutcome::Completed {
-        code: status.code(),
-        signal: std::os::unix::process::ExitStatusExt::signal(&status),
-        stdout,
-        stderr,
+        BoundedOutcome::TimedOut => NtmActivityOutcome::TimedOut {
+            seconds: cfg.ntm_activity_timeout.as_secs().max(1),
+            stdout_bytes: 0,
+            stderr_bytes: 0,
+        },
+        BoundedOutcome::Unspawned(error) => NtmActivityOutcome::SpawnFailed { kind: error.kind() },
     }
 }
-
 fn typed_safe_panes(activity: &str) -> Result<(Vec<String>, ActivitySnapshot), ActivityError> {
     let typed = parse_activity_json(activity)?;
     let omp_panes: std::collections::BTreeSet<_> = typed
@@ -744,16 +796,13 @@ fn record_ntm_activity_failure(cfg: &Cfg, repo: &str, outcome: &NtmActivityOutco
             stderr_bytes,
         } => (
             "timeout",
-            format!(r#""seconds":{seconds},"stdout_bytes":{stdout_bytes},"stderr_bytes":{stderr_bytes}"#),
+            format!(
+                r#""seconds":{seconds},"stdout_bytes":{stdout_bytes},"stderr_bytes":{stderr_bytes}"#
+            ),
         ),
-        NtmActivityOutcome::SpawnFailed { kind } => (
-            "spawn_failed",
-            format!(r#""error_kind":"{:?}""#, kind),
-        ),
-        NtmActivityOutcome::IoFailed { kind } => (
-            "io_failed",
-            format!(r#""error_kind":"{:?}""#, kind),
-        ),
+        NtmActivityOutcome::SpawnFailed { kind } => {
+            ("spawn_failed", format!(r#""error_kind":"{:?}""#, kind))
+        }
         NtmActivityOutcome::OutputLimitExceeded { stream, bytes } => (
             "output_limit_exceeded",
             format!(r#""stream":"{stream}","bytes":{bytes}"#),
@@ -779,10 +828,17 @@ fn record_ntm_activity_failure(cfg: &Cfg, repo: &str, outcome: &NtmActivityOutco
             ),
         ),
     };
-    say(&format!("  OMP         {repo}: readiness unavailable ({kind})"));
+    say(&format!(
+        "  OMP         {repo}: readiness unavailable ({kind})"
+    ));
     cfg.log(
         "omp_readiness_unproven",
-        &format!(r#""repo":"{}","reason":"{}",{}"#, json_escape(repo), kind, detail),
+        &format!(
+            r#""repo":"{}","reason":"{}",{}"#,
+            json_escape(repo),
+            kind,
+            detail
+        ),
     );
 }
 
@@ -790,7 +846,11 @@ fn record_ntm_activity_failure(cfg: &Cfg, repo: &str, outcome: &NtmActivityOutco
 fn aux_lane(cfg: &Cfg, script: &str, args: &[&str], event: &str) {
     let bin = cfg.cp_bin.join(script);
     if !bin.exists() {
-        say(&format!("[{}] {event} UNRUN: {} is absent", ts(), bin.display()));
+        say(&format!(
+            "[{}] {event} UNRUN: {} is absent",
+            ts(),
+            bin.display()
+        ));
         cfg.log(&format!("{event}_unrun"), "");
         return;
     }
@@ -801,16 +861,27 @@ fn aux_lane(cfg: &Cfg, script: &str, args: &[&str], event: &str) {
             ts(),
             wrapper.display()
         ));
-        cfg.log(&format!("{event}_unrun"), "\"reason\":\"auxiliary_deadline_wrapper_missing\"");
+        cfg.log(
+            &format!("{event}_unrun"),
+            "\"reason\":\"auxiliary_deadline_wrapper_missing\"",
+        );
         return;
     }
-    let Some(seconds) = aux_lane_budget_seconds(cfg.deadline.remaining(), cfg.aux_lane_timeout) else {
-        say(&format!("[{}] {event} skipped — fleet run deadline exhausted", ts()));
-        cfg.log(&format!("{event}_skipped_deadline"), "\"reason\":\"run_deadline_exhausted\"");
+    let Some(seconds) = aux_lane_budget_seconds(cfg.deadline.remaining(), cfg.aux_lane_timeout)
+    else {
+        say(&format!(
+            "[{}] {event} skipped — fleet run deadline exhausted",
+            ts()
+        ));
+        cfg.log(
+            &format!("{event}_skipped_deadline"),
+            "\"reason\":\"run_deadline_exhausted\"",
+        );
         return;
     };
     let lane = format!("fleet-monitor-aux-{event}");
-    let out = Command::new(&wrapper)
+    let mut command = Command::new(&wrapper);
+    command
         .arg("--lane")
         .arg(&lane)
         .arg("--deadline")
@@ -831,7 +902,11 @@ fn aux_lane(cfg: &Cfg, script: &str, args: &[&str], event: &str) {
     }
     let extra = match outcome {
         AuxLaneOutcome::Completed { .. } | AuxLaneOutcome::DeadlineReached { .. } => {
-            format!(r#""rc":{},"outcome":"{}""#, outcome.ledger_rc(), outcome.label())
+            format!(
+                r#""rc":{},"outcome":"{}""#,
+                outcome.ledger_rc(),
+                outcome.label()
+            )
         }
         AuxLaneOutcome::Signalled { signal } => format!(
             r#""rc":{},"outcome":"{}","signal":{}"#,
@@ -850,7 +925,11 @@ fn aux_lane(cfg: &Cfg, script: &str, args: &[&str], event: &str) {
     if let AuxLaneOutcome::DeadlineReached { seconds, .. } = outcome {
         cfg.log(
             "aux_lane_deadline_reached",
-            &format!(r#""event_name":"{}","deadline_seconds":{}"#, json_escape(event), seconds),
+            &format!(
+                r#""event_name":"{}","deadline_seconds":{}"#,
+                json_escape(event),
+                seconds
+            ),
         );
     }
     if outcome.is_failure() {
@@ -988,14 +1067,20 @@ fn attention_wait(cfg: &Cfg) -> String {
 }
 
 fn idle_scan(cfg: &Cfg, repos: &[String]) -> (u64, u64) {
-    say(&format!("[{}] scanning for idle panes beside ready work:", ts()));
+    say(&format!(
+        "[{}] scanning for idle panes beside ready work:",
+        ts()
+    ));
     let mut found = 0u64;
     let mut liveness_blocked = 0u64;
 
     for repo in repos {
         if cfg.deadline.expired() {
             cfg.log("run_deadline_reached", r#""phase":"idle_scan""#);
-            say(&format!("[{}] RUN_DEADLINE reached mid-scan — remaining repos deferred to the next slot", ts()));
+            say(&format!(
+                "[{}] RUN_DEADLINE reached mid-scan — remaining repos deferred to the next slot",
+                ts()
+            ));
             break;
         }
         let d = cfg.developer_root.join(repo);
@@ -1004,7 +1089,11 @@ fn idle_scan(cfg: &Cfg, repos: &[String]) -> (u64, u64) {
         }
         let activity = run_ntm_activity(cfg, repo);
         let panes = match &activity {
-            NtmActivityOutcome::Completed { code: Some(0), stdout, .. } => {
+            NtmActivityOutcome::Completed {
+                code: Some(0),
+                stdout,
+                ..
+            } => {
                 let activity = String::from_utf8_lossy(stdout);
                 match typed_safe_panes(&activity) {
                     Ok((panes, snapshot)) => {
@@ -1020,7 +1109,9 @@ fn idle_scan(cfg: &Cfg, repos: &[String]) -> (u64, u64) {
                                 stdout_bytes: stdout.len(),
                             },
                         );
-                        say(&format!("  OMP         {repo}: typed readiness refused ({error})"));
+                        say(&format!(
+                            "  OMP         {repo}: typed readiness refused ({error})"
+                        ));
                         Vec::new()
                     }
                 }
@@ -1119,7 +1210,9 @@ fn idle_scan(cfg: &Cfg, repos: &[String]) -> (u64, u64) {
                     "  ACTIONABLE  {repo}: {idle} live idle pane(s), {ready} dispatchable ({parked} parked, {busy} busy, {wedged} wedged, {unproven} unproven)"
                 ));
             } else {
-                say(&format!("  ACTIONABLE  {repo}: {idle} live idle pane(s), {ready} dispatchable"));
+                say(&format!(
+                    "  ACTIONABLE  {repo}: {idle} live idle pane(s), {ready} dispatchable"
+                ));
             }
             cfg.log(
                 "idle_with_work",
@@ -1140,7 +1233,9 @@ fn idle_scan(cfg: &Cfg, repos: &[String]) -> (u64, u64) {
                 &format!(r#""repo":"{}","parked":{parked}"#, json_escape(repo)),
             );
         } else {
-            say(&format!("  ok          {repo}: {idle} idle pane(s), queue genuinely empty"));
+            say(&format!(
+                "  ok          {repo}: {idle} idle pane(s), queue genuinely empty"
+            ));
         }
     }
     (found, liveness_blocked)
@@ -1215,9 +1310,16 @@ fn dispatch_handoff(cfg: &Cfg, found: u64) {
         ),
     );
     if rc == 0 {
-        say(&format!("[{}] controller tick returned rc=0; inspect its ledger for delivered panes", ts()));
+        say(&format!(
+            "[{}] controller tick returned rc=0; inspect its ledger for delivered panes",
+            ts()
+        ));
     } else {
-        say(&format!("[{}] controller tick FAILED rc={rc} — see {}", ts(), dispatch_log.display()));
+        say(&format!(
+            "[{}] controller tick FAILED rc={rc} — see {}",
+            ts(),
+            dispatch_log.display()
+        ));
     }
 }
 
@@ -1226,7 +1328,10 @@ fn selftest_run(cfg: &Cfg) -> ExitCode {
     // actually broken this lane: the publisher, the policy filter, and the lock directory.
     let check_sh = cfg.cp_bin.join("check.sh");
     if !check_sh.exists() {
-        say(&format!("selftest: FAIL — publisher missing at {}", check_sh.display()));
+        say(&format!(
+            "selftest: FAIL — publisher missing at {}",
+            check_sh.display()
+        ));
         return ExitCode::FAILURE;
     }
     let inv = publish_invocation(&check_sh, &cfg.state_dir, &cfg.ledger, 1500, 1500);
@@ -1293,6 +1398,64 @@ fn selftest_run(cfg: &Cfg) -> ExitCode {
         return ExitCode::FAILURE;
     }
 
+    // ── SELF SCOPE ─────────────────────────────────────────────────────────────────────────
+    // `--self` must name the session containing the CALLING PANE. This lane is the only
+    // scheduled writer of the standing admission verdict, so a wrong session silently points the
+    // whole observe lane at another project's fleet. MEASURED 2026-09-03: called from pane %6 in
+    // `omp-orchestrator`, it resolved `betc`, because it keyed on the CWD, not the pane.
+    const PLANTED_CENSUS: &str = "%0 other-project\n%6 omp-orchestrator\n";
+    // KNOWN-GOOD: the calling pane selects the session containing it, not the first row listed.
+    if resolve_self_session(Some("%6"), PLANTED_CENSUS)
+        != (SelfScope::Session {
+            session: "omp-orchestrator".to_string(),
+            pane_id: "%6".to_string(),
+        })
+    {
+        say("selftest: FAIL — self-scope did not resolve the planted calling pane's session");
+        return ExitCode::FAILURE;
+    }
+    // KNOWN-BAD: every unresolvable input must REFUSE with its own named reason. A silent
+    // fallback to "the first session" is the failure this lane was pointed at another fleet by.
+    for (pane, census, want) in [
+        (None, PLANTED_CENSUS, "self_pane_unset"),
+        // bead omp-orchestrator-kyq5: pane INDEX and pane ID are different namespaces.
+        (Some("2"), PLANTED_CENSUS, "self_pane_id_not_a_pane_id"),
+        (Some("%999"), PLANTED_CENSUS, "self_pane_not_in_census"),
+        (Some("%6"), "", "self_pane_census_unavailable"),
+    ] {
+        if resolve_self_session(pane, census) != (SelfScope::Refused { reason: want }) {
+            say(&format!(
+                "selftest: FAIL — self-scope detector {want} did not fire on pane={pane:?}"
+            ));
+            return ExitCode::FAILURE;
+        }
+    }
+    say("selftest: PASS — named detectors self_pane_unset/self_pane_id_not_a_pane_id/self_pane_not_in_census/self_pane_census_unavailable RED on planted inputs");
+
+    // LIVE leg, asserted in BOTH directions so neither environment is a free pass:
+    // with a calling pane it must resolve; with none it must refuse.
+    let live_pane = self_pane_env();
+    match (resolve_self_scope(cfg), live_pane.is_empty()) {
+        (SelfScope::Session { session, pane_id }, false) => say(&format!(
+            "selftest: PASS — live self-scope resolved session={session} from pane={pane_id}"
+        )),
+        (SelfScope::Refused { reason }, true) => say(&format!(
+            "selftest: PASS — no calling pane, live self-scope refused with reason={reason} instead of guessing a session"
+        )),
+        (SelfScope::Session { session, .. }, true) => {
+            say(&format!(
+                "selftest: FAIL — live self-scope resolved session={session} with NO calling pane; that is the measured defect"
+            ));
+            return ExitCode::FAILURE;
+        }
+        (SelfScope::Refused { reason }, false) => {
+            say(&format!(
+                "selftest: FAIL — live self-scope refused with reason={reason} while pane={live_pane} is the calling pane"
+            ));
+            return ExitCode::FAILURE;
+        }
+    }
+
     say(&format!(
         "selftest: PASS (publisher={}, invoker={}/{})",
         check_sh.display(),
@@ -1310,6 +1473,7 @@ mod tests {
     use std::io;
     use std::process::Command;
     use std::time::Duration;
+    use subprocess_contract::{bounded_output, BoundedOutcome};
 
     #[test]
     fn rule_aux_lane_budget_is_capped_and_nonzero() {
@@ -1393,16 +1557,26 @@ mod tests {
 
         let conflict = healthy.replace("\"state\":\"IDLE\"", "\"state\":\"THINKING\"");
         let (panes, snapshot) = typed_safe_panes(&conflict).expect("conflict activity parses");
-        assert!(panes.is_empty(), "conflicting OMP must not remain a legacy candidate");
+        assert!(
+            panes.is_empty(),
+            "conflicting OMP must not remain a legacy candidate"
+        );
         assert_eq!(snapshot.dispatchable_omp_count(), 0);
 
         let unknown_state = healthy.replace("\"state\":\"IDLE\"", "\"state\":\"UNKNOWN\"");
         let (panes, _) = typed_safe_panes(&unknown_state).expect("unknown idle OMP parses");
-        assert_eq!(panes, vec!["3"], "pane capture remains the final liveness gate");
+        assert_eq!(
+            panes,
+            vec!["3"],
+            "pane capture remains the final liveness gate"
+        );
 
         let unknown = healthy.replace("omp-claude", "omp-future");
         let (panes, _) = typed_safe_panes(&unknown).expect("unknown OMP activity parses");
-        assert!(panes.is_empty(), "unknown OMP plugins must not fall through legacy safety");
+        assert!(
+            panes.is_empty(),
+            "unknown OMP plugins must not fall through legacy safety"
+        );
 
         assert!(typed_safe_panes(r#"{"success":true,"agents":[]}"#).is_err());
     }

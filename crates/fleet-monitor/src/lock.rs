@@ -45,7 +45,10 @@ pub enum LockOutcome {
     /// Held for this process's life. Dropping the guard releases it.
     Acquired(RunLock),
     /// Another live run holds it. Carries whatever the OS could tell us about the holder.
-    Busy { holder_pid: String, holder_elapsed: String },
+    Busy {
+        holder_pid: String,
+        holder_elapsed: String,
+    },
     /// The lock could not be used at all (unopenable path). FAIL CLOSED: refuse to run
     /// unserialized rather than stack another instance.
     Unusable { reason: String },
@@ -147,21 +150,32 @@ pub fn acquire<L: HolderLookup>(lock_path: &Path, lookup: &L) -> LockOutcome {
     let file = match OpenOptions::new().create(true).append(true).open(lock_path) {
         Ok(f) => f,
         Err(e) => {
-            return LockOutcome::Unusable { reason: format!("open_failed: {e}") };
+            return LockOutcome::Unusable {
+                reason: format!("open_failed: {e}"),
+            };
         }
     };
     match file.try_lock_exclusive() {
-        Ok(()) => LockOutcome::Acquired(RunLock { file, path: lock_path.to_path_buf() }),
+        Ok(()) => LockOutcome::Acquired(RunLock {
+            file,
+            path: lock_path.to_path_buf(),
+        }),
         Err(_) => {
             // BUSY. Name the blocker — a lane that cannot say what is blocking it cannot be
             // diagnosed, which is exactly today's `holder_pid=unknown` defect.
             let holders = lookup.holders(lock_path);
-            let holder_pid = holders.first().cloned().unwrap_or_else(|| "unknown".to_string());
+            let holder_pid = holders
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "unknown".to_string());
             let holder_elapsed = holders
                 .first()
                 .and_then(|p| lookup.elapsed(p))
                 .unwrap_or_else(|| "unknown".to_string());
-            LockOutcome::Busy { holder_pid, holder_elapsed }
+            LockOutcome::Busy {
+                holder_pid,
+                holder_elapsed,
+            }
         }
     }
 }
@@ -196,7 +210,11 @@ mod tests {
     #[test]
     fn rule_second_instance_is_refused_while_one_is_live() {
         let p = tmp("second");
-        let look = FakeLookup { pids: vec!["4242".into()], elapsed: Some("22:22".into()), calls: RefCell::new(0) };
+        let look = FakeLookup {
+            pids: vec!["4242".into()],
+            elapsed: Some("22:22".into()),
+            calls: RefCell::new(0),
+        };
         let first = acquire(&p, &look);
         assert!(
             matches!(first, LockOutcome::Acquired(_)),
@@ -215,11 +233,18 @@ mod tests {
     #[test]
     fn rule_skip_row_names_its_holder() {
         let p = tmp("names");
-        let look = FakeLookup { pids: vec!["4242".into()], elapsed: Some("22:22".into()), calls: RefCell::new(0) };
+        let look = FakeLookup {
+            pids: vec!["4242".into()],
+            elapsed: Some("22:22".into()),
+            calls: RefCell::new(0),
+        };
         let first = acquire(&p, &look);
         assert!(matches!(first, LockOutcome::Acquired(_)));
         match acquire(&p, &look) {
-            LockOutcome::Busy { holder_pid, holder_elapsed } => {
+            LockOutcome::Busy {
+                holder_pid,
+                holder_elapsed,
+            } => {
                 assert_eq!(
                     holder_pid, "4242",
                     "RULE skip_row_names_holder: a skip row must NAME its blocker — \
@@ -245,7 +270,11 @@ mod tests {
         // A dead/finished holder's lock is NOT held. This is the kernel property that means a
         // crashed run can never wedge the lane — and the recovery path that must not be deleted.
         let p = tmp("stale");
-        let look = FakeLookup { pids: vec![], elapsed: None, calls: RefCell::new(0) };
+        let look = FakeLookup {
+            pids: vec![],
+            elapsed: None,
+            calls: RefCell::new(0),
+        };
         {
             let first = acquire(&p, &look);
             assert!(matches!(first, LockOutcome::Acquired(_)));
@@ -263,7 +292,11 @@ mod tests {
     fn rule_unusable_lock_fails_closed() {
         // A path that cannot be opened must refuse, never run unserialized.
         let p = Path::new("/nonexistent-root-xyz/deeper/fleet-monitor.run.lock");
-        let look = FakeLookup { pids: vec![], elapsed: None, calls: RefCell::new(0) };
+        let look = FakeLookup {
+            pids: vec![],
+            elapsed: None,
+            calls: RefCell::new(0),
+        };
         match acquire(p, &look) {
             LockOutcome::Unusable { .. } => {}
             other => panic!(
@@ -275,7 +308,11 @@ mod tests {
     #[test]
     fn rule_holder_unknown_when_os_cannot_say() {
         let p = tmp("unknown");
-        let look = FakeLookup { pids: vec![], elapsed: None, calls: RefCell::new(0) };
+        let look = FakeLookup {
+            pids: vec![],
+            elapsed: None,
+            calls: RefCell::new(0),
+        };
         let first = acquire(&p, &look);
         assert!(matches!(first, LockOutcome::Acquired(_)));
         match acquire(&p, &look) {
