@@ -1,0 +1,69 @@
+# THE FUZZ WORKSPACE. Its own `[workspace]` so the shared root manifest is never edited
+# (AGENTS.md: extraction drops crates into crates/ and never touches the root). Shape copied
+# from asupersync/fuzz/Cargo.toml and frankenterm/fuzz/Cargo.toml in the Dicklesworthstone
+# mirror: publish=false, `cargo-fuzz = true`, libfuzzer-sys 0.4, `arbitrary` derive, one
+# `[[bin]]` per target, `test = false` / `doc = false` / `bench = false`.
+#
+# Naming: `<crate>_<invariant>.rs`. The Op enum AND the reference model live IN the target
+# (frankenterm/fuzz/fuzz_targets/wire_envelope.rs:97-118, :307-345): the kernel crates stay
+# pure and carry no fuzz-only derives until a `fuzz` feature is worth its own bead.
+#
+# Run:   cargo +nightly fuzz run <target> -- -max_total_time=300
+# Gate:  cargo build --manifest-path fuzz/Cargo.toml      (every target must compile: the
+#        asupersync `fuzz-build-gate` job, .github/workflows/fuzz.yml)
+# Crash: cargo +nightly fuzz tmin <target> fuzz/artifacts/<target>/<crash>  -> a regression
+#        test in the owning crate BEFORE the fix lands (testing-fuzzing rule 10).
+
+[workspace]
+
+[package]
+name = "omp-orchestrator-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+receiver-receipt = { path = "../crates/receiver-receipt" }
+ack-stage = { path = "../crates/ack-stage" }
+tick-monitor = { path = "../crates/tick-monitor" }
+ack-spine = { path = "../crates/ack-spine", optional = true }
+
+# ack-spine drags asupersync (the 7.6 GB-peak codegen crate) into every fuzz build; it is a
+# feature so the three light targets build in minutes, not the hour the heavy one costs.
+[features]
+default = []
+ack-spine-targets = ["dep:ack-spine"]
+
+[[bin]]
+name = "ack_stage_verdict_lattice"
+path = "fuzz_targets/ack_stage_verdict_lattice.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "receiver_receipt_ack_wait"
+path = "fuzz_targets/receiver_receipt_ack_wait.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "tick_monitor_classify"
+path = "fuzz_targets/tick_monitor_classify.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ack_spine_close_reason_lattice"
+path = "fuzz_targets/ack_spine_close_reason_lattice.rs"
+required-features = ["ack-spine-targets"]
+test = false
+doc = false
+bench = false
