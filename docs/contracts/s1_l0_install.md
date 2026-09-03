@@ -177,7 +177,7 @@ S1_REQUIREMENTS=472 COVERED=103 MISSING=369 DOC_ONLY=0
 contract.named_test total=59 covered=37 missing=22 doc_only=0
 ```
 
-WORKTREE delta: total `+27`, covered `+26`, missing `+1`, doc-only unchanged. L0 is visible at 26 named tests and 26 stable IDs; 22 matrix test beads plus four law-only beads cover the named tests and 26 ID beads cover the stable block. WORKTREE L0 execution precondition: these coverage rows, 41 unclaimed row/law beads, their 41 gate edges, the installer crate, and the future `l0_install.rs` suite must exist before execution; the smallest planning gate is satisfied, but `BUILDABLE=no: crate and suite remain absent under BUILD FREEZE`.
+WORKTREE delta: total `+27`, covered `+26`, missing `+1`. L0 stable IDs 26/26 and named tests 26/26 are covered by 41 gate edges. The real suite is 9 tests: 8 pass, path-collision refuses by failing RED; 26 contract names collapse 26-to-9. `BUILDABLE=no: parent fsync, hook/skill/signature/report/uninstall modules remain absent; BUILD FREEZE controls implementation.`
 ## Rotation Lap 1 Axis (c): known-bad audit
 
 WORKTREE denominator: 81 test/law rows (`L0=22 L1=22 L2=22 L3=5 L4=5 L5=5`) plus one L0 self-scan leg = 82. Initial WORKTREE `NAMED-AND-PLAUSIBLE=71`, `UNNAMED=9`; L0 itself has no unnamed leg because all six laws map to concrete T rows.
@@ -211,4 +211,4 @@ Static install: `/usr/bin/install` fsyncs the destination fd, not its parent; no
 
 ## NO-CLAIM
 
-This contract does not establish that the installer, `ompo` commands, report writer, event writer, monitor, gate, SLO trigger, or `tests/l0_install.rs` exists or works. It establishes the complete build/test work required before L0 can close. The matrix's document validation is not a runtime proof. No crate code, Cargo manifest, workflow, installer source, or S2 work is authorized by this document. A build row is not complete until its implementation is wired, its acceptance is rerun, its known-good and mutation evidence exist where applicable, and a non-author grades it.
+This contract does not establish that the full installer (signature, parent-fsync, hooks/skills, report, uninstall), gate, or S1 runtime exists or works. `tests/l0_install.rs` is now a real suite: 8 pass and 1 known RED path-collision test. The matrix and suite do not authorize S2; a green suite would still require non-author grading and the missing production paths.
