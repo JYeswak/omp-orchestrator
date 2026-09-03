@@ -2,8 +2,8 @@
 
 > Generated from read-only measurement of this checkout. This projection is not canonical; only this output and the Atlas Arc bead were changed.
 
-Generated_at: `2026-09-03T21:42:32.828Z`  
-Repository_HEAD: `05cdd2adb10bcbc7b5da54fbc9529934146554a8`  
+Generated_at: `2026-09-03T21:42:32.828Z`
+Repository_HEAD: `05cdd2adb10bcbc7b5da54fbc9529934146554a8`
 S1_coverage: SUSPENDED after `5619f5bedc33ff6fff753a9fba12f0799e96541d feat(s1): add tree-backed coverage kernel [test]`; preserved, not reverted.
 
 ## Verdict
