@@ -138,7 +138,7 @@ Every matrix row has one filed, unclaimed bead. The acceptance in each bead repe
 Build: `B01=omp-orchestrator-s1-l0-b01-3vro`, `B02=omp-orchestrator-s1-l0-b02-grg4`, `B03=omp-orchestrator-s1-l0-b03-pp2o`, `B04=omp-orchestrator-s1-l0-b04-a6nx`, `B05=omp-orchestrator-s1-l0-b05-qsyg`, `B06=omp-orchestrator-s1-l0-b06-vz1p`, `B07=omp-orchestrator-s1-l0-b07-h6pu`, `B08=omp-orchestrator-s1-l0-b08-u7tm`, `B09=omp-orchestrator-s1-l0-b09-x282`, `B10=omp-orchestrator-s1-l0-b10-3r1g`, `B11=omp-orchestrator-s1-l0-b11-uegf`, `B12=omp-orchestrator-s1-l0-b12-rmr2`, `B13=omp-orchestrator-s1-l0-b13-ebyw`, `B14=omp-orchestrator-s1-l0-b14-f2jh`, `B15=omp-orchestrator-s1-l0-b15-ucvv`.
 
 Test: `T01=omp-orchestrator-s1-l0-t01-o34w`, `T02=omp-orchestrator-s1-l0-t02-mauc`, `T03=omp-orchestrator-s1-l0-t03-26ou`, `T04=omp-orchestrator-s1-l0-t04-kqne`, `T05=omp-orchestrator-s1-l0-t05-xe16`, `T06=omp-orchestrator-s1-l0-t06-3ga8`, `T07=omp-orchestrator-s1-l0-t07-ab3a`, `T08=omp-orchestrator-s1-l0-t08-aqao`, `T09=omp-orchestrator-s1-l0-t09-jx83`, `T10=omp-orchestrator-s1-l0-t10-6idp`, `T11=omp-orchestrator-s1-l0-t11-andf`, `T12=omp-orchestrator-s1-l0-t12-6t0k`, `T13=omp-orchestrator-s1-l0-t13-kvw6`, `T14=omp-orchestrator-s1-l0-t14-pccb`, `T15=omp-orchestrator-s1-l0-t15-tzul`, `T16=omp-orchestrator-s1-l0-t16-m61c`, `T17=omp-orchestrator-s1-l0-t17-sado`, `T18=omp-orchestrator-s1-l0-t18-sk8h`, `T19=omp-orchestrator-s1-l0-t19-shc0`, `T20=omp-orchestrator-s1-l0-t20-i6ki`, `T21=omp-orchestrator-s1-l0-t21-f6si`, `T22=omp-orchestrator-s1-l0-t22-bsfy`.
-
+Law tests: `LAW-FAIL=omp-orchestrator-s1-l0-law-fail-closed-d8v5`, `LAW-ATOMIC=omp-orchestrator-s1-l0-law-atomic-durable-rfs8`, `LAW-RESTORE=omp-orchestrator-s1-l0-law-restore-ylsu`, `LAW-REPORT=omp-orchestrator-s1-l0-law-report-before-success-lxdb`.
 ## Dispatch Preflight for L0
 
 `FILE → CLAIM → PACKET → ADMISSION → SEND → RECEIPT → ACK → OBSERVE → VERIFY → RECORD`.
@@ -154,30 +154,30 @@ C01 FIXED: this check does not read or grep `docs/contracts/s1_l0_install.md`; i
 
 ```bash
 set -eu
-rows="$(br list --json | jq '[.issues[] | select((.title|startswith("[L0-B")) or (.title|startswith("[L0-T")))] | length')"
-missing="$(br list --json | jq '[.issues[] | select(((.title|startswith("[L0-B")) or (.title|startswith("[L0-T"))) and ((.acceptance_criteria // .acceptance // "") == ""))] | length')"
-deps="$(br dep list omp-orchestrator-gate-s1-l0-jtgw --json | jq '[.[] | select(.depends_on_id | startswith("omp-orchestrator-s1-l0-b") or startswith("omp-orchestrator-s1-l0-t"))] | length')"
-test "$rows" -eq 37
+rows="$(br list --json | jq '[.issues[] | select((.title|startswith("[L0-B")) or (.title|startswith("[L0-T")) or (.title|startswith("[L0-LAW")))] | length')"
+missing="$(br list --json | jq '[.issues[] | select(((.title|startswith("[L0-B")) or (.title|startswith("[L0-T")) or (.title|startswith("[L0-LAW"))) and ((.acceptance_criteria // .acceptance // "") == ""))] | length')"
+deps="$(br dep list omp-orchestrator-gate-s1-l0-jtgw --json | jq '[.[] | select(.depends_on_id | startswith("omp-orchestrator-s1-l0-b") or startswith("omp-orchestrator-s1-l0-t") or startswith("omp-orchestrator-s1-l0-law-"))] | length')"
+test "$rows" -eq 41
 test "$missing" -eq 0
-test "$deps" -eq 37
+test "$deps" -eq 41
 printf 'WORKTREE_EXTERNAL_INPUT L0_EXTERNAL_MATRIX PASS row_beads=%s acceptance_missing=%s gate_matrix_dependencies=%s\n' "$rows" "$missing" "$deps"
 ```
 
 Pasted output (`WORKTREE`, external tracker inputs):
 
 ```text
-WORKTREE_EXTERNAL_INPUT L0_EXTERNAL_MATRIX PASS row_beads=37 acceptance_missing=0 gate_matrix_dependencies=37
+WORKTREE_EXTERNAL_INPUT L0_EXTERNAL_MATRIX PASS row_beads=41 acceptance_missing=0 gate_matrix_dependencies=41
 ```
 ## Rotation Lap 1 Axis (c): named-test denominator
 
-Pane 4's generator keys on backticked `file.rs::function` tokens. WORKTREE before: `contract.named_test total=32 covered=11 missing=21 doc_only=0`; L0 contributed zero. After normalizing all 22 WORKTREE test rows and law/invariant references to `l0_install.rs::<function>`, the same generator reported:
+Pane4 extractor `.git/s1_cov.py:16-18` requires a backticked `file.rs::function`. WORKTREE before: `contract.named_test 32/11/21`; after: L0 `named_test 26/22/4`, L0 `stable_id 26/26/0`. Decision: `NAMED_TEST_FORM=converted`; L3-L5 already use this grammar, so changing the extractor would hide the split.
 WORKTREE generator output:
 ```text
-S1_REQUIREMENTS=478 COVERED=72 MISSING=406 DOC_ONLY=0
-contract.named_test total=58 covered=33 missing=25 doc_only=0
+S1_REQUIREMENTS=472 COVERED=103 MISSING=369 DOC_ONLY=0
+contract.named_test total=59 covered=37 missing=22 doc_only=0
 ```
 
-WORKTREE delta: total `+26`, covered `+22`, missing `+4`, doc-only unchanged. L0 adds 22 covered rows; four law-only symbols remain MISSING. Generator output was restored and is not this change.
+WORKTREE delta: total `+27`, covered `+26`, missing `+1`, doc-only unchanged. L0 is visible at 26 named tests and 26 stable IDs; 22 matrix test beads plus four law-only beads cover the named tests and 26 ID beads cover the stable block. WORKTREE L0 execution precondition: these coverage rows, 41 unclaimed row/law beads, their 41 gate edges, the installer crate, and the future `l0_install.rs` suite must exist before execution; the smallest planning gate is satisfied, but `BUILDABLE=no: crate and suite remain absent under BUILD FREEZE`.
 ## Rotation Lap 1 Axis (c): known-bad audit
 
 WORKTREE denominator: 81 test/law rows (`L0=22 L1=22 L2=22 L3=5 L4=5 L5=5`) plus one L0 self-scan leg = 82. Initial WORKTREE `NAMED-AND-PLAUSIBLE=71`, `UNNAMED=9`; L0 itself has no unnamed leg because all six laws map to concrete T rows.
@@ -190,9 +190,7 @@ WORKTREE denominator: 81 test/law rows (`L0=22 L1=22 L2=22 L3=5 L4=5 L5=5`) plus
 Taxonomy attack: `SELF_SATISFYING` is a strict subset of `NAMED-BUT-WOULD-PASS`; both allow green without subject failure. C01 is now FIXED by external validation; C02 remains the one sibling-owned WOULD_PASS row. Historical buckets were `WOULD_PASS=2`, `SELF_SATISFYING=0`; current `WOULD_PASS=1`, `SELF_SATISFYING=0`, verdict `collapse`.
 ## Cross-Attack Retained from Wave 0
 
-Static `/usr/bin/install` measurement: `_fsync`, `_fcntl`, and `_rename` exist; arm64e code renames, reopens the destination, and fsyncs the destination fd, but has no parent-directory sync path or `F_FULLFSYNC` command. `dtruss` was denied by macOS SIP, so runtime tracing is UNMEASURED.
-
-The L3 non-owner attack ran `command -v ompo` plus tests for `crates/ompo-start/src/steps.rs` and `crates/ompo-start/tests/l3_step_parity.rs`: `OMPO=absent`; all paths absent. Its wave-0 object-identity stand-in remains UNPROVEN until its runner and suite exist.
+Static install: `/usr/bin/install` fsyncs the destination fd, not its parent; no `F_FULLFSYNC` path. `dtruss` was SIP-denied, so runtime tracing is UNMEASURED. L3: `ompo` and runner/suite paths absent; object-identity stand-in UNPROVEN.
 ## Cross-References
 
 - `docs/plan/flow/boxes/S1.toml:10-25,246-275` — L0 inputs/outputs, observability rows, metric, and known-bad requirements.
