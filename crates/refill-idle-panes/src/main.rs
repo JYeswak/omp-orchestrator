@@ -12,10 +12,12 @@
 
 use dispatch_claim_fence::{authorize, parse_br_show_json, BeadSnapshot, DispatchIntent};
 use refill_idle_panes::{
-    conflict_verdict, decide, measurability_refusal, measurability_verdict, packet_is_sendable,
-    parse_activity_view, parse_oracle_view, parse_ready_fallback,
-    parse_recommendations_with_skips, plan, reconciliation_failure, run_outcome, Assignment,
-    SkippedPick,
+    actuation_refusal, authorize_plan_line, conflict_verdict, decide, decide_capacity,
+    measurability_refusal,
+    measurability_verdict, packet_is_sendable, pane_index_map, parse_activity_view,
+    parse_oracle_view, parse_pane_table, parse_ready_fallback, parse_recommendations_with_skips,
+    plan, plan_line, reconciliation_failure, resolve_exclusions, roster_readability, run_outcome,
+    session_is_live, session_of_pane, Assignment, PaneRow, SkippedPick, APPROVAL_MARKER,
 };
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -68,6 +70,72 @@ fn probe_in(dir: Option<&str>, bin: &str, args: &[String], secs: u64) -> Option<
                     .map_or_else(|| "signal".to_owned(), |code| code.to_string())
             );
             None
+        }
+        BoundedOutcome::TimedOut => {
+            eprintln!("refill-idle-panes: {bin} timed out before its deadline");
+            None
+        }
+        BoundedOutcome::Unspawned(error) => {
+            eprintln!("refill-idle-panes: {bin} could not spawn: {error}");
+            None
+        }
+    }
+}
+
+/// Run a ROSTER probe whose readability is decided by its PAYLOAD, not its exit code.
+///
+/// # THE MEASURED DEFECT, 2026-09-03T21:10Z, live
+///
+/// ```text
+/// $ refill-idle-panes --plan
+/// refill-idle-panes: ~/.local/bin/pane-dispatch-ready exited=1
+/// refill: UNMEASURABLE detector=pane_roster why=unreadable_arm …
+///
+/// $ pane-dispatch-ready control-plane --json ; echo "exit=$?"
+/// {"schema":"zs.dispatch-ready.v1","panes":[{"pane":"0",…},{"pane":"1",…},
+///  {"pane":"2",…},{"pane":"3",…},{"pane":"4",…}],"free_count":0}
+/// exit=1
+/// ```
+///
+/// A COMPLETE five-pane roster, and exit 1. `pane-dispatch-ready` exits 1 to mean **zero
+/// FREE panes** — `crates/pane-dispatch-ready/src/main.rs:395`:
+///
+/// ```text
+/// if free_count > 0 { ExitCode::SUCCESS } else { ExitCode::from(1) }
+/// ```
+///
+/// [`probe_in`] discards stdout on ANY nonzero exit, so that roster arrived here as the
+/// empty string, parsed to `SetArm::Unreadable`, and the measurability gate refused. The
+/// kernel could not run at all whenever the fleet was busy — the exact state it exists to
+/// wait out. A semantic exit code was read as an I/O verdict.
+///
+/// # Why this is not a widening
+///
+/// Fail-closed is PRESERVED, because readability is still decided by the parser and the
+/// parser is unchanged. The paths that genuinely cannot read a session print NOTHING on
+/// stdout — `main.rs:270` (`tmux not available`, exit 2), `main.rs:280` (`no tmux
+/// sessions`, exit 1) — so they still arrive empty, still parse to `None`, and still
+/// refuse. What changed is only that a nonzero exit no longer ERASES a payload that
+/// parsed. Trimmed-empty stdout is still `None`.
+fn roster_probe(bin: &str, args: &[String], secs: u64) -> Option<String> {
+    let mut command = Command::new(bin);
+    command.args(args);
+    match bounded_output(&mut command, Duration::from_secs(secs)) {
+        BoundedOutcome::Completed(output) => {
+            let code = output
+                .status
+                .code()
+                .map_or_else(|| "signal".to_owned(), |code| code.to_string());
+            let text = String::from_utf8(output.stdout).ok()?;
+            if !output.status.success() {
+                eprintln!(
+                    "refill-idle-panes: {bin} exited={code} stdout_bytes={} \
+                     — the exit code is not the readability test; the parser is",
+                    text.len()
+                );
+            }
+            // ONE readability rule, in the lib, where the fixtures that pin it live.
+            roster_readability(&text).map(str::to_owned)
         }
         BoundedOutcome::TimedOut => {
             eprintln!("refill-idle-panes: {bin} timed out before its deadline");
@@ -449,17 +517,167 @@ fn append_ledger(
         .and_then(|_| file.sync_data())
         .map_err(|error| format!("ledger path={} write error={error}", path.display()))
 }
+/// The verb and the options it carries.
+#[derive(Debug, Clone, Default)]
+struct Invocation {
+    apply: bool,
+    session: Option<String>,
+    /// `--exclude-pane` specs in the order given, either `%6` or a bare index.
+    excludes: Vec<String>,
+}
+
+enum Verb {
+    Run(Invocation),
+    Selftest,
+}
+
+const USAGE: &str = "usage: refill-idle-panes [--plan|--apply|--selftest] \
+                     [--session NAME] [--exclude-pane %ID|INDEX]";
+
+/// Parse argv.
+///
+/// **`--exclude-pane` is the flag shape ALREADY IN USE in this fleet**, not a new one: the
+/// live watcher for this very session runs `tick-monitor watch --session omp-orchestrator
+/// … --exclude-pane %6 --exclude-pane %5`, and `crates/omp-orchestrator/src/main.rs:3124`
+/// is what builds those arguments. A second spelling would leave the conductor passing a
+/// flag refill does not read — indistinguishable, at the pane, from no exclusion at all.
+///
+/// An unknown flag is a refusal. A tool that ignores `--exclude-pane` because it was
+/// misspelt dispatches into the pane the flag was protecting.
+fn parse_invocation(args: &[String]) -> Result<Verb, String> {
+    let mut invocation = Invocation::default();
+    let mut selftest = false;
+    let mut rest = args.iter();
+    while let Some(arg) = rest.next() {
+        let (flag, inline) = match arg.split_once('=') {
+            Some((flag, value)) => (flag, Some(value.to_owned())),
+            None => (arg.as_str(), None),
+        };
+        match flag {
+            "--plan" => invocation.apply = false,
+            "--apply" => invocation.apply = true,
+            "--selftest" => selftest = true,
+            "--session" | "--exclude-pane" => {
+                let value = match inline {
+                    Some(value) => value,
+                    None => rest
+                        .next()
+                        .cloned()
+                        .ok_or_else(|| format!("{USAGE}\n  {flag} requires a value"))?,
+                };
+                if flag == "--session" {
+                    invocation.session = Some(value);
+                } else {
+                    invocation.excludes.push(value);
+                }
+            }
+            other => return Err(format!("{USAGE}\n  unknown flag: {other}")),
+        }
+    }
+    if selftest {
+        return Ok(Verb::Selftest);
+    }
+    Ok(Verb::Run(invocation))
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    match args.first().map(String::as_str) {
-        Some("--selftest") => selftest(),
-        Some("--apply") => run(true),
-        Some("--plan") | None => run(false),
-        _ => {
-            eprintln!("usage: refill-idle-panes [--plan|--apply|--selftest]");
+    match parse_invocation(&args) {
+        Ok(Verb::Selftest) => selftest(),
+        Ok(Verb::Run(invocation)) => run(&invocation),
+        Err(message) => {
+            eprintln!("{message}");
             ExitCode::from(2)
         }
     }
+}
+
+/// One tmux call that answers BOTH questions: which session holds `$TMUX_PANE`, and how
+/// pane ids map to the indices the rosters key on.
+const PANE_TABLE_FORMAT: &str = "#{pane_id} #{session_name} #{pane_index}";
+
+/// The session refill probes when nothing else names one.
+///
+/// Kept as the LAST resort rather than the first. A literal session name is how the one
+/// live supervisor came to supervise `control-plane` while this repository's own fleet
+/// went unrefilled — bead `omp-orchestrator-antiidle-loop-unwired-this-repo-fqhv`.
+const FALLBACK_SESSION: &str = "control-plane";
+
+/// Which tmux session holds the fleet this run should refill, and how that was decided.
+///
+/// MEASURED 2026-09-03T21:10Z: with the session hardcoded to `control-plane`, running
+/// `refill-idle-panes --plan` from this `omp-orchestrator` checkout probed
+/// `control-plane` — a different fleet, working a different repository. The packet's
+/// `Target:` line names the RESOLVED repository (see [`probe_in`]), so the repository that
+/// selects the work must also decide which fleet receives it. `probe_in`'s header records
+/// what happens otherwise: `omp-orchestrator-ack-spine-oj6.3` was sent to a control-plane
+/// pane.
+///
+/// Order: `--session` > `REFILL_SESSION` > a LIVE session named after the target
+/// repository > the session holding `$TMUX_PANE` > [`FALLBACK_SESSION`]. The provenance is
+/// returned and printed, because a session resolved from the wrong source is invisible
+/// otherwise — which is how the previous default survived.
+fn resolve_session(
+    flag: Option<&str>,
+    target: &str,
+    table: Option<&[PaneRow]>,
+) -> (String, String) {
+    if let Some(session) = flag.filter(|name| !name.is_empty()) {
+        return (session.to_owned(), "flag(--session)".to_owned());
+    }
+    if let Some(session) = std::env::var("REFILL_SESSION")
+        .ok()
+        .filter(|name| !name.is_empty())
+    {
+        return (session, "env(REFILL_SESSION)".to_owned());
+    }
+    if let Some(rows) = table {
+        if let Some(name) = Path::new(target).file_name().and_then(|name| name.to_str()) {
+            if session_is_live(rows, name) {
+                return (name.to_owned(), "target-repo".to_owned());
+            }
+        }
+        if let Some(pane) = std::env::var("TMUX_PANE")
+            .ok()
+            .filter(|pane| !pane.is_empty())
+        {
+            if let Some(session) = session_of_pane(rows, &pane) {
+                return (session, format!("tmux(TMUX_PANE={pane})"));
+            }
+        }
+    }
+    (FALLBACK_SESSION.to_owned(), "fallback-literal".to_owned())
+}
+
+/// Every pane refill must not propose, in the spelling the operator wrote it.
+///
+/// Three sources, all pre-existing:
+/// * `--exclude-pane`, the flag `tick-monitor watch` takes;
+/// * `OMP_EXCLUDE_PANES`, the comma list `crates/omp-orchestrator/src/main.rs:372` reads;
+/// * `$TMUX_PANE`, which the same file pushes onto the same list at :379-383.
+///
+/// The third is the one that fixes the measured defect without anyone remembering to:
+/// refill is invoked BY the conductor from the conductor's own pane, so `$TMUX_PANE` is
+/// how the orchestrator pane excludes ITSELF. A scheduled lane has no `$TMUX_PANE` and
+/// must set `OMP_EXCLUDE_PANES`; the resolved set is printed on every run so a lane that
+/// excludes nothing says so out loud.
+fn exclusion_specs(cli: &[String]) -> Vec<String> {
+    let env_list = env_or("OMP_EXCLUDE_PANES", "");
+    let self_pane = env_or("TMUX_PANE", "");
+    let mut specs: Vec<String> = Vec::new();
+    for candidate in cli
+        .iter()
+        .map(String::as_str)
+        .chain(env_list.split(','))
+        .chain(std::iter::once(self_pane.as_str()))
+    {
+        let spec = candidate.trim();
+        if spec.is_empty() || specs.iter().any(|known| known == spec) {
+            continue;
+        }
+        specs.push(spec.to_owned());
+    }
+    specs
 }
 /// Marker entries that identify a repository root while walking up from the cwd.
 const REPO_MARKERS: [&str; 2] = [".git", ".beads"];
@@ -484,7 +702,17 @@ fn resolve_target() -> Result<String, String> {
     ))
 }
 
-fn run(apply: bool) -> ExitCode {
+fn run(invocation: &Invocation) -> ExitCode {
+    // ACTUATION IS WITHHELD, AHEAD OF EVERY PROBE. See `actuation_refusal`: repairing the
+    // roster arm would otherwise have moved `--apply` from dead-by-breakage to live as a
+    // side effect of a diagnosis fix. A broken instrument and a withheld capability must
+    // not be the same state.
+    if invocation.apply {
+        let refusal = actuation_refusal();
+        eprintln!("{}", refusal.message);
+        return ExitCode::from(2);
+    }
+    let apply = invocation.apply;
     let target = match resolve_target() {
         Ok(target) => target,
         Err(message) => {
@@ -492,7 +720,37 @@ fn run(apply: bool) -> ExitCode {
             return ExitCode::from(64);
         }
     };
-    let session = env_or("REFILL_SESSION", "control-plane");
+    let table = parse_pane_table(
+        &probe(
+            "tmux",
+            &[
+                "list-panes".into(),
+                "-a".into(),
+                "-F".into(),
+                PANE_TABLE_FORMAT.into(),
+            ],
+            45,
+        )
+        .unwrap_or_default(),
+    );
+    let (session, session_source) =
+        resolve_session(invocation.session.as_deref(), &target, table.as_deref());
+    let specs = exclusion_specs(&invocation.excludes);
+    let pane_map = table
+        .as_deref()
+        .and_then(|rows| pane_index_map(rows, &session));
+    let exclusions = match resolve_exclusions(&specs, pane_map.as_ref()) {
+        Ok(exclusions) => exclusions,
+        Err(message) => {
+            eprintln!("{message}");
+            return ExitCode::from(2);
+        }
+    };
+    println!(
+        "refill: session={session} source={session_source} target={target} \
+         exclude_specs={specs:?} exclude_panes={:?} exclude_unmatched={:?}",
+        exclusions.indices, exclusions.unmatched
+    );
     let max: usize = env_or("REFILL_MAX_PANES", "")
         .parse()
         .unwrap_or(DEFAULT_MAX_PANES);
@@ -504,9 +762,10 @@ fn run(apply: bool) -> ExitCode {
         return ExitCode::from(1);
     }
 
-    let activity = probe("ntm", &[format!("--robot-activity={session}")], 45).unwrap_or_default();
+    let activity = roster_probe("ntm", &[format!("--robot-activity={session}")], 45)
+        .unwrap_or_default();
     let ready_bin = PathBuf::from(env_or("HOME", "")).join(".local/bin/pane-dispatch-ready");
-    let oracle = probe(
+    let oracle = roster_probe(
         &ready_bin.display().to_string(),
         &[session.clone(), "--json".into()],
         90,
@@ -530,7 +789,11 @@ fn run(apply: bool) -> ExitCode {
         return ExitCode::from(2);
     };
 
-    let decision = decide(&activity_view, &oracle_view);
+    // THE ORCHESTRATOR PANE LEAVES CAPACITY HERE, in the same call that classifies. One
+    // call, because two is how the exclusion set came to be resolved and printed while
+    // never being applied: measured 2026-09-03 on the live fleet, the header printed
+    // `exclude_panes={"1"}` while the same run's verdict printed `excluded=[]`.
+    let decision = decide_capacity(&activity_view, &oracle_view, &exclusions);
     let conflict = conflict_verdict(&activity_view, &oracle_view);
     let outcome = run_outcome(&decision, &conflict);
     let panes = decision.dispatchable.clone();
@@ -607,7 +870,10 @@ fn run(apply: bool) -> ExitCode {
             }
         };
         if !apply {
-            println!("PLAN  pane={pane} bead={bead} bytes={}", packet.len());
+            println!(
+                "{}",
+                plan_line(&Assignment { pane: pane.clone(), bead: bead.clone() }, packet.len())
+            );
             continue;
         }
 
@@ -937,6 +1203,86 @@ fn selftest() -> ExitCode {
         packet_is_sendable(10) == false,
     );
     check("a full-size packet is accepted", packet_is_sendable(7_347));
+
+    // The two namespaces, joined by tmux rather than guessed. `%6` is index 1 on the live
+    // fleet, and index 1 is the pane `AGENTS.md` measured refill proposing.
+    let table = parse_pane_table(
+        "%5 omp-orchestrator 0\n%6 omp-orchestrator 1\n%9 omp-orchestrator 4\n%1 control-plane 1\n",
+    )
+    .expect("fixture parses");
+    let map = pane_index_map(&table, "omp-orchestrator").expect("session is live");
+    let excluded = resolve_exclusions(&["%6".to_owned()], Some(&map)).expect("resolves");
+    let mut both_idle = decide(
+        &parse_activity_view(&format!(
+            r#"{{"agents":[{},{}]}}"#,
+            r#"{"pane":"1","observation_state":"idle","capture_provenance":"live","observation_freshness":"fresh"}"#,
+            r#"{"pane":"4","observation_state":"idle","capture_provenance":"live","observation_freshness":"fresh"}"#
+        ))
+        .expect("fixture parses"),
+        &parse_oracle_view(r#"{"panes":[{"pane":"1","state":"FREE"},{"pane":"4","state":"FREE"}]}"#)
+            .expect("fixture parses"),
+    );
+    check(
+        "without exclusion the ORCHESTRATOR pane really is proposed (the defect exists)",
+        both_idle.dispatchable == vec!["1".to_string(), "4".to_string()],
+    );
+    both_idle.withhold(&excluded);
+    check(
+        "%6 resolves to index 1 and the orchestrator pane leaves capacity",
+        both_idle.dispatchable == vec!["4".to_string()]
+            && both_idle.withheld == vec!["1".to_string()],
+    );
+    check(
+        "an unresolvable %-exclusion REFUSES rather than excluding nothing",
+        resolve_exclusions(&["%6".to_owned()], None).is_err(),
+    );
+    check(
+        "a session absent from the pane table yields NO map, not an empty one",
+        pane_index_map(&table, "no-such-session").is_none(),
+    );
+
+    // A PLAN IS NOT AN AUTHORIZATION.
+    let proposal = plan_line(
+        &Assignment {
+            pane: "4".into(),
+            bead: "omp-orchestrator-example".into(),
+        },
+        7_347,
+    );
+    check(
+        "every plan line carries the approval marker in the line itself",
+        proposal.contains(APPROVAL_MARKER),
+    );
+    check(
+        "a plan consumed with NO approval is refused",
+        authorize_plan_line(&proposal, None).is_err(),
+    );
+    check(
+        "an unmarked row cannot be laundered into a refill plan",
+        authorize_plan_line("PLAN  pane=4 bead=x bytes=1", Some("token")).is_err(),
+    );
+    check(
+        "an approved plan line IS actionable (the gate is satisfiable)",
+        authorize_plan_line(&proposal, Some("approval-2026-09-03")).is_ok(),
+    );
+    check(
+        "--apply is a NAMED refusal while actuation is withheld",
+        actuation_refusal().code == 2
+            && actuation_refusal().message.contains(APPROVAL_MARKER)
+            && actuation_refusal()
+                .message
+                .contains("detector=actuation_withheld"),
+    );
+    check(
+        "--exclude-pane parses in both spellings and an unknown flag refuses",
+        matches!(
+            &parse_invocation(&["--exclude-pane=%6".to_owned()]),
+            Ok(Verb::Run(inv)) if inv.excludes == vec!["%6".to_string()] && !inv.apply
+        ) && matches!(
+            &parse_invocation(&["--exclude-pane".to_owned(), "%6".to_owned()]),
+            Ok(Verb::Run(inv)) if inv.excludes == vec!["%6".to_string()]
+        ) && parse_invocation(&["--refill-everything".to_owned()]).is_err(),
+    );
 
     println!("---");
     println!("selftest fails={fails}");

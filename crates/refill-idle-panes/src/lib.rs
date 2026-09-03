@@ -250,6 +250,46 @@ fn activity_observation(agent: &serde_json::Value) -> Observation {
     }
 }
 
+/// Is a completed probe's stdout usable as a roster payload?
+///
+/// # THE MEASURED ROOT CAUSE, 2026-09-03T21:10Z
+///
+/// ```text
+/// $ refill-idle-panes --plan
+/// refill-idle-panes: ~/.local/bin/pane-dispatch-ready exited=1
+/// refill: UNMEASURABLE detector=pane_roster why=unreadable_arm …
+///
+/// $ pane-dispatch-ready control-plane --json ; echo "exit=$?"
+/// {"schema":"zs.dispatch-ready.v1","panes":[{"pane":"0",…},…,{"pane":"4",…}],"free_count":0}
+/// exit=1
+/// ```
+///
+/// A COMPLETE five-pane roster, and exit 1, because `pane-dispatch-ready` exits 1 to mean
+/// **zero FREE panes** — `crates/pane-dispatch-ready/src/main.rs:395`:
+/// `if free_count > 0 { ExitCode::SUCCESS } else { ExitCode::from(1) }`. The caller
+/// discarded stdout on any nonzero exit, so that roster arrived as the empty string and
+/// the measurability gate refused. **A semantic exit code was read as an I/O verdict**,
+/// and the selector could not run at all whenever the fleet was busy — the exact state it
+/// exists to wait out.
+///
+/// # Why an exit code is not a parameter here
+///
+/// It is not ignored; it is UNAVAILABLE. A function that cannot see the exit code cannot
+/// regress into gating on it, and the next reader cannot reintroduce the conflation by
+/// adding one condition.
+///
+/// Fail-closed is preserved, because readability is still decided downstream by the
+/// parsers: `pane-dispatch-ready`'s genuinely-unreadable paths print NOTHING on stdout
+/// (`main.rs:270` `tmux not available` exit 2, `main.rs:280` `no tmux sessions` exit 1),
+/// so they arrive empty, return `None` here, and still refuse.
+pub fn roster_readability(stdout: &str) -> Option<&str> {
+    if stdout.trim().is_empty() {
+        None
+    } else {
+        Some(stdout)
+    }
+}
+
 /// Parse `pane-dispatch-ready <session> --json` into a three-valued view.
 ///
 /// The key is `state`, and that is load-bearing: a fixture written against `status`
@@ -354,6 +394,14 @@ pub struct Decision {
     pub unconfirmed: Vec<String>,
     pub unknowable: Vec<String>,
     pub held: Vec<String>,
+    /// Every pane index the exclusion set names, whether or not it was dispatchable.
+    ///
+    /// Echoed on every run. The orchestrator pane is BUSY almost all the time, so a
+    /// report that only listed exclusions when they bit would leave "is the conductor
+    /// excluded?" unanswerable until the exact moment the answer stops mattering.
+    pub excluded: Vec<String>,
+    /// Panes that WERE dispatchable and were removed from capacity by the exclusion set.
+    pub withheld: Vec<String>,
 }
 
 impl Decision {
@@ -364,7 +412,174 @@ impl Decision {
             + self.unconfirmed.len()
             + self.unknowable.len()
             + self.held.len()
+            + self.withheld.len()
     }
+
+    /// Remove the excluded panes from CAPACITY, and from capacity only.
+    ///
+    /// THE MEASURED DEFECT (`AGENTS.md`): "`refill-idle-panes --plan` proposes `pane=1`,
+    /// the ORCHESTRATOR pane." Pane index 1 of session `omp-orchestrator` is `%6`, the
+    /// conductor — dispatching a bead into it interrupts the process that does the
+    /// dispatching.
+    ///
+    /// An excluded pane KEEPS its place in `conflicts` / `unconfirmed` / `unknowable`.
+    /// `crates/tick-monitor/src/main.rs:284` states the same rule for the same fleet:
+    /// "NOT excluded by `--exclude-pane`: the conductor's own pane can be obscured or
+    /// prompting too, and 'it is not worker capacity' is not 'I need not look at it'."
+    /// Exclusion is a capacity decision, never a blindfold.
+    pub fn withhold(&mut self, exclusions: &ExclusionSet) {
+        self.excluded = exclusions.indices.iter().cloned().collect();
+        sort_panes(&mut self.excluded);
+        let mut withheld = Vec::new();
+        self.dispatchable.retain(|pane| {
+            if exclusions.indices.contains(pane) {
+                withheld.push(pane.clone());
+                false
+            } else {
+                true
+            }
+        });
+        sort_panes(&mut withheld);
+        self.withheld = withheld;
+    }
+}
+
+/// One row of `tmux list-panes -a -F '#{pane_id} #{session_name} #{pane_index}'`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PaneRow {
+    pub pane_id: String,
+    pub session: String,
+    pub index: String,
+}
+
+/// Parse the tmux pane table.
+///
+/// **Two namespaces have to be joined by tmux itself.** Both roster surfaces key panes by
+/// INDEX (`ntm --robot-activity` emits `"pane":"1"`, `pane-dispatch-ready` emits
+/// `"pane":"0"`), while every exclusion in this fleet is written as a tmux pane ID: the
+/// live watcher for this very session runs
+/// `tick-monitor watch --session omp-orchestrator … --exclude-pane %6 --exclude-pane %5`,
+/// and `crates/omp-orchestrator/src/main.rs:379` pushes `$TMUX_PANE` onto that same list.
+/// Assuming `%6` means index 6 is how an exclusion silently stops excluding — measured
+/// live 2026-09-03: `%5 %6 %7 %8 %9` are indices `0 1 2 3 4`.
+///
+/// `None` on an empty or unparseable listing. A live server cannot have zero panes, so an
+/// empty table is a broken probe, never "no panes to exclude".
+pub fn parse_pane_table(text: &str) -> Option<Vec<PaneRow>> {
+    let rows: Vec<PaneRow> = text
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            let pane_id = fields.next()?;
+            let session = fields.next()?;
+            let index = fields.next()?;
+            if !pane_id.starts_with('%') || index.parse::<u64>().is_err() {
+                return None;
+            }
+            Some(PaneRow {
+                pane_id: pane_id.to_owned(),
+                session: session.to_owned(),
+                index: index.to_owned(),
+            })
+        })
+        .collect();
+    if rows.is_empty() {
+        None
+    } else {
+        Some(rows)
+    }
+}
+
+/// Which session holds this pane id, if the table knows.
+pub fn session_of_pane(rows: &[PaneRow], pane_id: &str) -> Option<String> {
+    rows.iter()
+        .find(|row| row.pane_id == pane_id)
+        .map(|row| row.session.clone())
+}
+
+/// Is this session present in the table at all?
+pub fn session_is_live(rows: &[PaneRow], session: &str) -> bool {
+    rows.iter().any(|row| row.session == session)
+}
+
+/// `pane_id -> pane_index` for ONE session.
+///
+/// `None` when the session contributed no rows — an absent session is not a session with
+/// nothing to exclude.
+pub fn pane_index_map(rows: &[PaneRow], session: &str) -> Option<BTreeMap<String, String>> {
+    let map: BTreeMap<String, String> = rows
+        .iter()
+        .filter(|row| row.session == session)
+        .map(|row| (row.pane_id.clone(), row.index.clone()))
+        .collect();
+    if map.is_empty() {
+        None
+    } else {
+        Some(map)
+    }
+}
+
+/// The panes refill may never propose, resolved into the index namespace the rosters use.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ExclusionSet {
+    /// Pane INDICES excluded from capacity.
+    pub indices: BTreeSet<String>,
+    /// `%`-form specs that named no pane in the target session. Reported rather than
+    /// dropped in silence: an exclusion aimed at another fleet is worth seeing, and an
+    /// exclusion aimed at a pane that has since died is worth seeing too.
+    pub unmatched: Vec<String>,
+}
+
+/// Resolve `--exclude-pane` specs against the target session's pane table.
+///
+/// Accepts both namespaces, because both are in live use: `%6` (the shape
+/// `tick-monitor watch --session omp-orchestrator … --exclude-pane %6` passes, and the
+/// shape `$TMUX_PANE` carries) and a bare index `1` (the shape the rosters speak).
+///
+/// **A `%`-spec that cannot be resolved is a REFUSAL, not an empty exclusion.** Silently
+/// dropping `%6` because tmux was unreadable proposes the conductor's own pane — the
+/// precise defect this function exists to prevent. A bare index needs no table and is
+/// taken at face value; it can only ever match fewer panes than intended, never more.
+pub fn resolve_exclusions(
+    specs: &[String],
+    pane_map: Option<&BTreeMap<String, String>>,
+) -> Result<ExclusionSet, String> {
+    let mut set = ExclusionSet::default();
+    for raw in specs {
+        let spec = raw.trim();
+        if spec.is_empty() {
+            continue;
+        }
+        if spec.starts_with('%') {
+            let Some(map) = pane_map else {
+                return Err(format!(
+                    "refill: UNMEASURABLE detector=pane_index_map spec={spec} \
+                     why=an exclusion named a tmux pane id and the pane table was unreadable \
+                     probe=`tmux list-panes -a -F '#{{pane_id}} #{{session_name}} #{{pane_index}}'` \
+                     remedy=an unresolvable exclusion is not an absent exclusion; refusing rather \
+                     than proposing the pane the exclusion exists to protect"
+                ));
+            };
+            match map.get(spec) {
+                Some(index) => {
+                    set.indices.insert(index.clone());
+                }
+                None => set.unmatched.push(spec.to_owned()),
+            }
+            continue;
+        }
+        if spec.parse::<u64>().is_ok() {
+            set.indices.insert(spec.to_owned());
+            continue;
+        }
+        return Err(format!(
+            "refill: usage detector=exclude_pane spec={spec} \
+             why=neither a tmux pane id (`%6`) nor a pane index (`1`) \
+             remedy=an unparsed exclusion would silently exclude nothing; pass the shape \
+             `tick-monitor watch --exclude-pane %6` uses, or the index the rosters key on"
+        ));
+    }
+    Ok(set)
 }
 
 /// Sort numerically where possible so a run is reproducible and diffable.
@@ -395,6 +610,24 @@ pub fn decide(activity: &SurfaceView, oracle: &SurfaceView) -> Decision {
     sort_panes(&mut decision.unconfirmed);
     sort_panes(&mut decision.unknowable);
     sort_panes(&mut decision.held);
+    decision
+}
+
+/// Resolve capacity from both surfaces AND the exclusion set, in ONE call.
+///
+/// The production path uses this rather than `decide` followed by
+/// [`Decision::withhold`], because two calls is how the exclusion set came to be resolved
+/// and PRINTED while never being applied. Measured live on 2026-09-03, from the run that
+/// caught it: the header said `exclude_panes={"1"}` and the same run's verdict said
+/// `excluded=[]`. A resolved-but-unapplied guard is worse than an absent one — it reads,
+/// to a log reader and to the next author, exactly like a working guard.
+pub fn decide_capacity(
+    activity: &SurfaceView,
+    oracle: &SurfaceView,
+    exclusions: &ExclusionSet,
+) -> Decision {
+    let mut decision = decide(activity, oracle);
+    decision.withhold(exclusions);
     decision
 }
 
@@ -568,6 +801,23 @@ pub fn run_outcome(decision: &Decision, conflict: &OracleCompareVerdict) -> Refi
             code: 2,
         };
     }
+    // ORDERING: this sits AFTER the unmeasurable branch on purpose. If capacity was
+    // withheld AND some pane could not be established, the unresolved observation is the
+    // louder fact and keeps its nonzero exit. Exclusion may empty the plan; it may never
+    // convert a refusal into a pass.
+    if decision.dispatchable.is_empty() && !decision.withheld.is_empty() {
+        return RefillOutcome {
+            message: format!(
+                "refill: every dispatchable pane is EXCLUDED from capacity \
+                 (withheld={:?}, excluded={:?}, held={}) — the fleet has no WORKER \
+                 capacity, and an excluded pane is not capacity",
+                decision.withheld,
+                decision.excluded,
+                decision.held.len()
+            ),
+            code: 0,
+        };
+    }
     if decision.dispatchable.is_empty() {
         return RefillOutcome {
             message: format!(
@@ -581,12 +831,15 @@ pub fn run_outcome(decision: &Decision, conflict: &OracleCompareVerdict) -> Refi
     }
     RefillOutcome {
         message: format!(
-            "refill: {} dispatchable pane(s) {:?} (held={}, unconfirmed={}, unknowable={})",
+            "refill: {} dispatchable pane(s) {:?} \
+             (held={}, unconfirmed={}, unknowable={}, excluded={:?}, withheld={:?})",
             decision.dispatchable.len(),
             decision.dispatchable,
             decision.held.len(),
             decision.unconfirmed.len(),
-            decision.unknowable.len()
+            decision.unknowable.len(),
+            decision.excluded,
+            decision.withheld
         ),
         code: 0,
     }
@@ -794,6 +1047,94 @@ pub const MIN_PACKET_BYTES: usize = 400;
 /// Is this rendered packet substantial enough to send?
 pub const fn packet_is_sendable(bytes: usize) -> bool {
     bytes > MIN_PACKET_BYTES
+}
+
+// -------------------------------------------------------------------------------------
+// A PLAN IS NOT AN AUTHORIZATION
+// -------------------------------------------------------------------------------------
+//
+// STANDING CONSTRAINT, 2026-09-03, from the repository owner, verbatim: "we dont want to
+// automatically refill panes with work without being approved - we have to reap every
+// update and get docs updated - we dont want auto refill until our process is proven."
+//
+// The distinction is NOT less automation. Notification is wanted — a pane finishing must
+// reach the conductor as a loud event. ACTUATION is not: what the conductor does next is
+// a judgement that gets reaped, documented and approved first.
+//
+// This crate is the SELECTION half and it stops at a proposal. The failure mode that
+// makes that a code problem rather than a policy one: a plan line and a dispatch order
+// are the same bytes, so any downstream reader that finds a `PLAN pane=… bead=…` row can
+// treat it as an order and nobody can tell from the row that it was not one. The marker
+// below is what makes them different bytes.
+
+/// The token every planned assignment carries so a plan can never read as an order.
+pub const APPROVAL_MARKER: &str = "APPROVAL_REQUIRED";
+
+/// Why an actuator may not act on a refill plan on the strength of the plan alone.
+pub const APPROVAL_REASON: &str = "reap-and-document-before-refill";
+
+/// Render one planned assignment as a PROPOSAL.
+///
+/// The marker is in the line itself, not in a header the reader may never have seen and
+/// not in a sidecar an actuator can skip. One line, self-describing, greppable.
+pub fn plan_line(assignment: &Assignment, bytes: usize) -> String {
+    format!(
+        "PLAN  pane={} bead={} bytes={bytes} {APPROVAL_MARKER}={APPROVAL_REASON} \
+         note=refill-idle-panes PROPOSES this pairing; it does not authorize it",
+        assignment.pane, assignment.bead
+    )
+}
+
+/// May a consumer ACT on this plan line?
+///
+/// Two ways to be refused, and both are defects a plan-as-order reader would have:
+/// * the line carries no [`APPROVAL_MARKER`], so its provenance cannot be established —
+///   and an unestablished provenance is not a permissive one;
+/// * the line carries the marker and the consumer brought no approval token of its own.
+///
+/// The token is deliberately opaque here. This function decides only that SOMETHING
+/// approved outside refill; who may issue one is the approving system's question, and
+/// answering it here would put the approver and the requester in the same binary.
+pub fn authorize_plan_line(line: &str, approval: Option<&str>) -> Result<(), String> {
+    if !line.contains(APPROVAL_MARKER) {
+        return Err(format!(
+            "refill: PLAN_UNMARKED detector=plan_provenance why=a plan line without \
+             `{APPROVAL_MARKER}` cannot be shown to have come from a refill proposal \
+             remedy=an unestablished provenance is not a permissive one; refusing"
+        ));
+    }
+    match approval.map(str::trim).filter(|token| !token.is_empty()) {
+        Some(_) => Ok(()),
+        None => Err(format!(
+            "refill: {APPROVAL_MARKER} detector=plan_consumed_unapproved \
+             reason={APPROVAL_REASON} why=this row is a PROPOSAL and carries no approval \
+             remedy=reap the finished work, update the docs, then approve; a plan is not \
+             an authorization"
+        )),
+    }
+}
+
+/// The refusal `--apply` returns while actuation is withheld.
+///
+/// **This crate's dispatch path is INERT BY DECISION, not by breakage.** It was inert by
+/// breakage until 2026-09-03: every verb, `--apply` included, died on
+/// `UNMEASURABLE detector=pane_roster` before reaching a send. Repairing that arm — the
+/// whole point of the fix — would have moved `--apply` from dead to LIVE as a side effect,
+/// which is precisely the actuation the standing constraint withholds. So the verb refuses
+/// HERE, at the top of `run`, ahead of every probe: a broken instrument and a withheld
+/// capability must not be the same state, because repairing the instrument then silently
+/// grants the capability.
+pub fn actuation_refusal() -> RefillOutcome {
+    RefillOutcome {
+        message: format!(
+            "refill: {APPROVAL_MARKER} detector=actuation_withheld verb=--apply \
+             reason={APPROVAL_REASON} why=the selection half proposes and stops; \
+             auto-refill is withheld until the reap-and-document process is proven \
+             remedy=run `--plan`, reap and document the finished work, then dispatch \
+             under an approval that is not this plan"
+        ),
+        code: 2,
+    }
 }
 
 #[cfg(test)]
@@ -1474,9 +1815,11 @@ mod tests {
     /// that a checked claim instead of a sentence.
     ///
     /// The enumeration is over the SHAPES `run_outcome` branches on, not over sampled
-    /// fixtures: each of conflicts / unconfirmed / unknowable / held / dispatchable is
-    /// varied empty-vs-nonempty, all 32 combinations, against both kernel verdicts. A
-    /// sampled test would pass while a new branch returned 3.
+    /// fixtures: each of conflicts / unconfirmed / unknowable / held / dispatchable /
+    /// withheld is varied empty-vs-nonempty, all 64 combinations, against all three
+    /// kernel verdicts. A sampled test would pass while a new branch returned 3 — which
+    /// is exactly the risk the `withheld` branch introduced, so the slot count grew with
+    /// the branch rather than after it.
     #[test]
     fn run_outcome_only_ever_yields_a_documented_exit_code() {
         const DOCUMENTED: [u8; 3] = [0, 1, 2];
@@ -1490,7 +1833,7 @@ mod tests {
         ];
         let mut seen: BTreeSet<u8> = BTreeSet::new();
         let mut cases = 0usize;
-        for bits in 0u8..32 {
+        for bits in 0u8..64 {
             let pick = |slot: u8, name: &str| -> Vec<String> {
                 if bits & (1 << slot) == 0 {
                     Vec::new()
@@ -1498,13 +1841,24 @@ mod tests {
                     vec![name.to_string()]
                 }
             };
-            let decision = Decision {
+            let mut decision = Decision {
                 dispatchable: pick(0, "2"),
                 conflicts: pick(1, "3"),
                 unconfirmed: pick(2, "4"),
                 unknowable: pick(3, "5"),
                 held: pick(4, "6"),
+                excluded: Vec::new(),
+                withheld: Vec::new(),
             };
+            // Reached through `withhold` rather than by writing the field, so the
+            // enumeration exercises the real production path into the branch.
+            if bits & (1 << 5) != 0 {
+                decision.dispatchable.push("7".to_owned());
+                decision.withhold(&ExclusionSet {
+                    indices: BTreeSet::from(["7".to_owned()]),
+                    unmatched: Vec::new(),
+                });
+            }
             for verdict in &verdicts {
                 let outcome = run_outcome(&decision, verdict);
                 cases += 1;
@@ -1519,8 +1873,8 @@ mod tests {
             }
         }
         assert_eq!(
-            cases, 96,
-            "the enumeration must actually run all 32x3 shapes"
+            cases, 192,
+            "the enumeration must actually run all 64x3 shapes"
         );
         assert_eq!(
             seen.iter().copied().collect::<Vec<u8>>(),
@@ -1562,5 +1916,400 @@ mod tests {
         // every dispatch while reporting itself healthy.
         assert!(packet_is_sendable(MIN_PACKET_BYTES + 1));
         assert!(packet_is_sendable(7_347));
+    }
+
+    // -----------------------------------------------------------------------------------
+    // The orchestrator exclusion
+    // -----------------------------------------------------------------------------------
+
+    /// VERBATIM `tmux list-panes -a -F '#{pane_id} #{session_name} #{pane_index}'`,
+    /// captured 2026-09-03T21:10Z on the live server, `omp-orchestrator` rows only.
+    ///
+    /// `%6` is INDEX 1 — the number the rosters key on and the number `AGENTS.md` measured
+    /// refill proposing. The two namespaces do not coincide anywhere in this table, which
+    /// is why the mapping cannot be guessed.
+    const LIVE_PANE_TABLE: &str = "%5 omp-orchestrator 0\n\
+                                   %6 omp-orchestrator 1\n\
+                                   %7 omp-orchestrator 2\n\
+                                   %8 omp-orchestrator 3\n\
+                                   %9 omp-orchestrator 4\n\
+                                   %0 control-plane 0\n\
+                                   %1 control-plane 1\n";
+
+    fn live_table() -> Vec<PaneRow> {
+        parse_pane_table(LIVE_PANE_TABLE).expect("the live table parses")
+    }
+
+    #[test]
+    fn the_pane_table_joins_the_id_and_index_namespaces_per_session() {
+        let rows = live_table();
+        let map = pane_index_map(&rows, "omp-orchestrator").expect("session is live");
+        assert_eq!(map.get("%6").map(String::as_str), Some("1"));
+        assert_eq!(map.get("%9").map(String::as_str), Some("4"));
+        assert_eq!(
+            map.len(),
+            5,
+            "the map must be SCOPED to one session — control-plane also has a %1 and an \
+             index 1, and mixing the two excludes a stranger's pane: {map:?}"
+        );
+        assert_eq!(
+            session_of_pane(&rows, "%6").as_deref(),
+            Some("omp-orchestrator"),
+            "$TMUX_PANE=%6 must resolve to the session that holds it"
+        );
+        assert!(session_is_live(&rows, "control-plane"));
+        assert!(!session_is_live(&rows, "no-such-session"));
+    }
+
+    /// KNOWN-BAD LEG: an unreadable table is not an empty table.
+    #[test]
+    fn an_empty_or_unparseable_pane_table_is_none_not_an_empty_map() {
+        assert_eq!(parse_pane_table(""), None);
+        assert_eq!(parse_pane_table("\n\n"), None);
+        // A tmux error on stdout must not parse as a roster of zero panes.
+        assert_eq!(parse_pane_table("no server running on /tmp/x"), None);
+        assert_eq!(pane_index_map(&live_table(), "gone"), None);
+    }
+
+    /// THE DEFECT `AGENTS.md` MEASURED: a plan naming pane 1, the orchestrator.
+    ///
+    /// Both surfaces confidently report the conductor idle — which they do, between its
+    /// turns — and the join dispatches it. With `%6` excluded the same input plans only
+    /// worker panes.
+    #[test]
+    fn the_orchestrator_pane_is_never_proposed_once_its_pane_id_is_excluded() {
+        let activity = ntm(&[("1", "idle"), ("2", "idle"), ("3", "working")]);
+        let oracle_view = oracle(&[("1", "FREE"), ("2", "FREE"), ("3", "BUSY")]);
+        let mut decision = decide(&activity, &oracle_view);
+        assert_eq!(
+            decision.dispatchable,
+            vec!["1".to_string(), "2".to_string()],
+            "PRE-FIX BEHAVIOUR, pinned: without exclusion the orchestrator pane IS \
+             proposed. If this ever stops holding, the exclusion below is being proved \
+             against an input that never had the defect."
+        );
+
+        let map = pane_index_map(&live_table(), "omp-orchestrator").expect("session is live");
+        let exclusions = resolve_exclusions(&["%6".to_owned()], Some(&map)).expect("resolves");
+        assert_eq!(exclusions.indices, BTreeSet::from(["1".to_owned()]));
+        decision.withhold(&exclusions);
+
+        assert_eq!(decision.dispatchable, vec!["2".to_string()]);
+        assert_eq!(decision.withheld, vec!["1".to_string()]);
+        assert_eq!(decision.excluded, vec!["1".to_string()]);
+        let plan = plan(&decision.dispatchable, &["bead-a".to_owned()], 8);
+        assert!(
+            plan.iter().all(|assignment| assignment.pane != "1"),
+            "the ORCHESTRATOR pane reached a plan: {plan:?}"
+        );
+    }
+
+    /// Exclusion is a CAPACITY decision, not a blindfold — the rule
+    /// `crates/tick-monitor/src/main.rs:284` states for this same fleet.
+    #[test]
+    fn an_excluded_pane_keeps_its_place_in_the_findings() {
+        let activity = ntm(&[("1", "idle")]);
+        let oracle_view = oracle(&[("1", "BUSY")]);
+        let mut decision = decide(&activity, &oracle_view);
+        assert_eq!(decision.conflicts, vec!["1".to_string()]);
+        decision.withhold(&ExclusionSet {
+            indices: BTreeSet::from(["1".to_owned()]),
+            unmatched: Vec::new(),
+        });
+        assert_eq!(
+            decision.conflicts,
+            vec!["1".to_string()],
+            "a two-surface contradiction on the conductor's pane is still a finding"
+        );
+        let outcome = run_outcome(&decision, &conflict_verdict(&activity, &oracle_view));
+        assert_eq!(outcome.code, 1, "{}", outcome.message);
+        assert!(outcome.message.contains("SURFACE_CONFLICT"));
+    }
+
+    /// KNOWN-BAD LEG: a `%`-spec with no table REFUSES. Dropping it would propose the
+    /// pane the exclusion exists to protect.
+    #[test]
+    fn an_unresolvable_pane_id_exclusion_refuses_rather_than_excluding_nothing() {
+        let error = resolve_exclusions(&["%6".to_owned()], None)
+            .expect_err("an unresolvable exclusion must refuse");
+        assert!(error.contains("UNMEASURABLE"), "{error}");
+        assert!(error.contains("detector=pane_index_map"), "{error}");
+        assert!(error.contains("%6"), "{error}");
+
+        // A spec in neither namespace is a usage refusal, not a silent no-op.
+        let map = pane_index_map(&live_table(), "omp-orchestrator").expect("session is live");
+        let bad = resolve_exclusions(&["orchestrator".to_owned()], Some(&map))
+            .expect_err("an unparsed spec must refuse");
+        assert!(bad.contains("detector=exclude_pane"), "{bad}");
+
+        // KNOWN-GOOD on the same path: no specs at all needs no table and refuses nothing.
+        assert_eq!(
+            resolve_exclusions(&[], None).expect("no specs, no refusal"),
+            ExclusionSet::default()
+        );
+        // And a bare index needs no table either — it can only ever match fewer panes.
+        assert_eq!(
+            resolve_exclusions(&["1".to_owned()], None)
+                .expect("a bare index needs no table")
+                .indices,
+            BTreeSet::from(["1".to_owned()])
+        );
+    }
+
+    /// A `%`-spec naming another fleet's pane is REPORTED, not silently swallowed.
+    #[test]
+    fn an_exclusion_aimed_at_another_session_is_reported_as_unmatched() {
+        let map = pane_index_map(&live_table(), "omp-orchestrator").expect("session is live");
+        let set = resolve_exclusions(&["%1".to_owned(), "%6".to_owned()], Some(&map))
+            .expect("resolves");
+        assert_eq!(
+            set.indices,
+            BTreeSet::from(["1".to_owned()]),
+            "%1 belongs to control-plane and must NOT resolve to omp-orchestrator index 1"
+        );
+        assert_eq!(set.unmatched, vec!["%1".to_string()]);
+    }
+
+    /// Exclusion may empty the plan. It may NEVER turn a refusal into a pass, and the
+    /// zero it does report must say WHY it is zero.
+    #[test]
+    fn withholding_the_last_dispatchable_pane_reports_exclusion_and_not_a_quiet_fleet() {
+        let activity = ntm(&[("1", "idle"), ("2", "working")]);
+        let oracle_view = oracle(&[("1", "FREE"), ("2", "BUSY")]);
+        let mut decision = decide(&activity, &oracle_view);
+        decision.withhold(&ExclusionSet {
+            indices: BTreeSet::from(["1".to_owned()]),
+            unmatched: Vec::new(),
+        });
+        let outcome = run_outcome(&decision, &conflict_verdict(&activity, &oracle_view));
+        assert_eq!(outcome.code, 0, "{}", outcome.message);
+        assert!(outcome.message.contains("EXCLUDED"), "{}", outcome.message);
+        assert!(
+            outcome.message.contains("withheld=[\"1\"]"),
+            "the zero must name the pane it withheld: {}",
+            outcome.message
+        );
+        assert!(
+            !outcome.message.contains("genuine no-work"),
+            "an excluded fleet is not a quiet fleet: {}",
+            outcome.message
+        );
+        assert_eq!(
+            decision.observed(),
+            2,
+            "a withheld pane was still OBSERVED and must stay in the denominator"
+        );
+    }
+
+    /// KNOWN-GOOD LEG. An exclusion set that matches nothing must leave every worker pane
+    /// dispatchable, and the run must still ECHO the set — the orchestrator is busy almost
+    /// always, so a report that only spoke when exclusion bit would answer "is the
+    /// conductor excluded?" only when it no longer matters.
+    #[test]
+    fn an_exclusion_that_bites_nothing_leaves_the_workers_dispatchable_and_still_echoes() {
+        let activity = ntm(&[("1", "working"), ("4", "idle")]);
+        let oracle_view = oracle(&[("0", "NO_AGENT"), ("1", "BUSY"), ("4", "FREE")]);
+        let mut decision = decide(&activity, &oracle_view);
+        let map = pane_index_map(&live_table(), "omp-orchestrator").expect("session is live");
+        decision.withhold(
+            &resolve_exclusions(&["%6".to_owned(), "%5".to_owned()], Some(&map)).expect("resolves"),
+        );
+        assert_eq!(
+            decision.dispatchable,
+            vec!["4".to_string()],
+            "the worker pane must survive exclusion: {decision:?}"
+        );
+        assert!(decision.withheld.is_empty());
+        let outcome = run_outcome(&decision, &conflict_verdict(&activity, &oracle_view));
+        assert_eq!(outcome.code, 0, "{}", outcome.message);
+        assert!(
+            outcome.message.contains("excluded=[\"0\", \"1\"]"),
+            "the echo must name the excluded indices even when none bit: {}",
+            outcome.message
+        );
+    }
+
+    // -----------------------------------------------------------------------------------
+    // The root cause: a semantic exit code read as an I/O verdict
+    // -----------------------------------------------------------------------------------
+
+    /// VERBATIM `pane-dispatch-ready control-plane --json`, 2026-09-03T21:11Z, the run
+    /// that **exited 1** while emitting this complete roster. Trimmed only in `reason`.
+    const ZERO_FREE_ORACLE: &str = r#"{"schema":"zs.dispatch-ready.v1","panes":[
+        {"pane":"0","reason":"no prompt marker in the live region","session":"control-plane","state":"BUSY"},
+        {"pane":"1","reason":"pane buffer changed over 10s","session":"control-plane","state":"BUSY"},
+        {"pane":"2","reason":"no prompt marker in the live region","session":"control-plane","state":"BUSY"},
+        {"pane":"3","reason":"no prompt marker in the live region","session":"control-plane","state":"BUSY"},
+        {"pane":"4","reason":"no agent process rendering in this pane (bare shell)","session":"control-plane","state":"NO_AGENT"}],
+        "free_count":0}"#;
+
+    /// KNOWN-GOOD LEG on the exact payload that used to be discarded.
+    ///
+    /// `free_count: 0` with exit 1 is a fully READ session in which nothing is free. That
+    /// is the healthy busy-fleet answer, and the kernel could not reach it.
+    #[test]
+    fn a_zero_free_roster_is_readable_and_resolves_to_a_confidently_busy_fleet() {
+        let payload = roster_readability(ZERO_FREE_ORACLE).expect("a full roster is readable");
+        let oracle_view = parse_oracle_view(payload).expect("the verbatim payload parses");
+        assert_eq!(
+            oracle_view.panes.len(),
+            5,
+            "the payload the old caller threw away held five classified panes"
+        );
+        let activity = ntm(&[("1", "working"), ("2", "working")]);
+        assert!(
+            measurability_refusal(&measurability_verdict(
+                &format!(
+                    r#"{{"agents":[{},{}]}}"#,
+                    ntm_row("1", "working"),
+                    ntm_row("2", "working")
+                ),
+                ZERO_FREE_ORACLE
+            ))
+            .is_none(),
+            "with the payload kept, the roster comparison is MEASURABLE — this is the \
+             whole fix, and before it every busy fleet reported UNMEASURABLE"
+        );
+        let decision = decide(&activity, &oracle_view);
+        assert!(decision.dispatchable.is_empty());
+        let outcome = run_outcome(&decision, &conflict_verdict(&activity, &oracle_view));
+        assert_eq!(outcome.code, 0, "{}", outcome.message);
+    }
+
+    /// KNOWN-BAD LEG. The fix must not widen into a pass: the paths that genuinely cannot
+    /// read a session print nothing on stdout, and those must still refuse.
+    #[test]
+    fn an_empty_or_unparseable_roster_still_refuses_however_the_probe_exited() {
+        for empty in ["", "   ", "\n\t\n"] {
+            assert_eq!(
+                roster_readability(empty),
+                None,
+                "an empty payload is unreadable no matter what the exit code said"
+            );
+        }
+        // `tmux not available` / `no tmux sessions` go to stderr; stdout is empty, so the
+        // arm arrives here as the empty string and the gate must still refuse.
+        let refusal = measurability_refusal(&measurability_verdict(
+            &format!(r#"{{"agents":[{}]}}"#, ntm_row("1", "working")),
+            "",
+        ))
+        .expect("an unreadable oracle arm must refuse");
+        assert_eq!(refusal.code, 2, "{}", refusal.message);
+        assert!(refusal.message.contains("UNMEASURABLE"), "{}", refusal.message);
+        assert!(
+            refusal.message.contains("detector=pane_roster"),
+            "{}",
+            refusal.message
+        );
+        // Readable-but-not-JSON is unreadable too: a payload is not a roster.
+        assert!(parse_oracle_view("no server running on /tmp/tmux-501/default").is_none());
+    }
+
+    // -----------------------------------------------------------------------------------
+    // A plan is not an authorization
+    // -----------------------------------------------------------------------------------
+
+    /// KNOWN-BAD LEG: a plan row consumed with no approval is REFUSABLE, and an unmarked
+    /// row cannot be laundered into one.
+    #[test]
+    fn a_plan_line_is_refused_without_an_approval_and_cannot_be_forged() {
+        let proposal = plan_line(
+            &Assignment {
+                pane: "4".into(),
+                bead: "omp-orchestrator-example".into(),
+            },
+            7_347,
+        );
+        assert!(proposal.contains(APPROVAL_MARKER), "{proposal}");
+        assert!(proposal.contains(APPROVAL_REASON), "{proposal}");
+
+        let unapproved =
+            authorize_plan_line(&proposal, None).expect_err("a plan is not an authorization");
+        assert!(unapproved.contains(APPROVAL_MARKER), "{unapproved}");
+        assert!(
+            unapproved.contains("detector=plan_consumed_unapproved"),
+            "{unapproved}"
+        );
+        for blank in ["", "   "] {
+            assert!(
+                authorize_plan_line(&proposal, Some(blank)).is_err(),
+                "a blank token is not an approval"
+            );
+        }
+        // The OLD line shape — the bytes a dispatcher would have found before the marker
+        // existed — must not pass even WITH a token, because its provenance is unknown.
+        let legacy = "PLAN  pane=4 bead=omp-orchestrator-example bytes=7347";
+        let forged = authorize_plan_line(legacy, Some("approval-2026-09-03"))
+            .expect_err("an unmarked row has no establishable provenance");
+        assert!(forged.contains("PLAN_UNMARKED"), "{forged}");
+
+        // KNOWN-GOOD LEG: the gate is satisfiable. An unsatisfiable gate gets deleted
+        // rather than obeyed, which is a slower death than no gate at all.
+        assert!(authorize_plan_line(&proposal, Some("approval-2026-09-03")).is_ok());
+    }
+
+    /// `--apply` is withheld by DECISION and says so, at a code no reader can mistake for
+    /// success. Before 2026-09-03 it was withheld by BREAKAGE, and repairing the roster
+    /// arm would have granted it silently.
+    #[test]
+    fn actuation_is_a_named_refusal_and_not_a_silent_zero() {
+        let refusal = actuation_refusal();
+        assert_ne!(refusal.code, 0, "{}", refusal.message);
+        assert_eq!(refusal.code, 2);
+        assert!(refusal.message.contains(APPROVAL_MARKER), "{}", refusal.message);
+        assert!(
+            refusal.message.contains("detector=actuation_withheld"),
+            "{}",
+            refusal.message
+        );
+        assert!(
+            refusal.message.contains("verb=--apply"),
+            "the refusal must name the verb it refused: {}",
+            refusal.message
+        );
+    }
+
+    /// KNOWN-BAD LEG for the RESOLVED-BUT-UNAPPLIED class.
+    ///
+    /// The first live run of this fix printed `exclude_panes={"1"}` in its header and
+    /// `excluded=[]` in its verdict, because the resolution and the application were two
+    /// calls and only the first was made. This leg fires on that exact shape: `decide`
+    /// ALONE must still propose the excluded pane (proving the input has the defect), and
+    /// `decide_capacity` must not.
+    #[test]
+    fn decide_capacity_applies_the_exclusion_set_and_decide_alone_does_not() {
+        let activity = ntm(&[("1", "idle"), ("4", "idle")]);
+        let oracle_view = oracle(&[("1", "FREE"), ("4", "FREE")]);
+        let exclusions = ExclusionSet {
+            indices: BTreeSet::from(["1".to_owned()]),
+            unmatched: Vec::new(),
+        };
+
+        let unapplied = decide(&activity, &oracle_view);
+        assert_eq!(
+            unapplied.dispatchable,
+            vec!["1".to_string(), "4".to_string()],
+            "the KNOWN-BAD path: classification alone proposes the excluded pane"
+        );
+        assert!(
+            unapplied.excluded.is_empty() && unapplied.withheld.is_empty(),
+            "a decision that never saw the exclusion set must not CLAIM one: {unapplied:?}"
+        );
+
+        let applied = decide_capacity(&activity, &oracle_view, &exclusions);
+        assert_eq!(applied.dispatchable, vec!["4".to_string()]);
+        assert_eq!(applied.withheld, vec!["1".to_string()]);
+        assert_eq!(
+            applied.excluded,
+            vec!["1".to_string()],
+            "the echo and the effect must come from the SAME call, or a log reader cannot \
+             tell a working guard from a printed one"
+        );
+
+        // KNOWN-GOOD: an empty set through the same entry point changes nothing.
+        assert_eq!(
+            decide_capacity(&activity, &oracle_view, &ExclusionSet::default()).dispatchable,
+            unapplied.dispatchable
+        );
     }
 }
