@@ -853,6 +853,161 @@ impl ReservationResult {
     }
 }
 
+/// One conflicting reservation returned by the authoritative conflict query.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReservationConflict {
+    pub agent: String,
+    pub path: String,
+    pub exclusive: bool,
+}
+
+/// Typed result from check_file_reservation_conflicts.
+///
+/// This is intentionally separate from the advisory am robot reservations roster. The
+/// conflict endpoint is the guard-safe read: it must identify its database snapshot and
+/// cannot turn an empty or malformed response into permission to edit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReservationConflictReport {
+    conflict_free: bool,
+    conflicts: Vec<ReservationConflict>,
+    total_conflicting_reservations: usize,
+    clear_paths: Vec<String>,
+    authoritative_source: String,
+}
+
+impl ReservationConflictReport {
+    #[must_use]
+    pub fn conflict_free(&self) -> bool {
+        self.conflict_free
+    }
+
+    #[must_use]
+    pub fn conflicts(&self) -> &[ReservationConflict] {
+        &self.conflicts
+    }
+
+    #[must_use]
+    pub fn total_conflicting_reservations(&self) -> usize {
+        self.total_conflicting_reservations
+    }
+
+    #[must_use]
+    pub fn clear_paths(&self) -> &[String] {
+        &self.clear_paths
+    }
+
+    #[must_use]
+    pub fn authoritative_source(&self) -> &str {
+        &self.authoritative_source
+    }
+}
+
+fn reservation_protocol_error(detail: impl Into<String>) -> MailError {
+    MailError::Protocol {
+        detail: detail.into(),
+    }
+}
+
+/// Parse the authoritative conflict response without accepting an empty wrong shape.
+pub fn parse_authoritative_reservation_report(
+    value: &Value,
+) -> Result<ReservationConflictReport, MailError> {
+    let object = value.as_object().ok_or_else(|| {
+        reservation_protocol_error("reservation report must be an object, not an empty roster")
+    })?;
+    let conflict_free = object
+        .get("conflict_free")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| {
+            reservation_protocol_error("reservation report missing boolean conflict_free")
+        })?;
+    let rows = object
+        .get("conflicts")
+        .and_then(Value::as_array)
+        .ok_or_else(|| reservation_protocol_error("reservation report missing conflicts array"))?;
+    let mut conflicts = Vec::with_capacity(rows.len());
+    for (index, row) in rows.iter().enumerate() {
+        let row = row.as_object().ok_or_else(|| {
+            reservation_protocol_error(format!("reservation conflict {index} must be an object"))
+        })?;
+        let agent = row.get("agent").and_then(Value::as_str).ok_or_else(|| {
+            reservation_protocol_error(format!("reservation conflict {index} missing agent"))
+        })?;
+        let path = row.get("path").and_then(Value::as_str).ok_or_else(|| {
+            reservation_protocol_error(format!("reservation conflict {index} missing path"))
+        })?;
+        let exclusive = row
+            .get("exclusive")
+            .and_then(Value::as_bool)
+            .ok_or_else(|| {
+                reservation_protocol_error(format!(
+                    "reservation conflict {index} missing exclusive"
+                ))
+            })?;
+        conflicts.push(ReservationConflict {
+            agent: agent.to_owned(),
+            path: path.to_owned(),
+            exclusive,
+        });
+    }
+    let total = object
+        .get("total_conflicting_reservations")
+        .and_then(Value::as_u64)
+        .and_then(|count| usize::try_from(count).ok())
+        .ok_or_else(|| {
+            reservation_protocol_error("reservation report missing total_conflicting_reservations")
+        })?;
+    let source = object
+        .get("authoritative_source")
+        .and_then(Value::as_str)
+        .filter(|source| !source.trim().is_empty())
+        .ok_or_else(|| {
+            reservation_protocol_error("reservation report missing authoritative_source")
+        })?;
+    if source != "database_snapshot" || total != conflicts.len() || conflict_free != (total == 0) {
+        return Err(reservation_protocol_error(format!(
+            "reservation report inconsistent source={source} conflict_free={conflict_free} total={total} rows={}",
+            conflicts.len()
+        )));
+    }
+    let clear_paths = match object.get("clear_paths") {
+        None => Vec::new(),
+        Some(value) => value
+            .as_array()
+            .ok_or_else(|| {
+                reservation_protocol_error("reservation report clear_paths must be an array")
+            })?
+            .iter()
+            .map(|path| {
+                path.as_str().map(ToOwned::to_owned).ok_or_else(|| {
+                    reservation_protocol_error(
+                        "reservation report clear_paths must contain strings",
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+    };
+    Ok(ReservationConflictReport {
+        conflict_free,
+        conflicts,
+        total_conflicting_reservations: total,
+        clear_paths,
+        authoritative_source: source.to_owned(),
+    })
+}
+
+/// Check file reservation conflicts and require the authoritative report shape.
+pub async fn check_conflicts_authoritative(
+    cx: &Cx,
+    client: &MailClient,
+    project: &ProjectKey,
+    agent: &AgentName,
+    paths: &[String],
+) -> Result<ReservationConflictReport, MailError> {
+    let value = check_conflicts(cx, client, project, agent, paths).await?;
+    parse_authoritative_reservation_report(&value)
+}
+
 /// Reserve paths for exclusive or shared work.
 pub async fn reserve_paths(
     cx: &Cx,
@@ -922,6 +1077,10 @@ pub async fn release_reservations(
 }
 
 /// Check whether paths would conflict, without taking a reservation.
+///
+/// This low-level function preserves the daemon payload for diagnostics. Any
+/// guard or dispatch decision MUST use [`check_conflicts_authoritative`], which
+/// rejects the advisory roster shape and validates the authoritative snapshot.
 pub async fn check_conflicts(
     cx: &Cx,
     client: &MailClient,
