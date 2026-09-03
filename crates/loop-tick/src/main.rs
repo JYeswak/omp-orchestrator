@@ -1,6 +1,9 @@
 #![forbid(unsafe_code)]
 
 use std::process::ExitCode;
+fn exit_code_value(code: i32) -> u8 {
+    u8::try_from(code).unwrap_or(1)
+}
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -22,16 +25,16 @@ fn main() -> ExitCode {
         });
     }
     if args.iter().any(|a| a == "--selftest-guard") {
-        return ExitCode::from(loop_tick::selftest_queue_guard() as u8);
+        return ExitCode::from(exit_code_value(loop_tick::selftest_queue_guard()));
     }
     if args.iter().any(|a| a == "--selftest-observe") {
-        return ExitCode::from(loop_tick::selftest_observe() as u8);
+        return ExitCode::from(exit_code_value(loop_tick::selftest_observe()));
     }
     if args.iter().any(|a| a == "--selftest-cargo-lane") {
-        return ExitCode::from(loop_tick::selftest_cargo_lane() as u8);
+        return ExitCode::from(exit_code_value(loop_tick::selftest_cargo_lane()));
     }
     if args.iter().any(|a| a == "--selftest-wait") {
-        return ExitCode::from(loop_tick::selftest_wait() as u8);
+        return ExitCode::from(exit_code_value(loop_tick::selftest_wait()));
     }
     if args.iter().any(|a| a == "--selftest-empty") {
         return ExitCode::from(match loop_tick::validate_non_empty("comparison set", 0) {
@@ -51,10 +54,23 @@ fn main() -> ExitCode {
     }
 
     match loop_tick::run(&args) {
-        Ok(code) => ExitCode::from(code as u8),
+        Ok(code) => ExitCode::from(exit_code_value(code)),
         Err(message) => {
             eprintln!("usage error: {message}");
             ExitCode::from(2)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exit_code_conversion_refuses_unrepresentable_values() {
+        assert_eq!(exit_code_value(0), 0);
+        assert_eq!(exit_code_value(1), 1);
+        assert_eq!(exit_code_value(256), 1);
+        assert_eq!(exit_code_value(-1), 1);
     }
 }

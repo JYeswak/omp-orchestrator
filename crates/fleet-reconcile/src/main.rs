@@ -277,7 +277,7 @@ fn run_reconcile(json: bool, rules: &FleetReconcileRules) -> ExitCode {
         ));
         say(&format!("detail: {}", env["detail"].as_str().unwrap_or("")));
     }
-    ExitCode::from(exit_for(&inner.verdict) as u8)
+    ExitCode::from(u8::try_from(exit_for(&inner.verdict)).unwrap_or(1))
 }
 
 fn write_fix(dir: &std::path::Path, tmux: &str, list: &str, snap: &str, ft: &str) {

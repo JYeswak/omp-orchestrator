@@ -85,6 +85,16 @@ struct PassThrough {
     line: usize,
 }
 
+/// One exit-path integer narrowing cast derived by this gate's own scanner.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct NarrowingCast {
+    expression: String,
+    target: String,
+    file: String,
+    line: usize,
+}
+
+
 /// Every `.rs` file beneath `<root>/crates/*/src`, recursively.
 ///
 /// The scan set must be at least as wide as the patterns run over it. The first hand-built
@@ -254,10 +264,32 @@ fn passthrough_chain(expr: &str) -> Option<String> {
     let shaped = bare
         .chars()
         .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '.');
-    if shaped { Some(e.to_owned()) } else { None }
+    if shaped {
+        Some(e.to_owned())
+    } else {
+        None
+    }
 }
 
-/// `const EXIT_NAME: uN = 78;` -> (name, value).
+/// Return an integer cast in an exit argument, with source expression and target type.
+fn narrowing_cast(expr: &str) -> Option<(String, String)> {
+    let expression = expr.trim();
+    for target in [
+        "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128",
+        "isize",
+    ] {
+        let suffix = format!(" as {target}");
+        if let Some(source) = expression.strip_suffix(&suffix) {
+            let source = source.trim();
+            if !source.is_empty() {
+                return Some((source.to_owned(), target.to_owned()));
+            }
+        }
+    }
+    None
+}
+
+/// const EXIT_NAME: uN = 78; -> (name, value).
 fn const_declaration(line: &str) -> Option<(String, u16)> {
     let i = line.find("const EXIT_")?;
     let tail = &line[i + "const ".len()..];
@@ -334,6 +366,7 @@ struct Scan {
     emissions: Vec<Emission>,
     consts: BTreeMap<String, BTreeSet<u16>>,
     passthrough: Vec<PassThrough>,
+    narrowing: Vec<NarrowingCast>,
 }
 
 impl Scan {
@@ -351,6 +384,7 @@ fn scan(root: &Path) -> Scan {
     let mut emissions = Vec::new();
     let mut consts: BTreeMap<String, BTreeSet<u16>> = BTreeMap::new();
     let mut passthrough = Vec::new();
+    let mut narrowing = Vec::new();
     for path in &files {
         let Ok(text) = fs::read_to_string(path) else {
             continue;
@@ -360,13 +394,13 @@ fn scan(root: &Path) -> Scan {
             .unwrap_or(path)
             .to_string_lossy()
             .into_owned();
-        let crate_name = rel
-            .split('/')
-            .nth(1)
-            .unwrap_or("<unknown>")
-            .to_owned();
+        let crate_name = rel.split('/').nth(1).unwrap_or("<unknown>").to_owned();
         for value in exit_code_body_values(&text) {
-            emissions.push(Emission { code: value, file: rel.clone(), line: 0 });
+            emissions.push(Emission {
+                code: value,
+                file: rel.clone(),
+                line: 0,
+            });
         }
         for (n, raw_line) in text.lines().enumerate() {
             let lineno = n + 1;
@@ -375,11 +409,22 @@ fn scan(root: &Path) -> Scan {
             let line = stripped.as_str();
             for needle in ["ExitCode::from(", "process::exit("] {
                 for code in literal_after(line, needle) {
-                    emissions.push(Emission { code, file: rel.clone(), line: lineno });
+                    emissions.push(Emission {
+                        code,
+                        file: rel.clone(),
+                        line: lineno,
+                    });
                 }
-                if let Some(chain) =
-                    call_argument(line, needle).as_deref().and_then(passthrough_chain)
-                {
+                let argument = call_argument(line, needle);
+                if let Some((expression, target)) = argument.as_deref().and_then(narrowing_cast) {
+                    narrowing.push(NarrowingCast {
+                        expression,
+                        target,
+                        file: rel.clone(),
+                        line: lineno,
+                    });
+                }
+                if let Some(chain) = argument.as_deref().and_then(passthrough_chain) {
                     passthrough.push(PassThrough {
                         expression: chain,
                         crate_name: crate_name.clone(),
@@ -396,7 +441,11 @@ fn scan(root: &Path) -> Scan {
                     .collect();
                 if !digits.is_empty() {
                     if let Ok(code) = digits.parse::<u16>() {
-                        emissions.push(Emission { code, file: rel.clone(), line: lineno });
+                        emissions.push(Emission {
+                            code,
+                            file: rel.clone(),
+                            line: lineno,
+                        });
                     }
                 }
             }
@@ -405,7 +454,13 @@ fn scan(root: &Path) -> Scan {
             }
         }
     }
-    Scan { files: files.len(), emissions, consts, passthrough }
+    Scan {
+        files: files.len(),
+        emissions,
+        consts,
+        passthrough,
+        narrowing,
+    }
 }
 
 // ---------------------------------------------------------------------------------------
@@ -459,17 +514,23 @@ fn documented_passthrough(doc: &str) -> BTreeSet<String> {
     registry_rows(doc)
         .into_iter()
         .filter(|r| r.id.starts_with("XC-PT-"))
-        .filter_map(|r| r.cells.get(1).map(|c| c.trim_matches('`').trim().to_owned()))
+        .filter_map(|r| {
+            r.cells
+                .get(1)
+                .map(|c| c.trim_matches('`').trim().to_owned())
+        })
         .collect()
 }
 
 /// The check itself, so every leg exercises the same code path.
 fn undocumented(scan: &Scan, doc: &str) -> Result<Vec<String>, String> {
     if scan.files == 0 {
-        return Err("EXIT_SCAN_EMPTY: zero source files scanned. An empty scan set is an \
+        return Err(
+            "EXIT_SCAN_EMPTY: zero source files scanned. An empty scan set is an \
                     ERROR, never a pass — a code that was never looked for reports \
                     identically to one that has a row."
-            .to_owned());
+                .to_owned(),
+        );
     }
     let known = documented_emitted(doc);
     if known.is_empty() {
@@ -560,7 +621,10 @@ fn a_planted_undocumented_code_is_caught() {
         "fn main() -> std::process::ExitCode { std::process::ExitCode::from(213) }\n",
     );
     let s = scan(&root);
-    assert_eq!(s.files, 1, "the fixture must be seen: positive control on the walker");
+    assert_eq!(
+        s.files, 1,
+        "the fixture must be seen: positive control on the walker"
+    );
     let doc = fs::read_to_string(registry_path(&repo_root())).expect("registry");
     let complaints = undocumented(&s, &doc).expect("fixture scan is not vacuous");
     assert!(
@@ -817,7 +881,91 @@ fn every_pass_through_row_declares_an_expression() {
 /// A row belongs here only when the site genuinely exists and the RECOGNISER cannot see
 /// it — not when the site is gone. If the site is gone the row must be deleted, which is
 /// what `no_declared_pass_through_row_outlives_its_site` enforces.
+/// Allowances for reviewed narrowing casts, keyed by file:line:source as target.
+/// Category-three sites must either disappear or carry a reason containing DEBT.
+const NARROWING_ALLOWANCE: &[(&str, &str)] = &[
+    ("crates/crate-soundness-verify/src/main.rs:31:EXIT_RED as u8", "ALLOWANCE CATEGORY-1: EXIT_RED is a closed literal status code; its documented value is 1 and cannot wrap."),
+    ("crates/crate-soundness-verify/src/main.rs:49:EXIT_RED as u8", "ALLOWANCE CATEGORY-1: EXIT_RED is a closed literal status code; its documented value is 1 and cannot wrap."),
+    ("crates/crate-soundness-verify/src/main.rs:68:EXIT_RED as u8", "ALLOWANCE CATEGORY-1: EXIT_RED is a closed literal status code; its documented value is 1 and cannot wrap."),
+    ("crates/crate-soundness-verify/src/main.rs:85:EXIT_RED as u8", "ALLOWANCE CATEGORY-1: EXIT_RED is a closed literal status code; its documented value is 1 and cannot wrap."),
+    ("crates/crate-soundness-verify/src/main.rs:190:EXIT_RED as u8", "ALLOWANCE CATEGORY-1: EXIT_RED is a closed literal status code; its documented value is 1 and cannot wrap."),
+    ("crates/dispatcher-deadman/src/main.rs:185:verdict.exit as u8", "ALLOWANCE CATEGORY-2: verdict.exit forwards the child/status contract under XC-PT-VERDICT; range validation remains outside this gate."),
+    ("crates/fleet-monitor/src/main.rs:462:EXIT_CANNOT_OBSERVE as u8", "ALLOWANCE CATEGORY-1: EXIT_CANNOT_OBSERVE is a named closed literal status code; its documented value is 78 and cannot wrap."),
+    ("crates/fleet-monitor/src/main.rs:477:rc as u8", "ALLOWANCE CATEGORY-2: rc forwards the child/status contract under XC-PT-RC; range validation remains outside this gate."),
+    ("crates/loop-driver/src/main.rs:38:output.code as u8", "ALLOWANCE CATEGORY-2: output.code forwards the child status under XC-PT-OUTPUT; range validation remains outside this gate."),
+    ("crates/loop-driver/src/main.rs:55:output.code as u8", "ALLOWANCE CATEGORY-2: output.code forwards the child status under XC-PT-OUTPUT; range validation remains outside this gate."),
+    ("crates/loop-queue-filter/src/main.rs:18:output.code as u8", "ALLOWANCE CATEGORY-2: output.code forwards the child status under XC-PT-OUTPUT; range validation remains outside this gate."),
+    ("crates/omp-idle-dispatch/src/main.rs:853:exit as i32", "ALLOWANCE CATEGORY-2: exit forwards the child status into process::exit; range validation remains outside this gate."),
+    ("crates/pane-oracle-diff/src/main.rs:103:v.exit_code() as u8", "ALLOWANCE CATEGORY-2: v.exit_code() forwards the typed verdict under XC-PT-EXITCODE; range validation remains outside this gate."),
+    ("crates/pane-oracle-diff/src/main.rs:169:v.exit_code() as u8", "ALLOWANCE CATEGORY-2: v.exit_code() forwards the typed verdict under XC-PT-EXITCODE; range validation remains outside this gate."),
+    ("crates/tick-dispatch/src/main.rs:385:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
+    ("crates/tick-dispatch/src/main.rs:400:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
+    ("crates/tick-dispatch/src/main.rs:473:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
+    ("crates/tick-dispatch/src/main.rs:503:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
+    ("crates/tick-dispatch/src/main.rs:562:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
+    ("crates/tick-dispatch/src/main.rs:582:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
+    ("crates/tick-dispatch/src/main.rs:716:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
+    ("crates/tick-dispatch/src/main.rs:736:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
+    ("crates/verify-dispatch/src/main.rs:54:out.code as u8", "ALLOWANCE CATEGORY-2: out.code forwards the child/status contract under XC-PT-OUT; range validation remains outside this gate."),
+];
+
+fn narrowing_key(site: &NarrowingCast) -> String {
+    format!("{}:{}:{} as {}", site.file, site.line, site.expression, site.target)
+}
+
+fn narrowing_complaints(scan: &Scan) -> Result<Vec<String>, String> {
+    narrowing_complaints_with_allowance(scan, NARROWING_ALLOWANCE)
+}
+
+fn narrowing_complaints_with_allowance(
+    scan: &Scan,
+    allowances: &[(&str, &str)],
+) -> Result<Vec<String>, String> {
+    if scan.files == 0 {
+        return Err(
+            "EXIT_NARROWING_SCAN_EMPTY: zero source files scanned. An empty scan set is an \
+             ERROR, never a pass — no narrowing cast was checked."
+                .to_owned(),
+        );
+    }
+    if scan.narrowing.is_empty() {
+        return Err(
+            "EXIT_NARROWING_SCAN_EMPTY: zero exit-path narrowing casts derived. The deciding \
+             leg must not pass while its recogniser sees nothing."
+                .to_owned(),
+        );
+    }
+    let occupied: BTreeSet<String> = scan.narrowing.iter().map(narrowing_key).collect();
+    let declared: BTreeSet<&str> = allowances.iter().map(|(key, _)| *key).collect();
+    let mut complaints = scan
+        .narrowing
+        .iter()
+        .filter(|site| !declared.contains(narrowing_key(site).as_str()))
+        .map(|site| {
+            format!(
+                "EXIT_NARROWING_UNDECLARED at {}:{} — {} as {} has no reasoned allowance row",
+                site.file, site.line, site.expression, site.target
+            )
+        })
+        .collect::<Vec<_>>();
+    complaints.extend(
+        allowances
+            .iter()
+            .filter(|(key, _)| !occupied.contains(*key))
+            .map(|(key, _)| format!("EXIT_NARROWING_ORPHANED allowance names no scanned site: {key}")),
+    );
+    complaints.extend(
+        allowances
+            .iter()
+            .filter(|(_, reason)| reason.trim().len() < 40)
+            .map(|(key, _)| format!("EXIT_NARROWING_UNREASONED allowance is too short: {key}")),
+    );
+    Ok(complaints)
+}
+
 const UNMATCHED_ROW_ALLOWANCE: &[(&str, &str)] = &[];
+
+/// Rows deliberately kept although no scanned site matches their expression, each with
 
 /// A declared row must still describe a site. Checked in the direction nothing checked.
 ///
@@ -860,7 +1008,11 @@ fn no_declared_pass_through_row_outlives_its_site() {
          this the leg would report every row as orphaned the moment the walker broke.",
         s.passthrough.len()
     );
-    let occupied: BTreeSet<&str> = s.passthrough.iter().map(|pt| pt.expression.as_str()).collect();
+    let occupied: BTreeSet<&str> = s
+        .passthrough
+        .iter()
+        .map(|pt| pt.expression.as_str())
+        .collect();
     let allowed: BTreeSet<&str> = UNMATCHED_ROW_ALLOWANCE.iter().map(|(e, _)| *e).collect();
     let orphaned: Vec<&String> = declared
         .iter()
@@ -905,4 +1057,70 @@ fn no_declared_pass_through_row_outlives_its_site() {
         "{unreasoned:?} carry no usable reason; a row without a reason is silence with \
          extra steps"
     );
+}
+
+#[test]
+fn every_narrowing_exit_cast_has_a_reasoned_allowance() {
+    let barren = fixture("narrowing-empty", "fn main() {}\n").join("nothing");
+    fs::create_dir_all(&barren).expect("barren fixture");
+    let empty_scan = scan(&barren);
+    let empty_error = narrowing_complaints(&empty_scan).expect_err("empty narrowing scan");
+    assert!(
+        empty_error.starts_with("EXIT_NARROWING_SCAN_EMPTY"),
+        "anti-vacuity must be in the deciding leg: {empty_error}"
+    );
+
+    let root = repo_root();
+    let derived = scan(&root);
+    println!(
+        "EXIT_NARROWING_SCAN sites={} allowance_rows={}",
+        derived.narrowing.len(),
+        NARROWING_ALLOWANCE.len()
+    );
+    let complaints = narrowing_complaints(&derived).expect("real narrowing scan");
+    assert!(
+        complaints.is_empty(),
+        "{} exit-path narrowing cast(s) lack a reasoned allowance or have an orphaned row:\n{}",
+        complaints.len(),
+        complaints.join("\n")
+    );
+    let _ = fs::remove_dir_all(barren);
+}
+
+#[test]
+fn a_planted_narrowing_cast_is_red_and_the_known_good_shape_is_clean() {
+    let bad = fixture(
+        "narrowing-known-bad",
+        "fn main() { let code = 300i32; let _ = std::process::ExitCode::from(code as u8); }\n",
+    );
+    let bad_scan = scan(&bad);
+    let complaints = narrowing_complaints(&bad_scan).expect("bad fixture scan");
+    assert!(
+        complaints
+            .iter()
+            .any(|message| message.contains("crates/planted/src/main.rs:1")),
+        "known-bad narrowing cast did not name file:line: {complaints:?}"
+    );
+    let stale_allowance = [("crates/planted/src/main.rs:99:missing as u8", "A deliberately long reason proves an allowance row must not outlive its scanned site.")];
+    let stale_messages = narrowing_complaints_with_allowance(&bad_scan, &stale_allowance)
+        .expect("stale allowance fixture scan");
+    assert!(
+        stale_messages
+            .iter()
+            .any(|message| message.contains("EXIT_NARROWING_ORPHANED")),
+        "a stale allowance must fail bidirectionally: {stale_messages:?}"
+    );
+    let _ = fs::remove_dir_all(&bad);
+
+    let good = fixture(
+        "narrowing-known-good",
+        "fn main() { let _ = std::process::ExitCode::from(1); }\n",
+    );
+    let good_scan = scan(&good);
+    assert!(
+        good_scan.narrowing.is_empty(),
+        "known-good literal exit must not be classified as narrowing: {:?}",
+        good_scan.narrowing
+    );
+    let _ = fs::remove_dir_all(&good);
 }

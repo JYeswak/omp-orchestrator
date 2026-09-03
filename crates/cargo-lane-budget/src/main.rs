@@ -98,7 +98,9 @@ fn main() -> ExitCode {
                 }
             }
         }
-        "--check" if args.len() == 1 => ExitCode::from(print_report(&check(&config)) as u8),
+        "--check" if args.len() == 1 => {
+            ExitCode::from(u8::try_from(print_report(&check(&config))).unwrap_or(1))
+        }
         _ => {
             usage();
             ExitCode::from(1)
