@@ -936,6 +936,7 @@ fn parse_tracker_close_state(payload: &str) -> Result<(String, Option<String>), 
     Ok((status, close_reason))
 }
 
+#[cfg(test)]
 fn parse_tracker_status(payload: &str) -> Result<String, String> {
     parse_tracker_close_state(payload).map(|(status, _)| status)
 }
