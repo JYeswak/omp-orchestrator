@@ -527,3 +527,33 @@ python3 .git/s1_cov.py
 
 COVERED means a bead title or acceptance carries the id as a whole token. It does not mean the crate is wired. MISSING=0 would still not mean S1 is done.
 
+## Denominator tree-state (bead 7t33, 2026-09-03T19:15Z)
+
+Extractor: backticked `L[0-5]-*` / `LAW-L*` / `OBS-L*` / `L*P-*`, excluding Cross-References and Work breakdown. WORKTREE and `git show HEAD:<path>` on the six `s1_l*.md` files.
+
+| tree | declared unique IDs |
+|---|---:|
+| HEAD `e6dac73` | 211 |
+| this worktree | 211 |
+| invisible delta | 0 |
+
+The earlier `160→211` was **not** currently-uncommitted growth. Those IDs are in HEAD. Trajectory of unique declared IDs at the commits that touched the six contracts:
+
+| sha | declared | delta |
+|---|---:|---:|
+| `6238c0f` L3/L4/L5 land | 38 | — |
+| `8de39a5` L0 contract | 62 | +24 |
+| `933432d` L1/L2 inventory | 204 | +142 |
+| `2dd7a59` | 206 | +2 |
+| `fe30a57` L4 law backticks | 211 | +5 |
+| `e6dac73` HEAD | 211 | 0 |
+
+GROWTH_PER_COMMIT = (211-38)/9 = 19.22. COVERED_AT_HEAD (title-or-acceptance token join against current `.beads/issues.jsonl`) = 43. Closure is not keeping up with declaration.
+
+`git status --porcelain` = 138 lines (17 untracked). `origin..HEAD` = 333 unpushed. Heaviest dirty prefixes: `crates/no-shell-gate` 23, `docs` 13, `crates/agent-mail-native` 10, `crates/ack-spine` 6. **Not committed from this pane.**
+
+MATRIX_FROM_HEAD = no: `S1-COVERAGE.md` exists at HEAD as a **snapshot**; regenerating it requires untracked `.git/s1_cov.py`. Freeze blocks `s1-coverage-gate`.
+
+GROWTH_VERDICT = mixed: the +142 at `933432d` is L1/L2 audit filling previously empty contracts (findings). The +24 is L0 landing. The +5 is extractor-visible law names, not new product scope. Calling all of it creep would punish the audit. Calling HEAD the only real denominator would hide uncommitted obligations if they return; today they are committed, so the clone can see 211.
+
+
