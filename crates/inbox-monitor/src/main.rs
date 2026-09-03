@@ -28,10 +28,15 @@
 //! replays. The forbidden order is cursor-then-append, which SKIPS: a duplicate notification
 //! is noise, a skipped one is the failure this crate exists to prevent.
 
+use agent_mail_native::client::MailClient;
+use agent_mail_native::error::MailError;
+use agent_mail_native::journey::{fetch_inbox, AgentName, InboxRequest, ProjectKey};
+use asupersync::runtime::RuntimeBuilder;
+use asupersync::Cx;
 use inbox_monitor::{
-    append_ledger, classify, cursor_path_in, home_dir, iso8601_utc, ledger_path_in,
-    now_epoch_secs, parse_event_page, parse_inbox_rows, read_cursor, resolve_pane, unread,
-    write_cursor_atomic, EventPage, InboxRow, MonitorVerdict,
+    append_ledger, classify, cursor_path_in, home_dir, iso8601_utc, ledger_path_in, now_epoch_secs,
+    parse_event_page, parse_inbox_rows, read_cursor, resolve_pane, unread, write_cursor_atomic,
+    DaemonArm, EventPage, InboxRow, MonitorVerdict, UnreachableReason,
 };
 use std::process::{Command, ExitCode};
 use std::time::Duration;
@@ -46,6 +51,11 @@ const PROBE_DEADLINE: Duration = Duration::from_secs(5);
 /// The daemon health endpoint. Both halves are also `am`'s own defaults.
 const HEALTH_HOST: &str = "127.0.0.1";
 const HEALTH_PORT: u16 = 8765;
+
+/// How many unread rows to ask the daemon for. Above the largest count either surface has
+/// been measured to hold (128 total / 96 unread on 2026-09-02), because a limit BELOW the
+/// true count would manufacture a disagreement out of pagination.
+const DAEMON_INBOX_LIMIT: u32 = 500;
 
 fn usage() -> String {
     "usage: inbox-monitor --agent <NAME> [--project <PATH>] [--pane <SESSION>:<INDEX>] \
@@ -73,21 +83,27 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
         match argv[index].as_str() {
             "--agent" => {
                 index += 1;
-                agent = Some(argv.get(index).cloned().ok_or_else(|| {
-                    format!("--agent requires a value\n{}", usage())
-                })?);
+                agent = Some(
+                    argv.get(index)
+                        .cloned()
+                        .ok_or_else(|| format!("--agent requires a value\n{}", usage()))?,
+                );
             }
             "--project" => {
                 index += 1;
-                project = Some(argv.get(index).cloned().ok_or_else(|| {
-                    format!("--project requires a value\n{}", usage())
-                })?);
+                project = Some(
+                    argv.get(index)
+                        .cloned()
+                        .ok_or_else(|| format!("--project requires a value\n{}", usage()))?,
+                );
             }
             "--pane" => {
                 index += 1;
-                pane_spec = Some(argv.get(index).cloned().ok_or_else(|| {
-                    format!("--pane requires a value\n{}", usage())
-                })?);
+                pane_spec = Some(
+                    argv.get(index)
+                        .cloned()
+                        .ok_or_else(|| format!("--pane requires a value\n{}", usage()))?,
+                );
             }
             "--position-now" => position_now = true,
             "-h" | "--help" => return Err(usage()),
@@ -115,7 +131,10 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
                 format!("--pane wants <SESSION>:<INDEX>, got {spec:?}\n{}", usage())
             })?;
             let parsed = index_text.parse::<u32>().map_err(|_| {
-                format!("--pane index must be an integer, got {index_text:?}\n{}", usage())
+                format!(
+                    "--pane index must be an integer, got {index_text:?}\n{}",
+                    usage()
+                )
             })?;
             Some((session.to_string(), parsed))
         }
@@ -223,6 +242,76 @@ fn am_command(project: &str, agent: &str, extra: &[&str]) -> Command {
     command
 }
 
+/// The PRIMARY read: `fetch_inbox` over authenticated MCP.
+///
+/// # Why this is not a `curl` and not the `am` CLI
+///
+/// `agent-mail-native` already owns this call, and it owns the one distinction acceptance 3
+/// of `omp-orchestrator-monitor-reads-oracle-y256` turns on: `MailError::Unauthorized`
+/// (the daemon answered and refused the credential) is a DIFFERENT value from
+/// `MailError::Unreachable` (nothing answered). Re-deriving that from a message string is
+/// how "no listener on 127.0.0.1:8765" came to be printed about a daemon that was running
+/// and answering `/health`.
+///
+/// `mark_read` is `false`, and that is load-bearing rather than tidy: the daemon's own
+/// default is TRUE, so a monitor that omitted it would CONSUME the unread state it exists to
+/// report. The bead's recorded "daemon: 0 unread, every row carries a read_ts" is exactly
+/// the shape a consuming read leaves behind.
+enum DaemonRead {
+    Unread(usize),
+    Failed {
+        detail: String,
+        reason: UnreachableReason,
+    },
+}
+
+fn read_daemon_unread(project: &str, agent: &str) -> DaemonRead {
+    let runtime = match RuntimeBuilder::current_thread().build() {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            return DaemonRead::Failed {
+                detail: format!("asupersync runtime could not be built: {error}"),
+                reason: UnreachableReason::Indeterminate,
+            }
+        }
+    };
+    let project = project.to_owned();
+    let agent = agent.to_owned();
+    let outcome: Result<usize, MailError> = runtime.block_on(async move {
+        let cx = Cx::current().expect("runtime context inside block_on");
+        let client = MailClient::discover().with_request_timeout(AM_DEADLINE);
+        let request = InboxRequest {
+            project: ProjectKey::new(project),
+            agent: AgentName::new(agent),
+            include_bodies: false,
+            limit: Some(DAEMON_INBOX_LIMIT),
+            unread_only: true,
+            // NEVER true. See the doc above: the daemon's default consumes read state.
+            mark_read: false,
+        };
+        let messages = fetch_inbox(&cx, &client, &request).await?;
+        Ok(messages.len())
+    });
+    match outcome {
+        Ok(count) => DaemonRead::Unread(count),
+        Err(MailError::Unauthorized { status }) => DaemonRead::Failed {
+            detail: format!(
+                "the daemon ANSWERED and refused our credential (HTTP {status}); a 401 is not \
+                 an absent listener"
+            ),
+            reason: UnreachableReason::Unauthorized { status },
+        },
+        Err(error @ MailError::Unreachable { .. }) => DaemonRead::Failed {
+            detail: format!("nothing answered on the MCP endpoint: {error}"),
+            reason: UnreachableReason::Absent,
+        },
+        Err(error) => DaemonRead::Failed {
+            detail: format!("the daemon was reached but its answer was unusable: {error}"),
+            reason: UnreachableReason::Indeterminate,
+        },
+    }
+}
+
 /// One observation, already reduced to what the row needs.
 struct Observation {
     verdict: MonitorVerdict,
@@ -230,10 +319,31 @@ struct Observation {
     unread_count: usize,
     direct_read: bool,
     daemon_health: String,
+    /// What the PRIMARY authority said, carried so the row can attribute both numbers even
+    /// on a run where the two agreed.
+    daemon_arm: DaemonArm,
 }
 
 fn observe(args: &Args, persisted: Option<u64>) -> Observation {
     let daemon_health = probe_daemon_health();
+
+    // THE PRIMARY READ, first. If the designated authority cannot be read the observation is
+    // ABSENT — the CLI's answer is the differential oracle and is not promoted to primary
+    // just because it happens to reply. That promotion is precisely the defect this bead
+    // names: the monitor consuming the oracle while reporting it as the answer.
+    let daemon_arm = match read_daemon_unread(&args.project, &args.agent) {
+        DaemonRead::Unread(count) => DaemonArm::Unread(count),
+        DaemonRead::Failed { detail, reason } => {
+            return Observation {
+                verdict: MonitorVerdict::Unreachable { detail, reason },
+                page: None,
+                unread_count: 0,
+                direct_read: daemon_health != "ready",
+                daemon_health,
+                daemon_arm: DaemonArm::NotConsulted,
+            }
+        }
+    };
     // `--direct` is a fallback, not a default: it bypasses the daemon's own view. It is
     // reached only when the health probe did not say ready, and the row says so.
     let direct_read = daemon_health != "ready";
@@ -265,22 +375,28 @@ fn observe(args: &Args, persisted: Option<u64>) -> Observation {
                 return Observation {
                     verdict: MonitorVerdict::Unreachable {
                         detail: error.to_string(),
+                        reason: UnreachableReason::Indeterminate,
                     },
                     page: None,
                     unread_count: 0,
                     direct_read,
                     daemon_health,
-                }
+                    daemon_arm,
+                    }
             }
         },
         Read::Failed(detail) => {
             return Observation {
-                verdict: MonitorVerdict::Unreachable { detail },
+                verdict: MonitorVerdict::Unreachable {
+                    detail,
+                    reason: UnreachableReason::Indeterminate,
+                },
                 page: None,
                 unread_count: 0,
                 direct_read,
                 daemon_health,
-            }
+                daemon_arm,
+                }
         }
     };
 
@@ -293,7 +409,8 @@ fn observe(args: &Args, persisted: Option<u64>) -> Observation {
             unread_count: 0,
             direct_read,
             daemon_health,
-        };
+            daemon_arm,
+            };
     }
 
     let mut inbox_command = am_command(&args.project, &args.agent, &["inbox", "--unread"]);
@@ -304,34 +421,41 @@ fn observe(args: &Args, persisted: Option<u64>) -> Observation {
                 return Observation {
                     verdict: MonitorVerdict::Unreachable {
                         detail: error.to_string(),
+                        reason: UnreachableReason::Indeterminate,
                     },
                     page: Some(page),
                     unread_count: 0,
                     direct_read,
                     daemon_health,
-                }
+                    daemon_arm,
+                    }
             }
         },
         Read::Failed(detail) => {
             return Observation {
-                verdict: MonitorVerdict::Unreachable { detail },
+                verdict: MonitorVerdict::Unreachable {
+                    detail,
+                    reason: UnreachableReason::Indeterminate,
+                },
                 page: Some(page),
                 unread_count: 0,
                 direct_read,
                 daemon_health,
-            }
+                daemon_arm,
+                }
         }
     };
 
     let unread_count = unread(&rows).len();
-    let verdict = classify(&page, &rows, persisted);
+    let verdict = classify(&page, &rows, persisted, daemon_arm);
     Observation {
         verdict,
         page: Some(page),
         unread_count,
         direct_read,
         daemon_health,
-    }
+        daemon_arm,
+        }
 }
 
 /// A mis-invocation, which is NOT an observation and therefore never wears a verdict code.
@@ -350,10 +474,12 @@ fn run(argv: &[String]) -> Result<MonitorVerdict, Usage> {
         Err(error) => {
             return Ok(MonitorVerdict::Unreachable {
                 detail: error.to_string(),
+                reason: UnreachableReason::Indeterminate,
             })
         }
     };
-    let cursor_file = cursor_path_in(&home, &args.agent).map_err(|error| Usage(error.to_string()))?;
+    let cursor_file =
+        cursor_path_in(&home, &args.agent).map_err(|error| Usage(error.to_string()))?;
     let ledger = ledger_path_in(&home);
 
     let persisted = match read_cursor(&cursor_file) {
@@ -362,6 +488,7 @@ fn run(argv: &[String]) -> Result<MonitorVerdict, Usage> {
             // A corrupt cursor is UNREACHABLE, not clear: we cannot say what has been seen.
             return Ok(MonitorVerdict::Unreachable {
                 detail: format!("cursor unreadable: {error}"),
+                reason: UnreachableReason::Indeterminate,
             });
         }
     };
@@ -392,27 +519,61 @@ fn run(argv: &[String]) -> Result<MonitorVerdict, Usage> {
         // RIGHT: `observation.verdict` is a genuine five-variant state enum, so a catch-all
         // renders a NEWLY ADDED verdict as absent rather than forcing a decision here. That is
         // the same class as ntm coercing state=UNKNOWN into a busy claim — a non-answer wearing
-        // a negative one. Four sites, explicit arms each; a sixth variant now fails to compile.
+        // a negative one. It already did its job: adding AuthoritiesDisagree failed to compile at
+        // every one of these sites, which is exactly what the lint was for.
         "detail": match &observation.verdict {
-            MonitorVerdict::Unreachable { detail } => Some(detail.clone()),
+            MonitorVerdict::Unreachable { detail, .. } => Some(detail.clone()),
             MonitorVerdict::Clear
             | MonitorVerdict::MailWaiting { .. }
             | MonitorVerdict::CursorRegressed { .. }
-            | MonitorVerdict::CursorBelowFloor { .. } => None,
+            | MonitorVerdict::CursorBelowFloor { .. }
+            | MonitorVerdict::AuthoritiesDisagree { .. } => None,
         },
+        // The typed reason, beside the free text. A consumer branching on WHY the monitor
+        // could not observe must not have to substring-match `detail`: a 401 and an absent
+        // listener have opposite remedies and were measurably confused for each other.
+        "unreachable_reason": match &observation.verdict {
+            MonitorVerdict::Unreachable { reason, .. } => Some(reason.label()),
+            MonitorVerdict::Clear
+            | MonitorVerdict::MailWaiting { .. }
+            | MonitorVerdict::CursorRegressed { .. }
+            | MonitorVerdict::CursorBelowFloor { .. }
+            | MonitorVerdict::AuthoritiesDisagree { .. } => None,
+        },
+        // BOTH numbers, each attributed. A disagreement row that carries one of them is the
+        // defect this verdict exists to remove.
+        "daemon_unread": match &observation.verdict {
+            MonitorVerdict::AuthoritiesDisagree { daemon_unread, .. } => Some(*daemon_unread),
+            _other => match observation.daemon_arm {
+                DaemonArm::Unread(count) => Some(count),
+                DaemonArm::NotConsulted => None,
+            },
+        },
+        "cli_unread": match &observation.verdict {
+            MonitorVerdict::AuthoritiesDisagree { cli_unread, .. } => Some(*cli_unread),
+            MonitorVerdict::Clear
+            | MonitorVerdict::MailWaiting { .. }
+            | MonitorVerdict::Unreachable { .. }
+            | MonitorVerdict::CursorRegressed { .. }
+            | MonitorVerdict::CursorBelowFloor { .. } => Some(observation.unread_count),
+        },
+        "primary_authority": "daemon:mcp/fetch_inbox",
+        "oracle_authority": "cli:am inbox --unread",
         "oldest_from": match &observation.verdict {
             MonitorVerdict::MailWaiting { oldest_from, .. } => Some(oldest_from.clone()),
             MonitorVerdict::Clear
             | MonitorVerdict::Unreachable { .. }
             | MonitorVerdict::CursorRegressed { .. }
-            | MonitorVerdict::CursorBelowFloor { .. } => None,
+            | MonitorVerdict::CursorBelowFloor { .. }
+            | MonitorVerdict::AuthoritiesDisagree { .. } => None,
         },
         "oldest_subject": match &observation.verdict {
             MonitorVerdict::MailWaiting { oldest_subject, .. } => Some(oldest_subject.clone()),
             MonitorVerdict::Clear
             | MonitorVerdict::Unreachable { .. }
             | MonitorVerdict::CursorRegressed { .. }
-            | MonitorVerdict::CursorBelowFloor { .. } => None,
+            | MonitorVerdict::CursorBelowFloor { .. }
+            | MonitorVerdict::AuthoritiesDisagree { .. } => None,
         },
         // The floor the verdict was decided against, carried on the VERDICT and not only on
         // the page. A row that says "below floor" without both numbers is undiagnosable, and
@@ -420,6 +581,7 @@ fn run(argv: &[String]) -> Result<MonitorVerdict, Usage> {
         // could stop emitting, or which is null on an Unreachable run. This field is the one
         // that cannot go absent while the verdict says the floor was breached.
         "oldest_available": match &observation.verdict {
+            MonitorVerdict::AuthoritiesDisagree { .. } => None,
             MonitorVerdict::CursorBelowFloor { oldest_available, .. } => Some(*oldest_available),
             MonitorVerdict::Clear
             | MonitorVerdict::MailWaiting { .. }
@@ -448,6 +610,7 @@ fn run(argv: &[String]) -> Result<MonitorVerdict, Usage> {
     if let Err(error) = append_ledger(&ledger, &line) {
         return Ok(MonitorVerdict::Unreachable {
             detail: format!("ledger append failed, cursor NOT advanced: {error}"),
+            reason: UnreachableReason::Indeterminate,
         });
     }
 
@@ -467,6 +630,7 @@ fn run(argv: &[String]) -> Result<MonitorVerdict, Usage> {
             if let Err(error) = write_cursor_atomic(&cursor_file, page.next_cursor) {
                 return Ok(MonitorVerdict::Unreachable {
                     detail: format!("cursor write failed after a durable ledger append: {error}"),
+                    reason: UnreachableReason::Indeterminate,
                 });
             }
         }

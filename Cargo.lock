@@ -930,6 +930,8 @@ dependencies = [
 name = "inbox-monitor"
 version = "0.1.0"
 dependencies = [
+ "agent-mail-native",
+ "asupersync",
  "serde",
  "serde_json",
  "subprocess-contract",

@@ -149,12 +149,75 @@ pub const EXIT_CURSOR_REGRESSED: u8 = 14;
 /// every surface it emits reports healthy.
 pub const EXIT_CURSOR_BELOW_FLOOR: u8 = 15;
 
+/// `AuthoritiesDisagree` — the daemon and the CLI report different unread counts.
+///
+/// A FIFTH distinct number because it is not a mail fact and not a state fault: both reads
+/// SUCCEEDED and they contradict each other, so the monitor has no unread count to report.
+/// Folding this into [`EXIT_MAIL_WAITING`] with one arm's number would be the exact defect
+/// this crate exists to remove — a monitor that reports a number without saying which
+/// authority answered is not evidence.
+///
+/// # Measured, on my own mailbox, 2026-09-02T23:5x Z
+///
+/// | surface | unread | total rows |
+/// |---|---|---|
+/// | daemon, `fetch_inbox` over authenticated MCP, `mark_read=false` | **96** | 128, of which 32 carry a non-null `read_ts` |
+/// | `am inbox --unread` (CLI, direct `storage.sqlite3`) | **20** | `count: 20` in the envelope |
+///
+/// The bead that owns this recorded the daemon at **0** unread with "every row carries a
+/// `read_ts`". That is REFUTED by a non-mutating read, and the refutation names its own
+/// cause: `fetch_inbox`'s `mark_read` **defaults to true**, so a read that omits it CONSUMES
+/// the unread state it was measuring and a second read then honestly reports zero. This
+/// crate's daemon arm therefore sets `mark_read: false` explicitly, which is also why
+/// [`agent_mail_native::journey::InboxRequest`] carries that field with an explicit `false`
+/// default rather than inheriting the daemon's.
+///
+/// Which number is TRUE is not decided here and is not this crate's question. 96 and 20 are
+/// both reported, each attributed to the authority that said it.
+pub const EXIT_AUTHORITIES_DISAGREE: u8 = 16;
+
 /// `Clear` — read both surfaces, nothing is owed.
 pub const EXIT_CLEAR: u8 = 0;
 
 // ---------------------------------------------------------------------------------------
 // Verdict
 // ---------------------------------------------------------------------------------------
+
+/// WHY the monitor could not observe. A 401 is not an absent listener.
+///
+/// Acceptance 3 of `omp-orchestrator-monitor-reads-oracle-y256` requires these two to be
+/// distinguishable. They are distinguishable HERE because `agent-mail-native` already
+/// separates them upstream — `MailError::Unauthorized { status }` for a daemon that answered
+/// and rejected the credential, `MailError::Unreachable` for a transport failure before any
+/// HTTP status. This enum consumes that distinction rather than re-deriving it from a
+/// message string, which is the only way a caller can branch on it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UnreachableReason {
+    /// Nothing answered: connection refused, DNS failure, transport I/O error.
+    /// The remedy is to START something.
+    Absent,
+    /// The daemon answered and rejected our credential. The remedy is to SUPPLY one.
+    /// `status` is carried because 401 and 403 are different answers to that question.
+    Unauthorized {
+        /// The HTTP status the daemon returned, 401 or 403.
+        status: u16,
+    },
+    /// Reached, authorized, and still unusable — a parse failure, a refusal we do not
+    /// classify, or a timeout. Named rather than folded into `Absent`, because "we could
+    /// not read the answer" is not "there was no answer".
+    Indeterminate,
+}
+
+impl UnreachableReason {
+    /// The stable machine label emitted in the JSON row and the ledger.
+    pub fn label(&self) -> &'static str {
+        match self {
+            UnreachableReason::Absent => "absent",
+            UnreachableReason::Unauthorized { .. } => "unauthorized",
+            UnreachableReason::Indeterminate => "indeterminate",
+        }
+    }
+}
 
 /// What one observation of the two Agent Mail surfaces means, and what its integer says.
 ///
@@ -171,6 +234,8 @@ pub const EXIT_CLEAR: u8 = 0;
 /// | 13 | [`MonitorVerdict::Unreachable`] | the monitor could not observe; the verdict is ABSENT | that there is no mail. This is the fail-closed unknown |
 /// | 14 | [`MonitorVerdict::CursorRegressed`] | our persisted cursor is ahead of the durable tail | that mail is waiting. Our STATE is wrong, not the mailbox |
 /// | 15 | [`MonitorVerdict::CursorBelowFloor`] | our persisted cursor is below THIS recipient's oldest retained event, so the resume position cannot be proven continuous | that mail is waiting, and NOT that the mailbox lost anything. A recipient's events are sparse in a global sequence, so a position below the floor is indistinguishable from a recipient that started later — and the daemon will not say so, it CLAMPS to the floor and returns success |
+///
+/// | 16 | [`MonitorVerdict::AuthoritiesDisagree`] | both mailbox authorities answered and gave DIFFERENT unread counts, so no count is reported | that anything failed, and NOT that mail is or is not waiting. Both reads SUCCEEDED; the disagreement is the finding. Measured live: daemon 96, CLI 20 |
 ///
 /// The load-bearing column is **does NOT mean**, per that registry's §1: a refusal and a
 /// failure are indistinguishable from the outside when the only signal is a small integer.
@@ -192,6 +257,14 @@ pub enum MonitorVerdict {
     Unreachable {
         /// Why — the spawn outcome, the exit status, or the parse failure.
         detail: String,
+        /// WHICH KIND of not-observable, as a type rather than a substring.
+        ///
+        /// A free-text `detail` cannot be asserted on, and the distinction it was hiding is
+        /// the one that cost the fleet an hour: `am agent start` reported "no listener on
+        /// 127.0.0.1:8765" while `/health` answered `status: ready` and two robot calls
+        /// returned live data — an AUTH FAILURE REPORTED AS ABSENCE. The remedies are
+        /// opposite (supply a credential vs start a process), so they are separate values.
+        reason: UnreachableReason,
     },
     /// The persisted cursor is strictly ahead of the durable tail cursor.
     CursorRegressed {
@@ -219,6 +292,19 @@ pub enum MonitorVerdict {
         /// The durable tail, so the size of the unreachable gap is readable directly.
         tail: u64,
     },
+    /// Both mailbox authorities answered and they DISAGREE, so there is no unread count to
+    /// report. Both numbers and both source labels are carried, because a disagreement that
+    /// does not name its sides is not actionable.
+    ///
+    /// Deliberately NOT [`MonitorVerdict::Unreachable`]: nothing failed. Two successful
+    /// reads contradict each other, which is a different fact with a different remedy —
+    /// reconcile the surfaces, do not restart anything.
+    AuthoritiesDisagree {
+        /// The authenticated daemon's unread count — the designated PRIMARY.
+        daemon_unread: usize,
+        /// The `am` CLI's unread count — the designated differential ORACLE.
+        cli_unread: usize,
+    },
 }
 
 impl MonitorVerdict {
@@ -230,6 +316,7 @@ impl MonitorVerdict {
             MonitorVerdict::Unreachable { .. } => EXIT_UNREACHABLE,
             MonitorVerdict::CursorRegressed { .. } => EXIT_CURSOR_REGRESSED,
             MonitorVerdict::CursorBelowFloor { .. } => EXIT_CURSOR_BELOW_FLOOR,
+            MonitorVerdict::AuthoritiesDisagree { .. } => EXIT_AUTHORITIES_DISAGREE,
         }
     }
 
@@ -241,6 +328,7 @@ impl MonitorVerdict {
             MonitorVerdict::Unreachable { .. } => "unreachable",
             MonitorVerdict::CursorRegressed { .. } => "cursor_regressed",
             MonitorVerdict::CursorBelowFloor { .. } => "cursor_below_floor",
+            MonitorVerdict::AuthoritiesDisagree { .. } => "authorities_disagree",
         }
     }
 
@@ -255,10 +343,27 @@ impl MonitorVerdict {
             } => format!(
                 "inbox-monitor: MAIL WAITING — {unread} unread; oldest from {oldest_from}: {oldest_subject}"
             ),
-            MonitorVerdict::Unreachable { detail } => format!(
-                "inbox-monitor: UNREACHABLE — could not observe Agent Mail ({detail}). \
-                 This is NOT 'no mail'; the verdict is absent"
-            ),
+            MonitorVerdict::Unreachable { detail, reason } => {
+                // The remedy differs by reason, so the line names it. An operator handed
+                // "could not observe" alone restarts a daemon that is already running.
+                let remedy = match reason {
+                    UnreachableReason::Absent => {
+                        "nothing answered — START the daemon (`am agent start`)"
+                    }
+                    UnreachableReason::Unauthorized { .. } => {
+                        "the daemon ANSWERED and refused the credential — supply a token \
+                         (AGENT_MAIL_TOKEN); do NOT restart anything"
+                    }
+                    UnreachableReason::Indeterminate => {
+                        "reached but unreadable — diagnose the payload; this is not absence"
+                    }
+                };
+                format!(
+                    "inbox-monitor: UNREACHABLE [{}] — could not observe Agent Mail \
+                     ({detail}). {remedy}. This is NOT 'no mail'; the verdict is absent",
+                    reason.label()
+                )
+            }
             MonitorVerdict::CursorRegressed { persisted, tail } => format!(
                 "inbox-monitor: CURSOR REGRESSED — persisted {persisted} is ahead of tail {tail}; \
                  repair state, do not read mail"
@@ -274,6 +379,16 @@ impl MonitorVerdict {
                  a success shape, so the page would be one the server chose. Repair the cursor \
                  file named on stderr, or re-baseline with --position-now; the cursor was NOT \
                  advanced and no mail claim was made"
+            ),
+            MonitorVerdict::AuthoritiesDisagree {
+                daemon_unread,
+                cli_unread,
+            } => format!(
+                "inbox-monitor: AUTHORITIES DISAGREE — daemon (authenticated MCP fetch_inbox) \
+                 says {daemon_unread} unread, am CLI (direct storage.sqlite3) says \
+                 {cli_unread}. Both reads SUCCEEDED; nothing is unreachable. No unread count \
+                 is reported because reporting one without naming its authority is not \
+                 evidence. Reconcile the surfaces; do not restart anything"
             ),
         }
     }
@@ -303,6 +418,12 @@ impl MonitorVerdict {
     pub fn advances_cursor(&self) -> bool {
         match self {
             MonitorVerdict::Clear | MonitorVerdict::MailWaiting { .. } => true,
+            // The POSITION was proven — both cursor guards passed and the page is
+            // trustworthy. What is unresolved is the mailbox, and re-reading the same events
+            // cannot resolve it, so withholding the advance would only imply the position is
+            // suspect when it is not. The verdict repeats on every run until the surfaces are
+            // reconciled, which is intended for a monitor that must not self-clear.
+            MonitorVerdict::AuthoritiesDisagree { .. } => true,
             MonitorVerdict::Unreachable { .. }
             | MonitorVerdict::CursorRegressed { .. }
             | MonitorVerdict::CursorBelowFloor { .. } => false,
@@ -526,6 +647,25 @@ fn inbox_row_from_wire(row: &serde_json::Value) -> Result<InboxRow, ParseError> 
 // Classification — pure, no I/O
 // ---------------------------------------------------------------------------------------
 
+/// The PRIMARY authority's answer, or an explicit statement that it was not consulted.
+///
+/// An `Option<usize>` would have done the same job and is exactly what this must not be: a
+/// `None` reads as "zero unread" to the next person who writes `unwrap_or_default()`, and a
+/// false zero from a monitor is the failure mode this whole crate exists to prevent. The
+/// two states are therefore NAMED.
+///
+/// `NotConsulted` is not a production state on the notification path — there, a daemon that
+/// cannot be read is [`MonitorVerdict::Unreachable`], never a skipped arm. It exists for
+/// callers that deliberately decline the second authority, and every existing single-arm
+/// test passes it so those legs keep testing exactly what they tested before.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DaemonArm {
+    /// The daemon answered with this unread count.
+    Unread(usize),
+    /// The daemon was not asked. The CLI's answer stands alone and no cross-check is made.
+    NotConsulted,
+}
+
 /// Classify one observation.
 ///
 /// `rows` is expected to be the mailbox surface's rows; the unread filter is re-applied here
@@ -550,10 +690,19 @@ fn inbox_row_from_wire(row: &serde_json::Value) -> Result<InboxRow, ParseError> 
 ///
 /// Reporting `MailWaiting` or `Clear` from an unresumable position is therefore the exact
 /// silent blindness this guards against. Both faults are terminal for the observation.
+///
+/// # ORDER: the two-authority check sits BETWEEN the cursor guards and the mail check
+///
+/// After the cursor guards, because a disagreement about read state says nothing about the
+/// delivery position and must not pre-empt a fault that destroys evidence. Before the mail
+/// check, because that is the whole point: with the arms in conflict there is no unread
+/// count, and reporting one arm's number would be picking the convenient side silently —
+/// which is the defect this check was added to remove.
 pub fn classify(
     page: &EventPage,
     rows: &[InboxRow],
     persisted_cursor: Option<u64>,
+    daemon: DaemonArm,
 ) -> MonitorVerdict {
     // `None` is a BASELINE, not a fault: a first run has never been positioned, so it is
     // neither ahead of the tail nor below the floor. Folding `None` into either fault would
@@ -581,6 +730,20 @@ pub fn classify(
     }
 
     let pending = unread(rows);
+
+    // The two-authority reconciliation. `unread(rows)` is re-applied above, so both sides of
+    // this comparison are counted by THIS crate's single definition of unread — the CLI's
+    // own `count` envelope field is deliberately not trusted as the second number, because
+    // then a disagreement could be manufactured by the envelope alone.
+    if let DaemonArm::Unread(daemon_unread) = daemon {
+        if daemon_unread != pending.len() {
+            return MonitorVerdict::AuthoritiesDisagree {
+                daemon_unread,
+                cli_unread: pending.len(),
+            };
+        }
+    }
+
     if let Some(oldest) = pending.iter().min_by_key(|row| row.id) {
         return MonitorVerdict::MailWaiting {
             unread: pending.len(),
@@ -619,7 +782,10 @@ impl fmt::Display for ConfigError {
                  wrong state silently)",
             ),
             ConfigError::InvalidAgent { agent, reason } => {
-                write!(formatter, "agent name {agent:?} is unusable as a path component: {reason}")
+                write!(
+                    formatter,
+                    "agent name {agent:?} is unusable as a path component: {reason}"
+                )
             }
         }
     }
@@ -756,10 +922,13 @@ pub fn read_cursor(path: &Path) -> Result<Option<u64>, CursorError> {
             contents: raw,
         });
     }
-    trimmed.parse::<u64>().map(Some).map_err(|_| CursorError::Malformed {
-        path: path.to_path_buf(),
-        contents: raw,
-    })
+    trimmed
+        .parse::<u64>()
+        .map(Some)
+        .map_err(|_| CursorError::Malformed {
+            path: path.to_path_buf(),
+            contents: raw,
+        })
 }
 
 /// Write the cursor durably: temp file in the SAME directory, fsync, then rename.
@@ -840,11 +1009,12 @@ pub fn append_ledger(path: &Path, row: &str) -> Result<(), CursorError> {
         })?;
     let mut line = row.trim_end().to_string();
     line.push('\n');
-    file.write_all(line.as_bytes()).map_err(|error| CursorError::Io {
-        op: "append ledger",
-        path: path.to_path_buf(),
-        detail: error.to_string(),
-    })?;
+    file.write_all(line.as_bytes())
+        .map_err(|error| CursorError::Io {
+            op: "append ledger",
+            path: path.to_path_buf(),
+            detail: error.to_string(),
+        })?;
     file.sync_all().map_err(|error| CursorError::Io {
         op: "fsync ledger",
         path: path.to_path_buf(),
@@ -908,7 +1078,11 @@ pub fn resolve_pane(listing: &str, session: &str, index: u32) -> Option<String> 
 /// Civil date from a days-since-epoch count (Howard Hinnant's `civil_from_days`).
 fn civil_from_days(days: i64) -> (i64, u32, u32) {
     let shifted = days + 719_468;
-    let era = if shifted >= 0 { shifted } else { shifted - 146_096 } / 146_097;
+    let era = if shifted >= 0 {
+        shifted
+    } else {
+        shifted - 146_096
+    } / 146_097;
     let day_of_era = shifted - era * 146_097;
     let year_of_era =
         (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
@@ -969,10 +1143,7 @@ mod tests {
                 oldest_subject: "b".into(),
             }
             .exit_code(),
-            MonitorVerdict::Unreachable {
-                detail: "x".into(),
-            }
-            .exit_code(),
+            MonitorVerdict::Unreachable { detail: "x".into(), reason: UnreachableReason::Indeterminate }.exit_code(),
             MonitorVerdict::CursorRegressed {
                 persisted: 2,
                 tail: 1,

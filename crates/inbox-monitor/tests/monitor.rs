@@ -16,6 +16,7 @@
 //! attack-only suite ships an over-strict gate, and an over-strict gate gets routed around.
 
 use inbox_monitor::{
+    DaemonArm, UnreachableReason,
     classify, cursor_path_in, iso8601_utc, ledger_path_in, parse_event_page, parse_inbox_rows,
     read_cursor, resolve_pane, state_dir_in, unread, write_cursor_atomic, ConfigError, InboxRow,
     MonitorVerdict, EXIT_CLEAR, EXIT_CURSOR_BELOW_FLOOR, EXIT_CURSOR_REGRESSED, EXIT_MAIL_WAITING,
@@ -140,10 +141,15 @@ fn item2_cursor_durability_no_replay_and_no_gap() {
     );
 
     let page = page();
-    let rows: Vec<InboxRow> = vec![row(40721, "BlueLantern", "already answered", Some("4h ago"))];
+    let rows: Vec<InboxRow> = vec![row(
+        40721,
+        "BlueLantern",
+        "already answered",
+        Some("4h ago"),
+    )];
 
     // PASS 1: process the page, then persist next_cursor exactly as the binary does.
-    let first = classify(&page, &rows, None);
+    let first = classify(&page, &rows, None, DaemonArm::NotConsulted);
     assert_eq!(first, MonitorVerdict::Clear);
     write_cursor_atomic(&cursor_file, page.next_cursor).expect("cursor write must succeed");
 
@@ -158,7 +164,7 @@ fn item2_cursor_durability_no_replay_and_no_gap() {
     );
 
     // PASS 2 over the SAME page: no re-notification.
-    let second = classify(&page, &rows, Some(after_restart));
+    let second = classify(&page, &rows, Some(after_restart), DaemonArm::NotConsulted);
     assert_eq!(
         second,
         MonitorVerdict::Clear,
@@ -183,7 +189,7 @@ fn item2_cursor_durability_no_replay_and_no_gap() {
     // about, so the two `Clear`s above are not a broken reader.
     let unread_rows = vec![row(40772, "BlueLantern", "[identity] lifecycle", None)];
     assert!(matches!(
-        classify(&page, &unread_rows, Some(after_restart)),
+        classify(&page, &unread_rows, Some(after_restart), DaemonArm::NotConsulted),
         MonitorVerdict::MailWaiting { .. }
     ));
 
@@ -214,7 +220,7 @@ fn item5_fires_on_known_bad_unread_message_is_loud() {
         "[identity] BlueLantern - lifecycle and inbox monitor protocol",
         None,
     );
-    let loud = classify(&page, std::slice::from_ref(&unread_row), Some(5059));
+    let loud = classify(&page, std::slice::from_ref(&unread_row), Some(5059), DaemonArm::NotConsulted);
     match &loud {
         MonitorVerdict::MailWaiting {
             unread,
@@ -234,8 +240,14 @@ fn item5_fires_on_known_bad_unread_message_is_loud() {
     assert_eq!(loud.exit_code(), EXIT_MAIL_WAITING);
     // The human line must carry the sender and subject, not just a count.
     let line = loud.human_line();
-    assert!(line.contains("BlueLantern"), "human line must name the sender: {line}");
-    assert!(line.contains("lifecycle"), "human line must name the subject: {line}");
+    assert!(
+        line.contains("BlueLantern"),
+        "human line must name the sender: {line}"
+    );
+    assert!(
+        line.contains("lifecycle"),
+        "human line must name the subject: {line}"
+    );
 
     // KNOWN GOOD: the SAME row, read, must be silent. Both arms asserted, so this is not an
     // attack-only leg that would pass with a gate wired permanently open.
@@ -243,7 +255,7 @@ fn item5_fires_on_known_bad_unread_message_is_loud() {
         read_ts: Some("2026-09-02T05:03:50Z".to_string()),
         ..unread_row
     };
-    let quiet = classify(&page, std::slice::from_ref(&read_row), Some(5059));
+    let quiet = classify(&page, std::slice::from_ref(&read_row), Some(5059), DaemonArm::NotConsulted);
     assert_eq!(quiet, MonitorVerdict::Clear);
     assert_eq!(quiet.exit_code(), EXIT_CLEAR);
 
@@ -254,7 +266,7 @@ fn item5_fires_on_known_bad_unread_message_is_loud() {
         row(40001, "AirTrafficControl", "older", None),
         row(40500, "AmberGate", "middle", Some("1h ago")),
     ];
-    match classify(&page, &mixed, None) {
+    match classify(&page, &mixed, None, DaemonArm::NotConsulted) {
         MonitorVerdict::MailWaiting {
             unread,
             oldest_from,
@@ -274,7 +286,7 @@ fn item5_fires_on_known_bad_unread_message_is_loud() {
         row(2, "b", "y", Some("2h ago")),
     ];
     assert_eq!(unread(&all_read).len(), 0);
-    assert_eq!(classify(&page, &all_read, None), MonitorVerdict::Clear);
+    assert_eq!(classify(&page, &all_read, None, DaemonArm::NotConsulted), MonitorVerdict::Clear);
 }
 
 // ---------------------------------------------------------------------------------------
@@ -291,6 +303,7 @@ fn item6_anti_vacuity_unreachable_is_an_error_not_no_mail() {
     // provenance of a quiet run is unrecoverable unless the verdict carries it.
     let unreachable = MonitorVerdict::Unreachable {
         detail: "am inbox-events exceeded its 20s deadline".to_string(),
+        reason: UnreachableReason::Indeterminate,
     };
 
     assert_ne!(
@@ -299,7 +312,8 @@ fn item6_anti_vacuity_unreachable_is_an_error_not_no_mail() {
         "an unobservable mailbox must never exit 0"
     );
     assert_ne!(
-        unreachable, MonitorVerdict::Clear,
+        unreachable,
+        MonitorVerdict::Clear,
         "Unreachable and Clear are different facts and must not compare equal"
     );
     assert_ne!(
@@ -344,10 +358,24 @@ fn item6_anti_vacuity_unreachable_is_an_error_not_no_mail() {
     assert_eq!(MonitorVerdict::Clear, MonitorVerdict::Clear);
     assert_eq!(
         MonitorVerdict::Unreachable {
-            detail: "x".to_string()
+            detail: "x".to_string(),
+            reason: UnreachableReason::Indeterminate
         },
         MonitorVerdict::Unreachable {
-            detail: "x".to_string()
+            detail: "x".to_string(),
+            reason: UnreachableReason::Indeterminate
+        }
+    );
+    // And the REASON participates in equality, which is the whole point of typing it: two
+    // Unreachable verdicts with the same detail and opposite remedies must not be equal.
+    assert_ne!(
+        MonitorVerdict::Unreachable {
+            detail: "x".to_string(),
+            reason: UnreachableReason::Absent
+        },
+        MonitorVerdict::Unreachable {
+            detail: "x".to_string(),
+            reason: UnreachableReason::Unauthorized { status: 401 }
         }
     );
 }
@@ -363,7 +391,7 @@ fn a_cursor_ahead_of_the_tail_is_a_regression_not_a_clear_run() {
 
     // KNOWN BAD: our state claims to have consumed past the durable tail. Every subsequent
     // `--after` would ask for events beyond the end and receive nothing — a silent skip.
-    let regressed = classify(&page, &[], Some(page.tail_cursor + 1));
+    let regressed = classify(&page, &[], Some(page.tail_cursor + 1), DaemonArm::NotConsulted);
     assert_eq!(
         regressed,
         MonitorVerdict::CursorRegressed {
@@ -378,22 +406,22 @@ fn a_cursor_ahead_of_the_tail_is_a_regression_not_a_clear_run() {
 
     // KNOWN GOOD: exactly at the tail is the normal fully-drained state, not a regression.
     assert_eq!(
-        classify(&page, &[], Some(page.tail_cursor)),
+        classify(&page, &[], Some(page.tail_cursor), DaemonArm::NotConsulted),
         MonitorVerdict::Clear
     );
     // KNOWN GOOD: behind the tail is an ordinary resume.
     assert_eq!(
-        classify(&page, &[], Some(page.oldest_available_cursor)),
+        classify(&page, &[], Some(page.oldest_available_cursor), DaemonArm::NotConsulted),
         MonitorVerdict::Clear
     );
     // KNOWN GOOD: never positioned is not a regression.
-    assert_eq!(classify(&page, &[], None), MonitorVerdict::Clear);
+    assert_eq!(classify(&page, &[], None, DaemonArm::NotConsulted), MonitorVerdict::Clear);
 
     // PRECEDENCE INVERTED, 2026-09-02, deliberately and with the reason recorded.
     //
     // THIS ASSERTION PREVIOUSLY READ: "Mail waiting outranks a regression: the human can act
     // on mail now, and a state repair does not expire", asserting
-    // `classify(&page, &rows, Some(page.tail_cursor + 1))` matched `MailWaiting { .. }`.
+    // `classify(&page, &rows, Some(page.tail_cursor + 1), DaemonArm::NotConsulted)` matched `MailWaiting { .. }`.
     // That intent is recorded here rather than deleted, because an inverted assertion with no
     // explanation is indistinguishable from an assertion someone flipped to get green.
     //
@@ -406,13 +434,13 @@ fn a_cursor_ahead_of_the_tail_is_a_regression_not_a_clear_run() {
     // then (pre-fix) persisted that position as if everything before it had been consumed.
     let rows = vec![row(1, "BlueLantern", "s", None)];
     assert!(matches!(
-        classify(&page, &rows, Some(page.tail_cursor + 1)),
+        classify(&page, &rows, Some(page.tail_cursor + 1), DaemonArm::NotConsulted),
         MonitorVerdict::CursorRegressed { .. }
     ));
     // And the mail claim is still reachable the moment the position is provable — this is the
     // known-good arm that keeps the reordering from being an over-strict gate.
     assert!(matches!(
-        classify(&page, &rows, Some(page.tail_cursor)),
+        classify(&page, &rows, Some(page.tail_cursor), DaemonArm::NotConsulted),
         MonitorVerdict::MailWaiting { .. }
     ));
 }
@@ -464,7 +492,7 @@ fn a_cursor_below_the_recipient_floor_is_blindness_not_a_clear_run() {
     // global, so 5105 is a perfectly resumable position for GreenFrog (floor 2108) and an
     // unresumable one for SnowyCanyon (floor 5147). Cursors are not portable across
     // recipients, and an empty `events` list from such a read is not evidence of no mail.
-    let blind = classify(&page, &[], Some(5105));
+    let blind = classify(&page, &[], Some(5105), DaemonArm::NotConsulted);
     assert_eq!(
         blind,
         MonitorVerdict::CursorBelowFloor {
@@ -545,27 +573,24 @@ fn a_first_run_with_no_persisted_cursor_is_a_baseline_not_below_floor() {
     // BASELINE: a first run has never been positioned, so it is neither ahead of the tail nor
     // below the floor. Without this arm the guard fires on every fresh install — and a guard
     // that fires on the known-good path is a guard that gets routed around.
-    let baseline = classify(&page, &[], None);
+    let baseline = classify(&page, &[], None, DaemonArm::NotConsulted);
     assert_eq!(baseline, MonitorVerdict::Clear);
     assert_eq!(baseline.exit_code(), EXIT_CLEAR);
     assert_ne!(baseline.exit_code(), EXIT_CURSOR_BELOW_FLOOR);
-    assert!(!matches!(
-        baseline,
-        MonitorVerdict::CursorBelowFloor { .. }
-    ));
+    assert!(!matches!(baseline, MonitorVerdict::CursorBelowFloor { .. }));
 
     // A first run with mail is still MailWaiting, not a cursor fault: absence of a stored
     // position is not a fault about a position.
     let rows = vec![row(1, "BrightGorge", "first contact", None)];
     assert!(matches!(
-        classify(&page, &rows, None),
+        classify(&page, &rows, None, DaemonArm::NotConsulted),
         MonitorVerdict::MailWaiting { .. }
     ));
 
     // FIRES-ON-KNOWN-BAD control, so the leg above is not passing because the comparison is
     // dead: the SAME page with a stored position one below the floor does fault.
     assert!(matches!(
-        classify(&page, &[], Some(page.oldest_available_cursor - 1)),
+        classify(&page, &[], Some(page.oldest_available_cursor - 1), DaemonArm::NotConsulted),
         MonitorVerdict::CursorBelowFloor { .. }
     ));
 }
@@ -576,10 +601,10 @@ fn a_cursor_inside_the_window_still_reports_mail_or_clear_normally() {
 
     // KNOWN GOOD: 5150 sits inside [5147, 5165]. The new check must not swallow the normal
     // path — an over-strict guard is worse than none, because it gets disabled.
-    assert_eq!(classify(&page, &[], Some(5150)), MonitorVerdict::Clear);
+    assert_eq!(classify(&page, &[], Some(5150), DaemonArm::NotConsulted), MonitorVerdict::Clear);
 
     let rows = vec![row(7, "GreenFrog", "still routes", None)];
-    match classify(&page, &rows, Some(5150)) {
+    match classify(&page, &rows, Some(5150), DaemonArm::NotConsulted) {
         MonitorVerdict::MailWaiting {
             unread,
             oldest_from,
@@ -594,23 +619,23 @@ fn a_cursor_inside_the_window_still_reports_mail_or_clear_normally() {
     // BOUNDARY, and it is the one that decides `<` versus `<=`: exactly AT the floor is a
     // legitimate full replay of everything retained, not a fault.
     assert_eq!(
-        classify(&page, &[], Some(page.oldest_available_cursor)),
+        classify(&page, &[], Some(page.oldest_available_cursor), DaemonArm::NotConsulted),
         MonitorVerdict::Clear,
         "equal to the floor is a full replay, so the comparison must be strict"
     );
     // BOUNDARY: exactly AT the tail is the drained state.
     assert_eq!(
-        classify(&page, &[], Some(page.tail_cursor)),
+        classify(&page, &[], Some(page.tail_cursor), DaemonArm::NotConsulted),
         MonitorVerdict::Clear
     );
     // And the fault is still one step away in each direction, so neither boundary is passing
     // because the checks are dead.
     assert!(matches!(
-        classify(&page, &[], Some(page.oldest_available_cursor - 1)),
+        classify(&page, &[], Some(page.oldest_available_cursor - 1), DaemonArm::NotConsulted),
         MonitorVerdict::CursorBelowFloor { .. }
     ));
     assert!(matches!(
-        classify(&page, &[], Some(page.tail_cursor + 1)),
+        classify(&page, &[], Some(page.tail_cursor + 1), DaemonArm::NotConsulted),
         MonitorVerdict::CursorRegressed { .. }
     ));
 }
@@ -655,7 +680,12 @@ fn a_missing_json_key_is_a_parse_error_not_a_default() {
     );
 
     // Every other top-level key is equally required.
-    for key in ["events", "has_more", "oldest_available_cursor", "tail_cursor"] {
+    for key in [
+        "events",
+        "has_more",
+        "oldest_available_cursor",
+        "tail_cursor",
+    ] {
         let mutated = EVENT_PAGE_JSON
             .lines()
             .filter(|line| !line.trim_start().starts_with(&format!("\"{key}\"")))
@@ -691,8 +721,14 @@ fn a_missing_json_key_is_a_parse_error_not_a_default() {
     assert_eq!(unread(&rows).len(), 2);
     assert_eq!(rows[0].id, 40721);
     assert_eq!(rows[0].from, "BlueLantern");
-    assert!(!rows[0].ack_required, "ack_status `none` is not ack_required");
-    assert!(rows[1].ack_required, "ack_status `required` is ack_required");
+    assert!(
+        !rows[0].ack_required,
+        "ack_status `none` is not ack_required"
+    );
+    assert!(
+        rows[1].ack_required,
+        "ack_status `required` is ack_required"
+    );
     assert_eq!(rows[1].importance, "high");
 
     // KNOWN BAD: a row with no `from` must not become a row with an empty sender.
@@ -711,7 +747,10 @@ fn a_missing_json_key_is_a_parse_error_not_a_default() {
     let literal = r#"{"inbox":[{"id":1,"from":"a","subject":"s","importance":"normal",
         "read_ts":"2026-09-02T05:00:00Z","ack_required":false}]}"#;
     let literal_rows = parse_inbox_rows(literal).expect("a literal read_ts must parse");
-    assert_eq!(literal_rows[0].read_ts.as_deref(), Some("2026-09-02T05:00:00Z"));
+    assert_eq!(
+        literal_rows[0].read_ts.as_deref(),
+        Some("2026-09-02T05:00:00Z")
+    );
     assert_eq!(unread(&literal_rows).len(), 0);
 
     // An envelope with no recognisable row array is an error, never an empty mailbox — an
@@ -719,7 +758,10 @@ fn a_missing_json_key_is_a_parse_error_not_a_default() {
     assert!(parse_inbox_rows(r#"{"_meta":{},"count":0}"#).is_err());
     // POSITIVE CONTROL for that leg: a bare array is accepted, so the error above is about
     // the missing array and not about the shape check being permanently closed.
-    assert_eq!(parse_inbox_rows("[]").expect("a bare array parses").len(), 0);
+    assert_eq!(
+        parse_inbox_rows("[]").expect("a bare array parses").len(),
+        0
+    );
 }
 
 // ---------------------------------------------------------------------------------------
@@ -781,7 +823,10 @@ fn pane_resolution_returns_the_pane_id_and_records_the_index_it_came_from() {
     assert_eq!(resolve_pane(&noisy, "fleet", 1).as_deref(), Some("%1397"));
     // A pane index of 10 must not be matched by the `.1` suffix of pane index 1.
     assert_eq!(resolve_pane("%5 fleet:0.10\n", "fleet", 1), None);
-    assert_eq!(resolve_pane("%5 fleet:0.10\n", "fleet", 10).as_deref(), Some("%5"));
+    assert_eq!(
+        resolve_pane("%5 fleet:0.10\n", "fleet", 10).as_deref(),
+        Some("%5")
+    );
 }
 
 // ---------------------------------------------------------------------------------------
@@ -790,7 +835,9 @@ fn pane_resolution_returns_the_pane_id_and_records_the_index_it_came_from() {
 
 #[test]
 fn home_unset_is_a_typed_error_not_a_literal_path() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _guard = ENV_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let previous = std::env::var_os("HOME");
 
     std::env::remove_var("HOME");
@@ -818,14 +865,20 @@ fn home_unset_is_a_typed_error_not_a_literal_path() {
         "{} must live under the resolved home",
         resolved.display()
     );
-    assert_eq!(resolved, cursor_path_in(&home, "AmberGate").expect("pure form"));
+    assert_eq!(
+        resolved,
+        cursor_path_in(&home, "AmberGate").expect("pure form")
+    );
     assert_eq!(
         inbox_monitor::ledger_path().expect("ledger path"),
         ledger_path_in(&home)
     );
     assert_eq!(
         state_dir_in(&home),
-        home.join(".local").join("state").join("flywheel").join("inbox-monitor")
+        home.join(".local")
+            .join("state")
+            .join("flywheel")
+            .join("inbox-monitor")
     );
 
     match previous {
@@ -862,7 +915,10 @@ fn a_corrupt_cursor_is_an_error_not_a_zero() {
         .map(|entry| entry.file_name().to_string_lossy().into_owned())
         .filter(|name| name.ends_with(".tmp"))
         .collect();
-    assert!(leftovers.is_empty(), "temp files left behind: {leftovers:?}");
+    assert!(
+        leftovers.is_empty(),
+        "temp files left behind: {leftovers:?}"
+    );
     assert_eq!(read_cursor(&cursor_file).expect("read"), Some(6000));
 
     let _ = std::fs::remove_dir_all(&home);
@@ -902,4 +958,196 @@ fn the_emitted_timestamp_is_rfc3339_utc() {
     assert_eq!(iso8601_utc(1_000_000_000), "2001-09-09T01:46:40Z");
     assert_eq!(iso8601_utc(951_782_400), "2000-02-29T00:00:00Z");
     assert_eq!(iso8601_utc(1_756_800_000), "2025-09-02T08:00:00Z");
+}
+
+// ---------------------------------------------------------------------------------------
+// y256 — the primary is the daemon, the CLI is the oracle, and a disagreement is LOUD
+// ---------------------------------------------------------------------------------------
+
+/// The two numbers MEASURED on AmberGate's own mailbox, 2026-09-02, with commands that were
+/// re-run rather than remembered:
+///
+/// * daemon — `fetch_inbox` over authenticated MCP with `unread_only:true, mark_read:false,
+///   limit:500` → **96** unread of **128** total rows, of which **32** carry a non-null
+///   `read_ts`.
+/// * CLI — `am inbox --project … --agent AmberGate --unread --json` → **20**, matching the
+///   envelope's own `count` field, split `{urgent: 10, ack-overdue: 4, unread: 6}`.
+const MEASURED_DAEMON_UNREAD: usize = 96;
+const MEASURED_CLI_UNREAD: usize = 20;
+
+#[test]
+fn y256_the_live_disagreement_is_reported_and_neither_side_is_picked() {
+    // ACCEPTANCE 2. The bead asked for the disagreement leg to fire on today's real data.
+    // It does — with CORRECTED numbers: the bead recorded the daemon at 0 unread, and a
+    // non-mutating read says 96. See `y256_the_beads_own_premise_was_a_consuming_read`.
+    let cli: Vec<InboxRow> = (0..MEASURED_CLI_UNREAD)
+        .map(|i| row(40000 + i as u64, "GreenFrog", "ACK needed", None))
+        .collect();
+    let verdict = classify(
+        &page(),
+        &cli,
+        None,
+        DaemonArm::Unread(MEASURED_DAEMON_UNREAD),
+    );
+    assert_eq!(
+        verdict,
+        MonitorVerdict::AuthoritiesDisagree {
+            daemon_unread: MEASURED_DAEMON_UNREAD,
+            cli_unread: MEASURED_CLI_UNREAD,
+        },
+        "the live divergence must not resolve to either arm"
+    );
+    assert_eq!(verdict.exit_code(), 16, "a distinct code, not folded into 12");
+
+    // BOTH numbers and BOTH sources in the line a human reads. A disagreement that names
+    // one side is the defect this verdict replaces.
+    let line = verdict.human_line();
+    for needle in ["96", "20", "daemon", "CLI", "storage.sqlite3", "fetch_inbox"] {
+        assert!(line.contains(needle), "the line must carry {needle:?}: {line}");
+    }
+    assert!(
+        !line.contains("unread; oldest from"),
+        "it must NOT wear the MailWaiting shape: {line}"
+    );
+}
+
+#[test]
+fn y256_agreement_reports_the_shared_answer_and_is_not_a_disagreement() {
+    // KNOWN-GOOD ARM, and the one that matters: a check that fires on every run is a check
+    // that gets routed around. Two arms agreeing must produce the ordinary verdicts.
+    let unread_rows = vec![row(40772, "BlueLantern", "[identity] lifecycle", None)];
+    assert!(matches!(
+        classify(&page(), &unread_rows, None, DaemonArm::Unread(1)),
+        MonitorVerdict::MailWaiting { unread: 1, .. }
+    ));
+
+    let read_rows = vec![row(
+        40772,
+        "BlueLantern",
+        "[identity] lifecycle",
+        Some("2026-09-02T00:00:00Z"),
+    )];
+    assert_eq!(
+        classify(&page(), &read_rows, None, DaemonArm::Unread(0)),
+        MonitorVerdict::Clear,
+        "agreement on zero is Clear, not a disagreement about zero"
+    );
+}
+
+#[test]
+fn y256_a_cursor_fault_still_outranks_a_disagreement() {
+    // ORDER. A disagreement about READ state says nothing about the delivery POSITION, and
+    // the cursor faults are the ones that destroy their own evidence by advancing. So they
+    // must still win, even while the arms are in conflict.
+    let page = page();
+    let cli = vec![row(1, "GreenFrog", "x", None)];
+
+    let regressed = classify(
+        &page,
+        &cli,
+        Some(page.tail_cursor + 1),
+        DaemonArm::Unread(999),
+    );
+    assert!(
+        matches!(regressed, MonitorVerdict::CursorRegressed { .. }),
+        "a regressed cursor must outrank a disagreement, got {regressed:?}"
+    );
+
+    let below = classify(
+        &page,
+        &cli,
+        Some(page.oldest_available_cursor - 1),
+        DaemonArm::Unread(999),
+    );
+    assert!(
+        matches!(below, MonitorVerdict::CursorBelowFloor { .. }),
+        "a below-floor cursor must outrank a disagreement, got {below:?}"
+    );
+
+    // POSITIVE CONTROL: with a SANE cursor the same inputs do reach the disagreement, so the
+    // two assertions above are about ORDER and not about the check being unreachable.
+    let sane = classify(&page, &cli, Some(page.tail_cursor), DaemonArm::Unread(999));
+    assert!(
+        matches!(sane, MonitorVerdict::AuthoritiesDisagree { .. }),
+        "the disagreement must be reachable at all, got {sane:?}"
+    );
+}
+
+#[test]
+fn y256_unauthorized_and_absent_are_not_the_same_verdict_or_the_same_line() {
+    // ACCEPTANCE 3. `am agent start` once reported "no listener on 127.0.0.1:8765" about a
+    // daemon that was running and answering /health — an AUTH FAILURE REPORTED AS ABSENCE.
+    // The two must differ as VALUES, not merely in prose.
+    let unauthorized = MonitorVerdict::Unreachable {
+        detail: "the daemon ANSWERED and refused our credential (HTTP 401)".to_string(),
+        reason: UnreachableReason::Unauthorized { status: 401 },
+    };
+    let absent = MonitorVerdict::Unreachable {
+        detail: "nothing answered on the MCP endpoint".to_string(),
+        reason: UnreachableReason::Absent,
+    };
+    assert_ne!(unauthorized, absent);
+    assert_ne!(
+        unauthorized.human_line(),
+        absent.human_line(),
+        "the two must not produce the same detail string"
+    );
+    assert_ne!(
+        UnreachableReason::Unauthorized { status: 401 }.label(),
+        UnreachableReason::Absent.label()
+    );
+
+    // The REMEDIES are opposite, and each line must carry its own.
+    assert!(
+        unauthorized.human_line().contains("do NOT restart"),
+        "an auth failure must not read as 'start the daemon': {}",
+        unauthorized.human_line()
+    );
+    assert!(
+        absent.human_line().contains("START the daemon"),
+        "an absent listener must say to start one: {}",
+        absent.human_line()
+    );
+
+    // Both remain exit 13 — the CODE is the same fact ("no verdict"), the REASON is not.
+    assert_eq!(unauthorized.exit_code(), 13);
+    assert_eq!(absent.exit_code(), 13);
+    // And neither advances the cursor.
+    assert!(!unauthorized.advances_cursor() && !absent.advances_cursor());
+}
+
+#[test]
+fn y256_the_disagreement_advances_the_cursor_and_says_why() {
+    // The POSITION was proven — both cursor guards passed — so withholding the advance would
+    // imply the position is suspect when only the mailbox is. Documented as intentional
+    // because it is the opposite choice from the two cursor faults sitting beside it.
+    let verdict = MonitorVerdict::AuthoritiesDisagree {
+        daemon_unread: 96,
+        cli_unread: 20,
+    };
+    assert!(verdict.advances_cursor());
+    assert_eq!(verdict.label(), "authorities_disagree");
+    // Not a failure, so it carries no `detail`, and it must not be confused with one.
+    assert_ne!(verdict.exit_code(), 13);
+}
+
+#[test]
+fn y256_the_beads_own_premise_was_a_consuming_read() {
+    // The bead recorded `MCP fetch_inbox (daemon) -> 0 unread, every row carries a read_ts`.
+    // Re-measured with `mark_read:false`, the daemon reports 96 unread of 128 rows with 32
+    // carrying a non-null `read_ts`. The refutation names its own cause: `fetch_inbox`'s
+    // `mark_read` DEFAULTS TO TRUE, so a read that omits it consumes the unread state it was
+    // measuring — and a second read then honestly reports zero with every returned row
+    // stamped. That is why the daemon arm sets it explicitly, and why `InboxRequest` carries
+    // the field with an explicit `false` default instead of inheriting the daemon's.
+    //
+    // This leg pins the numbers so a future convergence is a visible change and not a quiet
+    // one. If the arms converge, UPDATE it with the new measurement — do not delete it.
+    assert_ne!(
+        MEASURED_DAEMON_UNREAD, 0,
+        "the bead's premise of a zero daemon count is refuted, not inherited"
+    );
+    assert_ne!(MEASURED_DAEMON_UNREAD, MEASURED_CLI_UNREAD);
+    // 32 read + 96 unread = 128 total: the arithmetic the non-mutating read returned.
+    assert_eq!(32 + MEASURED_DAEMON_UNREAD, 128);
 }
