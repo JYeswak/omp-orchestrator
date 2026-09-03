@@ -11,7 +11,7 @@ kernel_output = "PreCommitOutcome::{Clean, Violation, NothingToCheck} | crate_at
 event_row = "LifecycleEvent{stage_from=S6c, stage_to=S7, actor, pane, incarnation, repo, staged_paths, outcome, gate, reason_code}"
 validator = "The installed pre-commit hook reaches pre-registration and plan-assemble prechecks, then six staged-set gates; GATE 7 is staged-build-gate and GATE 8 is crate-atom-gate. RCH admission is required for cargo lanes; the live lane verdict is recorded outside this pure box."
 sota_standard = "A validation runner must fail closed on an applicable violation, distinguish an unrun instrument from a refusal, and reject an empty scan rather than calling it clean."
-sota_cite = "this-repo:crates/no-shell-gate/src/bin/pre-commit-gate.rs:L1; this-repo:crates/no-shell-gate/src/bin/pre-commit-gate.rs:L3; this-repo:crates/no-shell-gate/src/bin/pre-commit-gate.rs:L22; this-repo:crates/no-shell-gate/src/bin/pre-commit-gate.rs:L94; this-repo:crates/no-shell-gate/src/bin/pre-commit-gate.rs:L300; this-repo:crates/crate-atom-gate/src/lib.rs:L50; this-repo:crates/crate-atom-gate/src/lib.rs:L322; this-repo:crates/staged-build-gate/src/lib.rs:L311; runtime:.git/hooks/pre-commit is Mach-O arm64 and strings includes crates/no-shell-gate/src/bin/pre-commit-gate.rs; runtime:rch admit cargo test -p crate-atom-gate => offload; FH_STATUS: STALE SEARCH_INDEX_STALE"
+sota_cite = "this-repo:crates/no-shell-gate/src/bin/pre-commit-gate.rs:L1; this-repo:crates/no-shell-gate/src/bin/pre-commit-gate.rs:L3; this-repo:crates/no-shell-gate/src/bin/pre-commit-gate.rs:L22; this-repo:crates/no-shell-gate/src/bin/pre-commit-gate.rs:L94; this-repo:crates/no-shell-gate/src/bin/pre-commit-gate.rs:L300; this-repo:crates/crate-atom-gate/src/lib.rs:L50; this-repo:crates/crate-atom-gate/src/lib.rs:L322; this-repo:crates/staged-build-gate/src/lib.rs:L311; this-repo:docs/plan/flow/CONTRACT.md:L70; runtime:.git/hooks/pre-commit is Mach-O arm64 and strings includes crates/no-shell-gate/src/bin/pre-commit-gate.rs; runtime:rch admit cargo test -p crate-atom-gate => offload; FH_STATUS: STALE SEARCH_INDEX_STALE"
 skill = "/oracle-gates, /testing-conformance-harnesses, /rch"
 branches = [
   "PreCommitOutcome::Clean",
@@ -36,3 +36,136 @@ branches = [
   "human-halt: owner=josh resolves an unfixable validation refusal",
 ]
 no_claim = "This box records the dispatcher and hook reachability; it does not claim that every gate is semantically complete, that RCH is healthy on every tick, or that a passing validation proves downstream lifecycle success."
+
+# Wave 1 physics. Every number is paired with the command, timestamp, and actor.
+[[box.measurement]]
+claim = "The dispatcher has eight validation lanes: two prechecks, six staged-set gates, then GATE 7 and GATE 8."
+command = "sed -n '1,8p;94,115p;300,345p' crates/no-shell-gate/src/bin/pre-commit-gate.rs"
+value = "6 named staged-set gates; preregistration and plan-assemble prechecks; GATE 7 staged-build-gate; GATE 8 crate-atom-gate"
+measured_at = "2026-09-03T05:31:12Z"
+by = "QuietRidge"
+
+[[box.measurement]]
+claim = "The primary verdict lattices have closed arm sets."
+command = "sed -n '22,34p' crates/no-shell-gate/src/bin/pre-commit-gate.rs; sed -n '322,345p' crates/crate-atom-gate/src/lib.rs; sed -n '309,329p' crates/staged-build-gate/src/lib.rs"
+value = "PreCommitOutcome=3 arms; crate-atom GateVerdict=4 arms; staged-build CargoBuildOutcome=4 arms"
+measured_at = "2026-09-03T05:31:12Z"
+by = "QuietRidge"
+
+[[box.measurement]]
+claim = "The crate-atom checklist is nine parts, including wired caller reachability."
+command = "sed -n '47,85p' crates/crate-atom-gate/src/lib.rs"
+value = "Part::ALL contains 9 entries: Lib, Bin, Verdict, Tests, Fuzz, Claim, Slo, Oracle, WiredCaller"
+measured_at = "2026-09-03T05:31:12Z"
+by = "QuietRidge"
+
+[[box.measurement]]
+claim = "The local hook reaches the dispatcher binary, and the cargo lane is admissible for remote execution."
+command = "file .git/hooks/pre-commit; ls -l .git/hooks/pre-commit; strings .git/hooks/pre-commit | grep -E 'pre-commit-gate|no-shell-gate'; rch admit 'cargo test -p crate-atom-gate'"
+value = "Mach-O arm64 executable; strings contains the dispatcher source path; RCH recommendation=offload, family=cargo_test"
+measured_at = "2026-09-03T05:31:12Z"
+by = "QuietRidge"
+
+[[box.measurement]]
+claim = "The Wave 1 checklist is sixteen classes before the additional diagram, hook, and measurement obligations."
+command = "sed -n '70,77p' docs/plan/flow/CONTRACT.md"
+value = "9 crate-atom parts + 7 rigor classes = 16"
+measured_at = "2026-09-03T05:31:12Z"
+by = "QuietRidge"
+
+[[box.measurement]]
+claim = "The owned branch diagram is complete and rendered."
+command = "frankenmermaid validate docs/plan/flow/diagrams/S7.mmd --fail-on warning; frankenmermaid render docs/plan/flow/diagrams/S7.mmd --format svg --output docs/plan/flow/diagrams/S7.svg"
+value = "validate_exit=0; Nodes=21; Edges=20; rendered SVG present"
+measured_at = "2026-09-03T05:33:31Z"
+by = "QuietRidge"
+
+# Wave 1 gap walk. PRESENT means the class has evidence; PARTIAL and MISSING remain blockers.
+[[box.gap]]
+what = "atom.1.lib: PRESENT — typed Rust dispatcher logic exists"
+resolves = "none; preserve source-backed kernel"
+class = "atom.1.lib"
+[[box.gap]]
+what = "atom.2.bin: PRESENT — pre-commit-gate is a Rust binary target"
+resolves = "none; retain the installed hook identity proof"
+class = "atom.2.bin"
+[[box.gap]]
+what = "atom.3.verdict_type: PRESENT — PreCommitOutcome and downstream typed verdicts have closed arms"
+resolves = "none; keep the arm inventory exhaustive"
+class = "atom.3.verdict_type"
+[[box.gap]]
+what = "atom.4.tests: PRESENT — no-shell-gate has 40 integration test files and the two downstream gates add test targets"
+resolves = "none; d3gm must keep the gate tests attributable"
+class = "atom.4.tests"
+[[box.gap]]
+what = "atom.5.fuzz: MISSING — the four root fuzz targets do not target this dispatcher or its staged-set parser"
+resolves = "MISSING: add a dispatcher/staged-set fuzz target or a named d3gm allowance with a ratcheting ceiling"
+class = "atom.5.fuzz"
+[[box.gap]]
+what = "atom.6.claim: MISSING — no claim registry row states the dispatcher contract"
+resolves = "MISSING: add a claims registry row with a stronger justifier and source pin"
+class = "atom.6.claim"
+[[box.gap]]
+what = "atom.7.slo: MISSING — no slo.yaml row covers validation latency or refusal completeness"
+resolves = "MISSING: add a validation SLO row with a measured command and threshold"
+class = "atom.7.slo"
+[[box.gap]]
+what = "atom.8.oracle: MISSING — no independent external oracle compares the dispatcher result"
+resolves = "MISSING: add a named external/differential oracle and run it from the gate"
+class = "atom.8.oracle"
+[[box.gap]]
+what = "atom.9.wired_caller: PARTIAL — the installed hook reaches the dispatcher, but an independent reachability assertion for all eight lanes is absent"
+resolves = "d3gm: add a WIRED_CALLERS reachability test with a positive control and a dead-lane mutation"
+class = "atom.9.wired_caller"
+[[box.gap]]
+what = "rigor.L1.claim_row: MISSING — the gate's load-bearing claim is not registered"
+resolves = "MISSING: register the claim row and its source-backed justifier"
+class = "claim_row(L1)"
+[[box.gap]]
+what = "rigor.L2.slo: MISSING — no performance floor is registered for this tick-path validation"
+resolves = "MISSING: add the SLO row and a bounded measurement command"
+class = "slo(L2)"
+[[box.gap]]
+what = "rigor.L3.oracle: MISSING — RCH admission is an execution route, not a correctness oracle"
+resolves = "MISSING: name and invoke an independent correctness oracle"
+class = "oracle(L3)"
+[[box.gap]]
+what = "rigor.L4.gate_trip: PARTIAL — source has refusal and anti-vacuity branches, but a current eight-lane good/bad/mutation matrix is not proven"
+resolves = "d3gm: publish the eight-lane matrix with known-good, known-bad, mutation, and empty-scan legs"
+class = "gate_trip(L4)"
+[[box.gap]]
+what = "rigor.L5.fuzz: MISSING — no dispatcher fuzz corpus or target"
+resolves = "MISSING: add fuzz/fuzz_targets/pre_commit_dispatcher.rs and seed the empty/deletion paths"
+class = "fuzz(L5)"
+[[box.gap]]
+what = "rigor.L6.formal: MISSING — no formal artifact checks the staged-set-to-verdict invariant"
+resolves = "MISSING: add a formal/conformance witness or explicitly escalate the assurance decision"
+class = "formal(L6)"
+[[box.gap]]
+what = "rigor.L7.lock: PARTIAL — commit serialization and staged-set TOCTOU recheck exist, but cross-process lock coverage is not independently proven"
+resolves = "MISSING: add a lock contention race leg and a certified lock row"
+class = "lock(L7)"
+[[box.gap]]
+what = "diagram: PRESENT — one node per branch, validate_exit=0, rendered SVG exists"
+resolves = "none; x226 must consume the generated diagram rather than a hand-edited branch list"
+class = "diagram"
+[[box.gap]]
+what = "hook: PARTIAL — the local hook is Rust/Mach-O and reaches the dispatcher, but its hooks_certified.toml row and six-stage certification evidence are not present in this repository"
+resolves = "MISSING: add the certified hook row, source commit, policy file, and /hook-certification stage receipt"
+class = "hook"
+[[box.gap]]
+what = "measurement: PRESENT for this Wave 1 pass — every owned numeric claim above has a command, timestamp, and actor"
+resolves = "none for this pass; future measurements must refresh moving RCH and hook state"
+class = "measurement"
+
+[box.agreement]
+wave = 1
+owner = "QuietRidge"
+reviewers = ["AmberGate", "BlueLantern", "SilverWolf"]
+open_disagreements = 0
+status = "draft"
+approval = "MISSING"
+
+[box.diagram]
+mmd = "docs/plan/flow/diagrams/S7.mmd"
+validate_exit = 0

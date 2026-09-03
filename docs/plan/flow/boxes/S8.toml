@@ -11,7 +11,7 @@ kernel_output = "IdentityCheck{binary_name, repo_ownership, head_sha, build_id_i
 event_row = "LifecycleEvent{stage_from=S7, stage_to=S8, actor, pane, incarnation, binary, head_sha, build_id, inode, rollback, outcome, reason_code}"
 validator = "installer --check exercises the build_id/version identity legs; RCH admits the release build on the pinned contabo-3 lane; staged-build-gate classifies the cargo result; install_binary verifies the staged copy before atomic replacement; jplf.7.20 supplies the prior-binary rollback transcript."
 sota_standard = "Installation is a controlled ownership transfer: identify the source artifact, reject identity drift before replacement, preserve the prior artifact, and verify the restart or rollback postcondition with a bounded build lane."
-sota_cite = "this-repo:crates/installer/src/main.rs:L13; this-repo:crates/installer/src/main.rs:L36; this-repo:crates/installer/src/lib.rs:L165; this-repo:crates/installer/src/lib.rs:L186; this-repo:crates/installer/src/lib.rs:L196; this-repo:crates/installer/src/lib.rs:L344; this-repo:crates/installer/src/lib.rs:L664; this-repo:crates/installer/src/lib.rs:L705; this-repo:crates/installer/src/lib.rs:L716; this-repo:crates/staged-build-gate/src/lib.rs:L311; this-repo:.cargo/config.toml:L9; this-repo:.cargo/config.toml:L35; runtime:rch admit cargo build --release -p installer => offload; FH_STATUS: STALE SEARCH_INDEX_STALE"
+sota_cite = "this-repo:crates/installer/src/main.rs:L13; this-repo:crates/installer/src/main.rs:L36; this-repo:crates/installer/src/lib.rs:L165; this-repo:crates/installer/src/lib.rs:L186; this-repo:crates/installer/src/lib.rs:L196; this-repo:crates/installer/src/lib.rs:L344; this-repo:crates/installer/src/lib.rs:L664; this-repo:crates/installer/src/lib.rs:L705; this-repo:crates/installer/src/lib.rs:L716; this-repo:crates/staged-build-gate/src/lib.rs:L311; this-repo:.cargo/config.toml:L9; this-repo:.cargo/config.toml:L35; this-repo:docs/plan/flow/CONTRACT.md:L70; runtime:rch admit cargo build --release -p installer => offload; FH_STATUS: STALE SEARCH_INDEX_STALE"
 skill = "/installer-workmanship, /release-preparations, /rch"
 branches = [
   "RepoOwnership::ThisRepo",
@@ -32,3 +32,150 @@ branches = [
   "human-halt: owner=josh approves a restart or rollback after identity refusal",
 ]
 no_claim = "This box records installer identity, bounded build classification, and rollback evidence; it does not prove launchd continuity, receiver liveness, delivery, or that an installed artifact matches the current workspace unless the identity legs pass."
+
+# Wave 1 physics. Every number is paired with the command, timestamp, and actor.
+[[box.measurement]]
+claim = "The installer exposes four tracked binaries and bounded CLI verbs."
+command = "sed -n '11,18p;35,50p' crates/installer/src/main.rs"
+value = "BINARIES=4; verbs include --check, --install <target>, --version, --help"
+measured_at = "2026-09-03T05:31:12Z"
+by = "QuietRidge"
+
+[[box.measurement]]
+claim = "Identity and restart classification are closed over four-way branches."
+command = "sed -n '164,192p;195,232p' crates/installer/src/lib.rs"
+value = "RepoOwnership=3 arms; identity_legs=4 outcomes; RestartPostcondition=4 arms"
+measured_at = "2026-09-03T05:31:12Z"
+by = "QuietRidge"
+
+[[box.measurement]]
+claim = "The installer has a build fence and verifies the staged artifact before atomic replacement."
+command = "sed -n '344,407p;664,716p' crates/installer/src/lib.rs"
+value = "build fence check; staged copy; identity verification; atomic same-filesystem rename"
+measured_at = "2026-09-03T05:31:12Z"
+by = "QuietRidge"
+
+[[box.measurement]]
+claim = "The shared cargo result classifier has four arms and admits only Pass."
+command = "sed -n '309,329p' crates/staged-build-gate/src/lib.rs"
+value = "CargoBuildOutcome=4 arms: Pass, BuildFailed, BuildInconclusive, NotApplicable"
+measured_at = "2026-09-03T05:31:12Z"
+by = "QuietRidge"
+
+[[box.measurement]]
+claim = "The repo pins this lane to contabo-3 and RCH admits the installer release build remotely."
+command = "sed -n '1,35p' .cargo/config.toml; rch admit 'cargo build --release -p installer'"
+value = "RCH_WORKER=contabo-3; RCH recommendation=offload, family=cargo_build"
+measured_at = "2026-09-03T05:31:12Z"
+by = "QuietRidge"
+
+[[box.measurement]]
+claim = "Installer test and rollback evidence is incomplete in the current tree."
+command = "[ -d crates/installer/tests ] && echo tests_dir=PRESENT || echo tests_dir=MISSING; grep -R -n -E 'rollback|prior binary' crates/installer docs/plan/dag | head -20"
+value = "tests_dir=MISSING; rollback references exist in source and plan, but no persisted rollback transcript was found"
+measured_at = "2026-09-03T05:31:12Z"
+by = "QuietRidge"
+
+[[box.measurement]]
+claim = "The Wave 1 checklist is sixteen classes before the additional diagram, hook, and measurement obligations."
+command = "sed -n '70,77p' docs/plan/flow/CONTRACT.md"
+value = "9 crate-atom parts + 7 rigor classes = 16"
+measured_at = "2026-09-03T05:31:12Z"
+by = "QuietRidge"
+
+[[box.measurement]]
+claim = "The owned branch diagram is complete and rendered."
+command = "frankenmermaid validate docs/plan/flow/diagrams/S8.mmd --fail-on warning; frankenmermaid render docs/plan/flow/diagrams/S8.mmd --format svg --output docs/plan/flow/diagrams/S8.svg"
+value = "validate_exit=0; Nodes=17; Edges=16; rendered SVG present"
+measured_at = "2026-09-03T05:33:31Z"
+by = "QuietRidge"
+
+# Wave 1 gap walk. PRESENT means the class has evidence; PARTIAL and MISSING remain blockers.
+[[box.gap]]
+what = "atom.1.lib: PRESENT — installer identity and placement logic exists in typed Rust"
+resolves = "none; preserve the source-backed kernel"
+class = "atom.1.lib"
+[[box.gap]]
+what = "atom.2.bin: PRESENT — installer has a Rust binary target"
+resolves = "none; retain the CLI target and identity marker"
+class = "atom.2.bin"
+[[box.gap]]
+what = "atom.3.verdict_type: PRESENT — RestartPostcondition and CargoBuildOutcome are typed"
+resolves = "none; keep all refusal and inconclusive arms distinct"
+class = "atom.3.verdict_type"
+[[box.gap]]
+what = "atom.4.tests: MISSING — no crates/installer/tests target; inline unit tests do not satisfy the external contract target"
+resolves = "jplf.7.20: add a real install-over-existing-artifact and rollback integration target"
+class = "atom.4.tests"
+[[box.gap]]
+what = "atom.5.fuzz: MISSING — no installer identity or rollback fuzz target"
+resolves = "MISSING: add fuzz/fuzz_targets/installer_identity.rs or a named d3gm allowance"
+class = "atom.5.fuzz"
+[[box.gap]]
+what = "atom.6.claim: MISSING — no claim registry row for identity-safe replacement"
+resolves = "MISSING: register the identity and rollback claim with a stronger justifier"
+class = "atom.6.claim"
+[[box.gap]]
+what = "atom.7.slo: MISSING — no install or rollback SLO row"
+resolves = "MISSING: add bounded install latency and rollback completion SLOs"
+class = "atom.7.slo"
+[[box.gap]]
+what = "atom.8.oracle: MISSING — no independent artifact oracle compares predecessor and installed bytes/build IDs"
+resolves = "sor6 plus MISSING: add a cross-platform artifact oracle and receipt hash"
+class = "atom.8.oracle"
+[[box.gap]]
+what = "atom.9.wired_caller: MISSING — installer is hand-invocable but no in-repo caller or reachability assertion consumes it"
+resolves = "6hrv/jplf.7: add a real install caller and a positive-control reachability test"
+class = "atom.9.wired_caller"
+[[box.gap]]
+what = "rigor.L1.claim_row: MISSING — install identity is not registered as a load-bearing claim"
+resolves = "MISSING: add the claim row and source pin"
+class = "claim_row(L1)"
+[[box.gap]]
+what = "rigor.L2.slo: MISSING — no measured install/rollback performance floor"
+resolves = "MISSING: add the SLO row and bounded measurement"
+class = "slo(L2)"
+[[box.gap]]
+what = "rigor.L3.oracle: MISSING — RCH placement is not a correctness oracle"
+resolves = "MISSING: add an independent artifact identity/rollback oracle"
+class = "oracle(L3)"
+[[box.gap]]
+what = "rigor.L4.gate_trip: PARTIAL — source refuses identity drift and build failures, but no current rollback transcript proves the end-to-end gate trip"
+resolves = "jplf.7.20: run the rollback acceptance with exit_code=0 and rollback=true"
+class = "gate_trip(L4)"
+[[box.gap]]
+what = "rigor.L5.fuzz: MISSING — no adversarial predecessor/build-id corpus"
+resolves = "MISSING: add installer fuzz inputs for foreign, unknown, and mismatched artifacts"
+class = "fuzz(L5)"
+[[box.gap]]
+what = "rigor.L6.formal: MISSING — no formal invariant for preserve-before-replace and identity refusal"
+resolves = "MISSING: add a formal/conformance witness or escalate the assurance decision"
+class = "formal(L6)"
+[[box.gap]]
+what = "rigor.L7.lock: PARTIAL — .build_in_flight is checked, but cross-process ownership and rollback locking are not independently proven"
+resolves = "MISSING: add a lock contention test and certified ownership row"
+class = "lock(L7)"
+[[box.gap]]
+what = "diagram: PRESENT — one node per branch, validate_exit=0, rendered SVG exists"
+resolves = "none; x226 must consume the generated branch diagram"
+class = "diagram"
+[[box.gap]]
+what = "hook: MISSING — installer has no certified hook row or automatic invocation path"
+resolves = "MISSING: add a Rust certified install hook only if Joshua approves automatic installation"
+class = "hook"
+[[box.gap]]
+what = "measurement: PRESENT for this Wave 1 pass — every owned numeric claim above has a command, timestamp, and actor"
+resolves = "none for this pass; refresh moving RCH and artifact state before approval"
+class = "measurement"
+
+[box.agreement]
+wave = 1
+owner = "QuietRidge"
+reviewers = ["AmberGate", "BlueLantern", "SilverWolf"]
+open_disagreements = 0
+status = "draft"
+approval = "MISSING"
+
+[box.diagram]
+mmd = "docs/plan/flow/diagrams/S8.mmd"
+validate_exit = 0
