@@ -31,11 +31,20 @@
 # step. GitHub Actions does not resolve YAML anchors, so the step is repeated per
 # job rather than shared.
 #
-# NOT BUILT HERE, DELIBERATELY: `crates/loop-driver` does not compile on EITHER
-# channel (E0599 — `asupersync::Cx::for_request()` is upstream-gated behind
-# `cfg(any(test, feature = "test-internals"))`). No job below builds it. Do not
-# add a `cargo check --workspace` job without fixing that first; it would go red
-# immediately and read as a regression from the stable flip, which it is not.
+# NOT BUILT HERE, DELIBERATELY: TWO crates do not compile at HEAD on EITHER
+# channel, and no job below builds either of them.
+#   - `crates/loop-driver`   — E0599, `asupersync::Cx::for_request()` is
+#     upstream-gated behind `cfg(any(test, feature = "test-internals"))`.
+#   - `crates/fleet-monitor` — 23 errors in the bin (33 with tests), from
+#     `E0433 cannot find type Stdio` at src/main.rs:586. It reads GREEN in a dirty
+#     worktree only because a sibling holds a ~320-line uncommitted diff on that
+#     file; it was found by measuring a `git archive` export instead. The worktree
+#     was the lie, which is the same reason the debt ceilings in
+#     `kernel-bypass-gate` are pinned to `git archive HEAD`.
+# Both were control-run on nightly-2026-08-23 and fail identically, so neither is
+# a consequence of the stable pin. Do not add a `cargo check --workspace` job
+# without fixing both first; it would go red immediately and read as a regression
+# from the stable flip, which it is not.
 name: gate
 
 on:
@@ -303,7 +312,28 @@ jobs:
           cargo --version
           rustc --version
       - run: cargo test -p omp-inventory-map
-      - run: cargo run --quiet -p omp-inventory-map -- .
+      # DELETED, not fixed: `cargo run --quiet -p omp-inventory-map -- .`
+      #
+      # There is NO argv that makes it pass on a runner, so correcting it the way
+      # the fence was corrected would not have worked. Measured against a clean
+      # `git clone --local` checkout at 4fb865c:
+      #   `-- .`                   exit 1  ERROR   "CONFIG_ERROR unknown argument ."
+      #   `-- doctor|health|audit` exit 2  UNKNOWN
+      #   `-- types --repo .`      exit 2  REFUSED (29 collisions, 23 unallowanced)
+      #   `-- version`             exit 0  OK      <- the only exit-0 command
+      # Independently confirmed here: `version` -> 0, `.` -> 1, `types --repo .` -> 2.
+      # doctor/health/audit probe the LOCALLY INSTALLED omp npm package and map any
+      # unresolved probe to exit 2, so the step asked a local-machine probe for a
+      # verdict about a GitHub runner. `types` is a report, not a gate.
+      #
+      # COVERAGE IS NOT LOST, and this is the load-bearing half: the type-census
+      # blocking leg now lives in the test suite above, as a derived invariant rather
+      # than the `assert_eq!` name snapshot that drifted from six names to eight and
+      # became cause 3 of this bead. `types_inventory` needs no external program —
+      # `grep -c 'omp_program\|find_program\|cargo_program'
+      # crates/omp-inventory-map/src/types_inventory.rs` returns 0, against a positive
+      # control of 3 in the same crate's `main.rs`, so the needle can match and the
+      # zero is real. It is a pure `crates/**` tree scan and runs on any runner.
   pre-delete-citation-check:
     # WIRING: this is one of the eight gates §06 is built around and CI did not
     # invoke it. Caught by wired_lanes, not by a human. refuses a delete whose citation is unresolved; never run by CI.
