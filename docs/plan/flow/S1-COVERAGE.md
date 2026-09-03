@@ -1,15 +1,15 @@
 # S1 Coverage Matrix
 
-Generated 2026-09-03T18:56Z by the Validation command below. **Never hand-edit the table.**
+Generated 2026-09-03T19:06Z by the Validation command below. **Never hand-edit the table.**
 
-`S1_REQUIREMENTS=401 COVERED=134 MISSING=267 DOC_ONLY=0`
+`S1_REQUIREMENTS=452 COVERED=50 MISSING=402 DOC_ONLY=0`
 
-TREE (git show HEAD of six contracts): stable-id occurrences summed=64 named-tests summed=15. Pane 1's census was 63 ids / 15 tests against TREE; this run's TREE tests=15. WORKTREE ids/tests are larger because L0/L1/L2 contracts are dirty in this worktree.
+TREE (git show HEAD of six contracts): stable-id occurrences summed=207 named-tests summed=32. Pane 1's census was 63 ids / 15 tests against TREE; this run's TREE tests=32. WORKTREE ids/tests are larger because L0/L1/L2 contracts are dirty in this worktree.
 A sha names a TREE. This command reads the worktree. Re-run after checkout of a clean tree to get TREE counts.
 
 ## Headline (WORKTREE)
 
-`S1_REQUIREMENTS=401 COVERED=134 MISSING=267 DOC_ONLY=0`
+`S1_REQUIREMENTS=452 COVERED=50 MISSING=402 DOC_ONLY=0`
 
 PX-P0 exit predicate is `MISSING = 0`. DOC-ONLY is not a way to zero MISSING; every DOC-ONLY row carries a reason.
 
@@ -17,10 +17,10 @@ PX-P0 exit predicate is `MISSING = 0`. DOC-ONLY is not a way to zero MISSING; ev
 
 | source | n | COVERED | MISSING | DOC_ONLY |
 |---|---:|---:|---:|---:|
-| `contract.stable_id` | 160 | 120 | 40 | 0 |
-| `contract.named_test` | 28 | 11 | 17 | 0 |
+| `contract.stable_id` | 207 | 39 | 168 | 0 |
+| `contract.named_test` | 32 | 11 | 21 | 0 |
 | `box.gap` | 10 | 0 | 10 | 0 |
-| `box.observability` | 36 | 3 | 33 | 0 |
+| `box.observability` | 36 | 0 | 36 | 0 |
 | `box.hook` | 108 | 0 | 108 | 0 |
 | `box.branch.diagram` | 20 | 0 | 20 | 0 |
 | `layer.exists` | 6 | 0 | 6 | 0 |
@@ -37,7 +37,24 @@ Added because pane 1 asked for an attack, not adoption:
 3. `decisions.HD` — HD-0009..0012. S1 cannot leave L3/L4/hooks without them.
 4. `crate-atom.L0` — nine parts on the one named S1 crate (`installer`). L1–L5 have no crate so they already fail `layer.exists`; applying 9 parts there would double-count the missing crate.
 
-Not counted (would require human judgement — cannot be gated): whether a branch string is 'the same' as a mermaid edge; whether a bead 'really' implements an ID vs mentioning it. Join is substring of bead title+description against the stable_id. False COVERED from a mention is possible; false MISSING is the safe direction.
+Not counted (cannot be gated): whether a branch string is a mermaid edge; whether a bead *implements* an ID. Join is now a word-boundary token in bead **title or acceptance_criteria**, not description prose.
+
+## Join delta (substring → token in title/acceptance)
+
+COVERED_before (loose substring on this same worktree pass) = 134
+COVERED_after (token in title or acceptance) = 50
+FALSE_COVERED = 84
+
+Examples of false COVERED (loose hit, tight miss):
+
+- `contract.stable_id` `L1-BUILD-DOCTOR` was joined to `omp-orchestrator-l1-build-doctor-25u5` by substring
+- `contract.stable_id` `L1-BUILD-SCOPE` was joined to `omp-orchestrator-l1-build-scope-myw3` by substring
+- `contract.stable_id` `L1-BUILD-PROBE-TMUX` was joined to `omp-orchestrator-l1-build-probe-tmux-pdpb` by substring
+- `contract.stable_id` `L1-BUILD-PROBE-NTM` was joined to `omp-orchestrator-l1-build-probe-ntm-mqag` by substring
+- `contract.stable_id` `L1-BUILD-PROBE-BR` was joined to `omp-orchestrator-l1-build-probe-br-g4pg` by substring
+- `contract.stable_id` `L1-BUILD-PROBE-BV` was joined to `omp-orchestrator-l1-build-probe-bv-lebe` by substring
+- `contract.stable_id` `L1-BUILD-PROBE-AGENT-MAIL` was joined to `omp-orchestrator-l1-build-probe-agent-mail-pev8` by substring
+- `contract.stable_id` `L1-BUILD-PROBE-SOCRATICODE` was joined to `omp-orchestrator-l1-build-probe-socraticode-52ig` by substring
 
 ## Matrix
 
@@ -69,54 +86,97 @@ Not counted (would require human judgement — cannot be gated): whether a branc
 | `contract.stable_id` | `OBS-L0-REPORT` | stable id in s1_l0_install.md | `—` | MISSING |
 | `contract.stable_id` | `OBS-L0-MONITOR` | stable id in s1_l0_install.md | `—` | MISSING |
 | `contract.stable_id` | `OBS-L0-GATE` | stable id in s1_l0_install.md | `—` | MISSING |
+| `contract.stable_id` | `L1-INPUT` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-VERDICT` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-REPAIR` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-UNDO` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-IDEMPOTENCE` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-DRIFT` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-SCOPE` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1P-EXHAUSTIVE-ARMS` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1P-WRONG-VERSION-STALE` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1P-UNRUN-NOT-REFUSED` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1P-PAUSED-DISTINCT` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1P-HD-NAMED` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `LAW-L1-VERDICT-EXHAUSTIVE` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `LAW-L1-UNRUN` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `LAW-L1-WRONG-VERSION` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `LAW-L1-PAUSED` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `LAW-L1-UNKNOWN` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1P-TWO-SIGNALS` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1P-UNKNOWN-LOUD` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1P-ONE-MUTATOR` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1P-BEFORE-HASH` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1P-CONDITIONAL-IDEMPOTENCE` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1P-REPAIR-THEN-REPROBE` | stable id in s1_l1_doctor.md | `—` | MISSING |
 | `contract.stable_id` | `LAW-L1-SCOPED-PROBE` | stable id in s1_l1_doctor.md | `—` | MISSING |
 | `contract.stable_id` | `LAW-L1-TWO-SIGNALS` | stable id in s1_l1_doctor.md | `—` | MISSING |
 | `contract.stable_id` | `LAW-L1-MUTATE-AUDIT` | stable id in s1_l1_doctor.md | `—` | MISSING |
 | `contract.stable_id` | `LAW-L1-CONDITIONAL-IDEMPOTENCE` | stable id in s1_l1_doctor.md | `—` | MISSING |
 | `contract.stable_id` | `LAW-L1-UNDO` | stable id in s1_l1_doctor.md | `—` | MISSING |
 | `contract.stable_id` | `LAW-L1-REPROBE` | stable id in s1_l1_doctor.md | `—` | MISSING |
-| `contract.stable_id` | `L1-BUILD-DOCTOR` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-build-doctor-25u5` | COVERED |
-| `contract.stable_id` | `L1-BUILD-SCOPE` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-build-scope-myw3` | COVERED |
-| `contract.stable_id` | `L1-BUILD-PROBE-TMUX` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-build-probe-tmux-pdpb` | COVERED |
-| `contract.stable_id` | `L1-BUILD-PROBE-NTM` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-build-probe-ntm-mqag` | COVERED |
-| `contract.stable_id` | `L1-BUILD-PROBE-BR` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-build-probe-br-g4pg` | COVERED |
-| `contract.stable_id` | `L1-BUILD-PROBE-BV` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-build-probe-bv-lebe` | COVERED |
-| `contract.stable_id` | `L1-BUILD-PROBE-AGENT-MAIL` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-build-probe-agent-mail-pev8` | COVERED |
-| `contract.stable_id` | `L1-BUILD-PROBE-SOCRATICODE` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-build-probe-socraticode-52ig` | COVERED |
-| `contract.stable_id` | `L1-BUILD-PROBE-RCH` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-build-probe-rch-n1ak` | COVERED |
-| `contract.stable_id` | `L1-BUILD-PROBE-GIT` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-build-probe-git-cij6` | COVERED |
-| `contract.stable_id` | `L1-BUILD-PROBE-DISK` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-build-probe-disk-9s1p` | COVERED |
-| `contract.stable_id` | `L1-BUILD-PROBE-FRANKENMERMAID` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-build-probe-frankenmermaid-4g8g` | COVERED |
-| `contract.stable_id` | `L1-BUILD-PROBE-TOOLCHAIN` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-build-probe-toolchain-fz4n` | COVERED |
-| `contract.stable_id` | `L1-BUILD-TWO-SIGNALS` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-build-two-signals-cqib` | COVERED |
+| `contract.stable_id` | `L1-BUILD-DOCTOR` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-BUILD-SCOPE` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-BUILD-PROBE-TMUX` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-BUILD-PROBE-NTM` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-BUILD-PROBE-BR` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-BUILD-PROBE-BV` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-BUILD-PROBE-AGENT-MAIL` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-BUILD-PROBE-SOCRATICODE` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-BUILD-PROBE-RCH` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-BUILD-PROBE-GIT` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-BUILD-PROBE-DISK` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-BUILD-PROBE-FRANKENMERMAID` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-BUILD-PROBE-TOOLCHAIN` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-BUILD-TWO-SIGNALS` | stable id in s1_l1_doctor.md | `—` | MISSING |
 | `contract.stable_id` | `L1-BUILD-VERDICT` | stable id in s1_l1_doctor.md | `—` | MISSING |
-| `contract.stable_id` | `L1-BUILD-REMEDIATION` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-build-remediation-o0nl` | COVERED |
-| `contract.stable_id` | `L1-BUILD-EXIT` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-build-exit-apqm` | COVERED |
-| `contract.stable_id` | `L1-BUILD-MUTATE` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-build-mutate-hxot` | COVERED |
-| `contract.stable_id` | `L1-BUILD-UNDO` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-build-undo-wctj` | COVERED |
-| `contract.stable_id` | `L1-BUILD-REPROBE-IDEMPOTENCE` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-build-reprobe-idempotence-il2t` | COVERED |
-| `contract.stable_id` | `L1-TEST-PROBE-TMUX` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-test-probe-tmux-nwcm` | COVERED |
-| `contract.stable_id` | `L1-TEST-PROBE-NTM` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-test-probe-ntm-iedm` | COVERED |
-| `contract.stable_id` | `L1-TEST-PROBE-BR` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-test-probe-br-xcpj` | COVERED |
-| `contract.stable_id` | `L1-TEST-PROBE-BV` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-test-probe-bv-ggdt` | COVERED |
-| `contract.stable_id` | `L1-TEST-PROBE-AGENT-MAIL` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-test-probe-agent-mail-e331` | COVERED |
-| `contract.stable_id` | `L1-TEST-PROBE-SOCRATICODE` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-test-probe-socraticode-1cda` | COVERED |
-| `contract.stable_id` | `L1-TEST-PROBE-RCH` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-test-probe-rch-4y4z` | COVERED |
-| `contract.stable_id` | `L1-TEST-PROBE-GIT` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-test-probe-git-6dn9` | COVERED |
-| `contract.stable_id` | `L1-TEST-PROBE-DISK` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-test-probe-disk-6drs` | COVERED |
-| `contract.stable_id` | `L1-TEST-PROBE-FRANKENMERMAID` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-test-probe-frankenmermaid-vzoi` | COVERED |
-| `contract.stable_id` | `L1-TEST-PROBE-TOOLCHAIN` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-test-probe-toolchain-1hni` | COVERED |
-| `contract.stable_id` | `L1-TEST-TWO-SIGNAL` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-test-two-signal-wrbx` | COVERED |
-| `contract.stable_id` | `L1-TEST-VERDICT-ARMS` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-test-verdict-arms-gsig` | COVERED |
-| `contract.stable_id` | `L1-TEST-TIMEOUT-UNRUN` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-test-timeout-unrun-4b9b` | COVERED |
-| `contract.stable_id` | `L1-TEST-ABSENT-REMEDIATION` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-test-absent-remediation-mf3m` | COVERED |
-| `contract.stable_id` | `L1-TEST-EXIT-LATTICE` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-test-exit-lattice-ocnm` | COVERED |
-| `contract.stable_id` | `L1-TEST-MUTATE-BACKUP` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-test-mutate-backup-kyng` | COVERED |
-| `contract.stable_id` | `L1-TEST-UNDO` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-test-undo-3oq5` | COVERED |
-| `contract.stable_id` | `L1-TEST-IDEMPOTENT-SAME` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-test-idempotent-same-s12x` | COVERED |
-| `contract.stable_id` | `L1-TEST-IDEMPOTENT-DRIFT` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-test-idempotent-drift-k187` | COVERED |
-| `contract.stable_id` | `L1-TEST-REPROBE-HALT` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-test-reprobe-halt-jgat` | COVERED |
-| `contract.stable_id` | `L1-TEST-SCOPE-UNKNOWN` | stable id in s1_l1_doctor.md | `omp-orchestrator-l1-test-scope-unknown-jrvj` | COVERED |
+| `contract.stable_id` | `L1-BUILD-REMEDIATION` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-BUILD-EXIT` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-BUILD-MUTATE` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-BUILD-UNDO` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-BUILD-REPROBE-IDEMPOTENCE` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-TEST-PROBE-TMUX` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-TEST-PROBE-NTM` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-TEST-PROBE-BR` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-TEST-PROBE-BV` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-TEST-PROBE-AGENT-MAIL` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-TEST-PROBE-SOCRATICODE` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-TEST-PROBE-RCH` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-TEST-PROBE-GIT` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-TEST-PROBE-DISK` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-TEST-PROBE-FRANKENMERMAID` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-TEST-PROBE-TOOLCHAIN` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-TEST-TWO-SIGNAL` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-TEST-VERDICT-ARMS` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-TEST-TIMEOUT-UNRUN` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-TEST-ABSENT-REMEDIATION` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-TEST-EXIT-LATTICE` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-TEST-MUTATE-BACKUP` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-TEST-UNDO` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-TEST-IDEMPOTENT-SAME` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-TEST-IDEMPOTENT-DRIFT` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-TEST-REPROBE-HALT` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L1-TEST-SCOPE-UNKNOWN` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `OBS-L1-PROBE` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `OBS-L1-VERDICT` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `OBS-L1-MUTATION` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `OBS-L1-UNDO` | stable id in s1_l1_doctor.md | `—` | MISSING |
+| `contract.stable_id` | `L2-IDENTITY` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TRUST` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-SNAPSHOT` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-INCEPTION` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-FOUNDATION` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-REPROBE` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-SCOPE` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-IDEMPOTENCE` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2P-IDENTITY-BEFORE-WRITE` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2P-NO-FOREIGN-OVERWRITE` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2P-BACKUP-BEFORE-HASH` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2P-INCEPTION-COMPLETE` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2P-FOUNDATION-LINK` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2P-REPROBE` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2P-CONDITIONAL-IDEMPOTENCE` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2P-SCOPE-UNKNOWN` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
 | `contract.stable_id` | `LAW-L2-IDENTITY` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
 | `contract.stable_id` | `LAW-L2-TRUSTED-INIT` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
 | `contract.stable_id` | `LAW-L2-BACKUP` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
@@ -124,46 +184,50 @@ Not counted (would require human judgement — cannot be gated): whether a branc
 | `contract.stable_id` | `LAW-L2-REPROBE` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
 | `contract.stable_id` | `LAW-L2-CONDITIONAL-IDEMPOTENCE` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
 | `contract.stable_id` | `LAW-L2-SCOPE` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
-| `contract.stable_id` | `L2-BUILD-IDENTITY` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-build-identity-ljxh` | COVERED |
-| `contract.stable_id` | `L2-BUILD-GIT-REPO` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-build-git-repo-e0li` | COVERED |
-| `contract.stable_id` | `L2-BUILD-REMOTE-PERSONA-A` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-build-remote-persona-a-nqac` | COVERED |
-| `contract.stable_id` | `L2-BUILD-REMOTE-PERSONA-BC` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-build-remote-persona-bc-mxro` | COVERED |
-| `contract.stable_id` | `L2-BUILD-AGENTS-STAMP` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-build-agents-stamp-43x7` | COVERED |
-| `contract.stable_id` | `L2-BUILD-CLAUDE-STAMP` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-build-claude-stamp-qruz` | COVERED |
-| `contract.stable_id` | `L2-BUILD-BEADS` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-build-beads-zb2p` | COVERED |
-| `contract.stable_id` | `L2-BUILD-RUST-TOOLCHAIN` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-build-rust-toolchain-yhia` | COVERED |
-| `contract.stable_id` | `L2-BUILD-HOOK-HEAD` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-build-hook-head-tqs8` | COVERED |
-| `contract.stable_id` | `L2-BUILD-CARGO-MEMBERS` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-build-cargo-members-do8n` | COVERED |
-| `contract.stable_id` | `L2-BUILD-AGENT-MAIL` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-build-agent-mail-4xwl` | COVERED |
-| `contract.stable_id` | `L2-BUILD-RCH-LANE` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-build-rch-lane-bx3q` | COVERED |
-| `contract.stable_id` | `L2-BUILD-TRUSTED-INIT-OPTIN` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-build-trusted-init-optin-jlna` | COVERED |
-| `contract.stable_id` | `L2-BUILD-TEMPLATE-IDENTITY` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-build-template-identity-8qaz` | COVERED |
-| `contract.stable_id` | `L2-BUILD-BACKUP` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-build-backup-ctjf` | COVERED |
-| `contract.stable_id` | `L2-BUILD-INCEPTION-FOUNDATION` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-build-inception-foundation-4228` | COVERED |
-| `contract.stable_id` | `L2-BUILD-REPROBE` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-build-reprobe-2zrz` | COVERED |
-| `contract.stable_id` | `L2-BUILD-HALT-NOT-TAKEN` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-build-halt-not-taken-dvni` | COVERED |
-| `contract.stable_id` | `L2-TEST-IDENTITY` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-test-identity-1d7i` | COVERED |
-| `contract.stable_id` | `L2-TEST-GIT-REPO` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-test-git-repo-h6kb` | COVERED |
-| `contract.stable_id` | `L2-TEST-REMOTE-A` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-test-remote-a-996z` | COVERED |
-| `contract.stable_id` | `L2-TEST-REMOTE-BC` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-test-remote-bc-b3g5` | COVERED |
-| `contract.stable_id` | `L2-TEST-AGENTS-STAMP` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-test-agents-stamp-uudd` | COVERED |
-| `contract.stable_id` | `L2-TEST-CLAUDE-STAMP` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-test-claude-stamp-7m6w` | COVERED |
-| `contract.stable_id` | `L2-TEST-BEADS` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-test-beads-vc9j` | COVERED |
-| `contract.stable_id` | `L2-TEST-RUST-TOOLCHAIN` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-test-rust-toolchain-ncc0` | COVERED |
-| `contract.stable_id` | `L2-TEST-HOOK-HEAD` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-test-hook-head-u3hp` | COVERED |
-| `contract.stable_id` | `L2-TEST-CARGO-MEMBERS` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-test-cargo-members-6ql0` | COVERED |
-| `contract.stable_id` | `L2-TEST-AGENT-MAIL` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-test-agent-mail-d8xg` | COVERED |
-| `contract.stable_id` | `L2-TEST-RCH-LANE` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-test-rch-lane-j23r` | COVERED |
-| `contract.stable_id` | `L2-TEST-TRUSTED-INIT` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-test-trusted-init-l0ku` | COVERED |
-| `contract.stable_id` | `L2-TEST-TEMPLATE-IDENTITY` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-test-template-identity-ukon` | COVERED |
-| `contract.stable_id` | `L2-TEST-BACKUP` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-test-backup-6au3` | COVERED |
-| `contract.stable_id` | `L2-TEST-INCEPTION-FOUNDATION` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-test-inception-foundation-mumf` | COVERED |
-| `contract.stable_id` | `L2-TEST-REPROBE-SUCCESS` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-test-reprobe-success-xsws` | COVERED |
-| `contract.stable_id` | `L2-TEST-REPROBE-FAIL` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-test-reprobe-fail-0oqo` | COVERED |
-| `contract.stable_id` | `L2-TEST-IDEMPOTENT-SAME` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-test-idempotent-same-yi8a` | COVERED |
-| `contract.stable_id` | `L2-TEST-IDEMPOTENT-DRIFT` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-test-idempotent-drift-p2w1` | COVERED |
-| `contract.stable_id` | `L2-TEST-EPISTEMIC-COMPLETE` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-test-epistemic-complete-flyf` | COVERED |
-| `contract.stable_id` | `L2-TEST-ATOMIC-ROLLBACK` | stable id in s1_l2_ecosystem.md | `omp-orchestrator-l2-test-atomic-rollback-cffj` | COVERED |
+| `contract.stable_id` | `L2-BUILD-IDENTITY` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-BUILD-GIT-REPO` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-BUILD-REMOTE-PERSONA-A` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-BUILD-REMOTE-PERSONA-BC` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-BUILD-AGENTS-STAMP` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-BUILD-CLAUDE-STAMP` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-BUILD-BEADS` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-BUILD-RUST-TOOLCHAIN` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-BUILD-HOOK-HEAD` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-BUILD-CARGO-MEMBERS` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-BUILD-AGENT-MAIL` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-BUILD-RCH-LANE` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-BUILD-TRUSTED-INIT-OPTIN` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-BUILD-TEMPLATE-IDENTITY` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-BUILD-BACKUP` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-BUILD-INCEPTION-FOUNDATION` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-BUILD-REPROBE` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-BUILD-HALT-NOT-TAKEN` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TEST-IDENTITY` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TEST-GIT-REPO` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TEST-REMOTE-A` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TEST-REMOTE-BC` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TEST-AGENTS-STAMP` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TEST-CLAUDE-STAMP` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TEST-BEADS` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TEST-RUST-TOOLCHAIN` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TEST-HOOK-HEAD` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TEST-CARGO-MEMBERS` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TEST-AGENT-MAIL` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TEST-RCH-LANE` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TEST-TRUSTED-INIT` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TEST-TEMPLATE-IDENTITY` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TEST-BACKUP` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TEST-INCEPTION-FOUNDATION` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TEST-REPROBE-SUCCESS` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TEST-REPROBE-FAIL` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TEST-IDEMPOTENT-SAME` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TEST-IDEMPOTENT-DRIFT` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TEST-EPISTEMIC-COMPLETE` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `L2-TEST-ATOMIC-ROLLBACK` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `OBS-L2-IDENTITY` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `OBS-L2-TRUST` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `OBS-L2-WRITE` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
+| `contract.stable_id` | `OBS-L2-READBACK` | stable id in s1_l2_ecosystem.md | `—` | MISSING |
 | `contract.stable_id` | `L3-ARRAY` | stable id in s1_l3_walkthrough.md | `omp-orchestrator-s1-l3-array-zr1g` | COVERED |
 | `contract.stable_id` | `L3-STEP` | stable id in s1_l3_walkthrough.md | `omp-orchestrator-s1-l3-step-kymv` | COVERED |
 | `contract.stable_id` | `L3-TUI` | stable id in s1_l3_walkthrough.md | `omp-orchestrator-s1-l3-tui-l7k8` | COVERED |
@@ -203,8 +267,12 @@ Not counted (would require human judgement — cannot be gated): whether a branc
 | `contract.stable_id` | `L5-OBS-SOURCES` | stable id in s1_l5_portal.md | `omp-orchestrator-s1-l5-obs-sources-1o28` | COVERED |
 | `contract.stable_id` | `L5-OBS-READBACK` | stable id in s1_l5_portal.md | `omp-orchestrator-s1-l5-obs-readback-zi3x` | COVERED |
 | `contract.stable_id` | `L5-METRIC-READBACK-OK` | stable id in s1_l5_portal.md | `omp-orchestrator-s1-l5-metric-readback-fqgi` | COVERED |
-| `contract.named_test` | `l1_doctor.rs::scope_does_not_vacuously_pass_skipped_probes` | named test in s1_l1_doctor.md | `—` | MISSING |
+| `contract.named_test` | `l1_doctor.rs::unknown_arm_is_instrument_error` | named test in s1_l1_doctor.md | `—` | MISSING |
+| `contract.named_test` | `l1_doctor.rs::timeout_is_unrun` | named test in s1_l1_doctor.md | `—` | MISSING |
 | `contract.named_test` | `l1_doctor.rs::wrong_version_is_stale` | named test in s1_l1_doctor.md | `omp-orchestrator-l1-test-two-signal-wrbx` | COVERED |
+| `contract.named_test` | `l1_doctor.rs::paused_is_not_unprobeable` | named test in s1_l1_doctor.md | `—` | MISSING |
+| `contract.named_test` | `l1_doctor.rs::unknown_record_is_unmeasured` | named test in s1_l1_doctor.md | `—` | MISSING |
+| `contract.named_test` | `l1_doctor.rs::scope_does_not_vacuously_pass_skipped_probes` | named test in s1_l1_doctor.md | `—` | MISSING |
 | `contract.named_test` | `l1_doctor.rs::repair_records_before_hash_backup_after_hash` | named test in s1_l1_doctor.md | `omp-orchestrator-l1-test-mutate-backup-kyng` | COVERED |
 | `contract.named_test` | `l1_doctor.rs::second_repair_is_zero_actions_given_identical_hashes` | named test in s1_l1_doctor.md | `omp-orchestrator-l1-test-idempotent-same-s12x` | COVERED |
 | `contract.named_test` | `l1_doctor.rs::undo_restores_before_hash` | named test in s1_l1_doctor.md | `omp-orchestrator-l1-test-undo-3oq5` | COVERED |
@@ -264,19 +332,19 @@ Not counted (would require human judgement — cannot be gated): whether a branc
 | `box.observability` | `L3.monitor` | L3 observability monitor | `—` | MISSING |
 | `box.observability` | `L3.gate` | L3 observability gate | `—` | MISSING |
 | `box.observability` | `L3.known_bad` | L3 observability known-bad | `—` | MISSING |
-| `box.observability` | `L3.metric` | L3 observability metric | `omp-orchestrator-s1-l3-metric-divergent-hli2` | COVERED |
+| `box.observability` | `L3.metric` | L3 observability metric | `—` | MISSING |
 | `box.observability` | `L4.event_row` | L4 observability event_row | `—` | MISSING |
 | `box.observability` | `L4.artifact` | L4 observability artifact | `—` | MISSING |
 | `box.observability` | `L4.monitor` | L4 observability monitor | `—` | MISSING |
 | `box.observability` | `L4.gate` | L4 observability gate | `—` | MISSING |
 | `box.observability` | `L4.known_bad` | L4 observability known-bad | `—` | MISSING |
-| `box.observability` | `L4.metric` | L4 observability metric | `omp-orchestrator-s1-l4-metric-silent-vdxb` | COVERED |
+| `box.observability` | `L4.metric` | L4 observability metric | `—` | MISSING |
 | `box.observability` | `L5.event_row` | L5 observability event_row | `—` | MISSING |
 | `box.observability` | `L5.artifact` | L5 observability artifact | `—` | MISSING |
 | `box.observability` | `L5.monitor` | L5 observability monitor | `—` | MISSING |
 | `box.observability` | `L5.gate` | L5 observability gate | `—` | MISSING |
 | `box.observability` | `L5.known_bad` | L5 observability known-bad | `—` | MISSING |
-| `box.observability` | `L5.metric` | L5 observability metric | `omp-orchestrator-s1-l5-metric-readback-fqgi` | COVERED |
+| `box.observability` | `L5.metric` | L5 observability metric | `—` | MISSING |
 | `box.hook` | `HOOK-1-id` | git pre-commit certified field id | `—` | MISSING |
 | `box.hook` | `HOOK-1-event` | git pre-commit certified field event | `—` | MISSING |
 | `box.hook` | `HOOK-1-matcher` | git pre-commit certified field matcher | `—` | MISSING |
@@ -447,17 +515,15 @@ Not counted (would require human judgement — cannot be gated): whether a branc
 
 ## Validation
 
-Pasteable. Regenerates this file. Not a `.py`/`.sh` in `git ls-files`.
+**REFUSED: embedding this generator in a fenced `python3 -` block.** A fenced program a human pastes into `python3 -` is the same program as a committed `.py` file. The no-shell gate keys on `git ls-files` extensions; hiding Python in Markdown is `PX-E14` with a different geography (a fence instead of `.git/`). Cosmetic compliance is refused. The honest owner is a Rust crate, name **`s1-coverage-gate`**, blocked by BUILD FREEZE. Until that crate exists, `PX-DONE-1` (clone-reproducible matrix) is **blocked**, not satisfied.
+
+WORKTREE-LOCAL runner only (not tracked, not clone-portable):
 
 ```bash
-python3 /Users/josh/Developer/omp-orchestrator/.git/s1_cov.py
-# if .git/s1_cov.py is missing, the generator text is the python in the
-# commit that introduced this file; restore it then re-run.
+python3 .git/s1_cov.py
 ```
-
-The generator is stored at `.git/s1_cov.py` so the no-shell gate (`git ls-files` `*.py`/`*.sh`) does not see it. That is a **WORKTREE-LOCAL** runner. A fresh clone will not have it until someone restores the script. That limit is named: the Validation command is not clone-portable until a Rust crate owns it (BUILD FREEZE forbids that crate this pass).
 
 ## NO-CLAIM
 
-COVERED means a bead *mentions* the id, not that the crate is wired. MISSING=0 would still not mean S1 is done. This matrix is the denominator, not the proof.
+COVERED means a bead title or acceptance carries the id as a whole token. It does not mean the crate is wired. MISSING=0 would still not mean S1 is done.
 
