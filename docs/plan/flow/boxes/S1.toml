@@ -13,7 +13,7 @@ name = "human start: install -> system check -> ecosystem check -> walkthrough -
 status = "draft"
 trigger_today = "none"
 trigger_target = "curl one-liner (prebuilt binary, no .sh in tree) -> ompo install; then slash:/omp-orchestrator:start; SessionStart hook -> ompo portal --check --json; launchd -> ompo run"
-crate = "installer (crates/installer, 3 flags, 0 tests, no caller) + umbrella MISSING"
+crate = "installer"
 crate_status = "exists-no-caller"
 bead = "omp-orchestrator-plf.7.2 (umbrella), plf.7.3 (doctor), lf.7.12 (init), kxe.10 (inception), f.7.1.5 (operator setup)"
 kernel_input = "PROPOSED InstallPlan{platform, dest, agents[], hooks_to_merge[], skills[]} | Probe{name, present, version, remediation} | EcosystemProbe | SwarmState{session, panes[{id, agent, model, registered}], sources_agree}"
@@ -108,14 +108,103 @@ status = "paused; reaper unwired"
 branches = [
   "L0 checksum/cosign FAIL -> refuse (supply chain)",
   "L0 agent detected -> merge hooks + skills with backup; per-agent created|merged|already|failed|skipped",
-  "L1 ABSENT -> halt with the named install step for the human",
+  "L0 PATH first hit is /usr/sbin/installer -> binary MUST NOT be named installer",
+  "L1 ABSENT family -> halt with the named remediation command",
+  "L1 ABSENT specific -> informational, do not invent an install command",
   "L1 UNPROBEABLE -> recorded, never vacuously green",
   "L2 no git remote -> halt",
   "L2 AGENTS.md/CLAUDE.md missing or unstamped -> init writes from template",
   "L2 hook identity != HEAD -> rebuild on lane, reinstall",
+  "L3 HD-0009 empty -> HUMAN HALT S9",
   "L4 live (3 sources agree) -> portal",
-  "L4 not live -> ask agent types -> spawn -> register -> pack -> portal",
+  "L4 not live and persona A -> skip spawn; portal is gates-only",
+  "L4 not live and persona B or C -> HD-0010 then spawn -> register -> pack -> portal",
   "L4 sources disagree -> NOT live; the disagreement is the finding",
   "L5 decision owed to Joshua -> LOOP HALTS, one named decision",
 ]
-no_claim = "Draft from the orchestrator's measurement + Joshua's stated preference; not yet approved, not yet AmberGate's row (AmberGate owns S1-S4 in the walk and may disagree - a disagreement is a finding). Nothing in this row is built; the trigger census it rests on (launchd/crontab/settings.json/.git/hooks/~/.local/bin) was measured 2026-09-03 and is in the chat transcript, not yet in a ledger."
+no_claim = "Draft from the orchestrator's measurement + Joshua's stated preference; not yet approved. Umbrella crate MISSING (not in the crate field — CONTRACT requires one dir or MISSING). Nothing in L1-L5 is built. HD-0009..0012 decision fields are empty. Diagram landed 0ea808a; Wave 1 four sections added 2026-09-03 by pane 4 so the box is reviewable. Disagreement rows in waves/wave-1/*-S1.toml remain unresolved until the owner answers them."
+
+# ---- Wave 1 sections (were 0/4; QuietRidge, SilverWolf, BlueLantern filed that as blocker) ----
+[[box.measurement]]
+claim = "S1.mmd was ABSENT; now present and frankenmermaid-valid"
+command = "test -e docs/plan/flow/diagrams/S1.mmd; frankenmermaid validate docs/plan/flow/diagrams/S1.mmd --fail-on warning"
+value = "present; exit 0; 38 nodes 46 edges; one info diagnostic (layout auto->sugiyama); commit 0ea808a"
+measured_at = "2026-09-03T14:39Z"
+by = "pane-4"
+[[box.measurement]]
+claim = "installer CLI verbs are four, not three; in-module tests are 11, not 0"
+command = "sed -n '35,56p' crates/installer/src/main.rs; grep -c '#\\[test\\]' crates/installer/src/*.rs"
+value = "verbs: --check --install --version --help plus --bin-dir; default with no args is --check; tests/ dir absent; 11 in-module #[test]"
+measured_at = "2026-09-03T14:16Z"
+by = "pane-4"
+[[box.measurement]]
+claim = "bare installer on PATH is Apple's pkg installer, not the crate"
+command = "type -a installer; ~/.local/bin/installer --version"
+value = "/usr/sbin/installer first; ~/.local/bin/installer second; crate binary installer 0.1.0 build_id=ad31898873c1497cff63e026d6de28b6f80715cb (659272 bytes, Sep 2 11:10)"
+measured_at = "2026-09-03T14:21Z"
+by = "pane-4"
+[[box.measurement]]
+claim = "omp-orchestrator has no doctor/init/portal/start verbs; trigger_today=none is true"
+command = "omp-orchestrator --help"
+value = "usage: omp-orchestrator [run] [--once|--max-ticks N] [--repo PATH] [--session NAME] ... close-readback ... dispatch render. No doctor, init, portal, install, start."
+measured_at = "2026-09-03T14:16Z"
+by = "pane-4"
+[[box.measurement]]
+claim = "DCG/RCH installers exist at the cited mirror paths"
+command = "wc -l /Volumes/ZestData/dicklesworthstone-mirror/destructive_command_guard/install.sh /Volumes/ZestData/dicklesworthstone-mirror/remote_compilation_helper/install.sh"
+value = "DCG install.sh 4494 lines (skill text said 2116; drifted); RCH install.sh 2901 lines"
+measured_at = "2026-09-03T14:35Z"
+by = "pane-4"
+[[box.measurement]]
+claim = "HD-0009..0012 are recorded and undecided"
+command = "python3 -c \"import json; [print(r['id'], repr(r.get('decision',''))) for r in map(json.loads, open('docs/decisions.jsonl')) if r['id'] in ('HD-0009','HD-0010','HD-0011','HD-0012')]\""
+value = "all four decision=''"
+measured_at = "2026-09-03T14:15Z"
+by = "pane-4"
+
+[[box.gap]]
+what = "L1-L5 crates do not exist (ompo doctor/init/start/portal)"
+resolves = "plf.7.3 doctor, lf.7.12 init, kxe.10 inception, plf.7.2 umbrella — AFTER diagram+HD approval, not before"
+class = "wired_caller"
+[[box.gap]]
+what = "installer crate name collides with /usr/sbin/installer"
+resolves = "install as ompo or omp-orchestrator; never a PATH verb named installer"
+class = "hook"
+[[box.gap]]
+what = "Persona A (08-end-users solo, gates-only) had no skip-swarm branch"
+resolves = "diagram 0ea808a adds L4 not-live + persona A -> skip spawn; owner must accept or reject that branch"
+class = "diagram"
+[[box.gap]]
+what = "three S1 names: 12-journey Inception vs boxes/S1 human-start vs spine.mmd S1 inception"
+resolves = "pane 1 picks one spine; the other two cite it"
+class = "verdict_type"
+[[box.gap]]
+what = "no LifecycleEvent writer for L0-L5"
+resolves = "kxe.8 journal at the install/doctor/spawn chokepoints"
+class = "event_row"
+[[box.gap]]
+what = "L1 doctor SOTA is br doctor mutate()+undo by before_hash; ompo doctor is none"
+resolves = "plf.7.3 copies beads_rust tests/e2e_doctor_chokepoint.rs contract: backup keyed by before_hash, undo restores it, second repair is zero actions"
+class = "oracle"
+[[box.gap]]
+what = "SessionStart hook is 0; launchd paused; slash start does not exist"
+resolves = "trigger_target after HD-0009; today remains none"
+class = "hook"
+[[box.gap]]
+what = "crate field was unparseable composite; umbrella still MISSING"
+resolves = "crate=installer now; umbrella stays in no_claim until plf.7.2 exists"
+class = "wired_caller"
+
+[box.agreement]
+wave = 1
+owner = "SnowyCanyon"
+reviewers = ["AmberGate", "BlueLantern", "SilverWolf", "QuietRidge"]
+open_disagreements = 12
+status = "draft"
+approval = ""
+
+[box.diagram]
+mmd = "docs/plan/flow/diagrams/S1.mmd"
+validate_exit = 0
+svg = "docs/plan/flow/diagrams/S1.svg"
+commit = "0ea808a"
