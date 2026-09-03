@@ -200,7 +200,7 @@ pub fn render_with_pane(
         .and_then(nonempty)
         .map_or_else(String::new, |pane| format!("Pane: {pane}\n"));
     let mut packet = format!(
-        "Objective: {objective}\n\nTarget: {target}. Read br show {bead} --json IN FULL before starting.\n{pane_line}{handoff}\nScope:\n{scope}\n\nAcceptance:\n{acceptance}\n\n{done}\n\nStop: {stop}.\n"
+        "Objective: {objective}\n\nTarget: {target}. Read br show {bead} --json IN FULL before starting.\nEvery bead requires current-state validation: re-run br show {bead} --json immediately before editing; validate the bead's assumptions against the current repository and DAG; if the bead, plan, owner, files, dependencies, or acceptance changed, STOP and report it.\n{pane_line}{handoff}\nScope:\n{scope}\n\nAcceptance:\n{acceptance}\n\n{done}\n\nStop: {stop}.\n"
     );
     if let Some(why_now) = why_now.and_then(nonempty) {
         packet.push_str(&format!("\nWhy this, why now: {why_now}\n"));
@@ -291,6 +291,23 @@ mod tests {
         for line in acceptance.lines() {
             assert!(packet.contains(line), "missing acceptance line: {line}");
         }
+    }
+
+    #[test]
+    fn packet_requires_current_state_revalidation_before_work() {
+        let packet = render(
+            &snapshot("fixture", "body", "Run cargo test; expect exit 0"),
+            Path::new("/repo"),
+            None,
+            None,
+        )
+        .expect("packet should render");
+        assert!(packet.contains(
+            "Every bead requires current-state validation: re-run br show fixture --json immediately before editing;"
+        ));
+        assert!(packet.contains(
+            "if the bead, plan, owner, files, dependencies, or acceptance changed, STOP and report it"
+        ));
     }
 
     #[test]

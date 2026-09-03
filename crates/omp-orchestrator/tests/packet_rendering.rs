@@ -33,6 +33,7 @@ fn zrq_positive_control_carries_required_packet_fields() {
         );
     }
     assert!(packet.contains("Run cargo test -p zrq; expect exit 0"));
+    assert!(packet.contains("Every bead requires current-state validation: re-run br show omp-orchestrator-zrq --json immediately before editing;"), "{packet}");
     assert!(packet.contains("Why this, why now: the selector chose this bead"));
 }
 
@@ -117,7 +118,7 @@ fn pane_and_supervisor_handoff_are_carried() {
         None,
         None,
     )
-        .expect("pane packet should render");
+    .expect("pane packet should render");
     assert!(packet.contains("Pane: %1414"), "{packet}");
     assert!(packet.contains("Handoff: supervisor:123"), "{packet}");
 }
