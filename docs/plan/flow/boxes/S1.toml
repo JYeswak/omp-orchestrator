@@ -212,9 +212,12 @@ class = "verdict_type"
 wave = 2
 owner = "SnowyCanyon"
 reviewers = ["WildStone", "WildMountain", "AmberGate", "BlueLantern", "SilverWolf", "QuietRidge"]
-open_disagreements = 0                # DERIVED, never typed: grep -h -c '^resolution = ""$' over waves/wave-1/*-S1.toml waves/wave-2/*-S1.toml -> 0. TREE 63169b7. Wave-1 was 10 open (AmberGate 4, BlueLantern 3, QuietRidge 3), answered by the owner at e77dd04; wave-2's last 4 were pane-1's own OMP-column rows, filled by non-author %9 at 3b35442.
-status = "converged"                  # CONTRACT.md:79-87: a box converges when a wave yields ZERO open disagreements from all non-owners. Six reviewers across two waves are at 0: WildStone 24/24, WildMountain 11/11, AmberGate 4/4, BlueLantern 3/3, QuietRidge 3/3, SilverWolf 2/2. NOT a claim that S1 is built -- L1-L5 crates do not exist and two gap rows (hook 12-field schema, unregistered refusal type) are open by design. Converged means the MAP is agreed, not that the product is.
-approval = ""                         # BLOCKED ON JOSHUA. approval = the HD row id. HD-0009..HD-0012 in docs/decisions.jsonl still carry decision="" -- HD-0009 (L3 walkthrough) is the S9 human halt the diagram routes to at S1.mmd:46-47, so S1 cannot reach status="approved" and S2 cannot start until those four rows are decided.
+open_disagreements = 0                # DERIVED: grep -h -c '^resolution = ""$' over waves/wave-1/*-S1.toml waves/wave-2/*-S1.toml -> 0. NECESSARY, NOT SUFFICIENT -- see CONTRACT.md:82-113. Alone this number is evidence of nothing.
+rows = 62                             # DERIVED: grep -c '^[[disagreement]]' over both waves' S1 files -> wave-1 12 (AmberGate 4, BlueLantern 3, QuietRidge 3, SilverWolf 2), wave-2 50 (WildStone 24, WildMountain 12, pane1 14).
+rejections = 25                       # reviewer rows opening REJECT/REFUTED: wave-1 = 0 of 12 (a SURVEY, not a review), wave-2 = 25 of 50 (WildMountain 9, WildStone 12, pane1 4). The wave-1 zero is the failed wave.
+refutations = 0                       # resolutions beginning refuted( -- ZERO. CONTRACT.md clause (b) is UNMET: no wave has produced a refutation that changed the box, and the owner accepted 10 of 10 reviewer rows without pushing back once.
+status = "draft"                      # REVERTED FROM "converged" BY JOSHUA, 2026-09-03: "s1 is not converged - you can't claim converged when s1 is still missing massive functionality" and "converged wrongly is worse than no convergence". Both new clauses fail: (b) refutations = 0, and the FUNCTIONAL FLOOR -- S1.toml:41,49,57,65,72 read exists = "none" for L1, L2, L3, L4's wrapper and L5. The prior flip (a9ea672) certified agreement about a MAP as if it were working software. It was wrong and it is retracted.
+approval = ""                         # BLOCKED ON JOSHUA regardless: approval is an HD row id and HD-0009..HD-0012 all carry decision="". Build S1 fully in waves and prove it across the lifecycle BEFORE S2 (Joshua, 2026-09-03).
 
 [box.diagram]
 mmd = "docs/plan/flow/diagrams/S1.mmd"

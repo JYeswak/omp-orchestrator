@@ -79,14 +79,46 @@ what = "no LifecycleEvent row is written for S2 (S2 logs nothing)"
 resolves = "kxe.8 journal writer + vcd7.1 emit site at plan-assemble's write chokepoint"
 class = "event_row"        # event_row | claim_row(L1) | slo(L2) | oracle(L3) | gate_trip(L4) | fuzz(L5) | formal(L6) | lock(L7) | wired_caller(atom 9) | verdict_type(atom 3) | diagram | hook | measurement
 
-# 3. AGREEMENT — the debate ledger. A box converges when a wave yields ZERO open disagreements from
-#    all three non-owners (steady state, planning-workflow validation loop #4). Waves repeat as long
-#    as it takes. A disagreement is a row, never an edit to another pane's box.
+# 3. AGREEMENT — the debate ledger.
+#
+#    RETIRED DEFINITION (Joshua, 2026-09-03): "a box converges when a wave yields ZERO open
+#    disagreements from all three non-owners". That rule is now REFUSED. Agents drift into
+#    agreement: "if you told me the sky was brown and I said ok, it's brown, settled, then the
+#    result is a wrong premise. CONVERGED WRONGLY IS WORSE THAN NO CONVERGENCE."
+#
+#    MEASURED THE SAME DAY, which is why the rule changed. Across all 88 wave-1 disagreement rows
+#    in every box, reviewer rejections = 0 — not one row opened with a rejection. Wave 1 was a
+#    SURVEY, not a review. And owner refutations = 0 everywhere: the S1 owner answered ten rows and
+#    accepted ten, then flipped the box to converged. Four reviewers on S1 in wave 1 produced fewer
+#    challenges than one reviewer in wave 2 (WildMountain 9 rejections / 12 rows). Reviewer COUNT is
+#    not a quality signal; a wide net recruits agreers.
+#
+#    THE BAR NOW HAS FOUR CLAUSES. All four, or the box stays draft.
+#    a. ZERO OPEN ROWS IS NECESSARY, NOT SUFFICIENT, and alone is evidence of nothing.
+#    b. A wave MUST produce at least one REFUTATION THAT CHANGED THE BOX — a row whose resolution
+#       begins `refuted(` and carries the evidence, filed by someone who is not the owner. A wave of
+#       all-accepted rows is a FAILED WAVE. Rerun it with a different reviewer.
+#    c. THE OWNER MUST REFUTE, TOO. An owner whose accept rate is 100% is not answering, they are
+#       agreeing. Refute at least one row per wave, or state per surviving row why it survived.
+#    d. A reviewer row MUST carry a FALSIFIER ATTEMPT, not an opinion: the command that could have
+#       proven the box right and did not. Measured exemplar — pane 4 graded the owner's L4OMP claim
+#       by enumerating four live omp PIDs and reporting LISTEN_ROWS=0, unix_named=0. That beat the
+#       owner's topology inference and turned it into a measurement. An "I agree" row is worth zero.
+#
+#    AND THE FUNCTIONAL FLOOR: no box may reach `converged` while any of its layers reads
+#    `exists = "none"`. Agreement about a MAP is not working software. Every layer needs a wired
+#    caller, an event row with a WRITER, a monitor, a gate with a known-bad leg, and a proof run.
+#
+#    Every wave prints three numbers or it has not been reviewed: rows, rejections, refutations.
+#    A disagreement is a row, never an edit to another pane's box.
 [box.agreement]
 wave = 1
 owner = "AmberGate"
 reviewers = ["BlueLantern", "SilverWolf", "QuietRidge"]
 open_disagreements = 0
+rows = 0                    # DERIVED per wave: grep -c '^\[\[disagreement\]\]'
+rejections = 0              # reviewer rows opening REJECT/REFUTED. 0 across a whole wave = failed wave
+refutations = 0             # resolutions beginning refuted( . Clause (b) requires >= 1 from a non-owner
 status = "draft"            # draft | reviewed | converged | approved (approved = Joshua's HD row id)
 approval = ""               # "HD-00NN" when Joshua approves
 
