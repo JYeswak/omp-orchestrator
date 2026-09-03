@@ -71,39 +71,158 @@ command = "ompo portal --json via /omp-orchestrator:start"
 row = "session, panes, queue depth by bv, admission, gates red/green, decisions owed to Joshua, THE ONE NEXT ACTION"
 exists = "none"
 
-# hooks - every layer
+# hooks - every layer. RE-MEASURED 2026-09-03T19:1xZ by pane 1 against the LIVE tables, not
+# against this file's own prior text. The prior eight rows carried surface/hook/status and
+# UNDERSTATED THE LIVE SURFACE BY ROUGHLY 3x. Every row below now carries the twelve certified
+# fields required by CONTRACT.md:98-104. `certified = false` everywhere is HONEST, not lazy: no
+# hook here has been through the six-stage /hook-certification gauntlet, and a row claiming
+# otherwise would be a fabricated certificate -- worse than a missing row, because a reader stops
+# looking. source_commit and policy_file are "" for the same reason: unknown, not zero.
+#
+# THE MEASUREMENT, per surface:
+#   python3 -c "json.load(open('~/.claude/settings.json'))['hooks']" -> PreToolUse 9 matchers / 11
+#   hooks; PostToolUse 2/2; Stop 1/4; SessionStart 1/2. Prior text said PreToolUse was three named
+#   binaries and SessionStart was "0 (topology gate only)".
+#   ~/.codex/hooks.json -> PreToolUse 4, PostToolUse 2. Prior text's "4 Pre / 2 Post" was CORRECT.
+#   ls -l .git/hooks/pre-commit -> 1,036,224 bytes, Mach-O 64-bit arm64, mtime Sep 2 19:29.
+#   launchctl list | grep -c 'ai.zeststream.omp-orchestrator$' -> 0, while the plist IS on disk.
+#
+# TWO FINDINGS FROM THE RE-MEASUREMENT, both filed:
+#   (1) A LIVE `.sh` HOOK. `finding-bead-gate.sh` runs on claude Stop. AGENTS.md states "No .sh
+#       hook, ever." It lives under ~/.claude/, so `git ls-files` cannot see it -- the SAME
+#       geography escape as the `.git/s1_cov.py` coverage generator (PX-E14). The repo's no-shell
+#       rule is enforced by a gate that walks tracked files, so anything outside the tree is
+#       invisible to it by construction, and the rule is satisfied by location rather than by
+#       compliance.
+#   (2) THE HOOK COUNT ITSELF WAS THE DEFECT. A box row summarising a live table in prose drifts
+#       silently; this one drifted from 3 to 11 on one surface without anyone noticing, because
+#       nothing re-read the table. The row must carry the producing command, like every other
+#       figure in this repo.
+
 [[box.hook]]
-surface = "git pre-commit"
-hook = "no-shell-gate multi-gate dispatcher (8 gates)"
-status = "wired, per-clone, hand-installed; identity via 588v"
+id = "S1-HOOK-PRECOMMIT"
+event = "git pre-commit"
+matcher = "staged paths"
+class = "gate"
+fail_mode = "fail-closed; prints CLEAN or MULTI-GATE REFUSED with per-gate scope"
+binary = ".git/hooks/pre-commit (Mach-O arm64, 1036224 B, built from crates/no-shell-gate/src/bin/pre-commit-gate.rs)"
+policy_file = ""
+source_commit = ""
+language = "rust"
+stage = "live"
+certified = false
+harm_class = "blocks a commit"
+measured = "ls -l + file .git/hooks/pre-commit; per-clone and untracked, so a fresh checkout has NO hook"
+note = "The only surface measured to have changed an agent's behaviour rather than described it: it refused this orchestrator twice on 2026-09-03 (OC-L2 dispatch-before-claim, OC-L1 malformed tick row). PX-STAMP adds a ninth gate here."
+
 [[box.hook]]
-surface = "claude SessionStart"
-hook = "ompo portal --check --json"
-status = "0 (today: zestgraph topology gate only)"
+id = "S1-HOOK-CLAUDE-PRE"
+event = "claude PreToolUse"
+matcher = "9 matchers: Bash x6, Write|Edit|MultiEdit x3, Skill, Edit|Write|MultiEdit|NotebookEdit"
+class = "gate"
+fail_mode = "mixed and UNAUDITED per hook -- a denial reads as UNKNOWN, never as a negative result"
+binary = "11 live: dcg, rch-lane-bind, zestgraph-danger-gate, zestgraph-accretive-write-gate, zestgraph-reservation-conflict-gate, slb-guard-fail-closed, rch-alias-reconcile, rch, zestgraph-recall, skill-tracker, kernel-only-operator-hook"
+policy_file = ""
+source_commit = ""
+language = "mixed/UNMEASURED"
+stage = "live"
+certified = false
+harm_class = "blocks a tool call"
+measured = "9 matchers / 11 hooks. Prior row named THREE binaries; the live table has eleven."
+note = "dcg denied two pane-1 commands today (an env grep, a git checkout). AGENTS.md's rule applies: a denied probe is UNKNOWN, never a negative result."
+
 [[box.hook]]
-surface = "claude PreToolUse(Bash)"
-hook = "kernel-only-operator-hook (--shadow today), dcg, rch shim"
-status = "partial"
+id = "S1-HOOK-CLAUDE-POST"
+event = "claude PostToolUse"
+matcher = "Bash; Edit|Write|MultiEdit|NotebookEdit"
+class = "advisory"
+fail_mode = "UNMEASURED"
+binary = "zestgraph-ee-capture, zestgraph-capture"
+policy_file = ""
+source_commit = ""
+language = "UNMEASURED"
+stage = "live"
+certified = false
+harm_class = "none known; capture only"
+measured = "2 matchers / 2 hooks -- the prior row's 'partial' was directionally right"
+
 [[box.hook]]
-surface = "claude PostToolUse"
-hook = "zestgraph-capture; ee capture (eeManaged=0)"
-status = "partial"
+id = "S1-HOOK-CLAUDE-STOP"
+event = "claude Stop"
+matcher = "(none -- fires on every Stop)"
+class = "gate"
+fail_mode = "UNMEASURED"
+binary = "zestgraph-close-check, zestgraph-agent-prompt-drift, zestgraph-machine-health, finding-bead-gate.sh"
+policy_file = ""
+source_commit = ""
+language = "rust x3 + SHELL x1 -- see harm_class"
+stage = "live"
+certified = false
+harm_class = "blocks a session close; AND CARRIES A LIVE .sh HOOK against AGENTS.md's 'No .sh hook, ever'"
+measured = "1 matcher / 4 hooks. finding-bead-gate.sh is under ~/.claude/, outside the tree, so the no-shell gate that walks git ls-files cannot see it -- the same geography escape as PX-E14."
+note = "HD-0011's clause -- REFUSE Stop while an in_progress bead held by this agent has no STAGE comment since dispatch -- is still 0 of 4. The four live hooks do something else."
+
 [[box.hook]]
-surface = "claude Stop"
-hook = "close-check + REFUSE Stop while an in_progress bead held by this agent has no STAGE: comment since dispatch (decision HD-0011)"
-status = "zestgraph-close-check exists; bead-stage clause 0"
+id = "S1-HOOK-CLAUDE-SESSIONSTART"
+event = "claude SessionStart"
+matcher = "(none)"
+class = "advisory"
+fail_mode = "UNMEASURED"
+binary = "zestgraph-skill-topology-gate, skill-topology-hook"
+policy_file = ""
+source_commit = ""
+language = "UNMEASURED"
+stage = "live"
+certified = false
+harm_class = "none known"
+measured = "1 matcher / 2 hooks. The prior row said '0 (today: zestgraph topology gate only)' -- the count was wrong AND the target (ompo portal --check --json) does not exist."
+
 [[box.hook]]
-surface = "codex ~/.codex/hooks.json"
-hook = "mirror of the above (4 Pre / 2 Post today)"
-status = "partial"
+id = "S1-HOOK-CODEX"
+event = "codex PreToolUse / PostToolUse"
+matcher = "UNMEASURED per matcher"
+class = "gate + advisory"
+fail_mode = "UNMEASURED"
+binary = "UNMEASURED per hook"
+policy_file = "~/.codex/hooks.json"
+source_commit = ""
+language = "UNMEASURED"
+stage = "live"
+certified = false
+harm_class = "blocks a tool call"
+measured = "PreToolUse 4, PostToolUse 2 -- the prior row's '4 Pre / 2 Post' was CORRECT and is the only prior count that survived re-measurement"
+
 [[box.hook]]
-surface = "omp (pi) panes"
-hook = "UNMEASURED - dist/types/extensibility, capability exist; whether a profile takes hooks is unknown (decision HD-0012: probe first)"
-status = "unmeasured"
+id = "S1-HOOK-OMP-PANES"
+event = "omp (pi) profile hooks"
+matcher = "UNKNOWN"
+class = "UNKNOWN"
+fail_mode = "UNKNOWN"
+binary = "UNKNOWN"
+policy_file = ""
+source_commit = ""
+language = "UNKNOWN"
+stage = "unmeasured"
+certified = false
+harm_class = "UNKNOWN"
+measured = "NOT MEASURED. dist/types/extensibility and dist/types/capability exist in the installed bundle; whether an omp profile accepts hooks at all is unknown. Decision HD-0012 says probe first."
+note = "UNKNOWN is the correct value here. Filling these fields by inference would be the fabricated-certificate failure this table exists to avoid."
+
 [[box.hook]]
-surface = "launchd"
-hook = "ai.zeststream.omp-orchestrator -> ompo run; reaper"
-status = "paused; reaper unwired"
+id = "S1-HOOK-LAUNCHD"
+event = "launchd RunAtLoad + KeepAlive"
+matcher = "n/a"
+class = "gate"
+fail_mode = "n/a -- NOT LOADED"
+binary = "/Users/josh/.local/bin/omp-orchestrator --repo <this repo> --session omp-orchestrator"
+policy_file = "~/Library/LaunchAgents/ai.zeststream.omp-orchestrator.plist"
+source_commit = ""
+language = "rust"
+stage = "on-disk, NOT LOADED"
+certified = false
+harm_class = "dispatches work into panes"
+measured = "launchctl list | grep -c 'ai.zeststream.omp-orchestrator$' -> 0, while the plist IS on disk. The only loaded sibling is ai.zeststream.omp-orchestrator.control-plane, PID 38194, --repo control-plane, 12h44m."
+note = "Blocked on fqhv P1: OMP_EXCLUDE_PANES is %1396,%1397,%1424 while live panes are %5-%9, so loading it as written invites the supervisor to dispatch into the conductor. Role-based exclusion needs a supervisor binary change."
 
 branches = [
   "L0 checksum/cosign FAIL or missing checksum -> refuse supply chain",
