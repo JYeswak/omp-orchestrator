@@ -30,7 +30,7 @@ id = "L0"
 name = "install"
 command = "ompo install"
 checks = ["platform -> triple", "preflight disk/perms/net", "mkdir lock", "SHA256 + cosign", "install -m 0755", "completions", "PATH", "agent detection: claude, codex, omp/pi, agy, cursor", "hook merge with timestamped backup", "skill install ~/.claude/skills + ~/.codex/skills", "summary per agent", "uninstall"]
-exists = "crates/installer --check/--install/--bin-dir only"
+exists = "crates/installer: four verbs --check/--install <target>/--version/-h|--help plus --bin-dir; no-args defaults to --check (src/main.rs:36-48). 11 in-module #[test]; no tests/ dir. QuietRidge wave-1 correction: the earlier three-flag string contradicted this box's own measurement row."
 
 [[box.layer]]
 id = "L1"
@@ -125,17 +125,17 @@ branches = [
   "L4 not live persona B or C -> HD-0010 then ntm spawn --assign --cass-context via Cx",
   "L4 spawn partial -> refuse; post-spawn not live -> halt",
   "L5 decision owed -> HUMAN HALT S9",
-  "L5 else write inception.json required fields then S2",
+  "L5 else write inception.json required fields AND append FOUNDATION.jsonl stage=S1 AND jq readback, then S2",
 ]
-no_claim = "HD-0009..0012 still empty. L1-L5 crates unbuilt. command -v ompo identity is the target contract; installer today verifies a supplied absolute path (WildStone). omp-rpc-session Command::new(omp) and GetState exist; L0 installer still does not speak OMP. subprocess-contract is the L0/L4 Cx path to adopt, not yet called from installer."
+no_claim = "HD-0009..0012 still empty. L1-L5 crates unbuilt. command -v ompo identity is the target contract; installer today verifies a supplied absolute path (WildStone). omp-rpc-session Command::new(omp) and GetState exist; L0 installer still does not speak OMP. subprocess-contract is the L0/L4 Cx path to adopt, not yet called from installer. S1's REFUSAL TYPE IS UNRESOLVED: the diagram's Code::Refused has 0 call sites and there is no `enum Code` anywhere in crates/*/src (owner re-ran 2026-09-03T16:0xZ), so it replaced one unregistered name (OutcomeClass::Refusal, WildMountain wave 2) with another. loop-coverage/src/lib.rs:131 says verbatim 'Do not fork OutcomeClass / PaneLiveness' and :233 names controller-tick as owner, but :581 records controller-tick as pending-extraction and this workspace has 0 definitions of it — while 31 files under crates/*/src already declare their own Refusal/Outcome/Verdict enum. S1 must name an existing type and a SCHEMAS.toml row, not coin a third."
 
 # ---- Wave 1 sections (were 0/4; QuietRidge, SilverWolf, BlueLantern filed that as blocker) ----
 [[box.measurement]]
 claim = "S1.mmd was ABSENT; now present and frankenmermaid-valid"
 command = "test -e docs/plan/flow/diagrams/S1.mmd; frankenmermaid validate docs/plan/flow/diagrams/S1.mmd --fail-on warning"
-value = "present; exit 0; 38 nodes 46 edges; one info diagnostic (layout auto->sugiyama); commit 0ea808a"
-measured_at = "2026-09-03T14:39Z"
-by = "pane-4"
+value = "present; exit 0. STALE HALF CORRECTED BY OWNER: this row said '38 nodes 46 edges; commit 0ea808a' while [box.diagram] said 52/60. Re-run at HEAD 7f9195a: frankenmermaid validate diagrams/S1.mmd --fail-on warning -> exit 0, Nodes 52 Edges 60, one info diagnostic (layout auto->sugiyama); diagrams/S1-surfaces.mmd -> exit 0, Nodes 17 Edges 16 (was 31/33 with 6 GAP labels at 5743987^)"
+measured_at = "2026-09-03T16:0xZ"
+by = "pane-1 (owner re-run; original reading by pane-4 at 14:39Z was correct for commit 0ea808a)"
 [[box.measurement]]
 claim = "installer CLI verbs are four, not three; in-module tests are 11, not 0"
 command = "sed -n '35,56p' crates/installer/src/main.rs; grep -c '#\\[test\\]' crates/installer/src/*.rs"
@@ -199,12 +199,20 @@ class = "hook"
 what = "crate field was unparseable composite; umbrella still MISSING"
 resolves = "crate=installer now; umbrella stays in no_claim until plf.7.2 exists"
 class = "wired_caller"
+[[box.gap]]
+what = "the eight [[box.hook]] rows carry surface/hook/status, not the twelve certified fields (id, event, matcher, class, fail_mode, binary, policy_file, source_commit, language, stage, certified, harm_class)"
+resolves = "one 12-field row per hook naming its future hooks_certified.toml id and /hook-certification stage; NOT written with placeholders, because a filled certificate with no certification is worse than a missing row (BlueLantern wave-1 hook_schema)"
+class = "hook"
+[[box.gap]]
+what = "S1 has no registered refusal type: Code::Refused has 0 call sites and no enum Code exists in crates/*/src, while 31 files already declare their own Refusal/Outcome/Verdict enum against loop-coverage:131 'Do not fork'"
+resolves = "name an existing in-workspace type (e.g. ntm_fleet_monitor::Refusal at src/lib.rs:161) or block on the controller-tick extraction (loop-coverage:233,581), and add the SCHEMAS.toml row; do not coin a third name (WildMountain wave-2 L5.outcome_type)"
+class = "verdict_type"
 
 [box.agreement]
 wave = 2
 owner = "SnowyCanyon"
 reviewers = ["WildStone", "WildMountain", "AmberGate", "BlueLantern", "SilverWolf", "QuietRidge"]
-open_disagreements = 12
+open_disagreements = 4                # DERIVED, not typed: grep -c '^resolution = ""' over waves/wave-1/*-S1.toml waves/wave-2/*-S1.toml. Wave-1 S1 is now 0 open (AmberGate 4, BlueLantern 3, QuietRidge 3, SilverWolf 0 all answered by the owner); the 4 remaining are pane-1's own wave-2 rows, held open because owner==author and they need a non-author verdict per the grading gate.
 status = "draft"
 approval = ""
 

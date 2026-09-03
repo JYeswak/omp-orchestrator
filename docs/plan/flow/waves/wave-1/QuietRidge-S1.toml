@@ -5,7 +5,7 @@ owner_says = "S1 is a draft human-start preference and the layer/hook lists are 
 reviewer_says = "S1 is not reviewable under the pinned Wave 1 contract: it has zero box.measurement rows, zero box.gap rows, no box.agreement table, and no box.diagram table. The layer and hook tables do not substitute for the four required sections."
 evidence = "sed -n '54,96p' docs/plan/flow/CONTRACT.md; grep -cF '[[box.measurement]]' docs/plan/flow/boxes/S1.toml; grep -cF '[[box.gap]]' docs/plan/flow/boxes/S1.toml; grep -cF '[box.agreement]' docs/plan/flow/boxes/S1.toml; grep -cF '[box.diagram]' docs/plan/flow/boxes/S1.toml -> 0,0,0,0"
 severity = "blocker"
-resolution = ""
+resolution = "accepted-and-landed: the blocker is cleared, same measurement as BlueLantern's identical row. Owner re-ran grep -cF on docs/plan/flow/boxes/S1.toml -> [[box.measurement]] 6, [[box.gap]] 8, [box.agreement] 1, [box.diagram] 1, and additionally [[box.layer]] 6 and [[box.hook]] 8. The reviewer's point that layer/hook tables do not substitute for the four sections is upheld and is why both sets now exist."
 
 [[disagreement]]
 box = "S1"
@@ -14,7 +14,7 @@ owner_says = "installer plus an umbrella MISSING is the current start surface."
 reviewer_says = "The row claims three installer flags and a no-caller state but the live installer exposes four CLI verbs and the umbrella remains MISSING; the count and boundary need a command-backed correction in the owner wave."
 evidence = "sed -n '13,18p;35,50p' crates/installer/src/main.rs"
 severity = "major"
-resolution = ""
+resolution = "accepted-and-amended, and the reviewer found a live inconsistency the owner must fix in the box: measurement :140-144 already records four verbs, but the L0 layer field S1.toml:33 still reads 'crates/installer --check/--install/--bin-dir only' -- three. Owner re-ran crates/installer/src/main.rs:36-48: the dispatch arms are --check, --install <one target>, --version, -h/--help, plus --bin-dir, and no-args defaults to --check. The L0 exists string must be corrected to match its own measurement row; the umbrella stays MISSING. Filed as an owner correction, not a reviewer disagreement."
 
 [[disagreement]]
 box = "S1"
@@ -23,4 +23,4 @@ owner_says = "omp-orchestrator:start and ompo install are the current start comm
 reviewer_says = "The installed OMP surface is omp/18.1.5 and its help exposes omp launch plus --mode=rpc; omp start --help is accepted as a message-shaped invocation but is not listed as a CLI verb. The trigger must distinguish the planned ompo wrapper from the installed OMP command, or mark the wrapper MISSING."
 evidence = "omp --version; omp --help | sed -n '1,12p'; omp start --help | sed -n '1,6p'"
 severity = "major"
-resolution = ""
+resolution = "accepted-and-landed with a version correction the reviewer could not have made. S1.toml:15 now separates the planned ompo wrapper (curl one-liner -> ompo install; slash start; SessionStart -> ompo portal --check --json; launchd -> ompo run) from installed OMP, and the wrapper is MISSING in no_claim. Two of the reviewer's cites are now stale: omp --version -> omp/18.1.6 (sha 002f6c36..., 21,263,616 B), not 18.1.5; and 'omp launch' is NOT among the 39 subcommands in 18.1.6's COMMANDS block, so S1 carries no launch claim. The load-bearing half stands: planned wrapper and installed binary are distinct rows."
