@@ -244,7 +244,8 @@ fn part_nine_is_reachability_and_names_the_machine() {
     // `reap-finished-panes` today: no manifest dependent, no hook, no unit.
     let mut orphan = complete("reap-finished-panes");
     orphan.callers = Vec::new();
-    let status = status_of(&assess_crate(&orphan, &Allowances::default()), Part::WiredCaller);
+    let orphan_rows = assess_crate(&orphan, &Allowances::default());
+    let status = status_of(&orphan_rows, Part::WiredCaller);
     assert!(status.refuses(), "{status:?}");
     let PartStatus::Missing { detail } = status else {
         panic!()
@@ -259,7 +260,8 @@ fn part_nine_is_reachability_and_names_the_machine() {
         hook: ".git/hooks/pre-commit".to_owned(),
         machine: "joshs-mac-studio".to_owned(),
     }];
-    let status = status_of(&assess_crate(&wired, &Allowances::default()), Part::WiredCaller);
+    let wired_rows = assess_crate(&wired, &Allowances::default());
+    let status = status_of(&wired_rows, Part::WiredCaller);
     let PartStatus::Present { evidence } = status else {
         panic!("expected Present, got {status:?}")
     };
