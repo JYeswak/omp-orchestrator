@@ -49,12 +49,13 @@ pub struct BeadSnapshot {
     id: String,
     title: String,
     description: String,
+    acceptance_criteria: String,
     status: BeadStatus,
     assignee: Option<String>,
 }
 
 impl BeadSnapshot {
-    /// Builds a snapshot from already-separated tracker fields.
+    /// Builds a snapshot from tracker fields without acceptance criteria.
     pub fn new(
         id: &str,
         title: &str,
@@ -62,10 +63,23 @@ impl BeadSnapshot {
         status: &str,
         assignee: Option<&str>,
     ) -> Self {
+        Self::new_with_acceptance(id, title, description, "", status, assignee)
+    }
+
+    /// Builds a snapshot retaining the typed acceptance criteria field.
+    pub fn new_with_acceptance(
+        id: &str,
+        title: &str,
+        description: &str,
+        acceptance_criteria: &str,
+        status: &str,
+        assignee: Option<&str>,
+    ) -> Self {
         Self {
             id: id.trim().to_owned(),
             title: title.to_owned(),
             description: description.to_owned(),
+            acceptance_criteria: acceptance_criteria.to_owned(),
             status: BeadStatus::parse(status),
             assignee: normalize_optional(assignee),
         }
@@ -84,6 +98,11 @@ impl BeadSnapshot {
     /// Tracker description used in the packet.
     pub fn description(&self) -> &str {
         &self.description
+    }
+
+    /// Typed acceptance criteria used in the packet.
+    pub fn acceptance_criteria(&self) -> &str {
+        &self.acceptance_criteria
     }
 
     /// Canonical tracker status label.
@@ -802,6 +821,8 @@ struct BrShowRow {
     title: String,
     #[serde(default)]
     description: String,
+    #[serde(default)]
+    acceptance_criteria: Option<String>,
     status: String,
     #[serde(default)]
     assignee: Option<String>,
@@ -832,10 +853,11 @@ pub fn parse_br_show_json(bytes: &[u8]) -> Result<BeadSnapshot, SnapshotParseErr
     if row.status.trim().is_empty() {
         return Err(SnapshotParseError::MissingField("status"));
     }
-    Ok(BeadSnapshot::new(
+    Ok(BeadSnapshot::new_with_acceptance(
         &row.id,
         &row.title,
         &row.description,
+        row.acceptance_criteria.as_deref().unwrap_or(""),
         &row.status,
         row.assignee.as_deref(),
     ))

@@ -29,6 +29,7 @@
 //! the DispatchReceipt type models both but neither is proven here.
 
 pub mod spine_emit;
+pub mod dispatch_packet;
 
 use std::collections::BTreeSet;
 use std::fmt;

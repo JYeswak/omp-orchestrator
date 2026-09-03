@@ -106,13 +106,14 @@ fn broadcasts_and_corrections_are_distinct_named_operations() {
 #[test]
 fn br_show_json_is_parsed_into_typed_snapshot() {
     let snapshot = parse_br_show_json(
-        br#"[{"id":"5rh","title":"Claim before send","description":"Claim it","status":"in_progress","assignee":"BlueLantern"}]"#,
+        br#"[{"id":"5rh","title":"Claim before send","description":"Claim it","acceptance_criteria":"Run cargo test -p fixture","status":"in_progress","assignee":"BlueLantern"}]"#,
     )
     .expect("valid br show output");
 
     assert_eq!(snapshot.id(), "5rh");
     assert_eq!(snapshot.status_label(), "in_progress");
     assert_eq!(snapshot.assignee(), Some("BlueLantern"));
+    assert_eq!(snapshot.acceptance_criteria(), "Run cargo test -p fixture");
 }
 fn claim_required_error() -> ClaimFenceError {
     authorize(
