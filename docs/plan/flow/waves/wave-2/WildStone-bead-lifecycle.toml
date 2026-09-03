@@ -1,0 +1,74 @@
+# Wave 2 reviewer: WildStone. Bead lifecycle after S1.
+# OMP orchestrator only. No implementation, no S2 dispatch.
+
+[[disagreement]]
+box = "bead-lifecycle"
+field = "selection_feedback_unroll"
+owner_says = "S5a selects work, claim/permit/ACK/grade refusals return to SEL so the loop can try the next item."
+reviewer_says = "REMAINING: frankenmermaid currently rejects the diagram because feedback edges reverse the flow. SEL is re-entered from NEXT, REF, DENY, INDET, GRADEQ, and BACK, while WIP also self-loops. Unroll each return into a named next-cycle node (for example SEL_AFTER_CLAIM_REFUSAL, SEL_AFTER_PERMIT_REFUSAL, SEL_AFTER_RECEIVER_DENY, SEL_AFTER_INDETERMINATE, SEL_AFTER_CLOSE_REFUSAL) with the retained cause, attempt identity, and explicit stop/defer arm; do not point back to one generic SEL."
+evidence = "this-repo:docs/plan/flow/diagrams/bead-lifecycle.mmd:7-18,19-31,33-41; operator-reported frankenmermaid validate --fail-on warning = FAIL cycle reversal"
+severity = "blocker"
+resolution = "remaining; selection feedback is cyclic and not yet unrolled"
+
+[[disagreement]]
+box = "bead-lifecycle"
+field = "selection_grade_state_identity"
+owner_says = "CLASS -> GRADE means grade starvation gets priority; later GRADE -> CLOSE verifies and closes work."
+reviewer_says = "REMAINING: the same GRADE node represents two different states: a selection class ('pick IssueStatus::Grading first') and a verification/close stage ('verify-dispatch'). This conflates selection policy with lifecycle state and makes the feedback graph ambiguous. Use distinct nodes such as SELECT_GRADING and VERIFY_GRADING before unrolling feedback."
+evidence = "this-repo:docs/plan/flow/diagrams/bead-lifecycle.mmd:8-12,33-41"
+severity = "major"
+resolution = "remaining; GRADE is overloaded across selection and verification"
+
+[[disagreement]]
+box = "bead-lifecycle"
+field = "after_ack_stage.ReceiverDecision"
+owner_says = "ACK -> receiver decision? -> Accepted or Denied reason."
+reviewer_says = "REMAINING: ReceiverDecision is not a named type in ack-stage. The real typed outputs are AckStageInput/AckStageResult, AckAction, and DispatchVerdict::{Delivered, Indeterminate, AckPending, Failed}. Define ReceiverDecision as a clearly scoped post-ACK worker decision only if it is a projection of existing evidence; do not add a seventh receipt/verdict dialect or confuse receiver acceptance with transport delivery."
+evidence = "this-repo:docs/plan/flow/diagrams/bead-lifecycle.mmd:25-31; this-repo:crates/ack-stage/src/lib.rs:341-362,427-452,541-561,613-662"
+severity = "major"
+resolution = "remaining; ReceiverDecision ownership and projection are unspecified"
+
+[[disagreement]]
+box = "bead-lifecycle"
+field = "after_ack_stage.ACCEPT"
+owner_says = "Accepted -> S6b work."
+reviewer_says = "REMAINING: the Accepted edge must name the exact proof predicate and retained payload. AckStageResult::is_confirmed requires RecordReceipt, an ACK comment, ReceiptConfirmed, and a transport that supports a delivery claim; DispatchVerdict::Delivered is the typed publication arm. A generic Accepted label can incorrectly turn an indeterminate or merely acknowledged transport into work-started truth."
+evidence = "this-repo:docs/plan/flow/diagrams/bead-lifecycle.mmd:25-28; this-repo:crates/ack-stage/src/lib.rs:354-371,373-425,541-561,613-624"
+severity = "major"
+resolution = "remaining; ACCEPT must be tied to DispatchVerdict::Delivered and work-start evidence"
+
+[[disagreement]]
+box = "bead-lifecycle"
+field = "after_ack_stage.DENY"
+owner_says = "Denied reason -> status Open, label research-needed, class=research; original blocks on a new research bead."
+reviewer_says = "REMAINING: the DENY branch does not name the actual tracker mutation. dispatch-claim-fence exposes br update <bead> --assignee \"\" --status open, but the diagram does not show that release, the research-needed label mutation, the new research bead id, or the parent/original blocking edge. The receiver denial must not silently reopen work or create an untracked research obligation."
+evidence = "this-repo:docs/plan/flow/diagrams/bead-lifecycle.mmd:26-31; this-repo:crates/dispatch-claim-fence/src/lib.rs:468-505,527-560,796-808"
+severity = "major"
+resolution = "remaining; DENY lacks explicit br update, new research bead, and blocking-edge receipt"
+
+[[disagreement]]
+box = "bead-lifecycle"
+field = "research_bead_labels"
+owner_says = "Beads carry class=impl|grade|research and denial selects label research-needed."
+reviewer_says = "REMAINING: class=research and label research-needed are two different names with no declared registry or canonical mapping in the diagram. The materialized research bead needs a durable schema naming its exact labels, source denial, original bead, reason, owner, and acceptance; otherwise the next selector cannot distinguish intentional research deferral from ordinary ready work."
+evidence = "this-repo:docs/plan/flow/diagrams/bead-lifecycle.mmd:3-11,26-29; this-repo:crates/dispatch-claim-fence/src/lib.rs:390-407,468-495"
+severity = "major"
+resolution = "remaining; research class/label mapping and materializer contract are unspecified"
+
+[[disagreement]]
+box = "bead-lifecycle"
+field = "dispatcher_deadman_after_deny"
+owner_says = "ClaimFenceError retains the blocker chain and dispatcher-deadman watches eligible work with no packet."
+reviewer_says = "REMAINING: dispatcher-deadman fires when ready_count > 0 and delivered_count == 0 for two consecutive ticks, and its Record has no typed exclusion for intentional receiver denial or research-held work. The diagram sends DENY back to SEL without specifying whether the denied bead remains in ready_count, whether a new research bead is eligible, or which reason prevents a false deadman alarm. Add the deadman input row and an explicit intentional-deferral branch before claiming the loop is closed."
+evidence = "this-repo:docs/plan/flow/diagrams/bead-lifecycle.mmd:16-18,26-31; this-repo:crates/dispatcher-deadman/src/lib.rs:3-7,73-87,105-158"
+severity = "major"
+resolution = "remaining; deadman cannot distinguish intentional denial from no-packet starvation"
+
+[[disagreement]]
+box = "bead-lifecycle"
+field = "ack_stage_to_receiver_decision_receipt"
+owner_says = "Every transition appends LifecycleEvent and the receiver decision is visible to the operator."
+reviewer_says = "REMAINING: the diagram's LEDGER receives DEC, but no event schema names ReceiverDecision, its source comment or tracker row, the br update result, the research bead id, or the dispatcher-deadman disposition. Without those joins, the ACK/DENY beat is observable only as a label and cannot answer why work was reopened, deferred, or routed to research."
+evidence = "this-repo:docs/plan/flow/diagrams/bead-lifecycle.mmd:25-31,43-47; this-repo:crates/ack-stage/src/lib.rs:341-362; this-repo:crates/dispatch-claim-fence/src/lib.rs:681-800; this-repo:crates/dispatcher-deadman/src/lib.rs:73-158"
+severity = "major"
+resolution = "remaining; LifecycleEvent does not yet carry the complete ACK/DENY receipt join"

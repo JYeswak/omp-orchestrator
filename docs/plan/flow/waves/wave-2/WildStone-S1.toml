@@ -1,0 +1,218 @@
+# Wave 2 reviewer: WildStone. Box S1. Read-only review of the landed S1 diagram.
+# These are diagram/schema disagreements only; S1.toml remains owned by SnowyCanyon.
+
+[[disagreement]]
+box = "S1"
+field = "branches.L0_agent_detected"
+owner_says = "L0 agent detected -> merge hooks + skills with timestamped backup; per-agent outcome is created|merged|already|failed|skipped."
+reviewer_says = "REJECTED as rendered: S1.mmd routes every detected-agent result through L0M -> L1. The box names failed as a possible per-agent outcome, but the diagram has no failed/refused or degraded continuation branch and therefore can advance after a failed merge without carrying the failure in the state. Keep the per-agent result typed and require an explicit policy for failed merges before L1."
+evidence = "this-repo:docs/plan/flow/boxes/S1.toml:27-33; this-repo:docs/plan/flow/boxes/S1.toml:108-110; this-repo:docs/plan/flow/diagrams/S1.mmd:10-16"
+severity = "major"
+resolution = "resolved-at-7f9195a; evidence=S1.mmd:15-17"
+
+[[disagreement]]
+box = "S1"
+field = "branches.L2_hook_identity"
+owner_says = "L2 hook identity != HEAD -> rebuild on the lane and reinstall the hook."
+reviewer_says = "REJECTED as rendered: S1.mmd routes L2R directly to L3 after displaying IDENTITY MISMATCH. It has no success/failure result for the rebuild/reinstall action, so a failed repair can be read as permission to enter the walkthrough. The remediation needs an explicit verified-success branch and a typed refusal/halt branch."
+evidence = "this-repo:docs/plan/flow/boxes/S1.toml:43-49; this-repo:docs/plan/flow/boxes/S1.toml:113-115; this-repo:docs/plan/flow/diagrams/S1.mmd:26-34; this-repo:crates/installer/src/lib.rs:470-501"
+severity = "major"
+resolution = "resolved-at-7f9195a; evidence=S1.mmd:41-44"
+
+[[disagreement]]
+box = "S1"
+field = "branches.L4_persona_A_not_live"
+owner_says = "L4 not live -> ask agent types/counts/models -> spawn -> register -> context pack -> portal."
+reviewer_says = "REJECTED as schema omission, not as product behavior: S1.mmd adds an agree-not-live + Persona-A -> gates-only -> portal branch, but S1.toml does not declare persona as an input or this exception in branches. The exception is supported by the Persona-A contract (solo maintainer, no fleet/supervisor), but a diagram branch absent from the box's exhaustive branch list cannot be treated as generated truth. Either add a persona-qualified branch to the owner row or remove the exception and preserve the unconditional spawn behavior."
+evidence = "this-repo:docs/plan/flow/boxes/S1.toml:19-21; this-repo:docs/plan/flow/boxes/S1.toml:59-65; this-repo:docs/plan/flow/boxes/S1.toml:108-119; this-repo:docs/plan/flow/diagrams/S1.mmd:41-50; this-repo:docs/plan/08-end-users.md:32-53"
+severity = "major"
+resolution = "resolved-at-7f9195a; evidence=S1.toml:120-121"
+
+[[disagreement]]
+box = "S1"
+field = "diagram.output_to_S2"
+owner_says = "L5 produces PortalRow and the lifecycle proceeds after the decision check."
+reviewer_says = "PARTIAL: OUT says 'inception envelope accepted, to S2', but the diagram does not show the Inception fields or the persistence/identity evidence that S1.toml lists in kernel_output. The output edge must name the accepted envelope and its proof boundary; otherwise the visual path hides the handoff schema."
+evidence = "this-repo:docs/plan/flow/boxes/S1.toml:19-21; this-repo:docs/plan/flow/boxes/S1.toml:67-72; this-repo:docs/plan/flow/diagrams/S1.mmd:52-54"
+severity = "minor"
+resolution = "resolved-at-7f9195a; evidence=S1.mmd:65-67"
+
+[[disagreement]]
+box = "S1"
+field = "branches.L0_path_collision"
+owner_says = "L0 PATH first hit is /usr/sbin/installer -> binary MUST NOT be named installer."
+reviewer_says = "REJECTED as rendered: the diagram puts the collision rule in the L0 node label, but no decision edge or refusal/output node carries this branch. A diagram reader cannot distinguish a collision refusal from a normal install path, and the branch is absent from the executable flow despite being explicit in S1.toml."
+evidence = "this-repo:docs/plan/flow/boxes/S1.toml:27-33; this-repo:docs/plan/flow/boxes/S1.toml:108-112; this-repo:docs/plan/flow/diagrams/S1.mmd:10-16; live:type -a installer -> /usr/sbin/installer first"
+severity = "major"
+resolution = "resolved-at-7f9195a; evidence=S1.mmd:8-10"
+
+[[disagreement]]
+box = "S1"
+field = "branches.L0_agent_merge_failure"
+owner_says = "L0 agent detected -> merge hooks and skills with timestamped backup; per-agent outcome is created|merged|already|failed|skipped."
+reviewer_says = "REJECTED as rendered: L0M contains all five per-agent outcomes and unconditionally routes to L1. The failed outcome has no refusal, degraded status, retry, or explicit continuation branch. The diagram therefore permits a failed hook/skill merge to read as a completed install."
+evidence = "this-repo:docs/plan/flow/boxes/S1.toml:27-33; this-repo:docs/plan/flow/boxes/S1.toml:108-110; this-repo:docs/plan/flow/diagrams/S1.mmd:10-16"
+severity = "major"
+resolution = "resolved-at-7f9195a; evidence=S1.mmd:15-17"
+
+[[disagreement]]
+box = "S1"
+field = "branches.L1_probe_scope"
+owner_says = "L1 distinguishes ABSENT family, ABSENT specific, and UNPROBEABLE; specific absence is informational and family absence halts with remediation."
+reviewer_says = "PARTIAL/REJECTED as a query schema: the diagram labels the split as 'probe family?' but emits no probe scope, capability family, implementation identity, remediation status, or degraded continuation state. The route to L2 loses the distinction that makes specific absence informational and family absence actionable."
+evidence = "this-repo:docs/plan/flow/boxes/S1.toml:35-41; this-repo:docs/plan/flow/boxes/S1.toml:112-114; this-repo:docs/plan/flow/diagrams/S1.mmd:18-24; this-repo:docs/plan/08-end-users.md:96-120"
+severity = "major"
+resolution = "resolved-at-7f9195a; evidence=S1.mmd:19-28"
+
+[[disagreement]]
+box = "S1"
+field = "branches.L2_remote_requirement"
+owner_says = "L2 no git remote -> halt."
+reviewer_says = "REJECTED for the adopter journey: 08-end-users defines the hard requirements as a git repository, a source of work units, and a worker; it does not require a configured remote. The S1 diagram hard-stops a local-only repository without naming an adapter or distinguishing our fleet policy from the foreign-repo adoption contract."
+evidence = "this-repo:docs/plan/flow/boxes/S1.toml:43-49; this-repo:docs/plan/flow/boxes/S1.toml:115-117; this-repo:docs/plan/flow/diagrams/S1.mmd:26-28; this-repo:docs/plan/08-end-users.md:260-272"
+severity = "major"
+resolution = "resolved-at-7f9195a; evidence=S1.mmd:30-32"
+
+[[disagreement]]
+box = "S1"
+field = "branches.L2_convention_initialization"
+owner_says = "Missing or unstamped AGENTS.md/CLAUDE.md -> init writes from template."
+reviewer_says = "REJECTED for foreign repositories: the end-user contract says the orchestrator must not require its own directory layout or conventions; the adapter owns those differences. The diagram's unconditional init write path needs an explicit opt-in/adoption decision and a durable before/after report, or it can overwrite user-owned policy files."
+evidence = "this-repo:docs/plan/flow/boxes/S1.toml:43-49; this-repo:docs/plan/flow/diagrams/S1.mmd:26-34; this-repo:docs/plan/08-end-users.md:260-272"
+severity = "major"
+resolution = "resolved-at-7f9195a; evidence=S1.mmd:33-38"
+
+[[disagreement]]
+box = "S1"
+field = "branches.L2_hook_identity_repair"
+owner_says = "L2 hook identity != HEAD -> rebuild on lane and reinstall."
+reviewer_says = "REJECTED as rendered: L2R routes directly to L3 after displaying IDENTITY MISMATCH. No verified repair-success branch, refusal branch, or artifact identity readback exists in the diagram. A failed repair can therefore enter the walkthrough as if the hook were current."
+evidence = "this-repo:docs/plan/flow/boxes/S1.toml:113-117; this-repo:docs/plan/flow/diagrams/S1.mmd:26-34; this-repo:crates/installer/src/lib.rs:470-501"
+severity = "major"
+resolution = "resolved-at-7f9195a; evidence=S1.mmd:41-44"
+
+[[disagreement]]
+box = "S1"
+field = "branches.L4_spawn_transaction"
+owner_says = "L4 not live and persona B or C -> HD-0010 then spawn -> register -> pack -> portal."
+reviewer_says = "REJECTED as rendered: L4S routes directly to L5 with no failure arms for spawn, registration, WAVE.md generation, macro_start_session, or context-pack delivery. A partial swarm startup becomes portal-ready without a typed failure or retry state. If tmux is absent, the diagram also lacks the documented one-shot worker adapter path."
+evidence = "this-repo:docs/plan/flow/boxes/S1.toml:59-65; this-repo:docs/plan/flow/boxes/S1.toml:120-122; this-repo:docs/plan/flow/diagrams/S1.mmd:41-50; this-repo:docs/plan/08-end-users.md:260-272"
+severity = "major"
+resolution = "resolved-at-7f9195a; evidence=S1.mmd:58-63"
+
+[[disagreement]]
+box = "S1"
+field = "branches.L1_external_tool_matrix"
+owner_says = "L1 checks tmux, ntm, br, bv, Agent Mail, Socraticode/Qdrant, rch, git, disk, frankenmermaid, fh, and the lane toolchain."
+reviewer_says = "REJECTED as incomplete branch coverage: the diagram has one generic probe-family node but no explicit branches for bv ranking unavailable, fh stale, rch lane unavailable, jsm absent, frankenmermaid unavailable, launchd paused, or OMP hook surface unmeasured. These are distinct operator states and must not collapse into OK, ABSENT, or UNPROBEABLE."
+evidence = "this-repo:docs/plan/flow/boxes/S1.toml:35-41,74-106; this-repo:docs/plan/flow/diagrams/S1.mmd:18-24; this-repo:docs/plan/flow/CONTRACT.md:60-78"
+severity = "major"
+resolution = "remaining; diagram still misses per-tool bv/fh/rch/jsm/frankenmermaid/launchd/OMP-hook result branches; evidence=S1.mmd:19-28"
+
+[[disagreement]]
+box = "S1"
+field = "kernel_output.PortalRow"
+owner_says = "PortalRow contains session, panes, queue depth by bv, admission, gates, decisions owed to Joshua."
+reviewer_says = "PARTIAL: the diagram names THE ONE NEXT ACTION, but the declared PortalRow schema does not contain a one_next_action field or the three per-source liveness verdicts required by L4. The portal cannot be queried for why it called the swarm live or what exact action follows."
+evidence = "this-repo:docs/plan/flow/boxes/S1.toml:19-21,59-72; this-repo:docs/plan/flow/diagrams/S1.mmd:41-54"
+severity = "major"
+resolution = "resolved-at-7f9195a; evidence=S1.mmd:65"
+
+[[disagreement]]
+box = "S1"
+field = "diagram.L5_to_S2_proof"
+owner_says = "L5 portal proceeds to the next lifecycle stage after the decision check."
+reviewer_says = "PARTIAL: OUT says 'inception envelope accepted, to S2' but does not render the Inception fields, run identity, source evidence, or persisted proof reference. The S1-to-S2 handoff is therefore visually asserted but not queryable."
+evidence = "this-repo:docs/plan/flow/boxes/S1.toml:19-21,67-72; this-repo:docs/plan/flow/diagrams/S1.mmd:52-54; this-repo:docs/plan/flow/spine.mmd:2-4"
+severity = "minor"
+resolution = "resolved-at-7f9195a; evidence=S1.mmd:67"
+
+[[disagreement]]
+box = "S1"
+field = "gap_ack.L0OMP"
+owner_says = "L0 OMP surface gap: install is pre-session and does not speak OMP RPC."
+reviewer_says = "ACCEPTED as an intentional stage boundary, not accepted as OMP coverage. L0 should not require an OMP child before installation, but the gap remains explicit: no OMP protocol is consumed at install. No L0 OMP wiring should be invented; the later OMP surfaces carry the adoption work."
+evidence = "this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:9-10; this-repo:docs/plan/flow/boxes/S1.toml:27-33"
+severity = "minor"
+resolution = "resolved-at-7f9195a; evidence=S1-surfaces.mmd:9"
+
+[[disagreement]]
+box = "S1"
+field = "gap_ack.L0CX"
+owner_says = "L0 Asupersync gap: installer has zero Cx and zero Scope; it uses std::process."
+reviewer_says = "ACCEPTED as a real open gap. The installer source imports std::process::Command and exposes bounded helper logic, but no Cx-first API or region-owned Scope is present. This must remain a named cross-cutting decision; do not read the existing bounded helper as proof of the Asupersync contract."
+evidence = "this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:13-15; this-repo:crates/installer/src/main.rs:1-6; this-repo:crates/installer/src/lib.rs:10-13,118-146"
+severity = "major"
+resolution = "remaining; installer still has zero Cx/Scope and the map names replacement rather than proof; evidence=S1-surfaces.mmd:11"
+
+[[disagreement]]
+box = "S1"
+field = "gap_ack.L1OMP"
+owner_says = "L1 OMP gap: installed OMP exposes get_state, but doctor currently scrapes PATH instead."
+reviewer_says = "ACCEPTED as a real open gap. The existing omp-rpc-session adapter covers get_state for one configured OMP child, but its own no-claim excludes tmux/NTM/pane liveness. L1 may use it for OMP process state, but must retain separate tool-probe and fleet-observation authorities."
+evidence = "this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:17-18; this-repo:crates/omp-rpc-session/src/lib.rs:3-21,241-248,868-910"
+severity = "major"
+resolution = "resolved-at-7f9195a; evidence=S1-surfaces.mmd:13"
+
+[[disagreement]]
+box = "S1"
+field = "gap_ack.L4OMP"
+owner_says = "L4 OMP gap: live-definition scrapes OMP status-line paint while RPC surfaces remain unused."
+reviewer_says = "ACCEPTED as a real open gap. The current live-definition contract is a visual terminal classifier; OMP RPC state exists but no pane-level protocol join is shown. Do not claim that get_state alone proves pane liveness or receiver delivery."
+evidence = "this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:24-25; this-repo:crates/omp-rpc-session/src/lib.rs:17-21,37-41; this-repo:crates/tick-monitor/src/lib.rs:219-243,307-411"
+severity = "major"
+resolution = "resolved-at-7f9195a; evidence=S1-surfaces.mmd:17"
+
+[[disagreement]]
+box = "S1"
+field = "gap_ack.L4CX"
+owner_says = "L4 Asupersync gap: no region-owned spawn wrapper for the swarm-start path."
+reviewer_says = "ACCEPTED as a real open gap. A supervisor Cx does not by itself prove that detached NTM/session children are region-owned or group-cancelled. The eventual create path must name the owner, cancellation boundary, child-group policy, and timeout outcome."
+evidence = "this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:28-29; this-repo:crates/subprocess-contract/src/lib.rs:3-9,82-139; this-repo:crates/omp-orchestrator/src/lib.rs:3-8,24-29"
+severity = "major"
+resolution = "remaining; diagram names Cx/process-group policy but no region-owned runtime wrapper is proven; evidence=S1-surfaces.mmd:19"
+
+[[disagreement]]
+box = "S1"
+field = "gap_ack.L5OMP"
+owner_says = "L5 OMP gap: portal would scrape again despite get_state and get_session_stats existing."
+reviewer_says = "ACCEPTED as a real open gap. The portal should consume typed OMP process/session state where applicable, but must not replace the independent NTM/tmux/Agent Mail authorities for fleet truth. The portal's output needs per-authority evidence rather than a merged scrape."
+evidence = "this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:31-32; this-repo:crates/omp-rpc-session/src/lib.rs:10-21,241-248"
+severity = "major"
+resolution = "resolved-at-7f9195a; evidence=S1-surfaces.mmd:21"
+
+[[disagreement]]
+box = "S1"
+field = "invariant.command_v_path_identity"
+owner_says = "After L0, command -v of the published name is either the new verified artifact or the prior artifact, never a third PATH hit, and the receipt names which."
+reviewer_says = "REJECTED as KNOW in the current map; retain it as a projected invariant/open gap. The installer identity API verifies a supplied absolute binary path and its build-id/version pair, while installer source has no command-v or every-PATH-hit proof. The map's invariant is the target contract, not current evidence."
+evidence = "this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:2,15; this-repo:crates/installer/src/lib.rs:445-501,664-745; this-repo:crates/installer/src/main.rs:82-93"
+severity = "blocker"
+resolution = "remaining; command-v new-or-prior identity remains PROJECTED and no implementation edge is shown; evidence=S1-surfaces.mmd:2"
+
+[[disagreement]]
+box = "S1"
+field = "gap_ack.OMP_zero_consumption_measurement"
+owner_says = "OMP gap text says crates spawn br/git/tmux/cargo and Command::new(omp) = 0 files; L1 says installed get_state is unused and consumption is 0/42."
+reviewer_says = "REJECTED as a repository-wide measurement. Current source has Command::new("omp") at omp-rpc-session/src/lib.rs:136, and omp-orchestrator imports and calls run_session (src/main.rs:31-33,448-474). The L0 installer-specific non-use claim can stand only when scoped to crates/installer; the global zero/42 text is stale or over-broad. Narrow the census before treating this GAP as measured."
+evidence = "this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:9-10,17-18; this-repo:crates/omp-rpc-session/src/lib.rs:84-92,136-146,241-265; this-repo:crates/omp-orchestrator/src/main.rs:31-33,448-474"
+severity = "blocker"
+resolution = "resolved-at-7f9195a; evidence=S1-surfaces.mmd:9"
+
+[[disagreement]]
+box = "S1"
+field = "surface_ack.NTM"
+owner_says = "NTM owns session creation and send; spawn --assign --cass-context is the only legal create; WAVE.md is generated from tmux list-panes."
+reviewer_says = "ACCEPTED as the intended NTM boundary for this review. Do not hand-create panes or hand-type WAVE.md. The accepted boundary is still a design/source claim, not runtime proof; future evidence must retain the spawn response, assigned pane identity, generated WAVE.md hash, Agent Mail registration, and context-pack delivery outcome."
+evidence = "this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:11-12,26-27; this-repo:docs/plan/flow/boxes/S1.toml:59-65,120-122; this-repo:crates/ntm-fleet-monitor/src/lib.rs:3-25"
+severity = "major"
+resolution = "remaining; diagram has post-spawn branch but no runtime spawn/registration/pack receipt; evidence=S1.mmd:58-63"
+
+[[disagreement]]
+box = "S1"
+field = "surface_ack.Asupersync"
+owner_says = "Installer has zero Cx; L1 probes require bounded plus checkpoint; L4 has no region-owned spawn wrapper; L5 observe loop needs Cx checkpoint."
+reviewer_says = "ACCEPTED as an open cross-cutting gap. The map correctly separates installer's zero-Cx state from later required Cx usage. Existing supervisor or subprocess helpers do not prove that every S1 operation is region-owned, cancellation-correct, or free of detached children."
+evidence = "this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:13-14,21-22,28-29,35-36; this-repo:crates/subprocess-contract/src/lib.rs:3-9,82-139; this-repo:crates/installer/src/lib.rs:10-13,118-146"
+severity = "major"
+resolution = "remaining; installer zero-Cx and L4 region-owned spawn remain unresolved; evidence=S1-surfaces.mmd:11,19"
