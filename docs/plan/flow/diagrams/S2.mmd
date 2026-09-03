@@ -1,0 +1,12 @@
+flowchart TD
+  IN["S2 idea to plan: sections staged"] --> Q1{"any staged docs/plan path?"}
+  Q1 -->|no| NA["preregistration-gate GATE_NOT_APPLICABLE and plan-assemble-build NOT_APPLICABLE cargo count 0"]
+  Q1 -->|yes| Q2{"HYPOTHESES.jsonl readable at HEAD?"}
+  Q2 -->|no| H0["REFUSED: git show HEAD docs/plan/HYPOTHESES.jsonl fails. Measured in a scratch clone as the only refusal a clean commit produced"]
+  Q2 -->|yes| Q3{"section carries a preregistered hypothesis?"}
+  Q3 -->|no| H1["REFUSED at pre-commit-gate.rs L122 refusals.push preregistration-gate error"]
+  Q3 -->|yes| Q4{"docs/PLAN.md stamp matches its sections?"}
+  Q4 -->|no| H2["assembly_freshness RED. The metric counts commits since the last disk write"]
+  Q4 -->|yes| Q5{"assembly needs a human decision?"}
+  Q5 -->|yes| HALT["HUMAN HALT: S9 request row, owner josh, one named decision"]
+  Q5 -->|no| OUT["assembled and preregistered, to S3"]

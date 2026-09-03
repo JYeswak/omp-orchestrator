@@ -1,0 +1,12 @@
+flowchart TD
+  IN["S3 plan to grade: a round is dispatched with a lens"] --> Q1{"lens already spent?"}
+  Q1 -->|yes| R1["PROPOSED LensReused: the round does not count"]
+  Q1 -->|no| Q2{"grader wrote the section?"}
+  Q2 -->|yes| R2["PROPOSED GraderIsAuthor: the round does not count"]
+  Q2 -->|no| Q3{"gate state recorded for this round?"}
+  Q3 -->|no| R3["PROPOSED Unrun: an unrecorded check is not a check. Round 8 rows were backfilled gates_green false"]
+  Q3 -->|yes| Q4{"findings greater than zero?"}
+  Q4 -->|yes| R4["PROPOSED FindingsOpen: each finding becomes a bead, a one line note, or is dropped. Never a document"]
+  Q4 -->|no| Q5{"a finding's remedy is a decision?"}
+  Q5 -->|yes| HALT["HUMAN HALT: S9 request row"]
+  Q5 -->|no| OUT["PROPOSED Banked, to S4. Two consecutive zero finding rounds are required"]

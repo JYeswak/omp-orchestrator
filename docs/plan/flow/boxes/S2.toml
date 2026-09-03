@@ -10,7 +10,7 @@ trigger_target = "hook:.git/hooks/pre-commit for preregistration + slash:/planni
 crate = "plan-assemble"
 crate_status = "wired"
 bead = "omp-orchestrator-bcrn"
-kernel_input = "docs/plan/*.md (18 section files) + docs/plan/HYPOTHESES.jsonl"
+kernel_input = "docs/plan/[0-9][0-9]-*.md (13 numbered sections, 7969 lines; `ls docs/plan/*.md` counts 18 because CONVERGENCE.md, R24-SOTA-CHARTER.md, ROUNDS.md, round24-L1-dag.md and skill-ledger-20260902.md are not sections) + docs/plan/HYPOTHESES.jsonl"
 kernel_output = "docs/PLAN.md (assembled) + a preregistration verdict: validate_staged_preregistration -> Result<(), String> (this-repo:crates/no-shell-gate/src/bin/pre-commit-gate.rs:L579)"
 event_row = "LifecycleEvent{stage_from=S1, stage_to=S2, actor=human+agent, pane, incarnation=MISSING, outcome, reason_code=PREREGISTRATION_REFUSED|PLAN_ASSEMBLED|NOT_APPLICABLE, blocker={hypothesis|assemble-stamp}}"
 validator = "preregistration-gate invoked at this-repo:crates/no-shell-gate/src/bin/pre-commit-gate.rs:L121 (refusal pushed at L122); plan-assemble freshness stamp via no-shell-gate/tests/assembly_freshness.rs"
@@ -123,4 +123,33 @@ approval = ""
 
 [box.diagram]
 mmd = "docs/plan/flow/diagrams/S2.mmd"
-validate_exit = -1
+validate_exit = 0   # frankenmermaid validate diagrams/S2.mmd --fail-on warning -> 0, 12 nodes 11 edges, 2026-09-03T05:30Z, AmberGate
+
+# ── WAVE 1: physics added by the owner, reconciling two numbers in this box ────
+
+[[box.measurement]]
+claim = "13 numbered sections, not 18 files: my own kernel_input said 18 and that was a FILE count"
+command = "ls docs/plan/[0-9][0-9]-*.md | wc -l  AND  ls docs/plan/*.md | wc -l  AND  cat docs/plan/[0-9][0-9]-*.md | wc -l"
+value = "13 numbered sections / 18 .md files / 7969 lines. The five non-sections are CONVERGENCE.md, R24-SOTA-CHARTER.md, ROUNDS.md, round24-L1-dag.md, skill-ledger-20260902.md. Josh's 13 was right; my row said 18 and is corrected."
+measured_at = "2026-09-03T05:33Z"
+by = "AmberGate"
+
+[[box.measurement]]
+claim = "plan-assemble has ONE real in-tree caller, not two, and it is reachable through the installed hook"
+command = "git grep -n plan_assemble -- 'crates/*/src/*'  AND  git grep -ln plan-assemble -- 'crates/*/Cargo.toml'  AND  strings .git/hooks/pre-commit | grep -c plan-assemble"
+value = "2 FILES match, but one is staged-build-gate/src/lib.rs where `plan_assemble` appears inside a doc-comment quoting error[E0601]. The real caller is validate_plan_assemble_build (pre-commit-gate.rs:L124 invocation, L645 definition). Manifest dependents: 0. Installed hook bytes: 8 occurrences on host joshs-mac-studio, which is the part-9 reachability answer and why crate_status is `wired`."
+measured_at = "2026-09-03T05:33Z"
+by = "AmberGate"
+
+# ── WAVE 1: hook (S2's gap list names the absence; this names the future row) ──
+[[box.hook]]
+future_certified_id = "plan-section-preregistration-gate"
+event = "PreToolUse"
+matcher = "Bash command matching 'git commit' with a staged docs/plan path"
+class = "gate"
+fail_mode = "closed"
+binary = "crates/preregistration-gate (EXISTS, and is reached today only through the per-clone pre-commit Mach-O)"
+language = "rust"
+harm_class = "a plan section changes with no preregistered hypothesis, so a later result can be re-narrated as predicted"
+gauntlet_stage = "/hook-certification: the logic is live inside the multi-gate hook but has NO certified row of its own"
+note = "The gate already runs. What is missing is the certified row: it is per-clone, untracked, and absent in a fresh checkout, so its reachability is machine-scoped."

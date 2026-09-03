@@ -1,0 +1,14 @@
+flowchart TD
+  IN["S4 plan to beads: crate-atom-gate report json"] --> Q0{"did the report run?"}
+  Q0 -->|"exit 2 SCAN_EMPTY or exit 3 INSTRUMENT_ERROR"| RU["PROPOSED ReportUnrun: file nothing. An unrun report is not an empty one"]
+  Q0 -->|"exit 0 or 1"| Q1{"row status?"}
+  Q1 -->|present| P["no bead filed"]
+  Q1 -->|"not applicable"| NAP["no bead filed. NotApplicable is deliberately not Present, so a crate with no parser cannot inflate coverage"]
+  Q1 -->|ALLOWED| AL["no bead filed. The allowance row names owner and dies_when"]
+  Q1 -->|MISSING| Q2{"bead already exists for this crate and part?"}
+  Q2 -->|yes| AF["PROPOSED AlreadyFiled: never a duplicate"]
+  Q2 -->|no| Q3{"does the filed bead pass bead-lint 2lqd?"}
+  Q3 -->|no| LR["PROPOSED RefusedByLint: the materializer must not emit a bead its own linter rejects"]
+  Q3 -->|yes| Q4{"is the remedy a decision, retire versus wire?"}
+  Q4 -->|yes| HALT["HUMAN HALT: S9 request row"]
+  Q4 -->|no| OUT["PROPOSED Filed with labels crate name and part n, to S5a"]

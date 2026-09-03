@@ -46,3 +46,133 @@ DISAGREEMENT WITH THE PACKET: it says "24 hand rounds in docs/plan/round*.jsonl"
 a file, and CONVERGENCE.jsonl carries rows for rounds 8-21), so 24 may be a round COUNT
 against 16 FILES — but as written the cite does not resolve, and I am not guessing which.
 """
+
+# ── WAVE 1: physics ───────────────────────────────────────────────────────────
+# Every number below was produced by the command beside it, at the stamped time. A number
+# without a command is a guess dressed as a fact.
+
+[[box.measurement]]
+claim = "16 round files exist, named for rounds 16 through 24"
+command = "ls docs/plan/round*.jsonl | wc -l  AND  ls docs/plan/round*.jsonl | sed 's|.*/round||;s|-.*||' | sort -un"
+value = "16 files; round numbers 16 17 18 19 20 21 22 23 24 (multiple graders share a round)"
+measured_at = "2026-09-03T05:30Z"
+by = "AmberGate"
+
+[[box.measurement]]
+claim = "CONVERGENCE.jsonl holds 87 rows across only 8 distinct rounds, and its round set does not match the files"
+command = "wc -l docs/plan/CONVERGENCE.jsonl  AND  python3 -c \"import json;print(sorted({json.loads(l)['round'] for l in open('docs/plan/CONVERGENCE.jsonl') if l.strip()}))\""
+value = "87 rows; rounds [8, 9, 10, 12, 13, 14, 15, 22]. Rounds 11 and 16-21 and 23-24 are ABSENT from the ledger while round files exist for 16-24"
+measured_at = "2026-09-03T05:30Z"
+by = "AmberGate"
+
+[[box.measurement]]
+claim = "only about half the banked rows recorded their gate state"
+command = "python3 -c \"import json;rows=[json.loads(l) for l in open('docs/plan/CONVERGENCE.jsonl') if l.strip()];print(sum(1 for r in rows if r.get('gates_green') is True), len(rows))\""
+value = "45 of 87 rows have gates_green true; the round-8 rows carry the backfill note 'an unrecorded check is not a check'"
+measured_at = "2026-09-03T05:30Z"
+by = "AmberGate"
+
+[[box.measurement]]
+claim = "the stop condition has never been met: 1 consecutive zero-finding round, 2 required"
+command = "python3 -c \"...group CONVERGENCE rows by round, keep rounds where every new_findings==0, find the longest consecutive run...\""
+value = "longest run = 1 (only round 22 is zero-finding across all its rows). The goal is two consecutive."
+measured_at = "2026-09-03T05:30Z"
+by = "AmberGate"
+
+[[box.measurement]]
+claim = "no crate implements S3"
+command = "ls crates/plan-check"
+value = "MISSING (no such directory)"
+measured_at = "2026-09-03T05:30Z"
+by = "AmberGate"
+
+# ── WAVE 1: gaps ──────────────────────────────────────────────────────────────
+# Walked all 13 classes. S3 is missing 11 of them; the two it does not need are named as
+# such rather than omitted, because a box that lists a short gap list is lying.
+
+[[box.gap]]
+what = "no crate at all: plan-check (bcrn.1) does not exist, so every branch in this box is PROPOSED and nothing enforces a round's validity"
+resolves = "bcrn.1 lands crates/plan-check with a lib+bin reading CONVERGENCE.jsonl and the round files"
+class = "verdict_type"
+
+[[box.gap]]
+what = "no LifecycleEvent row: a round is recorded by an agent hand-appending to a .jsonl, so a round that was never run and a round that found nothing are indistinguishable in the ledger"
+resolves = "kxe.8 journal writer emitting one row per round with stage_from=S2 stage_to=S3"
+class = "event_row"
+
+[[box.gap]]
+what = "the ledger disagrees with the files and nothing notices: CONVERGENCE.jsonl has rounds [8,9,10,12,13,14,15,22] while round files exist for 16-24. 42 of 87 rows have no gate state."
+resolves = "plan-check reconciling the two sources and refusing a round file with no ledger row (and vice versa)"
+class = "oracle"
+
+[[box.gap]]
+what = "no claim row (L1) for 'two consecutive zero-finding rounds bank a section', and no strength lattice entry for what a round's verdict is worth"
+resolves = "registries/claims.toml with a claim row whose justifier is at least as strong as the claim"
+class = "claim_row"
+
+[[box.gap]]
+what = "no SLO (L2): a grading round has no p95, no budget, and no safe_mode_trigger, so 24 rounds over two days is invisible as a cost"
+resolves = "slo.yaml row keyed on the grading lane once plan-check exists"
+class = "slo"
+
+[[box.gap]]
+what = "no named external oracle (L3): the grade's correctness is judged by the same fleet that produced the plan. There is no out-of-our-control arbiter for 'is this plan good'"
+resolves = "an external validation signal per loop-engineering's third loop; until then S3's verdict is internal agreement, which the Charter explicitly says is not the bar"
+class = "oracle"
+
+[[box.gap]]
+what = "no gate that trips (L4): nothing refuses a round that reuses a spent lens or whose grader authored the section, though both facts are IN the round rows"
+resolves = "plan-check with a fires-on-known-bad leg planting a reused lens and asserting RED"
+class = "gate_trip"
+
+[[box.gap]]
+what = "no fuzz target (L5): the round-row parser is a parser and has none"
+resolves = "crates/plan-check/fuzz/fuzz_targets/plan_check_round_row.rs asserting the stated invariants, not absence of panic"
+class = "fuzz"
+
+[[box.gap]]
+what = "no wired caller (atom 9): even once plan-check exists, no trigger is defined. Rounds are dispatched by hand from pane 1"
+resolves = "a WIRED_CALLERS row naming either the pre-commit chain or the supervisor tick, proved by reachability"
+class = "wired_caller"
+
+[[box.gap]]
+what = "no hook: nothing fires on a round file being written, so a malformed round row lands and is discovered by a reader"
+resolves = "a Rust PostToolUse hook certified per control-plane/hooks_certified.toml; see [[box.hook]] below"
+class = "hook"
+
+[[box.gap]]
+what = "measurement gap: 'new_findings' is self-reported by the grader with no re-execution, and round 15 produced 4 verified FALSE POSITIVES out of 23 blockers"
+resolves = "the verify-before-record rule becoming machine-checked: a finding row must cite a command and its output"
+class = "measurement"
+
+[[box.gap]]
+what = "NOT NEEDED, stated so it is not mistaken for an omission: formal proof (L6) and an ecosystem lock (L7) do not apply to a grading round — there is no theorem and no cross-repo pin here"
+resolves = "n/a by design; revisit if plan-check acquires a decision procedure worth proving"
+class = "formal"
+
+# ── WAVE 1: hook ──────────────────────────────────────────────────────────────
+[[box.hook]]
+future_certified_id = "plan-round-row-lint"
+event = "PostToolUse"
+matcher = "Write|Edit on docs/plan/round*.jsonl or docs/plan/CONVERGENCE.jsonl"
+class = "gate"
+fail_mode = "closed"
+binary = "crates/plan-check (MISSING — the hook cannot exist before the crate)"
+language = "rust"
+harm_class = "records a grading verdict that was never earned"
+gauntlet_stage = "/hook-certification stage 0 of 6 (not started)"
+note = "Rust only. No .sh hook, ever. The row is named here so the future certified row has an id before it has a binary."
+
+# ── WAVE 1: agreement ─────────────────────────────────────────────────────────
+[box.agreement]
+wave = 1
+owner = "AmberGate"
+reviewers = ["BlueLantern", "SilverWolf", "QuietRidge"]
+open_disagreements = 0
+status = "draft"
+approval = ""
+
+# ── WAVE 1: diagram ───────────────────────────────────────────────────────────
+[box.diagram]
+mmd = "docs/plan/flow/diagrams/S3.mmd"
+validate_exit = 0   # frankenmermaid validate --fail-on warning -> 0, 12 nodes 11 edges, 2026-09-03T05:30Z

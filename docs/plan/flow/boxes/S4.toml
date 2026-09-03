@@ -51,3 +51,135 @@ ALSO NOT ESTABLISHED: that `arrow:` labels exist on any bead today. My d3gm bead
 least one bead — but I did not survey the tracker for coverage, so bead-lint's refusal rate
 against the existing corpus is UNMEASURED.
 """
+
+# ── WAVE 1: physics ───────────────────────────────────────────────────────────
+
+[[box.measurement]]
+claim = "the plan->DAG conversion produced 23 hand-run files and no crate ran"
+command = "ls docs/plan/dag/ | wc -l  AND  ls crates/plan-materialize crates/bead-lint crates/lifecycle-arrow-gate"
+value = "23 files under docs/plan/dag/; all three crates MISSING (no such directory)"
+measured_at = "2026-09-03T05:30Z"
+by = "AmberGate"
+
+[[box.measurement]]
+claim = "the report S4 consumes would be 621 rows"
+command = "cargo metadata --no-deps --format-version 1 | jq '.packages | length'  x  crate_atom_gate::Part::ALL length"
+value = "69 packages x 9 parts = 621 (crate, part) cells. Part::ALL is [Self; 9] at crates/crate-atom-gate/src/lib.rs:L75"
+measured_at = "2026-09-03T05:30Z"
+by = "AmberGate"
+
+[[box.measurement]]
+claim = "the report emitter is landed and its kernel is verified, but the BINARY has never run"
+command = "grep -c '#\\[test\\]' crates/crate-atom-gate/tests/atom.rs  AND  RCH_WORKER=contabo-3 CARGO_BUILD_JOBS=1 CARGO_PROFILE_DEV_DEBUG=0 rch exec -- cargo test -j 1 -p crate-atom-gate  AND  ls target/debug/crate-atom-gate"
+value = "10 #[test] legs; 'test result: ok. 10 passed; 0 failed' on contabo-3 at 05:00:31Z; target/debug/crate-atom-gate is x86-64 ELF and cannot execute on this arm64 host"
+measured_at = "2026-09-03T05:30Z"
+by = "AmberGate"
+
+[[box.measurement]]
+claim = "bead-lint's future refusal rate against the existing corpus is near-total: almost no bead carries the labels it will require"
+command = "br list -a --json | python3 -c \"...count rows having BOTH a crate: label and a part: label...\""
+value = "3 of 434 beads carry both a crate: and a part: label"
+measured_at = "2026-09-03T05:30Z"
+by = "AmberGate"
+
+[[box.measurement]]
+claim = "the seeded ceilings this box's report will be graded against came from a second instrument, not from the gate"
+command = "sed -n '/^ceiling/p' registries/allowances.toml"
+value = "ceilings 2/10/26/68/56/69/20/69/26 for parts 1-9, computed by an independent census because the gate binary could not run"
+measured_at = "2026-09-03T05:30Z"
+by = "AmberGate"
+
+# ── WAVE 1: gaps ──────────────────────────────────────────────────────────────
+# All 13 classes walked. S4 is missing 12; the one it does not need is named.
+
+[[box.gap]]
+what = "no crate: plan-materialize (n92x) and bead-lint (2lqd) do not exist, so the plan->bead arrow is entirely hand-run. This is Joshua's NO-GO in one row"
+resolves = "n92x lands plan-materialize reading crate-atom-gate --report --json; 2lqd lands bead-lint"
+class = "verdict_type"
+
+[[box.gap]]
+what = "the report exists and has never been produced: no crate-atom-gate check or --report has run over the 69 real packages, because a lane build is ELF and this host is arm64"
+resolves = "sor6's cross-compile lane, OR running the report ON the lane and consuming its JSON rather than its binary"
+class = "measurement"
+
+[[box.gap]]
+what = "no LifecycleEvent row for a filed bead: nothing records that (crate, part) became bead X, so a duplicate filing is only visible by reading the tracker"
+resolves = "kxe.8 journal writer + an emit site in plan-materialize at the filing chokepoint"
+class = "event_row"
+
+[[box.gap]]
+what = "the ceilings are unreconciled: allowances.toml was seeded by a second instrument, so the first real report is EXPECTED to refuse with CEILING_HAS_SLACK or CEILING_BREACHED wherever the two disagree"
+resolves = "one live crate-atom-gate check, then lowering each ceiling to the measured live count"
+class = "oracle"
+
+[[box.gap]]
+what = "no external oracle (L3): the materializer would be graded by the same report it files from. Nothing outside our control says the 9-part atom is the right atom"
+resolves = "naming an out-of-tree arbiter for crate shape, or accepting that atom-correctness is internal doctrine and saying so in the claim row"
+class = "oracle"
+
+[[box.gap]]
+what = "no claim row (L1) for 'a bead generated from a schema cannot be malformed against that schema'"
+resolves = "registries/claims.toml row with strength invariant and a justifier at least as strong"
+class = "claim_row"
+
+[[box.gap]]
+what = "no SLO (L2): filing 621 cells worth of beads has no budget and no safe_mode_trigger, and a materializer that files hundreds of beads is a fleet-scale event"
+resolves = "slo.yaml row bounding beads-filed-per-run with a trigger that halts rather than floods"
+class = "slo"
+
+[[box.gap]]
+what = "no gate that trips (L4) on the materializer's own output: nothing refuses a bead that lacks a crate: or arrow: label, which is exactly what 2lqd is for. Measured: 3 of 434 beads would pass today"
+resolves = "bead-lint with a fires-on-known-bad leg planting a label-less bead and asserting RED"
+class = "gate_trip"
+
+[[box.gap]]
+what = "no fuzz target (L5): the report JSON reader in plan-materialize will be a parser and has none"
+resolves = "crates/plan-materialize/fuzz/fuzz_targets/plan_materialize_report_row.rs"
+class = "fuzz"
+
+[[box.gap]]
+what = "no wired caller (atom 9) for either future crate, and none for lifecycle-arrow-gate which is meant to read flow.toml"
+resolves = "WIRED_CALLERS rows proved by reachability; x226 is the bead that would consume flow.toml"
+class = "wired_caller"
+
+[[box.gap]]
+what = "no hook: a bead can be created by any agent with br create, bypassing the materializer and its schema entirely. That is how 431 of 434 unlabelled beads exist"
+resolves = "a Rust hook on the bead-write path; see [[box.hook]]"
+class = "hook"
+
+[[box.gap]]
+what = "no lock (L7): plan-materialize would read crate-atom-gate's report across a crate boundary with no pinned revision, so a report shape change silently changes what gets filed"
+resolves = "a constellation-style pin of the report schema version, checked at load"
+class = "lock"
+
+[[box.gap]]
+what = "NOT NEEDED, stated so it is not read as an omission: formal proof (L6) does not apply — there is no theorem in 'file a bead per missing part'"
+resolves = "n/a by design"
+class = "formal"
+
+# ── WAVE 1: hook ──────────────────────────────────────────────────────────────
+[[box.hook]]
+future_certified_id = "bead-label-schema-gate"
+event = "PreToolUse"
+matcher = "Bash command matching 'br create'"
+class = "gate"
+fail_mode = "closed"
+binary = "crates/bead-lint (MISSING — 2lqd)"
+language = "rust"
+harm_class = "a hand-typed bead enters the DAG malformed against the schema it should have been generated from; 431 of 434 existing beads are this"
+gauntlet_stage = "/hook-certification stage 0 of 6 (not started)"
+note = "Rust only, fail-closed, certified per control-plane/hooks_certified.toml (16 rows today). A hook error reads as DENY and bricks every writer, so this is the highest-risk row in my set and must not be auto-installed."
+
+# ── WAVE 1: agreement ─────────────────────────────────────────────────────────
+[box.agreement]
+wave = 1
+owner = "AmberGate"
+reviewers = ["BlueLantern", "SilverWolf", "QuietRidge"]
+open_disagreements = 0
+status = "draft"
+approval = ""
+
+# ── WAVE 1: diagram ───────────────────────────────────────────────────────────
+[box.diagram]
+mmd = "docs/plan/flow/diagrams/S4.mmd"
+validate_exit = 0   # frankenmermaid validate --fail-on warning -> 0, 14 nodes 13 edges, 2026-09-03T05:30Z
