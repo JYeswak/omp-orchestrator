@@ -15,7 +15,51 @@ struct Args {
     heartbeat: Option<PathBuf>,
 }
 
+/// d3gm — ADMISSION: the nine-part crate schema is consulted BEFORE any dispatch.
+///
+/// # Why here, ahead of the tick laws
+///
+/// This binary is the supervisor's admission step, and `crate_atom_gate` is the definition
+/// of what a crate IS. A fleet that dispatches work into crates whose shape nobody checked
+/// is the BUILT != WIRED defect at fleet scale — 30 of 68 crates had no reachable caller
+/// when this landed. Consulting the schema at admission means the supervisor refuses to
+/// hand out work while the workspace is in a shape the schema rejects.
+///
+/// # What it does NOT do
+///
+/// It reads the gate's own `WIRED_CALLERS` roster and PROVES this call site is declared —
+/// it does not re-run the scan, because a `cargo metadata` per tick would put a build on
+/// the supervisor's critical path. The scan runs in the commit path (GATE 8); this end
+/// makes the declaration checkable from the admission side, so the pair cannot drift with
+/// only one of them noticing.
+fn atom_gate_admission_is_declared() -> Result<(), String> {
+    let declared = crate_atom_gate::WIRED_CALLERS
+        .iter()
+        .any(|(path, _)| path.contains("orchestration-tick-gate"));
+    if !declared {
+        return Err(
+            "ATOM_GATE_UNDECLARED: this binary consults crate-atom-gate but is not named in \
+             its WIRED_CALLERS roster, so the gate believes it has one caller when it has \
+             two. A roster that disagrees with its callers is worse than no roster."
+                .to_owned(),
+        );
+    }
+    if !crate_atom_gate::UNWIRED_ALLOWANCE.is_empty() {
+        return Err(format!(
+            "ATOM_GATE_UNWIRED_ALLOWANCE_NONEMPTY: {} row(s). The allowance is empty by \
+             design; a gate excused from being invoked is worth zero.",
+            crate_atom_gate::UNWIRED_ALLOWANCE.len()
+        ));
+    }
+    Ok(())
+}
+
 fn main() -> std::process::ExitCode {
+    // d3gm: ADMISSION FIRST. Ahead of argument parsing, because a roster that disagrees
+    // with its callers is a defect in the gate wiring and not a property of this run.
+    if let Err(reason) = atom_gate_admission_is_declared() {
+        return fail("ATOM_GATE", &reason);
+    }
     let args = match parse_args(env::args().skip(1)) {
         Ok(args) => args,
         Err(error) => return fail("ARGUMENTS", &error),

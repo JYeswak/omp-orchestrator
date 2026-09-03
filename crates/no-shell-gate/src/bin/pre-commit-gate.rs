@@ -318,6 +318,12 @@ fn main() -> ExitCode {
     // have staged enough work.
     staged_build_gate_on_commit_path(&repo_root, &staged, &mut refusals);
 
+    // ── GATE 8: crate-atom-gate (d3gm) ─────────────────────────────────────
+    //
+    // The nine-part crate schema. Runs only when this commit touches a manifest or a
+    // crate's tests/, which are the two edits that can change a crate's shape.
+    crate_atom_gate_on_commit_path(&repo_root, &staged, &mut refusals);
+
     if refusals.is_empty() {
         // ── nh5: THE TOCTOU RECHECK ─────────────────────────────────────
         //
@@ -800,6 +806,107 @@ fn round_trip_check(editmsg_path: &std::path::Path) -> Option<String> {
 /// A bypass nobody can name is a bypass everybody uses. Every refusal here says how to
 /// bypass it, so an agent under time pressure reaches for the visible escape rather than
 /// deleting the gate.
+/// GATE 8 — the nine-part crate schema (`d3gm`).
+///
+/// # Scoped to the two edits that change a crate's SHAPE
+///
+/// A manifest edit can add or remove a `[lib]`/`[[bin]]` target or a path dependency
+/// (parts 1, 2, 9); a `tests/` edit can add or remove one of the five named legs (part 4).
+/// Every other commit leaves the atom unchanged, so scanning on it would spend a
+/// `cargo metadata` per commit to re-derive an answer nobody's change could have moved.
+///
+/// # FAIL CLOSED on an absent binary, and the reason is measured
+///
+/// A missing gate binary is not permission to commit — same ruling as `staged-build-gate`
+/// above. And the absence is currently REAL rather than hypothetical: under the
+/// 2026-09-03 "we build on contabo" ruling the only enabled rch workers are Linux, so a
+/// lane build of this gate yields `ELF 64-bit x86-64` on an `arm64` host. Measured this
+/// session on a sibling crate: `./target/debug/decision-ledger` -> `cannot execute binary
+/// file`. So the refusal below names the cross-compile bead rather than telling an
+/// operator to run a build that cannot produce a runnable artifact.
+fn crate_atom_gate_on_commit_path(repo_root: &Path, staged: &[String], refusals: &mut Vec<String>) {
+    let touches_shape = staged.iter().any(|path| {
+        path.ends_with("Cargo.toml")
+            || (path.starts_with("crates/") && path.contains("/tests/"))
+    });
+    if !touches_shape {
+        eprintln!(
+            "crate-atom-gate: GATE_NOT_APPLICABLE -- no staged Cargo.toml and no \
+             crates/*/tests/* path. DECLARED SCOPE: manifest edits (parts 1/2/9) and \
+             tests/ edits (part 4); nothing else can move a crate's shape."
+        );
+        return;
+    }
+    let candidates = [
+        repo_root.join("target/debug/crate-atom-gate"),
+        dirs_home()
+            .map(|home| home.join(".local/bin/crate-atom-gate"))
+            .unwrap_or_else(|| repo_root.join("target/debug/crate-atom-gate")),
+    ];
+    let Some(binary) = candidates.into_iter().find(|path| path.is_file()) else {
+        refusals.push(
+            "crate-atom-gate: CRATE_ATOM_GATE_ERROR reason=BINARY_ABSENT \
+             detail=\"neither target/debug/crate-atom-gate nor $HOME/.local/bin/crate-atom-gate \
+             exists, so the nine-part schema was NOT checked for the crates this commit \
+             reshapes\" next_action=see-omp-orchestrator-sor6 -- an arm64 build needs the \
+             zigbuild lane; a contabo build yields ELF and cannot run here. Bypass visibly \
+             with `git commit --no-verify`"
+                .to_owned(),
+        );
+        return;
+    };
+    let mut command = std::process::Command::new(&binary);
+    command.current_dir(repo_root).arg("check");
+    match subprocess_contract::bounded_output(&mut command, std::time::Duration::from_secs(180)) {
+        subprocess_contract::BoundedOutcome::Completed(output) => {
+            let text = format!(
+                "{}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            // Exit 2 is UNRUN and exit 3 is an INSTRUMENT ERROR. Neither is a finding
+            // about a crate, and neither may pass: an instrument that could not look must
+            // not render as a subject that passed.
+            match output.status.code() {
+                Some(0) => {
+                    for line in text.lines().rev().take(1) {
+                        eprintln!("crate-atom-gate: {line}");
+                    }
+                }
+                code => {
+                    let label = match code {
+                        Some(2) => "UNRUN",
+                        Some(3) => "INSTRUMENT_ERROR",
+                        _ => "REFUSED",
+                    };
+                    for line in text.lines().filter(|l| l.contains("MISSING") || l.contains("CEILING")).take(20) {
+                        refusals.push(format!("crate-atom-gate: {label} {line}"));
+                    }
+                    if !text.contains("MISSING") && !text.contains("CEILING") {
+                        refusals.push(format!(
+                            "crate-atom-gate: {label} exit={code:?} -- the gate refused \
+                             without naming a row, which is an instrument fault"
+                        ));
+                    }
+                }
+            }
+        }
+        subprocess_contract::BoundedOutcome::TimedOut { .. } => refusals.push(
+            "crate-atom-gate: UNRUN reason=TIMEOUT -- a deadline is not a verdict about \
+             any crate; the schema went unchecked"
+                .to_owned(),
+        ),
+        subprocess_contract::BoundedOutcome::Unspawned(error) => refusals.push(format!(
+            "crate-atom-gate: INSTRUMENT_ERROR reason=UNSPAWNED detail={error}"
+        )),
+    }
+}
+
+/// The author's home, for the installed-binary candidate. Never a literal.
+fn dirs_home() -> Option<std::path::PathBuf> {
+    std::env::var_os("HOME").map(std::path::PathBuf::from)
+}
+
 fn staged_build_gate_on_commit_path(
     repo_root: &Path,
     staged: &[String],

@@ -1,0 +1,120 @@
+# allowances.toml — the declared, owned, shrinking gaps in the nine-part crate atom.
+#
+# READ THIS BEFORE ADDING A ROW.
+#
+# `crate-atom-gate` refuses the build for any (crate, part) that is MISSING and unexcused.
+# Measured 2026-09-03 over 69 workspace packages, the raw MISSING counts were:
+#
+#   part1 lib            2      part6 claim          69
+#   part2 bin           10      part7 slo            20
+#   part3 verdict       26      part8 oracle         69
+#   part4 tests         68      part9 wired-caller   26
+#   part5 fuzz          56
+#
+# So ~365 of 621 cells are MISSING today. A gate that refused all of them would refuse
+# EVERY commit in this repo the moment it was wired, and an unwirable gate is worth zero
+# (`fh N043`). A blanket allowance would be the opposite failure: vacuously green forever.
+#
+# THE RATCHET IS WHAT HAS TEETH ON DAY ONE. Each `[[systemic]]` row carries a CEILING that
+# is checked in BOTH directions:
+#
+#   live > ceiling  ->  CEILING_BREACHED    a new crate widened a known gap. REFUSED.
+#   live < ceiling  ->  CEILING_HAS_SLACK   the gap shrank and the row did not. REFUSED,
+#                                           because a ceiling with slack cannot detect the
+#                                           next regression.
+#   live = ceiling  ->  the only clean state.
+#
+# The consequence worth understanding: **adding a crate that misses a part refuses the
+# commit**, and **closing a gap refuses the commit until you lower the number**. Both are
+# intended. The absolute gaps are declared, owned, and mechanically forced downward, while
+# regression is blocked immediately.
+#
+# PROVENANCE OF THESE CEILINGS, and their one weakness: they were computed by a SECOND
+# instrument (an independent census applying the same predicates) because the gate's own
+# binary could not be built when this registry was seeded — `[RCH-I002] contabo-3 refused
+# (unavailable); failed admission under critical pressure (memory_pressure_critical)`, and
+# a lane build yields x86-64 ELF on an arm64 host. So the first real `crate-atom-gate check`
+# is expected to REFUSE with `CEILING_HAS_SLACK` or `CEILING_BREACHED` on any part where the
+# two instruments disagree. **That disagreement is a finding, not a nuisance** — reconcile
+# it by reading both, not by editing the number until the gate goes quiet.
+
+# ── part 1: lib ────────────────────────────────────────────────────────────────
+[[systemic]]
+part = 1
+owner = "josh"
+dies_when = "every package declares a [lib], or the two bin-only packages are folded into a crate that does"
+ceiling = 2
+
+# ── part 2: bin ────────────────────────────────────────────────────────────────
+[[systemic]]
+part = 2
+owner = "josh"
+dies_when = "every kernel crate ships a thin CLI with the versioned envelope and the 0/1/2/3 exit lattice"
+ceiling = 10
+
+# ── part 3: Verdict-typed output ───────────────────────────────────────────────
+[[systemic]]
+part = 3
+owner = "josh"
+dies_when = "omp-types re-exports a Verdictlike over asupersync Outcome and every kernel returns it, so a timeout is Unrun by type rather than by convention"
+ceiling = 26
+
+# ── part 4: the five named test legs ───────────────────────────────────────────
+# The largest gap and the most mechanical: 68 of 69 crates name their tests as descriptive
+# sentences rather than the five canonical legs. A leg you cannot find by name is a leg the
+# next agent cannot know to preserve — that is the whole reason part 4 keys on names.
+[[systemic]]
+part = 4
+owner = "josh"
+dies_when = "every crate carries fires_on_known_bad, passes_known_good, mutation_goes_red, empty_scan_is_error and a claim-header leg, by name"
+ceiling = 68
+
+# ── part 5: in-crate fuzz targets ──────────────────────────────────────────────
+# 4 fuzz targets exist under the workspace `fuzz/` directory and cover 4 crates; ZERO live
+# in-crate. The count here is crates with a parser/classifier/lattice and no
+# `<crate>/fuzz/fuzz_targets/*.rs`.
+[[systemic]]
+part = 5
+owner = "josh"
+dies_when = "every parser/classifier/lattice has an in-crate fuzz target asserting the lib's stated invariants rather than absence of panic"
+ceiling = 56
+
+# ── part 6: claim rows ─────────────────────────────────────────────────────────
+# 69 of 69: `registries/claims.toml` does not exist yet. This registry is its sibling and
+# the first row of L1.
+[[systemic]]
+part = 6
+owner = "josh"
+dies_when = "registries/claims.toml exists with a strength lattice and claims-lint resolves every load-bearing prose marker in README/AGENTS/PLAN to a row"
+ceiling = 69
+
+# ── part 7: SLO rows for tick-path crates ──────────────────────────────────────
+[[systemic]]
+part = 7
+owner = "josh"
+dies_when = "slo.yaml exists with p95, memory ceiling and safe_mode_trigger for every crate on a tick path, and a breach flips the running supervisor to safe mode"
+ceiling = 20
+
+# ── part 8: a named external oracle ────────────────────────────────────────────
+# 69 of 69. Three crates have an oracle in PROSE (tmux for pane-truth, br for
+# verify-dispatch, hand manifests for plan-materialize); none is declared in a registry a
+# gate can read, which is exactly the difference this part exists to make.
+[[systemic]]
+part = 8
+owner = "josh"
+dies_when = "registries/oracles.toml names the out-of-our-control arbiter for every crate and the differential test that runs it in CI"
+ceiling = 69
+
+# ── part 9: a reachable production trigger ─────────────────────────────────────
+# 26 crates have no manifest dependent, no invocation in the installed hook's bytes, and no
+# launchd/cron unit naming their binary. This is the BUILT != WIRED defect at fleet scale,
+# and it is the count Joshua's NO-GO on unattended restart rests on.
+#
+# NOTE the machine-dependence, and it is not a technicality: `.git/hooks/pre-commit` is
+# untracked and per-clone, so a crate reachable here is unreachable in a fresh checkout
+# elsewhere. The gate's part-9 evidence names the machine that answered.
+[[systemic]]
+part = 9
+owner = "josh"
+dies_when = "every crate is wired to a reachable trigger or retired; the count reaching 0 is the condition Joshua's unattended-restart GO depends on"
+ceiling = 26

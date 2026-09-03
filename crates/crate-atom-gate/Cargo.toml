@@ -1,0 +1,24 @@
+[package]
+name = "crate-atom-gate"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "The nine-part crate schema as a build gate: what a crate IS here"
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "crate_atom_gate"
+path = "src/lib.rs"
+
+[[bin]]
+name = "crate-atom-gate"
+path = "src/main.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+serde_json = "1"
+subprocess-contract = { path = "../subprocess-contract" }

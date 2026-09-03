@@ -15,6 +15,7 @@ name = "orchestration-tick-gate"
 path = "src/main.rs"
 
 [dependencies]
+crate-atom-gate = { path = "../crate-atom-gate" }
 serde_json = "1"
 
 [lints.rust]
