@@ -91,6 +91,21 @@ pub struct CrateTypes {
     pub crate_name: String,
     pub decls: Vec<TypeDecl>,
     pub reexports: Vec<TypeReexport>,
+    /// Whether the crate has a `src/lib.rs`, i.e. whether it has a library
+    /// surface at all.
+    ///
+    /// A crate with `main.rs` and no `lib.rs` CANNOT declare a public type:
+    /// nothing can import it. Asking it to name its zero is a category
+    /// error, not a finding, and the mechanical answer beats a hand-written
+    /// row — measured 2026-09-03, `pane-dispatch-fence`'s existing
+    /// [`NAMED_ZEROS`] row read "Deliberate leaf: admission fence logic over
+    /// types owned by its callers", which is a judgment shaped like a reason
+    /// for a fact that is purely structural: the crate has no `lib.rs`.
+    /// Two of 69 crates are binary-only today; a per-crate row for each
+    /// would be the exemption-list accretion AGENTS.md's one rule exists to
+    /// prevent.
+    #[serde(default)]
+    pub has_lib: bool,
 }
 
 /// A name declared by MORE THAN ONE crate. `allowance` carries the reason
@@ -223,24 +238,160 @@ pub const ALLOWED_COLLISIONS: &[(&str, &str, &str)] = &[
          unifying them earlier would couple two gates sharing only a suffix.",
     ),
 ];
-/// Crates allowed to own zero public types, with the reason each zero is
-/// real. `omp-types` is a re-export vocabulary crate: it must have reexports
-/// > 0 or it is genuinely empty and the gate fails it.
+
+/// The workspace's shared vocabulary crate. Declared, not guessed: its
+/// [`NAMED_ZEROS`] row calls it a "Re-export vocabulary crate
+/// (asupersync::types facade)", and its whole reason to exist is to be the
+/// ONE home for a type two crates would otherwise each declare.
+pub const VOCABULARY_CRATE: &str = "omp-types";
+
+/// VOCABULARY SPLIT: a collision where one of the colliding crates IS
+/// [`VOCABULARY_CRATE`]. This is the sharp half of the census and the only
+/// half that is worth a blocking gate.
+///
+/// # Why this class, and not the collision set as a whole
+///
+/// The census reports every duplicated public type name. Measured
+/// 2026-09-03 with `omp-inventory-map types --repo <tree>` against two
+/// trees extracted by `git archive`:
+///
+/// | tree | crates | collisions |
+/// |---|---|---|
+/// | `4b398e4` (last CI run, 2026-09-02T03:01:50Z) | 51 | **8** |
+/// | `6238c0f` (HEAD, ~19h later) | 69 | **29** |
+///
+/// Eighteen crates and twenty-one collisions landed in one day, and 27 of
+/// the 29 are leaf-crate coincidences — `Config` in two gate crates, `Row`,
+/// `Rule`, `Rules`, `Verdict`, `Stage`, `ScanError`. Those are namespaced by
+/// crate, semantically unrelated, and exactly what the module header already
+/// NO-CLAIMs: "Identically-named types may be legitimately distinct."
+/// Asserting the absolute set therefore pins a number that is 8 in one tree
+/// and 29 in another **on the same day**, which is the gate AGENTS.md warns
+/// about: red whenever the fleet is most active, and correct in no tree for
+/// longer than an afternoon.
+///
+/// The `omp-types` predicate cuts the noise away without a hand-maintained
+/// list. Measured on the same HEAD tree: **exactly 2 of the 29** collisions
+/// involve `omp-types`, and they are precisely the two that were new. A name
+/// living BOTH in the shared home AND in a leaf crate is not a coincidence —
+/// it is a migration that landed step 1 and stopped, or a leaf that grew its
+/// own copy of a type the vocabulary crate already owns. That is the
+/// vocabulary split this census was built to find.
+///
+/// # Rows
+///
+/// `(type name, exact sorted crate set, crate that owns the fix, resolution)`.
+/// The set must match exactly, like [`ALLOWED_COLLISIONS`] — the same name
+/// splitting against `omp-types` from a DIFFERENT leaf is a new finding, not
+/// a covered one. A row is a REFUSAL that has been triaged and assigned, not
+/// an amnesty: [`TypeInventory::check`] still reports every one of these,
+/// because the duplication is real until the resolution lands.
+pub const VOCABULARY_SPLITS: &[(&str, &str, &str, &str)] = &[
+    (
+        "Lifecycle",
+        "omp-rpc-session+omp-types",
+        "omp-rpc-session",
+        "VARIANT-IDENTICAL, measured: omp-types/src/lifecycle.rs:12 and \
+         omp-rpc-session/src/lib.rs:682 both declare `pub enum Lifecycle` \
+         with the same eight variants in the same order — Spawned, Ready, \
+         Negotiated, Active, Stopping, Stopped, Failed, TimedOut. Only the \
+         impls differ: omp-types adds `transition` + `LifecycleInput` \
+         (lifecycle.rs:53), omp-rpc-session adds `as_str` (lib.rs:694). \
+         omp-types/src/lifecycle.rs:3-4 DECLARES `This is intentionally not \
+         the RPC session machine in the control-plane sibling`; the variant \
+         set MEASURES that claim false, so this is the declared-vs-measured \
+         split, not two unrelated types that share a suffix. Resolution: \
+         omp-rpc-session re-exports omp_types::Lifecycle and keeps `as_str` \
+         as an inherent impl or a Display, deleting its own enum. Dies when \
+         that re-export lands.",
+    ),
+    (
+        "PaneObservation",
+        "omp-orchestrator+omp-types",
+        "omp-orchestrator",
+        "THE OBSERVATION MIGRATION, CAUGHT MID-FLIGHT — and the census's own \
+         positive control. [`observation_seam_decision`] step 1 says omp-types \
+         gains PaneObservation and step 3 says `the consumer's private \
+         PaneObservation dies`. Step 1 HAS landed \
+         (omp-types/src/pane_observation.rs:122, private fields behind \
+         PaneLiveness/EvidenceGrade/DispatchAdmissibility); step 3 has NOT \
+         (omp-orchestrator/src/lib.rs:178, still four public bools). So this \
+         collision is not a regression the census stumbled on — it is the \
+         exact intermediate state the DECISION predicted, surfacing on \
+         schedule. Resolution: finish step 3. Dies with the consumer's \
+         private struct; tracked by the Observation seam decision, not by a \
+         separate allowance.",
+    ),
+];
+
+/// LIBRARY crates allowed to own zero public types, with the reason each
+/// zero is real. Binary-only crates are not in scope: see
+/// [`CrateTypes::has_lib`] — that answer is structural, not a judgment, so
+/// it is not a row.
+///
+/// A row here must correspond to a crate that ACTUALLY has zero output —
+/// same anti-drift discipline as [`ALLOWED_COLLISIONS`], and now enforced by
+/// the STALE NAMED-ZERO leg of [`TypeInventory::check`]. Until 2026-09-03
+/// this table had no such leg while the allowance table did, and the only
+/// thing catching a filled zero was an `assert_eq!` on the exact zero list
+/// in one test — i.e. by accident, and with the same drift the collision
+/// snapshot had.
+///
+/// PRUNED 2026-09-03: `finding-dispatch` — "Zero-caller library today; owns
+/// no type yet." It now declares three public enums, measured on both the
+/// HEAD tree and the worktree: `SupervisorDecision`, `NotYet`, `MaybeFinding`
+/// at `crates/finding-dispatch/src/lib.rs:14,56,109`. The same grep against
+/// tree `4b398e4` (the last CI run) returns nothing, so the zero was real
+/// when the row was written and was filled in the ~19h since. A row saying
+/// "owns no type yet" about a crate with three of them is a false statement
+/// the gate was publishing.
+///
+/// PRUNED 2026-09-03: `omp-types` — "Re-export vocabulary crate
+/// (asupersync::types facade). Must carry reexports > 0; zero declarations
+/// is its SHAPE, not an absence." The row is DEAD, and it was dead before
+/// the last CI run, not because of this session's churn. Measured with the
+/// same grep against two `git archive` exports: omp-types declares **12**
+/// public types at HEAD `6238c0f` AND at `4b398e4` — `UnknownReason`,
+/// `PaneLiveness`, `DispatchAdmissibility`, `CaptureSnapshot`,
+/// `EvidenceGrade`, `ObservationError`, `PaneObservation`
+/// (pane_observation.rs:14-122), `Lifecycle`, `WaitDeadline`,
+/// `LifecycleInput` (lifecycle.rs:12-53), `ClaimStrength`,
+/// `UnknownClaimStrength` (claim_strength.rs:43,127). A crate with 12
+/// declarations can never satisfy the NAMED-ZERO REQUIRED leg this row
+/// exempts it from, so the row is unreachable code in table form.
+///
+/// It is also the same event as both [`VOCABULARY_SPLITS`] rows, seen from
+/// the other side: omp-types stopped being a pure re-export facade and
+/// started DECLARING, which is precisely how `Lifecycle` and
+/// `PaneObservation` came to exist in two places. The census reported the
+/// split and the dead zero row separately and nothing connected them,
+/// because one leg had an anti-drift check and the other did not.
+///
+/// PRUNED 2026-09-03: `pane-dispatch-fence` — "Deliberate leaf: admission
+/// fence logic over types owned by its callers." The judgment was not
+/// wrong, it was unnecessary: the crate ships `src/main.rs` and no
+/// `src/lib.rs`, so it has no library surface that could hold a public type.
+/// Handled by [`CrateTypes::has_lib`] for it and for every future
+/// binary-only crate, instead of one row each.
 pub const NAMED_ZEROS: &[(&str, &str)] = &[
     (
-        "finding-dispatch",
-        "Zero-caller library today (flagged elsewhere); owns no type yet. \
-         Named zero, not silence.",
+        "oracle-pane-state-differential",
+        "Function-only library leaf: exports parse_tmux_keys, parse_ntm_keys \
+         and diff_sets (src/lib.rs:10,19,47) over BTreeSet<String> and the \
+         verdict types owned by oracle-compare. It compares pane SETS; the \
+         vocabulary it compares belongs to the crate that defines the \
+         comparison, so declaring its own would be a second home for one \
+         concept — the exact split VOCABULARY_SPLITS refuses. Named zero, \
+         not silence.",
     ),
     (
-        "pane-dispatch-fence",
-        "Deliberate leaf: admission fence logic over types owned by its \
-         callers. Named zero, not silence.",
-    ),
-    (
-        "omp-types",
-        "Re-export vocabulary crate (asupersync::types facade). Must carry \
-         reexports > 0; zero declarations is its SHAPE, not an absence.",
+        "pane-oracle-diff",
+        "Function-only library leaf, same shape: AGENT_CMD_RE plus \
+         is_agent_command, census and parse_subject_json \
+         (src/lib.rs:10,17,21,43) over oracle-compare's CountArm / \
+         OracleCompareVerdict. Existence-only census against ntm; it owns a \
+         regex and three functions, and deliberately no type. Named zero, \
+         not silence.",
     ),
 ];
 
@@ -287,6 +438,61 @@ pub fn observation_seam_decision() -> SeamDecision {
                 .to_owned(),
         ],
     }
+}
+
+/// The DECISION for the `Lifecycle` vocabulary split. Measured 2026-09-03,
+/// not remembered: the two enums are variant-identical, so the honest
+/// resolution is that the vocabulary crate already owns the type and the
+/// control-plane sibling should stop declaring its own.
+pub fn lifecycle_seam_decision() -> SeamDecision {
+    SeamDecision {
+        type_name: "Lifecycle".to_owned(),
+        decision: "CONVERGE on omp-types::Lifecycle; omp-rpc-session re-exports".to_owned(),
+        shared_home: "omp-types::lifecycle".to_owned(),
+        rationale: concat!(
+            "omp-types/src/lifecycle.rs:12 and omp-rpc-session/src/lib.rs:682 ",
+            "both declare `pub enum Lifecycle` over the SAME eight variants in ",
+            "the SAME order: Spawned, Ready, Negotiated, Active, Stopping, ",
+            "Stopped, Failed, TimedOut. The state algebra is identical; only the ",
+            "impls differ (omp-types::transition + LifecycleInput at ",
+            "lifecycle.rs:53; omp-rpc-session::as_str at lib.rs:694). ",
+            "omp-types/src/lifecycle.rs:3-4 DECLARES `This is intentionally not ",
+            "the RPC session machine in the control-plane sibling` — and the ",
+            "variant set MEASURES that claim false. This is the declared-vs- ",
+            "measured gap the census exists to expose, one level up from the ",
+            "ack/receipt dialect split named in the module header: two crates ",
+            "did not merely pick the same NOUN, they independently wrote the ",
+            "same MACHINE, and each believes the other's is something else. ",
+            "A shared enum makes the divergence a compile error; two copies ",
+            "make it a comment."
+        )
+        .to_owned(),
+        migration: vec![
+            "1. omp-rpc-session depends on omp-types and re-exports \
+             `omp_types::Lifecycle`, deleting its own enum."
+                .to_owned(),
+            "2. `as_str` moves to omp-types as an inherent impl (or a Display \
+             impl), so the JSON surface at omp-rpc-session/src/lib.rs:660 keeps \
+             emitting the same strings — byte-identical wire output is the \
+             acceptance evidence, not a passing build."
+                .to_owned(),
+            "3. Owned by the omp-rpc-session side: it is the crate holding the \
+             duplicate of a type the vocabulary crate already declares. \
+             NOT owned by omp-inventory-map, which can only report it."
+                .to_owned(),
+        ],
+    }
+}
+
+/// Every seam DECISION the census carries, one per triaged
+/// [`VOCABULARY_SPLITS`]-class finding plus the original Observation seam.
+///
+/// `PaneObservation` deliberately has NO row of its own: it is step 3 of
+/// [`observation_seam_decision`]'s migration, so giving it a second decision
+/// would be two crates independently pinning one fact — the exact defect the
+/// deleted `assert_eq!` name list used to carry in its own comment.
+pub fn seam_decisions() -> Vec<SeamDecision> {
+    vec![observation_seam_decision(), lifecycle_seam_decision()]
 }
 
 /// The vocabulary the ecosystem is missing, with exact-name evidence derived
@@ -407,9 +613,8 @@ fn parse_source(
     reexports: &mut Vec<TypeReexport>,
 ) {
     let spans = cfg_test_module_spans(text);
-    let decl_re =
-        regex::Regex::new(r"(?m)^[ \t]*pub\s+(struct|enum)\s+([A-Z][A-Za-z0-9_]*)")
-            .expect("static regex parses");
+    let decl_re = regex::Regex::new(r"(?m)^[ \t]*pub\s+(struct|enum)\s+([A-Z][A-Za-z0-9_]*)")
+        .expect("static regex parses");
     for m in decl_re.captures_iter(text) {
         let whole = m.get(0).expect("group 0");
         let kind = match &m[1] {
@@ -426,9 +631,8 @@ fn parse_source(
         });
     }
     // `pub use path::{A, B, C};` and single `pub use path::Name;`
-    let braced =
-        regex::Regex::new(r"(?m)^[ \t]*pub\s+use\s+([A-Za-z0-9_:]+)::\{([^}]*)\}\s*;")
-            .expect("static regex parses");
+    let braced = regex::Regex::new(r"(?m)^[ \t]*pub\s+use\s+([A-Za-z0-9_:]+)::\{([^}]*)\}\s*;")
+        .expect("static regex parses");
     for m in braced.captures_iter(text) {
         let from = m[1].to_owned();
         for name in m[2].split(',') {
@@ -514,6 +718,7 @@ pub fn scan_workspace_types(repo_root: &Path) -> Result<TypeInventory, crate::In
             crate_name,
             decls,
             reexports,
+            has_lib: src.join("lib.rs").is_file(),
         });
     }
 
@@ -588,8 +793,14 @@ pub fn assemble(crates: Vec<CrateTypes>) -> TypeInventory {
         });
     }
 
+    // Named zeros apply only to crates that HAVE a library surface. A
+    // binary-only crate cannot declare a public type, so it is not a zero
+    // to be named — see [`CrateTypes::has_lib`].
     let mut named_zeros = Vec::new();
     for c in &crates {
+        if !c.has_lib {
+            continue;
+        }
         let has_public_decls = c.decls.iter().any(|d| !d.in_test_module);
         if !has_public_decls && c.reexports.is_empty() {
             if let Some((_, reason)) = NAMED_ZEROS.iter().find(|(n, _)| *n == c.crate_name) {
@@ -621,7 +832,7 @@ pub fn assemble(crates: Vec<CrateTypes>) -> TypeInventory {
         crates,
         collisions,
         missing: missing_vocabulary(),
-        seam_decisions: vec![observation_seam_decision()],
+        seam_decisions: seam_decisions(),
         named_zeros,
     }
 }
@@ -635,8 +846,50 @@ impl TypeInventory {
             .collect()
     }
 
+    /// Collisions where one side IS [`VOCABULARY_CRATE`] — the sharp class.
+    ///
+    /// Derived, never listed: the predicate is "does this collision involve
+    /// the shared vocabulary crate", so a leaf crate landing does not move
+    /// it. Measured 2026-09-03 on HEAD `6238c0f`: 29 collisions in, **2**
+    /// out, and those 2 are exactly the two that had just appeared.
+    pub fn vocabulary_splits(&self) -> Vec<&TypeCollision> {
+        self.collisions
+            .iter()
+            .filter(|c| c.crates.iter().any(|k| k == VOCABULARY_CRATE))
+            .collect()
+    }
+
+    /// Vocabulary splits carrying NO [`VOCABULARY_SPLITS`] row for their
+    /// exact crate set — an untriaged split, which is the finding that must
+    /// never accrue silently. A split whose crate set differs from its row's
+    /// counts as untriaged: the same name splitting against `omp-types` from
+    /// a different leaf is a new event, not a covered one.
+    pub fn untriaged_vocabulary_splits(&self) -> Vec<&TypeCollision> {
+        self.vocabulary_splits()
+            .into_iter()
+            .filter(|c| {
+                let mut keys: Vec<&str> = c.crates.iter().map(String::as_str).collect();
+                keys.sort_unstable();
+                let key = keys.join("+");
+                !VOCABULARY_SPLITS
+                    .iter()
+                    .any(|(name, set, _, _)| *name == c.name && *set == key)
+            })
+            .collect()
+    }
+
     /// The gate. Errors name both crates per disallowed collision, plus any
-    /// structural violation (anti-vacuity, unnamed zero, stale allowance).
+    /// structural violation (anti-vacuity, unnamed zero, stale allowance,
+    /// stale vocabulary-split row).
+    ///
+    /// Strictness is UNCHANGED by the vocabulary-split classification: every
+    /// collision without an allowance is still refused, exactly as before. A
+    /// [`VOCABULARY_SPLITS`] row is a REFUSAL that has been triaged and
+    /// assigned an owner, not an amnesty — it changes what the error SAYS,
+    /// never whether it fires. The classification exists because an
+    /// undifferentiated wall of 29 refusals is an unread red, and an unread
+    /// red is indistinguishable from an unwired gate at the only moment that
+    /// matters.
     pub fn check(&self) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
 
@@ -650,11 +903,36 @@ impl TypeInventory {
             );
         }
 
-        // Disallowed collisions: name both crates.
+        // Disallowed collisions: name both crates. A vocabulary split — one
+        // side IS the shared vocabulary crate — is called out as such and
+        // carries its owner, because it is the class a human can act on.
         for c in self.disallowed() {
+            let mut keys: Vec<&str> = c.crates.iter().map(String::as_str).collect();
+            keys.sort_unstable();
+            let key = keys.join("+");
+            let triaged = VOCABULARY_SPLITS
+                .iter()
+                .find(|(name, set, _, _)| *name == c.name && *set == key);
+            let detail = match (
+                c.crates.iter().any(|k| k == VOCABULARY_CRATE),
+                triaged,
+            ) {
+                (true, Some((_, _, owner, resolution))) => format!(
+                    "VOCABULARY SPLIT against {VOCABULARY_CRATE}, TRIAGED — \
+                     owner={owner}: {resolution}"
+                ),
+                (true, None) => format!(
+                    "VOCABULARY SPLIT against {VOCABULARY_CRATE}, UNTRIAGED — a \
+                     leaf crate declares a name the shared vocabulary crate \
+                     already owns. Name it in VOCABULARY_SPLITS with an owner \
+                     and a resolution, or delete the duplicate"
+                ),
+                (false, _) => "no allowance row carries a reason (see \
+                               ALLOWED_COLLISIONS)"
+                    .to_owned(),
+            };
             errors.push(format!(
-                "COLLISION {} declared by {}: {} — no allowance row carries a \
-                 reason (see ALLOWED_COLLISIONS)",
+                "COLLISION {} declared by {}: {} — {detail}",
                 c.name,
                 c.crates.join(" + "),
                 c.sites.join(", ")
@@ -665,6 +943,10 @@ impl TypeInventory {
         // zero is a finding, not silence.
         let named: Vec<&str> = NAMED_ZEROS.iter().map(|(n, _)| *n).collect();
         for c in &self.crates {
+            // A binary-only crate has no library surface to be empty.
+            if !c.has_lib {
+                continue;
+            }
             let has_decls = c.decls.iter().any(|d| !d.in_test_module);
             if !has_decls && c.reexports.is_empty() && !named.contains(&c.crate_name.as_str()) {
                 errors.push(format!(
@@ -691,6 +973,64 @@ impl TypeInventory {
             }
         }
 
+        // Stale vocabulary-split row: same anti-drift discipline as the
+        // allowance table. A triage row for a split that no longer exists
+        // means the resolution LANDED and nobody pruned the row — which is
+        // how a resolved finding keeps reading as open debt.
+        if self.crates_scanned_is_real_workspace() {
+            for (name, set, owner, _) in VOCABULARY_SPLITS {
+                let live = self.vocabulary_splits().into_iter().any(|c| {
+                    let mut keys: Vec<&str> = c.crates.iter().map(String::as_str).collect();
+                    keys.sort_unstable();
+                    &c.name == name && keys.join("+") == *set
+                });
+                if !live {
+                    errors.push(format!(
+                        "STALE VOCABULARY-SPLIT ROW: {name} ({set}) no longer \
+                         splits — the resolution owned by {owner} has landed; \
+                         prune the row (a triage row for a non-existent split \
+                         reports resolved work as open debt)"
+                    ));
+                }
+            }
+        }
+
+        // Stale named zero: a crate whose declared zero has been FILLED.
+        // The allowance table has had this leg since it was written and this
+        // table has not, so a row could keep asserting "owns no type yet"
+        // about a crate that grew three enums — measured 2026-09-03 on
+        // `finding-dispatch`, caught only because one test happened to pin
+        // the exact zero list.
+        if self.crates_scanned_is_real_workspace() {
+            for (name, _) in NAMED_ZEROS {
+                let Some(c) = self.crates.iter().find(|c| c.crate_name == *name) else {
+                    errors.push(format!(
+                        "STALE NAMED-ZERO ROW: crate {name} is not in the \
+                         workspace — prune the row (a named zero for a crate \
+                         that does not exist is drift)"
+                    ));
+                    continue;
+                };
+                let filled = c.decls.iter().any(|d| !d.in_test_module);
+                if filled {
+                    let names: Vec<&str> = c
+                        .decls
+                        .iter()
+                        .filter(|d| !d.in_test_module)
+                        .map(|d| d.name.as_str())
+                        .collect();
+                    errors.push(format!(
+                        "STALE NAMED-ZERO ROW: crate {name} now declares {} \
+                         public type(s) ({}) — the zero was filled; prune the \
+                         row (a row saying it owns no type is a false \
+                         statement the gate publishes)",
+                        names.len(),
+                        names.join(", ")
+                    ));
+                }
+            }
+        }
+
         if errors.is_empty() {
             Ok(())
         } else {
@@ -700,7 +1040,10 @@ impl TypeInventory {
 
     fn crates_scanned_is_real_workspace(&self) -> bool {
         self.generated_by == "omp-inventory-map::types_inventory"
-            && self.crates.iter().any(|c| c.crate_name == "omp-inventory-map")
+            && self
+                .crates
+                .iter()
+                .any(|c| c.crate_name == "omp-inventory-map")
     }
 }
 
@@ -723,6 +1066,20 @@ mod tests {
                 })
                 .collect(),
             reexports: Vec::new(),
+            // Fixtures model LIBRARY crates unless a test says otherwise:
+            // that is the case the named-zero legs are about.
+            has_lib: true,
+        }
+    }
+
+    /// A binary-only crate: `main.rs`, no `lib.rs`, therefore no library
+    /// surface that a public type could live on.
+    fn binary_only_crate(name: &str) -> CrateTypes {
+        CrateTypes {
+            crate_name: name.to_owned(),
+            decls: Vec::new(),
+            reexports: Vec::new(),
+            has_lib: false,
         }
     }
 
@@ -730,7 +1087,10 @@ mod tests {
     fn every_allowed_collision_row_carries_a_nonempty_reason() {
         for (name, _, reason) in ALLOWED_COLLISIONS {
             assert!(!name.is_empty(), "allowance row with empty name");
-            assert!(!reason.trim().is_empty(), "allowance row {name} has empty reason");
+            assert!(
+                !reason.trim().is_empty(),
+                "allowance row {name} has empty reason"
+            );
         }
         assert!(
             !ALLOWED_COLLISIONS.is_empty(),
@@ -742,14 +1102,20 @@ mod tests {
     fn every_named_zero_row_carries_a_nonempty_reason() {
         for (name, reason) in NAMED_ZEROS {
             assert!(!name.is_empty());
-            assert!(!reason.trim().is_empty(), "named zero {name} has empty reason");
+            assert!(
+                !reason.trim().is_empty(),
+                "named zero {name} has empty reason"
+            );
         }
     }
 
     #[test]
     fn positive_control_unique_types_pass() {
         let inv = assemble(vec![
-            crate_with("alpha", &[("Alpha", TypeKind::Struct), ("AlphaKind", TypeKind::Enum)]),
+            crate_with(
+                "alpha",
+                &[("Alpha", TypeKind::Struct), ("AlphaKind", TypeKind::Enum)],
+            ),
             crate_with("beta", &[("Beta", TypeKind::Struct)]),
         ]);
         assert!(
@@ -767,7 +1133,8 @@ mod tests {
         ]);
         let err = inv.check().expect_err("collision must fail the gate");
         assert!(
-            err.iter().any(|e| e.contains("alpha") && e.contains("beta")),
+            err.iter()
+                .any(|e| e.contains("alpha") && e.contains("beta")),
             "error must name BOTH crates: {err:?}"
         );
     }
@@ -830,6 +1197,7 @@ mod tests {
                 name: "Outcome".to_owned(),
                 from: "asupersync::types".to_owned(),
             }],
+            has_lib: true,
         };
         let inv = assemble(vec![crate_with("alpha", &[("Alpha", TypeKind::Struct)]), c]);
         assert!(
@@ -842,7 +1210,9 @@ mod tests {
     #[test]
     fn observation_has_a_decision_row_not_an_allowance() {
         assert!(
-            !ALLOWED_COLLISIONS.iter().any(|(n, _, _)| *n == "Observation"),
+            !ALLOWED_COLLISIONS
+                .iter()
+                .any(|(n, _, _)| *n == "Observation"),
             "Observation must NOT be an allowance row"
         );
         let d = observation_seam_decision();
@@ -950,6 +1320,8 @@ mod tests {
             crate_name: crate_name.to_owned(),
             decls,
             reexports,
+            // Same rule as the real walker: lib.rs presence, not a guess.
+            has_lib: src.join("lib.rs").is_file(),
         }
     }
 
@@ -964,9 +1336,43 @@ mod tests {
         format!("{h:016x}")
     }
 
-    /// POSITIVE CONTROL on the REAL workspace: today's four measured
-    /// collisions carry their rows (Observation carries the DECISION), the
-    /// rest of the fleet is unique, and the inventory discovers real volume.
+    /// POSITIVE CONTROL on the REAL workspace. This test asserts only what
+    /// (a) is true of ANY tree and (b) this crate can own.
+    ///
+    /// # What used to be here, and why it could never hold
+    ///
+    /// This test used to `assert_eq!` the collision NAME SET against a
+    /// hardcoded six-name vector. It was measured wrong three ways at once
+    /// on 2026-09-03, all with `omp-inventory-map types --repo <tree>`
+    /// against trees extracted by `git archive`:
+    ///
+    /// | tree | crates | collisions |
+    /// |---|---|---|
+    /// | `4b398e4` — the last CI run, 2026-09-02T03:01:50Z | 51 | 8 |
+    /// | `6238c0f` — HEAD, ~19h later | 69 | 29 |
+    /// | the shared worktree, same minute as HEAD | 69 | 29 |
+    ///
+    /// The hardcoded vector said **6**. CI reported **8**. HEAD holds
+    /// **29**. Eighteen crates landed in one day. So the assertion was not
+    /// stale-and-fixable; it asserted a quantity that changes several times
+    /// per day, that this crate does not produce, and that no lane can be
+    /// held to. Worse, `scan_workspace_types` reads the WORKTREE — under a
+    /// four-agent fleet this test's verdict was a function of three peers'
+    /// UNCOMMITTED edits, so it could go red for a reason its own crate had
+    /// no way to see, let alone fix. That is AGENTS.md rule 8 (a `cargo`
+    /// figure is never evidence about a commit) expressed as a test.
+    ///
+    /// # What replaced it
+    ///
+    /// The DERIVED class, not the snapshot: a collision where one side IS
+    /// [`VOCABULARY_CRATE`]. That predicate needs no maintained list, and it
+    /// cut 29 collisions to the **2** that carry a real finding —
+    /// `Lifecycle` and `PaneObservation`, which were exactly the two that
+    /// had just appeared. The other 27 are leaf-crate coincidences
+    /// (`Config`, `Row`, `Rule`, `Verdict`, `ScanError`) that the module
+    /// header already NO-CLAIMs. An `assert_eq!` on the whole set could not
+    /// tell those two classes apart; that is the argument, and it is why
+    /// both readings of the original failure were right about different rows.
     #[test]
     fn real_workspace_today_all_collisions_accounted_and_volume_real() {
         let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -975,81 +1381,396 @@ mod tests {
             .expect("repo root is two levels above the crate");
         let inv = scan_workspace_types(repo).expect("scan works");
 
+        // Volume floors. Monotone by construction: the workspace only grows,
+        // so a floor never re-stales upward the way an equality does.
         assert!(inv.counts.enums >= 50, "enums floor: {}", inv.counts.enums);
-        assert!(inv.counts.structs >= 79, "structs floor: {}", inv.counts.structs);
-        assert!(inv.counts.crates_with_types >= 20, "crates-with-types floor");
-
-        let names: Vec<&str> = inv.collisions.iter().map(|c| c.name.as_str()).collect();
-        // Pinned to the measured set, re-derived 2026-09-01 after two crates landed.
-        //
-        // `DispatchIntent` and `GateError` are new since this list was written, and
-        // both are already carried with reasons in no-shell-gate's COLLISION_ALLOWANCE
-        // — which is the real finding here: **two crates independently pin the same
-        // fact.** This assertion and that allowance list must be edited together, and
-        // nothing enforces that they agree. A single shared source would remove the
-        // class; it does not exist yet, so this comment is the only link between them.
-        assert_eq!(
-            names,
-            vec![
-                "DispatchIntent",
-                "Finding",
-                "GateError",
-                "LintReport",
-                "Observation",
-                "Violation",
-            ],
-            "today's measured collision set (sorted)"
+        assert!(
+            inv.counts.structs >= 79,
+            "structs floor: {}",
+            inv.counts.structs
+        );
+        assert!(
+            inv.counts.crates_with_types >= 20,
+            "crates-with-types floor"
         );
 
+        // POSITIVE CONTROL (AGENTS.md rule 2): the scanner must find the
+        // crate it lives in. A census that reports nothing is
+        // indistinguishable from one that works.
+        assert!(
+            inv.crates
+                .iter()
+                .any(|c| c.crate_name == "omp-inventory-map"
+                    && c.decls.iter().any(|d| !d.in_test_module)),
+            "scanner must see its own crate's public types"
+        );
+        assert!(
+            !inv.collisions.is_empty(),
+            "anti-vacuity on the collision leg: a real workspace with zero \
+             detected collisions means the detector is broken, not that the \
+             tree is clean"
+        );
+
+        // THE INVARIANT, derived: every vocabulary split against omp-types
+        // is triaged with an owner and a resolution. Nothing here names a
+        // count of collisions the fleet happens to have today.
+        let untriaged: Vec<String> = inv
+            .untriaged_vocabulary_splits()
+            .iter()
+            .map(|c| format!("{} ({})", c.name, c.crates.join("+")))
+            .collect();
+        assert!(
+            untriaged.is_empty(),
+            "UNTRIAGED VOCABULARY SPLIT: a leaf crate declares a public type \
+             name that {VOCABULARY_CRATE} already owns. Name it in \
+             VOCABULARY_SPLITS with an owner and a resolution, or delete the \
+             duplicate: {untriaged:?}"
+        );
+
+        // Each triaged row must still be LIVE — a resolved split whose row
+        // was never pruned reports finished work as open debt. `check` emits
+        // STALE VOCABULARY-SPLIT ROW for this; assert it is silent here.
+        let errs = inv
+            .check()
+            .expect_err("the Observation collision is REFUSED until the seam convergence lands");
+        assert!(
+            !errs.iter().any(|e| e.contains("STALE VOCABULARY-SPLIT ROW")),
+            "a VOCABULARY_SPLITS row no longer matches a real split: {errs:?}"
+        );
+        assert!(
+            !errs.iter().any(|e| e.contains("STALE ALLOWANCE")),
+            "an ALLOWED_COLLISIONS row no longer matches a real collision: {errs:?}"
+        );
+
+        // ACTIONABILITY: every refusal must carry the type, both crates, and
+        // a site. A refusal a reader cannot act on is the unread red.
+        for c in inv.disallowed() {
+            assert!(c.crates.len() >= 2, "{} claims fewer than two crates", c.name);
+            assert!(
+                c.sites.len() >= 2,
+                "{} must carry a file:line per declaring crate: {:?}",
+                c.name,
+                c.sites
+            );
+            assert!(
+                errs.iter().any(|e| {
+                    e.contains(&format!("COLLISION {}", c.name))
+                        && c.crates.iter().all(|k| e.contains(k.as_str()))
+                }),
+                "refusal for {} must name the type and every crate: {errs:?}",
+                c.name
+            );
+        }
+
+        // Every vocabulary split must be named as one in its refusal, so the
+        // sharp class is not buried in the undifferentiated wall.
+        for c in inv.vocabulary_splits() {
+            assert!(
+                errs.iter().any(|e| e.contains(&format!("COLLISION {}", c.name))
+                    && e.contains("VOCABULARY SPLIT")),
+                "split {} must be labelled a VOCABULARY SPLIT: {errs:?}",
+                c.name
+            );
+        }
+
+        // The Observation seam keeps its DECISION and no allowance.
         let obs = inv
             .collisions
             .iter()
             .find(|c| c.name == "Observation")
             .expect("Observation collision present");
         assert!(obs.allowance.is_none(), "Observation must not be allowed");
-        assert_eq!(inv.seam_decisions.len(), 1);
-        assert_eq!(inv.seam_decisions[0].type_name, "Observation");
-        for c in &inv.collisions {
-            if c.name != "Observation" {
-                assert!(c.allowance.is_some(), "{} must carry its allowance", c.name);
-            }
-        }
+        assert!(
+            inv.seam_decisions
+                .iter()
+                .any(|d| d.type_name == "Observation"),
+            "Observation must carry a seam decision"
+        );
+        assert!(
+            errs.iter().any(|e| e.contains("COLLISION Observation")),
+            "the gate must name the refused seam: {errs:?}"
+        );
 
-        // Named zeros: finding-dispatch and pane-dispatch-fence ONLY.
-        // omp-types is reexport-only — it is NOT a zero; its provision is
-        // asserted separately below via non-empty reexports.
-        let zero_names: Vec<&str> = inv
-            .named_zeros
-            .iter()
-            .map(|s| s.split(':').next().expect("prefix"))
-            .collect();
-        assert_eq!(zero_names, vec!["finding-dispatch", "pane-dispatch-fence"]);
+        // NAMED ZEROS, as an invariant rather than a list. The old
+        // `assert_eq!(zero_names, ["finding-dispatch", "pane-dispatch-fence"])`
+        // was the same drifting-snapshot defect one assertion down, and it
+        // was the ONLY thing catching a filled zero because `check` had a
+        // STALE ALLOWANCE leg and no STALE NAMED-ZERO leg. Measured
+        // 2026-09-03: `finding-dispatch` declared zero public types at tree
+        // `4b398e4` and three at HEAD, so the row asserting "owns no type
+        // yet" had become false and the gate was publishing it.
+        assert!(
+            !inv.named_zeros.is_empty(),
+            "a real workspace with no named zero at all means the zero \
+             detector is broken, not that every crate owns a type"
+        );
+        assert!(
+            !errs.iter().any(|e| e.contains("STALE NAMED-ZERO ROW")),
+            "a NAMED_ZEROS row no longer describes a real zero: {errs:?}"
+        );
+        // Every crate reported as a named zero must actually own nothing,
+        // and every actual zero must be named (the latter is `check`'s
+        // NAMED-ZERO REQUIRED leg; assert it is silent).
+        for reported in &inv.named_zeros {
+            let name = reported.split(':').next().expect("prefix");
+            let c = inv
+                .crates
+                .iter()
+                .find(|c| c.crate_name == name)
+                .unwrap_or_else(|| panic!("reported zero {name} is not a scanned crate"));
+            assert!(
+                !c.decls.iter().any(|d| !d.in_test_module) && c.reexports.is_empty(),
+                "{name} is reported as a zero but owns output"
+            );
+        }
+        assert!(
+            !errs.iter().any(|e| e.contains("NAMED-ZERO REQUIRED")),
+            "an unnamed zero crate exists — name it in NAMED_ZEROS: {errs:?}"
+        );
         let omp_types = inv
             .crates
             .iter()
-            .find(|c| c.crate_name == "omp-types")
+            .find(|c| c.crate_name == VOCABULARY_CRATE)
             .expect("omp-types present");
         assert!(
             !omp_types.reexports.is_empty(),
             "omp-types is a vocabulary crate: reexports must be non-empty"
         );
+    }
 
-        let verdicts: Vec<&str> = inv
-            .crates
-            .iter()
-            .flat_map(|c| c.decls.iter())
-            .filter(|d| !d.in_test_module && d.name.contains("Verdict"))
-            .map(|d| d.name.as_str())
-            .collect();
-        assert_eq!(verdicts.len(), 13, "thirteen Verdict types measured: {verdicts:?}");
+    /// The STALE NAMED-ZERO leg, on fixtures, with BOTH controls.
+    ///
+    /// The leg only runs on the REAL workspace (a synthetic set has no
+    /// business being told its rows are stale), so the fixture must LOOK
+    /// real: `crates_scanned_is_real_workspace` keys on `generated_by` plus
+    /// the presence of a crate named `omp-inventory-map`.
+    #[test]
+    fn stale_named_zero_row_is_refused_when_the_zero_gets_filled() {
+        let declared_zero = NAMED_ZEROS[0].0;
+        // Every row must be present as a real zero, or the leg reports the
+        // OTHER rows as absent and the control proves nothing.
+        let all_zeros = || {
+            let mut set = vec![crate_with(
+                "omp-inventory-map",
+                &[("InventoryMap", TypeKind::Struct)],
+            )];
+            set.extend(NAMED_ZEROS.iter().map(|(n, _)| crate_with(n, &[])));
+            set
+        };
 
-        // The four rows the gate enforces beyond collisions.
-        let errs = inv.check().expect_err(
-            "Observation collision is REFUSED until the seam convergence lands",
+        // NEGATIVE CONTROL: every row is live (crate owns nothing) -> silent.
+        let live = assemble(all_zeros());
+        assert!(
+            live.crates_scanned_is_real_workspace(),
+            "the fixture must satisfy the real-workspace guard or this test \
+             proves nothing"
+        );
+        let errs = live.check().err().unwrap_or_default();
+        assert!(
+            !errs.iter().any(|e| e.contains("STALE NAMED-ZERO ROW")),
+            "a live named zero must not be reported stale: {errs:?}"
+        );
+
+        // POSITIVE CONTROL: fill one zero -> refused, naming the crate AND
+        // the types that filled it.
+        let mut mutated = all_zeros();
+        let target = mutated
+            .iter_mut()
+            .find(|c| c.crate_name == declared_zero)
+            .expect("declared zero is in the fixture");
+        *target = crate_with(declared_zero, &[("SupervisorDecision", TypeKind::Enum)]);
+        let filled = assemble(mutated);
+        let errs = filled.check().expect_err("a filled named zero must go RED");
+        assert!(
+            errs.iter().any(|e| e.contains("STALE NAMED-ZERO ROW")
+                && e.contains(declared_zero)
+                && e.contains("SupervisorDecision")),
+            "the refusal must name the crate and what filled it: {errs:?}"
+        );
+
+        // A row for a crate that is not in the workspace at all is also drift.
+        let absent = assemble(vec![crate_with(
+            "omp-inventory-map",
+            &[("InventoryMap", TypeKind::Struct)],
+        )]);
+        let errs = absent.check().expect_err("a row for an absent crate is drift");
+        assert!(
+            errs.iter()
+                .any(|e| e.contains("STALE NAMED-ZERO ROW") && e.contains("not in the workspace")),
+            "an absent named-zero crate must be reported: {errs:?}"
+        );
+
+        // BINARY-ONLY: no library surface, so neither a finding nor a zero
+        // to name. This is the leg that replaced pane-dispatch-fence's row.
+        let mut with_bin = all_zeros();
+        with_bin.push(binary_only_crate("plan-assemble"));
+        let inv = assemble(with_bin);
+        let errs = inv.check().err().unwrap_or_default();
+        assert!(
+            !errs.iter().any(|e| e.contains("plan-assemble")),
+            "a binary-only crate must not be asked to name its zero: {errs:?}"
         );
         assert!(
-            errs.iter().any(|e| e.contains("COLLISION Observation")),
-            "the gate must name the refused seam: {errs:?}"
+            !inv.named_zeros.iter().any(|z| z.contains("plan-assemble")),
+            "a binary-only crate is not a named zero either"
+        );
+
+        // NEGATIVE CONTROL for that leg — the exemption must be about
+        // has_lib and NOT about being empty: the SAME empty crate WITH a
+        // library surface is still a finding. Without this control the
+        // has_lib skip would be indistinguishable from silencing every
+        // empty crate.
+        let mut with_lib = all_zeros();
+        with_lib.push(crate_with("plan-assemble", &[]));
+        let errs = assemble(with_lib)
+            .check()
+            .expect_err("an empty LIBRARY crate is still a finding");
+        assert!(
+            errs.iter()
+                .any(|e| e.contains("NAMED-ZERO REQUIRED") && e.contains("plan-assemble")),
+            "an empty crate WITH lib.rs must still be refused: {errs:?}"
+        );
+    }
+
+    /// The vocabulary-split predicate, on fixtures, with BOTH controls.
+    ///
+    /// A derived classifier with no fixture test is BUILT ≠ WIRED: it would
+    /// be indistinguishable from one that classifies everything, or nothing.
+    #[test]
+    fn vocabulary_split_predicate_fires_only_against_the_vocabulary_crate() {
+        // NEGATIVE CONTROL: two leaf crates colliding is NOT a split.
+        let leafs = assemble(vec![
+            crate_with("cargo-lane-budget", &[("Config", TypeKind::Struct)]),
+            crate_with("crate-soundness-verify", &[("Config", TypeKind::Struct)]),
+        ]);
+        assert_eq!(leafs.collisions.len(), 1, "the collision itself is detected");
+        assert!(
+            leafs.vocabulary_splits().is_empty(),
+            "a leaf+leaf collision must NOT be a vocabulary split"
+        );
+
+        // POSITIVE CONTROL: the same shape with omp-types on one side IS.
+        let split = assemble(vec![
+            crate_with(VOCABULARY_CRATE, &[("Config", TypeKind::Struct)]),
+            crate_with("crate-soundness-verify", &[("Config", TypeKind::Struct)]),
+        ]);
+        assert_eq!(split.vocabulary_splits().len(), 1);
+        assert_eq!(
+            split.untriaged_vocabulary_splits().len(),
+            1,
+            "a split with no VOCABULARY_SPLITS row is UNTRIAGED"
+        );
+        let errs = split.check().expect_err("an untriaged split must go RED");
+        assert!(
+            errs.iter()
+                .any(|e| e.contains("VOCABULARY SPLIT") && e.contains("UNTRIAGED")),
+            "the refusal must say UNTRIAGED so a reader knows what to do: {errs:?}"
+        );
+
+        // The triage row must match the EXACT crate set: the same name
+        // splitting from a different leaf is a new event, not a covered one.
+        let (row_name, row_set, _, _) = VOCABULARY_SPLITS[0];
+        let (owner, other) = row_set
+            .split_once('+')
+            .expect("a split row names two crates");
+        let leaf = if owner == VOCABULARY_CRATE { other } else { owner };
+        let covered = assemble(vec![
+            crate_with(VOCABULARY_CRATE, &[(row_name, TypeKind::Enum)]),
+            crate_with(leaf, &[(row_name, TypeKind::Enum)]),
+        ]);
+        assert!(
+            covered.untriaged_vocabulary_splits().is_empty(),
+            "the declared crate set must be recognised as triaged"
+        );
+        let elsewhere = assemble(vec![
+            crate_with(VOCABULARY_CRATE, &[(row_name, TypeKind::Enum)]),
+            crate_with("some-other-leaf", &[(row_name, TypeKind::Enum)]),
+        ]);
+        assert_eq!(
+            elsewhere.untriaged_vocabulary_splits().len(),
+            1,
+            "{row_name} splitting against a DIFFERENT leaf is a new finding"
+        );
+    }
+
+    /// Every VOCABULARY_SPLITS row is well-formed: an owner that is one of
+    /// the two named crates and is NOT the vocabulary crate (the leaf holding
+    /// the duplicate owns the fix), and a resolution carrying real evidence
+    /// rather than a stub.
+    #[test]
+    fn every_vocabulary_split_row_names_a_leaf_owner_and_a_resolution() {
+        assert!(
+            !VOCABULARY_SPLITS.is_empty(),
+            "the split table must not be silently empty — an empty table and \
+             a clean tree are indistinguishable without a live measurement"
+        );
+        for (name, set, owner, resolution) in VOCABULARY_SPLITS {
+            assert!(!name.is_empty(), "split row with empty type name");
+            let crates: Vec<&str> = set.split('+').collect();
+            assert_eq!(crates.len(), 2, "row {name}: set must name two crates");
+            let mut sorted = crates.clone();
+            sorted.sort_unstable();
+            assert_eq!(
+                sorted, crates,
+                "row {name}: crate set must be sorted, it is matched against a \
+                 sorted key"
+            );
+            assert!(
+                crates.contains(&VOCABULARY_CRATE),
+                "row {name}: a vocabulary split must involve {VOCABULARY_CRATE}"
+            );
+            assert!(
+                crates.contains(owner),
+                "row {name}: owner {owner} is not one of the colliding crates"
+            );
+            assert_ne!(
+                *owner, VOCABULARY_CRATE,
+                "row {name}: the LEAF holding the duplicate owns the fix, not \
+                 the vocabulary crate that legitimately declares the name"
+            );
+            assert!(
+                resolution.len() > 120,
+                "row {name}: resolution must carry derived evidence with \
+                 file:line, not a stub ({} chars)",
+                resolution.len()
+            );
+            assert!(
+                resolution.contains(".rs:"),
+                "row {name}: resolution must cite a file:line"
+            );
+        }
+    }
+
+    #[test]
+    fn lifecycle_decision_is_a_decision_not_an_allowance() {
+        assert!(
+            !ALLOWED_COLLISIONS
+                .iter()
+                .any(|(n, _, _)| *n == "Lifecycle"),
+            "Lifecycle must NOT be an allowance row — the enums are \
+             variant-identical, which is a convergence, not an accepted \
+             coincidence"
+        );
+        let d = lifecycle_seam_decision();
+        assert_eq!(d.type_name, "Lifecycle");
+        assert!(d.decision.contains("CONVERGE"));
+        assert!(d.shared_home.starts_with(VOCABULARY_CRATE));
+        assert!(d.rationale.contains("omp-rpc-session/src/lib.rs:682"));
+        assert!(d.rationale.contains("omp-types/src/lifecycle.rs:12"));
+        assert_eq!(d.migration.len(), 3);
+
+        // PaneObservation deliberately has NO decision of its own: it is
+        // step 3 of the Observation migration. Two rows for one fact is the
+        // defect the deleted assert_eq! carried in its own comment.
+        let decided: Vec<String> = seam_decisions()
+            .into_iter()
+            .map(|d| d.type_name)
+            .collect();
+        assert_eq!(decided, ["Observation", "Lifecycle"]);
+        assert!(
+            observation_seam_decision().migration[2].contains("PaneObservation"),
+            "PaneObservation's resolution must live in the Observation \
+             migration step 3"
         );
     }
 }

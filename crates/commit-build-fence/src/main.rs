@@ -17,7 +17,23 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const USAGE: &str = "usage: commit-build-fence [check|init|register|release] [options]";
+/// The accepted surface, stated in full. An earlier one-liner said only
+/// `[check|init|register|release] [options]`, and "[options]" is where the
+/// caller/callee break lived: `.github/workflows/gate.yml` invoked
+/// `commit-build-fence -- .` (measured 2026-09-02, run 33585450134 on tree
+/// `4b398e4`) because three sibling gates in the same workflow — `no-shell-gate`,
+/// `pre-delete-citation-check`, `omp-inventory-map` — DO take a bare positional
+/// repo root. The fence takes `--repo`. The gate refused correctly, exit 2 with
+/// `reason=unknown_command command=.`, and the refusal named the token it
+/// rejected but not the flag that would have worked, so a reader could see they
+/// were wrong without being able to see what was right.
+const USAGE: &str = "usage: commit-build-fence <check|init|register|release> \
+                     [--repo PATH] [--store PATH] [--head SHA] [--now UNIX]\n\
+                     \x20      register also takes --build-id ID [--holder NAME] \
+                     [--ttl SECS]\n\
+                     \x20      release also takes --build-id ID\n\
+                     \x20      no subcommand => check; the repo is named by \
+                     --repo PATH (or $OMP_REPO), NEVER by a positional argument";
 
 #[derive(Debug)]
 enum Outcome {
@@ -52,10 +68,53 @@ fn main() -> ExitCode {
     }
 }
 
+/// Flags the parser understands, matched on the name half so `--repo=PATH`
+/// is recognised as well as `--repo PATH`.
+///
+/// This list exists so that a LEADING flag can select the default `check`
+/// command without also silently swallowing a typo. `commit-build-fence
+/// --repo .` is the documented "no subcommand => check" form and must work;
+/// `commit-build-fence --rpeo .` must not be treated as a successful check
+/// over the current directory, because a gate that passes on a misspelled
+/// argument is a fooled certificate.
+const KNOWN_FLAGS: &[&str] = &[
+    "--repo",
+    "--store",
+    "--head",
+    "--now",
+    "--build-id",
+    "--holder",
+    "--ttl",
+];
+
+fn known_flag(argument: &str) -> bool {
+    let name = argument.split_once('=').map_or(argument, |(name, _)| name);
+    KNOWN_FLAGS.contains(&name)
+}
+
 async fn run(cx: &Cx, args: &[String]) -> Result<Outcome, String> {
     cx.checkpoint()
         .map_err(|_| "COMMIT_FENCE_ERROR reason=cancelled".to_owned())?;
-    let command = args.first().map(String::as_str).unwrap_or("check");
+    // Command selection. Three cases, and the middle one was unreachable
+    // until 2026-09-03:
+    //   - empty argv        => check. This is the pre-commit hook path.
+    //   - a leading KNOWN flag => check, with that flag applied. The doc
+    //     comment on this binary has always promised "with no subcommand,
+    //     this is the hook operation", and every `check` option
+    //     (--repo/--store/--head/--now) is documented — but `args.first()`
+    //     saw `--repo` and refused it as an unknown COMMAND, so the default
+    //     command could never be combined with any of its own options.
+    //     Measured: `commit-build-fence --repo <path>` exited 2 with
+    //     `reason=unknown_command command=--repo`.
+    //   - anything else     => that token must be a real command, or it is
+    //     refused. A bare `.` stays a hard exit-2 refusal, which is the
+    //     class that broke CI at gate.yml tree `4b398e4` and must keep
+    //     firing.
+    let command = match args.first().map(String::as_str) {
+        None => "check",
+        Some(argument) if known_flag(argument) => "check",
+        Some(argument) => argument,
+    };
     let outcome = match command {
         "check" => run_check(args).map_err(|error| error.to_string()),
         "init" => run_init(args).map_err(|error| error.to_string()),

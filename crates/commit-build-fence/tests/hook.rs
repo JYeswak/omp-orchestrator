@@ -339,3 +339,116 @@ fn cli_registration_expiry_and_release_are_durable() {
     assert!(reread.registrations.is_empty());
     assert_eq!(reread.events, vec![event]);
 }
+
+/// THE CALLER/CALLEE CONTRACT, pinned as a test because it was pinned in a
+/// CI workflow instead and nothing checked that the two agreed.
+///
+/// Measured 2026-09-02, run `33585450134` on tree `4b398e4`:
+/// `.github/workflows/gate.yml:180` ran `cargo run -p commit-build-fence
+/// -- .` and the job died with `COMMIT_FENCE_ERROR reason=unknown_command
+/// command=.` exit 2. Three sibling gates in the SAME workflow —
+/// `no-shell-gate`, `pre-delete-citation-check`, `omp-inventory-map` — do
+/// take a bare positional repo root, so the argv was written to the
+/// convention next door rather than to this binary's.
+///
+/// The gate was RIGHT to refuse and this test locks that in: a bare `.`
+/// must stay exit 2. What it must ALSO do is let the documented default
+/// command be used with its own documented options, which it could not.
+#[test]
+fn cli_contract_refuses_a_positional_path_and_accepts_the_documented_default() {
+    let dir = fresh_repo("cli-contract");
+    let repo = dir.canonicalize().expect("canonical repo");
+    let repo_arg = repo.display().to_string();
+    let store = store_for(&dir);
+    let store_arg = store.display().to_string();
+
+    // The exact argv the failing CI run used. Still refused, still exit 2,
+    // and the refusal now names the flag that WOULD have worked.
+    let positional = run_fence(&[".".to_owned()]);
+    assert_eq!(
+        positional.status.code(),
+        Some(2),
+        "a bare positional path must stay a hard refusal"
+    );
+    let stderr = String::from_utf8_lossy(&positional.stderr);
+    assert!(
+        stderr.contains("reason=unknown_command command=."),
+        "the refusal must name the token it rejected: {stderr}"
+    );
+    assert!(
+        stderr.contains("--repo"),
+        "the refusal must name the flag that names a repo, or a caller can \
+         see they are wrong without seeing what is right: {stderr}"
+    );
+
+    // A leading KNOWN flag selects the default `check` command. Before the
+    // fix this exited 2 with `unknown_command command=--repo`, which made
+    // every documented option of the default command unreachable.
+    RegistrationStore::init(&store).expect("init store");
+    let defaulted = run_fence(&["--repo".to_owned(), repo_arg.clone()]);
+    assert!(
+        defaulted.status.success(),
+        "`--repo PATH` with no subcommand must run check: {}",
+        String::from_utf8_lossy(&defaulted.stderr)
+    );
+
+    // ...and it really ran CHECK, not a no-op: an active registration on
+    // the current HEAD must make the same argv REFUSE. Without this leg a
+    // silent no-op would pass the assertion above.
+    let head = current_head(&dir);
+    let mut loaded = RegistrationStore::load(&store).expect("load store");
+    loaded
+        .register(
+            BuildRegistration {
+                build_id: "build-default-cmd".to_owned(),
+                repo: repo_arg.clone(),
+                head: head.clone(),
+                holder: "agent-default".to_owned(),
+                started_at_unix: now_unix(),
+                expires_at_unix: now_unix() + 600,
+            })
+        .expect("register active build");
+    loaded.save_atomic(&store).expect("save registration");
+    let blocked = run_fence(&["--repo".to_owned(), repo_arg.clone()]);
+    assert_eq!(
+        blocked.status.code(),
+        Some(1),
+        "the defaulted command must be a real check: {}",
+        String::from_utf8_lossy(&blocked.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&blocked.stderr).contains("COMMIT_FENCE_REFUSED"),
+        "an active registration must refuse through the defaulted command"
+    );
+
+    // `--store=PATH` proves the `=` form is recognised by the same leg.
+    let equals_form = run_fence(&[format!("--store={store_arg}"), "--repo".to_owned(), repo_arg]);
+    assert_eq!(
+        equals_form.status.code(),
+        Some(1),
+        "`--flag=value` must select the default command too: {}",
+        String::from_utf8_lossy(&equals_form.stderr)
+    );
+
+    // NEGATIVE CONTROL: the flag leg must not swallow a typo. A gate that
+    // passes on a misspelled argument is worse than one that refuses a
+    // valid argv, because it manufactures confidence.
+    let typo = run_fence(&["--rpeo".to_owned(), ".".to_owned()]);
+    assert_eq!(
+        typo.status.code(),
+        Some(2),
+        "a misspelled flag must NOT be treated as the default command: {}",
+        String::from_utf8_lossy(&typo.stdout)
+    );
+
+    // `--help` is a command, exits 0, and lists every accepted subcommand.
+    let help = run_fence(&["--help".to_owned()]);
+    assert!(help.status.success(), "--help must exit 0");
+    let text = String::from_utf8_lossy(&help.stdout);
+    for accepted in ["check", "init", "register", "release"] {
+        assert!(
+            text.contains(accepted),
+            "usage must name the {accepted} command: {text}"
+        );
+    }
+}

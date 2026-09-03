@@ -253,6 +253,24 @@ fn types_command(config: ProbeConfig) -> ExitCode {
                 data: Some(serde_json::json!({
                     "counts": inventory.counts,
                     "collisions": inventory.collisions,
+                    // The SHARP class, published separately because an
+                    // undifferentiated wall of collisions is an unread red.
+                    // Derived from the crate set, never a maintained list.
+                    "vocabulary_crate": omp_inventory_map::types_inventory::VOCABULARY_CRATE,
+                    "vocabulary_splits": inventory
+                        .vocabulary_splits()
+                        .iter()
+                        .map(|c| serde_json::json!({
+                            "name": c.name,
+                            "crates": c.crates,
+                            "sites": c.sites,
+                        }))
+                        .collect::<Vec<_>>(),
+                    "untriaged_vocabulary_splits": inventory
+                        .untriaged_vocabulary_splits()
+                        .iter()
+                        .map(|c| c.name.clone())
+                        .collect::<Vec<_>>(),
                     "seam_decisions": inventory.seam_decisions,
                     "missing": inventory.missing,
                     "named_zeros": inventory.named_zeros,
