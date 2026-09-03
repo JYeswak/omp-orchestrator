@@ -632,7 +632,7 @@ impl std::fmt::Display for ClaimFenceError {
                 command,
             } => write!(
                 formatter,
-                "DISPATCH_BLOCKED bead={bead_id} status={actual_status} assignee={} receiver={expected_agent}; claim it first: {command}",
+                "DISPATCH_BLOCKED bead={bead_id} status={actual_status} assignee={} receiver={expected_agent}; choose one mutually exclusive remedy after inspecting dispatch ledger: {command}",
                 actual_assignee.as_deref().unwrap_or("unassigned")
             ),
             Self::AssignedElsewhere {
@@ -699,7 +699,7 @@ pub fn authorize(
                     actual_status: snapshot.status_label().to_owned(),
                     actual_assignee: snapshot.assignee.clone(),
                     expected_agent: receiver_agent.clone(),
-                    command,
+                    command: claim_required_unavailable_command(bead_id, receiver_agent),
                 });
             }
             match snapshot.assignee.as_deref() {
@@ -719,7 +719,7 @@ pub fn authorize(
                     actual_status: snapshot.status_label().to_owned(),
                     actual_assignee: None,
                     expected_agent: receiver_agent.clone(),
-                    command,
+                    command: claim_required_unavailable_command(bead_id, receiver_agent),
                 }),
             }
         }
@@ -779,6 +779,13 @@ fn claim_command(bead_id: &str, receiver_agent: &str) -> String {
 }
 fn release_command(bead_id: &str) -> String {
     format!("br update {bead_id} --assignee \"\" --status open")
+}
+fn claim_required_unavailable_command(bead_id: &str, receiver_agent: &str) -> String {
+    format!(
+        "evidence=UNAVAILABLE mutually_exclusive=true complete_claim={} release_fully={} next_action=inspect_dispatch_ledger",
+        claim_command(bead_id, receiver_agent),
+        release_command(bead_id)
+    )
 }
 
 fn normalize_optional(value: Option<&str>) -> Option<String> {

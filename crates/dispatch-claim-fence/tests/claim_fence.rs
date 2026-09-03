@@ -14,22 +14,24 @@ fn open_unassigned_bead_is_refused_with_actual_status_and_claim_command() {
         Some(&bead("5rh", "open", None)),
     )
     .expect_err("an open bead must not be dispatched");
-
     assert!(matches!(
         error,
         ClaimFenceError::ClaimRequired {
             ref bead_id,
             ref actual_status,
-            ref command,
             ..
-        } if bead_id == "5rh"
-            && actual_status == "open"
-            && command == "br update 5rh --assignee BlueLantern --status in_progress"
+        } if bead_id == "5rh" && actual_status == "open"
     ));
-    assert!(error.to_string().contains("status=open"));
-    assert!(error
-        .to_string()
-        .contains("br update 5rh --assignee BlueLantern --status in_progress"));
+    let rendered = error.to_string();
+    assert!(rendered.contains("mutually exclusive remedy"), "{rendered}");
+    assert!(
+        rendered.contains("br update 5rh --assignee BlueLantern --status in_progress"),
+        "missing claim remedy: {rendered}"
+    );
+    assert!(
+        rendered.contains("br update 5rh --assignee \"\" --status open"),
+        "missing release remedy: {rendered}"
+    );
 }
 
 #[test]
