@@ -50,3 +50,69 @@ no_claim = "what this box does not establish"
 2. Write your boxes. Commit path-scoped: `git commit -- docs/plan/flow/boxes/<Sx>.toml`.
 3. Post one bead comment on `omp-orchestrator-x226`: `SPINE: <boxes> landed <sha>; disagreements: <list>`.
 4. Cross-review round follows (you read another pane's boxes; a disagreement is a finding, not an edit).
+
+## Wave 1 addendum (Joshua, 2026-09-03 05:3xZ): "not ready — name everything it's missing, physics for every aspect, Rust hooks, all agents agree after healthy debate, as long as it takes; stop building"
+
+**BUILD FREEZE.** No new crate, no new feature bead, no install, until every box has `agreement.status = "converged"` AND Joshua's approval row in `docs/decisions.jsonl`. The four in-flight beads (`d3gm`, `6nhj`, `ywd5`, `gfb`) go to GRADING or release; nothing new is claimed.
+
+Every box file gains four sections. A box without all four is not reviewable.
+
+```toml
+# 1. PHYSICS — every number in the row, with the command that produced it and when. A number
+#    without a command is a guess dressed as a fact (planning-workflow: "Grounding").
+[[box.measurement]]
+claim = "preregistration-gate is first in the pre-commit chain"
+command = "sed -n '121,122p' crates/no-shell-gate/src/bin/pre-commit-gate.rs"
+value = "L121 validate_staged_preregistration; L122 refusals.push(\"preregistration-gate: …\")"
+measured_at = "2026-09-03T05:20Z"
+by = "AmberGate"
+
+# 2. GAPS — everything the box is missing, each with the thing that resolves it. The nine crate-atom
+#    parts (d3gm) and the seven rigor layers L1–L7 (AGENTS.md) are the checklist: a box that does
+#    not name its claim row, SLO row, oracle, fuzz target, wired-caller test, event row, and diagram
+#    has gaps whether or not it lists them.
+[[box.gap]]
+what = "no LifecycleEvent row is written for S2 (S2 logs nothing)"
+resolves = "kxe.8 journal writer + vcd7.1 emit site at plan-assemble's write chokepoint"
+class = "event_row"        # event_row | claim_row(L1) | slo(L2) | oracle(L3) | gate_trip(L4) | fuzz(L5) | formal(L6) | lock(L7) | wired_caller(atom 9) | verdict_type(atom 3) | diagram | hook | measurement
+
+# 3. AGREEMENT — the debate ledger. A box converges when a wave yields ZERO open disagreements from
+#    all three non-owners (steady state, planning-workflow validation loop #4). Waves repeat as long
+#    as it takes. A disagreement is a row, never an edit to another pane's box.
+[box.agreement]
+wave = 1
+owner = "AmberGate"
+reviewers = ["BlueLantern", "SilverWolf", "QuietRidge"]
+open_disagreements = 0
+status = "draft"            # draft | reviewed | converged | approved (approved = Joshua's HD row id)
+approval = ""               # "HD-00NN" when Joshua approves
+
+# 4. DIAGRAM — the box's own if/then flowchart, one node per branch, generated from `branches`
+#    (hand-written until x226 emits it), validated: `frankenmermaid validate diagrams/<Sx>.mmd
+#    --fail-on warning` exit 0, rendered: `frankenmermaid render diagrams/<Sx>.mmd --format svg`.
+[box.diagram]
+mmd = "docs/plan/flow/diagrams/S2.mmd"
+validate_exit = 0
+```
+
+**Hooks are Rust, certified, or they are not hooks.** Reference: `~/Developer/control-plane/hooks_certified.toml`
+(16 rows; schema `id, event, matcher, class advisory|gate, fail_mode, binary, policy_file,
+source_commit, language, stage, certified, harm_class`) and the substrate crate
+`control-plane/crates/zestgraph-hook-substrates`; contract = stdin JSON `{tool_name, tool_input}` →
+stdout `{"hookSpecificOutput":{"hookEventName","permissionDecision"}}` (probed live on
+`zestgraph-danger-gate`: benign command → `allow`). Every `[[box.hook]]` row names its future
+`hooks_certified.toml` row and its gauntlet stage (`/hook-certification`, six stages). No `.sh` hook, ever.
+
+**Disagreement rows** go in `docs/plan/flow/waves/wave-<N>/<reviewer>-<Sx>.toml`:
+```toml
+[[disagreement]]
+box = "S2"
+field = "crate_status"
+owner_says = "wired"
+reviewer_says = "wired to the hook only; no supervisor caller — call it hook-wired"
+evidence = "grep -rn plan_assemble crates/omp-orchestrator/src -> 0"
+severity = "major"         # blocker | major | minor
+resolution = ""            # filled by the owner: accepted | refuted(with evidence) | escalated(HD-00NN)
+```
+The owner answers every row in the next wave. `refuted` needs evidence the reviewer can re-run;
+`escalated` means Joshua decides. A wave closes when every row has a resolution.

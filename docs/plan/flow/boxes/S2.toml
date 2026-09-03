@@ -43,3 +43,84 @@ The staleness metric counts commits since the doc's last DISK WRITE, so a wave c
 ~2/min re-stales PLAN.md in ~25 minutes; that is a measured property of the metric, and it
 is why this box's validator is red more often than the plan is wrong.
 """
+
+# ---- Wave 1 (orchestrator, 2026-09-03 05:4xZ): physics + gaps. Owner AmberGate answers in wave 2. ----
+[[box.measurement]]
+claim = "13 plan sections, 7969 lines, assembled by plan-assemble"
+command = "ls docs/plan/[0-9][0-9]-*.md | wc -l; cat docs/plan/[0-9][0-9]-*.md | wc -l"
+value = "13; 7969"
+measured_at = "2026-09-03T05:40Z"
+by = "SnowyCanyon"
+[[box.measurement]]
+claim = "preregistration is nearly empty: the gate guards a ledger with ONE row"
+command = "wc -l docs/plan/HYPOTHESES.jsonl docs/plan/FINDINGS.jsonl docs/plan/CONVERGENCE.jsonl"
+value = "HYPOTHESES=1, FINDINGS=235, CONVERGENCE=87"
+measured_at = "2026-09-03T05:40Z"
+by = "SnowyCanyon"
+[[box.measurement]]
+claim = "plan grading ran 16 hand rounds with no crate"
+command = "ls docs/plan/round*.jsonl | wc -l"
+value = "16"
+measured_at = "2026-09-03T05:40Z"
+by = "SnowyCanyon"
+[[box.measurement]]
+claim = "plan-assemble has 2 in-tree callers and 1 test file"
+command = "grep -rl 'plan_assemble\\|plan-assemble' crates/*/src crates/*/Cargo.toml | grep -v crates/plan-assemble/ | wc -l; ls crates/plan-assemble/tests | wc -l"
+value = "2; 1"
+measured_at = "2026-09-03T05:40Z"
+by = "SnowyCanyon"
+[[box.measurement]]
+claim = "assembly freshness at this instant"
+command = "[ docs/PLAN.md -nt \"$(ls -t docs/plan/[0-9][0-9]-*.md | head -1)\" ]"
+value = "PLAN.md newer than every section (GREEN at 05:40Z; the row's 'RED on this checkout' was true at 05:2xZ — freshness is a moving reading, which is itself a finding)"
+measured_at = "2026-09-03T05:40Z"
+by = "SnowyCanyon"
+
+[[box.gap]]
+what = "S2 writes no LifecycleEvent row; the plan can change with no journal entry"
+resolves = "kxe.8 journal writer + vcd7.1 emit site at plan-assemble's write chokepoint"
+class = "event_row"
+[[box.gap]]
+what = "HYPOTHESES.jsonl holds 1 row for a 7969-line plan: preregistration exists as a gate, not as a practice; 235 FINDINGS have no hypothesis they refute or support"
+resolves = "plan-check (bcrn.1) PC-n: every section's load-bearing claims map to a hypothesis row or the section is UNPREREGISTERED"
+class = "oracle"
+[[box.gap]]
+what = "no machine-readable plan items: the only structured form of 01-12 is the hand-made docs/plan/dag/dag-NN.json (567 items)"
+resolves = "plan-materialize (n92x) extract stage regenerates them from the sections; differential against the hand manifests"
+class = "oracle"
+[[box.gap]]
+what = "docs/PLAN.md can be hand-edited; plan-assemble is not the sole writer, so assembly_freshness measures mtimes, not authorship"
+resolves = "PLAN.md generated-only: a content-hash manifest of consumed sections (12.67) replaces the mtime key; hand edits refused by the pre-commit gate"
+class = "gate_trip"
+[[box.gap]]
+what = "no claim row (L1) for 'the plan is assembled from its sections'; no SLO (L2); no fuzz target on the section parser (L5); no wired-caller test (atom 9)"
+resolves = "registries/claims.toml row; slo.yaml row for plan-assemble; fuzz/fuzz_targets/plan_assemble_sections.rs; WIRED_CALLERS in plan-assemble"
+class = "claim_row"
+[[box.gap]]
+what = "no Verdict-typed output: plan-assemble exits, it does not return a Verdictlike over Outcome"
+resolves = "lf.1.1 Grade/Verdictlike in omp-types, adopted by plan-assemble"
+class = "verdict_type"
+[[box.gap]]
+what = "S2 -> S3 edge is hand-written (11.5): nothing types 'the plan is ready to grade'"
+resolves = "plan-assemble emits PlanAssembled{content_hash, sections[]} consumed by plan-check as its input"
+class = "event_row"
+[[box.gap]]
+what = "no per-box diagram; branches exist only as prose strings"
+resolves = "docs/plan/flow/diagrams/S2.mmd from branches; frankenmermaid validate --fail-on warning"
+class = "diagram"
+[[box.gap]]
+what = "no hook row: the pre-commit gate is the only hook, and it is per-clone and hand-installed (588v)"
+resolves = "hooks_certified.toml row for the pre-commit dispatcher with source_commit + stage; ompo install --hooks writes it"
+class = "hook"
+
+[box.agreement]
+wave = 1
+owner = "AmberGate"
+reviewers = ["BlueLantern", "SilverWolf", "QuietRidge"]
+open_disagreements = 0
+status = "draft"
+approval = ""
+
+[box.diagram]
+mmd = "docs/plan/flow/diagrams/S2.mmd"
+validate_exit = -1
