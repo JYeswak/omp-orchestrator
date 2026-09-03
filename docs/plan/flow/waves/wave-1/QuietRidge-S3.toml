@@ -1,0 +1,17 @@
+[[disagreement]]
+box = "S3"
+field = "gap_inventory"
+owner_says = "S3 walks all 13 classes and is missing 11 of them."
+reviewer_says = "The Wave 1 contract now requires the 9 crate-atom parts plus 7 rigor classes: 16 classes before diagram, hook, and measurement. The owner explicitly records the old 13-class walk, so three required classes are absent from the inventory and the box cannot converge."
+evidence = "sed -n '70,77p' docs/plan/flow/CONTRACT.md; sed -n '89,96p' docs/plan/flow/boxes/S3.toml; grep -cF '[[box.gap]]' docs/plan/flow/boxes/S3.toml -> 12"
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S3"
+field = "sota_cite"
+owner_says = "The cited AUTONOMOUS-WAVE and CONVERGENCE artifacts support the grading rule."
+reviewer_says = "The row cites this-repo files without any :L<n> line locations, contrary to the contract's reproducible citation rule. The source paths exist, but the claim remains unaddressable until exact sed-verified lines are recorded."
+evidence = "sed -n '36,45p' docs/plan/flow/CONTRACT.md; sed -n '14,18p' docs/plan/flow/boxes/S3.toml; test -e .flywheel/AUTONOMOUS-WAVE.md && echo AUTONOMOUS-WAVE=PRESENT"
+severity = "major"
+resolution = ""

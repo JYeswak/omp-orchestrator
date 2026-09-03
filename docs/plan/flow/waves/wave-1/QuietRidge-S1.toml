@@ -1,0 +1,17 @@
+[[disagreement]]
+box = "S1"
+field = "wave1_sections"
+owner_says = "S1 is a draft human-start preference and the layer/hook lists are sufficient context."
+reviewer_says = "S1 is not reviewable under the pinned Wave 1 contract: it has zero box.measurement rows, zero box.gap rows, no box.agreement table, and no box.diagram table. The layer and hook tables do not substitute for the four required sections."
+evidence = "sed -n '54,96p' docs/plan/flow/CONTRACT.md; grep -cF '[[box.measurement]]' docs/plan/flow/boxes/S1.toml; grep -cF '[[box.gap]]' docs/plan/flow/boxes/S1.toml; grep -cF '[box.agreement]' docs/plan/flow/boxes/S1.toml; grep -cF '[box.diagram]' docs/plan/flow/boxes/S1.toml -> 0,0,0,0"
+severity = "blocker"
+resolution = ""
+
+[[disagreement]]
+box = "S1"
+field = "crate_scope"
+owner_says = "installer plus an umbrella MISSING is the current start surface."
+reviewer_says = "The row claims three installer flags and a no-caller state but the live installer exposes four CLI verbs and the umbrella remains MISSING; the count and boundary need a command-backed correction in the owner wave."
+evidence = "sed -n '13,18p;35,50p' crates/installer/src/main.rs"
+severity = "major"
+resolution = ""

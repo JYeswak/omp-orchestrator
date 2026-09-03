@@ -1,0 +1,17 @@
+[[disagreement]]
+box = "S5b"
+field = "gap_inventory"
+owner_says = "S5b's 15 gap rows cover the claim-fence and packet path."
+reviewer_says = "The addendum requires the 9 crate-atom parts plus 7 rigor classes, then explicit diagram, hook, and measurement status. Fifteen rows cannot establish that full inventory; the missing classes must be named rather than inferred from the prose."
+evidence = "sed -n '70,77p' docs/plan/flow/CONTRACT.md; grep -cF '[[box.gap]]' docs/plan/flow/boxes/S5b.toml -> 15"
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S5b"
+field = "kernel_output"
+owner_says = "ClaimFenceError and PacketError lists describe the complete dispatch refusal surface."
+reviewer_says = "The source confirms the listed DispatchIntent, DispatchPermit, and ClaimFenceError arms, but PacketError is a separate production module and transport/pane fence outcomes are not represented in the kernel_output contract. The row must distinguish authorization, packet validation, pane admission, and transport receipt rather than collapsing them into one output."
+evidence = "sed -n '394,452p;526,560p' crates/dispatch-claim-fence/src/lib.rs; sed -n '6,13p' crates/omp-orchestrator/src/dispatch_packet.rs; sed -n '153,183p' crates/omp-orchestrator/src/dispatch_packet.rs"
+severity = "major"
+resolution = ""

@@ -1,0 +1,17 @@
+[[disagreement]]
+box = "S4"
+field = "gap_inventory"
+owner_says = "S4 walks all 13 classes and records the missing plan-materialize and bead-lint crates."
+reviewer_says = "The addendum requires a 16-class walk: 9 crate-atom parts plus 7 rigor classes, followed by explicit diagram, hook, and measurement status. S4 has 13 gap rows and therefore does not name all required classes or the additional obligations."
+evidence = "sed -n '70,77p' docs/plan/flow/CONTRACT.md; sed -n '89,98p' docs/plan/flow/boxes/S4.toml; grep -cF '[[box.gap]]' docs/plan/flow/boxes/S4.toml -> 13"
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S4"
+field = "sota_cite"
+owner_says = "Part::ALL and docs/plan/dag are sufficient citations for the report shape."
+reviewer_says = "The citation names a source file and a directory but supplies no :L<n> location for either. The contract requires a sed-verified source line; a directory citation cannot establish report shape or current DAG content."
+evidence = "sed -n '36,45p' docs/plan/flow/CONTRACT.md; sed -n '13,18p' docs/plan/flow/boxes/S4.toml; sed -n '47,85p' crates/crate-atom-gate/src/lib.rs"
+severity = "major"
+resolution = ""

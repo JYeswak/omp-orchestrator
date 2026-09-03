@@ -1,0 +1,17 @@
+[[disagreement]]
+box = "S2"
+field = "gap_inventory"
+owner_says = "S2 has nine Wave 1 gap rows covering its known missing mechanisms."
+reviewer_says = "The pinned addendum requires the nine crate-atom parts plus seven rigor classes to be walked, with diagram, hook, and measurement obligations named. S2 has 9 gap rows, so it does not enumerate the required 16 classes or the additional sections; a short list is explicitly non-reviewable."
+evidence = "sed -n '70,77p' docs/plan/flow/CONTRACT.md; grep -cF '[[box.gap]]' docs/plan/flow/boxes/S2.toml -> 9"
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S2"
+field = "agreement.approval"
+owner_says = "approval = \"\" is the pending Joshua approval field."
+reviewer_says = "The addendum says unknown values are the literal MISSING, never blank. A blank approval is ambiguous between pending, absent, and accidentally omitted; use MISSING until a real HD row exists."
+evidence = "sed -n '10,10p;82,96p' docs/plan/flow/CONTRACT.md; sed -n '116,125p' docs/plan/flow/boxes/S2.toml"
+severity = "major"
+resolution = ""

@@ -1,0 +1,17 @@
+[[disagreement]]
+box = "S9"
+field = "event_row"
+owner_says = "The S8-to-S9 event carries ledger id, owner, question, evidence, decision, status, outcome, and reason code."
+reviewer_says = "The event row omits actor, pane, and incarnation, which the Wave 1 contract requires on every lifecycle event. A durable ledger id alone does not identify the emitting agent or pane epoch."
+evidence = "sed -n '23,23p' docs/plan/flow/CONTRACT.md; sed -n '9,12p' docs/plan/flow/boxes/S9.toml"
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S9"
+field = "bead"
+owner_says = "The S9 bead is omp-orchestrator-12.58."
+reviewer_says = "The validator explicitly names both gate 12.58 and consumer 12.59, but the bead field names only 12.58. The 12.59 consumer is a separate missing deliverable and must be represented as MISSING or with its actual bead, not silently omitted."
+evidence = "sed -n '8,12p' docs/plan/flow/boxes/S9.toml; grep -n -A2 -B2 '12\\.59' docs/plan/dag/dag-12.json"
+severity = "major"
+resolution = ""

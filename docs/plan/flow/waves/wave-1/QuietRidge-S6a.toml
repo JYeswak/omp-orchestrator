@@ -1,0 +1,17 @@
+[[disagreement]]
+box = "S6a"
+field = "branches"
+owner_says = "The branch list exhaustively covers 16 ReceiptReason arms and six AckAction arms, with a planned AckIncarnationMismatch arm marked MISSING."
+reviewer_says = "The contract requires real enum arms verbatim. S6a collapses all ReceiptReason arms into one string and adds a non-existent AckIncarnationMismatch pseudo-arm; the current source has 16 ReceiptReason arms and the planned arm is not a real branch until implemented. Split the current arms exactly and record the planned gap separately."
+evidence = "sed -n '43,89p' crates/receiver-receipt/src/lib.rs; sed -n '149,169p' crates/receiver-receipt/src/lib.rs; sed -n '429,470p' crates/ack-stage/src/lib.rs; sed -n '16,30p' docs/plan/flow/boxes/S6a.toml"
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S6a"
+field = "agreement.approval"
+owner_says = "approval = '' records that Joshua has not approved the box yet."
+reviewer_says = "The addendum's unknown-value rule requires the literal MISSING, not an ambiguous blank. Use MISSING until a real approval row exists."
+evidence = "sed -n '10,10p;82,96p' docs/plan/flow/CONTRACT.md; sed -n '133,143p' docs/plan/flow/boxes/S6a.toml"
+severity = "major"
+resolution = ""

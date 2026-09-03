@@ -1,0 +1,17 @@
+[[disagreement]]
+box = "S5a"
+field = "event_row"
+owner_says = "The S4-to-S5a LifecycleEvent carries actor, pane, bead, rank, claim_attempt, outcome, and reason_code."
+reviewer_says = "The event row omits incarnation, although the Wave 1 contract requires every lifecycle event to carry actor, pane, and incarnation. A pane id is reusable; without incarnation this row cannot bind a selection decision to the observed pane epoch."
+evidence = "sed -n '23,23p' docs/plan/flow/CONTRACT.md; sed -n '9,12p' docs/plan/flow/boxes/S5a.toml"
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S5a"
+field = "branches"
+owner_says = "The branch list exhaustively names IssueStatus, BlockerState, Availability, and Unblocks outcomes."
+reviewer_says = "The branch strings append prose arrows to enum names instead of preserving the verbatim arms required by the contract, and the box's gap list is 16 rows rather than the full 16-class walk plus diagram, hook, and measurement status. Preserve exact arm names in the owner response and enumerate the additional obligations."
+evidence = "sed -n '44,45p' docs/plan/flow/CONTRACT.md; sed -n '19,99p' crates/bead-availability/src/lib.rs; grep -cF '[[box.gap]]' docs/plan/flow/boxes/S5a.toml -> 16"
+severity = "major"
+resolution = ""

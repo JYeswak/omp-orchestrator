@@ -1,0 +1,17 @@
+[[disagreement]]
+box = "S6c"
+field = "event_row"
+owner_says = "The S6b-to-S6c event carries verifier, grader, bead, mutation, evidence paths, close prefix, close reason, and outcome."
+reviewer_says = "The event row omits the required actor, pane, and incarnation fields. A verifier/grader label without sender identity and pane incarnation cannot establish custody or distinguish a reused pane."
+evidence = "sed -n '23,23p' docs/plan/flow/CONTRACT.md; sed -n '9,12p' docs/plan/flow/boxes/S6c.toml"
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S6c"
+field = "branches"
+owner_says = "The branch list exhaustively covers verify, reap, close-prefix, and close-reason outcomes."
+reviewer_says = "The source's VerifyDispatchRule enum is absent from the branch list, although it is the verifier's real rule type. The owner lists ReapPaneDecision and CloseReasonVerdict but must include VerifyDispatchRule arms verbatim or explicitly state why that type is outside this box."
+evidence = "sed -n '38,68p' crates/verify-dispatch/src/lib.rs; sed -n '139,174p' crates/reap-finished-panes/src/lib.rs; sed -n '16,31p' docs/plan/flow/boxes/S6c.toml"
+severity = "major"
+resolution = ""

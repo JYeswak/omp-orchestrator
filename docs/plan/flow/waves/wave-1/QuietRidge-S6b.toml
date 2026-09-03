@@ -1,0 +1,17 @@
+[[disagreement]]
+box = "S6b"
+field = "kernel_output"
+owner_says = "classify_followup typed enum is MISSING in the current target."
+reviewer_says = "The focused dispatch-silence-watch target does not define classify_followup, but the repository already has the typed follow-up projection in ack-spine/src/followup.rs. The row overstates repository absence; it must name the existing producer and the missing caller/integration boundary."
+evidence = "sed -n '20,80p' crates/ack-spine/src/followup.rs; sed -n '27,50p;174,205p' crates/dispatch-silence-watch/src/lib.rs; sed -n '8,12p' docs/plan/flow/boxes/S6b.toml"
+severity = "major"
+resolution = ""
+
+[[disagreement]]
+box = "S6b"
+field = "agreement.approval"
+owner_says = "approval = '' is the pending approval state."
+reviewer_says = "The Wave 1 unknown rule prohibits blank values. approval must be MISSING until Joshua supplies an HD row."
+evidence = "sed -n '10,10p' docs/plan/flow/CONTRACT.md; sed -n '128,138p' docs/plan/flow/boxes/S6b.toml"
+severity = "major"
+resolution = ""
