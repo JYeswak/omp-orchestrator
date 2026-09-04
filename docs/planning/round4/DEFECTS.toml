@@ -1,0 +1,200 @@
+[verdict]
+round = 4
+role = "fresh-eyes reviewer"
+reviewer = "WildStone"
+pane = "%9"
+bead = "omp-orchestrator-arc-s4-round4-review-033k"
+review_mode = "hierarchical"
+coverage_fraction = "0.09"
+plan_bytes = 680420
+plan_lines = 8200
+index_lines = 332
+round_log_lines = 11
+plan_blob_sha = "c720b4e265b799bf4b705e546a786596b851b640"
+head_commit = "fe1638c577c539fd6a7831bc6df35c4b4c4f51b1"
+read_complete = [
+  "docs/planning/DESIGN_INDEX.md:1-332",
+  "docs/planning/ROUND_LOG.md:1-11",
+  "docs/PLAN.md:1-143 constitution header and S2 sentinel graph",
+  "docs/plan/00-brief.md:18-80 R1-R13 source rows for REQ-001..013",
+  "docs/plan/00-brief.md:565-575 INV-001/INV-002 writing-contract rows",
+  "docs/plan/01-idea.md:411-438 GATE-001..010 and RISK-001..006 source tables",
+  "docs/plan/06-gates.md:28-40 GATE-011..018 crate rows",
+  "docs/plan/06-gates.md:225-234 GATE-019..024 six properties",
+  "docs/plan/09-milestones.md:32-81 M1-M2 headings and mermaid chain for WP-003..004",
+  "docs/plan/flow/boxes/S8.toml:1-181 rollback authority after Round 3 weaken",
+  "crates/no-shell-gate/tests/wired_lanes.rs:63-75 GATE-001..011 identifier table",
+  "docs/decisions.jsonl:1-24 HD-0001 through HD-0017",
+  "stable-ID census of all 72 DESIGN_INDEX canonical IDs against git grep -F outside the index",
+]
+read_unreviewed = [
+  "docs/PLAN.md:144-8200 section bodies except the sampled source excerpts above",
+  "docs/plan/02-surface-census.md through 05-actions.md, 07-installability.md, 08-end-users.md, 10-prior-art.md, 11-lifecycle.md, 12-journey.md bodies",
+  "all 32 docs/contracts/*.md bodies",
+  "docs/plan/flow/boxes/{S1,S2,S3,S4,S5a,S5b,S6a,S6b,S6c,S7,S9}.toml",
+]
+ids_sampled = 8
+ids_sampled_list = [
+  "REQ-001",
+  "INV-001",
+  "GATE-001",
+  "GATE-011",
+  "WP-003",
+  "RISK-001",
+  "HD-0009",
+  "INV-2026",
+]
+ids_census = 72
+ids_earned = 34
+ids_still_decorative = 38
+ids_cut_recommended = 38
+is_a_dag = false
+edges_index_claimed = 7
+edges_validator_visible = 1
+weakened_to_truth = "yes-in-index-only"
+other_unearned = 1
+diff_class = "STRUCTURAL"
+decomposition_verdict = "wrong"
+verdict = "ROUND 5 REQUIRED: STRUCTURAL — 38 decorative aliases; validator-blind product DAG; HD harvest already stale; S8 authority still overclaims; no BEADS READY authorization"
+
+[[defect]]
+id = "DEF-001"
+severity = "P1"
+class = "DECORATIVE_IDENTIFIER_REGISTER"
+affected_ids = [
+  "REQ-001",
+  "REQ-002",
+  "REQ-003",
+  "REQ-004",
+  "REQ-005",
+  "REQ-006",
+  "REQ-007",
+  "REQ-008",
+  "REQ-009",
+  "REQ-010",
+  "REQ-011",
+  "REQ-012",
+  "REQ-013",
+  "INV-001",
+  "INV-002",
+  "INV-003",
+  "INV-004",
+  "INV-005",
+  "INV-006",
+  "INV-007",
+  "INV-008",
+  "INV-009",
+  "INV-010",
+  "INV-011",
+  "INV-012",
+  "WP-003",
+  "WP-004",
+  "WP-005",
+  "WP-006",
+  "WP-007",
+  "WP-008",
+  "WP-009",
+  "RISK-001",
+  "RISK-002",
+  "RISK-003",
+  "RISK-004",
+  "RISK-005",
+  "RISK-006",
+]
+evidence = [
+  "DESIGN_INDEX.md:319-322 claims IDS_AFTER=72 and 'No semantic item is invented by this index'",
+  "git grep -lF outside DESIGN_INDEX and docs/planning/round*: 38 of 72 canonical IDs have zero files",
+  "REQ-001..013 never appear; source authority is still R1-R13 at docs/plan/00-brief.md:21-80",
+  "INV-001..012 never appear; INV-001 source is still the unnumbered writing-contract bullet at 00-brief.md:569-570",
+  "WP-003..009 never appear; source headings are still M1-M7 at 09-milestones.md:45-215",
+  "RISK-001..006 never appear; source is still the unnumbered risk table at 01-idea.md:433-438",
+  "the 34 IDs that did earn a consumer: GATE-001..024 in crates/no-shell-gate/tests/wired_lanes.rs:63-75; HD-0009..0015 in docs/decisions.jsonl; INV-2026/WP-001/WP-002 in docs/PLAN.md:35-88",
+]
+failure_consequence = "A reader, validator, or plan_to_beads conversion can treat 72 addressable IDs as a work graph. 38 of those IDs have no consumer outside the index that minted them. Round 3 closed 'name the alias'. Round 4 asked whether the alias earned a place. It did not. Keeping 72 is a larger decorative registry; the true set is 34."
+minimal_repair = "Cut the 38 unused aliases from the canonical count. Keep the source numbering (R1-R13, M1-M7, idea gates 8-17, risk table rows, INV writing-contract bullets). Do not invent REQ/INV/WP-milestone/RISK IDs until the constitution, a crate table, or a bead actually cites them."
+owner = "%8 integrator"
+verification_method = "Re-run git grep -lF for every remaining canonical ID excluding DESIGN_INDEX and docs/planning/round*; require zero IDs that match only the index. Report IDS_AFTER as the count with at least one non-index consumer."
+
+[[defect]]
+id = "DEF-002"
+severity = "P1"
+class = "VALIDATOR_BLIND_PRODUCT_DAG"
+affected_ids = [
+  "WP-001",
+  "WP-002",
+  "WP-003",
+  "WP-004",
+  "WP-005",
+  "WP-006",
+  "WP-007",
+  "WP-008",
+  "WP-009",
+]
+evidence = [
+  "docs/PLAN.md:81-88 is the only constitution DAG: WP-001 then WP-002 depends on WP-001. That is one edge.",
+  "DESIGN_INDEX.md:300-317 claims seven derived edges: the S2 sentinel plus M1→M7. Those six product edges live only in the index table, as citations of 09-milestones.md:32-41 mermaid.",
+  "DESIGN_INDEX.md:304-305 states the two graphs are intentionally not joined until a source authority says plan review gates M1",
+  "ROUND_LOG.md Round 2 line claimed '7 milestone edges derived'; the integrator report said 'dependency edges parsed: 1 ready set: 1'",
+  "WP-001/WP-002 are completed planning-process nodes (S2 repair, S4 review). WP-003..009 alias unimplemented product milestones. One ID family.",
+]
+failure_consequence = "Mechanical DAG audit of the constitution still sees a two-node finished process. Bead conversion from PLAN.md cannot emit M1-M7. Bead conversion from the index would either re-file finished process as work or emit aliases nobody else uses. This is why Rounds 2 and 3 stayed STRUCTURAL: the decomposition added a register around a sentinel, not a DAG."
+minimal_repair = "Put the product dependency graph in the constitution in the same table the validator parses, using the source milestone IDs (M1-M7) or promoted WP IDs — one graph, not two. Keep WP-001/WP-002 out of that graph or tombstone them as process sentinels. Join to M1 only when a cited source authority says so; until then the honest constitution graph is still one edge."
+owner = "%8 integrator"
+verification_method = "Run the plan validator's DAG parse against PLAN.md and DESIGN_INDEX.md; require the product chain the index claims to be visible to the same parser, or require the index to stop claiming seven edges. Ready-set size must match the unblocked product roots, not WP-001."
+
+[[defect]]
+id = "DEF-003"
+severity = "P1"
+class = "STALE_HARVEST_VS_LEDGER"
+affected_ids = [
+  "HD-0009",
+  "HD-0010",
+  "HD-0011",
+  "HD-0012",
+  "HD-0013",
+  "HD-0014",
+  "HD-0015",
+]
+evidence = [
+  "DESIGN_INDEX.md:242-256 harvests seven unique HD IDs: HD-0009 through HD-0015, classified as DEC",
+  "DESIGN_INDEX.md:319 expected unique register counts include DEC=7; total IDS_AFTER=72",
+  "docs/decisions.jsonl contains HD-0001 through HD-0017 as of this review (rows 1-8 are prior decisions; rows 23-24 are HD-0016 and HD-0017, both still empty-decision)",
+  "HD-0009 appears twice (empty ask at jsonl:9, answered at jsonl:14) — the index names this duplicate condition but still counts seven unique IDs as the register",
+  "the harvest omitted HD-0001..0008 without a stated exclusion rule, then froze before HD-0016/HD-0017 landed",
+]
+failure_consequence = "The index claims to be a deterministic alias of existing authorities. Its DEC slice is already neither complete nor current relative to docs/decisions.jsonl, the named authority at DESIGN_INDEX.md:36 and :272. A Round 5 reader who trusts DEC=7 will miss two open Joshua questions and eight earlier binding decisions."
+minimal_repair = "Either harvest every unique HD-* currently in docs/decisions.jsonl, or state an explicit inclusion rule (for example: unanswered S1/S8/S9 rows only) and date it. Do not keep a frozen 7-row DEC count while the ledger grows."
+owner = "%8 integrator"
+verification_method = "Diff sorted unique id fields in docs/decisions.jsonl against DESIGN_INDEX §3.6; require the register either equal the ledger or cite the exclusion rule and the excluded IDs by name."
+
+[[defect]]
+id = "DEF-004"
+severity = "P1"
+class = "AUTHORITY_STILL_OVERCLAIMS"
+affected_ids = ["REQ-008", "INV-011", "WP-008", "HD-0013"]
+evidence = [
+  "DESIGN_INDEX.md:128-129 correctly marks missing rollback artifacts PROJECTED and not an already-demonstrated gate trip (Round 3 DEF-006 repair)",
+  "docs/plan/flow/boxes/S8.toml:12 still says present-tense 'jplf.7.20 supplies the prior-binary rollback transcript'",
+  "S8.toml:73-75 measurement: tests_dir=MISSING; no persisted rollback transcript found",
+  "S8.toml:143 gap rigor.L4.gate_trip=PARTIAL — 'no current rollback transcript proves the end-to-end gate trip'",
+  "S8.toml is the sole install/rollback authority per DESIGN_INDEX.md:125-128",
+]
+failure_consequence = "Round 3 weakened the index, which is not the authority. A hierarchical reviewer who loads S8.toml as instructed still reads a supplied transcript. The overclaim did not retreat; it moved out of the file Round 3 was allowed to edit."
+minimal_repair = "Change S8.toml validator language to PROJECTED until a retained transcript and schema-valid persisted manifest exist. Keep identity/staged-install refusals as the currently evidenced legs. Do not describe jplf.7.20 as supplying a transcript it has not produced."
+owner = "%8 integrator with S8 owner"
+verification_method = "Re-read S8.toml validator, measurement, and rigor.L4 rows; require no present-tense 'supplies'/'proves' for rollback while tests_dir=MISSING and no persisted transcript path exists."
+
+[[defect]]
+id = "DEF-005"
+severity = "P3"
+class = "STALE_STEADY_STATE_HEADER"
+affected_ids = ["WP-002"]
+evidence = [
+  "docs/PLAN.md:9 Document status is Round 3 integration",
+  "docs/PLAN.md:14 STEADY STATE line still says 'S4 Round 2 is structural'",
+  "docs/planning/ROUND_LOG.md:10-11 records Round 3 and next=S4_REVIEW",
+]
+failure_consequence = "A header that names the wrong round trains reviewers to treat Round 3 as unintegrated. Polish, not the reason this round is STRUCTURAL."
+minimal_repair = "Set the STEADY STATE line to Round 3/4 structural and not bead-ready, without claiming freeze."
+owner = "%8 integrator"
+verification_method = "docs/PLAN.md STEADY STATE sentence names the latest completed round and remains NO."
