@@ -3,18 +3,21 @@
 **A single installable Rust binary that takes a repo's own work graph and drives it to completion
 across a fleet of agents, refusing every step it cannot prove.**
 
-Assembled from `docs/plan/`. **The section files are the source of truth**; this document is their
-concatenation. Edit a section, then re-assemble — never edit here, and never re-stamp this file's
-mtime to satisfy the freshness gate (§12.11 records the author doing exactly that).
-**Document status:** S2 PLAN GATE PASS; validator exit 0 is recorded in
-`docs/planning/ROUND_LOG.md`; S4 independent review remains required.
-**STEADY STATE:** NO — S2 mechanical gate only; this plan is not frozen or bead-ready.
+Assembled from `docs/plan/`. Section files remain the source of truth for the body; this header is the
+constitution's review metadata and companion boundary. Body changes are made in a section, then
+re-assembled; `DESIGN_INDEX.md` governs delegated companions.
+**Document status:** S4 ROUND 2 STRUCTURAL — hierarchical index integration; S2 validator exit 0 remains
+necessary but does not certify readiness.
+**Review mode:** HIERARCHICAL — this file is the constitution; reviewers load the design index and
+the selected normative companions rather than treating one companion as the whole plan.
+**Design index:** `docs/planning/DESIGN_INDEX.md`
+**STEADY STATE:** NO — S4 Round 2 is structural; the plan is not frozen or bead-ready.
 ## Document control
 
 - **Owner:** omp-orchestrator planning lane
-- **Revision:** v1; resume repair is recorded in `docs/planning/ROUND_LOG.md`
-- **Authority:** `docs/plan/` section files plus this assembled gate artifact
-- **Scope of this pass:** S2 mechanical closure only; no implementation or contract changes.
+- **Revision:** v2; S4 Round 2 hierarchical integration
+- **Authority:** `docs/PLAN.md` constitution, `docs/planning/DESIGN_INDEX.md`, `docs/plan/` source files, and delegated companions
+- **Scope of this pass:** S4 substantive ID/index review only; no crates, S1.toml, or contract edits.
 
 ## Normative language
 
@@ -29,8 +32,8 @@ producing command and source revision.
 
 ## Stable identifiers
 
-Published IDs are immutable; superseded IDs remain tombstones with replacement references. This pass defines
-the missing provenance marker once and keeps work-package IDs in the dependency table below.
+The canonical cross-companion register is `docs/planning/DESIGN_INDEX.md`. `INV-2026` and `WP-001`/`WP-002` remain compatibility sentinels for the S2 validator; the full harvested register is delegated to the index and is not duplicated here.
+
 
 | ID | Meaning | Authority |
 |---|---|---|
@@ -77,7 +80,7 @@ Release staging remains owned by §9 and §12; S2 PASS is not a release or launc
 
 ## S2 plan-gate dependency graph
 
-This two-node graph makes the current planning sequence addressable; product work remains in §9 and §12.
+The S2 two-node edge remains as a validator sentinel. The substantive graph is delegated to `docs/planning/DESIGN_INDEX.md`, where each edge is tied to the existing milestone order and no new work is introduced.
 
 | ID | Work package | Depends on |
 |---|---|---|
@@ -93,6 +96,7 @@ plan addressable without restating the evidence.
 |---:|---|---|---|---:|
 | 0 | planning-arc-validator | BLOCKING baseline; missing control metadata and one undefined reference | STRUCTURAL | 2 |
 | 1 | planning-arc-validator | NOT BEADS READY — S2 PLAN GATE PASS; S4 independent review remains | STRUCTURAL | 0 |
+| 2 | planning-arc-v1.2 substance audit | NOT BEADS READY — RESTRUCTURE to hierarchical constitution plus indexed normative companions; stable register harvested from existing authorities | STRUCTURAL | 0 |
 
 
 
