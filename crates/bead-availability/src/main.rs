@@ -6,8 +6,11 @@ use bead_availability::collect_live;
 use std::env;
 use std::process::ExitCode;
 
+#[used]
+static BUILD_ID_MARKER: &[u8] = concat!("build_id=", env!("OMP_BUILD_ID")).as_bytes();
+
 fn usage() -> &'static str {
-    "usage: bead-availability [--json] [--br PATH]\n       reports live blockers for every non-terminal bead; closed blockers are RELEASED"
+    "usage: bead-availability [--json] [--br PATH] [--version]\n       reports live blockers for every non-terminal bead; closed blockers are RELEASED"
 }
 
 fn main() -> ExitCode {
@@ -18,6 +21,10 @@ fn main() -> ExitCode {
     while index < args.len() {
         match args[index].as_str() {
             "--json" => json = true,
+            "--version" => {
+                println!("bead-availability 0.1.0 build_id={}", env!("OMP_BUILD_ID"));
+                return ExitCode::SUCCESS;
+            }
             "--help" | "-h" => {
                 println!("{}", usage());
                 return ExitCode::SUCCESS;

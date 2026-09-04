@@ -19,6 +19,7 @@ const BINARIES: &[(&str, &str)] = &[
     ("tick-monitor", "tick-monitor"),
     ("pane-truth", "pane-truth"),
     ("installer", "installer"),
+    ("bead-availability", "bead-availability"),
 ];
 
 fn main() -> ExitCode {
@@ -178,7 +179,7 @@ fn run_install(repo_root: &PathBuf, bin_dir: &PathBuf, target: &str) -> ExitCode
     let Some((crate_name, binary_name)) =
         BINARIES.iter().find(|(_, name)| *name == target).copied()
     else {
-        eprintln!("INSTALLER ERROR: unknown target {target:?}; expected one of omp-orchestrator, tick-monitor, pane-truth, installer");
+        eprintln!("INSTALLER ERROR: unknown target {target:?}; expected one of omp-orchestrator, tick-monitor, pane-truth, installer, bead-availability");
         return ExitCode::from(2);
     };
     let ownership = installer::resolve_repo_ownership(repo_root, binary_name);

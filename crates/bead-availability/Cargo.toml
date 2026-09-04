@@ -4,12 +4,12 @@ name = "bead-availability"
 version = "0.1.0"
 edition = "2021"
 publish = false
+build = "build.rs"
 description = "Live blocker availability with released edges and tri-state unblocks"
 
 [[bin]]
 name = "bead-availability"
 path = "src/main.rs"
-
 [lib]
 name = "bead_availability"
 path = "src/lib.rs"
