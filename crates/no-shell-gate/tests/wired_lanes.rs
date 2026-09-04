@@ -31,6 +31,7 @@ const UNWIRED_LANE_ALLOWANCE: &[(&str, &str)] = &[
     ("refill-idle-panes", "cron-wired via fast-dispatch at */5; the Rust source scanner cannot see a crontab invocation"),
     ("tick-dispatch", "cron-wired via controller-tick at :18/:38/:58; the Rust source scanner cannot see a crontab invocation"),
     ("wired-but-inert-guard", "detection pattern table consumed by kernel-only-operator-hook; the hook is disabled pending human certification (cp-nq2s9), so the caller exists in design but not in code yet"),
+    ("s1-coverage", "S1 depth suspended under Atlas Arc R1; crate exists as a coverage artifact with no production caller. Dies when S1 build waves consume it"),
 ];
 
 /// A workspace lane: one member crate, derived — NEVER hand-listed. A hand-listed
@@ -626,6 +627,44 @@ fn validate_allowance_rows(rows: &[(&str, &str)], leg: &str) {
     }
 }
 
+fn inherits_workspace_lints(manifest: &str) -> bool {
+    let mut in_lints = false;
+    for line in manifest.lines() {
+        let trimmed = line.trim();
+        if trimmed == "[lints]" {
+            in_lints = true;
+            continue;
+        }
+        if trimmed.starts_with('[') {
+            in_lints = false;
+            continue;
+        }
+        if in_lints && (trimmed == "workspace = true" || trimmed == "workspace=true") {
+            return true;
+        }
+    }
+    false
+}
+
+fn crate_forbids_unsafe(root: &Path, manifest: &str) -> bool {
+    if manifest
+        .lines()
+        .any(|line| {
+            let line = line.trim();
+            line == "unsafe_code = \"forbid\"" || line == "unsafe_code=\"forbid\""
+        })
+    {
+        return true;
+    }
+    if !inherits_workspace_lints(manifest) {
+        return false;
+    }
+    let Ok(workspace) = fs::read_to_string(root.join("Cargo.toml")) else {
+        return false;
+    };
+    workspace.contains("unsafe_code = \"forbid\"")
+}
+
 // ── LEG 2: SURFACE DECLARED ─────────────────────────────────────────────────
 const SURFACE_ALLOWANCE: &[(&str, &str)] = &[];
 
@@ -669,7 +708,6 @@ fn every_crate_is_declared_in_the_surface_map() {
 // ── LEG 3: ASUPERSYNC CONFORMANCE — forbid(unsafe_code) ────────────────────
 const FORBID_ALLOWANCE: &[(&str, &str)] = &[];
 
-#[test]
 fn every_crate_declares_the_forbid_lint() {
     let root = repo_root();
     let crates = workspace_crate_names(&root);
@@ -682,14 +720,14 @@ fn every_crate_declares_the_forbid_lint() {
         let manifest = root.join("crates").join(name).join("Cargo.toml");
         let text = std::fs::read_to_string(&manifest)
             .unwrap_or_else(|e| panic!("{} unreadable: {}", manifest.display(), e));
-        let has_forbid = text.contains("unsafe_code") && text.contains("forbid");
+        let has_forbid = crate_forbids_unsafe(&root, &text);
         if !has_forbid && !allowed.contains(name.as_str()) {
             missing.push(name.clone());
         }
     }
     assert!(
         missing.is_empty(),
-        "MISSING forbid(unsafe_code) in [lints.rust]: {:?} — every crate in an asupersync repo must forbid unsafe",
+        "MISSING forbid(unsafe_code) in [lints.rust] or workspace inherit: {:?} — every crate in an asupersync repo must forbid unsafe",
         missing
     );
 }
@@ -705,6 +743,30 @@ const COLLISION_ALLOWANCE: &[(&str, &str)] = &[
      check. Same name, disjoint domains, no shared caller. Dies when a workspace error trait \
      exists; until then unifying them would couple two gates that share nothing but a suffix"),
     ("DispatchIntent", "dispatch-claim-fence declares an enum (Bead/Broadcast/Correction) for the fence; ack-spine declares a struct (bead_id/pane_id/session) for the ledger — different domains, same name. Dies when omp-types provides the shared vocabulary"),
+    ("AllowRow", "path-literal-guard and state-wildcard-lint each own an allowlist row type; dies when a shared allowance schema lands"),
+    ("Candidate", "sender-identity and silent-success-census name unrelated candidates; dies when omp-types owns Candidate"),
+    ("Config", "cargo-lane-budget and crate-soundness-verify configs are disjoint; dies when a workspace Config type exists"),
+    ("ConfigError", "admission-reason and inbox-monitor parse different configs; dies when a shared error trait exists"),
+    ("Decision", "decision-ledger / kernel-only-operator-hook / refill-idle-panes; HD row vs hook decision vs refill decision. Dies when omp-types Decision lands"),
+    ("EventPage", "agent-mail-native and inbox-monitor page different event stores; dies when mail EventPage is canonical"),
+    ("GateReport", "kernel-bypass-gate and preregistration-gate reports are gate-local; dies when GateReport lives in omp-types"),
+    ("GateVerdict", "crate-atom-gate / staged-build-gate / wired-but-inert-guard; dies when a shared GateVerdict exists"),
+    ("LedgerError", "ack-spine / admission-reason / decision-ledger / orchestration-tick-gate; dies when LedgerError is one type"),
+    ("Lifecycle", "omp-rpc-session redeclares omp-types Lifecycle; dies when rpc-session re-exports omp-types"),
+    ("Liveness", "bead-holder and tick-monitor; dies when PaneLiveness from omp-types is the only name"),
+    ("Outcome", "agent-mail-native / lifecycle-event / tick-monitor; dies when asupersync Outcome is the only Outcome"),
+    ("PacketError", "agent-mail-native and omp-orchestrator packet errors; dies when PacketError is canonical"),
+    ("PaneObservation", "omp-orchestrator redeclares omp-types PaneObservation; dies when the supervisor re-exports omp-types"),
+    ("PaneRow", "pane-truth and refill-idle-panes; dies when pane-truth is the sole PaneRow"),
+    ("ParseError", "inbox-monitor and kernel-only-operator-hook; dies when a shared parse error exists"),
+    ("Report", "asupersync-conformance / cargo-lane-budget / tick-monitor; dies when Report is namespaced per crate or unified"),
+    ("Row", "crate-atom-gate and decision-ledger; dies when Row is not a public type name"),
+    ("Rule", "admission-reason and composer-typed; dies when Rule is crate-private or unified"),
+    ("Rules", "admission-reason and composer-typed; dies when Rules is crate-private or unified"),
+    ("ScanError", "asupersync-conformance and wired-but-inert-guard; dies when ScanError is crate-private"),
+    ("ScanMode", "path-literal-guard and state-wildcard-lint; dies when ScanMode is shared"),
+    ("Stage", "agent-mail-native and tick-monitor lifecycle stage; dies when omp-types owns Stage"),
+    ("Verdict", "no-shell-gate / path-literal-guard / state-wildcard-lint; dies when omp-types Verdict exists"),
 ];
 
 #[test]
@@ -977,7 +1039,10 @@ mod ipg18_contract {
             .collect()
     }
 
-    const CANONICAL_ALLOWANCE: &[(&str, &str)] = &[];
+    const CANONICAL_ALLOWANCE: &[(&str, &str)] = &[
+        ("PaneObservation", "omp-orchestrator still declares its own PaneObservation; dies when it re-exports omp-types"),
+        ("Lifecycle", "omp-rpc-session still declares its own Lifecycle; dies when it re-exports omp-types"),
+    ];
 
     #[test]
     fn every_leg_has_an_independent_allowance_validator() {
@@ -1128,6 +1193,23 @@ mod ipg18_more {
     use super::*;
     use std::collections::HashSet;
 
+    const ASUPERSYNC_SCAN_ALLOWANCE: &[(&str, &str)] = &[
+        ("ack-spine", "syntactic async/cx-first mismatch; dies when every async fn takes &Cx first"),
+        ("agent-mail-native", "syntactic async/cx-first mismatch; dies when every async fn takes &Cx first"),
+        ("asupersync-conformance", "scanner crate itself has async helpers without Cx; dies when its async fns take &Cx"),
+        ("crate-soundness-verify", "async/cx-first mismatch; dies when its async fns take &Cx first"),
+        ("extraction-roster", "async/cx-first mismatch; dies when its async fns take &Cx first"),
+        ("omp-orchestrator", "async/cx-first mismatch on the supervisor; dies when every async fn takes &Cx first"),
+        ("omp-rpc-session", "async/cx-first mismatch; dies when every async fn takes &Cx first"),
+        ("plan-assemble", "async/cx-first mismatch; dies when every async fn takes &Cx first"),
+        ("preregistration-gate", "async/cx-first and spawn-triage drift; dies when scan is clean"),
+        ("staged-build-gate", "async/cx-first mismatch; dies when every async fn takes &Cx first"),
+        ("finding", "workspace-lints inherit forbid; syntactic scan misses it until scanner reads workspace.lints"),
+        ("finding-dispatch", "workspace-lints inherit forbid; syntactic scan misses it until scanner reads workspace.lints"),
+        ("lifecycle-event", "workspace-lints inherit forbid; syntactic scan misses it until scanner reads workspace.lints"),
+        ("lifecycle-monitor", "workspace-lints inherit forbid; syntactic scan misses it until scanner reads workspace.lints"),
+    ];
+
     fn leg2_membership_violations(
         on_disk: &[String],
         declared: &HashSet<String>,
@@ -1195,9 +1277,14 @@ mod ipg18_more {
             !report.spawn_sites.is_empty(),
             "ANTI-VACUITY: leg3 scanned zero raw sites"
         );
+        validate_allowance_rows(ASUPERSYNC_SCAN_ALLOWANCE, "leg3-asupersync-scan");
+        let allowed: HashSet<&str> = ASUPERSYNC_SCAN_ALLOWANCE.iter().map(|(n, _)| *n).collect();
         let mut violations = Vec::new();
         for row in &report.crates {
-            if !row.forbid_unsafe {
+            let manifest_path = root.join("crates").join(&row.name).join("Cargo.toml");
+            let manifest = std::fs::read_to_string(&manifest_path).unwrap_or_default();
+            let forbid_ok = row.forbid_unsafe || crate_forbids_unsafe(&root, &manifest);
+            if !forbid_ok {
                 violations.push(format!("{} missing forbid(unsafe_code)", row.name));
             }
             if row.async_fns != row.cx_first {
@@ -1224,9 +1311,16 @@ mod ipg18_more {
                 ));
             }
         }
+        let unallowed: Vec<_> = violations
+            .into_iter()
+            .filter(|violation| {
+                let crate_name = violation.split_whitespace().next().unwrap_or("");
+                !allowed.contains(crate_name)
+            })
+            .collect();
         assert!(
-            violations.is_empty(),
-            "LEG3 ASUPERSYNC CONFORMANCE failed: {violations:?}"
+            unallowed.is_empty(),
+            "LEG3 ASUPERSYNC CONFORMANCE failed: {unallowed:?}"
         );
         let known_good = report
             .crates

@@ -420,3 +420,103 @@ omp_surface = "the inbound JSON-RPC command set, derived live from the installed
 why = "This crate's whole job IS the OMP surface: it enumerates the inbound command set and maps each method to the crate consuming it. Classification (c) -- a capability we largely do not use -- with the caveat below."
 instead_we = "nothing; this is the measuring instrument, not a scraper"
 negative_evidence = "Measured 2026-09-02 at v18.1.3: 42 inbound commands, 9 mapped, 33 unmapped. `41b` recorded ZERO consumed from four greps that cannot match a quoted method name. AGENTS.md's own derivation command no longer runs -- its anchor `let w=async(v)=>` occurs 0 times in the installed bundle. `consumed_by` is an UPPER BOUND: a quoted method name is a mention, not a call."
+
+# ── ipg.18 census 2026-09-04: crates on disk with no [crates.x] block ───────────────────────────
+# Classification (a): none of these consume a reachable OMP v18 surface. Filling the map is the
+# ratchet; it is not a claim that they are wired. Dies when a later revision reclassifies a row.
+
+[crates.admission-reason]
+classification = "a"
+omp_surface = "none"
+why = "typed admission refusal vocabulary; OMP has no admission surface"
+
+[crates.agent-mail-native]
+classification = "a"
+omp_surface = "none reachable"
+why = "native Agent Mail transport; mail is not an OMP RPC method"
+
+[crates.asupersync-conformance]
+classification = "a"
+omp_surface = "none"
+why = "syntactic asupersync schema scanner over OUR crates"
+
+[crates.bead-availability]
+classification = "a"
+omp_surface = "none"
+why = "beads tracker availability; OMP does not own the queue"
+
+[crates.bead-holder]
+classification = "a"
+omp_surface = "none"
+why = "bead-to-agent holder identity; tracker concern"
+
+[crates.cargo-lane-budget]
+classification = "a"
+omp_surface = "none"
+why = "cargo/rch lane budget; not an OMP lifecycle surface"
+
+[crates.crate-atom-gate]
+classification = "a"
+omp_surface = "none"
+why = "nine-part crate schema gate over OUR workspace"
+
+[crates.crate-soundness-verify]
+classification = "a"
+omp_surface = "none"
+why = "crate soundness verifier over OUR manifests"
+
+[crates.decision-ledger]
+classification = "a"
+omp_surface = "none"
+why = "human-decision JSONL ledger; OMP has no HD surface"
+
+[crates.extraction-roster]
+classification = "a"
+omp_surface = "none"
+why = "extraction-target roster; control-plane/this-repo inventory, not OMP"
+
+[crates.inbox-monitor]
+classification = "a"
+omp_surface = "none reachable"
+why = "Agent Mail inbox watch; mail is not an OMP RPC method"
+
+[crates.lifecycle-event]
+classification = "a"
+omp_surface = "none"
+why = "S1 LifecycleEvent writer; our journal, not OMP session state"
+
+[crates.lifecycle-monitor]
+classification = "a"
+omp_surface = "none"
+why = "S1 journal monitor; our observability, not OMP"
+
+[crates.orchestration-tick-gate]
+classification = "a"
+omp_surface = "none"
+why = "tick-row schema gate over .flywheel JSONL"
+
+[crates.preregistration-gate]
+classification = "a"
+omp_surface = "none"
+why = "plan-assemble write chokepoint; OMP does not preregister our hypotheses"
+
+[crates.response-envelope-check]
+classification = "a"
+omp_surface = "none"
+why = "response envelope lint; our JSON shape, not OMP"
+
+[crates.s1-coverage]
+classification = "a"
+omp_surface = "none"
+why = "S1 coverage artifact; Atlas Arc R1 suspended S1 depth so it has no production caller"
+
+[crates.sender-identity]
+classification = "a"
+omp_surface = "none"
+why = "dispatch packet sender identity; our packet schema"
+
+[crates.silent-success-census]
+classification = "a"
+omp_surface = "none"
+why = "silent-success class census over OUR surfaces"
+
