@@ -1,0 +1,127 @@
+[verdict]
+round = 3
+role = "fresh-eyes reviewer"
+review_mode = "hierarchical"
+coverage_fraction = "0.12"
+plan_bytes = 680047
+plan_lines = 8200
+index_lines = 307
+round_log_lines = 10
+read_complete = [
+  "docs/planning/DESIGN_INDEX.md:1-307",
+  "docs/planning/ROUND_LOG.md:1-10",
+  "docs/PLAN.md:1-143",
+  "docs/PLAN.md:144-345",
+  "docs/PLAN.md:4134-4705 targeted gate and matrix excerpts",
+  "docs/PLAN.md:4706-6123 targeted install, end-user, and milestone excerpts",
+  "docs/PLAN.md:6462-8200 targeted lifecycle, journey, and claim excerpts",
+  "stable-ID census over all 680047 bytes of docs/PLAN.md and all 19170 bytes of DESIGN_INDEX.md",
+]
+read_unreviewed = [
+  "full prose bodies of PLAN.md sections 00-05 outside the recorded ranges",
+  "full prose bodies of PLAN.md sections 10-12 outside the recorded ranges",
+  "all companion contract bodies except the directly cited orchestration and schema excerpts",
+]
+ids_sampled = 8
+ids_unreferenced_outside_index = 69
+delegations_named = "43/60"
+delegation_metric = "Named means a per-row delegated concern is present: 31 contract rows plus 12 box rows. The 16 artifact rows name persisted surfaces but no per-row reader/shape authority, and one of the 32 contract files is omitted."
+diff_class = "STRUCTURAL"
+demote_candidates = []
+unearned_claims = 1
+verdict = "ROUND 4 REQUIRED: STRUCTURAL — partial coverage; no BEADS READY authorization"
+
+[[defect]]
+id = "DEF-001"
+severity = "P1"
+class = "NORMATIVE_CORPUS_OMISSION"
+affected_ids = ["REQ-013", "INV-004", "INV-006", "INV-007", "INV-008", "INV-009", "INV-012"]
+evidence = [
+  "docs/planning/DESIGN_INDEX.md:67-105 claims all 32 files under docs/contracts are normative but contains 31 contract path rows",
+  "filesystem census: find docs/contracts -maxdepth 1 -type f -name '*.md' -> 32; index contract rows -> 31",
+  "the omitted path is docs/contracts/orchestration_contract.md",
+  "docs/contracts/orchestration_contract.md:1-20 defines the canonical tick artifact and six orchestration laws",
+]
+failure_consequence = "Hierarchical review can omit the contract that defines the tick artifact and its laws while the index still reports the complete 32-file normative corpus. A later reader cannot know whether the omission is intentional, retired, or an unreviewed authority gap."
+minimal_repair = "Add orchestration_contract.md to the normative contract table with its delegated concern, then re-derive the 32-row path set and add it to the applicable constitution cross-reference without copying the contract body."
+owner = "%8 integrator"
+verification_method = "Compare the sorted docs/contracts/*.md path set against the sorted index table path set; require 32=32, require orchestration_contract.md, and verify its cross-reference names the affected invariant rows."
+
+[[defect]]
+id = "DEF-002"
+severity = "P1"
+class = "OVERLAPPING_INSTALL_AUTHORITY"
+affected_ids = ["REQ-008", "INV-011", "WP-008", "HD-0013"]
+evidence = [
+  "docs/planning/DESIGN_INDEX.md:34-41 says a companion is normative only for the surface named in its row",
+  "docs/planning/DESIGN_INDEX.md:106-130 assigns S1 a human-start/install concern and assigns S8 install, identity, build, and rollback",
+  "docs/contracts/s1_l0_install.md:1-20 is also the named S1 install contract",
+  "docs/PLAN.md:4706-5035 and docs/PLAN.md:7513-7543 place install identity and rollback under the S8 ship surface",
+]
+failure_consequence = "A hierarchical reviewer can load S1 L0 or S8 as the normative owner of install behavior and receive two overlapping authorities with no precedence rule. Implementers may satisfy one surface while the other still carries a contradictory install requirement."
+minimal_repair = "Make S8 the authority for install, identity, build, and rollback; make S1 the human entry/reference surface only, with an explicit cross-reference rather than duplicated install obligations."
+owner = "%8 integrator"
+verification_method = "For every install, identity, build, and rollback phrase in the index and constitution, resolve exactly one normative owner and verify S1 references S8 instead of claiming the same surface."
+
+[[defect]]
+id = "DEF-003"
+severity = "P1"
+class = "STAGE_DELEGATION_MISLABEL"
+affected_ids = ["INV-004", "INV-012", "WP-005", "WP-006", "WP-007"]
+evidence = [
+  "docs/planning/DESIGN_INDEX.md:106-130 labels S6a as work grading, S6b as verification, and S6c as evidence and close",
+  "docs/plan/flow/boxes/S6a.toml:1-14 names receipt ACK and independent post-observation",
+  "docs/plan/flow/boxes/S6b.toml:1-14 names tracker-visible work-in-progress and silence state",
+  "docs/plan/flow/boxes/S6c.toml:1-14 names independent verify, grade, and sanctioned close",
+]
+failure_consequence = "The hierarchical review dispatches the wrong companion for three adjacent lifecycle stages: receipt evidence is read as grading, silence state as generic verification, and verification/close as only evidence. Stage-specific inputs, outputs, and ownership become addressably wrong despite every file existing."
+minimal_repair = "Correct the three index delegated-concern strings to receipt/ACK, tracker-visible progress/silence, and independent verify/grade/close respectively; preserve the box files as the authority and do not restate their bodies."
+owner = "%8 integrator"
+verification_method = "Parse each S6 box header name and compare it to its DESIGN_INDEX delegated-concern row; require the S6a/S6b/S6c mapping to be one-to-one and consistent with the event-stage order."
+
+[[defect]]
+id = "DEF-004"
+severity = "P2"
+class = "ARTIFACT_DELEGATION_LACKS_READER"
+affected_ids = ["REQ-006", "INV-011", "INV-012", "GATE-024"]
+evidence = [
+  "docs/planning/DESIGN_INDEX.md:43-62 has the columns Artifact declaration and Persisted surface only",
+  "docs/planning/DESIGN_INDEX.md:46 says shape checks are delegated to SCHEMAS.toml and its declared reader, but no artifact row names that reader or its exact delegated operation",
+  "SCHEMAS.toml:16-100 demonstrates the omitted per-artifact writer/reader/required-field authority, including watch_ledger with reader=the orchestrator, by eye",
+]
+failure_consequence = "The index looks normative while several artifact rows are only a path table. A reviewer cannot tell which reader is authoritative, whether the delegation is shape, write, read-back, or gate behavior, or which reader failure should block the plan."
+minimal_repair = "Add per-row delegated-what and reader/authority columns, or state explicitly that every row delegates required-field shape to SCHEMAS.toml and name the reader separately without duplicating schema fields."
+owner = "%8 integrator"
+verification_method = "Require all 16 artifact rows to carry non-empty delegated-what, authority, and reader references; resolve each reader path or explicitly mark the reader as unbuilt/diagnostic rather than silently omitting it."
+
+[[defect]]
+id = "DEF-005"
+severity = "P1"
+class = "STABLE_ID_REGISTER_BUILT_NOT_WIRED"
+affected_ids = ["REQ-001", "INV-001", "GATE-011", "GATE-019", "GATE-024", "WP-003", "RISK-001", "REQ-013"]
+evidence = [
+  "docs/planning/DESIGN_INDEX.md:131-254 defines the 72 canonical aliases and docs/planning/DESIGN_INDEX.md:294-297 reports the register counts",
+  "exact tracked scan: git grep -lF each canonical ID outside docs/planning/DESIGN_INDEX.md finds only the three compatibility sentinels INV-2026, WP-001, and WP-002 outside the index",
+  "the eight sampled IDs above are index-only; the exhaustive census leaves 69 of 72 canonical IDs unreferenced outside the index",
+  "all GATE-001 through GATE-024 are in the index-only set; no test, CI job, or bead path contains their canonical names",
+]
+failure_consequence = "The harvested register is addressable prose but not load-bearing. Gates, requirements, risks, and milestone IDs cannot drive a failing test, CI job, or bead closure, so the index can report a complete register while implementation and review remain disconnected."
+minimal_repair = "For every ID intended to remain load-bearing, add a reference from a test, CI job, validator, or bead that can fail; otherwise classify it as a non-load-bearing alias or tombstone. Do not satisfy this by adding more prose references inside the index."
+owner = "%8 integrator with S4 graph owner"
+verification_method = "Rerun the exact per-ID scan outside DESIGN_INDEX.md, require every load-bearing ID to have at least one failing-capable consumer path, retain positive controls for INV-2026/WP-001/WP-002, and report any index-only IDs explicitly."
+
+[[defect]]
+id = "DEF-006"
+severity = "P1"
+class = "UNEARNED_ROLLBACK_REFUSAL_CLAIM"
+affected_ids = ["REQ-008", "INV-011", "WP-008", "GATE-024"]
+evidence = [
+  "docs/PLAN.md:7527 says the S8 done signal is PROJECTED until installer-check and rollback transcripts exist",
+  "docs/PLAN.md:7535 says the four-way gate REFUSES stale binaries, unproven installs, and missing rollback artifacts",
+  "docs/PLAN.md:7537 says rollback_tests expect >=1 before ship and today=0",
+  "docs/PLAN.md:7543 says the install manifest is printed, not persisted, and the rollback path is untested",
+]
+failure_consequence = "A reader can treat missing rollback artifacts as an already-enforced refusal even though the same S8 section records no rollback test, no persisted manifest, and a projected done signal. This overclaim suppresses the exact verification work needed before ship."
+minimal_repair = "Mark the rollback-artifact refusal as PROJECTED and separate it from the currently evidenced identity/staged-install refusals; leave the claim unearned until a persisted manifest and rollback transcript exist."
+owner = "%8 integrator with S8 owner"
+verification_method = "Re-read S8 after integration; require the rollback refusal sentence to be explicitly PROJECTED while rollback_tests=0 and the manifest is non-persisted, then promote it only after a retained transcript and schema-valid manifest exist."
