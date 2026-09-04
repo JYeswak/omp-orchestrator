@@ -1,6 +1,6 @@
 # DESIGN_INDEX — omp-orchestrator
 
-**Status:** S4 Round 2 structural integration; not a beads-ready or ship authorization.
+**Status:** S4 Round 3 integration complete; pane two defects applied; Round 4 remains required.
 
 **Mode:** `hierarchical`
 
@@ -26,7 +26,7 @@ the companion rows named by the review question. It never treats one contract or
 whole plan.
 
 The monolithic heuristic is not available for this artifact: the measured constitution is
-680,047 bytes, above the Grade-B 100–260 KB band. The repository is nevertheless constitution-grade
+680,420 bytes, above the Grade-B 100–260 KB band. The repository is nevertheless constitution-grade
 because the subject is a system others build on, not a single local change, pure research note,
 dictated port, or hotfix. The twelve box files are companion stage specifications; they are not
 twelve independent plans.
@@ -45,24 +45,24 @@ revision; it is not resolved by whichever prose was read last.
 `SCHEMAS.toml` declares 16 artifact formats. This index does not duplicate required fields; it
 names the artifact family and delegates shape checks to that file and its declared reader.
 
-| Artifact declaration | Persisted surface |
-|---|---|
-| `artifacts.convergence` | `docs/plan/CONVERGENCE.jsonl` |
-| `artifacts.surface_map` | `docs/plan/SURFACE-MAP.jsonl` |
-| `artifacts.preserved_inventory` | `.flywheel/inventory-artifacts/` |
-| `artifacts.crate_surface` | `OMP-SURFACE-MAP.toml` |
-| `artifacts.tick_state` | session-scoped `tick-monitor.tsv` |
-| `artifacts.watch_ledger` | session-scoped `watch-ledger.jsonl` |
-| `artifacts.grade_evidence` | grade evidence records |
-| `artifacts.beads` | `.beads/issues.jsonl` |
-| `artifacts.journey_foundation` | `docs/plan/FOUNDATION.jsonl` |
-| `artifacts.dispatch_journal` | `docs/plan/DISPATCH.jsonl` |
-| `artifacts.human_decisions` | `docs/decisions.jsonl` |
-| `artifacts.findings_ledger` | `docs/plan/FINDINGS.jsonl` |
-| `artifacts.hypotheses` | `docs/plan/HYPOTHESES.jsonl` |
-| `artifacts.inception_manifest` | `.omp-orchestrator/inception.json` |
-| `artifacts.numbers` | `NUMBERS.toml` |
-| `artifacts.cross_section_authority` | `docs/plan/CROSS-SECTION-AUTHORITY.jsonl` |
+| Artifact declaration | Persisted surface | Reader | Shape authority |
+|---|---|---|---|
+| `artifacts.convergence` | `docs/plan/CONVERGENCE.jsonl` | `crates/no-shell-gate/tests/convergence.rs` | `SCHEMAS.toml:21-29` |
+| `artifacts.surface_map` | `docs/plan/SURFACE-MAP.jsonl` | assembly and census sections | `SCHEMAS.toml:31-38` |
+| `artifacts.preserved_inventory` | `.flywheel/inventory-artifacts/` | plan provenance claims and evidence reviewers | `SCHEMAS.toml:40-47` |
+| `artifacts.crate_surface` | `OMP-SURFACE-MAP.toml` | `crates/no-shell-gate/tests/wired_lanes.rs` | `SCHEMAS.toml:49-56` |
+| `artifacts.tick_state` | session-scoped `tick-monitor.tsv` | `crates/tick-monitor` | `SCHEMAS.toml:58-65` |
+| `artifacts.watch_ledger` | session-scoped `watch-ledger.jsonl` | orchestrator observation path | `SCHEMAS.toml:67-74` |
+| `artifacts.grade_evidence` | grade evidence records | orchestrator comparing rounds | `SCHEMAS.toml:76-83` |
+| `artifacts.beads` | `.beads/issues.jsonl` | `br`, `bv` | `SCHEMAS.toml:85-92` |
+| `artifacts.journey_foundation` | `docs/plan/FOUNDATION.jsonl` | plan materializer and stage gates | `SCHEMAS.toml:111-118` |
+| `artifacts.dispatch_journal` | `docs/plan/DISPATCH.jsonl` | S6 grading, reap path, and post-mortems | `SCHEMAS.toml:120-127` |
+| `artifacts.human_decisions` | `docs/decisions.jsonl` | dispatch packet builder and grading | `SCHEMAS.toml:129-136` |
+| `artifacts.findings_ledger` | `docs/plan/FINDINGS.jsonl` | `crates/no-shell-gate/tests/findings_ledger.rs` and integrator | `SCHEMAS.toml:138-145` |
+| `artifacts.hypotheses` | `docs/plan/HYPOTHESES.jsonl` | preregistration gate before plan materialization | `SCHEMAS.toml:147-154` |
+| `artifacts.inception_manifest` | `.omp-orchestrator/inception.json` | S2 planning foundation and S7 validation | `SCHEMAS.toml:156-163` |
+| `artifacts.numbers` | `NUMBERS.toml` | `numbers.rs` and every load-bearing plan claim | `SCHEMAS.toml:165-172` |
+| `artifacts.cross_section_authority` | `docs/plan/CROSS-SECTION-AUTHORITY.jsonl` | plan assembler and integrator | `SCHEMAS.toml:174-181` |
 
 ### 2.2 Normative contract corpus
 
@@ -89,6 +89,7 @@ surface; this index only assigns their review grouping.
 | `docs/contracts/kernel_only_policy.md` | kernel adoption and no handroll rule |
 | `docs/contracts/lifecycle_contract.md` | lifecycle transitions |
 | `docs/contracts/oracle_comparison_contract.md` | oracle comparison and skew |
+| `docs/contracts/orchestration_contract.md` | end-to-end orchestrator lifecycle |
 | `docs/contracts/pane_observation_contract.md` | pane observation |
 | `docs/contracts/pane_readiness_contract.md` | pane admission readiness |
 | `docs/contracts/planning_to_exhaustion.md` | planning exhaustion boundary |
@@ -111,19 +112,21 @@ row remains a surfaced work item.
 
 | Box | Delegated concern |
 |---|---|
-| `docs/plan/flow/boxes/S1.toml` | human start, install, doctor, ecosystem, walkthrough, swarm, portal |
+| `docs/plan/flow/boxes/S1.toml` | human start and install entry/reference; delegates install, identity, build, and rollback semantics to S8 |
 | `docs/plan/flow/boxes/S2.toml` | planning stage |
 | `docs/plan/flow/boxes/S3.toml` | plan grading |
 | `docs/plan/flow/boxes/S4.toml` | beads graph |
 | `docs/plan/flow/boxes/S5a.toml` | execution admission |
 | `docs/plan/flow/boxes/S5b.toml` | execution and transport |
-| `docs/plan/flow/boxes/S6a.toml` | work grading |
-| `docs/plan/flow/boxes/S6b.toml` | verification |
-| `docs/plan/flow/boxes/S6c.toml` | evidence and close |
+| `docs/plan/flow/boxes/S6a.toml` | receipt ACK: independent post-observation carries custody identity |
+| `docs/plan/flow/boxes/S6b.toml` | work in progress: tracker-visible stage, block, and silence state |
+| `docs/plan/flow/boxes/S6c.toml` | verify grade close: independent evidence to sanctioned bead closure |
 | `docs/plan/flow/boxes/S7.toml` | validation |
-| `docs/plan/flow/boxes/S8.toml` | install, identity, build, rollback |
+| `docs/plan/flow/boxes/S8.toml` | sole install, identity, build, and rollback authority; rollback evidence remains unproven until transcript and persisted manifest exist |
 | `docs/plan/flow/boxes/S9.toml` | human decision ledger |
 
+**Install precedence:** S8 is the sole normative authority for install, identity, build, and rollback. S1 L0 is the human entry/reference surface and must point to S8; it does not duplicate or override S8's install rules.
+**Rollback evidence boundary:** S8 may require a rollback transcript before ship, but the current source records rollback_tests=0 and a non-persisted manifest. Missing rollback artifacts are therefore PROJECTED evidence, not an already-demonstrated gate trip.
 `docs/plan/flow/unknowns/DEFECTS.toml`, `DISPOSITIONS.toml`, and `CENSUS.json` are diagnostic
 companion evidence. They are not silently promoted into a plan gate: their row status and source
 measurement remain part of the cited finding.
@@ -252,6 +255,28 @@ condition. Empty decision fields remain empty evidence, not a filled-in decision
 | DEC | `HD-0014` | `docs/decisions.jsonl:14` — S1-first depth versus breadth-before-depth |
 | DEC | `HD-0015` | `docs/decisions.jsonl:15` — conductor refill approval |
 
+## 3.7 Identifier delegation state
+
+Every canonical ID has one explicit delegated concern, authority, and consumer state. The rows below are range-complete: each individual ID in a range is covered. This is index-side wiring, not a claim that the consumer is already implemented.
+
+| ID family | Delegated concern | Delegated to | Current consumer state |
+|---|---|---|---|
+| `REQ-001`–`REQ-013` | requirement text and acceptance intent | `docs/plan/00-brief.md` and the constitution | index/constitution reference; no code or bead edge claimed in this integration |
+| `INV-001`–`INV-012`, `INV-2026` | invariant and provenance rule | each source authority in §3.2 | load-bearing design rule; runtime enforcement remains separately evidenced |
+| `GATE-001`–`GATE-010` | business and adoption acceptance | `docs/plan/01-idea.md` gate rows 8–17 | index-only alias; pane %7 owns code/bead wiring outside this bead |
+| `GATE-011`–`GATE-018` | technical gate-leg identity | the named gate crate row in `docs/plan/06-gates.md` | index-only alias; pane %7 owns code/bead wiring outside this bead |
+| `GATE-019`–`GATE-024` | six gate properties | `docs/plan/06-gates.md:229-234` and its gate admission owner | index-only alias; pane %7 owns code/bead wiring outside this bead |
+| `WP-001`–`WP-002` | S2/S4 planning sequence | constitution S2 graph and S4 integrator | existing validator sentinel and plan edge |
+| `WP-003`–`WP-009` | seven ordered implementation milestones | `docs/plan/09-milestones.md` and the derived edge table | milestone graph address; implementation remains not beads-ready |
+| `RISK-001`–`RISK-006` | owned risk register rows | `docs/plan/01-idea.md:433-438` and milestone reviewers | risk visibility; no automatic gate trip claimed |
+| `HD-0009`–`HD-0015` | human decision records | `docs/decisions.jsonl` and S9 decision owner | source IDs preserved; duplicate occurrences remain a ledger condition |
+
+Delegation completeness is now 32 contract rows + 16 artifact rows + 12 box rows = 60/60. All 72
+canonical IDs are retained because each maps to an existing source row, heading, or decision; none is
+cut. Index-only consumer state is disclosed rather than disguised as implementation wiring.
+
+
+
 ## 4. Constitution cross-reference map
 
 This is the reference map the constitution uses during hierarchical review. It tells a reviewer
@@ -262,10 +287,10 @@ which authority rows to load; it does not copy their content into a second defin
 | `00-brief` requirements and facts | `REQ-001`–`REQ-013`, `INV-001`–`INV-003` | `SCHEMAS.toml`, `docs/plan/FINDINGS.jsonl` |
 | `01-idea` thesis and adoption | `GATE-001`–`GATE-010`, `RISK-001`–`RISK-006` | `docs/contracts/claim_strength_contract.md`, `docs/contracts/expectation_registry.md` |
 | `02-surface-census` | `INV-001`–`INV-003`, `INV-2026` | `SCHEMAS.toml`, `docs/plan/SURFACE-MAP.jsonl` |
-| `03-crates` and process boundaries | `INV-003`, `INV-011` | `docs/contracts/subprocess_contract.md`, `docs/contracts/cancellation_contract.md` |
+| `03-crates` and process boundaries | `REQ-013`, `INV-003`, `INV-004`, `INV-011` | `docs/contracts/orchestration_contract.md`, `docs/contracts/subprocess_contract.md`, `docs/contracts/cancellation_contract.md` |
 | `05-actions` | `INV-006`–`INV-010` | `docs/contracts/admission_contract.md`, `docs/contracts/dispatch_claim_contract.md` |
 | `06-gates` | `GATE-011`–`GATE-024`, `INV-006`–`INV-009` | all gate-specific contracts and declared readers |
-| `07-installability` | `INV-011`, `WP-008`, `HD-0013` | `docs/contracts/s1_l0_install.md`, `docs/contracts/s1_l1_doctor.md` |
+| `07-installability` | `INV-011`, `WP-008`, `HD-0013` | `docs/plan/flow/boxes/S8.toml`, `docs/contracts/s1_l0_install.md` (human entry/reference), `docs/contracts/s1_l1_doctor.md` |
 | `08-end-users` | `REQ-008`, `REQ-009`, `GATE-003`, `GATE-008` | S1 L2–L5 contracts and boxes |
 | `09-milestones` | `WP-003`–`WP-009`, `RISK-001`–`RISK-006` | `docs/contracts/verification_contract.md` |
 | `10-prior-art` | `REQ-007`, `INV-2026` | pinned donor sources in `sources.lock.json` |
@@ -298,9 +323,10 @@ Round 2 delta: 69 unique identifiers became addressable beyond the three existin
 
 ## 6. Review rule for the next round
 
-Round 2 is `STRUCTURAL`: the review surface changed from an addressless monolith to a constitution
-plus an explicit companion boundary and replayable identifier map. The mechanical validator's
-`exit 0` remains necessary but is not a readiness verdict. The current state is
-`NOT BEADS READY`; the next reviewer must attack whether each alias actually reaches the cited
-source, whether the delegated companion really owns the asserted field, and whether the graph can
-be materialized without reading the 679 KB constitution again.
+Round 3 is `STRUCTURAL`: the six pane-two defects changed corpus completeness, authority precedence,
+stage routing, artifact read-back, delegation state, and the S8 rollback claim.
+The mechanical validator's `exit 0` remains necessary but is not a readiness verdict. The current state is
+`NOT BEADS READY`; pane two's verdict remains authoritative for Round 4.
+The Round 4 reviewer must attack the six repaired joins: exact 32=32 path coverage, S1/S8 precedence,
+S6 stage alignment, every artifact reader and shape authority, per-ID delegation state, and the distinction
+between a projected rollback refusal and a demonstrated gate trip.

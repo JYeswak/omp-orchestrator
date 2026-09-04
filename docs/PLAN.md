@@ -6,8 +6,8 @@ across a fleet of agents, refusing every step it cannot prove.**
 Assembled from `docs/plan/`. Section files remain the source of truth for the body; this header is the
 constitution's review metadata and companion boundary. Body changes are made in a section, then
 re-assembled; `DESIGN_INDEX.md` governs delegated companions.
-**Document status:** S4 ROUND 2 STRUCTURAL — hierarchical index integration; S2 validator exit 0 remains
-necessary but does not certify readiness.
+**Document status:** S4 ROUND 3 INTEGRATION — six pane-2 defects applied; Round 4 remains required.
+Mechanical validator exit 0 remains necessary and does not certify readiness.
 **Review mode:** HIERARCHICAL — this file is the constitution; reviewers load the design index and
 the selected normative companions rather than treating one companion as the whole plan.
 **Design index:** `docs/planning/DESIGN_INDEX.md`
@@ -15,9 +15,9 @@ the selected normative companions rather than treating one companion as the whol
 ## Document control
 
 - **Owner:** omp-orchestrator planning lane
-- **Revision:** v2; S4 Round 2 hierarchical integration
+- **Revision:** v3; S4 Round 3 defect integration
 - **Authority:** `docs/PLAN.md` constitution, `docs/planning/DESIGN_INDEX.md`, `docs/plan/` source files, and delegated companions
-- **Scope of this pass:** S4 substantive ID/index review only; no crates, S1.toml, or contract edits.
+- **Scope of this pass:** S4 integrator repair only; no crates, S1.toml, or other contract edits.
 
 ## Normative language
 
@@ -32,7 +32,7 @@ producing command and source revision.
 
 ## Stable identifiers
 
-The canonical cross-companion register is `docs/planning/DESIGN_INDEX.md`. `INV-2026` and `WP-001`/`WP-002` remain compatibility sentinels for the S2 validator; the full harvested register is delegated to the index and is not duplicated here.
+The canonical cross-companion register is `docs/planning/DESIGN_INDEX.md`. `INV-2026` and `WP-001`/`WP-002` remain compatibility sentinels for the S2 validator; delegation states and ownership are recorded in index §3.7; the full harvested register is not duplicated here.
 
 
 | ID | Meaning | Authority |
@@ -97,6 +97,7 @@ plan addressable without restating the evidence.
 | 0 | planning-arc-validator | BLOCKING baseline; missing control metadata and one undefined reference | STRUCTURAL | 2 |
 | 1 | planning-arc-validator | NOT BEADS READY — S2 PLAN GATE PASS; S4 independent review remains | STRUCTURAL | 0 |
 | 2 | planning-arc-v1.2 substance audit | NOT BEADS READY — RESTRUCTURE to hierarchical constitution plus indexed normative companions; stable register harvested from existing authorities | STRUCTURAL | 0 |
+| 3 | pane 2 fresh-eyes review / integrator | ROUND 4 REQUIRED — six defects integrated; external consumer wiring remains outside this bead | STRUCTURAL | 0 |
 
 
 
@@ -7532,7 +7533,7 @@ it is a specification for a field that does not yet exist anywhere in this plan.
 
 **F3 CRATES.** Mechanism: `installer` (exists, isolated — on neither side of any of the 18 DAG edges, so nothing consumes it; this stage is the consumer that ends its isolation). Thin caller: the ship step of the journey (a tag + an installer invocation). MUST BE CREATED: nothing — the crate is the mechanism; the S8 wire is `installer --check` being called by something other than a human.
 
-**F4 GATES.** Gate: the four-way identity check (HEAD == build_id == --version == running), which fires and names the drift — measured live: it caught the 96lacd/36fc41e mismatch and named all three identities. Known-BAD leg: the staged-file refusal (`installer --install` on a dirty tree refuses with named file — measured). REFUSES: stale binaries, unproven installs, and missing rollback artifacts.
+**F4 GATES.** Gate: the four-way identity check (HEAD == build_id == --version == running), which fires and names the drift — measured live: it caught the 96lacd/36fc41e mismatch and named all three identities. Known-BAD leg: the staged-file refusal (`installer --install` on a dirty tree refuses with named file — measured). **CURRENTLY EVIDENCED:** stale identity and staged-install refusals. **PROJECTED, NOT YET EVIDENCED:** missing rollback-artifact refusal; rollback_tests=0 and manifest persistence is absent, so S8 does not claim that refusal has fired.
 
 **F5 NUMBERS.** Figures: identity_check_exit (expect 0 at ship; the drift measurement is historical), install_coverage (**3 of 48** current target rows listed by installer_known_binaries=3 in NUMBERS.toml), rollback_tests (expect >=1 before ship; today 0). The current ratio is a workspace fact, not install acceptance.
 
