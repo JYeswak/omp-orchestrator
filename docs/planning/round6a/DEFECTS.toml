@@ -1,0 +1,72 @@
+[verdict]
+round = "6A"
+role = "fresh-eyes reviewer"
+reviewer = "WildStone"
+pane = "%9"
+bead = "omp-orchestrator-arc-s4-round6a-review-fnyk"
+review_mode = "hierarchical"
+range = "docs/PLAN.md:144-4200 plus docs/plan/02-surface-census.md through 05-actions.md"
+coverage_fraction = "0.70"
+plan_range_lines = 4057
+lines_read = 2860
+read_complete = [
+  "docs/plan/02-surface-census.md:1-1029",
+  "docs/plan/03-crates.md:1-533",
+  "docs/plan/04-diagrams.md:1-432",
+  "docs/plan/05-actions.md:1-510",
+  "docs/PLAN.md:144-153 contents",
+  "docs/PLAN.md assembled 02-05 corresponding to source files above (1610-4141)",
+  "docs/plan/01-idea.md:1-123 thesis and control-loop table",
+  "docs/plan/01-idea.md:411-438 GATE/RISK source tables (prior round)",
+  "docs/plan/00-brief.md:18-80 R1-R13 and :565-575 writing contract (prior round)",
+]
+read_unreviewed = [
+  "docs/plan/00-brief.md body outside :18-80 and :565-575 (assembled PLAN.md ~154-1058 remainder)",
+  "docs/plan/01-idea.md:124-410 and :439-544 except the gate/risk tables already sampled",
+  "docs/PLAN.md:4142-4200 (start of 06-gates; overlaps %7 range)",
+]
+ids_cut_recommended_r4 = 38
+ids_cut_r5 = 31
+seven_survivors = ["WP-003", "WP-004", "WP-005", "WP-006", "WP-007", "WP-008", "WP-009"]
+seven_survivors_earned = 7
+seven_survivors_caution = 0
+cross_section_dependencies = 8
+cycles_named = []
+decomposition_verdict = "unread-not-wrong:body-02-05-is-inventory-not-a-cycle"
+diff_class = "POLISH"
+verdict = "ROUND 6B REQUIRED: POLISH in 02-05 — no cross-section cycles; decomposition unread-not-wrong; seven WP aliases earned; no BEADS READY authorization"
+
+[[defect]]
+id = "DEF-001"
+severity = "P1"
+class = "STALE_ABSENCE_ACROSS_SECTIONS"
+affected_ids = ["WP-005", "WP-007"]
+evidence = [
+  "docs/plan/04-diagrams.md:339 — Diagram 5 mapping: nodes I, J, L 'do not exist in any crate'",
+  "docs/plan/01-idea.md:71 — send_and_verify is implemented in crates/omp-orchestrator/src/main.rs and called from run_cycle; gap is runtime verification, not source existence",
+  "docs/plan/05-actions.md:178-206 — A6 DISPATCH specifies TransportReceipt and send path as existing crate surface",
+  "docs/plan/04-diagrams.md:365-375 — Diagram 6 then describes send_and_verify as the current actuator",
+]
+failure_consequence = "A reader of Diagram 5 treats actuation/receipt/completion as unbuilt crates while 01 and Diagram 6 and A6 describe an implemented send_and_verify whose receipts are unverified. That is an absence claim that did not survive the same plan. It is not a cycle: 04 can be corrected from 01 without waiting on 08-12."
+minimal_repair = "Rewrite Diagram 5's I/J/L line to match 01-idea: source exists, transport and receiver receipts remain unproven. Keep the PROJECTED journey label. Do not claim crates are absent when 05 already specifies their actions."
+owner = "%8 integrator"
+verification_method = "Require 04-diagrams.md Diagram 5 prose to agree with 01-idea.md:71 on send_and_verify existence; absence language may remain only for unbuilt receipt proof, not for missing source."
+
+[[defect]]
+id = "DEF-002"
+severity = "P2"
+class = "HISTORICAL_TABLE_STILL_THE_CONTRACT_TABLE"
+affected_ids = ["WP-003"]
+evidence = [
+  "docs/plan/03-crates.md:49-91 is still titled 'The crate table' and lists 26 crates",
+  "docs/plan/03-crates.md:10-11 and :61 already label it a 2026-08-31 historical snapshot and point at NUMBERS.toml for the current denominator",
+  "docs/plan/04-diagrams.md:41-90 Diagram 1 is the same 18-edge 26-crate DAG, labelled HISTORICAL",
+]
+failure_consequence = "A bead converter or implementer can still take the only typed contract table as the workspace. The banner is honest; the table is still the only per-crate I/O list in §03. Not a cycle: 03 does not need 06-12 to replace the snapshot with a live census command."
+minimal_repair = "Keep the 26-row table under an explicit HISTORICAL heading and add a current one-row-per-package pointer whose producing command is NUMBERS.toml workspace_crates, or state that no current per-crate contract census exists."
+owner = "%8 integrator"
+verification_method = "A reader of §03 heading 'The crate table' must land on either a live census or a sentence that no live per-crate contract table exists; the 26-row snapshot must not be the first unqualified table."
+
+[[note]]
+id = "NOTE-DECOMPOSITION"
+text = "Atlas-arc's 'S1 final form depends on S2-S12' is a claim about stage boxes, not about plan sections 02-05. In this range the body is labelled historical inventory plus forward pointers. Eight one-way dependencies exist (02→11, 02→08, 02→09, 03→06, 04→00, 04→06, 05→03, 05→09). None is a cycle. 02, 03, 04, and 05 are individually completable as maps with NO-CLAIM floors. Round 4 STRUCTURAL was about the index/header layer, which Round 5 repaired. Unread 00-brief remainder and 01-idea remainder could still hide a cycle; they are labelled UNREVIEWED rather than assumed clean."
