@@ -33,6 +33,59 @@ const UNWIRED_LANE_ALLOWANCE: &[(&str, &str)] = &[
     ("wired-but-inert-guard", "detection pattern table consumed by kernel-only-operator-hook; the hook is disabled pending human certification (cp-nq2s9), so the caller exists in design but not in code yet"),
     ("s1-coverage", "S1 depth suspended under Atlas Arc R1; crate exists as a coverage artifact with no production caller. Dies when S1 build waves consume it"),
 ];
+/// Plan-level gate identifiers are either wired to an existing referent or
+/// explicitly declared as future work. This registry does not certify gate
+/// semantics; it prevents a canonical ID from becoming decorative prose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GateReferentKind {
+    Test,
+    Ci,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GateIdentifierStatus {
+    Wired { kind: GateReferentKind },
+    DeclaredNotWired,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct GateIdentifier {
+    id: &'static str,
+    status: GateIdentifierStatus,
+    referent: Option<&'static str>,
+    known_bad: Option<&'static str>,
+    known_good: Option<&'static str>,
+    anti_vacuity: Option<&'static str>,
+    owner: Option<&'static str>,
+    dies_when: Option<&'static str>,
+}
+
+const GATE_IDENTIFIER_REFERENTS: &[GateIdentifier] = &[
+    GateIdentifier { id: "GATE-001", status: GateIdentifierStatus::DeclaredNotWired, referent: None, known_bad: None, known_good: None, anti_vacuity: None, owner: Some("S3-01-idea-reviewer"), dies_when: Some("Dies when the 01-idea gate has retained source-pinned population evidence and a bead acceptance naming its verifier") },
+    GateIdentifier { id: "GATE-002", status: GateIdentifierStatus::DeclaredNotWired, referent: None, known_bad: None, known_good: None, anti_vacuity: None, owner: Some("S3-01-idea-reviewer"), dies_when: Some("Dies when the 01-idea gate has retained measured economics evidence and a bead acceptance naming its verifier") },
+    GateIdentifier { id: "GATE-003", status: GateIdentifierStatus::DeclaredNotWired, referent: None, known_bad: None, known_good: None, anti_vacuity: None, owner: Some("S3-01-idea-reviewer"), dies_when: Some("Dies when the 01-idea gate has a retained distribution-channel evidence row and a bead acceptance naming its verifier") },
+    GateIdentifier { id: "GATE-004", status: GateIdentifierStatus::DeclaredNotWired, referent: None, known_bad: None, known_good: None, anti_vacuity: None, owner: Some("S3-01-idea-reviewer"), dies_when: Some("Dies when the first-value journey has a retained external-user receipt and a bead acceptance naming its verifier") },
+    GateIdentifier { id: "GATE-005", status: GateIdentifierStatus::DeclaredNotWired, referent: None, known_bad: None, known_good: None, anti_vacuity: None, owner: Some("S3-01-idea-reviewer"), dies_when: Some("Dies when the paid-commitment gate has retained evidence and a bead acceptance naming its verifier") },
+    GateIdentifier { id: "GATE-006", status: GateIdentifierStatus::DeclaredNotWired, referent: None, known_bad: None, known_good: None, anti_vacuity: None, owner: Some("S3-01-idea-reviewer"), dies_when: Some("Dies when the unit-economics gate has source-pinned measured inputs and a bead acceptance naming its verifier") },
+    GateIdentifier { id: "GATE-007", status: GateIdentifierStatus::DeclaredNotWired, referent: None, known_bad: None, known_good: None, anti_vacuity: None, owner: Some("S3-01-idea-reviewer"), dies_when: Some("Dies when the recurrence gate has a retained cohort or retention evidence row and a bead acceptance naming its verifier") },
+    GateIdentifier { id: "GATE-008", status: GateIdentifierStatus::DeclaredNotWired, referent: None, known_bad: None, known_good: None, anti_vacuity: None, owner: Some("S3-01-idea-reviewer"), dies_when: Some("Dies when the rights, security, and licensing gate has a retained review receipt and a bead acceptance naming its verifier") },
+    GateIdentifier { id: "GATE-009", status: GateIdentifierStatus::DeclaredNotWired, referent: None, known_bad: None, known_good: None, anti_vacuity: None, owner: Some("S3-01-idea-reviewer"), dies_when: Some("Dies when the defensibility gate has retained compounding-asset evidence and a bead acceptance naming its verifier") },
+    GateIdentifier { id: "GATE-010", status: GateIdentifierStatus::DeclaredNotWired, referent: None, known_bad: None, known_good: None, anti_vacuity: None, owner: Some("S3-01-idea-reviewer"), dies_when: Some("Dies when the substitute comparison has a retained evidence row and a bead acceptance naming its verifier") },
+    GateIdentifier { id: "GATE-011", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::no-shell-gate"), known_bad: Some("crates/no-shell-gate/tests/gate.rs::planted_shell_is_red_then_green_after_delete"), known_good: Some("crates/no-shell-gate/tests/gate.rs::clean_list_passes"), anti_vacuity: Some("crates/no-shell-gate/tests/gate.rs::empty_scan_set_is_an_error_not_a_pass"), owner: None, dies_when: None },
+    GateIdentifier { id: "GATE-012", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::omp-inventory-map"), known_bad: Some("crates/omp-inventory-map/tests/inventory.rs::surface_map_ghost_is_unknown"), known_good: Some("crates/omp-inventory-map/tests/inventory.rs::subprocess_and_no_shell_positive_controls_are_visible"), anti_vacuity: Some("crates/omp-inventory-map/tests/inventory.rs::empty_metadata_is_a_hard_error"), owner: None, dies_when: None },
+    GateIdentifier { id: "GATE-013", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::undrained-pipe-lint"), known_bad: Some("crates/undrained-pipe-lint/tests/specimens.rs::known_bad_both_pipes_try_wait_poll_is_flagged"), known_good: Some("crates/undrained-pipe-lint/tests/specimens.rs::known_good_stdout_only_passes"), anti_vacuity: Some("crates/undrained-pipe-lint/tests/specimens.rs::empty_scan_set_is_an_error_not_a_pass"), owner: None, dies_when: None },
+    GateIdentifier { id: "GATE-014", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::commit-build-fence"), known_bad: Some("crates/commit-build-fence/tests/hook.rs::real_hook_refuses_active_registration_with_actionable_identity"), known_good: Some("crates/commit-build-fence/tests/hook.rs::real_hook_allows_commit_with_valid_empty_store"), anti_vacuity: Some("crates/commit-build-fence/tests/hook.rs::real_hook_treats_missing_store_as_error"), owner: None, dies_when: None },
+    GateIdentifier { id: "GATE-015", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::state-wildcard-lint"), known_bad: Some("crates/state-wildcard-lint/tests/specimens.rs::known_bad_state_wildcard_is_flagged"), known_good: Some("crates/state-wildcard-lint/tests/specimens.rs::wildcard_on_integer_and_string_passes"), anti_vacuity: Some("crates/state-wildcard-lint/tests/specimens.rs::empty_or_unreadable_workspace_is_an_error"), owner: None, dies_when: None },
+    GateIdentifier { id: "GATE-016", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::kernel-bypass-gate"), known_bad: Some("crates/kernel-bypass-gate/tests/kernel_bypass.rs::known_bad_raw_send_keys_outside_kernel_is_flagged"), known_good: Some("crates/kernel-bypass-gate/tests/kernel_bypass.rs::kernel_own_call_site_is_allowlisted"), anti_vacuity: Some("crates/kernel-bypass-gate/tests/kernel_bypass.rs::real_workspace_ledger_balances"), owner: None, dies_when: None },
+    GateIdentifier { id: "GATE-017", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::pre-delete-citation-check"), known_bad: Some("crates/pre-delete-citation-check/tests/killed_child.rs::killed_git_produces_refusal_not_success"), known_good: Some("crates/pre-delete-citation-check/tests/killed_child.rs::working_git_with_no_deletions_passes"), anti_vacuity: Some("NOT_APPLICABLE: an empty staged-deletion set is the valid clean input"), owner: None, dies_when: None },
+    GateIdentifier { id: "GATE-018", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::path-literal-guard"), known_bad: Some("crates/path-literal-guard/tests/repo_wide.rs::unreadable_input_is_refused_and_restores_to_a_clean_scan"), known_good: Some("crates/path-literal-guard/tests/repo_wide.rs::zero_home_path_literals_across_crates_src"), anti_vacuity: Some("crates/path-literal-guard/tests/repo_wide.rs::staged_mode_over_the_real_repo_equals_the_sweep"), owner: None, dies_when: None },
+    GateIdentifier { id: "GATE-019", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Test }, referent: Some("crates/no-shell-gate/tests/gate.rs::planted_shell_is_red_then_green_after_delete"), known_bad: Some("crates/no-shell-gate/tests/gate.rs::planted_shell_is_red_then_green_after_delete"), known_good: Some("crates/no-shell-gate/tests/gate.rs::clean_list_passes"), anti_vacuity: Some("crates/no-shell-gate/tests/gate.rs::empty_scan_set_is_an_error_not_a_pass"), owner: None, dies_when: None },
+    GateIdentifier { id: "GATE-020", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Test }, referent: Some("crates/no-shell-gate/tests/gate.rs::clean_list_passes"), known_bad: Some("crates/no-shell-gate/tests/gate.rs::planted_shell_is_red_then_green_after_delete"), known_good: Some("crates/no-shell-gate/tests/gate.rs::clean_list_passes"), anti_vacuity: Some("crates/no-shell-gate/tests/gate.rs::empty_scan_set_is_an_error_not_a_pass"), owner: None, dies_when: None },
+    GateIdentifier { id: "GATE-021", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Test }, referent: Some("crates/state-wildcard-lint/tests/specimens.rs::mutation_removing_state_wildcard_is_green"), known_bad: Some("crates/state-wildcard-lint/tests/specimens.rs::known_bad_state_wildcard_is_flagged"), known_good: Some("crates/state-wildcard-lint/tests/specimens.rs::wildcard_on_integer_and_string_passes"), anti_vacuity: Some("crates/state-wildcard-lint/tests/specimens.rs::empty_or_unreadable_workspace_is_an_error"), owner: None, dies_when: None },
+    GateIdentifier { id: "GATE-022", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Test }, referent: Some("crates/no-shell-gate/tests/gate.rs::empty_scan_set_is_an_error_not_a_pass"), known_bad: Some("crates/no-shell-gate/tests/gate.rs::planted_shell_is_red_then_green_after_delete"), known_good: Some("crates/no-shell-gate/tests/gate.rs::clean_list_passes"), anti_vacuity: Some("crates/no-shell-gate/tests/gate.rs::empty_scan_set_is_an_error_not_a_pass"), owner: None, dies_when: None },
+    GateIdentifier { id: "GATE-023", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Test }, referent: Some("crates/kernel-bypass-gate/tests/kernel_bypass.rs::ratchet_refuses_new_debt_slack_and_undeclared"), known_bad: Some("crates/kernel-bypass-gate/tests/kernel_bypass.rs::ratchet_refuses_new_debt_slack_and_undeclared"), known_good: Some("crates/kernel-bypass-gate/tests/kernel_bypass.rs::kernel_own_call_site_is_allowlisted"), anti_vacuity: Some("crates/kernel-bypass-gate/tests/kernel_bypass.rs::real_workspace_ledger_balances"), owner: None, dies_when: None },
+    GateIdentifier { id: "GATE-024", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Test }, referent: Some("crates/no-shell-gate/tests/gate_reachability.rs::positive_control_runs_real_hook_and_refuses_staged_shell"), known_bad: Some("crates/no-shell-gate/tests/gate_reachability.rs::removing_ci_trigger_flips_gate_to_unreachable"), known_good: Some("crates/no-shell-gate/tests/gate_reachability.rs::known_good_fixture_reports_ci_trigger_and_unwired_gate"), anti_vacuity: Some("crates/no-shell-gate/tests/gate_reachability.rs::empty_gate_set_is_an_error_not_a_pass"), owner: None, dies_when: None },
+];
 
 /// A workspace lane: one member crate, derived — NEVER hand-listed. A hand-listed
 /// expectation set is the same defect control-plane carries (check.sh EXPECTED_GATES
@@ -406,6 +459,111 @@ fn workflow_source(path: &str, contents: &str) -> CallerSource {
         kind: SourceKind::Workflow,
         contents: contents.to_owned(),
     }
+}
+fn assert_test_referent(root: &Path, field: &str, referent: &str) {
+    let Some((path, function)) = referent.split_once("::") else {
+        panic!("{field} referent must be path::function: {referent}");
+    };
+    let source = fs::read_to_string(root.join(path))
+        .unwrap_or_else(|error| panic!("{field} path {path} unreadable: {error}"));
+    let needle = format!("fn {function}");
+    assert!(
+        source
+            .lines()
+            .any(|line| line.trim_start().starts_with("fn ") && line.contains(&needle)),
+        "{field} referent {referent} names no existing test function"
+    );
+}
+
+fn assert_ci_referent(root: &Path, field: &str, referent: &str) {
+    let Some((path, job)) = referent.split_once("::") else {
+        panic!("{field} CI referent must be workflow::job: {referent}");
+    };
+    let workflow = fs::read_to_string(root.join(path))
+        .unwrap_or_else(|error| panic!("{field} workflow {path} unreadable: {error}"));
+    assert!(
+        workflow.contains(&format!("  {job}:")),
+        "{field} referent {referent} names no workflow job"
+    );
+}
+
+fn assert_leg_referent(root: &Path, field: &str, referent: &str) {
+    if referent.starts_with("NOT_APPLICABLE:") {
+        assert!(
+            referent.len() > "NOT_APPLICABLE:".len(),
+            "{field} non-applicable leg needs a reason"
+        );
+        return;
+    }
+    assert_test_referent(root, field, referent);
+}
+
+#[test]
+fn every_plan_gate_identifier_has_a_referent_or_dies_when() {
+    let root = repo_root();
+    assert_eq!(
+        GATE_IDENTIFIER_REFERENTS.len(),
+        24,
+        "the plan declares exactly GATE-001 through GATE-024"
+    );
+    let mut seen = std::collections::BTreeSet::new();
+    let mut wired = 0usize;
+    let mut declared = 0usize;
+    for (index, gate) in GATE_IDENTIFIER_REFERENTS.iter().enumerate() {
+        let expected = format!("GATE-{:03}", index + 1);
+        assert_eq!(gate.id, expected, "gate identifiers must be contiguous");
+        assert!(seen.insert(gate.id), "duplicate gate identifier {}", gate.id);
+        match gate.status {
+            GateIdentifierStatus::Wired { kind } => {
+                wired += 1;
+                let referent = gate.referent.expect("wired gate needs a referent");
+                match kind {
+                    GateReferentKind::Test => assert_test_referent(&root, gate.id, referent),
+                    GateReferentKind::Ci => assert_ci_referent(&root, gate.id, referent),
+                }
+                assert_leg_referent(
+                    &root,
+                    &format!("{} known_bad", gate.id),
+                    gate.known_bad.expect("wired gate needs known-bad"),
+                );
+                assert_leg_referent(
+                    &root,
+                    &format!("{} known_good", gate.id),
+                    gate.known_good.expect("wired gate needs known-good"),
+                );
+                assert_leg_referent(
+                    &root,
+                    &format!("{} anti_vacuity", gate.id),
+                    gate.anti_vacuity.expect("wired gate needs anti-vacuity or N/A"),
+                );
+                assert!(gate.owner.is_none() && gate.dies_when.is_none());
+            }
+            GateIdentifierStatus::DeclaredNotWired => {
+                declared += 1;
+                assert!(
+                    gate.referent.is_none()
+                        && gate.known_bad.is_none()
+                        && gate.known_good.is_none()
+                        && gate.anti_vacuity.is_none(),
+                    "declared-not-wired {} must not carry a fake referent or test leg",
+                    gate.id
+                );
+                assert!(
+                    gate.owner.is_some_and(|owner| !owner.trim().is_empty()),
+                    "declared-not-wired {} needs an owner",
+                    gate.id
+                );
+                assert!(
+                    gate.dies_when
+                        .is_some_and(|reason| reason.starts_with("Dies when") && reason.len() > 20),
+                    "declared-not-wired {} needs a dies-when reason",
+                    gate.id
+                );
+            }
+        }
+    }
+    assert_eq!(wired, 14, "technical/property identifiers wired");
+    assert_eq!(declared, 10, "future business identifiers declared, not wired");
 }
 
 #[test]
