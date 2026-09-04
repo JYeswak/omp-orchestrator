@@ -15,19 +15,49 @@ use std::process::Command;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InstallError {
-    BuildFailed { crate_name: String, detail: String },
-    BuildInconclusive { crate_name: String, code: Option<i32>, stderr_tail: String },
-    IdentityMismatch { binary: String, head: String, build_id: String, version: String },
-    NotAGitRepo { path: String },
-    NoBinaries { repo_root: String },
-    RestartFailed { binary: String, detail: String },
-    RunningExecutableMissing { binary: String, path: String },
+    BuildFailed {
+        crate_name: String,
+        detail: String,
+    },
+    BuildInconclusive {
+        crate_name: String,
+        code: Option<i32>,
+        stderr_tail: String,
+    },
+    IdentityMismatch {
+        binary: String,
+        head: String,
+        build_id: String,
+        version: String,
+    },
+    NotAGitRepo {
+        path: String,
+    },
+    NoBinaries {
+        repo_root: String,
+    },
+    RestartFailed {
+        binary: String,
+        detail: String,
+    },
+    RunningExecutableMissing {
+        binary: String,
+        path: String,
+    },
     /// A build is already running in this repo (a .build_in_flight marker is
     /// present). Installing over an in-flight build races the linker.
-    BuildInFlight { detail: String },
-    IoError { path: String, detail: String },
+    BuildInFlight {
+        detail: String,
+    },
+    IoError {
+        path: String,
+        detail: String,
+    },
     /// A bounded spawn exceeded its deadline and the process group was killed.
-    InstallTimeout { step: &'static str, deadline_secs: u64 },
+    InstallTimeout {
+        step: &'static str,
+        deadline_secs: u64,
+    },
 }
 
 impl fmt::Display for InstallError {
@@ -36,13 +66,22 @@ impl fmt::Display for InstallError {
             Self::BuildFailed { crate_name, detail } => {
                 write!(formatter, "BUILD FAILED: {crate_name} — {detail}")
             }
-            Self::BuildInconclusive { crate_name, code, stderr_tail } => {
+            Self::BuildInconclusive {
+                crate_name,
+                code,
+                stderr_tail,
+            } => {
                 write!(
                     formatter,
                     "BUILD INCONCLUSIVE: {crate_name} exit={code:?} stderr_tail={stderr_tail:?}"
                 )
             }
-            Self::IdentityMismatch { binary, head, build_id, version } => write!(
+            Self::IdentityMismatch {
+                binary,
+                head,
+                build_id,
+                version,
+            } => write!(
                 formatter,
                 "IDENTITY MISMATCH for {binary}: HEAD={head} build_id={build_id} version={version}"
             ),
@@ -64,7 +103,10 @@ impl fmt::Display for InstallError {
             Self::IoError { path, detail } => {
                 write!(formatter, "I/O error at {path}: {detail}")
             }
-            Self::InstallTimeout { step, deadline_secs } => write!(
+            Self::InstallTimeout {
+                step,
+                deadline_secs,
+            } => write!(
                 formatter,
                 "INSTALL TIMEOUT at {step}: exceeded {deadline_secs}s; \
                  the process group was killed - remedy: retry, or inspect \
@@ -215,7 +257,11 @@ impl fmt::Display for IdentityCheck {
             self.build_id_in_binary.as_deref().unwrap_or("ABSENT"),
             self.version_output.as_deref().unwrap_or("ABSENT"),
             self.identity_legs(),
-            if self.consistent { "IDENTITY OK" } else { "MISMATCH" }
+            if self.consistent {
+                "IDENTITY OK"
+            } else {
+                "MISMATCH"
+            }
         )
     }
 }
@@ -228,7 +274,13 @@ fn configured_sibling_repo(this_root: &Path) -> Option<PathBuf> {
     std::env::var_os("CONTROL_PLANE_REPO")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
-        .map(|path| if path.is_absolute() { path } else { this_root.join(path) })
+        .map(|path| {
+            if path.is_absolute() {
+                path
+            } else {
+                this_root.join(path)
+            }
+        })
 }
 
 /// Determine which repository owns a binary by checking whether its crate
@@ -352,11 +404,13 @@ pub fn build_target(
                 stderr_tail,
             })
         }
-        staged_build_gate::CargoBuildOutcome::NotApplicable => Err(InstallError::BuildInconclusive {
-            crate_name: crate_name.to_owned(),
-            code: output.status.code(),
-            stderr_tail: "cargo invocation was not classified".to_owned(),
-        }),
+        staged_build_gate::CargoBuildOutcome::NotApplicable => {
+            Err(InstallError::BuildInconclusive {
+                crate_name: crate_name.to_owned(),
+                code: output.status.code(),
+                stderr_tail: "cargo invocation was not classified".to_owned(),
+            })
+        }
     }
 }
 
@@ -380,9 +434,15 @@ fn parse_build_id(text: &str) -> Option<String> {
         } else if hex_len >= 8 {
             &value[..hex_len]
         } else {
-            value.split(|character: char| character.is_whitespace() || character == '_').next()?
+            value
+                .split(|character: char| character.is_whitespace() || character == '_')
+                .next()?
         };
-        (!token.is_empty()).then(|| token.to_owned())
+        (!token.is_empty()
+            && !token.eq_ignore_ascii_case("absent")
+            && !token.eq_ignore_ascii_case("unavailable")
+            && !token.eq_ignore_ascii_case("unversioned"))
+            .then(|| token.to_owned())
     })
 }
 
@@ -390,10 +450,7 @@ fn parse_build_id(text: &str) -> Option<String> {
 pub fn probe_version(binary: &Path) -> Option<String> {
     let mut probe_command = Command::new(binary);
     probe_command.arg("--version");
-    let out = match subprocess_contract::bounded_output(
-        &mut probe_command,
-        PROBE_DEADLINE,
-    ) {
+    let out = match subprocess_contract::bounded_output(&mut probe_command, PROBE_DEADLINE) {
         subprocess_contract::BoundedOutcome::Completed(out) => out,
         _ => return None,
     };
@@ -407,10 +464,7 @@ pub fn probe_version(binary: &Path) -> Option<String> {
 pub fn probe_build_id_string(binary: &Path) -> Option<String> {
     let mut strings_command = Command::new("strings");
     strings_command.arg(binary);
-    let out = match subprocess_contract::bounded_output(
-        &mut strings_command,
-        PROBE_DEADLINE,
-    ) {
+    let out = match subprocess_contract::bounded_output(&mut strings_command, PROBE_DEADLINE) {
         subprocess_contract::BoundedOutcome::Completed(out) => out,
         _ => return None,
     };
@@ -450,8 +504,10 @@ pub fn verify_identity(
     }
 }
 
-
-fn bounded_probe(command: &mut Command, step: &'static str) -> Result<std::process::Output, InstallError> {
+fn bounded_probe(
+    command: &mut Command,
+    step: &'static str,
+) -> Result<std::process::Output, InstallError> {
     match subprocess_contract::bounded_output(command, PROBE_DEADLINE) {
         subprocess_contract::BoundedOutcome::Completed(output) => Ok(output),
         subprocess_contract::BoundedOutcome::TimedOut => Err(InstallError::InstallTimeout {
@@ -569,17 +625,10 @@ pub fn restart_and_verify(
             });
         }
         let after_start_secs = running_process_start(binary_name)?;
-        let identity_ok = verify_identity(
-            installed_path,
-            head_sha,
-            &RepoOwnership::ThisRepo,
-        )
-        .consistent;
-        let postcondition = classify_restart_postcondition(
-            before_start_secs,
-            after_start_secs,
-            identity_ok,
-        );
+        let identity_ok =
+            verify_identity(installed_path, head_sha, &RepoOwnership::ThisRepo).consistent;
+        let postcondition =
+            classify_restart_postcondition(before_start_secs, after_start_secs, identity_ok);
         match postcondition {
             RestartPostcondition::Verified => return Ok(postcondition),
             RestartPostcondition::IdentityMismatch => {
@@ -647,10 +696,9 @@ pub fn install_binary(
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
     #[cfg(unix)]
-    if let Err(error) = std::fs::set_permissions(
-        &staged_path,
-        std::fs::Permissions::from_mode(0o755),
-    ) {
+    if let Err(error) =
+        std::fs::set_permissions(&staged_path, std::fs::Permissions::from_mode(0o755))
+    {
         let _ = std::fs::remove_file(&staged_path);
         return Err(InstallError::IoError {
             path: staged_path.display().to_string(),
@@ -710,7 +758,10 @@ mod tests {
             "omp-orchestrator",
             "85828bf95fba66525aa64944f3e84443f7ce188f", // HEAD
             Some("85828bf95fba66525aa64944f3e84443f7ce188f".to_owned()), // build_id
-            Some("omp-orchestrator 0.1.0 build_id=85828bf95fba66525aa64944f3e84443f7ce188f".to_owned()), // version
+            Some(
+                "omp-orchestrator 0.1.0 build_id=85828bf95fba66525aa64944f3e84443f7ce188f"
+                    .to_owned(),
+            ), // version
         );
         assert!(check.consistent, "matching identity must be consistent");
     }
@@ -719,21 +770,19 @@ mod tests {
     fn identity_check_fails_when_build_id_differs_from_head() {
         let check = verify_identity_impl(
             "omp-orchestrator",
-            "aaaaaaaa", // HEAD
+            "aaaaaaaa",                  // HEAD
             Some("bbbbbbbb".to_owned()), // build_id
             Some("omp-orchestrator 0.1.0 build_id=aaaaaaaa".to_owned()),
         );
-        assert!(!check.consistent, "mismatched identity must be inconsistent");
+        assert!(
+            !check.consistent,
+            "mismatched identity must be inconsistent"
+        );
     }
 
     #[test]
     fn identity_check_fails_when_both_missing() {
-        let check = verify_identity_impl(
-            "omp-orchestrator",
-            "cccccccc",
-            None,
-            None,
-        );
+        let check = verify_identity_impl("omp-orchestrator", "cccccccc", None, None);
         assert!(!check.consistent, "missing identity must be inconsistent");
     }
 
@@ -768,7 +817,9 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         let path = root.join("fake-cargo");
         std::fs::write(&path, body).expect("write fake cargo");
-        let mut permissions = std::fs::metadata(&path).expect("fake cargo metadata").permissions();
+        let mut permissions = std::fs::metadata(&path)
+            .expect("fake cargo metadata")
+            .permissions();
         permissions.set_mode(0o755);
         std::fs::set_permissions(&path, permissions).expect("make fake cargo executable");
         path
@@ -804,8 +855,13 @@ exit 0
 "#
         );
         let cargo = executable_fixture(&root, &body);
-        build_target(&root, cargo.to_str().expect("cargo path"), "omp-orchestrator", "head-42")
-            .expect("single-target build must not require a broken sibling");
+        build_target(
+            &root,
+            cargo.to_str().expect("cargo path"),
+            "omp-orchestrator",
+            "head-42",
+        )
+        .expect("single-target build must not require a broken sibling");
         let command_args = std::fs::read_to_string(args).expect("recorded cargo args");
         assert!(command_args.contains("build"), "{command_args}");
         assert!(command_args.contains("--release"), "{command_args}");
@@ -819,7 +875,8 @@ exit 0
 
     #[test]
     fn pane_truth_without_local_source_is_foreign_with_named_origin() {
-        let root = std::env::temp_dir().join(format!("omp-installer-foreign-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("omp-installer-foreign-{}", std::process::id()));
         assert!(matches!(
             resolve_repo_ownership(&root, "pane-truth"),
             RepoOwnership::Foreign { ref repo } if repo.contains("control-plane")
@@ -899,7 +956,10 @@ exit 0
         std::fs::write(&installed, b"previous installed binary").expect("previous install");
         let result = install_binary(&source, &scratch, "head-42", &RepoOwnership::ThisRepo);
         assert!(result.is_err(), "identity-less source must refuse");
-        assert_eq!(std::fs::read(&installed).expect("destination remains"), b"previous installed binary");
+        assert_eq!(
+            std::fs::read(&installed).expect("destination remains"),
+            b"previous installed binary"
+        );
         let staged = std::fs::read_dir(&scratch)
             .expect("scratch entries")
             .filter_map(Result::ok)
@@ -909,24 +969,42 @@ exit 0
         std::fs::remove_dir_all(source_root).expect("source cleanup");
         std::fs::remove_dir_all(scratch).expect("scratch cleanup");
     }
+    #[test]
+    fn anonymous_build_identity_is_absent_from_leg_inventory() {
+        for value in ["absent", "unavailable", "unversioned"] {
+            assert_eq!(parse_build_id(&format!("installer 0.1.0 build_id={value}")), None);
+        }
+        assert_eq!(
+            parse_build_id("installer 0.1.0 build_id=0123456789abcdef"),
+            Some("0123456789abcdef".to_owned())
+        );
+    }
     #[cfg(unix)]
     #[test]
     fn cargo_shim_refusal_is_inconclusive_with_stderr_tail() {
-        let root = std::env::temp_dir().join(format!(
-            "omp-installer-rch-refusal-{}",
-            std::process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("omp-installer-rch-refusal-{}", std::process::id()));
         std::fs::create_dir_all(&root).expect("fixture root");
         let cargo = executable_fixture(
             &root,
             "#!/bin/sh\nprintf '%s\n' '[RCH] remote required; refusing local fallback (no admissible workers)' >&2\nexit 103\n",
         );
-        let error = build_target(&root, cargo.to_str().expect("cargo path"), "installer", "head-42")
-            .expect_err("shim refusal must block install");
+        let error = build_target(
+            &root,
+            cargo.to_str().expect("cargo path"),
+            "installer",
+            "head-42",
+        )
+        .expect_err("shim refusal must block install");
         match error {
-            InstallError::BuildInconclusive { code, stderr_tail, .. } => {
+            InstallError::BuildInconclusive {
+                code, stderr_tail, ..
+            } => {
                 assert_eq!(code, Some(103));
-                assert!(stderr_tail.contains("[RCH] remote required"), "{stderr_tail}");
+                assert!(
+                    stderr_tail.contains("[RCH] remote required"),
+                    "{stderr_tail}"
+                );
             }
             other => panic!("expected inconclusive build, got {other:?}"),
         }
