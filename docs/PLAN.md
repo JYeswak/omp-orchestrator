@@ -6,16 +6,16 @@ across a fleet of agents, refusing every step it cannot prove.**
 Assembled from `docs/plan/`. Section files remain the source of truth for the body; this header is the
 constitution's review metadata and companion boundary. Body changes are made in a section, then
 re-assembled; `DESIGN_INDEX.md` governs delegated companions.
-**Document status:** S4 ROUND 3 INTEGRATION — six pane-2 defects applied; Round 4 remains required.
+**Document status:** S4 ROUND 5 INTEGRATION — pane four's four P1 defects and one P3 defect applied; Round 6 remains required.
 Mechanical validator exit 0 remains necessary and does not certify readiness.
 **Review mode:** HIERARCHICAL — this file is the constitution; reviewers load the design index and
 the selected normative companions rather than treating one companion as the whole plan.
 **Design index:** `docs/planning/DESIGN_INDEX.md`
-**STEADY STATE:** NO — S4 Round 2 is structural; the plan is not frozen or bead-ready.
+**STEADY STATE:** NO — S4 Round 5 is structural; the plan is not frozen or bead-ready.
 ## Document control
 
 - **Owner:** omp-orchestrator planning lane
-- **Revision:** v3; S4 Round 3 defect integration
+- **Revision:** v5; S4 Round 5 defect integration
 - **Authority:** `docs/PLAN.md` constitution, `docs/planning/DESIGN_INDEX.md`, `docs/plan/` source files, and delegated companions
 - **Scope of this pass:** S4 integrator repair only; no crates, S1.toml, or other contract edits.
 
@@ -78,14 +78,21 @@ adopts one.
 
 Release staging remains owned by §9 and §12; S2 PASS is not a release or launch authorization.
 
-## S2 plan-gate dependency graph
+## Product dependency graph (validator-visible)
 
-The S2 two-node edge remains as a validator sentinel. The substantive graph is delegated to `docs/planning/DESIGN_INDEX.md`, where each edge is tied to the existing milestone order and no new work is introduced.
+This is the one graph the validator parses. It contains the two process sentinels and the seven product milestones as two explicitly unjoined components; the index carries no second edge table.
 
 | ID | Work package | Depends on |
 |---|---|---|
-| `WP-001` | S2 plan validation repair | — |
-| `WP-002` | S4 independent review | `WP-001` |
+| WP-001 | S2 plan validation repair | — |
+| WP-002 | S4 independent review | WP-001 |
+| WP-003 | M1 shared pane-state seam | — |
+| WP-004 | M2 graph selection | WP-003 |
+| WP-005 | M3 acknowledgement or typed refusal | WP-004 |
+| WP-006 | M4 completion detection | WP-005 |
+| WP-007 | M5 end-to-end close | WP-006 |
+| WP-008 | M6 foreign-machine execution | WP-007 |
+| WP-009 | M7 unattended refusal accounting | WP-008 |
 
 ## Review round log
 
@@ -98,6 +105,8 @@ plan addressable without restating the evidence.
 | 1 | planning-arc-validator | NOT BEADS READY — S2 PLAN GATE PASS; S4 independent review remains | STRUCTURAL | 0 |
 | 2 | planning-arc-v1.2 substance audit | NOT BEADS READY — RESTRUCTURE to hierarchical constitution plus indexed normative companions; stable register harvested from existing authorities | STRUCTURAL | 0 |
 | 3 | pane 2 fresh-eyes review / integrator | ROUND 4 REQUIRED — six defects integrated; external consumer wiring remains outside this bead | STRUCTURAL | 0 |
+| 4 | pane 4 fresh-eyes reviewer | ROUND 5 REQUIRED — four P1 defects and one P3 defect identified; decomposition verdict deferred | STRUCTURAL | 0 |
+| 5 | pane 4 fresh-eyes review / integrator | ROUND 5 REQUIRED — four minimal repairs integrated; fresh-eyes verification remains required | STRUCTURAL | 0 |
 
 
 

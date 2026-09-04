@@ -1,6 +1,6 @@
 # DESIGN_INDEX — omp-orchestrator
 
-**Status:** S4 Round 3 integration complete; pane two defects applied; Round 4 remains required.
+**Status:** S4 Round 5 integration complete; four pane-four repairs applied; Round 6 remains required.
 
 **Mode:** `hierarchical`
 
@@ -26,7 +26,7 @@ the companion rows named by the review question. It never treats one contract or
 whole plan.
 
 The monolithic heuristic is not available for this artifact: the measured constitution is
-680,420 bytes, above the Grade-B 100–260 KB band. The repository is nevertheless constitution-grade
+681,088 bytes, above the Grade-B 100–260 KB band. The repository is nevertheless constitution-grade
 because the subject is a system others build on, not a single local change, pure research note,
 dictated port, or hotfix. The twelve box files are companion stage specifications; they are not
 twelve independent plans.
@@ -138,41 +138,18 @@ risk rows, and human-decision records. The alias is a durable address; it is not
 risk, gate, work package, or decision. Definitions appear exactly once in this register. Cross-
 section use belongs in §4.
 
-### 3.1 Requirements — 13 existing `R` rows
+### 3.1 Source numbering retained; unearned aliases cut
 
-| Canonical ID | Source ID | Existing authority and subject |
-|---|---|---|
-| `REQ-001` | `R1` | `docs/plan/00-brief.md:21-24` — A-to-Z journey and milestone completion |
-| `REQ-002` | `R2` | `docs/plan/00-brief.md:27-29` — reap before refill and repository hygiene |
-| `REQ-003` | `R3` | `docs/plan/00-brief.md:31-35` — one investor-attackable plan |
-| `REQ-004` | `R4` | `docs/plan/00-brief.md:38-40` — complete system coverage |
-| `REQ-005` | `R5` | `docs/plan/00-brief.md:42` — every OMP surface |
-| `REQ-006` | `R6` | `docs/plan/00-brief.md:44` — testing, validation, and gating frameworks |
-| `REQ-007` | `R7` | `docs/plan/00-brief.md:47-48` — mirror prior art at every gap |
-| `REQ-008` | `R8` | `docs/plan/00-brief.md:50-51` — installability and canonical CLI scoping |
-| `REQ-009` | `R9` | `docs/plan/00-brief.md:53-54` — end users and foreign repositories |
-| `REQ-010` | `R10` | `docs/plan/00-brief.md:56-60` — idea, action, negative pattern, and SOTA frame |
-| `REQ-011` | `R11` | `docs/plan/00-brief.md:62-66` — requirements written before dispatch |
-| `REQ-012` | `R12` | `docs/plan/00-brief.md:68-74` — owned economic and risk questions |
-| `REQ-013` | `R13` | `docs/plan/00-brief.md:76-80` — idea-to-shipped lifecycle |
+The source requirements remain authoritative as R1–R13 at `docs/plan/00-brief.md:21-80`. The prior requirement aliases were index-only, so they are not retained until a non-index consumer cites them.
 
-### 3.2 Invariants — existing assertions given stable addresses
+### 3.2 Retained invariant provenance
+
+The unnumbered writing-contract bullets at `docs/plan/00-brief.md:569-572` remain source material. Only the already earned provenance marker is retained in the canonical register.
 
 | Canonical ID | Existing authority and invariant |
 |---|---|
-| `INV-001` | `docs/plan/00-brief.md:569-570` — every number carries its deriving command |
-| `INV-002` | `docs/plan/00-brief.md:571-572` — `MEASURED` and `PROJECTED` do not share a sentence |
-| `INV-003` | `docs/plan/00-brief.md:461-462`; `docs/plan/02-surface-census.md:49` — a timeout is not a verdict |
-| `INV-004` | `docs/plan/12-journey.md:39` — canonical stage order is S1 → S8 with S9 cross-cutting |
-| `INV-005` | `docs/plan/flow/boxes/S1.toml:63-65` — swarm liveness requires three freshness-bearing sources |
-| `INV-006` | `docs/plan/06-gates.md:122-124` — empty or unreadable scan input is an error |
-| `INV-007` | `docs/plan/06-gates.md:108-110` — mutation goes red and restoration is byte-identical |
-| `INV-008` | `docs/plan/06-gates.md:221-223` — gate claims carry ENFORCES, STILL PASSES, and PROVENANCE |
-| `INV-009` | `docs/plan/06-gates.md:229-234` — a gate must be addressable by a documented command |
-| `INV-010` | `docs/plan/flow/boxes/S9.toml:13,26` — decision append is durable, deduplicated, and restrictive on unreadable input |
-| `INV-011` | `SCHEMAS.toml:18-19` — every persisted artifact has a declared required-field row |
-| `INV-012` | `docs/plan/12-journey.md:27-35` — each journey stage leaves its named artifact behind |
 | `INV-2026` | `docs/plan/02-surface-census.md:14` — retained 2026-08-31 surface-map provenance marker |
+
 
 ### 3.3 Acceptance gates — existing rows normalized, not invented
 
@@ -225,57 +202,49 @@ no milestone body is copied here.
 | `WP-008` | `docs/plan/09-milestones.md:163` — M6 foreign-machine execution |
 | `WP-009` | `docs/plan/09-milestones.md:215` — M7 unattended refusal accounting |
 
-### 3.5 Risks — existing owned risk register
+### 3.5 Source risk rows retained
 
-These six rows are the existing owned risk register, not six new risks. The seven milestone-local
-`RISK` paragraphs remain local acceptance annotations and are not duplicated into the global register.
+The six unnumbered risk rows remain authoritative at `docs/plan/01-idea.md:433-438`. Their prior aliases were index-only and are cut; no replacement risk IDs are invented.
 
-| Canonical ID | Existing source row |
-|---|---|
-| `RISK-001` | `docs/plan/01-idea.md:433` — dispatch blast radius |
-| `RISK-002` | `docs/plan/01-idea.md:434` — secrets and tokens |
-| `RISK-003` | `docs/plan/01-idea.md:435` — compatibility and upstream drift |
-| `RISK-004` | `docs/plan/01-idea.md:436` — licensing and data-use rights |
-| `RISK-005` | `docs/plan/01-idea.md:437` — access and distribution |
-| `RISK-006` | `docs/plan/01-idea.md:438` — operational failure |
+### 3.6 Human decisions — every unique ID in the current ledger
 
-### 3.6 Human decisions — exact existing `HD` IDs, classified as decisions
-
-The decision kind uses the source IDs verbatim. The source ledger currently contains duplicate
-occurrences for some IDs; this index counts seven unique IDs and does not erase that source-level
-condition. Empty decision fields remain empty evidence, not a filled-in decision.
+The decision kind uses source IDs verbatim. The inclusion rule is **harvest every unique `HD-*` present in `docs/decisions.jsonl` at review time**; duplicate source occurrences remain visible conditions, not additional IDs.
 
 | Kind | Source ID | Existing authority and subject |
 |---|---|---|
-| DEC | `HD-0009` | `docs/decisions.jsonl:9` — S1/L3 walkthrough substrate |
-| DEC | `HD-0010` | `docs/decisions.jsonl:10` — S1/L4 spawn defaults |
-| DEC | `HD-0011` | `docs/decisions.jsonl:11` — S1 Stop-hook strictness |
-| DEC | `HD-0012` | `docs/decisions.jsonl:12` — OMP profile-hook probe |
-| DEC | `HD-0013` | `docs/decisions.jsonl:13` — macOS SDK and cross-link posture |
-| DEC | `HD-0014` | `docs/decisions.jsonl:14` — S1-first depth versus breadth-before-depth |
-| DEC | `HD-0015` | `docs/decisions.jsonl:15` — conductor refill approval |
+| DEC | `HD-0001` | `docs/decisions.jsonl` — pending-dispatch fence disposition |
+| DEC | `HD-0002` | `docs/decisions.jsonl` — buyer and external-validation decision |
+| DEC | `HD-0003` | `docs/decisions.jsonl` — public publishability decision |
+| DEC | `HD-0004` | `docs/decisions.jsonl` — worker retirement and respawn decision |
+| DEC | `HD-0005` | `docs/decisions.jsonl` — convergence stop condition |
+| DEC | `HD-0006` | `docs/decisions.jsonl` — unreconciled finding stop condition |
+| DEC | `HD-0007` | `docs/decisions.jsonl` — storage reclaim and RCH decision |
+| DEC | `HD-0008` | `docs/decisions.jsonl` — public push decision |
+| DEC | `HD-0009` | `docs/decisions.jsonl` — S1/L3 walkthrough substrate |
+| DEC | `HD-0010` | `docs/decisions.jsonl` — S1/L4 spawn defaults |
+| DEC | `HD-0011` | `docs/decisions.jsonl` — S1 Stop-hook strictness |
+| DEC | `HD-0012` | `docs/decisions.jsonl` — OMP profile-hook probe |
+| DEC | `HD-0013` | `docs/decisions.jsonl` — macOS SDK and cross-link posture |
+| DEC | `HD-0014` | `docs/decisions.jsonl` — S1-first depth versus breadth-before-depth |
+| DEC | `HD-0015` | `docs/decisions.jsonl` — conductor refill approval |
+| DEC | `HD-0016` | `docs/decisions.jsonl` — current ledger decision row |
+| DEC | `HD-0017` | `docs/decisions.jsonl` — current ledger decision row |
 
 ## 3.7 Identifier delegation state
 
-Every canonical ID has one explicit delegated concern, authority, and consumer state. The rows below are range-complete: each individual ID in a range is covered. This is index-side wiring, not a claim that the consumer is already implemented.
+Every retained canonical ID has one delegated concern, authority, and consumer state. Range rows cover each individual retained ID; source-only numbering remains at its source authority. This is an honest index map, not a claim that every consumer is implemented.
 
-| ID family | Delegated concern | Delegated to | Current consumer state |
+| Retained ID family | Delegated concern | Delegated to | Consumer state |
 |---|---|---|---|
-| `REQ-001`–`REQ-013` | requirement text and acceptance intent | `docs/plan/00-brief.md` and the constitution | index/constitution reference; no code or bead edge claimed in this integration |
-| `INV-001`–`INV-012`, `INV-2026` | invariant and provenance rule | each source authority in §3.2 | load-bearing design rule; runtime enforcement remains separately evidenced |
-| `GATE-001`–`GATE-010` | business and adoption acceptance | `docs/plan/01-idea.md` gate rows 8–17 | index-only alias; pane %7 owns code/bead wiring outside this bead |
-| `GATE-011`–`GATE-018` | technical gate-leg identity | the named gate crate row in `docs/plan/06-gates.md` | index-only alias; pane %7 owns code/bead wiring outside this bead |
-| `GATE-019`–`GATE-024` | six gate properties | `docs/plan/06-gates.md:229-234` and its gate admission owner | index-only alias; pane %7 owns code/bead wiring outside this bead |
-| `WP-001`–`WP-002` | S2/S4 planning sequence | constitution S2 graph and S4 integrator | existing validator sentinel and plan edge |
-| `WP-003`–`WP-009` | seven ordered implementation milestones | `docs/plan/09-milestones.md` and the derived edge table | milestone graph address; implementation remains not beads-ready |
-| `RISK-001`–`RISK-006` | owned risk register rows | `docs/plan/01-idea.md:433-438` and milestone reviewers | risk visibility; no automatic gate trip claimed |
-| `HD-0009`–`HD-0015` | human decision records | `docs/decisions.jsonl` and S9 decision owner | source IDs preserved; duplicate occurrences remain a ledger condition |
+| `GATE-001`–`GATE-024` | business, technical, and six-property gate definitions | the named gate rows and gate owner in `docs/plan/06-gates.md` | real code/bead wiring remains owned by pane %7; not claimed here |
+| `WP-001`–`WP-009` | S2/S4 sentinels plus the seven product milestones | the constitution graph and `docs/plan/09-milestones.md` | validator-visible product graph; implementation remains not beads-ready |
+| `HD-0001`–`HD-0017` | human decision records | `docs/decisions.jsonl` and the S9 decision owner | all unique ledger IDs harvested at review time; duplicate rows remain source conditions |
+| `INV-2026` | retained surface-map provenance | `docs/plan/02-surface-census.md:14` | constitution provenance sentinel |
 
-Delegation completeness is now 32 contract rows + 16 artifact rows + 12 box rows = 60/60. All 72
-canonical IDs are retained because each maps to an existing source row, heading, or decision; none is
-cut. Index-only consumer state is disclosed rather than disguised as implementation wiring.
-
-
+Delegation completeness remains 32 contract rows + 16 artifact rows + 12 box rows = 60/60. The 31
+unearned aliases (the requirement aliases, twelve invariant aliases, and six risk aliases) are cut.
+R1–R13, M1–M7, the risk table rows, and the writing-contract bullets remain readable at their source
+authorities; no replacement IDs are invented.
 
 ## 4. Constitution cross-reference map
 
@@ -284,49 +253,33 @@ which authority rows to load; it does not copy their content into a second defin
 
 | Constitution area | Load these identifiers | Normative companions |
 |---|---|---|
-| `00-brief` requirements and facts | `REQ-001`–`REQ-013`, `INV-001`–`INV-003` | `SCHEMAS.toml`, `docs/plan/FINDINGS.jsonl` |
-| `01-idea` thesis and adoption | `GATE-001`–`GATE-010`, `RISK-001`–`RISK-006` | `docs/contracts/claim_strength_contract.md`, `docs/contracts/expectation_registry.md` |
-| `02-surface-census` | `INV-001`–`INV-003`, `INV-2026` | `SCHEMAS.toml`, `docs/plan/SURFACE-MAP.jsonl` |
-| `03-crates` and process boundaries | `REQ-013`, `INV-003`, `INV-004`, `INV-011` | `docs/contracts/orchestration_contract.md`, `docs/contracts/subprocess_contract.md`, `docs/contracts/cancellation_contract.md` |
-| `05-actions` | `INV-006`–`INV-010` | `docs/contracts/admission_contract.md`, `docs/contracts/dispatch_claim_contract.md` |
-| `06-gates` | `GATE-011`–`GATE-024`, `INV-006`–`INV-009` | all gate-specific contracts and declared readers |
-| `07-installability` | `INV-011`, `WP-008`, `HD-0013` | `docs/plan/flow/boxes/S8.toml`, `docs/contracts/s1_l0_install.md` (human entry/reference), `docs/contracts/s1_l1_doctor.md` |
-| `08-end-users` | `REQ-008`, `REQ-009`, `GATE-003`, `GATE-008` | S1 L2–L5 contracts and boxes |
-| `09-milestones` | `WP-003`–`WP-009`, `RISK-001`–`RISK-006` | `docs/contracts/verification_contract.md` |
-| `10-prior-art` | `REQ-007`, `INV-2026` | pinned donor sources in `sources.lock.json` |
-| `11-lifecycle` | `REQ-013`, `INV-004`, `INV-012` | `docs/contracts/lifecycle_contract.md` |
-| `12-journey` | `REQ-001`, `REQ-013`, `INV-004`–`INV-010`, `HD-0009`–`HD-0015` | all 12 stage boxes and journey contracts |
+| `00-brief` requirements and facts | source R1–R13 | `SCHEMAS.toml`, `docs/plan/FINDINGS.jsonl` |
+| `01-idea` thesis and adoption | `GATE-001`–`GATE-010` | `docs/contracts/claim_strength_contract.md`, `docs/contracts/expectation_registry.md` |
+| `02-surface-census` | `INV-2026` | `SCHEMAS.toml`, `docs/plan/SURFACE-MAP.jsonl` |
+| `03-crates` and process boundaries | `WP-001`–`WP-009` | `docs/contracts/orchestration_contract.md`, `docs/contracts/subprocess_contract.md`, `docs/contracts/cancellation_contract.md` |
+| `05-actions` | `GATE-019`–`GATE-024` | `docs/contracts/admission_contract.md`, `docs/contracts/dispatch_claim_contract.md` |
+| `06-gates` | `GATE-011`–`GATE-024` | all gate-specific contracts and declared readers |
+| `07-installability` | `INV-2026`, `WP-008`, `HD-0013` | `docs/plan/flow/boxes/S8.toml`, S1 entry/reference contracts |
+| `08-end-users` | `GATE-003`, `GATE-008` | S1 L2–L5 contracts and boxes |
+| `09-milestones` | `WP-003`–`WP-009` | `docs/contracts/verification_contract.md` |
+| `10-prior-art` | `INV-2026` | pinned donor sources in `sources.lock.json` |
+| `11-lifecycle` | `WP-003`–`WP-009` | `docs/contracts/lifecycle_contract.md` |
+| `12-journey` | `WP-001`–`WP-009`, `HD-0001`–`HD-0017` | all 12 stage boxes and journey contracts |
 
-## 5. Derived work-package edges
+## 5. Product dependency graph
 
-Edges are derived from existing order statements, not guessed from document position. The existing
-S2→S4 planning edge is retained. The seven milestone headings explicitly state dependency order,
-so their chain contributes six edges. The two components are intentionally not joined until a
-source authority states that plan review gates M1.
+The one canonical graph is the validator-visible table in docs/PLAN.md. This index carries no second edge table or edge count. The source order is M1–M7; the constitution promotes the existing WP-003–WP-009 aliases into that one table. WP-001/WP-002 remain a separate process component in the same table because no source authority says that plan review gates M1.
 
-| Work package | Depends on | Source authority |
-|---|---|---|
-| `WP-001` | — | existing constitution S2 gate graph |
-| `WP-002` | `WP-001` | existing constitution S2 gate graph |
-| `WP-003` | — | `docs/plan/09-milestones.md:32-45` — seven milestones ordered by dependency |
-| `WP-004` | `WP-003` | `docs/plan/09-milestones.md:32-76` |
-| `WP-005` | `WP-004` | `docs/plan/09-milestones.md:32-95` |
-| `WP-006` | `WP-005` | `docs/plan/09-milestones.md:32-119` |
-| `WP-007` | `WP-006` | `docs/plan/09-milestones.md:32-142` |
-| `WP-008` | `WP-007` | `docs/plan/09-milestones.md:32-163` |
-| `WP-009` | `WP-008` | `docs/plan/09-milestones.md:32-215` |
+## 6. Register counts and next-round rule
 
-Expected unique register counts for this index: `WP=9`, `INV=13`, `GATE=24`, `REQ=13`,
-`DEC=7`, `RISK=6`; total `IDS_AFTER=72`. Existing constitution compatibility IDs are
-`WP-001`, `WP-002`, and `INV-2026`. No semantic item is invented by this index.
-Round 2 delta: 69 unique identifiers became addressable beyond the three existing constitution sentinels; semantic items added = 0.
+The retained register is WP=9, INV=1, GATE=24, DEC=17; total IDS_AFTER=51. Thirty-one index-only aliases were cut: the requirement aliases, twelve invariant aliases, and six risk aliases. The seven product aliases are retained because the constitution now references them in the canonical graph.
 
-## 6. Review rule for the next round
+Decision rule: harvest every unique HD-* present in docs/decisions.jsonl at each review; the current register therefore includes HD-0001 through HD-0017. Duplicate ledger rows are not silently collapsed into evidence.
 
-Round 3 is `STRUCTURAL`: the six pane-two defects changed corpus completeness, authority precedence,
-stage routing, artifact read-back, delegation state, and the S8 rollback claim.
-The mechanical validator's `exit 0` remains necessary but is not a readiness verdict. The current state is
-`NOT BEADS READY`; pane two's verdict remains authoritative for Round 4.
+Round 5 is STRUCTURAL: pane four's four P1 repairs changed the retained ID set, moved the product graph into the validator-visible constitution table, refreshed the decision harvest, and corrected the S8 source authority claim. The decomposition verdict is intentionally not acted on at 9% coverage.
+
+The mechanical validator's exit 0 remains necessary but is not a readiness verdict. Round 6 must re-derive the surviving ID consumers, the single-table DAG, the all-unique decision harvest, and the S8 rollback evidence boundary with fresh eyes.
+
 The Round 4 reviewer must attack the six repaired joins: exact 32=32 path coverage, S1/S8 precedence,
 S6 stage alignment, every artifact reader and shape authority, per-ID delegation state, and the distinction
 between a projected rollback refusal and a demonstrated gate trip.
