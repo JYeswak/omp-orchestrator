@@ -295,6 +295,30 @@ file *and* the parent directory, reached from four real callers.
 - **BUILT ≠ WIRED applies to every crate row above.** A crate appearing in the group table is not a
   claim that anything calls it; `AGENTS.md` records that 30 of 68 crates had no caller when last
   measured.
+- **The fleet's own monitors are mostly not running.** Measured 2026-09-04: of eight monitor crates,
+  `tick-monitor` runs (one watcher per project) and `inbox-monitor` is armed as a bounded wait.
+  `fleet-monitor`, `dispatch-silence-watch`, `reap-finished-panes` and `refill-idle-panes` are
+  installed with **zero processes**; `bead-availability` is **not on `PATH` at all**. A monitor that
+  is installed and not running is the same worth as a crate with no caller.
+- **A monitor writing to a file nobody reads is not a monitor.** `tick-monitor` reached
+  `free_capacity_streak=101` — 101 consecutive ticks reporting free capacity, ~2.5 hours — while
+  emitting `verdict=None blocker=None`, because it had been started without
+  `--capacity-alarm-after`. It could not escalate even to a reader. A sibling project's watcher
+  carried that flag and ours did not.
+- **`tick-monitor watch --help` does not print help; it starts a watch loop.** One such invocation
+  had been holding the *default* ledger lock, which is why the crate refused other watchers with
+  `LEDGER CONTENDED`. A help flag that daemonises is a defect, not a quirk.
+- **The plan is `NOT BEADS READY`, and that is the current recorded verdict, not an aspiration.**
+  `docs/planning/ROUND_LOG.md` carries `S4 ROUND 2 … verdict="NOT BEADS READY: RESTRUCTURE"` under
+  `planning-arc` v1.2. The plan validates clean (`exit 0`) — and v1.2 states that
+  *"exit 0/1 never certifies readiness"*, so the clean exit is a plan-integrity check and nothing
+  more.
+- **The plan is hierarchical in form only as of Round 2.** `docs/PLAN.md` is 680 KB against a
+  34-repo corpus band of 100–260 KB, so monolithic review is unavailable (the reviewer-headroom
+  heuristic is ≤ ~45% of context). `docs/planning/DESIGN_INDEX.md` now delegates 32 contracts and
+  12 stage boxes, and the identifier count went `3 → 72` (`HARVESTED=69 INVENTED=0`) — but the
+  validator's own view still reads `WP=2 INV=1` because the registry is delegated, and **7 edges
+  across 72 identifiers** means most have no dependency relation yet.
 
 **NO-CLAIM.** The zero-worktree policy has no gate behind it. Nothing in-tree refuses a
 `git worktree add`, so it is enforced by every agent reading `AGENTS.md`, which is the enforcement
