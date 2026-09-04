@@ -18,6 +18,49 @@ The exemption list is empty. There is deliberately no `check.sh` carve-out — t
 let **160 scripts and 60,467 lines** accrete in the repo this substrate is extracted from.
 ---
 
+## `cargo test` refuses to run? Use the bypass. (measured 2026-09-04)
+
+**Read this before reporting a test as unrunnable.** A bare `cargo` invocation in this repo goes
+through an `rch` wrapper that offloads to remote workers and **refuses local fallback**:
+
+```
+[RCH] remote required; refusing local fallback
+      (no admissible workers: insufficient_total_slots=3,active_project_exclusion=1) — retryable
+```
+
+**The bypass runs it locally and works:**
+
+```bash
+RCH_CARGO_WRAPPER_BYPASS=1 cargo test -p <crate>
+```
+
+**MEASURED COST OF NOT DOCUMENTING THIS: a pane declined a MUTATION-VERIFIED claim it could have
+earned.** On 2026-09-04 a worker landed `ae115ec` and reported *"cargo test blocked: rch hook
+refuses local fallback (no admissible workers). Not MUTATION-VERIFIED."* That refusal was correct
+discipline — an unrunnable test is not a passing test. But the bypass had been in use by the
+conductor all through the previous session, and `grep -c RCH_CARGO_WRAPPER_BYPASS` returned **0 in
+`AGENTS.md`, 0 in `CONTRACT.md`, 0 in `NEGATIVE_EVIDENCE.md`** — every place a pane would look. The
+knowledge existed only in the conductor's shell history, which is the *dispatch-only instruction*
+failure aimed at a tool rather than a requirement.
+
+**Two things the bypass does NOT license.**
+
+1. **It changes WHERE the build runs, never WHAT the verdict means.** `NE-001` records three
+   offloaded `101`s in one day whose causes were SIGKILL, SIGKILL, and a tracked file the worker
+   never received — **zero compile errors** between them. An offloaded exit code is not a verdict
+   about the local target. Read `signal:` before `E`.
+2. **It is also how you get the wrong artifact.** A bare `cargo build` was silently offloaded and
+   returned an `x86-64 ELF` on this `arm64 Darwin` host; five ledger writes failed with
+   `cannot execute binary file` and landed nothing. If a freshly built binary will not run,
+   `file <binary>` first, then rebuild with the bypass. This is `HD-0013`'s rule in practice:
+   **contabo for Linux, the local Mac for darwin.**
+
+**NO-CLAIM.** The bypass makes the local run possible; it does not make the remote lane healthy.
+`insufficient_total_slots=3` and `active_project_exclusion=1` are unexplained here, and the wrapper
+calls the refusal *retryable*, so a worker fleet problem remains UNMEASURED rather than fixed.
+
+---
+
 ## The zero-worktree policy (binding, Joshua 2026-09-03)
 
 **All work happens on `main`, in this one checkout, saved to `main`.** No worktrees. No branches.
