@@ -6,7 +6,7 @@
 
 #![forbid(unsafe_code)]
 
-use lifecycle_event::{DurableJournal, Layer, LifecycleEvent, Outcome, ReasonCode};
+use lifecycle_event::{DurableJournal, Layer, LifecycleEvent, EmitOutcome, ReasonCode};
 use lifecycle_monitor::{
     gate_claimed_write_readback, journal_for_host, load_metrics, observe_all, observe_layer,
     EXPECTED_METRIC_COUNT,
@@ -87,7 +87,7 @@ fn gate(args: &[String]) -> Result<(), String> {
             "HUMAN",
             "S1.L0",
             "lifecycle-monitor",
-            Outcome::Emitted,
+            EmitOutcome::Emitted,
             ReasonCode::new("GATE_PROBE").map_err(|e| e.to_string())?,
         );
         return match gate_claimed_write_readback(&journal, std::slice::from_ref(&claimed)) {

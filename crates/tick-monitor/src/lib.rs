@@ -71,51 +71,9 @@ pub fn now_unix() -> u64 {
 // proc -- the shared subprocess helper
 // ---------------------------------------------------------------------------
 
-/// The typed result of running one subprocess.
-///
-/// `TimedOut` is deliberately NOT `Completed { code: non-zero }`. AGENTS.md: "A timeout
-/// is not a verdict" -- an empty buffer from a killed child must never map to the token a
-/// genuinely failing subject produces. A caller matching on `Completed` structurally
-/// cannot read a timeout as an answer.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Outcome {
-    Completed {
-        code: Option<i32>,
-        stdout: String,
-        stderr: String,
-    },
-    TimedOut {
-        after_ms: u64,
-        group_killed: bool,
-    },
-    SpawnFailed {
-        message: String,
-    },
-}
-
-impl Outcome {
-    /// stdout only when the process genuinely completed. A timeout yields None, so a
-    /// caller cannot accidentally treat a killed child's empty buffer as output.
-    pub fn stdout_if_completed(&self) -> Option<&str> {
-        // Enumerated, not wildcarded: both non-Completed arms are RESTRICTIVE
-        // terminals, and a wildcard here would silently swallow a fourth variant
-        // into "no output" — the same shape as reading a killed child's empty
-        // buffer as a real answer, which is what this method exists to prevent.
-        match self {
-            Outcome::Completed { stdout, .. } => Some(stdout),
-            Outcome::TimedOut { .. } => None,
-            Outcome::SpawnFailed { .. } => None,
-        }
-    }
-
-    pub fn kind(&self) -> &'static str {
-        match self {
-            Outcome::Completed { .. } => "completed",
-            Outcome::TimedOut { .. } => "timed_out",
-            Outcome::SpawnFailed { .. } => "spawn_failed",
-        }
-    }
-}
+/// The typed result of running one subprocess. Canonical type lives in omp-types
+/// so LEG4 can refuse a third `pub enum Outcome`.
+pub use omp_types::ChildOutcome;
 
 /// Run `argv` with a deadline, draining BOTH pipes concurrently and killing the whole
 /// process GROUP on timeout.
@@ -129,9 +87,9 @@ impl Outcome {
 ///
 /// `process_group(0)` makes the child a group leader, so its pgid equals its pid and one
 /// signal to `-pid` reaches every descendant.
-pub fn run(argv: &[&str], timeout: Duration) -> Outcome {
+pub fn run(argv: &[&str], timeout: Duration) -> ChildOutcome {
     if argv.is_empty() {
-        return Outcome::SpawnFailed {
+        return ChildOutcome::SpawnFailed {
             message: "empty argv".to_owned(),
         };
     }
@@ -145,7 +103,7 @@ pub fn run(argv: &[&str], timeout: Duration) -> Outcome {
     let mut child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => {
-            return Outcome::SpawnFailed {
+            return ChildOutcome::SpawnFailed {
                 message: format!("{}: {e}", argv[0]),
             }
         }
@@ -177,12 +135,12 @@ pub fn run(argv: &[&str], timeout: Duration) -> Outcome {
     let stderr = err_thread.join().unwrap_or_default();
 
     if timed_out {
-        Outcome::TimedOut {
+        ChildOutcome::TimedOut {
             after_ms: timeout.as_millis() as u64,
             group_killed: true,
         }
     } else {
-        Outcome::Completed {
+        ChildOutcome::Completed {
             code,
             stdout,
             stderr,
@@ -1226,20 +1184,20 @@ pub fn escalate_idle_capacity_with_notifier(
     })?;
     let argv = [executable, "-e", notification.as_str()];
     match run(&argv, Duration::from_secs(10)) {
-        Outcome::Completed { code: Some(0), .. } => Ok(CapacityEscalationReceipt {
+        ChildOutcome::Completed { code: Some(0), .. } => Ok(CapacityEscalationReceipt {
             urgent_path: urgent_path.to_owned(),
             notification_observed: true,
             consecutive_ticks,
         }),
-        Outcome::Completed { code, stderr, .. } => Err(format!(
+        ChildOutcome::Completed { code, stderr, .. } => Err(format!(
             "notification command exited {:?}: {}",
             code,
             stderr.trim()
         )),
-        Outcome::TimedOut { after_ms, .. } => {
+        ChildOutcome::TimedOut { after_ms, .. } => {
             Err(format!("notification command timed out after {after_ms}ms"))
         }
-        Outcome::SpawnFailed { message } => {
+        ChildOutcome::SpawnFailed { message } => {
             Err(format!("notification command failed to spawn: {message}"))
         }
     }

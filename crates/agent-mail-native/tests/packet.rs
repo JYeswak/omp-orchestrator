@@ -10,9 +10,8 @@ use agent_mail_native::identity::{BindingStatus, PaneIdentity};
 use agent_mail_native::journey::{AgentName, ProjectKey, ResumePoint};
 use agent_mail_native::packet::{
     assert_field_order, parse_line, sha256_hex, ActorIdentity, Authority, CursorPoint, CursorTouch,
-    EffectResult, Outcome, PacketError, PacketJournal, PacketRow, RowSpec, Stage, Timestamp,
-    ACTOR_FIELD_ORDER,
-    FIELD_ORDER, SCHEMA, SCHEMA_VERSION,
+    EffectResult, AttemptOutcome, PacketError, PacketJournal, PacketRow, RowSpec, Stage, Timestamp,
+    ACTOR_FIELD_ORDER, FIELD_ORDER, SCHEMA, SCHEMA_VERSION,
 };
 use agent_mail_native::DeliveryCursor;
 use std::fs;
@@ -90,7 +89,10 @@ fn the_key_scanner_ignores_nested_objects_and_still_sees_them_nested() {
         },
         ..valid_spec()
     };
-    let emitted = PacketRow::new(spec).expect("valid spec").emit().expect("emit");
+    let emitted = PacketRow::new(spec)
+        .expect("valid spec")
+        .emit()
+        .expect("emit");
     let keys = agent_mail_native::packet::top_level_keys(&emitted.line);
 
     assert_eq!(keys.len(), 14, "exactly the top-level keys: {keys:?}");
@@ -161,7 +163,10 @@ fn the_digest_survives_a_write_and_reread_round_trip() {
         .lines()
         .next()
         .expect("one line was written, so one line reads back");
-    assert_eq!(line, emitted.line, "the bytes on disk are the bytes emitted");
+    assert_eq!(
+        line, emitted.line,
+        "the bytes on disk are the bytes emitted"
+    );
     assert_eq!(
         sha256_hex(line.as_bytes()),
         emitted.sha256,
@@ -202,9 +207,7 @@ fn reordered_bytes_are_a_different_artifact() {
         .expect("valid spec")
         .emit()
         .expect("emit");
-    let reordered = format!(
-        "{{\"version\":{SCHEMA_VERSION},\"schema\":\"{SCHEMA}\"}}"
-    );
+    let reordered = format!("{{\"version\":{SCHEMA_VERSION},\"schema\":\"{SCHEMA}\"}}");
     assert_ne!(
         sha256_hex(reordered.as_bytes()),
         emitted.sha256,
@@ -232,7 +235,10 @@ fn a_cursor_on_the_wire_always_carries_its_recipient_and_project() {
         },
         ..valid_spec()
     };
-    let emitted = PacketRow::new(spec).expect("valid spec").emit().expect("emit");
+    let emitted = PacketRow::new(spec)
+        .expect("valid spec")
+        .emit()
+        .expect("emit");
     let parsed = parse_line(&emitted.line).expect("parse");
 
     let before = parsed.cursor_before.expect("touched rows carry both ends");
@@ -339,11 +345,10 @@ fn a_reader_refuses_an_unsupported_version_by_name() {
         .expect("valid")
         .emit()
         .expect("emit");
-    let bumped = emitted.line.replacen(
-        &format!("\"version\":{SCHEMA_VERSION}"),
-        "\"version\":2",
-        1,
-    );
+    let bumped =
+        emitted
+            .line
+            .replacen(&format!("\"version\":{SCHEMA_VERSION}"), "\"version\":2", 1);
     assert_ne!(bumped, emitted.line, "the bump must actually apply");
 
     match parse_line(&bumped) {
@@ -367,9 +372,7 @@ fn a_reader_refuses_a_foreign_schema_by_name() {
         .expect("valid")
         .emit()
         .expect("emit");
-    let foreign = emitted
-        .line
-        .replacen(SCHEMA, "someone.elses.packet", 1);
+    let foreign = emitted.line.replacen(SCHEMA, "someone.elses.packet", 1);
     match parse_line(&foreign) {
         Err(PacketError::UnsupportedSchema { found }) => {
             assert_eq!(found, "someone.elses.packet");
@@ -393,7 +396,7 @@ fn a_current_version_row_parses_cleanly() {
     assert_eq!(parsed.actor.pane_id, "%1408");
     assert_eq!(parsed.actor.pane_index, 4);
     assert_eq!(parsed.authority, Authority::Daemon);
-    assert_eq!(parsed.outcome, Outcome::Delivered);
+    assert_eq!(parsed.outcome, AttemptOutcome::Delivered);
     assert_eq!(parsed.ts_unix, 1_767_331_200);
 }
 
@@ -540,7 +543,7 @@ fn an_empty_journal_is_an_error_not_a_clean_run() {
 fn a_value_containing_newlines_quotes_and_backslashes_stays_one_parseable_line() {
     let hostile = "line one\nline two\ttabbed \"quoted\" back\\slash \u{1b}[31mansi\u{1b}[0m";
     let spec = RowSpec {
-        result: EffectResult::denied(Outcome::ToolError, hostile)
+        result: EffectResult::denied(AttemptOutcome::ToolError, hostile)
             .expect("ToolError is restrictive"),
         ..valid_spec()
     };
@@ -604,10 +607,10 @@ fn the_journal_writes_one_row_per_line_with_a_trailing_newline() {
 #[test]
 fn restrictive_outcomes_are_named_and_delivered_is_not_a_receipt() {
     for outcome in [
-        Outcome::Refused,
-        Outcome::TimedOut,
-        Outcome::Unreachable,
-        Outcome::ToolError,
+        AttemptOutcome::Refused,
+        AttemptOutcome::TimedOut,
+        AttemptOutcome::Unreachable,
+        AttemptOutcome::ToolError,
     ] {
         assert!(
             outcome.is_restrictive(),
@@ -616,16 +619,16 @@ fn restrictive_outcomes_are_named_and_delivered_is_not_a_receipt() {
         );
     }
     assert!(
-        !Outcome::Delivered.is_restrictive(),
+        !AttemptOutcome::Delivered.is_restrictive(),
         "delivered is not restrictive"
     );
     assert!(
-        !Outcome::NothingToDo.is_restrictive(),
+        !AttemptOutcome::NothingToDo.is_restrictive(),
         "nothing-to-do is a real observation, not a fault"
     );
     // And it is a DISTINCT token from delivered: folding them would make the one
     // actionable outcome indistinguishable from an empty run.
-    assert_ne!(Outcome::NothingToDo.as_str(), Outcome::Delivered.as_str());
+    assert_ne!(AttemptOutcome::NothingToDo.as_str(), AttemptOutcome::Delivered.as_str());
 }
 
 /// Every wire token is distinct across the three enums. Two states sharing a
@@ -649,14 +652,14 @@ fn every_wire_token_is_distinct_within_its_enum() {
     ]
     .map(Stage::as_str);
     let outcomes = [
-        Outcome::Delivered,
-        Outcome::Refused,
-        Outcome::TimedOut,
-        Outcome::Unreachable,
-        Outcome::ToolError,
-        Outcome::NothingToDo,
+        AttemptOutcome::Delivered,
+        AttemptOutcome::Refused,
+        AttemptOutcome::TimedOut,
+        AttemptOutcome::Unreachable,
+        AttemptOutcome::ToolError,
+        AttemptOutcome::NothingToDo,
     ]
-    .map(Outcome::as_str);
+    .map(AttemptOutcome::as_str);
 
     for set in [authorities.to_vec(), stages.to_vec(), outcomes.to_vec()] {
         let mut sorted = set.clone();
@@ -706,7 +709,7 @@ fn every_authority_round_trips_through_the_wire() {
 /// THE DECISIVE LEG. A denied effect emits `"output_sha256":null`, and the proof
 /// that nothing ran is that ABSENCE — not a settable flag beside a digest.
 ///
-/// The first version of this contract had `outcome: Outcome` next to a REQUIRED
+/// The first version of this contract had `outcome: AttemptOutcome` next to a REQUIRED
 /// `output_sha256: String`, so a row could say `refused` while carrying a 64-hex
 /// digest of bytes that were never produced. The card's anti-pattern, verbatim:
 /// *"a boolean can be set wrongly; a missing field cannot be forged into
@@ -714,10 +717,10 @@ fn every_authority_round_trips_through_the_wire() {
 #[test]
 fn a_denied_effect_emits_no_output_digest() {
     for outcome in [
-        Outcome::Refused,
-        Outcome::TimedOut,
-        Outcome::Unreachable,
-        Outcome::ToolError,
+        AttemptOutcome::Refused,
+        AttemptOutcome::TimedOut,
+        AttemptOutcome::Unreachable,
+        AttemptOutcome::ToolError,
     ] {
         let spec = RowSpec {
             result: EffectResult::denied(outcome, "the fence refused this pane")
@@ -756,10 +759,10 @@ fn a_denied_effect_emits_no_output_digest() {
 #[test]
 fn no_restrictive_outcome_can_carry_an_output_digest() {
     for outcome in [
-        Outcome::Refused,
-        Outcome::TimedOut,
-        Outcome::Unreachable,
-        Outcome::ToolError,
+        AttemptOutcome::Refused,
+        AttemptOutcome::TimedOut,
+        AttemptOutcome::Unreachable,
+        AttemptOutcome::ToolError,
     ] {
         let denied = EffectResult::denied(outcome, "reason").expect("restrictive");
         assert_eq!(denied.output_sha256(), None, "{}", outcome.as_str());
@@ -768,7 +771,11 @@ fn no_restrictive_outcome_can_carry_an_output_digest() {
     }
     let completed = EffectResult::completed(sha256_hex(b"out")).expect("valid digest");
     assert!(completed.output_sha256().is_some());
-    assert_eq!(completed.error(), None, "a completed effect has no error text");
+    assert_eq!(
+        completed.error(),
+        None,
+        "a completed effect has no error text"
+    );
 }
 
 /// KNOWN-BAD: a NON-restrictive outcome cannot be paired with a denial.
@@ -776,7 +783,7 @@ fn no_restrictive_outcome_can_carry_an_output_digest() {
 /// would reintroduce the incoherence the type removes.
 #[test]
 fn a_non_restrictive_outcome_cannot_be_denied() {
-    for outcome in [Outcome::Delivered, Outcome::NothingToDo] {
+    for outcome in [AttemptOutcome::Delivered, AttemptOutcome::NothingToDo] {
         match EffectResult::denied(outcome, "reason") {
             Err(PacketError::NonRestrictiveDenial { outcome: named }) => {
                 assert_eq!(named, outcome.as_str());
@@ -784,9 +791,12 @@ fn a_non_restrictive_outcome_cannot_be_denied() {
             other => panic!("{} must not be deniable, got {other:?}", outcome.as_str()),
         }
     }
-    let refusal = EffectResult::denied(Outcome::Delivered, "x").unwrap_err().to_string();
+    let refusal = EffectResult::denied(AttemptOutcome::Delivered, "x")
+        .unwrap_err()
+        .to_string();
     assert!(
-        refusal.contains("PACKET_NON_RESTRICTIVE_DENIAL") && refusal.contains("describes an effect that RAN"),
+        refusal.contains("PACKET_NON_RESTRICTIVE_DENIAL")
+            && refusal.contains("describes an effect that RAN"),
         "the refusal must say why: {refusal}"
     );
 }
@@ -794,7 +804,7 @@ fn a_non_restrictive_outcome_cannot_be_denied() {
 /// A denial with no reason records nothing.
 #[test]
 fn a_denial_without_a_reason_is_refused() {
-    match EffectResult::denied(Outcome::Refused, "   ") {
+    match EffectResult::denied(AttemptOutcome::Refused, "   ") {
         Err(PacketError::EmptyField { field }) => assert_eq!(field, "error"),
         other => panic!("a blank denial reason must refuse, got {other:?}"),
     }
@@ -811,9 +821,10 @@ fn a_hand_written_row_cannot_forge_either_direction() {
         .expect("emit");
 
     // FORGERY 1: a restrictive outcome carrying an output digest.
-    let forged_denial = completed
-        .line
-        .replacen("\"outcome\":\"delivered\"", "\"outcome\":\"refused\"", 1);
+    let forged_denial =
+        completed
+            .line
+            .replacen("\"outcome\":\"delivered\"", "\"outcome\":\"refused\"", 1);
     assert_ne!(forged_denial, completed.line, "the forgery must apply");
     match parse_line(&forged_denial) {
         Err(PacketError::IncoherentResult {
@@ -839,7 +850,10 @@ fn a_hand_written_row_cannot_forge_either_direction() {
             output_present,
         }) => {
             assert_eq!(outcome, "delivered");
-            assert!(!output_present, "the forgery is a completion WITHOUT a digest");
+            assert!(
+                !output_present,
+                "the forgery is a completion WITHOUT a digest"
+            );
         }
         other => panic!("a completion missing its digest must be refused, got {other:?}"),
     }

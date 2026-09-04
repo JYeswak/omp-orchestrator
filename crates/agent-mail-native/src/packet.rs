@@ -156,7 +156,7 @@ impl Authority {
 ///
 /// # What this does NOT mean
 ///
-/// A stage is what was ATTEMPTED, never what was achieved — the [`Outcome`] on
+/// A stage is what was ATTEMPTED, never what was achieved — the [`AttemptOutcome`] on
 /// the same row carries that. `Dispatched` with `outcome: refused` is a
 /// well-formed row and a common one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -191,59 +191,9 @@ impl Stage {
     }
 }
 
-/// What the attempt produced.
-///
-/// # What this does NOT mean
-///
-/// `Delivered` means the transport returned success for the send. It does NOT
-/// mean the receiver observed the packet: measured on this fleet, a send returned
-/// `successful: ["4"]` while the packet never arrived, and the inverse also
-/// fired the same session. Receiver observation is K8 and is a separate
-/// authority by design. `TimedOut` is never a verdict about the subject.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Outcome {
-    /// The transport returned success. Not a receipt.
-    Delivered,
-    /// A working gate or policy refused, which is a functioning refusal.
-    Refused,
-    /// A bounded wait elapsed. Not a verdict about the subject.
-    TimedOut,
-    /// The authority could not be reached, so the verdict is ABSENT, not negative.
-    Unreachable,
-    /// The tool itself broke, distinct from a refusal.
-    ToolError,
-    /// Nothing was eligible. Distinct from success, per this repo's anti-vacuity rule.
-    NothingToDo,
-}
-
-impl Outcome {
-    /// The wire token.
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Delivered => "delivered",
-            Self::Refused => "refused",
-            Self::TimedOut => "timed-out",
-            Self::Unreachable => "unreachable",
-            Self::ToolError => "tool-error",
-            Self::NothingToDo => "nothing-to-do",
-        }
-    }
-
-    /// True when this outcome must not be read as the work having happened.
-    ///
-    /// The restrictive set, mirroring the RPC lifecycle's restrictive terminals:
-    /// a caller that treats any of these as success is asserting something the
-    /// row does not say.
-    #[must_use]
-    pub const fn is_restrictive(self) -> bool {
-        matches!(
-            self,
-            Self::Refused | Self::TimedOut | Self::Unreachable | Self::ToolError
-        )
-    }
-}
+/// What the attempt produced. Canonical type lives in omp-types so this crate
+/// does not redeclare `Outcome`. `Delivered` is not a receiver receipt.
+pub use omp_types::AttemptOutcome;
 
 /// A K6 serialisation or validation failure.
 ///
@@ -410,7 +360,10 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
 }
 
 fn validate_sha256(field: &'static str, value: &str) -> Result<(), PacketError> {
-    if value.len() != 64 || !value.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+    if value.len() != 64
+        || !value
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
     {
         return Err(PacketError::MalformedSha256 {
             field,
@@ -620,7 +573,7 @@ impl Timestamp {
 /// — *"a `PolicyOutcome::Denied` receipt has **no** `result_hash` /
 /// `post_state_hash`"*.
 ///
-/// The first version of this contract had `outcome: Outcome` beside a REQUIRED
+/// The first version of this contract had `outcome: AttemptOutcome` beside a REQUIRED
 /// `output_sha256: String`, so a row could say `outcome: refused` while carrying
 /// a 64-hex digest of bytes that were never produced. Both halves were settable
 /// and nothing tied them together. Here the pairing is the type: a `Denied`
@@ -644,7 +597,7 @@ pub enum EffectResult {
     Denied {
         /// Which restrictive outcome. Enforced restrictive by
         /// [`EffectResult::denied`].
-        outcome: Outcome,
+        outcome: AttemptOutcome,
         /// Why, in the emitter's words. Required: a denial with no reason
         /// records nothing.
         error: String,
@@ -662,7 +615,7 @@ impl EffectResult {
     /// A denied effect. **Refuses a non-restrictive outcome**: `Delivered` and
     /// `NothingToDo` describe effects that ran, so pairing either with a denial
     /// would reintroduce exactly the incoherence this type removes.
-    pub fn denied(outcome: Outcome, error: impl Into<String>) -> Result<Self, PacketError> {
+    pub fn denied(outcome: AttemptOutcome, error: impl Into<String>) -> Result<Self, PacketError> {
         if !outcome.is_restrictive() {
             return Err(PacketError::NonRestrictiveDenial {
                 outcome: outcome.as_str(),
@@ -675,10 +628,10 @@ impl EffectResult {
 
     /// The outcome to emit on the wire.
     #[must_use]
-    pub const fn outcome(&self) -> Outcome {
+    pub const fn outcome(&self) -> AttemptOutcome {
         match self {
             // A completed effect that named no restrictive outcome delivered.
-            Self::Completed { .. } => Outcome::Delivered,
+            Self::Completed { .. } => AttemptOutcome::Delivered,
             Self::Denied { outcome, .. } => *outcome,
         }
     }
@@ -767,7 +720,7 @@ struct Wire<'row> {
     cursor_after: Option<&'row CursorPoint>,
     input_sha256: &'row str,
     output_sha256: Option<&'row str>,
-    outcome: Outcome,
+    outcome: AttemptOutcome,
     error: Option<&'row str>,
 }
 
@@ -800,7 +753,7 @@ pub struct ParsedRow {
     /// denied** — that absence is the proof nothing ran.
     pub output_sha256: Option<String>,
     /// What the attempt produced.
-    pub outcome: Outcome,
+    pub outcome: AttemptOutcome,
     /// Error text on a restrictive outcome.
     pub error: Option<String>,
 }

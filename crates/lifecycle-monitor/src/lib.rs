@@ -360,10 +360,10 @@ pub fn journal_for_host() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lifecycle_event::{emit_one_host, Outcome, ReasonCode};
+    use lifecycle_event::{emit_one_host, EmitOutcome, ReasonCode};
     use tempfile::tempdir;
 
-    fn event(layer: Layer, reason: &str, outcome: Outcome) -> LifecycleEvent {
+    fn event(layer: Layer, reason: &str, outcome: EmitOutcome) -> LifecycleEvent {
         LifecycleEvent::new(
             layer,
             "HUMAN",
@@ -393,7 +393,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("lifecycle.jsonl");
         let journal = DurableJournal::open(&path).unwrap();
-        emit_one_host(&journal, event(Layer::L4, "OBSERVE_OK", Outcome::Emitted)).unwrap();
+        emit_one_host(&journal, event(Layer::L4, "OBSERVE_OK", EmitOutcome::Emitted)).unwrap();
         let err = observe_layer(&path, Layer::L0, 60_000).expect_err("no L0");
         match err {
             MonitorError::EmptyScan { layer: Some(Layer::L0), .. } => {}
@@ -406,7 +406,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("lifecycle.jsonl");
         let journal = DurableJournal::open(&path).unwrap();
-        emit_one_host(&journal, event(Layer::L4, "OBSERVE_OK", Outcome::Emitted)).unwrap();
+        emit_one_host(&journal, event(Layer::L4, "OBSERVE_OK", EmitOutcome::Emitted)).unwrap();
         let v = observe_layer(&path, Layer::L4, 60_000).expect("observe");
         assert_eq!(v.state, LayerState::Progressing);
         assert_eq!(v.row_count, 1);
@@ -418,7 +418,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("lifecycle.jsonl");
         let journal = DurableJournal::open(&path).unwrap();
-        emit_one_host(&journal, event(Layer::L1, "IDENTITY_DRIFT", Outcome::Refused)).unwrap();
+        emit_one_host(&journal, event(Layer::L1, "IDENTITY_DRIFT", EmitOutcome::Refused)).unwrap();
         let v = observe_layer(&path, Layer::L1, 60_000).expect("observe");
         assert_eq!(v.state, LayerState::Refusing);
     }
@@ -441,7 +441,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("lifecycle.jsonl");
         let journal = DurableJournal::open(&path).unwrap();
-        let claimed = event(Layer::L5, "PORTAL_ROW", Outcome::Emitted);
+        let claimed = event(Layer::L5, "PORTAL_ROW", EmitOutcome::Emitted);
         let err = gate_claimed_write_readback(&journal, &[claimed]).expect_err("missing");
         assert!(matches!(err, MonitorError::ReadbackFailed { .. }));
     }
@@ -451,7 +451,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("lifecycle.jsonl");
         let journal = DurableJournal::open(&path).unwrap();
-        let claimed = event(Layer::L0, "INSTALL_VERIFIED", Outcome::Emitted);
+        let claimed = event(Layer::L0, "INSTALL_VERIFIED", EmitOutcome::Emitted);
         emit_one_host(&journal, claimed.clone()).unwrap();
         std::fs::write(&path, "").unwrap();
         let err = gate_claimed_write_readback(&journal, &[claimed]).expect_err("truncated");

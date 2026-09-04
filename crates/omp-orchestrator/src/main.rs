@@ -46,7 +46,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use subprocess_contract::run_output;
 use lifecycle_event::{
-    default_repo_journal, emit as emit_lifecycle, DurableJournal, Layer, LifecycleEvent, Outcome,
+    default_repo_journal, emit as emit_lifecycle, DurableJournal, Layer, LifecycleEvent, EmitOutcome,
     ReasonCode,
 };
 use lifecycle_monitor::{load_metrics, observe_layer, verify_artifact};
@@ -1766,10 +1766,10 @@ async fn emit_s1_l3_l5(cx: &Cx, config: &Config, decision: &SupervisorDecision) 
     };
     let outcome = match decision {
         SupervisorDecision::Dispatch { .. } | SupervisorDecision::SupervisedWorking { .. } => {
-            Outcome::Emitted
+            EmitOutcome::Emitted
         }
-        SupervisorDecision::AuthorizedIdle { .. } => Outcome::Idle,
-        _ => Outcome::Refused,
+        SupervisorDecision::AuthorizedIdle { .. } => EmitOutcome::Idle,
+        _ => EmitOutcome::Refused,
     };
     let l3 = LifecycleEvent::new(
         Layer::L3,

@@ -7,7 +7,7 @@
 
 use installer::RepoOwnership;
 use lifecycle_event::{
-    default_repo_journal, DurableJournal, Layer, LifecycleEvent, Outcome, ReasonCode,
+    default_repo_journal, DurableJournal, Layer, LifecycleEvent, EmitOutcome, ReasonCode,
 };
 use std::path::Path;
 use std::path::PathBuf;
@@ -164,7 +164,7 @@ fn run_check(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
         repo_root,
         Layer::L1,
         "S1.L1",
-        Outcome::Emitted,
+        EmitOutcome::Emitted,
         "IDENTITY_OK",
     );
     ExitCode::SUCCESS
@@ -230,7 +230,7 @@ fn run_install(repo_root: &PathBuf, bin_dir: &PathBuf, target: &str) -> ExitCode
         repo_root,
         Layer::L0,
         "S1.L0",
-        Outcome::Emitted,
+        EmitOutcome::Emitted,
         "INSTALL_VERIFIED",
     );
     println!("INSTALLER: target {binary_name} installed and verified");
@@ -246,7 +246,7 @@ fn shellexpand_path(path: &str) -> String {
     path.to_owned()
 }
 
-fn emit_s1(repo_root: &Path, layer: Layer, stage_to: &str, outcome: Outcome, reason: &str) {
+fn emit_s1(repo_root: &Path, layer: Layer, stage_to: &str, outcome: EmitOutcome, reason: &str) {
     let Ok(code) = ReasonCode::new(reason) else {
         eprintln!("LIFECYCLE_EVENT_EMIT_FAILED layer={} detail=missing reason_code", layer.as_str());
         return;

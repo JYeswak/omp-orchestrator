@@ -434,10 +434,9 @@ fn sha_exists(repo: &str, sha: &str) -> bool {
             &["git", "-C", repo, "cat-file", "-e", &spec],
             std::time::Duration::from_secs(20)
         ),
-        crate::Outcome::Completed { code: Some(0), .. }
+        crate::ChildOutcome::Completed { code: Some(0), .. }
     )
 }
-
 
 /// Which bucket a cited SHA belongs in. A PURE function of two facts, extracted so
 /// the decision is testable without a git repository.
@@ -505,7 +504,12 @@ fn commit_references_bead(repos: &[String], sha: &str, bead_id: &str) -> bool {
             &["git", "-C", repo, "log", "-1", "--format=%s%n%b", sha],
             std::time::Duration::from_secs(20),
         );
-        if let crate::Outcome::Completed { code: Some(0), stdout, .. } = out {
+        if let crate::ChildOutcome::Completed {
+            code: Some(0),
+            stdout,
+            ..
+        } = out
+        {
             if stdout.contains(bead_id) || (short.len() >= 3 && stdout.contains(short)) {
                 return true;
             }
@@ -516,7 +520,7 @@ fn commit_references_bead(repos: &[String], sha: &str, bead_id: &str) -> bool {
 
 fn br(args: &[&str], secs: u64) -> String {
     match crate::run(args, std::time::Duration::from_secs(secs)) {
-        crate::Outcome::Completed { stdout, .. } => stdout,
+        crate::ChildOutcome::Completed { stdout, .. } => stdout,
         // A timeout is NOT an empty record. Returning "" here would silently downgrade a
         // bead to "no evidence"; the caller cannot distinguish that, so we mark it.
         _ => "\u{0}TIMEOUT".to_owned(),
@@ -529,7 +533,7 @@ pub fn collect(repos: &[String]) -> Result<Report, String> {
         &["br", "list", "--json"],
         std::time::Duration::from_secs(60),
     ) {
-        crate::Outcome::Completed {
+        crate::ChildOutcome::Completed {
             stdout,
             code: Some(0),
             ..
@@ -797,7 +801,7 @@ mod tests {
         assert!(got.is_empty(), "embedded hex is not a citation: {got:?}");
     }
 
-        /// The DECISION, exercised directly. All four input combinations.
+    /// The DECISION, exercised directly. All four input combinations.
     ///
     /// This test is the reason `classify_citation` exists as a pure function: the
     /// earlier fixture-only tests passed while the attribution check was reverted to
@@ -889,7 +893,10 @@ mod tests {
         // But the commit's message names 4ak, not 2lo.
         u.cited_only_shas = vec!["3f821d4".to_owned()];
         u.verified_shas = vec![];
-        let report = Report { units: vec![u], repo_updates: vec![] };
+        let report = Report {
+            units: vec![u],
+            repo_updates: vec![],
+        };
 
         assert_eq!(
             report.borrowed_credit().len(),
@@ -917,7 +924,10 @@ mod tests {
         let mut u = test_unit("omp-orchestrator-4ak", "closed");
         u.verified_shas = vec!["3f821d4".to_owned()];
         u.cited_only_shas = vec![];
-        let report = Report { units: vec![u], repo_updates: vec![] };
+        let report = Report {
+            units: vec![u],
+            repo_updates: vec![],
+        };
         assert!(
             report.borrowed_credit().is_empty(),
             "a bead whose commit names it must NOT be flagged as borrowing credit"
@@ -928,7 +938,7 @@ mod tests {
         );
     }
 
-#[test]
+    #[test]
     fn landed_but_unclosed_is_the_grading_queue() {
         let u = Unit {
             bead: "x".into(),

@@ -87,33 +87,7 @@ impl ReasonCode {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Outcome {
-    Emitted,
-    Refused,
-    Idle,
-}
-
-impl Outcome {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Emitted => "emitted",
-            Self::Refused => "refused",
-            Self::Idle => "idle",
-        }
-    }
-
-    pub fn parse(raw: &str) -> Result<Self, EmitError> {
-        match raw {
-            "emitted" => Ok(Self::Emitted),
-            "refused" => Ok(Self::Refused),
-            "idle" => Ok(Self::Idle),
-            _ => Err(EmitError::UnknownOutcome {
-                got: raw.to_owned(),
-            }),
-        }
-    }
-}
+pub use omp_types::EmitOutcome;
 
 /// One S1 lifecycle row. Extra L3 fields are optional, never a second type.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -124,7 +98,7 @@ pub struct LifecycleEvent {
     actor: String,
     pane: String,
     incarnation: String,
-    outcome: Outcome,
+    outcome: EmitOutcome,
     reason_code: ReasonCode,
     blocker: String,
     step: String,
@@ -138,7 +112,7 @@ impl LifecycleEvent {
         stage_from: impl Into<String>,
         stage_to: impl Into<String>,
         actor: impl Into<String>,
-        outcome: Outcome,
+        outcome: EmitOutcome,
         reason_code: ReasonCode,
     ) -> Self {
         Self {
@@ -449,7 +423,7 @@ mod tests {
             "HUMAN",
             format!("S1.{}", layer.as_str()),
             "test",
-            Outcome::Emitted,
+            EmitOutcome::Emitted,
             code(reason),
         )
     }

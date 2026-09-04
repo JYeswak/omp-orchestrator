@@ -13,7 +13,7 @@ use std::io::{self, Read};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use lifecycle_event::{
-    default_host_journal, emit_one, DurableJournal, Layer, LifecycleEvent, Outcome, ReasonCode,
+    default_host_journal, emit_one, DurableJournal, Layer, LifecycleEvent, EmitOutcome, ReasonCode,
 };
 use lifecycle_monitor::verify_artifact;
 
@@ -130,8 +130,8 @@ fn run_hook(input: Vec<u8>, shadow_mode: bool, predecessor: Option<PathBuf>) -> 
 
 async fn emit_l2(cx: &Cx, decision: &Decision) {
     let (outcome, reason) = match decision.permission {
-        Permission::Allow => (Outcome::Emitted, "HOOK_ALLOW"),
-        Permission::Deny => (Outcome::Refused, "HOOK_DENY"),
+        Permission::Allow => (EmitOutcome::Emitted, "HOOK_ALLOW"),
+        Permission::Deny => (EmitOutcome::Refused, "HOOK_DENY"),
     };
     let Ok(code) = ReasonCode::new(reason) else {
         return;

@@ -67,8 +67,8 @@
 // workspace; it is not a re-export from asupersync and has no Phase 0 caller migration.
 pub mod pane_observation;
 pub use pane_observation::{
-    CaptureSnapshot, DispatchAdmissibility, EvidenceGrade, ObservationError, PaneLiveness,
-    PaneObservation, UnknownReason, MIN_TWO_CAPTURE_INTERVAL_SECS,
+    CaptureSnapshot, DispatchAdmissibility, EvidenceGrade, MIN_TWO_CAPTURE_INTERVAL_SECS,
+    ObservationError, PaneLiveness, PaneObservation, UnknownReason,
 };
 
 // ─────────────────────────────────────────────── AUTHORED, not derived (Phase 0 · T1)
@@ -86,12 +86,14 @@ pub use claim_strength::{ClaimStrength, UnknownClaimStrength};
 // the sibling control-plane RPC session machine; it bridges the typed subprocess boundary without
 // flattening timeout or spawn failure into success.
 pub mod lifecycle;
-pub use lifecycle::{Lifecycle, LifecycleInput, WaitDeadline};
+pub mod named_outcomes;
 /// A completed operation's result — severity and panic payload modelled rather than flattened.
 ///
-/// **Resolves a live collision:** `tick-monitor` declares its own `Outcome`, unrelated to this
-/// one. Two types, one name, different meanings — the class the inventory gate exists to refuse.
+/// **Resolves a live collision:** child execution, journal emit, and transport
+/// attempts must not share this name. They live in `named_outcomes`.
 pub use asupersync::types::{Outcome, OutcomeError, PanicPayload, Severity, join_outcomes};
+pub use lifecycle::{Lifecycle, LifecycleInput, WaitDeadline};
+pub use named_outcomes::{AttemptOutcome, ChildOutcome, EmitOutcome};
 
 /// Capability-narrowing budgets. Absent from every crate we own, while this repo declares the
 /// asupersync contract binding — where `Budget`, `Outcome` and capability narrowing are the
@@ -150,6 +152,9 @@ mod tests {
     fn ack_vocabulary_is_documented_as_unreachable() {
         const BLOCKER: &str =
             "messaging-fabric requires test-internals at fa3c01aec (consumer.rs:1299 default impl)";
-        assert!(!BLOCKER.is_empty(), "the blocker must stay named, not silently dropped");
+        assert!(
+            !BLOCKER.is_empty(),
+            "the blocker must stay named, not silently dropped"
+        );
     }
 }

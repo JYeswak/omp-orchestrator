@@ -7,7 +7,7 @@
 #![forbid(unsafe_code)]
 
 use lifecycle_event::{
-    default_host_journal, DurableJournal, EmitError, Layer, LifecycleEvent, Outcome, ReasonCode,
+    default_host_journal, DurableJournal, EmitError, Layer, LifecycleEvent, EmitOutcome, ReasonCode,
 };
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -38,7 +38,8 @@ fn run(args: &[String]) -> Result<(), String> {
 
 fn emit(args: &[String]) -> Result<(), String> {
     let layer = Layer::parse(require(args, "--layer")?).map_err(|e| e.to_string())?;
-    let outcome = Outcome::parse(require(args, "--outcome")?).map_err(|e| e.to_string())?;
+    let outcome = EmitOutcome::parse(require(args, "--outcome")?)
+        .ok_or_else(|| "LIFECYCLE_EVENT_UNKNOWN_OUTCOME".to_owned())?;
     let reason = ReasonCode::new(require(args, "--reason-code")?).map_err(|e| e.to_string())?;
     let mut event = LifecycleEvent::new(
         layer,

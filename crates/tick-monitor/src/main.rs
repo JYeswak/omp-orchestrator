@@ -12,7 +12,7 @@ use std::process::exit;
 use std::time::Duration;
 use tick_monitor::*;
 use lifecycle_event::{
-    default_host_journal, default_repo_journal, DurableJournal, Layer, LifecycleEvent, Outcome,
+    default_host_journal, default_repo_journal, DurableJournal, Layer, LifecycleEvent, EmitOutcome,
     ReasonCode,
 };
 use lifecycle_monitor::{load_metrics, observe_layer, verify_artifact};
@@ -133,7 +133,7 @@ fn pane_ids(session: &str) -> Result<Vec<String>, String> {
         TMUX_TIMEOUT,
     );
     let text = match &out {
-        Outcome::Completed { stdout, .. } => stdout,
+        ChildOutcome::Completed { stdout, .. } => stdout,
         // A timeout is not an empty fleet. Refuse rather than report zero panes.
         other => return Err(format!("tmux list-panes {}", other.kind())),
     };
@@ -153,7 +153,7 @@ fn capture(pane: &str) -> Option<String> {
         &["tmux", "capture-pane", "-p", "-t", pane, "-S", "-14"],
         TMUX_TIMEOUT,
     ) {
-        Outcome::Completed { stdout, .. } => Some(stdout),
+        ChildOutcome::Completed { stdout, .. } => Some(stdout),
         _ => None,
     }
 }
@@ -169,7 +169,7 @@ fn commits_since(repo: &str, since_unix: u64) -> Result<Vec<String>, String> {
         GIT_TIMEOUT,
     );
     match &out {
-        Outcome::Completed { stdout, code, .. } if *code == Some(0) => Ok(stdout
+        ChildOutcome::Completed { stdout, code, .. } if *code == Some(0) => Ok(stdout
             .lines()
             .filter(|l| !l.trim().is_empty())
             .map(str::to_owned)
@@ -183,7 +183,7 @@ fn head_sha(repo: &str) -> Option<String> {
         &["git", "-C", repo, "rev-parse", "--short", "HEAD"],
         GIT_TIMEOUT,
     ) {
-        Outcome::Completed { stdout, code, .. } if code == Some(0) => {
+        ChildOutcome::Completed { stdout, code, .. } if code == Some(0) => {
             Some(stdout.trim().to_owned())
         }
         _ => None,
@@ -428,17 +428,17 @@ fn observe(args: &[String]) -> i32 {
     match observe_core(args) {
         Ok(json) => {
             println!("{json}");
-            emit_l4(args, Outcome::Emitted, "OBSERVE_OK");
+            emit_l4(args, EmitOutcome::Emitted, "OBSERVE_OK");
             0
         }
         Err(code) => {
-            emit_l4(args, Outcome::Refused, "OBSERVE_REFUSED");
+            emit_l4(args, EmitOutcome::Refused, "OBSERVE_REFUSED");
             code
         }
     }
 }
 
-fn emit_l4(args: &[String], outcome: Outcome, reason: &str) {
+fn emit_l4(args: &[String], outcome: EmitOutcome, reason: &str) {
     let Ok(code) = ReasonCode::new(reason) else {
         return;
     };
@@ -981,7 +981,7 @@ fn selftest() -> i32 {
 
     println!("subprocess contract");
     match run(&["/bin/echo", "hello"], Duration::from_secs(5)) {
-        Outcome::Completed { stdout, code, .. } => {
+        ChildOutcome::Completed { stdout, code, .. } => {
             leg!("completed carries stdout", stdout.trim() == "hello");
             leg!("completed carries exit code", code == Some(0));
         }
@@ -995,7 +995,7 @@ fn selftest() -> i32 {
         "a deadline yields TimedOut, NOT Completed(non-zero)",
         matches!(
             slow,
-            Outcome::TimedOut {
+            ChildOutcome::TimedOut {
                 group_killed: true,
                 ..
             }
@@ -1009,7 +1009,7 @@ fn selftest() -> i32 {
         "spawn failure is typed, not a panic",
         matches!(
             run(&["/nonexistent/binary/xyz"], Duration::from_secs(2)),
-            Outcome::SpawnFailed { .. }
+            ChildOutcome::SpawnFailed { .. }
         )
     );
     // >64KiB on BOTH pipes: the undrained-pipe deadlock.
@@ -1022,7 +1022,7 @@ fn selftest() -> i32 {
         Duration::from_secs(20),
     );
     match &big {
-        Outcome::Completed { stdout, stderr, .. } => {
+        ChildOutcome::Completed { stdout, stderr, .. } => {
             leg!("200KB stdout fully drained", stdout.len() >= 200_000);
             leg!("200KB stderr fully drained", stderr.len() >= 200_000);
         }

@@ -129,7 +129,7 @@ fn acquire(path: &Path, owner: &str) -> Result<File, AcquireError> {
     Ok(file)
 }
 
-async fn run_async(config: Config, cx: &Cx) -> u8 {
+async fn run_async(cx: &Cx, config: Config) -> u8 {
     let path = lock_path(&config.state_dir, &config.session, &config.pane);
     let lock = match acquire(&path, &config.owner) {
         Ok(lock) => lock,
@@ -197,7 +197,7 @@ fn run(config: Config) -> u8 {
         }
     };
     let cx = runtime.request_cx_with_budget(Budget::INFINITE);
-    runtime.block_on(async move { run_async(config, &cx).await })
+    runtime.block_on(async move { run_async(&cx, config).await })
 }
 
 fn selftest(state_dir: &Path) -> ExitCode {

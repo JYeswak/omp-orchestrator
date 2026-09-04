@@ -422,15 +422,39 @@ fn every_declared_lane_has_a_production_caller() {
         .expect("positive-control search must run")
         .expect("known wired checkout action must be found");
     assert_eq!(positive.path, PathBuf::from(".github/workflows/gate.yml"));
-    assert_eq!(positive.line, 20);
+    let workflow = std::fs::read_to_string(repo_root().join(&positive.path))
+        .expect("positive-control file must be readable");
+    let cited = workflow
+        .lines()
+        .nth(positive.line.saturating_sub(1))
+        .expect("positive-control line must exist");
+    assert!(
+        cited.contains("actions/checkout"),
+        "positive control must cite the needle, not a stale line number (got line {} text {:?})",
+        positive.line,
+        cited
+    );
 
     let hits = check_wiring(&lanes, &sources, UNWIRED_LANE_ALLOWANCE, STRIP_TEST_CODE)
         .expect("every workspace lane must be wired or carry a named allowance reason");
     let allowlisted = UNWIRED_LANE_ALLOWANCE.len();
-    assert_eq!(
+    // Allowance means "do not fail if unwired", not "subtract from the hit
+    // count". An allowlisted lane that HAS a caller still produces a hit.
+    // left==81/right==20 was a stale line-cite on the positive control, then
+    // 71 vs 68 was this off-by-allowance accounting. Do not paper it with a
+    // blanket exemption.
+    assert!(
+        hits.len() <= lanes.len(),
+        "cannot have more hits than derived lanes: hits={} lanes={}",
         hits.len(),
-        lanes.len() - allowlisted,
-        "wired hits must account for every lane minus the named allowances"
+        lanes.len()
+    );
+    assert!(
+        hits.len() >= lanes.len().saturating_sub(allowlisted),
+        "wired hits {} below lanes {} minus allowances {}",
+        hits.len(),
+        lanes.len(),
+        allowlisted
     );
 }
 
@@ -708,6 +732,7 @@ fn every_crate_is_declared_in_the_surface_map() {
 // ── LEG 3: ASUPERSYNC CONFORMANCE — forbid(unsafe_code) ────────────────────
 const FORBID_ALLOWANCE: &[(&str, &str)] = &[];
 
+#[test]
 fn every_crate_declares_the_forbid_lint() {
     let root = repo_root();
     let crates = workspace_crate_names(&root);
