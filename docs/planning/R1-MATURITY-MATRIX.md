@@ -100,10 +100,36 @@ engine:
 R1 (`SKILL.md:69-75`) requires a `CRITICAL_PATH_EXCEPTION` with reason, affected
 sections, expiry condition, reviewer, and risks introduced.
 
-`grep -rl CRITICAL_PATH_EXCEPTION` → three files, **every hit a negative**:
-`CONTRACT.md:147` ("No `CRITICAL_PATH_EXCEPTION` is recorded"), the `HD-0014` decision
-body, and `.skill-loop-progress.md`. Positive control:
-`grep -rl "breadth before depth" docs/` → hits `CONTRACT.md`.
+`grep -rl CRITICAL_PATH_EXCEPTION` → three files at the time of measurement, **every
+hit a negative**: `CONTRACT.md:147` ("No `CRITICAL_PATH_EXCEPTION` is recorded"), the
+`HD-0014` decision body, and `.skill-loop-progress.md`. Positive control:
+`grep -rl "breadth before depth" docs/` → hits `CONTRACT.md`. The R6 grader
+strengthened the reading: `CONTRACT.md:147` is not an absence that had to be inferred,
+it is a **positive statement** that no exception was recorded.
+
+**THIS CENSUS DESTROYED ITS OWN INSTRUMENT, AND A RE-RUNNER MUST KNOW IT.** The R6
+grader re-ran the same grep and got **six** files; re-run again after this artifact
+landed and it returns **ten**:
+
+```
+.beads/.br_history/issues.20260905_02{3938,4029,4142,4215}.jsonl   (4 snapshot generations)
+.beads/beads.db
+.beads/issues.jsonl
+.skill-loop-progress.md
+docs/decisions.jsonl
+docs/plan/flow/CONTRACT.md
+docs/planning/R1-MATURITY-MATRIX.md                                 (this file)
+```
+
+Seven of those ten hits are **this pass reporting the absence** — the bead
+`r1-exception-missing-so9x` quotes the token, so it now lives in `issues.jsonl`, in
+`beads.db`, in four rolling `.br_history` snapshots, and in this artifact. **Not one
+of the seven is an exception record.** The honest instrument for any future run is
+therefore: exclude `.beads/`, `.skill-loop-progress.md`, and `docs/planning/`, and
+read only the canonical surfaces (`docs/plan/**`, `docs/decisions.jsonl`) — otherwise
+the census counts its own report as evidence. `EXCEPTIONS_FOUND` is a count of
+**records**, never of matches, and the grader's `.br_history` note is the first half of
+a defect whose second half is the observer effect this file introduced.
 
 **EXCEPTIONS_FOUND = 0. EXCEPTIONS_WELLFORMED = 0.** Best candidate-equivalent
 `HD-0014` (`docs/decisions.jsonl:19-20`) scores **3 of 5**: reason ✓, affected sections
@@ -147,7 +173,10 @@ mapping change under the BUILD FREEZE at `CONTRACT.md:54-58`. **0 of 6 exist by 
 
 1. **`CURRENT-REALITY.md` — the only machine-visible four-surface artifact is a
    present-tense snapshot.** `:6` pins `Repository_HEAD 05cdd2a`;
-   `git rev-list --count 05cdd2a..HEAD` → **25**. `:21` asserts "761 parsed rows;
+   `git rev-list --count 05cdd2a..HEAD` → **25 at `c17585a`** (the R6 grader measured
+   **28** afterwards; the three added commits are this pass's `4a4d45b` and `36a1a65`
+   plus `%7`'s `120947d`, so the figure is pinned, not wrong — which is the whole
+   point of pinning it). `:21` asserts "761 parsed rows;
    closed=104, open=527, in_progress=95, grading=11, tombstone=22, blocked=2";
    re-measured now: **791 rows, closed=121, open=533, in_progress=101, grading=11,
    blocked=3, tombstone=22** — five of seven drifted. *Positive control:* `grading=11`
@@ -254,6 +283,47 @@ exist; the rows are real in `DEFECTS.toml:16` and `:28`) ·
    `grep -oE '\b[0-9a-z]{4}\b' | wc -l` → 898; the sibling `S1-COVERAGE.md` → 58. No
    instrument returns 273, and no command is recorded beside it, against
    `CONTRACT.md:215-216`.
+   **Independently confirmed by the R6 grader** on the same file: `S1.toml` is 449
+   lines total; `omp-orchestrator-` occurs 4 times (4 unique); the bare token `bead`
+   occurs 15 times (4 unique); **`beadref` occurs 0 times**. 273 exceeds half the
+   file's line count. The chain matters: that figure is what sets `S1 MATURITY=4`,
+   which is what makes `R1_DELTA=2`, which is what `HD-0014` ruled on — a load-bearing
+   number with no producing command, inside the document that governs the freeze.
+
+## R6 — graded by a non-author
+
+**DISCHARGED.** Pane 1 (non-author) re-executed the three named re-runs plus the `273`
+check and returned PRODUCTIVE. Both commits were verified with `git cat-file -e`
+rather than accepted as cited text. Results: (a) confirmed, with the
+`.beads/.br_history/` population caveat folded in above; (b) the **stable** quantities
+matched exactly — `in_progress=101`, `grading=11`, `blocked=3`, `tombstone=22` — while
+the moving ones drifted by live work in the interval (total 791→802, closed 121→122,
+open 533→543, every unit attributable to a named bead or lane). That is the designed
+behaviour of the positive control: it makes drift readable **as movement rather than
+as instrument error**; (c) pinned-figure correction recorded above.
+
+**Independent cross-lane agreement, which neither lane could see.** Pane `%7`, working
+`s1-coverage-breaks-advisory-ratchet-xl9d` with no contact with this pass, added an
+allowance row reading "advisory-unreachable: S1 depth is suspended by **Atlas Arc R1**
+and the HD-0012 hook decision pending Joshua approval; no production caller is honest
+while…", and its `census_membership` moved 10p/2f → 13p/0f. Two lanes reached "S1
+depth is suspended" from opposite directions — one from the plan surface, one from the
+crate surface, citing R1 by name. Concurring independent measurement outranks either
+one alone.
+
+**A second instance of this pass's headline shape, named by the grader.**
+`arc-s4-apply-6c-dispositions-jy4o` sits unassigned because its only permitted
+non-author integrators are busy — dispositions produced, no integrator. That is
+structurally identical to `r1-relocations-no-integrator-1xx9`: *the analysis landed and
+the application has no owner.* Two independent instances in one repo makes it a class,
+not an incident.
+
+**Caveat inherited from the grader, so no later pass repeats it.** A CI lane was
+dispatched citing "67 of 67 runs failed" as a claim about the present tree; measured
+afterwards, there are 381 unpushed commits and the last CI run `4b398e4` is
+`2026-09-02T03:01:50Z` against a HEAD dated 2026-09-04. CI has not seen 381 commits,
+so that figure is true of a three-day-stale tree and false as a statement about now —
+the cargo-vs-commit class. **Any pass citing CI state must pin the tree first.**
 
 ## NO-CLAIM
 
