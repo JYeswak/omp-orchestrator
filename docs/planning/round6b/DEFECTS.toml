@@ -1,0 +1,77 @@
+[verdict]
+round = "6B"
+role = "fresh-eyes reviewer"
+reviewer = "WildStone"
+pane = "%9"
+bead = "omp-orchestrator-arc-s4-round6b-review-xts3"
+review_mode = "hierarchical"
+range = "docs/PLAN.md:4201-8200 plus docs/plan/06-gates.md through 12-journey.md"
+coverage_fraction = "0.58"
+plan_range_lines = 4000
+lines_read = 2320
+builds_run = 0
+read_complete = [
+  "docs/plan/06-gates.md:1-565",
+  "docs/plan/07-installability.md:1-300",
+  "docs/plan/08-end-users.md:1-300",
+  "docs/plan/09-milestones.md:1-300",
+  "docs/plan/10-prior-art.md:1-300",
+  "docs/plan/11-lifecycle.md:1-300",
+  "docs/plan/12-journey.md:1-200 and HD-9999 at :471",
+]
+read_unreviewed = [
+  "docs/plan/07-installability.md:301-633",
+  "docs/plan/08-end-users.md:301-430",
+  "docs/plan/09-milestones.md:301-333",
+  "docs/plan/10-prior-art.md:301-332",
+  "docs/plan/11-lifecycle.md:301-628",
+  "docs/plan/12-journey.md:201-1100 except the HD-9999 planted-row sentence",
+  "docs/plan/CURRENT-REALITY.md",
+]
+cycles_named = []
+forward_refs_resolved = [
+  "03→06 R6 — 06-gates.md:1 serves R6; six properties at :227-234",
+  "04→06 Diagram 4 — 06-gates.md:13-14 is current worktree authority for Diagram 4",
+  "05→09 M1 seam — 09-milestones.md:45-55 M1 OBSERVABLE exists",
+  "02→11 S4 severed — 11-lifecycle.md:180-194 four sequential breaks, not three",
+  "00 R1→09 — 09-milestones.md:3 serves R1",
+  "00 R6→06 — 06-gates.md:3 serves R6",
+  "00 R8→07 — 07-installability.md exists; receipt still OPEN",
+  "00 R9→08 — 08-end-users.md:3 serves R9; path PROJECTED",
+  "00 R13→11/12 — 11 evidence map; 12 runbook contract at :40-65",
+]
+forward_refs_dangling = [
+  "02→08 Q2 economics — 08 is R9 end-user journey, not Q2; Q2 remains 00-brief §8",
+  "02→09 WIRE-bead conversion as first milestone — 09 M1 is the pane-state seam, not SURFACE-MAP WIRE rows",
+]
+ids_earned_here = []
+ids_earned_here_note = "Zero of the 51 canonical ID strings appear as consumers in 06-12. GATE-011..024 source rows exist unlabeled in 06-gates.md:31-38 and :229-234. WP-003..009 source headings exist as M1-M7 in 09-milestones.md. HD-9999 at 12-journey.md:471 is a planted known-bad, not a register member."
+ids_earned_union = "7/51"
+ids_earned_union_note = "Union with 6A: still only WP-003..009 as body-earned aliases. GATE/HD/INV-2026 have no new ID-string consumers in this half. Substance of 06-12 sits in crate names, Mn, and Sn — not in the 51-ID register."
+decomposition_verdict = "unread-not-wrong"
+round4_verdict = "refuted"
+diff_class = "POLISH"
+verdict = "ROUND 6B: POLISH — no cycles in 06-12; Round 4 decomposition=wrong refuted; 0 new ID-string consumers; 2 dangling 6A forward refs; no BEADS READY authorization"
+
+[[defect]]
+id = "DEF-001"
+severity = "P2"
+class = "DANGLING_FORWARD_REF"
+affected_ids = ["WP-003"]
+evidence = [
+  "6A named 02→08 Q2 economics and 02→09 WIRE-bead conversion as first milestone",
+  "docs/plan/08-end-users.md:1-8 serves R9 (foreign repo/machine); it does not own Q2",
+  "docs/plan/09-milestones.md:45 M1 is the shared pane-state type, not SURFACE-MAP WIRE conversion",
+]
+failure_consequence = "A reader of 02 who follows those two pointers lands on the wrong section and thinks the WIRE/Q2 work is M1 or the end-user journey. Not a cycle: 02 can be corrected to point at 00-brief §8 and a named WIRE milestone, or to drop the claim."
+minimal_repair = "In 02, retarget Q2 at 00-brief §8 (or say OPEN). Retarget WIRE conversion at a named 09 row or retract 'first milestone'. Do not invent a WP alias for it in this pass."
+owner = "%8 integrator"
+verification_method = "Re-read the two 02 sentences after integration; each pointer must land on a heading that owns that noun."
+
+[[note]]
+id = "NOTE-NO-CYCLES"
+text = "11-lifecycle.md:10-30 says §12 owns the runbook; 12-journey.md:9-12 says §11 gave the spine. Complementary ownership, not a completion cycle. 07:83 says §09 owns install sequencing; 09 M6 says §07-§08 own the general foreign-host case. Same shape. 06 does not wait on 12. No S-section in 06-12 is individually uncompletable for want of a later section's unmade decision."
+
+[[note]]
+id = "NOTE-COVERAGE"
+text = "12-journey.md:201-1100 mostly unread (Done-signal rows sampled). 07/08/11 tails unread. A hidden cycle could still live in those tails; they are UNREVIEWED, not assumed clean. BUILDS_RUN=0. Disk floor named in the dispatch was not crossed."
