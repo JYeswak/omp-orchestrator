@@ -772,12 +772,16 @@ mod tests {
         let deadline = Instant::now() + std::time::Duration::from_secs(3);
         loop {
             let after = descendants(root);
-            if after == before {
+            // The claim is "we left no extra children", not "the process tree is
+            // frozen". Parallel tests in this process can die between snapshots;
+            // that is not a leak. Dies when after contains a pid not in before.
+            let leaked: BTreeSet<u32> = after.difference(&before).copied().collect();
+            if leaked.is_empty() {
                 return;
             }
             if Instant::now() >= deadline {
                 panic!(
-                    "subprocess contract left descendants: before={before:?} after={after:?}"
+                    "subprocess contract left descendants: before={before:?} after={after:?} leaked={leaked:?}"
                 );
             }
             thread::sleep(std::time::Duration::from_millis(25));

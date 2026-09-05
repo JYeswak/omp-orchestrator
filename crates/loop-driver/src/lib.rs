@@ -42,6 +42,10 @@ fn cron_path() -> String {
     }
 }
 const OS_PROBE_BUDGET: Duration = Duration::from_secs(1);
+/// Measured 2026-09-05: `/usr/sbin/lsof -nP -t` on a lockf-held file took 2.15s
+/// on this box. A 1s budget made every holder look unresolved. Dies when lsof
+/// returns inside OS_PROBE_BUDGET, at which point this can collapse.
+const LSOF_PROBE_BUDGET: Duration = Duration::from_secs(5);
 
 fn os_output(command: &mut Command) -> Option<Output> {
     match bounded_output(command, OS_PROBE_BUDGET) {
@@ -459,11 +463,15 @@ fn lock_holder_pids(path: &Path) -> Vec<u32> {
         for args in [vec!["-nP", "-t"], vec!["-t"]] {
             let mut cmd = Command::new(bin);
             cmd.args(&args).arg(path);
-            if let Some(output) = os_output(&mut cmd) {
-                let pids = parse(&output.stdout);
-                if !pids.is_empty() {
-                    return pids;
+            // lsof is the slow path; do not reuse OS_PROBE_BUDGET (1s).
+            match bounded_output(&mut cmd, LSOF_PROBE_BUDGET) {
+                BoundedOutcome::Completed(output) => {
+                    let pids = parse(&output.stdout);
+                    if !pids.is_empty() {
+                        return pids;
+                    }
                 }
+                BoundedOutcome::TimedOut | BoundedOutcome::Unspawned(_) => {}
             }
         }
     }
