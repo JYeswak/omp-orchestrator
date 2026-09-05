@@ -1,0 +1,162 @@
+[verdict]
+round = "6C"
+role = "fresh-eyes reviewer"
+reviewer = "WildStone"
+pane = "%9"
+bead = "omp-orchestrator-arc-s4-round6c-review-oyn7"
+applied = false
+builds_run = 0
+coverage_union = "0.84"
+lines_read_union = "6775/8057"
+ranges_closed = [
+  "docs/plan/07-installability.md:301-633",
+  "docs/plan/08-end-users.md:301-430",
+  "docs/plan/09-milestones.md:301-333",
+  "docs/plan/10-prior-art.md:301-332",
+  "docs/plan/11-lifecycle.md:301-628",
+  "docs/plan/CURRENT-REALITY.md:1-279",
+]
+ranges_cycle_scanned_not_fully_read = [
+  "docs/plan/12-journey.md:201-1100 (cycle-keyword scan + Done-signal samples; not line-complete)",
+]
+cycles_named = []
+acyclicity = "closed"
+dispositions_adopt = 24
+dispositions_demote = 16
+dispositions_delete = 0
+real_defect_count = 24
+hd9999 = "planted known-bad for F4 GATES at 12-journey.md:471 (supersedes pointing at nonexistent HD-9999); not a live identifier; PLAN.md counting it among 12 constitutional IDs is decorative"
+gate_011_024 = "ADOPT — label the unlabeled 06-gates.md:31-38 crate rows and :229-234 six-property rows"
+dangling_refs = "ref-wrong:2,target-wrong:0"
+diff_class = "POLISH"
+verdict = "ROUND 6C: POLISH — remainder acyclic; 40 is not 40 defects; 24 ADOPT labels + 16 DEMOTE ledger IDs; HD-9999 planted; APPLIED=none"
+
+# Counter to "40 index-only IDs is a defect":
+# The 40 = GATE-001..024 (24) + HD-0002..0017 (16).
+# GATE referents already live unlabeled in the assembled constitution (01-idea gates 8-17, 06-gates crate/property rows). Missing is the alias string. That is ADOPT-by-labelling, one class, 24 IDs.
+# HD-0002..0017 belong in docs/decisions.jsonl. The index harvest-all rule is correct for DESIGN_INDEX. The constitution should not duplicate the ledger. DEMOTE 16.
+# DELETE 0 of the 40. HD-9999 is extra in PLAN, not in the 40.
+
+adopt = [
+  "GATE-001",
+  "GATE-002",
+  "GATE-003",
+  "GATE-004",
+  "GATE-005",
+  "GATE-006",
+  "GATE-007",
+  "GATE-008",
+  "GATE-009",
+  "GATE-010",
+  "GATE-011",
+  "GATE-012",
+  "GATE-013",
+  "GATE-014",
+  "GATE-015",
+  "GATE-016",
+  "GATE-017",
+  "GATE-018",
+  "GATE-019",
+  "GATE-020",
+  "GATE-021",
+  "GATE-022",
+  "GATE-023",
+  "GATE-024",
+]
+
+[adopt_why]
+GATE_001_010 = "01-idea.md:415-424 gate rows 8-17. Constitution already contains the referents. Add GATE-001..010 labels on those rows (and optionally the constitution cross-ref map). Not new requirements."
+GATE_011_018 = "06-gates.md:31-38 eight gate-crate rows. Same: label, do not invent."
+GATE_019_024 = "06-gates.md:229-234 six required properties. Same: label."
+
+demote = [
+  "HD-0002",
+  "HD-0003",
+  "HD-0004",
+  "HD-0005",
+  "HD-0006",
+  "HD-0007",
+  "HD-0008",
+  "HD-0009",
+  "HD-0010",
+  "HD-0011",
+  "HD-0012",
+  "HD-0013",
+  "HD-0014",
+  "HD-0015",
+  "HD-0016",
+  "HD-0017",
+]
+
+[demote_why]
+HD_0002_0017 = "Authority is docs/decisions.jsonl. DESIGN_INDEX harvest-all is the right index rule. Duplicating 16 decision IDs into PLAN.md would mint constitution surface for ledger bookkeeping. HD-0001 already appearing in PLAN.md is incidental, not a reason to pull the rest."
+
+delete = []
+
+[[defect]]
+id = "DEF-001"
+severity = "P2"
+class = "UNLABELED_CONSTITUTION_REFERENTS"
+affected_ids = [
+  "GATE-001",
+  "GATE-002",
+  "GATE-003",
+  "GATE-004",
+  "GATE-005",
+  "GATE-006",
+  "GATE-007",
+  "GATE-008",
+  "GATE-009",
+  "GATE-010",
+  "GATE-011",
+  "GATE-012",
+  "GATE-013",
+  "GATE-014",
+  "GATE-015",
+  "GATE-016",
+  "GATE-017",
+  "GATE-018",
+  "GATE-019",
+  "GATE-020",
+  "GATE-021",
+  "GATE-022",
+  "GATE-023",
+  "GATE-024",
+]
+evidence = [
+  "DESIGN_INDEX.md unique canonical IDs = 51; PLAN.md unique = 12 (HD-0001, HD-9999, INV-2026, WP-001..009)",
+  "40 index IDs absent from PLAN.md as strings: GATE-001..024 and HD-0002..0017",
+  "GATE-001..010 referents exist unlabeled at 01-idea.md:415-424",
+  "GATE-011..018 referents exist unlabeled at 06-gates.md:31-38",
+  "GATE-019..024 referents exist unlabeled at 06-gates.md:229-234",
+]
+failure_consequence = "A constitution grep for GATE-011 finds nothing while the assembled 06-gates table is the source. Index and constitution disagree on whether those IDs exist. Round 5 IDS_CUT=31 trimmed the index; it could not put labels into PLAN.md."
+minimal_repair = "Integrator (not this reviewer) adds the GATE-* alias on the existing rows. Do not copy HD-0002..0017 into PLAN.md."
+owner = "%8 integrator (non-author of 6A/6B/6C)"
+verification_method = "git grep -F GATE-011 -- docs/PLAN.md docs/plan/06-gates.md docs/plan/01-idea.md must hit the source row; HD-0009 must remain absent from PLAN.md."
+
+[[defect]]
+id = "DEF-002"
+severity = "P3"
+class = "PLANTED_ID_COUNTED_LIVE"
+affected_ids = ["HD-9999"]
+evidence = [
+  "HD-9999 is in PLAN.md and not in DESIGN_INDEX",
+  "12-journey.md:471 is a known-BAD leg: planted row with empty decision and supersedes to HD-9999",
+]
+failure_consequence = "The constitution's 12-ID set includes a fixture identifier. A census that treats PLAN.md IDs as live register members is 1/12 decorative."
+minimal_repair = "Exclude HD-9999 from live ID counts. Keep the planted sentence. Do not add it to DESIGN_INDEX."
+owner = "%8 integrator"
+verification_method = "Live ID census of PLAN.md excluding fixture/planted IDs equals 11 (INV-2026, HD-0001, WP-001..009) until GATE labels land."
+
+[[note]]
+id = "NOTE-DANGLING"
+text = "02→08 Q2: REFERENCE wrong (retarget 00-brief §8); TARGET 08 is correctly R9. 02→09 WIRE-as-first-milestone: REFERENCE wrong (M1 is pane-state seam); TARGET 09 M1 is correctly that seam. ref-wrong:2 target-wrong:0."
+
+[[note]]
+id = "NOTE-ACYCLICITY"
+text = "07-11 tails and CURRENT-REALITY contain one-way pointers (07→09, 08→06/07, 11→12). 12-journey:201-1100 cycle-keyword scan found no completion cycle. Acyclicity CLOSED for the named remainder subject to the 12-journey not-fully-read bound."
+
+[[note]]
+id = "NOTE-NOT-40-DEFECTS"
+text = "Attack: 40 index-only IDs is a defect. Counter: 16/40 are HD ledger IDs the constitution must not copy (DEMOTE). Remaining 24 are unlabeled GATE referents already in the assembled body (ADOPT labels). REAL_DEFECT_COUNT=24 IDs in one P2 class, not 40 defects. DELETE=0 of the 40."
