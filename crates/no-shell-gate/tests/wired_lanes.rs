@@ -7,8 +7,10 @@
 //! reachability only: a caller can invoke a lane while the invoked mode may still be weaker than the
 //! lane's live guarantee.
 
+use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 /// Lanes that are correct but deliberately not yet wired. Every exception must name a
 /// lane AND a reason; a row naming an undeclared lane is an error, not a pass. Silence
@@ -361,11 +363,31 @@ fn strip_test_code(contents: &str) -> String {
 
 fn cleaned_source(source: &CallerSource, strip_tests: bool) -> String {
     let without_comments = strip_comments(&source.contents, source.kind);
-    if source.kind == SourceKind::Rust && strip_tests {
+    let cleaned = if source.kind == SourceKind::Rust && strip_tests {
         strip_test_code(&without_comments)
     } else {
         without_comments
+    };
+    if source.path == Path::new("crates/omp-orchestrator/src/lib.rs") {
+        remove_advisory_registry(cleaned)
+    } else {
+        cleaned
     }
+}
+
+/// The existing advisory registry is the authority, not a caller of every name it records.
+/// Remove only that literal table from the source scan; preserve real command/use sites in
+/// the same file. This is the anti-self-reference boundary for the reachability census.
+fn remove_advisory_registry(mut source: String) -> String {
+    let Some(start) = source.find("pub const ADVISORY_ALLOWANCE") else {
+        return source;
+    };
+    let Some(relative_end) = source[start..].find("];" ) else {
+        return source;
+    };
+    let end = start + relative_end + 2;
+    source.replace_range(start..end, "");
+    source
 }
 
 /// Find a production caller for one lane, skipping the lane's own crate: a lane
@@ -574,7 +596,17 @@ fn every_declared_lane_has_a_production_caller() {
     // DECLARED_LANES is the defect this crate exists to prevent. An empty or
     // unreadable derivation is an error, never a pass.
     let lanes = derive_lanes(&repo_root()).expect("lane derivation must be readable and non-empty");
-    validate_allowance(&lanes, UNWIRED_LANE_ALLOWANCE).expect("allowance must be valid");
+    let advisory = advisory_allowance(&repo_root()).expect("ADVISORY_ALLOWANCE must be readable");
+    let mut allowance_rows: Vec<(String, String)> = UNWIRED_LANE_ALLOWANCE
+        .iter()
+        .map(|(name, reason)| ((*name).to_owned(), (*reason).to_owned()))
+        .collect();
+    allowance_rows.extend(advisory);
+    let allowance_refs: Vec<(&str, &str)> = allowance_rows
+        .iter()
+        .map(|(name, reason)| (name.as_str(), reason.as_str()))
+        .collect();
+    validate_allowance(&lanes, &allowance_refs).expect("allowance must be valid");
 
     let positive = find_caller(&positive_control(), &sources, STRIP_TEST_CODE)
         .expect("positive-control search must run")
@@ -593,9 +625,9 @@ fn every_declared_lane_has_a_production_caller() {
         cited
     );
 
-    let hits = check_wiring(&lanes, &sources, UNWIRED_LANE_ALLOWANCE, STRIP_TEST_CODE)
+    let hits = check_wiring(&lanes, &sources, &allowance_refs, STRIP_TEST_CODE)
         .expect("every workspace lane must be wired or carry a named allowance reason");
-    let allowlisted = UNWIRED_LANE_ALLOWANCE.len();
+    let allowlisted = allowance_refs.len();
     // Allowance means "do not fail if unwired", not "subtract from the hit
     // count". An allowlisted lane that HAS a caller still produces a hit.
     // left==81/right==20 was a stale line-cite on the positive control, then
@@ -1557,4 +1589,325 @@ mod ipg18_leg3_fixture {
         let manifest = std::fs::read_to_string(&path).expect("known-bad manifest");
         assert!(!has_forbid(&manifest), "known-bad fixture must omit forbid(unsafe_code)");
     }
+}
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MetadataMember {
+    lane: Lane,
+    cargo_callers: Vec<String>,
+    has_bin: bool,
+    has_lib: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReachabilityClass {
+    CargoPathDependency,
+    WiredByNonCargoEdge,
+    NoCallerAtAll,
+    LegitimatelyTerminal,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ReachabilityRow {
+    name: String,
+    class: ReachabilityClass,
+    cargo_callers: Vec<String>,
+    non_cargo_caller: Option<CallerHit>,
+}
+
+fn metadata_members(root: &Path) -> Result<Vec<MetadataMember>, String> {
+    let output = Command::new("cargo")
+        .args(["metadata", "--format-version", "1", "--no-deps", "--offline"])
+        .current_dir(root)
+        .env("RCH_ENABLED", "false")
+        .env("RCH_CARGO_WRAPPER_BYPASS", "1")
+        .output()
+        .map_err(|error| format!("ERROR: cargo metadata did not start: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "ERROR: cargo metadata failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    let document: Value = serde_json::from_slice(&output.stdout)
+        .map_err(|error| format!("ERROR: cargo metadata emitted invalid JSON: {error}"))?;
+    let packages = document["packages"]
+        .as_array()
+        .ok_or_else(|| "ERROR: cargo metadata omitted packages".to_owned())?;
+    if packages.is_empty() {
+        return Err("ERROR: cargo metadata returned an empty package set".to_owned());
+    }
+
+    let mut seen = std::collections::BTreeSet::new();
+    let mut members = Vec::with_capacity(packages.len());
+    let mut dependency_edges = Vec::<(String, String)>::new();
+    for package in packages {
+        let name = package["name"]
+            .as_str()
+            .ok_or_else(|| "ERROR: cargo metadata package omitted name".to_owned())?
+            .to_owned();
+        if !seen.insert(name.clone()) {
+            return Err(format!("ERROR: cargo metadata duplicated package {name}"));
+        }
+        let mut has_bin = false;
+        let mut has_lib = false;
+        for target in package["targets"].as_array().into_iter().flatten() {
+            for kind in target["kind"].as_array().into_iter().flatten() {
+                match kind.as_str() {
+                    Some("bin") => has_bin = true,
+                    Some("lib" | "proc-macro") => has_lib = true,
+                    _ => {}
+                }
+            }
+        }
+        for dependency in package["dependencies"].as_array().into_iter().flatten() {
+            if dependency["kind"].as_str() == Some("dev") || dependency["path"].as_str().is_none() {
+                continue;
+            }
+            let target = dependency["name"]
+                .as_str()
+                .ok_or_else(|| format!("ERROR: {name} has a path dependency without a name"))?;
+            dependency_edges.push((name.clone(), target.to_owned()));
+        }
+        members.push(MetadataMember {
+            lane: Lane {
+                needle_hyphen: name.clone(),
+                needle_underscore: name.replace('-', "_"),
+                name,
+            },
+            cargo_callers: Vec::new(),
+            has_bin,
+            has_lib,
+        });
+    }
+    let indexes: std::collections::BTreeMap<String, usize> = members
+        .iter()
+        .enumerate()
+        .map(|(index, member)| (member.lane.name.clone(), index))
+        .collect();
+    for (caller, target) in dependency_edges {
+        let Some(index) = indexes.get(target.as_str()) else {
+            continue;
+        };
+        members[*index].cargo_callers.push(caller);
+    }
+    for member in &mut members {
+        member.cargo_callers.sort();
+        member.cargo_callers.dedup();
+    }
+    members.sort_by(|left, right| left.lane.name.cmp(&right.lane.name));
+    Ok(members)
+}
+
+fn advisory_allowance(root: &Path) -> Result<std::collections::BTreeMap<String, String>, String> {
+    let path = root.join("crates/omp-orchestrator/src/lib.rs");
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("ERROR: read advisory registry {}: {error}", path.display()))?;
+    let start = source
+        .find("pub const ADVISORY_ALLOWANCE")
+        .ok_or_else(|| "ERROR: ADVISORY_ALLOWANCE declaration is missing".to_owned())?;
+    let body = source[start..]
+        .split_once("];" )
+        .map(|(body, _)| body)
+        .ok_or_else(|| "ERROR: ADVISORY_ALLOWANCE is unterminated".to_owned())?;
+    let mut rows = std::collections::BTreeMap::new();
+    for line in body.lines() {
+        let line = line.trim();
+        let Some(rest) = line.strip_prefix("(\"") else { continue };
+        let Some((name, reason)) = rest.split_once("\", \"") else {
+            return Err(format!("ERROR: malformed advisory row {line}"));
+        };
+        let reason = reason
+            .strip_suffix("\"),")
+            .ok_or_else(|| format!("ERROR: malformed advisory reason {line}"))?;
+        if name.is_empty() || reason.trim().is_empty() {
+            return Err(format!("ERROR: advisory row lacks name or reason {line}"));
+        }
+        if rows.insert(name.to_owned(), reason.to_owned()).is_some() {
+            return Err(format!("ERROR: duplicate advisory row {name}"));
+        }
+    }
+    if rows.is_empty() {
+        return Err("ERROR: ADVISORY_ALLOWANCE is empty or unreadable".to_owned());
+    }
+    Ok(rows)
+}
+
+
+fn classify_member(
+    member: &MetadataMember,
+    sources: &[CallerSource],
+    strip_tests: bool,
+) -> Result<ReachabilityRow, String> {
+    if sources.is_empty() {
+        return Err("ERROR: production caller scan set is empty".to_owned());
+    }
+    if !member.cargo_callers.is_empty() {
+        return Ok(ReachabilityRow {
+            name: member.lane.name.clone(),
+            class: ReachabilityClass::CargoPathDependency,
+            cargo_callers: member.cargo_callers.clone(),
+            non_cargo_caller: None,
+        });
+    }
+    if let Some(hit) = find_caller(&member.lane, sources, strip_tests)? {
+        return Ok(ReachabilityRow {
+            name: member.lane.name.clone(),
+            class: ReachabilityClass::WiredByNonCargoEdge,
+            cargo_callers: Vec::new(),
+            non_cargo_caller: Some(hit),
+        });
+    }
+    let class = if member.has_bin && !member.has_lib {
+        ReachabilityClass::LegitimatelyTerminal
+    } else {
+        ReachabilityClass::NoCallerAtAll
+    };
+    Ok(ReachabilityRow {
+        name: member.lane.name.clone(),
+        class,
+        cargo_callers: Vec::new(),
+        non_cargo_caller: None,
+    })
+}
+
+fn enforce_reachability(
+    members: &[MetadataMember],
+    rows: &[ReachabilityRow],
+    advisory: &std::collections::BTreeMap<String, String>,
+) -> Result<(), String> {
+    if members.is_empty() || rows.is_empty() {
+        return Err("ERROR: reachability census has an empty member or row set".to_owned());
+    }
+    if members.len() != rows.len() {
+        return Err(format!(
+            "ERROR: reachability rows={} do not cover metadata members={}",
+            rows.len(),
+            members.len()
+        ));
+    }
+    let member_names: std::collections::BTreeSet<_> =
+        members.iter().map(|member| member.lane.name.as_str()).collect();
+    let stale: Vec<_> = advisory
+        .keys()
+        .filter(|name| !member_names.contains(name.as_str()))
+        .cloned()
+        .collect();
+    if !stale.is_empty() {
+        return Err(format!("ERROR: advisory registry names absent members {stale:?}"));
+    }
+    let unallowlisted: Vec<_> = rows
+        .iter()
+        .filter(|row| {
+            row.class == ReachabilityClass::NoCallerAtAll && !advisory.contains_key(&row.name)
+        })
+        .map(|row| row.name.clone())
+        .collect();
+    if !unallowlisted.is_empty() {
+        return Err(format!(
+            "UNWIRED CRATE: no caller at all and absent from ADVISORY_ALLOWANCE {unallowlisted:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn run_reachability_census(root: &Path) -> Result<Vec<ReachabilityRow>, String> {
+    let members = metadata_members(root)?;
+    let sources = collect_sources(root)?;
+    let advisory = advisory_allowance(root)?;
+    let rows: Vec<_> = members
+        .iter()
+        .map(|member| classify_member(member, &sources, STRIP_TEST_CODE))
+        .collect::<Result<_, _>>()?;
+    let stale_wired: Vec<_> = advisory
+        .keys()
+        .filter(|name| rows.iter().any(|row| row.name == **name && row.class != ReachabilityClass::NoCallerAtAll))
+        .cloned()
+        .collect();
+    let pre_no_caller: Vec<_> = rows
+        .iter()
+        .filter(|row| row.class == ReachabilityClass::NoCallerAtAll)
+        .map(|row| row.name.as_str())
+        .collect();
+    eprintln!("REACHABILITY_PRECHECK no_caller_names={pre_no_caller:?} advisory_stale_wired={stale_wired:?}");
+    enforce_reachability(&members, &rows, &advisory)?;
+    let mut counts = std::collections::BTreeMap::<&'static str, usize>::new();
+    for row in &rows {
+        let label = match row.class {
+            ReachabilityClass::CargoPathDependency => "cargo_path_dependency",
+            ReachabilityClass::WiredByNonCargoEdge => "wired_by_non_cargo_edge",
+            ReachabilityClass::NoCallerAtAll => "no_caller_at_all",
+            ReachabilityClass::LegitimatelyTerminal => "legitimately_terminal",
+        };
+        *counts.entry(label).or_default() += 1;
+    }
+    let no_caller: Vec<_> = rows
+        .iter()
+        .filter(|row| row.class == ReachabilityClass::NoCallerAtAll)
+        .map(|row| row.name.as_str())
+        .collect();
+    eprintln!(
+        "CRATE_REACHABILITY_CENSUS members={} cargo_path_dependency={} wired_by_non_cargo_edge={} no_caller_at_all={} legitimately_terminal={} no_caller_names={no_caller:?}",
+        rows.len(),
+        counts.get("cargo_path_dependency").copied().unwrap_or_default(),
+        counts.get("wired_by_non_cargo_edge").copied().unwrap_or_default(),
+        counts.get("no_caller_at_all").copied().unwrap_or_default(),
+        counts.get("legitimately_terminal").copied().unwrap_or_default(),
+    );
+    Ok(rows)
+}
+
+#[test]
+fn every_metadata_member_has_a_reachability_classification() {
+    let rows = run_reachability_census(&repo_root()).expect("reachability census must be complete");
+    assert!(!rows.is_empty(), "census cannot pass with an empty row set");
+    let positive = rows
+        .iter()
+        .find(|row| row.name == "subprocess-contract")
+        .expect("positive-control crate must be a workspace member");
+    assert_ne!(
+        positive.class,
+        ReachabilityClass::NoCallerAtAll,
+        "POSITIVE_CONTROL=subprocess-contract:found must be wired"
+    );
+    eprintln!("POSITIVE_CONTROL=subprocess-contract:found class={:?}", positive.class);
+}
+
+#[test]
+fn planted_unwired_member_is_red_then_green() {
+    let member = MetadataMember {
+        lane: Lane {
+            name: "planted-unwired-member".to_owned(),
+            needle_hyphen: "planted-unwired-member".to_owned(),
+            needle_underscore: "planted_unwired_member".to_owned(),
+        },
+        cargo_callers: Vec::new(),
+        has_bin: true,
+        has_lib: true,
+    };
+    let sources = [rust_source("src/other.rs", "fn run() {}\n")];
+    let row = classify_member(&member, &sources, STRIP_TEST_CODE).expect("fixture scan");
+    assert_eq!(row.class, ReachabilityClass::NoCallerAtAll);
+    let empty = std::collections::BTreeMap::new();
+    assert!(enforce_reachability(&[member.clone()], &[row.clone()], &empty).is_err());
+    let mut allowance = std::collections::BTreeMap::new();
+    allowance.insert(member.lane.name.clone(), "planted known-bad row".to_owned());
+    assert!(enforce_reachability(&[member], &[row], &allowance).is_ok());
+}
+
+#[test]
+fn reachability_census_rejects_empty_inputs() {
+    let member = MetadataMember {
+        lane: Lane {
+            name: "empty-input".to_owned(),
+            needle_hyphen: "empty-input".to_owned(),
+            needle_underscore: "empty_input".to_owned(),
+        },
+        cargo_callers: Vec::new(),
+        has_bin: true,
+        has_lib: true,
+    };
+    assert!(classify_member(&member, &[], STRIP_TEST_CODE).is_err());
+    assert!(enforce_reachability(&[], &[], &std::collections::BTreeMap::new()).is_err());
 }
