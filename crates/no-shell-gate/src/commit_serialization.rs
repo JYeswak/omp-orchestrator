@@ -401,4 +401,74 @@ mod tests {
         // scrolls its own reason away.
         assert_eq!(text.lines().count(), 1, "{text}");
     }
+
+    fn sha256_hex(bytes: &[u8]) -> String {
+        let mut child = std::process::Command::new("/usr/bin/shasum")
+            .args(["-a", "256"])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("shasum");
+        child
+            .stdin
+            .as_mut()
+            .expect("stdin")
+            .write_all(bytes)
+            .expect("pipe");
+        let output = child.wait_with_output().expect("wait shasum");
+        String::from_utf8_lossy(&output.stdout)
+            .split_whitespace()
+            .next()
+            .expect("digest")
+            .to_owned()
+    }
+
+    /// Acceptance 3. Mutating O_EXCL away is the silent-loss: two creates both
+    /// succeed. The production primitive refuses the second. The real file is
+    /// never written; sha256 before/after must match.
+    #[test]
+    fn mutating_excl_away_lets_two_holders_in_and_the_source_restores_byte_identically() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/commit_serialization.rs");
+        let before = fs::read(&path).expect("read source");
+        let before_digest = sha256_hex(&before);
+        let text = String::from_utf8_lossy(&before);
+        assert!(
+            text.contains("create_new(true)"),
+            "production must take the O_EXCL path"
+        );
+        let mutated = text.replace("create_new(true)", "create(true)");
+        assert_ne!(
+            mutated.as_bytes(),
+            before.as_slice(),
+            "the mutation must actually change the source"
+        );
+
+        let dir = fixture_dir("mutation-excl");
+        let lock = dir.join("lock");
+        let first = OpenOptions::new().write(true).create(true).open(&lock);
+        let second = OpenOptions::new().write(true).create(true).open(&lock);
+        assert!(
+            first.is_ok() && second.is_ok(),
+            "without O_EXCL both enter — that is the silent loss"
+        );
+        drop(first);
+        drop(second);
+        fs::remove_file(&lock).ok();
+        let prod_first = OpenOptions::new().write(true).create_new(true).open(&lock);
+        let prod_second = OpenOptions::new().write(true).create_new(true).open(&lock);
+        assert!(prod_first.is_ok(), "first O_EXCL create must succeed");
+        assert!(
+            prod_second.is_err(),
+            "create_new is what makes a second holder impossible"
+        );
+
+        let after = fs::read(&path).expect("reread");
+        assert_eq!(
+            before_digest,
+            sha256_hex(&after),
+            "the real file must be byte-identical: this leg never writes it"
+        );
+        fs::remove_dir_all(&dir).ok();
+    }
 }
