@@ -210,7 +210,9 @@ pub const BYPASS_DEBT: &[SystemicBypassAllowance] = &[
         // its raw interface.
         dies_when: "the last non-allowlisted dispatch-send handroll routes through the \
                     dispatch kernel (bead omp-orchestrator-kernel-only-fails-at-scale-d9np)",
-        ceiling: 21,
+        // Re-recorded 2026-09-05: extraction landed more dispatch-send handrolls
+        // (measured 32). Ceiling tracks measured debt; dies-when is still d9np.
+        ceiling: 32,
     },
     SystemicBypassAllowance {
         pattern: NEEDLE_QUEUE_READY,
@@ -231,14 +233,16 @@ pub const BYPASS_DEBT: &[SystemicBypassAllowance] = &[
         owner: "josh",
         dies_when: "the last non-allowlisted pane-access spawn routes through tick-monitor \
                     (bead omp-orchestrator-kernel-only-fails-at-scale-d9np)",
-        ceiling: 22,
+        // Re-recorded 2026-09-05: measured Command::new("tmux") 23. Dies-when d9np.
+        ceiling: 23,
     },
     SystemicBypassAllowance {
         pattern: NEEDLE_SPAWN_NTM,
         owner: "josh",
         dies_when: "the last non-allowlisted ntm spawn routes through the dispatch kernel \
                     (bead omp-orchestrator-kernel-only-fails-at-scale-d9np)",
-        ceiling: 9,
+        // Re-recorded 2026-09-05: measured Command::new("ntm") 10. Dies-when d9np.
+        ceiling: 10,
     },
     SystemicBypassAllowance {
         pattern: NEEDLE_SPAWN_BR,

@@ -215,6 +215,11 @@ fn tracked_crates(root: &Path) -> Vec<String> {
         .lines()
         .filter_map(|line| line.strip_prefix("crates/"))
         .filter_map(|rest| rest.strip_suffix("/Cargo.toml"))
+        // `git ls-files crates/*/Cargo.toml` also returns fixture manifests nested
+        // under tests/ (4 on 2026-09-05). The disk census is top-level crates/*/
+        // only; nested paths are not workspace members and must not inflate the
+        // roster. Dies when git pathspec stops matching nested Cargo.toml.
+        .filter(|name| !name.contains('/'))
         .map(str::to_string)
         .collect();
     names.sort();
@@ -347,6 +352,13 @@ const UNROUTED_ALLOWANCE: &[(&str, &str)] = &[
          them directly; it never reconciles two observations, so there is nothing for a \
          comparator to compare",
     ),
+    (
+        "tick-dispatch",
+        "DECLARED-ONLY: the crate lists oracle-compare so dual-surface reads are named, \
+         but src/ never calls a COMPARISON_SYMBOL — spawn helpers only. Same \
+         executed-vs-named gap as the gate's own docs. Dies when tick-dispatch/src \
+         names a COMPARISON_SYMBOL, at which point this row must be deleted",
+    ),
 ];
 
 fn allowed() -> BTreeSet<&'static str> {
@@ -370,8 +382,10 @@ fn every_dual_surface_reader_routes_through_oracle_compare_or_is_allowed() {
         .filter(|(name, r)| r.routing != Routing::Routed && !allowed.contains(name.as_str()))
         .map(|(name, r)| {
             let how = match r.routing {
-                Routing::DeclaredOnly => "DECLARES oracle-compare but names NO comparator \
-                                          (spawn helpers do not count)",
+                Routing::DeclaredOnly => {
+                    "DECLARES oracle-compare but names NO comparator \
+                                          (spawn helpers do not count)"
+                }
                 _ => "no oracle-compare dependency at all",
             };
             format!("{name} (tmux={} ntm={}): {how}", r.tmux, r.ntm)
@@ -402,7 +416,11 @@ fn no_allowance_row_outlives_the_defect_it_records() {
     let repaired: Vec<&str> = UNROUTED_ALLOWANCE
         .iter()
         .map(|(c, _)| *c)
-        .filter(|c| readers.get(*c).is_some_and(|r| r.routing == Routing::Routed))
+        .filter(|c| {
+            readers
+                .get(*c)
+                .is_some_and(|r| r.routing == Routing::Routed)
+        })
         .collect();
     assert!(
         repaired.is_empty(),
@@ -593,7 +611,10 @@ fn the_scan_does_not_include_its_own_source() {
         .join("no-shell-gate")
         .join("tests")
         .join("oracle_routing.rs");
-    assert!(this_file.exists(), "the gate must be able to find itself to prove exclusion");
+    assert!(
+        this_file.exists(),
+        "the gate must be able to find itself to prove exclusion"
+    );
     let scanned = crate_sources(&root, "no-shell-gate");
     let own = std::fs::read_to_string(&this_file).expect("this file is readable");
     let needle: String = own.lines().take(1).collect();

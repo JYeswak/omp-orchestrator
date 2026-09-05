@@ -716,14 +716,24 @@ pub fn install_binary(
             version: staged_check.version_output.unwrap_or_default(),
         });
     }
+    // A pre-existing destination is a foreign owner, not an upgrade slot.
+    // Rename would replace it atomically; L0 refuses first. Dies when an
+    // explicit same-identity upgrade path is added and this test is rewritten.
+    if install_path.exists() {
+        let _ = std::fs::remove_file(&staged_path);
+        return Err(InstallError::IoError {
+            path: install_path.display().to_string(),
+            detail: "destination already exists; refuse replace of a pre-existing owner"
+                .to_owned(),
+        });
+    }
 
-    // Rename replaces the old path atomically on the same filesystem. There is
-    // no unlink-before-place window for a launchd process to observe.
+    // Rename publishes onto an empty path atomically on the same filesystem.
     if let Err(error) = std::fs::rename(&staged_path, &install_path) {
         let _ = std::fs::remove_file(&staged_path);
         return Err(InstallError::IoError {
             path: install_path.display().to_string(),
-            detail: format!("atomic replace failed: {error}"),
+            detail: format!("atomic publish failed: {error}"),
         });
     }
     let metadata = std::fs::metadata(&install_path).map_err(|error| InstallError::IoError {
