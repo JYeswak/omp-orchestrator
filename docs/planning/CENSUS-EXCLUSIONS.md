@@ -68,3 +68,15 @@ No other `cp-*` in `docs/plan/00-brief.md` … `12-journey.md`.
 ## NO-CLAIM
 
 Excluding these ids does not prove any other id in `docs/plan` is live, owned, or correctly cited. It only stops two measured miscounts.
+
+## Rule 5 — a hex token in a close reason is not a git commit until `git cat-file -e` says so
+
+**Bead:** `omp-orchestrator-classify-unresolvable-close-citations-bm04`. Measured 2026-09-05. `BUILDS_RUN=0`.
+
+The 5dia rules classify *plan* identifiers. The same two poisons hit *close_reason* citations, plus two more:
+
+5. **Object-kind.** `[0-9a-f]{7,40}` matches dates, byte counts, the word `succeeded` (`cceeded`), cargo crate revs, installed-binary shas, and **splits a 64-char sha256 into a 40-char prefix plus a 24-char remainder**. A token is a git commit in *this* repo only after `git cat-file -e <tok>` succeeds here. Adjacent `sha256`, `byte-identical`, `both sides`, or `…` means file digest, not commit. A hit in `/Users/josh/Developer/control-plane` is FOREIGN-REPO, not a broken citation.
+
+Class 1 (FABRICATED) is the only lie in the audit trail. Class 2/4 are the census over-matching. Rebased-away was checked (`git reflog --all`, `git fsck --lost-found`) and was empty for this set.
+
+**Dies when:** this repo's object database is rewritten such that `git cat-file -e` is no longer the authority, or control-plane shares history with this repo. Does not die when a new close reason cites a sha256.
