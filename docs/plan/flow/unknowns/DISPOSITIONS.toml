@@ -10,6 +10,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "reviewer asserting-correct; owner_says stands; falsifier=re-run measurements"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S5a-S5b-S7-S8.toml"
 stable_ids = ["wave-1/AmberGate-S5a-S5b-S7-S8.toml:all", "S5a"]
+audit_source = "docs/plan/flow/waves/wave-1/AmberGate-S5a-S5b-S7-S8.toml:9"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: br ready --json; sed -n '611p;614p;621p' crates/omp-orchestrator/src/main.rs; git grep -nE 'cooldown|COOLDOWN|DISPATCH_CLAIMED|age_secs' -- crates/loop-queue-filter/src/lib.rs; REFUTES_IF: any cited queue count, QUEUE_UNREADABLE line, or selector implementation/dependency fact differs."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -22,6 +25,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "additive cite of existing DispatchIntent; not a Joshua question"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S5a-S5b-S7-S8.toml"
 stable_ids = ["wave-1/AmberGate-S5a-S5b-S7-S8.toml:kernel_output", "S5a"]
+audit_source = "docs/plan/flow/waves/wave-1/AmberGate-S5a-S5b-S7-S8.toml:18"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: git grep -nE 'cooldown|COOLDOWN|DISPATCH_CLAIMED|age_secs' -- crates/loop-queue-filter/src/lib.rs; REFUTES_IF: no cooldown load/apply/commit implementation is found."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -34,6 +40,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "reviewer asserting-correct"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S5a-S5b-S7-S8.toml"
 stable_ids = ["wave-1/AmberGate-S5a-S5b-S7-S8.toml:all", "S5b"]
+audit_source = "docs/plan/flow/waves/wave-1/AmberGate-S5a-S5b-S7-S8.toml:29"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: sed -n '1225p;1228p;1421p;4503p' crates/omp-orchestrator/src/main.rs; for c in dispatch-claim-fence pane-dispatch-fence composer-typed sender-identity tick-monitor; do test -d crates/$c; done; REFUTES_IF: any cited call or supporting crate is absent."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -70,6 +79,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "reading-hazard note; seven GATE banners vs eight gates; owner amends prose"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S5a-S5b-S7-S8.toml"
 stable_ids = ["wave-1/AmberGate-S5a-S5b-S7-S8.toml:branches", "S7"]
+audit_source = "docs/plan/flow/waves/wave-1/AmberGate-S5a-S5b-S7-S8.toml:58"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: grep -cE 'GATE [0-9]+' crates/no-shell-gate/src/bin/pre-commit-gate.rs; grep -nF 'GATE 6' crates/no-shell-gate/src/bin/pre-commit-gate.rs; REFUTES_IF: banner count is not 7 or GATE 6 appears, because banners undercount invocations."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -82,6 +94,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "asserting-correct plus additive headline"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S5a-S5b-S7-S8.toml"
 stable_ids = ["wave-1/AmberGate-S5a-S5b-S7-S8.toml:all", "S8"]
+audit_source = "docs/plan/flow/waves/wave-1/AmberGate-S5a-S5b-S7-S8.toml:69"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: file -b target/debug/decision-ledger; uname -m; REFUTES_IF: target/debug/decision-ledger is arm64-compatible or uname -m is not arm64."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -94,6 +109,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "installed-vs-in-repo nuance; crate_status stays exists-no-caller"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S5a-S5b-S7-S8.toml"
 stable_ids = ["wave-1/AmberGate-S5a-S5b-S7-S8.toml:crate_status", "S8"]
+audit_source = "docs/plan/flow/waves/wave-1/AmberGate-S5a-S5b-S7-S8.toml:78"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: ls -l ~/.local/bin/installer; ~/.local/bin/installer --version; git grep -nF 'installer' -- crates/omp-orchestrator/src crates/*/Cargo.toml .github; REFUTES_IF: the binary/version is absent or an automated caller is found."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -106,6 +124,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "asserting-correct"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S6a-S6b-S6c.toml"
 stable_ids = ["wave-1/AmberGate-S6a-S6b-S6c.toml:all", "S6a"]
+audit_source = "docs/plan/flow/waves/wave-1/AmberGate-S6a-S6b-S6c.toml:8"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: sed -n '43,89p' crates/receiver-receipt/src/lib.rs; grep -nF 'AckIncarnationMismatch' docs/plan/flow/boxes/S6a.toml; REFUTES_IF: ReceiptReason is not 16 arms or the planned 17th marker is absent."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -118,6 +139,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "stale: S6a now has 16 gap rows so the four sections exist"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S6a-S6b-S6c.toml"
 stable_ids = ["wave-1/AmberGate-S6a-S6b-S6c.toml:measurement", "S6a"]
+audit_source = "docs/plan/flow/waves/wave-1/AmberGate-S6a-S6b-S6c.toml:17"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: grep -cF '[[box.measurement]]' docs/plan/flow/boxes/S6a.toml; grep -cF '[[box.gap]]' docs/plan/flow/boxes/S6a.toml; git grep -lnF 'receiver-receipt = { path' -- crates/*/Cargo.toml; REFUTES_IF: the required sections or three manifest dependents no longer match the cited measurement."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -154,6 +178,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "asserting-correct"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S6a-S6b-S6c.toml"
 stable_ids = ["wave-1/AmberGate-S6a-S6b-S6c.toml:all", "S6c"]
+audit_source = "docs/plan/flow/waves/wave-1/AmberGate-S6a-S6b-S6c.toml:48"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: grep -nE 'pub enum (ReceiptReason|AckAction|ReceiptVerdict)|pub (struct|enum) (ReceiptReason|AckAction|ReceiptVerdict)' crates/receiver-receipt/src/lib.rs; grep -nF 'AckIncarnationMismatch' docs/plan/flow/boxes/S6a.toml; REFUTES_IF: the measured 16-arm plus planned-17th inventory differs."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -202,6 +229,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "opposing point on the same change; keep hook-wired not plain wired"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S9.toml"
 stable_ids = ["wave-1/AmberGate-S9.toml:crate_status", "S9"]
+audit_source = "docs/plan/flow/waves/wave-1/AmberGate-S9.toml:9"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: git grep -cE 'decision_ledger::|use decision_ledger' -- crates/omp-orchestrator/src/*; git grep -lnF 'decision-ledger = { path' -- crates/*/Cargo.toml; REFUTES_IF: either count is zero."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -214,6 +244,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "stale: S9 now has 16 gap rows"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S9.toml"
 stable_ids = ["wave-1/AmberGate-S9.toml:measurement", "S9"]
+audit_source = "docs/plan/flow/waves/wave-1/AmberGate-S9.toml:27"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: wc -l docs/decisions.jsonl; git grep -n 'decisions.jsonl' -- 'crates/*/src/*' | grep -vE '///|//!'; REFUTES_IF: the 12-row ledger or comment-only writer boundary no longer holds."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -226,6 +259,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "richer arms are a map amend, not a human halt"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/AmberGate-S9.toml"
 stable_ids = ["wave-1/AmberGate-S9.toml:branches", "S9"]
+audit_source = "docs/plan/flow/waves/wave-1/AmberGate-S9.toml:36"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: grep -nE 'pub enum (AppendOutcome|LedgerError)|classify_heartbeat' crates/decision-ledger/src/lib.rs; REFUTES_IF: AppendOutcome is not 2 arms, LedgerError is not 5 arms, or classify_heartbeat lacks explicit UNCLASSIFIED/None handling."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -250,6 +286,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "hook schema is HOOK-SCHEMA-CORE 10 fields (vnp2); do not ask Joshua"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S2.toml"
 stable_ids = ["wave-1/BlueLantern-S2.toml:hook", "S2"]
+audit_source = "docs/plan/flow/waves/wave-1/BlueLantern-S2.toml:12"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: for f in id event matcher class fail_mode binary policy_file source_commit language stage certified harm_class; do grep -qE \"^$f[[:space:]]*=\" docs/plan/flow/boxes/S2.toml || exit 1; done; REFUTES_IF: the S2 hook record does not contain all 12 certified fields."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -286,6 +325,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "16-class walk is CONTRACT.md; owner amends the gap list"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S3.toml"
 stable_ids = ["wave-1/BlueLantern-S3.toml:gap_class_coverage", "S3"]
+audit_source = "docs/plan/flow/waves/wave-1/BlueLantern-S3.toml:12"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: n=$(grep -cF '[[box.gap]]' docs/plan/flow/boxes/S3.toml); test \"$n\" -eq 16; REFUTES_IF: this exits nonzero (current n=12), proving the claimed complete 16-class walk is false."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -298,6 +340,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "hook schema 10-field core"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S3.toml"
 stable_ids = ["wave-1/BlueLantern-S3.toml:hook_schema", "S3"]
+audit_source = "docs/plan/flow/waves/wave-1/BlueLantern-S3.toml:21"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: for f in id event matcher class fail_mode binary policy_file source_commit language stage certified harm_class; do grep -qE \"^$f[[:space:]]*=\" docs/plan/flow/boxes/S3.toml || exit 1; done; REFUTES_IF: the S3 hook record does not contain all 12 certified fields."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -346,6 +391,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "hook schema 10-field core"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S4.toml"
 stable_ids = ["wave-1/BlueLantern-S4.toml:hook_schema", "S4"]
+audit_source = "docs/plan/flow/waves/wave-1/BlueLantern-S4.toml:21"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: for f in id event matcher class fail_mode binary policy_file source_commit language stage certified harm_class; do grep -qE \"^$f[[:space:]]*=\" docs/plan/flow/boxes/S4.toml || exit 1; done; REFUTES_IF: the S4 hook record does not contain all 12 certified fields."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -370,6 +418,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "verbatim enum arms is CONTRACT; owner splits the grouped string"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S6a.toml"
 stable_ids = ["wave-1/BlueLantern-S6a.toml:branches", "S6a"]
+audit_source = "docs/plan/flow/waves/wave-1/BlueLantern-S6a.toml:3"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: n=$(sed -n '43,89p' crates/receiver-receipt/src/lib.rs | grep -cE '^[[:space:]]+[A-Z][A-Za-z0-9_]*(,| \\{|$)'); test \"$n\" -eq 16; ! grep -qF 'AckIncarnationMismatch' docs/plan/flow/boxes/S6a.toml; REFUTES_IF: arm count differs or the pseudo-arm remains in the branch inventory."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -382,6 +433,10 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "missing hook row becomes an explicit absence row, not a Joshua call"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S6a.toml"
 stable_ids = ["wave-1/BlueLantern-S6a.toml:hook", "S6a"]
+audit_source = "docs/plan/flow/waves/wave-1/BlueLantern-S6a.toml:12"
+audit_outcome = "DECLARED_NOT_WIRED"
+dies_when = "a certified S6a hook row and a real hook-invocation test exist for the ACK/read-back trigger"
+followup_bead = "omp-orchestrator-ys6b"
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -430,6 +485,10 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "explicit [[box.hook]] absence row"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S6b.toml"
 stable_ids = ["wave-1/BlueLantern-S6b.toml:hook", "S6b"]
+audit_source = "docs/plan/flow/waves/wave-1/BlueLantern-S6b.toml:21"
+audit_outcome = "DECLARED_NOT_WIRED"
+dies_when = "a certified S6b hook row and a real hook-invocation test exist for the follow-up trigger"
+followup_bead = "omp-orchestrator-ys6b"
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -442,6 +501,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "MISSING Grade is a gap not a branch; owner moves it"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S6c.toml"
 stable_ids = ["wave-1/BlueLantern-S6c.toml:branches", "S6c"]
+audit_source = "docs/plan/flow/waves/wave-1/BlueLantern-S6c.toml:3"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: grep -nF 'Grade' docs/plan/flow/boxes/S6c.toml; git grep -nE 'struct Grade|enum Grade|type Grade|GradeResult' -- crates/verify-dispatch/src crates/ntm-fleet-monitor/src; REFUTES_IF: a shared Grade type exists where the box treats grading vocabulary as wholly missing, or the cited GradeResult arms are absent."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -466,6 +528,10 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "explicit hook absence"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S6c.toml"
 stable_ids = ["wave-1/BlueLantern-S6c.toml:hook", "S6c"]
+audit_source = "docs/plan/flow/waves/wave-1/BlueLantern-S6c.toml:21"
+audit_outcome = "DECLARED_NOT_WIRED"
+dies_when = "a certified S6c hook row and a real hook-invocation test exist for the verify-grade-close trigger"
+followup_bead = "omp-orchestrator-ys6b"
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -478,6 +544,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "class vocabulary is CONTRACT.md; owner renames"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S7.toml"
 stable_ids = ["wave-1/BlueLantern-S7.toml:gap_class_schema", "S7"]
+audit_source = "docs/plan/flow/waves/wave-1/BlueLantern-S7.toml:3"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: grep -nE '^class = ' docs/plan/flow/boxes/S7.toml | grep -vE 'event_row|claim_row|slo|oracle|gate_trip|fuzz|formal|lock|wired_caller|verdict_type|diagram|hook|measurement'; REFUTES_IF: output is nonempty, showing a class outside the declared vocabulary."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -490,6 +559,10 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "reachability is not certification; absence row"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S7.toml"
 stable_ids = ["wave-1/BlueLantern-S7.toml:hook_schema", "S7"]
+audit_source = "docs/plan/flow/waves/wave-1/BlueLantern-S7.toml:12"
+audit_outcome = "DECLARED_NOT_WIRED"
+dies_when = "a certified S7 hook row names the installed binary, policy, stage, and six-stage certification result, with a real hook-interception test"
+followup_bead = "omp-orchestrator-ys6b"
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -538,6 +611,10 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "auto-install HUMAN is GAP-S8-18; this row is only the absence schema"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S8.toml"
 stable_ids = ["wave-1/BlueLantern-S8.toml:hook", "S8"]
+audit_source = "docs/plan/flow/waves/wave-1/BlueLantern-S8.toml:21"
+audit_outcome = "DECLARED_NOT_WIRED"
+dies_when = "a certified S8 hook row and a real hook-invocation test exist for the install trigger"
+followup_bead = "omp-orchestrator-ys6b"
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -550,6 +627,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "class vocabulary"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S9.toml"
 stable_ids = ["wave-1/BlueLantern-S9.toml:gap_class_schema", "S9"]
+audit_source = "docs/plan/flow/waves/wave-1/BlueLantern-S9.toml:3"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: grep -nE '^class = ' docs/plan/flow/boxes/S9.toml | grep -vE 'event_row|claim_row|slo|oracle|gate_trip|fuzz|formal|lock|wired_caller|verdict_type|diagram|hook|measurement'; REFUTES_IF: output is nonempty, showing a class outside the declared vocabulary."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -574,6 +654,10 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "human-halt IS the trigger; no hook"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/BlueLantern-S9.toml"
 stable_ids = ["wave-1/BlueLantern-S9.toml:hook", "S9"]
+audit_source = "docs/plan/flow/waves/wave-1/BlueLantern-S9.toml:21"
+audit_outcome = "DECLARED_NOT_WIRED"
+dies_when = "a certified S9 hook row and a real hook-invocation test exist for the decision-ledger trigger"
+followup_bead = "omp-orchestrator-ys6b"
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -586,6 +670,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "16-class walk"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S2.toml"
 stable_ids = ["wave-1/QuietRidge-S2.toml:gap_inventory", "S2"]
+audit_source = "docs/plan/flow/waves/wave-1/QuietRidge-S2.toml:3"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: n=$(grep -cF '[[box.gap]]' docs/plan/flow/boxes/S2.toml); test \"$n\" -eq 16; REFUTES_IF: this exits nonzero (current n=9), proving the inventory is not the required 16-class walk."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -598,6 +685,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "blank approval writes MISSING; not a Joshua interrupt"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S2.toml"
 stable_ids = ["wave-1/QuietRidge-S2.toml:agreement.approval", "S2"]
+audit_source = "docs/plan/flow/waves/wave-1/QuietRidge-S2.toml:12"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: grep -nF 'approval = \"\"' docs/plan/flow/boxes/S2.toml; REFUTES_IF: any blank approval remains; the contract requires MISSING until an HD row exists."
 would_have_asked_joshua = true
 moved_off_human = true
 
@@ -610,6 +700,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "16-class walk"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S3.toml"
 stable_ids = ["wave-1/QuietRidge-S3.toml:gap_inventory", "S3"]
+audit_source = "docs/plan/flow/waves/wave-1/QuietRidge-S3.toml:3"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: n=$(grep -cF '[[box.gap]]' docs/plan/flow/boxes/S3.toml); test \"$n\" -eq 16; REFUTES_IF: this exits nonzero (current n=12), proving the inventory is not the required 16-class walk."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -634,6 +727,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "16-class walk"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S4.toml"
 stable_ids = ["wave-1/QuietRidge-S4.toml:gap_inventory", "S4"]
+audit_source = "docs/plan/flow/waves/wave-1/QuietRidge-S4.toml:3"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: n=$(grep -cF '[[box.gap]]' docs/plan/flow/boxes/S4.toml); test \"$n\" -eq 16; REFUTES_IF: this exits nonzero (current n=13), proving the inventory is not the required 16-class walk."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -670,6 +766,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "strip prose arrows from branch strings"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S5a.toml"
 stable_ids = ["wave-1/QuietRidge-S5a.toml:branches", "S5a"]
+audit_source = "docs/plan/flow/waves/wave-1/QuietRidge-S5a.toml:12"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: sed -n '19,99p' docs/plan/flow/boxes/S5a.toml | grep -nF '->'; REFUTES_IF: output is nonempty, because prose arrows are not verbatim enum arms."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -682,6 +781,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "16-class walk"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S5b.toml"
 stable_ids = ["wave-1/QuietRidge-S5b.toml:gap_inventory", "S5b"]
+audit_source = "docs/plan/flow/waves/wave-1/QuietRidge-S5b.toml:3"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: n=$(grep -cF '[[box.gap]]' docs/plan/flow/boxes/S5b.toml); test \"$n\" -eq 16; REFUTES_IF: this exits nonzero (current n=15), proving the inventory is short."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -694,6 +796,10 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "additive type cite"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S5b.toml"
 stable_ids = ["wave-1/QuietRidge-S5b.toml:kernel_output", "S5b"]
+audit_source = "docs/plan/flow/waves/wave-1/QuietRidge-S5b.toml:12"
+audit_outcome = "DECLARED_NOT_WIRED"
+dies_when = "a typed dispatch projection has a live consumer that distinguishes authorization, packet validation, pane admission, and transport receipt; current S5b has no such wired boundary"
+followup_bead = "omp-orchestrator-ys6b"
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -706,6 +812,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "split collapsed ReceiptReason"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S6a.toml"
 stable_ids = ["wave-1/QuietRidge-S6a.toml:branches", "S6a"]
+audit_source = "docs/plan/flow/waves/wave-1/QuietRidge-S6a.toml:3"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: sed -n '43,89p' crates/receiver-receipt/src/lib.rs; sed -n '149,169p' crates/receiver-receipt/src/lib.rs; sed -n '429,470p' crates/ack-stage/src/lib.rs; REFUTES_IF: grouped or pseudo enum arms remain instead of verbatim branches."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -718,6 +827,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "approval blank -> MISSING"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S6a.toml"
 stable_ids = ["wave-1/QuietRidge-S6a.toml:agreement.approval", "S6a"]
+audit_source = "docs/plan/flow/waves/wave-1/QuietRidge-S6a.toml:12"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: grep -nF \"approval = ''\" docs/plan/flow/boxes/S6a.toml; REFUTES_IF: any blank approval remains; the contract requires MISSING until an HD row exists."
 would_have_asked_joshua = true
 moved_off_human = true
 
@@ -742,6 +854,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "approval blank -> MISSING"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/QuietRidge-S6b.toml"
 stable_ids = ["wave-1/QuietRidge-S6b.toml:agreement.approval", "S6b"]
+audit_source = "docs/plan/flow/waves/wave-1/QuietRidge-S6b.toml:12"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: grep -nF \"approval = ''\" docs/plan/flow/boxes/S6b.toml; REFUTES_IF: any blank approval remains; the contract requires MISSING until an HD row exists."
 would_have_asked_joshua = true
 moved_off_human = true
 
@@ -802,6 +917,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "stale: S1 now has measurement+10 gaps"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-1/SilverWolf-S1.toml"
 stable_ids = ["wave-1/SilverWolf-S1.toml:wave1_sections", "S1"]
+audit_source = "docs/plan/flow/waves/wave-1/SilverWolf-S1.toml:3"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: for marker in '[[box.measurement]]' '[[box.gap]]' '[box.agreement]' '[box.diagram]'; do grep -cF \"$marker\" docs/plan/flow/boxes/S1.toml; done; REFUTES_IF: any result differs from the cited draft 0,0,0,0, or the four sections are asserted present without remeasurement."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -970,6 +1088,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "truncated mirror ellipsis already refused by CONTRACT.md"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-2/pane4-jt1i-citations.toml"
 stable_ids = ["wave-2/pane4-jt1i-citations.toml:cite.mirror-truncated-ellipsis", "S1"]
+audit_source = "docs/plan/flow/waves/wave-2/pane4-jt1i-citations.toml:36"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: grep -nE 'beads_rust[^[:space:]\"]*\\.\\.\\.|mirror:[^[:space:]\"]*\\.\\.\\.' docs/plan/flow/CONTRACT.md docs/plan/flow/waves/wave-2/pane4-jt1i-citations.toml; REFUTES_IF: any truncated mirror token remains."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -994,6 +1115,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "unlabelled figure in owner files; not a halt"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-2/pane4-jt1i-citations.toml"
 stable_ids = ["wave-2/pane4-jt1i-citations.toml:figure.unlabelled-in-owner-files", "S1"]
+audit_source = "docs/plan/flow/waves/wave-2/pane4-jt1i-citations.toml:54"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: grep -n 'open_disagreements' docs/plan/flow/boxes/S1.toml docs/plan/flow/waves/wave-1/BlueLantern-S2.toml | grep -vE 'TREE|WORKTREE'; REFUTES_IF: output is nonempty, because the figure lacks its tree-state label."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -1006,6 +1130,9 @@ disposition = "ASSUME_REVERSIBLY"
 reason = "certified=false vs UNATTEMPTED already amended in S1.toml hook rows"
 evidence = "resolution=\"\" in docs/plan/flow/waves/wave-2/pane4-qibn-hook-count.toml"
 stable_ids = ["wave-2/pane4-qibn-hook-count.toml:box.hook.certified_false_vs_unattempted", "S1"]
+audit_source = "docs/plan/flow/waves/wave-2/pane4-qibn-hook-count.toml:14"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: grep -nF 'certified = \"false\"' docs/plan/flow/boxes/S1.toml; REFUTES_IF: any such row remains; UNATTEMPTED is required for a gauntlet never entered."
 would_have_asked_joshua = false
 moved_off_human = false
 
@@ -1033,6 +1160,9 @@ reason = "install as ompo; falsifier=command -v installer points at /usr/sbin af
 evidence = "installer crate name collides with /usr/sbin/installer"
 resolves = "install as ompo or omp-orchestrator; never a PATH verb named installer"
 stable_ids = ["docs/plan/flow/boxes/S1.toml#gap2", "class:hook"]
+audit_source = "docs/plan/flow/boxes/S1.toml:293"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: command -v installer; REFUTES_IF: output is /usr/sbin/installer rather than the selected ompo target name."
 would_have_asked_joshua = true
 moved_off_human = true
 
@@ -1046,6 +1176,9 @@ reason = "accept diagram 0ea808a skip-spawn branch; falsifier=S1.mmd lacks perso
 evidence = "Persona A (08-end-users solo, gates-only) had no skip-swarm branch"
 resolves = "diagram 0ea808a adds L4 not-live + persona A -> skip spawn; owner must accept or reject that branch"
 stable_ids = ["docs/plan/flow/boxes/S1.toml#gap3", "class:diagram"]
+audit_source = "docs/plan/flow/boxes/S1.toml:297"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: grep -nF 'persona A' docs/plan/flow/diagrams/S1.mmd; REFUTES_IF: no persona-A skip-spawn branch is present."
 would_have_asked_joshua = true
 moved_off_human = true
 
@@ -1059,6 +1192,9 @@ reason = "spine.mmd is canonical (renderer source); boxes/S1.toml and 12-journey
 evidence = "three S1 names: 12-journey Inception vs boxes/S1 human-start vs spine.mmd S1 inception"
 resolves = "pane 1 picks one spine; the other two cite it"
 stable_ids = ["docs/plan/flow/boxes/S1.toml#gap4", "class:verdict_type"]
+audit_source = "docs/plan/flow/boxes/S1.toml:301"
+audit_outcome = "FALSIFIER"
+falsifier = "RUN: grep -nE 'S1|Inception|human-start|inception' docs/plan/12-journey.md docs/plan/flow/boxes/S1.toml docs/plan/flow/diagrams/S1.mmd; REFUTES_IF: more than one distinct canonical S1 name survives."
 would_have_asked_joshua = true
 moved_off_human = true
 
@@ -1346,11 +1482,16 @@ id = "GAP-S3-06"
 surface = "box.gap"
 box = "S3"
 severity_in = "gap"
-disposition = "ASSUME_REVERSIBLY"
+disposition = "HUMAN_DECISION"
 reason = "HD-0002 already: Josh is the buyer and the external loop; do not re-ask"
 evidence = "no named external oracle (L3): the grade's correctness is judged by the same fleet that produced the plan. There is no out-of-our-control arbiter for 'is this plan good'"
 resolves = "an external validation signal per loop-engineering's third loop; until then S3's verdict is internal agreement, which the Charter explicitly says is not the bar"
 stable_ids = ["docs/plan/flow/boxes/S3.toml#gap6", "class:oracle"]
+audit_source = "docs/plan/flow/boxes/S3.toml:118"
+audit_outcome = "RECLASSIFIED"
+reclass_target = "HUMAN_DECISION"
+decision_gate = "HD-0002"
+reclass_reason = "The external-validation policy is already a Joshua decision: HD-0002 names Joshua as buyer and external loop. This row is a human policy choice, not a reversible implementation assumption."
 would_have_asked_joshua = true
 moved_off_human = true
 
@@ -1498,11 +1639,16 @@ id = "GAP-S4-05"
 surface = "box.gap"
 box = "S4"
 severity_in = "gap"
-disposition = "ASSUME_REVERSIBLY"
+disposition = "HUMAN_DECISION"
 reason = "accept internal atom-correctness until an out-of-tree arbiter is named; falsifier=named oracle row"
 evidence = "no external oracle (L3): the materializer would be graded by the same report it files from. Nothing outside our control says the 9-part atom is the right atom"
 resolves = "naming an out-of-tree arbiter for crate shape, or accepting that atom-correctness is internal doctrine and saying so in the claim row"
 stable_ids = ["docs/plan/flow/boxes/S4.toml#gap5", "class:oracle"]
+audit_source = "docs/plan/flow/boxes/S4.toml:115"
+audit_outcome = "RECLASSIFIED"
+reclass_target = "HUMAN_DECISION"
+decision_gate = "HD-0002"
+reclass_reason = "The same external-validation policy is governed by HD-0002. The materializer cannot invent an out-of-tree arbiter; record the human decision and its binding gate instead."
 would_have_asked_joshua = true
 moved_off_human = true
 
