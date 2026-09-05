@@ -61,7 +61,7 @@ and outside the index/round records that minted it.
 | 11 | `GATE-*` convergence/release gate | **24 ids / 128 occ** | — | `DESIGN_INDEX.md:162-185` (per-id line-pin table) + `:239` (family row) | **yes, in code** — `crates/no-shell-gate/tests/wired_lanes.rs:63-87` (25 occ, `56cdd28`). **Section consumers: 0** |
 | 12 | `WS-*` workstream | 0 | `WP-001`..`WP-009` | `docs/PLAN.md:87-95` — the only constitution DAG, and it exists in **no section file** | **weak** — tracker (7) + `docs/decisions.jsonl` (2); `crates/**` 0 |
 | 13 | `B-*` bead specification | 0 | `omp-orchestrator-<slug>-<hash>` — **802 rows** | `.beads/issues.jsonl` + `.beads/*.db` | **yes**, heavily |
-| 14 | `DEF-*` review defect | **14 strings / 21 defined objects** | — | **NO SINGLE OWNER** — `id = "DEF-001"` is defined **7 times** in 7 files; `DEF-002` 5 times | **yes, and ambiguously** — 6 references in `DISPOSITIONS.toml:3481-3541` + 1 in `docs/decisions.jsonl` |
+| 14 | `DEF-*` review defect | **14 distinct strings / 31 definition sites** | — | **NO SINGLE OWNER** — counting only lines matching exactly `id = "DEF-NNN"`: `DEF-001` ×7, `DEF-002` ×5, `DEF-003` ×3, `DEF-004` ×3, `DEF-005` ×3, `DEF-006` ×2, `DEF-007`..`DEF-014` ×1. **6 of 14 strings are defined more than once** | **yes, and ambiguously** — 6 references in `DISPOSITIONS.toml:3481-3541` + 1 in `docs/decisions.jsonl` |
 | 15 | `RB-*` Atlas Rigor binding | **0** | none | **ABSENT** — `\bRB-\d` returns zero across `docs/**`, `crates/**`, `.beads/issues.jsonl`. The only occurrence of the string `RB-` is prose inside bead `y0dy` | n/a |
 | 16 | `REC-*` closure receipt | **0** | none as an ID | **ABSENT** — `\bREC-\d` zero repo-wide. `receipts` occurs 152×, `crates/receiver-receipt` exists with a 7-id `RR-*` law family, but no receipt is addressable | n/a |
 
@@ -167,13 +167,27 @@ against 381 unpushed commits, so CI has never seen this tree.
 | `DESIGN_INDEX.md:241,275,277` asserts `HD-0001`–`HD-0017` / `DEC=17` against an append-only ledger holding 18 — an index asserting a stale count of the ledger it points at | `docs/decisions.jsonl:25-26` | tracked `f02j` |
 | 31 cut aliases survive as **54 `affected_ids` occurrences** with no owner: `REQ-001..013`, `INV-001..012`, `RISK-001..006` | `round3/DEFECTS.toml`, `round4/DEFECTS.toml` only; `DESIGN_INDEX.md:275` records the cut of exactly 31 | **NEW** → `cut-aliases-left-dangling-references-m3v6` |
 | `GATE-001..024`'s only definition site is `DESIGN_INDEX.md:162-185`, a file describing itself (`:9-12`) as "a deterministic alias … does not add product scope" — while `crates/no-shell-gate/tests/wired_lanes.rs` depends on those ids and the aliased sections carry the string 0 times | `GATE-0xx` in `docs/PLAN.md` → 0; in all 13 sections → 0 | tracked `jy4o` (24 ADOPT, `APPLIED=none`) — measured and commented |
-| `docs/contracts/**` carries **238 distinct law ids in 27 families**; **0 of 238** appear in `DESIGN_INDEX.md`, `docs/PLAN.md`, or the 13 sections, while `DESIGN_INDEX.md:69-70` declares all 32 contract files normative. 228 of 238 have no `crates/**` consumer | 27 families each resolving to one owning file (`LAW-*` resolves at the two-segment prefix: `LAW-JQ-*`, `LAW-L0-*`..`LAW-L5-*`) | **NEW** → `contract-law-ids-unregistered-a6b7` |
+| `docs/contracts/**` carries **238 distinct law ids in 27 families**; **0 of 238** appear in `DESIGN_INDEX.md`, `docs/PLAN.md`, or the 13 sections, while `DESIGN_INDEX.md:69-70` declares all 32 contract files normative. **228 of 238 have no `crates/**` consumer**, and — scope stated precisely so the number is not over-read — **81 of 238 have SOME consumer outside `docs/contracts/`** (union of `crates/**` 10, `.beads/issues.jsonl` 37, `docs/plan/flow/**` 41), leaving **157 with no consumer of any kind** | 27 families each resolving to one owning file (`LAW-*` resolves at the two-segment prefix: `LAW-JQ-*`, `LAW-L0-*`..`LAW-L5-*`) | **NEW** → `contract-law-ids-unregistered-a6b7` |
 | 269 typed unknown ids in `DISPOSITIONS.toml` have **zero** consumers outside that file | `GAP-S1-` over the consumer population → 0 files | R3's subject (pass 3); recorded, not filed here |
 
-`DUPLICATE_IDS = 15` distinct id strings minted more than once for different objects: 7 `DEF-*`
-strings (`DEF-001`..`DEF-006` plus the cross-file `DEF-002` reference target) and 8 `HD-*` pairs.
+`DUPLICATE_IDS = 14` distinct id strings minted more than once for different objects: **6 `DEF-*`
+strings** (`DEF-001` ×7, `DEF-002` ×5, `DEF-003` ×3, `DEF-004` ×3, `DEF-005` ×3, `DEF-006` ×2 —
+31 definition sites under 14 strings) and **8 `HD-*` ask/answer pairs**.
 `RESTATEMENTS_POINTING_AT_NON_OWNER = 61`: 54 dangling `affected_ids` + 6 bare `DEF-002` references
 + 1 bare `DEF-004` in `docs/decisions.jsonl`.
+
+**Roll-up figures, with their composition so each is reproducible.**
+`IDS_TOTAL = 1422` distinct ids across every kind and analogue: `GATE` 24 + `HD` 18 + `WP` 9 +
+`INV-2026` 1 + `REQ` 13 + `INV-001..012` 12 + `RISK` 6 + `DEF` 14 + contract laws 238 +
+typed unknowns 269 + `SCHEMAS.toml` artifacts 16 + bead ids 802.
+`IDS_EARNED = 960` (same order: 24 + 18 + 9 + 1 + 0 + 0 + 0 + 9 + 81 + 0 + 16 + 802) — an id is
+earned when it is referenced outside its own definition site and outside the index/round records
+that minted it. `IDS_UNEARNED = 462`, of which **269 are the typed unknowns and 157 are contract
+laws** — so 92% of the unearned population is two surfaces, not scattered rot.
+`IDS_INDEX_ONLY = 0` under round 4 `DEF-001`'s own `verification_method` re-run over the current
+51-id register. That is not a clean bill: **40 of the 51 are absent from the constitution**
+(`docs/PLAN.md`), which is `y0dy`'s finding and reproduces exactly. "Index-only" and
+"constitution-absent" are different questions and only the first is zero.
 
 ## Correction to a binding rule
 
