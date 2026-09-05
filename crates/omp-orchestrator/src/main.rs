@@ -61,7 +61,38 @@ use ntm_fleet_monitor::bead_lifecycle::ledger::{
 
 const DEFAULT_INTERVAL: Duration = Duration::from_secs(90);
 const DEFAULT_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
-const RECEIPT_TIMEOUT: Duration = Duration::from_secs(30);
+/// The window the supervisor waits for an ACK readback.
+///
+/// # This is DERIVED, not chosen, and the derivation is the fix
+///
+/// MEASURED 2026-09-05: this was a bare `from_secs(30)` while the discriminator it
+/// feeds — `receiver_receipt`'s two-capture motion arm — refuses any span below
+/// [`OBSERVATION_WINDOW_MIN_SECS`] (75s) with `WINDOW_BELOW_FLOOR`. A 30s wait asked a
+/// question that needs 75s of span, so **every dispatch was structurally guaranteed to
+/// return `Indeterminate`**, and the loop printed `DISPATCH_FAILED
+/// detail=ACK_STAGE_RETRY_BLOCKED ... discriminator_reason=WINDOW_BELOW_FLOOR` on
+/// successful dispatches. Two consecutive live ticks did exactly that: `%8`/`2yf` and
+/// `%9`/`nh5` both landed — both panes went WORKING and both beads reached
+/// `in_progress` — while the status word said failure. `ack-stage/src/lib.rs:525`
+/// already recorded the same class: *"the ack is late, not absent"*, `owes_human=false`,
+/// measured on `io3h -> %1414` four seconds before that worker's ACK landed.
+///
+/// So the window is now computed FROM the floor rather than sitting beside it. Two
+/// hand-maintained durations that must agree is the shape that just failed; the same
+/// prescription was applied to `ADVISORY_CEILING` and its recording anchor, which became
+/// one type with `is_consistent()` instead of two constants nobody kept in step.
+///
+/// The `+ 15` is headroom for capture jitter: the floor is a *minimum* span between two
+/// observations, so waiting exactly 75s can still yield a 74s span and refuse.
+///
+/// # NO-CLAIM
+///
+/// A window at or above the floor makes a delivery verdict *reachable*. It does not make
+/// it *true* — a genuinely silent pane still returns `Indeterminate`, which is correct,
+/// and the tmux literal transport is `Indeterminate` BY CONSTRUCTION regardless of window
+/// per `ack-stage`'s own contract.
+const RECEIPT_TIMEOUT: Duration =
+    Duration::from_secs(receiver_receipt::OBSERVATION_WINDOW_MIN_SECS + 15);
 const RECEIPT_POLL: Duration = Duration::from_millis(250);
 const SILENCE_WATCH: &str = "dispatch-silence-watch";
 /// The commit this binary was built from. MANDATORY.
