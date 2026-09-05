@@ -180,12 +180,25 @@ impl TransportReceipt {
     }
 }
 
+/// One tracker comment, text verbatim, timestamp from the tracker row.
+///
+/// `created_at` is the comment's own time, never the clock at read-back.
+/// Missing or unparseable time is `None` and fails closed under recency.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AckComment {
+    pub text: String,
+    pub created_at: Option<u64>,
+}
+
 /// Read-back of the tracker comments; each text is preserved verbatim.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AckReadback {
     pub bead_id: String,
     pub pane_id: String,
-    pub comments: Vec<String>,
+    pub comments: Vec<AckComment>,
+    /// Unix seconds from the pending-dispatch MARKER, never wall clock.
+    /// `None` disables recency (the mutation that lets a stale ACK pass).
+    pub dispatch_issued_at: Option<u64>,
 }
 
 /// Why the authoritative comment read-back could not be parsed.
@@ -217,6 +230,60 @@ fn ack_token(bead_id: &str) -> &str {
 
 fn ack_prefix(bead_id: &str, pane_id: &str) -> String {
     format!("ACK {} on {pane_id} -- ", ack_token(bead_id))
+}
+
+/// Parse a `br comments` `created_at` cell. Unix number or RFC3339 `…Z`.
+///
+/// Sourced from the tracker row, never from the process clock.
+pub fn parse_comment_created_at(value: &Value) -> Option<u64> {
+    if let Some(n) = value.as_u64() {
+        return Some(n);
+    }
+    let s = value.as_str()?;
+    parse_rfc3339_z(s)
+}
+
+fn parse_rfc3339_z(s: &str) -> Option<u64> {
+    let s = s.strip_suffix('Z')?;
+    let (date, time) = s.split_once('T')?;
+    let mut date = date.split('-');
+    let y: i32 = date.next()?.parse().ok()?;
+    let m: u32 = date.next()?.parse().ok()?;
+    let d: u32 = date.next()?.parse().ok()?;
+    if date.next().is_some() {
+        return None;
+    }
+    let time = time.split('.').next()?;
+    let mut time = time.split(':');
+    let hh: u32 = time.next()?.parse().ok()?;
+    let mm: u32 = time.next()?.parse().ok()?;
+    let ss: u32 = time.next()?.parse().ok()?;
+    if time.next().is_some() {
+        return None;
+    }
+    unix_from_civil(y, m, d, hh, mm, ss)
+}
+
+fn unix_from_civil(y: i32, m: u32, d: u32, hh: u32, mm: u32, ss: u32) -> Option<u64> {
+    if !(1..=12).contains(&m) || d == 0 || d > 31 || hh > 23 || mm > 59 || ss > 60 {
+        return None;
+    }
+    let mut y = y;
+    if m <= 2 {
+        y -= 1;
+    }
+    let era = y.div_euclid(400);
+    let yoe = (y - era * 400) as u32;
+    let mp = if m > 2 { m - 3 } else { m + 9 };
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era as i64 * 146097 + doe as i64 - 719468;
+    let secs = days
+        .checked_mul(86400)?
+        .checked_add(i64::from(hh) * 3600)?
+        .checked_add(i64::from(mm) * 60)?
+        .checked_add(i64::from(ss))?;
+    u64::try_from(secs).ok()
 }
 
 /// Render the single ACK instruction shared by the parser and receiver packets.
@@ -285,13 +352,31 @@ impl AckReadback {
                 .ok_or(AckReadbackError::MissingText(index))?
                 .as_str()
                 .ok_or(AckReadbackError::WrongTextType(index))?;
-            comments.push(text.to_owned());
+            comments.push(AckComment {
+                text: text.to_owned(),
+                created_at: row.get("created_at").and_then(parse_comment_created_at),
+            });
         }
         Ok(Self {
             bead_id: bead_id.into(),
             pane_id: pane_id.into(),
             comments,
+            dispatch_issued_at: None,
         })
+    }
+
+    /// Bind this read-back to a dispatch. `issued_at` is the MARKER field.
+    #[must_use]
+    pub fn with_dispatch_issued_at(mut self, issued_at: u64) -> Self {
+        self.dispatch_issued_at = Some(issued_at);
+        self
+    }
+
+    fn is_fresh(&self, created_at: Option<u64>) -> bool {
+        match self.dispatch_issued_at {
+            None => true,
+            Some(issued) => created_at.map(|t| t > issued).unwrap_or(false),
+        }
     }
 
     /// Return the exact matching comment body, if the required ACK exists.
@@ -300,27 +385,50 @@ impl AckReadback {
     }
 
     /// Classify a read-back ACK against the dispatched bead and pane.
+    ///
+    /// `session_pane_ids` are the tmux pane ids that belong to this dispatch
+    /// session. An ACK naming a pane outside that set is ignored (ABSENT), not
+    /// `ACK_PANE_MISMATCH`. A mismatch *inside* the set stays a typed refusal.
+    /// Empty `session_pane_ids` means only `pane_id` is in-session.
+    ///
+    /// An ACK older than `dispatch_issued_at` is ABSENT, not a mismatch.
+    /// Recency is skipped when `dispatch_issued_at` is `None`.
     pub fn match_verdict_for(&self, bead_id: &str, pane_id: &str) -> AckReadbackVerdict {
+        self.match_verdict_in_session(bead_id, pane_id, &[])
+    }
+
+    pub fn match_verdict_in_session(
+        &self,
+        bead_id: &str,
+        pane_id: &str,
+        session_pane_ids: &[String],
+    ) -> AckReadbackVerdict {
         if self.bead_id != bead_id {
             return AckReadbackVerdict::Missing;
         }
         let prefix = format!("ACK {} on ", ack_token(bead_id));
         for comment in &self.comments {
-            let Some(rest) = comment.strip_prefix(&prefix) else {
+            let Some(rest) = comment.text.strip_prefix(&prefix) else {
                 continue;
             };
             let Some((got, _)) = rest.split_once(" -- ") else {
                 continue;
             };
-            if got != pane_id {
+            if !self.is_fresh(comment.created_at) {
+                continue;
+            }
+            if got == pane_id {
+                return AckReadbackVerdict::Matched {
+                    comment: comment.text.clone(),
+                };
+            }
+            let in_session = session_pane_ids.iter().any(|id| id == got);
+            if in_session {
                 return AckReadbackVerdict::AckPaneMismatch {
                     expected: pane_id.to_owned(),
                     got: got.to_owned(),
                 };
             }
-            return AckReadbackVerdict::Matched {
-                comment: comment.clone(),
-            };
         }
         AckReadbackVerdict::Missing
     }
@@ -333,8 +441,10 @@ impl AckReadback {
         let prefix = ack_prefix(bead_id, pane_id);
         self.comments
             .iter()
-            .find(|comment| comment.starts_with(&prefix))
-            .map(String::as_str)
+            .find(|comment| {
+                comment.text.starts_with(&prefix) && self.is_fresh(comment.created_at)
+            })
+            .map(|comment| comment.text.as_str())
     }
 }
 
@@ -349,6 +459,9 @@ pub struct AckStageInput {
     pub post_send: PostSendObservation,
     pub ack: AckReadback,
     pub attempts_so_far: u32,
+    /// Tmux pane ids belonging to this dispatch session. Empty: only `pane_id`
+    /// is in-session, so a foreign ACK is ABSENT not ACK_PANE_MISMATCH.
+    pub session_pane_ids: Vec<String>,
 }
 
 /// One typed action plus all evidence that led to it.
@@ -391,9 +504,11 @@ pub fn assess(input: &AckStageInput) -> AckStageResult {
         }
         (_, receiver) => receiver,
     };
-    let ack_verdict = input
-        .ack
-        .match_verdict_for(&input.bead_id, &input.pane_id);
+    let ack_verdict = input.ack.match_verdict_in_session(
+        &input.bead_id,
+        &input.pane_id,
+        &input.session_pane_ids,
+    );
     let ack_comment = match &ack_verdict {
         AckReadbackVerdict::Matched { comment } => Some(comment.clone()),
         AckReadbackVerdict::Missing | AckReadbackVerdict::AckPaneMismatch { .. } => None,
@@ -691,7 +806,29 @@ mod tests {
         AckReadback {
             bead_id: "omp-orchestrator-ack-stage-qhl".into(),
             pane_id: "%1413".into(),
-            comments: comments.iter().map(|comment| (*comment).into()).collect(),
+            comments: comments
+                .iter()
+                .map(|comment| AckComment {
+                    text: (*comment).into(),
+                    created_at: None,
+                })
+                .collect(),
+            dispatch_issued_at: None,
+        }
+    }
+
+    fn ack_at(pane_id: &str, comments: &[(&str, u64)]) -> AckReadback {
+        AckReadback {
+            bead_id: "omp-orchestrator-ack-stage-qhl".into(),
+            pane_id: pane_id.into(),
+            comments: comments
+                .iter()
+                .map(|(comment, at)| AckComment {
+                    text: (*comment).into(),
+                    created_at: Some(*at),
+                })
+                .collect(),
+            dispatch_issued_at: None,
         }
     }
 
@@ -741,6 +878,7 @@ mod tests {
             post_send: PostSendObservation::Present(idle()),
             ack: ack(&["ACK qhl on %1413 -- first step"]),
             attempts_so_far: 0,
+            session_pane_ids: Vec::new(),
         });
         assert_eq!(result.action.label(), "RETRY");
         assert!(!result.is_confirmed());
@@ -770,6 +908,7 @@ mod tests {
             post_send: PostSendObservation::Present(working()),
             ack: ack(&["ACK qhl on %1413 -- first step"]),
             attempts_so_far: 0,
+            session_pane_ids: Vec::new(),
         });
         assert_eq!(result.action.label(), "AWAIT_HUMAN");
         assert!(matches!(
@@ -791,6 +930,7 @@ mod tests {
             post_send: PostSendObservation::Present(working()),
             ack: ack(&["ACK qhl on %1413 -- first step"]),
             attempts_so_far: 0,
+            session_pane_ids: Vec::new(),
         });
         assert_eq!(result.action.label(), "RECORD_RECEIPT");
         assert!(result.is_confirmed());
@@ -810,6 +950,7 @@ mod tests {
             post_send: PostSendObservation::Present(working()),
             ack: ack(&[]),
             attempts_so_far: 0,
+            session_pane_ids: Vec::new(),
         });
         assert_eq!(result.action.label(), "AWAIT_HUMAN");
         assert!(!result.action.is_retry());
@@ -837,6 +978,7 @@ mod tests {
             post_send: PostSendObservation::Present(working()),
             ack: ack(&["ACK qhl on %1413 -- first step"]),
             attempts_so_far: 0,
+            session_pane_ids: Vec::new(),
         });
         assert_eq!(result.action.label(), "AWAIT_HUMAN");
         assert!(!result.action.is_retry());
@@ -958,7 +1100,11 @@ mod tests {
         let readback = AckReadback {
             bead_id: "omp-orchestrator-ack-stage-qhl".into(),
             pane_id: "%1413".into(),
-            comments: vec![rendered_comment.into()],
+            comments: vec![AckComment {
+                text: rendered_comment.into(),
+                created_at: None,
+            }],
+            dispatch_issued_at: None,
         };
         assert_eq!(
             readback.matching_comment_for("omp-orchestrator-ack-stage-qhl", "%1413"),
@@ -972,7 +1118,11 @@ mod tests {
         let readback = AckReadback {
             bead_id: "omp-orchestrator-ack-stage-qhl".into(),
             pane_id: "%1413".into(),
-            comments: vec![malformed.into()],
+            comments: vec![AckComment {
+                text: malformed.into(),
+                created_at: None,
+            }],
+            dispatch_issued_at: None,
         };
         assert_eq!(
             readback.matching_comment_for("omp-orchestrator-ack-stage-qhl", "%1413"),
@@ -982,29 +1132,66 @@ mod tests {
     }
 
     #[test]
-    fn mismatched_ack_pane_is_a_typed_refusal() {
-        let readback = ack(&["ACK qhl on %1414 -- agent=Other title=wrong-pane"]);
+    fn foreign_session_ack_pane_is_absent_not_a_mismatch() {
+        let readback = ack(&["ACK qhl on %1414 -- agent=Other title=wrong-repo"]);
         assert_eq!(
-            readback.match_verdict_for("omp-orchestrator-ack-stage-qhl", "%1413"),
-            AckReadbackVerdict::AckPaneMismatch {
-                expected: "%1413".into(),
-                got: "%1414".into(),
-            }
+            readback.match_verdict_for("omp-orchestrator-ack-stage-qhl", "%8"),
+            AckReadbackVerdict::Missing,
+            "a control-plane pane must not satisfy or refute this session's readback"
         );
         let result = assess(&AckStageInput {
             bead_id: "omp-orchestrator-ack-stage-qhl".into(),
-            pane_id: "%1413".into(),
+            pane_id: "%8".into(),
             transport: ntm(),
             pre_send: idle(),
             post_send: PostSendObservation::Present(working()),
             ack: readback,
             attempts_so_far: 0,
+            session_pane_ids: vec!["%5".into(), "%8".into(), "%9".into()],
+        });
+        assert_eq!(result.ack_verdict, AckReadbackVerdict::Missing);
+        assert!(
+            !matches!(
+                result.delivery,
+                ReceiptVerdict::Indeterminate {
+                    reason: ReceiptReason::AckPaneMismatch { .. },
+                    ..
+                }
+            ),
+            "foreign pane must not surface as ACK_PANE_MISMATCH: {:?}",
+            result.delivery
+        );
+    }
+
+    #[test]
+    fn in_session_ack_pane_mismatch_is_still_a_typed_refusal() {
+        let readback = ack(&["ACK qhl on %7 -- agent=Other title=wrong-pane"]);
+        assert_eq!(
+            readback.match_verdict_in_session(
+                "omp-orchestrator-ack-stage-qhl",
+                "%8",
+                &["%7".into(), "%8".into()]
+            ),
+            AckReadbackVerdict::AckPaneMismatch {
+                expected: "%8".into(),
+                got: "%7".into(),
+            }
+        );
+        let result = assess(&AckStageInput {
+            bead_id: "omp-orchestrator-ack-stage-qhl".into(),
+            pane_id: "%8".into(),
+            transport: ntm(),
+            pre_send: idle(),
+            post_send: PostSendObservation::Present(working()),
+            ack: readback,
+            attempts_so_far: 0,
+            session_pane_ids: vec!["%7".into(), "%8".into()],
         });
         assert_eq!(
             result.ack_verdict,
             AckReadbackVerdict::AckPaneMismatch {
-                expected: "%1413".into(),
-                got: "%1414".into(),
+                expected: "%8".into(),
+                got: "%7".into(),
             }
         );
         assert!(matches!(
@@ -1026,5 +1213,202 @@ mod tests {
         .expect_err("zero ACK rows must be loud");
         assert_eq!(error, AckReadbackError::EmptyAckCensus);
         assert!(error.to_string().contains("ACK_CENSUS_EMPTY"));
+    }
+
+    #[test]
+    fn rfc3339_z_created_at_is_unix_from_the_tracker_row() {
+        let value = serde_json::json!("2026-09-05T23:33:12Z");
+        let parsed = parse_comment_created_at(&value).expect("RFC3339 Z must parse");
+        assert_eq!(parsed, 1_788_651_192);
+        assert_eq!(
+            parse_comment_created_at(&serde_json::json!(1_788_651_192)),
+            Some(1_788_651_192)
+        );
+        assert_eq!(unix_from_civil(1970, 1, 1, 0, 0, 0), Some(0));
+    }
+
+    #[test]
+    fn stale_same_pane_ack_is_absent_not_a_mismatch() {
+        const ISSUED: u64 = 1_788_650_431;
+        let readback = ack_at(
+            "%8",
+            &[(
+                "ACK qhl on %8 -- agent=WildStone title=stale-same-pane",
+                ISSUED - 3_600,
+            )],
+        )
+        .with_dispatch_issued_at(ISSUED);
+        assert_eq!(
+            readback.match_verdict_for("omp-orchestrator-ack-stage-qhl", "%8"),
+            AckReadbackVerdict::Missing,
+            "KNOWN-BAD: an ACK predating issued_at must not confirm this dispatch"
+        );
+        let result = assess(&AckStageInput {
+            bead_id: "omp-orchestrator-ack-stage-qhl".into(),
+            pane_id: "%8".into(),
+            transport: ntm(),
+            pre_send: idle(),
+            post_send: PostSendObservation::Present(working()),
+            ack: readback,
+            attempts_so_far: 0,
+            session_pane_ids: vec!["%8".into()],
+        });
+        assert_eq!(result.ack_verdict, AckReadbackVerdict::Missing);
+        assert!(!result.is_confirmed(), "stale ACK must keep waiting");
+        assert!(
+            !matches!(
+                result.delivery,
+                ReceiptVerdict::Indeterminate {
+                    reason: ReceiptReason::AckPaneMismatch { .. },
+                    ..
+                }
+            ),
+            "stale is ABSENT not mismatch: {:?}",
+            result.delivery
+        );
+    }
+
+    #[test]
+    fn fresh_same_pane_ack_is_accepted() {
+        const ISSUED: u64 = 1_788_650_431;
+        let readback = ack_at(
+            "%1413",
+            &[(
+                "ACK qhl on %1413 -- agent=WildStone title=fresh-same-pane",
+                ISSUED + 12,
+            )],
+        )
+        .with_dispatch_issued_at(ISSUED);
+        assert_eq!(
+            readback.match_verdict_for("omp-orchestrator-ack-stage-qhl", "%1413"),
+            AckReadbackVerdict::Matched {
+                comment: "ACK qhl on %1413 -- agent=WildStone title=fresh-same-pane".into(),
+            }
+        );
+        let result = assess(&AckStageInput {
+            bead_id: "omp-orchestrator-ack-stage-qhl".into(),
+            pane_id: "%1413".into(),
+            transport: ntm(),
+            pre_send: idle(),
+            post_send: PostSendObservation::Present(working()),
+            ack: readback,
+            attempts_so_far: 0,
+            session_pane_ids: vec!["%1413".into()],
+        });
+        assert!(
+            result.is_confirmed(),
+            "KNOWN-GOOD: fresh ACK on the expected pane"
+        );
+    }
+
+    #[test]
+    fn comments_without_ack_prefix_are_absent_never_a_pass() {
+        let readback = ack_at("%8", &[("progress note, not an ACK", 1_788_650_500)])
+            .with_dispatch_issued_at(1_788_650_431);
+        assert_eq!(
+            readback.match_verdict_for("omp-orchestrator-ack-stage-qhl", "%8"),
+            AckReadbackVerdict::Missing,
+            "ANTI-VACUITY: zero ACK comments is ABSENT, never a pass"
+        );
+        assert!(readback.matching_comment().is_none());
+    }
+
+    #[test]
+    fn disabling_recency_lets_a_stale_ack_pass() {
+        const ISSUED: u64 = 1_788_650_431;
+        let stale = ack_at(
+            "%8",
+            &[(
+                "ACK qhl on %8 -- agent=WildStone title=stale-same-pane",
+                ISSUED - 3_600,
+            )],
+        );
+        assert_eq!(
+            stale.match_verdict_for("omp-orchestrator-ack-stage-qhl", "%8"),
+            AckReadbackVerdict::Matched {
+                comment: "ACK qhl on %8 -- agent=WildStone title=stale-same-pane".into(),
+            },
+            "MUTATION: issued_at=None must go RED against the recency invariant"
+        );
+        let gated = stale.clone().with_dispatch_issued_at(ISSUED);
+        assert_eq!(
+            gated.match_verdict_for("omp-orchestrator-ack-stage-qhl", "%8"),
+            AckReadbackVerdict::Missing
+        );
+    }
+
+    #[test]
+    fn fresh_in_session_mismatch_is_still_ack_pane_mismatch() {
+        const ISSUED: u64 = 1_788_650_431;
+        let readback = ack_at(
+            "%8",
+            &[(
+                "ACK qhl on %7 -- agent=Other title=fresh-wrong-pane",
+                ISSUED + 5,
+            )],
+        )
+        .with_dispatch_issued_at(ISSUED);
+        assert_eq!(
+            readback.match_verdict_in_session(
+                "omp-orchestrator-ack-stage-qhl",
+                "%8",
+                &["%7".into(), "%8".into()]
+            ),
+            AckReadbackVerdict::AckPaneMismatch {
+                expected: "%8".into(),
+                got: "%7".into(),
+            },
+            "FRESH in-session mismatch must stay ACK_PANE_MISMATCH"
+        );
+    }
+
+    #[test]
+    fn stale_in_session_mismatch_is_absent() {
+        const ISSUED: u64 = 1_788_650_431;
+        let readback = ack_at(
+            "%8",
+            &[(
+                "ACK qhl on %7 -- agent=Other title=stale-wrong-pane",
+                ISSUED - 10,
+            )],
+        )
+        .with_dispatch_issued_at(ISSUED);
+        assert_eq!(
+            readback.match_verdict_in_session(
+                "omp-orchestrator-ack-stage-qhl",
+                "%8",
+                &["%7".into(), "%8".into()]
+            ),
+            AckReadbackVerdict::Missing,
+            "a stale wrong-pane ACK is ABSENT, not a mismatch"
+        );
+    }
+
+    #[test]
+    fn equal_created_at_is_not_strictly_newer() {
+        const ISSUED: u64 = 1_788_650_431;
+        let readback = ack_at(
+            "%8",
+            &[(
+                "ACK qhl on %8 -- agent=WildStone title=equal-clock",
+                ISSUED,
+            )],
+        )
+        .with_dispatch_issued_at(ISSUED);
+        assert_eq!(
+            readback.match_verdict_for("omp-orchestrator-ack-stage-qhl", "%8"),
+            AckReadbackVerdict::Missing
+        );
+    }
+
+    #[test]
+    fn undatable_comment_fails_closed_under_recency() {
+        let readback = ack(&["ACK qhl on %8 -- agent=WildStone title=no-time"])
+            .with_dispatch_issued_at(1_788_650_431);
+        assert_eq!(
+            readback.match_verdict_for("omp-orchestrator-ack-stage-qhl", "%8"),
+            AckReadbackVerdict::Missing,
+            "missing created_at under recency is ABSENT"
+        );
     }
 }
