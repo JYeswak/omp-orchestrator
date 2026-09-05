@@ -34,10 +34,11 @@
 
 use std::path::PathBuf;
 
-/// Measured 2026-09-01 BY THIS GATE'S OWN SCAN. Lower it as sites convert; never raise it.
-/// Seeded from this scan, not a neighbouring one — the build-identity ratchet was first set
-/// from a different measurement and had a slot of slack, so its mutation probe passed.
-const PID_KILL_CEILING: usize = 30; // 31 -> 30: loop-driver now routes through the kernel
+/// Re-recorded 2026-09-05 BY THIS GATE'S OWN SCAN: 9 pid-only kill sites
+/// (was 30). Count FELL — sites converted, not added. Dies when the last
+/// non-kernel `.kill()` routes through subprocess-contract; then LOWER.
+/// Never raise it. Anti-vacuity floor is 5 so a scan collapse still refuses.
+const PID_KILL_CEILING: usize = 9;
 
 fn repo_root() -> Option<PathBuf> {
     let mut cur = std::env::current_dir().ok()?;
@@ -109,9 +110,9 @@ fn the_pid_only_kill_count_only_falls() {
     // workspace stopped killing processes. `citation_integrity` failed exactly this way today,
     // matching 0 of 32 citations because it wanted punctuation the document never used.
     assert!(
-        hits.len() >= 10,
-        "ANTI-VACUITY: found only {} pid-kill sites; ~30 were measured 2026-09-01. The scan \
-         broke, or the comment filter is eating code.",
+        hits.len() >= 5,
+        "ANTI-VACUITY: found only {} pid-kill sites; {PID_KILL_CEILING} were measured \
+         2026-09-05. The scan broke, or the comment filter is eating code.",
         hits.len()
     );
 

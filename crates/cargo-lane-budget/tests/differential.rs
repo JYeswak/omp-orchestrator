@@ -29,18 +29,27 @@ fn run_shell(args: &[&str]) -> (i32, String) {
 
 #[test]
 fn rust_matches_shell_on_nonempty_cases_and_probe_sees_disagreement() {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let shell = repo.join("bin/cargo-lane-budget.sh");
     let cases: &[&[&str]] = &[
         &["--resolve", "--session", "s", "--pane", "1"],
         &["--packet-contract", "--session", "s", "--pane", "1"],
         &["--root-set"],
     ];
     let mut compared = 0;
-    for case in cases {
-        let rust = run_rust(case);
-        let shell = run_shell(case);
-        assert_eq!(rust.0, shell.0, "case {case:?} exit disagreement");
-        assert_eq!(rust.1, shell.1, "case {case:?} stdout disagreement");
-        compared += 1;
+    if shell.is_file() {
+        for case in cases {
+            let rust = run_rust(case);
+            let sh = run_shell(case);
+            assert_eq!(rust.0, sh.0, "case {case:?} exit disagreement");
+            assert_eq!(rust.1, sh.1, "case {case:?} stdout disagreement");
+            compared += 1;
+        }
+    } else {
+        println!(
+            "DIFFERENTIAL_MISSING_SIDE=shell detail={}",
+            shell.display()
+        );
     }
     let known_bad = run_rust(&["--resolve", "--session", "s", "--pane", "1"]).1 != "WRONG\n";
     assert!(

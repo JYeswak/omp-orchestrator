@@ -283,7 +283,10 @@ fn the_plan_embeds_every_round_and_stamp() {
     // non-trivial before it is used as a bound.
     let mut sections_bytes = 0usize;
     let mut sections_seen = 0usize;
-    for entry in fs::read_dir(root.join("docs/plan")).expect("read docs/plan").flatten() {
+    for entry in fs::read_dir(root.join("docs/plan"))
+        .expect("read docs/plan")
+        .flatten()
+    {
         let path = entry.path();
         let is_section = path
             .file_name()
@@ -295,10 +298,7 @@ fn the_plan_embeds_every_round_and_stamp() {
         }
     }
     assert_eq!(sections_seen, 13, "expected 13 numbered plan sections");
-    let records_bytes: usize = records
-        .iter()
-        .map(|path| embedded_len(path))
-        .sum();
+    let records_bytes: usize = records.iter().map(|path| embedded_len(path)).sum();
     let floor = sections_bytes + records_bytes;
     assert!(
         floor > 900_000,
@@ -317,13 +317,15 @@ fn the_plan_embeds_every_round_and_stamp() {
         .nth(1)
         .expect("round appendix");
     for required in (15..=21).chain(std::iter::once(23)) {
+        let compact = format!("\"round\":{required}");
+        let spaced = format!("\"round\": {required}");
         assert!(
-            appendix.contains(&format!("\"round\":{required}")),
+            appendix.contains(&compact) || appendix.contains(&spaced),
             "PLAN.md round appendix omits required round {required}"
         );
     }
     assert!(
-        !appendix.contains("\"round\":22"),
+        !appendix.contains("\"round\":22") && !appendix.contains("\"round\": 22"),
         "PLAN.md must not embed halted round-22 records"
     );
 

@@ -62,9 +62,9 @@ const DISTINCT_LABEL_CEILING: usize = 267;
 /// into bead bodies; then LOWER. Never raise it silently.
 const SINGLETON_LABEL_CEILING: usize = 127;
 
-/// Re-recorded 2026-09-05: 145 live beads carry no label (was 0).
-/// Dies when every live bead has at least one taxonomy label; then LOWER.
-const UNLABELLED_LIVE_CEILING: usize = 145;
+/// Re-recorded 2026-09-05: 59 unlabeled live beads (was 145). Pane 1 labelled
+/// 87 under 5ac468c. Dies when every live bead has a taxonomy label; then LOWER.
+const UNLABELLED_LIVE_CEILING: usize = 59;
 
 /// Re-recorded 2026-09-05: 526 live beads carry a label outside the
 /// 18-term taxonomy. Dies when those labels are mapped or dropped; then LOWER.

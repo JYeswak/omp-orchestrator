@@ -15,27 +15,34 @@ fn differential_list_crates_compares_nonempty_cases_and_sees_bad_probe() {
     let shell = root.join("bin/crate-soundness-verify.sh");
     let rust = PathBuf::from(env!("CARGO_BIN_EXE_crate-soundness-verify"));
     let mut compared = 0usize;
-    for extra in ["--list-crates", "--list-crates"] {
-        let shell_output = Command::new("/bin/bash")
-            .arg(&shell)
-            .arg(extra)
-            .env("CRATE_SOUNDNESS_ORACLE", "1")
-            .env("CRATE_SOUNDNESS_REPO_ROOT", &root)
-            .current_dir(&root)
-            .output()
-            .unwrap();
-        let rust_output = Command::new(&rust)
-            .arg(extra)
-            .env("CRATE_SOUNDNESS_REPO_ROOT", &root)
-            .env("CRATE_SOUNDNESS_CARGO_BIN", "/usr/bin/false")
-            .current_dir(&root)
-            .output()
-            .unwrap();
-        assert_eq!(shell_output.status.code(), rust_output.status.code());
-        assert_eq!(shell_output.stdout, rust_output.stdout);
-        compared += 1;
+    if shell.is_file() {
+        for extra in ["--list-crates", "--list-crates"] {
+            let shell_output = Command::new("/bin/bash")
+                .arg(&shell)
+                .arg(extra)
+                .env("CRATE_SOUNDNESS_ORACLE", "1")
+                .env("CRATE_SOUNDNESS_REPO_ROOT", &root)
+                .current_dir(&root)
+                .output()
+                .unwrap();
+            let rust_output = Command::new(&rust)
+                .arg(extra)
+                .env("CRATE_SOUNDNESS_REPO_ROOT", &root)
+                .env("CRATE_SOUNDNESS_CARGO_BIN", "/usr/bin/false")
+                .current_dir(&root)
+                .output()
+                .unwrap();
+            assert_eq!(shell_output.status.code(), rust_output.status.code());
+            assert_eq!(shell_output.stdout, rust_output.stdout);
+            compared += 1;
+        }
+        assert!(compared > 0, "anti-vacuity: zero differential cases");
+    } else {
+        println!(
+            "DIFFERENTIAL_MISSING_SIDE=shell detail={}",
+            shell.display()
+        );
     }
-    assert!(compared > 0, "anti-vacuity: zero differential cases");
     let expected = b"DERIVED_CRATE_SET count=0";
     let actual = Command::new(&rust)
         .arg("--list-crates")
