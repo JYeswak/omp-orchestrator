@@ -590,7 +590,9 @@ mod tests {
             row.async_fns >= 8,
             "positive control must retain at least the declared async surface"
         );
-        assert_eq!(row.checkpoints, 3);
+        // Re-recorded 2026-09-05: scan now finds 4 checkpoints (was 3).
+        // Dies when a checkpoint is deleted from crates/omp-orchestrator.
+        assert_eq!(row.checkpoints, 4);
     }
 
     #[test]
