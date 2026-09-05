@@ -1940,6 +1940,26 @@ async fn send_and_verify(
 
     let deadline = Instant::now() + RECEIPT_TIMEOUT;
     let mut attempts_so_far = 0u32;
+    let session_pane_ids: Vec<String> = {
+        let list_args = vec![
+            "list-panes".to_owned(),
+            "-t".to_owned(),
+            config.session.clone(),
+            "-F".to_owned(),
+            "#{pane_id}".to_owned(),
+        ];
+        match invoke(cx, config, "tmux", &list_args).await {
+            Ok(output) => match require_success("tmux list-panes", output) {
+                Ok(bytes) => String::from_utf8_lossy(&bytes)
+                    .lines()
+                    .map(|line| line.trim().to_owned())
+                    .filter(|id| !id.is_empty())
+                    .collect(),
+                Err(_) => vec![pane.to_owned()],
+            },
+            Err(_) => vec![pane.to_owned()],
+        }
+    };
     let composer_rules = composer_typed::Rules::default();
     // iis6: keep the FIRST and LAST observations so an expired wait can DISCRIMINATE
     // busy from unreachable instead of reporting `ack_readback_missing` for both.
@@ -1968,6 +1988,7 @@ async fn send_and_verify(
             post_send: post_send.clone(),
             ack,
             attempts_so_far,
+            session_pane_ids: session_pane_ids.clone(),
         });
         if stage.is_confirmed() {
             let receiver_at_ms = now_unix().saturating_mul(1_000);
@@ -3045,8 +3066,39 @@ fn clear_dispatch_marker(path: &Path, pane: &str) -> Result<(), String> {
         )),
     }
 }
+/// Arguments for the finished-pane sweep.
+///
+/// # `--session` is MANDATORY and its absence used to be a global sweep
+///
+/// MEASURED 2026-09-05: this built `["--repo", repo]` only, and the reaper's own CLI
+/// exposed no session flag, so a tick scoped to `--session omp-orchestrator` enumerated
+/// and CAPTURED four control-plane panes — `SKIPPED control-plane:1..4
+/// reason=still_changing`. They were skipped by luck of their state; a settled
+/// control-plane pane would have been reaped by us, its transcript written and its state
+/// consumed, from a repo we do not own. Joshua, verbatim: *"this needs to be configurable
+/// per session / repo so that we aren't stealing work / session data from other repos."*
+///
+/// `ma3b` gave the reaper `--session` and made its ABSENCE a typed refusal
+/// (`SCOPE_REFUSED reason=MISSING_SESSION`, exit 2) rather than a widen-to-all-sessions
+/// default — a missing scope silently becoming global is exactly how the capture happened.
+/// That fix was correct at the callee and left this caller unwired, so the very next tick
+/// died at `SUPERVISOR_REFUSED reap-finished-panes exited=2` — the same step the tick had
+/// been aborting at for three days per the comment at the `recover_pending_findings` site.
+/// Passing the scope here is the other half.
+///
+/// # NO-CLAIM
+///
+/// Scoping the sweep stops THIS caller from reading another session's panes. It does not
+/// separate the shared write surface: `~/.local/state/flywheel/reaped/` is still one
+/// directory that control-plane's own supervisor (pid 38194, launchd) writes to, so
+/// ownership of an artifact there is still inferred from a filename rather than enforced.
 fn finished_pane_reaper_args(config: &Config) -> Vec<String> {
-    vec!["--repo".to_owned(), config.repo.display().to_string()]
+    vec![
+        "--repo".to_owned(),
+        config.repo.display().to_string(),
+        "--session".to_owned(),
+        config.session.clone(),
+    ]
 }
 async fn run_finished_pane_sweep(cx: &Cx, config: &Config) -> Result<String, String> {
     let reaper_args = finished_pane_reaper_args(config);
