@@ -14,6 +14,7 @@ use agent_mail_native::journey::{
     self as mail, AgentName, DeliveryReceipt, ProjectKey, SendRequest,
 };
 use agent_mail_native::{MailClient, MailError};
+use agent_mail_native::identity::{resolve_pane_identity, BindingStatus, PaneIdentity};
 use asupersync::process::{Command, Output};
 use orchestration_tick_gate::{append_receipt, build_receipt, PaneDisposition, Receipt};
 use asupersync::runtime::RuntimeBuilder;
@@ -113,14 +114,6 @@ pub struct Config {
     /// junk project in the live store. An empty value here refuses before any
     /// I/O, and the test fixture sets it empty deliberately.
     mail_sender: String,
-    /// WHICH variable the value above came from, kept because a refusal that cannot name
-    /// the variable is one nobody can act on.
-    ///
-    /// yfp2: the resolution used to collapse the var list to a value, so a set-but-ambient
-    /// identity was indistinguishable from a configured one. Measured 2026-09-02: the
-    /// supervisor signed 64 sends as `WildStone` — an agent of `~/Developer/fsw` that
-    /// arrived through the machine-global `AGENT_NAME` — and every one was refused.
-    mail_sender_var: String,
     omp_quick: bool,
     reap_finished_panes: String,
     omp_binary: PathBuf,
@@ -536,10 +529,6 @@ impl Config {
             mail_sender: resolved_sender
                 .as_ref()
                 .map(|candidate| candidate.value.clone())
-                .unwrap_or_default(),
-            mail_sender_var: resolved_sender
-                .as_ref()
-                .map(|candidate| candidate.source.var().to_owned())
                 .unwrap_or_default(),
             omp_quick,
             reap_finished_panes: env::var("OMP_REAP_FINISHED_PANES_BIN")
@@ -3040,18 +3029,32 @@ struct DurableNotice {
     cursor: u64,
 }
 
-/// This orchestrator's own Agent Mail identity, for a signed FROM.
-///
-/// Read from [`Config::mail_sender`], which is resolved once at startup,
-/// because the daemon REFUSES descriptive names (`INVALID_AGENT_NAME`: names
-/// must be generated adjective+noun) so the supervisor cannot synthesise one.
-///
-/// An unset identity is a NAMED REFUSAL, never a silent skip. That is the
-/// call-site form of the binding's empty-catalogue rule: an absent result must
-/// not be readable as a healthy no-op, because a supervisor that quietly
-/// stopped notifying looks exactly like one with nothing to report.
-fn mail_sender_identity(config: &Config) -> Result<AgentName, String> {
-    sender_identity_from(&config.mail_sender, &config.mail_sender_var)
+/// Derive the sender from the live pane identity, never from ambient AGENT_NAME.
+fn sender_from_verified_pane(identity: &PaneIdentity) -> Result<AgentName, String> {
+    if identity.binding != BindingStatus::VerifiedLive {
+        return Err(format!(
+            "SENDER_IDENTITY_REFUSED pane={} reason=binding_not_verified_live",
+            identity.pane_id
+        ));
+    }
+    identity
+        .agent_name
+        .clone()
+        .ok_or_else(|| format!("SENDER_IDENTITY_REFUSED pane={} reason=agent_name_missing", identity.pane_id))
+}
+
+/// Resolve TMUX_PANE through the existing K0 kernel immediately before sending.
+async fn mail_sender_identity_for_pane(
+    cx: &Cx,
+    client: &MailClient,
+    project: &ProjectKey,
+) -> Result<AgentName, String> {
+    let pane_id = env::var("TMUX_PANE")
+        .map_err(|_| "SENDER_IDENTITY_REFUSED reason=TMUX_PANE_missing".to_owned())?;
+    let identity = resolve_pane_identity(cx, client, project, &pane_id)
+        .await
+        .map_err(|error| format!("SENDER_IDENTITY_REFUSED pane={pane_id} error={error}"))?;
+    sender_from_verified_pane(&identity)
 }
 
 /// The environment variables consulted for the sender identity, in order.
@@ -3181,10 +3184,10 @@ async fn notify_dispatch_result_durably(
     bead: &str,
     result: &str,
 ) -> Result<DurableNotice, String> {
-    let sender = mail_sender_identity(config)?;
     let recipient = mail_recipient(config, pane)?;
     let project = ProjectKey::new(config.repo.display().to_string());
     let client = MailClient::discover().with_request_timeout(MAIL_REQUEST_TIMEOUT);
+    let sender = mail_sender_identity_for_pane(cx, &client, &project).await?;
 
     let detail = one_line_detail(result);
     let body = format!(
@@ -4357,7 +4360,6 @@ mod tests {
             // notification is exercised as a NAMED degradation in unit tests
             // and proven for real only against the live daemon.
             mail_sender: String::new(),
-            mail_sender_var: String::new(),
             omp_binary: PathBuf::from("omp"),
         }
     }
@@ -5559,9 +5561,9 @@ exit 2
 
     #[test]
     fn the_durable_notification_degrades_without_erasing_the_dispatch_record() {
-        // The wired path runs inside `report_dispatch_result`. With no sender
-        // identity configured it refuses BEFORE any I/O, and the caller must
-        // still succeed and still have written the dispatch record — the
+        // The wired path runs inside `report_dispatch_result`. With no verified-live
+        // pane identity in this isolated fixture it refuses BEFORE the mail I/O, and
+        // the caller must still succeed and still have written the dispatch record — the
         // precedent being that a blocked notify used to erase it.
         let temp = tempfile::tempdir().expect("degrade fixture");
         // Point the pane transport at a binary that does not exist, so this
@@ -5603,8 +5605,8 @@ exit 2
             "the degradation must be NAMED, not silent: {ledger}"
         );
         assert!(
-            ledger.contains("sender_identity_unset"),
-            "the row must say what was missing: {ledger}"
+            ledger.contains("SENDER_IDENTITY_REFUSED"),
+            "the row must say verified pane identity was missing: {ledger}"
         );
         assert!(
             !ledger.contains("DISPATCH_RESULT_MAIL_PERSISTED"),
@@ -6045,6 +6047,46 @@ Stop: now
     fn empty_peer_candidate_is_a_typed_outcome_not_success() {
         assert_eq!(peer_grade_outcome_wire(&PeerGradeCommandOutcome::NoCandidate), "PEER_GRADE_EMPTY");
         assert_eq!(peer_grade_outcome_wire(&PeerGradeCommandOutcome::ActivePeerGrade), "PEER_GRADE_ACTIVE");
+    }
+
+
+    #[test]
+    fn verified_live_pane_identity_supplies_sender() {
+        let identity = PaneIdentity {
+            pane_id: "%8".to_owned(),
+            binding: BindingStatus::VerifiedLive,
+            agent_name: Some(AgentName::new("BrightGorge")),
+            session: Some("omp-orchestrator".to_owned()),
+            pane_index: Some(3),
+        };
+        assert_eq!(
+            sender_from_verified_pane(&identity).expect("verified identity"),
+            AgentName::new("BrightGorge")
+        );
+    }
+
+    #[test]
+    fn non_live_or_missing_pane_identity_refuses_sender() {
+        let dead = PaneIdentity {
+            pane_id: "%8".to_owned(),
+            binding: BindingStatus::LegacyUnverified,
+            agent_name: Some(AgentName::new("BrightGorge")),
+            session: None,
+            pane_index: None,
+        };
+        assert!(sender_from_verified_pane(&dead)
+            .expect_err("legacy identity must refuse")
+            .contains("binding_not_verified_live"));
+        let missing = PaneIdentity {
+            pane_id: "%9".to_owned(),
+            binding: BindingStatus::VerifiedLive,
+            agent_name: None,
+            session: None,
+            pane_index: Some(4),
+        };
+        assert!(sender_from_verified_pane(&missing)
+            .expect_err("missing sender must refuse")
+            .contains("agent_name_missing"));
     }
 
 }
