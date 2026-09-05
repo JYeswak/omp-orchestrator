@@ -68,9 +68,11 @@ const POSITIVE_CONTROL_SPECS: [(&str, usize, Predicate); 3] = [
         77,
         Predicate::UnwrapOrDefault,
     ),
+    // Re-recorded 2026-09-05: Clean=>SUCCESS is line 78 after NothingToCheck
+    // became its own arm at 80. Dies when that match is reordered.
     (
         "crates/state-wildcard-lint/src/main.rs",
-        80,
+        78,
         Predicate::ExitCodeSuccess,
     ),
 ];

@@ -306,7 +306,7 @@ fn main() {
     };
     let machine = machine_name();
     let mut report = format!(
-        "{{\"schema_version\":\"omp-gate-reachability/v1\",\"status\":{},\"machine\":{},\"root\":{},\"rows\":{},\"excluded_paths\":{},\"positive_control\":{},\"summary\":{{\"rows\":{},\"reachable\":{},\"unreachable\":{}}}}}",
+        "{{\"schema_version\":\"omp-gate-reachability/v1\",\"status\":{},\"machine\":{},\"root\":{},\"rows\":{},\"excluded_paths\":{},\"positive_control\":{},\"summary\":{{\"rows\":{},\"reachable\":{},\"unreachable\":{}}}",
         json_string(status),
         json_string(&machine),
         json_string(&root.display().to_string()),

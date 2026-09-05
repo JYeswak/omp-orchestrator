@@ -80,16 +80,22 @@ fn positive_controls_refind_named_live_rows() {
     assert_eq!(report.status, "ok");
     assert!(report.file_count >= 3);
 
+    // Re-recorded 2026-09-05: ExitCode::SUCCESS moved 80 -> 78 when NothingToCheck
+    // gained its own arm. Dies when that match arm is reordered again.
     let expected = [
         (
             "crates/admission-reason/src/main.rs",
             40,
             Predicate::ExitCodeSuccess,
         ),
-        ("crates/loop-tick/src/lib.rs", 77, Predicate::UnwrapOrDefault),
+        (
+            "crates/loop-tick/src/lib.rs",
+            77,
+            Predicate::UnwrapOrDefault,
+        ),
         (
             "crates/state-wildcard-lint/src/main.rs",
-            80,
+            78,
             Predicate::ExitCodeSuccess,
         ),
     ];
