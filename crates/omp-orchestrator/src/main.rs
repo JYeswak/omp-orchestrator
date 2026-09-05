@@ -84,7 +84,7 @@ const BUILD_ID: &str = env!(
 #[used]
 static BUILD_ID_MARKER: &[u8] = concat!("build_id=", env!("OMP_BUILD_ID")).as_bytes();
 #[derive(Debug)]
-struct Config {
+pub struct Config {
     repo: PathBuf,
     session: String,
     interval: Duration,
@@ -243,6 +243,101 @@ fn parse_close_readback_args(args: &[String]) -> Result<Option<CloseRequest>, St
         bead: bead.to_owned(),
         reason: reason.to_owned(),
     }))
+}
+
+fn parse_grade_claim_args(args: &[String]) -> Result<Option<Vec<String>>, String> {
+    if args.first().map(String::as_str) != Some("grade") {
+        return Ok(None);
+    }
+    if args.get(1).map(String::as_str) != Some("--claim") {
+        return Err("CONFIG_REFUSED grade requires --claim".to_owned());
+    }
+    Ok(Some(args[2..].to_vec()))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PeerGradeCommandOutcome {
+    Claimed(PeerGradeClaim),
+    ActivePeerGrade,
+    NoCandidate,
+}
+
+fn peer_grade_outcome_wire(outcome: &PeerGradeCommandOutcome) -> &'static str {
+    match outcome {
+        PeerGradeCommandOutcome::Claimed(_) => "PEER_GRADE_CLAIMED",
+        PeerGradeCommandOutcome::ActivePeerGrade => "PEER_GRADE_ACTIVE",
+        PeerGradeCommandOutcome::NoCandidate => "PEER_GRADE_EMPTY",
+    }
+}
+
+async fn run_peer_grade_claim(
+    cx: &Cx,
+    config: &Config,
+    grader_pane: &str,
+) -> Result<PeerGradeCommandOutcome, String> {
+    let mut monitor_args = vec![
+        "observe".to_owned(),
+        "--session".to_owned(),
+        config.session.clone(),
+        "--repo".to_owned(),
+        config.repo.display().to_string(),
+        "--state".to_owned(),
+        config.tick_monitor_state.display().to_string(),
+    ];
+    for pane in &config.exclude_panes {
+        monitor_args.push("--exclude-pane".to_owned());
+        monitor_args.push(pane.clone());
+    }
+    let monitor_bytes = require_success(
+        &config.tick_monitor,
+        invoke(cx, config, &config.tick_monitor, &monitor_args).await?,
+    )?;
+    let mut observation = parse_observation(&monitor_bytes, census_gates(&config.repo))?;
+    observation.panes.retain(|pane| {
+        !config
+            .exclude_panes
+            .iter()
+            .any(|excluded| excluded == &pane.pane_id)
+    });
+    if !observation
+        .panes
+        .iter()
+        .any(|pane| pane.pane_id == grader_pane && pane.is_dispatchable && pane.liveness == "CONFIRMED_IDLE")
+    {
+        return Err(format!(
+            "PEER_GRADING_REFUSED grader_pane={grader_pane} reason=current_pane_not_confirmed_idle"
+        ));
+    }
+    match gate_peer_grading_for_pane(config, &mut observation, now_unix(), grader_pane)? {
+        Some(claim) if claim.bead == "<active-peer-grade>" => {
+            Ok(PeerGradeCommandOutcome::ActivePeerGrade)
+        }
+        Some(claim) => Ok(PeerGradeCommandOutcome::Claimed(claim)),
+        None => Ok(PeerGradeCommandOutcome::NoCandidate),
+    }
+}
+
+fn peer_grade_command_exit(outcome: PeerGradeCommandOutcome) -> std::process::ExitCode {
+    match outcome {
+        PeerGradeCommandOutcome::Claimed(claim) => {
+            println!(
+                "{} bead={} receiver_pane={} grader_pane={} experiment=self-service",
+                peer_grade_outcome_wire(&PeerGradeCommandOutcome::Claimed(claim.clone())),
+                claim.bead,
+                claim.receiver_pane,
+                claim.grader_pane,
+            );
+            std::process::ExitCode::SUCCESS
+        }
+        PeerGradeCommandOutcome::ActivePeerGrade => {
+            eprintln!("PEER_GRADING_REFUSED reason=active_peer_grade");
+            std::process::ExitCode::from(2)
+        }
+        PeerGradeCommandOutcome::NoCandidate => {
+            eprintln!("PEER_GRADE_EMPTY typed_outcome=no_receiver_verified_candidate");
+            std::process::ExitCode::from(2)
+        }
+    }
 }
 
 impl Config {
@@ -454,7 +549,7 @@ impl Config {
     }
 }
 fn usage() -> &'static str {
-    "usage: omp-orchestrator [run] [--once|--max-ticks N] [--repo PATH] [--session NAME] [--interval-secs N] [--receiver-agent NAME] [--omp-quick] [--omp-binary PATH]\n       close-readback BEAD --reason REASON\n       dispatch render --bead BEAD --pane %N [--why-now TEXT] [--traps-file PATH]\n       run is the explicit resident lifecycle entrypoint (observe -> ready queue -> dispatch -> receiver receipt); dispatch render emits the same packet without transport"
+    "usage: omp-orchestrator [run] [--once|--max-ticks N] [--repo PATH] [--session NAME] [--interval-secs N] [--receiver-agent NAME] [--omp-quick] [--omp-binary PATH]\n       close-readback BEAD --reason REASON\n       dispatch render --bead BEAD --pane %N [--why-now TEXT] [--traps-file PATH]\n       grade --claim [--repo PATH] [--session NAME]\n       run is the explicit resident lifecycle entrypoint (observe -> ready queue -> dispatch -> receiver receipt); dispatch render emits the same packet without transport"
 }
 
 fn now_unix() -> u64 {
@@ -1572,16 +1667,34 @@ fn begin_dispatch_lifecycle(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct PeerGradeClaim {
-    bead: String,
-    receiver_pane: String,
-    grader_pane: String,
+pub struct PeerGradeClaim {
+    pub bead: String,
+    pub receiver_pane: String,
+    pub grader_pane: String,
 }
 
-fn gate_peer_grading(
+pub fn gate_peer_grading(
     config: &Config,
     observation: &mut Observation,
     tick: u64,
+) -> Result<Option<PeerGradeClaim>, String> {
+    gate_peer_grading_inner(config, observation, tick, None)
+}
+
+pub fn gate_peer_grading_for_pane(
+    config: &Config,
+    observation: &mut Observation,
+    tick: u64,
+    grader_pane: &str,
+) -> Result<Option<PeerGradeClaim>, String> {
+    gate_peer_grading_inner(config, observation, tick, Some(grader_pane))
+}
+
+fn gate_peer_grading_inner(
+    config: &Config,
+    observation: &mut Observation,
+    tick: u64,
+    preferred_grader_pane: Option<&str>,
 ) -> Result<Option<PeerGradeClaim>, String> {
     let active = LifecycleLedger::active_grading_panes(&config.bead_lifecycle_ledger)
         .map_err(|error| format!("PEER_GRADING_LEDGER_UNREADABLE error={error}"))?;
@@ -1611,16 +1724,35 @@ fn gate_peer_grading(
         else {
             continue;
         };
-        let Some(grader_pane) = idle
-            .iter()
-            .find(|pane| pane.pane_id != receiver_pane)
-            .map(|pane| pane.pane_id.clone())
-        else {
-            return Err(format!(
-                "PEER_GRADING_REFUSED bead={} receiver_pane={} reason=no_distinct_idle_peer",
-                candidate.identity.bead.as_str(),
-                receiver_pane,
-            ));
+        let grader_pane = if let Some(preferred) = preferred_grader_pane {
+            if preferred == receiver_pane.as_str() {
+                return Err(format!(
+                    "PEER_GRADING_REFUSED bead={} receiver_pane={} reason=self_grade",
+                    candidate.identity.bead.as_str(),
+                    receiver_pane,
+                ));
+            }
+            if !idle.iter().any(|pane| pane.pane_id == preferred) {
+                return Err(format!(
+                    "PEER_GRADING_REFUSED bead={} grader_pane={} reason=preferred_grader_not_idle",
+                    candidate.identity.bead.as_str(),
+                    preferred,
+                ));
+            }
+            preferred.to_owned()
+        } else {
+            let Some(grader_pane) = idle
+                .iter()
+                .find(|pane| pane.pane_id != receiver_pane)
+                .map(|pane| pane.pane_id.clone())
+            else {
+                return Err(format!(
+                    "PEER_GRADING_REFUSED bead={} receiver_pane={} reason=no_distinct_idle_peer",
+                    candidate.identity.bead.as_str(),
+                    receiver_pane,
+                ));
+            };
+            grader_pane
         };
         let grader = idle
             .iter()
@@ -4078,8 +4210,17 @@ fn main() -> std::process::ExitCode {
             return std::process::ExitCode::from(2);
         }
     };
+    let grade_request = match parse_grade_claim_args(&args) {
+        Ok(request) => request,
+        Err(error) => {
+            eprintln!("{error}");
+            return std::process::ExitCode::from(2);
+        }
+    };
     let config_args = if close_request.is_some() || dispatch_request.is_some() {
         Vec::new()
+    } else if let Some(request) = &grade_request {
+        request.clone()
     } else {
         args.clone()
     };
@@ -4101,6 +4242,26 @@ fn main() -> std::process::ExitCode {
             return std::process::ExitCode::from(1);
         }
     };
+    if grade_request.is_some() {
+        let grader_pane = env::var("TMUX_PANE").unwrap_or_default();
+        if grader_pane.trim().is_empty() {
+            eprintln!("PEER_GRADING_REFUSED reason=current_pane_unresolved");
+            return std::process::ExitCode::from(2);
+        }
+        let outcome = runtime.block_on(async {
+            let cx = Cx::current()
+                .ok_or_else(|| "SUPERVISOR_REFUSED no runtime context".to_owned())?;
+            run_peer_grade_claim(&cx, &config, &grader_pane).await
+        });
+        return match outcome {
+            Ok(outcome) => peer_grade_command_exit(outcome),
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::ExitCode::from(2)
+            }
+        };
+    }
+
     if let Some(request) = dispatch_request {
         let outcome = runtime.block_on(async {
             let cx = Cx::current()
@@ -5835,6 +5996,18 @@ Stop: now
             },
             gate_census: Some(GateCensus { rows: Vec::new() }),
         };
+        let mut self_only = Observation {
+            panes: vec![idle("%1409")],
+            queue: QueueState {
+                ready_count: 1,
+                readable: true,
+            },
+            gate_census: Some(GateCensus { rows: Vec::new() }),
+        };
+        let self_grade = gate_peer_grading_for_pane(&config, &mut self_only, 76, "%1409")
+            .expect_err("a pane cannot self-grade its own receiver-verified bead");
+        assert!(self_grade.contains("reason=self_grade"), "{self_grade}");
+
         let claim = gate_peer_grading(&config, &mut observation, 77)
             .unwrap()
             .expect("a finished peer bead must claim grading before new work");
@@ -5851,4 +6024,27 @@ Stop: now
         assert!(observation.panes.iter().all(|pane| pane.pane_id != "%1414"));
         drop(temp);
     }
+
+    #[test]
+    fn grade_claim_parser_requires_the_claim_flag() {
+        let request = parse_grade_claim_args(&[
+            "grade".to_owned(),
+            "--claim".to_owned(),
+            "--repo".to_owned(),
+            "/repo".to_owned(),
+        ])
+        .expect("valid grade claim syntax")
+        .expect("grade claim request");
+        assert_eq!(request, vec!["--repo".to_owned(), "/repo".to_owned()]);
+        let error = parse_grade_claim_args(&["grade".to_owned()])
+            .expect_err("bare grade must refuse");
+        assert!(error.contains("--claim"), "{error}");
+    }
+
+    #[test]
+    fn empty_peer_candidate_is_a_typed_outcome_not_success() {
+        assert_eq!(peer_grade_outcome_wire(&PeerGradeCommandOutcome::NoCandidate), "PEER_GRADE_EMPTY");
+        assert_eq!(peer_grade_outcome_wire(&PeerGradeCommandOutcome::ActivePeerGrade), "PEER_GRADE_ACTIVE");
+    }
+
 }
