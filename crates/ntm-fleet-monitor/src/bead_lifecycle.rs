@@ -8,6 +8,7 @@ use std::collections::BTreeSet;
 
 mod model;
 pub mod ledger;
+pub mod reader;
 pub use model::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
