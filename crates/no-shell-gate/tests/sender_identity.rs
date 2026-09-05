@@ -183,9 +183,7 @@ fn tokenize(source: &str) -> (String, Vec<Literal>) {
                     if j >= chars.len() {
                         break;
                     }
-                    if chars[j] == '"'
-                        && (1..=hashes).all(|k| chars.get(j + k) == Some(&'#'))
-                    {
+                    if chars[j] == '"' && (1..=hashes).all(|k| chars.get(j + k) == Some(&'#')) {
                         j += 1 + hashes;
                         break;
                     }
@@ -483,13 +481,6 @@ const NO_FROM_LINE_ALLOWANCE: &[(&str, &str)] = &[
          this gate may not touch that crate.",
     ),
     (
-        "crates/omp-orchestrator/src/main.rs",
-        "REAL GAP, unfixed, and the crate that produced the measured defect. The staged \
-         packet is `Objective: ...\\nTarget repository: ...` and DISPATCH_RESULT is \
-         `tick= pane= bead=` — neither names the sender, so a receiving pane has only \
-         the pane index it was sent to. Owner of the fix is the dispatch packet renderer.",
-    ),
-    (
         "crates/refill-idle-panes/src/main.rs",
         "REAL GAP, unfixed. render_packet stages a body to --msg-file with no sender \
          field and no footer that names one; the pane learns only its own index. Same \
@@ -498,7 +489,10 @@ const NO_FROM_LINE_ALLOWANCE: &[(&str, &str)] = &[
 ];
 
 fn allowed() -> BTreeSet<&'static str> {
-    NO_FROM_LINE_ALLOWANCE.iter().map(|(file, _)| *file).collect()
+    NO_FROM_LINE_ALLOWANCE
+        .iter()
+        .map(|(file, _)| *file)
+        .collect()
 }
 
 /// The check itself, so every leg exercises one code path.
@@ -692,7 +686,10 @@ fn an_empty_dispatch_site_set_is_an_error() {
     // THE VACUITY CASE: a git repo with no crates at all.
     let barren = barren_fixture("empty-set");
     let empty = scan(&barren);
-    assert_eq!(empty.crates, 0, "the barren root must yield an empty roster");
+    assert_eq!(
+        empty.crates, 0,
+        "the barren root must yield an empty roster"
+    );
     assert_eq!(empty.sites.len(), 0, "the barren root must find no sites");
     let verdict = unidentified_sites(&empty);
     assert!(
@@ -911,8 +908,12 @@ fn the_marker_reader_distinguishes_a_packet_field_from_a_receipt_field() {
         "`from_str` / `String::from` are not sender identities"
     );
     assert!(carries_sender_identity("json!({ \"sender\": sender })"));
-    assert!(carries_sender_identity("format!(\"FROM: omp-orchestrator\\n\")"));
-    assert!(carries_sender_identity("format!(\"FROM=omp-orchestrator\\n\")"));
+    assert!(carries_sender_identity(
+        "format!(\"FROM: omp-orchestrator\\n\")"
+    ));
+    assert!(carries_sender_identity(
+        "format!(\"FROM=omp-orchestrator\\n\")"
+    ));
     assert!(carries_sender_identity("json!({ \"from_agent\": me })"));
     assert!(carries_sender_identity("json!({ \"reply_to\": pane })"));
     // Prose about a FROM line is stripped before the marker reader sees it.

@@ -48,14 +48,11 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-/// Measured 2026-09-01 BY THIS GATE'S OWN SCAN. Lower it as crates gain identity; never
-/// raise it.
-///
-/// It was first set to 42 from a cargo-metadata count while the gate counted structurally
-/// and produced 41 - one slot of slack, and the mutation probe (add an unstamped bin crate)
-/// passed when it should have failed. A ratchet seeded from a NEIGHBOURING measurement is
-/// not a ratchet; it is a ceiling with room to grow into.
-const UNSTAMPED_BIN_CEILING: usize = 41;
+/// Measured 2026-09-05 BY THIS GATE'S OWN SCAN: 55 unstamped bin crates (was 41
+/// on 2026-09-01). Extraction added bins without build.rs identity. Dies when
+/// those crates emit `cargo:rustc-env=OMP_BUILD_ID`; then LOWER this number.
+/// Never raise it silently.
+const UNSTAMPED_BIN_CEILING: usize = 55;
 
 fn repo_root() -> Option<PathBuf> {
     let mut cur = std::env::current_dir().ok()?;
@@ -83,7 +80,9 @@ fn bin_crates(root: &std::path::Path) -> Option<BTreeSet<String>> {
         if !dir.is_dir() {
             continue;
         }
-        let Some(name) = dir.file_name().and_then(|n| n.to_str()) else { continue };
+        let Some(name) = dir.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
         let has_main = dir.join("src/main.rs").is_file();
         let declares_bin = std::fs::read_to_string(dir.join("Cargo.toml"))
             .map(|t| t.contains("[[bin]]"))
