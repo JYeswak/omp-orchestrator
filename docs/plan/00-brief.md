@@ -130,7 +130,7 @@ A requirement that cannot be checked is a wish. Each row states the observable t
 | R9 | End users orchestrating their own projects | **OPEN — §08 must attach a second-machine/clean-repo first-tick receipt naming the adapter and delivery receipt; no external-repo receipt is recorded** |
 | R10 | Idea → why → binaries → actions+negatives → map → design specs at SOTA | **OPEN — §09 must attach a rubric artifact with every SOTA dimension scored ≥4/5 and no missing action/negative mapping; no thresholded score artifact is recorded** |
 | R11 | Requirements written down before dispatch | **this file** |
-| R12 | Economic and risk questions are registered, owned, and answerable | §8 — thirteen registered questions (eleven OPEN, Q9 ANSWER MOVED, Q10 PARTIAL) and five kill criteria |
+| R12 | Economic and risk questions are registered, owned, and answerable | §8 — thirteen typed unknowns (4 BLOCKS_PLAN, 1 BLOCKS_BUILD, 4 DEFER_TO_BEAD, 4 HUMAN_DECISION); none is answered |
 | R13 | Full idea-to-shipped lifecycle mapped through skills, crates, gates, and dispatch | §11 lifecycle evidence map plus §12 S1–S9 runbook; every stage must carry the seven-field dispatch contract |
 > **Upstream type for the receipts gap:** `IrcDeliveryReceipt` + `AsyncJobDeliverySink` (`tools/hub/types.d.ts:AsyncJobDeliverySink`) already ship. The demand above is DECLARED ONLY — no wire path measured — not precedent-free, and this row must not be read as "nothing exists upstream".
 > **Completion is not precedent-free.** `AgentEndEvent.willContinue` + `SessionStopEvent` ship on `RpcSessionEventFrame` and were observed crossing the wire. Any "precedent-free" language in this table is about OUR consumption, never about the platform's vocabulary.
@@ -494,7 +494,7 @@ The prior-art sweep found an upstream type for every gap this plan had treated a
 | claims | Stage1Claim / GlobalClaim with ownershipToken + inputWatermark (memories/storage.d.ts:Stage1Claim) | **DECLARED ONLY** — no wire path measured | the local claim fence remains necessary; adoption is an experiment, not a completed fix |
 | idle | GuestIdleReconcilerCtx (dist/types/collab/guest.d.ts:GuestIdleReconcilerCtx) | **DECLARED ONLY** — settle-vs-continuation semantics found, no wire path | the local NewlyIdle/ConfirmedIdle seam remains broken until this repository consumes it |
 | roster | HubRosterCounts (dist/types/tools/hub/types.d.ts:HubRosterCounts) | **DECLARED ONLY** — schema found, no wire path | hand-derived roster evidence remains unclosed |
-| cost | SearchUsage (dist/types/web/search/types.d.ts:PerplexityCost), PerplexityCost (:510-527), and ContextUsage (dist/types/extensibility/extensions/types.d.ts:PerplexityCost) | **DECLARED ONLY** — no wire path measured | Q2 remains an instrumentation question; do not claim cost telemetry exists |
+| cost | SearchUsage (dist/types/web/search/types.d.ts:PerplexityCost), PerplexityCost (:510-527), and ContextUsage (dist/types/extensibility/extensions/types.d.ts:PerplexityCost) | **DECLARED ONLY** — no wire path measured | OQ-2 remains an instrumentation question; do not claim cost telemetry exists |
 | compaction | SessionBeforeCompactEvent / SessionCompactEvent (dist/types/extensibility/shared-events.d.ts:SessionBeforeCompactEvent) | **DECLARED ONLY** — typed hook found, no wire path measured | context-loss recovery remains unproven; the type narrows the build, it does not close the operational gap |
 
 **NO-CLAIM:** “WIRE-PROVEN” means the completion frame crossed the observed OMP RPC wire. It does
@@ -807,19 +807,19 @@ Every row is OPEN unless marked. None of these had a home in the document before
 
 | # | question | status | owner |
 |---|---|---|---|
-| Q1 | Who pays for this, and what is their current workaround? | **OPEN** — no buyer named anywhere in thirteen sections | Josh |
-| Q2 | What does the current workaround cost, measurably? | **OPEN** — the only cost figure in the brief is the phrase *"cost real time"* | Josh |
-| Q3 | What is the outcome if this works, in customer terms with a baseline and a target? | **OPEN** — the plan describes mechanism end-to-end and outcome nowhere | Josh |
-| Q4 | How long, and with how many people? | **OPEN** — no timeline, no headcount, in any section | Josh |
-| Q5 | Buy, adopt, or build? What existing tool was evaluated and rejected, and why? | **OPEN** — §10 mines the mirror for *patterns*, never for a *substitute* | orchestrator |
-| Q6 | What happens when OMP changes under us? | **OPEN** — the host now reports `omp/18.1.2`; the retained scanner snapshots target `omp/18.0.11`, and no compatibility policy governs upgrades. The pre-extraction scanner's 799-versus-136 slash-command mismatch remains historical. | orchestrator |
-| Q7 | What is the security posture — secrets, tokens, the blast radius of a dispatch? | **OPEN** — no numerical corpus claim is made here; the census recipe below scans all twelve companion files (01–12), case-insensitively | orchestrator |
-| Q8 | Licensing, for us and for what we vendor? | **OPEN** — no numerical corpus claim is made here; the same twelve-file, case-insensitive census recipe below is the source of any future count | Josh |
-| Q9 | Is any of this novel, and does novelty matter here? | **ANSWER MOVED** — the completion protocol’s precedent-free claim is REFUTED: AgentEndEvent.willContinue is WIRE-PROVEN on RpcSessionEventFrame via --mode=rpc; the novelty question remains open for the other six DECLARED ONLY types and their adoption path | orchestrator |
-| Q11 | Who owns the composer-typed policy decision — oracle outside the tree, retire the lane, or the rule's first exemption? | **OPEN** — orchestrator owns the decision, but §3.5 records the trilemma without a deadline or decision receipt; %1408 flagged the missing closure twice | orchestrator |
-| Q12 | Who owns the pi_agent_rust tmux-missing defect we inherit if we adopt its two-signal probe? | **OPEN** — orchestrator owns the decision, but the adoption/exception choice and its evidence are not recorded; adopting the pattern adopts the bug | orchestrator |
-| Q13 | Should the `.git/hooks/commit-msg-verification-level.sh` policy be registered, rewritten, or retired? | **OPEN** — the hook decision is not recorded with a chosen option, owner deadline, or durable decision receipt | Josh |
-| Q10 | **What kills this?** | **PARTIAL** — Josh owns the decision; §09 carries technical kill conditions, but no economic criterion or decision receipt is recorded | Josh |
+| OQ-1 | Who pays for this, and what is their current workaround? | **UNKNOWN** — **BLOCKS_PLAN** — no buyer named anywhere in thirteen sections; identifying the buyer and current workaround is required before an investor-grade plan can be judged | Josh |
+| OQ-2 | What does the current workaround cost, measurably? | **UNKNOWN** — **BLOCKS_PLAN** — the only cost figure in the brief is the phrase *"cost real time"*; a measured baseline is required before value can be assessed | Josh |
+| OQ-3 | What is the outcome if this works, in customer terms with a baseline and a target? | **UNKNOWN** — **BLOCKS_PLAN** — the plan describes mechanism end-to-end and outcome nowhere; the missing baseline and target prevent an outcome claim | Josh |
+| OQ-4 | How long, and with how many people? | **UNKNOWN** — **BLOCKS_PLAN** — no timeline or headcount is recorded; the delivery plan cannot be evaluated without them | Josh |
+| OQ-5 | Buy, adopt, or build? What existing tool was evaluated and rejected, and why? | **UNKNOWN** — **DEFER_TO_BEAD** — tracked by existing bead omp-orchestrator-plan-00-04at.2; no adoption decision is asserted here | orchestrator |
+| OQ-6 | What happens when OMP changes under us? | **UNKNOWN** — **DEFER_TO_BEAD** — tracked by existing bead omp-orchestrator-plan-00-04at.3; no compatibility policy is asserted here | orchestrator |
+| OQ-7 | What is the security posture — secrets, tokens, the blast radius of a dispatch? | **UNKNOWN** — **BLOCKS_BUILD** — security review and dispatch-blast-radius limits are prerequisites to building or operating the system; no posture is asserted here | orchestrator |
+| OQ-8 | Licensing, for us and for what we vendor? | **UNKNOWN** — **DEFER_TO_BEAD** — tracked by existing bead omp-orchestrator-plan-00-04at.4; no license conclusion is asserted here | Josh |
+| OQ-9 | Is any of this novel, and does novelty matter here? | **UNKNOWN** — **DEFER_TO_BEAD** — tracked by existing bead omp-orchestrator-plan-00-04at.5; the six DECLARED ONLY adoption paths remain unjudged | orchestrator |
+| OQ-11 | Who owns the composer-typed policy decision — oracle outside the tree, retire the lane, or the rule's first exemption? | **UNKNOWN** — **HUMAN_DECISION** — gate=COMPOSER_TYPED_ADOPTION_GATE; orchestrator must choose and record the policy before this lane is treated as settled | orchestrator |
+| OQ-12 | Who owns the pi_agent_rust tmux-missing defect we inherit if we adopt its two-signal probe? | **UNKNOWN** — **HUMAN_DECISION** — gate=TMUX_PRESENCE_ADOPTION_GATE; orchestrator must choose adoption or exception before the inherited defect is accepted | orchestrator |
+| OQ-13 | Should the .git/hooks/commit-msg-verification-level.sh policy be registered, rewritten, or retired? | **UNKNOWN** — **HUMAN_DECISION** — gate=COMMIT_MSG_POLICY_GATE; Josh must choose and record the hook policy before it is treated as settled | Josh |
+| OQ-10 | **What kills this?** | **UNKNOWN** — **HUMAN_DECISION** — gate=KILL_CRITERION_GATE; Josh must choose the economic kill criterion before the pilot is treated as viable | Josh |
 
 ### 8.3 The kill criteria, stated so they can fire
 
@@ -828,10 +828,10 @@ A kill criterion nobody can evaluate is decoration. Each names its observable.
 | # | we stop if… | observable |
 |---|---|---|
 | K1 | the completion signal cannot be consumed by the supervisor | **WIRE-PROVEN, ADOPTION REMAINS** — OMP ships `AgentEndEvent.willContinue` and `SessionStopEvent` (`dist/types/extensibility/shared-events.d.ts:RpcSessionEventFrame`), and a raw `agent_end` frame with `isTerminal:true` crossed `--mode=rpc` via `RpcSessionEventFrame` (`modes/rpc/rpc-types.d.ts:RpcSessionEventFrame`). The remaining kill condition is failed adoption into the supervisor, not inability to build a completion protocol |
-| K2 | verification costs more than the review it replaces | **OPEN/UNVERIFIED — owner: Josh. For a 30-day pilot, numerator = verification minutes recorded in the tick/review ledger; denominator = review minutes demonstrably replaced; fire if numerator/denominator > 1.0 in two consecutive weekly windows. Source: timestamped tick ledger plus review log. Instrumentation and baseline are not yet built.** |
+| RISK-002 (K2) | verification costs more than the review it replaces | **OPEN/UNVERIFIED — owner: Josh.** For a 30-day pilot, numerator = verification minutes recorded in the tick/review ledger; denominator = review minutes demonstrably replaced; fire if numerator/denominator > 1.0 in two consecutive weekly windows. Source: timestamped tick ledger plus review log. Instrumentation and baseline are not yet built. **This kill criterion is separately registered from the thirteen OQ rows; it remains unmeasured.** |
 | K3 | a second machine cannot run it | §07: never attempted; installer hardcodes `/Users/josh` as its fallback home |
 | K4 | the gates get routed around | measurable as: any commit landing with a gate disabled and no named allowance row |
-| K5 | the fleet needs more tending than the work it does | **OPEN/UNVERIFIED — owner: orchestrator. For a 30-day pilot, numerator = operator tending minutes (reap, redispatch, unblock, or intervene); denominator = minutes of verified work completed; fire if numerator/denominator > 1.0 in two consecutive weekly windows. Source: timestamped fleet/operator ledger plus verified close receipts. The historical 4.2 hours of refused ticks is context only, not this denominator or a fire.** |
+| RISK-005 (K5) | the fleet needs more tending than the work it does | **OPEN/UNVERIFIED — owner: orchestrator.** For a 30-day pilot, numerator = operator tending minutes (reap, redispatch, unblock, or intervene); denominator = minutes of verified work completed; fire if numerator/denominator > 1.0 in two consecutive weekly windows. Source: timestamped fleet/operator ledger plus verified close receipts. The historical 4.2 hours of refused ticks is context only, not this denominator or a fire. **This kill criterion is separately registered from the thirteen OQ rows; it remains unmeasured.** |
 
 ### 8.4 The blind spot this method cannot see
 
@@ -846,7 +846,7 @@ That is why this section exists at all, and why it took a lens explicitly assign
 find it. The fix is R12 plus the per-subsection expected-contents list `%1408` proposed, which is
 **not built**.
 
-**NO-CLAIM.** This section registers thirteen questions (eleven OPEN; Q9 ANSWER MOVED; Q10 PARTIAL) and five kill criteria. It **answers none of them**. Registering a question is not
+**NO-CLAIM.** This section registers thirteen unanswered questions (4 BLOCKS_PLAN, 1 BLOCKS_BUILD, 4 DEFER_TO_BEAD, 4 HUMAN_DECISION) and five kill criteria. It **answers none of them**. Typing a disposition makes the unknown visible and schedulable; it does not answer it.
 progress on it; it makes the gap visible and assignable, which is strictly less than knowing the
 answer and strictly more than the previous state, where the question could not be asked from
 inside the requirement set.

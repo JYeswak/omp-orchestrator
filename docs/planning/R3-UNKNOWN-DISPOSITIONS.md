@@ -28,7 +28,7 @@ Binding instrument rules: `docs/planning/CENSUS-EXCLUSIONS.md` 1-5. No figure be
 | `docs/plan/flow/waves/**` `[[disagreement]]` | 160 | 104 (84 empty + 20 open-worded) | 84 | 20 |
 | `docs/plan/flow/boxes/S1.toml` `[[box.hook]]` UNKNOWN | 1 | 1 | 1 | 0 |
 | `docs/decisions.jsonl` | 29 rows / 19 ids | 8 (7 dual-row/claim + HD-0019) | 7 | 1 |
-| `docs/plan/00-brief.md:808-834` Q1..Q13 + K1..K5 | 18 | 14 | 0 | 14 |
+| `docs/plan/00-brief.md:808-834` OQ-1..OQ-13 + RISK-002/RISK-005 (pre-repair snapshot) | 18 | 14 | 0 | 14 |
 | **TOTAL** | | **304** | **269** | **35** |
 
 **Overlap explicitly handled — the `269` is not additive with `157`.** `docs/plan/flow/maturity0/S*.toml`
@@ -128,15 +128,15 @@ Ten objects, **ten disagreements**.
 `remaining`, `escalated:`, `row stays open`, `accepted AND STILL OPEN` are the `SKILL.md:111` class:
 a status, not a disposition. 4 of the 20 are severity `blocker`.
 
-**`docs/plan/00-brief.md`, 14 rows whose recorded disposition is literally the word R3 rejects:**
+**Pre-repair: `docs/plan/00-brief.md`, 14 rows whose recorded disposition was literally the word R3 rejects:**
 
-- `:810` Q1 — “Who pays for this, and what is their current workaround? | **OPEN** — no buyer named anywhere in thirteen sections | Josh”
-- `:811` Q2 **OPEN** · `:812` Q3 **OPEN** · `:813` Q4 **OPEN** · `:814` Q5 **OPEN** · `:815` Q6 **OPEN** · `:816` Q7 **OPEN** · `:817` Q8 **OPEN** · `:819` Q11 **OPEN** · `:820` Q12 **OPEN** · `:821` Q13 **OPEN**
-- `:822` Q10 — “**What kills this?** | **PARTIAL** — Josh owns the decision … no economic criterion or decision receipt is recorded”
-- `:831` K2 — “**OPEN/UNVERIFIED — owner: Josh. … Instrumentation and baseline are not yet built.**”
-- `:834` K5 — “**OPEN/UNVERIFIED — owner: orchestrator. …**”
+- `:810` OQ-1 — “Who pays for this, and what is their current workaround? | **OPEN** — no buyer named anywhere in thirteen sections | Josh”
+- `:811` OQ-2 **OPEN** · `:812` OQ-3 **OPEN** · `:813` OQ-4 **OPEN** · `:814` OQ-5 **OPEN** · `:815` OQ-6 **OPEN** · `:816` OQ-7 **OPEN** · `:817` OQ-8 **OPEN** · `:819` OQ-11 **OPEN** · `:820` OQ-12 **OPEN** · `:821` OQ-13 **OPEN**
+- `:822` OQ-10 — “**What kills this?** | **PARTIAL** — Josh owns the decision … no economic criterion or decision receipt is recorded”
+- `:831` RISK-002 (K2) — “**OPEN/UNVERIFIED — owner: Josh. … Instrumentation and baseline are not yet built.**”
+- `:834` RISK-005 (K5) — “**OPEN/UNVERIFIED — owner: orchestrator. …**”
 
-`:849` states the count itself: *“This section registers thirteen questions (eleven OPEN; Q9 ANSWER MOVED; Q10 PARTIAL)”*.
+`:849` states the pre-repair count itself: *“This section registered thirteen questions (eleven OPEN; OQ-9 ANSWER MOVED; OQ-10 PARTIAL)”*.
 `:789` states the rule this satisfies and R3 rejects: *“must be either answered or **registered here as an
 open question with an owner**”*. Registering with an owner is not a disposition.
 
@@ -302,16 +302,16 @@ emits `open questions without a typed disposition`.
 | negative control | same copy + ` BLOCKS_PLAN |` appended to each row | back to **0** |
 
 Root cause, one line: `validate_plan.py:449` iterates `d.startswith("OPEN-") or d.startswith("OQ-")`.
-`00-brief.md:810-822` names them `Q1`..`Q13`. **A two-character prefix mismatch turns a validated R3 gate
-into a silent GREEN over 13 real undispositioned questions.** Same shape as R2's
+Before repair, `00-brief.md:810-822` used bare question labels. The repaired source now uses `OQ-1` through `OQ-13`. **A two-character prefix mismatch turned a validated R3 gate into a silent GREEN over 13 real undispositioned questions.**
+Same shape as R2's
 `contract-law-ids-unregistered-a6b7` — content under an analogue naming scheme the register does not
 admit — except here a checker runs and passes. → `omp-orchestrator-r3-oracle-exists-and-is-blind-54d3` (P0).
 
-Two instruments, reconciled rather than averaged: my hand census of `00-brief.md` counts **14**
-(11 `**OPEN**` + Q10 `**PARTIAL**` + K2/K5 `**OPEN/UNVERIFIED**`, excluding Q9 `**ANSWER MOVED**`); the
-oracle counts **13** (all thirteen `Q` rows including Q9, and it never sees the two `K` rows because they
-are not table ids). Union 15, intersection 12. The population total below uses the hand figure 14 and the
-band is ±1.
+Two instruments, reconciled rather than averaged: the pre-repair hand census of `00-brief.md` counted **14**
+(11 `**OPEN**` + OQ-10 `**PARTIAL**` + RISK-002/RISK-005 `**OPEN/UNVERIFIED**`, excluding OQ-9 `**ANSWER MOVED**`); the
+oracle counted **13** (all thirteen OQ rows including OQ-9, and it never saw the two RISK kill-criterion rows because they
+were not table ids). The repaired owner table now carries one typed disposition on each OQ row; the two RISK rows remain
+separate kill criteria and are not answers to those questions.
 
 ## 8. PRODUCT
 
@@ -325,7 +325,7 @@ anti-vacuity leg, `--actor AtlasArcPass3`:
 | `omp-orchestrator-r3-oracle-exists-and-is-blind-54d3` | P0 | a validated R3 checker runs and returns 0 over 13 untyped questions |
 | `omp-orchestrator-r3-defer-to-bead-names-no-bead-9bt4` | P1 | 83/88 deferrals name no bead; 11/12 name a person |
 | `omp-orchestrator-r3-unknown-detector-is-empty-string-3zhb` | P1 | detector is `resolution == ""`; 20 open rows (4 blockers) invisible |
-| `omp-orchestrator-r3-plan-sections-type-no-unknowns-yb4q` | P1 | 0 disposition tokens in 13 sections; 14 `**OPEN**` rows + HD-0019 untyped |
+| `omp-orchestrator-r3-plan-sections-type-no-unknowns-yb4q` | P1 | pre-repair: 0 disposition tokens in 13 sections; 14 `**OPEN**` rows + HD-0019 untyped; repaired owner table now carries 13 tokens |
 | `omp-orchestrator-r3-human-decision-names-no-gate-w73c` | P1 | 6 human decisions, 0 name a gate, 0 actuated |
 
 Cited as tracked, not re-filed, each with a measurement comment: `omp-orchestrator-1qzt` (the seventh

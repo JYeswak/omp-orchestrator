@@ -151,7 +151,7 @@ verification_method = "Live ID census of PLAN.md excluding fixture/planted IDs e
 
 [[note]]
 id = "NOTE-DANGLING"
-text = "02→08 Q2: REFERENCE wrong (retarget 00-brief §8); TARGET 08 is correctly R9. 02→09 WIRE-as-first-milestone: REFERENCE wrong (M1 is pane-state seam); TARGET 09 M1 is correctly that seam. ref-wrong:2 target-wrong:0."
+text = "02→08 OQ-2: REFERENCE wrong (retarget 00-brief §8); TARGET 08 is correctly R9. 02→09 WIRE-as-first-milestone: REFERENCE wrong (M1 is pane-state seam); TARGET 09 M1 is correctly that seam. ref-wrong:2 target-wrong:0."
 
 [[note]]
 id = "NOTE-ACYCLICITY"

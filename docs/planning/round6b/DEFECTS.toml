@@ -41,7 +41,7 @@ forward_refs_resolved = [
   "00 R13→11/12 — 11 evidence map; 12 runbook contract at :40-65",
 ]
 forward_refs_dangling = [
-  "02→08 Q2 economics — 08 is R9 end-user journey, not Q2; Q2 remains 00-brief §8",
+  "02→08 OQ-2 economics — 08 is R9 end-user journey, not OQ-2; OQ-2 remains 00-brief §8",
   "02→09 WIRE-bead conversion as first milestone — 09 M1 is the pane-state seam, not SURFACE-MAP WIRE rows",
 ]
 ids_earned_here = []
@@ -59,12 +59,12 @@ severity = "P2"
 class = "DANGLING_FORWARD_REF"
 affected_ids = ["WP-003"]
 evidence = [
-  "6A named 02→08 Q2 economics and 02→09 WIRE-bead conversion as first milestone",
-  "docs/plan/08-end-users.md:1-8 serves R9 (foreign repo/machine); it does not own Q2",
+  "6A named 02→08 OQ-2 economics and 02→09 WIRE-bead conversion as first milestone",
+  "docs/plan/08-end-users.md:1-8 serves R9 (foreign repo/machine); it does not own OQ-2",
   "docs/plan/09-milestones.md:45 M1 is the shared pane-state type, not SURFACE-MAP WIRE conversion",
 ]
-failure_consequence = "A reader of 02 who follows those two pointers lands on the wrong section and thinks the WIRE/Q2 work is M1 or the end-user journey. Not a cycle: 02 can be corrected to point at 00-brief §8 and a named WIRE milestone, or to drop the claim."
-minimal_repair = "In 02, retarget Q2 at 00-brief §8 (or say OPEN). Retarget WIRE conversion at a named 09 row or retract 'first milestone'. Do not invent a WP alias for it in this pass."
+failure_consequence = "A reader of 02 who follows those two pointers lands on the wrong section and thinks the WIRE/OQ-2 work is M1 or the end-user journey. Not a cycle: 02 can be corrected to point at 00-brief §8 and a named WIRE milestone, or to drop the claim."
+minimal_repair = "In 02, retarget OQ-2 at 00-brief §8 (or say OPEN). Retarget WIRE conversion at a named 09 row or retract 'first milestone'. Do not invent a WP alias for it in this pass."
 owner = "%8 integrator"
 verification_method = "Re-read the two 02 sentences after integration; each pointer must land on a heading that owns that noun."
 

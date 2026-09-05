@@ -544,7 +544,7 @@ those interpreters, and six crate call-sites spawn `python3`. This is the same b
 index, and both the hook directory and the process table sit outside it.
 
 Not a violation — a **coverage** statement. The rule is narrower than its reputation, and the
-reputation is doing work the rule cannot. Registered with Q13.
+reputation is doing work the rule cannot. Registered with OQ-13.
 
 **NO-CLAIM.** §7 establishes the §6 denominator was chosen without justification and that at least
 three load-bearing binaries were omitted. It does **not** provide their surface counts — `rch`, `fh`,
@@ -705,8 +705,7 @@ round of grading.
 `%1409` re-probed 56 OMP rows: **51 confirmed, 5 flipped** — 2 to `CONSUMED` (they had been consumed
 all along and the census said otherwise), 2 to `VALIDATE`, and one to `WIRE` that matters
 economically: **`telemetry-export.d.ts` — OMP ships OTLP export behind `OTEL_*` env vars.** That
-moves **Q2** (*"what does the current workaround cost, measurably?"*) from `OPEN` to *sampled*, which
-is the first movement on any §8 economic question.
+moves **OQ-2** (*"what does the current workaround cost, measurably?"*) from an unmeasured state to *sampled*, while the typed question remains unresolved.
 
 `%1408` re-probed batches 12–13 and **flipped 9 of 42 on probe evidence**, including a live one:
 
@@ -881,8 +880,8 @@ dead pane alive, the whole-buffer scan that scored one pane working AND idle sim
 scraper inherits every rendering change as a correctness bug.** A typed consumer does not.
 
 **(c) `goals` — UNUSED CAPABILITY.** A typed token-budget runtime, consumed nowhere. It could ground
-**S5 Cost** and **Q2** — the cost question §00 has carried as OPEN since the first pass, and which
-`%1408` earlier priced as "grading is 30+ pane-hours unmeasured". We have been reasoning about cost
+**S5 Cost** and **OQ-2** — the cost question §00 has carried as BLOCKS_PLAN, and which
+%1408 earlier priced as "grading is 30+ pane-hours unmeasured". We have been reasoning about cost
 from per-pane dollar figures scraped off status lines while a typed budget surface sits unused.
 
 ### The positive control FAILED, and the diagnosis is why that is reportable

@@ -405,7 +405,7 @@ method has not run.
 This is a **DISCOVER** decision with a narrowed first-value wedge. It is not KILL, PILOT, or BUILD.
 The local technical evidence is a FACT about one checkout; buyer prevalence, willingness to pay,
 reachable population, distribution, recurrence, rights, and defensibility are UNKNOWN. The authoritative
-brief still marks Q1–Q3 as OPEN/PARTIAL; gates 1–4 and 12 are therefore not passed. The fresh grade imposed no
+brief still marks OQ-1–OQ-3 as BLOCKS_PLAN unknowns; gates 1–4 and 12 are therefore not passed. The fresh grade imposed no
 “dispatchable-stage” contract, so this section does not add one.
 
 ### Gate status (8–17)

@@ -30,7 +30,7 @@ this file is a **scope error**. The transition tables below still record measure
 outputs, refusals, and current boundaries so that §12 can be implemented against evidence.
 
 All claims below are `MEASURED` unless explicitly marked `PROJECTED`, `DECLARED`,
-`WIRE-PROVEN`, `NOT CONSUMED`, or `NO-CLAIM`. R13 is represented by the stage/property matrix below, and Q13 remains an unresolved policy choice in §11.4; §00 is outside this assignment and is not treated as a second authority.
+`WIRE-PROVEN`, `NOT CONSUMED`, or `NO-CLAIM`. R13 is represented by the stage/property matrix below, and OQ-13 remains an unresolved policy choice in §11.4; §00 is outside this assignment and is not treated as a second authority.
 
 ---
 
@@ -166,13 +166,13 @@ The script that enforces build-grading discipline is a 6.3 KB shell script, invi
 rule because `no-shell-gate` scans the git index. The gate states its boundary at
 `crates/no-shell-gate/src/lib.rs:EXTENSIONS`: *"this gate covers FILE EXTENSIONS of tracked files,
 nothing else."* This is a coverage finding, not a claim that the gate implementation is
-incorrect. Q13 remains unresolved and is retained here rather than silently closed:
+incorrect. OQ-13 remains unresolved and is retained here rather than silently closed:
 
 1. declare `.git/hooks` legitimately outside the rule because hooks are machine-local;
 2. replace the hook with a Rust binary like the other gates; or
 3. record a named allowance, owner, and reason.
 
-The lifecycle section does not choose among those policy decisions. **NO-CLAIM:** Q13 is retained
+The lifecycle section does not choose among those policy decisions. **NO-CLAIM:** OQ-13 is retained
 for its owner and policy decision; no new exemption or migration is asserted here.
 
 ---
@@ -483,3 +483,146 @@ limit that §12 must honor.
 It establishes where the current resident path stops, which upstream completion fact is reachable,
 which local consumers are absent, which records are durable or not, and which 1:many behaviors are
 explicitly refused until proven.
+
+
+---
+
+## 11.9 A–Z kernel expansion: target mapping and evidence boundary
+
+Section 12 now owns the operational A–Z map. This section records the evidence needed to keep that
+map honest while it is materialized.
+
+### Current versus target
+
+| target | current evidence | target proof still required |
+|---|---|---|
+| K0 namespace/identity | live pane identity can be read from NTM; Agent Mail identity exists; `binding` can be `legacy-unverified` | register/readback field diff, verified-live binding, cold-start envelope |
+| K1 requirements/decisions | manual `HD-*` rows in `docs/decisions.jsonl` | typed append-only writer, retrieval, stage linkage, consumer |
+| K2 plan/foundation | plan assembly and freshness prose | foundation artifact, source hashes, materializer caller |
+| K3 plan grade | grading rounds and JSONL evidence exist | shared typed grade, held-out lens, identity comparison |
+| K4 DAG/selection | `br` and `bv` are installed surfaces | plan-to-beads materializer, cycle/orphan/digest gate, caller |
+| K5 claim/lease | `dispatch-claim-fence` authorizes a tracker snapshot; Agent Mail reservations exist | atomic claim/lease lifecycle, expiry, transfer and readback |
+| K6 admission/packet | admission, readiness, packet shapes exist in separate crates | one caller and one event-producing kernel path |
+| K7 transport | bounded subprocess contracts and NTM send path exist | native adapter parity, transport event hashes, failure receipt |
+| K8 receiver observation | receiver receipt contract requires fresh captures | local observation parser and two-capture proof |
+| K9 tracker ack | three-authority ack spine is documented | typed `NoAckYet`/`AckRefused`, pending retry preservation |
+| K10 completion/reap | one OMP terminal frame is wire-proven; finished-pane sweep is wired | AgentEndEvent parser/consumer, grade-to-reap edge |
+| K11 independent grade | fresh-eyes rounds and findings artifacts exist | production grade type and close-evidence caller |
+| K12 external validation | stage is named; no transcript is proven | foreign-machine unattended runner and transcript |
+| K13 ship/rollback | installer coverage is declared; identity is printed | persisted manifest, rollback transcript, caller |
+| K14 memory/skills/closure | archive timeline and inbox surfaces exist; mining is prospective | native AM corpus lane, candidate evaluator, closure event chain |
+
+### Native Agent Mail as a kernel lane
+
+The proposed adapter boundary is deliberately two-ended:
+
+- **Rust core:** typed request/response models, `&Cx` cancellation, field-presence comparison,
+  identity/binding policy, event-byte hashing, cursor/read-state reconciliation, and restrictive
+  error outcomes.
+- **Native adapter:** authenticated Agent Mail daemon/MCP HTTP is primary. The Homebrew `am 0.3.31`
+  CLI path is a differential oracle over local storage, not daemon truth. Both boundaries are bounded
+  and retain raw request/response hashes.
+- **Reconciliation:** daemon and CLI/direct backends are distinct in the event record. If both are
+  used, disagreement is `ORACLE_DISAGREEMENT`, never silent preference.
+
+The monitor is not one boolean. `delivery_cursor`, recipient `tail_cursor`, `unread_count/read_ts`,
+`ack_required`, and `wake_result` are separate fields. `am inbox-events` supplies delivery position;
+`am inbox` supplies read and acknowledgement state; NTM supplies live wake. The documented NTM wait deadline is 300 seconds. A caller ceiling below 300 terminates the observer
+first and yields `CANCELED` without cursor information; a 340-second ceiling reaches NTM's `TIMEOUT`
+with resumable `cursor_info`. An explicit shorter caller timeout is still REQUIRED for dispatch latency
+and cursor preservation. `ntm --robot-attention --attention-cursor=<n>` is the working attention path.
+A recipient tail of zero is a no-events state, not a healthy monitor result. Delivery continuity is
+recipient-scoped over a global sparse sequence; pair stored cursor, recipient, tail, and
+`oldest_available_cursor`, refusing ambiguity rather than claiming eviction. The daemon's documented
+`CURSOR_EXPIRED` refusal is currently reported to clamp to a successful page, silently skipping content;
+`agent-mail-native` defends this via `journey::verify_resume_continuity` / `journey::resume_from` and
+reports the fix upstream.
+
+### Conversation-to-skill mining contract
+
+Mining is a lifecycle lane, not an ad hoc retrospective. For each project namespace it must:
+
+1. capture a bounded timeline/inbox/thread corpus with source and byte hashes;
+2. normalize messages without dropping sender, thread, bead, pane, or acknowledgement metadata;
+3. cluster repeated operational patterns and count support;
+4. attach counterexamples and a falsifier to every candidate;
+5. emit a candidate skill with trigger, when-not-to-use, inputs, outputs, failure modes, and refusal;
+6. run a held-out replay against an external oracle before promotion;
+7. retain rejected candidates and the retry predicate in the negative-evidence ledger.
+
+The 746-event archive supports candidate families but does not yet prove that any candidate is a
+materialized skill. In particular, the timeline contains 310 ack-term summaries, 303 of which are
+ATC acknowledgement probes; this is evidence for an ack/monitoring candidate, not evidence that
+those probes establish liveness or completion. `am inbox-events` returning `inbox_events_unavailable`
+for an unregistered/no-pipe/redirected case is correct fail-closed behavior and is excluded from the
+silent-success census. Any exit-code audit must isolate the command rather than inspect `$?` after a
+pipeline.
+
+### Research boundary
+
+The design uses these original arXiv results only as bounded analogies:
+
+- MetaGPT (`2308.00352`) and ChatDev (`2307.07924`) support structured SOPs and role communication.
+- Self-Resource Allocation (`2504.02051`) supports capability-aware allocation hypotheses.
+- Magentic-One (`2411.04468`) supports plan/working-memory/replan loop shape.
+- AIOS (`2403.16971`) supports an OS-like kernel boundary for scheduling and memory.
+- AgentScope (`2402.14034`) supports first-class message/fault/monitor surfaces.
+- SAGA (`2605.00528`) supports workflow-level scheduling and affinity hypotheses.
+- Reflexion (`2303.11366`) supports retaining feedback as explicit language-level memory.
+
+None proves OMP transport, receiver delivery, comprehension, claim, tracker acknowledgement,
+completion, external validation, or shipment. The local contracts and their fired gates remain the
+only acceptance authorities.
+
+
+### JSM skill-library overlay
+
+JSM discovery adds operational depth to this evidence map. The installed library exposes `agent-orchestration` (dependency-aware fan-out/fan-in and completion tracking), `agent-mail` (identity, reservations, threads, ACKs), `agent-monitoring` (layered health/trajectory/SLO), `agent-lifecycle` (version/rollback/retirement), `agent-memory` (raw/summarized/structured memory), `operationalizing-expertise` (provenance and join keys), `self-improving-agent` (reviewed promotion and pruning), `accretive-cron-orchestration` plus `loop-enforcement` (SWEEP/AUDIT/LEARN, tick receipts, escalation), `human-in-the-loop` (risk-proportional approval and demotion), `rust-core-thin-frontend-workspace` (core/harness/thin adapters), `testing-conformance-harnesses` and `oracle-ga…
+
+The JSM status snapshot was online/authenticated with 135 local skills, 85 saved skills, a 47-day-old sync, 47 active bandit arms, 5,473 feedback events, and zero evidence records. Long natural-language searches returned empty sets while exact/one-word searches returned relevant matches; search results require exact-term retries and shape checks. `agent-mail-patterns` appears in remote/private search results but is not installed here, so it is not treated as loaded authority.
+
+| project artifact | required fields | source skills |
+|---|---|---|
+| skill manifest | project ID, query, skill/version/content hash, trigger, refusal, source message IDs, owner, held-out result | `operationalizing-expertise`, `agent-memory`, `self-improving-agent` |
+| dispatch receipt | sender/session/target/bead/detail, input/output hashes, authority, receiver and tracker outcomes | `agent-mail`, `agent-orchestration`, `testing-conformance-harnesses` |
+| monitor receipt | recipient, global cursor, recipient tail/oldest, read state, backend, explicit timeout, wake result | `agent-monitoring`, `condition-based-waiting`, `oracle-gates` |
+| tick receipt | typed mode, work/plan-space artifact, blocker/escalation, next action | `accretive-cron-orchestration`, `loop-enforcement`, `swarm-operator-loop` |
+
+
+### Observer and gate hardening corrections
+
+- `omp-orchestrator-calr` is a P0 vacuity finding: an empty staged scan currently returns exit 0. The
+  three-valued result must distinguish `CLEAN`, `VIOLATION`, and `NOTHING_TO_CHECK`; an empty index is
+  not clean.
+- Pipe exit status is not command exit status. Any exit-code audit MUST isolate the command and capture
+  its status directly; `$?` after a pipeline is inadmissible evidence.
+- `path-literal-guard` and `state-wildcard-lint` have inconsistent treatment of inline test code. This
+  is a gate-asymmetry finding requiring either a runtime-constructed fixture or a named gate fix; the
+  fixture itself is not silently promoted as proof.
+- Agent Mail `inbox_events_unavailable` is correct fail-closed behavior and is excluded from the
+  silent-success census. The daemon `CURSOR_EXPIRED` clamp remains a source defect defended by
+  `agent-mail-native` continuity checks and reported upstream.
+
+### Scope gate
+
+K0–K14 is a logical architecture map. It must be staged before bead creation. The recommended first
+implementation wave is K0/K5/K6/K7/K8/K9 because it closes the dispatch/ack/comms spine; K2/K3/K4/
+K10/K11/K12/K13 follows for plan-to-ship; K1/K14 closes decisions, mining, learning, and run closure.
+Joshua approved this staging on 2026-09-02; the scope decision is recorded before bead creation.
+
+**NO-CLAIM.** This section names the native AM lane, the exact event-byte contract, the mining
+workflow, and the research boundary. It does not claim that any K0–K14 lane is complete or that a
+current event writer, monitor, completion consumer, or skill evaluator exists.
+
+### 11.10 Native AM wiring boundary
+
+`crates/agent-mail-native/` now contains the typed daemon client, journey operations, cursor newtypes,
+wake wrapper, CLI differential oracle, and ignored live journey tests. A scoped search of
+`crates/omp-orchestrator/` found no reference to `agent_mail_native`, `MailClient`,
+`fetch_inbox_events`, or `wait_for_mail`. The native lane therefore exists and has local contract
+tests, but has no production caller in the resident supervisor. This is the concrete BUILT ≠ WIRED
+boundary for K0/K7/K9/K14; it is not a completion claim.
+
+The first implementation bead must wire one real caller through the typed core, then prove the daemon
+path, the CLI differential oracle, receiver/tracker separation, and the explicit timeout/cursor rules
+at that caller. An isolated green live-test crate does not close the lifecycle edge.
