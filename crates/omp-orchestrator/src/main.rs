@@ -50,6 +50,13 @@ use lifecycle_event::{
     ReasonCode,
 };
 use lifecycle_monitor::{load_metrics, observe_layer, verify_artifact};
+use ntm_fleet_monitor::{classify, Approved, Intent, TypedAction};
+use ntm_fleet_monitor::bead_lifecycle::{
+    BeadId, DispatchReceipt, DispatchTarget, EvidencePolicy, EventId, ReceiverEvidence,
+};
+use ntm_fleet_monitor::bead_lifecycle::ledger::{
+    packet_digest, InvokerClass, LedgerEvidence, LifecycleIdentity, LifecycleLedger,
+};
 
 const DEFAULT_INTERVAL: Duration = Duration::from_secs(90);
 const DEFAULT_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
@@ -90,6 +97,7 @@ struct Config {
     tmux_tmpdir: PathBuf,
     exclude_panes: Vec<String>,
     heartbeat_ledger: PathBuf,
+    bead_lifecycle_ledger: PathBuf,
     tick_monitor_state: PathBuf,
     pending_dispatch: PathBuf,
     finding_spool: PathBuf,
@@ -387,6 +395,11 @@ impl Config {
                 home.join(".local/state/flywheel")
                     .join(format!("omp-orchestrator-{session}.heartbeat.jsonl"))
             });
+        let bead_lifecycle_ledger = env::var_os("OMP_BEAD_LIFECYCLE_LEDGER")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                heartbeat_ledger.with_file_name(format!("omp-orchestrator-{session}.bead-lifecycle.jsonl"))
+            });
         let tick_monitor_state = env::var_os("OMP_TICK_MONITOR_STATE")
             .map(PathBuf::from)
             .unwrap_or_else(|| {
@@ -420,6 +433,7 @@ impl Config {
             run_subcommand,
             exclude_panes,
             heartbeat_ledger,
+            bead_lifecycle_ledger,
             tick_monitor_state,
             pending_dispatch,
             finding_spool,
@@ -1460,10 +1474,213 @@ async fn run_silence_watch(
     }
 }
 
+const DISPATCH_PACKET_MARKERS: &[&str] = &[
+    "Objective: ",
+    "Target: ",
+    "Scope:\n",
+    "Acceptance:\n",
+    "Done: ",
+    "Stop: ",
+];
+
+fn packet_is_complete(packet: &str) -> bool {
+    !packet.trim().is_empty()
+        && DISPATCH_PACKET_MARKERS
+            .iter()
+            .all(|marker| packet.contains(marker))
+}
+
+/// Obtain the only approval value accepted by the transport path.
+///
+/// PaneObservation::is_dispatchable is emitted by tick-monitor only after its
+/// two-capture liveness rule. Requiring the canonical CONFIRMED_IDLE label as
+/// the second fact prevents a forged boolean from masquerading as the capture.
+fn authorize_dispatch_preflight(
+    pane_observation: &PaneObservation,
+    packet: &str,
+    bead: &str,
+    pane: &str,
+) -> Result<(), String> {
+    let intent = Intent {
+        action: TypedAction::DispatchPacket,
+        pane_dispatchable: pane_observation.is_dispatchable,
+        two_captures: pane_observation.is_dispatchable
+            && pane_observation.liveness == "CONFIRMED_IDLE",
+        packet_complete: packet_is_complete(packet),
+        finding_has_bead: !bead.trim().is_empty(),
+    };
+    let wave = classify(intent);
+    let verdict = wave.verdict;
+    Approved::authorize(wave).map(|_| ()).map_err(|error| {
+        format!(
+            "DISPATCH_PREFLIGHT_REFUSED bead={bead} pane={pane} verdict={} reason={error:?} pane_dispatchable={} two_captures={} packet_complete={}",
+            verdict.as_str(),
+            intent.pane_dispatchable,
+            intent.two_captures,
+            intent.packet_complete,
+        )
+    })
+}
+fn begin_dispatch_lifecycle(
+    config: &Config,
+    pane: &str,
+    pane_observation: &PaneObservation,
+    bead: &str,
+    packet: &str,
+    tick: u64,
+) -> Result<LifecycleLedger, String> {
+    let bead_id = BeadId::new(bead).map_err(|error| error.to_string())?;
+    let target = DispatchTarget::new(config.session.clone(), pane)
+        .map_err(|error| error.to_string())?;
+    let now_ms = now_unix().saturating_mul(1_000);
+    let intent = Intent {
+        action: TypedAction::DispatchPacket,
+        pane_dispatchable: pane_observation.is_dispatchable,
+        two_captures: pane_observation.is_dispatchable
+            && pane_observation.liveness == "CONFIRMED_IDLE",
+        packet_complete: packet_is_complete(packet),
+        finding_has_bead: !bead.trim().is_empty(),
+    };
+    let approval = Approved::authorize(classify(intent))
+        .map_err(|error| format!("lifecycle selection is not approved: {error:?}"))?;
+    let identity = LifecycleIdentity::new(
+        bead_id,
+        config.repo.display().to_string(),
+        target,
+        packet_digest(packet.as_bytes()),
+        InvokerClass::detect_current(),
+    )
+    .map_err(|error| error.to_string())?;
+    let selected_id = EventId::new(format!("{bead}:selected:{tick}"))
+        .map_err(|error| error.to_string())?;
+    let selected = LedgerEvidence::single(
+        selected_id,
+        now_ms,
+        EvidencePolicy::new(now_ms, 0),
+        "decision",
+        format!("dispatch preflight passed pane={pane}"),
+    )
+    .map_err(|error| error.to_string())?;
+    LifecycleLedger::start(
+        &config.bead_lifecycle_ledger,
+        identity,
+        format!("dispatch bead {bead}"),
+        approval,
+        selected,
+    )
+    .map_err(|error| error.to_string())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PeerGradeClaim {
+    bead: String,
+    receiver_pane: String,
+    grader_pane: String,
+}
+
+fn gate_peer_grading(
+    config: &Config,
+    observation: &mut Observation,
+    tick: u64,
+) -> Result<Option<PeerGradeClaim>, String> {
+    let active = LifecycleLedger::active_grading_panes(&config.bead_lifecycle_ledger)
+        .map_err(|error| format!("PEER_GRADING_LEDGER_UNREADABLE error={error}"))?;
+    if !active.is_empty() {
+        observation
+            .panes
+            .retain(|pane| !active.contains(&pane.pane_id));
+        return Ok(Some(PeerGradeClaim {
+            bead: "<active-peer-grade>".to_owned(),
+            receiver_pane: "<ledger>".to_owned(),
+            grader_pane: active.into_iter().collect::<Vec<_>>().join(","),
+        }));
+    }
+
+    let candidates = LifecycleLedger::receiver_verified_candidates(&config.bead_lifecycle_ledger)
+        .map_err(|error| format!("PEER_GRADING_LEDGER_UNREADABLE error={error}"))?;
+    let idle = observation
+        .panes
+        .iter()
+        .filter(|pane| pane.is_dispatchable && pane.liveness == "CONFIRMED_IDLE")
+        .collect::<Vec<_>>();
+    for candidate in candidates {
+        let Some(receiver_pane) = idle
+            .iter()
+            .find(|pane| pane.pane_id == candidate.identity.target.pane)
+            .map(|pane| pane.pane_id.clone())
+        else {
+            continue;
+        };
+        let Some(grader_pane) = idle
+            .iter()
+            .find(|pane| pane.pane_id != receiver_pane)
+            .map(|pane| pane.pane_id.clone())
+        else {
+            return Err(format!(
+                "PEER_GRADING_REFUSED bead={} receiver_pane={} reason=no_distinct_idle_peer",
+                candidate.identity.bead.as_str(),
+                receiver_pane,
+            ));
+        };
+        let grader = idle
+            .iter()
+            .find(|pane| pane.pane_id == grader_pane)
+            .ok_or_else(|| format!("PEER_GRADING_REFUSED grader_pane={grader_pane} observation_row_missing"))?;
+        let intent = Intent {
+            action: TypedAction::DispatchPacket,
+            pane_dispatchable: grader.is_dispatchable,
+            two_captures: grader.is_dispatchable && grader.liveness == "CONFIRMED_IDLE",
+            packet_complete: true,
+            finding_has_bead: true,
+        };
+        let approval = Approved::authorize(classify(intent))
+            .map_err(|error| format!("PEER_GRADING_REFUSED reason={error:?}"))?;
+        let now_ms = now_unix().saturating_mul(1_000);
+        let event_id = EventId::new(format!(
+            "peer-grade:{}:{}:{}",
+            candidate.identity.bead.as_str(),
+            tick,
+            grader_pane
+        ))
+        .map_err(|error| error.to_string())?;
+        let evidence = LedgerEvidence::new(
+            event_id,
+            now_ms,
+            EvidencePolicy::new(now_ms, 0),
+            [
+                ("source", "omp-orchestrator"),
+                ("receiver_event_id", candidate.receiver_event_id.as_str()),
+                ("receiver_pane", receiver_pane.as_str()),
+                ("grader_pane", grader_pane.as_str()),
+            ],
+        )
+        .map_err(|error| error.to_string())?;
+        let bead = candidate.identity.bead.as_str().to_owned();
+        LifecycleLedger::claim_peer_grading(
+            &config.bead_lifecycle_ledger,
+            candidate,
+            approval,
+            grader_pane.clone(),
+            evidence,
+        )
+        .map_err(|error| format!("PEER_GRADING_REFUSED error={error}"))?;
+        observation
+            .panes
+            .retain(|pane| pane.pane_id != grader_pane);
+        return Ok(Some(PeerGradeClaim {
+            bead,
+            receiver_pane,
+            grader_pane,
+        }));
+    }
+    Ok(None)
+}
+
 async fn send_and_verify(
     cx: &Cx,
     config: &Config,
     pane: &str,
+    pane_observation: &PaneObservation,
     bead: &str,
     receiver_agent: &str,
     snapshot: &BeadSnapshot,
@@ -1479,6 +1696,13 @@ async fn send_and_verify(
         None,
     )
     .map_err(|error| format!("DISPATCH_PACKET_REFUSED bead={bead} pane={pane} error={error}"))?;
+    authorize_dispatch_preflight(pane_observation, &packet, bead, pane)?;
+    println!(
+        "DISPATCH_PREFLIGHT verdict=autonomous bead={bead} pane={pane} pane_dispatchable={} two_captures={} packet_complete={}",
+        pane_observation.is_dispatchable,
+        pane_observation.is_dispatchable && pane_observation.liveness == "CONFIRMED_IDLE",
+        packet_is_complete(&packet),
+    );
     let staged = env::temp_dir().join(format!(
         "omp-orchestrator-dispatch-{}-{}-{}.txt",
         std::process::id(),
@@ -1491,6 +1715,31 @@ async fn send_and_verify(
     let pre_identity = ntm_output_identity(cx, config, pane).await?;
     let pre_observation =
         observe_capture(pane, &String::from_utf8_lossy(before), pre_at, pre_identity);
+    let mut lifecycle = begin_dispatch_lifecycle(config, pane, pane_observation, bead, &packet, tick)
+        .map_err(|error| format!("LIFECYCLE_LEDGER_REFUSED bead={bead} pane={pane} error={error}"))?;
+    let dispatch_at_ms = now_unix().saturating_mul(1_000);
+    let dispatch_id = EventId::new(format!("{bead}:dispatch:{tick}"))
+        .map_err(|error| error.to_string())?;
+    let dispatch_receipt = DispatchReceipt::new(
+        dispatch_id.clone(),
+        BeadId::new(bead).map_err(|error| error.to_string())?,
+        DispatchTarget::new(config.session.clone(), pane)
+            .map_err(|error| error.to_string())?,
+        format!("dispatch bead {bead}"),
+        dispatch_at_ms,
+    )
+    .map_err(|error| error.to_string())?;
+    let dispatch_evidence = LedgerEvidence::single(
+        dispatch_id,
+        dispatch_at_ms,
+        EvidencePolicy::new(dispatch_at_ms, 0),
+        "packet_bytes",
+        packet.len().to_string(),
+    )
+    .map_err(|error| error.to_string())?;
+    lifecycle
+        .dispatch(dispatch_receipt, dispatch_evidence)
+        .map_err(|error| format!("LIFECYCLE_LEDGER_REFUSED bead={bead} pane={pane} error={error}"))?;
     let codex = receiver_is_codex(cx, config, pane).await?;
     let transport = if codex {
         let typed_args = vec![
@@ -1569,6 +1818,34 @@ async fn send_and_verify(
             attempts_so_far,
         });
         if stage.is_confirmed() {
+            let receiver_at_ms = now_unix().saturating_mul(1_000);
+            let receiver_id = EventId::new(format!("{bead}:receiver:{tick}"))
+                .map_err(|error| error.to_string())?;
+            let receiver = ReceiverEvidence::new(
+                receiver_id.clone(),
+                BeadId::new(bead).map_err(|error| error.to_string())?,
+                DispatchTarget::new(config.session.clone(), pane)
+                    .map_err(|error| error.to_string())?,
+                format!("dispatch bead {bead}"),
+                receiver_at_ms,
+            )
+            .map_err(|error| error.to_string())?;
+            let receiver_evidence = LedgerEvidence::new(
+                receiver_id,
+                receiver_at_ms,
+                EvidencePolicy::new(receiver_at_ms, 0),
+                [
+                    ("transport", stage.transport.kind().label()),
+                    ("ack_action", stage.action.label()),
+                    ("receiver_agent", receiver_agent),
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+            lifecycle
+                .verify_receiver(receiver, receiver_evidence)
+                .map_err(|error| {
+                    format!("LIFECYCLE_LEDGER_REFUSED bead={bead} pane={pane} error={error}")
+                })?;
             return Ok(stage);
         }
 
@@ -2868,7 +3145,10 @@ async fn report_dispatch_result(
         config.session
     );
 
-    let notify = notify_dispatch_result(cx, config, tick, pane, bead, result).await;
+    let notify = match authorize_result_notification(bead, result) {
+        Ok(()) => notify_dispatch_result(cx, config, tick, pane, bead, result).await,
+        Err(error) => Err(error),
+    };
     if let Err(error) = notify {
         let degraded = one_line_detail(&error);
         write_heartbeat(
@@ -2933,6 +3213,25 @@ async fn report_dispatch_result(
 
 /// Sends the courtesy notification. Its failure is never the caller's failure;
 /// `report_dispatch_result` downgrades it to a ledger row.
+fn authorize_result_notification(bead: &str, result: &str) -> Result<(), String> {
+    if bead.trim().is_empty() || result.trim().is_empty() {
+        return Err(
+            "DISPATCH_RESULT_PREFLIGHT_REFUSED packet_complete=false: result notification is empty"
+                .to_owned(),
+        );
+    }
+    let wave = classify(Intent {
+        action: TypedAction::VerifyReceipt,
+        pane_dispatchable: false,
+        two_captures: false,
+        packet_complete: true,
+        finding_has_bead: true,
+    });
+    Approved::authorize(wave)
+        .map(|_| ())
+        .map_err(|error| format!("DISPATCH_RESULT_PREFLIGHT_REFUSED reason={error:?}"))
+}
+
 async fn notify_dispatch_result(
     cx: &Cx,
     config: &Config,
@@ -3245,6 +3544,20 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         &observation.queue,
     );
     let decision = decide(&observation, &authorization);
+    if matches!(&decision, SupervisorDecision::Dispatch { .. }) {
+        if let Some(claim) = gate_peer_grading(config, &mut observation, tick)? {
+            let detail = format!(
+                "bead={} receiver_pane={} grader_pane={} requirement=peer-grading-before-new-work",
+                claim.bead, claim.receiver_pane, claim.grader_pane
+            );
+            write_heartbeat(config, tick, "PEER_GRADING_REQUIRED", &detail)?;
+            println!(
+                "PEER_GRADING_REQUIRED tick={tick} session={} {detail}",
+                config.session
+            );
+            return Ok(());
+        }
+    }
     file_supervisor_finding(cx, config, tick, &decision).await?;
     emit_s1_l3_l5(cx, config, &decision).await;
     observe_s1_after_emit(config);
@@ -3311,6 +3624,12 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             let dispatch_result = async {
                 let (snapshot, receiver_agent) =
                     prepare_bead_dispatch(cx, config, &pane, bead, tick, true).await?;
+                let pane_observation = observation
+                    .panes
+                    .iter()
+                    .find(|candidate| candidate.pane_id == pane)
+                    .cloned()
+                    .ok_or_else(|| format!("DISPATCH_PREFLIGHT_REFUSED bead={bead} pane={pane} observation_row_missing"))?;
                 let dispatch_epoch = now_unix() as i64;
                 write_dispatch_intent(config, &pane, bead)?;
                 emit_step(cx, &mut spine, StepKind::FenceChecked, bead, &pane, config, "per-pane dispatch fence passed; intent written").await?;
@@ -3318,9 +3637,18 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                 emit_step(cx, &mut spine, StepKind::PacketRendered, bead, &pane, config, &format!("receiver={receiver_agent}")).await?;
                 let prior = prior_dispatch_count(config, bead);
                 let send = omp_orchestrator::spine_emit::send_kind(prior);
-                let stage =
-                    send_and_verify(cx, config, &pane, bead, &receiver_agent, &snapshot, &before, tick)
-                        .await?;
+                let stage = send_and_verify(
+                    cx,
+                    config,
+                    &pane,
+                    &pane_observation,
+                    bead,
+                    &receiver_agent,
+                    &snapshot,
+                    &before,
+                    tick,
+                )
+                .await?;
                 emit_step(cx, &mut spine, send, bead, &pane, config, &format!("prior_dispatches={prior} verdict={}", stage.delivery.label())).await?;
                 let silence =
                     run_silence_watch(cx, config, bead, dispatch_epoch, &receiver_agent).await?;
@@ -3856,6 +4184,7 @@ mod tests {
             tmux_tmpdir,
             exclude_panes: Vec::new(),
             heartbeat_ledger,
+            bead_lifecycle_ledger: root.join("bead-lifecycle.jsonl"),
             tick_monitor_state: root.join("state"),
             pending_dispatch: root.join("pending"),
             finding_spool: root.join("findings"),
@@ -5338,5 +5667,162 @@ exit 2
         let error = parse_close_readback_args(&args)
             .expect_err("a close without an explicit reason must refuse");
         assert!(error.contains("--reason"), "{error}");
+    }
+    #[test]
+    fn dispatch_preflight_refuses_single_capture_liveness() {
+        let pane = PaneObservation {
+            pane_id: "%7".to_owned(),
+            state: "IDLE".to_owned(),
+            liveness: "UNPROVEN".to_owned(),
+            is_dispatchable: false,
+            is_free_capacity: true,
+            is_working: false,
+            awaits_human: false,
+        };
+        let error = authorize_dispatch_preflight(
+            &pane,
+            "Objective: x\nTarget: y\nScope:\nreal\nAcceptance:\nrun\nDone: exit 0\nStop: now\n",
+            "bead",
+            "%7",
+        )
+        .expect_err("single capture must refuse before transport");
+        assert!(error.contains("DISPATCH_PREFLIGHT_REFUSED"), "{error}");
+        assert!(error.contains("SingleCaptureLiveness"), "{error}");
+    }
+
+    #[test]
+    fn dispatch_preflight_accepts_confirmed_idle_complete_packet() {
+        let pane = PaneObservation {
+            pane_id: "%7".to_owned(),
+            state: "IDLE".to_owned(),
+            liveness: "CONFIRMED_IDLE".to_owned(),
+            is_dispatchable: true,
+            is_free_capacity: true,
+            is_working: false,
+            awaits_human: false,
+        };
+        let packet = "Objective: x\nTarget: y\nScope:\nreal\nAcceptance:\nrun\nDone: exit 0\nStop: now\n";
+        authorize_dispatch_preflight(&pane, packet, "bead", "%7")
+            .expect("confirmed two-capture liveness and complete packet must authorize");
+    }
+
+    #[test]
+    fn packet_completeness_rejects_an_identifier_only_body() {
+        assert!(!packet_is_complete("bead-only"));
+        assert!(packet_is_complete(
+            "Objective: x\nTarget: y\nScope:\nreal\nAcceptance:\nrun\nDone: exit 0\nStop: now\n"
+        ));
+    }
+    #[test]
+    fn peer_grade_claim_blocks_new_work_until_a_distinct_pane_is_named() {
+        let (temp, config) = isolated_fixture_config();
+        let now_ms = now_unix().saturating_mul(1_000);
+        let bead = BeadId::new("peer-bead").unwrap();
+        let target = DispatchTarget::new(config.session.clone(), "%1409").unwrap();
+        let identity = LifecycleIdentity::new(
+            bead.clone(),
+            config.repo.display().to_string(),
+            target.clone(),
+            packet_digest(b"peer-packet"),
+            InvokerClass::detect_current(),
+        )
+        .unwrap();
+        let approval = Approved::authorize(classify(Intent {
+            action: TypedAction::DispatchPacket,
+            pane_dispatchable: true,
+            two_captures: true,
+            packet_complete: true,
+            finding_has_bead: true,
+        }))
+        .unwrap();
+        let objective = "dispatch bead peer-bead";
+        let mut ledger = LifecycleLedger::start(
+            config.bead_lifecycle_ledger.clone(),
+            identity,
+            objective,
+            approval,
+            LedgerEvidence::single(
+                EventId::new("peer-selected").unwrap(),
+                now_ms,
+                EvidencePolicy::new(now_ms, 0),
+                "source",
+                "test",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        ledger
+            .dispatch(
+                DispatchReceipt::new(
+                    EventId::new("peer-dispatch").unwrap(),
+                    bead.clone(),
+                    target.clone(),
+                    objective,
+                    now_ms,
+                )
+                .unwrap(),
+                LedgerEvidence::single(
+                    EventId::new("peer-dispatch").unwrap(),
+                    now_ms,
+                    EvidencePolicy::new(now_ms, 0),
+                    "source",
+                    "test",
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        ledger
+            .verify_receiver(
+                ReceiverEvidence::new(
+                    EventId::new("peer-receiver").unwrap(),
+                    bead,
+                    target,
+                    objective,
+                    now_ms,
+                )
+                .unwrap(),
+                LedgerEvidence::single(
+                    EventId::new("peer-receiver").unwrap(),
+                    now_ms,
+                    EvidencePolicy::new(now_ms, 0),
+                    "source",
+                    "test",
+                )
+                .unwrap(),
+            )
+            .unwrap();
+
+        let idle = |pane: &str| PaneObservation {
+            pane_id: pane.to_owned(),
+            state: "IDLE".to_owned(),
+            liveness: "CONFIRMED_IDLE".to_owned(),
+            is_dispatchable: true,
+            is_free_capacity: true,
+            is_working: false,
+            awaits_human: false,
+        };
+        let mut observation = Observation {
+            panes: vec![idle("%1409"), idle("%1414")],
+            queue: QueueState {
+                ready_count: 1,
+                readable: true,
+            },
+            gate_census: Some(GateCensus { rows: Vec::new() }),
+        };
+        let claim = gate_peer_grading(&config, &mut observation, 77)
+            .unwrap()
+            .expect("a finished peer bead must claim grading before new work");
+        assert_eq!(claim.bead, "peer-bead");
+        assert_eq!(claim.receiver_pane, "%1409");
+        assert_eq!(claim.grader_pane, "%1414");
+        assert_eq!(
+            LifecycleLedger::active_grading_panes(&config.bead_lifecycle_ledger)
+                .unwrap()
+                .into_iter()
+                .collect::<Vec<_>>(),
+            vec!["%1414".to_owned()]
+        );
+        assert!(observation.panes.iter().all(|pane| pane.pane_id != "%1414"));
+        drop(temp);
     }
 }

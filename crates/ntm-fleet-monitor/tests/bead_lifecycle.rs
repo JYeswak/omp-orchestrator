@@ -68,7 +68,7 @@ fn receiver_verified() -> BeadLifecycle {
 }
 fn grading() -> BeadLifecycle {
     let mut life = receiver_verified();
-    life.start_grading(id("grading-1")).unwrap();
+    life.start_grading(id("grading-1"), "5").unwrap();
     life
 }
 fn external_blocker(observed_at_ms: u64) -> BlockerEvidence {
@@ -89,6 +89,7 @@ fn valid_lifecycle_reaches_close_only_after_independent_pass_grade() {
             id("grade-1"),
             bead("cp-life"),
             target("4"),
+            "5",
             id("receiver-1"),
             130,
         ),
@@ -118,6 +119,7 @@ fn fix_grade_requires_named_redispatch_before_dispatch() {
             id("grade-fix"),
             bead("cp-life"),
             target("4"),
+            "5",
             id("receiver-1"),
             "add-proof",
             130,
@@ -283,6 +285,7 @@ fn close_without_independent_grade_is_the_mutation_sensitive_guard() {
         id("grade-1"),
         bead("cp-life"),
         target("other-pane"),
+        "5",
         id("receiver-1"),
         130,
     );
@@ -375,6 +378,7 @@ fn closed_lifecycle_cannot_become_blocked() {
             id("grade-1"),
             bead("cp-life"),
             target("4"),
+            "5",
             id("receiver-1"),
             130,
         ),

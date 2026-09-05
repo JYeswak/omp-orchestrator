@@ -308,7 +308,10 @@ pub enum GradeResult {
 impl GradeResult {
     pub fn fix(name: impl Into<String>) -> Result<Self, LifecycleError> {
         let name = name.into();
-        if name.trim().is_empty() {
+        let normalized = name.trim().to_ascii_lowercase();
+        if normalized.is_empty()
+            || matches!(normalized.as_str(), "retry" | "try again" | "try-again" | "fix")
+        {
             return Err(LifecycleError::InvalidInput { field: "fix_name" });
         }
         Ok(Self::Fix { name })
@@ -320,6 +323,7 @@ pub struct GradeReceipt {
     pub id: EventId,
     pub bead: BeadId,
     pub target: DispatchTarget,
+    pub grader_pane: String,
     pub receiver_event_id: EventId,
     pub result: GradeResult,
     pub graded_at_ms: u64,
@@ -329,6 +333,7 @@ impl GradeReceipt {
         id: EventId,
         bead: BeadId,
         target: DispatchTarget,
+        grader_pane: impl Into<String>,
         receiver_event_id: EventId,
         graded_at_ms: u64,
     ) -> Self {
@@ -336,6 +341,7 @@ impl GradeReceipt {
             id,
             bead,
             target,
+            grader_pane: grader_pane.into(),
             receiver_event_id,
             result: GradeResult::Pass,
             graded_at_ms,
@@ -345,6 +351,7 @@ impl GradeReceipt {
         id: EventId,
         bead: BeadId,
         target: DispatchTarget,
+        grader_pane: impl Into<String>,
         receiver_event_id: EventId,
         name: impl Into<String>,
         graded_at_ms: u64,
@@ -353,6 +360,7 @@ impl GradeReceipt {
             id,
             bead,
             target,
+            grader_pane: grader_pane.into(),
             receiver_event_id,
             result: GradeResult::fix(name)?,
             graded_at_ms,
@@ -430,6 +438,9 @@ pub enum LifecycleError {
     },
     MissingReceiverEvidence,
     WrongReceiverEvent,
+    GraderIdentityMissing,
+    SelfGradeRefused,
+    GraderMismatch,
     GradeMustBePass,
 }
 impl fmt::Display for LifecycleError {
@@ -463,6 +474,9 @@ impl fmt::Display for LifecycleError {
             Self::WrongReceiverEvent => {
                 f.write_str("grade does not name the stored receiver evidence")
             }
+            Self::GraderIdentityMissing => f.write_str("grade requires a named grader pane"),
+            Self::SelfGradeRefused => f.write_str("the receiver pane cannot grade its own bead"),
+            Self::GraderMismatch => f.write_str("grade grader pane does not match the claimed peer"),
             Self::GradeMustBePass => f.write_str("close requires an independent passing grade"),
         }
     }

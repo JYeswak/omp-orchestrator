@@ -7,6 +7,7 @@ use loop_coverage::LoopLayer;
 use std::collections::BTreeSet;
 
 mod model;
+pub mod ledger;
 pub use model::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,6 +19,7 @@ pub struct BeadLifecycle {
     action: TypedAction,
     state: LifecycleStatus,
     receiver: Option<ReceiverEvidence>,
+    grader_pane: Option<String>,
     grade: Option<GradeReceipt>,
     blocker: Option<BlockerEvidence>,
     fix_name: Option<String>,
@@ -47,6 +49,7 @@ impl BeadLifecycle {
             action: wave.action,
             state: LifecycleStatus::Selected,
             receiver: None,
+            grader_pane: None,
             grade: None,
             blocker: None,
             fix_name: None,
@@ -86,6 +89,9 @@ impl BeadLifecycle {
     }
     pub fn receiver(&self) -> Option<&ReceiverEvidence> {
         self.receiver.as_ref()
+    }
+    pub fn grader_pane(&self) -> Option<&str> {
+        self.grader_pane.as_deref()
     }
     pub fn grade_receipt(&self) -> Option<&GradeReceipt> {
         self.grade.as_ref()
@@ -224,7 +230,11 @@ impl BeadLifecycle {
             LifecycleStatus::ReceiverVerified,
         )
     }
-    pub fn start_grading(&mut self, event_id: EventId) -> Result<(), LifecycleError> {
+    pub fn start_grading(
+        &mut self,
+        event_id: EventId,
+        grader_pane: impl Into<String>,
+    ) -> Result<(), LifecycleError> {
         self.require_state(
             &event_id,
             LifecycleEventKind::GradingStarted,
@@ -233,6 +243,14 @@ impl BeadLifecycle {
         if self.receiver.is_none() {
             return Err(LifecycleError::MissingReceiverEvidence);
         }
+        let grader_pane = grader_pane.into();
+        if grader_pane.trim().is_empty() {
+            return Err(LifecycleError::GraderIdentityMissing);
+        }
+        if grader_pane == self.target.pane {
+            return Err(LifecycleError::SelfGradeRefused);
+        }
+        self.grader_pane = Some(grader_pane);
         self.transition(
             event_id,
             LifecycleEventKind::GradingStarted,
@@ -254,6 +272,15 @@ impl BeadLifecycle {
         let Some(receiver) = self.receiver.as_ref() else {
             return Err(LifecycleError::MissingReceiverEvidence);
         };
+        if receipt.grader_pane.trim().is_empty() {
+            return Err(LifecycleError::GraderIdentityMissing);
+        }
+        if receipt.grader_pane == self.target.pane {
+            return Err(LifecycleError::SelfGradeRefused);
+        }
+        if self.grader_pane.as_deref() != Some(receipt.grader_pane.as_str()) {
+            return Err(LifecycleError::GraderMismatch);
+        }
         if receipt.receiver_event_id != receiver.id {
             return Err(LifecycleError::WrongReceiverEvent);
         }
