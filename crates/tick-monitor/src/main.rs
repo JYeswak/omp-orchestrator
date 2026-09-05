@@ -30,6 +30,18 @@ fn local_observation_identity(epoch: &str, sequence: u64, changed_at: u64) -> Ob
     }
 }
 
+fn print_usage() {
+    eprintln!("usage: tick-monitor [observe|watch|emit-tick|capabilities|--selftest]");
+    eprintln!();
+    eprintln!("observe   [--session NAME] [--repo PATH].. [--no-save] [--state PATH]");
+    eprintln!("watch     [--interval SECS] [--max-ticks N] [--stall-after N]");
+    eprintln!("          [--watch-ledger PATH]  + all observe flags");
+    eprintln!("          THE LOOP: runs observe forever, one JSON line per tick");
+    eprintln!("emit-tick --mode MODE --verdict GREEN|RED|BLOCKED");
+    eprintln!("          [--blocker CLASS:NAME] [--escalation TEXT] [--bead ID]");
+    eprintln!("          [--note TEXT] [--ledger PATH] [--state PATH]");
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.iter().any(|arg| arg == "--version") {
@@ -38,6 +50,13 @@ fn main() {
     }
     if args.iter().any(|a| a == "--selftest") {
         exit(selftest());
+    }
+    if args
+        .iter()
+        .any(|arg| matches!(arg.as_str(), "--help" | "-h"))
+    {
+        print_usage();
+        return;
     }
     match args.first().map(String::as_str) {
         Some("observe") => exit(observe(&args[1..])),
@@ -49,17 +68,7 @@ fn main() {
             exit(0)
         }
         _ => {
-            eprintln!(
-                "usage: tick-monitor [observe|watch|emit-tick|capabilities|--selftest]\n\
-                 \n\
-                 observe   [--session NAME] [--repo PATH].. [--no-save] [--state PATH]\n\
-                 watch     [--interval SECS] [--max-ticks N] [--stall-after N]\n\
-                           [--watch-ledger PATH]  + all observe flags\n\
-                           THE LOOP: runs observe forever, one JSON line per tick\n\
-                 emit-tick --mode MODE --verdict GREEN|RED|BLOCKED\n\
-                           [--blocker CLASS:NAME] [--escalation TEXT] [--bead ID]\n\
-                           [--note TEXT] [--ledger PATH] [--state PATH]\n"
-            );
+            print_usage();
             exit(2)
         }
     }
@@ -273,8 +282,8 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
         };
         let prev = prior.panes.iter().find(|p| &p.pane_id == id);
         let live = liveness(prev, &o);
-        // Reported separately: a NewlyIdle pane is free capacity a conductor must SEE,
-        // even though it may not be filled until the next tick confirms it.
+        // A recognized Idle state is free capacity a conductor must SEE, even on the
+        // first or short-gap capture; liveness gates filling, not awareness.
         //
         // The orchestrator's own pane is EXCLUDED. It goes idle between turns by design,
         // and counting it as free capacity fires the idle alarm continuously -- the
@@ -321,7 +330,7 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
             esc(last_status_line(&cap))
         ));
         obs.push(o);
-        capacity_rows.push((id.clone(), live));
+        capacity_rows.push(CapacityObservation::new(id.clone(), state, live));
     }
 
     let CapacityReport {

@@ -349,7 +349,7 @@ fn a_just_finished_pane_is_newly_idle_not_live() {
     );
     // But it MUST be visible as free capacity.
     assert!(
-        v.is_free_capacity(),
+        CapacityObservation::new("%1408", now.state.clone(), v.clone()).is_free_capacity(),
         "a conductor has to see the freed worker"
     );
 
@@ -391,7 +391,7 @@ fn a_pane_picking_work_up_is_live_and_not_free_capacity() {
     let v = liveness(Some(&prev), &now);
     assert_eq!(v, Liveness::Live);
     assert!(
-        !v.is_free_capacity(),
+        !CapacityObservation::new("%1", now.state.clone(), v.clone()).is_free_capacity(),
         "a working pane is never free capacity"
     );
 }
@@ -401,20 +401,36 @@ fn newly_idle_is_free_capacity_but_not_dispatchable_in_report() {
     // Known-bad observer report: the pane has just gone idle at t=0 of the new
     // observation state. It must be visible to the conductor before the next
     // capture confirms it, but it is not yet safe to fill.
-    let rows = vec![("%newly-idle".to_owned(), Liveness::NewlyIdle)];
+    let rows = vec![CapacityObservation::new("%newly-idle", PaneState::Idle, Liveness::NewlyIdle)];
     let report = partition_capacity(&rows, &[]).expect("one observed pane is not monitor-blind");
 
     assert!(report.dispatchable.is_empty());
     assert_eq!(report.free_capacity, vec!["%newly-idle".to_owned()]);
     assert_ne!(report.dispatchable, report.free_capacity);
 }
+#[test]
+fn first_idle_capture_is_visible_but_not_dispatchable() {
+    // The real incident was an IDLE pane whose first capture made liveness UNPROVEN.
+    // Awareness must not wait for the dispatch proof, or the conductor sees no capacity.
+    let rows = vec![CapacityObservation::new(
+        "%first-idle",
+        PaneState::Idle,
+        Liveness::Unproven {
+            why: "no_prior_capture",
+        },
+    )];
+    let report = partition_capacity(&rows, &[]).expect("an observed idle pane is not monitor-blind");
 
+    assert!(report.dispatchable.is_empty());
+    assert_eq!(report.free_capacity, vec!["%first-idle".to_owned()]);
+    assert_ne!(report.dispatchable, report.free_capacity);
+}
 #[test]
 fn a_busy_fleet_has_no_free_capacity() {
     let rows = vec![
-        ("%live".to_owned(), Liveness::Live),
-        ("%frozen".to_owned(), Liveness::Frozen),
-        ("%dialog".to_owned(), Liveness::Dialog { timer_secs: 1 }),
+        CapacityObservation::new("%live", PaneState::Working { timer_secs: 1 }, Liveness::Live),
+        CapacityObservation::new("%frozen", PaneState::Working { timer_secs: 1 }, Liveness::Frozen),
+        CapacityObservation::new("%dialog", PaneState::Dialog { timer_secs: 1 }, Liveness::Dialog { timer_secs: 1 }),
     ];
     let report = partition_capacity(&rows, &[]).expect("observed busy panes are not monitor-blind");
 
@@ -425,7 +441,7 @@ fn a_busy_fleet_has_no_free_capacity() {
 #[test]
 fn no_observed_panes_is_monitor_blind() {
     assert_eq!(
-        partition_capacity(&[] as &[(String, Liveness)], &[]),
+        partition_capacity(&[] as &[CapacityObservation], &[]),
         Err(MonitorBlind)
     );
 }
@@ -463,7 +479,8 @@ fn provider_error_pane_is_attention_not_capacity() {
         "402-dead pane must be surfaced: {live:?}"
     );
     assert!(
-        !live.is_free_capacity() && !live.is_dispatchable(),
+        !live.is_dispatchable()
+            && !CapacityObservation::new("%1409", now.state.clone(), live.clone()).is_free_capacity(),
         "402-dead pane must not be refilled: {live:?}"
     );
     assert_eq!(live.why(), "provider_error_402");
@@ -533,7 +550,7 @@ fn a_dialog_pane_is_neither_dispatchable_nor_free_capacity_but_needs_an_answer()
         !l.is_dispatchable(),
         "cannot accept a packet while prompting"
     );
-    assert!(!l.is_free_capacity(), "it is occupied, not free");
+    assert!(!CapacityObservation::new("%dialog", PaneState::Dialog { timer_secs: 1560 }, l.clone()).is_free_capacity(), "it is occupied, not free");
     assert!(l.needs_answer(), "the conductor must see it");
 }
 
@@ -681,7 +698,8 @@ fn a_covered_pane_that_was_working_is_obscured_not_dropped() {
     );
     assert!(l.needs_attention(), "the conductor must be told to LOOK");
     assert!(
-        !l.is_dispatchable() && !l.is_free_capacity(),
+        !l.is_dispatchable()
+            && !CapacityObservation::new("%1414", now.state.clone(), l.clone()).is_free_capacity(),
         "unreadable is not free"
     );
     assert!(

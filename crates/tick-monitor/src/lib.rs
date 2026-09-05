@@ -409,10 +409,8 @@ pub enum Liveness {
     /// `omp-orchestrator-transition-to-idle-misread-oco`: this case used to fall through a
     /// `_ => Live` catch-all, because "it moved, so it is not frozen" is true and is not
     /// the question a dispatcher asks. The operator spotted a freed worker my classifier
-    /// had hidden. It stays out of `is_dispatchable` because one idle capture is still one
-    /// capture -- the NEXT tick sees (Idle, Idle) and yields `ConfirmedIdle`. Naming it
-    /// separately is what makes a just-freed worker VISIBLE without buying a slot by
-    /// weakening the two-capture rule.
+    /// had hidden. The current observation is still `PaneState::Idle`, so the shared
+    /// `CapacityObservation` reports awareness while keeping the two-capture dispatch gate.
     NewlyIdle,
     /// Timer and stable hash both static across a sufficient gap.
     Frozen,
@@ -430,12 +428,13 @@ pub enum Liveness {
     /// and it carried one last tick. Alive, and unreadable rather than idle or dead.
     ///
     /// Distinct from `Dialog` on purpose. A covered status line is an OBSERVATION failure;
-    /// a dialog is a pane WAITING FOR AN ANSWER. Distinct from `Unproven` because that gets
-    /// dropped from capacity, which is how a live pane goes untended.
+    /// a dialog is a pane WAITING FOR AN ANSWER. Distinct from `Unproven`: it preserves
+    /// evidence of a live agent and demands attention; neither state authorizes filling.
     Obscured,
     /// Accepts input, submits nothing.
     Wedged,
-    /// One capture only, gap too short, or unreadable. NOT idle.
+    /// No liveness proof: it is never dispatchable. Capacity awareness is decided from
+    /// the current recognized PaneState, so an idle first capture remains visible.
     Unproven { why: &'static str },
 }
 
@@ -471,21 +470,14 @@ impl Liveness {
     pub fn is_dispatchable(&self) -> bool {
         matches!(self, Liveness::ConfirmedIdle)
     }
-    /// Free capacity a conductor should be AWARE of, whether or not it may be filled yet.
-    /// `NewlyIdle` belongs here and not in `is_dispatchable`: report it, confirm it, then
-    /// fill it.
-    pub fn is_free_capacity(&self) -> bool {
-        matches!(self, Liveness::ConfirmedIdle | Liveness::NewlyIdle)
-    }
     /// Alive but blocked on an ANSWER, not on work. The conductor must act; a dispatcher
-    /// must not. Kept separate from `is_free_capacity` on purpose: answering is the action,
-    /// not filling.
+    /// must not. Kept separate from CapacityObservation::is_free_capacity: answering is the
+    /// action, not filling.
     pub fn needs_answer(&self) -> bool {
         matches!(self, Liveness::Dialog { .. })
     }
     /// Alive, but the conductor must LOOK rather than fill. `Dialog` needs an answer;
-    /// `Obscured` needs a deeper capture. Both used to vanish into `Unproven` and be
-    /// dropped from capacity, which is precisely how a live pane goes untended.
+    /// `Obscured` needs a deeper capture and is not a capacity view.
     pub fn needs_attention(&self) -> bool {
         matches!(
             self,
@@ -494,8 +486,38 @@ impl Liveness {
     }
 }
 
+/// One pane's current classifier state plus its two-capture evidence.
+///
+/// The observer emits PaneState::Idle in the lifecycle census and derives both capacity
+/// views from this same value. An idle first capture is awareness, never dispatch authority.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CapacityObservation {
+    pub pane_id: String,
+    pub state: PaneState,
+    pub liveness: Liveness,
+}
+
+impl CapacityObservation {
+    pub fn new(pane_id: impl Into<String>, state: PaneState, liveness: Liveness) -> Self {
+        Self {
+            pane_id: pane_id.into(),
+            state,
+            liveness,
+        }
+    }
+
+    pub fn is_dispatchable(&self) -> bool {
+        self.liveness.is_dispatchable()
+    }
+
+    /// Awareness only: a recognized current Idle state is visible before liveness is proven.
+    pub fn is_free_capacity(&self) -> bool {
+        matches!(self.state, PaneState::Idle)
+    }
+}
+
 /// The observer's two capacity projections. free_capacity is awareness;
-/// dispatchable is permission to send. They intentionally disagree for NewlyIdle.
+/// dispatchable is permission to send. They intentionally disagree for newly idle observations.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CapacityReport {
     pub dispatchable: Vec<String>,
@@ -512,12 +534,14 @@ impl fmt::Display for MonitorBlind {
     }
 }
 
-/// Partition observed pane liveness without allowing dispatchability to hide capacity.
+/// Derive both capacity views from one pane observation.
 ///
+/// free_capacity is awareness of a recognized current Idle state, including a first
+/// capture or a short-gap capture. dispatchable remains the stricter two-capture proof.
 /// Empty input is an error: a zero-row report is indistinguishable from a healthy fleet
 /// unless the monitor names its blindness.
 pub fn partition_capacity(
-    rows: &[(String, Liveness)],
+    rows: &[CapacityObservation],
     excluded: &[&str],
 ) -> Result<CapacityReport, MonitorBlind> {
     if rows.is_empty() {
@@ -528,15 +552,15 @@ pub fn partition_capacity(
         dispatchable: Vec::new(),
         free_capacity: Vec::new(),
     };
-    for (pane_id, liveness) in rows {
-        if excluded.contains(&pane_id.as_str()) {
+    for observation in rows {
+        if excluded.contains(&observation.pane_id.as_str()) {
             continue;
         }
-        if liveness.is_dispatchable() {
-            report.dispatchable.push(pane_id.clone());
+        if observation.is_dispatchable() {
+            report.dispatchable.push(observation.pane_id.clone());
         }
-        if liveness.is_free_capacity() {
-            report.free_capacity.push(pane_id.clone());
+        if observation.is_free_capacity() {
+            report.free_capacity.push(observation.pane_id.clone());
         }
     }
     Ok(report)
