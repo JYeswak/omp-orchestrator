@@ -35,7 +35,7 @@
 
 use omp_orchestrator::{
     census_gates, crates_on_disk, CensusDisposition, GateCensus, GateReachability,
-    ADVISORY_ALLOWANCE, ADVISORY_CEILING, ADVISORY_CEILING_RECORDED_AT_UNIX,
+    ADVISORY_ALLOWANCE, ADVISORY_CEILING, ADVISORY_CEILING_RECORDED_AT_UNIX, ADVISORY_RATCHET,
     advisory_ratchet_overdue, ADVISORY_RATCHET_DEADLINE_TICKS, CURATED_BLOCKING_ROSTER,
     PRE_LEHT_BLOCKING_ROWS,
 };
@@ -360,6 +360,20 @@ fn the_ratchet_deadline_is_a_real_number_and_not_a_sentiment() {
         ADVISORY_CEILING_RECORDED_AT_UNIX > 1_700_000_000,
         "the ceiling must carry the time it was recorded, or 'has it decreased since' is \
          unanswerable"
+    );
+    assert!(
+        ADVISORY_RATCHET.is_consistent(),
+        "ceiling changed without its recorded ceiling anchor"
+    );
+    assert_eq!(
+        ADVISORY_CEILING,
+        ADVISORY_RATCHET.ceiling(),
+        "compatibility ceiling projection drifted from the ratchet"
+    );
+    assert_eq!(
+        ADVISORY_CEILING_RECORDED_AT_UNIX,
+        ADVISORY_RATCHET.recorded_at_unix(),
+        "compatibility timestamp projection drifted from the ratchet"
     );
     // 200 ticks at the supervisor's 90s interval. Stated so a reader can check the
     // arithmetic rather than trust the comment.

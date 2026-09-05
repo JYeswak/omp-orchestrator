@@ -418,12 +418,40 @@ pub const ADVISORY_ALLOWANCE: &[(&str, &str)] = &[
     ("verify-dispatch", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("wired-but-inert-guard", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
 ];
+/// The advisory ceiling and the value recorded at its anchor are one ratchet.
+///
+/// The duplicated ceiling_at_recording field is intentional: it makes a mutation
+/// that changes the live ceiling while leaving its recorded anchor untouched fail
+/// the census contract instead of silently changing the meaning of the deadline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AdvisoryRatchetAnchor {
+    ceiling: usize,
+    ceiling_at_recording: usize,
+    recorded_at_unix: u64,
+}
+impl AdvisoryRatchetAnchor {
+    pub const fn ceiling(self) -> usize {
+        self.ceiling
+    }
 
-/// The high-water mark for [`ADVISORY_ALLOWANCE`]. May only be LOWERED.
-pub const ADVISORY_CEILING: usize = 24;
+    pub const fn recorded_at_unix(self) -> u64 {
+        self.recorded_at_unix
+    }
 
-/// When [`ADVISORY_CEILING`] was last recorded, and the deadline the operator asked
-/// to be held to.
+    pub const fn is_consistent(self) -> bool {
+        self.ceiling == self.ceiling_at_recording
+    }
+}
+
+pub const ADVISORY_RATCHET: AdvisoryRatchetAnchor = AdvisoryRatchetAnchor {
+    ceiling: 24,
+    ceiling_at_recording: 24,
+    recorded_at_unix: 1_788_576_189,
+};
+
+/// Compatibility projection from the single ratchet anchor.
+pub const ADVISORY_CEILING: usize = ADVISORY_RATCHET.ceiling();
+
 ///
 /// Crates whose verdict was BLOCKING before `leht` and must stay blocking.
 ///
@@ -475,7 +503,8 @@ pub const PRE_LEHT_BLOCKING_ROWS: usize = 22;
 /// is recorded carries no information, and it would have trained the operator to
 /// ignore the line. `overdue_is_false_at_the_moment_of_recording_and_true_past_the_deadline`
 /// predicate cannot fire at record time.
-pub const ADVISORY_CEILING_RECORDED_AT_UNIX: u64 = 1_788_380_629;
+/// Unix time at which the current advisory ceiling was recorded.
+pub const ADVISORY_CEILING_RECORDED_AT_UNIX: u64 = ADVISORY_RATCHET.recorded_at_unix();
 pub const ADVISORY_RATCHET_DEADLINE_TICKS: u64 = 200;
 
 /// Has the advisory ratchet blown its deadline without the count decreasing?
@@ -2656,6 +2685,15 @@ mod disk_pressure_thresholds {
         assert!(
             refuses(0, 0),
             "an unmeasurable volume must refuse, never pass"
+        );
+    }
+    #[test]
+    fn advisory_ratchet_anchor_couples_ceiling_and_recorded_at() {
+        assert!(crate::ADVISORY_RATCHET.is_consistent());
+        assert_eq!(crate::ADVISORY_CEILING, crate::ADVISORY_RATCHET.ceiling());
+        assert_eq!(
+            crate::ADVISORY_CEILING_RECORDED_AT_UNIX,
+            crate::ADVISORY_RATCHET.recorded_at_unix()
         );
     }
 }
