@@ -13,9 +13,9 @@ This document is the answer, and `STAMP.toml` is its coverage claim. A new round
 
 | field | value |
 |---|---|
-| cut at | `epoch:1788310449` |
-| rounds recorded | **15** |
-| round rows | **187** |
+| cut at | `epoch:1788646099` |
+| rounds recorded | **16** |
+| round rows | **190** |
 | declared findings, all rounds | **571** |
 | plan sections digested | **13** |
 
@@ -25,11 +25,11 @@ Joshua's rulings of 2026-09-01. A **void** round and a **pre-identity** round ar
 
 | class | rounds | declared | dispositioned | counts toward coverage |
 |---|---|---:|---:|---|
-| **LIVE** | 15, 16, 17, 18, 19, 20, 21, 23 | **218** | **232** | yes |
+| **LIVE** | 15, 16, 17, 18, 19, 20, 21, 23, 24 | **218** | **235** | yes |
 | PRE-IDENTITY | 8, 9, 10, 12, 13, 14 | 340 | 0 | no — recorded, never minted |
 | VOID (HD-0005) | 22 | 13 | 0 | no — record kept, coverage excluded |
 
-**232 of 218 declared findings are dispositioned on the live rounds.** That ratio is the honest state of the plan, and a current stamp does not improve it — the stamp says the RECORD is complete, never that the work is.
+**235 of 218 declared findings are dispositioned on the live rounds.** That ratio is the honest state of the plan, and a current stamp does not improve it — the stamp says the RECORD is complete, never that the work is.
 
 ## Every round
 
@@ -45,11 +45,12 @@ Joshua's rulings of 2026-09-01. A **void** round and a **pre-identity** round ar
 | **16** | LIVE | 20 | 76 | 89 | 14 | `docs/plan/round16-AdversaryEye.jsonl`<br>`docs/plan/round16-DeltaEye.jsonl`<br>`docs/plan/round16-GreenFrog.jsonl`<br>`docs/plan/round16-SchemaEye.jsonl`<br>`docs/plan/round16-TraceEye.jsonl` |
 | **17** | LIVE | 4 | 0 | 0 | 4 | `docs/plan/round17-GreenFrog.jsonl` |
 | **18** | LIVE | 4 | 0 | 0 | 4 | `docs/plan/round18-GreenFrog.jsonl` |
-| **19** | LIVE | 15 | 47 | 47 | 15 | `docs/plan/round19-GreenFrog.jsonl` |
+| **19** | LIVE | 15 | 47 | 50 | 15 | `docs/plan/round19-GreenFrog.jsonl` |
 | **20** | LIVE | 14 | 25 | 25 | 14 | `docs/plan/round20-GreenFrog.jsonl` |
 | **21** | LIVE | 14 | 38 | 38 | 14 | `docs/plan/round21-GreenFrog.jsonl` |
-| **22** | VOID | 20 | 13 | 0 | 13 | `docs/plan/CONVERGENCE.jsonl`<br>`docs/plan/round16-Opus.jsonl` |
+| **22** | VOID | 20 | 13 | 0 | 13 | `docs/plan/CONVERGENCE.jsonl`<br>`docs/plan/round22-Opus.jsonl` |
 | **23** | LIVE | 13 | 12 | 12 | 13 | `docs/plan/round23-AmberGate.jsonl`<br>`docs/plan/round23-BlueLantern.jsonl`<br>`docs/plan/round23-GreenFrog.jsonl`<br>`docs/plan/round23-SilverWolf.jsonl` |
+| **24** | LIVE | 3 | 0 | 0 | 3 | `docs/plan/round24-BlueLantern.jsonl` |
 
 ### PRE-IDENTITY: 6 rounds, 340 declared findings, recorded and not dispositioned
 
@@ -231,25 +232,25 @@ HD-0006 scopes reconciliation to rounds 15-22 and that scope stands. Mining bead
 | 21 | `12-journey` | adversarial-acceptance-structural-honesty | round21-fresh-eyes | 7 | UN-CONVERGED | `docs/plan/round21-GreenFrog.jsonl` |
 | 21 | `cross-cutting` | adversarial-acceptance-structural-honesty | round21-fresh-eyes | 3 | UN-CONVERGED | `docs/plan/round21-GreenFrog.jsonl` |
 | 22 | `00-brief` | extraction-truth-replayability | GreenFrog | 0 | ZERO_NEW | `docs/plan/CONVERGENCE.jsonl` |
-| 22 | `00-brief` | reproducibility | Opus | 1 | MAJOR_OPEN | `docs/plan/round16-Opus.jsonl` |
-| 22 | `00-brief` | reproducibility | Opus | 0 | ACTIONABLE | `docs/plan/round16-Opus.jsonl` |
+| 22 | `00-brief` | reproducibility | Opus | 1 | MAJOR_OPEN | `docs/plan/round22-Opus.jsonl` |
+| 22 | `00-brief` | reproducibility | Opus | 0 | ACTIONABLE | `docs/plan/round22-Opus.jsonl` |
 | 22 | `01-idea` | extraction-truth-replayability | GreenFrog | 0 | ZERO_NEW | `docs/plan/CONVERGENCE.jsonl` |
-| 22 | `01-idea` | reproducibility | Opus | 1 | BLOCKED | `docs/plan/round16-Opus.jsonl` |
-| 22 | `01-idea` | reproducibility | Opus | 0 | ACTIONABLE | `docs/plan/round16-Opus.jsonl` |
+| 22 | `01-idea` | reproducibility | Opus | 1 | BLOCKED | `docs/plan/round22-Opus.jsonl` |
+| 22 | `01-idea` | reproducibility | Opus | 0 | ACTIONABLE | `docs/plan/round22-Opus.jsonl` |
 | 22 | `02-surface-census` | extraction-truth-replayability | GreenFrog | 0 | ZERO_NEW | `docs/plan/CONVERGENCE.jsonl` |
-| 22 | `02-surface-census` | reproducibility | Opus | 1 | ACTIONABLE | `docs/plan/round16-Opus.jsonl` |
+| 22 | `02-surface-census` | reproducibility | Opus | 1 | ACTIONABLE | `docs/plan/round22-Opus.jsonl` |
 | 22 | `03-crates` | extraction-truth-replayability | GreenFrog | 0 | ZERO_NEW | `docs/plan/CONVERGENCE.jsonl` |
-| 22 | `03-crates` | reproducibility | Opus | 2 | BLOCKED | `docs/plan/round16-Opus.jsonl` |
-| 22 | `03-crates` | reproducibility | Opus | 0 | BLOCKED | `docs/plan/round16-Opus.jsonl` |
-| 22 | `04-diagrams` | reproducibility | Opus | 0 | ACTIONABLE | `docs/plan/round16-Opus.jsonl` |
-| 22 | `05-actions` | reproducibility | Opus | 0 | ACTIONABLE | `docs/plan/round16-Opus.jsonl` |
-| 22 | `06-gates` | reproducibility | Opus | 3 | BLOCKED | `docs/plan/round16-Opus.jsonl` |
-| 22 | `07-installability` | reproducibility | Opus | 3 | MAJOR_OPEN | `docs/plan/round16-Opus.jsonl` |
-| 22 | `08-end-users` | reproducibility | Opus | 1 | MAJOR_OPEN | `docs/plan/round16-Opus.jsonl` |
-| 22 | `09-milestones` | reproducibility | Opus | 0 | ACTIONABLE | `docs/plan/round16-Opus.jsonl` |
-| 22 | `10-prior-art` | reproducibility | Opus | 0 | ACTIONABLE | `docs/plan/round16-Opus.jsonl` |
-| 22 | `11-lifecycle` | reproducibility | Opus | 0 | ACTIONABLE | `docs/plan/round16-Opus.jsonl` |
-| 22 | `12-journey` | reproducibility | Opus | 1 | MAJOR_OPEN | `docs/plan/round16-Opus.jsonl` |
+| 22 | `03-crates` | reproducibility | Opus | 2 | BLOCKED | `docs/plan/round22-Opus.jsonl` |
+| 22 | `03-crates` | reproducibility | Opus | 0 | BLOCKED | `docs/plan/round22-Opus.jsonl` |
+| 22 | `04-diagrams` | reproducibility | Opus | 0 | ACTIONABLE | `docs/plan/round22-Opus.jsonl` |
+| 22 | `05-actions` | reproducibility | Opus | 0 | ACTIONABLE | `docs/plan/round22-Opus.jsonl` |
+| 22 | `06-gates` | reproducibility | Opus | 3 | BLOCKED | `docs/plan/round22-Opus.jsonl` |
+| 22 | `07-installability` | reproducibility | Opus | 3 | MAJOR_OPEN | `docs/plan/round22-Opus.jsonl` |
+| 22 | `08-end-users` | reproducibility | Opus | 1 | MAJOR_OPEN | `docs/plan/round22-Opus.jsonl` |
+| 22 | `09-milestones` | reproducibility | Opus | 0 | ACTIONABLE | `docs/plan/round22-Opus.jsonl` |
+| 22 | `10-prior-art` | reproducibility | Opus | 0 | ACTIONABLE | `docs/plan/round22-Opus.jsonl` |
+| 22 | `11-lifecycle` | reproducibility | Opus | 0 | ACTIONABLE | `docs/plan/round22-Opus.jsonl` |
+| 22 | `12-journey` | reproducibility | Opus | 1 | MAJOR_OPEN | `docs/plan/round22-Opus.jsonl` |
 | 23 | `00-brief` | independent-reader-cross-section-currentness | GreenFrog | 2 | UN-CONVERGED | `docs/plan/round23-GreenFrog.jsonl` |
 | 23 | `01-idea` | independent-reader-cross-section-currentness | GreenFrog | 2 | UN-CONVERGED | `docs/plan/round23-GreenFrog.jsonl` |
 | 23 | `02-surface-census` | independent-reader-cross-section-currentness | GreenFrog | 3 | UN-CONVERGED | `docs/plan/round23-GreenFrog.jsonl` |
@@ -263,24 +264,27 @@ HD-0006 scopes reconciliation to rounds 15-22 and that scope stands. Mining bead
 | 23 | `10-prior-art` | fresh-eyes | SilverWolf | 0 | ZERO_NEW | `docs/plan/round23-SilverWolf.jsonl` |
 | 23 | `11-lifecycle` | fresh-eyes | SilverWolf | 0 | ZERO_NEW | `docs/plan/round23-SilverWolf.jsonl` |
 | 23 | `12-journey` | fresh-eyes | SilverWolf | 0 | ZERO_NEW | `docs/plan/round23-SilverWolf.jsonl` |
+| 24 | `10-prior-art` | fresh-eyes-currentness | BlueLantern | 0 | ZERO_NEW | `docs/plan/round24-BlueLantern.jsonl` |
+| 24 | `11-lifecycle` | fresh-eyes-currentness | BlueLantern | 0 | ZERO_NEW | `docs/plan/round24-BlueLantern.jsonl` |
+| 24 | `12-journey` | fresh-eyes-currentness | BlueLantern | 0 | ZERO_NEW | `docs/plan/round24-BlueLantern.jsonl` |
 
 ## Section digests at this stamp
 
 | section | sha256 |
 |---|---|
-| `00-brief.md` | `dec2ba3ca0542238` |
-| `01-idea.md` | `d9ebda567994fa57` |
-| `02-surface-census.md` | `a4f438ffc5474525` |
-| `03-crates.md` | `f7beefaf8249c5d1` |
-| `04-diagrams.md` | `152a14cb030c0740` |
-| `05-actions.md` | `82ca124497b46954` |
-| `06-gates.md` | `ba344de286b3734b` |
-| `07-installability.md` | `8f6fd3397d1cc2eb` |
-| `08-end-users.md` | `762f8031ab14db9b` |
-| `09-milestones.md` | `6d6c09d52380cc48` |
-| `10-prior-art.md` | `fc4dd89abb9bdeb3` |
-| `11-lifecycle.md` | `3e5499ddf00d6d00` |
-| `12-journey.md` | `bf5014a6809c6384` |
+| `00-brief.md` | `9e0bb73aaa9b78d6` |
+| `01-idea.md` | `62d884947a5f1d0a` |
+| `02-surface-census.md` | `a65e713c21a35416` |
+| `03-crates.md` | `95761be397d505ce` |
+| `04-diagrams.md` | `fb6ad17a105aaeda` |
+| `05-actions.md` | `62a106bd638d00c0` |
+| `06-gates.md` | `bb49a2134e806ab8` |
+| `07-installability.md` | `9288c29af5efccbe` |
+| `08-end-users.md` | `c04b91e8fbf8d19c` |
+| `09-milestones.md` | `c04aa29831904903` |
+| `10-prior-art.md` | `10e34315171375d8` |
+| `11-lifecycle.md` | `35b7b2caa1763d16` |
+| `12-journey.md` | `629e8131992e2e3a` |
 
 ## NO-CLAIM
 

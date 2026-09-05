@@ -79,6 +79,27 @@ The row block is generated from Cargo metadata and is the artifact checked by th
 | `undrained-pipe-lint` | argv, files | stdout, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | Violation, LintReport, strip_line_comment, find_detailed_violations_in_source, find_violations_in_source | UNDECLARED route |
 | `verify-dispatch` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | VerifyDispatchRule, VerifyDispatchRules, VerifyDispatchConfig, VerifyDispatchRunOutput, now_secs | handroll process spawn; handroll br |
 | `wired-but-inert-guard` | files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | SCHEMA_VERSION, CRONTAB_ENV, REPO_ENV, TRACKED_FILE_GLOBS, GateSpec | routes subprocess-contract; process request supplied to kernel |
+| `admission-reason` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
+| `agent-mail-native` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
+| `asupersync-conformance` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
+| `bead-availability` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
+| `bead-holder` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
+| `cargo-lane-budget` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
+| `crate-atom-gate` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
+| `crate-soundness-verify` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
+| `decision-ledger` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
+| `extraction-roster` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
+| `inbox-monitor` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
+| `lifecycle-event` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
+| `lifecycle-monitor` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
+| `omp-surface-consumption` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
+| `orchestration-tick-gate` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
+| `preregistration-gate` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
+| `response-envelope-check` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
+| `s1-coverage` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
+| `sender-identity` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
+| `silent-success-census` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
+| `staged-build-gate` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
 <!-- CRATE-CONTRACT-ROWS-END -->
 
 ## Validation
