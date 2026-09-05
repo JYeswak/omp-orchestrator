@@ -268,7 +268,7 @@ fn a_timeout_is_not_a_verdict() {
     // buffer from a killed child must not map to the token a failing subject produces.
     let out = run(&["/bin/sleep", "30"], Duration::from_millis(500));
     match &out {
-        Outcome::TimedOut { group_killed, .. } => assert!(*group_killed),
+        ChildOutcome::TimedOut { group_killed, .. } => assert!(*group_killed),
         other => panic!("expected TimedOut, got {}", other.kind()),
     }
     assert!(
@@ -290,7 +290,7 @@ fn both_pipes_are_drained_past_the_deadlock_threshold() {
         Duration::from_secs(30),
     );
     match out {
-        Outcome::Completed { stdout, stderr, .. } => {
+        ChildOutcome::Completed { stdout, stderr, .. } => {
             assert!(
                 stdout.len() >= 200_000,
                 "stdout truncated: {}",
@@ -310,7 +310,7 @@ fn both_pipes_are_drained_past_the_deadlock_threshold() {
 fn a_missing_binary_is_typed_not_a_panic() {
     assert!(matches!(
         run(&["/nonexistent/xyz"], Duration::from_secs(2)),
-        Outcome::SpawnFailed { .. }
+        ChildOutcome::SpawnFailed { .. }
     ));
 }
 
