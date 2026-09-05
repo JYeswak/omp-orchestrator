@@ -1,0 +1,75 @@
+[verdict]
+round = "6D"
+role = "fresh-eyes reviewer"
+reviewer = "WildStone"
+pane = "%9"
+bead = "omp-orchestrator-arc-s4-round6d-review-qlzk"
+applied = false
+builds_run = 0
+coverage_union = "0.95"
+lines_read_union = "7675/8057"
+range = "docs/plan/12-journey.md:201-1100"
+lines_read = "900/900"
+line_complete = true
+cycles_named = []
+acyclicity = "closed"
+scan_adequate = true
+diff_class = "POLISH"
+verdict = "ROUND 6D: POLISH — 900/900 line-complete; no plan cycle; keyword scan adequate; two ref-wrong 02-11 pointers; more planted specimens; APPLIED=none"
+
+# The 6C leftover: acyclicity=closed rested on a 900-line keyword scan.
+# Full read: S1→S8 is one-way. S9 is a side-channel (any stage records; dispatch/grading/AGENTS consume).
+# A–Z is a linear expansion of that graph. K0–K14 are logical lanes, not a second cycle.
+# "cycle" at 697/708/714/718/930 is the S4 bead-DAG known-bad shape, not a document cycle.
+# Closest false-positive: 467 "load-bearing in both directions" — S9 fan-in/fan-out, not A→B→A.
+
+xfile_refs_resolved = 37
+xfile_refs_dangling = 2
+# dangling = ref-wrong, target-right (same class as 6C NOTE-DANGLING). No missing 02-11 files.
+
+scan_missed_keyword = "none — full read found no cycle the 6C scan missed"
+# Method residual: "both directions" at 467 would have been the keyword if S9 were a cycle. It is not.
+
+planted_specimens = [
+  "HD-9999 @471 F4 known-BAD supersedes-nonexistent (already 6C)",
+  "cp-z42vu / success:[4] @322,326,338,349 historical; PROJECTED fixture; repo has none",
+  "cp-3k9jq @361,375 known-BAD 104-char zero-cite close reason",
+  "S1 missing-AGENTS.md fixture @523",
+  "S2 bare-figure + UNKNOWN-without-experiment @583-584",
+  "S3 SEVERITY-removed / omitted new_findings / one-lens clean row @660-662",
+  "S4 two-bead-cycle + blank acceptance @708",
+  "S7 exit-0 empty-digest transcript @407",
+]
+
+[[defect]]
+id = "DEF-001"
+severity = "P3"
+class = "REF_WRONG"
+evidence = [
+  "12-journey.md:363 '09 A8' — A8 lives at 05-actions.md:253 (### A8. GRADE a claim), not in 09-milestones.md",
+  "12-journey.md:443 '03-crates §3.4' — 03-crates.md has no §3.4 heading; installer isolation is the crate-table path-deps dash at :74 and the 17-leaf list at :119-120",
+]
+failure_consequence = "A journey→02-11 pointer that names the wrong section is the shape earlier rounds guessed. Both targets exist. A grep for '09 A8' or '03-crates §3.4' manufactures a missing-section finding."
+minimal_repair = "Retarget 363 to 05-actions A8. Retarget 443 to 03-crates installer leaf row / path-deps. Integrator lane, not this reviewer."
+owner = "%8 integrator (non-author of 6A/6B/6C/6D)"
+verification_method = "git grep -n '09 A8' -- docs/plan/12-journey.md must be empty after retarget; '05-actions' A8 must remain."
+
+[[note]]
+id = "NOTE-STALE-IPG4"
+text = "841/850 claim ipg.4 has no coverage document. docs/inventories/omp_surface_coverage_ipg4.md exists. Not a dangling href (the table cell is prose 'no coverage document'). Stale absence, not a cycle."
+
+[[note]]
+id = "NOTE-SLUG"
+text = "597 cites docs/plan/12-journey.md:heading_field_8_foundation_runs_before_any_bead. Actual heading is :240 '### Field 8 — FOUNDATION (runs before any bead in the stage is created)'. Intra-file ref-wrong. Target exists."
+
+[[note]]
+id = "NOTE-DISPATCH-JSONL"
+text = "docs/plan/DISPATCH.jsonl is named at 330/332 and SCHEMAS.toml [artifacts.dispatch_journal] path=docs/plan/DISPATCH.jsonl. File absent. Done signal is PROJECTED until the writer exists. Not counted as a live dangling ref."
+
+[[note]]
+id = "NOTE-XFILE-RESOLVED"
+text = "Resolved unique targets in 201-1100: 00-brief, 01-idea, 02-surface-census, 03-crates, 04-diagrams, 05-actions (via enum; A8 is the real 363 target), 06-gates, 07-installability, 08-end-users, 09-milestones, 10-prior-art, 11-lifecycle, SCHEMAS.toml, NUMBERS.toml, docs/decisions.jsonl, FOUNDATION.jsonl, CONVERGENCE.jsonl, docs/PLAN.md, OMP-COVERAGE-TABLE.jsonl, inventories index + ipg1,2,3,5-11, three docs/contracts/*.md, AGENTS.md, CLAUDE.md, .beads/issues.jsonl, finding/src/lib.rs. Journey→02-11 is citation, not a reverse dependency. 02-11 do not need 12 to close."
+
+[[note]]
+id = "NOTE-SCAN-ADEQUATE"
+text = "6C keyword scan (cycle/circular/depends/until/cannot complete) would have hit 697,708,714,718,930 — all S4 bead-DAG cycle-as-known-bad. Full read adds no plan-level cycle. Scan was adequate for the acyclicity question. The overreach was asserting closed over unread lines, not missing a cycle inside them."
