@@ -2544,35 +2544,96 @@ fn read_pending_dispatch(config: &Config) -> Result<PendingDispatch, String> {
 /// here would inherit that hole, so this compares **content**: every section's
 /// bytes must appear inside the assembly. Touching a timestamp cannot satisfy it;
 /// only re-assembling can.
-fn docs_are_stale(config: &Config) -> Result<Option<String>, String> {
+/// # Repo shape is DERIVED, never a repo allowlist
+///
+/// Measured 2026-09-05 across three served repos:
+///
+/// | repo | `docs/PLAN.md` | numbered sections |
+/// |---|---|---|
+/// | `omp-orchestrator` | 676,234 B | 13 |
+/// | `uds` | absent | 0 |
+/// | `control-plane` | absent | 0 |
+///
+/// The original order read the assembly FIRST and returned "assembly absent" before it ever
+/// looked at the sections, so a repo with nothing to assemble was indistinguishable from one
+/// whose assembly had gone missing. `--repo uds` therefore died at tick 1 in 0.13s, forever,
+/// on a gate whose subject cannot exist there by design: the planning doctrine measured
+/// `PLAN.md` at 0 occurrences across 180 corpus repos and uses `docs/plans/plan_to_*.md`.
+///
+/// So the sections are counted FIRST and the shape decides:
+/// - zero sections and no assembly -> nothing to assemble -> `NotApplicable`, NAMED, never a
+///   silent green;
+/// - zero sections but an assembly EXISTS -> an assembly whose sources vanished; still `Err`,
+///   preserving the original anti-vacuity refusal;
+/// - sections exist and the assembly is missing -> `Stale`. A real defect, refused as before;
+/// - both present -> the unchanged content comparison.
+///
+/// This refuses LESS in exactly one case and identically in every other.
+#[derive(Debug)]
+enum DocsVerdict {
+    Fresh,
+    Stale(String),
+    /// This repo does not assemble a plan, so freshness is not a property it has.
+    NotApplicable(String),
+}
+
+fn docs_are_stale(config: &Config) -> Result<DocsVerdict, String> {
     let plan = config.repo.join("docs/PLAN.md");
     let dir = config.repo.join("docs/plan");
-    let Ok(assembly) = fs::read_to_string(&plan) else {
-        // No assembly at all is not a stale assembly — say which it is.
-        return Ok(Some(format!("assembly absent path={}", plan.display())));
-    };
+    let assembly = fs::read_to_string(&plan).ok();
 
-    let Ok(entries) = fs::read_dir(&dir) else {
-        return Err(format!(
-            "DOCS_STALE section dir unreadable path={}",
-            dir.display()
-        ));
-    };
-
-    let mut scanned = 0usize;
-    let mut missing = Vec::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
-            continue;
-        };
-        if !name.ends_with(".md") || !name.starts_with(|c: char| c.is_ascii_digit()) {
-            continue;
+    // Count the SOURCES first: the shape of the repo decides whether this gate applies.
+    let mut sections: Vec<(String, String)> = Vec::new();
+    let dir_readable = match fs::read_dir(&dir) {
+        Ok(entries) => {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
+                    continue;
+                };
+                if !name.ends_with(".md") || !name.starts_with(|c: char| c.is_ascii_digit()) {
+                    continue;
+                }
+                if let Ok(section) = fs::read_to_string(&path) {
+                    sections.push((name.to_owned(), section));
+                }
+            }
+            true
         }
-        let Ok(section) = fs::read_to_string(&path) else {
-            continue;
+        Err(_) => false,
+    };
+
+    if sections.is_empty() {
+        return match assembly {
+            // An assembly with no sources cannot be told from a fresh one. Unchanged refusal.
+            Some(_) => Err(format!(
+                "DOCS_STALE assembly present at {} but zero numbered sections in {} — an \
+                 empty scan set cannot distinguish fresh from broken",
+                plan.display(),
+                dir.display()
+            )),
+            None => Ok(DocsVerdict::NotApplicable(format!(
+                "no assembly and no numbered sections (dir_readable={dir_readable} \
+                 plan={} sections_dir={}) — this repo does not assemble a plan",
+                plan.display(),
+                dir.display()
+            ))),
         };
-        scanned += 1;
+    }
+
+    // Sections exist, so this repo DOES assemble a plan and the gate applies in full.
+    let Some(assembly) = assembly else {
+        return Ok(DocsVerdict::Stale(format!(
+            "assembly absent path={} while {} numbered sections exist in {}",
+            plan.display(),
+            sections.len(),
+            dir.display()
+        )));
+    };
+
+    let scanned = sections.len();
+    let mut missing = Vec::new();
+    for (name, section) in &sections {
         // Compare a stable interior slice, not the whole file: the assembler trims
         // trailing whitespace, so an exact whole-file match would false-positive.
         let body = section.trim();
@@ -2585,23 +2646,14 @@ fn docs_are_stale(config: &Config) -> Result<Option<String>, String> {
             .rev()
             .collect();
         if !probe.trim().is_empty() && !assembly.contains(probe.trim()) {
-            missing.push(name.to_owned());
+            missing.push(name.clone());
         }
     }
 
-    // ANTI-VACUITY: zero sections scanned reports identically to a fresh assembly.
-    if scanned == 0 {
-        return Err(format!(
-            "DOCS_STALE scanned zero sections in {} — an empty scan set cannot distinguish \
-             fresh from broken",
-            dir.display()
-        ));
-    }
-
     if missing.is_empty() {
-        Ok(None)
+        Ok(DocsVerdict::Fresh)
     } else {
-        Ok(Some(format!(
+        Ok(DocsVerdict::Stale(format!(
             "{} of {scanned} sections are not in the assembly: {}",
             missing.len(),
             missing.join(",")
@@ -3568,14 +3620,27 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     // checked AFTER the dispatch fence and BEFORE observation, because a stale
     // assembly makes every downstream dispatch send an agent to work from old
     // knowledge, which is the failure this condition exists to prevent.
-    if let Some(why) = docs_are_stale(config)? {
-        write_heartbeat(config, tick, "DOCS_STALE", &why)?;
-        let detail = format!(
-            "DOCS_STALE owner=josh next_action=re-assemble-docs/PLAN.md detail={why} \
-             authority=HD-0001"
-        );
-        println!("{detail}");
-        return Ok(());
+    match docs_are_stale(config)? {
+        DocsVerdict::Fresh => {}
+        DocsVerdict::Stale(why) => {
+            write_heartbeat(config, tick, "DOCS_STALE", &why)?;
+            let detail = format!(
+                "DOCS_STALE owner=josh next_action=re-assemble-docs/PLAN.md detail={why} \
+                 authority=HD-0001"
+            );
+            println!("{detail}");
+            return Ok(());
+        }
+        // NAMED, never a silent green: a reader must be able to tell "this repo has no
+        // assembly to be stale" from "the assembly is fresh". Both continue the tick; only
+        // one of them is a measurement of an assembly.
+        DocsVerdict::NotApplicable(why) => {
+            write_heartbeat(config, tick, "DOCS_ASSEMBLY_NOT_APPLICABLE", &why)?;
+            println!(
+                "DOCS_ASSEMBLY_NOT_APPLICABLE owner=loop next_action=continue scope=repo \
+                 detail={why} authority=HD-0001"
+            );
+        }
     }
 
     let mut monitor_args = vec![
@@ -4393,6 +4458,83 @@ mod tests {
             // and proven for real only against the live daemon.
             mail_sender: String::new(),
             omp_binary: PathBuf::from("omp"),
+        }
+    }
+
+    /// The four repo shapes the docs gate must distinguish. Measured 2026-09-05:
+    /// `omp-orchestrator` is 676,234 B / 13 sections; `uds` and `control-plane` are
+    /// absent / 0. The original order read the assembly FIRST, so shapes 3 and 4 were
+    /// indistinguishable and `--repo uds` died at tick 1 forever.
+    fn shape_fixture(
+        sections: &[(&str, &str)],
+        assembly: Option<&str>,
+    ) -> (tempfile::TempDir, Config) {
+        let guard = tempfile::tempdir().expect("docs-shape fixture root");
+        let config = fixture_config(guard.path().join("heartbeat.jsonl"));
+        let docs = config.repo.join("docs");
+        std::fs::create_dir_all(docs.join("plan")).expect("plan dir");
+        for (name, body) in sections {
+            std::fs::write(docs.join("plan").join(name), body).expect("section");
+        }
+        if let Some(a) = assembly {
+            std::fs::write(docs.join("PLAN.md"), a).expect("assembly");
+        }
+        (guard, config)
+    }
+
+    #[test]
+    fn no_sections_and_no_assembly_is_not_applicable_not_stale() {
+        // uds and control-plane. This is the leg the whole 202-bead block rested on.
+        let (_g, config) = shape_fixture(&[], None);
+        match docs_are_stale(&config) {
+            Ok(DocsVerdict::NotApplicable(why)) => {
+                assert!(
+                    why.contains("does not assemble a plan"),
+                    "the state must SAY it is not applicable, not pass silently: {why}"
+                );
+            }
+            other => panic!("a repo with nothing to assemble must be NotApplicable, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn sections_present_but_assembly_missing_still_refuses() {
+        // The REAL defect this gate exists for. Must keep refusing.
+        let (_g, config) = shape_fixture(&[("01-intro.md", "a section body long enough to probe")], None);
+        match docs_are_stale(&config) {
+            Ok(DocsVerdict::Stale(why)) => {
+                assert!(why.contains("assembly absent"), "{why}");
+                assert!(why.contains("1 numbered sections") || why.contains("while 1"), "{why}");
+            }
+            other => panic!("sections without an assembly must be Stale, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn assembly_without_sources_is_still_an_error() {
+        // ANTI-VACUITY, preserved: an assembly whose sources vanished cannot be told
+        // from a fresh one, so it must not become NotApplicable.
+        let (_g, config) = shape_fixture(&[], Some("some assembled text"));
+        assert!(
+            docs_are_stale(&config).is_err(),
+            "an assembly with zero sources must remain an Err, never NotApplicable"
+        );
+    }
+
+    #[test]
+    fn stale_content_is_detected_and_fresh_content_is_not() {
+        let body = "this is the section body, long enough that the 240-char probe is non-empty";
+        // FRESH: the section's bytes appear in the assembly.
+        let (_g1, fresh) = shape_fixture(&[("01-a.md", body)], Some(&format!("preamble\n{body}\n")));
+        assert!(
+            matches!(docs_are_stale(&fresh), Ok(DocsVerdict::Fresh)),
+            "a section contained in the assembly is Fresh"
+        );
+        // STALE, fires-on-known-bad: same shape, section NOT in the assembly.
+        let (_g2, stale) = shape_fixture(&[("01-a.md", body)], Some("preamble only\n"));
+        match docs_are_stale(&stale) {
+            Ok(DocsVerdict::Stale(why)) => assert!(why.contains("01-a.md"), "must NAME the section: {why}"),
+            other => panic!("a section missing from the assembly must be Stale, got {other:?}"),
         }
     }
     fn isolated_fixture_config() -> (tempfile::TempDir, Config) {
