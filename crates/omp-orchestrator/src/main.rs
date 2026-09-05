@@ -3044,17 +3044,16 @@ fn sender_from_verified_pane(identity: &PaneIdentity) -> Result<AgentName, Strin
 }
 
 /// Resolve TMUX_PANE through the existing K0 kernel immediately before sending.
-async fn mail_sender_identity_for_pane(
+async fn mail_sender_pane_identity(
     cx: &Cx,
     client: &MailClient,
     project: &ProjectKey,
-) -> Result<AgentName, String> {
+) -> Result<PaneIdentity, String> {
     let pane_id = env::var("TMUX_PANE")
         .map_err(|_| "SENDER_IDENTITY_REFUSED reason=TMUX_PANE_missing".to_owned())?;
-    let identity = resolve_pane_identity(cx, client, project, &pane_id)
+    resolve_pane_identity(cx, client, project, &pane_id)
         .await
-        .map_err(|error| format!("SENDER_IDENTITY_REFUSED pane={pane_id} error={error}"))?;
-    sender_from_verified_pane(&identity)
+        .map_err(|error| format!("SENDER_IDENTITY_REFUSED pane={pane_id} error={error}"))
 }
 
 /// The environment variables consulted for the sender identity, in order.
@@ -3187,15 +3186,17 @@ async fn notify_dispatch_result_durably(
     let recipient = mail_recipient(config, pane)?;
     let project = ProjectKey::new(config.repo.display().to_string());
     let client = MailClient::discover().with_request_timeout(MAIL_REQUEST_TIMEOUT);
-    let sender = mail_sender_identity_for_pane(cx, &client, &project).await?;
+    let sender_identity = mail_sender_pane_identity(cx, &client, &project).await?;
+    let sender = sender_from_verified_pane(&sender_identity)?;
 
     let detail = one_line_detail(result);
     let body = format!(
         "Dispatch result for `{bead}`.\n\n\
-         FROM: {sender}\nREPLY VIA: Agent Mail send_message to {sender}, project {project}\n\n\
+         FROM: {sender} pane={} binding=verified-live\nREPLY VIA: Agent Mail send_message to {sender}, project {project}\n\n\
          - pane: {pane}\n- bead: {bead}\n- build_id: {BUILD_ID}\n- result: {detail}\n\n\
          This is the DURABLE record of the dispatch result. The pane notification \
          is a courtesy and has been measured to report success without delivering.",
+        sender_identity.pane_id,
     );
     let request = SendRequest::new(
         project.clone(),
