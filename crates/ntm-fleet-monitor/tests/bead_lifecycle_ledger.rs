@@ -370,3 +370,81 @@ fn external_blocker_rows_retain_escalation_provenance() {
     assert_eq!(row["blocker"]["kind"], "external-dependency");
     assert_eq!(row["blocker"]["escalation_ref"], "BEAD-h5o8");
 }
+
+#[test]
+fn stale_receiver_event_is_refused_after_redispatch() {
+    let temp = tempdir().unwrap();
+    let path = temp.path().join("stale-receiver.jsonl");
+    let mut ledger = writer(path.clone());
+
+    ledger
+        .dispatch(dispatch_receipt("dispatch-1", 101), evidence("dispatch-1", 101))
+        .unwrap();
+    ledger
+        .verify_receiver(receiver("receiver-1", 102), evidence("receiver-1", 102))
+        .unwrap();
+    ledger
+        .start_grading(evidence("grading-1", 103), "%1414")
+        .unwrap();
+    ledger
+        .grade(
+            GradeReceipt::fix(
+                EventId::new("grade-fix-1").unwrap(),
+                bead(),
+                target(),
+                "%1414",
+                EventId::new("receiver-1").unwrap(),
+                "repair-stale-receiver-binding",
+                104,
+            )
+            .unwrap(),
+            evidence("grade-fix-1", 104),
+        )
+        .unwrap();
+    ledger
+        .require_redispatch(
+            RedispatchPlan::new(
+                EventId::new("redispatch-1").unwrap(),
+                bead(),
+                target(),
+                "repair-stale-receiver-binding",
+            )
+            .unwrap(),
+            evidence("redispatch-1", 105),
+        )
+        .unwrap();
+    ledger
+        .dispatch(dispatch_receipt("dispatch-2", 106), evidence("dispatch-2", 106))
+        .unwrap();
+    ledger
+        .verify_receiver(receiver("receiver-2", 107), evidence("receiver-2", 107))
+        .unwrap();
+    assert_eq!(
+        read_events(&path)
+            .iter()
+            .filter(|row| row["event"] == "receiver_verified")
+            .count(),
+        2
+    );
+    ledger
+        .start_grading(evidence("grading-2", 108), "%1414")
+        .unwrap();
+
+    let stale_grade = ledger.grade(
+        GradeReceipt::pass(
+            EventId::new("grade-stale").unwrap(),
+            bead(),
+            target(),
+            "%1414",
+            EventId::new("receiver-1").unwrap(),
+            109,
+        ),
+        evidence("grade-stale", 109),
+    );
+    assert!(matches!(
+        stale_grade,
+        Err(LedgerError::Lifecycle(
+            ntm_fleet_monitor::bead_lifecycle::LifecycleError::WrongReceiverEvent
+        ))
+    ));
+}

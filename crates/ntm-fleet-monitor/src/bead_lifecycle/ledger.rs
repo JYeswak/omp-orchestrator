@@ -613,11 +613,6 @@ impl LifecycleLedger {
     ) -> Result<Vec<AppendOutcome>, LedgerError> {
         require_key(&receipt.id, &evidence.id)?;
         self.ensure_identity(&receipt.bead, &receipt.target, None)?;
-        if let Some(receiver) = self.lifecycle.receiver() {
-            if receipt.receiver_event_id != receiver.id {
-                return Err(LedgerError::Lifecycle(LifecycleError::WrongReceiverEvent));
-            }
-        }
         let grader_pane = receipt.grader_pane.clone();
         let receiver_event_id = receipt.receiver_event_id.as_str().to_owned();
         let (result_event, result_status, mut result_extra) = match &receipt.result {
