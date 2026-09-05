@@ -2,9 +2,12 @@
 
 #[path = "dispatch_cli_contract.rs"]
 mod dispatch_cli_contract;
+use asupersync::runtime::RuntimeBuilder;
+use asupersync::Cx;
 use loop_driver::{
     arm_wall_watchdog, deadline_probe, selftest_failure_reason, selftest_holder_liveness,
-    selftest_invoker, LoopDriverConfig, InstanceGuard, LockRules, LoopDriverRules, LoopDriverRunOutput,
+    selftest_invoker, InstanceGuard, LockRules, LoopDriverConfig, LoopDriverRules,
+    LoopDriverRunOutput,
 };
 use std::io::Write;
 use std::process::ExitCode;
@@ -37,7 +40,10 @@ fn emit(output: LoopDriverRunOutput) -> ExitCode {
     ExitCode::from(output.code as u8)
 }
 
-fn acquire_for_probe(config: &LoopDriverConfig, lock_rules: LockRules) -> Result<InstanceGuard, ExitCode> {
+fn acquire_for_probe(
+    config: &LoopDriverConfig,
+    lock_rules: LockRules,
+) -> Result<InstanceGuard, ExitCode> {
     match InstanceGuard::acquire(&config.lock_path, lock_rules) {
         Ok(guard) => {
             if let Some(line) = guard.wedged_kill_line() {
@@ -52,7 +58,6 @@ fn acquire_for_probe(config: &LoopDriverConfig, lock_rules: LockRules) -> Result
         }
     }
 }
-
 fn main() -> ExitCode {
     let _telemetry = scheduled_lane_telemetry::Run::new("loop-driver");
     let raw_args: Vec<String> = std::env::args().skip(1).collect();
@@ -142,7 +147,23 @@ fn main() -> ExitCode {
             Ok(p) => p,
             Err(e) => return usage_error(&format!("current_exe: {e}")),
         };
-        return emit(selftest_holder_liveness(&exe));
+        let runtime = match RuntimeBuilder::current_thread().build() {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                eprintln!("LOOP_DRIVER_ERROR reason=runtime_build detail={error}");
+                return ExitCode::from(2);
+            }
+        };
+        return emit(runtime.block_on(async move {
+            match Cx::current() {
+                Some(cx) => selftest_holder_liveness(&cx, &exe),
+                None => LoopDriverRunOutput {
+                    stdout: String::new(),
+                    stderr: "LOOP_DRIVER_ERROR reason=no_runtime_context\n".into(),
+                    code: 2,
+                },
+            }
+        }));
     }
 
     let config = match LoopDriverConfig::from_env() {
@@ -226,7 +247,21 @@ fn main() -> ExitCode {
                     .stdin(std::process::Stdio::null())
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null());
-                let child = subprocess_contract::spawn_group(&asupersync::Cx::for_request(), &mut sleep_cmd);
+                let runtime = match RuntimeBuilder::current_thread().build() {
+                    Ok(runtime) => runtime,
+                    Err(error) => {
+                        eprintln!("LOOP_DRIVER_ERROR reason=runtime_build detail={error}");
+                        return ExitCode::from(2);
+                    }
+                };
+                let child = runtime.block_on(async {
+                    let Some(cx) = Cx::current() else {
+                        return Err("LOOP_DRIVER_ERROR reason=no_runtime_context".to_owned());
+                    };
+                    subprocess_contract::spawn_group(&cx, &mut sleep_cmd).map_err(|error| {
+                        format!("cannot spawn inheritance probe: {error}")
+                    })
+                });
                 match child {
                     Ok(child) => {
                         println!("CHILD_RUNNING pid={}", child.id());
@@ -234,7 +269,7 @@ fn main() -> ExitCode {
                         drop(guard);
                         ExitCode::SUCCESS
                     }
-                    Err(error) => usage_error(&format!("cannot spawn inheritance probe: {error}")),
+                    Err(error) => usage_error(&error),
                 }
             }
             Err(code) => code,
@@ -243,8 +278,8 @@ fn main() -> ExitCode {
             config.deadline,
             Duration::from_secs(seconds),
         )),
-        Mode::SelftestFailureReason | Mode::SelftestInvoker | Mode::SelftestHolderLiveness => {
-            unreachable!()
-        }
+        Mode::SelftestFailureReason
+        | Mode::SelftestInvoker
+        | Mode::SelftestHolderLiveness => unreachable!(),
     }
 }

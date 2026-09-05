@@ -1568,10 +1568,9 @@ fn probe(
 }
 /// Plants a CPU-burning LIVE holder and a sleeping WEDGED holder.
 /// Leg (a) LIVE is load-bearing: without it, always-crying-wedge would pass.
-pub fn selftest_holder_liveness(exe: &Path) -> LoopDriverRunOutput {
+pub fn selftest_holder_liveness(cx: &Cx, exe: &Path) -> LoopDriverRunOutput {
     let mut fails = 0u32;
     let mut lines = Vec::new();
-    let cx = Cx::for_request();
     // (a) genuinely working holder
     let live_lock = unique_lock("live");
     let mut live = spawn_holder(&cx, exe, &live_lock, "--hold-lock-working", &[]);
