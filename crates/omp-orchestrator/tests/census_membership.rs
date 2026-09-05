@@ -202,7 +202,7 @@ fn derivation_did_not_convert_one_blocker_into_forty_three() {
     );
     // ANTI-VACUITY, and it is the important half: if the advisory set were also
     // empty, this test would pass because the census found NOTHING, which is
-    // indistinguishable from a fully-wired fleet. The whole finding is that 23
+    // indistinguishable from a fully-wired fleet. The whole finding is that 24
     // crates are unreachable and were invisible.
     assert!(
         !advisory.is_empty(),
@@ -265,6 +265,17 @@ fn every_advisory_unreachable_row_is_named_in_the_allowance() {
          with the reason they are not yet blocking. Silence is not an option the ratchet \
          admits."
     );
+}
+#[test]
+fn s1_coverage_allowance_carries_its_suspension_and_dies_when() {
+    let reason = ADVISORY_ALLOWANCE
+        .iter()
+        .find(|(name, _)| *name == "s1-coverage")
+        .map(|(_, reason)| *reason)
+        .expect("s1-coverage must have an explicit allowance row");
+    assert!(reason.contains("S1 depth is suspended"), "{reason}");
+    assert!(reason.contains("Dies when"), "{reason}");
+    assert!(reason.contains("approved S1 build wave"), "{reason}");
 }
 
 /// RATCHET LEG 2. The ceiling bounds the set, so adding a name is a visible diff

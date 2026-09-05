@@ -5691,6 +5691,32 @@ exit 2
     }
 
     #[test]
+    fn lifecycle_selection_preflight_rejects_single_capture_independently() {
+        let (_temp, config) = isolated_fixture_config();
+        let pane = PaneObservation {
+            pane_id: "%7".to_owned(),
+            state: "IDLE".to_owned(),
+            liveness: "UNPROVEN".to_owned(),
+            is_dispatchable: true,
+            is_free_capacity: true,
+            is_working: false,
+            awaits_human: false,
+        };
+        let packet = r#"Objective: x
+Target: y
+Scope:
+real
+Acceptance:
+run
+Done: exit 0
+Stop: now
+"#;
+        let error = begin_dispatch_lifecycle(&config, "%7", &pane, "bead", packet, 7)
+            .expect_err("the lifecycle selection site must reject one-capture liveness");
+        assert!(error.contains("SingleCaptureLiveness"), "{error}");
+    }
+
+    #[test]
     fn dispatch_preflight_accepts_confirmed_idle_complete_packet() {
         let pane = PaneObservation {
             pane_id: "%7".to_owned(),
