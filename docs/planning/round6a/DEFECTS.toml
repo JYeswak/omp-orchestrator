@@ -6,9 +6,9 @@ pane = "%9"
 bead = "omp-orchestrator-arc-s4-round6a-review-fnyk"
 review_mode = "hierarchical"
 range = "docs/PLAN.md:144-4200 plus docs/plan/02-surface-census.md through 05-actions.md"
-coverage_fraction = "0.70"
+coverage_fraction = "0.82"
 plan_range_lines = 4057
-lines_read = 2860
+lines_read = 3320
 read_complete = [
   "docs/plan/02-surface-census.md:1-1029",
   "docs/plan/03-crates.md:1-533",
@@ -16,13 +16,13 @@ read_complete = [
   "docs/plan/05-actions.md:1-510",
   "docs/PLAN.md:144-153 contents",
   "docs/PLAN.md assembled 02-05 corresponding to source files above (1610-4141)",
-  "docs/plan/01-idea.md:1-123 thesis and control-loop table",
-  "docs/plan/01-idea.md:411-438 GATE/RISK source tables (prior round)",
-  "docs/plan/00-brief.md:18-80 R1-R13 and :565-575 writing contract (prior round)",
+  "docs/plan/01-idea.md:1-438 thesis, binaries, SOTA floor, viability gates",
+  "docs/plan/00-brief.md:18-400 requirements, census, vacuity, gate-leg table",
+  "docs/plan/00-brief.md:565-575 writing contract",
 ]
 read_unreviewed = [
-  "docs/plan/00-brief.md body outside :18-80 and :565-575 (assembled PLAN.md ~154-1058 remainder)",
-  "docs/plan/01-idea.md:124-410 and :439-544 except the gate/risk tables already sampled",
+  "docs/plan/00-brief.md:401-564 and :576-900",
+  "docs/plan/01-idea.md:439-544 after the risk table",
   "docs/PLAN.md:4142-4200 (start of 06-gates; overlaps %7 range)",
 ]
 ids_cut_recommended_r4 = 38
@@ -70,3 +70,7 @@ verification_method = "A reader of §03 heading 'The crate table' must land on e
 [[note]]
 id = "NOTE-DECOMPOSITION"
 text = "Atlas-arc's 'S1 final form depends on S2-S12' is a claim about stage boxes, not about plan sections 02-05. In this range the body is labelled historical inventory plus forward pointers. Eight one-way dependencies exist (02→11, 02→08, 02→09, 03→06, 04→00, 04→06, 05→03, 05→09). None is a cycle. 02, 03, 04, and 05 are individually completable as maps with NO-CLAIM floors. Round 4 STRUCTURAL was about the index/header layer, which Round 5 repaired. Unread 00-brief remainder and 01-idea remainder could still hide a cycle; they are labelled UNREVIEWED rather than assumed clean."
+
+[[note]]
+id = "NOTE-KEEPALIVE-S4"
+text = "Keep-alive read 2026-09-05: 00-brief:80-400 and 01-idea:124-438. Still no cycles. 00-brief R-table is one-way (R1→09, R6→06, R8→07, R9→08, R13→11/12). 01-idea 1.2.3 OUT OF SCOPE: autonomous dispatch until the one-session wedge is wired. That is the plan-level refusal of extracting ntm-fleet-monitor lifecycle during S4. Peer-watch this hour = 6B coverage + integrator applying DEF-001/DEF-002. Mail 41466 challenged the conductor. Classifier refuse on single-capture is correct and is not a bead."
