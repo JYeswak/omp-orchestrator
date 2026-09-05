@@ -11,7 +11,7 @@ An exclusion *list* dies the way `DESIGN_INDEX.md` died: within an hour of being
 1. **Prefix.** This tracker's ids are `omp-orchestrator-*`. A `cp-*` id belongs to the control-plane tracker. Resolving it with this repo's `br` yields `ISSUE_NOT_FOUND` by prefix. That is not broken evidence and must not increment a dangling-citation count.
 2. **Specimen prose.** An identifier that appears inside a `known-BAD` / `planted` / `supersedes` pointing at a nonexistent row / `fixture` sentence is a poison-pill for a gate's refusal leg, not a live register member. `HD-9[0-9]{3}` in that context is the sentinel shape. Keep the sentence; drop the id from any live-ID census.
 3. **Refuse-literals.** `success:[N]`, `success:[4]`, `successful:[4]` are transport payloads a gate must refuse. They are not bead ids.
-4. **Assembly is not a second population.** `docs/PLAN.md` is assembled from `docs/plan/*.md`. Counting both inflates every occurrence 2×.
+4. **Assembly is not a second population.** `docs/PLAN.md` is assembled from `docs/plan/*.md`, so an id counted in both is counted twice. Measured by the grader 2026-09-05: `PLAN.md` is 8,209 lines against 10,019 for `cat docs/plan/*.md`, so the two corpora **overlap and are not identical** — the inflation is real but is *not* a uniform 2×, and a census must pick one corpus rather than scale a combined count. `HD-9999` is a confirmed duplicate pair (`12-journey.md:471` and `PLAN.md:7577`).
 
 **Dies when:** (a) this repo's bead prefix is no longer `omp-orchestrator-`, (b) a `cp-*` bead is actually filed *here*, (c) `HD-9xxx` is used as a real `docs/decisions.jsonl` row. Until then the rule does not need a new list.
 
@@ -25,7 +25,7 @@ The 12→11 error: a `grep` over `docs/PLAN.md` reported 12 constitutional ids (
 
 | identifier / literal | class | why exclude | source `file:line` (do not also count `PLAN.md`) |
 |---|---|---|---|
-| `HD-9999` | specimen | F4 decision-ledger known-BAD: empty `decision` + `supersedes` to a nonexistent row. Gate: projected S9 ledger gate. Not in `docs/decisions.jsonl` (live rows are `HD-0001`..`HD-0008`). | `docs/plan/12-journey.md:471` |
+| `HD-9999` | specimen | F4 decision-ledger known-BAD: empty `decision` + `supersedes` to a nonexistent row. Gate: projected S9 ledger gate. Not in `docs/decisions.jsonl` (live rows are `HD-0001`..`HD-0018`, 18 rows, measured by the grader 2026-09-05 — this file's original `..HD-0008` was already stale by 10 rows when written, which is the rot the rule above predicts; the **rule** survived it because `HD-0009`..`HD-0018` are not the `HD-9[0-9]{3}` sentinel shape). | `docs/plan/12-journey.md:471` |
 | `success:[4]` / `successful:[4]` / `success:[N]` | refuse-literal | Payload a receipt gate must refuse (send reports success, packet never lands). Not a bead id. Often adjacent to `cp-z42vu` — the *id* is Class 2; the *payload* is Class 1. | `05-actions.md:193-194`; `09-milestones.md:103,320`; `12-journey.md:326,339` |
 
 Unnamed fixture *shapes* (no identifier to grep; listed so a later census does not mint one):
