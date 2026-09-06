@@ -144,6 +144,16 @@ S1      meas=6  gap=10  contracts=1  diagram=2  beadrefs=273  MATURITY=4
 S2..S9  meas=5-8 gap=9-19 contracts=0 diagram=1 beadrefs=0-3  MATURITY=2
 ```
 
+R1_POPULATION_BOXES=S1,S2,S3,S4,S5a,S5b,S6a,S6b,S6c,S7,S8,S9
+
+The R1 denominator is that named set (HD-0014's twelve stage boxes), not
+"whatever is on disk" and not the 13 numbered `docs/plan/[0-9][0-9]-*.md`
+files. `r1-breadth-gate` refuses a box on disk omitted from this pin, and
+refuses if this row is deleted. Numbered sections are scored in the same
+run; they do not enter the max/median/delta.
+
+
+
 **No `CRITICAL_PATH_EXCEPTION` is recorded.** One was recommended; the ruling makes it unnecessary,
 because the order it would have excepted is itself superseded. The gate now in force: *no further S1
 depth until all twelve section records carry purpose, inputs, outputs, dependencies, consumers,

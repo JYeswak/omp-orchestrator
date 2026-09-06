@@ -17,6 +17,8 @@ pre-delete-citation-check = { path = "../pre-delete-citation-check" }
 undrained-pipe-lint = { path = "../undrained-pipe-lint" }
 subprocess-contract = { path = "../subprocess-contract" }
 staged-build-gate = { path = "../staged-build-gate" }
+r1-breadth-gate = { path = "../r1-breadth-gate" }
+
 
 [lints.rust]
 unsafe_code = "forbid"

@@ -1,0 +1,18 @@
+[package]
+license.workspace = true
+name = "r1-breadth-gate"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "R1 breadth-before-depth: pinned population, max-median <= 1"
+
+[lib]
+name = "r1_breadth_gate"
+path = "src/lib.rs"
+
+[[bin]]
+name = "r1-breadth-gate"
+path = "src/main.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
