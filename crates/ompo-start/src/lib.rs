@@ -9,6 +9,6 @@
 pub mod steps;
 
 pub use steps::{
-    apply_predicates, fixture_steps, json_ordered_ids, ordered_ids, tui_ordered_ids, view, Predicate,
-    Step, StepStatus,
+    apply_predicates, fixture_steps, json_next_command, json_ordered_ids, next_command, next_step,
+    ordered_ids, tui_next_command, tui_ordered_ids, view, Predicate, Step, StepStatus,
 };

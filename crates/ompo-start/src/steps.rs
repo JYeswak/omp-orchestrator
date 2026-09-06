@@ -73,6 +73,28 @@ pub fn json_ordered_ids(steps: &[Step]) -> Vec<&'static str> {
     ordered_ids(view(steps))
 }
 
+fn elapsed(status: StepStatus) -> bool {
+    matches!(status, StepStatus::Passed | StepStatus::Skipped)
+}
+
+/// First non-Passed, non-Skipped step in array order.
+/// Ready-first sorting keeps set equality and disagrees here (LAW-L3-ORDERED-IDS trap).
+pub fn next_step(steps: &[Step]) -> Option<&Step> {
+    view(steps).iter().find(|step| !elapsed(step.status))
+}
+
+pub fn next_command(steps: &[Step]) -> Option<&'static str> {
+    next_step(steps).and_then(|step| step.next_command)
+}
+
+pub fn tui_next_command(steps: &[Step]) -> Option<&'static str> {
+    next_command(view(steps))
+}
+
+pub fn json_next_command(steps: &[Step]) -> Option<&'static str> {
+    next_command(view(steps))
+}
+
 /// Contract fixture: skipped spawn stays in the array (s1_l3_walkthrough.md Validation).
 pub fn fixture_steps() -> Vec<Step> {
     vec![
