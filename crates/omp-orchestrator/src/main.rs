@@ -1083,25 +1083,21 @@ fn persist_spine(
         .map_err(|error| format!("SPINE_LEDGER_WRITE {error}"))
 }
 
-/// How many times this bead has already been dispatched, from the heartbeat's own
-/// `DISPATCHED` rows.
+/// How many times this bead has already been dispatched.
 ///
-/// Measured 2026-09-02: 209 `DISPATCHED` rows across 27 distinct beads and 59
-/// (bead, pane) pairs. So `Redispatched` — a kind that existed in the enum and in
-/// zero rows — has real input the moment it is asked for.
+/// Heartbeat `DISPATCHED` rows plus spine `packet_sent`/`redispatched` rows.
+/// Heartbeat-only counting left `Redispatched` unreachable for beads the
+/// supervisor had already sent on the spine path (`eg0m`: spine packet_sent,
+/// zero heartbeat DISPATCHED lines).
 fn prior_dispatch_count(config: &Config, bead: &str) -> usize {
-    let Ok(text) = fs::read_to_string(&config.heartbeat_ledger) else {
-        return 0;
-    };
-    let needle = format!("bead={bead} ");
-    text.lines()
-        .filter(|line| line.contains("\"DISPATCHED\""))
-        // The trailing space matters: without it `bead=omp-orchestrator-2z2`
-        // matches `bead=omp-orchestrator-2z2.1`, and a prefix collision would
-        // inflate the count for every dotted child bead.
-        .filter(|line| line.contains(&needle) || line.contains(&format!("bead={bead}\"")))
-        .count()
+    let heartbeat = fs::read_to_string(&config.heartbeat_ledger).unwrap_or_default();
+    let spine = fs::read_to_string(omp_orchestrator::spine_emit::spine_ledger_path(
+        &config.heartbeat_ledger,
+    ))
+    .unwrap_or_default();
+    omp_orchestrator::spine_emit::prior_send_count(&heartbeat, &spine, bead)
 }
+
 
 /// THE CLOSE HALF. Emit `Closed` and `GradeReceived` for beads this supervisor
 /// dispatched that have since finished.
@@ -4512,7 +4508,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                 emit_step(cx, &mut spine, StepKind::PacketRendered, bead, &pane, config, &format!("receiver={receiver_agent}")).await?;
                 let prior = prior_dispatch_count(config, bead);
                 let send = omp_orchestrator::spine_emit::send_kind(prior);
-                let stage = send_and_verify(
+                let stage_result = send_and_verify(
                     cx,
                     config,
                     &pane,
@@ -4523,8 +4519,20 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                     &before,
                     tick,
                 )
-                .await?;
-                emit_step(cx, &mut spine, send, bead, &pane, config, &format!("prior_dispatches={prior} verdict={}", stage.delivery.label())).await?;
+                .await;
+                let send_detail = match &stage_result {
+                    Ok(stage) => format!(
+                        "prior_dispatches={prior} verdict={}",
+                        stage.delivery.label()
+                    ),
+                    Err(error) => format!(
+                        "prior_dispatches={prior} send_failed={}",
+                        one_line_detail(error)
+                    ),
+                };
+                emit_step(cx, &mut spine, send, bead, &pane, config, &send_detail).await?;
+                let stage = stage_result?;
+
                 let silence =
                     run_silence_watch(cx, config, bead, dispatch_epoch, &receiver_agent).await?;
                 write_heartbeat(

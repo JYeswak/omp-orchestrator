@@ -118,6 +118,35 @@ pub fn send_kind(prior_dispatch_count: usize) -> StepKind {
     }
 }
 
+/// How many prior sends this bead already has, from heartbeat `DISPATCHED` rows
+/// plus spine `packet_sent`/`redispatched` rows.
+///
+/// Heartbeat-only counting made `Redispatched` unreachable for beads the
+/// supervisor had already sent on the spine path: measured, `eg0m` has spine
+/// `packet_sent` and zero heartbeat `DISPATCHED` lines, so every later cycle
+/// still asked `send_kind(0)`.
+pub fn prior_send_count(heartbeat_jsonl: &str, spine_jsonl: &str, bead: &str) -> usize {
+    let needle = format!("bead={bead} ");
+    let needle_q = format!("bead={bead}\"");
+    let from_heartbeat = heartbeat_jsonl
+        .lines()
+        .filter(|line| line.contains("\"DISPATCHED\""))
+        .filter(|line| line.contains(&needle) || line.contains(&needle_q))
+        .count();
+    let from_spine = spine_jsonl.lines().filter(|line| {
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(line.trim()) else {
+            return false;
+        };
+        let kind = value.get("kind").and_then(|k| k.as_str()).unwrap_or("");
+        if kind != StepKind::PacketSent.as_str() && kind != StepKind::Redispatched.as_str() {
+            return false;
+        }
+        value.get("bead").and_then(|b| b.as_str()) == Some(bead)
+    }).count();
+    from_heartbeat + from_spine
+}
+
+
 /// Where the supervisor's spine ledger lives, derived from the heartbeat path.
 ///
 /// Derived rather than configured for the reason `8nuh` records: a fact about the
@@ -284,6 +313,21 @@ mod tests {
         assert_eq!(StepKind::Redispatched.as_str(), "redispatched");
         assert_ne!(StepKind::Redispatched.as_str(), StepKind::PacketSent.as_str());
     }
+
+    /// Spine `packet_sent` is a prior send even when heartbeat has no DISPATCHED
+    /// row — the measured eg0m hole.
+    #[test]
+    fn a_spine_packet_sent_makes_the_next_kind_redispatched() {
+        let spine = r#"{"kind":"packet_sent","bead":"omp-orchestrator-eg0m","pane":"%8","session":"s","ts":1,"detail":"prior_dispatches=0"}"#;
+        let n = prior_send_count("", spine, "omp-orchestrator-eg0m");
+        assert_eq!(n, 1);
+        assert_eq!(send_kind(n), StepKind::Redispatched);
+        assert_eq!(prior_send_count("", spine, "omp-orchestrator-eg0m.1"), 0);
+        let hb = r#"{"status":"DISPATCHED","detail":"bead=omp-orchestrator-eg0m pane=%8"}"#;
+        assert_eq!(prior_send_count(hb, "", "omp-orchestrator-eg0m"), 1);
+        assert_eq!(prior_send_count(hb, spine, "omp-orchestrator-eg0m"), 2);
+    }
+
 
     /// The persisted-ledger reader, both directions.
     #[test]
