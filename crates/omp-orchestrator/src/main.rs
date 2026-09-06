@@ -2332,6 +2332,18 @@ fn supervisor_claim_owner(session: &str) -> String {
     format!("supervisor:{session}")
 }
 
+/// q8zl: the transport boundary re-reads tracker status. A prefetched ready-queue
+/// snapshot is not authority to send. Terminal statuses are named in the refusal.
+fn refuse_terminal_status_at_send(bead: &str, status: &str) -> Result<(), String> {
+    match status {
+        "open" | "in_progress" => Ok(()),
+        terminal => Err(format!(
+            "DISPATCH_BLOCKED bead={bead} reason=STALE_QUEUE_SNAPSHOT status={terminal} \
+             next_action=skip-closed-bead"
+        )),
+    }
+}
+
 async fn send_and_verify(
     cx: &Cx,
     config: &Config,
@@ -2343,6 +2355,8 @@ async fn send_and_verify(
     before: &[u8],
     tick: u64,
 ) -> Result<DispatchVerdict, String> {
+    let at_send = load_bead_snapshot(cx, config, bead).await?;
+    refuse_terminal_status_at_send(bead, at_send.status_label())?;
     let packet = dispatch_packet::render_with_pane(
         snapshot,
         &config.repo,
@@ -6305,6 +6319,73 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
             "C112: pid form dies at process exit: {a}"
         );
     }
+
+    #[test]
+    fn closed_bead_is_refused_when_send_is_five_seconds_after_close() {
+        // MEASURED 2026-09-06: close 16:43:39.130, DISPATCHED 16:43:44. Five
+        // seconds later is this defect; a send inside the close window is not.
+        let close_ts: u64 = 1_746_663_819;
+        let send_ts: u64 = close_ts + 5;
+        assert!(
+            send_ts > close_ts,
+            "q8zl only: send timestamp must be later than close"
+        );
+        let err = refuse_terminal_status_at_send(
+            "omp-orchestrator-plan-12-ibpa.11",
+            "closed",
+        )
+        .expect_err("closed at send must refuse, not transmit");
+        assert!(err.contains("STALE_QUEUE_SNAPSHOT"), "{err}");
+        assert!(err.contains("status=closed"), "{err}");
+        assert!(err.contains("omp-orchestrator-plan-12-ibpa.11"), "{err}");
+    }
+
+    #[test]
+    fn blocked_bead_is_refused_when_send_is_three_seconds_after_park() {
+        // CASE 2 2026-09-06: parked y6yg 16:58:10.663 -> DISPATCHED 16:58:13 (+3s).
+        let park_ts: u64 = 1_746_664_690;
+        let send_ts: u64 = park_ts + 3;
+        assert!(
+            send_ts > park_ts,
+            "q8zl only: send timestamp must be later than the terminal transition"
+        );
+        let err = refuse_terminal_status_at_send("omp-orchestrator-y6yg", "blocked")
+            .expect_err("blocked at send must refuse, not transmit");
+        assert!(err.contains("STALE_QUEUE_SNAPSHOT"), "{err}");
+        assert!(err.contains("status=blocked"), "{err}");
+    }
+
+
+    #[test]
+    fn open_acceptance_bearing_bead_is_not_refused_at_send() {
+        refuse_terminal_status_at_send("omp-orchestrator-live-work", "open")
+            .expect("open must still dispatch");
+        refuse_terminal_status_at_send("omp-orchestrator-live-work", "in_progress")
+            .expect("in_progress must still dispatch");
+    }
+
+    #[test]
+    fn send_and_verify_rechecks_status_before_transport() {
+        let source = include_str!("main.rs");
+        let start = source
+            .find("async fn send_and_verify")
+            .expect("send_and_verify must exist");
+        let body = &source[start..];
+        let recheck = body
+            .find("refuse_terminal_status_at_send")
+            .expect("transport boundary must re-read status");
+        let load = body
+            .find("load_bead_snapshot")
+            .expect("re-check must be a fresh br show, not the prefetched snapshot");
+        let transport = body
+            .find("tick_monitor::SEND_KEYS")
+            .expect("send path must exist so this test is not vacuous");
+        assert!(
+            load < recheck && recheck < transport,
+            "fresh show then refuse must precede tmux/ntm send (load={load} refuse={recheck} send={transport})"
+        );
+    }
+
 
 
     #[test]
