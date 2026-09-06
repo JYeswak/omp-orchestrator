@@ -7,8 +7,8 @@
 //! idle only with a bound Josh authorization token.
 
 use ack_stage::{
-    assess as assess_ack_stage, AckAction, AckReadback, AckStageInput, AckStageResult,
-    TransportReceipt,
+    assess as assess_ack_stage, AckAction, AckReadback, AckReadbackVerdict, AckStageInput,
+    AckStageResult, TransportReceipt,
 };
 use ack_stage::cell_matrix::{self, DispatchCellMatrix};
 
@@ -1888,7 +1888,8 @@ async fn claim_bead_for_supervisor(
     // refused `ASSIGNED_ELSEWHERE assignee=GreenFrog claim_owner=supervisor:90627`
     // -- rejecting the transition it had just performed correctly.
     let detail = format!(
-        "bead={bead} pane={pane} assignee={expected_assignee} receiver_agent={receiver_agent}"
+        "bead={bead} pane={pane} assignee={expected_assignee} receiver_agent={receiver_agent} claim_owner={}",
+        supervisor_claim_owner(&config.session)
     );
     write_heartbeat(config, tick, "DISPATCH_CLAIMED", &detail).map_err(|error| {
         format!(
@@ -2304,6 +2305,33 @@ fn admit_immediately_before_send(session: &str, pane: &str) -> Result<PaneIncarn
     Ok(incarnation)
 }
 
+/// K1: send_and_verify is three-valued. Delivered / Indeterminate / AckPending
+/// are not Err, and DISPATCH_FAILED is only Failed (refused send / tmux timeout).
+#[derive(Debug)]
+enum DispatchVerdict {
+    Delivered(AckStageResult),
+    Indeterminate { reason: String, transport: String },
+    AckPending { after_secs: u64, discriminator: String },
+    Failed(String),
+}
+
+impl DispatchVerdict {
+    fn status_word(&self) -> &'static str {
+        match self {
+            Self::Delivered(_) => "DISPATCHED",
+            Self::Indeterminate { .. } => "DISPATCH_INDETERMINATE",
+            Self::AckPending { .. } => "ACK_PENDING",
+            Self::Failed(_) => "DISPATCH_FAILED",
+        }
+    }
+}
+
+/// C112: claim owner must outlive the tick. A pid dies at process exit while
+/// the tracker row remains; session/label does not.
+fn supervisor_claim_owner(session: &str) -> String {
+    format!("supervisor:{session}")
+}
+
 async fn send_and_verify(
     cx: &Cx,
     config: &Config,
@@ -2314,7 +2342,7 @@ async fn send_and_verify(
     snapshot: &BeadSnapshot,
     before: &[u8],
     tick: u64,
-) -> Result<AckStageResult, String> {
+) -> Result<DispatchVerdict, String> {
     let packet = dispatch_packet::render_with_pane(
         snapshot,
         &config.repo,
@@ -2495,7 +2523,7 @@ async fn send_and_verify(
                 .map_err(|error| {
                     format!("LIFECYCLE_LEDGER_REFUSED bead={bead} pane={pane} error={error}")
                 })?;
-            return Ok(stage);
+            return Ok(DispatchVerdict::Delivered(stage));
         }
 
         let recovery = match (&stage.delivery, &post_send, pane_capture.as_deref()) {
@@ -2594,20 +2622,12 @@ async fn send_and_verify(
                 .reason()
                 .map(ToString::to_string)
                 .unwrap_or_else(|| "unclassified".to_owned());
-            return Err(format!(
-                "ACK_STAGE_INDETERMINATE pane={pane} bead={bead} action={} verdict={} reason={} transport={}",
-                stage.action.label(),
-                stage.delivery.label(),
+            return Ok(DispatchVerdict::Indeterminate {
                 reason,
-                transport.kind().label(),
-            ));
+                transport: transport.kind().label().to_owned(),
+            });
         }
         if retry_exhausted || Instant::now() >= deadline {
-            let reason = stage
-                .delivery
-                .reason()
-                .map(ToString::to_string)
-                .unwrap_or_else(|| "unclassified".to_owned());
             // iis6: THE WINDOW DECIDES WHEN WE RE-CHECK, NOT WHETHER A HUMAN IS
             // CALLED. Before this, every expired wait returned
             // `ack_readback_missing` — the same verdict for a pane mid-tool-call and
@@ -2700,12 +2720,10 @@ async fn send_and_verify(
                 .map_err(|error| {
                     format!("LIFECYCLE_LEDGER_REFUSED bead={bead} pane={pane} error={error}")
                 })?;
-            return Err(format!(
-                "ACK_STAGE_RETRY_BLOCKED pane={pane} bead={bead} action={action} verdict={} reason={} after={}s{discriminator}",
-                stage.delivery.label(),
-                reason,
-                RECEIPT_TIMEOUT.as_secs(),
-            ));
+            return Ok(DispatchVerdict::AckPending {
+                after_secs: RECEIPT_TIMEOUT.as_secs(),
+                discriminator,
+            });
         }
         sleep(cx.now_for_observability(), RECEIPT_POLL).await;
     }
@@ -3142,7 +3160,76 @@ enum MarkerFence {
 
 /// Machine clearing transition. `Expired` is retired here, named, and the cycle
 /// CONTINUES. `Live` withholds only that pane. `Undatable` still owes a human.
+fn issued_at_from_marker_detail(detail: &str) -> Option<u64> {
+    serde_json::from_str::<Value>(detail.trim())
+        .ok()?
+        .get("issued_at")
+        .and_then(Value::as_u64)
+}
+
+fn late_ack_clears_marker(readback: &AckReadback) -> bool {
+    matches!(
+        readback.match_verdict_for(&readback.bead_id, &readback.pane_id),
+        AckReadbackVerdict::Matched { .. }
+    )
+}
+
+fn last_dispatch_claimed_ts(heartbeat: &str, bead: &str) -> Option<u64> {
+    let mut latest = None;
+    for line in heartbeat.lines() {
+        let Ok(row) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        if row.get("status").and_then(Value::as_str) != Some("DISPATCH_CLAIMED") {
+            continue;
+        }
+        let detail = row.get("detail").and_then(Value::as_str).unwrap_or("");
+        if field_after(detail, "bead=").as_deref() != Some(bead) {
+            continue;
+        }
+        let Some(ts) = row.get("ts_unix").and_then(Value::as_u64) else {
+            continue;
+        };
+        latest = Some(latest.map_or(ts, |prev: u64| prev.max(ts)));
+    }
+    latest
+}
+
+fn redispatch_cooldown_age(heartbeat: &str, bead: &str, now: u64) -> Option<u64> {
+    let ts = last_dispatch_claimed_ts(heartbeat, bead)?;
+    let age = now.saturating_sub(ts);
+    (age < PENDING_DISPATCH_MAX_AGE_SECS).then_some(age)
+}
+
+fn select_ready_skipping_cooldown<'a>(
+    ready: &'a [String],
+    heartbeat: &str,
+    now: u64,
+) -> (Option<&'a str>, Vec<(String, u64)>) {
+    let mut skipped = Vec::new();
+    let selected = ready.iter().map(String::as_str).find(|id| {
+        if let Some(age) = redispatch_cooldown_age(heartbeat, id, now) {
+            skipped.push(((*id).to_owned(), age));
+            false
+        } else {
+            true
+        }
+    });
+    (selected, skipped)
+}
+
 fn process_pending_markers(config: &Config, tick: u64) -> Result<MarkerFence, String> {
+    process_pending_markers_with(config, tick, |_, _, _| None)
+}
+
+fn process_pending_markers_with<F>(
+    config: &Config,
+    tick: u64,
+    ack: F,
+) -> Result<MarkerFence, String>
+where
+    F: Fn(&str, &str, u64) -> Option<AckReadback>,
+{
     let rows = read_pending_dispatches(config)?;
     if rows.is_empty() {
         return Ok(MarkerFence::Proceed(MarkerCycleOutcome {
@@ -3166,6 +3253,22 @@ fn process_pending_markers(config: &Config, tick: u64) -> Result<MarkerFence, St
                 cleared.push((pane, bead, "ACKNOWLEDGED"));
             }
             PendingDispatch::Live { detail, age_secs } => {
+                let bead = bead_from_marker_detail(&detail);
+                if let Some(issued_at) = issued_at_from_marker_detail(&detail) {
+                    if let Some(readback) = ack(&bead, &pane, issued_at) {
+                        let bound = readback.with_dispatch_issued_at(issued_at);
+                        if late_ack_clears_marker(&bound) {
+                            clear_dispatch_marker(&marker_path, &pane)?;
+                            let late = format!(
+                                "pane={pane} bead={bead} age_secs={age_secs} owner=loop next_action=continue"
+                            );
+                            write_heartbeat(config, tick, "ACK_RECEIVED_LATE", &late)?;
+                            println!("ACK_RECEIVED_LATE tick={tick} session={} {late}", config.session);
+                            cleared.push((pane, bead, "ACK_RECEIVED_LATE"));
+                            continue;
+                        }
+                    }
+                }
                 write_heartbeat(config, tick, "DISPATCH_RETRY_BLOCKED", &detail)?;
                 let remaining = PENDING_DISPATCH_MAX_AGE_SECS.saturating_sub(age_secs);
                 println!(
@@ -3183,6 +3286,21 @@ fn process_pending_markers(config: &Config, tick: u64) -> Result<MarkerFence, St
             }
             PendingDispatch::Expired { detail, age_secs } => {
                 let bead = bead_from_marker_detail(&detail);
+                if let Some(issued_at) = issued_at_from_marker_detail(&detail) {
+                    if let Some(readback) = ack(&bead, &pane, issued_at) {
+                        let bound = readback.with_dispatch_issued_at(issued_at);
+                        if late_ack_clears_marker(&bound) {
+                            clear_dispatch_marker(&marker_path, &pane)?;
+                            let late = format!(
+                                "pane={pane} bead={bead} age_secs={age_secs} owner=loop next_action=continue"
+                            );
+                            write_heartbeat(config, tick, "ACK_RECEIVED_LATE", &late)?;
+                            println!("ACK_RECEIVED_LATE tick={tick} session={} {late}", config.session);
+                            cleared.push((pane, bead, "ACK_RECEIVED_LATE"));
+                            continue;
+                        }
+                    }
+                }
                 clear_dispatch_marker(&marker_path, &pane)?;
                 let expiry = format!(
                     "age_secs={age_secs} max_age_secs={PENDING_DISPATCH_MAX_AGE_SECS} pane={pane} bead={bead} marker={} reason=DISPATCH_INTENT_EXPIRED owner=loop next_action=continue detail={detail}",
@@ -4604,10 +4722,6 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         readable: true,
     };
     // DISK PRESSURE. Checked after observation and queue read, before any dispatch
-    // step can write. A full build volume fails as a LINKER error that reads like a
-    // code defect, but this gate must not suppress read-only pane observation.
-    //
-    // Measured 2026-09-01: /Volumes/BuildShared reached 99% and every gate stopped
     // with No space left on device (os error 28). The protection and 8% free / 1 GiB
     // threshold remain unchanged; only placement is different.
     //
@@ -4705,9 +4819,23 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             return Ok(());
         }
         SupervisorDecision::Dispatch { pane, .. } => {
-            let bead = bead_ids.first().ok_or_else(|| {
-                "QUEUE_UNREADABLE ready count changed before bead selection".to_owned()
-            })?;
+            let heartbeat = fs::read_to_string(&config.heartbeat_ledger).unwrap_or_default();
+            let (selected, skipped) =
+                select_ready_skipping_cooldown(&bead_ids, &heartbeat, now_unix());
+            for (id, age) in &skipped {
+                let detail = format!("bead={id} age_secs={age} next_action=grade-or-human");
+                write_heartbeat(config, tick, "REDISPATCH_COOLDOWN", &detail)?;
+                println!("REDISPATCH_COOLDOWN {detail}");
+            }
+            let bead = match selected {
+                Some(id) => id,
+                None if skipped.is_empty() => {
+                    return Err(
+                        "QUEUE_UNREADABLE ready count changed before bead selection".to_owned(),
+                    );
+                }
+                None => return Ok(()),
+            };
             // eg0m: THE SUPERVISOR NOW EMITS THROUGH ack-spine.
             //
             // Five of eleven StepKinds appeared in ZERO of 6,305 heartbeat rows, and
@@ -4754,9 +4882,13 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                 )
                 .await;
                 let send_detail = match &stage_result {
-                    Ok(stage) => format!(
+                    Ok(DispatchVerdict::Delivered(stage)) => format!(
                         "prior_dispatches={prior} verdict={}",
                         stage.delivery.label()
+                    ),
+                    Ok(verdict) => format!(
+                        "prior_dispatches={prior} status={}",
+                        verdict.status_word()
                     ),
                     Err(error) => format!(
                         "prior_dispatches={prior} send_failed={}",
@@ -4765,6 +4897,12 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                 };
                 emit_step(cx, &mut spine, send, bead, &pane, config, &send_detail).await?;
                 {
+                    let delivered = stage_result.as_ref().ok().and_then(|verdict| match verdict {
+                        DispatchVerdict::Delivered(stage) => Some(stage),
+                        DispatchVerdict::Indeterminate { .. }
+                        | DispatchVerdict::AckPending { .. }
+                        | DispatchVerdict::Failed(_) => None,
+                    });
                     let facts = cell_matrix::facts_from_stage(
                         format!("{tick}-{pane}-{bead}"),
                         bead.to_owned(),
@@ -4774,7 +4912,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                         true,
                         false,
                         true,
-                        stage_result.as_ref().ok(),
+                        delivered,
                         None,
                     );
                     match DispatchCellMatrix::from_facts(facts) {
@@ -4794,8 +4932,12 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                     }
                 }
 
-                let stage = stage_result?;
-
+                let verdict = match stage_result {
+                    Ok(verdict) => verdict,
+                    Err(error) => DispatchVerdict::Failed(error),
+                };
+                match verdict {
+                    DispatchVerdict::Delivered(stage) => {
                 let silence =
                     run_silence_watch(cx, config, bead, dispatch_epoch, &receiver_agent).await?;
                 write_heartbeat(
@@ -4855,6 +4997,26 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                             clear_intent: clears_pending_dispatch_intent(other),
                         })
                     }
+                }
+                    }
+                    DispatchVerdict::Indeterminate { reason, transport } => {
+                        Ok(DispatchOutcome {
+                            detail: format!(
+                                "status=DISPATCH_INDETERMINATE reason={reason} transport={transport}"
+                            ),
+                            clear_intent: false,
+                        })
+                    }
+                    DispatchVerdict::AckPending {
+                        after_secs,
+                        discriminator,
+                    } => Ok(DispatchOutcome {
+                        detail: format!(
+                            "status=ACK_PENDING after={after_secs}s{discriminator}"
+                        ),
+                        clear_intent: false,
+                    }),
+                    DispatchVerdict::Failed(error) => Err(error),
                 }
             }
             .await;
@@ -6018,6 +6180,132 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
             "a second dispatch to the same pane must still refuse"
         );
     }
+
+    fn planted_ack(bead: &str, pane: &str, created_at: u64) -> AckReadback {
+        let token = bead.rsplit('-').next().unwrap();
+        let json = serde_json::json!([{
+            "text": format!("ACK {token} on {pane} -- starting..."),
+            "created_at": created_at,
+        }]);
+        AckReadback::from_comments_json(bead, pane, json.to_string().as_bytes())
+            .expect("planted ACK comments JSON")
+    }
+
+    #[test]
+    fn dispatch_verdict_indeterminate_is_not_dispatch_failed() {
+        let v = DispatchVerdict::Indeterminate {
+            reason: "unproven_transport".to_owned(),
+            transport: "codex_tmux".to_owned(),
+        };
+        assert_eq!(v.status_word(), "DISPATCH_INDETERMINATE");
+        assert_ne!(v.status_word(), "DISPATCH_FAILED");
+        let pending = DispatchVerdict::AckPending {
+            after_secs: 90,
+            discriminator: " discriminator=ACK_PENDING_WORKER_BUSY discriminator_reason=NONE owes_human=false".to_owned(),
+        };
+        assert_eq!(pending.status_word(), "ACK_PENDING");
+        assert_eq!(DispatchVerdict::Failed("TIMEOUT program=tmux".into()).status_word(), "DISPATCH_FAILED");
+    }
+
+    #[test]
+    fn late_ack_clears_live_marker_instead_of_blocking() {
+        let temp = tempfile::tempdir().expect("late-ack live");
+        let root = temp.path().to_path_buf();
+        let mut config = fixture_config(root.join("heartbeat.jsonl"));
+        config.pending_dispatch = root.join("pending");
+        let bead = "omp-orchestrator-ack-spine-oj6.3";
+        let pane = "%1414";
+        let issued = now_unix() - 30;
+        let path = plant_intent(&config, pane, bead, issued);
+        let ack = planted_ack(bead, pane, issued + 8);
+        let MarkerFence::Proceed(outcome) = process_pending_markers_with(&config, 1, |b, p, _| {
+            (b == bead && p == pane).then(|| ack.clone())
+        })
+        .unwrap() else {
+            panic!("late ACK on Live must Proceed");
+        };
+        assert!(!path.exists(), "ACK_RECEIVED_LATE must clear the live marker");
+        assert!(outcome.blocked_panes.is_empty(), "{outcome:?}");
+        assert_eq!(outcome.cleared[0].2, "ACK_RECEIVED_LATE");
+        let heartbeat = std::fs::read_to_string(&config.heartbeat_ledger).unwrap();
+        assert!(heartbeat.contains("ACK_RECEIVED_LATE"), "{heartbeat}");
+        assert!(!heartbeat.contains("DISPATCH_INTENT_EXPIRED"), "{heartbeat}");
+    }
+
+    #[test]
+    fn late_ack_clears_expired_marker_instead_of_expiring() {
+        let temp = tempfile::tempdir().expect("late-ack expired");
+        let root = temp.path().to_path_buf();
+        let mut config = fixture_config(root.join("heartbeat.jsonl"));
+        config.pending_dispatch = root.join("pending");
+        let bead = "omp-orchestrator-ack-spine-oj6.3";
+        let pane = "%1414";
+        let issued = now_unix() - PENDING_DISPATCH_MAX_AGE_SECS - 30;
+        let path = plant_intent(&config, pane, bead, issued);
+        let ack = planted_ack(bead, pane, issued + 8);
+        let MarkerFence::Proceed(outcome) = process_pending_markers_with(&config, 1, |b, p, _| {
+            (b == bead && p == pane).then(|| ack.clone())
+        })
+        .unwrap() else {
+            panic!("late ACK on Expired must Proceed");
+        };
+        assert!(!path.exists(), "ACK_RECEIVED_LATE must clear the expired marker");
+        assert_eq!(outcome.cleared[0].2, "ACK_RECEIVED_LATE");
+        let heartbeat = std::fs::read_to_string(&config.heartbeat_ledger).unwrap();
+        assert!(heartbeat.contains("ACK_RECEIVED_LATE"), "{heartbeat}");
+        assert!(!heartbeat.contains("DISPATCH_INTENT_EXPIRED"), "{heartbeat}");
+    }
+
+    #[test]
+    fn expired_marker_without_ack_still_expires() {
+        let temp = tempfile::tempdir().expect("expire-no-ack");
+        let root = temp.path().to_path_buf();
+        let mut config = fixture_config(root.join("heartbeat.jsonl"));
+        config.pending_dispatch = root.join("pending");
+        let bead = "omp-orchestrator-ack-spine-oj6.3";
+        plant_intent(
+            &config,
+            "%1414",
+            bead,
+            now_unix() - PENDING_DISPATCH_MAX_AGE_SECS - 30,
+        );
+        let MarkerFence::Proceed(outcome) = process_pending_markers(&config, 1).unwrap() else {
+            panic!("no ACK must expire");
+        };
+        assert_eq!(outcome.cleared[0].2, "DISPATCH_INTENT_EXPIRED");
+    }
+
+    #[test]
+    fn cooldown_skips_recently_claimed_bead_and_takes_next() {
+        let claimed = "omp-orchestrator-plan-12-ibpa.11";
+        let next = "omp-orchestrator-next-ready";
+        let now = 1_800_000_000;
+        let heartbeat = serde_json::json!({
+            "ts_unix": now - 120,
+            "status": "DISPATCH_CLAIMED",
+            "detail": format!("bead={claimed} pane=%7 assignee=pane=%7;incarnation=1;agent=WildStone"),
+        })
+        .to_string();
+        let ready = vec![claimed.to_owned(), next.to_owned()];
+        let (selected, skipped) = select_ready_skipping_cooldown(&ready, &heartbeat, now);
+        assert_eq!(skipped[0].0, claimed);
+        assert_eq!(selected, Some(next));
+        assert!(redispatch_cooldown_age(&heartbeat, claimed, now).is_some());
+        assert!(redispatch_cooldown_age(&heartbeat, next, now).is_none());
+    }
+
+    #[test]
+    fn supervisor_claim_owner_is_session_not_pid() {
+        let a = supervisor_claim_owner("omp-orchestrator");
+        let b = supervisor_claim_owner("omp-orchestrator");
+        assert_eq!(a, b, "two ticks must produce the same owner");
+        assert_eq!(a, "supervisor:omp-orchestrator");
+        assert!(
+            !a.contains(&std::process::id().to_string()),
+            "C112: pid form dies at process exit: {a}"
+        );
+    }
+
 
     #[test]
     fn acknowledged_dispatch_marker_clears_only_on_next_cycle() {
