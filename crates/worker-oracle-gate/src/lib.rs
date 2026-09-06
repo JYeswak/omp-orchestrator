@@ -11,7 +11,15 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 pub const LEDGER_RELATIVE_PATH: &str = "crates/worker-oracle-gate/src/TEST-ORACLE.jsonl";
-const _LEDGER_SOURCE: &str = include_str!("TEST-ORACLE.jsonl");
+
+/// The machine ledger is kept in Rust so an RCH source transfer cannot silently drop it.
+/// The census reads this one string; there is no second target list.
+const TEST_ORACLE_LEDGER: &str = r#"{"target":"no-shell-gate::findings_ledger","classification":"HOST_BOUND","source":"crates/no-shell-gate/tests/findings_ledger.rs","reason":"reads git history and fixed-pointer commits","surface_marker":"git show"}
+{"target":"omp-orchestrator::gate_wiring_wave3","classification":"HOST_BOUND","source":"crates/omp-orchestrator/tests/gate_wiring_wave3.rs","reason":"census derives reachability from host git and hook state","surface_marker":"census_gates"}
+{"target":"no-shell-gate::cross_section_authority","classification":"HOST_BOUND","source":"crates/no-shell-gate/tests/cross_section_authority.rs","reason":"reads the tracked cross-section authority registry","surface_marker":"CROSS-SECTION-AUTHORITY"}
+{"target":"no-shell-gate::numbers","classification":"HOST_BOUND","source":"crates/no-shell-gate/tests/numbers.rs","reason":"re-runs host paths and environment-backed figures","surface_marker":"NUMBERS.toml"}
+{"target":"omp-types::claim_strength_laws","classification":"TREE_PURE","source":"crates/omp-types/tests/claim_strength_laws.rs","reason":"pure type laws over checked-in Rust values","surface_marker":"claim_strength"}
+"#;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Classification {
@@ -111,7 +119,7 @@ pub fn load_ledger(repo_root: &Path) -> Result<Vec<TargetRecord>, OracleError> {
     let path = repo_root.join(LEDGER_RELATIVE_PATH);
     let text = match fs::read_to_string(&path) {
         Ok(text) => text,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Err(OracleError::MissingLedger(path)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => TEST_ORACLE_LEDGER.to_owned(),
         Err(error) => return Err(io_error(&path, error)),
     };
     let mut rows = Vec::new();
@@ -146,7 +154,7 @@ fn test_source(repo_root: &Path, record: &TargetRecord) -> Result<String, Oracle
 }
 
 fn generic_host_surface(source: &str) -> bool {
-    ["git log", "git remote", "git cat-file", ".git/hooks", "/Volumes/", ".local/state/", "census_gates", "CROSS-SECTION-AUTHORITY", "NUMBERS.toml"]
+    ["git log", "git remote", "git cat-file", "git show", ".git/hooks", "/Volumes/", ".local/state/", "census_gates", "CROSS-SECTION-AUTHORITY", "NUMBERS.toml"]
         .iter()
         .any(|marker| source.contains(marker))
 }
@@ -216,7 +224,7 @@ url = https://example.invalid/repo
         fs::write(root.join(".git/hooks/pre-commit"), "gate").unwrap();
         fs::write(root.join("crates/demo/tests/test.rs"), r#"fn test() { let _ = "git remote"; }
 "#).unwrap();
-        fs::create_dir_all(root.join("docs/plan")).unwrap();
+        fs::create_dir_all(root.join("crates/worker-oracle-gate/src")).unwrap();
         fs::write(root.join(LEDGER_RELATIVE_PATH), r#"{"target":"demo::test","classification":"HOST_BOUND","source":"crates/demo/tests/test.rs","reason":"reads git remote","surface_marker":"git remote"}
 "#).unwrap();
         temp
@@ -244,7 +252,7 @@ url = https://example.invalid/repo
     fn tree_pure_target_does_not_need_host_surfaces() {
         let temp = tempfile::tempdir().unwrap();
         fs::create_dir_all(temp.path().join("crates/demo/tests")).unwrap();
-        fs::create_dir_all(temp.path().join("docs/plan")).unwrap();
+        fs::create_dir_all(temp.path().join("crates/worker-oracle-gate/src")).unwrap();
         fs::write(temp.path().join("crates/demo/tests/test.rs"), r#"fn test() { assert!(true); }
 "#).unwrap();
         fs::write(temp.path().join(LEDGER_RELATIVE_PATH), r#"{"target":"demo::test","classification":"TREE_PURE","source":"crates/demo/tests/test.rs","reason":"pure","surface_marker":"assert"}

@@ -1,5 +1,0 @@
-{"target":"no-shell-gate::findings_ledger","classification":"HOST_BOUND","source":"crates/no-shell-gate/tests/findings_ledger.rs","reason":"reads git history and fixed-pointer commits","surface_marker":"git cat-file"}
-{"target":"omp-orchestrator::gate_wiring_wave3","classification":"HOST_BOUND","source":"crates/omp-orchestrator/tests/gate_wiring_wave3.rs","reason":"census derives reachability from host git and hook state","surface_marker":"census_gates"}
-{"target":"no-shell-gate::cross_section_authority","classification":"HOST_BOUND","source":"crates/no-shell-gate/tests/cross_section_authority.rs","reason":"reads the tracked cross-section authority registry","surface_marker":"CROSS-SECTION-AUTHORITY"}
-{"target":"no-shell-gate::numbers","classification":"HOST_BOUND","source":"crates/no-shell-gate/tests/numbers.rs","reason":"re-runs host paths and environment-backed figures","surface_marker":"NUMBERS.toml"}
-{"target":"omp-types::claim_strength_laws","classification":"TREE_PURE","source":"crates/omp-types/tests/claim_strength_laws.rs","reason":"pure type laws over checked-in Rust values","surface_marker":"claim_strength"}
