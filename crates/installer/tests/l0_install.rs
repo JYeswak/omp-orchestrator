@@ -1,7 +1,8 @@
 use installer::{
     check_build_fence, classify_restart_postcondition, git_head, git_rev_parse_short,
-    install_binary, publish_atomic, resolve_repo_ownership, stage_artifact_stream, verify_identity,
-    verify_minisign_policy, InstallError, RepoOwnership, RestartPostcondition,
+    install_binary, publish_atomic, refuse_path_collisions, resolve_repo_ownership,
+    stage_artifact_stream, verify_identity, verify_minisign_policy, InstallError, RepoOwnership,
+    RestartPostcondition,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -327,4 +328,52 @@ fn atomic_publication_refuses_mutated_staged() {
         other => panic!("expected ATOMIC_REFUSED, got {other:?}"),
     }
     assert!(!dest.exists(), "partial/mutated dest must not appear");
+}
+
+#[test]
+fn path_collision_lists_every_hit() {
+    let a = TempDir::new("path-hit-a");
+    let b = TempDir::new("path-hit-b");
+    fs::write(a.path().join("installer"), b"owner-a").expect("hit a");
+    fs::write(b.path().join("installer"), b"owner-b").expect("hit b");
+    let path_env = format!("{}:{}", a.path().display(), b.path().display());
+    let error = refuse_path_collisions("installer", &path_env, None)
+        .expect_err("two PATH owners must refuse");
+    match error {
+        InstallError::PathCollision { hits } => {
+            assert_eq!(hits.len(), 2, "{hits:?}");
+            assert!(hits.iter().any(|h| h.ends_with("/installer")));
+            let text = InstallError::PathCollision { hits: hits.clone() }.to_string();
+            assert!(text.starts_with("L0_PATH_COLLISION"), "{text}");
+            assert!(text.contains(&hits[0]) && text.contains(&hits[1]), "{text}");
+        }
+        other => panic!("expected PathCollision, got {other:?}"),
+    }
+}
+
+#[test]
+fn path_collision_usr_sbin_first_refuses_without_overwrite() {
+    let usr_sbin = Path::new("/usr/sbin/installer");
+    if !usr_sbin.is_file() {
+        eprintln!("skip: /usr/sbin/installer absent on this host");
+        return;
+    }
+    let owned = TempDir::new("path-owned");
+    let dest = owned.path().join("installer");
+    fs::write(&dest, b"ours").expect("owned dest");
+    let path_env = format!("/usr/sbin:{}", owned.path().display());
+    let before = fs::read(&dest).expect("read before");
+    let error = refuse_path_collisions("installer", &path_env, Some(&dest))
+        .expect_err("/usr/sbin/installer on PATH must refuse");
+    match error {
+        InstallError::PathCollision { hits } => {
+            assert!(
+                hits.iter().any(|h| h == "/usr/sbin/installer"),
+                "{hits:?}"
+            );
+            assert!(!hits.iter().any(|h| Path::new(h) == dest.as_path()));
+        }
+        other => panic!("expected PathCollision, got {other:?}"),
+    }
+    assert_eq!(fs::read(&dest).expect("read after"), before, "no overwrite");
 }

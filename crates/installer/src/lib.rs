@@ -63,6 +63,10 @@ pub enum InstallError {
     MinisignRefused {
         detail: String,
     },
+    /// Existing PATH owners of the install name. Non-interactive refuse.
+    PathCollision {
+        hits: Vec<String>,
+    },
 }
 
 impl fmt::Display for InstallError {
@@ -120,6 +124,9 @@ impl fmt::Display for InstallError {
             Self::MinisignRefused { detail } => {
                 write!(formatter, "L0_MINISIGN_REFUSED: {detail}")
             }
+            Self::PathCollision { hits } => {
+                write!(formatter, "L0_PATH_COLLISION: {}", hits.join(" "))
+            }
         }
     }
 }
@@ -144,6 +151,40 @@ pub fn verify_minisign_policy(
         Err(InstallError::MinisignRefused {
             detail: "invalid minisign signature".to_owned(),
         })
+    }
+}
+
+/// Every PATH directory that already contains `binary_name`.
+pub fn path_collision_hits(binary_name: &str, path_env: &str) -> Vec<PathBuf> {
+    let mut hits = Vec::new();
+    for dir in path_env.split(':') {
+        if dir.is_empty() {
+            continue;
+        }
+        let candidate = Path::new(dir).join(binary_name);
+        if candidate.is_file() {
+            hits.push(candidate);
+        }
+    }
+    hits
+}
+
+/// L0-PATH-COLLISION. Lists every conflicting hit. Does not overwrite.
+/// `owned_dest`, if present, is not a collision (it is the install target).
+pub fn refuse_path_collisions(
+    binary_name: &str,
+    path_env: &str,
+    owned_dest: Option<&Path>,
+) -> Result<(), InstallError> {
+    let hits: Vec<String> = path_collision_hits(binary_name, path_env)
+        .into_iter()
+        .filter(|hit| owned_dest != Some(hit.as_path()))
+        .map(|hit| hit.display().to_string())
+        .collect();
+    if hits.is_empty() {
+        Ok(())
+    } else {
+        Err(InstallError::PathCollision { hits })
     }
 }
 // ── BOUNDED SPAWNS (bead omp-orchestrator-n4q) ────────────────────────────────
