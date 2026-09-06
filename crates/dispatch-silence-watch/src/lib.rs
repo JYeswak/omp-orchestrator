@@ -94,17 +94,10 @@ pub fn has_posted_verdict(comments_output: &str) -> bool {
 
 /// Classify one dispatched bead's post-dispatch state.
 ///
-/// LEGS (bead omp-orchestrator-dispatch-silence-watch):
-/// * A bead whose comments output contains a real `[Author] at date` block is
-///   VERDICT_POSTED — verified by read-back, never by exit code.
-/// * A bead whose assignee changed since dispatch is REASSIGNED, even if
-///   comments exist — the original dispatch is moot.
-/// * A bead with no comment past its deadline is SILENT_PAST_DEADLINE.
-/// * An unreadable tracker (empty output, error markers) is TrackerError —
-///   never VERDICT_POSTED, never SILENT_PAST_DEADLINE.
-///
-/// The precedence order matters: TrackerError > Reassigned > VerdictPosted >
-/// SilentPastDeadline. A tracker error contaminates every other reading.
+/// Tracker unreadability is owned by [`tracker_read_from`] / [`classify_from_read`].
+/// This function classifies a successful `br` stdout payload only.
+/// Empty payload remains TrackerError: even a bead with zero comments produces
+/// a `Comments for ...` header, so empty means the read failed.
 pub fn classify(
     comments_output: &str,
     current_assignee: &str,
@@ -113,40 +106,57 @@ pub fn classify(
     now_epoch: i64,
     deadline_secs: i64,
 ) -> SilenceVerdict {
-    // Unreadable tracker: an ERROR, never VERDICT_POSTED. An empty output is
-    // the strongest signal — even a bead with zero comments produces the
-    // "Comments for cp-xxx:" header.
     if comments_output.trim().is_empty() {
         return SilenceVerdict::TrackerError;
     }
-    if comments_output.contains("Error:") || comments_output.contains("error:") {
-        return SilenceVerdict::TrackerError;
-    }
 
-    // Assignee changed: the original dispatch is moot. This outranks
-    // VerdictPosted because a REASSIGNED bead's comments belong to the
-    // PREVIOUS assignee's work, not to the new assignee's.
     if current_assignee != dispatch_assignee {
         return SilenceVerdict::Reassigned;
     }
 
-    // A real comment was read back from the tracker.
     if has_posted_verdict(comments_output) {
         return SilenceVerdict::VerdictPosted;
     }
 
-    // No comment. If the deadline has passed, the bead is silent.
     if now_epoch - dispatch_epoch >= deadline_secs {
         return SilenceVerdict::SilentPastDeadline;
     }
 
-    // Within deadline, no comment yet: the conductor should not be asking
-    // yet, but the honest answer is still "no verdict posted." We report
-    // SILENT_PAST_DEADLINE only past the deadline; before it, the caller
-    // should not have asked — but if it did, the answer is the same: no
-    // verdict. This is NOT TrackerError (the tracker is readable); it is
-    // simply too early to escalate.
     SilenceVerdict::SilentPastDeadline
+}
+
+/// Restrictive tracker terminals clear the pending-dispatch intent so a
+/// false or genuine TRACKER_ERROR cannot withhold a pane for the full 600s
+/// marker expiry. VerdictPosted already clears; SilentPastDeadline does not
+/// (the packet may still be in flight).
+pub fn clears_pending_dispatch_intent(verdict: SilenceVerdict) -> bool {
+    matches!(
+        verdict,
+        SilenceVerdict::VerdictPosted | SilenceVerdict::TrackerError
+    )
+}
+
+/// Apply [`tracker_read_from`] then [`classify`]. Nonzero `br` exit never
+/// becomes a payload for the substring-sensitive classifier.
+pub fn classify_from_read(
+    read: TrackerRead,
+    current_assignee: &str,
+    dispatch_assignee: &str,
+    dispatch_epoch: i64,
+    now_epoch: i64,
+    deadline_secs: i64,
+) -> SilenceVerdict {
+    match read {
+        TrackerRead::TrackerError(_) => SilenceVerdict::TrackerError,
+        TrackerRead::Read(text) => classify(
+            &text,
+            current_assignee,
+            dispatch_assignee,
+            dispatch_epoch,
+            now_epoch,
+            deadline_secs,
+        ),
+    }
 }
 
 /// Extract the current assignee from the raw stdout of
@@ -256,5 +266,25 @@ mod bounded_read_tests {
             )),
             TrackerRead::TrackerError("br could not be spawned")
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn successful_exit_with_error_colon_in_stdout_is_not_tracker_error() {
+        let payload = "Comments for dp21:\n[WildStone] at 2026-09-06 13:00 UTC\nError: cannot claim blocked issue\n";
+        let read = tracker_read_from(completed(0, payload));
+        let v = classify_from_read(read, "a", "a", 1_000, 10_000, 3_600);
+        assert_ne!(v, SilenceVerdict::TrackerError);
+        assert_eq!(v, SilenceVerdict::VerdictPosted);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn nonzero_exit_classifies_as_tracker_error_even_if_stdout_quotes_error() {
+        let read = tracker_read_from(completed(1, "Error: Issue not found\n"));
+        let v = classify_from_read(read, "a", "a", 1_000, 10_000, 3_600);
+        assert_eq!(v, SilenceVerdict::TrackerError);
+        assert_eq!(v.detector(), "TRACKER_ERROR");
+        assert!(clears_pending_dispatch_intent(v));
     }
 }

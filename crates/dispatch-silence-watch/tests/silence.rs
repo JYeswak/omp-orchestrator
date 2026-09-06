@@ -1,6 +1,9 @@
 #![forbid(unsafe_code)]
 
-use dispatch_silence_watch::{classify, has_posted_verdict, SilenceVerdict};
+use dispatch_silence_watch::{
+    classify, classify_from_read, clears_pending_dispatch_intent, has_posted_verdict,
+    SilenceVerdict, TrackerRead,
+};
 
 const NOW: i64 = 1_000_000;
 const DISPATCH: i64 = NOW - 7200; // 2 hours ago
@@ -24,33 +27,100 @@ fn usage_error_on_stderr() -> String {
 
 #[test]
 fn posted_comment_is_verdict_posted() {
-    let v = classify(&with_comment(), "AmberGate", "AmberGate", DISPATCH, NOW, DEADLINE);
+    let v = classify(
+        &with_comment(),
+        "AmberGate",
+        "AmberGate",
+        DISPATCH,
+        NOW,
+        DEADLINE,
+    );
     assert_eq!(v, SilenceVerdict::VerdictPosted);
 }
 
 #[test]
 fn empty_comments_past_deadline_is_silent() {
-    let v = classify(&without_comment(), "AmberGate", "AmberGate", DISPATCH, NOW, DEADLINE);
+    let v = classify(
+        &without_comment(),
+        "AmberGate",
+        "AmberGate",
+        DISPATCH,
+        NOW,
+        DEADLINE,
+    );
     assert_eq!(v, SilenceVerdict::SilentPastDeadline);
 }
 
 #[test]
 fn assignee_change_is_reassigned_even_with_comments() {
-    let v = classify(&with_comment(), "SilverWolf", "AmberGate", DISPATCH, NOW, DEADLINE);
+    let v = classify(
+        &with_comment(),
+        "SilverWolf",
+        "AmberGate",
+        DISPATCH,
+        NOW,
+        DEADLINE,
+    );
     assert_eq!(v, SilenceVerdict::Reassigned);
 }
 
 #[test]
-fn unreadable_tracker_is_never_verdict_posted() {
-    let v = classify(&usage_error_on_stderr(), "AmberGate", "AmberGate", DISPATCH, NOW, DEADLINE);
+fn genuine_br_failure_read_is_tracker_error() {
+    let v = classify_from_read(
+        TrackerRead::TrackerError("br exited nonzero"),
+        "AmberGate",
+        "AmberGate",
+        DISPATCH,
+        NOW,
+        DEADLINE,
+    );
     assert_eq!(v, SilenceVerdict::TrackerError);
-    assert_ne!(v, SilenceVerdict::VerdictPosted);
+    assert_eq!(v.detector(), "TRACKER_ERROR");
+    assert!(clears_pending_dispatch_intent(v));
+}
+
+#[test]
+fn quoting_error_colon_on_successful_read_is_not_tracker_error() {
+    // Live case: dp21 comments contain `Error:` twice; `br comments list` exits 0.
+    let payload = "Comments for omp-orchestrator-retry-producer-unfiltered-dp21:\n\
+         [WildStone] at 2026-09-06 13:00 UTC\n\
+         Evidence: `Error: cannot claim blocked issue` pasted verbatim.\n";
+    assert!(payload.contains("Error:"));
+    let v = classify_from_read(
+        TrackerRead::Read(payload.to_owned()),
+        "AmberGate",
+        "AmberGate",
+        DISPATCH,
+        NOW,
+        DEADLINE,
+    );
+    assert_ne!(v, SilenceVerdict::TrackerError);
+    assert_eq!(v, SilenceVerdict::VerdictPosted);
+    assert!(!clears_pending_dispatch_intent(SilenceVerdict::SilentPastDeadline));
+}
+
+#[test]
+fn stderr_shaped_error_payload_is_not_tracker_error() {
+    // Channel, not content: this string is what `br` prints on failure.
+    // When it arrives as a successful stdout Read, it is payload, not a
+    // tracker terminal. The known-good TrackerError path is classify_from_read.
+    let v = classify(
+        &usage_error_on_stderr(),
+        "AmberGate",
+        "AmberGate",
+        DISPATCH,
+        NOW,
+        DEADLINE,
+    );
+    assert_ne!(v, SilenceVerdict::TrackerError);
+    assert_eq!(v, SilenceVerdict::SilentPastDeadline);
 }
 
 #[test]
 fn empty_output_is_tracker_error() {
     let v = classify("", "AmberGate", "AmberGate", DISPATCH, NOW, DEADLINE);
     assert_eq!(v, SilenceVerdict::TrackerError);
+    assert!(clears_pending_dispatch_intent(v));
 }
 
 #[test]
@@ -63,7 +133,14 @@ fn br_comment_singular_trap_does_not_produce_verdict_posted() {
 #[test]
 fn within_deadline_no_comment_is_not_verdict_posted() {
     let recent = NOW - 60; // 1 minute ago, deadline 3600s
-    let v = classify(&without_comment(), "AmberGate", "AmberGate", recent, NOW, DEADLINE);
+    let v = classify(
+        &without_comment(),
+        "AmberGate",
+        "AmberGate",
+        recent,
+        NOW,
+        DEADLINE,
+    );
     assert_ne!(v, SilenceVerdict::VerdictPosted, "no comment = not posted");
 }
 

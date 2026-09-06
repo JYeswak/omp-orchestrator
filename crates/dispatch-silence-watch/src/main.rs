@@ -6,7 +6,6 @@
 
 #![forbid(unsafe_code)]
 
-use dispatch_silence_watch::{classify, parse_bead_assignee};
 use std::path::Path;
 use std::process::{Command, ExitCode};
 use std::time::Duration;
@@ -22,7 +21,7 @@ fn main() -> ExitCode {
         return ExitCode::from(2);
     }
     let bead_id = &args[0];
-    let session = &args[1];
+    let _session = &args[1];
     let dispatch_assignee = &args[2];
     let dispatch_epoch: i64 = match args[3].parse() {
         Ok(v) => v,
@@ -51,17 +50,14 @@ fn main() -> ExitCode {
     let mut comments_command = Command::new(finding::BR);
     comments_command.args(["comments", "list", bead_id]);
     comments_command.current_dir(repo);
-    let comments_output = match dispatch_silence_watch::tracker_read_from(
+    let comments_read = dispatch_silence_watch::tracker_read_from(
         subprocess_contract::bounded_output(&mut comments_command, TRACKER_READ_DEADLINE),
-    ) {
-        dispatch_silence_watch::TrackerRead::Read(text) => text,
-        dispatch_silence_watch::TrackerRead::TrackerError(reason) => {
-            eprintln!("TRACKER_ERROR: br comments list: {reason} for {bead_id}");
-            return ExitCode::from(3);
-        }
-    };
+    );
+    if let dispatch_silence_watch::TrackerRead::TrackerError(reason) = &comments_read {
+        eprintln!("TRACKER_ERROR: br comments list: {reason} for {bead_id}");
+        return ExitCode::from(3);
+    }
 
-    // READ BACK the bead's current assignee - same bounded, typed contract.
     let mut show_command = Command::new(finding::BR);
     show_command.args(["show", bead_id, "--json"]);
     show_command.current_dir(repo);
@@ -69,15 +65,15 @@ fn main() -> ExitCode {
         subprocess_contract::bounded_output(&mut show_command, TRACKER_READ_DEADLINE),
     ) {
         dispatch_silence_watch::TrackerRead::Read(text) => {
-            parse_bead_assignee(&text, bead_id).unwrap_or_default()
+            dispatch_silence_watch::parse_bead_assignee(&text, bead_id).unwrap_or_default()
         }
         dispatch_silence_watch::TrackerRead::TrackerError(reason) => {
             eprintln!("TRACKER_ERROR: br show: {reason} for {bead_id}");
             return ExitCode::from(3);
         }
     };
-    let verdict = classify(
-        &comments_output,
+    let verdict = dispatch_silence_watch::classify_from_read(
+        comments_read,
         &current_assignee,
         dispatch_assignee,
         dispatch_epoch,

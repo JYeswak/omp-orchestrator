@@ -6,7 +6,7 @@
 //! NO-CLAIM: proves the crates are reachable from omp-orchestrator. Does NOT
 //! prove the dispatched work is correct — that is M4/M5's observable.
 
-use dispatch_silence_watch::SilenceVerdict;
+use dispatch_silence_watch::{clears_pending_dispatch_intent, SilenceVerdict};
 
 /// dispatch-silence-watch is callable from the orchestrator: the classify
 /// function compiles and returns a typed verdict.
@@ -26,6 +26,15 @@ fn silence_watch_classify_is_callable_from_orchestrator() {
     let _ = verdict;
 }
 
+#[test]
+fn tracker_error_clears_pending_dispatch_intent() {
+    assert!(clears_pending_dispatch_intent(SilenceVerdict::TrackerError));
+    assert!(clears_pending_dispatch_intent(SilenceVerdict::VerdictPosted));
+    assert!(!clears_pending_dispatch_intent(
+        SilenceVerdict::SilentPastDeadline
+    ));
+}
+
 /// dispatch-claim-fence is already imported at main.rs:16 and its known-bad
 /// leg (unknown_status_is_not_admitted) is green in its own test suite.
 #[test]
@@ -34,18 +43,17 @@ fn claim_fence_is_already_wired() {
     // orchestrator. The fence's own test suite (dispatch-claim-fence tests)
     // verifies the known-bad leg. This test proves the WIRE exists.
     let manifest = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));
-    assert!(manifest.contains("dispatch-claim-fence"),
-        "claim-fence wire is cut");
+    assert!(
+        manifest.contains("dispatch-claim-fence"),
+        "claim-fence wire is cut"
+    );
 }
 
 /// The Cargo.toml dependency chain proves both crates are path dependencies:
 /// removing either line breaks this test's compilation.
 #[test]
 fn both_dispatch_crates_are_path_dependencies() {
-    let manifest = include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/Cargo.toml"
-    ));
+    let manifest = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));
     assert!(
         manifest.contains("dispatch-silence-watch"),
         "dispatch-silence-watch missing from Cargo.toml — the silence-watch wire is cut"

@@ -28,7 +28,7 @@ use dispatch_claim_fence::{
     authorize, authorize_with_identities, parse_br_show_json, BeadSnapshot, ClaimFenceError,
     DispatchIntent, IdentityRecord, IdentityRegistries,
 };
-use dispatch_silence_watch::SilenceVerdict;
+use dispatch_silence_watch::{clears_pending_dispatch_intent, SilenceVerdict};
 use pane_dispatch_fence::{
     admit_at_send, IncarnationMint, Occupancy, PaneIncarnation, Presented,
 };
@@ -4828,7 +4828,19 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                                 stage.transport.kind().label(),
                                 stage.action.label(),
                             ),
-                            clear_intent: true,
+                            clear_intent: clears_pending_dispatch_intent(silence),
+                        })
+                    }
+                    SilenceVerdict::TrackerError => {
+                        println!(
+                            "DISPATCH_SILENCE tick={tick} session={} pane={pane} bead={bead} verdict={silence} next_action=re-read-tracker",
+                            config.session
+                        );
+                        Ok(DispatchOutcome {
+                            detail: format!(
+                                "status=DISPATCH_SILENCE verdict={silence} next_action=re-read-tracker"
+                            ),
+                            clear_intent: clears_pending_dispatch_intent(silence),
                         })
                     }
                     other => {
@@ -4840,7 +4852,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                             detail: format!(
                                 "status=DISPATCH_SILENCE verdict={other} next_action=inspect-or-resolve-pending"
                             ),
-                            clear_intent: false,
+                            clear_intent: clears_pending_dispatch_intent(other),
                         })
                     }
                 }
