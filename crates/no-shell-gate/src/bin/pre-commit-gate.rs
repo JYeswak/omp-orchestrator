@@ -10,6 +10,7 @@
 #![forbid(unsafe_code)]
 
 use no_shell_gate::commit_serialization;
+use no_shell_gate::firing_ledger;
 use no_shell_gate::violation_for;
 use orchestration_tick_gate::{law_code, parse_ledger, validate_receipt, LedgerError};
 use preregistration_gate::{
@@ -418,10 +419,12 @@ fn main() -> ExitCode {
             eprintln!("ANCESTRY_ONLY_MERGE: merge range is empty and merge tree equals HEAD tree");
             PreCommitOutcome::AncestryOnlyMerge.exit_code()
         } else {
+            record_gate_firings(&repo_root, &staged, &refusals, true);
             eprintln!("CLEAN: all staged files passed the multi-gate checks");
             PreCommitOutcome::Clean.exit_code()
         }
     } else {
+        record_gate_firings(&repo_root, &staged, &refusals, false);
         let mut stderr = io::stderr();
         let _ = writeln!(
             stderr,
@@ -1077,4 +1080,22 @@ fn staged_build_gate_binary(repo_root: &Path) -> Option<std::path::PathBuf> {
     candidates.push(repo_root.join("target/debug/staged-build-gate"));
     candidates.push(repo_root.join("target/release/staged-build-gate"));
     candidates.into_iter().find(|path| path.is_file())
+}
+
+fn record_gate_firings(repo_root: &Path, staged: &[String], refusals: &[String], clean: bool) {
+    let path = firing_ledger::default_ledger_path(repo_root);
+    let source = bounded_git_text(repo_root, &["rev-parse", "HEAD"])
+        .ok()
+        .map(|text| format!("commit:{}", text.trim()))
+        .unwrap_or_else(|| "commit:unknown".to_owned());
+    let input = if staged.is_empty() {
+        "<empty-staged-set>".to_owned()
+    } else {
+        staged.join(",")
+    };
+    if let Err(error) =
+        firing_ledger::append_commit_outcome(&path, &source, &input, refusals, clean)
+    {
+        eprintln!("gate-firing-ledger: {error}");
+    }
 }

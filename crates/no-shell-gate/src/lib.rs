@@ -30,7 +30,7 @@
 /// about the commit that is actually being made.
 pub mod commit_serialization;
 pub mod def_ids;
-
+pub mod firing_ledger;
 
 use std::fmt;
 use std::path::Path;
