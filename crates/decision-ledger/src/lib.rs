@@ -45,6 +45,9 @@ use std::path::Path;
 
 use serde_json::{json, Map, Value};
 
+pub mod execution;
+
+
 /// A question the loop needs a human to answer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Request {
@@ -132,7 +135,10 @@ impl fmt::Display for LedgerError {
                  next_action=fix-the-row -- a skipped row is a lost decision"
             ),
             Self::NotWritable { path, detail } => {
-                write!(f, "DECISION_LEDGER_NOT_WRITABLE path={path} detail={detail}")
+                write!(
+                    f,
+                    "DECISION_LEDGER_NOT_WRITABLE path={path} detail={detail}"
+                )
             }
             Self::NoSuchRequest { id } => write!(
                 f,

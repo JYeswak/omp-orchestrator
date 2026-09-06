@@ -15,15 +15,20 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use decision_ledger::{
-    append_request, hd_reference, now_unix, read_rows, record_decision, replay, Decision, Request,
+    append_request, classify_heartbeat, hd_reference, now_unix, read_rows, record_decision, replay,
+    AppendOutcome, Decision, Request,
 };
+use decision_ledger::execution::{check_path, Probe};
 use serde_json::Value;
+
 
 const USAGE: &str = "usage:\n  \
     decision-ledger replay <heartbeat.jsonl> [--since <unix>] [--apply] [--ledger <path>]\n  \
     decision-ledger request --question <q> --asked-by <who> --blocking <gate:x|bead:y> [--ledger <p>]\n  \
     decision-ledger decision --id HD-000N --decision <d> --decider <who> [--recorded-by <a>] [--ref <r>] [--ledger <p>]\n  \
-    decision-ledger from-close --reason <text> --decision <d> --decider <who> [--recorded-by <a>] [--ledger <p>]";
+    decision-ledger from-close --reason <text> --decision <d> --decider <who> [--recorded-by <a>] [--ledger <p>]\n  \
+    decision-ledger check-unexecuted [--ledger <p>] [--unpushed-count <n>]";
+
 
 fn default_ledger() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -51,6 +56,7 @@ fn main() -> ExitCode {
         Some("request") => cmd_request(&args, &ledger),
         Some("decision") => cmd_decision(&args, &ledger),
         Some("from-close") => cmd_from_close(&args, &ledger),
+        Some("check-unexecuted") => cmd_check_unexecuted(&args, &ledger),
         Some("--help" | "-h") | None => {
             println!("{USAGE}");
             ExitCode::SUCCESS
@@ -139,7 +145,11 @@ fn cmd_replay(args: &[String], ledger: &Path) -> ExitCode {
             Ok(outcome) => {
                 println!(
                     "  {} {} {}",
-                    if outcome.wrote() { "APPENDED" } else { "DEDUPED " },
+                    if outcome.wrote() {
+                        "APPENDED"
+                    } else {
+                        "DEDUPED "
+                    },
                     outcome.id(),
                     entry.blocking
                 );
@@ -150,7 +160,10 @@ fn cmd_replay(args: &[String], ledger: &Path) -> ExitCode {
             Err(error) => return fail(error),
         }
     }
-    println!("REPLAY_APPLIED appended={wrote} ledger={}", ledger.display());
+    println!(
+        "REPLAY_APPLIED appended={wrote} ledger={}",
+        ledger.display()
+    );
     ExitCode::SUCCESS
 }
 
@@ -160,7 +173,9 @@ fn cmd_request(args: &[String], ledger: &Path) -> ExitCode {
         flag(args, "--asked-by"),
         flag(args, "--blocking"),
     ) else {
-        return fail(format!("request needs --question, --asked-by, --blocking\n{USAGE}"));
+        return fail(format!(
+            "request needs --question, --asked-by, --blocking\n{USAGE}"
+        ));
     };
     let request = Request {
         question,
@@ -191,7 +206,9 @@ fn cmd_decision(args: &[String], ledger: &Path) -> ExitCode {
         flag(args, "--decision"),
         flag(args, "--decider"),
     ) else {
-        return fail(format!("decision needs --id, --decision, --decider\n{USAGE}"));
+        return fail(format!(
+            "decision needs --id, --decision, --decider\n{USAGE}"
+        ));
     };
     let record = Decision {
         id,
@@ -242,6 +259,27 @@ fn cmd_from_close(args: &[String], ledger: &Path) -> ExitCode {
         Err(error) => fail(error),
     }
 }
+
+fn cmd_check_unexecuted(args: &[String], ledger: &Path) -> ExitCode {
+    let probe = Probe {
+        origin_main_unpushed: flag(args, "--unpushed-count").and_then(|v| v.parse().ok()),
+    };
+    match check_path(ledger, probe) {
+        Ok(report) => {
+            print!("{}", report.render());
+            if report.unexecuted_count() == 0 {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            }
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            ExitCode::from(2)
+        }
+    }
+}
+
 
 /// Count the rows a caller can expect to read back, for a quick health line.
 #[allow(dead_code)]
