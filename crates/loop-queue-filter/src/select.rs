@@ -554,7 +554,6 @@ impl fmt::Display for GradingSlot {
     }
 }
 
-/// Decide the grading slot. Never a silent empty: a skip always names why.
 pub fn grading_slot(jsonl: &str, ready: &[String], grader: &str) -> GradingSlot {
     let beads = match parse_jsonl(jsonl) {
         Ok(beads) => beads,
@@ -569,6 +568,7 @@ pub fn grading_slot(jsonl: &str, ready: &[String], grader: &str) -> GradingSlot 
             reason: "empty_grading_slot",
         };
     }
+    let ledger = BTreeMap::new();
     let reapable: Vec<&BeadComments> = beads
         .iter()
         .filter(|bead| ready.iter().any(|id| id == &bead.id) && is_reapable(bead))
@@ -589,7 +589,7 @@ pub fn grading_slot(jsonl: &str, ready: &[String], grader: &str) -> GradingSlot 
         let Some(bead) = reapable.iter().find(|bead| &bead.id == id) else {
             continue;
         };
-        let authors = author_panes(bead);
+        let authors = author_panes(bead, &ledger);
         if authors.is_empty() {
             saw_empty_authors = true;
             continue;
@@ -819,7 +819,10 @@ fn ack_pane(text: &str) -> Option<String> {
     Some(pane.to_owned())
 }
 
-fn author_panes(bead: &BeadComments) -> BTreeSet<String> {
+fn author_panes(
+    bead: &BeadComments,
+    ledger: &BTreeMap<String, BTreeSet<String>>,
+) -> BTreeSet<String> {
     let mut out = pane_scoped_authors(bead);
     for text in &bead.texts {
         if let Some(pane) = ack_pane(text) {
@@ -827,6 +830,64 @@ fn author_panes(bead: &BeadComments) -> BTreeSet<String> {
             if let Some(key) = pane_assignee_key(&pane) {
                 out.insert(key);
             }
+        }
+    }
+    if let Some(panes) = ledger.get(&bead.id) {
+        for pane in panes {
+            out.insert(pane.clone());
+            if let Some(key) = pane_assignee_key(pane) {
+                out.insert(key);
+            }
+        }
+    }
+    out
+}
+
+fn tmux_pane_id(raw: &str) -> Option<String> {
+    let pane = raw.trim();
+    let digits = pane.strip_prefix('%')?;
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    Some(pane.to_owned())
+}
+
+fn push_pane_field(out: &mut BTreeSet<String>, value: Option<&Value>) {
+    if let Some(pane) = value.and_then(Value::as_str).and_then(tmux_pane_id) {
+        out.insert(pane);
+    }
+}
+
+/// Third author source: lifecycle ledger `grader_pane` and `pane` fields.
+pub fn parse_ledger_authors(ledger_jsonl: &str) -> BTreeMap<String, BTreeSet<String>> {
+    let mut out: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for line in ledger_jsonl.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let Ok(value) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        let bead = value
+            .get("bead")
+            .and_then(Value::as_str)
+            .or_else(|| value.pointer("/identity/bead").and_then(Value::as_str))
+            .unwrap_or("")
+            .trim();
+        if bead.is_empty() {
+            continue;
+        }
+        let panes = out.entry(bead.to_owned()).or_default();
+        push_pane_field(panes, value.get("grader_pane"));
+        push_pane_field(panes, value.get("pane"));
+        push_pane_field(panes, value.get("receiver_pane"));
+        push_pane_field(panes, value.pointer("/identity/target/pane"));
+        push_pane_field(panes, value.pointer("/target/pane"));
+        push_pane_field(panes, value.pointer("/evidence/grader_pane"));
+        push_pane_field(panes, value.pointer("/evidence/pane"));
+        push_pane_field(panes, value.pointer("/evidence/receiver_pane"));
+        if panes.is_empty() {
+            out.remove(bead);
         }
     }
     out
@@ -933,6 +994,16 @@ pub fn assign_peer_grade(
     panes: &[ObservedPane],
     jsonl: &str,
 ) -> Result<GradeAssignment, AssignGradeError> {
+    assign_peer_grade_with_ledger(observer_pane, panes, jsonl, "")
+}
+
+/// Same as [`assign_peer_grade`], with lifecycle-ledger pane attribution.
+pub fn assign_peer_grade_with_ledger(
+    observer_pane: &str,
+    panes: &[ObservedPane],
+    jsonl: &str,
+    ledger_jsonl: &str,
+) -> Result<GradeAssignment, AssignGradeError> {
     if observer_pane.trim().is_empty() {
         return Err(AssignGradeError::ObserverPaneUnresolved);
     }
@@ -957,8 +1028,14 @@ pub fn assign_peer_grade(
         return Err(AssignGradeError::NoEligibleGrader { reason });
     }
     let beads = parse_jsonl(jsonl).map_err(AssignGradeError::Jsonl)?;
+    let ledger = parse_ledger_authors(ledger_jsonl);
     let reapable: Vec<&BeadComments> = beads.iter().filter(|bead| is_reapable(bead)).collect();
-    let mut saw_empty_authors = false;
+    if reapable.is_empty() {
+        return Err(AssignGradeError::NoEligibleGrader {
+            reason: "empty_reapable_set",
+        });
+    }
+    let mut missing_attribution: BTreeSet<String> = BTreeSet::new();
     for grader in &idle {
         require_idle_grader(&grader.pane_id, panes)?;
         let Some(grader_assignee) = pane_assignee_key(&grader.pane_id) else {
@@ -967,9 +1044,9 @@ pub fn assign_peer_grade(
             });
         };
         for bead in &reapable {
-            let authors = author_panes(bead);
+            let authors = author_panes(bead, &ledger);
             if authors.is_empty() {
-                saw_empty_authors = true;
+                missing_attribution.insert(bead.id.clone());
                 continue;
             }
             if authors_include_pane(&authors, &grader.pane_id) {
@@ -983,9 +1060,9 @@ pub fn assign_peer_grade(
             });
         }
     }
-    if saw_empty_authors {
+    if !missing_attribution.is_empty() {
         return Err(AssignGradeError::GraderIdentityUnresolved {
-            detail: "no pane-scoped author on reapable beads".to_owned(),
+            detail: format!("missing_attribution count={}", missing_attribution.len()),
         });
     }
     Err(AssignGradeError::NoEligibleGrader {
@@ -1398,6 +1475,82 @@ mod tests {
         assert_ne!(assigned.grader_pane, "%9");
         assert_eq!(assigned.grader_assignee, "pane3-%3");
     }
+
+    fn ledger_row(bead: &str, pane: &str) -> String {
+        format!(r#"{{"bead":"{bead}","event":"dispatched","pane":"{pane}","grader_pane":"{pane}"}}"#)
+    }
+
+    #[test]
+    fn ledger_only_attribution_is_gradeable_by_a_different_pane() {
+        let panes = vec![
+            pane("%9", "LIVE", true),
+            pane("%3", "CONFIRMED_IDLE", false),
+        ];
+        let jsonl = r#"{"id":"reap-me","status":"in_progress","assignee":"WildStone","comments":[{"author":"WildStone","text":"DONE work"}]}"#;
+        let ledger = ledger_row("reap-me", "%8");
+        let assigned = assign_peer_grade_with_ledger("%9", &panes, jsonl, &ledger)
+            .expect("ledger pane %8 is not the idle grader");
+        assert_eq!(assigned.bead, "reap-me");
+        assert_eq!(assigned.grader_pane, "%3");
+    }
+
+    #[test]
+    fn ledger_naming_candidate_grader_is_self_author() {
+        let panes = vec![
+            pane("%9", "LIVE", true),
+            pane("%3", "CONFIRMED_IDLE", false),
+        ];
+        let jsonl = r#"{"id":"reap-me","status":"in_progress","assignee":"WildStone","comments":[{"author":"WildStone","text":"DONE work"}]}"#;
+        let ledger = ledger_row("reap-me", "%3");
+        let error = assign_peer_grade_with_ledger("%9", &panes, jsonl, &ledger)
+            .expect_err("idle grader authored the ledger row");
+        assert_eq!(
+            error.to_string(),
+            "NO_ELIGIBLE_GRADER reason=no_distinct_idle_peer"
+        );
+        let without = assign_peer_grade("%9", &panes, jsonl).expect_err("ledger removed");
+        assert!(
+            without
+                .to_string()
+                .contains("missing_attribution count=1"),
+            "known-bad must fail when ledger source is removed: {without}"
+        );
+    }
+
+    #[test]
+    fn missing_attribution_names_the_count_not_no_distinct_idle_peer() {
+        let panes = vec![
+            pane("%9", "LIVE", true),
+            pane("%3", "CONFIRMED_IDLE", false),
+        ];
+        let jsonl = concat!(
+            r#"{"id":"a","status":"in_progress","assignee":"WildStone","comments":[{"author":"WildStone","text":"DONE a"}]}"#,
+            "\n",
+            r#"{"id":"b","status":"in_progress","assignee":"WildStone","comments":[{"author":"WildStone","text":"DONE b"}]}"#,
+        );
+        let error = assign_peer_grade("%9", &panes, jsonl).expect_err("unattributed");
+        let text = error.to_string();
+        assert!(
+            text.starts_with("GRADER_IDENTITY_UNRESOLVED"),
+            "{text}"
+        );
+        assert!(text.contains("missing_attribution count=2"), "{text}");
+        assert!(!text.contains("no_distinct_idle_peer"), "{text}");
+    }
+
+    #[test]
+    fn empty_reapable_set_is_error_not_no_distinct_idle_peer() {
+        let panes = vec![
+            pane("%9", "LIVE", true),
+            pane("%3", "CONFIRMED_IDLE", false),
+        ];
+        let error = assign_peer_grade("%9", &panes, "").expect_err("empty");
+        assert_eq!(
+            error.to_string(),
+            "NO_ELIGIBLE_GRADER reason=empty_reapable_set"
+        );
+    }
+
 
     #[test]
     fn assign_peer_grade_refuses_a_pane_carrying_its_own_dispatch() {
