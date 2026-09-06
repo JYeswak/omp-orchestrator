@@ -1,0 +1,14 @@
+[package]
+license.workspace = true
+name = "ompo-start"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "ompo start: one STEPS array rendered twice; view() must not drop Skipped"
+
+[lints]
+workspace = true
+
+[lib]
+name = "ompo_start"
+path = "src/lib.rs"
