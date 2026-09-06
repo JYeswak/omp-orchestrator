@@ -215,6 +215,39 @@ pub fn render_with_pane(
     Ok(packet)
 }
 
+/// Render a grading packet. Distinct from a work packet: the receiver re-runs
+/// acceptance, does not implement, and is a different pane from the observer.
+pub fn render_grading_packet(
+    snapshot: &BeadSnapshot,
+    target: &Path,
+    grader_pane: &str,
+    observer_pane: &str,
+) -> Result<String, PacketError> {
+    let grader_pane =
+        nonempty(grader_pane).ok_or(PacketError::PacketFieldMissing("grader_pane"))?;
+    let observer_pane =
+        nonempty(observer_pane).ok_or(PacketError::PacketFieldMissing("observer_pane"))?;
+    if grader_pane == observer_pane {
+        return Err(PacketError::PacketAddsScope {
+            bead: nonempty(snapshot.id()).unwrap_or("unknown").to_owned(),
+            line: 0,
+            detail: "grader_pane must differ from observer_pane".to_owned(),
+        });
+    }
+    let work = render_with_pane(
+        snapshot,
+        target,
+        Some(grader_pane),
+        None,
+        Some("peer grade assignment — re-run acceptance, do not implement"),
+        None,
+    )?;
+    Ok(format!(
+        "GRADE ASSIGNMENT (not implementation)\nObserver: {observer_pane} (may be WORKING; observer is not the grader).\nGrader pane: {grader_pane}\nDo not implement. Re-run the bead's acceptance. Close with MUTATION-VERIFIED if it holds; otherwise GAP/UNKNOWN.\nYou are not the author if your pane is distinct from ACK pane-scoped keys.\n\n{work}"
+    ))
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -349,4 +382,42 @@ mod tests {
         );
         assert!(packet.contains("DIFFERENT agent"));
     }
+
+    #[test]
+    fn grading_packet_is_distinct_from_a_work_packet() {
+        let work = render(
+            &snapshot("omp-orchestrator-lwdo.1", "body", "typed acceptance"),
+            Path::new("/repo"),
+            None,
+            None,
+        )
+        .expect("work");
+        let grade = render_grading_packet(
+            &snapshot("omp-orchestrator-lwdo.1", "body", "typed acceptance"),
+            Path::new("/repo"),
+            "%3",
+            "%9",
+        )
+        .expect("grade");
+        assert!(grade.starts_with("GRADE ASSIGNMENT (not implementation)"));
+        assert!(!work.starts_with("GRADE ASSIGNMENT"));
+        assert!(grade.contains("Grader pane: %3"));
+        assert!(grade.contains("Observer: %9"));
+        assert!(grade.contains("Do not implement"));
+        assert!(grade.contains("Pane: %3"));
+        assert!(grade.contains("ACK lwdo.1 on $TMUX_PANE --"));
+    }
+
+    #[test]
+    fn grading_packet_refuses_observer_as_grader() {
+        let error = render_grading_packet(
+            &snapshot("fixture", "body", "typed acceptance"),
+            Path::new("/repo"),
+            "%9",
+            "%9",
+        )
+        .expect_err("same pane");
+        assert!(matches!(error, PacketError::PacketAddsScope { .. }));
+    }
+
 }

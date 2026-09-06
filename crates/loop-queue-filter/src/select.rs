@@ -15,8 +15,11 @@
 
 use serde_json::Value;
 use std::collections::BTreeSet;
+use std::fmt;
+
 
 /// Pane-scoped assignee: unique on one tmux server for one occupancy window.
+#[allow(dead_code)]
 const PANE_SCOPED: &str = r"^pane[0-9]+-%[0-9]+$";
 
 fn pane_scoped(id: &str) -> bool {
@@ -297,6 +300,279 @@ pub fn select_dispatch_order(
     Ok(out)
 }
 
+/// One pane as the assignment path sees it. The observer may be WORKING;
+/// the grader must not be.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ObservedPane {
+    pub pane_id: String,
+    pub liveness: String,
+    pub is_dispatchable: bool,
+    pub is_working: bool,
+}
+
+impl ObservedPane {
+    fn is_confirmed_idle(&self) -> bool {
+        self.is_dispatchable && self.liveness == "CONFIRMED_IDLE" && !self.is_working
+    }
+}
+
+/// Successful grading assignment. Observer and grader are different panes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GradeAssignment {
+    pub bead: String,
+    pub grader_pane: String,
+    pub grader_assignee: String,
+    pub observer_pane: String,
+}
+
+/// Typed refusals for the dispatch-based grading path.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AssignGradeError {
+    EmptyObservation,
+    ObserverPaneUnresolved,
+    NoEligibleGrader {
+        reason: &'static str,
+    },
+    GraderCarryingOwnDispatch {
+        pane: String,
+        liveness: String,
+        is_working: bool,
+    },
+    GraderIdentityUnresolved {
+        detail: String,
+    },
+    Jsonl(String),
+}
+
+impl fmt::Display for AssignGradeError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EmptyObservation => formatter.write_str(
+                "EMPTY_OBSERVATION no eligible grader can be decided from an empty pane set",
+            ),
+            Self::ObserverPaneUnresolved => {
+                formatter.write_str("PEER_GRADING_REFUSED reason=observer_pane_unresolved")
+            }
+            Self::NoEligibleGrader { reason } => {
+                write!(formatter, "NO_ELIGIBLE_GRADER reason={reason}")
+            }
+            Self::GraderCarryingOwnDispatch {
+                pane,
+                liveness,
+                is_working,
+            } => write!(
+                formatter,
+                "GRADER_CARRYING_OWN_DISPATCH pane={pane} liveness={liveness} is_working={is_working}"
+            ),
+            Self::GraderIdentityUnresolved { detail } => {
+                write!(formatter, "GRADER_IDENTITY_UNRESOLVED {detail}")
+            }
+            Self::Jsonl(detail) => formatter.write_str(detail),
+        }
+    }
+}
+
+/// `pane9-%9` from tmux pane id `%9`. Unique on one tmux server.
+pub fn pane_assignee_key(pane_id: &str) -> Option<String> {
+    let id = pane_id.trim();
+    let rest = id.strip_prefix('%')?;
+    if rest.is_empty() || !rest.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    Some(format!("pane{rest}-{id}"))
+}
+
+fn ack_pane(text: &str) -> Option<String> {
+    if !text.starts_with("ACK ") {
+        return None;
+    }
+    let marker = " on %";
+    let start = text.find(marker)?;
+    let rest = &text[start + " on ".len()..];
+    let end = rest.find(" --")?;
+    let pane = &rest[..end];
+    let digits = pane.strip_prefix('%')?;
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    Some(pane.to_owned())
+}
+
+fn author_panes(bead: &BeadComments) -> BTreeSet<String> {
+    let mut out = pane_scoped_authors(bead);
+    for text in &bead.texts {
+        if let Some(pane) = ack_pane(text) {
+            out.insert(pane.clone());
+            if let Some(key) = pane_assignee_key(&pane) {
+                out.insert(key);
+            }
+        }
+    }
+    out
+}
+
+fn authors_include_pane(authors: &BTreeSet<String>, pane_id: &str) -> bool {
+    if authors.contains(pane_id) {
+        return true;
+    }
+    if let Some(key) = pane_assignee_key(pane_id) {
+        if authors.contains(&key) {
+            return true;
+        }
+    }
+    authors
+        .iter()
+        .any(|author| pane_scoped(author) && author.ends_with(pane_id))
+}
+
+fn parse_one_pane(value: &Value) -> Option<ObservedPane> {
+    let pane_id = value
+        .get("pane_id")
+        .or_else(|| value.get("pane"))
+        .and_then(Value::as_str)?
+        .trim()
+        .to_owned();
+    if pane_id.is_empty() {
+        return None;
+    }
+    let liveness = value
+        .get("liveness")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_owned();
+    let state = value.get("state").and_then(Value::as_str).unwrap_or("");
+    let is_working = value
+        .get("is_working")
+        .and_then(Value::as_bool)
+        .unwrap_or(state == "WORKING" || liveness == "LIVE");
+    let is_dispatchable = value
+        .get("is_dispatchable")
+        .and_then(Value::as_bool)
+        .unwrap_or(liveness == "CONFIRMED_IDLE");
+    Some(ObservedPane {
+        pane_id,
+        liveness,
+        is_dispatchable,
+        is_working,
+    })
+}
+
+/// Parse a compact pane array or a tick-monitor `omp_lifecycle.panes` envelope.
+pub fn parse_observed_panes(bytes: &[u8]) -> Result<Vec<ObservedPane>, AssignGradeError> {
+    let value: Value = serde_json::from_slice(bytes).map_err(|error| {
+        AssignGradeError::Jsonl(format!("ASSIGN_GRADE_REFUSED observation JSON: {error}"))
+    })?;
+    let arrays = [
+        value.get("panes").and_then(Value::as_array),
+        value
+            .pointer("/omp_lifecycle/panes")
+            .and_then(Value::as_array),
+    ];
+    let mut panes = Vec::new();
+    for array in arrays.into_iter().flatten() {
+        for row in array {
+            if let Some(pane) = parse_one_pane(row) {
+                panes.push(pane);
+            }
+        }
+        if !panes.is_empty() {
+            break;
+        }
+    }
+    if panes.is_empty() {
+        return Err(AssignGradeError::EmptyObservation);
+    }
+    Ok(panes)
+}
+
+/// Refuse a grader that is carrying its own dispatch. This is the guarantee
+/// `current_pane_not_confirmed_idle` provided, applied to the TARGET pane.
+pub fn require_idle_grader(
+    grader_pane: &str,
+    panes: &[ObservedPane],
+) -> Result<(), AssignGradeError> {
+    let Some(pane) = panes.iter().find(|pane| pane.pane_id == grader_pane) else {
+        return Err(AssignGradeError::NoEligibleGrader {
+            reason: "grader_observation_row_missing",
+        });
+    };
+    if !pane.is_confirmed_idle() {
+        return Err(AssignGradeError::GraderCarryingOwnDispatch {
+            pane: grader_pane.to_owned(),
+            liveness: pane.liveness.clone(),
+            is_working: pane.is_working,
+        });
+    }
+    Ok(())
+}
+
+/// Pick a grader that is not the observer. The observer may be WORKING.
+pub fn assign_peer_grade(
+    observer_pane: &str,
+    panes: &[ObservedPane],
+    jsonl: &str,
+) -> Result<GradeAssignment, AssignGradeError> {
+    if observer_pane.trim().is_empty() {
+        return Err(AssignGradeError::ObserverPaneUnresolved);
+    }
+    if panes.is_empty() {
+        return Err(AssignGradeError::EmptyObservation);
+    }
+    let others: Vec<&ObservedPane> = panes
+        .iter()
+        .filter(|pane| pane.pane_id != observer_pane)
+        .collect();
+    let idle: Vec<&ObservedPane> = others
+        .iter()
+        .copied()
+        .filter(|pane| pane.is_confirmed_idle())
+        .collect();
+    if idle.is_empty() {
+        let reason = if !others.is_empty() && others.iter().all(|pane| pane.is_working) {
+            "all_panes_carrying_dispatches"
+        } else {
+            "no_idle_pane"
+        };
+        return Err(AssignGradeError::NoEligibleGrader { reason });
+    }
+    let beads = parse_jsonl(jsonl).map_err(AssignGradeError::Jsonl)?;
+    let reapable: Vec<&BeadComments> = beads.iter().filter(|bead| is_reapable(bead)).collect();
+    let mut saw_empty_authors = false;
+    for grader in &idle {
+        require_idle_grader(&grader.pane_id, panes)?;
+        let Some(grader_assignee) = pane_assignee_key(&grader.pane_id) else {
+            return Err(AssignGradeError::GraderIdentityUnresolved {
+                detail: format!("grader_pane={} is not a tmux pane id", grader.pane_id),
+            });
+        };
+        for bead in &reapable {
+            let authors = author_panes(bead);
+            if authors.is_empty() {
+                saw_empty_authors = true;
+                continue;
+            }
+            if authors_include_pane(&authors, &grader.pane_id) {
+                continue;
+            }
+            return Ok(GradeAssignment {
+                bead: bead.id.clone(),
+                grader_pane: grader.pane_id.clone(),
+                grader_assignee,
+                observer_pane: observer_pane.to_owned(),
+            });
+        }
+    }
+    if saw_empty_authors {
+        return Err(AssignGradeError::GraderIdentityUnresolved {
+            detail: "no pane-scoped author on reapable beads".to_owned(),
+        });
+    }
+    Err(AssignGradeError::NoEligibleGrader {
+        reason: "no_distinct_idle_peer",
+    })
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -480,4 +756,108 @@ mod tests {
         assert!(!pane_scoped("%9"));
         let _ = PANE_SCOPED;
     }
+
+    fn jsonl_done_ack(id: &str, ack_pane: &str) -> String {
+        format!(
+            r#"{{"id":"{id}","status":"in_progress","assignee":"WildStone","comments":[{{"author":"WildStone","text":"ACK token on {ack_pane} -- agent=WildStone"}},{{"author":"WildStone","text":"DONE work"}}]}}"#
+        )
+    }
+
+    fn pane(id: &str, liveness: &str, working: bool) -> ObservedPane {
+        ObservedPane {
+            pane_id: id.to_owned(),
+            liveness: liveness.to_owned(),
+            is_dispatchable: liveness == "CONFIRMED_IDLE",
+            is_working: working,
+        }
+    }
+
+    #[test]
+    fn assign_peer_grade_picks_an_idle_peer_not_the_working_observer() {
+        let panes = vec![
+            pane("%9", "LIVE", true),
+            pane("%3", "CONFIRMED_IDLE", false),
+        ];
+        let jsonl = jsonl_done_ack("reap-me", "%9");
+        let assigned = assign_peer_grade("%9", &panes, &jsonl).expect("idle peer");
+        assert_eq!(assigned.bead, "reap-me");
+        assert_eq!(assigned.grader_pane, "%3");
+        assert_eq!(assigned.grader_assignee, "pane3-%3");
+        assert_eq!(assigned.observer_pane, "%9");
+    }
+
+    #[test]
+    fn assign_peer_grade_refuses_a_pane_carrying_its_own_dispatch() {
+        let panes = vec![pane("%3", "LIVE", true)];
+        let error = require_idle_grader("%3", &panes).expect_err("working grader");
+        let text = error.to_string();
+        assert!(
+            text.starts_with("GRADER_CARRYING_OWN_DISPATCH"),
+            "{text}"
+        );
+        assert!(text.contains("pane=%3"), "{text}");
+        assert!(text.contains("is_working=true"), "{text}");
+    }
+
+    #[test]
+    fn assign_peer_grade_empty_observation_is_typed() {
+        let error = assign_peer_grade("%9", &[], "").expect_err("empty");
+        assert_eq!(error.to_string(), "EMPTY_OBSERVATION no eligible grader can be decided from an empty pane set");
+    }
+
+    #[test]
+    fn assign_peer_grade_all_others_working_is_typed() {
+        let panes = vec![
+            pane("%9", "LIVE", true),
+            pane("%3", "LIVE", true),
+            pane("%8", "LIVE", true),
+        ];
+        let error = assign_peer_grade("%9", &panes, &jsonl_done_ack("reap-me", "%9"))
+            .expect_err("all carrying");
+        assert_eq!(
+            error.to_string(),
+            "NO_ELIGIBLE_GRADER reason=all_panes_carrying_dispatches"
+        );
+    }
+
+    #[test]
+    fn assign_peer_grade_no_idle_pane_is_typed() {
+        let panes = vec![
+            pane("%9", "LIVE", true),
+            pane("%3", "NEWLY_IDLE", false),
+        ];
+        let error = assign_peer_grade("%9", &panes, &jsonl_done_ack("reap-me", "%9"))
+            .expect_err("no idle");
+        assert_eq!(error.to_string(), "NO_ELIGIBLE_GRADER reason=no_idle_pane");
+    }
+
+    #[test]
+    fn assign_peer_grade_refuses_unresolved_author() {
+        let panes = vec![
+            pane("%9", "LIVE", true),
+            pane("%3", "CONFIRMED_IDLE", false),
+        ];
+        let jsonl = r#"{"id":"reap-me","status":"in_progress","assignee":"WildStone","comments":[{"author":"WildStone","text":"DONE work"}]}"#;
+        let error = assign_peer_grade("%9", &panes, jsonl).expect_err("unresolved");
+        assert!(
+            error.to_string().starts_with("GRADER_IDENTITY_UNRESOLVED"),
+            "{}",
+            error
+        );
+    }
+
+    #[test]
+    fn assign_peer_grade_does_not_self_grade() {
+        let panes = vec![
+            pane("%9", "LIVE", true),
+            pane("%3", "CONFIRMED_IDLE", false),
+        ];
+        let jsonl = jsonl_done_ack("reap-me", "%3");
+        let error = assign_peer_grade("%9", &panes, &jsonl).expect_err("self");
+        assert_eq!(
+            error.to_string(),
+            "NO_ELIGIBLE_GRADER reason=no_distinct_idle_peer"
+        );
+    }
+
 }

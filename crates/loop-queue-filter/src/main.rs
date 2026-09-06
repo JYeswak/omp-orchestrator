@@ -1,19 +1,123 @@
 #![forbid(unsafe_code)]
 
+use loop_queue_filter::select::{
+    assign_peer_grade, parse_observed_panes, require_idle_grader,
+};
 use std::io::{self, Read};
+use std::process::ExitCode;
 
-fn main() -> std::process::ExitCode {
+fn assign_grade_cli(args: &[String]) -> ExitCode {
+    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
+        println!(
+            "usage: loop-queue-filter assign-grade --observer %N --observation FILE --jsonl FILE [--grader %N]\n\
+             Observer may be WORKING. Grader must be CONFIRMED_IDLE and not carrying a dispatch.\n\
+             Prints GRADE_ASSIGNED bead=... grader_pane=... grader_assignee=... observer_pane=..."
+        );
+        return ExitCode::SUCCESS;
+    }
+    let mut observer = String::new();
+    let mut observation_path = String::new();
+    let mut jsonl_path = String::new();
+    let mut grader = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--observer" => {
+                index += 1;
+                observer = args.get(index).cloned().unwrap_or_default();
+            }
+            "--observation" => {
+                index += 1;
+                observation_path = args.get(index).cloned().unwrap_or_default();
+            }
+            "--jsonl" => {
+                index += 1;
+                jsonl_path = args.get(index).cloned().unwrap_or_default();
+            }
+            "--grader" => {
+                index += 1;
+                grader = args.get(index).cloned();
+            }
+            other => {
+                eprintln!("ASSIGN_GRADE_REFUSED unknown argument {other}");
+                return ExitCode::from(2);
+            }
+        }
+        index += 1;
+    }
+    if observer.trim().is_empty() || observation_path.is_empty() || jsonl_path.is_empty() {
+        eprintln!("ASSIGN_GRADE_REFUSED usage: --observer %N --observation FILE --jsonl FILE");
+        return ExitCode::from(2);
+    }
+    let observation = match std::fs::read(&observation_path) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            eprintln!("ASSIGN_GRADE_REFUSED observation={error}");
+            return ExitCode::from(2);
+        }
+    };
+    let jsonl = match std::fs::read_to_string(&jsonl_path) {
+        Ok(text) => text,
+        Err(error) => {
+            eprintln!("ASSIGN_GRADE_REFUSED jsonl={error}");
+            return ExitCode::from(2);
+        }
+    };
+    let panes = match parse_observed_panes(&observation) {
+        Ok(panes) => panes,
+        Err(error) => {
+            eprintln!("{error}");
+            return ExitCode::from(2);
+        }
+    };
+    if let Some(grader_pane) = grader.as_deref() {
+        if let Err(error) = require_idle_grader(grader_pane, &panes) {
+            eprintln!("{error}");
+            return ExitCode::from(2);
+        }
+    }
+    match assign_peer_grade(&observer, &panes, &jsonl) {
+        Ok(assignment) => {
+            if let Some(grader_pane) = grader.as_deref() {
+                if assignment.grader_pane != grader_pane {
+                    eprintln!(
+                        "NO_ELIGIBLE_GRADER reason=requested_grader_not_selected requested={grader_pane} selected={}",
+                        assignment.grader_pane
+                    );
+                    return ExitCode::from(2);
+                }
+            }
+            println!(
+                "GRADE_ASSIGNED bead={} grader_pane={} grader_assignee={} observer_pane={}",
+                assignment.bead,
+                assignment.grader_pane,
+                assignment.grader_assignee,
+                assignment.observer_pane
+            );
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.first().map(String::as_str) == Some("--selftest-guard") {
         println!("queue-filter guard: PASS (Rust binary present)");
-        return std::process::ExitCode::SUCCESS;
+        return ExitCode::SUCCESS;
+    }
+    if args.first().map(String::as_str) == Some("assign-grade") {
+        return assign_grade_cli(&args[1..]);
     }
     let mut input = String::new();
     if io::stdin().read_to_string(&mut input).is_err() {
-        return std::process::ExitCode::from(1);
+        return ExitCode::from(1);
     }
     let output = loop_queue_filter::run(&input, &args, &loop_queue_filter::Runtime::from_process());
     print!("{}", output.stdout);
     eprint!("{}", output.stderr);
-    std::process::ExitCode::from(output.code as u8)
+    ExitCode::from(output.code as u8)
 }
