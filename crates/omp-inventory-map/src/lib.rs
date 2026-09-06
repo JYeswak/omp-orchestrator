@@ -1179,8 +1179,10 @@ fn row(
         id.strip_prefix("crate:")
             .unwrap_or(id.as_str())
             .to_owned()
+    } else if let Some((_, name)) = surface.split_once(':') {
+        name.to_owned()
     } else {
-        kind.clone()
+        surface.clone()
     };
     let (must_be_true, negative_evidence) =
         census_invariants::invariants_for_kind(&kind, &identity);
@@ -1450,21 +1452,31 @@ pub fn build_inventory_map(inputs: InventoryInputs) -> Result<InventoryMap, Inve
         } else {
             ("CAPABILITY_NOT_USED".to_owned(), reason.clone())
         };
+        let consumes = if package.path_dependencies.is_empty() {
+            "no workspace path-deps".to_owned()
+        } else {
+            package.path_dependencies.join(",")
+        };
         let current = row(
             format!("crate:{}", package.name),
             format!("crate:{}", package.name),
             "workspace_crate".to_owned(),
-            format!("Workspace crate {} from cargo metadata", package.name),
+            format!(
+                "crate {} consumes {} and promises lib {}",
+                package.name, consumes, package.name
+            ),
             ProbeState::Known,
             owner,
-            vec![
-                "cargo metadata --format-version 1 --no-deps".to_owned(),
-                package.manifest_path.clone(),
-            ],
-            vec![
-                format!("targets={}", package.targets.join(",")),
-                format!("path_dependencies={}", package.path_dependencies.join(",")),
-            ],
+            if package.path_dependencies.is_empty() {
+                vec!["no workspace path-deps".to_owned()]
+            } else {
+                package
+                    .path_dependencies
+                    .iter()
+                    .map(|dep| format!("path-dep {dep}"))
+                    .collect()
+            },
+            vec![format!("lib {}", package.name)],
             classification,
             reason,
         );

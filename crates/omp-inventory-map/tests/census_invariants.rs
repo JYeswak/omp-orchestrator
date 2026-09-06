@@ -9,7 +9,7 @@
 
 use omp_inventory_map::census_invariants::{
     CensusInvariantError, CensusInvariantRow, ROW_KIND_COUNT, ROW_KINDS, VacuityMode,
-    check_census_invariants, invariants_for_kind,
+    check_census_invariants, invariants_for_kind, scanner_provides_template,
 };
 use omp_inventory_map::{InventoryInputs, InventoryRow, ProbeState, build_inventory_map};
 use serde_json::json;
@@ -43,6 +43,8 @@ fn row(
         negative_evidence,
         vacuity_mode,
         vacuity_reason,
+        what_it_provides: String::new(),
+        inputs: Vec::new(),
     }
 }
 
@@ -197,6 +199,8 @@ fn census_invariants_emitted_map_is_kind_specific() {
             negative_evidence: row.negative_evidence.clone(),
             vacuity_mode: row.vacuity_mode,
             vacuity_reason: row.vacuity_reason.clone(),
+            what_it_provides: row.what_it_provides.clone(),
+            inputs: row.inputs.clone(),
         })
         .collect();
 
@@ -216,15 +220,26 @@ fn census_invariants_emitted_map_is_kind_specific() {
         crate_row
             .must_be_true
             .iter()
-            .any(|item| item.contains("ack-spine")),
-        "crate row must name its identifier: {:?}",
+            .any(|item| item.contains("ack detector") && item.contains("finding-dispatch")),
+        "crate:ack-spine contract must be about the detector, not cargo metadata: {:?}",
         crate_row.must_be_true
     );
-    let cli_row = views
+    assert!(
+        !crate_row.what_it_provides.contains("from cargo metadata"),
+        "scanner provenance leaked: {}",
+        crate_row.what_it_provides
+    );
+    let cli_alpha = views
         .iter()
-        .find(|row| row.kind == "cli_command")
-        .expect("cli_command");
-    assert_ne!(crate_row.must_be_true, cli_row.must_be_true);
+        .find(|row| row.id.contains("cli_command:alpha"))
+        .expect("cli_command:alpha");
+    let cli_beta = views
+        .iter()
+        .find(|row| row.id.contains("cli_command:beta"))
+        .expect("cli_command:beta");
+    assert_eq!(cli_alpha.must_be_true, vec!["omp --help lists alpha".to_owned()]);
+    assert_eq!(cli_beta.must_be_true, vec!["omp --help lists beta".to_owned()]);
+    assert_ne!(crate_row.must_be_true, cli_alpha.must_be_true);
 
     let mut must = std::collections::BTreeSet::new();
     let mut neg = std::collections::BTreeSet::new();
@@ -232,27 +247,40 @@ fn census_invariants_emitted_map_is_kind_specific() {
         must.insert(serde_json::to_string(&row.must_be_true).unwrap());
         neg.insert(serde_json::to_string(&row.negative_evidence).unwrap());
     }
-    assert!(
-        must.len() >= ROW_KIND_COUNT,
-        "distinct must_be_true={} < {ROW_KIND_COUNT}",
-        must.len()
+    assert_eq!(
+        must.len(),
+        views.len(),
+        "distinct must_be_true={} n={}",
+        must.len(),
+        views.len()
     );
-    assert!(
-        neg.len() >= ROW_KIND_COUNT,
-        "distinct negative_evidence={} < {ROW_KIND_COUNT}",
-        neg.len()
+    assert_eq!(
+        neg.len(),
+        views.len(),
+        "distinct negative_evidence={} n={}",
+        neg.len(),
+        views.len()
     );
 
-    // Two cli_command rows share the kind template → partitioned vacuity.
-    match check_census_invariants(&views) {
-        Err(CensusInvariantError::VacuousInvariantSet { kind, n, .. }) => {
-            assert_eq!(kind, "cli_command");
-            assert!(n >= 2, "n={n}");
-        }
-        other => panic!("kind-template cli_command rows must still be VACUOUS, got {other:?}"),
-    }
+    check_census_invariants(&views).expect("per-row contracts must be GREEN");
 
-    assert_eq!(map.rows.iter().find(|row| row.id == "crate:ack-spine").map(|row| row.status), Some(ProbeState::Known));
+    let planted = map
+        .rows
+        .iter()
+        .find(|row| row.id == "crate:ack-spine")
+        .expect("planted subject");
+    assert_ne!(
+        planted.what_it_provides,
+        scanner_provides_template("ack-spine")
+    );
+
+    assert_eq!(
+        map.rows
+            .iter()
+            .find(|row| row.id == "crate:ack-spine")
+            .map(|row| row.status),
+        Some(ProbeState::Known)
+    );
 }
 
 #[test]
@@ -289,6 +317,90 @@ fn census_invariants_structural_mode_is_in_the_envelope() {
         negative_evidence: decoded.negative_evidence.clone(),
         vacuity_mode: decoded.vacuity_mode,
         vacuity_reason: decoded.vacuity_reason.clone(),
+        what_it_provides: decoded.what_it_provides.clone(),
+        inputs: decoded.inputs.clone(),
     };
     check_census_invariants(&[view]).expect("structural row with reason is accepted");
 }
+
+#[test]
+fn planted_scanner_provenance_crate_row_fails_naming_the_specimen() {
+    let mut rows = diverse_fixture();
+    let mut planted = row(
+        "crate:planted-dup",
+        "workspace_crate",
+        vec!["crate planted-dup exposes a workspace surface named planted-dup, not a cargo-metadata provenance string".to_owned()],
+        vec!["crate planted-dup is not inferred by grepping crate names in AGENTS.md".to_owned()],
+        None,
+        None,
+    );
+    planted.what_it_provides = scanner_provides_template("planted-dup");
+    rows.push(planted);
+    match check_census_invariants(&rows) {
+        Err(CensusInvariantError::ScannerProvenance { id, field, value }) => {
+            assert_eq!(id, "crate:planted-dup");
+            assert_eq!(field, "what_it_provides");
+            assert!(
+                value.contains("from cargo metadata"),
+                "message must name the template, got {value}"
+            );
+            let rendered = CensusInvariantError::ScannerProvenance {
+                id: id.clone(),
+                field,
+                value: value.clone(),
+            }
+            .to_string();
+            assert!(
+                rendered.contains("crate:planted-dup"),
+                "error must name the specimen: {rendered}"
+            );
+            assert!(
+                rendered.contains("SCANNER_PROVENANCE"),
+                "error must name SCANNER_PROVENANCE: {rendered}"
+            );
+        }
+        other => panic!("planted scanner provenance must be RED, got {other:?}"),
+    }
+}
+
+#[test]
+fn two_cli_rows_sharing_one_contract_fail_with_vacuous_message() {
+    let rows = vec![
+        row(
+            "surface:cli_command:alpha",
+            "cli_command",
+            vec!["omp --help lists COMMANDS".to_owned()],
+            vec!["missing COMMANDS is UNKNOWN for alpha".to_owned()],
+            None,
+            None,
+        ),
+        row(
+            "surface:cli_command:beta",
+            "cli_command",
+            vec!["omp --help lists COMMANDS".to_owned()],
+            vec!["missing COMMANDS is UNKNOWN for beta".to_owned()],
+            None,
+            None,
+        ),
+    ];
+    match check_census_invariants(&rows) {
+        Err(CensusInvariantError::VacuousInvariantSet {
+            field,
+            kind,
+            n,
+            distinct,
+            repeated,
+        }) => {
+            assert_eq!(field, "must_be_true");
+            assert!(kind == "cli_command" || kind == "all", "kind={kind}");
+            assert_eq!(n, 2);
+            assert_eq!(distinct, 1);
+            assert!(
+                repeated.contains("omp --help lists COMMANDS"),
+                "repeated={repeated}"
+            );
+        }
+        other => panic!("shared cli contract must be VACUOUS, got {other:?}"),
+    }
+}
+

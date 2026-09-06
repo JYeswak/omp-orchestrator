@@ -141,6 +141,8 @@ fn census_rows(map: &InventoryMap) -> Vec<CensusInvariantRow> {
             negative_evidence: row.negative_evidence.clone(),
             vacuity_mode: row.vacuity_mode,
             vacuity_reason: row.vacuity_reason.clone(),
+            what_it_provides: row.what_it_provides.clone(),
+            inputs: row.inputs.clone(),
         })
         .collect()
 }

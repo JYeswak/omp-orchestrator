@@ -1,16 +1,15 @@
 //! Anti-vacuity check for inventory census invariants.
 //!
 //! A census that repeats one `must_be_true` / `negative_evidence` value across
-//! more than one row is not a census: the four-field discipline passed
-//! syntactically and said nothing about the subject. INV-2026-08-31 is the
-//! retained known-bad (n=183, distinct=1).
+//! more than one row is not a census. INV-2026-08-31 is the retained known-bad
+//! (n=183, distinct=1). lwdo.2 raises the floor: every non-structural row
+//! carries a contract about *that* surface, so distinct count equals row
+//! count, and crate `what_it_provides` / `inputs` may not be cargo-metadata
+//! scanner provenance.
 //!
-//! Partition is by `kind`. A row may declare `vacuity_mode=structural` with a
-//! non-empty reason; those rows are excluded from the distinct-count and are
-//! carried through the envelope unchanged.
-//!
-//! NO-CLAIM: this refuses identical invariant *sets*. It does not prove a
-//! remaining distinct string is a true contract of the surface (lwdo.2).
+//! NO-CLAIM: uniqueness plus a named contract sentence does not prove the
+//! sentence is true at runtime. Doctor wiring is the reachable trigger.
+
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -63,6 +62,8 @@ pub struct CensusInvariantRow {
     pub negative_evidence: Vec<String>,
     pub vacuity_mode: Option<VacuityMode>,
     pub vacuity_reason: Option<String>,
+    pub what_it_provides: String,
+    pub inputs: Vec<String>,
 }
 
 impl CensusInvariantRow {
@@ -93,6 +94,11 @@ pub enum CensusInvariantError {
     StructuralVacuityMissingReason {
         id: String,
     },
+    ScannerProvenance {
+        id: String,
+        field: &'static str,
+        value: String,
+    },
 }
 
 impl fmt::Display for CensusInvariantError {
@@ -119,6 +125,10 @@ impl fmt::Display for CensusInvariantError {
                     "STRUCTURAL_VACUITY_MISSING_REASON id={id} vacuity_mode=structural requires a non-empty reason"
                 )
             }
+            Self::ScannerProvenance { id, field, value } => write!(
+                formatter,
+                "SCANNER_PROVENANCE id={id} field={field} value={value} — row contract must not be cargo-metadata provenance"
+            ),
         }
     }
 }
@@ -142,23 +152,15 @@ fn check_field(
         by_kind.entry(row.kind.as_str()).or_default().push(row);
     }
 
-    let mut global: BTreeSet<String> = BTreeSet::new();
-    let mut global_n = 0usize;
-    let mut global_sample = String::new();
-    for row in rows.iter().filter(|row| !row.structural()) {
-        let encoded = encode_set(accessor(row));
-        if global_n == 0 {
-            global_sample = encoded.clone();
-        }
-        global.insert(encoded);
-        global_n += 1;
-    }
-    if global_n > 1 && global.len() == 1 {
+    let measurable: Vec<&CensusInvariantRow> =
+        rows.iter().filter(|row| !row.structural()).collect();
+    let (global_n, global_distinct, global_sample) = uniqueness(&measurable, &accessor);
+    if global_n > 1 && global_distinct < global_n {
         return Err(CensusInvariantError::VacuousInvariantSet {
             field,
             kind: "all".to_owned(),
             n: global_n,
-            distinct: 1,
+            distinct: global_distinct,
             repeated: global_sample,
         });
     }
@@ -167,26 +169,47 @@ fn check_field(
         if members.len() <= 1 {
             continue;
         }
-        let mut distinct = BTreeSet::new();
-        let mut sample = String::new();
-        for row in &members {
-            let encoded = encode_set(accessor(row));
-            if distinct.is_empty() {
-                sample = encoded.clone();
-            }
-            distinct.insert(encoded);
-        }
-        if distinct.len() == 1 {
+        let (n, distinct, sample) = uniqueness(&members, &accessor);
+        if distinct < n {
             return Err(CensusInvariantError::VacuousInvariantSet {
                 field,
                 kind: kind.to_owned(),
-                n: members.len(),
-                distinct: 1,
+                n,
+                distinct,
                 repeated: sample,
             });
         }
     }
     Ok(())
+}
+
+fn uniqueness(
+    rows: &[&CensusInvariantRow],
+    accessor: impl Fn(&CensusInvariantRow) -> &[String],
+) -> (usize, usize, String) {
+    let mut seen = BTreeSet::new();
+    let mut repeated = String::new();
+    for row in rows {
+        let encoded = encode_set(accessor(row));
+        if !seen.insert(encoded.clone()) && repeated.is_empty() {
+            repeated = encoded;
+        }
+    }
+    (rows.len(), seen.len(), repeated)
+}
+
+/// Scanner-provenance template lwdo.2 refuses on crate rows.
+#[must_use]
+pub fn scanner_provides_template(crate_name: &str) -> String {
+    format!("Workspace crate {crate_name} from cargo metadata")
+}
+
+fn is_scanner_provides(value: &str) -> bool {
+    value.contains(" from cargo metadata") || value.starts_with("Workspace crate ")
+}
+
+fn is_scanner_input(value: &str) -> bool {
+    value.contains("cargo metadata")
 }
 
 /// Refuse an empty census and a one-distinct-value invariant set.
@@ -222,6 +245,20 @@ pub fn check_census_invariants(
                     crate_name: crate_name.to_owned(),
                 });
             }
+            if !row.what_it_provides.is_empty() && is_scanner_provides(&row.what_it_provides) {
+                return Err(CensusInvariantError::ScannerProvenance {
+                    id: row.id.clone(),
+                    field: "what_it_provides",
+                    value: row.what_it_provides.clone(),
+                });
+            }
+            if let Some(input) = row.inputs.iter().find(|item| is_scanner_input(item)) {
+                return Err(CensusInvariantError::ScannerProvenance {
+                    id: row.id.clone(),
+                    field: "inputs",
+                    value: input.clone(),
+                });
+            }
         }
     }
     check_field(rows, "must_be_true", |row| &row.must_be_true)?;
@@ -229,57 +266,95 @@ pub fn check_census_invariants(
     Ok(())
 }
 
-/// Kind-specific invariant templates. Crate rows embed the crate identifier;
-/// every other kind shares one template so a live scan still trips
-/// `VACUOUS_INVARIANT_SET` on the repeated kind-level value until lwdo.2
-/// rewrites per-row contracts.
+/// Per-row contracts. Identity is the surface name (cli command, crate, …).
+/// A row whose invariant is reusable verbatim by another row has not written
+/// an invariant.
 pub fn invariants_for_kind(kind: &str, identity: &str) -> (Vec<String>, Vec<String>) {
     match kind {
         "cli_command" => (
-            vec!["cli_command rows are enumerated from the omp --help COMMANDS block".to_owned()],
-            vec![
-                "a missing COMMANDS block is UNKNOWN, not a healthy zero-command census".to_owned(),
-            ],
+            vec![format!("omp --help lists {identity}")],
+            vec![format!(
+                "a missing COMMANDS block is UNKNOWN, not a healthy zero for {identity}"
+            )],
         ),
         "type_root" => (
-            vec!["type_root rows are directories under the installed dist/types tree".to_owned()],
-            vec!["type_root rows are not inferred by grepping this repository's Rust sources".to_owned()],
+            vec![format!(
+                "installed dist/types contains directory {identity}"
+            )],
+            vec![format!(
+                "type_root {identity} is not inferred by grepping this repository's Rust sources"
+            )],
         ),
         "declaration" => (
-            vec!["declaration rows are top-level .d.ts files beside dist/types".to_owned()],
-            vec!["declaration rows are not counted from docs/plan prose".to_owned()],
+            vec![format!(
+                "installed dist/types lists declaration {identity}"
+            )],
+            vec![format!(
+                "declaration {identity} is not counted from docs/plan prose"
+            )],
         ),
         "rpc_handler" => (
-            vec!["rpc_handler rows are case labels in the installed cli.js dispatch handler".to_owned()],
-            vec!["rpc_handler rows are not the retired 81/17 method pair".to_owned()],
+            vec![format!(
+                "installed cli.js dispatch handler has case {identity}"
+            )],
+            vec![format!(
+                "rpc_handler {identity} is not the retired 81/17 method pair"
+            )],
         ),
         "slash_command" => (
-            vec!["slash_command rows come from the omp --mode=rpc startup stream".to_owned()],
-            vec!["slash_command expected_slash_commands is not treated as a discovered count".to_owned()],
+            vec![format!("omp --mode=rpc startup stream lists {identity}")],
+            vec![format!(
+                "slash_command {identity} is not treated as a discovered count"
+            )],
         ),
         "omp_method" => (
-            vec!["omp_method rows are omp/* strings in the installed cli.js bundle".to_owned()],
-            vec!["omp_method rows are not reconstructed from tmux pane scrapes".to_owned()],
+            vec![format!("installed cli.js bundle contains {identity}")],
+            vec![format!(
+                "omp_method {identity} is not reconstructed from tmux pane scrapes"
+            )],
         ),
         "transport" => (
-            vec!["transport rows are the documented --mode=<text|json|rpc|rpc-ui> flag".to_owned()],
-            vec!["a missing --mode probe is UNKNOWN, not an invented default transport".to_owned()],
-        ),
-        "workspace_crate" => (
             vec![format!(
-                "workspace crate {identity} is listed by cargo metadata --format-version 1 --no-deps"
+                "omp --help documents --mode including {identity}"
             )],
             vec![format!(
-                "workspace crate {identity} is not inferred by grepping crate names in AGENTS.md"
+                "a missing --mode probe is UNKNOWN, not an invented default for {identity}"
             )],
         ),
+        "workspace_crate" => crate_row_contract(identity),
         other => (
             vec![format!(
-                "{other} rows carry a kind-specific must_be_true, not the scanner provenance template"
+                "{other}:{identity} carries a per-row contract, not the scanner provenance template"
             )],
             vec![format!(
-                "{other} rows do not reuse the shared NO_SOURCE_GREP negative-evidence string"
+                "{other}:{identity} does not reuse a shared NO_SOURCE_GREP negative-evidence string"
             )],
         ),
     }
+}
+
+fn crate_row_contract(name: &str) -> (Vec<String>, Vec<String>) {
+    let must = match name {
+        "ack-spine" => {
+            "crate ack-spine exposes an ack detector reachable from finding-dispatch".to_owned()
+        }
+        "ack-stage" => {
+            "crate ack-stage admits exactly one ACK comment form as delivery evidence".to_owned()
+        }
+        "finding-dispatch" => {
+            "crate finding-dispatch is a reachable caller of the ack detector".to_owned()
+        }
+        "omp-inventory-map" => {
+            "crate omp-inventory-map owns generation and the doctor inventory gate".to_owned()
+        }
+        other => format!(
+            "crate {other} exposes a workspace surface named {other}, not a cargo-metadata provenance string"
+        ),
+    };
+    (
+        vec![must],
+        vec![format!(
+            "crate {name} is not inferred by grepping crate names in AGENTS.md"
+        )],
+    )
 }
