@@ -74,9 +74,8 @@ fn configure_group(command: &mut Command) {
 }
 
 fn checkpoint_io(cx: &Cx) -> std::io::Result<()> {
-    checkpoint(cx).map_err(|error| {
-        std::io::Error::new(std::io::ErrorKind::Interrupted, error.to_string())
-    })
+    checkpoint(cx)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::Interrupted, error.to_string()))
 }
 
 /// Spawn a long-lived process-group child for callers that must observe it while running.
@@ -228,12 +227,14 @@ fn bounded_output_with_stdin(
         }
         buf
     });
-    let stdin_writer = stdin.and_then(|bytes| child.stdin.take().map(|mut pipe| {
-        let bytes = bytes.to_owned();
-        std::thread::spawn(move || {
-            let _ = pipe.write_all(&bytes);
+    let stdin_writer = stdin.and_then(|bytes| {
+        child.stdin.take().map(|mut pipe| {
+            let bytes = bytes.to_owned();
+            std::thread::spawn(move || {
+                let _ = pipe.write_all(&bytes);
+            })
         })
-    }));
+    });
 
     let started = std::time::Instant::now();
     let status = loop {
@@ -265,13 +266,13 @@ fn bounded_output_with_stdin(
         None => {
             let group = format!("-{pid}");
             let _ = std::process::Command::new("/bin/kill")
-                .args(["-TERM", &group])
+                .args(["-TERM", "--", &group])
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
                 .status();
             std::thread::sleep(std::time::Duration::from_millis(300));
             let _ = std::process::Command::new("/bin/kill")
-                .args(["-KILL", &group])
+                .args(["-KILL", "--", &group])
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
                 .status();
@@ -385,13 +386,13 @@ pub fn bounded_status(
         None => {
             let group = format!("-{pid}");
             let _ = std::process::Command::new("/bin/kill")
-                .args(["-TERM", &group])
+                .args(["-TERM", "--", &group])
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
                 .status();
             std::thread::sleep(std::time::Duration::from_millis(300));
             let _ = std::process::Command::new("/bin/kill")
-                .args(["-KILL", &group])
+                .args(["-KILL", "--", &group])
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
                 .status();
@@ -444,7 +445,6 @@ mod tests {
             .map(|s| s.success())
             .unwrap_or(false)
     }
-
 
     #[test]
     fn sleep_child_past_deadline_is_timedout_never_completed() {
@@ -723,7 +723,10 @@ mod tests {
             let Some(ppid) = fields.next().and_then(|value| value.parse::<u32>().ok()) else {
                 continue;
             };
-            if fields.next().is_some_and(|command| command.ends_with("/ps") || command == "ps") {
+            if fields
+                .next()
+                .is_some_and(|command| command.ends_with("/ps") || command == "ps")
+            {
                 continue;
             }
             children.entry(ppid).or_default().push(pid);

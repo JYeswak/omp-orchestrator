@@ -178,17 +178,18 @@ fn join_reader(handle: thread::JoinHandle<String>) -> String {
 
 
 /// Signal the process GROUP (`-pid`), TERM then KILL. Dependency-free: this crate has no
-/// `libc`, so the signal goes through `/bin/kill`, which accepts a negative pgid.
+/// libc, so the signal goes through /bin/kill. procps-ng requires -- before a negative pgid;
+/// without it, procps-ng can return 0 without signalling. BSD kill accepts the explicit form.
 fn kill_group(pid: u32) {
     let neg = format!("-{pid}");
     let _ = Command::new("/bin/kill")
-        .args(["-TERM", &neg])
+        .args(["-TERM", "--", &neg])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status();
     thread::sleep(Duration::from_millis(300));
     let _ = Command::new("/bin/kill")
-        .args(["-KILL", &neg])
+        .args(["-KILL", "--", &neg])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status();
