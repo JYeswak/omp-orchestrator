@@ -2211,13 +2211,33 @@ async fn send_and_verify(
                     )?;
                 }
             }
+            // THE ACTION MUST FOLLOW THE DISCRIMINATOR, NOT THE PRE-DISCRIMINATION STAGE.
+            //
+            // MEASURED 2026-09-05 on two panes and two beads within minutes:
+            //   pane=%9 bead=y6v5 action=AWAIT_HUMAN ... owes_human=false
+            //   pane=%8 bead=93lo action=AWAIT_HUMAN ... owes_human=false
+            // `stage.action` is decided BEFORE the discriminator runs, so a successful
+            // discrimination that explicitly does not owe a human still printed the
+            // instruction to fetch one. Two contradictory directives in a single line,
+            // and the operator-facing half was the wrong one.
+            let action = match &discriminated {
+                Some(verdict) if !verdict.owes_a_human() => verdict.next_action(),
+                _ => stage.action.label(),
+            };
             let discriminator = discriminated
                 .as_ref()
                 .map(|v| {
+                    // An EMPTY value is indistinguishable from a field the writer forgot.
+                    // `ACK_PENDING_WORKER_BUSY` carries no reason because it is a positive
+                    // discrimination rather than a refusal, and it printed as a bare
+                    // `discriminator_reason=` — which reads as a bug in the emitter.
+                    let mut reason_field = v.reason_or_empty().to_string();
+                    if reason_field.is_empty() {
+                        reason_field = "NONE".to_owned();
+                    }
                     format!(
-                        " discriminator={} discriminator_reason={} owes_human={}",
+                        " discriminator={} discriminator_reason={reason_field} owes_human={}",
                         v.label(),
-                        v.reason_or_empty(),
                         v.owes_a_human()
                     )
                 })
@@ -2226,8 +2246,7 @@ async fn send_and_verify(
                 // letting the reader assume it did.
                 .unwrap_or_else(|| " discriminator=NO_WORKING_CAPTURE owes_human=unknown".to_owned());
             return Err(format!(
-                "ACK_STAGE_RETRY_BLOCKED pane={pane} bead={bead} action={} verdict={} reason={} after={}s{discriminator}",
-                stage.action.label(),
+                "ACK_STAGE_RETRY_BLOCKED pane={pane} bead={bead} action={action} verdict={} reason={} after={}s{discriminator}",
                 stage.delivery.label(),
                 reason,
                 RECEIPT_TIMEOUT.as_secs(),
@@ -2542,6 +2561,121 @@ enum PendingDispatch {
         detail: String,
         reason: &'static str,
     },
+}
+
+impl PendingDispatch {
+    /// Stable name for the four states. Absence is `NO_PENDING_DISPATCH`, never
+    /// an error and never a silent pass.
+    fn label(&self) -> &'static str {
+        match self {
+            Self::None => "NO_PENDING_DISPATCH",
+            Self::Live { .. } => "PENDING_DISPATCH_LIVE",
+            Self::Expired { .. } => "DISPATCH_INTENT_EXPIRED",
+            Self::Undatable { .. } => "PENDING_DISPATCH_UNDATABLE",
+        }
+    }
+}
+
+/// Why the loop itself may clear a marker. Human `inspect-or-clear-pending-dispatch`
+/// remains only for `Undatable`.
+fn intent_clear_reason(error: &str) -> Option<&'static str> {
+    // d6q2: receiver observation is a separate authority from sender return.
+    // A marker that survives RECEIVER_OBSERVATION_MISSING treats sender success
+    // as in-flight — the unacknowledged-transport latch. Clear it.
+    if error.contains("RECEIVER_OBSERVATION_MISSING") {
+        return Some("RECEIVER_OBSERVATION_MISSING");
+    }
+    // Packet was submitted; ACK wait is the genuine in-flight case. Keep Live.
+    if error.contains("ACK_STAGE_RETRY_BLOCKED") {
+        return None;
+    }
+    // Anything else after the marker was written failed before a receipt claim.
+    Some("DISPATCH_FAILED_BEFORE_RECEIPT")
+}
+
+fn bead_from_marker_detail(detail: &str) -> String {
+    serde_json::from_str::<Value>(detail.trim())
+        .ok()
+        .and_then(|value| value.get("bead").and_then(Value::as_str).map(str::to_owned))
+        .unwrap_or_default()
+}
+
+#[derive(Debug)]
+struct MarkerCycleOutcome {
+    blocked_panes: Vec<String>,
+    cleared: Vec<(String, String, &'static str)>,
+}
+
+#[derive(Debug)]
+enum MarkerFence {
+    Proceed(MarkerCycleOutcome),
+    StopUndatable {
+        detail: String,
+        reason: &'static str,
+        marker_path: PathBuf,
+    },
+}
+
+/// Machine clearing transition. `Expired` is retired here, named, and the cycle
+/// CONTINUES. `Live` withholds only that pane. `Undatable` still owes a human.
+fn process_pending_markers(config: &Config, tick: u64) -> Result<MarkerFence, String> {
+    let rows = read_pending_dispatches(config)?;
+    if rows.is_empty() {
+        return Ok(MarkerFence::Proceed(MarkerCycleOutcome {
+            blocked_panes: Vec::new(),
+            cleared: Vec::new(),
+        }));
+    }
+    let mut blocked_panes = Vec::new();
+    let mut cleared = Vec::new();
+    for (pane, marker_path, verdict) in rows {
+        match verdict {
+            PendingDispatch::None => {}
+            PendingDispatch::Live { detail, age_secs } => {
+                write_heartbeat(config, tick, "DISPATCH_RETRY_BLOCKED", &detail)?;
+                let remaining = PENDING_DISPATCH_MAX_AGE_SECS.saturating_sub(age_secs);
+                println!(
+                    "DISPATCH_RETRY_BLOCKED age_secs={age_secs} expires_in_secs={remaining} owner=loop next_action=await-intent-expiry scope=pane blocked_pane={pane} marker={} detail={detail}",
+                    marker_path.display()
+                );
+                blocked_panes.push(pane);
+            }
+            PendingDispatch::Undatable { detail, reason } => {
+                return Ok(MarkerFence::StopUndatable {
+                    detail,
+                    reason,
+                    marker_path,
+                });
+            }
+            PendingDispatch::Expired { detail, age_secs } => {
+                let bead = bead_from_marker_detail(&detail);
+                clear_dispatch_marker(&marker_path, &pane)?;
+                let expiry = format!(
+                    "age_secs={age_secs} max_age_secs={PENDING_DISPATCH_MAX_AGE_SECS} pane={pane} bead={bead} marker={} reason=DISPATCH_INTENT_EXPIRED owner=loop next_action=continue detail={detail}",
+                    marker_path.display()
+                );
+                write_heartbeat(config, tick, "DISPATCH_INTENT_EXPIRED", &expiry)?;
+                println!(
+                    "DISPATCH_INTENT_EXPIRED tick={tick} session={} {expiry}",
+                    config.session
+                );
+                cleared.push((pane, bead, "DISPATCH_INTENT_EXPIRED"));
+            }
+        }
+    }
+    Ok(MarkerFence::Proceed(MarkerCycleOutcome {
+        blocked_panes,
+        cleared,
+    }))
+}
+
+/// After the loop clears latched beads, pick a DIFFERENT ready bead.
+fn select_next_bead<'a>(ready: &'a [String], cleared_beads: &[String]) -> Option<&'a str> {
+    ready
+        .iter()
+        .map(String::as_str)
+        .find(|id| !cleared_beads.iter().any(|cleared| cleared == id))
+        .or_else(|| ready.first().map(String::as_str))
 }
 
 /// Classify marker text against a clock. Pure, so a test plants an age without
@@ -3676,46 +3810,31 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     //
     // `Expired` still clears and CONTINUES (the y6v5 fix). `Undatable` still
     // fails closed to a human. Neither is weakened here; both are now per-pane.
-    let mut marker_blocked_panes: Vec<String> = Vec::new();
-    for (pane, marker_path, verdict) in read_pending_dispatches(config)? {
-        match verdict {
-            PendingDispatch::None => {}
-            PendingDispatch::Live { detail, age_secs } => {
-                write_heartbeat(config, tick, "DISPATCH_RETRY_BLOCKED", &detail)?;
-                let remaining = PENDING_DISPATCH_MAX_AGE_SECS.saturating_sub(age_secs);
-                println!(
-                    "DISPATCH_RETRY_BLOCKED age_secs={age_secs} expires_in_secs={remaining} owner=loop next_action=await-intent-expiry scope=pane blocked_pane={pane} marker={} detail={detail}",
-                    marker_path.display()
-                );
-                marker_blocked_panes.push(pane);
+    let marker_blocked_panes: Vec<String> = match process_pending_markers(config, tick)? {
+        MarkerFence::Proceed(outcome) => {
+            if outcome.cleared.is_empty() && outcome.blocked_panes.is_empty() {
+                write_heartbeat(
+                    config,
+                    tick,
+                    "NO_PENDING_DISPATCH",
+                    "owner=loop next_action=continue",
+                )?;
             }
-            PendingDispatch::Undatable { detail, reason } => {
-                // FAIL CLOSED, and fleet-wide. An age we cannot compute must not be
-                // retired as stale, and a marker we cannot date may name a pane whose
-                // dispatch is genuinely in flight — so this is the one arm that still
-                // stops the cycle and still owes a human.
-                write_heartbeat(config, tick, "DISPATCH_RETRY_BLOCKED", &detail)?;
-                println!(
-                    "DISPATCH_RETRY_BLOCKED reason={reason} owner=josh next_action=inspect-or-clear-pending-dispatch scope=fleet marker={} detail={detail}",
-                    marker_path.display()
-                );
-                return Ok(());
-            }
-            PendingDispatch::Expired { detail, age_secs } => {
-                clear_dispatch_marker(&marker_path, &pane)?;
-                let expiry = format!(
-                    "age_secs={age_secs} max_age_secs={PENDING_DISPATCH_MAX_AGE_SECS} pane={pane} marker={} detail={detail}",
-                    marker_path.display()
-                );
-                write_heartbeat(config, tick, "DISPATCH_INTENT_EXPIRED", &expiry)?;
-                println!(
-                    "DISPATCH_INTENT_EXPIRED tick={tick} session={} {expiry}",
-                    config.session
-                );
-                // Deliberately NOT `return` — the whole defect was returning here.
-            }
+            outcome.blocked_panes
         }
-    }
+        MarkerFence::StopUndatable {
+            detail,
+            reason,
+            marker_path,
+        } => {
+            write_heartbeat(config, tick, "DISPATCH_RETRY_BLOCKED", &detail)?;
+            println!(
+                "DISPATCH_RETRY_BLOCKED reason={reason} owner=josh next_action=inspect-or-clear-pending-dispatch scope=fleet marker={} detail={detail}",
+                marker_path.display()
+            );
+            return Ok(());
+        }
+    };
 
     // HD-0001 (docs/decisions.jsonl): "tick loop continues as long as we're keeping
     // our docs up to date". A buyer condition, so it gates the tick — and it is
@@ -4060,9 +4179,31 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                     "DISPATCH_RESULT_LEDGER_WRITE_FAILED source_pane={pane} bead={bead} result={report_detail} owner=josh next_action=repair-heartbeat-ledger report_error={report_error}"
                 ));
             }
-            let outcome = dispatch_result?;
-            if outcome.clear_intent {
-                clear_dispatch_intent(config, &pane)?;
+            match dispatch_result {
+                Ok(outcome) => {
+                    if outcome.clear_intent {
+                        clear_dispatch_intent(config, &pane)?;
+                        write_heartbeat(
+                            config,
+                            tick,
+                            "DISPATCH_INTENT_CLEARED",
+                            &format!(
+                                "pane={pane} bead={bead} reason=VERDICT_POSTED owner=loop next_action=continue"
+                            ),
+                        )?;
+                    }
+                }
+                Err(error) => {
+                    if let Some(reason) = intent_clear_reason(&error) {
+                        clear_dispatch_intent(config, &pane)?;
+                        let detail = format!(
+                            "pane={pane} bead={bead} reason={reason} owner=loop next_action=continue"
+                        );
+                        write_heartbeat(config, tick, "DISPATCH_INTENT_CLEARED", &detail)?;
+                        println!("DISPATCH_INTENT_CLEARED {detail}");
+                    }
+                    return Err(error);
+                }
             }
         }
         SupervisorDecision::GateUnwired { unwired } => {
@@ -4945,6 +5086,137 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
             "a fresh marker and a stale one must not classify alike"
         );
     }
+
+    fn plant_intent(config: &Config, pane: &str, bead: &str, issued_at: u64) -> PathBuf {
+        let path = pending_dispatch_path(config, pane);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("marker parent");
+        }
+        let row = serde_json::json!({
+            "event": "dispatch_intent",
+            "pane": pane,
+            "bead": bead,
+            "issued_at": issued_at,
+        });
+        std::fs::write(&path, format!("{row}\n")).expect("plant marker");
+        path
+    }
+
+    #[test]
+    fn absent_marker_label_is_no_pending_dispatch_not_an_error() {
+        assert_eq!(PendingDispatch::None.label(), "NO_PENDING_DISPATCH");
+        let temp = tempfile::tempdir().expect("absent marker tempdir");
+        let root = temp.path().to_path_buf();
+        let mut config = fixture_config(root.join("heartbeat.jsonl"));
+        config.pending_dispatch = root.join("no-such-marker");
+        assert_eq!(
+            read_pending_dispatch(&config).unwrap().label(),
+            "NO_PENDING_DISPATCH"
+        );
+        match process_pending_markers(&config, 1).unwrap() {
+            MarkerFence::Proceed(outcome) => {
+                assert!(outcome.blocked_panes.is_empty());
+                assert!(outcome.cleared.is_empty());
+            }
+            other => panic!("absence must Proceed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn receiver_observation_missing_clears_the_marker_ack_wait_does_not() {
+        assert_eq!(
+            intent_clear_reason(
+                "RECEIVER_OBSERVATION_MISSING pane=%1413 identity row absent"
+            ),
+            Some("RECEIVER_OBSERVATION_MISSING"),
+            "d6q2: missing receiver observation must not latch"
+        );
+        assert_eq!(
+            intent_clear_reason(
+                "ACK_STAGE_RETRY_BLOCKED pane=%1413 bead=x action=RETRY verdict=INDETERMINATE reason=ack_readback_missing after=75s"
+            ),
+            None,
+            "a genuine in-flight ACK wait must keep the Live marker"
+        );
+        let temp = tempfile::tempdir().expect("clear-on-missing tempdir");
+        let root = temp.path().to_path_buf();
+        let mut config = fixture_config(root.join("heartbeat.jsonl"));
+        config.pending_dispatch = root.join("pending");
+        let path = plant_intent(
+            &config,
+            "%1413",
+            "omp-orchestrator-ack-spine-oj6.3",
+            now_unix(),
+        );
+        assert!(path.exists(), "fresh marker must exist before the refusal");
+        let reason = intent_clear_reason("RECEIVER_OBSERVATION_MISSING pane=%1413").unwrap();
+        clear_dispatch_intent(&config, "%1413").unwrap();
+        assert!(
+            !path.exists(),
+            "reason={reason} must remove the marker so the next cycle is not latched"
+        );
+    }
+
+    #[test]
+    fn a_stale_marker_is_cleared_by_the_loop_and_a_different_bead_is_selected() {
+        let temp = tempfile::tempdir().expect("stale-loop tempdir");
+        let root = temp.path().to_path_buf();
+        let mut config = fixture_config(root.join("heartbeat.jsonl"));
+        config.pending_dispatch = root.join("pending");
+        let latched = "omp-orchestrator-ack-spine-oj6.3";
+        let next = "omp-orchestrator-kernel-gate-census-69i";
+        let path = plant_intent(
+            &config,
+            "%1413",
+            latched,
+            now_unix() - PENDING_DISPATCH_MAX_AGE_SECS - 30,
+        );
+        let MarkerFence::Proceed(outcome) = process_pending_markers(&config, 1).unwrap() else {
+            panic!("expired marker must Proceed after the machine clear");
+        };
+        assert!(
+            !path.exists(),
+            "KNOWN-BAD: the loop itself must remove the stale marker"
+        );
+        assert_eq!(outcome.blocked_panes.len(), 0);
+        assert_eq!(outcome.cleared.len(), 1);
+        assert_eq!(outcome.cleared[0].1, latched);
+        assert_eq!(outcome.cleared[0].2, "DISPATCH_INTENT_EXPIRED");
+        let ready = vec![next.to_owned(), "omp-orchestrator-third".to_owned()];
+        let cleared_beads: Vec<String> = outcome.cleared.iter().map(|row| row.1.clone()).collect();
+        let selected = select_next_bead(&ready, &cleared_beads).expect("ready queue");
+        assert_eq!(selected, next);
+        assert_ne!(
+            selected, latched,
+            "cleared={latched} selected={selected} — both beads named, and they differ"
+        );
+    }
+
+    #[test]
+    fn a_fresh_same_pane_marker_still_blocks_a_second_dispatch() {
+        let temp = tempfile::tempdir().expect("live-positive-control tempdir");
+        let root = temp.path().to_path_buf();
+        let mut config = fixture_config(root.join("heartbeat.jsonl"));
+        config.pending_dispatch = root.join("pending");
+        let path = plant_intent(
+            &config,
+            "%1413",
+            "omp-orchestrator-first-bead",
+            now_unix(),
+        );
+        let MarkerFence::Proceed(outcome) = process_pending_markers(&config, 1).unwrap() else {
+            panic!("fresh marker must stay Live, not StopUndatable");
+        };
+        assert!(path.exists(), "POSITIVE CONTROL: in-flight marker stays");
+        assert_eq!(outcome.blocked_panes, vec!["%1413".to_owned()]);
+        assert!(outcome.cleared.is_empty());
+        let second = write_dispatch_intent(&config, "%1413", "omp-orchestrator-second-bead");
+        assert!(
+            second.unwrap_err().contains("DISPATCH_RETRY_BLOCKED"),
+            "a second dispatch to the same pane must still refuse"
+        );
+    }
+
     #[test]
     fn heartbeat_is_durable_json_with_build_identity() {
         let temp = tempfile::tempdir().expect("heartbeat fixture tempdir");
