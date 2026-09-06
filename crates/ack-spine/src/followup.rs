@@ -122,14 +122,22 @@ impl fmt::Display for FollowUpVerdict {
     }
 }
 
-/// Extract the pane component of the canonical tracker assignee. Legacy names
-/// remain valid but intentionally yield None rather than inventing pane ownership.
+/// Extract the pane from the tracker assignee.
+///
+/// Canonical: `pane=%N;incarnation=…;agent=…`. Legacy hand-dispatch `pane4-%9`
+/// remains readable. Launch-flag names (WildStone) yield None — not invented.
 fn pane_from_assignee(assignee: &str) -> Option<String> {
-    assignee
+    if let Some(pane) = assignee
         .split(';')
         .find_map(|part| part.strip_prefix("pane="))
-        .filter(|pane| !pane.is_empty())
-        .map(str::to_owned)
+        .filter(|pane| pane.starts_with('%') && !pane.is_empty())
+    {
+        return Some(pane.to_owned());
+    }
+    assignee.rsplit_once('-').and_then(|(_, pane)| {
+        (pane.starts_with('%') && pane[1..].bytes().all(|b| b.is_ascii_digit()))
+            .then(|| pane.to_owned())
+    })
 }
 /// The pure classifier: given pre-captured bead state, classify the follow-up.
 ///
@@ -288,6 +296,30 @@ mod tests {
     const SUBSTANTIVE: &str = "VERDICT: re-ran the acceptance command, PASS";
 
     use super::*;
+
+    #[test]
+    fn silent_bead_followup_names_pane_from_canonical_assignee() {
+        let v = classify_followup(
+            "omp-orchestrator-fw20",
+            false,
+            None,
+            "pane=%7;incarnation=3;agent=WildStone",
+            "pane=%7;incarnation=3;agent=WildStone",
+            &[],
+            120,
+            60,
+            true,
+        );
+        match v {
+            FollowUpVerdict::SilentPastDeadline { pane_id, .. } => {
+                assert_eq!(pane_id.as_deref(), Some("%7"));
+            }
+            other => panic!("expected SilentPastDeadline with pane, got {other:?}"),
+        }
+        assert_eq!(pane_from_assignee("pane4-%9").as_deref(), Some("%9"));
+        assert_eq!(pane_from_assignee("WildStone"), None);
+    }
+
 
     /// LEG 1 — THE PUSH: completion is asserted by the worker via the tracker
     /// row and read back from that row alone. The classifier receives ONLY

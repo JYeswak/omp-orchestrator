@@ -1557,7 +1557,39 @@ fn tracker_assignee_for_dispatch(
     pane: &str,
     incarnation: PaneIncarnation,
 ) -> String {
-    format!("pane={pane};incarnation={};agent={receiver_agent}", incarnation.get())
+    tracker_assignee_with_composite(true, receiver_agent, pane, incarnation)
+        .expect("pane and agent were validated")
+}
+
+/// Canonical scheme: `pane=%N;incarnation=<nonzero>;agent=<name>`.
+///
+/// KEY: composite, not a bare pane id. Pane ids reuse across occupancies
+/// (`PaneIncarnation` exists for that). Agent alone is the launch-flag defect.
+/// Legacy rows stay as written: `pane4-%9` / nicknames / `WildStone`. Readers
+/// distinguish: canonical contains `pane=` AND `incarnation=` AND `agent=`;
+/// `paneN-%M` is hand-dispatch; anything else is unresolvable (not invented).
+fn tracker_assignee_with_composite(
+    composite: bool,
+    receiver_agent: &str,
+    pane: &str,
+    incarnation: PaneIncarnation,
+) -> Result<String, String> {
+    if !composite {
+        // MUTATION: the launch-flag write. Two panes collapse to one string.
+        return Ok(receiver_agent.to_owned());
+    }
+    if pane.trim().is_empty() || !pane.starts_with('%') {
+        return Err(format!(
+            "ASSIGNEE_UNRESOLVABLE pane={pane} reason=pane_not_a_tmux_id"
+        ));
+    }
+    if receiver_agent.trim().is_empty() {
+        return Err("ASSIGNEE_UNRESOLVABLE agent= reason=receiver_agent_empty".to_owned());
+    }
+    Ok(format!(
+        "pane={pane};incarnation={};agent={receiver_agent}",
+        incarnation.get()
+    ))
 }
 
 fn tracker_assignee_agent(assignee: &str) -> Option<&str> {
@@ -1566,6 +1598,20 @@ fn tracker_assignee_agent(assignee: &str) -> Option<&str> {
         .find_map(|part| part.strip_prefix("agent="))
         .filter(|agent| !agent.is_empty())
 }
+
+fn tracker_assignee_pane(assignee: &str) -> Option<&str> {
+    if let Some(pane) = assignee
+        .split(';')
+        .find_map(|part| part.strip_prefix("pane="))
+        .filter(|pane| pane.starts_with('%'))
+    {
+        return Some(pane);
+    }
+    assignee.rsplit_once('-').and_then(|(_, pane)| {
+        (pane.starts_with('%') && pane[1..].bytes().all(|b| b.is_ascii_digit())).then_some(pane)
+    })
+}
+
 
 
 fn receiver_agent_for_dispatch(
@@ -1738,7 +1784,12 @@ async fn claim_bead_for_supervisor(
         ));
     }
     let assignee = snapshot.assignee().unwrap_or("").to_owned();
-    let tracker_assignee = tracker_assignee_for_dispatch(receiver_agent, pane, incarnation);
+    let tracker_assignee = tracker_assignee_with_composite(true, receiver_agent, pane, incarnation)
+        .map_err(|reason| {
+            format!(
+                "DISPATCH_BLOCKED bead={bead} pane={pane} reason={reason} receiver_agent={receiver_agent} owner=josh next_action=fix-identity"
+            )
+        })?;
     let open = status == "open";
     let unclaimed_open = open && assignee.is_empty();
     let half_claimed_by_receiver = open
@@ -7735,7 +7786,53 @@ Stop: now
         assert_ne!(left, right);
         assert_eq!(tracker_assignee_agent(&left), Some("WildStone"));
         assert_eq!(tracker_assignee_agent(&right), Some("WildStone"));
+        assert_eq!(tracker_assignee_pane(&left), Some("%7"));
+        assert_eq!(tracker_assignee_pane(&right), Some("%8"));
         assert!(left.contains("pane=%7;incarnation="));
         assert!(right.contains("pane=%8;incarnation="));
+    }
+
+    #[test]
+    fn legacy_pane_prefixed_labels_remain_readable() {
+        assert_eq!(tracker_assignee_pane("pane4-%9"), Some("%9"));
+        assert_eq!(tracker_assignee_pane("pane3-%8"), Some("%8"));
+        assert_eq!(tracker_assignee_pane("WildStone"), None);
+        assert_eq!(tracker_assignee_pane("GreenFrog"), None);
+    }
+
+    #[test]
+    fn unresolvable_identity_is_typed_refusal_not_a_silent_write() {
+        let mint = IncarnationMint::new();
+        let empty_pane = tracker_assignee_with_composite(true, "WildStone", "", mint.mint());
+        assert!(empty_pane.unwrap_err().contains("ASSIGNEE_UNRESOLVABLE"));
+        let empty_agent = tracker_assignee_with_composite(true, "", "%7", mint.mint());
+        assert!(empty_agent.unwrap_err().contains("ASSIGNEE_UNRESOLVABLE"));
+    }
+
+    #[test]
+    fn mutation_launch_flag_write_collapses_panes_then_restores() {
+        let mint = IncarnationMint::new();
+        let a = mint.mint();
+        let b = mint.mint();
+        let with = (
+            tracker_assignee_with_composite(true, "WildStone", "%7", a).unwrap(),
+            tracker_assignee_with_composite(true, "WildStone", "%8", b).unwrap(),
+        );
+        assert_ne!(with.0, with.1, "leg 3 requires the composite");
+        let without = (
+            tracker_assignee_with_composite(false, "WildStone", "%7", a).unwrap(),
+            tracker_assignee_with_composite(false, "WildStone", "%8", b).unwrap(),
+        );
+        assert_eq!(
+            without.0, without.1,
+            "launch-flag write makes two panes identical — the defect"
+        );
+        let restored = (
+            tracker_assignee_with_composite(true, "WildStone", "%7", a).unwrap(),
+            tracker_assignee_with_composite(true, "WildStone", "%8", b).unwrap(),
+        );
+        assert_eq!(restored, with);
+        let source = include_str!("main.rs");
+        assert!(source.contains("tracker_assignee_with_composite(true,"));
     }
 }
