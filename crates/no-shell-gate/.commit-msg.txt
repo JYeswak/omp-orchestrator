@@ -1,0 +1,5 @@
+fix(gates): emit parseable gate-reachability JSON; retarget census control [test]
+
+Root JSON object was closed twice then a third brace appended, so
+serde trailing-characters made every reachability fixture look red
+including the positive control. Census control line 80->78 with dies-when.

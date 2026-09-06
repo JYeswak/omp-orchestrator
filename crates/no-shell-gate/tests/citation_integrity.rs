@@ -64,7 +64,11 @@ fn repo_root() -> PathBuf {
 fn omp_root() -> Option<PathBuf> {
     let home = std::env::var("HOME").ok()?;
     let p = PathBuf::from(home).join(".local/lib/node_modules/@oh-my-pi/pi-coding-agent");
-    if p.is_dir() { Some(p) } else { None }
+    if p.is_dir() {
+        Some(p)
+    } else {
+        None
+    }
 }
 
 fn plan_text() -> String {
@@ -106,9 +110,11 @@ fn cited_paths(text: &str) -> Vec<String> {
 #[test]
 fn every_cited_type_path_exists() {
     let Some(root) = omp_root() else {
-        eprintln!("SKIP every_cited_type_path_exists: OMP not installed at \
+        eprintln!(
+            "SKIP every_cited_type_path_exists: OMP not installed at \
                    ~/.local/lib/node_modules/@oh-my-pi/pi-coding-agent — \
-                   the subject is absent, so this proves nothing and says so");
+                   the subject is absent, so this proves nothing and says so"
+        );
         return;
     };
     let text = plan_text();
@@ -157,9 +163,14 @@ fn every_cited_symbol_appears_in_the_file_it_names() {
     // for the symbol, keeping the same plausibility filter. Both the backticked and the
     // bare form are accepted because both appear in the plan and both are legitimate.
     let mut pairs: Vec<(String, String)> = Vec::new();
-    for (idx, _) in text.match_indices("(dist/types/").chain(text.match_indices("(`dist/types/")) {
+    for (idx, _) in text
+        .match_indices("(dist/types/")
+        .chain(text.match_indices("(`dist/types/"))
+    {
         let after = &text[idx..];
-        let Some(e) = after.find(".d.ts") else { continue };
+        let Some(e) = after.find(".d.ts") else {
+            continue;
+        };
         let path = after[1..e + 5].trim_start_matches('`').to_owned();
 
         // Walk back over the space(s) before '(' and take the preceding token.
@@ -169,13 +180,23 @@ fn every_cited_symbol_appears_in_the_file_it_names() {
             .rsplit(|c: char| c.is_whitespace() || c == '|' || c == '`')
             .next()
             .unwrap_or("");
-        let clean_sym = sym_raw.split(['<', '(']).next().unwrap_or("").trim().to_owned();
+        let clean_sym = sym_raw
+            .split(['<', '('])
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_owned();
 
         // Unchanged from the original: an uppercase-initial identifier-shaped token.
         // This is what stops a prose word landing in symbol position.
         let plausible = !clean_sym.is_empty()
-            && clean_sym.chars().next().is_some_and(|c| c.is_ascii_uppercase())
-            && clean_sym.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.');
+            && clean_sym
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_uppercase())
+            && clean_sym
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '_' || c == '.');
         if plausible {
             pairs.push((clean_sym, path));
         }

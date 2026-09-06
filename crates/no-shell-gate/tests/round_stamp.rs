@@ -50,7 +50,9 @@ fn no_new_round_is_admitted_unless_the_stamp_covers_every_round() {
     );
 
     let stamp_path = root.join("docs/plan/STAMP.toml");
-    let stamp = fs::read_to_string(&stamp_path).ok().map(|t| parse_stamp(&t));
+    let stamp = fs::read_to_string(&stamp_path)
+        .ok()
+        .map(|t| parse_stamp(&t));
     let refused = refusals(&c, stamp.as_ref());
 
     assert!(
@@ -76,7 +78,10 @@ fn the_stamp_names_every_round_the_census_found() {
         &fs::read_to_string(root.join("docs/plan/STAMP.toml"))
             .expect("docs/plan/STAMP.toml must exist — cut it with `cargo run -p convergence-stamp -- --write`"),
     );
-    assert!(!c.declared_by_round.is_empty(), "ANTI-VACUITY: no rounds censused");
+    assert!(
+        !c.declared_by_round.is_empty(),
+        "ANTI-VACUITY: no rounds censused"
+    );
 
     let missing: Vec<u64> = c
         .declared_by_round
@@ -99,7 +104,10 @@ fn the_single_document_exists_and_names_every_round() {
     let doc = fs::read_to_string(root.join("docs/plan/ROUNDS.md"))
         .expect("docs/plan/ROUNDS.md must exist — it is the single stamped round document");
     let c = census(&root);
-    assert!(!c.declared_by_round.is_empty(), "ANTI-VACUITY: no rounds censused");
+    assert!(
+        !c.declared_by_round.is_empty(),
+        "ANTI-VACUITY: no rounds censused"
+    );
     for round in c.declared_by_round.keys() {
         assert!(
             doc.contains(&format!("| **{round}** |")),
@@ -145,12 +153,21 @@ fn an_unstamped_round_is_refused_with_a_named_invocable_remedy() {
     let stamp = parse_stamp(&fs::read_to_string(root.join("docs/plan/STAMP.toml")).expect("read"));
     let refused = refusals(&c, Some(&stamp));
     assert!(
-        refused.iter().any(|r| matches!(r, RoundRefusal::RoundNotInStamp { round: 99, .. })),
+        refused
+            .iter()
+            .any(|r| matches!(r, RoundRefusal::RoundNotInStamp { round: 99, .. })),
         "{refused:?}"
     );
-    let text = refused.iter().map(ToString::to_string).collect::<Vec<_>>().join("\n");
+    let text = refused
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(text.contains("round=99"), "must name the round:\n{text}");
-    assert!(text.contains("round99-Fresh.jsonl"), "must name the file:\n{text}");
+    assert!(
+        text.contains("round99-Fresh.jsonl"),
+        "must name the file:\n{text}"
+    );
     assert!(
         text.contains("cargo run -p convergence-stamp -- --write"),
         "the remedy must be invocable:\n{text}"

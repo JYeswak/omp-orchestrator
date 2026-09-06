@@ -279,7 +279,7 @@ fn tokenize(source: &str) -> (String, Vec<Literal>) {
 
 /// The comment-stripped source alone — the half [`carries_sender_identity`] reads.
 fn strip_comments(source: &str) -> String {
-    tokenize(source).0
+    text_structure::code_only(source).into_owned()
 }
 
 /// Dispatch flags inside one literal body, longest match first, non-overlapping.

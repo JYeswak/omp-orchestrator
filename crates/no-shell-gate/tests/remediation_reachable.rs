@@ -63,7 +63,9 @@ fn remediations(text: &str) -> Vec<(usize, String)> {
             let rest = &line[k + key.len()..];
             let Some(c) = rest.find(':') else { continue };
             let after = rest[c + 1..].trim_start();
-            let Some(open) = after.strip_prefix('"') else { continue };
+            let Some(open) = after.strip_prefix('"') else {
+                continue;
+            };
             let Some(end) = open.find('"') else { continue };
             let val = open[..end].trim().to_owned();
             if val.len() >= 3 {
@@ -89,7 +91,10 @@ fn shipped_help(root: &Path) -> Option<String> {
         root.join("target/debug/omp-orchestrator"),
     ] {
         if candidate.is_file() {
-            if let Ok(o) = std::process::Command::new(&candidate).arg("--help").output() {
+            if let Ok(o) = std::process::Command::new(&candidate)
+                .arg("--help")
+                .output()
+            {
                 let mut s = String::from_utf8_lossy(&o.stdout).into_owned();
                 s.push_str(&String::from_utf8_lossy(&o.stderr));
                 if !s.trim().is_empty() {
@@ -105,7 +110,9 @@ fn shipped_help(root: &Path) -> Option<String> {
 fn every_named_remediation_is_invocable_or_disclosed_as_projected() {
     let root = repo_root();
     let Some(help) = shipped_help(&root) else {
-        eprintln!("SKIP every_named_remediation_is_invocable_or_disclosed_as_projected: no built binary");
+        eprintln!(
+            "SKIP every_named_remediation_is_invocable_or_disclosed_as_projected: no built binary"
+        );
         return;
     };
 
@@ -124,7 +131,9 @@ fn every_named_remediation_is_invocable_or_disclosed_as_projected() {
     files.sort();
 
     for path in &files {
-        let Ok(text) = std::fs::read_to_string(path) else { continue };
+        let Ok(text) = std::fs::read_to_string(path) else {
+            continue;
+        };
         let lines: Vec<&str> = text.lines().collect();
         let markers: Vec<usize> = lines
             .iter()
@@ -143,9 +152,9 @@ fn every_named_remediation_is_invocable_or_disclosed_as_projected() {
             }
             checked += 1;
             let sub = toks[1];
-            let invocable = help.split_whitespace().any(|w| {
-                w.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '-') == sub
-            });
+            let invocable = help
+                .split_whitespace()
+                .any(|w| w.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '-') == sub);
             if invocable {
                 continue;
             }

@@ -40,13 +40,29 @@ use std::path::{Path, PathBuf};
 
 /// Fields `SCHEMAS.toml [artifacts.journey_foundation]` marks `required`.
 const REQUIRED: &[&str] = &[
-    "schema_version", "stage", "input_refs", "output_refs", "owner", "crates", "gates",
-    "numbers", "known", "unknown", "gaps",
+    "schema_version",
+    "stage",
+    "input_refs",
+    "output_refs",
+    "owner",
+    "crates",
+    "gates",
+    "numbers",
+    "known",
+    "unknown",
+    "gaps",
 ];
 
 /// Required fields whose value must be a JSON array.
 const REQUIRED_ARRAYS: &[&str] = &[
-    "input_refs", "output_refs", "crates", "gates", "numbers", "known", "unknown", "gaps",
+    "input_refs",
+    "output_refs",
+    "crates",
+    "gates",
+    "numbers",
+    "known",
+    "unknown",
+    "gaps",
 ];
 
 /// Keys accepted beyond `required`.
@@ -130,7 +146,9 @@ fn read_rows(path: &Path) -> Result<Vec<Value>, String> {
 }
 
 fn nonempty(row: &Value, key: &str) -> bool {
-    row.get(key).and_then(Value::as_str).is_some_and(|v| !v.trim().is_empty())
+    row.get(key)
+        .and_then(Value::as_str)
+        .is_some_and(|v| !v.trim().is_empty())
 }
 
 /// A registry KEY is an identifier. A BARE FIGURE is anything numeric.
@@ -142,10 +160,15 @@ fn is_registry_key(value: &str) -> bool {
     let v = value.trim();
     !v.is_empty()
         && v.parse::<f64>().is_err()
-        && v.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+        && v.chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
 }
 
-fn validate(rows: &[Value], on_disk: &BTreeSet<String>, checks: Checks) -> Result<usize, Vec<String>> {
+fn validate(
+    rows: &[Value],
+    on_disk: &BTreeSet<String>,
+    checks: Checks,
+) -> Result<usize, Vec<String>> {
     // ANTI-VACUITY: an empty scan set is an ERROR, never a pass.
     if rows.is_empty() {
         return Err(vec![
@@ -174,7 +197,9 @@ fn validate(rows: &[Value], on_disk: &BTreeSet<String>, checks: Checks) -> Resul
         for key in REQUIRED_ARRAYS {
             if let Some(value) = row.get(*key) {
                 if !value.is_array() {
-                    errors.push(format!("FOUNDATION_ROW_FIELD_NOT_ARRAY {label} field={key}"));
+                    errors.push(format!(
+                        "FOUNDATION_ROW_FIELD_NOT_ARRAY {label} field={key}"
+                    ));
                 }
             }
         }
@@ -183,7 +208,9 @@ fn validate(rows: &[Value], on_disk: &BTreeSet<String>, checks: Checks) -> Resul
                 let known = REQUIRED.contains(&key.as_str())
                     || KEY_ALLOWANCE.iter().any(|(allowed, _)| allowed == key);
                 if !known {
-                    errors.push(format!("FOUNDATION_ROW_UNDECLARED_FIELD {label} field={key}"));
+                    errors.push(format!(
+                        "FOUNDATION_ROW_UNDECLARED_FIELD {label} field={key}"
+                    ));
                 }
             }
         }
@@ -192,9 +219,18 @@ fn validate(rows: &[Value], on_disk: &BTreeSet<String>, checks: Checks) -> Resul
         }
 
         if checks.unknown_needs_experiment_and_cost {
-            for (u, entry) in row.get("unknown").and_then(Value::as_array).map_or(&[][..], |v| v).iter().enumerate() {
+            for (u, entry) in row
+                .get("unknown")
+                .and_then(Value::as_array)
+                .map_or(&[][..], |v| v)
+                .iter()
+                .enumerate()
+            {
                 if !nonempty(entry, "question") {
-                    errors.push(format!("FOUNDATION_UNKNOWN_NO_QUESTION {label} unknown={}", u + 1));
+                    errors.push(format!(
+                        "FOUNDATION_UNKNOWN_NO_QUESTION {label} unknown={}",
+                        u + 1
+                    ));
                 }
                 if !nonempty(entry, "experiment") {
                     errors.push(format!(
@@ -204,13 +240,22 @@ fn validate(rows: &[Value], on_disk: &BTreeSet<String>, checks: Checks) -> Resul
                     ));
                 }
                 if !nonempty(entry, "cost") {
-                    errors.push(format!("FOUNDATION_UNKNOWN_NO_COST {label} unknown={}", u + 1));
+                    errors.push(format!(
+                        "FOUNDATION_UNKNOWN_NO_COST {label} unknown={}",
+                        u + 1
+                    ));
                 }
             }
         }
 
         if checks.gap_needs_cost_and_owner {
-            for (g, entry) in row.get("gaps").and_then(Value::as_array).map_or(&[][..], |v| v).iter().enumerate() {
+            for (g, entry) in row
+                .get("gaps")
+                .and_then(Value::as_array)
+                .map_or(&[][..], |v| v)
+                .iter()
+                .enumerate()
+            {
                 if !nonempty(entry, "gap") {
                     errors.push(format!("FOUNDATION_GAP_NO_TEXT {label} gap={}", g + 1));
                 }
@@ -224,7 +269,11 @@ fn validate(rows: &[Value], on_disk: &BTreeSet<String>, checks: Checks) -> Resul
         }
 
         if checks.crate_absence_needs_must_be_created {
-            for entry in row.get("crates").and_then(Value::as_array).map_or(&[][..], |v| v) {
+            for entry in row
+                .get("crates")
+                .and_then(Value::as_array)
+                .map_or(&[][..], |v| v)
+            {
                 let name = entry.get("name").and_then(Value::as_str).unwrap_or("");
                 if name.is_empty() {
                     errors.push(format!("FOUNDATION_CRATE_NO_NAME {label}"));
@@ -258,7 +307,11 @@ fn validate(rows: &[Value], on_disk: &BTreeSet<String>, checks: Checks) -> Resul
         }
 
         if checks.numbers_must_not_be_bare_figures {
-            for entry in row.get("numbers").and_then(Value::as_array).map_or(&[][..], |v| v) {
+            for entry in row
+                .get("numbers")
+                .and_then(Value::as_array)
+                .map_or(&[][..], |v| v)
+            {
                 match entry.as_str() {
                     Some(key) if is_registry_key(key) => {}
                     Some(bad) => errors.push(format!(
@@ -273,7 +326,11 @@ fn validate(rows: &[Value], on_disk: &BTreeSet<String>, checks: Checks) -> Resul
             }
         }
 
-        for entry in row.get("gates").and_then(Value::as_array).map_or(&[][..], |v| v) {
+        for entry in row
+            .get("gates")
+            .and_then(Value::as_array)
+            .map_or(&[][..], |v| v)
+        {
             if !nonempty(entry, "gate") {
                 errors.push(format!("FOUNDATION_GATE_NO_TEXT {label}"));
             }
@@ -368,10 +425,15 @@ fn the_gate_refuses_a_planted_row_and_names_it() {
         "FOUNDATION_GAP_NO_OWNER",
         "FOUNDATION_CRATE_ABSENT_NOT_MARKED",
     ] {
-        assert!(joined.contains(expected), "missing {expected} in:\n{joined}");
+        assert!(
+            joined.contains(expected),
+            "missing {expected} in:\n{joined}"
+        );
     }
     assert!(
-        errors.iter().all(|e| e.contains("row=1") && e.contains("stage=S5")),
+        errors
+            .iter()
+            .all(|e| e.contains("row=1") && e.contains("stage=S5")),
         "every refusal must name the row it came from:\n{joined}"
     );
 }
@@ -385,19 +447,28 @@ fn dropping_the_experiment_check_stops_catching_the_planted_unknown() {
 
     let before = validate(&rows, &on_disk, Checks::default()).expect_err("baseline must be red");
     assert!(
-        before.iter().any(|e| e.starts_with("FOUNDATION_UNKNOWN_NO_EXPERIMENT")),
+        before
+            .iter()
+            .any(|e| e.starts_with("FOUNDATION_UNKNOWN_NO_EXPERIMENT")),
         "baseline must catch the experiment-less unknown: {before:?}"
     );
 
-    let mutated = Checks { unknown_needs_experiment_and_cost: false, ..Checks::default() };
+    let mutated = Checks {
+        unknown_needs_experiment_and_cost: false,
+        ..Checks::default()
+    };
     let after = validate(&rows, &on_disk, mutated).expect_err("other predicates still fire");
     assert!(
-        !after.iter().any(|e| e.starts_with("FOUNDATION_UNKNOWN_NO_")),
+        !after
+            .iter()
+            .any(|e| e.starts_with("FOUNDATION_UNKNOWN_NO_")),
         "with the check disabled the unknown must go unreported — otherwise some other \
          predicate is doing the work and the leg proves nothing: {after:?}"
     );
     assert!(
-        after.iter().any(|e| e.starts_with("FOUNDATION_NUMBER_IS_BARE_FIGURE")),
+        after
+            .iter()
+            .any(|e| e.starts_with("FOUNDATION_NUMBER_IS_BARE_FIGURE")),
         "the mutation must be SCOPED: the bare-figure predicate is independent and must \
          still fire: {after:?}"
     );
@@ -414,7 +485,9 @@ fn a_row_cannot_declare_a_crate_that_is_not_on_disk_as_existing() {
     let errors = validate(&[row], &crates_on_disk(&repo_root()), Checks::default())
         .expect_err("a lied-about crate must be refused");
     assert!(
-        errors.iter().any(|e| e.starts_with("FOUNDATION_CRATE_EXISTS_MISDECLARED")),
+        errors
+            .iter()
+            .any(|e| e.starts_with("FOUNDATION_CRATE_EXISTS_MISDECLARED")),
         "{errors:?}"
     );
 }
@@ -429,8 +502,9 @@ fn an_undeclared_field_is_refused_and_the_allowance_is_explicit() {
     let errors = validate(&[row], &crates_on_disk(&root), Checks::default())
         .expect_err("an undeclared field must be refused");
     assert!(
-        errors.iter().any(|e| e.contains("FOUNDATION_ROW_UNDECLARED_FIELD")
-            && e.contains("field=smuggled")),
+        errors
+            .iter()
+            .any(|e| e.contains("FOUNDATION_ROW_UNDECLARED_FIELD") && e.contains("field=smuggled")),
         "{errors:?}"
     );
     // and every allowance row carries a reason, so an exception is never silence

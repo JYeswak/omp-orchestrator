@@ -66,9 +66,17 @@ type Claim = (&'static str, &'static str, Option<&'static str>);
 /// with the table in `06-gates.md`, the disagreement is noted in the section.
 const GATE_PROPERTIES: &[Claim] = &[
     // no-shell-gate — the reference implementation
-    ("no-shell-gate", "known-bad", Some("planted_shell_is_red_then_green_after_delete")),
+    (
+        "no-shell-gate",
+        "known-bad",
+        Some("planted_shell_is_red_then_green_after_delete"),
+    ),
     ("no-shell-gate", "known-good", Some("clean_list_passes")),
-    ("no-shell-gate", "anti-vacuity", Some("empty_scan_set_is_an_error_not_a_pass")),
+    (
+        "no-shell-gate",
+        "anti-vacuity",
+        Some("empty_scan_set_is_an_error_not_a_pass"),
+    ),
     // state-wildcard-lint — the crate whose row the document gets WRONG
     (
         "state-wildcard-lint",
@@ -87,7 +95,11 @@ const GATE_PROPERTIES: &[Claim] = &[
         "anti-vacuity",
         Some("empty_or_unreadable_workspace_is_an_error"),
     ),
-    ("state-wildcard-lint", "wired", Some("lint_is_wired_into_blocking_ci")),
+    (
+        "state-wildcard-lint",
+        "wired",
+        Some("lint_is_wired_into_blocking_ci"),
+    ),
     // Declared absences — each is a real gap, not an omission
     ("kernel-bypass-gate", "mutation", None),
     ("kernel-bypass-gate", "anti-vacuity", None),
@@ -102,7 +114,9 @@ fn crate_test_bodies(root: &Path, crate_name: &str) -> String {
     for sub in ["src", "tests"] {
         let mut stack = vec![root.join("crates").join(crate_name).join(sub)];
         while let Some(d) = stack.pop() {
-            let Ok(items) = std::fs::read_dir(&d) else { continue };
+            let Ok(items) = std::fs::read_dir(&d) else {
+                continue;
+            };
             for it in items.flatten() {
                 let p = it.path();
                 if p.is_dir() {
@@ -134,7 +148,9 @@ fn every_claimed_property_cites_a_test_that_exists() {
         let needle = format!("fn {test_fn}");
         let found = body.contains(&needle);
         if !found {
-            missing.push(format!("{crate_name}/{property} cites `{test_fn}` — not found"));
+            missing.push(format!(
+                "{crate_name}/{property} cites `{test_fn}` — not found"
+            ));
         }
     }
     assert!(
@@ -157,7 +173,10 @@ fn a_declared_absence_is_recorded_rather_than_left_blank() {
     // Six rows carry None. If that ever reaches zero, either every gap closed — in
     // which case `06-gates.md`'s "zero gates satisfy all six" sentence is stale and
     // must be rewritten — or somebody deleted the honest half of the registry.
-    let absences = GATE_PROPERTIES.iter().filter(|(_, _, c)| c.is_none()).count();
+    let absences = GATE_PROPERTIES
+        .iter()
+        .filter(|(_, _, c)| c.is_none())
+        .count();
     assert!(
         absences > 0,
         "every property row now carries a citation. If that is real, 06-gates.md's \

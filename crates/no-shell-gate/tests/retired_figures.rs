@@ -97,8 +97,17 @@ const RETIRED: &[Retired] = &[
 
 /// A mention is retracted when the same line, or the two lines around it, name the retraction.
 const RETRACTION_MARKERS: &[&str] = &[
-    "RETIRED", "retired", "refuted", "REFUTED", "corrected", "CORRECTED",
-    "superseded", "SUPERSEDED", "retraction", "no longer", "was wrong",
+    "RETIRED",
+    "retired",
+    "refuted",
+    "REFUTED",
+    "corrected",
+    "CORRECTED",
+    "superseded",
+    "SUPERSEDED",
+    "retraction",
+    "no longer",
+    "was wrong",
 ];
 
 fn plan_dir() -> PathBuf {
@@ -128,9 +137,9 @@ fn sections() -> Vec<PathBuf> {
 fn is_retracted(lines: &[&str], idx: usize, replacement: &str) -> bool {
     let lo = idx.saturating_sub(2);
     let hi = (idx + 3).min(lines.len());
-    lines[lo..hi].iter().any(|l| {
-        RETRACTION_MARKERS.iter().any(|m| l.contains(m)) || l.contains(replacement)
-    })
+    lines[lo..hi]
+        .iter()
+        .any(|l| RETRACTION_MARKERS.iter().any(|m| l.contains(m)) || l.contains(replacement))
 }
 
 /// ANTI-VACUITY. An empty scan set is an ERROR, never a pass. Without this the gate is green on a
@@ -192,7 +201,11 @@ fn planted_retired_figure_is_detected() {
         !is_retracted(&planted, 1, "39"),
         "the detector must flag an unretracted mention"
     );
-    let excused = ["intro", "the 81 JSON-RPC methods figure is RETIRED", "outro"];
+    let excused = [
+        "intro",
+        "the 81 JSON-RPC methods figure is RETIRED",
+        "outro",
+    ];
     assert!(
         is_retracted(&excused, 1, "39"),
         "the detector must excuse a mention that names its own retraction"

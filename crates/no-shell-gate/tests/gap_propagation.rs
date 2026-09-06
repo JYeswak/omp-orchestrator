@@ -12,17 +12,46 @@ use std::{fs, path::PathBuf};
 
 /// (gap, needle proving the section knows, pattern showing it argues the absence)
 const GAPS: &[(&str, &str, &[&str])] = &[
-    ("completion", "AgentEndEvent",
-     &["precedent-free", "no completion path", "cannot complete", "completion protocol"]),
-    ("receipts", "IrcDeliveryReceipt",
-     &["no receipt", "missing receipt", "cp-z42vu"]),
-    ("claims", "ownershipToken",
-     &["claim vocabulary", "unclaimed bead"]),
-    ("idle", "GuestIdleReconcilerCtx",
-     &["NewlyIdle", "ConfirmedIdle"]),
-    ("roster", "HubRosterCounts", &["roster re-derived", "roster by hand"]),
-    ("cost", "ContextUsage", &["cost is unmeasured", "no cost telemetry"]),
-    ("compaction", "CompactEvent", &["85% context", "context was lost"]),
+    (
+        "completion",
+        "AgentEndEvent",
+        &[
+            "precedent-free",
+            "no completion path",
+            "cannot complete",
+            "completion protocol",
+        ],
+    ),
+    (
+        "receipts",
+        "IrcDeliveryReceipt",
+        &["no receipt", "missing receipt", "cp-z42vu"],
+    ),
+    (
+        "claims",
+        "ownershipToken",
+        &["claim vocabulary", "unclaimed bead"],
+    ),
+    (
+        "idle",
+        "GuestIdleReconcilerCtx",
+        &["NewlyIdle", "ConfirmedIdle"],
+    ),
+    (
+        "roster",
+        "HubRosterCounts",
+        &["roster re-derived", "roster by hand"],
+    ),
+    (
+        "cost",
+        "ContextUsage",
+        &["cost is unmeasured", "no cost telemetry"],
+    ),
+    (
+        "compaction",
+        "CompactEvent",
+        &["85% context", "context was lost"],
+    ),
 ];
 
 /// Measured 2026-08-31 at commit 7f7e0f6 **by the detector below**, not carried from
@@ -83,8 +112,14 @@ const BASELINE: usize = 0;
 /// nothing to do with the frame capture. A single broad word is not a claim —
 /// this file has now produced that error twice, in two different detectors.
 const DISCHARGED: &[(&[&str], &[&str])] = &[
-    (&["unrun", "frame capture"], &["SETTLED", "DISCHARGED", "isTerminal", "7f7e0f6"]),
-    (&["not established that it reaches"], &["SETTLED", "DISCHARGED", "isTerminal"]),
+    (
+        &["unrun", "frame capture"],
+        &["SETTLED", "DISCHARGED", "isTerminal", "7f7e0f6"],
+    ),
+    (
+        &["not established that it reaches"],
+        &["SETTLED", "DISCHARGED", "isTerminal"],
+    ),
 ];
 
 /// A paragraph carrying one of these is *discussing* a dead claim, not making it.
@@ -93,21 +128,39 @@ const DISCHARGED: &[(&[&str], &[&str])] = &[
 /// is flagged for all seven gaps it documents. Same principle the retired-figure gate
 /// uses: a retraction names itself, and quoting a corpse is not reanimating it.
 const RETRACTION: &[&str] = &[
-    "REFUTED", "refuted", "retracted", "RETRACTED", "no longer", "was wrong",
-    "corrected", "CORRECTED", "SETTLED", "WIRE-PROVEN", "superseded", "VOID",
+    "REFUTED",
+    "refuted",
+    "retracted",
+    "RETRACTED",
+    "no longer",
+    "was wrong",
+    "corrected",
+    "CORRECTED",
+    "SETTLED",
+    "WIRE-PROVEN",
+    "superseded",
+    "VOID",
 ];
 
 fn plan_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
-        .parent().unwrap().join("docs/plan")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("docs/plan")
 }
 
 /// The discriminator, isolated so it can be tested on known inputs rather than
 /// on production files whose state I would then have to keep constant.
 fn paragraph_is_stale(paras: &[&str], i: usize, needle: &str, stale: &[&str]) -> bool {
     let para = paras[i];
-    if !stale.iter().any(|s| para.contains(s)) { return false; }
-    if RETRACTION.iter().any(|m| para.contains(m)) { return false; }
+    if !stale.iter().any(|s| para.contains(s)) {
+        return false;
+    }
+    if RETRACTION.iter().any(|m| para.contains(m)) {
+        return false;
+    }
     let lo = i.saturating_sub(2);
     let hi = (i + 3).min(paras.len());
     !paras[lo..hi].iter().any(|p| p.contains(needle))
@@ -120,7 +173,9 @@ fn stale_pairs() -> Vec<(String, &'static str)> {
     for e in fs::read_dir(&dir).expect("docs/plan must exist") {
         let p = e.unwrap().path();
         let name = p.file_name().unwrap().to_string_lossy().to_string();
-        if !name.ends_with(".md") || !name.chars().next().unwrap().is_ascii_digit() { continue; }
+        if !name.ends_with(".md") || !name.chars().next().unwrap().is_ascii_digit() {
+            continue;
+        }
         sections += 1;
         let t = fs::read_to_string(&p).unwrap();
         // PARAGRAPH-GRAINED, not file-grained. A file mentioning AgentEndEvent once was
@@ -130,24 +185,35 @@ fn stale_pairs() -> Vec<(String, &'static str)> {
         let paras: Vec<&str> = t.split("\n\n").collect();
         for (gap, needle, stale) in GAPS {
             for i in 0..paras.len() {
-                if !paragraph_is_stale(&paras, i, needle, stale) { continue; }
+                if !paragraph_is_stale(&paras, i, needle, stale) {
+                    continue;
+                }
                 out.push((name.clone(), *gap));
                 break; // one pair per (file, gap)
             }
         }
     }
-    assert!(sections >= 10, "scanned {sections} sections; the plan has 12 — scan set collapsed");
+    assert!(
+        sections >= 10,
+        "scanned {sections} sections; the plan has 12 — scan set collapsed"
+    );
     out
 }
 
 #[test]
 fn gap_propagation_does_not_regress() {
     let stale = stale_pairs();
-    assert!(stale.len() <= BASELINE,
+    assert!(
+        stale.len() <= BASELINE,
         "gap propagation REGRESSED: {} stale pairs, baseline {}\n{}",
-        stale.len(), BASELINE,
-        stale.iter().map(|(f,g)| format!("  {f} argues the {g} gap without naming its type"))
-            .collect::<Vec<_>>().join("\n"));
+        stale.len(),
+        BASELINE,
+        stale
+            .iter()
+            .map(|(f, g)| format!("  {f} argues the {g} gap without naming its type"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
 }
 
 #[test]
@@ -155,25 +221,40 @@ fn the_discriminator_separates_assertion_from_retraction() {
     let (gap_needle, gap_stale) = ("AgentEndEvent", ["precedent-free"]);
 
     // KNOWN-BAD: asserts the absence, type nowhere near it.
-    let bad = ["intro", "the signal is precedent-free across the corpus", "unrelated"];
-    assert!(paragraph_is_stale(&bad, 1, gap_needle, &gap_stale),
-        "must flag a bare assertion of the absence");
+    let bad = [
+        "intro",
+        "the signal is precedent-free across the corpus",
+        "unrelated",
+    ];
+    assert!(
+        paragraph_is_stale(&bad, 1, gap_needle, &gap_stale),
+        "must flag a bare assertion of the absence"
+    );
 
     // KNOWN-GOOD 1: the type is named in the adjacent paragraph.
-    let ok1 = ["intro", "the signal is precedent-free across the corpus",
-               "AgentEndEvent closes it"];
-    assert!(!paragraph_is_stale(&ok1, 1, gap_needle, &gap_stale),
-        "must not flag a claim whose type is named next door");
+    let ok1 = [
+        "intro",
+        "the signal is precedent-free across the corpus",
+        "AgentEndEvent closes it",
+    ];
+    assert!(
+        !paragraph_is_stale(&ok1, 1, gap_needle, &gap_stale),
+        "must not flag a claim whose type is named next door"
+    );
 
     // KNOWN-GOOD 2: the paragraph is quoting the claim to refute it.
     let ok2 = ["intro", "we said precedent-free; that is REFUTED", "x"];
-    assert!(!paragraph_is_stale(&ok2, 1, gap_needle, &gap_stale),
-        "must not flag prose that retracts the claim it quotes");
+    assert!(
+        !paragraph_is_stale(&ok2, 1, gap_needle, &gap_stale),
+        "must not flag prose that retracts the claim it quotes"
+    );
 
     // KNOWN-GOOD 3: silence is not a finding.
     let ok3 = ["intro", "nothing relevant here", "x"];
-    assert!(!paragraph_is_stale(&ok3, 1, gap_needle, &gap_stale),
-        "must not flag a paragraph that makes no such claim");
+    assert!(
+        !paragraph_is_stale(&ok3, 1, gap_needle, &gap_stale),
+        "must not flag a paragraph that makes no such claim"
+    );
 }
 
 /// Stale discharged claims, independent of the gap needles.
@@ -182,7 +263,9 @@ fn stale_discharged() -> Vec<(String, String)> {
     for e in std::fs::read_dir(plan_dir()).expect("docs/plan must exist") {
         let p = e.unwrap().path();
         let name = p.file_name().unwrap().to_string_lossy().to_string();
-        if !name.ends_with(".md") || !name.chars().next().unwrap().is_ascii_digit() { continue; }
+        if !name.ends_with(".md") || !name.chars().next().unwrap().is_ascii_digit() {
+            continue;
+        }
         let t = std::fs::read_to_string(&p).unwrap();
         for para in t.split("\n\n") {
             for (dead, evidence) in DISCHARGED {
@@ -200,29 +283,43 @@ fn stale_discharged() -> Vec<(String, String)> {
 #[test]
 fn no_discharged_claim_survives_unmarked() {
     let stale = stale_discharged();
-    assert!(stale.is_empty(),
+    assert!(
+        stale.is_empty(),
         "a claim this session DISCHARGED is still asserted, and the gap needle cannot see it \
          because the paragraph names the type:\n  {}",
-        stale.iter().map(|(f, d)| format!("{f}: {d:?}")).collect::<Vec<_>>().join("\n  "));
+        stale
+            .iter()
+            .map(|(f, d)| format!("{f}: {d:?}"))
+            .collect::<Vec<_>>()
+            .join("\n  ")
+    );
 }
 
 #[test]
 fn the_discharged_detector_fires_on_a_planted_claim() {
     // KNOWN-BAD: asserts unrun, names the type, no settlement evidence.
-    let hits = |s: &str| DISCHARGED.iter().any(|(d, ev)| {
-        d.iter().all(|x| s.contains(x)) && !ev.iter().any(|e| s.contains(e))
-    });
+    let hits = |s: &str| {
+        DISCHARGED
+            .iter()
+            .any(|(d, ev)| d.iter().all(|x| s.contains(x)) && !ev.iter().any(|e| s.contains(e)))
+    };
     // KNOWN-BAD: names the type, still asserts the dead claim, no settlement.
-    assert!(hits("AgentEndEvent declared; the frame capture is unrun."),
-        "must flag a type-naming paragraph that still asserts the dead claim");
+    assert!(
+        hits("AgentEndEvent declared; the frame capture is unrun."),
+        "must flag a type-naming paragraph that still asserts the dead claim"
+    );
     // KNOWN-GOOD 1: same claim, settlement named.
-    assert!(!hits("the frame capture was unrun; SETTLED at 7f7e0f6, isTerminal:true"),
-        "a paragraph naming its own settlement must not be flagged");
+    assert!(
+        !hits("the frame capture was unrun; SETTLED at 7f7e0f6, isTerminal:true"),
+        "a paragraph naming its own settlement must not be flagged"
+    );
     // KNOWN-GOOD 2: an unrelated use of the same word. This is the false positive
     // the compound needle exists to prevent — 02-surface-census says "that sweep
     // is unrun and unowned" about a scanner sweep, and it is honest.
-    assert!(!hits("That scanner sweep is unrun and unowned."),
-        "a bare keyword match on an unrelated sentence is a false finding");
+    assert!(
+        !hits("That scanner sweep is unrun and unowned."),
+        "a bare keyword match on an unrelated sentence is a false finding"
+    );
 }
 
 /// ANTI-VACUITY, and it had to change shape the moment the work finished.
@@ -288,5 +385,7 @@ fn the_scan_is_not_vacuous() {
 fn print_measured_count() {
     let s = stale_pairs();
     println!("MEASURED_BY_THIS_DETECTOR={}", s.len());
-    for (f, g) in &s { println!("  {f} :: {g}"); }
+    for (f, g) in &s {
+        println!("  {f} :: {g}");
+    }
 }

@@ -3,7 +3,12 @@
 //! R4 inventory gate: the document must cover every workspace package returned
 //! by cargo metadata, without a hand-listed package roster in the test.
 
-use std::{collections::BTreeMap, fs, path::{Path, PathBuf}, process::Command};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 const ROWS_START: &str = "<!-- CRATE-CONTRACT-ROWS-BEGIN -->";
 const ROWS_END: &str = "<!-- CRATE-CONTRACT-ROWS-END -->";
@@ -19,7 +24,13 @@ fn repo_root() -> PathBuf {
 
 fn metadata_packages() -> Vec<String> {
     let output = Command::new("cargo")
-        .args(["metadata", "--format-version", "1", "--no-deps", "--offline"])
+        .args([
+            "metadata",
+            "--format-version",
+            "1",
+            "--no-deps",
+            "--offline",
+        ])
         .current_dir(repo_root())
         .output()
         .expect("cargo metadata must start");
@@ -90,7 +101,9 @@ fn validate_inventory(packages: &[String], document: &str) -> Result<(), String>
         .cloned()
         .collect();
     if !missing.is_empty() {
-        return Err(format!("metadata packages missing inventory rows: {missing:?}"));
+        return Err(format!(
+            "metadata packages missing inventory rows: {missing:?}"
+        ));
     }
     let package_set: std::collections::BTreeSet<_> = packages.iter().cloned().collect();
     let extras: Vec<_> = counts
@@ -120,7 +133,10 @@ fn every_metadata_package_has_exactly_one_inventory_row() {
 fn empty_package_sets_are_errors_not_passes() {
     let error = validate_inventory(&[], &inventory_document())
         .expect_err("an empty metadata package set must fail closed");
-    assert!(error.contains("empty package set"), "unexpected error: {error}");
+    assert!(
+        error.contains("empty package set"),
+        "unexpected error: {error}"
+    );
 }
 
 #[test]
@@ -138,9 +154,8 @@ fn planted_package_is_red_until_its_row_exists() {
         "mutation must name the missing package: {error}"
     );
     println!("MUTATION RED: planted package {planted} is rejected until its inventory row exists: {error}");
-    let row = format!(
-        "| `{planted}` | gate | UNDECLARED | UNDECLARED | UNDECLARED | NONE DECLARED |\n"
-    );
+    let row =
+        format!("| `{planted}` | gate | UNDECLARED | UNDECLARED | UNDECLARED | NONE DECLARED |\n");
     let restored = document.replace(ROWS_END, &format!("{row}{ROWS_END}"));
     validate_inventory(&packages, &restored)
         .expect("adding the planted package row must restore the known-good leg");

@@ -57,8 +57,13 @@ fn find_rs_files(base: &Path, dir: &Path, out: &mut Vec<PathBuf>) {
 fn is_declared(crate_src: &Path, module_name: &str) -> bool {
     for entry_file in ["lib.rs", "main.rs"] {
         let entry = crate_src.join(entry_file);
-        if !entry.exists() { continue; }
-        let text = match fs::read_to_string(&entry) { Ok(text) => text, Err(_) => continue };
+        if !entry.exists() {
+            continue;
+        }
+        let text = match fs::read_to_string(&entry) {
+            Ok(text) => text,
+            Err(_) => continue,
+        };
         for line in text.lines() {
             let stripped = strip_line_comment(line);
             let trimmed = stripped.trim();
@@ -86,8 +91,13 @@ fn find_path_directories(test_dir: &Path) -> Vec<String> {
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        if !path.extension().is_some_and(|ext| ext == "rs") { continue; }
-        let text = match fs::read_to_string(&path) { Ok(text) => text, Err(_) => continue };
+        if !path.extension().is_some_and(|ext| ext == "rs") {
+            continue;
+        }
+        let text = match fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(_) => continue,
+        };
         for line in text.lines() {
             if let Some(start) = line.find("#[path") {
                 if let Some(eq) = line[start..].find('=') {
@@ -159,14 +169,20 @@ fn module_reachability_conformance() {
 
     let crates_dir = repo_root.join("crates");
     let mut all_rel_paths: Vec<(String, PathBuf)> = Vec::new();
-    for entry in fs::read_dir(&crates_dir).expect("read crates dir").flatten() {
+    for entry in fs::read_dir(&crates_dir)
+        .expect("read crates dir")
+        .flatten()
+    {
         let crate_name = entry.file_name().to_string_lossy().into_owned();
         let crate_src = entry.path().join("src");
-        if !crate_src.is_dir() { continue; }
+        if !crate_src.is_dir() {
+            continue;
+        }
         let mut files = Vec::new();
         find_rs_files(&crate_src, &crate_src, &mut files);
         for file in files {
-            let rel = file.strip_prefix(&repo_root)
+            let rel = file
+                .strip_prefix(&repo_root)
                 .unwrap_or(&file)
                 .display()
                 .to_string();
@@ -189,7 +205,8 @@ fn module_reachability_conformance() {
     let mut entry_points = 0usize;
 
     for (crate_name, file) in &all_rel_paths {
-        let rel = file.strip_prefix(&repo_root)
+        let rel = file
+            .strip_prefix(&repo_root)
             .unwrap_or(file)
             .display()
             .to_string();
@@ -213,7 +230,9 @@ fn module_reachability_conformance() {
         let test_dir = repo_root.join("crates").join(crate_name).join("tests");
         let path_refs = find_path_directories(&test_dir);
         let module_stem = file_name.trim_end_matches(".rs");
-        let is_path_escape = path_refs.iter().any(|ref_path| ref_path.contains(module_stem));
+        let is_path_escape = path_refs
+            .iter()
+            .any(|ref_path| ref_path.contains(module_stem));
         if is_path_escape {
             test_only.push(rel.clone());
         } else {
@@ -293,6 +312,10 @@ fn test_escape() { escape::escaped(); }
 
     let paths = find_path_directories(&test_dir);
     assert_eq!(paths.len(), 1, "one #[path] directive expected");
-    assert!(paths[0].contains("escape.rs"), "the directive must reference escape.rs: {:?}", paths);
+    assert!(
+        paths[0].contains("escape.rs"),
+        "the directive must reference escape.rs: {:?}",
+        paths
+    );
     let _ = fs::remove_dir_all(&root);
 }

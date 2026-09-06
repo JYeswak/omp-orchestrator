@@ -59,7 +59,9 @@ fn rows_of(text: &str) -> Vec<String> {
     // A gate whose parser silently drops trailing fields manufactures exactly the
     // defect class it exists to detect. Caught by checking the data with a second
     // reader instead of believing the gate.
-    let Some(start) = text.find("\"rows\"") else { return Vec::new() };
+    let Some(start) = text.find("\"rows\"") else {
+        return Vec::new();
+    };
     let body = &text[start..];
     let mut out = Vec::new();
     let mut depth = 0usize;
@@ -69,24 +71,44 @@ fn rows_of(text: &str) -> Vec<String> {
     for ch in body.chars() {
         if in_str {
             cur.push(ch);
-            if esc { esc = false; }
-            else if ch == '\\' { esc = true; }
-            else if ch == '"' { in_str = false; }
+            if esc {
+                esc = false;
+            } else if ch == '\\' {
+                esc = true;
+            } else if ch == '"' {
+                in_str = false;
+            }
             continue;
         }
         match ch {
-            '"' => { in_str = true; cur.push(ch); }
-            '{' => { depth += 1; if depth == 1 { cur.clear(); } else { cur.push(ch); } }
+            '"' => {
+                in_str = true;
+                cur.push(ch);
+            }
+            '{' => {
+                depth += 1;
+                if depth == 1 {
+                    cur.clear();
+                } else {
+                    cur.push(ch);
+                }
+            }
             '}' => {
                 if depth == 1 {
-                    if cur.contains("\"surface\"") { out.push(cur.clone()); }
+                    if cur.contains("\"surface\"") {
+                        out.push(cur.clone());
+                    }
                     cur.clear();
                 } else if depth > 1 {
                     cur.push(ch);
                 }
                 depth = depth.saturating_sub(1);
             }
-            _ => { if depth >= 1 { cur.push(ch); } }
+            _ => {
+                if depth >= 1 {
+                    cur.push(ch);
+                }
+            }
         }
     }
     out
@@ -171,7 +193,6 @@ fn every_coverage_row_states_a_disposition() {
         unstated
     );
 }
-
 
 /// Every semantic field must say whether a HUMAN WAVE authored it or a SCRIPT derived it.
 ///

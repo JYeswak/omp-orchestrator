@@ -51,8 +51,11 @@ fn fixture_workspace_with_broken_member() -> std::path::PathBuf {
     .expect("write healthy lib");
     // THE PLANT: an unclosed table — cargo metadata must refuse this manifest
     // by name.
-    std::fs::write(dir.join("broken-member/Cargo.toml"), "[package\nname = \"broken\"\n")
-        .expect("write broken member");
+    std::fs::write(
+        dir.join("broken-member/Cargo.toml"),
+        "[package\nname = \"broken\"\n",
+    )
+    .expect("write broken member");
     dir
 }
 
@@ -76,15 +79,13 @@ fn fixture_workspace_healthy() -> std::path::PathBuf {
         "[package]\nname = \"member-a\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
     )
     .expect("write member-a manifest");
-    std::fs::write(dir.join("crates/member-a/src/lib.rs"), "pub fn a() {}\n")
-        .expect("write lib");
+    std::fs::write(dir.join("crates/member-a/src/lib.rs"), "pub fn a() {}\n").expect("write lib");
     std::fs::write(
         dir.join("crates/member-b/Cargo.toml"),
         "[package]\nname = \"member-b\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
     )
     .expect("write member-b manifest");
-    std::fs::write(dir.join("crates/member-b/src/lib.rs"), "pub fn b() {}\n")
-        .expect("write lib");
+    std::fs::write(dir.join("crates/member-b/src/lib.rs"), "pub fn b() {}\n").expect("write lib");
     dir
 }
 
@@ -97,8 +98,11 @@ fn fixture_workspace_without_members() -> std::path::PathBuf {
         FIXTURE_SEQ.fetch_add(1, Ordering::SeqCst)
     ));
     std::fs::create_dir_all(&dir).expect("create fixture dirs");
-    std::fs::write(dir.join("Cargo.toml"), "[workspace]\nmembers = []\nresolver = \"2\"\n")
-        .expect("write workspace manifest");
+    std::fs::write(
+        dir.join("Cargo.toml"),
+        "[workspace]\nmembers = []\nresolver = \"2\"\n",
+    )
+    .expect("write workspace manifest");
     dir
 }
 
@@ -196,4 +200,3 @@ fn missing_root_manifest_is_typed() {
     );
     assert!(!verdict.is_loaded());
 }
-

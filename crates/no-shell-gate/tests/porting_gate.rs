@@ -96,9 +96,8 @@ fn has_surface_declaration(root: &Path, name: &str) -> bool {
     // `"surface": "crate:{name}"` and `"kind": "workspace_crate"` on the SAME
     // line. Match per-line so a crate name appearing in another row's text
     // does not clear an undeclared crate.
-    text.lines().any(|line| {
-        line.contains(&format!("crate:{name}")) && line.contains("workspace_crate")
-    })
+    text.lines()
+        .any(|line| line.contains(&format!("crate:{name}")) && line.contains("workspace_crate"))
 }
 
 /// Clause 3: `unsafe_code = "forbid"` in Cargo.toml.

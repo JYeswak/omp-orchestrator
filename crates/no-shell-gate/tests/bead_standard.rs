@@ -33,7 +33,11 @@
 use std::process::Command;
 
 struct Bead {
-    id: String, body: String, labels: usize, edges: u64, status: String,
+    id: String,
+    body: String,
+    labels: usize,
+    edges: u64,
+    status: String,
 }
 
 fn beads() -> Vec<Bead> {
@@ -52,18 +56,29 @@ fn beads() -> Vec<Bead> {
                 let mut s = String::new();
                 let mut esc = false;
                 for c in r.chars() {
-                    if esc { s.push(c); esc = false; }
-                    else if c == '\\' { esc = true; }
-                    else if c == '"' { break; }
-                    else { s.push(c); }
+                    if esc {
+                        s.push(c);
+                        esc = false;
+                    } else if c == '\\' {
+                        esc = true;
+                    } else if c == '"' {
+                        break;
+                    } else {
+                        s.push(c);
+                    }
                 }
                 s
             } else {
-                rest.split(|c: char| c == ',' || c == '}').next()?.trim().to_owned()
+                rest.split(|c: char| c == ',' || c == '}')
+                    .next()?
+                    .trim()
+                    .to_owned()
             })
         };
         let Some(id) = field("id") else { continue };
-        if id.is_empty() { continue }
+        if id.is_empty() {
+            continue;
+        }
         let n = |k: &str| field(k).and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
         v.push(Bead {
             id,
@@ -77,7 +92,10 @@ fn beads() -> Vec<Bead> {
 }
 
 fn open_beads() -> Vec<Bead> {
-    beads().into_iter().filter(|b| b.status != "closed" && b.status != "tombstone").collect()
+    beads()
+        .into_iter()
+        .filter(|b| b.status != "closed" && b.status != "tombstone")
+        .collect()
 }
 
 /// Measured floors, 2026-08-31. Ratchet DOWN is forbidden; raise them as work lands.
@@ -87,23 +105,39 @@ const MAX_ISOLATED: usize = 17;
 #[test]
 fn every_bead_declares_acceptance() {
     let b = open_beads();
-    if b.is_empty() { eprintln!("SKIP: br unavailable or no beads"); return; }
+    if b.is_empty() {
+        eprintln!("SKIP: br unavailable or no beads");
+        return;
+    }
     let n = b.iter().filter(|x| x.body.contains("ACCEPT")).count();
-    assert!(n >= MIN_WITH_ACCEPTANCE.min(b.len()),
+    assert!(
+        n >= MIN_WITH_ACCEPTANCE.min(b.len()),
         "{n} of {} beads declare ACCEPTANCE; floor is {MIN_WITH_ACCEPTANCE}. A bead you cannot \
          write acceptance for is not granular enough — and one an agent cannot close gets \
-         adjudicated instead of worked.", b.len());
+         adjudicated instead of worked.",
+        b.len()
+    );
 }
 
 #[test]
 fn the_graph_does_not_grow_more_floating_nodes() {
     let b = open_beads();
-    if b.is_empty() { eprintln!("SKIP: br unavailable"); return; }
-    let iso: Vec<&str> = b.iter().filter(|x| x.edges == 0).map(|x| x.id.as_str()).collect();
-    assert!(iso.len() <= MAX_ISOLATED,
+    if b.is_empty() {
+        eprintln!("SKIP: br unavailable");
+        return;
+    }
+    let iso: Vec<&str> = b
+        .iter()
+        .filter(|x| x.edges == 0)
+        .map(|x| x.id.as_str())
+        .collect();
+    assert!(
+        iso.len() <= MAX_ISOLATED,
         "{} isolated beads (floor {MAX_ISOLATED}) — no edge in either direction, so bv cannot \
          rank them and they are invisible to triage:\n  {}",
-        iso.len(), iso.join("\n  "));
+        iso.len(),
+        iso.join("\n  ")
+    );
 }
 
 /// PLAN-DERIVED BEADS: the full standard, no ratchet, from the first one.
@@ -114,35 +148,60 @@ fn the_graph_does_not_grow_more_floating_nodes() {
 #[test]
 fn every_plan_derived_bead_meets_the_full_standard() {
     let all = open_beads();
-    if all.is_empty() { eprintln!("SKIP: br unavailable"); return; }
+    if all.is_empty() {
+        eprintln!("SKIP: br unavailable");
+        return;
+    }
 
     // A plan bead is one carrying the `plan` label. Until conversion runs this is
     // empty, and that emptiness is REPORTED rather than passed over in silence.
-    let plan: Vec<&Bead> = all.iter().filter(|b| b.body.contains("plan-derived")).collect();
+    let plan: Vec<&Bead> = all
+        .iter()
+        .filter(|b| b.body.contains("plan-derived"))
+        .collect();
     if plan.is_empty() {
-        eprintln!("NOTE: 0 plan-derived beads on the board. The plan has not been converted. \
-                   This gate is armed and will bite the first malformed one.");
+        eprintln!(
+            "NOTE: 0 plan-derived beads on the board. The plan has not been converted. \
+                   This gate is armed and will bite the first malformed one."
+        );
         return;
     }
 
     let mut bad = Vec::new();
     for b in &plan {
         let mut missing = Vec::new();
-        if !b.body.contains("WHAT") { missing.push("WHAT"); }
-        if !b.body.contains("WHY") { missing.push("WHY"); }
-        if !b.body.contains("ACCEPT") { missing.push("ACCEPTANCE"); }
-        if b.labels == 0 { missing.push("labels"); }
-        if b.edges == 0 { missing.push("a place in the DAG"); }
-        if !["cargo ", "br ", "bv ", "ntm ", "$ "].iter().any(|c| b.body.contains(c)) {
+        if !b.body.contains("WHAT") {
+            missing.push("WHAT");
+        }
+        if !b.body.contains("WHY") {
+            missing.push("WHY");
+        }
+        if !b.body.contains("ACCEPT") {
+            missing.push("ACCEPTANCE");
+        }
+        if b.labels == 0 {
+            missing.push("labels");
+        }
+        if b.edges == 0 {
+            missing.push("a place in the DAG");
+        }
+        if !["cargo ", "br ", "bv ", "ntm ", "$ "]
+            .iter()
+            .any(|c| b.body.contains(c))
+        {
             missing.push("runnable acceptance (a command)");
         }
         if !missing.is_empty() {
             bad.push(format!("{}: missing {}", b.id, missing.join(", ")));
         }
     }
-    assert!(bad.is_empty(),
+    assert!(
+        bad.is_empty(),
         "{} plan-derived bead(s) below standard. These are NEW — there is no legacy excuse \
-         and no ratchet:\n  {}", bad.len(), bad.join("\n  "));
+         and no ratchet:\n  {}",
+        bad.len(),
+        bad.join("\n  ")
+    );
 }
 
 #[test]
@@ -154,9 +213,14 @@ fn the_parser_reads_a_real_board() {
         eprintln!("SKIP: br produced no beads — cannot distinguish empty board from broken parse");
         return;
     }
-    assert!(b.iter().all(|x| !x.id.is_empty()), "a parsed bead has no id — parser is misaligned");
-    assert!(b.iter().any(|x| x.edges > 0),
+    assert!(
+        b.iter().all(|x| !x.id.is_empty()),
+        "a parsed bead has no id — parser is misaligned"
+    );
+    assert!(
+        b.iter().any(|x| x.edges > 0),
         "ZERO beads have edges. Either the graph is empty or the field name moved — the \
          orchestrator read `dependencies` instead of `dependency_count` on 2026-08-31 and \
-         nearly published 0/50 as a finding.");
+         nearly published 0/50 as a finding."
+    );
 }

@@ -265,6 +265,9 @@ fn collect_sources(root: &Path) -> Result<Vec<CallerSource>, String> {
 }
 
 fn strip_comments(contents: &str, kind: SourceKind) -> String {
+    if kind == SourceKind::Rust {
+        return text_structure::code_only(contents).into_owned();
+    }
     let mut output = String::with_capacity(contents.len());
     let mut in_block_comment = false;
     let mut in_double_quote = false;

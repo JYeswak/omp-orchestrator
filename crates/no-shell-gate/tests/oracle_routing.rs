@@ -124,52 +124,8 @@ fn surface_evidence(code: &str, binary: &str) -> usize {
 /// required — six gates in this repo have matched their own prose about the pattern
 /// they were hunting.
 fn strip_comments(source: &str) -> String {
-    let bytes: Vec<char> = source.chars().collect();
-    let mut out = String::with_capacity(source.len());
-    let mut i = 0usize;
-    while i < bytes.len() {
-        let c = bytes[i];
-        if c == '/' && bytes.get(i + 1) == Some(&'/') {
-            while i < bytes.len() && bytes[i] != '\n' {
-                i += 1;
-            }
-            continue;
-        }
-        if c == '/' && bytes.get(i + 1) == Some(&'*') {
-            i += 2;
-            while i < bytes.len() && !(bytes[i] == '*' && bytes.get(i + 1) == Some(&'/')) {
-                i += 1;
-            }
-            i = (i + 2).min(bytes.len());
-            continue;
-        }
-        if c == '"' {
-            out.push(c);
-            i += 1;
-            while i < bytes.len() {
-                if bytes[i] == '\\' {
-                    out.push(bytes[i]);
-                    if let Some(next) = bytes.get(i + 1) {
-                        out.push(*next);
-                    }
-                    i += 2;
-                    continue;
-                }
-                out.push(bytes[i]);
-                let closed = bytes[i] == '"';
-                i += 1;
-                if closed {
-                    break;
-                }
-            }
-            continue;
-        }
-        out.push(c);
-        i += 1;
-    }
-    out
+    text_structure::code_only(source).into_owned()
 }
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Routing {
     /// Declares the dependency AND names a comparator.

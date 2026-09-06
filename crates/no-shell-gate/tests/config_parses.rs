@@ -158,7 +158,9 @@ fn duplicate_keys(text: &str, style: Style, checks: Checks) -> Vec<String> {
                     path.push((indent.saturating_sub(1), scope));
                 }
 
-                let Some((key, rest)) = trimmed.split_once(':') else { continue };
+                let Some((key, rest)) = trimmed.split_once(':') else {
+                    continue;
+                };
                 let key = key.trim();
                 if key.is_empty()
                     || !key
@@ -228,7 +230,13 @@ fn no_machine_read_config_declares_a_duplicate_sibling_key() {
     for path in workflow_files(&root) {
         let text = fs::read_to_string(&path).expect("workflow must be readable");
         scanned += 1;
-        for f in duplicate_keys(&text, Style::Yaml, Checks { reject_duplicate_sibling_keys: true }) {
+        for f in duplicate_keys(
+            &text,
+            Style::Yaml,
+            Checks {
+                reject_duplicate_sibling_keys: true,
+            },
+        ) {
             findings.push(format!("{}: {f}", path.display()));
         }
     }
@@ -236,7 +244,13 @@ fn no_machine_read_config_declares_a_duplicate_sibling_key() {
     let numbers = root.join("NUMBERS.toml");
     let text = fs::read_to_string(&numbers).expect("NUMBERS.toml must be readable");
     scanned += 1;
-    for f in duplicate_keys(&text, Style::Toml, Checks { reject_duplicate_sibling_keys: true }) {
+    for f in duplicate_keys(
+        &text,
+        Style::Toml,
+        Checks {
+            reject_duplicate_sibling_keys: true,
+        },
+    ) {
         findings.push(format!("{}: {f}", numbers.display()));
     }
 
@@ -265,8 +279,17 @@ fn state_wildcard_lint_has_its_own_job_with_one_runs_on_and_one_steps() {
         text.contains("\n  state-wildcard-lint:\n"),
         "the job header that went missing must be present at job indent"
     );
-    let dups = duplicate_keys(&text, Style::Yaml, Checks { reject_duplicate_sibling_keys: true });
-    assert!(dups.is_empty(), "gate.yml still has duplicate keys: {dups:?}");
+    let dups = duplicate_keys(
+        &text,
+        Style::Yaml,
+        Checks {
+            reject_duplicate_sibling_keys: true,
+        },
+    );
+    assert!(
+        dups.is_empty(),
+        "gate.yml still has duplicate keys: {dups:?}"
+    );
 
     // every job declares runs-on and steps exactly once
     let jobs: Vec<&str> = text
@@ -279,7 +302,11 @@ fn state_wildcard_lint_has_its_own_job_with_one_runs_on_and_one_steps() {
             Some(t.trim_end_matches(':'))
         })
         .collect();
-    assert!(jobs.len() >= 10, "expected at least ten jobs, found {}: {jobs:?}", jobs.len());
+    assert!(
+        jobs.len() >= 10,
+        "expected at least ten jobs, found {}: {jobs:?}",
+        jobs.len()
+    );
     assert!(jobs.contains(&"state-wildcard-lint"), "{jobs:?}");
 }
 
@@ -298,10 +325,22 @@ jobs:
       - uses: actions/checkout@v4
       - run: cargo test -p state-wildcard-lint
 ";
-    let dups = duplicate_keys(known_bad, Style::Yaml, Checks { reject_duplicate_sibling_keys: true });
+    let dups = duplicate_keys(
+        known_bad,
+        Style::Yaml,
+        Checks {
+            reject_duplicate_sibling_keys: true,
+        },
+    );
     let text = dups.join("\n");
-    assert!(text.contains("key=runs-on"), "must catch the duplicate runs-on:\n{text}");
-    assert!(text.contains("key=steps"), "must catch the duplicate steps:\n{text}");
+    assert!(
+        text.contains("key=runs-on"),
+        "must catch the duplicate runs-on:\n{text}"
+    );
+    assert!(
+        text.contains("key=steps"),
+        "must catch the duplicate steps:\n{text}"
+    );
     assert!(
         text.contains("kernel-bypass-gate"),
         "the refusal must NAME the job it came from:\n{text}"
@@ -320,9 +359,18 @@ expect   = \"984\"
 
 note     = \"second note, silently wins in a lenient parser\"
 ";
-    let dups = duplicate_keys(known_bad, Style::Toml, Checks { reject_duplicate_sibling_keys: true });
+    let dups = duplicate_keys(
+        known_bad,
+        Style::Toml,
+        Checks {
+            reject_duplicate_sibling_keys: true,
+        },
+    );
     let text = dups.join("\n");
-    assert!(text.contains("key=note"), "must catch the duplicate note:\n{text}");
+    assert!(
+        text.contains("key=note"),
+        "must catch the duplicate note:\n{text}"
+    );
     assert!(
         text.contains("figures.test_functions"),
         "must name the table:\n{text}"
@@ -354,7 +402,13 @@ jobs:
       - name: b
         run: echo b
 ";
-    let dups = duplicate_keys(good, Style::Yaml, Checks { reject_duplicate_sibling_keys: true });
+    let dups = duplicate_keys(
+        good,
+        Style::Yaml,
+        Checks {
+            reject_duplicate_sibling_keys: true,
+        },
+    );
     assert!(
         dups.is_empty(),
         "false positives would get this gate routed around: {dups:?}"
@@ -369,16 +423,33 @@ fn mutating_gate_yml_goes_red_and_a_byte_identical_restore_goes_green() {
     let text = String::from_utf8_lossy(&before).into_owned();
 
     assert!(
-        duplicate_keys(&text, Style::Yaml, Checks { reject_duplicate_sibling_keys: true }).is_empty(),
+        duplicate_keys(
+            &text,
+            Style::Yaml,
+            Checks {
+                reject_duplicate_sibling_keys: true
+            }
+        )
+        .is_empty(),
         "baseline must be GREEN before mutating"
     );
 
     // reintroduce exactly the shipped defect: delete the job header that was missing
     let mutated = text.replace("\n  state-wildcard-lint:\n", "\n");
-    assert_ne!(mutated, text, "the mutation must actually change the content");
-    let red = duplicate_keys(&mutated, Style::Yaml, Checks { reject_duplicate_sibling_keys: true });
+    assert_ne!(
+        mutated, text,
+        "the mutation must actually change the content"
+    );
+    let red = duplicate_keys(
+        &mutated,
+        Style::Yaml,
+        Checks {
+            reject_duplicate_sibling_keys: true,
+        },
+    );
     assert!(
-        red.iter().any(|f| f.contains("key=runs-on")) && red.iter().any(|f| f.contains("key=steps")),
+        red.iter().any(|f| f.contains("key=runs-on"))
+            && red.iter().any(|f| f.contains("key=steps")),
         "removing the job header must go RED on both duplicated keys: {red:?}"
     );
 
@@ -387,7 +458,9 @@ fn mutating_gate_yml_goes_red_and_a_byte_identical_restore_goes_green() {
     let quiet = duplicate_keys(
         &mutated,
         Style::Yaml,
-        Checks { reject_duplicate_sibling_keys: false },
+        Checks {
+            reject_duplicate_sibling_keys: false,
+        },
     );
     assert!(
         quiet.is_empty(),

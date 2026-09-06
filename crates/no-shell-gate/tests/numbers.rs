@@ -13,10 +13,19 @@
 use std::{fs, path::PathBuf, process::Command};
 
 fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf()
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .to_path_buf()
 }
 
-struct Figure { key: String, command: String, expect: String }
+struct Figure {
+    key: String,
+    command: String,
+    expect: String,
+}
 
 /// TOML basic-string unescaping, done once and correctly.
 ///
@@ -32,15 +41,21 @@ fn unescape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut chars = s.chars();
     while let Some(c) = chars.next() {
-        if c != '\\' { out.push(c); continue; }
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
         match chars.next() {
-            Some('"')  => out.push('"'),
+            Some('"') => out.push('"'),
             Some('\\') => out.push('\\'),
-            Some('n')  => out.push('\n'),
-            Some('t')  => out.push('\t'),
+            Some('n') => out.push('\n'),
+            Some('t') => out.push('\t'),
             // Unknown escape: keep both characters. A regex like \[ or \d is a
             // legitimate payload here and must survive intact.
-            Some(other) => { out.push('\\'); out.push(other); }
+            Some(other) => {
+                out.push('\\');
+                out.push(other);
+            }
             None => out.push('\\'),
         }
     }
@@ -53,20 +68,35 @@ fn figures() -> Vec<Figure> {
     let mut out: Vec<Figure> = Vec::new();
     for line in text.lines() {
         let l = line.trim();
-        if let Some(k) = l.strip_prefix("[figures.").and_then(|s| s.strip_suffix(']')) {
-            out.push(Figure { key: k.to_owned(), command: String::new(), expect: String::new() });
+        if let Some(k) = l
+            .strip_prefix("[figures.")
+            .and_then(|s| s.strip_suffix(']'))
+        {
+            out.push(Figure {
+                key: k.to_owned(),
+                command: String::new(),
+                expect: String::new(),
+            });
         } else if let Some(cur) = out.last_mut() {
             // take everything after the first '=', trim one layer of quotes
             // Strip the outer quotes AND unescape \" — a registry that cannot hold a
             // command containing quotes is broken, and this parser silently produced an
             // empty command (which the gate then reported as drift to "").
-            let val = |s: &str| s.split_once('=').map(|(_, v)| {
-                let v = v.trim();
-                let v = v.strip_prefix('"').and_then(|x| x.strip_suffix('"')).unwrap_or(v);
-                unescape(v)
-            });
-            if l.starts_with("command") { cur.command = val(l).unwrap_or_default(); }
-            else if l.starts_with("expect") { cur.expect = val(l).unwrap_or_default(); }
+            let val = |s: &str| {
+                s.split_once('=').map(|(_, v)| {
+                    let v = v.trim();
+                    let v = v
+                        .strip_prefix('"')
+                        .and_then(|x| x.strip_suffix('"'))
+                        .unwrap_or(v);
+                    unescape(v)
+                })
+            };
+            if l.starts_with("command") {
+                cur.command = val(l).unwrap_or_default();
+            } else if l.starts_with("expect") {
+                cur.expect = val(l).unwrap_or_default();
+            }
         }
     }
     out
@@ -76,10 +106,22 @@ fn figures() -> Vec<Figure> {
 fn every_figure_declares_a_runnable_command_and_an_expectation() {
     let f = figures();
     // ANTI-VACUITY: an empty registry re-runs nothing and passes identically to a clean one.
-    assert!(f.len() >= 5, "registry declares {} figures; it described 6 when written", f.len());
+    assert!(
+        f.len() >= 5,
+        "registry declares {} figures; it described 6 when written",
+        f.len()
+    );
     for x in &f {
-        assert!(!x.command.is_empty(), "[figures.{}] has no command — then it is not measured", x.key);
-        assert!(!x.expect.is_empty(), "[figures.{}] has no expectation to compare against", x.key);
+        assert!(
+            !x.command.is_empty(),
+            "[figures.{}] has no command — then it is not measured",
+            x.key
+        );
+        assert!(
+            !x.expect.is_empty(),
+            "[figures.{}] has no expectation to compare against",
+            x.key
+        );
     }
 }
 
@@ -105,16 +147,28 @@ fn no_declared_figure_has_drifted() {
         // figure whose command has rotted is a silent hole — but its value is not
         // compared. The obligation moves to the prose: cite the command, not a number.
         if f.expect == "LIVE" {
-            let out = Command::new("sh").arg("-c").arg(&f.command).current_dir(&root).output();
+            let out = Command::new("sh")
+                .arg("-c")
+                .arg(&f.command)
+                .current_dir(&root)
+                .output();
             match out {
-                Ok(o) if !String::from_utf8_lossy(&o.stdout).trim().is_empty() => { ran += 1; }
+                Ok(o) if !String::from_utf8_lossy(&o.stdout).trim().is_empty() => {
+                    ran += 1;
+                }
                 _ => drifted.push(format!(
                     "{}: declared LIVE but its command produced nothing — a volatile figure \
-                     with a broken command is undetectable rot\n      $ {}", f.key, f.command)),
+                     with a broken command is undetectable rot\n      $ {}",
+                    f.key, f.command
+                )),
             }
             continue;
         }
-        let out = Command::new("sh").arg("-c").arg(&f.command).current_dir(&root).output();
+        let out = Command::new("sh")
+            .arg("-c")
+            .arg(&f.command)
+            .current_dir(&root)
+            .output();
         let Ok(out) = out else {
             drifted.push(format!("{}: command failed to spawn", f.key));
             continue;
@@ -124,26 +178,44 @@ fn no_declared_figure_has_drifted() {
         if got != f.expect {
             drifted.push(format!(
                 "{}: recorded {:?}, command now answers {:?}\n      $ {}",
-                f.key, f.expect, got, f.command));
+                f.key, f.expect, got, f.command
+            ));
         }
     }
 
     // ANTI-VACUITY: zero commands executed reports identically to zero drift.
-    assert!(ran > 0, "executed ZERO commands — the registry is unreadable or every command \
-                      failed to spawn, which is indistinguishable from a clean run");
-    assert!(drifted.is_empty(),
+    assert!(
+        ran > 0,
+        "executed ZERO commands — the registry is unreadable or every command \
+                      failed to spawn, which is indistinguishable from a clean run"
+    );
+    assert!(
+        drifted.is_empty(),
         "{} of {ran} load-bearing figures have DRIFTED since they were written:\n    {}",
-        drifted.len(), drifted.join("\n    "));
+        drifted.len(),
+        drifted.join("\n    ")
+    );
 }
 
 #[test]
 fn the_unescaper_handles_every_escape_the_registry_uses() {
     assert_eq!(unescape(r#"say \"hi\""#), r#"say "hi""#, "quote escape");
-    assert_eq!(unescape(r"a\\b"), r"a\b", "backslash escape — the one that broke grep");
-    assert_eq!(unescape(r"grep '#\[test\]'"), r"grep '#\[test\]'",
-        "an unknown escape is a regex payload and MUST survive intact");
+    assert_eq!(
+        unescape(r"a\\b"),
+        r"a\b",
+        "backslash escape — the one that broke grep"
+    );
+    assert_eq!(
+        unescape(r"grep '#\[test\]'"),
+        r"grep '#\[test\]'",
+        "an unknown escape is a regex payload and MUST survive intact"
+    );
     assert_eq!(unescape("plain"), "plain", "no escapes, no change");
-    assert_eq!(unescape(r"trailing\"), r"trailing\", "a dangling backslash must not panic");
+    assert_eq!(
+        unescape(r"trailing\"),
+        r"trailing\",
+        "a dangling backslash must not panic"
+    );
 }
 
 #[test]
@@ -152,23 +224,37 @@ fn the_parser_unescapes_embedded_quotes() {
     // mangles those quotes the command runs empty, and an empty answer reports as DRIFT
     // rather than as a broken registry. That happened on this gate's second run.
     let f = figures();
-    let bins = f.iter().find(|x| x.key == "built_binaries")
+    let bins = f
+        .iter()
+        .find(|x| x.key == "built_binaries")
         .expect("built_binaries figure must exist");
-    assert!(bins.command.contains("python3 -c \""),
-        "the embedded quote did not survive parsing: {:?}", bins.command);
-    assert!(!bins.command.contains("\\\""),
-        "the escape was left in place rather than unescaped: {:?}", bins.command);
+    assert!(
+        bins.command.contains("python3 -c \""),
+        "the embedded quote did not survive parsing: {:?}",
+        bins.command
+    );
+    assert!(
+        !bins.command.contains("\\\""),
+        "the escape was left in place rather than unescaped: {:?}",
+        bins.command
+    );
 }
 
 #[test]
 fn a_live_figure_is_declared_but_not_pinned() {
     let f = figures();
     let live: Vec<_> = f.iter().filter(|x| x.expect == "LIVE").collect();
-    assert!(!live.is_empty(),
+    assert!(
+        !live.is_empty(),
         "no LIVE figure declared — if the board total stopped being volatile, pin it \
-         and delete this test rather than leaving a mode nothing exercises");
+         and delete this test rather than leaving a mode nothing exercises"
+    );
     for x in &live {
-        assert!(!x.command.is_empty(), "[figures.{}] is LIVE with no command to run", x.key);
+        assert!(
+            !x.command.is_empty(),
+            "[figures.{}] is LIVE with no command to run",
+            x.key
+        );
     }
 }
 
@@ -182,9 +268,12 @@ fn no_figure_key_is_declared_twice() {
     keys.sort_unstable();
     let before = keys.len();
     keys.dedup();
-    assert_eq!(before, keys.len(),
+    assert_eq!(
+        before,
+        keys.len(),
         "a figure key is declared more than once — concurrent appends to a shared \
-         registry silently drop the earlier block");
+         registry silently drop the earlier block"
+    );
 }
 
 #[test]
@@ -193,7 +282,10 @@ fn the_comparison_is_exact_not_substring() {
     // document's history are numbers that looked close enough to a reader.
     assert_ne!("2", "26");
     let loose = "26".contains("2");
-    assert!(loose, "substring matching WOULD accept it — which is why this gate compares with !=");
+    assert!(
+        loose,
+        "substring matching WOULD accept it — which is why this gate compares with !="
+    );
 }
 
 /// A figure that derives ZERO must declare that the zero is real.
@@ -248,7 +340,9 @@ fn a_figure_deriving_zero_must_declare_the_zero_is_real() {
     let mut undeclared = Vec::new();
     let mut checked = 0usize;
     for f in figures() {
-        if f.command.is_empty() || f.expect == "LIVE" { continue; }
+        if f.command.is_empty() || f.expect == "LIVE" {
+            continue;
+        }
         // .current_dir(repo_root()) is LOAD-BEARING, and omitting it is how this
         // gate first reported 14 of 17 figures deriving zero. The commands use
         // repo-relative paths (`crates/*/Cargo.toml`); run from the harness's cwd

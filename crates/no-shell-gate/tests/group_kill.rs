@@ -57,13 +57,7 @@ fn repo_root() -> Option<PathBuf> {
 /// thing it checks. `loop-tick` now carries exactly such a comment, so this is not
 /// hypothetical.
 fn code_only(text: &str) -> String {
-    text.lines()
-        .filter(|l| {
-            let s = l.trim_start();
-            !(s.starts_with("//") || s.starts_with("///") || s.starts_with("//!"))
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
+    text_structure::code_only(text).into_owned()
 }
 
 fn pid_kill_sites(root: &std::path::Path) -> Option<Vec<String>> {

@@ -67,7 +67,6 @@ fn report(receipt: &Value) -> String {
     }
 }
 
-
 fn fixture_path(label: &str) -> PathBuf {
     let sequence = FIXTURE_SEQ.fetch_add(1, Ordering::Relaxed);
     std::env::temp_dir().join(format!(

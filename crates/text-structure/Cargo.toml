@@ -1,0 +1,15 @@
+[package]
+name = "text-structure"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Structure-aware source, documentation, and manifest matching"
+
+
+[dev-dependencies]
+tempfile = "3"
+[lints.rust]
+unsafe_code = "forbid"

@@ -160,35 +160,7 @@ fn walk_rs(dir: &Path, out: &mut Vec<PathBuf>) {
 /// (verified), and a stateful stripper would be a second parser to keep correct. If one
 /// ever appears, this is where it goes.
 fn code_only(line: &str) -> String {
-    let chars: Vec<char> = line.chars().collect();
-    let mut out = String::with_capacity(line.len());
-    let mut i = 0usize;
-    while i < chars.len() {
-        let c = chars[i];
-        if c == '/' && chars.get(i + 1) == Some(&'/') {
-            break;
-        }
-        if c == '"' {
-            out.push('"');
-            i += 1;
-            while i < chars.len() {
-                if chars[i] == '\\' {
-                    i += 2;
-                    continue;
-                }
-                if chars[i] == '"' {
-                    out.push('"');
-                    i += 1;
-                    break;
-                }
-                i += 1;
-            }
-            continue;
-        }
-        out.push(c);
-        i += 1;
-    }
-    out
+    text_structure::code_only(line).into_owned()
 }
 
 /// Digits immediately following `needle`, when the call is `needle<digits>)`.
