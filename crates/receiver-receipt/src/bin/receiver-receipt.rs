@@ -68,7 +68,7 @@ fn assess(pane_id: &str, pre_path: &str, post_path: &str, pre_at: u64, post_at: 
     let result = assess_receiver_receipt(pane_id, &pre, PostSendObservation::Present(post));
     println!("{} reason={:?}", result.label(), result.reason());
     match result {
-        ReceiptVerdict::ReceiptConfirmed { .. } => ExitCode::SUCCESS,
+        ReceiptVerdict::ReceiptConfirmed { .. } | ReceiptVerdict::AckConfirmed { .. } => ExitCode::SUCCESS,
         ReceiptVerdict::NoReceipt { .. } => ExitCode::from(1),
         ReceiptVerdict::Indeterminate { .. } => ExitCode::from(2),
         ReceiptVerdict::Dead { .. } => ExitCode::from(1),

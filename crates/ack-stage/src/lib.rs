@@ -441,9 +441,7 @@ impl AckReadback {
         let prefix = ack_prefix(bead_id, pane_id);
         self.comments
             .iter()
-            .find(|comment| {
-                comment.text.starts_with(&prefix) && self.is_fresh(comment.created_at)
-            })
+            .find(|comment| comment.text.starts_with(&prefix) && self.is_fresh(comment.created_at))
             .map(|comment| comment.text.as_str())
     }
 }
@@ -478,7 +476,7 @@ impl AckStageResult {
     pub fn is_confirmed(&self) -> bool {
         matches!(self.action, AckAction::RecordReceipt { .. })
             && self.ack_comment.is_some()
-            && matches!(self.delivery, ReceiptVerdict::ReceiptConfirmed { .. })
+            && matches!(self.delivery, ReceiptVerdict::ReceiptConfirmed { .. } | ReceiptVerdict::AckConfirmed { .. })
             && self.transport.supports_delivery_claim()
     }
 }
@@ -504,11 +502,10 @@ pub fn assess(input: &AckStageInput) -> AckStageResult {
         }
         (_, receiver) => receiver,
     };
-    let ack_verdict = input.ack.match_verdict_in_session(
-        &input.bead_id,
-        &input.pane_id,
-        &input.session_pane_ids,
-    );
+    let ack_verdict =
+        input
+            .ack
+            .match_verdict_in_session(&input.bead_id, &input.pane_id, &input.session_pane_ids);
     let ack_comment = match &ack_verdict {
         AckReadbackVerdict::Matched { comment } => Some(comment.clone()),
         AckReadbackVerdict::Missing | AckReadbackVerdict::AckPaneMismatch { .. } => None,
@@ -521,7 +518,20 @@ pub fn assess(input: &AckStageInput) -> AckStageResult {
                 got: got.clone(),
             },
         }
-    } else if matches!(&delivery, ReceiptVerdict::ReceiptConfirmed { .. }) && ack_comment.is_none() {
+    } else if let Some(comment) = &ack_comment {
+        if input.transport.supports_delivery_claim() {
+            // A fresh, prefix-correct tracker ACK is durable receiver evidence. It remains
+            // true after the pane starts work, so do not route this arm through liveness.
+            ReceiptVerdict::AckConfirmed {
+                pane_id: input.pane_id.clone(),
+                comment: comment.clone(),
+            }
+        } else {
+            // The tmux literal path cannot make a uniform delivery claim, even with a
+            // comment; its transport heuristic remains restrictive by construction.
+            delivery
+        }
+    } else if matches!(&delivery, ReceiptVerdict::ReceiptConfirmed { .. }) {
         ReceiptVerdict::Indeterminate {
             pane_id: input.pane_id.clone(),
             reason: ReceiptReason::AckReadbackMissing,
@@ -593,7 +603,7 @@ impl AckAction {
 /// waits rather than burying a human dialog with another packet.
 pub fn decide(verdict: &ReceiptVerdict, attempts_so_far: u32) -> AckAction {
     match verdict {
-        ReceiptVerdict::ReceiptConfirmed { pane_id, .. } => AckAction::RecordReceipt {
+        ReceiptVerdict::ReceiptConfirmed { pane_id, .. } | ReceiptVerdict::AckConfirmed { pane_id, .. } => AckAction::RecordReceipt {
             pane_id: pane_id.clone(),
         },
         ReceiptVerdict::Dead { pane_id } => AckAction::AbandonDeadPane {
@@ -858,7 +868,7 @@ mod tests {
         )
     }
     #[test]
-    fn ntm_capture_retains_full_json_and_successful_is_not_delivery() {
+    fn ntm_capture_retains_full_json_and_durable_ack_confirms() {
         let raw = br#"{"targets":["5"],"successful":["5"],"failed":[],"blocked":false}"#;
         let receipt = TransportReceipt::capture_ntm(raw).unwrap();
         let TransportReceipt::NtmRobotSend(receipt) = receipt else {
@@ -880,8 +890,8 @@ mod tests {
             attempts_so_far: 0,
             session_pane_ids: Vec::new(),
         });
-        assert_eq!(result.action.label(), "RETRY");
-        assert!(!result.is_confirmed());
+        assert_eq!(result.action.label(), "RECORD_RECEIPT");
+        assert!(result.is_confirmed());
     }
 
     #[test]
@@ -1205,12 +1215,9 @@ mod tests {
 
     #[test]
     fn an_empty_ack_census_is_an_error() {
-        let error = AckReadback::from_comments_json(
-            "omp-orchestrator-ack-stage-qhl",
-            "%1413",
-            br#"[]"#,
-        )
-        .expect_err("zero ACK rows must be loud");
+        let error =
+            AckReadback::from_comments_json("omp-orchestrator-ack-stage-qhl", "%1413", br#"[]"#)
+                .expect_err("zero ACK rows must be loud");
         assert_eq!(error, AckReadbackError::EmptyAckCensus);
         assert!(error.to_string().contains("ACK_CENSUS_EMPTY"));
     }
@@ -1389,10 +1396,7 @@ mod tests {
         const ISSUED: u64 = 1_788_650_431;
         let readback = ack_at(
             "%8",
-            &[(
-                "ACK qhl on %8 -- agent=WildStone title=equal-clock",
-                ISSUED,
-            )],
+            &[("ACK qhl on %8 -- agent=WildStone title=equal-clock", ISSUED)],
         )
         .with_dispatch_issued_at(ISSUED);
         assert_eq!(

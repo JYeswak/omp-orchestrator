@@ -154,6 +154,11 @@ pub enum ReceiptVerdict {
         timer_after_secs: u64,
         stable_content_changed: bool,
     },
+    /// The authoritative tracker ACK proves delivery even when the pane is now busy.
+    AckConfirmed {
+        pane_id: String,
+        comment: String,
+    },
     /// The receiver observation is sufficient to say the send was not evidenced.
     NoReceipt {
         pane_id: String,
@@ -171,7 +176,7 @@ pub enum ReceiptVerdict {
 impl ReceiptVerdict {
     pub const fn label(&self) -> &'static str {
         match self {
-            Self::ReceiptConfirmed { .. } => "RECEIPT_CONFIRMED",
+            Self::ReceiptConfirmed { .. } | Self::AckConfirmed { .. } => "RECEIPT_CONFIRMED",
             Self::NoReceipt { .. } => "NO_RECEIPT",
             Self::Indeterminate { .. } => "INDETERMINATE",
             Self::Dead { .. } => "DEAD",
@@ -180,7 +185,7 @@ impl ReceiptVerdict {
 
     pub fn reason(&self) -> Option<&ReceiptReason> {
         match self {
-            Self::ReceiptConfirmed { .. } | Self::Dead { .. } => None,
+            Self::ReceiptConfirmed { .. } | Self::AckConfirmed { .. } | Self::Dead { .. } => None,
             Self::NoReceipt { reason, .. } | Self::Indeterminate { reason, .. } => Some(reason),
         }
     }
