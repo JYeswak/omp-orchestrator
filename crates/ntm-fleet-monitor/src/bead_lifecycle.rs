@@ -6,8 +6,8 @@ use crate::{Approved, TypedAction, Wave};
 use loop_coverage::LoopLayer;
 use std::collections::BTreeSet;
 
-mod model;
 pub mod ledger;
+mod model;
 pub mod reader;
 pub use model::*;
 
@@ -320,13 +320,14 @@ impl BeadLifecycle {
         )
     }
     pub fn require_redispatch(&mut self, plan: RedispatchPlan) -> Result<(), LifecycleError> {
+        let from_dispatched = self.status() == LifecycleStatus::Dispatched;
         self.require_state(
             &plan.id,
             LifecycleEventKind::RedispatchRequired,
-            &[LifecycleStatus::GradedFix],
+            &[LifecycleStatus::GradedFix, LifecycleStatus::Dispatched],
         )?;
         self.check_identity(&plan.bead, &plan.target, None)?;
-        if self.fix_name.as_deref() != Some(plan.fix_name.as_str()) {
+        if !from_dispatched && self.fix_name.as_deref() != Some(plan.fix_name.as_str()) {
             return Err(LifecycleError::WrongObjective);
         }
         self.transition(

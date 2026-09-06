@@ -150,6 +150,32 @@ fn full_chain_emits_every_pass_side_lifecycle_row_with_identity() {
 }
 
 #[test]
+fn dispatched_without_receiver_report_is_redispatch_required() {
+    let temp = tempdir().unwrap();
+    let path = temp.path().join("bead-lifecycle.jsonl");
+    let mut ledger = writer(path.clone());
+    ledger
+        .dispatch(dispatch_receipt("dispatch", 101), evidence("dispatch", 101))
+        .unwrap();
+    let plan = RedispatchPlan::new(
+        EventId::new("redispatch-required").unwrap(),
+        bead(),
+        target(),
+        "receiver_not_reported",
+    )
+    .unwrap();
+    ledger
+        .require_redispatch(plan, evidence("redispatch-required", 199))
+        .unwrap();
+    assert_eq!(ledger.status(), LifecycleStatus::RedispatchRequired);
+    let row = read_events(&path).last().cloned().unwrap();
+    assert_eq!(row["event"], "redispatch_required");
+    assert_eq!(row["named_acceptance"], "receiver_not_reported");
+    assert_eq!(row["bead"], "omp-orchestrator-life");
+    assert_eq!(row["pane"], "%1409");
+}
+
+#[test]
 fn peer_claim_replays_receiver_verified_and_refuses_self_grade() {
     let temp = tempdir().unwrap();
     let path = temp.path().join("bead-lifecycle.jsonl");
