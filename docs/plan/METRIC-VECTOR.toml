@@ -1,0 +1,105 @@
+# METRIC-VECTOR.toml — RULE 0.1 efficiency vector for this repo.
+# Bead omp-orchestrator-adopt-efficiency-metric-vector-92zh.
+#
+# Twelve names are WWJD's (`~/Developer/wwjd/attachments/FRANKEN_ARC_1000X_BLUEPRINT.md:11-22`).
+# Blind adoption of all twelve is cargo cult. This file is the SUBSET we measure,
+# each with a denominator and a countermetric. A crate proposal that names none
+# of the adopted ids is refused by crate_atom_gate::metric_auth::authorize_new_crate.
+#
+# Manifest (yhnf): the blueprint is 435 lines / 36 ARC-CAP. This session read 435/435.
+# Status FULL. Remaining ARC-CAP 001-036 are NOT this bead; they are a 14-crate design
+# WWJD dropped under RULE 0.1. Do not fold them in.
+
+schema = "metric-vector.v1"
+source_blueprint = "~/Developer/wwjd/attachments/FRANKEN_ARC_1000X_BLUEPRINT.md"
+source_blueprint_lines = 435
+arc_cap_entries = 36
+manifest = "FULL"
+
+# --- adopted ---------------------------------------------------------------
+
+[[adopted]]
+id = "human_interruptions"
+denominator = "hd_ask"
+countermetric = "illegitimate_escalations"
+why = """
+Joshua asked for owner-required escalations counted with a denominator.
+Pairs with omp-orchestrator-two-escalation-authorities-0lc1 (closed):
+legitimate = money / irreversible / API keys; AWAIT_HUMAN otherwise is an
+agent stopping early. A count without that taxonomy is a vanity scalar.
+"""
+
+[[adopted]]
+id = "ready_frontier_utilization"
+denominator = "available_agent_slots"
+countermetric = "idle_beside_ready_queue"
+why = """
+AGENTS.md: an idle worker beside a ready queue is the conductor's failure.
+Numerator = productive agent slots; denominator = available agent slots
+(excluding the orchestrator pane). Countermeteric fires when idle_slots>0
+AND ready_beads>0.
+"""
+
+# --- rejected (the other ten WWJD names) -----------------------------------
+
+[[rejected]]
+id = "T_first_ready"
+why = "no frozen-intent timestamp exists in this repo; the clock has no start"
+
+[[rejected]]
+id = "T_beads_ready"
+why = "no compound readiness predicate is a clocked event here"
+
+[[rejected]]
+id = "tokens_per_qualified_bead"
+why = "no token accounting surface; a guessed token total would be ceremony"
+
+[[rejected]]
+id = "context_reconstruction_tokens"
+why = "compaction/handoff tokens are not metered"
+
+[[rejected]]
+id = "false_ready_rate"
+why = "real pathology, but 0lc1 + bead status already track it; not Joshua's ask. Do not fold into this vector."
+
+[[rejected]]
+id = "reopen_rate"
+why = "close-evidence-gate already watches evidence-less closes; not the first pair"
+
+[[rejected]]
+id = "escaped_plan_defects"
+why = "no join from plan defect to implementation/release discovery"
+
+[[rejected]]
+id = "contract_churn"
+why = "DESIGN_INDEX exists but has no freeze clock on stable IDs"
+
+[[rejected]]
+id = "wasted_model_cost"
+why = "no cost/token ledger to attribute duplicated model work"
+
+[[rejected]]
+id = "replay_success_rate"
+why = "no replay manifests; ARC-CAP-020/028 are unbuilt on purpose (WWJD dropped the 14-crate design)"
+
+# --- measurements (anti-vacuity: this table MUST be nonempty) --------------
+
+[[measurement]]
+metric = "human_interruptions"
+numerator = 24
+denominator_value = 42
+source_artifact = "docs/decisions.jsonl"
+quoted = "42 HD-* rows; 24 with decision=\"\" (unanswered owner asks). Counted 2026-09-06 by json.loads per line."
+countermetric_value = 18
+countermetric_source = "crates/**/*.rs AWAIT_HUMAN string count"
+countermetric_quoted = "18 AWAIT_HUMAN occurrences under crates/; 0lc1 says blanket AWAIT_HUMAN is cop-out"
+
+[[measurement]]
+metric = "ready_frontier_utilization"
+numerator = 4
+denominator_value = 4
+source_artifact = "tmux list-panes -t omp-orchestrator -F '#{pane_index} #{pane_dead} #{pane_current_command}'"
+quoted = "5 panes: index0 zsh (operator), 1-4 bun (agents), pane_dead=0 all. available_agent_slots=4, productive=4, utilization=1.0"
+countermetric_value = 351
+countermetric_source = "br ready --json"
+countermetric_quoted = "idle_agent_panes=0; ready_beads=351. Countermeteric idle_beside_ready_queue is 0 idle *with* 351 ready (slots saturated, queue is the residual)."

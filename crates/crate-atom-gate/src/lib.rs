@@ -39,6 +39,8 @@
 //! That makes the gate blocking against REGRESSION on the day it lands, while the absolute
 //! gaps are declared, owned, and mechanically forced downward.
 
+pub mod metric_auth;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -395,7 +397,11 @@ fn assess_part(facts: &CrateFacts, part: Part, allowances: &Allowances) -> PartS
 
 fn raw_status(facts: &CrateFacts, part: Part) -> PartStatus {
     match part {
-        Part::Lib => flag(facts.has_lib, "[lib] target", "no [lib] target in cargo metadata"),
+        Part::Lib => flag(
+            facts.has_lib,
+            "[lib] target",
+            "no [lib] target in cargo metadata",
+        ),
         Part::Bin => flag(
             facts.has_bin,
             "[[bin]] target",
@@ -417,16 +423,14 @@ fn raw_status(facts: &CrateFacts, part: Part) -> PartStatus {
             let absent: Vec<&str> = REQUIRED_TEST_LEGS
                 .iter()
                 .copied()
-                .filter(|leg| {
-                    !facts
-                        .test_fn_names
-                        .iter()
-                        .any(|name| name.contains(leg))
-                })
+                .filter(|leg| !facts.test_fn_names.iter().any(|name| name.contains(leg)))
                 .collect();
             if absent.is_empty() {
                 PartStatus::Present {
-                    evidence: format!("all five legs present of {} tests", facts.test_fn_names.len()),
+                    evidence: format!(
+                        "all five legs present of {} tests",
+                        facts.test_fn_names.len()
+                    ),
                 }
             } else {
                 PartStatus::Missing {

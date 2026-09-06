@@ -17,17 +17,19 @@
 //! lives here. Subprocesses go through `subprocess-contract` (bounded, both pipes drained,
 //! group kill) rather than a bare `Command::output`, per the atom's cross-cutting rule.
 
-use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
-use std::process::{Command, ExitCode};
-use std::time::Duration;
-
+use crate_atom_gate::metric_auth::require_vector_text;
 use crate_atom_gate::{
     assess_crate, ceiling_breaches, parse_allowances, verdict, Allowances, Caller, CrateFacts,
     GateVerdict, Part, PartStatus, Row, WIRED_CALLERS,
 };
 use serde_json::{json, Value};
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
+use std::process::{Command, ExitCode};
+use std::time::Duration;
 use subprocess_contract::{bounded_output, BoundedOutcome};
+
+
 
 const SCHEMA: &str = "crate-atom-gate.v1";
 const METADATA_DEADLINE: Duration = Duration::from_secs(90);
@@ -51,7 +53,11 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     if args.iter().any(|a| a == "--version") {
-        println!("crate-atom-gate {} build={}", env!("CARGO_PKG_VERSION"), build_id());
+        println!(
+            "crate-atom-gate {} build={}",
+            env!("CARGO_PKG_VERSION"),
+            build_id()
+        );
         return ExitCode::SUCCESS;
     }
     let repo = flag(&args, "--repo").map_or_else(default_repo, PathBuf::from);
@@ -70,13 +76,32 @@ fn main() -> ExitCode {
     let machine = hostname();
     let hook_bytes = std::fs::read(repo.join(".git/hooks/pre-commit")).unwrap_or_default();
     let units = scheduled_units();
-
     let mut rows: Vec<Row> = Vec::new();
     for package in &packages {
         let facts = measure(package, &packages, &repo, &hook_bytes, &units, &machine);
         rows.extend(assess_crate(&facts, &allowances));
     }
-    let outcome = verdict(&rows, packages.len(), &allowances);
+    let mut outcome = verdict(&rows, packages.len(), &allowances);
+    let vector_path = repo.join("docs/plan/METRIC-VECTOR.toml");
+    outcome = match std::fs::read_to_string(&vector_path) {
+        Err(error) => GateVerdict::InstrumentError {
+            reason: format!("METRIC-VECTOR.toml unreadable: {error}"),
+        },
+        Ok(text) => match require_vector_text(&text) {
+            Ok(()) => outcome,
+            Err(error) => match outcome {
+                GateVerdict::Refused { mut reasons } => {
+                    reasons.push(error.to_string());
+                    GateVerdict::Refused { reasons }
+                }
+                GateVerdict::Pass
+                | GateVerdict::Unrun { .. }
+                | GateVerdict::InstrumentError { .. } => GateVerdict::Refused {
+                    reasons: vec![error.to_string()],
+                },
+            },
+        },
+    };
     emit(&outcome, &rows, want_json)
 }
 
@@ -190,18 +215,22 @@ fn read_packages(repo: &Path) -> Result<Vec<Package>, String> {
             return Err(format!(
                 "CARGO_METADATA_FAILED status={:?} stderr={}",
                 output.status.code(),
-                String::from_utf8_lossy(&output.stderr).lines().take(2).collect::<Vec<_>>().join(" ")
+                String::from_utf8_lossy(&output.stderr)
+                    .lines()
+                    .take(2)
+                    .collect::<Vec<_>>()
+                    .join(" ")
             ))
         }
         // A deadline is NOT a verdict about the workspace.
         BoundedOutcome::TimedOut { .. } => {
-            return Err("CARGO_METADATA_TIMEOUT: the instrument could not look, which is \
+            return Err(
+                "CARGO_METADATA_TIMEOUT: the instrument could not look, which is \
                         not a finding about any crate"
-                .to_owned())
+                    .to_owned(),
+            )
         }
-        BoundedOutcome::Unspawned(error) => {
-            return Err(format!("CARGO_UNSPAWNED detail={error}"))
-        }
+        BoundedOutcome::Unspawned(error) => return Err(format!("CARGO_UNSPAWNED detail={error}")),
     };
     let value: Value = serde_json::from_slice(&raw)
         .map_err(|error| format!("CARGO_METADATA_UNPARSEABLE detail={error}"))?;
@@ -297,9 +326,15 @@ fn measure(
     let in_crate_fuzz_targets = list_dir(&package.dir.join("fuzz/fuzz_targets"));
 
     // A crate has something to fuzz when it parses, classifies, or maps a lattice.
-    let has_fuzzable_kernel = ["fn parse", "fn classify", "fn assess", "fn decide", "fn scan"]
-        .iter()
-        .any(|needle| src.contains(needle));
+    let has_fuzzable_kernel = [
+        "fn parse",
+        "fn classify",
+        "fn assess",
+        "fn decide",
+        "fn scan",
+    ]
+    .iter()
+    .any(|needle| src.contains(needle));
     // A crate is on a tick path when the supervisor or a tick lane names it.
     let on_tick_path = ["tick", "dispatch", "pane", "ack", "heartbeat"]
         .iter()
@@ -436,7 +471,10 @@ fn hostname() -> String {
 }
 
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {
-    !needle.is_empty() && haystack.windows(needle.len()).any(|window| window == needle)
+    !needle.is_empty()
+        && haystack
+            .windows(needle.len())
+            .any(|window| window == needle)
 }
 
 /// Keep the wiring roster reachable from the binary so a reader can print it.

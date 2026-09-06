@@ -1,0 +1,4 @@
+# This crate's RULE 0.1 claim. Bead omp-orchestrator-adopt-efficiency-metric-vector-92zh.
+improves = "human_interruptions"
+baseline_artifact = "docs/plan/METRIC-VECTOR.toml"
+why = "Admits only crates that name an adopted measure, so human_interruptions has a denominator instead of a vanity gate count."
