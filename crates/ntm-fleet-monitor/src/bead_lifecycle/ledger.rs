@@ -287,6 +287,25 @@ pub struct ActiveGradingClaim {
     pub grader_pane: String,
 }
 
+/// Distinguishes a ledger with no grading rows from one whose grading rows
+/// were all tracker-inadmissible. Those two used to look identical at the
+/// call site (`Vec` empty), which is acc 6 of `8js3`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GradingClaimScan {
+    LedgerEmpty,
+    FilteredEmpty { dropped: usize },
+    Active(Vec<ActiveGradingClaim>),
+}
+
+impl GradingClaimScan {
+    pub fn claims(&self) -> &[ActiveGradingClaim] {
+        match self {
+            Self::Active(claims) => claims,
+            Self::LedgerEmpty | Self::FilteredEmpty { .. } => &[],
+        }
+    }
+}
+
 
 impl std::fmt::Debug for LifecycleLedger {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -381,21 +400,37 @@ impl LifecycleLedger {
     }
     /// Outstanding grading rows with real bead / pane identifiers.
     /// Angle-bracket placeholders are refused, not returned.
+    ///
+    /// Tracker filter is admissibility, not nkhq-copy: a `grading` row whose
+    /// bead is closed is not an in-flight grade. A missing tracker id fails
+    /// closed (inadmissible), matching `receiver_verified_candidates`.
     pub fn active_grading_claims(
         path: impl AsRef<Path>,
-    ) -> Result<Vec<ActiveGradingClaim>, LedgerError> {
+        tracker_status_path: impl AsRef<Path>,
+    ) -> Result<GradingClaimScan, LedgerError> {
+        let statuses = read_tracker_statuses(tracker_status_path.as_ref())?;
         let mut latest = BTreeMap::new();
         for row in read_rows(path.as_ref())? {
             let identity = row_identity(&row)?;
             latest.insert(identity_key(&identity), row);
         }
+        let mut grading_rows = 0usize;
+        let mut dropped = 0usize;
         let mut claims = Vec::new();
         for row in latest.values() {
             if row.get("status").and_then(Value::as_str) != Some(LifecycleStatus::Grading.as_str())
             {
                 continue;
             }
+            grading_rows += 1;
             let identity = row_identity(row)?;
+            if !matches!(
+                statuses.get(identity.bead.as_str()).map(String::as_str),
+                Some("open" | "in_progress")
+            ) {
+                dropped += 1;
+                continue;
+            }
             let bead = identity.bead.as_str().to_owned();
             let receiver_pane = identity.target.pane.clone();
             let grader_pane = row_string(row, "grader_pane")?;
@@ -416,13 +451,23 @@ impl LifecycleLedger {
                 grader_pane,
             });
         }
-        Ok(claims)
+        if grading_rows == 0 {
+            return Ok(GradingClaimScan::LedgerEmpty);
+        }
+        if claims.is_empty() {
+            return Ok(GradingClaimScan::FilteredEmpty { dropped });
+        }
+        Ok(GradingClaimScan::Active(claims))
     }
 
-    pub fn active_grading_panes(path: impl AsRef<Path>) -> Result<BTreeSet<String>, LedgerError> {
-        Ok(Self::active_grading_claims(path)?
-            .into_iter()
-            .map(|claim| claim.grader_pane)
+    pub fn active_grading_panes(
+        path: impl AsRef<Path>,
+        tracker_status_path: impl AsRef<Path>,
+    ) -> Result<BTreeSet<String>, LedgerError> {
+        Ok(Self::active_grading_claims(path, tracker_status_path)?
+            .claims()
+            .iter()
+            .map(|claim| claim.grader_pane.clone())
             .collect())
     }
 

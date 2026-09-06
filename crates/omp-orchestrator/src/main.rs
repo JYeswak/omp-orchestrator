@@ -66,7 +66,9 @@ use ntm_fleet_monitor::bead_lifecycle::{
 };
 use ntm_fleet_monitor::bead_lifecycle::ledger::{
     packet_digest, InvokerClass, LedgerEvidence, LifecycleIdentity, LifecycleLedger,
+    GradingClaimScan,
 };
+
 
 const DEFAULT_INTERVAL: Duration = Duration::from_secs(90);
 const DEFAULT_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
@@ -1984,11 +1986,14 @@ fn gate_peer_grading_inner(
     tick: u64,
     preferred_grader_pane: Option<&str>,
 ) -> Result<Option<PeerGradeClaim>, String> {
-    let active = LifecycleLedger::active_grading_claims(&config.bead_lifecycle_ledger)
-        .map_err(|error| format!("PEER_GRADING_LEDGER_UNREADABLE error={error}"))?;
-    if !active.is_empty() {
+    let scan = LifecycleLedger::active_grading_claims(
+        &config.bead_lifecycle_ledger,
+        config.repo.join(".beads/issues.jsonl"),
+    )
+    .map_err(|error| format!("PEER_GRADING_LEDGER_UNREADABLE error={error}"))?;
+    if let GradingClaimScan::Active(active) = &scan {
         let mut in_flight = Vec::new();
-        for claim in &active {
+        for claim in active {
             refuse_placeholder_identity("bead", &claim.bead)?;
             refuse_placeholder_identity("receiver_pane", &claim.receiver_pane)?;
             refuse_placeholder_identity("grader_pane", &claim.grader_pane)?;
@@ -2009,6 +2014,7 @@ fn gate_peer_grading_inner(
             .retain(|pane| !in_flight.iter().any(|grader| grader == &pane.pane_id));
         return Ok(None);
     }
+
 
     let candidates = LifecycleLedger::receiver_verified_candidates(
         &config.bead_lifecycle_ledger,
@@ -7380,12 +7386,16 @@ Stop: now
         assert_eq!(claim.receiver_pane, "%1409");
         assert_eq!(claim.grader_pane, "%1414");
         assert_eq!(
-            LifecycleLedger::active_grading_panes(&config.bead_lifecycle_ledger)
-                .unwrap()
-                .into_iter()
-                .collect::<Vec<_>>(),
+            LifecycleLedger::active_grading_panes(
+                &config.bead_lifecycle_ledger,
+                config.repo.join(".beads/issues.jsonl"),
+            )
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>(),
             vec!["%1414".to_owned()]
         );
+
         assert!(
             observation.panes.iter().any(|pane| pane.pane_id == "%1414"),
             "grader must remain observable so the tick can dispatch the grade"

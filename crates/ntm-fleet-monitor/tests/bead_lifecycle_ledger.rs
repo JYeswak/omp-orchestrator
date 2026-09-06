@@ -1,7 +1,8 @@
 use ntm_fleet_monitor::bead_lifecycle::ledger::{
     packet_digest, AppendOutcome, InvokerClass, LedgerError, LedgerEvidence, LifecycleIdentity,
-    LifecycleLedger,
+    LifecycleLedger, GradingClaimScan,
 };
+
 use ntm_fleet_monitor::bead_lifecycle::{
     BeadId, BlockReason, BlockerEvidence, BlockerKind, DispatchReceipt, DispatchTarget,
     EvidencePolicy, EventId, GradeReceipt, LifecycleStatus, ReceiverEvidence, RedispatchPlan,
@@ -511,3 +512,73 @@ fn stale_receiver_event_is_refused_after_redispatch() {
         ))
     ));
 }
+
+/// MEASURED 2026-09-06 from
+/// `~/.local/state/flywheel/omp-orchestrator-omp-orchestrator.bead-lifecycle.jsonl`.
+/// Real `grading_started` for eg0m pane %8; tracker status closed.
+const EG0M_GRADING_ROW: &str = r#"{"bead":"omp-orchestrator-eg0m","event":"grading_started","evidence":{"grader_pane":"%9","receiver_event_id":"omp-orchestrator-eg0m:receiver:2","receiver_pane":"%8","source":"omp-orchestrator"},"freshness":{"age_ms":0,"max_age_ms":0,"now_ms":1788672265000,"observed_at_ms":1788672265000,"within_window":true},"grader_pane":"%9","idempotency_key":"peer-grade:omp-orchestrator-eg0m:3:%9","invoker":"MANUAL","objective":"dispatch bead omp-orchestrator-eg0m","packet_digest":"sha256:9f1272b8dec9099460f9bd01860bb86b6448433c81b5380460f7f26ca24ad9aa","pane":"%8","repo":"/Users/josh/Developer/omp-orchestrator","schema":"omp.bead.lifecycle.v1","session":"omp-orchestrator","status":"grading","written_at_unix":1788672265}"#;
+
+#[test]
+fn closed_eg0m_grading_row_is_not_an_active_claim() {
+    let dir = tempdir().unwrap();
+    let ledger = dir.path().join("lifecycle.jsonl");
+    std::fs::write(&ledger, format!("{EG0M_GRADING_ROW}\n")).unwrap();
+    let tracker = dir.path().join("issues.jsonl");
+    std::fs::write(&tracker, "{\"id\":\"omp-orchestrator-eg0m\",\"status\":\"closed\"}\n").unwrap();
+    let scan = LifecycleLedger::active_grading_claims(&ledger, &tracker).unwrap();
+    assert!(
+        matches!(scan, GradingClaimScan::FilteredEmpty { dropped: 1 }),
+        "closed eg0m must not produce a PeerGradeClaim: {scan:?}"
+    );
+    assert!(scan.claims().is_empty());
+}
+
+#[test]
+fn in_progress_grading_row_is_still_an_active_claim() {
+    let dir = tempdir().unwrap();
+    let ledger = dir.path().join("lifecycle.jsonl");
+    std::fs::write(&ledger, format!("{EG0M_GRADING_ROW}\n")).unwrap();
+    let tracker = dir.path().join("issues.jsonl");
+    std::fs::write(
+        &tracker,
+        "{\"id\":\"omp-orchestrator-eg0m\",\"status\":\"in_progress\"}\n",
+    )
+    .unwrap();
+    let scan = LifecycleLedger::active_grading_claims(&ledger, &tracker).unwrap();
+    match scan {
+        GradingClaimScan::Active(claims) => {
+            assert_eq!(claims.len(), 1);
+            assert_eq!(claims[0].bead, "omp-orchestrator-eg0m");
+            assert_eq!(claims[0].receiver_pane, "%8");
+            assert_eq!(claims[0].grader_pane, "%9");
+        }
+        other => panic!("in_progress must still claim: {other:?}"),
+    }
+}
+
+#[test]
+fn bead_absent_from_tracker_fails_closed() {
+    let dir = tempdir().unwrap();
+    let ledger = dir.path().join("lifecycle.jsonl");
+    std::fs::write(&ledger, format!("{EG0M_GRADING_ROW}\n")).unwrap();
+    let tracker = dir.path().join("issues.jsonl");
+    std::fs::write(&tracker, "{\"id\":\"some-other-bead\",\"status\":\"in_progress\"}\n").unwrap();
+    let scan = LifecycleLedger::active_grading_claims(&ledger, &tracker).unwrap();
+    assert!(
+        matches!(scan, GradingClaimScan::FilteredEmpty { dropped: 1 }),
+        "absent tracker id is inadmissible: {scan:?}"
+    );
+}
+
+#[test]
+fn empty_ledger_is_typed_empty_not_filtered() {
+    let dir = tempdir().unwrap();
+    let ledger = dir.path().join("lifecycle.jsonl");
+    std::fs::write(&ledger, "").unwrap();
+    let tracker = dir.path().join("issues.jsonl");
+    std::fs::write(&tracker, "{\"id\":\"omp-orchestrator-eg0m\",\"status\":\"closed\"}\n").unwrap();
+    let scan = LifecycleLedger::active_grading_claims(&ledger, &tracker).unwrap();
+    assert_eq!(scan, GradingClaimScan::LedgerEmpty);
+}
+
+
