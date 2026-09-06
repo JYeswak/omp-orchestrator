@@ -1,7 +1,7 @@
 # omp-orchestrator: a native Rust binary that runs a project end to end
 
 > Install it on any of our machines, point it at a repo, and it drives that project from a plan
-> to shipped, verified work using OMP agents: planning → beads → PageRank triage → dispatch →
+> to PROJECTED shipped work using OMP agents: planning → beads → PageRank triage → dispatch →
 > ground-truth verification → close. No shell. No Python. One binary.
 
 ## What this is
@@ -45,6 +45,12 @@ match we shipped has been wrong at least once.
 **control-plane is the proving ground.** This substrate is currently installed on the Studio for the
 `omp-orchestrator` session only. It travels to another repo or machine only after that target has its
 own live proof; source code, an installed binary, and a loaded launchd job are separate claims.
+
+**NO-CLAIM.** The current supervisor and surface map are not a shipped customer workflow until
+S5–S8 receipts exist (`docs/plan/FOUNDATION.jsonl`). Runtime evidence:
+`.flywheel/jplf9-once.receipt.txt` from `./target/debug/omp-orchestrator --once --session omp-orchestrator --max-ticks 1`
+(2026-09-06). That run ended `SUPERVISOR_STOP reason=bounded_test_run` with reap `SKIPPED` /
+`reaped=0`. Exit 0 is not a successful reap and not S5–S8 completion.
 
 ## Non-goals
 
@@ -172,8 +178,10 @@ it makes the choice visible, it does not force a rewrite.
 1. **No `.sh`, no `.py`.** A Rust gate walks `git ls-files` and refuses either extension. It lands
    *before* the first crate is copied, because a gate that arrives after the mess gets weakened to
    make the build pass. Planted known-bad both directions plus a mutation leg.
-2. **`#![forbid(unsafe_code)]` in every crate.** Today **2 of 20** carry it. A crate that will not
-   compile under the lint is a finding, not a reason to drop the lint.
+2. **`#![forbid(unsafe_code)]` in every crate.** Measured 2026-09-06: **74 of 78** workspace
+   crates carry `unsafe_code = "forbid"` in `Cargo.toml` (authority: `NUMBERS.toml`
+   `[figures.crates_forbidding_unsafe]` + `cargo metadata --format-version 1 --no-deps --offline`).
+   A crate that will not compile under the lint is a finding, not a reason to drop the lint.
 3. **Every gate proven to bite.** A gate with no fires-on-known-bad is not evidence of anything; a
    gate with *only* attack legs is over-strict and gets routed around. Both directions, always, plus
    a mutation that turns the leg RED.
@@ -187,7 +195,7 @@ it makes the choice visible, it does not force a rewrite.
 
 ## Architecture: the twelve-box phase arc
 
-The product is one binary that drives a project from an idea to shipped, verified work. That journey
+The product is one binary that drives a project from an idea to PROJECTED shipped work. That journey
 is cut into **twelve boxes**, the phase arc, and each box is a contract with measurements, gaps, an
 agreement ledger, and a rendered diagram before any of it is built. The boxes live in
 `docs/plan/flow/boxes/` and the governing contract is `docs/plan/flow/CONTRACT.md`.
@@ -274,9 +282,10 @@ file *and* the parent directory, reached from four real callers.
 
 ## Limitations
 
-- **The binary does not speak OMP's protocol.** It types into panes and reads status lines. Zero of
-  the 39 subcommands, 57 type-surface directories, and `--mode=rpc` transport OMP publishes are
-  called from any crate. Every pane verdict this binary emits is a claim about a rendering.
+- **The binary does not speak OMP's protocol.** It types into panes and reads status lines.
+  HISTORICAL 2026-08-31: 39 subcommands, 57 type-surface directories, and `--mode=rpc` were
+  published and unused by our crates. Mapping is not adoption. Every pane verdict this binary
+  emits is a claim about a rendering.
 - **Coverage does not regenerate from a clean clone.** The `S1-COVERAGE.md` generator is an
   untracked `.py` under `.git/`, which also breaks the no-shell rule by *geography* rather than
   following it. Until it reads a git tree via `--rev` instead of the worktree, the readiness number

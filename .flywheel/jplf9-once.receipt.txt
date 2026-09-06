@@ -1,0 +1,13 @@
+command: ./target/debug/omp-orchestrator --once --session omp-orchestrator --max-ticks 1
+measured_at: 2026-09-06T12:55:56Z
+exit: 0
+NO-CLAIM: exit 0 is SUPERVISOR_STOP reason=bounded_test_run, not a shipped S5-S8 workflow.
+reap: SKIPPED (working / still_changing); reaped=0. Not a successful reap.
+
+FINDING_RECOVERY tick=1 pending=0 filed=0
+CENSUS_ADVISORY count=26 ceiling=24 rows=78 blocking=22 CENSUS_ADVISORY_RATCHET_OVERDUE
+OBSERVATION tick=1 session=omp-orchestrator panes=4 states=%5=UNPROVEN,%6=WEDGED,%7=WORKING,%8=UNPROVEN free_capacity=0 dispatchable=0
+REAP_FINISHED_PANES tick=1 session=omp-orchestrator summary=SKIPPED ... reaped=0 skipped=4
+QUEUE_RANK_FALLBACK window=PRIORITY_FALLBACK priority_source=br_ready ready=340
+SUPERVISED_WORKING tick=1 session=omp-orchestrator working=1 ready=340
+SUPERVISOR_STOP tick=1 reason=bounded_test_run
