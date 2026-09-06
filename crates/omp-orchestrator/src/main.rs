@@ -2879,6 +2879,9 @@ enum PendingDispatch {
     /// Young enough that a packet may still be in flight. Still blocks; this is the
     /// positive control that keeps the double-send guard real.
     Live { detail: String, age_secs: u64 },
+    /// A successful dispatch has a tracker verdict, but the marker survives until the next
+    /// cycle so the success path cannot clear the pane's acknowledgment window immediately.
+    Acknowledged { detail: String },
     /// Older than the deadline. The loop retires this itself.
     Expired { detail: String, age_secs: u64 },
     /// A marker whose `issued_at` is missing, non-numeric, or in the future.
@@ -2898,6 +2901,7 @@ impl PendingDispatch {
         match self {
             Self::None => "NO_PENDING_DISPATCH",
             Self::Live { .. } => "PENDING_DISPATCH_LIVE",
+            Self::Acknowledged { .. } => "DISPATCH_INTENT_ACKNOWLEDGED",
             Self::Expired { .. } => "DISPATCH_INTENT_EXPIRED",
             Self::Undatable { .. } => "PENDING_DISPATCH_UNDATABLE",
         }
@@ -3018,6 +3022,16 @@ fn process_pending_markers(config: &Config, tick: u64) -> Result<MarkerFence, St
     for (pane, marker_path, verdict) in rows {
         match verdict {
             PendingDispatch::None => {}
+            PendingDispatch::Acknowledged { detail } => {
+                let bead = bead_from_marker_detail(&detail);
+                clear_dispatch_marker(&marker_path, &pane)?;
+                let cleared_detail = format!(
+                    "pane={pane} bead={bead} reason=ACKNOWLEDGED owner=loop next_action=continue detail={detail}"
+                );
+                write_heartbeat(config, tick, "DISPATCH_INTENT_CLEARED", &cleared_detail)?;
+                println!("DISPATCH_INTENT_CLEARED tick={tick} session={} {cleared_detail}", config.session);
+                cleared.push((pane, bead, "ACKNOWLEDGED"));
+            }
             PendingDispatch::Live { detail, age_secs } => {
                 write_heartbeat(config, tick, "DISPATCH_RETRY_BLOCKED", &detail)?;
                 let remaining = PENDING_DISPATCH_MAX_AGE_SECS.saturating_sub(age_secs);
@@ -3076,6 +3090,13 @@ fn classify_pending_dispatch(text: &str, now: u64) -> PendingDispatch {
         };
     }
     let detail = trimmed.to_owned();
+    if serde_json::from_str::<Value>(trimmed)
+        .ok()
+        .and_then(|row| row.get("acknowledged_at").and_then(Value::as_u64))
+        .is_some()
+    {
+        return PendingDispatch::Acknowledged { detail };
+    }
     let issued_at = serde_json::from_str::<serde_json::Value>(trimmed)
         .ok()
         .and_then(|row| row.get("issued_at").and_then(serde_json::Value::as_u64));
@@ -3619,6 +3640,50 @@ fn write_dispatch_intent(config: &Config, pane: &str, bead: &str) -> Result<(), 
         })
 }
 
+fn acknowledge_dispatch_intent(config: &Config, pane: &str) -> Result<(), String> {
+    let path = pending_dispatch_path(config, pane);
+    let text = fs::read_to_string(&path).map_err(|error| {
+        format!("DISPATCH_ACKNOWLEDGE_READ_FAILED pane={pane} path={} error={error}", path.display())
+    })?;
+    let mut value = serde_json::from_str::<Value>(&text)
+        .map_err(|error| format!("DISPATCH_ACKNOWLEDGE_MALFORMED pane={pane} error={error}"))?;
+    let object = value
+        .as_object_mut()
+        .ok_or_else(|| format!("DISPATCH_ACKNOWLEDGE_NOT_OBJECT pane={pane}"))?;
+    object.insert("acknowledged_at".to_owned(), json!(now_unix()));
+    let bytes = serde_json::to_vec(&value)
+        .map_err(|error| format!("DISPATCH_ACKNOWLEDGE_SERIALIZE_FAILED pane={pane} error={error}"))?;
+    let temp = path.with_extension(format!("ack-{}.tmp", std::process::id()));
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)
+        .map_err(|error| format!("DISPATCH_ACKNOWLEDGE_TEMP_FAILED path={} error={error}", temp.display()))?;
+    file.write_all(&bytes)
+        .and_then(|_| file.write_all(b"\n"))
+        .and_then(|_| file.sync_data())
+        .map_err(|error| format!("DISPATCH_ACKNOWLEDGE_WRITE_FAILED path={} error={error}", temp.display()))?;
+    fs::rename(&temp, &path)
+        .map_err(|error| format!("DISPATCH_ACKNOWLEDGE_RENAME_FAILED pane={pane} error={error}"))
+}
+
+fn record_successful_dispatch(
+    config: &Config,
+    tick: u64,
+    pane: &str,
+    bead: &str,
+) -> Result<(), String> {
+    acknowledge_dispatch_intent(config, pane)?;
+    write_heartbeat(
+        config,
+        tick,
+        "DISPATCH_INTENT_ACKNOWLEDGED",
+        &format!(
+            "pane={pane} bead={bead} reason=VERDICT_POSTED owner=loop next_action=clear-next-cycle"
+        ),
+    )?;
+    Ok(())
+}
 fn clear_dispatch_intent(config: &Config, pane: &str) -> Result<(), String> {
     clear_dispatch_marker(&pending_dispatch_path(config, pane), pane)
 }
@@ -4681,15 +4746,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             match dispatch_result {
                 Ok(outcome) => {
                     if outcome.clear_intent {
-                        clear_dispatch_intent(config, &pane)?;
-                        write_heartbeat(
-                            config,
-                            tick,
-                            "DISPATCH_INTENT_CLEARED",
-                            &format!(
-                                "pane={pane} bead={bead} reason=VERDICT_POSTED owner=loop next_action=continue"
-                            ),
-                        )?;
+                        record_successful_dispatch(config, tick, &pane, bead)?;
                     }
                 }
                 Err(error) => {
@@ -5815,6 +5872,45 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
             second.unwrap_err().contains("DISPATCH_RETRY_BLOCKED"),
             "a second dispatch to the same pane must still refuse"
         );
+    }
+
+    #[test]
+    fn acknowledged_dispatch_marker_clears_only_on_next_cycle() {
+        let temp = tempfile::tempdir().expect("acknowledged marker tempdir");
+        let root = temp.path().to_path_buf();
+        let mut config = fixture_config(root.join("heartbeat.jsonl"));
+        config.pending_dispatch = root.join("pending");
+        let path = plant_intent(
+            &config,
+            "%1413",
+            "omp-orchestrator-success-bead",
+            now_unix(),
+        );
+
+        record_successful_dispatch(&config, 1, "%1413", "omp-orchestrator-success-bead")
+            .expect("success must acknowledge marker");
+        assert!(path.exists(), "acknowledgment must retain the marker for the next cycle");
+        assert!(
+            matches!(
+                read_pending_dispatches(&config)
+                    .unwrap()
+                    .into_iter()
+                    .find(|(pane, _, _)| pane == "%1413"),
+                Some((_, _, PendingDispatch::Acknowledged { .. }))
+            ),
+            "acknowledged marker must not remain indistinguishable from a live marker"
+        );
+
+        let MarkerFence::Proceed(outcome) = process_pending_markers(&config, 1).unwrap() else {
+            panic!("acknowledged marker must proceed after clearing");
+        };
+        assert_eq!(outcome.cleared, vec![(
+            "%1413".to_owned(),
+            "omp-orchestrator-success-bead".to_owned(),
+            "ACKNOWLEDGED",
+        )]);
+        assert!(outcome.blocked_panes.is_empty());
+        assert!(!path.exists(), "next cycle must clear the acknowledged marker");
     }
 
     #[test]
