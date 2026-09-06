@@ -18,6 +18,12 @@
 //! from OUTSIDE the kernel crate that owns it. The kernel registry is DECLARED — a const
 //! in this file — not inferred, so adding a kernel requires adding its crate to the
 //! allowlist and the gate enforces the declaration.
+//! ENFORCES: committed Rust source outside the owning crate cannot bypass a declared kernel
+//! pattern without a named debt row and a non-slack ceiling.
+//! STILL PASSES: the owning kernel crate, comments, and allowlisted internal sites remain clean;
+//! the operator's uncommitted shell handrolls remain outside this source gate.
+//! PROVENANCE: the registry and debt ceilings below are measured from the committed tree and
+//! every allowance names its owner and the condition that removes it.
 //!
 //! THE LIMIT, stated in the gate's own output: this gate scans COMMITTED SOURCE ONLY.
 //! It cannot see an operator handrolling in a shell, which is how five kernels were
@@ -590,17 +596,10 @@ pub fn lint_workspace(root: &Path) -> GateReport {
     let entries = match std::fs::read_dir(&crates_dir) {
         Ok(entries) => entries,
         Err(_) => {
+            // Missing and empty crates/ are the same anti-vacuous input: no files were scanned.
             return GateReport {
-                scanned: vec![format!(
-                    "ERROR: cannot read {}: the scan set is empty",
-                    crates_dir.display()
-                )],
-                violations: vec![Bypass {
-                    file: String::new(),
-                    line: 0,
-                    pattern: String::new(),
-                    kernel: String::new(),
-                }],
+                scanned: Vec::new(),
+                violations: Vec::new(),
             };
         }
     };

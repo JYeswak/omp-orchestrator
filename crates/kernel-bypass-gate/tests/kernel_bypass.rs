@@ -3,6 +3,7 @@
 //! Specimen-based legs for the kernel-bypass gate (bead -ilt acceptance 1-3).
 
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use kernel_bypass_gate::{
     blank_block_comments, debt_verdict, lint_source, lint_workspace, strip_line_comment,
@@ -57,6 +58,30 @@ fn file_gap(context: &str) -> String {
 }
 
 /// KNOWN-GOOD: the kernel crate itself calling its own interface is NOT a violation.
+
+#[test]
+fn empty_crates_scan_exits_gate_error_not_success() {
+    let root = std::env::temp_dir().join(format!(
+        "kernel-bypass-empty-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&root).expect("empty scan root");
+    let output = Command::new(env!("CARGO_BIN_EXE_kernel-bypass-gate"))
+        .arg(&root)
+        .output()
+        .expect("kernel gate binary must run");
+    assert_eq!(output.status.code(), Some(3), "empty scan must be a gate error: {output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("empty scan set"),
+        "empty scan refusal must be named: {:?}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    std::fs::remove_dir_all(root).ok();
+}
 #[test]
 fn kernel_own_call_site_is_allowlisted() {
     let source = "\
@@ -323,6 +348,39 @@ fn ratchet_refuses_new_debt_slack_and_undeclared() {
 /// kernel-bypass-gate` and `cargo run -p kernel-bypass-gate -- .` render the SAME verdict
 /// from the SAME functions, so the two-leg design cannot drift the way the tested and
 /// shipped matchers just did.
+
+#[test]
+fn mutation_removing_registry_predicate_is_red_and_restores_green() {
+    let root = scratch_tree("registry-mutation");
+    write_crate_source(
+        &root,
+        "consumer",
+        "handroll.rs",
+        "fn send() { Command::new(\"tmux\").arg(\"x\"); }\n",
+    );
+    let report = lint_workspace(&root);
+    let pattern = KERNEL_REGISTRY
+        .iter()
+        .find(|(_, kernel, _)| *kernel == "tick-monitor pane access")
+        .expect("tmux registry row")
+        .0;
+    let restored = vec![SystemicBypassAllowance {
+        pattern,
+        owner: "josh",
+        dies_when: "fixture mutation restores this row",
+        ceiling: 1,
+    }];
+    assert!(debt_verdict(&report, &restored).is_pass(), "known-good registry row must pass");
+    let mutated = debt_verdict(&report, &[]);
+    assert!(!mutated.is_pass(), "removing the registry predicate must go RED");
+    assert!(
+        format!("{}", mutated.faults[0]).starts_with("UNDECLARED_PATTERN"),
+        "mutation must name the missing registry row: {:?}",
+        mutated.faults
+    );
+    assert!(debt_verdict(&report, &restored).is_pass(), "restoring the row must return GREEN");
+    std::fs::remove_dir_all(root).ok();
+}
 #[test]
 fn real_workspace_ledger_balances() {
     let report = lint_workspace(&repo_root());

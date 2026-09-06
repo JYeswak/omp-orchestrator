@@ -23,6 +23,11 @@
 //! followed by a REAL thread::spawn drain. A scan that does not strip //
 //! lines classifies these as violations (45% false-positive rate measured
 //! in the -w4j derivation).
+//! ENFORCES: functions that pipe both stdout and stderr cannot poll try_wait without
+//! draining those pipes concurrently.
+//! STILL PASSES: stdout-only pipes, wait_with_output, and explicit concurrent readers.
+//! PROVENANCE: this lint is derived from the AGENTS.md 64 KiB deadlock incident and
+//! reports the exact function and lines that form the pattern.
 
 use std::fmt;
 use std::fs;
@@ -151,7 +156,9 @@ fn brace_delta(line: &str) -> i32 {
 fn function_regions(code: &[String]) -> Vec<FunctionRegion> {
     let mut regions = Vec::new();
     for (start, line) in code.iter().enumerate() {
-        let Some(name) = function_name(line) else { continue };
+        let Some(name) = function_name(line) else {
+            continue;
+        };
         let mut depth = 0;
         let mut opened = false;
         let mut end = start;
@@ -241,7 +248,9 @@ pub fn find_detailed_violations_in_source(source: &str) -> Vec<(usize, usize, us
     let regions = function_regions(&code);
     let mut violations = Vec::new();
     for region in &regions {
-        let Some((stdout_line, stderr_line)) = piped_pair(&code, region) else { continue };
+        let Some((stdout_line, stderr_line)) = piped_pair(&code, region) else {
+            continue;
+        };
         if let Some(poll) = try_wait_line(&code, region) {
             if !drains_before_poll(&code, stdout_line.min(stderr_line), poll) {
                 violations.push((stdout_line + 1, stderr_line + 1, poll + 1));
@@ -351,7 +360,10 @@ pub fn lint_tree(root: &Path, skip_dirs: &[&str]) -> LintReport {
     }
 
     scanned.sort();
-    LintReport { scanned, violations }
+    LintReport {
+        scanned,
+        violations,
+    }
 }
 
 /// Convenience: scan `<root>/crates/*/src/` for violations.
@@ -417,5 +429,8 @@ pub fn lint_workspace(root: &Path) -> LintReport {
 
     scanned.sort();
     violations.sort_by(|a, b| a.file.cmp(&b.file).then(a.piped_line.cmp(&b.piped_line)));
-    LintReport { scanned, violations }
+    LintReport {
+        scanned,
+        violations,
+    }
 }

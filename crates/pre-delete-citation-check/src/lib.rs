@@ -20,6 +20,10 @@
 //! CORRECT (the scripts were replaced by Rust crates). The override names the
 //! superseding artifact and the caller writes a comment onto each affected bead so
 //! the citation gets REPAIRED, not bypassed.
+//! ENFORCES: a staged deletion is refused when any readable CLOSED bead cites that path.
+//! STILL PASSES: unrelated deletions and a checked, citation-free closed-bead set.
+//! PROVENANCE: the staged deletion list and the tracker JSON are the two inputs; a missing or
+//! empty tracker is an error, never evidence that no bead cites the deletion.
 
 use serde_json::Value;
 use std::fmt;
@@ -111,7 +115,11 @@ pub fn parse_closed_beads(br_json: &str) -> Vec<ClosedBead> {
         if status != "closed" {
             continue;
         }
-        let id = issue.get("id").and_then(Value::as_str).unwrap_or("").to_owned();
+        let id = issue
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_owned();
         let close_reason = issue
             .get("close_reason")
             .and_then(Value::as_str)
@@ -125,6 +133,25 @@ pub fn parse_closed_beads(br_json: &str) -> Vec<ClosedBead> {
         });
     }
     beads
+}
+
+/// Checked tracker parse for the gate boundary. Empty, malformed, or non-record output is
+/// restrictive: the deletion cannot be certified safe when the bead store was not read.
+pub fn parse_closed_beads_checked(br_json: &str) -> Result<Vec<ClosedBead>, String> {
+    let value: Value = serde_json::from_str(br_json)
+        .map_err(|error| format!("PRE_DELETE_BEADS_UNREADABLE reason=malformed_json detail={error}"))?;
+    let issues = value
+        .get("issues")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "PRE_DELETE_BEADS_UNREADABLE reason=missing_issues".to_owned())?;
+    if issues.is_empty() {
+        return Err("PRE_DELETE_BEADS_EMPTY reason=zero_bead_records_readable".to_owned());
+    }
+    let beads = parse_closed_beads(br_json);
+    if beads.is_empty() {
+        return Err("PRE_DELETE_BEADS_EMPTY reason=no_closed_records_readable".to_owned());
+    }
+    Ok(beads)
 }
 
 /// True when the given repo-root path is inside a git repository with at least one commit.
@@ -168,8 +195,7 @@ mod tests {
             "DONE: commit 92a65e4 adds the packet close prefix",
             &["4. Re-run bin/fleet-composite.py and paste the JSON."],
         );
-        let conflicts =
-            check_deletions(&["bin/fleet-composite.py".to_owned()], &[bead]);
+        let conflicts = check_deletions(&["bin/fleet-composite.py".to_owned()], &[bead]);
         assert_eq!(conflicts.len(), 1);
         assert!(
             conflicts[0].field.starts_with("comment"),
@@ -181,8 +207,7 @@ mod tests {
     fn unrelated_deletion_passes() {
         // KNOWN-GOOD: deleting a file that no closed bead cites must PASS.
         let bead = bead("cp-clean", "nothing about deleted files", &[]);
-        let conflicts =
-            check_deletions(&["bin/unrelated-thing.sh".to_owned()], &[bead]);
+        let conflicts = check_deletions(&["bin/unrelated-thing.sh".to_owned()], &[bead]);
         assert!(conflicts.is_empty(), "no citation -> no conflict");
     }
 
@@ -193,10 +218,7 @@ mod tests {
             "cites bin/a.sh in the close_reason",
             &["also cites bin/b.sh in a comment"],
         );
-        let conflicts = check_deletions(
-            &["bin/a.sh".to_owned(), "bin/b.sh".to_owned()],
-            &[bead],
-        );
+        let conflicts = check_deletions(&["bin/a.sh".to_owned(), "bin/b.sh".to_owned()], &[bead]);
         assert_eq!(conflicts.len(), 2, "both surfaces must be caught");
         assert!(conflicts.iter().any(|c| c.field == "close_reason"));
         assert!(conflicts.iter().any(|c| c.field.starts_with("comment")));

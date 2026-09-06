@@ -1,4 +1,4 @@
-use commit_build_fence::{BuildRegistration, RegistrationStore};
+use commit_build_fence::{check, BuildRegistration, FenceVerdict, RegistrationStore};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -149,6 +149,41 @@ fn real_hook_refuses_active_registration_with_actionable_identity() {
         head_before,
         "HEAD read-back must remain stable"
     );
+}
+
+#[test]
+fn mutation_live_registration_predicate_is_red_and_restores_green() {
+    let dir = fresh_repo("mutation");
+    let store_path = store_for(&dir);
+    RegistrationStore::empty()
+        .save_atomic(&store_path)
+        .expect("initialize mutation store");
+    let repo = dir.canonicalize().expect("canonical repo");
+    let now = now_unix();
+    let mut store = RegistrationStore::load(&store_path).expect("load mutation store");
+    store
+        .register(BuildRegistration {
+            build_id: "mutation-live".to_owned(),
+            repo: repo.display().to_string(),
+            head: current_head(&dir),
+            holder: "agent-mutation".to_owned(),
+            started_at_unix: now,
+            expires_at_unix: now + 1_800,
+        })
+        .expect("register live build");
+    store.save_atomic(&store_path).expect("save mutation store");
+    let refused = check(&store_path, &repo.display().to_string(), &current_head(&dir), now)
+        .expect("live registration should be readable");
+    assert!(matches!(refused, FenceVerdict::Refused { .. }), "live registration must refuse: {refused:?}");
+    let mut restored = RegistrationStore::load(&store_path).expect("reload mutation store");
+    restored
+        .release("mutation-live", &repo.display().to_string(), "agent-mutation", now)
+        .expect("release live build");
+    restored.save_atomic(&store_path).expect("save restored store");
+    let clear = check(&store_path, &repo.display().to_string(), &current_head(&dir), now)
+        .expect("restored store should be readable");
+    assert!(clear.is_clear(), "restoring the registration must return clear: {clear:?}");
+    fs::remove_dir_all(dir).ok();
 }
 
 #[test]
@@ -398,15 +433,14 @@ fn cli_contract_refuses_a_positional_path_and_accepts_the_documented_default() {
     let head = current_head(&dir);
     let mut loaded = RegistrationStore::load(&store).expect("load store");
     loaded
-        .register(
-            BuildRegistration {
-                build_id: "build-default-cmd".to_owned(),
-                repo: repo_arg.clone(),
-                head: head.clone(),
-                holder: "agent-default".to_owned(),
-                started_at_unix: now_unix(),
-                expires_at_unix: now_unix() + 600,
-            })
+        .register(BuildRegistration {
+            build_id: "build-default-cmd".to_owned(),
+            repo: repo_arg.clone(),
+            head: head.clone(),
+            holder: "agent-default".to_owned(),
+            started_at_unix: now_unix(),
+            expires_at_unix: now_unix() + 600,
+        })
         .expect("register active build");
     loaded.save_atomic(&store).expect("save registration");
     let blocked = run_fence(&["--repo".to_owned(), repo_arg.clone()]);
@@ -422,7 +456,11 @@ fn cli_contract_refuses_a_positional_path_and_accepts_the_documented_default() {
     );
 
     // `--store=PATH` proves the `=` form is recognised by the same leg.
-    let equals_form = run_fence(&[format!("--store={store_arg}"), "--repo".to_owned(), repo_arg]);
+    let equals_form = run_fence(&[
+        format!("--store={store_arg}"),
+        "--repo".to_owned(),
+        repo_arg,
+    ]);
     assert_eq!(
         equals_form.status.code(),
         Some(1),

@@ -100,13 +100,13 @@ const GATE_PROPERTIES: &[Claim] = &[
         "wired",
         Some("lint_is_wired_into_blocking_ci"),
     ),
-    // Declared absences — each is a real gap, not an omission
-    ("kernel-bypass-gate", "mutation", None),
-    ("kernel-bypass-gate", "anti-vacuity", None),
-    ("pre-delete-citation-check", "mutation", None),
-    ("pre-delete-citation-check", "anti-vacuity", None),
+    // Declared absences — remaining gaps are explicit; delivered legs carry citations.
+    ("kernel-bypass-gate", "mutation", Some("mutation_removing_registry_predicate_is_red_and_restores_green")),
+    ("kernel-bypass-gate", "anti-vacuity", Some("empty_crates_scan_exits_gate_error_not_success")),
+    ("pre-delete-citation-check", "mutation", Some("closed_status_predicate_detects_cp_op5uu")),
+    ("pre-delete-citation-check", "anti-vacuity", Some("empty_closed_bead_records_are_an_error_not_a_pass")),
     ("path-literal-guard", "known-good", None),
-    ("undrained-pipe-lint", "claim-discipline", None),
+    ("undrained-pipe-lint", "claim-discipline", Some("claim_header_names_enforces_still_passes_provenance")),
 ];
 
 fn crate_test_bodies(root: &Path, crate_name: &str) -> String {
@@ -170,9 +170,9 @@ fn every_claimed_property_cites_a_test_that_exists() {
 
 #[test]
 fn a_declared_absence_is_recorded_rather_than_left_blank() {
-    // Six rows carry None. If that ever reaches zero, either every gap closed — in
-    // which case `06-gates.md`'s "zero gates satisfy all six" sentence is stale and
-    // must be rewritten — or somebody deleted the honest half of the registry.
+    // One row remains None: it is a real absence, not an omission.
+    // If this reaches zero, the remaining absence and 06-gates.md's count are stale
+    // and must be rewritten in the same commit.
     let absences = GATE_PROPERTIES
         .iter()
         .filter(|(_, _, c)| c.is_none())

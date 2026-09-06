@@ -53,10 +53,15 @@ fn main() -> ExitCode {
         return ExitCode::from(3);
     };
     let br_text = String::from_utf8_lossy(&br_raw.stdout).into_owned();
-    let closed_beads = pre_delete_citation_check::parse_closed_beads(&br_text);
+    let closed_beads = match pre_delete_citation_check::parse_closed_beads_checked(&br_text) {
+        Ok(beads) => beads,
+        Err(error) => {
+            eprintln!("{error}");
+            return ExitCode::from(3);
+        }
+    };
     // 3. Cross-reference.
-    let conflicts =
-        pre_delete_citation_check::check_deletions(&staged, &closed_beads);
+    let conflicts = pre_delete_citation_check::check_deletions(&staged, &closed_beads);
 
     // 4. Override: names the superseding artifact, allows the deletion.
     if let Ok(override_artifact) = std::env::var("PRE_DELETE_OVERRIDE") {

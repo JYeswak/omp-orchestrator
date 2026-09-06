@@ -6,6 +6,10 @@
 //! means no build is in flight. A missing or unreadable store is an error, not
 //! permission to commit. Active registrations are matched by canonical repo
 //! path and name the build, source HEAD, and holder in the refusal.
+//! ENFORCES: a registered live build or install blocks commit until its owner releases it.
+//! STILL PASSES: a valid empty or expired registration store; missing or malformed state refuses.
+//! PROVENANCE: registration records carry the source HEAD, build id, holder, and bounded expiry;
+//! the store is read from the explicit caller-supplied path.
 
 use serde::{Deserialize, Serialize};
 use std::fmt;

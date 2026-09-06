@@ -14,6 +14,19 @@ use std::path::Path;
 use undrained_pipe_lint::{find_detailed_violations_in_source, lint_tree};
 
 const DEFECT_FIXTURE: &str = include_str!("fixtures/oracle_compare_f29323b_parent.rs");
+
+#[test]
+fn claim_header_names_enforces_still_passes_provenance() {
+    let source = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"))
+        .expect("undrained-pipe-lint source");
+    assert!(source.contains("ENFORCES:"), "header must state ENFORCES");
+    assert!(source.contains("STILL PASSES:"), "header must state STILL PASSES");
+    assert!(source.contains("PROVENANCE:"), "header must state PROVENANCE");
+    assert!(
+        !source.to_ascii_lowercase().contains("guarantee"),
+        "claim header must not make an unqualified guarantee"
+    );
+}
 const DEFECT_FIXTURE_PATH: &str =
     concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/oracle_compare_f29323b_parent.rs");
 
@@ -182,7 +195,10 @@ fn coverage_over_the_control_plane_universe() {
         }
     }
     assert!(scanned > 0, "anti-vacuity: zero files scanned");
-    assert!(!raw_files.is_empty(), "anti-vacuity: zero raw-pattern files found");
+    assert!(
+        !raw_files.is_empty(),
+        "anti-vacuity: zero raw-pattern files found"
+    );
     assert!(
         flagged_sites <= INHERITED_SITE_COUNT,
         "lint-flagged sites exceed inherited denominator: {flagged_sites}/{INHERITED_SITE_COUNT}"
@@ -190,8 +206,12 @@ fn coverage_over_the_control_plane_universe() {
     println!("coverage: files scanned={scanned}");
     println!("  raw-pattern files={} | lint-flagged files={} | lint-flagged sites={flagged_sites}/{INHERITED_SITE_COUNT} | drained files={}",
         raw_files.len(), flagged_files.len(), drain_justified.len());
-    for f in &flagged_files { println!("  FLAGGED: {}", f.display()); }
-    for f in &drain_justified { println!("  DRAINED (correctly un-flagged): {}", f.display()); }
+    for f in &flagged_files {
+        println!("  FLAGGED: {}", f.display());
+    }
+    for f in &drain_justified {
+        println!("  DRAINED (correctly un-flagged): {}", f.display());
+    }
     for (f, reason) in &known_limit_misses {
         println!("  MISS (KNOWN LIMIT): {} — {reason}", f.display());
     }
@@ -220,9 +240,12 @@ fn coverage_over_the_control_plane_universe() {
     // original INLINE deadlocked poll (both pipes + try_wait, no take/drain in
     // one body — the f29323b~1 shape) is gone from the file, not that a
     // single-file scan of a multi-file-drained crate is clean.
-    if let Ok(head_text) =
-        std::fs::read_to_string(universe.parent().unwrap().join("crates/oracle-compare/src/lib.rs"))
-    {
+    if let Ok(head_text) = std::fs::read_to_string(
+        universe
+            .parent()
+            .unwrap()
+            .join("crates/oracle-compare/src/lib.rs"),
+    ) {
         let head_hits = find_detailed_violations_in_source(&head_text);
         let cross_function_drained = head_text
             .contains("drained concurrently before the child is observed")
@@ -238,7 +261,9 @@ fn walk_rs(dir: &Path) -> Vec<std::path::PathBuf> {
     let mut out = Vec::new();
     let mut stack = vec![dir.to_path_buf()];
     while let Some(d) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&d) else { continue };
+        let Ok(entries) = std::fs::read_dir(&d) else {
+            continue;
+        };
         for e in entries.filter_map(|e| e.ok()) {
             let p = e.path();
             if p.is_dir() {

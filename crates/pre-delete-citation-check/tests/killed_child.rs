@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::process::Command;
+use pre_delete_citation_check::{check_deletions, parse_closed_beads_checked};
 
 fn killed_git_dir(dir: &std::path::Path) -> std::path::PathBuf {
     let git = dir.join("git");
@@ -44,7 +45,8 @@ fn killed_git_produces_refusal_not_success() {
         .expect("binary must run");
     let code = output.status.code().unwrap_or(-1);
     assert_eq!(
-        code, 3,
+        code,
+        3,
         "a killed git must produce exit 3 (error), not exit 0 (success). stdout={:?} stderr={:?}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
@@ -64,12 +66,32 @@ fn working_git_with_no_deletions_passes() {
     std::fs::create_dir_all(&tmp).unwrap();
     let repo = tmp.join("repo");
     std::fs::create_dir_all(&repo).unwrap();
-    Command::new("git").args(["init"]).current_dir(&repo).output().unwrap();
-    Command::new("git").args(["config", "user.email", "t@t"]).current_dir(&repo).output().unwrap();
-    Command::new("git").args(["config", "user.name", "t"]).current_dir(&repo).output().unwrap();
+    Command::new("git")
+        .args(["init"])
+        .current_dir(&repo)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["config", "user.email", "t@t"])
+        .current_dir(&repo)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["config", "user.name", "t"])
+        .current_dir(&repo)
+        .output()
+        .unwrap();
     std::fs::write(repo.join("f.txt"), "hello").unwrap();
-    Command::new("git").args(["add", "f.txt"]).current_dir(&repo).output().unwrap();
-    Command::new("git").args(["commit", "-m", "init"]).current_dir(&repo).output().unwrap();
+    Command::new("git")
+        .args(["add", "f.txt"])
+        .current_dir(&repo)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "-m", "init"])
+        .current_dir(&repo)
+        .output()
+        .unwrap();
 
     let bin = PathBuf::from(env!("CARGO_BIN_EXE_pre-delete-citation-check"));
     let output = Command::new(&bin)
@@ -83,4 +105,21 @@ fn working_git_with_no_deletions_passes() {
         "a clean repo with no staged deletions must pass"
     );
     std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn empty_closed_bead_records_are_an_error_not_a_pass() {
+    for raw in ["", "{}", "{\"issues\":[]}"] {
+        let error = parse_closed_beads_checked(raw).expect_err("empty tracker input must refuse");
+        assert!(error.contains("PRE_DELETE_BEADS_"), "typed anti-vacuity error: {error}");
+    }
+}
+
+#[test]
+fn closed_status_predicate_detects_cp_op5uu() {
+    let json = r#"{"issues":[{"id":"cp-op5uu","status":"closed","close_reason":"bin/omp-idle-dispatch.sh"}]}"#;
+    let beads = parse_closed_beads_checked(json).expect("closed record is readable");
+    let conflicts = check_deletions(&["bin/omp-idle-dispatch.sh".to_owned()], &beads);
+    assert_eq!(conflicts.len(), 1, "closed-status specimen must be detected");
+    assert_eq!(conflicts[0].bead_id, "cp-op5uu");
 }
