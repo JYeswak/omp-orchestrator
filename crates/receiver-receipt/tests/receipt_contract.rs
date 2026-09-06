@@ -242,8 +242,18 @@ fn the_documents_claims_about_the_source_are_current() {
         "the 75-second floor moved; the contract quotes it"
     );
     assert!(
-        src.contains("MAX_IDLE_TO_WORKING_TIMER_SECS: u64 = 30"),
-        "the 30-second freshness bound moved; the contract quotes it"
+        src.contains("IDLE_TO_WORKING_TIMER_TOLERANCE_SECS: u64 = 30"),
+        "the 30-second capture-jitter tolerance moved; the contract quotes it"
+    );
+    // The bound must stay SPAN-RELATIVE. An absolute comparison here was the defect:
+    // widening RECEIPT_TIMEOUT from 30s to 90s made `timer_too_large_after_idle` fire on
+    // panes that were working correctly (after_secs=32/31 vs max_secs=30, measured live
+    // on %9 and %8 2026-09-05), because a pane that starts work immediately shows
+    // timer_secs ~= elapsed_since_send. If this reverts to a constant comparison the
+    // guard silently mis-fires again the next time a wait length changes.
+    assert!(
+        src.contains("span_secs.saturating_add(IDLE_TO_WORKING_TIMER_TOLERANCE_SECS)"),
+        "the idle->working timer bound must be derived from the observed span, not absolute"
     );
     assert!(
         text.contains("75-second") && text.contains("30 seconds"),

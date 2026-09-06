@@ -186,8 +186,31 @@ impl ReceiptVerdict {
     }
 }
 
-/// New work must begin promptly after an idle pane accepts the packet.
-pub const MAX_IDLE_TO_WORKING_TIMER_SECS: u64 = 30;
+/// How far a post-send timer may exceed the OBSERVED SPAN before the receipt is
+/// unattributable.
+///
+/// # This was an absolute bound and that was only correct for one wait length
+///
+/// It read `MAX_IDLE_TO_WORKING_TIMER_SECS = 30` with the rationale *"new work must begin
+/// promptly after an idle pane accepts the packet"*. The rationale is right; the absolute
+/// form is not. The quantity that bounds a legitimate timer is **how long we waited**, not
+/// a constant: a pane that starts work the instant it accepts a packet will show
+/// `timer_secs ≈ elapsed_since_send`, so widening the wait necessarily grows the timer.
+///
+/// MEASURED 2026-09-05, immediately after `RECEIPT_TIMEOUT` was derived from
+/// [`OBSERVATION_WINDOW_MIN_SECS`] (30s → 90s): a live tick returned
+/// `DISPATCH_FAILED detail=ACK_STAGE_INDETERMINATE reason=timer_too_large_after_idle
+/// after_secs=32 max_secs=30` on `%9`/`h71-missing-tests-0hwn`. A 32s timer after a wait
+/// that may run to 90s is a pane working *correctly*; the guard fired because its bound
+/// had been calibrated to the old 30s wait. **Fixing one hardcoded duration exposed a
+/// second one that had silently depended on it** — the third instance of that coupling in
+/// one session, after `ADVISORY_CEILING`/its recording anchor and
+/// `RECEIPT_TIMEOUT`/`OBSERVATION_WINDOW_MIN_SECS`.
+///
+/// The defect this guard exists to catch is a timer that EXCEEDS the span, which means the
+/// work predates our send and cannot be attributed to it. That test is now expressed
+/// against the span, with this value as jitter tolerance for capture skew.
+pub const IDLE_TO_WORKING_TIMER_TOLERANCE_SECS: u64 = 30;
 
 /// The minimum span between the two captures a receipt is derived from.
 ///
@@ -604,12 +627,17 @@ pub fn assess_receiver_receipt(
 
     match (&pre_send.state, &post.state) {
         (PaneState::Idle, PaneState::Working { timer_secs }) => {
-            if *timer_secs > MAX_IDLE_TO_WORKING_TIMER_SECS {
+            // The bound is the OBSERVED SPAN plus jitter tolerance, not a constant. A
+            // timer at or below the span is a pane that began work inside our wait; a
+            // timer that EXCEEDS the span means the work predates the send and cannot be
+            // attributed to it, which is the only defect this arm exists to catch.
+            let max_secs = span_secs.saturating_add(IDLE_TO_WORKING_TIMER_TOLERANCE_SECS);
+            if *timer_secs > max_secs {
                 ReceiptVerdict::Indeterminate {
                     pane_id: pane_id_owned,
                     reason: ReceiptReason::TimerTooLargeAfterIdle {
                         after_secs: *timer_secs,
-                        max_secs: MAX_IDLE_TO_WORKING_TIMER_SECS,
+                        max_secs,
                     },
                 }
             } else if pre_send.hash == post.hash {
@@ -772,13 +800,44 @@ mod tests {
         );
     }
 
+    /// A timer that EXCEEDS the observed span means the work predates the send.
+    ///
+    /// The old form asserted `timer=61` was "large" against an absolute 30s bound. That
+    /// premise died when `RECEIPT_TIMEOUT` was derived from `OBSERVATION_WINDOW_MIN_SECS`:
+    /// a 61s timer inside an 80s span is a pane that started work DURING our wait, which
+    /// is a receipt, not a defect. Measured live 2026-09-05 as false refusals —
+    /// `after_secs=32 max_secs=30` on `%9` and `after_secs=31 max_secs=30` on `%8`.
+    ///
+    /// Here the span is `180 - 100 = 80`, the bound is `80 + 30 = 110`, and the timer is
+    /// 200 — the pane has been working ~120s longer than we have been waiting, so the work
+    /// cannot be attributed to this dispatch.
     #[test]
-    fn idle_to_working_with_large_timer_is_indeterminate() {
+    fn idle_to_working_with_timer_exceeding_span_is_indeterminate() {
         let pre = idle("%live", "prompt", 100);
-        let post = working("%live", 61, "unrelated old work", '⠙', 180);
+        let post = working("%live", 200, "unrelated old work", '⠙', 180);
         let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
         assert_eq!(result.label(), "INDETERMINATE");
         assert!(matches!(
+            result.reason(),
+            Some(ReceiptReason::TimerTooLargeAfterIdle { .. })
+        ));
+    }
+
+    /// The known-good half: a timer INSIDE the span is the case that was being refused.
+    ///
+    /// Without this leg the arm above could be satisfied by a bound so wide that nothing
+    /// ever trips it, and the false-refusal regression would return unnoticed.
+    #[test]
+    fn idle_to_working_with_timer_inside_the_span_is_a_receipt() {
+        let pre = idle("%live", "prompt", 100);
+        let post = working("%live", 61, "fresh packet text", '⠙', 180);
+        let result = assess_receiver_receipt("%live", &pre, PostSendObservation::Present(post));
+        assert_ne!(
+            result.label(),
+            "INDETERMINATE",
+            "a 61s timer inside an 80s span is a pane that began work during the wait"
+        );
+        assert!(!matches!(
             result.reason(),
             Some(ReceiptReason::TimerTooLargeAfterIdle { .. })
         ));

@@ -102,7 +102,13 @@ An expired ACK wait must say WHICH of busy or unreachable it observed. `AckWaitV
 
 The discriminator is **timer advance across `OBSERVATION_WINDOW_MIN_SECS`**, not elapsed time. Measured pane timers sat at 120s, 1320s and 1440s inside a single tool call, so no fixed bound separates a busy worker from a wedged one; widening a window only moves where it guesses wrong. **The window decides when to re-check; it must not decide whether a human is called.** A pane that never acks therefore stays a human debt at every window, and a widening that makes the never-acking case pass is a regression wearing a fix.
 
-`RECEIPT_TIMEOUT` in the supervisor is 30 seconds, which is BELOW this contract's 75-second floor: the old bound could not answer this question even in principle. Landed `d4e8453`; bead `omp-orchestrator-iis6`.
+`RECEIPT_TIMEOUT` in the supervisor **was** 30 seconds, BELOW this contract's 75-second floor: the old bound could not answer this question even in principle. Landed `d4e8453`; bead `omp-orchestrator-iis6`.
+
+**RESOLVED 2026-09-05, and the resolution is a derivation rather than a wider number.** `RECEIPT_TIMEOUT` is now `Duration::from_secs(receiver_receipt::OBSERVATION_WINDOW_MIN_SECS + 15)` — computed FROM the floor, so the two cannot drift again. Before the change, every dispatch was structurally guaranteed to return `Indeterminate` with `discriminator_reason=WINDOW_BELOW_FLOOR`, and the loop printed `DISPATCH_FAILED` on dispatches that had plainly landed: `%8`/`2yf` and `%9`/`nh5` both reached `in_progress` while the status word said failure. Landed `4d8c784`.
+
+**This is NOT the widening RR-L6 warns against, and the distinction is the point.** The paragraph above forbids a widening "that makes the never-acking case pass" — a widening that converts absence into presence. This one cannot: the ACK-comment requirement is untouched, and `omp-orchestrator-y903` tightened the same path in the opposite direction by binding the readback to the dispatch's `issued_at`, so a stale same-pane ACK now reads **ABSENT** rather than delivered (landed `58f2a54`, wired at the caller in `3813ec5`). A pane that never acks still owes a human at every window. What the derivation removes is a verdict that could never be reached, not a verdict that should be withheld.
+
+**The absolute post-send timer bound was the same defect one layer down.** `MAX_IDLE_TO_WORKING_TIMER_SECS = 30` is replaced by `IDLE_TO_WORKING_TIMER_TOLERANCE_SECS`, compared against the **observed span** rather than a constant: a pane that begins work the instant it accepts a packet shows `timer_secs ≈ elapsed_since_send`, so a longer wait necessarily grows the timer. Fixing `RECEIPT_TIMEOUT` immediately exposed it — two live ticks returned `reason=timer_too_large_after_idle after_secs=32 max_secs=30` (`%9`) and `after_secs=31 max_secs=30` (`%8`) on panes that were working correctly. The defect the arm exists to catch is a timer that EXCEEDS the span, which means the work predates the send; that test is now expressed against the span with the tolerance as capture-skew jitter.
 
 ## Cross-Check Against `pane_observation_contract`
 
@@ -123,7 +129,7 @@ Each law of this contract is stated against its counterpart. `pane_observation_c
 
 | Pre-state | Post-state | Positive receipt condition | Otherwise |
 |---|---|---|---|
-| `Idle` | `Working { timer_secs }` | Fresh timer at most 30 seconds **and** stable content changed. | `Indeterminate` for large timer; `NoReceipt` for unchanged content. |
+| `Idle` | `Working { timer_secs }` | Timer at most the observed span plus `IDLE_TO_WORKING_TIMER_TOLERANCE_SECS` (30 seconds of capture jitter) **and** stable content changed. | `Indeterminate` when the timer EXCEEDS the span, which means the work predates the send; `NoReceipt` for unchanged content. |
 | `Idle` | `Idle` | Never. | `NoReceipt::IdleUnchanged`. |
 | `Working { before }` | `Working { after }` | Timer reset (`after < before`) **and** stable content changed. | `NoReceipt` for no reset or unchanged content. |
 | `Working` | `Idle` | Never. | `NoReceipt::PostBecameIdle`. |
