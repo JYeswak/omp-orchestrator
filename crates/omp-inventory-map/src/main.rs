@@ -7,8 +7,8 @@ use omp_inventory_map::census_invariants::{
     CensusInvariantError, CensusInvariantRow, check_census_invariants,
 };
 use omp_inventory_map::{
-    CRATE_VERSION, EXPECTED_OMP_VERSION, InventoryMap, ProbeConfig, ProbeState, SCHEMA_VERSION,
-    SurfaceMapAudit, collect_inventory, collect_surface_map_audit,
+    count_twins, CRATE_VERSION, EXPECTED_OMP_VERSION, InventoryMap, ProbeConfig, ProbeState,
+    SCHEMA_VERSION, SurfaceMapAudit, collect_inventory, collect_surface_map_audit,
 };
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -165,14 +165,24 @@ fn collect(command: String, config: ProbeConfig) -> ExitCode {
     match runtime.block_on(async { collect_inventory(&cx, &config).await }) {
         Ok(map) => match check_census_invariants(&census_rows(&map)) {
             Ok(()) => {
-                let status = map_status(&map);
+                let mismatch_rows = count_twins::mismatches(&map.counts);
+                let status = if mismatch_rows.is_empty() {
+                    map_status(&map)
+                } else {
+                    "UNKNOWN"
+                };
+                let error = if mismatch_rows.is_empty() {
+                    None
+                } else {
+                    Some(count_twins::format_mismatches(&mismatch_rows))
+                };
                 let code = if status == "OK" { 0 } else { 2 };
                 let envelope = RobotEnvelope {
                     schema_version: SCHEMA_VERSION,
                     command,
                     status,
                     data: Some(map),
-                    error: None,
+                    error,
                 };
                 if print_json(&envelope).is_err() {
                     ExitCode::from(1)
@@ -192,12 +202,25 @@ fn collect(command: String, config: ProbeConfig) -> ExitCode {
                 ExitCode::from(1)
             }
             Err(error) => {
+                let mismatch_rows = count_twins::mismatches(&map.counts);
+                let (status, mut message) = if mismatch_rows.is_empty() {
+                    ("VACUOUS_INVARIANT_SET", error.to_string())
+                } else {
+                    (
+                        "UNKNOWN",
+                        count_twins::format_mismatches(&mismatch_rows),
+                    )
+                };
+                if !mismatch_rows.is_empty() {
+                    message.push_str("; ");
+                    message.push_str(&error.to_string());
+                }
                 let envelope = RobotEnvelope {
                     schema_version: SCHEMA_VERSION,
                     command,
-                    status: "VACUOUS_INVARIANT_SET",
+                    status,
                     data: Some(map),
-                    error: Some(error.to_string()),
+                    error: Some(message),
                 };
                 if print_json(&envelope).is_err() {
                     ExitCode::from(1)
