@@ -32,7 +32,7 @@ unearned_claims = 1
 verdict = "ROUND 4 REQUIRED: STRUCTURAL — partial coverage; no BEADS READY authorization"
 
 [[defect]]
-id = "DEF-001"
+id = "DEF-R3-001"
 severity = "P1"
 class = "NORMATIVE_CORPUS_OMISSION"
 affected_ids = ["REQ-013", "INV-004", "INV-006", "INV-007", "INV-008", "INV-009", "INV-012"]
@@ -48,7 +48,7 @@ owner = "%8 integrator"
 verification_method = "Compare the sorted docs/contracts/*.md path set against the sorted index table path set; require 32=32, require orchestration_contract.md, and verify its cross-reference names the affected invariant rows."
 
 [[defect]]
-id = "DEF-002"
+id = "DEF-R3-002"
 severity = "P1"
 class = "OVERLAPPING_INSTALL_AUTHORITY"
 affected_ids = ["REQ-008", "INV-011", "WP-008", "HD-0013"]
@@ -64,7 +64,7 @@ owner = "%8 integrator"
 verification_method = "For every install, identity, build, and rollback phrase in the index and constitution, resolve exactly one normative owner and verify S1 references S8 instead of claiming the same surface."
 
 [[defect]]
-id = "DEF-003"
+id = "DEF-R3-003"
 severity = "P1"
 class = "STAGE_DELEGATION_MISLABEL"
 affected_ids = ["INV-004", "INV-012", "WP-005", "WP-006", "WP-007"]
@@ -80,7 +80,7 @@ owner = "%8 integrator"
 verification_method = "Parse each S6 box header name and compare it to its DESIGN_INDEX delegated-concern row; require the S6a/S6b/S6c mapping to be one-to-one and consistent with the event-stage order."
 
 [[defect]]
-id = "DEF-004"
+id = "DEF-R3-004"
 severity = "P2"
 class = "ARTIFACT_DELEGATION_LACKS_READER"
 affected_ids = ["REQ-006", "INV-011", "INV-012", "GATE-024"]
@@ -95,7 +95,7 @@ owner = "%8 integrator"
 verification_method = "Require all 16 artifact rows to carry non-empty delegated-what, authority, and reader references; resolve each reader path or explicitly mark the reader as unbuilt/diagnostic rather than silently omitting it."
 
 [[defect]]
-id = "DEF-005"
+id = "DEF-R3-005"
 severity = "P1"
 class = "STABLE_ID_REGISTER_BUILT_NOT_WIRED"
 affected_ids = ["REQ-001", "INV-001", "GATE-011", "GATE-019", "GATE-024", "WP-003", "RISK-001", "REQ-013"]
@@ -111,7 +111,7 @@ owner = "%8 integrator with S4 graph owner"
 verification_method = "Rerun the exact per-ID scan outside DESIGN_INDEX.md, require every load-bearing ID to have at least one failing-capable consumer path, retain positive controls for INV-2026/WP-001/WP-002, and report any index-only IDs explicitly."
 
 [[defect]]
-id = "DEF-006"
+id = "DEF-R3-006"
 severity = "P1"
 class = "UNEARNED_ROLLBACK_REFUSAL_CLAIM"
 affected_ids = ["REQ-008", "INV-011", "WP-008", "GATE-024"]

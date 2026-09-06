@@ -94,7 +94,7 @@ HD_0002_0017 = "Authority is docs/decisions.jsonl. DESIGN_INDEX harvest-all is t
 delete = []
 
 [[defect]]
-id = "DEF-001"
+id = "DEF-R6C-001"
 severity = "P2"
 class = "UNLABELED_CONSTITUTION_REFERENTS"
 affected_ids = [
@@ -136,7 +136,7 @@ owner = "%8 integrator (non-author of 6A/6B/6C)"
 verification_method = "git grep -F GATE-011 -- docs/PLAN.md docs/plan/06-gates.md docs/plan/01-idea.md must hit the source row; HD-0009 must remain absent from PLAN.md."
 
 [[defect]]
-id = "DEF-002"
+id = "DEF-R6C-002"
 severity = "P3"
 class = "PLANTED_ID_COUNTED_LIVE"
 affected_ids = ["HD-9999"]

@@ -42,7 +42,7 @@ planted_specimens = [
 ]
 
 [[defect]]
-id = "DEF-001"
+id = "DEF-R6D-001"
 severity = "P3"
 class = "REF_WRONG"
 evidence = [

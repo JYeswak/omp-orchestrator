@@ -3624,7 +3624,7 @@ surface = "docs/decisions.jsonl"
 box = "S9"
 severity_in = "empty-decision"
 disposition = "OUT_OF_SCOPE"
-reason = "not an open unknown: a later answers= row in the same ledger records Joshua's decision. Empty first row is a dual-row ledger defect (DEF-002), not a question."
+reason = "not an open unknown: a later answers= row in the same ledger records Joshua's decision. Empty first row is a dual-row ledger defect (DEF-U-002), not a question."
 evidence = "HD-0009 appears twice: decision=\"\" then a non-empty answers row"
 stable_ids = ["HD-0009", "docs/decisions.jsonl"]
 would_have_asked_joshua = true
@@ -3636,7 +3636,7 @@ surface = "docs/decisions.jsonl"
 box = "S9"
 severity_in = "empty-decision"
 disposition = "OUT_OF_SCOPE"
-reason = "not an open unknown: a later answers= row in the same ledger records Joshua's decision. Empty first row is a dual-row ledger defect (DEF-002), not a question."
+reason = "not an open unknown: a later answers= row in the same ledger records Joshua's decision. Empty first row is a dual-row ledger defect (DEF-U-002), not a question."
 evidence = "HD-0010 appears twice: decision=\"\" then a non-empty answers row"
 stable_ids = ["HD-0010", "docs/decisions.jsonl"]
 would_have_asked_joshua = true
@@ -3648,7 +3648,7 @@ surface = "docs/decisions.jsonl"
 box = "S9"
 severity_in = "empty-decision"
 disposition = "OUT_OF_SCOPE"
-reason = "not an open unknown: a later answers= row in the same ledger records Joshua's decision. Empty first row is a dual-row ledger defect (DEF-002), not a question."
+reason = "not an open unknown: a later answers= row in the same ledger records Joshua's decision. Empty first row is a dual-row ledger defect (DEF-U-002), not a question."
 evidence = "HD-0011 appears twice: decision=\"\" then a non-empty answers row"
 stable_ids = ["HD-0011", "docs/decisions.jsonl"]
 would_have_asked_joshua = true
@@ -3660,7 +3660,7 @@ surface = "docs/decisions.jsonl"
 box = "S9"
 severity_in = "empty-decision"
 disposition = "OUT_OF_SCOPE"
-reason = "not an open unknown: a later answers= row in the same ledger records Joshua's decision. Empty first row is a dual-row ledger defect (DEF-002), not a question."
+reason = "not an open unknown: a later answers= row in the same ledger records Joshua's decision. Empty first row is a dual-row ledger defect (DEF-U-002), not a question."
 evidence = "HD-0012 appears twice: decision=\"\" then a non-empty answers row"
 stable_ids = ["HD-0012", "docs/decisions.jsonl"]
 would_have_asked_joshua = true
@@ -3672,7 +3672,7 @@ surface = "docs/decisions.jsonl"
 box = "S9"
 severity_in = "empty-decision"
 disposition = "OUT_OF_SCOPE"
-reason = "not an open unknown: a later answers= row in the same ledger records Joshua's decision. Empty first row is a dual-row ledger defect (DEF-002), not a question."
+reason = "not an open unknown: a later answers= row in the same ledger records Joshua's decision. Empty first row is a dual-row ledger defect (DEF-U-002), not a question."
 evidence = "HD-0013 appears twice: decision=\"\" then a non-empty answers row"
 stable_ids = ["HD-0013", "docs/decisions.jsonl"]
 would_have_asked_joshua = true
@@ -3684,7 +3684,7 @@ surface = "docs/decisions.jsonl"
 box = "S9"
 severity_in = "empty-decision"
 disposition = "OUT_OF_SCOPE"
-reason = "not an open unknown: a later answers= row in the same ledger records Joshua's decision. Empty first row is a dual-row ledger defect (DEF-002), not a question."
+reason = "not an open unknown: a later answers= row in the same ledger records Joshua's decision. Empty first row is a dual-row ledger defect (DEF-U-002), not a question."
 evidence = "HD-0014 appears twice: decision=\"\" then a non-empty answers row"
 stable_ids = ["HD-0014", "docs/decisions.jsonl"]
 would_have_asked_joshua = true

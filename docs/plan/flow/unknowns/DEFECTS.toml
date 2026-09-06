@@ -1,7 +1,7 @@
 # Atlas Arc R3 DEF-* rows. Pane 1 integrates. Not FINDINGS.jsonl.
 
 [[def]]
-id = "DEF-001"
+id = "DEF-U-001"
 severity = "P0"
 class = "self-referential-checker"
 failure_consequence = "Box reads as wave-closed while 8 disagreements are unanswered; graders idle or skip S1."
@@ -13,7 +13,7 @@ evidence = "S1.toml claims open_disagreements=0 via grep -c '^resolution = \"\"$
 affected_ids = ["S1.toml:[box.agreement].open_disagreements", "WAVE wave-1/SilverWolf-S1.toml", "WAVE wave-2/pane4-jt1i-citations.toml", "WAVE wave-2/pane4-qibn-hook-count.toml"]
 
 [[def]]
-id = "DEF-002"
+id = "DEF-U-002"
 severity = "P0"
 class = "dual-authority-ledger"
 failure_consequence = "Joshua remains the glue. HD-0014 (Atlas Arc vs S1-first) was re-presented as open in this dispatch after it was decided."
@@ -25,7 +25,7 @@ evidence = "Each of HD-0009..0014 has an empty-decision first object AND a later
 affected_ids = ["HD-0009", "HD-0010", "HD-0011", "HD-0012", "HD-0013", "HD-0014", "docs/decisions.jsonl"]
 
 [[def]]
-id = "DEF-003"
+id = "DEF-U-003"
 severity = "P0"
 class = "instrument-produced-reading"
 failure_consequence = "Adversary wastes a HUMAN slot on a decided question; Atlas R1 breadth work stalls waiting for a ruling that already exists."
@@ -37,7 +37,7 @@ evidence = "Dispatch: 'HD-0014 is open and is a genuine HUMAN_DECISION'. Ledger 
 affected_ids = ["HD-0014"]
 
 [[def]]
-id = "DEF-004"
+id = "DEF-U-004"
 severity = "P0"
 class = "unanswered-falsifier"
 failure_consequence = "S7 looks WIRED while installed binary cannot fire the named gates — the exact AGENTS.md unread-red / unwired-gate class."
@@ -49,7 +49,7 @@ evidence = "Empty-resolution BLOCKER: owner_says crate_status=wired; reviewer: t
 affected_ids = ["S7", "wave-1/AmberGate-S5a-S5b-S7-S8.toml crate_status"]
 
 [[def]]
-id = "DEF-005"
+id = "DEF-U-005"
 severity = "P0"
 class = "manufactured-uncertainty"
 failure_consequence = "R3 six-bucket typing without UNBUILT recreates the freeze cycle: unknown forever because the only closer is code, and code was frozen because of unknowns."
@@ -61,7 +61,7 @@ evidence = "157 of 177 gaps resolve to named beads / MISSING+wire / add-fuzz / r
 affected_ids = ["[[box.gap]] x177"]
 
 [[def]]
-id = "DEF-006"
+id = "DEF-U-006"
 severity = "P1"
 class = "untyped-disposition"
 failure_consequence = "Waves cannot close. Agreement.status cannot leave draft without lying."
@@ -73,7 +73,7 @@ evidence = "84 empty resolution fields (toml parse). escalated=0. CONTRACT.md: a
 affected_ids = ["docs/plan/flow/waves/** resolution=\"\""]
 
 [[def]]
-id = "DEF-007"
+id = "DEF-U-007"
 severity = "P1"
 class = "stale-human-block"
 failure_consequence = "Agents re-ask HD-0009 (frankentui) and HD-0010 (spawn mix) instead of building L3/L4."
@@ -85,7 +85,7 @@ evidence = "S1.toml:339 comment: 'HD-0009..HD-0012 all carry decision=\"\"'. Fal
 affected_ids = ["S1.toml:[box.agreement].approval", "HD-0009", "HD-0010", "HD-0011", "HD-0012"]
 
 [[def]]
-id = "DEF-008"
+id = "DEF-U-008"
 severity = "P1"
 class = "unknown-without-disposition"
 failure_consequence = "Hook table looks incomplete; agents ask Joshua what harm_class to write, which would fabricate a certificate."
@@ -97,7 +97,7 @@ evidence = "Only remaining S1.toml field with the literal UNKNOWN. Comment: cann
 affected_ids = ["S1-HOOK-OMP-PANES.harm_class"]
 
 [[def]]
-id = "DEF-009"
+id = "DEF-U-009"
 severity = "P1"
 class = "dropped-identifier"
 failure_consequence = "Dispatch packets name unclaimable beads; claim-before-dispatch fence cannot project them."
@@ -109,7 +109,7 @@ evidence = "Empty-resolution BLOCKER: leading j dropped on jplf family. Real ids
 affected_ids = ["omp-orchestrator-jplf.7.2", "omp-orchestrator-jplf.7.3", "omp-orchestrator-jplf.7.12", "wave-2/pane4-jt1i-citations.toml"]
 
 [[def]]
-id = "DEF-010"
+id = "DEF-U-010"
 severity = "P2"
 class = "row-shape-violation"
 failure_consequence = "lifecycle-arrow-gate cannot key a box to a crate; MISSING/UNWIRED census splits wrong."
@@ -121,7 +121,7 @@ evidence = "SilverWolf+BlueLantern empty-resolution majors: crate and bead field
 affected_ids = ["S7.crate", "S8.crate", "S7.bead", "S8.bead"]
 
 [[def]]
-id = "DEF-011"
+id = "DEF-U-011"
 severity = "P2"
 class = "blank-vs-MISSING"
 failure_consequence = "Blank and missing and pending-Joshua collapse into one unreadable state."
@@ -133,11 +133,11 @@ evidence = "CONTRACT unknown=literal MISSING. Several approvals are \"\". QuietR
 affected_ids = ["S2.approval", "S3.approval", "S4.approval", "S5a.approval", "S5b.approval", "wave QuietRidge agreement.approval"]
 
 [[def]]
-id = "DEF-012"
+id = "DEF-U-012"
 severity = "P2"
 class = "schema-drift"
 failure_consequence = "Owners cannot fill hook rows without fabricating certificates (the failure the table exists to prevent)."
-minimal_repair = "One schema. Until vnp2 is re-opened with measurable fields, ASSUME 10-field core; harm_class stays optional/UNKNOWN (DEF-008)."
+minimal_repair = "One schema. Until vnp2 is re-opened with measurable fields, ASSUME 10-field core; harm_class stays optional/UNKNOWN (DEF-U-008)."
 owner = "pane-1"
 status = "open"
 verification_method = "CONTRACT.md and S1.toml gap 09 name the same required field set"
@@ -145,7 +145,7 @@ evidence = "Wave rows still demand 12 certified fields including policy_file/har
 affected_ids = ["HOOK-SCHEMA-CORE", "S1.toml 12-field gap", "vnp2"]
 
 [[def]]
-id = "DEF-013"
+id = "DEF-U-013"
 severity = "P3"
 class = "stale-review"
 failure_consequence = "Owners chase ghosts; waves look more open than they are."
@@ -157,7 +157,7 @@ evidence = "Three empty-resolution blockers/majors say the box is not reviewable
 affected_ids = ["WAVE-010 S6a four-sections", "WAVE-018 S9 four-sections", "WAVE-067 S1 wave1_sections"]
 
 [[def]]
-id = "DEF-014"
+id = "DEF-U-014"
 severity = "P3"
 class = "survey-empty-resolution"
 failure_consequence = "Empty-resolution census inflates UNKNOWNS_FOUND with non-questions."

@@ -37,7 +37,7 @@ diff_class = "POLISH"
 verdict = "ROUND 6B REQUIRED: POLISH in 02-05 — no cross-section cycles; decomposition unread-not-wrong; seven WP aliases earned; no BEADS READY authorization"
 
 [[defect]]
-id = "DEF-001"
+id = "DEF-R6A-001"
 severity = "P1"
 class = "STALE_ABSENCE_ACROSS_SECTIONS"
 affected_ids = ["WP-005", "WP-007"]
@@ -53,7 +53,7 @@ owner = "%8 integrator"
 verification_method = "Require 04-diagrams.md Diagram 5 prose to agree with 01-idea.md:71 on send_and_verify existence; absence language may remain only for unbuilt receipt proof, not for missing source."
 
 [[defect]]
-id = "DEF-002"
+id = "DEF-R6A-002"
 severity = "P2"
 class = "HISTORICAL_TABLE_STILL_THE_CONTRACT_TABLE"
 affected_ids = ["WP-003"]

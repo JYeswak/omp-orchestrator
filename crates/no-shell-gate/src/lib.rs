@@ -29,6 +29,8 @@
 /// The six gates decide WHAT is wrong; this module decides whether their verdict is
 /// about the commit that is actually being made.
 pub mod commit_serialization;
+pub mod def_ids;
+
 
 use std::fmt;
 use std::path::Path;

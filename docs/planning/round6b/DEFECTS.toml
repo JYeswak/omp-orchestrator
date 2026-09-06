@@ -54,7 +54,7 @@ diff_class = "POLISH"
 verdict = "ROUND 6B: POLISH — no cycles in 06-12; Round 4 decomposition=wrong refuted; 0 new ID-string consumers; 2 dangling 6A forward refs; no BEADS READY authorization"
 
 [[defect]]
-id = "DEF-001"
+id = "DEF-R6B-001"
 severity = "P2"
 class = "DANGLING_FORWARD_REF"
 affected_ids = ["WP-003"]
