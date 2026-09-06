@@ -1425,6 +1425,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ompo-start"
+version = "0.1.0"
+dependencies = [
+ "sha2 0.11.0",
+ "tempfile",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"

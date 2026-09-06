@@ -7,7 +7,12 @@
 //! while the array still looks complete.
 
 pub mod steps;
+pub mod spawn;
 
+pub use spawn::{
+    generate_wave, panes_from_list_panes, sha256_hex, spawn_retain_wave_hash, verify_retained_hash,
+    PaneId, SpawnReceipt, SpawnWaveError,
+};
 pub use steps::{
     apply_predicates, fixture_steps, json_next_command, json_ordered_ids, next_command, next_step,
     ordered_ids, tui_next_command, tui_ordered_ids, view, Predicate, Step, StepStatus,
