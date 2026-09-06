@@ -838,7 +838,7 @@ runbook nobody finishes reading.
 | `ipg.1` | PLAN | plan-mode, modes, goals | [`omp_surface_coverage_ipg1.md`](../inventories/omp_surface_coverage_ipg1.md) |
 | `ipg.2` | BEADS | task, commands, slash-commands | [`omp_surface_coverage_ipg2.md`](../inventories/omp_surface_coverage_ipg2.md) |
 | `ipg.3` | TRIAGE | registry, capability, discovery | [`omp_surface_coverage_ipg3.md`](../inventories/omp_surface_coverage_ipg3.md) |
-| `ipg.4` | DISPATCH | irc, collab, jsonrpc, mcp, launch, exec, subprocess | **no coverage document — see below** |
+| `ipg.4` | DISPATCH | irc, collab, jsonrpc, mcp, launch, exec, subprocess | [`omp_surface_coverage_ipg4.md`](../inventories/omp_surface_coverage_ipg4.md) |
 | `ipg.5` | OBSERVE | session, live, tui, sharpshooter | [`omp_surface_coverage_ipg5.md`](../inventories/omp_surface_coverage_ipg5.md) |
 | `ipg.6` | VERIFY | eval, if-bench, hindsight, debug, dap, autoresearch, autolearn, advisor | [`omp_surface_coverage_ipg6.md`](../inventories/omp_surface_coverage_ipg6.md) |
 | `ipg.7` | MEMORY | memories, memory-backend, mnemopi, blob-broker, export | [`omp_surface_coverage_ipg7.md`](../inventories/omp_surface_coverage_ipg7.md) |
@@ -847,15 +847,17 @@ runbook nobody finishes reading.
 | `ipg.10` | IO | web, exa, stt, tts, ssh, internal-urls, tools, cli | [`omp_surface_coverage_ipg10.md`](../inventories/omp_surface_coverage_ipg10.md) |
 | `ipg.11` | RUNTIME | async, utils, lib, tiny, vibe, auto-thinking | [`omp_surface_coverage_ipg11.md`](../inventories/omp_surface_coverage_ipg11.md) |
 
-**What the split made visible in the first minute.** Wave `ipg.4` (DISPATCH) has a bead and no
+**What the split made visible in the first minute.** Wave `ipg.4` (DISPATCH) had a bead and no
 coverage document. Its seven surfaces include `subprocess`, `exec`, `launch`, `jsonrpc` and `mcp` —
 this orchestrator's own transport boundary — and the bead id has since been reused by three Phase 1
 contracts (`docs/contracts/subprocess_contract.md`, `cancellation_contract.md`,
 `dispatch_claim_contract.md`), so the sweep will never be filed under it. Round 13 recorded
 `ipg.4 absent` against this section and it survived ten further rounds, because a missing `##`
 heading inside a 21-heading file is invisible, while a missing file in a directory of eleven is one
-`ls`. The index carries three more measurements of the same kind: 50 surfaces classified but only
-12 rows in `docs/plan/OMP-COVERAGE-TABLE.jsonl`, and four different table schemas for one concern. — HISTORICAL as of 2026-09-02.
+`ls`. Closed by `5d505f9` (`docs(coverage): map dispatch surfaces and alternatives`), which added
+[`omp_surface_coverage_ipg4.md`](../inventories/omp_surface_coverage_ipg4.md). The index still
+carries three more measurements of the same kind: 50 surfaces classified but only 12 rows in
+`docs/plan/OMP-COVERAGE-TABLE.jsonl`, and four different table schemas for one concern. — HISTORICAL as of 2026-09-02; coverage file closed `5d505f9`.
 
 **Appendix A stayed.** It is a `jsm` skill sweep about how this plan is being graded, not a surface
 classification; it belongs with the runbook's AAR material above, and moving it would have been a
@@ -864,3 +866,237 @@ second, different split dressed up as the same one.
 **NO-CLAIM.** Moving these bytes changed no classification, no count and no verdict. A section that
 is 62% smaller is not a section that is more correct, and this stub asserts only where the rows
 went — not that any row in them is right.
+
+
+---
+
+## A–Z operational expansion and kernel mapping
+
+**Status: TARGET DESIGN, not runtime proof.** The S1–S9 graph above remains canonical. A–Z expands
+its operational edges so an orchestrator can name the exact kernel call, evidence authority, and
+refusal at every point. K0–K14 are **logical kernel lanes**, not fifteen implementation beads. The
+scope decision recorded 2026-09-02: Joshua approved staged waves rather than one fifteen-lane implementation bead.
+
+### The byte-exact event contract
+
+Every effectful kernel call emits one canonical event before returning its typed outcome. The exact
+record bytes are UTF-8, one RFC-8785-canonical JSON object followed by LF, with this fixed field
+sequence:
+
+`action, schema, version, event_seq, previous_event_sha256, run_id, project_id, stage, actor,
+subject, authority, input_sha256, output_sha256, cursor_before, cursor_after, outcome, error,
+evidence_refs, started_at, finished_at, event_sha256`
+
+`actor` MUST contain the stable Agent Mail name, program, model, session, live pane index, and live
+pane ID. `subject` MUST contain bead, thread, message, and attempt identifiers when applicable.
+`event_sha256` is SHA-256 over the exact canonical bytes emitted for that event, including the final
+LF. External command argv, stdout, and stderr are hashed as raw bytes before any presentation
+redaction. An omitted request field or an unverified identity binding is a typed refusal, never a
+successful event with a blank field.
+
+This makes a receipt auditable without making a receipt stronger than its authority. Transport can
+prove only transport; receiver observation can prove only receiver observation; tracker readback can
+prove only tracker state; human approval can prove only the recorded decision.
+
+### K0–K14 logical kernel lanes
+
+| lane | owns | primary native surfaces | current boundary |
+|---|---|---|---|
+| K0 | project namespace and identity | repo-root resolver; Agent Mail register/read-back; live tmux target | `legacy-unverified` binding MUST refuse; no complete inception envelope |
+| K1 | intent, requirements, and decisions | human decision ledger; Agent Mail thread/reply | `docs/decisions.jsonl` has manual rows, no writer/consumer |
+| K2 | foundation and plan provenance | plan assembler; source/content hashes; control-file checks | no foundation materializer is proven |
+| K3 | independent plan grade | typed grade, held-out lens, finding identity | no shared grade/held-out harness is proven |
+| K4 | bead DAG and selection | `br`, `bv`, dependency/cycle/orphan checks | `bv` selection is advisory until claim/readback |
+| K5 | claim and expiry-bearing reservation | `br` claim/readback; Agent Mail file reservation/renew/release | no atomic claim service; 1:many leases are projected |
+| K6 | pane admission and packet authorization | pane truth, readiness, admission meet, claim fence | current crates are partial and have no complete event spine |
+| K7 | packet serialization and bounded transport | typed packet; native NTM/AM adapters; Cx deadline | sender success is not delivery; documented mail wake has a 300-second internal deadline; external termination drops cursor |
+| K8 | receiver observation | fresh pane captures; composer/working transition | two-capture interval and receiver parser remain incomplete |
+| K9 | tracker acknowledgement and progress | `br show --json`; Agent Mail ack/readback; pending marker | no upward inference from transport or pane state |
+| K10 | execution completion and reap | AgentEndEvent consumer; finished-pane reaper | terminal frame is wire-proven once; local consumer is absent |
+| K11 | independent artifact grade | external re-derivation; close-evidence gate | grade type and close gate are absent |
+| K12 | external validation | foreign-machine runner; validation transcript | no production validation-to-ship edge |
+| K13 | ship and rollback | install manifest; version identity; rollback transcript | install identity is printed, not persisted; rollback untested |
+| K14 | memory, skill mining, and closure | daemon timeline/inbox/thread; CLI differential oracle; candidate skill eval | mining is prospective; search alias and default-wait paths have live defects |
+
+### A–Z journey rows
+
+| letter | responsibility | kernel call and evidence | refusal / boundary |
+|---|---|---|---|
+| A | establish project namespace | `K0.project_open`; repo marker + `project_id` hash | wrong root or namespace collision |
+| B | register and verify actor | `K0.am_register` → `K0.am_readback`; compare every settable field | wrong `name` field, omitted field, or `legacy-unverified` binding |
+| C | capture human intent | `K1.requirements_capture`; signed decision event | requirement exists only in pane scrollback |
+| D | persist decision | `K1.decision_append`; append-only event hash | overwrite, missing owner, or unlinked decision |
+| E | bootstrap controls and infrastructure | `K2.foundation_probe`; `CLAUDE.md`, `AGENTS.md`, gates, adapters | empty/unreadable foundation set |
+| F | assemble plan and provenance | `K2.plan_assemble`; source and output hashes | number without deriving command or stale assembly |
+| G | grade the plan | `K3.grade_plan`; two lenses plus held-out evidence | self-grade, missing lens, or non-identifiable finding |
+| H | materialize the bead DAG | `K4.plan_to_beads`; dependency digest | cycle, orphan, missing acceptance, or digest drift |
+| I | select eligible work | `K4.bv_next` + independent `br` snapshot | selection disagrees with ownership/dependency truth |
+| J | claim the bead | `K5.br_claim` + exact status/assignee readback | dispatcher manufactures claim or claim is stale |
+| K | reserve paths and lease | `K5.reserve` / `renew` / `release`; lease event | reservation conflict, expired owner, or no expiry |
+| L | admit pane and packet | `K6.admit` + `K7.packet_build`; signed FROM/REPLY VIA | unsafe/stale pane, undersized packet, identity mismatch |
+| M | send packet | `K7.ntm_send` or native adapter; raw transport hashes | transport error, recursive result-send failure |
+| N | observe receiver arrival | `K8.capture_pair`; fresh target-qualified captures | stale buffer, single capture, or wrong pane ID |
+| O | reconcile delivery and tracker | `K9.receiver_readback` + `br show --json` | sender success mistaken for receipt/ack |
+| P | monitor execution progress | `K9.progress_event`; explicit-timeout wait + status read | default wait loses resumable cursor; arbitrary polling |
+| Q | detect terminal completion | `K10.agent_end` parser + reap candidate | `isTerminal` alone, pre-deadline unchanged state |
+| R | reap and release capacity | `K10.reap`; closed bead + lease release readback | refill before authoritative completion |
+| S | independently grade artifact | `K11.grade_work`; fresh evaluator and cited diff | worker self-report or missing evidence |
+| T | validate externally | `K12.validate_foreign`; unattended transcript | same-machine-only or no transcript |
+| U | ship with identity | `K13.install_manifest`; version/hash readback | installable claim without persisted identity |
+| V | rollback or recover | `K13.rollback`; bounded retry/lease transfer event | retry after uncertain receipt; unbounded recovery |
+| W | store human requirements | `K14.decision_consume`; retrieve by run/stage | manual-only decision rows |
+| X | mine conversations | `K14.timeline` + inbox/thread fallback; archive hashes | CLI search error silently treated as healthy |
+| Y | promote a skill candidate | `K14.skill_extract`; support, counterexample, trigger, refusal, held-out test | one anecdote, no falsifier, no external oracle |
+| Z | close and publish evidence | `K14.run_close`; event-chain, bead, grade, validation, ship summaries | close without cited evidence or unresolved restrictive state |
+
+### Native Agent Mail kernel surface
+
+The Rust core owns policy, typing, event emission, and failure semantics. Adapters own only the
+bounded external boundary. The authenticated Agent Mail daemon/MCP HTTP path is primary. The Homebrew
+`am 0.3.31` CLI path is a differential oracle over local storage; it is not daemon truth.
+
+- `am_register_identity` and `am_read_identity` — use the `name` field, then compare the complete
+  response against the request; preserve `task_description` as the durable reply route.
+- `am_resolve_pane_binding` — read back `binding`; accept only `verified-live`, and use target-qualified
+  tmux identity for the caller's pane.
+- `am_reserve`, `am_renew`, `am_release` — expiry-bearing project/path leases with readback.
+- `am_send`, `am_reply`, `am_ack` — signed sender identity, project, thread, message, and queue
+  status; `DISPATCH_RESULT_SEND_FAILED` is its own restrictive outcome.
+- `am_delivery_events` — durable `inbox-events --after <cursor>`; cursor is a global monotonic
+  sequence position with a recipient-specific tail and oldest-available position, not a message ID or read state.
+  Continuity is daemon-side `CURSOR_EXPIRED` only (`omp-orchestrator-f1rn`). `oldest_available_cursor`
+  is a per-recipient first-delivery marker, not an eviction floor; do not refuse locally when it exceeds a stored cursor.
+- `am_inbox_state` — daemon-backed inbox readback with `read_ts`; pair it with delivery events to
+  distinguish delivered, unread, and acknowledged. A recipient tail of zero is a real no-events state.
+- `am_thread`, `am_timeline`, `am_search` — retrieval with explicit authority/backend and source
+  health; current CLI search failure `m.topic` remains a named defect.
+- `am_mine_skills` — deterministic candidate extraction from messages/threads/timeline, emitting
+  source message IDs, support count, counterexamples, trigger, refusal envelope, and held-out eval
+  result. It may not promote a skill from frequency alone.
+- `am_status` — daemon health, CLI differential health, queued sends, unread/urgent/ack-overdue counts,
+  active reservations, and degraded intents as separate typed observations.
+
+Every operation is `&Cx`-first, deadline-bounded, region-owned, and emits the byte-exact event above.
+No detached task, unbounded shutdown, or child-inherited lock is permitted.
+
+### Monitoring contract
+
+The monitor has two durable observations and one live wake:
+
+1. Durable progress: `am inbox-events --after <cursor>` advances the global delivery position and
+   records the recipient tail.
+2. Read state: daemon-backed `am inbox --unread --json` or `read_ts` determines whether delivered
+   mail remains unread.
+3. Live wake: `ntm --robot-attention --attention-cursor=<n>` works. `mail_pending` has the documented
+   300-second internal deadline. A caller ceiling below 300 observes its own termination as `CANCELED`
+   without cursor information; a 340-second ceiling observes NTM's `TIMEOUT` with resumable `cursor_info`.
+   The wrapper MUST own an explicit shorter timeout for dispatch latency and cursor preservation.
+
+A monitor receipt records both cursor positions, read-state counts, backend (`daemon` or `direct`),
+identity, current pane index/ID, timeout, and wake result. `--direct` does not announce itself; the
+receipt must. The default wait defect is not a reason to route around the kernel: it is a source fix, typed defense
+in `agent-mail-native`, or named finding with a reproduction command. `am inbox-events` failing closed
+with `inbox_events_unavailable` is correct behavior, not a silent-success defect. Exit-code audits MUST
+avoid pipelines because `$?` otherwise reports the pipeline rather than the audited command.
+
+### Scope decision — Joshua
+
+K0–K14 is a logical map, not permission to open fifteen implementation beads. Recommended staging:
+
+- **Wave A:** K0, K5, K6, K7, K8, K9 — identity, claim, admission, dispatch, receiver, ack.
+- **Wave B:** K2, K3, K4, K10, K11, K12, K13 — plan-to-ship completion path.
+- **Wave C:** K1, K14 — human ledger, conversation mining, skill promotion, closure.
+
+Joshua approved this staging on 2026-09-02; the map now becomes implementation scope in dependency-ordered waves. The current
+repository proves pieces of Wave A only; none of the waves is complete end-to-end.
+
+### Research boundary
+
+These primary sources justify architecture hypotheses, not OMP correctness claims:
+
+| source | narrow claim used here | explicit non-claim |
+|---|---|---|
+| MetaGPT, arXiv:2308.00352, https://arxiv.org/abs/2308.00352 | SOPs, specialist roles, intermediate artifacts, structured publish/subscribe can reduce collaborative inconsistency | no proof of live delivery, claim safety, or independent grading |
+| ChatDev, arXiv:2307.07924, https://arxiv.org/abs/2307.07924 | prescribed role communication can structure software work | no proof of arrival, comprehension, or software truth |
+| Self-Resource Allocation, arXiv:2504.02051, https://arxiv.org/abs/2504.02051 | capability/cost-aware planners can improve concurrent allocation in its benchmark | no proof of dependency-safe dispatch or stale-state handling |
+| Magentic-One, arXiv:2411.04468, https://arxiv.org/abs/2411.04468 | plan + working memory + specialist assignment + monitor/replan is a useful control-loop shape | no proof retry is safe or delivery/completion is real |
+| AIOS, arXiv:2403.16971, https://arxiv.org/abs/2403.16971 | an OS-like kernel can isolate scheduling, memory, storage, and access control | no proof of pane protocol or Rust-kernel correctness |
+| AgentScope, arXiv:2402.14034, https://arxiv.org/abs/2402.14034 | message exchange, fault tolerance, and monitor surfaces are first-class platform concerns | no proof that a message arrived or was understood |
+| SAGA, arXiv:2605.00528, https://arxiv.org/abs/2605.00528 | workflow-level scheduling, affinity, and bounded work stealing are viable abstractions | no proof of lease-safe terminal-pane stealing |
+| Reflexion, arXiv:2303.11366, https://arxiv.org/abs/2303.11366 | feedback can be retained as language-level reflection without parameter updates | no proof that mined reflections are true or transferable |
+
+**Research non-claim:** none of these papers proves our delivery, comprehension, claim, tracker ack,
+completion, validation, or ship invariants. Those remain local contracts with local oracles.
+
+**Archive measurement:** the 2026-09-02 05:02 UTC Agent Mail timeline extraction covered 746 events;
+sender counts were AirTrafficControl 543, BlueLantern 120, GreenFrog 37, with 310 ack-term summaries
+and 303 ATC acknowledgement probes. Candidate skills are identity/routing, dispatch receipt certainty,
+ack/receiver contract, liveness monitoring, claim/reservation handoff, append-only convergence, and
+conversation-to-skill mining. Search alias failure, external-signal cursor loss, and documented cursor-clamping are defects; `am inbox-events`
+failing closed is correct. Cursor continuity is recipient-scoped over a global sparse sequence, so a
+foreign recipient cursor or a cursor below that recipient's oldest position is unresumable without any
+claim about deletion. Daemon-versus-CLI authority drift is an authority boundary, not a fallback success.
+
+
+### JSM skill-library overlay
+
+JSM discovery was run against the authenticated local library before adding this design depth. `jsm status --json` reported online/authenticated, 135 local skills, 85 saved skills, and a 47-day-old last sync. `jsm bandit stats --json` reported 47 active arms, 5,473 feedback events, and zero evidence records. Long natural-language searches returned empty sets; exact and one-word facet searches returned useful matches. The search index therefore requires exact-term retries and result-shape checks; discovery is not itself selection evidence.
+
+| skill | lifecycle depth added | rows / gates |
+|---|---|---|
+| `agent-orchestration` | dependency-aware hierarchical, pipeline, fan-out/fan-in routing; track every spawned agent and timeout; circuit-breaker failure handling | H–I, Q–R |
+| `agent-mail` | reserve before edit, stable identity, threads, acknowledgement, conflict handling | B, J–P |
+| `agent-monitoring` | layered health, trajectory, SLO, failure-mode detection, alert routing | P–Q, K14 |
+| `agent-lifecycle` | versioned agents, reversible rollout, rollback, retirement, no abandoned agents | U–V, Z |
+| `agent-memory` | append-only raw capture, summarized memory, structured knowledge, hybrid retrieval and pruning | W–Z |
+| `operationalizing-expertise` | deterministic marker parsing, operator cards with triggers/failures, provenance, `thread_id` join key | X–Y |
+| `self-improving-agent` | capture is not curation; promotion requires review, scoped rules, and a demotion/prune path | Y–Z |
+| `accretive-cron-orchestration` | SWEEP/AUDIT/LEARN, no HOLD beside queued work, plan-space artifacts, resource rails | I, P, Z |
+| `loop-enforcement` | typed modes, tick guard, escalation after repeated blockers, no direct append or no-op reschedule | P, Z |
+| `human-in-the-loop` | risk-proportional autonomy, approval evidence, demotion, feedback loop | C–D, U |
+| `rust-core-thin-frontend-workspace` | pure core, callable conformance harness, thin CLI/HTTP frontends | K0–K14 |
+| `testing-conformance-harnesses` | enumerate every MUST/SHOULD, differential/round-trip tests, fixture provenance, discrepancy ledger | G, S–Z |
+| `condition-based-waiting` | fresh state reads, explicit maximum timeout, no infinite wait or stale cache | P |
+| `resource-exhaustion-hunting` | bounded local probes, falsifiers, no live exhaustion, correct-length accounting | P, V |
+| `oracle-gates` | external oracle, cheap-to-expensive G0–Gn ladder, missing oracle is failure, floors ratchet upward | G, S–Z |
+
+The remote/private result `agent-mail-patterns` was found by JSM search but is not installed in this runtime; the installed `agent-mail` skill and the live Agent Mail source evidence are the authorities used here. A per-project skill manifest MUST record project ID, query, skill name/version/content hash, trigger and refusal, source message IDs, selected evidence, and held-out evaluation result. JSM discovery MUST NOT auto-install or auto-promote a skill.
+
+
+
+**Measured wake table (2026-09-02):**
+
+| invocation | caller ceiling | waited seconds | result | cursor info |
+|---|---:|---:|---|---|
+| no flag | `timeout 75` | 71.336 | `CANCELED` from caller signal | absent |
+| no flag | `timeout 180` | 176.033 | `CANCELED` from caller signal | absent |
+| `--timeout=20s` | none | 20.037 | `TIMEOUT` from NTM deadline | present |
+| no flag | `timeout 340` | 300.34 | `TIMEOUT` from documented 5-minute deadline | present |
+
+A timeout probe cannot measure a deadline longer than its own ceiling. The 75/90/180-second runs
+cannot establish unboundedness because each ceiling is below the documented 300-second default. The
+surviving defect is narrower: external termination returns `CANCELED` and discards the resumable
+`cursor_info` that the internal-deadline path returns. Explicit caller timeout is required for dispatch
+latency and to make the cursor-bearing timeout the expected path.
+
+### Observer and gate hardening corrections
+
+- `omp-orchestrator-calr` is a P0 vacuity finding: an empty staged scan currently returns exit 0. The
+  three-valued result must distinguish `CLEAN`, `VIOLATION`, and `NOTHING_TO_CHECK`; an empty index is
+  not clean.
+- Pipe exit status is not command exit status. Any exit-code audit MUST isolate the command and capture
+  its status directly; `$?` after a pipeline is inadmissible evidence.
+- `path-literal-guard` and `state-wildcard-lint` have inconsistent treatment of inline test code. This
+  is a gate-asymmetry finding requiring either a runtime-constructed fixture or a named gate fix; the
+  fixture itself is not silently promoted as proof.
+- Agent Mail `inbox_events_unavailable` is correct fail-closed behavior and is excluded from the
+  silent-success census. Continuity authority is daemon-side `CURSOR_EXPIRED` only
+  (`omp-orchestrator-f1rn`); there is no client continuity guard.
+
+**Defect disposition:** every Agent Mail defect must become one of: fixed at source and upstreamed;
+defended in `agent-mail-native` with a typed refusal; or retained as a named finding with a
+reproduction command. Reported current disposition is: cursor continuity is daemon-side
+`CURSOR_EXPIRED` only (`omp-orchestrator-f1rn`, deletion `a3f254e`); the default wait
+requires an explicit caller timeout for latency/cursor preservation and remains a source hardening item; the search alias defect is a source-fix
+candidate; `inbox_events_unavailable` is a correct fail-closed result and is excluded from the census.
+No defect remains a note.
