@@ -63,6 +63,18 @@ fn dispatch_receipt(id: &str, at: u64) -> DispatchReceipt {
     .unwrap()
 }
 
+fn tracker_status(path: &std::path::Path, status: &str) -> std::path::PathBuf {
+    let tracker = path.parent().unwrap().join("issues.jsonl");
+    std::fs::write(
+        &tracker,
+        format!(
+            "{{\"id\":\"omp-orchestrator-life\",\"status\":\"{status}\"}}\n"
+        ),
+    )
+    .unwrap();
+    tracker
+}
+
 fn receiver(id: &str, at: u64) -> ReceiverEvidence {
     ReceiverEvidence::new(
         EventId::new(id).unwrap(),
@@ -145,7 +157,12 @@ fn full_chain_emits_every_pass_side_lifecycle_row_with_identity() {
         assert_eq!(row["invoker"], "SCHEDULED");
         assert_eq!(row["freshness"]["within_window"], true);
     }
-    assert!(LifecycleLedger::receiver_verified_candidates(&path).unwrap().is_empty());
+    let tracker = tracker_status(&path, "closed");
+    assert!(
+        LifecycleLedger::receiver_verified_candidates(&path, &tracker)
+            .unwrap()
+            .is_empty()
+    );
 
 }
 
@@ -176,6 +193,25 @@ fn dispatched_without_receiver_report_is_redispatch_required() {
 }
 
 #[test]
+fn closed_tracker_bead_is_not_receiver_candidate() {
+    let temp = tempdir().unwrap();
+    let path = temp.path().join("bead-lifecycle.jsonl");
+    let mut ledger = writer(path.clone());
+    ledger
+        .dispatch(dispatch_receipt("dispatch", 101), evidence("dispatch", 101))
+        .unwrap();
+    ledger
+        .verify_receiver(receiver("receiver", 102), evidence("receiver", 102))
+        .unwrap();
+    let tracker = tracker_status(&path, "closed");
+    assert!(
+        LifecycleLedger::receiver_verified_candidates(&path, &tracker)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn peer_claim_replays_receiver_verified_and_refuses_self_grade() {
     let temp = tempdir().unwrap();
     let path = temp.path().join("bead-lifecycle.jsonl");
@@ -187,7 +223,8 @@ fn peer_claim_replays_receiver_verified_and_refuses_self_grade() {
         .verify_receiver(receiver("receiver", 102), evidence("receiver", 102))
         .unwrap();
 
-    let candidates = LifecycleLedger::receiver_verified_candidates(&path).unwrap();
+    let tracker = tracker_status(&path, "in_progress");
+    let candidates = LifecycleLedger::receiver_verified_candidates(&path, &tracker).unwrap();
     assert_eq!(candidates.len(), 1);
     let candidate = candidates.into_iter().next().unwrap();
     let claimed = LifecycleLedger::claim_peer_grading(

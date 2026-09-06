@@ -330,10 +330,18 @@ impl LifecycleLedger {
     }
     pub fn receiver_verified_candidates(
         path: impl AsRef<Path>,
+        tracker_status_path: impl AsRef<Path>,
     ) -> Result<Vec<ReceiverVerifiedCandidate>, LedgerError> {
+        let statuses = read_tracker_statuses(tracker_status_path.as_ref())?;
         let mut latest = BTreeMap::new();
         for row in read_rows(path.as_ref())? {
             let identity = row_identity(&row)?;
+            if !matches!(
+                statuses.get(identity.bead.as_str()).map(String::as_str),
+                Some("open" | "in_progress")
+            ) {
+                continue;
+            }
             latest.insert(identity_key(&identity), row);
         }
         let mut candidates = Vec::new();
@@ -924,6 +932,21 @@ fn read_rows(path: &Path) -> Result<Vec<Value>, LedgerError> {
                 .map_err(|_| LedgerError::MalformedExistingRow { line: line.to_owned() })
         })
         .collect()
+}
+
+/// Read current tracker statuses once, then let candidate production apply
+/// the status gate. The br list surface is deliberately not involved: it omits closed
+/// rows, which would manufacture a false "no closed candidates" result.
+fn read_tracker_statuses(path: &Path) -> Result<BTreeMap<String, String>, LedgerError> {
+    let text = fs::read_to_string(path).map_err(|error| io_error("read_tracker_statuses", error))?;
+    let mut statuses = BTreeMap::new();
+    for line in text.lines().filter(|line| !line.trim().is_empty()) {
+        let row: Value = serde_json::from_str(line).map_err(|_| LedgerError::MalformedExistingRow {
+            line: line.to_owned(),
+        })?;
+        statuses.insert(row_string(&row, "id")?, row_string(&row, "status")?);
+    }
+    Ok(statuses)
 }
 
 fn row_string(row: &Value, key: &str) -> Result<String, LedgerError> {

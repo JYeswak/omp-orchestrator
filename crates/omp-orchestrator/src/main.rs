@@ -1993,7 +1993,10 @@ fn gate_peer_grading_inner(
         }));
     }
 
-    let candidates = LifecycleLedger::receiver_verified_candidates(&config.bead_lifecycle_ledger)
+    let candidates = LifecycleLedger::receiver_verified_candidates(
+        &config.bead_lifecycle_ledger,
+        config.repo.join(".beads/issues.jsonl"),
+    )
         .map_err(|error| format!("PEER_GRADING_LEDGER_UNREADABLE error={error}"))?;
     let idle = observation
         .panes
@@ -7161,6 +7164,13 @@ Stop: now
     #[test]
     fn peer_grade_claim_blocks_new_work_until_a_distinct_pane_is_named() {
         let (temp, config) = isolated_fixture_config();
+        std::fs::create_dir_all(config.repo.join(".beads")).unwrap();
+        std::fs::write(
+            config.repo.join(".beads/issues.jsonl"),
+            r#"{"id":"peer-bead","status":"in_progress"}
+"#,
+        )
+        .unwrap();
         let now_ms = now_unix().saturating_mul(1_000);
         let bead = BeadId::new("peer-bead").unwrap();
         let target = DispatchTarget::new(config.session.clone(), "%1409").unwrap();
