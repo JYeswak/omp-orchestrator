@@ -1,0 +1,21 @@
+[package]
+license.workspace = true
+name = "named-test-filter-gate"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Refuse cargo test filters that exit 0 with 0 passed"
+
+[lints]
+workspace = true
+
+[lib]
+name = "named_test_filter_gate"
+path = "src/lib.rs"
+
+[[bin]]
+name = "named-test-filter-gate"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1"
