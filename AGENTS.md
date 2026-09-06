@@ -1648,8 +1648,34 @@ binary probes must be labelled binary-only.
 The local kernel-only hook records a per-session invocation count in its shadow ledger. Run
 kernel-only-operator-hook --liveness SESSION_ID BASH_CALLS after the configured threshold
 KERNEL_ONLY_HOOK_LIVENESS_THRESHOLD (default 10). It emits HOOK_LIVENESS UNCOVERED and exits 1
-when Bash calls reach the threshold with zero recorded hook invocations. COVERED, PARTIAL, and
-UNKNOWN remain distinct outcomes. Shadow ledger evidence is diagnostic, not hook certification.
+when Bash calls reach the threshold with zero recorded hook invocations. Shadow ledger evidence is
+diagnostic, not hook certification.
+
+CORRECTED 2026-09-05 -- THIS PARAGRAPH ASSERTED AN OUTCOME THE CLASSIFIER COULD NOT PRODUCE, which
+is the more dangerous half of a doc-vs-code drift: a reader checking whether this hole was closed
+found a sentence saying it was. The retired claim was "COVERED, PARTIAL, and UNKNOWN remain
+distinct outcomes." Measured at crates/kernel-only-operator-hook/src/shadow.rs:233-239, the state
+machine had exactly THREE values and COVERED was the fallthrough:
+
+    let state = if bash_calls >= threshold && hook_invocations == 0 { "UNCOVERED" }
+                else if hook_invocations < bash_calls { "PARTIAL" }
+                else { "COVERED" };
+
+With bash_calls = 0 and hook_invocations = 0 against any nonzero threshold, the first guard is
+false and 0 < 0 is false, so a session that NEVER RAN classified as COVERED. UNKNOWN appeared once
+in the whole crate, at src/main.rs:226, and only for a probe ERROR -- so "the probe failed" and
+"the probe ran and found no evidence" had one representation between them, which is this file's own
+denied-probe rule violated inside our own kernel. Found by pane %9 on omp-orchestrator-j2z9 and
+verified independently at source by pane 1.
+
+The fix was to EXTEND the kernel rather than write a second crate, per the KERNEL-ONLY rule that
+fixing a broken kernel IS the work: classify_hook_liveness now has three POSITIVE-EVIDENCE arms
+(UNCOVERED / PARTIAL / COVERED) and every residual -- including zero-and-zero -- is UNKNOWN.
+
+The general lesson outlives this function. A CLASSIFIER WHOSE COMPLIANT VERDICT IS THE DEFAULT
+BRANCH RE-ACQUIRES THIS DEFECT EVERY TIME SOMEONE ADDS A CASE. Each arm must assert its own
+precondition and the residual must be the unknown, never the pass. Fail closed in the direction
+that costs nothing.
 
 The installed rch-lane-bind binary at /Users/josh/.local/bin/rch-lane-bind is outside this repo.
 Its stdin probe cannot prove that the Claude PreToolUse table intercepted a live call, and this
