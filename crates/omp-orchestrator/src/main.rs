@@ -2849,6 +2849,27 @@ fn dispatch_status_word(error: &str) -> &'static str {
     if error.contains("ACK_STAGE_RETRY_BLOCKED") && error.contains("owes_human=false") {
         return "DISPATCH_UNCONFIRMED_ACK_PENDING";
     }
+    // AN EMPTY ACK CENSUS IS "TOO EARLY", NOT "FAILED".
+    //
+    // MEASURED 2026-09-05 on the live loop. `tick=2 pane=%9 bead=dmpv` printed
+    // `status=DISPATCH_FAILED detail=ACK_STAGE_INDETERMINATE ... ACK_CENSUS_EMPTY`,
+    // and the packet had plainly landed: the bead read `in_progress`,
+    // `assignee=WildStone`, one comment (the ACK itself), and `%9` was WORKING at
+    // t=31. The census was empty at READBACK TIME because the worker had not written
+    // its reply yet — a race between dispatch and answer, not an absence of delivery.
+    //
+    // `ack-stage` raises `EmptyAckCensus` (`lib.rs:222`) precisely so an empty census
+    // cannot be read as a satisfied readback. That refusal is correct and stays; only
+    // the WORD the report site chooses from it was wrong. Per this repo's own rule, a
+    // refusal, a non-zero exit, an empty result and a missing file are all UNKNOWN and
+    // never a negative — so an empty census must not be reported as a failed dispatch.
+    //
+    // This is the third arm of one defect. `DISPATCH_FAILED` was one word doing the
+    // work of two; it is now three, and the residual is still the failure so a genuine
+    // failure can never be softened by omission.
+    if error.contains("ACK_CENSUS_EMPTY") {
+        return "DISPATCH_UNCONFIRMED_ACK_PENDING";
+    }
     "DISPATCH_FAILED"
 }
 
@@ -5585,6 +5606,41 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
     }
 
     #[test]
+    fn two_configs_different_sessions_resolve_different_state_paths() {
+        assert!(
+            std::env::var_os("OMP_TICK_MONITOR_STATE").is_none(),
+            "this test measures the default path; OMP_TICK_MONITOR_STATE overrides it"
+        );
+        let a = Config::from_args(&["--session".to_owned(), "control-plane".to_owned()]).unwrap();
+        let b = Config::from_args(&[
+            "--session".to_owned(),
+            "omp-orchestrator".to_owned(),
+        ])
+        .unwrap();
+        assert_ne!(
+            a.tick_monitor_state, b.tick_monitor_state,
+            "different sessions must not share capture state: {} vs {}",
+            a.tick_monitor_state.display(),
+            b.tick_monitor_state.display()
+        );
+    }
+
+    #[test]
+    fn identical_sessions_resolve_the_same_state_path() {
+        assert!(
+            std::env::var_os("OMP_TICK_MONITOR_STATE").is_none(),
+            "this test measures the default path; OMP_TICK_MONITOR_STATE overrides it"
+        );
+        let a = Config::from_args(&["--session".to_owned(), "control-plane".to_owned()]).unwrap();
+        let b = Config::from_args(&["--session".to_owned(), "control-plane".to_owned()]).unwrap();
+        assert_eq!(
+            a.tick_monitor_state, b.tick_monitor_state,
+            "identical sessions collide on one path"
+        );
+    }
+
+
+    #[test]
     fn unknown_positional_is_refused() {
         let stray = Config::from_args(&["run".to_owned(), "extra".to_owned()]).unwrap_err();
         assert!(
@@ -6273,6 +6329,23 @@ exit 2
                     discriminator=ACK_ABSENT_WORKER_IDLE discriminator_reason=NONE \
                     owes_human=true";
         assert_eq!(dispatch_status_word(owed), "DISPATCH_FAILED");
+    }
+
+    /// KNOWN-BAD: the verbatim `dmpv` line must not say `DISPATCH_FAILED`.
+    ///
+    /// Measured on the live loop 2026-09-05 at `tick=2`. The packet had landed — bead
+    /// `in_progress`, `assignee=WildStone`, one ACK comment, `%9` WORKING at t=31 — and
+    /// the census was empty only because the reply had not been written yet at readback
+    /// time. An empty result is UNKNOWN, never a negative.
+    #[test]
+    fn an_empty_ack_census_is_too_early_not_failed() {
+        let measured = "ACK_STAGE_INDETERMINATE bead=omp-orchestrator-dmpv pane=%9 \
+                        comment read-back: ACK_CENSUS_EMPTY";
+        assert_eq!(
+            dispatch_status_word(measured),
+            "DISPATCH_UNCONFIRMED_ACK_PENDING",
+            "a census empty at readback time is a race with the reply, not a failed dispatch"
+        );
     }
 
     /// Every OTHER error keeps the failure word. Both markers are required, so a
