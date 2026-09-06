@@ -170,7 +170,7 @@ fn run_live(session: &str, rules: &OracleCompareRules) -> ExitCode {
 }
 
 fn session_visible(session: &str) -> bool {
-    let mut cmd = Command::new("tmux");
+    let mut cmd = Command::new(tick_monitor::TMUX);
     cmd.args(["list-panes", "-a", "-F", "#{session_name}"]);
     let Some(out) = completed("tmux list-panes", spawn_timeout(cmd, Duration::from_secs(15))) else {
         return false;
@@ -181,7 +181,7 @@ fn session_visible(session: &str) -> bool {
 }
 
 fn subject_count(session: &str) -> Result<u64, ()> {
-    let mut cmd = Command::new("ntm");
+    let mut cmd = Command::new(tick_monitor::NTM);
     cmd.arg(format!("--robot-activity={session}")).arg("--all");
     let Some(out) = completed("ntm activity", spawn_timeout(cmd, Duration::from_secs(30))) else {
         return Err(());
@@ -190,7 +190,7 @@ fn subject_count(session: &str) -> Result<u64, ()> {
 }
 
 fn oracle_panes(session: &str) -> Vec<String> {
-    let mut cmd = Command::new("tmux");
+    let mut cmd = Command::new(tick_monitor::TMUX);
     cmd.args([
         "list-panes",
         "-a",

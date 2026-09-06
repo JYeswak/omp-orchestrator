@@ -121,14 +121,14 @@ pub const KERNEL_REGISTRY: &[(&str, &str, &str)] = &[
     (
         NEEDLE_BEAD_CREATE,
         "beads-workflow bead filing",
-        "omp-orchestrator",
+        "finding",
     ),
     (NEEDLE_SPAWN_TMUX, "tick-monitor pane access", "tick-monitor"),
     (NEEDLE_SPAWN_NTM, KERNEL_DISPATCH_SEND, "tick-monitor"),
     (
         NEEDLE_SPAWN_BR,
         "beads-workflow bead filing",
-        "omp-orchestrator",
+        "finding",
     ),
 ];
 
@@ -190,74 +190,7 @@ pub struct SystemicBypassAllowance {
 /// allowance with slack is an allowance that never shrinks — and because the refusal
 /// message names a one-integer edit. If this costs more than it catches, this paragraph
 /// is the evidence trail for reversing it.
-pub const BYPASS_DEBT: &[SystemicBypassAllowance] = &[
-    SystemicBypassAllowance {
-        pattern: NEEDLE_CAPTURE_PANE,
-        owner: "josh",
-        dies_when: "the last non-allowlisted pane-capture site routes through \
-                    tick-monitor observe (bead omp-orchestrator-kernel-only-fails-at-scale-d9np)",
-        ceiling: 6,
-    },
-    SystemicBypassAllowance {
-        pattern: NEEDLE_SEND_KEYS,
-        owner: "josh",
-        dies_when: "the last non-allowlisted key-injection site routes through the dispatch \
-                    kernel (bead omp-orchestrator-kernel-only-fails-at-scale-d9np)",
-        ceiling: 10,
-    },
-    SystemicBypassAllowance {
-        pattern: NEEDLE_ROBOT_SEND,
-        owner: "josh",
-        // NINTH INSTANCE, IN THIS FILE, CAUGHT BY THIS GATE. The first draft of this row
-        // read "the last non-allowlisted robot-send site", and the ratchet refused with
-        // NEW_BYPASS measured=22 ceiling=21 naming `lib.rs:205` — a string literal in the
-        // death condition of the very allowance that declares the needle. Prose in a
-        // STRING is not reachable by comment stripping. Describe the kernel, never quote
-        // its raw interface.
-        dies_when: "the last non-allowlisted dispatch-send handroll routes through the \
-                    dispatch kernel (bead omp-orchestrator-kernel-only-fails-at-scale-d9np)",
-        // Re-recorded 2026-09-05: extraction landed more dispatch-send handrolls
-        // (measured 32). Ceiling tracks measured debt; dies-when is still d9np.
-        ceiling: 32,
-    },
-    SystemicBypassAllowance {
-        pattern: NEEDLE_QUEUE_READY,
-        owner: "josh",
-        dies_when: "the last non-allowlisted ready-queue read routes through \
-                    loop-queue-filter (bead omp-orchestrator-kernel-only-fails-at-scale-d9np)",
-        ceiling: 10,
-    },
-    SystemicBypassAllowance {
-        pattern: NEEDLE_BEAD_CREATE,
-        owner: "josh",
-        dies_when: "the last non-allowlisted bead-filing site routes through crates/finding \
-                    (bead omp-orchestrator-kernel-only-fails-at-scale-d9np)",
-        ceiling: 3,
-    },
-    SystemicBypassAllowance {
-        pattern: NEEDLE_SPAWN_TMUX,
-        owner: "josh",
-        dies_when: "the last non-allowlisted pane-access spawn routes through tick-monitor \
-                    (bead omp-orchestrator-kernel-only-fails-at-scale-d9np)",
-        // Re-recorded 2026-09-05: measured Command::new("tmux") 23. Dies-when d9np.
-        ceiling: 23,
-    },
-    SystemicBypassAllowance {
-        pattern: NEEDLE_SPAWN_NTM,
-        owner: "josh",
-        dies_when: "the last non-allowlisted ntm spawn routes through the dispatch kernel \
-                    (bead omp-orchestrator-kernel-only-fails-at-scale-d9np)",
-        // Re-recorded 2026-09-05: measured Command::new("ntm") 10. Dies-when d9np.
-        ceiling: 10,
-    },
-    SystemicBypassAllowance {
-        pattern: NEEDLE_SPAWN_BR,
-        owner: "josh",
-        dies_when: "the last non-allowlisted br spawn routes through the bead-filing kernel \
-                    (bead omp-orchestrator-kernel-only-fails-at-scale-d9np)",
-        ceiling: 11,
-    },
-];
+pub const BYPASS_DEBT: &[SystemicBypassAllowance] = &[];
 
 /// A detected kernel bypass.
 #[derive(Debug, Clone, PartialEq, Eq)]

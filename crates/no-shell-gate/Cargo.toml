@@ -7,6 +7,7 @@ publish = false
 description = "Build gate: refuse tracked .sh/.py files; the exemption list is empty by design"
 
 [dependencies]
+finding = { path = "../finding" }
 crate-atom-gate = { path = "../crate-atom-gate" }
 convergence-stamp = { path = "../convergence-stamp" }
 orchestration-tick-gate = { path = "../orchestration-tick-gate" }

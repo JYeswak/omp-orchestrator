@@ -955,12 +955,12 @@ pub fn parse_recommendations_with_skips(text: &str) -> (Vec<String>, Vec<Skipped
     (ranked.into_iter().map(|(_, _, id)| id).collect(), skipped)
 }
 
-/// Fallback picks from `br ready --json` when bv's top-N recommendations all refuse.
+/// Fallback picks from the ready-queue JSON when bv's top-N recommendations all refuse.
 ///
 /// MEASURED 2026-09-02T21:23Z, the first `--apply` with `dispatch_refusal` installed: bv
 /// returned exactly 10 recommendations (`--robot-max-results` does not raise it), every one
 /// an epic, a grading bead, or a blocked bead, so the lane reported "NO picks — queue empty"
-/// while `br ready` listed 28 dispatchable beads. bv ranks by centrality; the DAG's most
+/// while the ready queue listed 28 dispatchable beads. bv ranks by centrality; the DAG's most
 /// central nodes are precisely the ones a worker must not receive. The ready list is the
 /// second oracle: rows ordered by priority (P0 first), same refusal applied to
 /// `issue_type`/`status`, epics never.
@@ -983,7 +983,7 @@ pub fn parse_ready_fallback(text: &str) -> (Vec<String>, Vec<SkippedPick>) {
         .enumerate()
         .filter_map(|(position, row)| {
             let id = row.get("id")?.as_str()?;
-            // br ready rows spell the type `issue_type`; bv spells it `type`. Normalise so
+            // ready-queue rows spell the type `issue_type`; bv spells it `type`. Normalise so
             // one refusal function governs both oracles.
             let mut probe = serde_json::Map::new();
             if let Some(kind) = row.get("issue_type").or_else(|| row.get("type")) {

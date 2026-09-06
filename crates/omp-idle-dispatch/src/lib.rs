@@ -60,7 +60,9 @@ impl IdleConfirmation {
 
 fn is_working_banner(line: &str) -> bool {
     let mut chars = line.trim_start().chars();
-    let Some(spinner) = chars.next() else { return false };
+    let Some(spinner) = chars.next() else {
+        return false;
+    };
     if !(('\u{2800}'..='\u{28ff}').contains(&spinner)) {
         return false;
     }
@@ -101,13 +103,18 @@ pub fn classify_capture(capture: &str) -> IdleDispatchPaneState {
 
 /// Require idle evidence in both captures, independent of cooldown settings.
 #[must_use]
-pub const fn confirm_idle(first: IdleDispatchPaneState, second: IdleDispatchPaneState) -> IdleConfirmation {
+pub const fn confirm_idle(
+    first: IdleDispatchPaneState,
+    second: IdleDispatchPaneState,
+) -> IdleConfirmation {
     match first {
         IdleDispatchPaneState::Working => IdleConfirmation::Working,
         IdleDispatchPaneState::Unknown => IdleConfirmation::Unknown,
         IdleDispatchPaneState::Idle => match second {
             IdleDispatchPaneState::Idle => IdleConfirmation::Idle,
-            IdleDispatchPaneState::Working | IdleDispatchPaneState::Unknown => IdleConfirmation::Changed,
+            IdleDispatchPaneState::Working | IdleDispatchPaneState::Unknown => {
+                IdleConfirmation::Changed
+            }
         },
     }
 }
@@ -145,7 +152,9 @@ fn acceptance_from_description(description: &str) -> String {
         .iter()
         .filter_map(|marker| description.find(marker))
         .min();
-    let Some(start) = start else { return ACCEPTANCE_FALLBACK.to_string() };
+    let Some(start) = start else {
+        return ACCEPTANCE_FALLBACK.to_string();
+    };
     let extracted: String = description[start..].chars().take(420).collect();
     let flattened = extracted.split_whitespace().collect::<Vec<_>>().join(" ");
     flattened.replace('`', "'").replace('$', "S")
@@ -158,7 +167,9 @@ fn acceptance_from_description(description: &str) -> String {
 /// target). Priority sorting is stable for equal priorities, matching Python's stable sort.
 #[must_use]
 pub fn pick_beads(json: &str, limit: usize) -> Vec<ReadyBead> {
-    let Ok(value) = serde_json::from_str::<Value>(json) else { return Vec::new() };
+    let Ok(value) = serde_json::from_str::<Value>(json) else {
+        return Vec::new();
+    };
     let rows = match value {
         Value::Array(rows) => rows,
         Value::Object(mut object) => match object.remove("issues") {
@@ -196,10 +207,7 @@ pub fn pick_beads(json: &str, limit: usize) -> Vec<ReadyBead> {
             .get("title")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        let priority = object
-            .get("priority")
-            .and_then(Value::as_i64)
-            .unwrap_or(9);
+        let priority = object.get("priority").and_then(Value::as_i64).unwrap_or(9);
         let title: String = title.chars().take(110).collect();
         selected.push(ReadyBead {
             id: id.to_string(),
@@ -335,32 +343,34 @@ pub fn parse_dispatch_marker(line: &str) -> Option<DispatchMarker> {
 /// Return whether a pane has a dispatch marker newer than the cutoff. `writer_pid`, if present
 /// in a ledger row, is deliberately ignored.
 #[must_use]
-pub fn recently_dispatched(
-    ledger: &str,
-    pane: &str,
-    now: SystemTime,
-    cooldown: Duration,
-) -> bool {
-    let Ok(now) = now.duration_since(UNIX_EPOCH) else { return true };
+pub fn recently_dispatched(ledger: &str, pane: &str, now: SystemTime, cooldown: Duration) -> bool {
+    let Ok(now) = now.duration_since(UNIX_EPOCH) else {
+        return true;
+    };
     let cutoff = now.as_secs().saturating_sub(cooldown.as_secs());
-    ledger.lines().filter_map(parse_dispatch_marker).any(|marker| {
-        marker.lane == LANE
-            && marker.pane == pane
-            && parse_utc_seconds(&marker.timestamp)
-                .is_some_and(|timestamp| timestamp >= cutoff)
-    })
+    ledger
+        .lines()
+        .filter_map(parse_dispatch_marker)
+        .any(|marker| {
+            marker.lane == LANE
+                && marker.pane == pane
+                && parse_utc_seconds(&marker.timestamp).is_some_and(|timestamp| timestamp >= cutoff)
+        })
 }
 
 fn parse_utc_seconds(value: &str) -> Option<u64> {
     let bytes = value.as_bytes();
-    if bytes.len() != 20 || bytes[4] != b'-' || bytes[7] != b'-' || bytes[10] != b'T'
-        || bytes[13] != b':' || bytes[16] != b':' || bytes[19] != b'Z'
+    if bytes.len() != 20
+        || bytes[4] != b'-'
+        || bytes[7] != b'-'
+        || bytes[10] != b'T'
+        || bytes[13] != b':'
+        || bytes[16] != b':'
+        || bytes[19] != b'Z'
     {
         return None;
     }
-    let number = |start: usize, end: usize| -> Option<u32> {
-        value.get(start..end)?.parse().ok()
-    };
+    let number = |start: usize, end: usize| -> Option<u32> { value.get(start..end)?.parse().ok() };
     let (year, month, day) = (number(0, 4)?, number(5, 7)?, number(8, 10)?);
     let (hour, minute, second) = (number(11, 13)?, number(14, 16)?, number(17, 19)?);
     let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
@@ -413,7 +423,12 @@ impl TickVerdict {
 
 /// Classify an observed tick without consulting the standing `check.sh` verdict.
 #[must_use]
-pub const fn classify_tick(omp_seen: usize, idle_found: usize, dispatched: usize, send_failed: bool) -> TickVerdict {
+pub const fn classify_tick(
+    omp_seen: usize,
+    idle_found: usize,
+    dispatched: usize,
+    send_failed: bool,
+) -> TickVerdict {
     if send_failed {
         TickVerdict::RedSendFailed
     } else if idle_found == 0 {
@@ -428,15 +443,25 @@ pub const fn classify_tick(omp_seen: usize, idle_found: usize, dispatched: usize
 
 /// The typed blocker emitted for a saturated or backstop-dispatched tick.
 #[must_use]
-pub fn blocker_fields(verdict: TickVerdict, omp_seen: usize, idle_found: usize, ready: usize, dispatched: usize) -> Option<(String, String)> {
+pub fn blocker_fields(
+    verdict: TickVerdict,
+    omp_seen: usize,
+    idle_found: usize,
+    ready: usize,
+    dispatched: usize,
+) -> Option<(String, String)> {
     match verdict {
         TickVerdict::BlockedNoIdleCapacity => Some((
             "infrastructure:no-idle-capacity".to_string(),
-            format!("observed omp_panes={omp_seen} idle={idle_found} ready={ready}; capacity saturated"),
+            format!(
+                "observed omp_panes={omp_seen} idle={idle_found} ready={ready}; capacity saturated"
+            ),
         )),
         TickVerdict::BlockedDriverDidNotDispatch => Some((
             "infrastructure:driver-did-not-dispatch".to_string(),
-            format!("backstop dispatched {dispatched} pane(s) the wave driver left idle; ready={ready}"),
+            format!(
+                "backstop dispatched {dispatched} pane(s) the wave driver left idle; ready={ready}"
+            ),
         )),
         TickVerdict::Green | TickVerdict::RedSendFailed => None,
     }
@@ -458,9 +483,17 @@ mod tests {
         let before = IDLE;
         let after = format!("{before}\nAUTO-DISPATCH cp-1\n{WORKING}");
         assert!(receiver_transition(before, &after, "cp-1"));
-        assert!(!receiver_transition(before, &format!("{before}\n{WORKING}"), "cp-1"));
+        assert!(!receiver_transition(
+            before,
+            &format!("{before}\n{WORKING}"),
+            "cp-1"
+        ));
         assert!(!receiver_transition(&after, &after, "cp-1"));
-        assert!(!receiver_transition(before, &format!("{before}\nAUTO-DISPATCH cp-2\n{WORKING}"), "cp-1"));
+        assert!(!receiver_transition(
+            before,
+            &format!("{before}\nAUTO-DISPATCH cp-2\n{WORKING}"),
+            "cp-1"
+        ));
     }
 
     #[test]
@@ -477,8 +510,14 @@ mod tests {
 
     #[test]
     fn unknown_shapes_and_plain_shell_fail_closed() {
-        assert_eq!(classify_capture("??? > ◒ GPT-5.6-Luna > unknown"), IdleDispatchPaneState::Unknown);
-        assert_eq!(classify_capture("josh@studio ~ % ls\nbin crates"), IdleDispatchPaneState::Unknown);
+        assert_eq!(
+            classify_capture("??? > ◒ GPT-5.6-Luna > unknown"),
+            IdleDispatchPaneState::Unknown
+        );
+        assert_eq!(
+            classify_capture("josh@studio ~ % ls\nbin crates"),
+            IdleDispatchPaneState::Unknown
+        );
     }
 
     #[test]
@@ -491,18 +530,36 @@ mod tests {
     #[test]
     fn unanchored_mutation_misreads_stale_scrollback_as_working() {
         let capture = " ⠹ 22m · ◒ GPT-5.6-Luna\nπ  > ◒ GPT-5.6-Luna > S37.17";
-        let first = capture.lines().find(|line| line.contains(MODEL_BANNER)).unwrap_or_default();
+        let first = capture
+            .lines()
+            .find(|line| line.contains(MODEL_BANNER))
+            .unwrap_or_default();
         assert!(is_working_banner(first));
         assert_eq!(classify_capture(capture), IdleDispatchPaneState::Idle);
     }
 
     #[test]
     fn two_captures_are_required_and_changed_is_not_idle() {
-        assert_eq!(confirm_idle(IdleDispatchPaneState::Idle, IdleDispatchPaneState::Idle), IdleConfirmation::Idle);
-        assert_eq!(confirm_idle(IdleDispatchPaneState::Idle, IdleDispatchPaneState::Working), IdleConfirmation::Changed);
-        assert_eq!(confirm_idle(IdleDispatchPaneState::Idle, IdleDispatchPaneState::Unknown), IdleConfirmation::Changed);
-        assert_eq!(confirm_idle(IdleDispatchPaneState::Working, IdleDispatchPaneState::Idle), IdleConfirmation::Working);
-        assert_eq!(confirm_idle(IdleDispatchPaneState::Unknown, IdleDispatchPaneState::Idle), IdleConfirmation::Unknown);
+        assert_eq!(
+            confirm_idle(IdleDispatchPaneState::Idle, IdleDispatchPaneState::Idle),
+            IdleConfirmation::Idle
+        );
+        assert_eq!(
+            confirm_idle(IdleDispatchPaneState::Idle, IdleDispatchPaneState::Working),
+            IdleConfirmation::Changed
+        );
+        assert_eq!(
+            confirm_idle(IdleDispatchPaneState::Idle, IdleDispatchPaneState::Unknown),
+            IdleConfirmation::Changed
+        );
+        assert_eq!(
+            confirm_idle(IdleDispatchPaneState::Working, IdleDispatchPaneState::Idle),
+            IdleConfirmation::Working
+        );
+        assert_eq!(
+            confirm_idle(IdleDispatchPaneState::Unknown, IdleDispatchPaneState::Idle),
+            IdleConfirmation::Unknown
+        );
     }
 
     #[test]
@@ -532,7 +589,12 @@ mod tests {
     #[test]
     fn queue_sort_is_priority_order_and_cursor_advances_per_attempt() {
         let beads: Vec<ReadyBead> = (0..7)
-            .map(|index| ReadyBead { id: format!("b{index}"), title: String::new(), description: String::new(), priority: index as i64 })
+            .map(|index| ReadyBead {
+                id: format!("b{index}"),
+                title: String::new(),
+                description: String::new(),
+                priority: index as i64,
+            })
             .collect();
         let plan = plan_queues(&beads, 3, 0);
         assert_eq!(plan.pane_queues[0][0].id, "b0");
@@ -543,7 +605,12 @@ mod tests {
 
     #[test]
     fn packet_is_ship_or_surface_and_contains_close_traps() {
-        let bead = ReadyBead { id: "cp-1".into(), title: "Title".into(), description: "ACCEPTANCE run X".into(), priority: 1 };
+        let bead = ReadyBead {
+            id: "cp-1".into(),
+            title: "Title".into(),
+            description: "ACCEPTANCE run X".into(),
+            priority: 1,
+        };
         let packet = render_packet("2026-08-31T00:00:00Z", 1, &[bead]);
         for phrase in [
             "br update <id> --status=in_progress",
@@ -567,32 +634,76 @@ mod tests {
         let now = UNIX_EPOCH + Duration::from_secs(1_788_134_460);
         let marker = parse_dispatch_marker(ledger.lines().next().unwrap_or_default()).unwrap();
         assert_eq!(marker.identity(), "omp-idle-dispatch:%1:b1");
-        assert!(recently_dispatched(ledger, "%1", now, Duration::from_secs(180)));
-        assert!(!recently_dispatched(ledger, "%2", now, Duration::from_secs(180)));
+        assert!(recently_dispatched(
+            ledger,
+            "%1",
+            now,
+            Duration::from_secs(180)
+        ));
+        assert!(!recently_dispatched(
+            ledger,
+            "%2",
+            now,
+            Duration::from_secs(180)
+        ));
     }
 
     #[test]
     fn tick_classes_saturation_and_backstop_as_blocked() {
-        assert_eq!(classify_tick(3, 0, 0, false), TickVerdict::BlockedNoIdleCapacity);
+        assert_eq!(
+            classify_tick(3, 0, 0, false),
+            TickVerdict::BlockedNoIdleCapacity
+        );
         assert_eq!(classify_tick(3, 0, 0, false).as_str(), "BLOCKED");
-        assert_eq!(classify_tick(3, 1, 1, false), TickVerdict::BlockedDriverDidNotDispatch);
+        assert_eq!(
+            classify_tick(3, 1, 1, false),
+            TickVerdict::BlockedDriverDidNotDispatch
+        );
         assert_eq!(classify_tick(3, 1, 0, true), TickVerdict::RedSendFailed);
-        assert_eq!(blocker_fields(TickVerdict::BlockedNoIdleCapacity, 3, 0, 487, 0).unwrap().0, "infrastructure:no-idle-capacity");
-        assert!(blocker_fields(TickVerdict::BlockedNoIdleCapacity, 3, 0, 487, 0).unwrap().1.contains("capacity saturated"));
-        assert_eq!(blocker_fields(TickVerdict::BlockedDriverDidNotDispatch, 3, 1, 494, 2).unwrap().0, "infrastructure:driver-did-not-dispatch");
+        assert_eq!(
+            blocker_fields(TickVerdict::BlockedNoIdleCapacity, 3, 0, 487, 0)
+                .unwrap()
+                .0,
+            "infrastructure:no-idle-capacity"
+        );
+        assert!(
+            blocker_fields(TickVerdict::BlockedNoIdleCapacity, 3, 0, 487, 0)
+                .unwrap()
+                .1
+                .contains("capacity saturated")
+        );
+        assert_eq!(
+            blocker_fields(TickVerdict::BlockedDriverDidNotDispatch, 3, 1, 494, 2)
+                .unwrap()
+                .0,
+            "infrastructure:driver-did-not-dispatch"
+        );
     }
     #[test]
     fn malformed_markers_and_other_lanes_never_trigger_cooldown() {
         assert!(parse_dispatch_marker("not-json").is_none());
         assert!(parse_dispatch_marker(r#"{"action":"send_failed","lane":"omp-idle-dispatch","pane":"%1","ts":"2026-08-31T00:00:00Z"}"#).is_none());
-        assert!(parse_dispatch_marker(r#"{"action":"dispatched","lane":"omp-idle-dispatch","pane":"%1","ts":"bad"}"#).is_none());
+        assert!(parse_dispatch_marker(
+            r#"{"action":"dispatched","lane":"omp-idle-dispatch","pane":"%1","ts":"bad"}"#
+        )
+        .is_none());
         let other = r#"{"action":"dispatched","lane":"other-lane","pane":"%1","bead":"b","ts":"2026-08-31T00:00:00Z"}"#;
-        assert!(!recently_dispatched(other, "%1", UNIX_EPOCH + Duration::from_secs(1_788_134_460), Duration::from_secs(180)));
+        assert!(!recently_dispatched(
+            other,
+            "%1",
+            UNIX_EPOCH + Duration::from_secs(1_788_134_460),
+            Duration::from_secs(180)
+        ));
     }
 
     #[test]
     fn queue_limit_and_cursor_are_bounded_without_fabricating_work() {
-        let bead = ReadyBead { id: "b".into(), title: "t".into(), description: "a".into(), priority: 1 };
+        let bead = ReadyBead {
+            id: "b".into(),
+            title: "t".into(),
+            description: "a".into(),
+            priority: 1,
+        };
         assert!(pick_beads("[]", 12).is_empty());
         assert!(parse_dispatch_marker(r#"{"action":"dispatched","lane":"omp-idle-dispatch","pane":"%1","ts":"2026-02-30T00:00:00Z"}"#).is_none());
         assert!(plan_queues(&[], 3, 0).pane_queues.is_empty());

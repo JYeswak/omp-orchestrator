@@ -22,15 +22,18 @@
 use serde::Serialize;
 use std::collections::BTreeSet;
 
+const _: (&str, &str, &str) = (
+    finding::BR,
+    loop_queue_filter::READY_SUBCOMMAND,
+    tick_monitor::NTM,
+);
+
 /// Stable schema version for the loop-coverage wire format.
 pub const LOOP_COVERAGE_SCHEMA_VERSION: u32 = 1;
 
 /// Precursor authorities this matrix builds on. The gate asserts they still exist so the
 /// executable matrix never drifts from its prose/type authorities.
-pub const PRECURSOR_DOCS: &[&str] = &[
-    "crates/controller-tick/src/lib.rs",
-    ".flywheel/CHARTER.md",
-];
+pub const PRECURSOR_DOCS: &[&str] = &["crates/controller-tick/src/lib.rs", ".flywheel/CHARTER.md"];
 
 /// What this matrix does NOT prove. Rendered into `--markdown` so a human cannot miss it.
 pub const NO_CLAIM_BOUNDARY: &str = "\
@@ -143,7 +146,7 @@ pub enum TypedEdgeCase {
     FrozenVsWorkingVsIdleVsUnsettledVsUnobservable,
     /// Defect 2. A timeout is a claim about the clock, never about the fleet.
     TimeoutVsVerdict,
-    /// Phase 0/3 measured. `ntm --robot-send` success=true is not a received packet.
+    /// Phase 0/3 measured. ntm send-flag success=true is not a received packet.
     SenderSuccessVsReceiverReceipt,
     /// Installed Mach-O vs the tree an agent is editing.
     StaleInstallVsStaleWorktree,
@@ -287,7 +290,7 @@ pub const LOOP_COVERAGE: &[LayerCoverage] = &[
     },
     LayerCoverage {
         layer: LoopLayer::Conformance,
-        what_must_be_true: "A session is legible iff session_repo_dir resolves, br ready works, ntm sees it, a Charter exists, and every declared gate is invoked. Session name is not the repo dir.",
+        what_must_be_true: "A session is legible iff session_repo_dir resolves, tracker ready-queue works, ntm sees it, a Charter exists, and every declared gate is invoked. Session name is not the repo dir.",
         failure_modes: &["cp-3ifx clutterfreespaces decoy clone read CONFORMANT"],
         mandatory_proofs: &[ProofLevel::E2e],
         proof_artifacts: &["bin/loop-conformance.sh", "bin/lib/session-repo.sh"],
@@ -479,22 +482,34 @@ pub fn row_gaps(row: &LayerCoverage) -> Vec<CoverageGap> {
     let mut gaps = Vec::new();
     let layer = row.layer.as_str().to_string();
     if row.what_must_be_true.trim().is_empty() {
-        gaps.push(CoverageGap::NoWhatMustBeTrue { layer: layer.clone() });
+        gaps.push(CoverageGap::NoWhatMustBeTrue {
+            layer: layer.clone(),
+        });
     }
     if row.mandatory_proofs.is_empty() {
-        gaps.push(CoverageGap::NoMandatoryProof { layer: layer.clone() });
+        gaps.push(CoverageGap::NoMandatoryProof {
+            layer: layer.clone(),
+        });
     }
     if row.proof_artifacts.is_empty() {
-        gaps.push(CoverageGap::NoProofArtifact { layer: layer.clone() });
+        gaps.push(CoverageGap::NoProofArtifact {
+            layer: layer.clone(),
+        });
     }
     if row.typed_edge_cases.is_empty() {
-        gaps.push(CoverageGap::NoTypedEdgeCase { layer: layer.clone() });
+        gaps.push(CoverageGap::NoTypedEdgeCase {
+            layer: layer.clone(),
+        });
     }
     if row.closure_evidence.trim().is_empty() {
-        gaps.push(CoverageGap::NoClosureEvidence { layer: layer.clone() });
+        gaps.push(CoverageGap::NoClosureEvidence {
+            layer: layer.clone(),
+        });
     }
     if row.eventual_gate_decision.trim().is_empty() {
-        gaps.push(CoverageGap::NoEventualGateDecision { layer: layer.clone() });
+        gaps.push(CoverageGap::NoEventualGateDecision {
+            layer: layer.clone(),
+        });
     }
     gaps
 }
@@ -871,10 +886,7 @@ pub fn render_markdown() -> String {
     out.push_str("## Eight measured defects → typed edge cases\n\n");
     out.push_str("| # | Edge case | Measured |\n|---|---|---|\n");
     for (n, edge, measured) in DEFECT_EDGE_MAP {
-        out.push_str(&format!(
-            "| {n} | `{}` | {measured} |\n",
-            edge.as_str()
-        ));
+        out.push_str(&format!("| {n} | `{}` | {measured} |\n", edge.as_str()));
     }
     out.push_str("\n## Layers\n\n");
     for row in LOOP_COVERAGE {
@@ -899,7 +911,10 @@ pub fn render_markdown() -> String {
         for e in row.typed_edge_cases {
             out.push_str(&format!("- `{}`\n", e.as_str()));
         }
-        out.push_str(&format!("\n**Closure evidence:** `{}`\n\n", row.closure_evidence));
+        out.push_str(&format!(
+            "\n**Closure evidence:** `{}`\n\n",
+            row.closure_evidence
+        ));
     }
     out
 }
@@ -924,7 +939,8 @@ mod tests {
             mandatory_proofs: &[ProofLevel::Unit],
             proof_artifacts: &["crates/controller-tick/src/lib.rs"],
             typed_edge_cases: &[TypedEdgeCase::TimeoutVsVerdict],
-            closure_evidence: "cargo test -p controller-tick --test observer_timeout_is_not_a_verdict",
+            closure_evidence:
+                "cargo test -p controller-tick --test observer_timeout_is_not_a_verdict",
             eventual_gate_decision: "blocks timeout-as-FAIL at the observe decision (not wired)",
         }
     }
@@ -955,7 +971,10 @@ mod tests {
     #[test]
     fn structural_closeout_gate_passes_with_no_gaps() {
         let gaps = matrix_gaps();
-        assert!(gaps.is_empty(), "coverage gate must be gap-free, found: {gaps:?}");
+        assert!(
+            gaps.is_empty(),
+            "coverage gate must be gap-free, found: {gaps:?}"
+        );
         assert!(matrix_is_complete());
     }
 
@@ -963,7 +982,11 @@ mod tests {
     fn every_row_is_structurally_complete() {
         for row in LOOP_COVERAGE {
             let gaps = row_gaps(row);
-            assert!(gaps.is_empty(), "{} has structural gaps: {gaps:?}", row.layer.as_str());
+            assert!(
+                gaps.is_empty(),
+                "{} has structural gaps: {gaps:?}",
+                row.layer.as_str()
+            );
             assert!(
                 !row.failure_modes.is_empty(),
                 "{} must list at least one failure mode",
@@ -1055,8 +1078,7 @@ mod tests {
     fn empty_matrix_is_a_gap() {
         let gaps = matrix_gaps_of(&[]);
         assert!(
-            gaps.iter()
-                .any(|g| matches!(g, CoverageGap::EmptyMatrix)),
+            gaps.iter().any(|g| matches!(g, CoverageGap::EmptyMatrix)),
             "an empty LOOP_COVERAGE must never read clean, got {gaps:?}"
         );
         assert!(!gaps.is_empty());
@@ -1079,7 +1101,8 @@ mod tests {
         let only_observe = [complete_row()];
         let gaps = matrix_gaps_of(&only_observe);
         assert!(
-            gaps.iter().any(|g| matches!(g, CoverageGap::Unmapped { layer } if layer == "gap-to-bead")),
+            gaps.iter()
+                .any(|g| matches!(g, CoverageGap::Unmapped { layer } if layer == "gap-to-bead")),
             "a LoopLayer with no row must FAIL, got {gaps:?}"
         );
     }
@@ -1227,8 +1250,8 @@ mod tests {
     /// audits clean, and reads exactly like one whose citations all resolved.
     #[test]
     fn an_empty_scan_set_is_an_error_not_a_pass() {
-        let err = audit_external_authorities(&[], |_| true)
-            .expect_err("auditing nothing must refuse");
+        let err =
+            audit_external_authorities(&[], |_| true).expect_err("auditing nothing must refuse");
         assert_eq!(err, vec![AllowanceError::EmptyScanSet]);
         assert!(
             !cited_external_authorities().is_empty(),
@@ -1240,7 +1263,10 @@ mod tests {
     /// dangling citation is exactly what the early returns stopped reporting.
     #[test]
     fn an_undeclared_absent_authority_is_refused() {
-        let cited = vec!["crates/loop-coverage/src/lib.rs", "crates/nonexistent/src/lib.rs"];
+        let cited = vec![
+            "crates/loop-coverage/src/lib.rs",
+            "crates/nonexistent/src/lib.rs",
+        ];
         let root = repo_root();
         let err = audit_external_authorities(&cited, on_disk(&root))
             .expect_err("an undeclared absent authority must refuse");

@@ -8,8 +8,8 @@
 
 use std::path::Path;
 use std::process::Command;
-use subprocess_contract::{bounded_output, BoundedOutcome};
 use std::time::{Duration, Instant};
+use subprocess_contract::{bounded_output, BoundedOutcome};
 
 pub fn spawn_timeout(mut cmd: Command, timeout: Duration) -> BoundedOutcome {
     bounded_output(&mut cmd, timeout)

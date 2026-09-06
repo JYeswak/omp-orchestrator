@@ -93,7 +93,7 @@ fn now_epoch() -> i64 {
 }
 
 fn derive_repo(session: &str) -> (String, String) {
-    let mut cmd = Command::new("tmux");
+    let mut cmd = Command::new(tick_monitor::TMUX);
     cmd.args(["list-panes", "-t", session, "-F", "#{pane_current_path}"]);
     let text = stdout_of(cmd);
     if text.trim().is_empty() {
@@ -159,7 +159,7 @@ fn last_bead_close(repo: &str) -> String {
     if !Path::new(repo).join(".beads").is_dir() {
         return "UNKNOWN".into();
     }
-    let mut cmd = Command::new("br");
+    let mut cmd = Command::new(finding::BR);
     cmd.args(["list", "--status", "closed", "--json"])
         .current_dir(repo);
     let text = stdout_of(cmd);
@@ -189,7 +189,7 @@ fn last_bead_close(repo: &str) -> String {
 }
 
 fn max_context_pct(session: &str) -> String {
-    let mut cmd = Command::new("ntm");
+    let mut cmd = Command::new(tick_monitor::NTM);
     cmd.arg(format!("--robot-context={session}"));
     let text = stdout_of(cmd);
     let v: Value = match serde_json::from_str(text.trim()) {
@@ -412,9 +412,12 @@ fn eval_row_mode(rules: &FleetTruthRules) -> ExitCode {
 }
 
 fn run_register(json_out: bool, sessions: &[String], rules: &FleetTruthRules) -> ExitCode {
-    let mut tmux_v = Command::new("tmux");
+    let mut tmux_v = Command::new(tick_monitor::TMUX);
     tmux_v.arg("-V");
-    let tmux_ok = successful("tmux version", spawn_timeout(tmux_v, Duration::from_secs(5)));
+    let tmux_ok = successful(
+        "tmux version",
+        spawn_timeout(tmux_v, Duration::from_secs(5)),
+    );
     let mut git_v = Command::new("git");
     git_v.arg("--version");
     let git_ok = successful("git version", spawn_timeout(git_v, Duration::from_secs(5)));
@@ -455,7 +458,7 @@ fn run_register(json_out: bool, sessions: &[String], rules: &FleetTruthRules) ->
     let now = now_epoch();
 
     let sess_list: Vec<String> = if sessions.is_empty() {
-        let mut cmd = Command::new("tmux");
+        let mut cmd = Command::new(tick_monitor::TMUX);
         cmd.args(["list-sessions", "-F", "#{session_name}"]);
         let t = stdout_of(cmd);
         if t.trim().is_empty() {

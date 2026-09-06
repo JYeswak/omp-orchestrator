@@ -51,7 +51,11 @@ pub enum TickDispatchDecision {
     },
 }
 
-pub fn pane_decision(verdict: &str, force_busy: bool, rules: &TickDispatchRules) -> TickDispatchDecision {
+pub fn pane_decision(
+    verdict: &str,
+    force_busy: bool,
+    rules: &TickDispatchRules,
+) -> TickDispatchDecision {
     match verdict {
         "DONE" | "IDLE" => TickDispatchDecision::Allow,
         other => {
@@ -130,7 +134,11 @@ pub fn ready_decision(rc: i32, pane: &str, rules: &TickDispatchRules) -> TickDis
     }
 }
 
-pub fn send_decision(send_rc: i32, jq_success: bool, rules: &TickDispatchRules) -> TickDispatchDecision {
+pub fn send_decision(
+    send_rc: i32,
+    jq_success: bool,
+    rules: &TickDispatchRules,
+) -> TickDispatchDecision {
     if send_rc != 0 {
         TickDispatchDecision::Refuse {
             exit: send_rc,
@@ -186,8 +194,14 @@ mod tests {
     #[test]
     fn done_and_idle_admit() {
         let r = TickDispatchRules::default();
-        assert_eq!(pane_decision("DONE", false, &r), TickDispatchDecision::Allow);
-        assert_eq!(pane_decision("IDLE", false, &r), TickDispatchDecision::Allow);
+        assert_eq!(
+            pane_decision("DONE", false, &r),
+            TickDispatchDecision::Allow
+        );
+        assert_eq!(
+            pane_decision("IDLE", false, &r),
+            TickDispatchDecision::Allow
+        );
     }
 
     #[test]
@@ -200,6 +214,9 @@ mod tests {
                 ..
             }
         ));
-        assert_eq!(pane_decision("WORKING", true, &r), TickDispatchDecision::Allow);
+        assert_eq!(
+            pane_decision("WORKING", true, &r),
+            TickDispatchDecision::Allow
+        );
     }
 }

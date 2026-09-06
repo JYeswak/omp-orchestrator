@@ -4,8 +4,9 @@
 
 use reap_finished_panes::{
     acquire_lock, apply_deadline, consecutive_cycle_started_same_pid, decide_reap,
-    invoker_from_chain, is_worker_pane, lane_row_json, parse_ancestor_rows, reap_pane,
-    require_panes, spawn_timeout, write_reaped_result, ReapFinishedPanesLockOutcome,
+    filter_panes_to_session, foreign_sessions_in, invoker_from_chain, is_worker_pane,
+    lane_row_json, parse_ancestor_rows, reap_pane, require_panes, scoped_artifact_dir,
+    spawn_timeout, write_reaped_result, MISSING_SESSION_REFUSAL, ReapFinishedPanesLockOutcome,
     ReapFinishedPanesRules, ReapPaneDecision, ReapPaneResult, SweepStats,
 };
 use std::fs::OpenOptions;
@@ -111,6 +112,7 @@ fn main() -> ExitCode {
     }
 
     let mut repo: Option<PathBuf> = None;
+    let mut session: Option<String> = None;
     let mut selftest = false;
     let mut mutation = false;
     let mut disabled: Vec<String> = Vec::new();
@@ -124,6 +126,13 @@ fn main() -> ExitCode {
                     return ExitCode::from(2);
                 }
             },
+            "--session" => match args.next() {
+                Some(v) if !v.is_empty() => session = Some(v),
+                Some(_) | None => {
+                    eprintln!("usage error: --session requires a tmux session name");
+                    return ExitCode::from(2);
+                }
+            },
             "--selftest" => selftest = true,
             "--mutation" => mutation = true,
             "--disable-rule" => match args.next() {
@@ -134,7 +143,9 @@ fn main() -> ExitCode {
                 }
             },
             "-h" | "--help" => {
-                eprintln!("usage: reap-finished-panes [--repo PATH] [--selftest]");
+                eprintln!(
+                    "usage: reap-finished-panes --session NAME [--repo PATH] [--selftest]"
+                );
                 return ExitCode::SUCCESS;
             }
             other => {
@@ -184,7 +195,10 @@ fn main() -> ExitCode {
             std::process::id()
         )
     } else {
-        home_state_path("reap-sweep.lock")
+        scoped_artifact_dir(&PathBuf::from(home_state_path("reaped")), &repo)
+            .join("reap-sweep.lock")
+            .display()
+            .to_string()
     };
     let apply = std::env::var("REAP_APPLY").unwrap_or_else(|_| "1".into()) == "1";
     let lane_ledger = if selftest {
@@ -199,8 +213,9 @@ fn main() -> ExitCode {
         std::env::var("REAP_LANE_LEDGER")
             .unwrap_or_else(|_| home_state_path("reap-finished-panes.jsonl"))
     };
-    let outdir =
+    let outdir_base =
         PathBuf::from(std::env::var("REAPER_OUTDIR").unwrap_or_else(|_| home_state_path("reaped")));
+    let outdir = scoped_artifact_dir(&outdir_base, &repo);
     let lines = std::env::var("REAPER_LINES")
         .ok()
         .and_then(|s| s.parse().ok())
@@ -233,6 +248,13 @@ fn main() -> ExitCode {
     if selftest {
         return run_selftest(&rules, &repo);
     }
+    let session = match session {
+        Some(name) => name,
+        None => {
+            eprintln!("{MISSING_SESSION_REFUSAL}");
+            return ExitCode::from(2);
+        }
+    };
 
     let deadline = Duration::from_secs(
         std::env::var("REAP_SWEEP_DEADLINE_SECS")
@@ -242,7 +264,16 @@ fn main() -> ExitCode {
     );
     let started = Instant::now();
     let mut stats = SweepStats::default();
-    let panes = pane_list();
+    let listed = pane_list(&session);
+    let panes = filter_panes_to_session(&listed, &session);
+    let stolen = foreign_sessions_in(&panes, &session);
+    if !stolen.is_empty() {
+        eprintln!(
+            "SCOPE_REFUSED reason=FOREIGN_SESSION_IN_SWEEP panes={}",
+            stolen.join(",")
+        );
+        return ExitCode::from(2);
+    }
     if let Err(reason) = require_panes(&panes) {
         eprintln!("reap-finished-panes: {reason}");
         return ExitCode::from(2);
@@ -340,7 +371,7 @@ fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn pane_list() -> Vec<(String, String)> {
+fn pane_list(session: &str) -> Vec<(String, String)> {
     if let Ok(raw) = std::env::var("REAP_PANE_LIST") {
         return raw
             .lines()
@@ -350,8 +381,15 @@ fn pane_list() -> Vec<(String, String)> {
             })
             .collect();
     }
-    let mut cmd = Command::new("tmux");
-    cmd.args(["list-panes", "-a", "-F", "#{session_name} #{pane_index}"]);
+    let mut cmd = Command::new(tick_monitor::TMUX);
+    cmd.args([
+        "list-panes",
+        "-s",
+        "-t",
+        session,
+        "-F",
+        "#{session_name} #{pane_index}",
+    ]);
     spawn_timeout(cmd, Duration::from_secs(15))
         .map(|o| {
             String::from_utf8_lossy(&o.stdout)

@@ -71,13 +71,13 @@ impl From<LedgerError> for StepError {
 /// occurrence in the dispatch path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StepKind {
-    /// `br ready` selected a bead for this pane.
+    /// Tracker ready-queue selected a bead for this pane.
     BeadSelected,
     /// The dispatch packet was rendered from the bead body.
     PacketRendered,
     /// The pane-dispatch fence admitted this pane.
     FenceChecked,
-    /// The packet was sent (ntm robot-send through the fence).
+    /// The packet was sent (ntm send-flag through the fence).
     PacketSent,
     /// The receiver proof verified the pane is acting on the named bead.
     ReceiverVerified,

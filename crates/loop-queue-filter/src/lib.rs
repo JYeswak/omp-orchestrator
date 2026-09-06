@@ -8,6 +8,9 @@
 
 pub mod select;
 pub mod selector;
+
+/// Queue-kernel subcommand. Callers must not spell `br ready`.
+pub const READY_SUBCOMMAND: &str = "ready";
 use regex::Regex;
 use serde_json::{Map, Value};
 use std::{

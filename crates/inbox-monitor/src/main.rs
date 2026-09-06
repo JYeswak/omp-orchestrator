@@ -359,7 +359,7 @@ fn resolve_emitting_pane(pane: &Option<(String, u32)>) -> (Option<String>, Strin
         };
     };
 
-    let mut command = Command::new("tmux");
+    let mut command = Command::new(tick_monitor::TMUX);
     command.args([
         "list-panes",
         "-a",

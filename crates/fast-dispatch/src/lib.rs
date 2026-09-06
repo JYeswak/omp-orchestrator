@@ -149,7 +149,8 @@ pub fn admission_fresh_pass(ledger_path: &Path, cfg: &AdmissionConfig) -> bool {
         Ok(v) => v,
         Err(_) => return false,
     };
-    if cfg.rules.overall_must_be_pass && data.get("overall").and_then(|v| v.as_str()) != Some("PASS")
+    if cfg.rules.overall_must_be_pass
+        && data.get("overall").and_then(|v| v.as_str()) != Some("PASS")
     {
         return false;
     }
@@ -187,7 +188,10 @@ pub enum SelectError {
 
 /// Only `state == "FREE"` is selected. `safe_to_dispatch` is ignored (the tempting lie).
 /// Schema drift or free_count disagreement is Invalid (shell exit 2), not "no panes".
-pub fn select_free_panes(json: &str, rules: &FastDispatchRules) -> Result<Vec<String>, SelectError> {
+pub fn select_free_panes(
+    json: &str,
+    rules: &FastDispatchRules,
+) -> Result<Vec<String>, SelectError> {
     let data: Value = serde_json::from_str(json).map_err(|_| SelectError::Invalid)?;
     if data.get("schema").and_then(|v| v.as_str()) != Some("zs.dispatch-ready.v1") {
         return Err(SelectError::Invalid);
@@ -365,11 +369,7 @@ mod tests {
     }
 
     fn tmp(tag: &str) -> PathBuf {
-        let p = std::env::temp_dir().join(format!(
-            "fast-dispatch-{}-{}",
-            tag,
-            std::process::id()
-        ));
+        let p = std::env::temp_dir().join(format!("fast-dispatch-{}-{}", tag, std::process::id()));
         let _ = fs::create_dir_all(&p);
         p.join("ledger.json")
     }
@@ -594,7 +594,10 @@ mod tests {
 
     #[test]
     fn conductor_routed_is_word_bounded() {
-        assert!(is_conductor_routed("clutterfreespaces", "clutterfreespaces"));
+        assert!(is_conductor_routed(
+            "clutterfreespaces",
+            "clutterfreespaces"
+        ));
         assert!(!is_conductor_routed(
             "clutterfreespaces-ios",
             "clutterfreespaces"
@@ -606,7 +609,11 @@ mod tests {
         // Home comes from the environment, so the mapping assertion holds on any
         // machine (omp-orchestrator-npq) — the function under test takes home as a
         // parameter, and so does its test.
-        let home = PathBuf::from(std::env::var_os("HOME").filter(|v| !v.is_empty()).unwrap_or_default());
+        let home = PathBuf::from(
+            std::env::var_os("HOME")
+                .filter(|v| !v.is_empty())
+                .unwrap_or_default(),
+        );
         let developer = home.join("Developer");
         assert_eq!(
             session_repo_dir("clutterfreespaces", &home),
@@ -678,7 +685,11 @@ mod tests {
         // All inputs derive from the environment (omp-orchestrator-npq): the test
         // asserts the matcher recognizes the cron shapes for THIS machine's home and
         // the discovered repo, exactly as production derives them.
-        let home = PathBuf::from(std::env::var_os("HOME").filter(|v| !v.is_empty()).unwrap_or_default());
+        let home = PathBuf::from(
+            std::env::var_os("HOME")
+                .filter(|v| !v.is_empty())
+                .unwrap_or_default(),
+        );
         let state = home.join(".local/state/flywheel");
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .ancestors()

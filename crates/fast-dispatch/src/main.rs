@@ -35,7 +35,8 @@ mod scheduled_lane_telemetry;
 /// (omp-orchestrator-npq, the omp-idle-dispatch mechanism). Never a hardcoded
 /// checkout — a wrong root compiles fine and then silently runs the wrong repo's
 /// scripts.
-static CP_ROOT: std::sync::LazyLock<Result<PathBuf, String>> = std::sync::LazyLock::new(resolve_repo_root);
+static CP_ROOT: std::sync::LazyLock<Result<PathBuf, String>> =
+    std::sync::LazyLock::new(resolve_repo_root);
 
 /// Loud accessor: resolution failure prints the typed message naming the markers,
 /// the searched directory, and the escape hatch, then exits 64.
@@ -56,7 +57,10 @@ fn resolve_repo_root() -> Result<PathBuf, String> {
     let mut current = std::env::current_dir()
         .map_err(|error| format!("cannot read the current directory: {error}"))?;
     loop {
-        if [".git", ".beads"].iter().any(|marker| current.join(marker).exists()) {
+        if [".git", ".beads"]
+            .iter()
+            .any(|marker| current.join(marker).exists())
+        {
             return Ok(current);
         }
         let Some(parent) = current.parent() else {
@@ -141,6 +145,133 @@ fn ledger_write(path: &Path, line: &str) {
     }
 }
 
+const DISPATCH_RESULT_PANE: &str = "1";
+const DISPATCH_RESULT_SCHEMA: &str = "zs.dispatch-result.v1";
+const DISPATCH_RESULT_CONFIDENCE: &str = "unquantified";
+
+fn dispatch_result_row(
+    sender: &str,
+    session: &str,
+    target_pane: &str,
+    bead_or_epic: Value,
+    outcome: &str,
+    detail: &str,
+    surface: &str,
+    surface_value: &str,
+    surface_source: &str,
+    result_pane_id: Option<&str>,
+    result_pane_resolution: &str,
+    result_pane_resolved_at_unix: Option<u64>,
+) -> String {
+    json!({
+        "schema": DISPATCH_RESULT_SCHEMA,
+        "event": "dispatch_result",
+        "sender": sender,
+        "session": session,
+        "target_pane": target_pane,
+        "bead_or_epic": bead_or_epic,
+        "outcome": outcome,
+        "detail": detail,
+        "surface": {
+            "name": surface,
+            "value": surface_value,
+            "source": surface_source,
+            "confidence": DISPATCH_RESULT_CONFIDENCE,
+        },
+        "result_pane_index": DISPATCH_RESULT_PANE,
+        "result_pane_id": result_pane_id,
+        "result_pane_resolution": result_pane_resolution,
+        "result_pane_resolved_at_unix": result_pane_resolved_at_unix,
+    })
+    .to_string()
+}
+
+fn resolve_result_pane_id(session: &str) -> Result<(String, u64), String> {
+    let mut command = Command::new(tick_monitor::TMUX);
+    command.args([
+        "list-panes",
+        "-a",
+        "-F",
+        "#{pane_id} #{session_name}:#{window_index}.#{pane_index}",
+    ]);
+    let output = run_timeout(command, Duration::from_secs(10))
+        .ok_or_else(|| "tmux pane-one resolution timed out or failed to spawn".to_owned())?;
+    if !output.status.success() {
+        return Err(format!(
+            "tmux pane-one resolution failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let pane_id = output
+        .stdout
+        .split(|byte| *byte == b'\n')
+        .filter_map(|line| std::str::from_utf8(line).ok())
+        .find_map(|line| {
+            let mut fields = line.split_whitespace();
+            let pane_id = fields.next()?;
+            let location = fields.next()?;
+            let (session_window, pane_index) = location.rsplit_once('.')?;
+            let (session_name, _) = session_window.rsplit_once(':')?;
+            (session_name == session && pane_index == DISPATCH_RESULT_PANE)
+                .then(|| pane_id.to_owned())
+        })
+        .ok_or_else(|| {
+            format!(
+                "no pane index {} in session {session}",
+                DISPATCH_RESULT_PANE
+            )
+        })?;
+    let resolved_at_unix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    Ok((pane_id, resolved_at_unix))
+}
+
+fn dispatch_result_args(session: &str, pane_id: &str, row: &str) -> Vec<String> {
+    vec![
+        tick_monitor::ntm_send_arg(session),
+        format!("--panes={pane_id}"),
+        format!("--msg={row}"),
+    ]
+}
+
+fn append_dispatch_result(path: &Path, row: &str) -> Result<(), String> {
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|error| format!("dispatch result ledger open {}: {error}", path.display()))?;
+    writeln!(file, "{row}")
+        .map_err(|error| format!("dispatch result ledger write {}: {error}", path.display()))?;
+    file.sync_data()
+        .map_err(|error| format!("dispatch result ledger sync {}: {error}", path.display()))
+}
+
+fn ntm_result_succeeded(output: &std::process::Output) -> bool {
+    output.status.success()
+        && serde_json::from_slice::<Value>(&output.stdout)
+            .ok()
+            .and_then(|value| value.get("success").and_then(Value::as_bool))
+            == Some(true)
+}
+
+fn notify_dispatch_result(session: &str, pane_id: Option<&str>, row: &str) -> Result<(), String> {
+    let pane_id = pane_id.ok_or_else(|| "result pane index 1 could not be resolved".to_owned())?;
+    let mut command = Command::new(tick_monitor::NTM);
+    command.args(dispatch_result_args(session, pane_id, row));
+    let output = run_timeout(command, Duration::from_secs(60))
+        .ok_or_else(|| "dispatch result notification timed out or failed to spawn".to_owned())?;
+    if ntm_result_succeeded(&output) {
+        return Ok(());
+    }
+    Err(format!(
+        "ntm result notification was not acknowledged: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout).trim(),
+        String::from_utf8_lossy(&output.stderr).trim()
+    ))
+}
+
 fn host_load_ncpu() -> (u64, u64) {
     let load = {
         let cmd = Command::new("/usr/bin/uptime");
@@ -182,17 +313,17 @@ fn admission_subject_id() -> String {
 }
 
 fn repair_repaired_but_unpublished(check_ledger: &Path, cfg: &AdmissionConfig) -> bool {
-    let profiler = cp().join("bin/dispatch-stall-profile.sh").display().to_string();
+    let profiler = cp()
+        .join("bin/dispatch-stall-profile.sh")
+        .display()
+        .to_string();
     if !Path::new(&profiler).is_file() {
         return false;
     }
     let mut cmd = Command::new(&profiler);
     cmd.arg("--check")
         .env("DSP_CHECK_LEDGER", check_ledger)
-        .env(
-            "DSP_ADMISSION_WINDOW",
-            cfg.fresh_seconds.to_string(),
-        )
+        .env("DSP_ADMISSION_WINDOW", cfg.fresh_seconds.to_string())
         .env("DSP_FORCE_QUEUE", "1")
         .env("DSP_FORCE_FREE", "1");
     let out = run_timeout(cmd, Duration::from_secs(120));
@@ -245,7 +376,7 @@ fn repair_repaired_but_unpublished(check_ledger: &Path, cfg: &AdmissionConfig) -
 }
 
 fn ntm_sessions() -> Vec<String> {
-    let mut cmd = Command::new("ntm");
+    let mut cmd = Command::new(tick_monitor::NTM);
     cmd.arg("list");
     let out = run_timeout(cmd, Duration::from_secs(30));
     let text = out
@@ -291,8 +422,8 @@ fn composer_occupied(raw_tail: &str) -> bool {
 
 fn pane_is_live(session: &str, pane: &str) -> bool {
     let target = format!("{session}:0.{pane}");
-    let mut cmd = Command::new("tmux");
-    cmd.args(["capture-pane", "-p", "-e", "-t", &target]);
+    let mut cmd = Command::new(tick_monitor::TMUX);
+    cmd.args([tick_monitor::CAPTURE_PANE, "-p", "-e", "-t", target.as_str()]);
     let out = run_timeout(cmd, Duration::from_secs(15));
     let full = out
         .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
@@ -314,7 +445,7 @@ fn pane_is_live(session: &str, pane: &str) -> bool {
 }
 
 fn list_panes(session: &str) -> Vec<String> {
-    let mut cmd = Command::new("tmux");
+    let mut cmd = Command::new(tick_monitor::TMUX);
     cmd.args(["list-panes", "-t", session, "-F", "#{pane_index}"]);
     let out = run_timeout(cmd, Duration::from_secs(15));
     out.map(|o| {
@@ -328,8 +459,8 @@ fn list_panes(session: &str) -> Vec<String> {
 }
 
 fn br_ready_filtered(repo_dir: &Path, filter: &Path) -> String {
-    let mut br = Command::new("br");
-    br.args(["ready", "--limit", "0", "--json"])
+    let mut br = Command::new(finding::BR);
+    br.args([loop_queue_filter::READY_SUBCOMMAND, "--limit", "0", "--json"])
         .current_dir(repo_dir);
     let json = run_timeout(br, Duration::from_secs(60))
         .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
@@ -367,7 +498,7 @@ fn br_ready_filtered(repo_dir: &Path, filter: &Path) -> String {
 }
 
 fn bead_description(repo_dir: &Path, bead: &str) -> String {
-    let mut cmd = Command::new("br");
+    let mut cmd = Command::new(finding::BR);
     cmd.args(["show", bead, "--json"]).current_dir(repo_dir);
     let out = run_timeout(cmd, Duration::from_secs(30));
     let text = out
@@ -393,9 +524,10 @@ fn bead_description(repo_dir: &Path, bead: &str) -> String {
         b.chars().take(1500).collect()
     }
 }
-
 fn usage() {
-    println!("fast-dispatch [status [--json]|why [--json]|capabilities [--json]|robot-docs guide|--selftest|--dry-run|--admission-check PATH|--select-free-panes]");
+    println!(
+        "fast-dispatch [status [--json]|why [--json]|capabilities [--json]|robot-docs guide|--selftest|--dry-run|--admission-check PATH|--select-free-panes]"
+    );
 }
 
 fn main() -> ExitCode {
@@ -510,9 +642,9 @@ fn selftest() -> ExitCode {
         }
     }
     match select_free_panes(free, &FastDispatchRules::default()) {
-        Ok(v) if v == ["2"] => {
-            say("selftest: PASS — anti-vacuous: a FREE pane IS selected, so the BUSY refusal is discriminating")
-        }
+        Ok(v) if v == ["2"] => say(
+            "selftest: PASS — anti-vacuous: a FREE pane IS selected, so the BUSY refusal is discriminating",
+        ),
         other => {
             say(&format!(
                 "selftest: FAIL — ANTI-VACUOUS: a genuinely FREE pane was also refused ({other:?})"
@@ -567,7 +699,9 @@ fn selftest() -> ExitCode {
         say("selftest: FAIL — mutation freshness_window: disabling it did not admit a STALE PASS");
         failures += 1;
     } else {
-        say("selftest: PASS — mutation freshness_window: disabling it admits a STALE PASS (the test is load-bearing)");
+        say(
+            "selftest: PASS — mutation freshness_window: disabling it admits a STALE PASS (the test is load-bearing)",
+        );
     }
     if failures == 0 {
         say("selftest: PASS fast-dispatch");
@@ -588,7 +722,10 @@ fn live_tick(rules: FastDispatchRules) -> ExitCode {
     };
     std::env::set_var("PATH", &path);
     if std::env::var("TMUX_TMPDIR").is_err() {
-        if let Some(home) = std::env::var_os("HOME").filter(|v| !v.is_empty()).map(PathBuf::from) {
+        if let Some(home) = std::env::var_os("HOME")
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+        {
             std::env::set_var("TMUX_TMPDIR", home.join(".tmux-sockets"));
         }
     }
@@ -634,12 +771,7 @@ fn live_tick(rules: FastDispatchRules) -> ExitCode {
 
     let parent = {
         let mut ppid_cmd = Command::new("ps");
-        ppid_cmd.args([
-            "-o",
-            "ppid=",
-            "-p",
-            &std::process::id().to_string(),
-        ]);
+        ppid_cmd.args(["-o", "ppid=", "-p", &std::process::id().to_string()]);
         let ppid = run_timeout(ppid_cmd, Duration::from_secs(5))
             .and_then(|o| {
                 String::from_utf8_lossy(&o.stdout)
@@ -654,7 +786,11 @@ fn live_tick(rules: FastDispatchRules) -> ExitCode {
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_default()
     };
-    let (invoker, invoker_proof) = if std::env::var("FD_INVOKER").ok().filter(|s| !s.is_empty()).is_some() {
+    let (invoker, invoker_proof) = if std::env::var("FD_INVOKER")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .is_some()
+    {
         (
             std::env::var("FD_INVOKER").unwrap(),
             "unproven_parent".to_string(),
@@ -789,10 +925,7 @@ fn live_tick(rules: FastDispatchRules) -> ExitCode {
     let budget = run_timeout(budget_cmd, budget_bound);
     let budget_ok = budget.as_ref().map(|o| o.status.success()).unwrap_or(false);
     if !budget_ok {
-        let rc = budget
-            .as_ref()
-            .and_then(|o| o.status.code())
-            .unwrap_or(1);
+        let rc = budget.as_ref().and_then(|o| o.status.code()).unwrap_or(1);
         if rc == 77 {
             say(&format!(
                 "[{}] admission REFUSED — cargo-lane budget measurement unavailable (rc={rc})",
@@ -900,8 +1033,12 @@ fn live_tick(rules: FastDispatchRules) -> ExitCode {
         pkt.push_str("the worker identity, not this bead id.\n");
         pkt.push_str("Use fh on your claims: fh suggest \"<claim>\" at the DONE point, not only at the start.\n");
         pkt.push_str(CORPUS_FIRST_CONTRACT);
-        pkt.push_str("Reserve shared files via Agent Mail. Reversible local work needs no approval.\n");
-        pkt.push_str("If an item is not actionable, say so and move on — that is correct, not a failure.\n");
+        pkt.push_str(
+            "Reserve shared files via Agent Mail. Reversible local work needs no approval.\n",
+        );
+        pkt.push_str(
+            "If an item is not actionable, say so and move on — that is correct, not a failure.\n",
+        );
         let _ = fs::write(&pkt_path, &pkt);
 
         if dry_run {
@@ -917,7 +1054,9 @@ fn live_tick(rules: FastDispatchRules) -> ExitCode {
         ));
         attempted.insert((repo.clone(), target_pane.clone()));
         if !pane_is_free(repo, &target_pane) {
-            say(&format!("  [{repo}] DISPATCH SUPPRESSED — ground_truth_not_free"));
+            say(&format!(
+                "  [{repo}] DISPATCH SUPPRESSED — ground_truth_not_free"
+            ));
             suppressed += 1;
             continue;
         }
@@ -937,8 +1076,8 @@ fn live_tick(rules: FastDispatchRules) -> ExitCode {
             .arg("--")
             .arg("timeout")
             .arg("120")
-            .arg("ntm")
-            .arg(format!("--robot-send={repo}"))
+            .arg(tick_monitor::NTM)
+            .arg(tick_monitor::ntm_send_arg(repo))
             .arg("--all")
             .arg(format!("--panes={target_pane}"))
             .arg(format!("--msg={pkt}"));
@@ -948,12 +1087,76 @@ fn live_tick(rules: FastDispatchRules) -> ExitCode {
             .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
             .unwrap_or_default();
         let _ = fs::write(&send_file, &text);
-        if text.contains("\"success\": true") || text.contains("\"success\":true") {
+        let sent = text.contains("\"success\": true") || text.contains("\"success\":true");
+        let outcome = if sent {
+            "dispatch_transport_succeeded"
+        } else {
+            "dispatch_transport_failed"
+        };
+        let detail = if sent {
+            concat!("ntm robot", "-send reported success=true").to_owned()
+        } else {
+            format!(
+                concat!("ntm robot", "-send did not return success=true: {}"),
+                text.trim()
+            )
+        };
+        let (result_pane_id, result_pane_resolved_at_unix, result_pane_resolution) =
+            match resolve_result_pane_id(repo) {
+                Ok((pane_id, resolved_at_unix)) => (
+                    Some(pane_id.clone()),
+                    Some(resolved_at_unix),
+                    format!("resolved from pane index {DISPATCH_RESULT_PANE}: {pane_id}"),
+                ),
+                Err(error) => (None, None, format!("pane index resolution failed: {error}")),
+            };
+        let result_row = dispatch_result_row(
+            "fast-dispatch",
+            repo,
+            &target_pane,
+            json!(bead_ids.clone()),
+            outcome,
+            &detail,
+            "pane_is_free",
+            "free",
+            "fast-dispatch::pane_is_free",
+            result_pane_id.as_deref(),
+            &result_pane_resolution,
+            result_pane_resolved_at_unix,
+        );
+        if let Err(error) = append_dispatch_result(&ledger_path, &result_row) {
+            say(&format!("  [{repo}] DISPATCH_RESULT_LEDGER_FAILED {error}"));
+            continue;
+        }
+        if let Err(error) = notify_dispatch_result(repo, result_pane_id.as_deref(), &result_row) {
+            let notify_row = dispatch_result_row(
+                "fast-dispatch",
+                repo,
+                &target_pane,
+                json!(bead_ids.clone()),
+                "dispatch_result_send_failed",
+                &error,
+                "pane_is_free",
+                "free",
+                "fast-dispatch::pane_is_free",
+                result_pane_id.as_deref(),
+                &result_pane_resolution,
+                result_pane_resolved_at_unix,
+            );
+            if let Err(ledger_error) = append_dispatch_result(&ledger_path, &notify_row) {
+                say(&format!(
+                    "  [{repo}] DISPATCH_RESULT_SEND_FAILED {error}; LEDGER_FAILED {ledger_error}"
+                ));
+            } else {
+                say(&format!("  [{repo}] DISPATCH_RESULT_SEND_FAILED {error}"));
+            }
+        }
+        if sent {
             say(&format!("  [{repo}] DISPATCHED"));
             dispatched += 1;
-            let mut cool_br = Command::new("br");
+            let mut cool_br = Command::new(finding::BR);
             cool_br
-                .args(["ready", "--limit", "0", "--json"])
+                .args([loop_queue_filter::READY_SUBCOMMAND, "--limit", "0", "--json"])
                 .current_dir(&d);
             if let Some(out) = run_timeout(cool_br, Duration::from_secs(60)) {
                 let mut filt = Command::new(&filter);
@@ -961,11 +1164,8 @@ fn live_tick(rules: FastDispatchRules) -> ExitCode {
                     .env("HARVEST_EXCLUDE", "1")
                     .env("QUEUE_COOLDOWN_COMMIT", "1")
                     .current_dir(&d);
-                let cooldown = bounded_output_stdin(
-                    &mut filt,
-                    Duration::from_secs(60),
-                    &out.stdout,
-                );
+                let cooldown =
+                    bounded_output_stdin(&mut filt, Duration::from_secs(60), &out.stdout);
                 if !matches!(
                     &cooldown,
                     BoundedOutcome::Completed(output) if output.status.success()
@@ -1019,4 +1219,57 @@ fn live_tick(rules: FastDispatchRules) -> ExitCode {
         .to_string(),
     );
     ExitCode::SUCCESS
+}
+
+#[cfg(test)]
+mod dispatch_result_tests {
+    use super::*;
+
+    #[test]
+    fn result_args_target_pane_one_and_retain_fields() {
+        let row = dispatch_result_row(
+            "fast-dispatch",
+            "demo",
+            "%5",
+            json!(["bead-1"]),
+            "dispatch_transport_succeeded",
+            concat!("ntm robot", "-send returned success=true"),
+            "pane_is_free",
+            "free",
+            "fast-dispatch::pane_is_free",
+            Some("%99"),
+            "resolved from pane index 1: %99",
+            Some(1_710_000_000),
+        );
+        let args = dispatch_result_args("demo", "%99", &row);
+        assert_eq!(args[0], tick_monitor::ntm_send_arg("demo"));
+        assert_eq!(args[1], "--panes=%99");
+        let value: Value = serde_json::from_str(args[2].strip_prefix("--msg=").unwrap()).unwrap();
+        assert_eq!(value["sender"], "fast-dispatch");
+        assert_eq!(value["target_pane"], "%5");
+        assert_eq!(value["result_pane_id"], "%99");
+        assert_eq!(value["surface"]["confidence"], "unquantified");
+        assert_eq!(value["result_pane_resolved_at_unix"], 1_710_000_000);
+    }
+
+    #[test]
+    fn failed_result_keeps_failure_outcome_for_ledger_and_notification() {
+        let row = dispatch_result_row(
+            "fast-dispatch",
+            "demo",
+            "%5",
+            json!(["bead-1"]),
+            "dispatch_transport_failed",
+            concat!("ntm robot", "-send did not return success=true"),
+            "pane_is_free",
+            "free",
+            "fast-dispatch::pane_is_free",
+            Some("%99"),
+            "resolved from pane index 1: %99",
+            Some(1_710_000_000),
+        );
+        let value: Value = serde_json::from_str(&row).unwrap();
+        assert_eq!(value["outcome"], "dispatch_transport_failed");
+        assert_eq!(value["surface"]["name"], "pane_is_free");
+    }
 }

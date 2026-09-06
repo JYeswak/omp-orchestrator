@@ -217,7 +217,7 @@ pub fn local_wall_z_stamp() -> String {
 /// deadlock the child (the failure class this port exists to make inexpressible).
 /// Verdicts are unchanged: `br show` does not read stdin.
 pub fn bead_status_via_br(repo_dir: &Path, bead: &str) -> Option<String> {
-    let mut cmd = Command::new("br");
+    let mut cmd = Command::new(finding::BR);
     cmd.arg("show")
         .arg(bead)
         .arg("--json")

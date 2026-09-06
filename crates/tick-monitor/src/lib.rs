@@ -27,6 +27,8 @@
 //! from idle capacity -- an unrecognised capture is never an idle pane.
 
 pub mod lifecycle;
+pub mod kernel;
+pub use kernel::{CAPTURE_PANE, NTM, SEND_KEYS, TMUX, ntm_send_arg, ntm_send_flag};
 
 use std::collections::hash_map::DefaultHasher;
 use std::fmt;

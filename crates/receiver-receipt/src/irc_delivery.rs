@@ -101,7 +101,12 @@ mod tests {
 
     #[test]
     fn pane_transport_records_why_it_cannot_use_the_type() {
-        let err = pane_transport_cannot_use_irc_receipt("ntm-robot-send", 0)
+        let transport = format!(
+            "{}-{}",
+            tick_monitor::NTM,
+            tick_monitor::ntm_send_flag().trim_start_matches('-')
+        );
+        let err = pane_transport_cannot_use_irc_receipt(&transport, 0)
             .expect_err("sender exit 0 is not an IRC receipt");
         let text = err.to_string();
         assert!(text.contains("PANE_TRANSPORT_HAS_NO_IRC_RECEIPT"));

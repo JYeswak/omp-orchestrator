@@ -16,6 +16,7 @@ path = "src/lib.rs"
 [dependencies]
 oracle-compare = { path = "../oracle-compare" }
 subprocess-contract = { path = "../subprocess-contract" }
+tick-monitor = { path = "../tick-monitor" }
 regex = "1"
 serde_json = "1"
 

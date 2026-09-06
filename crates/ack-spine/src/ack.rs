@@ -7,7 +7,7 @@
 //! posted when it did not.
 //!
 //! THE ALTERNATIVES, RULED OUT BY MEASUREMENT:
-//! * ntm robot-send REFUSES codex panes entirely (cp-nq2s9) — structurally
+//! * ntm send-flag REFUSES codex panes entirely (cp-nq2s9) — structurally
 //!   impossible for half the fleet.
 //! * Agent Mail returned 'database is locked' on both writes with RSS
 //!   130MB->687MB over 98 minutes and a restart that fixed it — state
@@ -19,8 +19,8 @@
 //! and check for exactly one unique marker from the comment. Exit 0 from the
 //! posting command is necessary but not sufficient.
 
-use asupersync::Cx;
 use asupersync::process::Command;
+use asupersync::Cx;
 use std::fmt;
 use subprocess_contract::run_output;
 
@@ -66,7 +66,7 @@ impl fmt::Display for AckVerdict {
 /// This is the I/O-bound wrapper that the hermetic tests bypass by calling the
 /// pure classify_ack_readback directly.
 pub async fn detect_ack(cx: &Cx, bead_id: &str, marker: &str) -> AckVerdict {
-    let mut command = Command::new("br");
+    let mut command = Command::new(finding::BR);
     command.args(["comments", "list", bead_id]);
 
     match run_output(cx, command).await {
@@ -83,12 +83,8 @@ pub async fn detect_ack(cx: &Cx, bead_id: &str, marker: &str) -> AckVerdict {
 /// Simulate the SINGULAR-verb trap: run br comment <id> -m <text> and return
 /// what happened. The comment does NOT land, but the exit code and stderr
 /// vary by argument shape — which is exactly why the read-back detector exists.
-pub async fn simulate_singular_trap(
-    cx: &Cx,
-    bead_id: &str,
-    text: &str,
-) -> SingularTrapResult {
-    let mut command = Command::new("br");
+pub async fn simulate_singular_trap(cx: &Cx, bead_id: &str, text: &str) -> SingularTrapResult {
+    let mut command = Command::new(finding::BR);
     command.args(["comment", bead_id, "-m", text]);
 
     match run_output(cx, command).await {

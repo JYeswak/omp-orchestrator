@@ -55,6 +55,12 @@
 use std::fmt;
 use std::path::{Path, PathBuf};
 
+/// Tracker CLI the bead-filing kernel owns. Callers use `Command::new(finding::BR)`.
+pub const BR: &str = "br";
+
+/// Subcommand that files a bead. Callers must not spell `br create`.
+pub const CREATE_SUBCOMMAND: &str = "create";
+
 use asupersync::Cx;
 use asupersync::process::Command;
 use subprocess_contract::run_output;

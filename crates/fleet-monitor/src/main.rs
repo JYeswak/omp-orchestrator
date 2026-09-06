@@ -151,7 +151,7 @@ fn configured_tmux_bin() -> PathBuf {
     if installed.is_file() {
         installed
     } else {
-        PathBuf::from("tmux")
+        PathBuf::from(tick_monitor::TMUX)
     }
 }
 
@@ -203,7 +203,9 @@ fn ts() -> String {
     let mut command = Command::new("date");
     command.args(["-u", "+%Y-%m-%dT%H:%M:%SZ"]);
     let text = match bounded_output(&mut command, Duration::from_secs(5)) {
-        BoundedOutcome::Completed(output) => String::from_utf8_lossy(&output.stdout).trim().to_owned(),
+        BoundedOutcome::Completed(output) => {
+            String::from_utf8_lossy(&output.stdout).trim().to_owned()
+        }
         BoundedOutcome::TimedOut | BoundedOutcome::Unspawned(_) => String::new(),
     };
     if text.is_empty() {
@@ -615,14 +617,12 @@ fn resolve_self_scope(cfg: &Cfg) -> SelfScope {
 /// unreachable server would look like a pane that is simply missing.
 fn self_pane_census(cfg: &Cfg) -> String {
     let mut command = Command::new(&cfg.tmux_bin);
-    command
-        .env("TMUX_TMPDIR", &cfg.tmux_tmpdir)
-        .args([
-            "list-panes",
-            "-a",
-            "-F",
-            "#{pane_id} #{session_name}",
-        ]);
+    command.env("TMUX_TMPDIR", &cfg.tmux_tmpdir).args([
+        "list-panes",
+        "-a",
+        "-F",
+        "#{pane_id} #{session_name}",
+    ]);
     match bounded_output(&mut command, cfg.ntm_activity_timeout) {
         BoundedOutcome::Completed(output) if output.status.success() => {
             String::from_utf8_lossy(&output.stdout).into_owned()
@@ -648,9 +648,13 @@ const NTM_ACTIVITY_OUTPUT_LIMIT: usize = 16 * 1024 * 1024;
 fn pane_selector(cfg: &Cfg, repo: &str) -> Result<String, NtmActivityOutcome> {
     let target = format!("{repo}:0");
     let mut command = Command::new(&cfg.tmux_bin);
-    command
-        .env("TMUX_TMPDIR", &cfg.tmux_tmpdir)
-        .args(["list-panes", "-t", &target, "-F", "#{pane_index}"]);
+    command.env("TMUX_TMPDIR", &cfg.tmux_tmpdir).args([
+        "list-panes",
+        "-t",
+        &target,
+        "-F",
+        "#{pane_index}",
+    ]);
     let output = match bounded_output(&mut command, cfg.ntm_activity_timeout) {
         BoundedOutcome::Completed(output) => output,
         BoundedOutcome::TimedOut => {
@@ -1130,7 +1134,7 @@ fn idle_scan(cfg: &Cfg, repos: &[String]) -> (u64, u64) {
             let text = run_capture(
                 Command::new(&cfg.tmux_bin)
                     .env("TMUX_TMPDIR", &cfg.tmux_tmpdir)
-                    .arg("capture-pane")
+                    .arg(tick_monitor::CAPTURE_PANE)
                     .arg("-p")
                     .arg("-t")
                     .arg(format!("{repo}:0.{pane}"))
@@ -1268,10 +1272,12 @@ fn queue_filter_count(cfg: &Cfg, repo_dir: &Path, br_json: &str) -> u64 {
     };
     cmd.current_dir(repo_dir);
     match bounded_output_stdin(&mut cmd, Duration::from_secs(60), br_json.as_bytes()) {
-        BoundedOutcome::Completed(output) if output.status.success() => String::from_utf8_lossy(&output.stdout)
-            .trim()
-            .parse::<u64>()
-            .unwrap_or(0),
+        BoundedOutcome::Completed(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .parse::<u64>()
+                .unwrap_or(0)
+        }
         BoundedOutcome::Completed(_) | BoundedOutcome::TimedOut | BoundedOutcome::Unspawned(_) => 0,
     }
 }

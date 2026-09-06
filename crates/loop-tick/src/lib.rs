@@ -452,6 +452,132 @@ fn append_row(cfg: &Config, mut row: serde_json::Map<String, Value>) {
     }
 }
 
+const DISPATCH_RESULT_PANE: &str = "1";
+const DISPATCH_RESULT_SCHEMA: &str = "zs.dispatch-result.v1";
+const DISPATCH_RESULT_CONFIDENCE: &str = "unquantified";
+
+fn dispatch_result_row(
+    sender: &str,
+    session: &str,
+    target_pane: &str,
+    bead_or_epic: &str,
+    outcome: &str,
+    detail: &str,
+    surface: &str,
+    surface_value: &str,
+    surface_source: &str,
+    result_pane_id: Option<&str>,
+    result_pane_resolution: &str,
+    result_pane_resolved_at_unix: Option<u64>,
+) -> String {
+    json!({
+        "schema": DISPATCH_RESULT_SCHEMA,
+        "event": "dispatch_result",
+        "sender": sender,
+        "session": session,
+        "target_pane": target_pane,
+        "bead_or_epic": bead_or_epic,
+        "outcome": outcome,
+        "detail": detail,
+        "surface": {
+            "name": surface,
+            "value": surface_value,
+            "source": surface_source,
+            "confidence": DISPATCH_RESULT_CONFIDENCE,
+        },
+        "result_pane_index": DISPATCH_RESULT_PANE,
+        "result_pane_id": result_pane_id,
+        "result_pane_resolution": result_pane_resolution,
+        "result_pane_resolved_at_unix": result_pane_resolved_at_unix,
+    })
+    .to_string()
+}
+
+fn resolve_result_pane_id(cfg: &Config) -> Result<(String, u64), String> {
+    let args = vec![
+        "list-panes".to_owned(),
+        "-a".to_owned(),
+        "-F".to_owned(),
+        "#{pane_id} #{session_name}:#{window_index}.#{pane_index}".to_owned(),
+    ];
+    let output = helper(cfg, Path::new(tick_monitor::TMUX), &args, 10)
+        .map_err(|error| format!("tmux pane-one resolution failed to spawn: {error}"))?;
+    if !success(&output) {
+        return Err(format!(
+            "tmux pane-one resolution failed: {}",
+            output.stderr.trim()
+        ));
+    }
+    let pane_id = output
+        .stdout
+        .lines()
+        .find_map(|line| {
+            let mut fields = line.split_whitespace();
+            let pane_id = fields.next()?;
+            let location = fields.next()?;
+            let (session_window, pane_index) = location.rsplit_once('.')?;
+            let (session_name, _) = session_window.rsplit_once(':')?;
+            (session_name == cfg.session && pane_index == DISPATCH_RESULT_PANE)
+                .then(|| pane_id.to_owned())
+        })
+        .ok_or_else(|| {
+            format!(
+                "no pane index {} in session {}",
+                DISPATCH_RESULT_PANE, cfg.session
+            )
+        })?;
+    let resolved_at_unix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    Ok((pane_id, resolved_at_unix))
+}
+fn dispatch_result_args(session: &str, pane_id: &str, row: &str) -> Vec<String> {
+    vec![
+        tick_monitor::ntm_send_arg(session),
+        format!("--panes={pane_id}"),
+        format!("--msg={row}"),
+    ]
+}
+
+fn append_dispatch_result(cfg: &Config, row: &str) -> io::Result<()> {
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&cfg.ledger)?;
+    writeln!(file, "{row}")?;
+    file.sync_data()
+}
+
+fn ntm_result_succeeded(output: &ChildOutput) -> bool {
+    success(output)
+        && serde_json::from_str::<Value>(&output.stdout)
+            .ok()
+            .and_then(|value| value.get("success").and_then(Value::as_bool))
+            == Some(true)
+}
+
+fn notify_dispatch_result(cfg: &Config, pane_id: Option<&str>, row: &str) -> Result<(), String> {
+    let pane_id = pane_id.ok_or_else(|| "result pane index 1 could not be resolved".to_owned())?;
+    let output = run_child(
+        Path::new(tick_monitor::NTM),
+        &dispatch_result_args(&cfg.session, pane_id, row),
+        &cfg.repo,
+        None,
+        &[],
+        Duration::from_secs(60),
+    )
+    .map_err(|error| format!("dispatch result notification failed to spawn: {error}"))?;
+    if ntm_result_succeeded(&output) {
+        return Ok(());
+    }
+    Err(format!(
+        "ntm result notification was not acknowledged: stdout={} stderr={}",
+        output.stdout.trim(),
+        output.stderr.trim()
+    ))
+}
+
 fn say(text: &str) {
     if !text.is_empty() {
         print!("{}{}", text, if text.ends_with('\n') { "" } else { "\n" });
@@ -583,7 +709,7 @@ fn wait_for_completion(cfg: &Config) -> bool {
         format!("--panes={}", cfg.pane),
         format!("--timeout={}", cfg.timeout),
     ];
-    match helper(cfg, Path::new("ntm"), &args, cfg.wait_hard_secs) {
+    match helper(cfg, Path::new(tick_monitor::NTM), &args, cfg.wait_hard_secs) {
         Ok(out) => {
             if out.timed_out {
                 println!(
@@ -689,9 +815,9 @@ fn ground_truth(cfg: &Config) {
 fn queue(cfg: &Config) -> io::Result<String> {
     let br = helper(
         cfg,
-        Path::new("br"),
+        Path::new(finding::BR),
         &[
-            "ready".into(),
+            loop_queue_filter::READY_SUBCOMMAND.into(),
             "--limit".into(),
             "0".into(),
             "--json".into(),
@@ -719,7 +845,7 @@ fn queue(cfg: &Config) -> io::Result<String> {
 
 fn description(cfg: &Config, bead: &str) -> (String, bool) {
     let args = vec!["show".into(), bead.into(), "--json".into()];
-    let Ok(out) = helper(cfg, Path::new("br"), &args, 60) else {
+    let Ok(out) = helper(cfg, Path::new(finding::BR), &args, 60) else {
         return ("(no description on this bead)".into(), false);
     };
     let Ok(value) = serde_json::from_str::<Value>(out.stdout.trim()) else {
@@ -842,12 +968,18 @@ fn admission(cfg: &Config) -> bool {
     say(&out.stderr);
     let rc = status_code(&out);
     if rc == 75 && fresh_pass(&ledger) {
-        println!("[{}] runtime admission: lock held by a worker; admitting on fresh standing PASS verdict", stamp());
+        println!(
+            "[{}] runtime admission: lock held by a worker; admitting on fresh standing PASS verdict",
+            stamp()
+        );
         append_row(cfg, json!({"event":"admitted_on_fresh_ledger","blocked_by":"check-lock","invoker":cfg.invoker,"invoker_proof":cfg.invoker_proof}).as_object().cloned().unwrap());
         return true;
     }
     if rc != 0 {
-        println!("[{}] runtime admission REFUSED — no admissible standing check.sh verdict; no packet sent", stamp());
+        println!(
+            "[{}] runtime admission REFUSED — no admissible standing check.sh verdict; no packet sent",
+            stamp()
+        );
         let reason = cfg.repo.join("bin/admission-reason.sh");
         if reason.is_file() {
             if let Ok(reason_out) = run_child(
@@ -875,8 +1007,14 @@ fn deadman(cfg: &Config, ready: usize, delivered: usize, reason: &str) {
     }
     let state = match std::env::var("DISPATCH_DEADMAN_STATE_FILE") {
         Ok(path) => path,
-        Err(_) => match std::env::var_os("HOME").filter(|v| !v.is_empty()).map(std::path::PathBuf::from) {
-            Some(home) => format!("{}/.local/state/flywheel/dispatcher-deadman.state", home.display()),
+        Err(_) => match std::env::var_os("HOME")
+            .filter(|v| !v.is_empty())
+            .map(std::path::PathBuf::from)
+        {
+            Some(home) => format!(
+                "{}/.local/state/flywheel/dispatcher-deadman.state",
+                home.display()
+            ),
             None => {
                 // `$HOME` unset: the deadman state location is unknowable; record the
                 // skip in the ledger rather than silently writing somewhere invented.
@@ -980,22 +1118,27 @@ fn dispatch(cfg: &Config, ready: &str, count: usize) -> i32 {
         "--".into(),
         "timeout".into(),
         "180".into(),
-        "ntm".into(),
-        format!("--robot-send={}", cfg.session),
+        tick_monitor::NTM.into(),
+        tick_monitor::ntm_send_arg(&cfg.session),
         "--all".into(),
         format!("--panes={}", cfg.pane),
         format!("--msg={message}"),
     ];
-    let output = run_child(
+    let output = match run_child(
         &cfg.fence,
         &args,
         &cfg.repo,
         None,
         &[],
         Duration::from_secs(240),
-    );
-    let Ok(output) = output else {
-        return 1;
+    ) {
+        Ok(output) => output,
+        Err(error) => ChildOutput {
+            status: None,
+            stdout: String::new(),
+            stderr: error.to_string(),
+            timed_out: false,
+        },
     };
     let _ = fs::write(
         cfg.state.join("loop-send.json"),
@@ -1006,6 +1149,68 @@ fn dispatch(cfg: &Config, ready: &str, count: usize) -> i32 {
             .ok()
             .and_then(|v| v.get("success").and_then(Value::as_bool))
             .unwrap_or(false);
+    let outcome = if sent {
+        "dispatch_transport_succeeded"
+    } else {
+        "dispatch_transport_failed"
+    };
+    let detail = if sent {
+        concat!("ntm robot", "-send returned success=true").to_owned()
+    } else {
+        format!(
+            concat!("ntm robot", "-send did not return success=true: stdout={} stderr={}"),
+            output.stdout.trim(),
+            output.stderr.trim()
+        )
+    };
+    let (result_pane_id, result_pane_resolved_at_unix, result_pane_resolution) =
+        match resolve_result_pane_id(cfg) {
+            Ok((pane_id, resolved_at_unix)) => (
+                Some(pane_id.clone()),
+                Some(resolved_at_unix),
+                format!("resolved from pane index {DISPATCH_RESULT_PANE}: {pane_id}"),
+            ),
+            Err(error) => (None, None, format!("pane index resolution failed: {error}")),
+        };
+    let result_row = dispatch_result_row(
+        "loop-tick",
+        &cfg.session,
+        &cfg.pane,
+        &cfg.epic,
+        outcome,
+        &detail,
+        "pane_free",
+        "free",
+        "loop-tick::pane_free",
+        result_pane_id.as_deref(),
+        &result_pane_resolution,
+        result_pane_resolved_at_unix,
+    );
+    if let Err(error) = append_dispatch_result(cfg, &result_row) {
+        println!("DISPATCH_RESULT_LEDGER_FAILED {error}");
+        return 1;
+    }
+    if let Err(error) = notify_dispatch_result(cfg, result_pane_id.as_deref(), &result_row) {
+        let notify_row = dispatch_result_row(
+            "loop-tick",
+            &cfg.session,
+            &cfg.pane,
+            &cfg.epic,
+            "dispatch_result_send_failed",
+            &error,
+            "pane_free",
+            "free",
+            "loop-tick::pane_free",
+            result_pane_id.as_deref(),
+            &result_pane_resolution,
+            result_pane_resolved_at_unix,
+        );
+        if let Err(ledger_error) = append_dispatch_result(cfg, &notify_row) {
+            println!("DISPATCH_RESULT_SEND_FAILED {error}; LEDGER_FAILED {ledger_error}");
+        } else {
+            println!("DISPATCH_RESULT_SEND_FAILED {error}");
+        }
+    }
     if sent {
         println!("[{}] DISPATCHED ok", stamp());
         append_row(cfg, json!({"event":"dispatched","epic":cfg.epic,"count":count,"pane":cfg.pane,"description_limit":1800,"description_truncated":descriptions_truncated,"invoker":cfg.invoker,"invoker_proof":cfg.invoker_proof}).as_object().cloned().unwrap());
@@ -1038,7 +1243,12 @@ pub fn run(args: &[String]) -> Result<i32, String> {
         Err(_) => {
             let lock_path = cfg.state.join("loop-tick.lock");
             let (holder_pid, holder_elapsed) = lock_holder(&lock_path);
-            println!("[{}] loop-tick REFUSED — another instance owns the live lock holder_pid={} holder_elapsed={}", stamp(), holder_pid, holder_elapsed);
+            println!(
+                "[{}] loop-tick REFUSED — another instance owns the live lock holder_pid={} holder_elapsed={}",
+                stamp(),
+                holder_pid,
+                holder_elapsed
+            );
             append_row(&cfg, json!({"event":"lock_blocked","reason":"live_instance","holder_pid":holder_pid,"holder_elapsed":holder_elapsed,"invoker":cfg.invoker,"invoker_proof":cfg.invoker_proof}).as_object().cloned().unwrap());
             return Ok(75);
         }
@@ -1122,9 +1332,9 @@ pub fn run(args: &[String]) -> Result<i32, String> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use std::thread;
     use std::time::Instant;
-    use super::*;
 
     #[test]
     fn mutation_busy_pane_is_load_bearing() {
@@ -1182,7 +1392,9 @@ mod tests {
             dispatch_allowed(input, mutated),
             "MUTATION RED admission_gate: deleted admission refusal dispatched"
         );
-        println!("MUTATION RED admission_gate — deleting standing verdict refusal changes refusal to dispatch");
+        println!(
+            "MUTATION RED admission_gate — deleting standing verdict refusal changes refusal to dispatch"
+        );
     }
 
     #[test]
@@ -1324,7 +1536,6 @@ mod tests {
         println!("NO-SILENT-TRUNCATION PASS — description_limit=1800 residue=1");
     }
 
-
     /// A deadline must kill the GRANDCHILDREN too, and it must do so through the PRODUCTION
     /// path, not a helper.
     ///
@@ -1385,4 +1596,50 @@ mod tests {
         );
     }
 
+    #[test]
+    fn dispatch_result_args_target_pane_one_and_retain_surface_confidence() {
+        let row = dispatch_result_row(
+            "loop-tick",
+            "demo",
+            "2",
+            "epic-1",
+            "dispatch_transport_succeeded",
+            concat!("ntm robot", "-send returned success=true"),
+            "pane_free",
+            "free",
+            "loop-tick::pane_free",
+            Some("%99"),
+            "resolved from pane index 1: %99",
+            Some(1_710_000_000),
+        );
+        let args = dispatch_result_args("demo", "%99", &row);
+        assert_eq!(args[0], tick_monitor::ntm_send_arg("demo"));
+        assert_eq!(args[1], "--panes=%99");
+        let value: Value = serde_json::from_str(args[2].strip_prefix("--msg=").unwrap()).unwrap();
+        assert_eq!(value["bead_or_epic"], "epic-1");
+        assert_eq!(value["result_pane_id"], "%99");
+        assert_eq!(value["surface"]["confidence"], "unquantified");
+        assert_eq!(value["result_pane_resolved_at_unix"], 1_710_000_000);
+    }
+
+    #[test]
+    fn failed_result_keeps_failure_outcome() {
+        let row = dispatch_result_row(
+            "loop-tick",
+            "demo",
+            "2",
+            "epic-1",
+            "dispatch_transport_failed",
+            "result notification is independent of transport outcome",
+            "pane_free",
+            "free",
+            "loop-tick::pane_free",
+            Some("%99"),
+            "resolved from pane index 1: %99",
+            Some(1_710_000_000),
+        );
+        let value: Value = serde_json::from_str(&row).unwrap();
+        assert_eq!(value["outcome"], "dispatch_transport_failed");
+        assert_eq!(value["surface"]["source"], "loop-tick::pane_free");
+    }
 }

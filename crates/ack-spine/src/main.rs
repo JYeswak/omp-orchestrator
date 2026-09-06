@@ -85,8 +85,9 @@ async fn run(cx: &Cx, args: &[String]) -> Result<ExitCode, String> {
             // completion is the malformed case the classifier escalates, and the
             // emitter is the one place it can be prevented rather than reported.
             let rendered = row.to_string();
-            ack_spine::completion::parse_completion(&rendered, bead)
-                .map_err(|error| format!("COMPLETION_UNPARSEABLE detail={error:?} row={rendered}"))?;
+            ack_spine::completion::parse_completion(&rendered, bead).map_err(|error| {
+                format!("COMPLETION_UNPARSEABLE detail={error:?} row={rendered}")
+            })?;
             println!("{rendered}");
             Ok(ExitCode::SUCCESS)
         }
@@ -104,6 +105,12 @@ async fn demo(cx: &Cx) -> Result<(), String> {
     let bead = "cp-example";
     let pane = "%5";
     let session = "omp-orchestrator";
+    let bead_selected = format!(
+        "{} {} selected",
+        finding::BR,
+        loop_queue_filter::READY_SUBCOMMAND
+    );
+    let packet_sent = format!("{} {}", tick_monitor::NTM, tick_monitor::ntm_send_flag());
 
     step(
         cx,
@@ -112,7 +119,7 @@ async fn demo(cx: &Cx) -> Result<(), String> {
         bead,
         pane,
         session,
-        "br ready selected",
+        &bead_selected,
         |_| async {},
     )
     .await
@@ -148,7 +155,7 @@ async fn demo(cx: &Cx) -> Result<(), String> {
         bead,
         pane,
         session,
-        "ntm robot-send",
+        &packet_sent,
         |_| async {},
     )
     .await
@@ -272,7 +279,10 @@ async fn selftest(cx: &Cx) -> Result<(), String> {
     println!(
         "SELFTEST PASS ack-spine (ledger assertions, anti-vacuity, cancel-consistency, \
          durable-path ownership; marker root {})",
-        pending.parent().map(|p| p.display().to_string()).unwrap_or_default()
+        pending
+            .parent()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default()
     );
     Ok(())
 }
@@ -369,8 +379,7 @@ async fn spine_demo(cx: &Cx) -> Result<(), String> {
     // This is also the production caller `scratch-home` was missing: wired_lanes
     // reported UNWIRED LANE: scratch-home, and UNWIRED_LANE_ALLOWANCE is empty by
     // design, so the crate had to be genuinely USED rather than exempted.
-    let pending_path =
-        durable_pending_path("omp-orchestrator", "ack-spine", "spine-demo", "josh")?;
+    let pending_path = durable_pending_path("omp-orchestrator", "ack-spine", "spine-demo", "josh")?;
     // Belt AND braces: the resolver cannot currently return a temp path, and this
     // asserts it anyway, because the next edit to the resolver is the one that
     // reintroduces the defect.

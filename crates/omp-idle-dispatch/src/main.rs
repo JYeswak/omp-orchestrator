@@ -7,19 +7,18 @@
 //! than an empty successful queue.
 
 use omp_idle_dispatch::{
-    blocker_fields, classify_capture, classify_tick, confirm_capture_pair, pick_beads,
-    recently_dispatched, receiver_transition, render_packet, plan_queues, IdleDispatchPaneState, TickVerdict,
-    DEFAULT_COOLDOWN_SECONDS, DEFAULT_CONFIRM_SECONDS, LANE, QUEUE_WIDTH,
+    blocker_fields, classify_capture, classify_tick, confirm_capture_pair, pick_beads, plan_queues,
+    receiver_transition, recently_dispatched, render_packet, IdleDispatchPaneState, TickVerdict,
+    DEFAULT_CONFIRM_SECONDS, DEFAULT_COOLDOWN_SECONDS, LANE, QUEUE_WIDTH,
 };
 use serde_json::{json, Value};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-#[cfg(unix)]
-use std::os::unix::process::CommandExt;
+use subprocess_contract::{bounded_output, bounded_status, BoundedOutcome};
 
 const COMMAND_TIMEOUT_SECONDS: u64 = 30;
 const DEFAULT_RECEIVER_PROOF_SECONDS: u64 = 30;
@@ -99,7 +98,6 @@ impl std::fmt::Display for ConfigError {
     }
 }
 
-
 #[derive(Debug)]
 enum CommandError {
     Spawn { program: String, message: String },
@@ -112,7 +110,9 @@ impl CommandError {
         match self {
             Self::Spawn { program, message } => format!("{program}: {message}"),
             Self::Failed { program, code } => format!("{program} exited {:?}", code),
-            Self::TimedOut { program, seconds } => format!("{program} exceeded {seconds}s deadline"),
+            Self::TimedOut { program, seconds } => {
+                format!("{program} exceeded {seconds}s deadline")
+            }
         }
     }
 }
@@ -127,7 +127,10 @@ struct DispatchLock {
 impl DispatchLock {
     fn acquire(path: impl Into<PathBuf>) -> io::Result<Self> {
         let path = path.into();
-        let file = OpenOptions::new().write(true).create_new(true).open(&path)?;
+        let file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)?;
         Ok(Self { path, _file: file })
     }
 }
@@ -155,7 +158,10 @@ fn env_u64(key: &str, fallback: u64) -> u64 {
 fn discover_repo_root(start: &Path) -> Option<PathBuf> {
     let mut current = Some(start);
     while let Some(directory) = current {
-        if REPO_MARKERS.iter().any(|marker| directory.join(marker).exists()) {
+        if REPO_MARKERS
+            .iter()
+            .any(|marker| directory.join(marker).exists())
+        {
             return Some(directory.to_path_buf());
         }
         current = directory.parent();
@@ -174,17 +180,23 @@ fn resolve_repo_root(
 ) -> Result<PathBuf, ConfigError> {
     if let Some(flag) = flag {
         if flag.trim().is_empty() {
-            return Err(ConfigError::ExplicitEmpty { source: "--repo".to_owned() });
+            return Err(ConfigError::ExplicitEmpty {
+                source: "--repo".to_owned(),
+            });
         }
         return Ok(PathBuf::from(flag));
     }
     if let Some(value) = env_value {
         if value.trim().is_empty() {
-            return Err(ConfigError::ExplicitEmpty { source: REPO_ENV.to_owned() });
+            return Err(ConfigError::ExplicitEmpty {
+                source: REPO_ENV.to_owned(),
+            });
         }
         return Ok(PathBuf::from(value));
     }
-    discover_repo_root(start).ok_or_else(|| ConfigError::RepoNotFound { from: start.to_path_buf() })
+    discover_repo_root(start).ok_or_else(|| ConfigError::RepoNotFound {
+        from: start.to_path_buf(),
+    })
 }
 
 /// `$HOME`, or a typed error. Never a guessed literal.
@@ -208,7 +220,10 @@ fn resolve_ledger() -> Result<PathBuf, ConfigError> {
 /// moved checkout (for example omp-orchestrator) resolves its own session instead of
 /// silently targeting a session that no longer matches the repository.
 fn session_name(repo: &Path) -> String {
-    if let Some(session) = std::env::var(SESSION_ENV).ok().filter(|value| !value.trim().is_empty()) {
+    if let Some(session) = std::env::var(SESSION_ENV)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+    {
         return session;
     }
     // No invented fallback: a repo path with no basename is pathological, and an empty
@@ -243,80 +258,44 @@ fn configure_command(command: &mut Command, cwd: Option<&Path>) {
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
     }
-    #[cfg(unix)]
-    {
-        command.process_group(0);
-    }
 }
 
-fn terminate_process_group(pid: u32, signal: &str) {
-    #[cfg(unix)]
-    {
-        let target = format!("-{pid}");
-        let _ = Command::new("/bin/kill")
-            .args([signal, target.as_str()])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = (pid, signal);
-    }
-}
 
 fn run_bounded(mut command: Command, program: &str, capture: bool) -> Result<String, CommandError> {
-    if capture {
-        command.stdout(Stdio::piped());
+    let outcome = if capture {
+        bounded_output(&mut command, Duration::from_secs(COMMAND_TIMEOUT_SECONDS))
     } else {
         command.stdout(Stdio::null());
-    }
-    let mut child: Child = command.spawn().map_err(|error| CommandError::Spawn {
-        program: program.to_string(),
-        message: error.to_string(),
-    })?;
-    let reader = child.stdout.take().map(|mut stdout| {
-        thread::spawn(move || {
-            let mut bytes = Vec::new();
-            stdout.read_to_end(&mut bytes).map(|_| bytes)
-        })
-    });
-    let deadline = Instant::now() + Duration::from_secs(COMMAND_TIMEOUT_SECONDS);
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(20)),
-            Ok(None) => {
-                terminate_process_group(child.id(), "-TERM");
-                thread::sleep(Duration::from_millis(50));
-                terminate_process_group(child.id(), "-KILL");
-                let _ = child.kill();
-                let _ = child.wait();
-                if let Some(reader) = reader {
-                    let _ = reader.join();
-                }
-                return Err(CommandError::TimedOut { program: program.to_string(), seconds: COMMAND_TIMEOUT_SECONDS });
-            }
-            Err(error) => {
-                terminate_process_group(child.id(), "-KILL");
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(CommandError::Spawn { program: program.to_string(), message: error.to_string() });
+        bounded_status(&mut command, Duration::from_secs(COMMAND_TIMEOUT_SECONDS))
+    };
+    match outcome {
+        BoundedOutcome::Completed(output) if output.status.success() => {
+            if capture {
+                Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+            } else {
+                Ok(String::new())
             }
         }
-    };
-    let bytes = reader
-        .and_then(|reader| reader.join().ok())
-        .and_then(Result::ok)
-        .unwrap_or_default();
-    if !status.success() {
-        return Err(CommandError::Failed { program: program.to_string(), code: status.code() });
+        BoundedOutcome::Completed(output) => Err(CommandError::Failed {
+            program: program.to_string(),
+            code: output.status.code(),
+        }),
+        BoundedOutcome::TimedOut => Err(CommandError::TimedOut {
+            program: program.to_string(),
+            seconds: COMMAND_TIMEOUT_SECONDS,
+        }),
+        BoundedOutcome::Unspawned(error) => Err(CommandError::Spawn {
+            program: program.to_string(),
+            message: error.to_string(),
+        }),
     }
-    Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
-fn command_output(program: &str, args: &[&str], cwd: Option<&Path>) -> Result<String, CommandError> {
+fn command_output(
+    program: &str,
+    args: &[&str],
+    cwd: Option<&Path>,
+) -> Result<String, CommandError> {
     let mut command = Command::new(program);
     command.args(args);
     configure_command(&mut command, cwd);
@@ -347,7 +326,8 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
     let z = days + 719_468;
     let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
     let day_of_era = z - era * 146_097;
-    let year_of_era = (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
     let year = year_of_era + era * 400;
     let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
     let month_prime = (5 * day_of_year + 2) / 153;
@@ -439,18 +419,22 @@ fn lock_or_report(path: &Path) -> Option<DispatchLock> {
     match DispatchLock::acquire(path) {
         Ok(lock) => Some(lock),
         Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-            emit(json!({ "schema": "omp-idle-dispatch.error.v1", "lane": LANE, "error": "ALREADY_RUNNING" }));
+            emit(
+                json!({ "schema": "omp-idle-dispatch.error.v1", "lane": LANE, "error": "ALREADY_RUNNING" }),
+            );
             None
         }
         Err(error) => {
-            emit(json!({ "schema": "omp-idle-dispatch.error.v1", "lane": LANE, "error": "lock_failed", "detail": error.to_string() }));
+            emit(
+                json!({ "schema": "omp-idle-dispatch.error.v1", "lane": LANE, "error": "lock_failed", "detail": error.to_string() }),
+            );
             None
         }
     }
 }
 
 fn capture_pane(pane: &str) -> Result<String, CommandError> {
-    command_output("tmux", &["capture-pane", "-p", "-t", pane], None)
+    command_output(tick_monitor::TMUX, &[tick_monitor::CAPTURE_PANE, "-p", "-t", pane], None)
 }
 
 /// Confirm a sender success by observing the target pane enter the named bead's working state.
@@ -458,7 +442,8 @@ fn capture_pane(pane: &str) -> Result<String, CommandError> {
 /// `ntm`'s return status is only dispatch-record evidence. The receiver proof is a separate,
 /// target-observed capture transition, bounded by the same command deadline and polled for state.
 fn receiver_proof(pane: &str, before: &str, bead_id: &str) -> bool {
-    let seconds = env_u64(RECEIVER_PROOF_ENV, DEFAULT_RECEIVER_PROOF_SECONDS).min(COMMAND_TIMEOUT_SECONDS);
+    let seconds =
+        env_u64(RECEIVER_PROOF_ENV, DEFAULT_RECEIVER_PROOF_SECONDS).min(COMMAND_TIMEOUT_SECONDS);
     let deadline = Instant::now() + Duration::from_secs(seconds);
     loop {
         if let Ok(after) = capture_pane(pane) {
@@ -475,13 +460,26 @@ fn receiver_proof(pane: &str, before: &str, bead_id: &str) -> bool {
 }
 
 fn live_panes(session: &str) -> Result<Vec<String>, CommandError> {
-    let output = command_output("tmux", &["list-panes", "-t", session, "-F", "#{pane_id}"], None)?;
-    Ok(output.lines().map(str::trim).filter(|line| !line.is_empty()).map(str::to_string).collect())
+    let output = command_output(
+        tick_monitor::TMUX,
+        &["list-panes", "-t", session, "-F", "#{pane_id}"],
+        None,
+    )?;
+    Ok(output
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(str::to_string)
+        .collect())
 }
 
 fn pane_index(pane: &str) -> Result<String, CommandError> {
-    command_output("tmux", &["display-message", "-p", "-t", pane, "#{pane_index}"], None)
-        .map(|value| value.trim().to_string())
+    command_output(
+        tick_monitor::TMUX,
+        &["display-message", "-p", "-t", pane, "#{pane_index}"],
+        None,
+    )
+    .map(|value| value.trim().to_string())
 }
 
 fn run_tick(dry_run: bool, repo: &Path) -> u8 {
@@ -493,29 +491,40 @@ fn run_tick(dry_run: bool, repo: &Path) -> u8 {
         Err(error) => return config_error_exit(&error),
     };
     let lock_path = PathBuf::from(env_or("OMP_DISPATCH_LOCK", DEFAULT_LOCK));
-    let Some(_lock) = lock_or_report(&lock_path) else { return 75 };
+    let Some(_lock) = lock_or_report(&lock_path) else {
+        return 75;
+    };
     let panes = match live_panes(&session) {
         Ok(panes) if !panes.is_empty() => panes,
         Ok(_) => {
-            emit(json!({ "schema": "omp-idle-dispatch.error.v1", "lane": LANE, "error": "no_panes_visible" }));
+            emit(
+                json!({ "schema": "omp-idle-dispatch.error.v1", "lane": LANE, "error": "no_panes_visible" }),
+            );
             return NO_PANES_EXIT;
         }
         Err(error) => {
-            emit(json!({ "schema": "omp-idle-dispatch.error.v1", "lane": LANE, "error": "pane_probe_failed", "detail": error.message() }));
+            emit(
+                json!({ "schema": "omp-idle-dispatch.error.v1", "lane": LANE, "error": "pane_probe_failed", "detail": error.message() }),
+            );
             return NO_PANES_EXIT;
         }
     };
-    let ready_json = match command_output("br", &["ready", "--limit", "0", "--json"], Some(repo)) {
+    let ready_json = match command_output(finding::BR, &[loop_queue_filter::READY_SUBCOMMAND, "--limit", "0", "--json"], Some(repo)) {
         Ok(output) => output,
         Err(error) => {
-            emit(json!({ "schema": "omp-idle-dispatch.error.v1", "lane": LANE, "error": "ready_probe_failed", "detail": error.message() }));
+            emit(
+                json!({ "schema": "omp-idle-dispatch.error.v1", "lane": LANE, "error": "ready_probe_failed", "detail": error.message() }),
+            );
             return NO_PANES_EXIT;
         }
     };
     let beads = pick_beads(&ready_json, 12);
     let ready_count = match serde_json::from_str::<Value>(&ready_json) {
         Ok(Value::Array(rows)) => rows.len(),
-        Ok(Value::Object(object)) => object.get("issues").and_then(Value::as_array).map_or(0, Vec::len),
+        Ok(Value::Object(object)) => object
+            .get("issues")
+            .and_then(Value::as_array)
+            .map_or(0, Vec::len),
         _ => 0,
     };
     let ledger_text = fs::read_to_string(&ledger).unwrap_or_default();
@@ -557,9 +566,14 @@ fn run_tick(dry_run: bool, repo: &Path) -> u8 {
         }
         let plan = plan_queues(&beads, 1, cursor);
         cursor = plan.next_cursor;
-        let Some(queue) = plan.pane_queues.first() else { break };
+        let Some(queue) = plan.pane_queues.first() else {
+            break;
+        };
         let packet = render_packet(&utc_timestamp(SystemTime::now()), ready_count, queue);
-        let first_bead = queue.first().map(|bead| bead.id.clone()).unwrap_or_default();
+        let first_bead = queue
+            .first()
+            .map(|bead| bead.id.clone())
+            .unwrap_or_default();
         if dry_run {
             println!("DRY-RUN would dispatch pane={pane} bead={first_bead}");
             dispatched += 1;
@@ -569,71 +583,94 @@ fn run_tick(dry_run: bool, repo: &Path) -> u8 {
             Ok(index) if !index.is_empty() => index,
             _ => {
                 send_failed = true;
-                let _ = append_ledger(&ledger, json!({ "ts": utc_timestamp(SystemTime::now()), "lane": LANE, "verdict": "RED", "cause": "pane_index_failed", "pane": pane, "action": "send_failed", "invoker": invoker_name, "invoker_proof": invoker_proof }));
+                let _ = append_ledger(
+                    &ledger,
+                    json!({ "ts": utc_timestamp(SystemTime::now()), "lane": LANE, "verdict": "RED", "cause": "pane_index_failed", "pane": pane, "action": "send_failed", "invoker": invoker_name, "invoker_proof": invoker_proof }),
+                );
                 continue;
             }
         };
         let args = vec![
-            format!("--robot-send={session}"),
+            tick_monitor::ntm_send_arg(&session),
             format!("--panes={index}"),
             format!("--msg={packet}"),
         ];
-        match command_status("ntm", &args, None) {
+        match command_status(tick_monitor::NTM, &args, None) {
             Ok(()) if receiver_proof(&pane, &second, &first_bead) => {
                 dispatched += 1;
-                let _ = append_ledger(&ledger, json!({
-                    "ts": utc_timestamp(SystemTime::now()),
-                    "lane": LANE,
-                    "verdict": "GREEN",
-                    "product_moved": true,
-                    "receiver_proof": "target_state_transition",
-                    "pane": pane,
-                    "action": "dispatched",
-                    "bead": first_bead,
-                    "ready": ready_count,
-                    "invoker": invoker_name,
-                    "invoker_proof": invoker_proof
-                }));
+                let _ = append_ledger(
+                    &ledger,
+                    json!({
+                        "ts": utc_timestamp(SystemTime::now()),
+                        "lane": LANE,
+                        "verdict": "GREEN",
+                        "product_moved": true,
+                        "receiver_proof": "target_state_transition",
+                        "pane": pane,
+                        "action": "dispatched",
+                        "bead": first_bead,
+                        "ready": ready_count,
+                        "invoker": invoker_name,
+                        "invoker_proof": invoker_proof
+                    }),
+                );
             }
             Ok(()) => {
                 send_failed = true;
-                let _ = append_ledger(&ledger, json!({
-                    "ts": utc_timestamp(SystemTime::now()),
-                    "lane": LANE,
-                    "verdict": "RED",
-                    "cause": "receiver_proof_failed",
-                    "sender_ok": true,
-                    "receiver_proof": false,
-                    "product_moved": false,
-                    "pane": pane,
-                    "action": "send_returned_without_target_transition",
-                    "bead": first_bead,
-                    "invoker": invoker_name,
-                    "invoker_proof": invoker_proof
-                }));
+                let _ = append_ledger(
+                    &ledger,
+                    json!({
+                        "ts": utc_timestamp(SystemTime::now()),
+                        "lane": LANE,
+                        "verdict": "RED",
+                        "cause": "receiver_proof_failed",
+                        "sender_ok": true,
+                        "receiver_proof": false,
+                        "product_moved": false,
+                        "pane": pane,
+                        "action": "send_returned_without_target_transition",
+                        "bead": first_bead,
+                        "invoker": invoker_name,
+                        "invoker_proof": invoker_proof
+                    }),
+                );
             }
             Err(error) => {
                 send_failed = true;
-                let _ = append_ledger(&ledger, json!({
-                    "ts": utc_timestamp(SystemTime::now()),
-                    "lane": LANE,
-                    "verdict": "RED",
-                    "cause": "send_failed",
-                    "detail": error.message(),
-                    "pane": pane,
-                    "action": "send_failed",
-                    "invoker": invoker_name,
-                    "invoker_proof": invoker_proof
-                }));
+                let _ = append_ledger(
+                    &ledger,
+                    json!({
+                        "ts": utc_timestamp(SystemTime::now()),
+                        "lane": LANE,
+                        "verdict": "RED",
+                        "cause": "send_failed",
+                        "detail": error.message(),
+                        "pane": pane,
+                        "action": "send_failed",
+                        "invoker": invoker_name,
+                        "invoker_proof": invoker_proof
+                    }),
+                );
             }
         }
     }
     let verdict = classify_tick(omp_seen, idle_found, dispatched, send_failed);
-    if let Some((blocker, escalation)) = blocker_fields(verdict, omp_seen, idle_found, ready_count, dispatched) {
-        let _ = append_ledger(&ledger, json!({ "ts": utc_timestamp(SystemTime::now()), "lane": LANE, "verdict": verdict.as_str(), "external_blocker": blocker, "escalation_action": escalation, "ready": ready_count, "invoker": invoker_name, "invoker_proof": invoker_proof }));
+    if let Some((blocker, escalation)) =
+        blocker_fields(verdict, omp_seen, idle_found, ready_count, dispatched)
+    {
+        let _ = append_ledger(
+            &ledger,
+            json!({ "ts": utc_timestamp(SystemTime::now()), "lane": LANE, "verdict": verdict.as_str(), "external_blocker": blocker, "escalation_action": escalation, "ready": ready_count, "invoker": invoker_name, "invoker_proof": invoker_proof }),
+        );
     }
-    emit(json!({ "schema": "omp-idle-dispatch.tick.v1", "lane": LANE, "verdict": verdict.as_str(), "idle": idle_found, "omp_seen": omp_seen, "dispatched": dispatched, "cooldown_skipped": cooldown_skipped, "ready": ready_count, "invoker": invoker_name, "invoker_proof": invoker_proof, "queue_width": QUEUE_WIDTH, "dry_run": dry_run }));
-    if verdict == TickVerdict::RedSendFailed { 1 } else { 0 }
+    emit(
+        json!({ "schema": "omp-idle-dispatch.tick.v1", "lane": LANE, "verdict": verdict.as_str(), "idle": idle_found, "omp_seen": omp_seen, "dispatched": dispatched, "cooldown_skipped": cooldown_skipped, "ready": ready_count, "invoker": invoker_name, "invoker_proof": invoker_proof, "queue_width": QUEUE_WIDTH, "dry_run": dry_run }),
+    );
+    if verdict == TickVerdict::RedSendFailed {
+        1
+    } else {
+        0
+    }
 }
 
 fn selftest() -> u8 {
@@ -655,8 +692,14 @@ fn selftest() -> u8 {
         classify_tick(3, 1, 0, true).as_str() == "RED",
     ];
     let passed = tests.iter().filter(|value| **value).count();
-    emit(json!({ "schema": "omp-idle-dispatch.selftest.v1", "passed": passed, "total": tests.len(), "ok": passed == tests.len(), "mutation": "first-banner-without-tail-anchor=WORKING" }));
-    if passed == tests.len() { 0 } else { 1 }
+    emit(
+        json!({ "schema": "omp-idle-dispatch.selftest.v1", "passed": passed, "total": tests.len(), "ok": passed == tests.len(), "mutation": "first-banner-without-tail-anchor=WORKING" }),
+    );
+    if passed == tests.len() {
+        0
+    } else {
+        1
+    }
 }
 
 fn usage() {
@@ -740,12 +783,11 @@ fn prepare_runtime_environment() -> Result<(), StartupError> {
             home.join(".tmux-sockets")
         }
     };
-    let metadata = std::fs::metadata(&tmux_tmpdir).map_err(|error| {
-        StartupError::TmuxTmpDirUnusable {
+    let metadata =
+        std::fs::metadata(&tmux_tmpdir).map_err(|error| StartupError::TmuxTmpDirUnusable {
             path: tmux_tmpdir.clone(),
             reason: error.to_string(),
-        }
-    })?;
+        })?;
     if !metadata.is_dir() {
         return Err(StartupError::TmuxTmpDirUnusable {
             path: tmux_tmpdir,
@@ -879,11 +921,16 @@ mod tests {
         .expect("flag must win");
         assert_eq!(resolved, flag_target.path());
 
-        let resolved = resolve_repo_root(None, Some(env_target.path().to_string_lossy().into_owned()), &nested)
-            .expect("env must win over discovery");
+        let resolved = resolve_repo_root(
+            None,
+            Some(env_target.path().to_string_lossy().into_owned()),
+            &nested,
+        )
+        .expect("env must win over discovery");
         assert_eq!(resolved, env_target.path());
 
-        let resolved = resolve_repo_root(None, None, &nested).expect("discovery must find the marker");
+        let resolved =
+            resolve_repo_root(None, None, &nested).expect("discovery must find the marker");
         assert_eq!(resolved, root.path());
     }
 
@@ -893,13 +940,19 @@ mod tests {
         let nested = git_root.path().join("deeply/nested");
         fs::create_dir_all(&nested).expect("create nested directory");
         fs::create_dir(git_root.path().join(".git")).expect("create .git marker");
-        assert_eq!(discover_repo_root(&nested), Some(git_root.path().to_path_buf()));
+        assert_eq!(
+            discover_repo_root(&nested),
+            Some(git_root.path().to_path_buf())
+        );
 
         let beads_root = TempDir::create("beads-marker");
         let nested = beads_root.path().join("x");
         fs::create_dir_all(&nested).expect("create nested directory");
         fs::create_dir(beads_root.path().join(".beads")).expect("create .beads marker");
-        assert_eq!(discover_repo_root(&nested), Some(beads_root.path().to_path_buf()));
+        assert_eq!(
+            discover_repo_root(&nested),
+            Some(beads_root.path().to_path_buf())
+        );
     }
 
     #[test]
@@ -914,7 +967,10 @@ mod tests {
         // The temp dir itself is clean; walk-up stops at the first marker, so plant the
         // start below a marker-free subtree by also asserting the error TYPE first.
         let error = match resolve_repo_root(None, None, &start) {
-            Ok(found) => panic!("a marker-free directory must not resolve; found {}", found.display()),
+            Ok(found) => panic!(
+                "a marker-free directory must not resolve; found {}",
+                found.display()
+            ),
             Err(error) => error,
         };
         // KNOWN-BAD: the error must be the typed RepoNotFound naming the markers.
@@ -923,21 +979,44 @@ mod tests {
             "wrong error for a marker-free directory: {error:?}"
         );
         let message = error.to_string();
-        assert!(message.contains(".git") && message.contains(".beads"), "message must name the markers: {message}");
-        assert!(message.contains(start.to_string_lossy().as_ref()), "message must name the start directory: {message}");
-        assert!(message.contains(REPO_ENV), "message must name the escape hatch env: {message}");
+        assert!(
+            message.contains(".git") && message.contains(".beads"),
+            "message must name the markers: {message}"
+        );
+        assert!(
+            message.contains(start.to_string_lossy().as_ref()),
+            "message must name the start directory: {message}"
+        );
+        assert!(
+            message.contains(REPO_ENV),
+            "message must name the escape hatch env: {message}"
+        );
     }
 
     #[test]
     fn empty_explicit_sources_are_errors_not_defaults() {
         let start = Path::new("/");
-        let error = resolve_repo_root(Some("   "), None, start).expect_err("empty --repo is an error");
-        assert!(matches!(error, ConfigError::ExplicitEmpty { .. }), "wrong error: {error:?}");
-        assert!(error.to_string().contains("--repo"), "message must name --repo: {error}");
+        let error =
+            resolve_repo_root(Some("   "), None, start).expect_err("empty --repo is an error");
+        assert!(
+            matches!(error, ConfigError::ExplicitEmpty { .. }),
+            "wrong error: {error:?}"
+        );
+        assert!(
+            error.to_string().contains("--repo"),
+            "message must name --repo: {error}"
+        );
 
-        let error = resolve_repo_root(None, Some(String::new()), start).expect_err("empty env is an error");
-        assert!(matches!(error, ConfigError::ExplicitEmpty { .. }), "wrong error: {error:?}");
-        assert!(error.to_string().contains(REPO_ENV), "message must name the env var: {error}");
+        let error =
+            resolve_repo_root(None, Some(String::new()), start).expect_err("empty env is an error");
+        assert!(
+            matches!(error, ConfigError::ExplicitEmpty { .. }),
+            "wrong error: {error:?}"
+        );
+        assert!(
+            error.to_string().contains(REPO_ENV),
+            "message must name the env var: {error}"
+        );
     }
     /// The home-path literal this gate forbids. Built by `concat!` so the scanning source
     /// itself never contains the contiguous literal (the gate must not catch its own needle).
@@ -975,7 +1054,11 @@ mod tests {
         let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let (hits, scanned) = hardcoded_user_path_hits(&src);
         // Anti-vacuity: a scan that saw no source files proves nothing.
-        assert!(scanned >= 2, "vacuous scan: only {scanned} source files under {}", src.display());
+        assert!(
+            scanned >= 2,
+            "vacuous scan: only {scanned} source files under {}",
+            src.display()
+        );
         assert!(
             hits.is_empty(),
             "hardcoded home-path literal(s) reintroduced (this test exists so a \

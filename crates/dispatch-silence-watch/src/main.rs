@@ -48,7 +48,7 @@ fn main() -> ExitCode {
     // READ BACK the comments — the authority for VERDICT_POSTED. Bounded:
     // a wedged br must produce a typed TRACKER_ERROR, never an unbounded
     // stall and never an empty read that parses as "no verdict posted".
-    let mut comments_command = Command::new("br");
+    let mut comments_command = Command::new(finding::BR);
     comments_command.args(["comments", "list", bead_id]);
     comments_command.current_dir(repo);
     let comments_output = match dispatch_silence_watch::tracker_read_from(
@@ -62,7 +62,7 @@ fn main() -> ExitCode {
     };
 
     // READ BACK the bead's current assignee - same bounded, typed contract.
-    let mut show_command = Command::new("br");
+    let mut show_command = Command::new(finding::BR);
     show_command.args(["show", bead_id, "--json"]);
     show_command.current_dir(repo);
     let current_assignee = match dispatch_silence_watch::tracker_read_from(
@@ -85,7 +85,10 @@ fn main() -> ExitCode {
         deadline_secs,
     );
 
-    println!("bead={bead_id} verdict={verdict} detector={}", verdict.detector());
+    println!(
+        "bead={bead_id} verdict={verdict} detector={}",
+        verdict.detector()
+    );
     if verdict == dispatch_silence_watch::SilenceVerdict::SilentPastDeadline {
         println!(
             "action=re-dispatch or escalate; dispatch_assignee={dispatch_assignee} dispatch_epoch={dispatch_epoch} deadline_secs={deadline_secs}"

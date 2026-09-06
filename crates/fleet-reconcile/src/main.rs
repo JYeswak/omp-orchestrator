@@ -207,17 +207,17 @@ fn read_inputs() -> Result<(String, String, String, String), String> {
             read("ft-state.json"),
         ));
     }
-    let mut tmux = Command::new("tmux");
+    let mut tmux = Command::new(tick_monitor::TMUX);
     tmux.args(["list-sessions", "-F", "#{session_name}"]);
     let tmux_sessions = completed("tmux sessions", spawn_timeout(tmux, observe_timeout()))
         .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
         .unwrap_or_default();
-    let mut ntm_l = Command::new("ntm");
+    let mut ntm_l = Command::new(tick_monitor::NTM);
     ntm_l.arg("list");
     let ntm_list = completed("ntm list", spawn_timeout(ntm_l, observe_timeout()))
         .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
         .unwrap_or_default();
-    let mut ntm_s = Command::new("ntm");
+    let mut ntm_s = Command::new(tick_monitor::NTM);
     ntm_s.arg("--robot-snapshot");
     let ntm_snap = completed("ntm snapshot", spawn_timeout(ntm_s, observe_timeout()))
         .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
@@ -298,8 +298,11 @@ fn run_selftest(_json: bool) -> ExitCode {
     let mut run_leg = |name: &str, want_det: &str, want_ver: &str, want_rc: i32| {
         let mut cmd = Command::new(&exe);
         cmd.arg("--json").env("FLEET_RECONCILE_FIXTURE_DIR", &fix);
-        let out = completed("fleet-reconcile selftest", spawn_timeout(cmd, Duration::from_secs(15)))
-            .expect("selftest spawn");
+        let out = completed(
+            "fleet-reconcile selftest",
+            spawn_timeout(cmd, Duration::from_secs(15)),
+        )
+        .expect("selftest spawn");
         let rc = out.status.code().unwrap_or(99);
         let text = String::from_utf8_lossy(&out.stdout);
         let v: serde_json::Value =

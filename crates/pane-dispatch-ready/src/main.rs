@@ -241,13 +241,18 @@ fn classify_with_composer(
     apply_composer_rc(v, rc, &path, rules)
 }
 
+fn floored_capture_interval(requested: Option<u64>) -> u64 {
+    requested
+        .unwrap_or(TWO_CAPTURE_MIN_SECS)
+        .max(TWO_CAPTURE_MIN_SECS)
+}
 fn run_live(
     json_out: bool,
     sessions: &[String],
     pane_filter: Option<&str>,
     rules: &PaneDispatchReadyRules,
 ) -> ExitCode {
-    let mut tmv = Command::new("tmux");
+    let mut tmv = Command::new(tick_monitor::TMUX);
     tmv.arg("-V");
     let tmux_unhealthy = match spawn_timeout(tmv, Duration::from_secs(5)) {
         BoundedOutcome::Completed(output) => !output.status.success(),
@@ -265,7 +270,7 @@ fn run_live(
         return ExitCode::from(2);
     }
     let sess_list: Vec<String> = if sessions.is_empty() {
-        let mut cmd = Command::new("tmux");
+        let mut cmd = Command::new(tick_monitor::TMUX);
         cmd.args(["list-sessions", "-F", "#{session_name}"]);
         let t = completed("tmux sessions", spawn_timeout(cmd, Duration::from_secs(15)))
             .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
@@ -282,10 +287,11 @@ fn run_live(
         sessions.to_vec()
     };
 
-    let capture_interval_secs = std::env::var("BUFFER_MOTION_SECONDS")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(TWO_CAPTURE_MIN_SECS);
+    let capture_interval_secs = floored_capture_interval(
+        std::env::var("BUFFER_MOTION_SECONDS")
+            .ok()
+            .and_then(|s| s.parse().ok()),
+    );
 
     let mut free_count = 0usize;
     let mut rows: Vec<String> = Vec::new();
@@ -294,7 +300,7 @@ fn run_live(
     }
     let mut first = true;
     for s in &sess_list {
-        let mut cmd = Command::new("tmux");
+        let mut cmd = Command::new(tick_monitor::TMUX);
         cmd.args(["list-panes", "-t", s, "-F", "#{pane_index}"]);
         let panes = completed("tmux panes", spawn_timeout(cmd, Duration::from_secs(15)))
             .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
@@ -305,9 +311,9 @@ fn run_live(
                     continue;
                 }
             }
-            let mut cap = Command::new("tmux");
+            let mut cap = Command::new(tick_monitor::TMUX);
             cap.args([
-                "capture-pane",
+                tick_monitor::CAPTURE_PANE,
                 "-p",
                 "-e",
                 "-t",
@@ -315,17 +321,20 @@ fn run_live(
                 "-S",
                 "-40",
             ]);
-            let txt = completed("tmux first capture", spawn_timeout(cap, Duration::from_secs(10)))
-                .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
-                .unwrap_or_default();
+            let txt = completed(
+                "tmux first capture",
+                spawn_timeout(cap, Duration::from_secs(10)),
+            )
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default();
             let first_captured_at_secs = unix_seconds();
             let mut v = classify_with_composer(&txt, false, rules);
             if v.state == PaneDispatchReadyState::Free && rules.two_capture_liveness {
                 let first_snapshot = capture_snapshot(first_captured_at_secs, &txt);
                 std::thread::sleep(Duration::from_secs(capture_interval_secs));
-                let mut cap2 = Command::new("tmux");
+                let mut cap2 = Command::new(tick_monitor::TMUX);
                 cap2.args([
-                    "capture-pane",
+                    tick_monitor::CAPTURE_PANE,
                     "-p",
                     "-e",
                     "-t",
@@ -333,9 +342,12 @@ fn run_live(
                     "-S",
                     "-40",
                 ]);
-                let next = completed("tmux second capture", spawn_timeout(cap2, Duration::from_secs(10)))
-                    .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
-                    .unwrap_or_default();
+                let next = completed(
+                    "tmux second capture",
+                    spawn_timeout(cap2, Duration::from_secs(10)),
+                )
+                .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+                .unwrap_or_default();
                 let current_snapshot = capture_snapshot(unix_seconds(), &next);
                 v = confirm_free(v, &next, first_snapshot, current_snapshot, rules);
                 if v.state == PaneDispatchReadyState::Free {
@@ -538,5 +550,30 @@ fn run_selftest(rules: &PaneDispatchReadyRules) -> ExitCode {
         ExitCode::SUCCESS
     } else {
         ExitCode::from(2)
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn buffer_motion_override_cannot_lower_canonical_floor() {
+        for requested in [Some(0), Some(10), Some(TWO_CAPTURE_MIN_SECS - 1)] {
+            assert_eq!(
+                floored_capture_interval(requested),
+                TWO_CAPTURE_MIN_SECS,
+                "override {requested:?} must not lower the canonical floor"
+            );
+        }
+        assert_eq!(
+            floored_capture_interval(Some(TWO_CAPTURE_MIN_SECS)),
+            TWO_CAPTURE_MIN_SECS
+        );
+        assert_eq!(floored_capture_interval(Some(90)), 90);
+        assert_eq!(
+            floored_capture_interval(None),
+            TWO_CAPTURE_MIN_SECS,
+            "an absent override uses the canonical floor"
+        );
     }
 }

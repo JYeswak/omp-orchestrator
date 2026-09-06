@@ -11,8 +11,8 @@
 use serde_json::{json, Map, Value};
 use std::collections::BTreeSet;
 use std::process::Command;
-use subprocess_contract::{bounded_output, BoundedOutcome};
 use std::time::{Duration, Instant};
+use subprocess_contract::{bounded_output, BoundedOutcome};
 
 /// Spawn a child with stdin=null (O_CLOEXEC on every other fd) and an explicit deadline.
 /// Drop of the Child on kill/wait releases pipes. No unbounded wait.
@@ -620,7 +620,10 @@ mod tests {
             "rule bounded_waits: a hung child must not be waited on unbounded, elapsed={:?}",
             start.elapsed()
         );
-        assert!(matches!(out, BoundedOutcome::TimedOut), "timeout path must remain typed");
+        assert!(
+            matches!(out, BoundedOutcome::TimedOut),
+            "timeout path must remain typed"
+        );
     }
 
     #[test]

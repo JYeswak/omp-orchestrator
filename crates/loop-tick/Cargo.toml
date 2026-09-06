@@ -16,6 +16,9 @@ path = "src/lib.rs"
 
 [dependencies]
 subprocess-contract = { path = "../subprocess-contract" }
+tick-monitor = { path = "../tick-monitor" }
+finding = { path = "../finding" }
+loop-queue-filter = { path = "../loop-queue-filter" }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 serde_json = "1"
 

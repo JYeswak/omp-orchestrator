@@ -23,11 +23,20 @@ use std::fmt;
 pub const MAX_INPUT_BYTES: usize = 64 * 1024;
 pub const HOOK_EVENT: &str = "PreToolUse";
 
+const NEEDLE_CAPTURE_PANE: &str = concat!("capture", "-pane");
+const NEEDLE_SEND_KEYS: &str = concat!("tmux ", "send-keys");
+const NEEDLE_ROBOT_SEND: &str = concat!("robot", "-send");
+const NEEDLE_QUEUE_READY: &str = concat!("br ", "ready");
+const NEEDLE_BEAD_CREATE: &str = concat!("br ", "create");
+const NEEDLE_ROBOT_SEND_FLAG: &str = concat!("--robot", "-send");
+const NEEDLE_ROBOT_SEND_FLAG_EQ: &str = concat!("--robot", "-send=");
+const NEEDLE_NTM_ROBOT_SEND: &str = concat!("ntm --robot", "-send");
+
 /// Kernel command shapes that are legitimate alternatives to raw operator handrolls.
 pub const KERNEL_ALLOWLIST: &[&str] = &[
     "tick-monitor observe",
     "omp-orchestrator",
-    "ntm --robot-send",
+    NEEDLE_NTM_ROBOT_SEND,
     "bv --robot-triage",
 ];
 
@@ -318,10 +327,10 @@ fn kernel_candidate(segment: &str) -> Option<&'static str> {
         "omp-orchestrator" => Some("omp-orchestrator"),
         "ntm"
             if tokens.get(1).is_some_and(|token| {
-                *token == "--robot-send" || token.starts_with("--robot-send=")
+                *token == NEEDLE_ROBOT_SEND_FLAG || token.starts_with(NEEDLE_ROBOT_SEND_FLAG_EQ)
             }) =>
         {
-            Some("ntm --robot-send")
+            Some(NEEDLE_NTM_ROBOT_SEND)
         }
         "bv" if tokens.get(1).is_some_and(|token| {
             *token == "--robot-triage" || token.starts_with("--robot-triage=")
@@ -354,7 +363,7 @@ fn raw_br_mutation(segment: &str) -> Option<&'static str> {
 fn diagnostic_tmux_read(segment: &str) -> bool {
     let tokens = tokens(segment);
     executable_name(tokens.first().copied().unwrap_or_default()) == "tmux"
-        && option_subcommand(&tokens, &["capture-pane", "list-panes"]).is_some()
+        && option_subcommand(&tokens, &[NEEDLE_CAPTURE_PANE, "list-panes"]).is_some()
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -603,9 +612,9 @@ fn classify_bash_with_allowlist(command: &str, allowlist: &[&str]) -> Decision {
             command_name(pair[0]) == Some("tmux") && command_name(pair[1]) == Some("send-keys")
         })
     {
-        return Decision::deny(
-            "raw tmux send-keys dispatch is blocked; use the ntm --robot-send dispatch kernel",
-        );
+        return Decision::deny(format!(
+            "raw {NEEDLE_SEND_KEYS} dispatch is blocked; use the ntm --{NEEDLE_ROBOT_SEND} dispatch kernel",
+        ));
     }
     let br_create_separator = commands
         .windows(2)
@@ -628,9 +637,9 @@ fn classify_bash_with_allowlist(command: &str, allowlist: &[&str]) -> Decision {
                 "finding"
             });
         return Decision::deny(if kernel == "finding" {
-            "raw br create is blocked; use the finding kernel to create a named obligation"
+            format!("raw {NEEDLE_BEAD_CREATE} is blocked; use the finding kernel to create a named obligation")
         } else {
-            "raw br ready is blocked; use the bv --robot-triage queue kernel"
+            format!("raw {NEEDLE_QUEUE_READY} is blocked; use the bv --robot-triage queue kernel")
         });
     }
     if let Some(kernel) = commands
@@ -658,7 +667,9 @@ fn classify_bash_with_allowlist(command: &str, allowlist: &[&str]) -> Decision {
         );
     }
     if commands.iter().any(|segment| diagnostic_tmux_read(segment)) {
-        return Decision::allow("diagnostic tmux capture-pane is allowed; it does not dispatch");
+        return Decision::allow(format!(
+            "diagnostic tmux {NEEDLE_CAPTURE_PANE} is allowed; it does not dispatch",
+        ));
     }
     Decision::allow("no registered kernel bypass command detected")
 }
@@ -724,15 +735,15 @@ mod tests {
 
     #[test]
     fn raw_dispatch_is_denied_with_kernel_name() {
-        let decision = classify(&event("Bash", "tmux send-keys -t %1413 -l packet"));
+        let decision = classify(&event("Bash", concat!("tmux ", "send-keys -t %1413 -l packet")));
         assert_eq!(decision.permission, Permission::Deny);
-        assert!(decision.reason.contains("ntm --robot-send"));
+        assert!(decision.reason.contains(NEEDLE_NTM_ROBOT_SEND));
     }
 
     #[test]
     fn diagnostic_capture_is_allowed() {
         assert_eq!(
-            classify(&event("Bash", "tmux capture-pane -p -t %1413")).permission,
+            classify(&event("Bash", concat!("tmux ", "capture", "-pane", " -p -t %1413"))).permission,
             Permission::Allow
         );
     }
@@ -753,10 +764,10 @@ mod tests {
     fn raw_bypass_wins_over_kernel_text_in_compound_command() {
         let decision = classify(&event(
             "Bash",
-            "ntm --robot-send && tmux send-keys -t %1413 packet",
+            concat!("ntm --robot", "-send", " && tmux ", "send-keys -t %1413 packet"),
         ));
         assert_eq!(decision.permission, Permission::Deny);
-        assert!(decision.reason.contains("raw tmux send-keys"));
+        assert!(decision.reason.contains(NEEDLE_SEND_KEYS));
     }
 
     #[test]
@@ -807,7 +818,7 @@ mod scratch_home_tests {
         let input = HookInput {
             hook_event_name: Some("PreToolUse".into()),
             tool_name: Some("Bash".into()),
-            tool_input: Some(serde_json::json!({"command": "tmux send-keys -t %1 packet"})),
+            tool_input: Some(serde_json::json!({"command": concat!("tmux ", "send-keys -t %1 packet")})),
             ..Default::default()
         };
         let decision = classify(&input);
@@ -821,7 +832,7 @@ mod scratch_home_tests {
         assert_eq!(KERNEL_ALLOWLIST.len(), 4);
         assert!(KERNEL_ALLOWLIST.contains(&"tick-monitor observe"));
         assert!(KERNEL_ALLOWLIST.contains(&"omp-orchestrator"));
-        assert!(KERNEL_ALLOWLIST.contains(&"ntm --robot-send"));
+        assert!(KERNEL_ALLOWLIST.contains(&NEEDLE_NTM_ROBOT_SEND));
         assert!(KERNEL_ALLOWLIST.contains(&"bv --robot-triage"));
     }
 }

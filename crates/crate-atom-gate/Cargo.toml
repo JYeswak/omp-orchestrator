@@ -22,3 +22,5 @@ unsafe_code = "forbid"
 [dependencies]
 serde_json = "1"
 subprocess-contract = { path = "../subprocess-contract" }
+finding = { path = "../finding" }
+loop-queue-filter = { path = "../loop-queue-filter" }

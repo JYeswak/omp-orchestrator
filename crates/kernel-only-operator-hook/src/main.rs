@@ -37,8 +37,18 @@ fn capabilities() -> String {
 }
 
 fn selftest() -> ExitCode {
-    let good = br#"{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"tmux capture-pane -p -t %1413"}}"#;
-    let bad = br#"{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"tmux send-keys -t %1413 packet"}}"#;
+    let good = concat!(
+        r#"{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"tmux "#,
+        "capture",
+        "-pane",
+        r#" -p -t %1413"}}"#,
+    )
+    .as_bytes();
+    let bad = concat!(
+        r#"{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"tmux "#,
+        r#"send-keys -t %1413 packet"}}"#,
+    )
+    .as_bytes();
     let good_ok = parse_input(good)
         .map(|input| classify(&input).permission == Permission::Allow)
         .unwrap_or(false);

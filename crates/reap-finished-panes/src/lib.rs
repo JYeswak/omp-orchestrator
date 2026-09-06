@@ -233,7 +233,7 @@ pub fn scoped_artifact_dir(base: &Path, repo: &Path) -> PathBuf {
 }
 
 pub fn resolve_pane_id(session: &str, idx: &str, timeout: Duration) -> Result<String, String> {
-    let mut cmd = Command::new("tmux");
+    let mut cmd = Command::new(tick_monitor::TMUX);
     cmd.args([
         "list-panes",
         "-s",
@@ -259,11 +259,17 @@ pub fn resolve_pane_id(session: &str, idx: &str, timeout: Duration) -> Result<St
 }
 
 pub fn capture_pane(pane_id: &str, lines: usize, timeout: Duration) -> Result<String, String> {
-    let mut cmd = Command::new("tmux");
-    cmd.args(["capture-pane", "-p", "-e", "-t", pane_id, "-S"])
+    let mut cmd = Command::new(tick_monitor::TMUX);
+    cmd.args([tick_monitor::CAPTURE_PANE, "-p", "-e", "-t", pane_id, "-S"])
         .arg(format!("-{lines}"));
     let out = spawn_timeout(cmd, timeout)
-        .ok_or_else(|| "tmux capture-pane timed out or failed".to_owned())?;
+        .ok_or_else(|| {
+            format!(
+                "{} {} timed out or failed",
+                tick_monitor::TMUX,
+                tick_monitor::CAPTURE_PANE
+            )
+        })?;
     if !out.status.success() {
         return Err(String::from_utf8_lossy(&out.stderr).trim().to_owned());
     }

@@ -7,7 +7,7 @@
 //! Joshua says so): a dispatched bead receives one assignee and a deadline.
 //! After the deadline, the conductor asks one question — did the assignee post
 //! a verdict? The answer must come from READING BACK the tracker's comment
-//! list, never from a send's exit code (cp-z42vu: `ntm --robot-send` returned
+//! list, never from a send's exit code (cp-z42vu: ntm send-flag returned
 //! `successful:["4"]` while the packet never reached the pane).
 //!
 //! THE `br comment` SINGULAR TRAP: `br comment <id> <text>` prefix-matches to
@@ -190,13 +190,13 @@ pub fn tracker_read_from(outcome: subprocess_contract::BoundedOutcome) -> Tracke
         subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() => {
             TrackerRead::Read(String::from_utf8_lossy(&output.stdout).into_owned())
         }
-        subprocess_contract::BoundedOutcome::Completed(output) => TrackerRead::TrackerError(
-            if output.status.code().is_none() {
+        subprocess_contract::BoundedOutcome::Completed(output) => {
+            TrackerRead::TrackerError(if output.status.code().is_none() {
                 "br exited by signal"
             } else {
                 "br exited nonzero"
-            },
-        ),
+            })
+        }
         subprocess_contract::BoundedOutcome::TimedOut => {
             TrackerRead::TrackerError("br read exceeded deadline; group killed")
         }

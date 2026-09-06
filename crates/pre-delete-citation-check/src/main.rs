@@ -38,7 +38,7 @@ fn main() -> ExitCode {
     }
 
     // 2. Get the closed beads.
-    let br_output = std::process::Command::new("br")
+    let br_output = std::process::Command::new(finding::BR)
         .args(["list", "--json", "--status", "closed"])
         .output();
     let Ok(br_raw) = br_output else {

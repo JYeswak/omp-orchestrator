@@ -63,13 +63,13 @@
 //! "no mail".
 
 use crate::error::MailError;
-use asupersync::Cx;
 use asupersync::process::Command;
+use asupersync::Cx;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt;
 use std::time::Duration;
-use subprocess_contract::{RunError, run_output};
+use subprocess_contract::{run_output, RunError};
 
 /// A position in NTM's attention feed.
 ///
@@ -248,14 +248,11 @@ impl MailWakeOutcome {
 /// process group, drains stdout and stderr concurrently, observes the caller's
 /// `Cx`, and escalates group termination on cancellation. There is no detached
 /// task and no second pipe left unread.
-pub async fn wait_for_mail(
-    cx: &Cx,
-    request: &WakeRequest,
-) -> Result<MailWakeOutcome, MailError> {
+pub async fn wait_for_mail(cx: &Cx, request: &WakeRequest) -> Result<MailWakeOutcome, MailError> {
     cx.checkpoint()
         .map_err(|_| MailError::from_cancelled(cx, "wait_for_mail"))?;
 
-    let mut command = Command::new("ntm");
+    let mut command = Command::new(tick_monitor::NTM);
     command.args(request.argv());
 
     let output = match run_output(cx, command).await {
@@ -303,7 +300,11 @@ pub fn parse_wake(stdout: &[u8]) -> Result<MailWakeOutcome, MailError> {
             .max(0.0),
     );
 
-    if body.get("success").and_then(Value::as_bool).unwrap_or(false) {
+    if body
+        .get("success")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
         let trigger = body.get("trigger_event");
         return Ok(MailWakeOutcome::Woke {
             reason: body
@@ -339,8 +340,7 @@ pub fn parse_wake(stdout: &[u8]) -> Result<MailWakeOutcome, MailError> {
         // TIMEOUT without the triple would be a NEW shape. Refuse rather than
         // synthesise a resume point we did not receive.
         None if code == "TIMEOUT" => Err(MailError::Protocol {
-            detail: "ntm reported TIMEOUT with no cursor_info; resume point unavailable"
-                .to_owned(),
+            detail: "ntm reported TIMEOUT with no cursor_info; resume point unavailable".to_owned(),
         }),
         // The measured defect: cancelled, cursor stripped.
         Some(_) | None => {
@@ -411,11 +411,9 @@ mod tests {
             "must not invent a cursor"
         );
         let resumed = bare.from_cursor(AttentionCursor::new(298_315));
-        assert!(
-            resumed
-                .argv()
-                .contains(&"--attention-cursor=298315".to_owned())
-        );
+        assert!(resumed
+            .argv()
+            .contains(&"--attention-cursor=298315".to_owned()));
     }
 
     #[test]
@@ -488,11 +486,9 @@ mod tests {
             }
             other => panic!("a fired condition must not read as {other:?}"),
         }
-        assert!(
-            !parse_wake(LIVE_WOKE.as_bytes())
-                .expect("parse")
-                .is_inconclusive()
-        );
+        assert!(!parse_wake(LIVE_WOKE.as_bytes())
+            .expect("parse")
+            .is_inconclusive());
     }
 
     #[test]
@@ -508,7 +504,8 @@ mod tests {
 
     #[test]
     fn an_unrecognised_error_code_is_refused_rather_than_guessed() {
-        let raw = r#"{"success":false,"error_code":"WAT","error":"something new","waited_seconds":1.0}"#;
+        let raw =
+            r#"{"success":false,"error_code":"WAT","error":"something new","waited_seconds":1.0}"#;
         match parse_wake(raw.as_bytes()).expect_err("must refuse") {
             MailError::Protocol { detail } => assert!(detail.contains("WAT"), "{detail}"),
             other => panic!("expected a protocol refusal, got {other}"),

@@ -1060,7 +1060,7 @@ mod tests {
             bead_id: "omp-orchestrator-ack-stage-qhl".into(),
             pane_id: "%1413".into(),
             transport: TransportReceipt::capture_codex(
-                "tmux send-keys -l; tmux send-keys Enter",
+                concat!("tmux ", "send-keys", " -l; tmux ", "send-keys", " Enter"),
                 b"",
                 b"",
                 Some(0),

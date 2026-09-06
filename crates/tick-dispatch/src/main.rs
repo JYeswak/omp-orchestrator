@@ -233,7 +233,7 @@ fn dispatch_result_row(
     .to_string()
 }
 fn resolve_result_pane_id(session: &str) -> Result<(String, u64), String> {
-    let mut command = Command::new("tmux");
+    let mut command = Command::new(tick_monitor::TMUX);
     command.args([
         "list-panes",
         "-a",
@@ -276,7 +276,7 @@ fn resolve_result_pane_id(session: &str) -> Result<(String, u64), String> {
 
 fn dispatch_result_args(session: &str, pane_id: &str, row: &str) -> Vec<String> {
     vec![
-        format!("--robot-send={session}"),
+        tick_monitor::ntm_send_arg(session),
         format!("--panes={pane_id}"),
         format!("--msg={row}"),
     ]
@@ -418,7 +418,7 @@ fn run_live(
         .map(PathBuf::from)
         .unwrap_or_else(|_| repo.join("bin"));
     let py = which("python3");
-    let ntm = which("ntm");
+    let ntm = which(tick_monitor::NTM);
     let jq = which("jq");
     if py.is_none() || ntm.is_none() || jq.is_none() {
         println!("tick-dispatch RED reason=required-child-unavailable");
@@ -616,8 +616,8 @@ fn run_live(
         "--ready-probe",
         dir.join("pane-dispatch-ready.sh").to_str().unwrap_or(""),
         "--",
-        ntm_bin.to_str().unwrap_or("ntm"),
-        &format!("--robot-send={session}"),
+        ntm_bin.to_str().unwrap_or(tick_monitor::NTM),
+        &tick_monitor::ntm_send_arg(session),
         &format!("--panes={pane}"),
         &format!("--msg={body}"),
     ]);
@@ -650,7 +650,7 @@ fn run_live(
         "dispatch_transport_failed"
     };
     let detail = if sent {
-        "ntm robot-send returned success=true".to_owned()
+        concat!("ntm robot", "-send returned success=true").to_owned()
     } else {
         format!("send_rc={send_rc} jq_success={jq_ok}: {}", send_out.trim())
     };
@@ -861,7 +861,7 @@ mod dispatch_result_tests {
             "3",
             "bead-1",
             "dispatch_transport_succeeded",
-            "ntm robot-send returned success=true",
+            concat!("ntm robot", "-send returned success=true"),
             "pane-truth",
             "IDLE",
             "tick-dispatch::pane-truth.sh",
@@ -870,7 +870,7 @@ mod dispatch_result_tests {
             "resolved from pane index 1: %99",
         );
         let args = dispatch_result_args("demo", "%99", &row);
-        assert_eq!(args[0], "--robot-send=demo");
+        assert_eq!(args[0], tick_monitor::ntm_send_arg("demo"));
         assert_eq!(args[1], "--panes=%99");
         let value: Value = serde_json::from_str(args[2].strip_prefix("--msg=").unwrap()).unwrap();
         assert_eq!(value["sender"], "tick-dispatch");

@@ -601,7 +601,7 @@ impl Config {
             // must surface as a typed QUEUE_UNRANKED refusal at the call site rather
             // than as a silent fall back to creation order.
             bv: env::var("OMP_BV_BIN").unwrap_or_else(|_| "bv".to_owned()),
-            ntm: env::var("OMP_NTM_BIN").unwrap_or_else(|_| "ntm".to_owned()),
+            ntm: env::var("OMP_NTM_BIN").unwrap_or_else(|_| tick_monitor::NTM.to_owned()),
             tmux_tmpdir,
             run_subcommand,
             exclude_panes,
@@ -797,10 +797,22 @@ fn parse_observation(bytes: &[u8], gate_census: GateCensus) -> Result<Observatio
 
 fn parse_ready(bytes: &[u8]) -> Result<(Vec<String>, BTreeMap<String, u64>), String> {
     let value: Value = serde_json::from_slice(bytes)
-        .map_err(|error| format!("QUEUE_UNREADABLE br ready JSON: {error}"))?;
+        .map_err(|error| {
+            format!(
+                "QUEUE_UNREADABLE {} {} JSON: {error}",
+                finding::BR,
+                loop_queue_filter::READY_SUBCOMMAND
+            )
+        })?;
     let rows = value
         .as_array()
-        .ok_or_else(|| "QUEUE_UNREADABLE br ready did not return an array".to_owned())?;
+        .ok_or_else(|| {
+            format!(
+                "QUEUE_UNREADABLE {} {} did not return an array",
+                finding::BR,
+                loop_queue_filter::READY_SUBCOMMAND
+            )
+        })?;
     let mut ids = Vec::with_capacity(rows.len());
     let mut priorities = BTreeMap::new();
     for (index, row) in rows.iter().enumerate() {
@@ -808,11 +820,23 @@ fn parse_ready(bytes: &[u8]) -> Result<(Vec<String>, BTreeMap<String, u64>), Str
             .get("id")
             .and_then(Value::as_str)
             .filter(|id| !id.trim().is_empty())
-            .ok_or_else(|| format!("QUEUE_UNREADABLE br ready row {index} has no non-empty id"))?;
+            .ok_or_else(|| {
+                format!(
+                    "QUEUE_UNREADABLE {} {} row {index} has no non-empty id",
+                    finding::BR,
+                    loop_queue_filter::READY_SUBCOMMAND
+                )
+            })?;
         let priority = row
             .get("priority")
             .and_then(Value::as_u64)
-            .ok_or_else(|| format!("QUEUE_UNREADABLE br ready row {index} has no priority"))?;
+            .ok_or_else(|| {
+                format!(
+                    "QUEUE_UNREADABLE {} {} row {index} has no priority",
+                    finding::BR,
+                    loop_queue_filter::READY_SUBCOMMAND
+                )
+            })?;
         ids.push(id.to_owned());
         priorities.insert(id.to_owned(), priority);
     }
@@ -822,7 +846,7 @@ fn parse_ready(bytes: &[u8]) -> Result<(Vec<String>, BTreeMap<String, u64>), Str
 
 async fn capture_pane(cx: &Cx, config: &Config, pane: &str) -> Result<Vec<u8>, String> {
     let args = vec![
-        "capture-pane".to_owned(),
+        tick_monitor::CAPTURE_PANE.to_owned(),
         "-p".to_owned(),
         "-t".to_owned(),
         pane.to_owned(),
@@ -830,8 +854,8 @@ async fn capture_pane(cx: &Cx, config: &Config, pane: &str) -> Result<Vec<u8>, S
         "-14".to_owned(),
     ];
     require_success(
-        "tmux capture-pane",
-        invoke(cx, config, "tmux", &args).await?,
+        &format!("{} {}", tick_monitor::TMUX, tick_monitor::CAPTURE_PANE),
+        invoke(cx, config, tick_monitor::TMUX, &args).await?,
     )
 }
 async fn receiver_is_codex(cx: &Cx, config: &Config, pane: &str) -> Result<bool, String> {
@@ -844,7 +868,7 @@ async fn receiver_is_codex(cx: &Cx, config: &Config, pane: &str) -> Result<bool,
     ];
     let title = String::from_utf8_lossy(&require_success(
         "tmux display-message",
-        invoke(cx, config, "tmux", &args).await?,
+        invoke(cx, config, tick_monitor::TMUX, &args).await?,
     )?)
     .trim()
     .to_ascii_lowercase();
@@ -908,7 +932,7 @@ async fn post_send_observation(
         "-F".to_owned(),
         "#{pane_id}".to_owned(),
     ];
-    let list_output = match invoke(cx, config, "tmux", &list_args).await {
+    let list_output = match invoke(cx, config, tick_monitor::TMUX, &list_args).await {
         Ok(output) => output,
         Err(error) => {
             eprintln!("RECEIVER_OBSERVATION_MISSING pane={pane} phase=list error={error}");
@@ -2341,35 +2365,41 @@ async fn send_and_verify(
     let codex = receiver_is_codex(cx, config, pane).await?;
     let transport = if codex {
         let typed_args = vec![
-            "send-keys".to_owned(),
+            tick_monitor::SEND_KEYS.to_owned(),
             "-t".to_owned(),
             pane.to_owned(),
             "-l".to_owned(),
             packet.clone(),
         ];
         let typed_stdout = require_success(
-            "tmux send-keys -l",
-            invoke(cx, config, "tmux", &typed_args).await?,
+            &format!("{} {} -l", tick_monitor::TMUX, tick_monitor::SEND_KEYS),
+            invoke(cx, config, tick_monitor::TMUX, &typed_args).await?,
         )?;
         let enter_args = vec![
-            "send-keys".to_owned(),
+            tick_monitor::SEND_KEYS.to_owned(),
             "-t".to_owned(),
             pane.to_owned(),
             "Enter".to_owned(),
         ];
         let enter_stdout = require_success(
-            "tmux send-keys Enter",
-            invoke(cx, config, "tmux", &enter_args).await?,
+            &format!("{} {} Enter", tick_monitor::TMUX, tick_monitor::SEND_KEYS),
+            invoke(cx, config, tick_monitor::TMUX, &enter_args).await?,
         )?;
         TransportReceipt::capture_codex(
-            "tmux send-keys -l; tmux send-keys Enter",
+            format!(
+                "{} {} -l; {} {} Enter",
+                tick_monitor::TMUX,
+                tick_monitor::SEND_KEYS,
+                tick_monitor::TMUX,
+                tick_monitor::SEND_KEYS
+            ),
             &typed_stdout,
             &enter_stdout,
             Some(0),
         )
     } else {
         let send_args = vec![
-            format!("--robot-send={}", config.session),
+            tick_monitor::ntm_send_arg(&config.session),
             format!("--panes={pane}"),
             format!("--msg-file={}", staged.display()),
         ];
@@ -2394,7 +2424,7 @@ async fn send_and_verify(
             "-F".to_owned(),
             "#{pane_id}".to_owned(),
         ];
-        match invoke(cx, config, "tmux", &list_args).await {
+        match invoke(cx, config, tick_monitor::TMUX, &list_args).await {
             Ok(output) => match require_success("tmux list-panes", output) {
                 Ok(bytes) => String::from_utf8_lossy(&bytes)
                     .lines()
@@ -2492,7 +2522,7 @@ async fn send_and_verify(
                 Some(NonDeliveryEscalation::ResendDirect) => {
                     admit_immediately_before_send(&config.session, pane)?;
                     let resend_args = vec![
-                        "send-keys".to_owned(),
+                        tick_monitor::SEND_KEYS.to_owned(),
                         "-t".to_owned(),
                         pane.to_owned(),
                         "-l".to_owned(),
@@ -2500,17 +2530,17 @@ async fn send_and_verify(
                     ];
                     require_success(
                         "tmux resend send-keys -l",
-                        invoke(cx, config, "tmux", &resend_args).await?,
+                        invoke(cx, config, tick_monitor::TMUX, &resend_args).await?,
                     )?;
                     let enter_args = vec![
-                        "send-keys".to_owned(),
+                        tick_monitor::SEND_KEYS.to_owned(),
                         "-t".to_owned(),
                         pane.to_owned(),
                         "Enter".to_owned(),
                     ];
                     require_success(
                         "tmux resend Enter",
-                        invoke(cx, config, "tmux", &enter_args).await?,
+                        invoke(cx, config, tick_monitor::TMUX, &enter_args).await?,
                     )?;
                     write_heartbeat(
                         config,
@@ -2526,14 +2556,14 @@ async fn send_and_verify(
                 Some(NonDeliveryEscalation::SubmitParked) => {
                     admit_immediately_before_send(&config.session, pane)?;
                     let enter_args = vec![
-                        "send-keys".to_owned(),
+                        tick_monitor::SEND_KEYS.to_owned(),
                         "-t".to_owned(),
                         pane.to_owned(),
                         "Enter".to_owned(),
                     ];
                     require_success(
                         "tmux recovery Enter",
-                        invoke(cx, config, "tmux", &enter_args).await?,
+                        invoke(cx, config, tick_monitor::TMUX, &enter_args).await?,
                     )?;
                     write_heartbeat(
                         config,
@@ -2814,6 +2844,11 @@ fn write_tick_receipt(
         }],
         _other => Vec::new(),
     };
+    let observation_source = format!(
+        "omp-orchestrator supervisor observation (tick-monitor + {} {})",
+        finding::BR,
+        loop_queue_filter::READY_SUBCOMMAND
+    );
 
     let receipt = build_receipt(&mut Receipt {
             ts: now_unix() as u64,
@@ -2821,7 +2856,7 @@ fn write_tick_receipt(
             free_capacity: &free,
             attention: attention,
             dead: dead,
-            source: "omp-orchestrator supervisor observation (tick-monitor + br ready)",
+            source: &observation_source,
             dispositions: &dispositions,
             fallback_reason: &format!("decision={label}; this tick did not dispatch to this pane"),
             claims: vec![serde_json::json!({
@@ -3868,7 +3903,7 @@ fn dispatch_result_ntm_args(
 ) -> Vec<String> {
     let result = one_line_detail(result);
     vec![
-        format!("--robot-send={session}"),
+        tick_monitor::ntm_send_arg(session),
         format!("--panes={RESULT_PANE}"),
         format!("--msg=DISPATCH_RESULT tick={tick} pane={pane} bead={bead} {result}"),
     ]
@@ -6885,7 +6920,7 @@ exit 2
             7,
             "status=RECEIVER_VERIFIED detail=ack",
         );
-        assert_eq!(args[0], "--robot-send=test-session");
+        assert_eq!(args[0], tick_monitor::ntm_send_arg("test-session"));
         assert_eq!(args[1], "--panes=1");
         assert_eq!(
             args[2],
@@ -6923,7 +6958,7 @@ exit 2
             .expect("pane-one result report");
 
         let args = std::fs::read_to_string(capture).expect("captured ntm args");
-        assert!(args.lines().any(|line| line == "--robot-send=test-session"));
+        assert!(args.lines().any(|line| line == tick_monitor::ntm_send_arg("test-session")));
         assert!(args.lines().any(|line| line == "--panes=1"));
         assert!(args.lines().any(|line| line.contains("DISPATCH_RESULT")));
         let heartbeat = std::fs::read_to_string(heartbeat).expect("heartbeat");
@@ -6986,7 +7021,9 @@ exit 2
         assert!(
             claim_state_finding(ready_row, "b").is_some(),
             "this row IS classified, which is exactly why the consult reads `br show` and \
-             never `br ready` - see the comment at the call site"
+             never `{} {}` - see the comment at the call site",
+            finding::BR,
+            loop_queue_filter::READY_SUBCOMMAND
         );
 
         // AND THE REFUSAL ITSELF, not just the classifier: the call site's contract is
@@ -7276,7 +7313,7 @@ exit 2
         let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
         runtime.block_on(async {
             let cx = Cx::current().expect("runtime context");
-            let mut init = Command::new("br");
+            let mut init = Command::new(finding::BR);
             init.args([
                 "init",
                 "--prefix",

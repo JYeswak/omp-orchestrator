@@ -1114,7 +1114,7 @@ fn session_visible(
     deadline: Deadline,
 ) -> Result<bool, LoopDriverRunOutput> {
     for attempt in 1..=3 {
-        let mut command = Command::new("ntm");
+        let mut command = Command::new(tick_monitor::NTM);
         command.arg("list");
         command_env(&mut command, config);
         let result = match run_command(command, deadline) {
@@ -1137,7 +1137,7 @@ fn session_visible(
         }
     }
 
-    let mut command = Command::new("tmux");
+    let mut command = Command::new(tick_monitor::TMUX);
     command.args(["has-session", "-t", &config.session]);
     command_env(&mut command, config);
     match run_command(command, deadline) {

@@ -18,6 +18,7 @@ fs2 = "0.4"
 pane-dispatch-ready = { path = "../pane-dispatch-ready" }
 serde_json = "1"
 subprocess-contract = { path = "../subprocess-contract" }
+tick-monitor = { path = "../tick-monitor" }
 
 [lints.rust]
 unsafe_code = "forbid"

@@ -522,11 +522,15 @@ fn tree_cpu(pid: u32) -> Result<f64, String> {
 
 fn capture(session: &str, index: u32) -> Result<String, String> {
     let target = format!("{session}:0.{index}");
-    let mut command = Command::new("tmux");
-    command.args(["capture-pane", "-p", "-t", &target]);
+    let mut command = Command::new(tick_monitor::TMUX);
+    command.args([tick_monitor::CAPTURE_PANE, "-p", "-t", &target]);
     let output = run_external(command, CHILD_DEADLINE)?;
     if output.timed_out || output.status != Some(0) {
-        return Err("tmux capture-pane timeout/unreadable".into());
+        return Err(format!(
+            "{} {} timeout/unreadable",
+            tick_monitor::TMUX,
+            tick_monitor::CAPTURE_PANE
+        ));
     }
     Ok(output.stdout.replace('\r', ""))
 }
@@ -571,7 +575,7 @@ fn append_history(path: &PathBuf, row: &PaneRow, text: &str, epoch: i64) {
 }
 
 pub fn run_live(session: &str, rules: &PaneTruthRules) -> i32 {
-    let mut command = Command::new("tmux");
+    let mut command = Command::new(tick_monitor::TMUX);
     command.args([
         "list-panes",
         "-t",

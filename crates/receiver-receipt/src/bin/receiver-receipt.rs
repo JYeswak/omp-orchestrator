@@ -26,8 +26,8 @@ fn identity(at: u64) -> ObservationIdentity {
 }
 
 fn capture(target: &str, path: &str, at: u64) -> ExitCode {
-    let output = match Command::new("tmux")
-        .args(["capture-pane", "-p", "-t", target, "-S", "-200"])
+    let output = match Command::new(tick_monitor::TMUX)
+        .args([tick_monitor::CAPTURE_PANE, "-p", "-t", target, "-S", "-200"])
         .output()
     {
         Ok(output) => output,

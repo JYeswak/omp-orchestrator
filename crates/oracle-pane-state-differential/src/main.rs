@@ -178,7 +178,7 @@ fn run_live(json_out: bool, rules: &OracleCompareRules) -> ExitCode {
         // (control-plane:0 is a documented DEFINITIONAL gap). Do not change which
         // pane states disagree. A single unreadable session contributes no keys
         // (original python sys.exit(0)), it does not fail the fleet-wide product arm.
-        let mut ntm = Command::new("ntm");
+        let mut ntm = Command::new(tick_monitor::NTM);
         ntm.arg(format!("--robot-activity={s}"))
             .arg("--robot-format=json");
         let Some(out) = completed("ntm activity", spawn_timeout(ntm, Duration::from_secs(30))) else {

@@ -325,7 +325,7 @@ fn main() -> ExitCode {
         // Bounded tracker readback. A wedged or failed `br` must not
         // silently skip the citation gate: the refusal below fails the
         // commit CLOSED (exit-3 class per AmberGate's contract).
-        let mut br_command = std::process::Command::new("br");
+        let mut br_command = std::process::Command::new(finding::BR);
         br_command.args(["list", "--status=closed", "--json"]);
         let closed = match subprocess_contract::bounded_output(
             &mut br_command,

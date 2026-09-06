@@ -71,7 +71,12 @@ impl fmt::Display for CompletionSignal {
         write!(
             f,
             "{}{} on {} -- verdict={} evidence={} frees={}",
-            DONE_PREFIX, self.bead_token, self.pane_id, self.verdict, self.evidence, self.frees_pane
+            DONE_PREFIX,
+            self.bead_token,
+            self.pane_id,
+            self.verdict,
+            self.evidence,
+            self.frees_pane
         )
     }
 }
@@ -120,7 +125,10 @@ pub fn bead_token(bead_id: &str) -> String {
 }
 
 /// Parse one tracker comment as a completion signal for `bead_id`.
-pub fn parse_completion(comment: &str, bead_id: &str) -> Result<CompletionSignal, CompletionParseError> {
+pub fn parse_completion(
+    comment: &str,
+    bead_id: &str,
+) -> Result<CompletionSignal, CompletionParseError> {
     let rest = comment
         .strip_prefix(DONE_PREFIX)
         .ok_or(CompletionParseError::NotACompletion)?;
@@ -139,14 +147,18 @@ pub fn parse_completion(comment: &str, bead_id: &str) -> Result<CompletionSignal
     if pane.trim().is_empty() {
         return Err(CompletionParseError::EmptyField { field: "pane" });
     }
-    let verdict = field(fields, "verdict=").ok_or(CompletionParseError::Malformed {
-        missing: "verdict",
-    })?;
+    let verdict =
+        field(fields, "verdict=").ok_or(CompletionParseError::Malformed { missing: "verdict" })?;
     let evidence = field(fields, "evidence=").ok_or(CompletionParseError::Malformed {
         missing: "evidence",
     })?;
-    let frees = field(fields, "frees=").ok_or(CompletionParseError::Malformed { missing: "frees" })?;
-    for (name, value) in [("verdict", &verdict), ("evidence", &evidence), ("frees", &frees)] {
+    let frees =
+        field(fields, "frees=").ok_or(CompletionParseError::Malformed { missing: "frees" })?;
+    for (name, value) in [
+        ("verdict", &verdict),
+        ("evidence", &evidence),
+        ("frees", &frees),
+    ] {
         if value.trim().is_empty() {
             return Err(CompletionParseError::EmptyField { field: leak(name) });
         }
@@ -231,7 +243,8 @@ impl CompletionOutcome {
     pub fn owes_investigation(&self) -> bool {
         matches!(
             self,
-            CompletionOutcome::SilentPastDeadline { .. } | CompletionOutcome::MalformedCompletion(_)
+            CompletionOutcome::SilentPastDeadline { .. }
+                | CompletionOutcome::MalformedCompletion(_)
         )
     }
 

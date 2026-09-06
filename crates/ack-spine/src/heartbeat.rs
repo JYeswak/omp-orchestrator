@@ -21,8 +21,7 @@ use std::path::{Path, PathBuf};
 /// It is represented as a relative suffix so this public constant contains no machine-specific path.
 ///
 /// The actual default is resolved from XDG_STATE_HOME or HOME at runtime.
-pub const DEFAULT_HEARTBEAT_PATH: &str =
-    ".local/state/omp-orchestrator/heartbeat.json";
+pub const DEFAULT_HEARTBEAT_PATH: &str = ".local/state/omp-orchestrator/heartbeat.json";
 
 /// One heartbeat row: the supervisor's liveness proof.
 ///
@@ -68,8 +67,7 @@ impl HeartbeatRow {
             pid: value
                 .get("pid")
                 .and_then(Value::as_u64)
-                .ok_or_else(|| "heartbeat row missing 'pid'".to_owned())?
-                as u32,
+                .ok_or_else(|| "heartbeat row missing 'pid'".to_owned())? as u32,
             session: get("session")?,
             repo: get("repo")?,
             decision: get("decision")?,
@@ -106,7 +104,11 @@ pub fn write_heartbeat(path: &Path, row: &HeartbeatRow) -> Result<(), String> {
 /// A row older than max_age_secs is STALE, not missing: "the supervisor wrote
 /// a heartbeat and then stopped" is a different defect from "the supervisor
 /// never started."
-pub fn read_heartbeat(path: &Path, now_unix: u64, max_age_secs: u64) -> Result<HeartbeatRow, String> {
+pub fn read_heartbeat(
+    path: &Path,
+    now_unix: u64,
+    max_age_secs: u64,
+) -> Result<HeartbeatRow, String> {
     let text = std::fs::read_to_string(path)
         .map_err(|error| format!("heartbeat missing: cannot read {}: {error}", path.display()))?;
     let row = HeartbeatRow::from_json(&text)?;
@@ -166,8 +168,14 @@ mod tests {
         write_heartbeat(&path, &row).expect("write must succeed");
 
         let text = std::fs::read_to_string(&path).expect("read must succeed");
-        assert!(text.contains(TEST_BUILD_ID), "build_id must be present: {text}");
-        assert!(text.contains(&TEST_PID.to_string()), "pid must be present: {text}");
+        assert!(
+            text.contains(TEST_BUILD_ID),
+            "build_id must be present: {text}"
+        );
+        assert!(
+            text.contains(&TEST_PID.to_string()),
+            "pid must be present: {text}"
+        );
 
         // A third party reads it back.
         let read = read_heartbeat(&path, 1700000000, 180).expect("read must succeed");
@@ -195,8 +203,8 @@ mod tests {
     #[test]
     fn missing_heartbeat_is_an_error_naming_the_path() {
         let path = std::env::temp_dir().join(format!("hb-missing-{}", std::process::id()));
-        let error = read_heartbeat(&path, 1700000000, 180)
-            .expect_err("a missing file must be an error");
+        let error =
+            read_heartbeat(&path, 1700000000, 180).expect_err("a missing file must be an error");
         assert!(error.contains("heartbeat missing"), "{error}");
         assert!(error.contains(&path.display().to_string()), "{error}");
         let _ = std::fs::remove_file(&path);

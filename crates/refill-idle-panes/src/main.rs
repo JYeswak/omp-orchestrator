@@ -46,7 +46,7 @@ fn probe(bin: &str, args: &[String], secs: u64) -> Option<String> {
 /// Run a probe INSIDE the resolved target repository.
 ///
 /// MEASURED 2026-09-02T21:24Z: with `REFILL_REPO` pinned, the packet's `Target:` line named
-/// control-plane while `bv --robot-triage` and `br ready` ran in the PROCESS cwd — `$HOME`
+/// control-plane while `bv --robot-triage` and the ready-queue probe ran in the PROCESS cwd — `$HOME`
 /// under cron (its own `.beads`, prefix `fc-`), or whichever checkout the operator happened
 /// to be in (`omp-orchestrator-ack-spine-oj6.3` was sent to a control-plane pane). The
 /// repository that names the work and the repository that selects it must be the same
@@ -154,7 +154,7 @@ fn roster_probe(bin: &str, args: &[String], secs: u64) -> Option<String> {
 /// as a named nonzero refill outcome.
 fn reconcile_fleet() -> Result<(), String> {
     let tmux = probe(
-        "tmux",
+        tick_monitor::TMUX,
         &[
             "list-sessions".into(),
             "-F".into(),
@@ -163,8 +163,8 @@ fn reconcile_fleet() -> Result<(), String> {
         45,
     )
     .unwrap_or_default();
-    let list = probe("ntm", &["list".into()], 45).unwrap_or_default();
-    let snapshot = probe("ntm", &["--robot-snapshot".into()], 45).unwrap_or_default();
+    let list = probe(tick_monitor::NTM, &["list".into()], 45).unwrap_or_default();
+    let snapshot = probe(tick_monitor::NTM, &["--robot-snapshot".into()], 45).unwrap_or_default();
     let verdict = fleet_reconcile::reconcile_inner(
         &tmux,
         &list,
@@ -223,7 +223,7 @@ fn packet_from_row(
 fn render_packet(bead: &str, footer: Option<&str>, target: &str) -> Result<String, String> {
     let raw = probe_in(
         Some(target),
-        "br",
+        finding::BR,
         &["show".into(), bead.into(), "--json".into()],
         CLAIM_TIMEOUT_SECS,
     )
@@ -417,7 +417,7 @@ fn write_pending_marker(
 fn load_target_snapshot(bead: &str, target: &str) -> Result<BeadSnapshot, String> {
     let raw = probe_in(
         Some(target),
-        "br",
+        finding::BR,
         &["show".into(), bead.into(), "--json".into()],
         CLAIM_TIMEOUT_SECS,
     )
@@ -437,7 +437,7 @@ fn claim_bead_for_refill(bead: &str, target: &str, pane: &str) -> Result<BeadSna
             "--actor".to_owned(),
             owner.clone(),
         ];
-        probe_in(Some(target), "br", &claim_args, CLAIM_TIMEOUT_SECS).ok_or_else(|| {
+        probe_in(Some(target), finding::BR, &claim_args, CLAIM_TIMEOUT_SECS).ok_or_else(|| {
             format!(
                 "DISPATCH_BLOCKED bead={bead} pane={pane} target={target} reason=CLAIM_COMMAND_FAILED"
             )
@@ -722,7 +722,7 @@ fn run(invocation: &Invocation) -> ExitCode {
     };
     let table = parse_pane_table(
         &probe(
-            "tmux",
+            tick_monitor::TMUX,
             &[
                 "list-panes".into(),
                 "-a".into(),
@@ -762,7 +762,7 @@ fn run(invocation: &Invocation) -> ExitCode {
         return ExitCode::from(1);
     }
 
-    let activity = roster_probe("ntm", &[format!("--robot-activity={session}")], 45)
+    let activity = roster_probe(tick_monitor::NTM, &[format!("--robot-activity={session}")], 45)
         .unwrap_or_default();
     let ready_bin = PathBuf::from(env_or("HOME", "")).join(".local/bin/pane-dispatch-ready");
     let oracle = roster_probe(
@@ -823,16 +823,18 @@ fn run(invocation: &Invocation) -> ExitCode {
     if picks.is_empty() {
         // bv's top-N was entirely epics/grading/blocked (measured 2026-09-02T21:23Z, 10 of
         // 10, beside 28 ready beads). The ready list is the second oracle.
-        let ready = probe_in(Some(&target), "br", &["ready".into(), "--json".into()], 60).unwrap_or_default();
+        let ready = probe_in(Some(&target), finding::BR, &[loop_queue_filter::READY_SUBCOMMAND.into(), "--json".into()], 60).unwrap_or_default();
         let (ready_picks, ready_refused) = parse_ready_fallback(&ready);
         for SkippedPick { bead, reason } in &ready_refused {
             println!("SKIP  bead={bead} reason={reason} source=br-ready");
         }
         if !ready_picks.is_empty() {
             println!(
-                "refill: bv top-{} all refused; falling back to br ready ({} dispatchable)",
+                "refill: bv top-{} all refused; falling back to {} {} ({} dispatchable)",
                 refused.len(),
-                ready_picks.len()
+                finding::BR,
+                loop_queue_filter::READY_SUBCOMMAND,
+                ready_picks.len(),
             );
         }
         picks = ready_picks;
@@ -1010,9 +1012,9 @@ fn run(invocation: &Invocation) -> ExitCode {
             skipped += 1;
             continue;
         }
-        let mut command = Command::new("ntm");
+        let mut command = Command::new(tick_monitor::NTM);
         command
-            .arg(format!("--robot-send={session}"))
+            .arg(tick_monitor::ntm_send_arg(&session))
             .arg(format!("--panes={pane}"))
             .arg(format!("--msg-file={}", staged.display()));
         let (ok, failure) = match bounded_status(&mut command, Duration::from_secs(45)) {
