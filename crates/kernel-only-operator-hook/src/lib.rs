@@ -6,6 +6,13 @@
 //! duplicates an installed kernel. It blocks only the concrete bypass shapes it can classify and
 //! reports an unresolved or malformed hook event as DENY rather than silently allowing it.
 //!
+//! Coverage window (`omp-orchestrator-j2z9`): a PreToolUse hook table is read at **session
+//! start**. Already-running agents are `UNCOVERED` until they restart. Piping a JSON event into
+//! this binary proves only the **binary decision** (`BINARY_PROBE_IS_NOT_INTERCEPT`); hook-level
+//! coverage requires a real tool call that was denied. `timeout`/`nice`/`env`/`time`/`stdbuf`/
+//! `xargs` wrappers may hide the command-position token and remain `UNMEASURED`/`UNSAFE`.
+//! Zero recorded invocations with zero tool calls is `UNKNOWN`, never `COVERED`.
+//!
 //! NO-CLAIM: this is not a general shell parser. It recognizes only the small set of command
 //! shapes and separators needed by this hook policy; shell syntax outside that set is not parsed.
 use asupersync::Cx;
@@ -23,6 +30,84 @@ pub const KERNEL_ALLOWLIST: &[&str] = &[
     "ntm --robot-send",
     "bv --robot-triage",
 ];
+
+/// When the host reads the hook table. Already-running sessions are uncovered.
+pub const COVERAGE_TAKES_EFFECT: &str = "session-start";
+
+/// A stdin JSON probe is not an intercept. Label those tests `binary-only`.
+pub const BINARY_PROBE_IS_NOT_INTERCEPT: bool = true;
+
+/// Wrappers that may skip a command-position resolver. Named limitation; not closed.
+pub const WRAPPER_TOKENS_UNMEASURED: &[&str] = &[
+    "timeout", "nice", "env", "time", "stdbuf", "xargs",
+];
+
+/// Four liveness outcomes. Never collapse `UNKNOWN` into `COVERED`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HookLiveness {
+    Unknown,
+    Uncovered,
+    Partial,
+    Covered,
+}
+
+impl HookLiveness {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Unknown => "UNKNOWN",
+            Self::Uncovered => "UNCOVERED",
+            Self::Partial => "PARTIAL",
+            Self::Covered => "COVERED",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ZeroThreshold;
+
+impl fmt::Display for ZeroThreshold {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "hook liveness threshold must be nonzero")
+    }
+}
+
+/// Classify shadow-ledger liveness. `threshold == 0` is an error, not a verdict.
+///
+/// `COVERED` is not the default branch. Each named outcome asserts its own
+/// precondition; the residual — including `bash_calls=0, hook_invocations=0` —
+/// is `UNKNOWN`.
+pub fn classify_hook_liveness(
+    bash_calls: u64,
+    hook_invocations: u64,
+    threshold: u64,
+) -> Result<HookLiveness, ZeroThreshold> {
+    if threshold == 0 {
+        return Err(ZeroThreshold);
+    }
+    if hook_invocations == 0 && bash_calls >= threshold {
+        Ok(HookLiveness::Uncovered)
+    } else if hook_invocations > 0 && hook_invocations < bash_calls {
+        Ok(HookLiveness::Partial)
+    } else if hook_invocations > 0 && hook_invocations >= bash_calls {
+        Ok(HookLiveness::Covered)
+    } else {
+        Ok(HookLiveness::Unknown)
+    }
+}
+
+/// Format the `--liveness` line consumed by the binary.
+pub fn format_hook_liveness(
+    session_id: &str,
+    bash_calls: u64,
+    hook_invocations: u64,
+    threshold: u64,
+) -> Result<String, ZeroThreshold> {
+    let state = classify_hook_liveness(bash_calls, hook_invocations, threshold)?;
+    Ok(format!(
+        "HOOK_LIVENESS {} session_id={session_id} bash_calls={bash_calls} hook_invocations={hook_invocations} threshold={threshold}",
+        state.label()
+    ))
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParseError {
@@ -738,5 +823,103 @@ mod scratch_home_tests {
         assert!(KERNEL_ALLOWLIST.contains(&"omp-orchestrator"));
         assert!(KERNEL_ALLOWLIST.contains(&"ntm --robot-send"));
         assert!(KERNEL_ALLOWLIST.contains(&"bv --robot-triage"));
+    }
+}
+
+#[cfg(test)]
+mod hook_liveness_tests {
+    use super::*;
+
+    #[test]
+    fn four_outcomes_stay_distinct() {
+        assert_eq!(
+            classify_hook_liveness(0, 0, 10).unwrap(),
+            HookLiveness::Unknown
+        );
+        assert_eq!(
+            classify_hook_liveness(10, 0, 10).unwrap(),
+            HookLiveness::Uncovered
+        );
+        assert_eq!(
+            classify_hook_liveness(10, 3, 10).unwrap(),
+            HookLiveness::Partial
+        );
+        assert_eq!(
+            classify_hook_liveness(10, 10, 10).unwrap(),
+            HookLiveness::Covered
+        );
+        let labels = [
+            HookLiveness::Unknown.label(),
+            HookLiveness::Uncovered.label(),
+            HookLiveness::Partial.label(),
+            HookLiveness::Covered.label(),
+        ];
+        let unique: std::collections::BTreeSet<_> = labels.into_iter().collect();
+        assert_eq!(unique.len(), 4);
+    }
+
+    #[test]
+    fn zero_calls_and_zero_invocations_is_unknown_never_covered() {
+        let report = format_hook_liveness("s", 0, 0, 10).unwrap();
+        assert!(report.starts_with("HOOK_LIVENESS UNKNOWN"), "{report}");
+        assert!(!report.contains("COVERED"));
+    }
+
+    #[test]
+    fn known_bad_uncovered_session_is_not_unknown() {
+        let report = format_hook_liveness("pre-install", 12, 0, 10).unwrap();
+        assert!(report.starts_with("HOOK_LIVENESS UNCOVERED"), "{report}");
+    }
+
+    #[test]
+    fn known_good_covered_session_is_not_uncovered() {
+        let report = format_hook_liveness("post-restart", 12, 12, 10).unwrap();
+        assert!(report.starts_with("HOOK_LIVENESS COVERED"), "{report}");
+        assert!(!report.contains("UNCOVERED"));
+    }
+
+    #[test]
+    fn below_threshold_without_invocations_is_unknown() {
+        assert_eq!(
+            classify_hook_liveness(3, 0, 10).unwrap(),
+            HookLiveness::Unknown
+        );
+    }
+
+    #[test]
+    fn covered_is_not_the_default_branch() {
+        assert_eq!(
+            classify_hook_liveness(0, 0, 10).unwrap(),
+            HookLiveness::Unknown
+        );
+        assert_eq!(
+            classify_hook_liveness(9, 0, 10).unwrap(),
+            HookLiveness::Unknown
+        );
+        assert_ne!(
+            classify_hook_liveness(0, 0, 10).unwrap(),
+            HookLiveness::Covered
+        );
+        assert_eq!(
+            classify_hook_liveness(1, 1, 10).unwrap(),
+            HookLiveness::Covered
+        );
+    }
+
+    #[test]
+    fn zero_threshold_is_an_error_not_a_verdict() {
+        assert_eq!(classify_hook_liveness(10, 0, 0), Err(ZeroThreshold));
+    }
+
+    #[test]
+    fn coverage_window_and_wrapper_limitation_are_named() {
+        assert_eq!(COVERAGE_TAKES_EFFECT, "session-start");
+        assert!(BINARY_PROBE_IS_NOT_INTERCEPT);
+        for token in ["timeout", "nice", "env", "time", "stdbuf", "xargs"] {
+            assert!(
+                WRAPPER_TOKENS_UNMEASURED.contains(&token),
+                "{token} missing from named wrapper limitation"
+            );
+        }
     }
 }

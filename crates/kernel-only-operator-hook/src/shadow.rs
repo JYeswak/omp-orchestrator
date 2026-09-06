@@ -9,12 +9,12 @@
 use asupersync::process::{Command, Output};
 use asupersync::time::timeout;
 use asupersync::Cx;
-use kernel_only_operator_hook::{Decision, Permission};
+use kernel_only_operator_hook::{format_hook_liveness, Decision, Permission};
 use serde::Serialize;
 use serde_json::Value;
 use std::fmt::Write as _;
-use std::fs::{self, OpenOptions};
-use std::io::{self, Write};
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use subprocess_contract::{run_output, RunError};
@@ -49,6 +49,7 @@ struct ShadowVerdict<'a> {
     command_sha256: String,
     input_sha256: String,
     session_id: String,
+    session_invocation_count: u64,
     turn_id: String,
     tool_use_id: String,
     transcript_path: String,
@@ -146,6 +147,15 @@ fn append_verdict_mode(
     predecessor: PredecessorObservation,
 ) -> io::Result<()> {
     let metadata = input_metadata(input);
+    let path = ledger_path()?;
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent)?;
+    }
+    let session_invocation_count =
+        session_invocation_count(&path, &metadata.session_id)?.saturating_add(1);
     let verdict = ShadowVerdict {
         schema_version: SCHEMA_VERSION,
         event: EVENT,
@@ -162,6 +172,7 @@ fn append_verdict_mode(
         command_sha256: metadata.command_sha256,
         input_sha256: metadata.input_sha256,
         session_id: metadata.session_id,
+        session_invocation_count,
         turn_id: metadata.turn_id,
         tool_use_id: metadata.tool_use_id,
         transcript_path: metadata.transcript_path,
@@ -182,15 +193,50 @@ fn append_verdict_mode(
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     line.push(b'\n');
 
-    let path = ledger_path()?;
-    if let Some(parent) = path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-    {
-        fs::create_dir_all(parent)?;
-    }
     let mut ledger = OpenOptions::new().create(true).append(true).open(path)?;
     ledger.write_all(&line)
+}
+
+fn session_invocation_count(path: &Path, session_id: &str) -> io::Result<u64> {
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(0),
+        Err(error) => return Err(error),
+    };
+    BufReader::new(file).lines().try_fold(0u64, |count, line| {
+        let line = line?;
+        let matches = serde_json::from_str::<Value>(&line)
+            .ok()
+            .and_then(|row| {
+                row.get("session_id")
+                    .and_then(Value::as_str)
+                    .map(|id| id == session_id)
+            })
+            .unwrap_or(false);
+        Ok(count.saturating_add(u64::from(matches)))
+    })
+}
+
+fn liveness_report_for(
+    path: &Path,
+    session_id: &str,
+    bash_calls: u64,
+    threshold: u64,
+) -> io::Result<String> {
+    if threshold == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "hook liveness threshold must be nonzero",
+        ));
+    }
+    let hook_invocations = session_invocation_count(path, session_id)?;
+    format_hook_liveness(session_id, bash_calls, hook_invocations, threshold)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error.to_string()))
+}
+
+/// Report whether this session's PreToolUse hook has recorded activity.
+pub fn liveness_report(session_id: &str, bash_calls: u64, threshold: u64) -> io::Result<String> {
+    liveness_report_for(&ledger_path()?, session_id, bash_calls, threshold)
 }
 
 /// Compare the exact bounded hook bytes with an existing predecessor, then append only
@@ -556,6 +602,7 @@ mod tests {
             command_sha256: metadata.command_sha256,
             input_sha256: metadata.input_sha256,
             session_id: metadata.session_id,
+            session_invocation_count: 1,
             turn_id: metadata.turn_id,
             tool_use_id: metadata.tool_use_id,
             transcript_path: metadata.transcript_path,
@@ -616,6 +663,7 @@ mod tests {
         let serialized = serialized_verdict(input);
 
         assert!(serialized.contains("command_sha256"));
+        assert!(serialized.contains("session_invocation_count"));
         assert!(serialized.contains("input_sha256"));
         assert!(!serialized.contains("rm -rf /sensitive-command"));
         assert!(!serialized.contains("\"command\""));
@@ -635,5 +683,47 @@ mod tests {
     fn predecessor_deadline_is_the_single_bounded_timeout() {
         assert_eq!(PREDECESSOR_DEADLINE, Duration::from_millis(250));
         assert_eq!(PREDECESSOR_DEADLINE.as_millis(), 250);
+    }
+    #[test]
+    fn session_liveness_reports_uncovered_and_counts_only_matching_sessions() {
+        let path = std::env::temp_dir().join(format!(
+            "kernel-hook-liveness-{}-{}.jsonl",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock")
+                .as_nanos()
+        ));
+        fs::write(
+            &path,
+            "{\"session_id\":\"s1\"}\n{\"session_id\":\"s2\"}\n{\"session_id\":\"s1\"}\n",
+        )
+        .expect("liveness fixture");
+        assert_eq!(session_invocation_count(&path, "s1").expect("count"), 2);
+        assert_eq!(session_invocation_count(&path, "s2").expect("count"), 1);
+        let report = liveness_report_for(&path, "missing", 3, 2).expect("report");
+        assert!(report.contains("HOOK_LIVENESS UNCOVERED"), "{report}");
+        assert!(report.contains("bash_calls=3"), "{report}");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn empty_ledger_with_zero_bash_calls_is_unknown_not_covered() {
+        let path = std::env::temp_dir().join(format!(
+            "kernel-hook-liveness-empty-{}-{}.jsonl",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock")
+                .as_nanos()
+        ));
+        fs::write(&path, "").expect("empty ledger");
+        let report = liveness_report_for(&path, "fresh", 0, 10).expect("report");
+        assert!(
+            report.starts_with("HOOK_LIVENESS UNKNOWN"),
+            "anti-vacuity: {report}"
+        );
+        assert!(!report.contains("COVERED"), "{report}");
+        let _ = fs::remove_file(path);
     }
 }

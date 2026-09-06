@@ -1,7 +1,8 @@
 #![forbid(unsafe_code)]
 
 use kernel_only_operator_hook::{
-    classify, parse_input, render_decision, HookInput, Permission, MAX_INPUT_BYTES,
+    classify, parse_input, render_decision, BINARY_PROBE_IS_NOT_INTERCEPT, HookInput, Permission,
+    MAX_INPUT_BYTES,
 };
 use serde_json::Value;
 use std::fs;
@@ -401,4 +402,16 @@ fn shadow_compare_predecessor_records_safe_local_observation() {
         "shadow effective behavior remains allow"
     );
     let _ = fs::remove_file(ledger_path);
+}
+
+/// binary-only: piping JSON into parse_input/classify proves the decision, not intercept.
+#[test]
+fn binary_only_probe_is_labelled_and_is_not_an_intercept() {
+    assert!(
+        BINARY_PROBE_IS_NOT_INTERCEPT,
+        "a stdin JSON probe must stay labelled binary-only"
+    );
+    let input: HookInput =
+        parse_input(&claude_event("tmux send-keys -t %1413 -l packet")).unwrap();
+    assert_eq!(classify(&input).permission, Permission::Deny);
 }
