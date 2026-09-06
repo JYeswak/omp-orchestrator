@@ -126,6 +126,27 @@ const BUILD_ID: &str = env!(
 );
 #[used]
 static BUILD_ID_MARKER: &[u8] = concat!("build_id=", env!("OMP_BUILD_ID")).as_bytes();
+/// Stable for this process and distinct across normal restarts, even when the binary build id
+/// repeats. The same value is attached to lifecycle evidence and embedded in event ids.
+static LIFECYCLE_RUN_ID: LazyLock<String> = LazyLock::new(|| {
+    let started_ns = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    format!("{BUILD_ID}:pid{}:start{started_ns}", std::process::id())
+});
+
+fn lifecycle_run_id() -> &'static str {
+    LIFECYCLE_RUN_ID.as_str()
+}
+
+fn run_scoped_event_key(kind: &str, bead: &str, tick: u64, suffix: &str) -> String {
+    format!("{bead}:{kind}:{}:{tick}{suffix}", lifecycle_run_id())
+}
+
+fn selected_event_key_for_run(bead: &str, tick: u64, run_id: &str) -> String {
+    format!("{bead}:selected:{run_id}:{tick}")
+}
 #[derive(Debug)]
 pub struct Config {
     repo: PathBuf,
@@ -1936,14 +1957,18 @@ fn begin_dispatch_lifecycle(
         InvokerClass::detect_current(),
     )
     .map_err(|error| error.to_string())?;
-    let selected_id = EventId::new(format!("{bead}:selected:{tick}"))
+    let selected_id = EventId::new(selected_event_key_for_run(bead, tick, lifecycle_run_id()))
         .map_err(|error| error.to_string())?;
-    let selected = LedgerEvidence::single(
+    let selected = LedgerEvidence::new(
         selected_id,
         now_ms,
         EvidencePolicy::new(now_ms, 0),
-        "decision",
-        format!("dispatch preflight passed pane={pane}"),
+        [
+            ("decision".to_owned(), format!("dispatch preflight passed pane={pane}")),
+            ("run_id".to_owned(), lifecycle_run_id().to_owned()),
+            ("build_id".to_owned(), BUILD_ID.to_owned()),
+            ("pid".to_owned(), std::process::id().to_string()),
+        ],
     )
     .map_err(|error| error.to_string())?;
     LifecycleLedger::start(
@@ -2081,11 +2106,11 @@ fn gate_peer_grading_inner(
         let approval = Approved::authorize(classify(intent))
             .map_err(|error| format!("PEER_GRADING_REFUSED reason={error:?}"))?;
         let now_ms = now_unix().saturating_mul(1_000);
-        let event_id = EventId::new(format!(
-            "peer-grade:{}:{}:{}",
+        let event_id = EventId::new(run_scoped_event_key(
+            "peer-grade",
             candidate.identity.bead.as_str(),
             tick,
-            grader_pane
+            &format!(":{grader_pane}"),
         ))
         .map_err(|error| error.to_string())?;
         let evidence = LedgerEvidence::new(
@@ -2192,7 +2217,7 @@ async fn send_and_verify(
     let mut lifecycle = begin_dispatch_lifecycle(config, pane, pane_observation, bead, &packet, tick)
         .map_err(|error| format!("LIFECYCLE_LEDGER_REFUSED bead={bead} pane={pane} error={error}"))?;
     let dispatch_at_ms = now_unix().saturating_mul(1_000);
-    let dispatch_id = EventId::new(format!("{bead}:dispatch:{tick}"))
+    let dispatch_id = EventId::new(run_scoped_event_key("dispatch", bead, tick, ""))
         .map_err(|error| error.to_string())?;
     let dispatch_receipt = DispatchReceipt::new(
         dispatch_id.clone(),
@@ -2315,7 +2340,7 @@ async fn send_and_verify(
         });
         if stage.is_confirmed() {
             let receiver_at_ms = now_unix().saturating_mul(1_000);
-            let receiver_id = EventId::new(format!("{bead}:receiver:{tick}"))
+            let receiver_id = EventId::new(run_scoped_event_key("receiver", bead, tick, ""))
                 .map_err(|error| error.to_string())?;
             let receiver = ReceiverEvidence::new(
                 receiver_id.clone(),
@@ -2521,7 +2546,7 @@ async fn send_and_verify(
                 // letting the reader assume it did.
                 .unwrap_or_else(|| " discriminator=NO_WORKING_CAPTURE owes_human=unknown".to_owned());
             let redispatch_at_ms = now_unix().saturating_mul(1_000);
-            let redispatch_id = EventId::new(format!("{bead}:redispatch-required:{tick}"))
+            let redispatch_id = EventId::new(run_scoped_event_key("redispatch-required", bead, tick, ""))
                 .map_err(|error| error.to_string())?;
             let redispatch_plan = RedispatchPlan::new(
                 redispatch_id.clone(),
@@ -2727,6 +2752,7 @@ fn write_heartbeat(config: &Config, tick: u64, status: &str, detail: &str) -> Re
         "ts_unix": now_unix(),
         "event": "supervisor_heartbeat",
         "build_id": BUILD_ID,
+        "run_id": lifecycle_run_id(),
         "status": status,
         "tick": tick,
         "pid": std::process::id(),
@@ -3559,6 +3585,7 @@ fn write_dispatch_intent(config: &Config, pane: &str, bead: &str) -> Result<(), 
     let row = serde_json::json!({
         "event": "dispatch_intent",
         "build_id": BUILD_ID,
+        "run_id": lifecycle_run_id(),
         "pid": std::process::id(),
         "repo": config.repo.display().to_string(),
         "session": config.session,
@@ -7525,4 +7552,23 @@ Stop: now
         }
     }
 
+    #[test]
+    fn selected_event_key_changes_across_runs_and_preserves_same_run_replay() {
+        let first = selected_event_key_for_run("omp-orchestrator-eg0m", 2, "build-a:pid101:start1");
+        let second = selected_event_key_for_run("omp-orchestrator-eg0m", 2, "build-a:pid202:start2");
+        let replay = selected_event_key_for_run("omp-orchestrator-eg0m", 2, "build-a:pid101:start1");
+
+        assert_ne!(first, second, "fresh runs must not collide at the same tick");
+        assert_eq!(first, replay, "same-run duplicate selection must remain idempotent");
+        assert!(first.contains(":selected:build-a:pid101:start1:2"));
+        assert!(second.contains(":selected:build-a:pid202:start2:2"));
+    }
+
+    #[test]
+    fn lifecycle_run_id_contains_build_pid_and_start_identity() {
+        let run_id = lifecycle_run_id();
+        assert!(run_id.contains(BUILD_ID));
+        assert!(run_id.contains(&format!("pid{}", std::process::id())));
+        assert!(run_id.contains(":start"));
+    }
 }
