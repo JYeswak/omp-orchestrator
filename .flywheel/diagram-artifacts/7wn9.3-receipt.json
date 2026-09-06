@@ -1,0 +1,29 @@
+{
+  "schema_version": "omp-orchestrator/diagram-receipt/v1",
+  "bead": "omp-orchestrator-plan-04-7wn9.3",
+  "source_revision_at_capture": "b60cad3e4038a167a7effafb8ca8453403554df3",
+  "generator": "omp-inventory-map --bin frankenmermaid",
+  "input": {
+    "metadata_path": ".flywheel/diagram-artifacts/7wn9.3-cargo-metadata.json",
+    "metadata_sha256": "54b36fdfcc043bcc1e4a2adc99a2ad26725ac49fff3cc911ff7df3720eada7c6",
+    "metadata_command": "cargo metadata --no-deps --format-version 1 --offline",
+    "inventory_path": ".flywheel/diagram-artifacts/7wn9.3-inventory-map.json",
+    "inventory_sha256": "876809f0779a81b31126564b2b166a7a883c4f5365b499561242013c7dd4c899",
+    "inventory_source_compressed_path": ".flywheel/inventory-artifacts/omp-inventory-map-2026-08-31.json.gz",
+    "inventory_source_compressed_sha256": "8de42c7cb9e653a79b9781602b16db21e4e281346e42c47c95e71041d9404f52"
+  },
+  "output": {
+    "diagram1_path": "docs/plan/diagrams/diagram-1-crate-dependencies.mmd",
+    "diagram1_sha256": "777c0a03382cda921f02faefcc9540aec3f1950b6a9d4f64b3e3611c5617d402",
+    "diagram2_path": "docs/plan/diagrams/diagram-2-omp-surface.mmd",
+    "diagram2_sha256": "aa67624261702cb2a6aa593150d46bfabdf3a39b99d3b733461fc92164792869",
+    "diagram1_packages": 81,
+    "diagram1_path_dependency_edges": 157,
+    "diagram2_rows": 981,
+    "diagram2_workspace_crates": 26
+  },
+  "commands": {
+    "write": "cargo run -p omp-inventory-map --bin frankenmermaid -- --metadata .flywheel/diagram-artifacts/7wn9.3-cargo-metadata.json --inventory .flywheel/diagram-artifacts/7wn9.3-inventory-map.json --output-dir docs/plan/diagrams --write",
+    "check": "cargo run -p omp-inventory-map --bin frankenmermaid -- --metadata .flywheel/diagram-artifacts/7wn9.3-cargo-metadata.json --inventory .flywheel/diagram-artifacts/7wn9.3-inventory-map.json --output-dir docs/plan/diagrams --check"
+  }
+}
