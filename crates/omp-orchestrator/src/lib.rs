@@ -31,7 +31,7 @@
 pub mod spine_emit;
 pub mod dispatch_packet;
 pub mod cross_pane_hold;
-
+pub mod jsm_suggest;
 use std::collections::BTreeSet;
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -395,36 +395,16 @@ pub struct GateCensus {
 ///
 /// Without leg 3, advisory-first is indistinguishable from permanent silence.
 pub const ADVISORY_ALLOWANCE: &[(&str, &str)] = &[
-    ("admission-reason", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
-    ("bead-availability", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
-    ("cargo-lane-budget", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("crate-soundness-verify", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
-    ("dispatcher-deadman", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("extraction-roster", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
-    ("fast-dispatch", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
-    ("fleet-monitor", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
-    ("fleet-truth", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
-    ("inbox-monitor", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
-    ("loop-driver", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
-    ("loop-tick", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
-    ("omp-idle-dispatch", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("omp-surface-consumption", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
-    ("oracle-pane-state-differential", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
-    ("pane-oracle-diff", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
-    ("reap-finished-panes", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("refill-idle-panes", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("response-envelope-check", "lib with no manifest caller; entered census 2026-09-02 by derived membership, untriaged"),
     ("s1-coverage", "advisory-unreachable: S1 depth is suspended by Atlas Arc R1 and the HD-0012 hook decision pending Joshua approval; no production caller is honest while S1 is frozen. Dies when an approved S1 build wave wires this crate into an in-tree production caller; delete this allowance row then"),
     ("silent-success-census", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("tick-dispatch", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
-    ("verify-dispatch", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("wired-but-inert-guard", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
 ];
-/// The advisory ceiling and the value recorded at its anchor are one ratchet.
-///
-/// The duplicated ceiling_at_recording field is intentional: it makes a mutation
-/// that changes the live ceiling while leaving its recorded anchor untouched fail
-/// the census contract instead of silently changing the meaning of the deadline.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AdvisoryRatchetAnchor {
     ceiling: usize,

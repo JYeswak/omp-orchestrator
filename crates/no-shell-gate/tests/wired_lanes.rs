@@ -445,6 +445,24 @@ fn validate_allowance(lanes: &[Lane], allowance: &[(&str, &str)]) -> Result<(), 
     Ok(())
 }
 
+fn allowance_verdict(
+    lane: &Lane,
+    caller: Option<CallerHit>,
+    allowance_reason: Option<&str>,
+) -> Result<Option<CallerHit>, String> {
+    match (caller, allowance_reason) {
+        (Some(hit), Some(reason)) => Err(format!(
+            "{} IS now invoked by {}:{}, but it is still declared unwired in UNWIRED_LANE_ALLOWANCE ({reason}). Remove the declaration",
+            lane.name,
+            hit.path.display(),
+            hit.line,
+        )),
+        (Some(hit), None) => Ok(Some(hit)),
+        (None, Some(_reason)) => Ok(None),
+        (None, None) => Err(format!("UNWIRED LANE: {}", lane.name)),
+    }
+}
+
 fn check_wiring(
     lanes: &[Lane],
     sources: &[CallerSource],
@@ -461,10 +479,13 @@ fn check_wiring(
 
     let mut hits = Vec::with_capacity(lanes.len());
     for lane in lanes {
-        match find_caller(lane, sources, strip_tests)? {
-            Some(hit) => hits.push(hit),
-            None if allowance.iter().any(|(name, _)| *name == lane.name) => continue,
-            None => return Err(format!("UNWIRED LANE: {}", lane.name)),
+        let caller = find_caller(lane, sources, strip_tests)?;
+        let allowance_reason = allowance
+            .iter()
+            .find(|(name, _)| *name == lane.name)
+            .map(|(_, reason)| *reason);
+        if let Some(hit) = allowance_verdict(lane, caller, allowance_reason)? {
+            hits.push(hit);
         }
     }
     Ok(hits)
@@ -685,6 +706,59 @@ fn planted_unwired_lane_is_red_then_green_in_one_run() {
         green.is_ok(),
         "a real production caller must turn the planted lane green"
     );
+}
+
+#[test]
+fn allowance_verdict_covers_four_wiring_combinations() {
+    let lane = Lane {
+        name: "matrix-lane".to_owned(),
+        needle_hyphen: "matrix-lane".to_owned(),
+        needle_underscore: "matrix_lane".to_owned(),
+    };
+    let hit = CallerHit {
+        path: PathBuf::from("src/production.rs"),
+        line: 7,
+    };
+
+    let wired_declared = allowance_verdict(&lane, Some(hit.clone()), Some("stale reason"))
+        .expect_err("wired lane with an allowance must be refused");
+    assert!(wired_declared.contains("matrix-lane IS now invoked"));
+    assert!(wired_declared.contains("Remove the declaration"));
+
+    let wired_undeclared = allowance_verdict(&lane, Some(hit), None)
+        .expect("wired lane without an allowance must pass")
+        .expect("wired caller must be returned");
+    assert_eq!(wired_undeclared.path, PathBuf::from("src/production.rs"));
+
+    assert!(
+        allowance_verdict(&lane, None, Some("valid reason"))
+            .expect("unwired declared lane is an allowed exception")
+            .is_none()
+    );
+    let unwired_undeclared = allowance_verdict(&lane, None, None)
+        .expect_err("unwired undeclared lane must be refused");
+    assert_eq!(unwired_undeclared, "UNWIRED LANE: matrix-lane");
+}
+
+#[test]
+fn wired_allowance_is_red_and_removing_declaration_is_green() {
+    let lane = Lane {
+        name: "planted-wired-lane".to_owned(),
+        needle_hyphen: "planted-wired-lane".to_owned(),
+        needle_underscore: "planted_wired_lane".to_owned(),
+    };
+    let source = rust_source(
+        "src/production.rs",
+        "fn run() { invoke(\"planted-wired-lane\"); }\n",
+    );
+    let stale = [("planted-wired-lane", "stale reason")];
+    let error = check_wiring(&[lane.clone()], &[source.clone()], &stale, STRIP_TEST_CODE)
+        .expect_err("a declared wired allowance must be RED");
+    assert!(error.contains("planted-wired-lane IS now invoked"), "{error}");
+    assert!(error.contains("Remove the declaration"), "{error}");
+    let clean = check_wiring(&[lane], &[source], &[], STRIP_TEST_CODE)
+        .expect("removing the stale declaration must restore GREEN");
+    assert_eq!(clean.len(), 1);
 }
 
 #[test]
