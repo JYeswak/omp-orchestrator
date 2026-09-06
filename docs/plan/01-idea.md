@@ -412,13 +412,13 @@ brief still marks OQ-1–OQ-3 as BLOCKS_PLAN unknowns; gates 1–4 and 12 are th
 
 | gate | test | status now | precommitted pass / kill rule |
 |---|---|---|---|
-| 8 | reachable population, sourced from named fleet operators | **OPEN / UNKNOWN** — no external population sample | pass if 5 qualified operators provide a redacted mismatch; kill/narrow if fewer than 2 do |
+| 8 | reachable population, sourced from named fleet operators | **NARROW** — 0 external mismatch receipts (NUMBERS `gate8_operator_mismatch_receipts`) | pass if 5 qualified operators provide a redacted mismatch; kill/narrow if fewer than 2 do |
 | 9 | bottom-up reachable economics | **OPEN / UNKNOWN** — no baseline minutes, volume, or ACV | pass if measured annualized avoided operator cost is at least 3× proposed annual price for 3 of 5 operators; otherwise narrow or kill |
 | 10 | distribution access | **OPEN / UNKNOWN** — no acquisition route or funnel | pass if 3 of 5 qualified buyers name an reachable channel and accept a concierge introduction; otherwise do not promote |
 | 11 | first-value path | **PARTIAL** — local enforcement exists, OMP supervisor integration does not | pass if 4 of 5 redacted replays produce a reviewable completion → receipt → typed close/refusal; kill this wedge if fewer than 2 do |
 | 12 | paid commitment at the proposed 500/month | **OPEN / UNKNOWN** — price is a test, not a validated fact | pass if 3 of 5 qualified economic buyers sign a non-binding letter of intent after replay; zero is a kill signal |
 | 13 | unit economics | **OPEN / UNKNOWN** — support, onboarding, compute, and acquisition cost unmeasured | pass if fully loaded recurring cost is below one third of 500/month for the measured cohort; otherwise reprice or kill |
-| 14 | recurrence and retention reason | **OPEN / UNKNOWN** — one stand-down is not recurrence | pass if 4 of 5 operators report the mismatch at least monthly over a 30-day diary; otherwise narrow |
+| 14 | recurrence and retention reason | **NARROW** — 0 diary operators (NUMBERS `gate14_diary_operators_monthly`); 30-day cohort not started | pass if 4 of 5 operators report the mismatch at least monthly over a 30-day diary; otherwise narrow |
 | 15 | rights, security, and licensing | **OPEN / UNKNOWN** — data-use rights, secrets, permissions, and licenses unreviewed | pass only with written rights and license review, no unresolved secret/permission blocker, and a fail-closed access test |
 | 16 | defensibility / compounding asset | **OPEN / UNKNOWN** — no measured moat against scripts, labor, or native tools | pass only if 3 of 5 buyers choose the receipt contract over their strongest substitute and retained evidence improves the next replay; otherwise treat as commodity |
 | 17 | proportionality against substitutes | **OPEN / UNKNOWN** — no 3× incremental comparison exists | pass if measured time/rework reduction is at least 3× incremental adoption cost for 3 of 5 operators; otherwise do not build |
