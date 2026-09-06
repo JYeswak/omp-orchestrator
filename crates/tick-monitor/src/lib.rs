@@ -485,6 +485,18 @@ impl Liveness {
         )
     }
 }
+/// A freshness window attached to a two-capture dispatch proof.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DispatchableEvidence {
+    pub proven_at: u64,
+    pub valid_until: u64,
+}
+
+impl DispatchableEvidence {
+    pub const fn is_fresh_at(self, now: u64) -> bool {
+        self.proven_at <= now && now < self.valid_until
+    }
+}
 
 /// One pane's current classifier state plus its two-capture evidence.
 ///
@@ -495,33 +507,78 @@ pub struct CapacityObservation {
     pub pane_id: String,
     pub state: PaneState,
     pub liveness: Liveness,
+    pub dispatchable_evidence: Option<DispatchableEvidence>,
 }
 
 impl CapacityObservation {
     pub fn new(pane_id: impl Into<String>, state: PaneState, liveness: Liveness) -> Self {
+        Self::with_evidence(pane_id, state, liveness, None)
+    }
+
+    pub fn with_evidence(
+        pane_id: impl Into<String>,
+        state: PaneState,
+        liveness: Liveness,
+        dispatchable_evidence: Option<DispatchableEvidence>,
+    ) -> Self {
         Self {
             pane_id: pane_id.into(),
             state,
             liveness,
+            dispatchable_evidence,
         }
     }
 
-    pub fn is_dispatchable(&self) -> bool {
-        self.liveness.is_dispatchable()
+    pub fn is_dispatchable_at(&self, now: u64) -> bool {
+        matches!(self.state, PaneState::Idle)
+            && self
+                .dispatchable_evidence
+                .is_some_and(|evidence| evidence.is_fresh_at(now))
     }
 
     /// Awareness only: a recognized current Idle state is visible before liveness is proven.
     pub fn is_free_capacity(&self) -> bool {
         matches!(self.state, PaneState::Idle)
     }
+
+    pub fn not_yet_provable_reason(&self, now: u64) -> Option<&'static str> {
+        if self.is_dispatchable_at(now) || !self.is_free_capacity() {
+            return None;
+        }
+        Some(match self.liveness {
+            Liveness::NewlyIdle => "newly_idle",
+            Liveness::Unproven { why } => why,
+            _ => "idle_not_confirmed",
+        })
+    }
 }
 
-/// The observer's two capacity projections. free_capacity is awareness;
-/// dispatchable is permission to send. They intentionally disagree for newly idle observations.
+/// The typed state of the capacity verdict, distinct from an empty pane list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CapacityState {
+    Dispatchable,
+    NotYetProvable,
+    NoCapacity,
+}
+
+impl CapacityState {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Dispatchable => "DISPATCHABLE",
+            Self::NotYetProvable => "NOT_YET_PROVABLE",
+            Self::NoCapacity => "NO_CAPACITY",
+        }
+    }
+}
+
+/// The observer's two capacity projections plus proof freshness and typed absence.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CapacityReport {
     pub dispatchable: Vec<String>,
+    pub dispatchable_evidence: Vec<(String, DispatchableEvidence)>,
     pub free_capacity: Vec<String>,
+    pub not_yet_provable: Vec<(String, &'static str)>,
+    pub state: CapacityState,
 }
 
 /// Observation could not establish any readable pane truth.
@@ -537,12 +594,13 @@ impl fmt::Display for MonitorBlind {
 /// Derive both capacity views from one pane observation.
 ///
 /// free_capacity is awareness of a recognized current Idle state, including a first
-/// capture or a short-gap capture. dispatchable remains the stricter two-capture proof.
-/// Empty input is an error: a zero-row report is indistinguishable from a healthy fleet
-/// unless the monitor names its blindness.
+/// capture or a short-gap capture. dispatchable remains the stricter two-capture proof,
+/// retained until its explicit validity window expires. Empty input is an error: a zero-row
+/// report is indistinguishable from a healthy fleet unless the monitor names its blindness.
 pub fn partition_capacity(
     rows: &[CapacityObservation],
     excluded: &[&str],
+    now: u64,
 ) -> Result<CapacityReport, MonitorBlind> {
     if rows.is_empty() {
         return Err(MonitorBlind);
@@ -550,19 +608,40 @@ pub fn partition_capacity(
 
     let mut report = CapacityReport {
         dispatchable: Vec::new(),
+        dispatchable_evidence: Vec::new(),
         free_capacity: Vec::new(),
+        not_yet_provable: Vec::new(),
+        state: CapacityState::NoCapacity,
     };
     for observation in rows {
         if excluded.contains(&observation.pane_id.as_str()) {
             continue;
         }
-        if observation.is_dispatchable() {
+        if observation.is_dispatchable_at(now) {
             report.dispatchable.push(observation.pane_id.clone());
+            if let Some(evidence) = observation.dispatchable_evidence {
+                report
+                    .dispatchable_evidence
+                    .push((observation.pane_id.clone(), evidence));
+            }
+        } else if let Some(reason) = observation.not_yet_provable_reason(now) {
+            report
+                .not_yet_provable
+                .push((observation.pane_id.clone(), reason));
         }
         if observation.is_free_capacity() {
             report.free_capacity.push(observation.pane_id.clone());
         }
     }
+    report.state = if report.dispatchable.is_empty() {
+        if report.not_yet_provable.is_empty() {
+            CapacityState::NoCapacity
+        } else {
+            CapacityState::NotYetProvable
+        }
+    } else {
+        CapacityState::Dispatchable
+    };
     Ok(report)
 }
 
@@ -574,6 +653,11 @@ pub fn partition_capacity(
 /// flight.
 pub const MIN_GAP_SECS: u64 = 75;
 
+/// How long a confirmed idle proof remains dispatchable without a new capture.
+///
+/// Two capture intervals cover the default 90s watcher cadence while keeping the
+/// proof bounded. Any observed non-Idle state revokes the window immediately.
+pub const DISPATCHABLE_VALIDITY_SECS: u64 = MIN_GAP_SECS * 2;
 /// One pane's observation at a point in time.
 /// The exact producer identity of a pane observation.
 ///
@@ -1084,6 +1168,16 @@ pub struct State {
     pub observation_epoch: String,
     /// Next identity sequence allocated by this monitor producer.
     pub next_observation_sequence: u64,
+    /// Fresh dispatch proofs carried across one-shot observe invocations.
+    pub dispatchable_evidence: Vec<(String, DispatchableEvidence)>,
+}
+impl State {
+    pub fn dispatchable_evidence_for(&self, pane_id: &str) -> Option<DispatchableEvidence> {
+        self.dispatchable_evidence
+            .iter()
+            .find(|(id, _)| id == pane_id)
+            .map(|(_, evidence)| *evidence)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1316,6 +1410,22 @@ pub fn load(path: &Path) -> State {
             ["last_blocker", v] => st.last_blocker = (*v).to_owned(),
             ["blocker_streak", v] => st.blocker_streak = v.parse().unwrap_or(0),
             ["red_streak", v] => st.red_streak = v.parse().unwrap_or(0),
+            ["dispatchable", id, proven_at, valid_until] => {
+                let (Ok(proven_at), Ok(valid_until)) =
+                    (proven_at.parse::<u64>(), valid_until.parse::<u64>())
+                else {
+                    continue;
+                };
+                if valid_until > proven_at {
+                    st.dispatchable_evidence.push((
+                        (*id).to_owned(),
+                        DispatchableEvidence {
+                            proven_at,
+                            valid_until,
+                        },
+                    ));
+                }
+            }
             ["commit", repo, sha] => st.commits.push(((*repo).to_owned(), (*sha).to_owned())),
             ["pane", id, label, timer, hash, at, epoch, sequence, changed_at] => {
                 let state = match *label {
@@ -1404,6 +1514,12 @@ pub fn save(path: &Path, st: &State) -> std::io::Result<()> {
     out.push_str(&format!("last_blocker\t{}\n", st.last_blocker));
     out.push_str(&format!("blocker_streak\t{}\n", st.blocker_streak));
     out.push_str(&format!("red_streak\t{}\n", st.red_streak));
+    for (id, evidence) in &st.dispatchable_evidence {
+        out.push_str(&format!(
+            "dispatchable\t{id}\t{}\t{}\n",
+            evidence.proven_at, evidence.valid_until
+        ));
+    }
     for (repo, sha) in &st.commits {
         out.push_str(&format!("commit\t{repo}\t{sha}\n"));
     }

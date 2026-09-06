@@ -255,6 +255,7 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
     let mut transitions = Vec::new();
     let mut capacity_rows = Vec::new();
     let mut attention = Vec::new();
+    let mut current_dispatchable_evidence = Vec::new();
 
     for id in &ids {
         let Some(cap) = capture(id) else {
@@ -282,6 +283,28 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
         };
         let prev = prior.panes.iter().find(|p| &p.pane_id == id);
         let live = liveness(prev, &o);
+        let dispatchable_evidence = if matches!(&live, Liveness::ConfirmedIdle) {
+            let proven_at = prev.map(|observation| observation.at).unwrap_or(now);
+            Some(DispatchableEvidence {
+                proven_at,
+                valid_until: now.saturating_add(DISPATCHABLE_VALIDITY_SECS),
+            })
+        } else if matches!(&state, PaneState::Idle)
+            && prev
+                .map(|observation| matches!(&observation.state, PaneState::Idle))
+                .unwrap_or(false)
+        {
+            prior
+                .dispatchable_evidence_for(id)
+                .filter(|evidence| evidence.is_fresh_at(now))
+        } else {
+            None
+        };
+        if let Some(evidence) = dispatchable_evidence {
+            if !excluded.contains(&id.as_str()) {
+                current_dispatchable_evidence.push((id.clone(), evidence));
+            }
+        }
         // A recognized Idle state is free capacity a conductor must SEE, even on the
         // first or short-gap capture; liveness gates filling, not awareness.
         //
@@ -330,13 +353,21 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
             esc(last_status_line(&cap))
         ));
         obs.push(o);
-        capacity_rows.push(CapacityObservation::new(id.clone(), state, live));
+        capacity_rows.push(CapacityObservation::with_evidence(
+            id.clone(),
+            state,
+            live,
+            dispatchable_evidence,
+        ));
     }
 
     let CapacityReport {
         dispatchable,
+        dispatchable_evidence,
         free_capacity,
-    } = partition_capacity(&capacity_rows, &excluded).map_err(|error| {
+        not_yet_provable,
+        state: capacity_state,
+    } = partition_capacity(&capacity_rows, &excluded, now).map_err(|error| {
         eprintln!("REFUSE observe: {error} for session {session:?}");
         3
     })?;
@@ -373,10 +404,33 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
         }
     }
 
+    let dispatchable_evidence_json = dispatchable_evidence
+        .iter()
+        .map(|(pane, evidence)| {
+            format!(
+                "{{\"pane\":\"{}\",\"proven_at\":{},\"valid_until\":{}}}",
+                esc(pane),
+                evidence.proven_at,
+                evidence.valid_until
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    let not_yet_provable_json = not_yet_provable
+        .iter()
+        .map(|(pane, reason)| {
+            format!(
+                "{{\"pane\":\"{}\",\"reason\":\"{}\"}}",
+                esc(pane),
+                esc(reason)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
     let json = format!(
         "{{\"observed_at\":{},\"prior_tick\":{},\"gap_secs\":{},\"session\":\"{}\",\
 \"panes_scanned\":{},\
-\"idle_panes\":{{\"dispatchable\":[{}],\"count\":{},\"free_capacity\":[{}]}},\
+\"idle_panes\":{{\"dispatchable\":[{}],\"count\":{},\"free_capacity\":[{}],\"state\":\"{}\",\"dispatchable_evidence\":[{}],\"not_yet_provable\":[{}]}},\
 \"attention\":{{\"panes\":[{}],\"count\":{}}},\
 \"dead_panes\":{{\"ids\":[{}],\"count\":{}}},\
 \"omp_lifecycle\":{{\"transitions\":[{}],\"panes\":[{}]}},\
@@ -397,6 +451,9 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
             .map(|d| format!("\"{}\"", esc(d)))
             .collect::<Vec<_>>()
             .join(","),
+        capacity_state.label(),
+        dispatchable_evidence_json,
+        not_yet_provable_json,
         attention
             .iter()
             .map(|d| format!("\"{}\"", esc(d)))
@@ -424,6 +481,7 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
             blocker_streak: prior.blocker_streak,
             red_streak: prior.red_streak,
             panes: obs,
+            dispatchable_evidence: current_dispatchable_evidence,
             commits: heads,
         };
         if let Err(e) = save(&state_file, &next) {
