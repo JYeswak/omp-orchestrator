@@ -61,6 +61,8 @@
 //! `am inbox-events` accepts `--direct`; **`am inbox` has no such flag** (`am inbox --help`,
 //! 2026-09-02), so the flag is passed to exactly one of the two reads.
 
+pub mod wake;
+
 use serde::Deserialize;
 use std::fmt;
 use std::path::{Path, PathBuf};

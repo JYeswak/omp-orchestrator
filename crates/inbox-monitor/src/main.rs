@@ -42,6 +42,9 @@ use inbox_monitor::{
     EXIT_CURSOR_REGRESSED, EXIT_MAIL_WAITING, EXIT_UNREACHABLE, EXIT_WATCH_TIMED_OUT,
     WATCH_BLIND_STREAK,
 };
+use inbox_monitor::wake::{
+    classify_watch_arm_live, cursor_keyed_wake, WatchArm,
+};
 use std::path::Path;
 use std::process::{Command, ExitCode};
 use std::time::{Duration, Instant};
@@ -936,8 +939,35 @@ async fn watch(
             return fail(verdict);
         }
 
-        let observation = observe(cx, args, persisted).await;
+        let mut observation = observe(cx, args, persisted).await;
         polls = polls.saturating_add(1);
+        if matches!(observation.verdict, MonitorVerdict::Clear) {
+            if let Some(page) = observation.page.as_ref() {
+                match cursor_keyed_wake(
+                    persisted,
+                    Some(page.next_cursor),
+                    Some(observation.unread_count),
+                ) {
+                    Ok(true) => {
+                        observation.verdict = MonitorVerdict::MailWaiting {
+                            unread: observation.unread_count,
+                            oldest_from: "unflagged-arrival".to_string(),
+                            oldest_subject: format!(
+                                "next_cursor {} > persisted {:?}",
+                                page.next_cursor, persisted
+                            ),
+                        };
+                    }
+                    Ok(false) => {}
+                    Err(error) => {
+                        observation.verdict = MonitorVerdict::Unreachable {
+                            detail: error.to_string(),
+                            reason: UnreachableReason::Indeterminate,
+                        };
+                    }
+                }
+            }
+        }
         let step = watch_step(&observation.verdict, consecutive_blind, WATCH_BLIND_STREAK);
         let waited_secs = started.elapsed().as_secs();
 
@@ -1069,6 +1099,14 @@ fn run(argv: &[String]) -> Result<Terminal, Usage> {
             }));
         }
     };
+
+    if args.watch.is_some() && classify_watch_arm_live() == WatchArm::RefusedAmpersand {
+        return Err(Usage(
+            "WAKE_ARMED_INTO_NOWHERE: --watch refused without \
+             INBOX_MONITOR_HARNESS_JOB=bg_<N> (shell ampersand from a tool call is not a harness)"
+                .to_string(),
+        ));
+    }
 
     let runtime = match RuntimeBuilder::current_thread().build() {
         Ok(runtime) => runtime,
