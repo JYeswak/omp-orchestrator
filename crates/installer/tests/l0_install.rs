@@ -331,6 +331,48 @@ fn atomic_publication_refuses_mutated_staged() {
 }
 
 #[test]
+fn atomic_publication_refuses_different_parent() {
+    let src_dir = TempDir::new("atomic-publication-other-parent-src");
+    let dest_dir = TempDir::new("atomic-publication-other-parent-dest");
+    let payload = b"complete-but-wrong-dir";
+    let staged = src_dir.path().join(".installer.staged.cross-dir");
+    fs::write(&staged, payload).expect("write staged in other dir");
+    let dest = dest_dir.path().join("installer");
+    let error = publish_atomic(&staged, &dest, payload.len() as u64)
+        .expect_err("cross-directory staged file must refuse");
+    match error {
+        InstallError::IoError { detail, .. } => {
+            assert_eq!(
+                detail,
+                "ATOMIC_REFUSED: staged file is not in the destination directory",
+                "{detail}"
+            );
+        }
+        other => panic!("expected parent-mismatch ATOMIC_REFUSED, got {other:?}"),
+    }
+    assert!(!dest.exists(), "cross-dir rename must not publish dest");
+}
+
+#[test]
+fn atomic_publication_refuses_non_staged_filename() {
+    let dir = TempDir::new("atomic-publication-not-staged");
+    let payload = b"complete-but-not-staged-name";
+    let staged = dir.path().join("installer.tmp");
+    fs::write(&staged, payload).expect("write non-staged complete file");
+    let dest = dir.path().join("installer");
+    let error = publish_atomic(&staged, &dest, payload.len() as u64)
+        .expect_err("filename lacking .staged. must refuse");
+    match error {
+        InstallError::IoError { detail, .. } => {
+            assert_eq!(detail, "ATOMIC_REFUSED: not a staged temporary", "{detail}");
+        }
+        other => panic!("expected not-staged ATOMIC_REFUSED, got {other:?}"),
+    }
+    assert!(!dest.exists(), "non-staged rename must not publish dest");
+    assert_eq!(fs::read(&staged).expect("source intact"), payload);
+}
+
+#[test]
 fn path_collision_lists_every_hit() {
     let a = TempDir::new("path-hit-a");
     let b = TempDir::new("path-hit-b");
