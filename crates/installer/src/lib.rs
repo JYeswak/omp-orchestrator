@@ -59,6 +59,10 @@ pub enum InstallError {
         step: &'static str,
         deadline_secs: u64,
     },
+    /// Required minisign check failed. Never a warning.
+    MinisignRefused {
+        detail: String,
+    },
 }
 
 impl fmt::Display for InstallError {
@@ -113,7 +117,33 @@ impl fmt::Display for InstallError {
                  the process group was killed - remedy: retry, or inspect \
                  for a credential prompt / build lock before retrying"
             ),
+            Self::MinisignRefused { detail } => {
+                write!(formatter, "L0_MINISIGN_REFUSED: {detail}")
+            }
         }
+    }
+}
+
+/// L0-VERIFY-MINISIGN. Required signatures are checked, never warned away.
+pub fn verify_minisign_policy(
+    minisig_present: bool,
+    signature_valid: bool,
+    require: bool,
+) -> Result<(), InstallError> {
+    if !minisig_present {
+        if require {
+            return Err(InstallError::MinisignRefused {
+                detail: "missing .minisig under --require-minisign".to_owned(),
+            });
+        }
+        return Ok(());
+    }
+    if signature_valid {
+        Ok(())
+    } else {
+        Err(InstallError::MinisignRefused {
+            detail: "invalid minisign signature".to_owned(),
+        })
     }
 }
 // ── BOUNDED SPAWNS (bead omp-orchestrator-n4q) ────────────────────────────────

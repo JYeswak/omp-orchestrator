@@ -1,7 +1,7 @@
 use installer::{
     check_build_fence, classify_restart_postcondition, git_head, git_rev_parse_short,
-    install_binary, resolve_repo_ownership, stage_artifact_stream, verify_identity, InstallError,
-    RepoOwnership, RestartPostcondition,
+    install_binary, resolve_repo_ownership, stage_artifact_stream, verify_identity,
+    verify_minisign_policy, InstallError, RepoOwnership, RestartPostcondition,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -251,4 +251,37 @@ fn artifact_staging_interrupt_leaves_no_publishable_temp() {
         leftovers.is_empty(),
         "interrupted stream left publishable temp: {leftovers:?}"
     );
+}
+
+#[test]
+fn minisign_policy_valid_passes() {
+    verify_minisign_policy(true, true, true).expect("valid .minisig must pass");
+}
+
+#[test]
+fn minisign_policy_require_absent_refuses() {
+    let error = verify_minisign_policy(false, false, true)
+        .expect_err("absent .minisig under --require-minisign must refuse");
+    let text = error.to_string();
+    assert!(
+        text.starts_with("L0_MINISIGN_REFUSED"),
+        "must be typed L0_MINISIGN_REFUSED, not a warning: {text}"
+    );
+}
+
+#[test]
+fn minisign_policy_require_invalid_refuses() {
+    let error = verify_minisign_policy(true, false, true)
+        .expect_err("invalid signature under --require-minisign must refuse");
+    assert!(
+        error.to_string().starts_with("L0_MINISIGN_REFUSED"),
+        "{error}"
+    );
+}
+
+#[test]
+fn required_minisign_missing_refuses() {
+    let error = verify_minisign_policy(false, true, true)
+        .expect_err("T04: missing .minisig is refuse not PASS");
+    assert!(error.to_string().contains("L0_MINISIGN_REFUSED"));
 }
