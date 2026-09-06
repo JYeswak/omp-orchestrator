@@ -723,6 +723,27 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
     };
 
     let mut rows = Vec::new();
+    // Worker-oracle census: the ledger is the target list and this call is the production trigger.
+    // The row is advisory because census reachability and admission correctness are separate axes;
+    // run_cycle below refuses on a failed ledger check.
+    if repo_root.join("crates/worker-oracle-gate").is_dir() {
+        let reachability = match worker_oracle_gate::census(repo_root) {
+            Ok(report) => GateReachability::Reachable {
+                trigger: format!(
+                    "supervisor:census_gates -> worker-oracle-gate::census ledger_targets={} host_bound={} grep_host_bound={}",
+                    report.ledger_targets, report.ledger_host_bound, report.source_host_bound
+                ),
+            },
+            Err(error) => GateReachability::Unreachable { reason: error.to_string() },
+        };
+        rows.push(GateCensusRow {
+            gate: "worker-oracle-gate".to_owned(),
+            reachability,
+            disposition: CensusDisposition::Advisory {
+                reason: "worker-bound test oracle is checked again by admission before dispatch".to_owned(),
+            },
+        });
+    }
 
     // no-shell-gate: .git/hooks/pre-commit is the REAL trigger (proven to bite
     // 2026-08-31, exit 1 naming the file). Curated blocking row, not the canary.

@@ -4341,6 +4341,20 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         println!("DISK_PRESSURE owner=josh next_action=cargo-clean-or-grow-volume detail={why}");
         return Ok(());
     }
+    // Admission consumes the same machine ledger the census reports; a failed host-oracle
+    // classification is a typed refusal before any authorization can become a dispatch.
+    match worker_oracle_gate::admission_check(&config.repo) {
+        Ok(report) => println!(
+            "WORKER_ORACLE_ADMISSION PASS ledger_targets={} host_bound={} grep_host_bound={}",
+            report.ledger_targets, report.ledger_host_bound, report.source_host_bound
+        ),
+        Err(error) => {
+            let detail = error.to_string();
+            write_heartbeat(config, tick, "WORKER_ORACLE_REFUSED", &detail)?;
+            println!("WORKER_ORACLE_REFUSED tick={tick} detail={detail}");
+            return Ok(());
+        }
+    }
     let authorization = applicable(
         read_idle_authorization(&config.repo, now_unix()),
         &config.session,

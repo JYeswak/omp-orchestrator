@@ -112,6 +112,12 @@ pub enum CloseReasonVerdict {
         /// written instead of echoing an entire prose paragraph into a log line.
         leading: String,
     },
+    /// A cargo test figure omitted the worker or local execution authority.
+    /// The number cannot be compared across an offloaded and local tree without it.
+    CargoWorkerMissing {
+        /// The first token of the unqualified cargo claim.
+        leading: String,
+    },
     /// A reason is present but blank once trimmed.
     Empty,
     /// No reason was supplied to this classifier. **The observer did not look.**
@@ -126,6 +132,7 @@ impl CloseReasonVerdict {
         match self {
             Self::Verified { .. } => "CLOSE_REASON_VERIFIED",
             Self::PolicyRefused { .. } => "CLOSE_REASON_POLICY_REFUSED",
+            Self::CargoWorkerMissing { .. } => "CLOSE_REASON_WORKER_MISSING",
             Self::Empty => "CLOSE_REASON_EMPTY",
             Self::Unread => "CLOSE_REASON_UNREAD",
         }
@@ -152,6 +159,10 @@ impl fmt::Display for CloseReasonVerdict {
                  MUTATION-VERIFIED, DONE, APPROVED, WONTFIX; the local guard refuses this, but a \
                  direct br close bypasses it, so read the status back"
             ),
+            Self::CargoWorkerMissing { leading } => write!(
+                formatter,
+                "CLOSE_REASON_WORKER_MISSING leading={leading} -- cargo test figures must name worker=<name> or local"
+            ),
             Self::Empty => write!(
                 formatter,
                 "CLOSE_REASON_EMPTY -- a close with no reason records nothing"
@@ -169,6 +180,15 @@ impl fmt::Display for CloseReasonVerdict {
 ///
 /// `None` means the caller did not read the reason and yields
 /// [`CloseReasonVerdict::Unread`] — never a verified verdict.
+fn has_cargo_test_figure(reason: &str) -> bool {
+    reason.contains("cargo test")
+}
+
+fn has_worker_authority(reason: &str) -> bool {
+    reason.split_whitespace().any(|token| {
+        token == "local" || token.starts_with("worker=") || token.starts_with("worker:")
+    })
+}
 #[must_use]
 pub fn classify_close_reason(reason: Option<&str>) -> CloseReasonVerdict {
     let Some(raw) = reason else {
@@ -178,9 +198,17 @@ pub fn classify_close_reason(reason: Option<&str>) -> CloseReasonVerdict {
     if trimmed.trim().is_empty() {
         return CloseReasonVerdict::Empty;
     }
+    if has_cargo_test_figure(trimmed) && !has_worker_authority(trimmed) {
+        let leading = trimmed.split_whitespace().next().unwrap_or_default().to_owned();
+        return CloseReasonVerdict::CargoWorkerMissing { leading };
+    }
     for prefix in ClosePrefix::ALL {
-        if trimmed.starts_with(prefix.as_str()) {
-            return CloseReasonVerdict::Verified { prefix: *prefix };
+        let tok = prefix.as_str();
+        if let Some(rest) = trimmed.strip_prefix(tok) {
+            let boundary_ok = rest.chars().next().map_or(true, |c| !c.is_alphanumeric());
+            if boundary_ok {
+                return CloseReasonVerdict::Verified { prefix: *prefix };
+            }
         }
     }
     let leading = trimmed
@@ -320,5 +348,30 @@ mod tests {
         tokens.sort_unstable();
         tokens.dedup();
         assert_eq!(tokens.len(), before, "duplicate prefix token");
+    }
+
+    #[test]
+    fn cargo_figure_without_worker_is_refused_and_names_the_surface() {
+        let verdict = classify_close_reason(Some("DONE: cargo test -p inbox-monitor 29 passed"));
+        assert_eq!(
+            verdict,
+            CloseReasonVerdict::CargoWorkerMissing {
+                leading: "DONE:".to_owned()
+            }
+        );
+        let text = verdict.to_string();
+        assert!(
+            text.contains("CLOSE_REASON_WORKER_MISSING")
+                && text.contains("worker=<name>")
+                && text.contains("local"),
+            "worker omission must be explicit: {text}"
+        );
+        assert!(!verdict.is_verified());
+    }
+
+    #[test]
+    fn cargo_figure_with_worker_or_local_authority_is_verified() {
+        assert!(classify_close_reason(Some("DONE: cargo test worker=contabo-3 29 passed")).is_verified());
+        assert!(classify_close_reason(Some("DONE: local cargo test 29 passed")).is_verified());
     }
 }
