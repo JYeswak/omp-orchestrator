@@ -10,6 +10,8 @@ use ack_stage::{
     assess as assess_ack_stage, AckAction, AckReadback, AckStageInput, AckStageResult,
     TransportReceipt,
 };
+use ack_stage::cell_matrix::{self, DispatchCellMatrix};
+
 use agent_mail_native::journey::{
     self as mail, AgentName, DeliveryReceipt, ProjectKey, SendRequest,
 };
@@ -4531,6 +4533,36 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                     ),
                 };
                 emit_step(cx, &mut spine, send, bead, &pane, config, &send_detail).await?;
+                {
+                    let facts = cell_matrix::facts_from_stage(
+                        format!("{tick}-{pane}-{bead}"),
+                        bead.to_owned(),
+                        pane.clone(),
+                        true,
+                        true,
+                        true,
+                        false,
+                        true,
+                        stage_result.as_ref().ok(),
+                        None,
+                    );
+                    match DispatchCellMatrix::from_facts(facts) {
+                        Ok(matrix) => {
+                            if let Err(error) = write_heartbeat(
+                                config,
+                                tick,
+                                DispatchCellMatrix::ROW_STATUS,
+                                &matrix.detail(),
+                            ) {
+                                eprintln!("DISPATCH_CELL_MATRIX_WRITE {error}");
+                            } else {
+                                println!("DISPATCH_CELL_MATRIX {}", matrix.detail());
+                            }
+                        }
+                        Err(error) => eprintln!("DISPATCH_CELL_MATRIX_REFUSED {error}"),
+                    }
+                }
+
                 let stage = stage_result?;
 
                 let silence =

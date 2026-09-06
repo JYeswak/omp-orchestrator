@@ -13,6 +13,9 @@ use serde_json::Value;
 use std::fmt;
 use tick_monitor::Observation;
 
+pub mod cell_matrix;
+
+
 /// Maximum number of retry actions for one dispatch attempt sequence.
 pub const MAX_RETRY_ATTEMPTS: u32 = 3;
 
