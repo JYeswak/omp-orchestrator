@@ -153,10 +153,41 @@ fn test_source(repo_root: &Path, record: &TargetRecord) -> Result<String, Oracle
     })
 }
 
+fn collect_files(directory: &Path, output: &mut Vec<PathBuf>) -> Result<(), OracleError> {
+    if !directory.is_dir() {
+        return Ok(());
+    }
+    let entries = fs::read_dir(directory).map_err(|error| io_error(directory, error))?;
+    for entry in entries {
+        let entry = entry.map_err(|error| io_error(directory, error))?;
+        let path = entry.path();
+        let file_type = entry.file_type().map_err(|error| io_error(&path, error))?;
+        if file_type.is_dir() {
+            collect_files(&path, output)?;
+        } else if file_type.is_file() {
+            output.push(path);
+        }
+    }
+    Ok(())
+}
 fn generic_host_surface(source: &str) -> bool {
     ["git log", "git remote", "git cat-file", "git show", ".git/hooks", "/Volumes/", ".local/state/", "census_gates", "CROSS-SECTION-AUTHORITY", "NUMBERS.toml"]
         .iter()
         .any(|marker| source.contains(marker))
+}
+fn observed_host_surface_test_count(repo_root: &Path) -> usize {
+    let mut files = Vec::new();
+    let tests_root = repo_root.join("crates");
+    let _ = collect_files(&tests_root, &mut files);
+    files
+        .into_iter()
+        .filter(|path| {
+            path.extension().and_then(|extension| extension.to_str()) == Some("rs")
+                && path.components().any(|component| component.as_os_str() == "tests")
+        })
+        .filter_map(|path| fs::read_to_string(path).ok())
+        .filter(|source| generic_host_surface(source))
+        .count()
 }
 
 pub fn census(repo_root: &Path) -> Result<CensusReport, OracleError> {
@@ -178,8 +209,13 @@ pub fn census(repo_root: &Path) -> Result<CensusReport, OracleError> {
         .filter_map(|row| test_source(repo_root, row).ok())
         .filter(|source| generic_host_surface(source))
         .count();
-    if ledger_host_bound == 0 && source_host_bound > 0 {
-        return Err(OracleError::ZeroHostBound { source_host_bound });
+    let observed_host_bound = if ledger_host_bound == 0 {
+        observed_host_surface_test_count(repo_root)
+    } else {
+        source_host_bound
+    };
+    if ledger_host_bound == 0 && observed_host_bound > 0 {
+        return Err(OracleError::ZeroHostBound { source_host_bound: observed_host_bound });
     }
     if ledger_host_bound != marker_matches || ledger_host_bound != source_host_bound {
         return Err(OracleError::ZeroHostBound { source_host_bound });
@@ -246,6 +282,16 @@ url = https://example.invalid/repo
         let error = classify_target(temp.path(), "demo::test", "contabo-4").unwrap_err().to_string();
         assert!(error.contains("HOST_BOUND_REFUSED"));
         assert!(error.contains("no git history on worker"));
+    }
+
+    #[test]
+    fn zero_host_bound_ledger_is_an_error_when_tests_use_host_surfaces() {
+        let temp = fixture();
+        fs::write(temp.path().join(LEDGER_RELATIVE_PATH), r#"{"target":"demo::test","classification":"TREE_PURE","source":"crates/demo/tests/test.rs","reason":"incorrectly classified","surface_marker":"git remote"}
+"#).unwrap();
+        let error = census(temp.path()).unwrap_err().to_string();
+        assert!(error.contains("host_bound_ledger_empty"));
+        assert!(error.contains("grep_host_bound=1"));
     }
 
     #[test]
