@@ -681,12 +681,14 @@ mod tests {
         ));
         let only_self = census_result(
             "transcript".to_owned(),
-            1,
-            vec![CensusRow {
-                path: ".flywheel/pane-transcript.txt".to_owned(),
-                line: 1,
-                text: "GateUnwired".to_owned(),
-            }],
+            9,
+            (1..=9)
+                .map(|line| CensusRow {
+                    path: ".flywheel/pane-transcript.txt".to_owned(),
+                    line,
+                    text: "WIRED_CALLERS".to_owned(),
+                })
+                .collect(),
             result.sources,
             CensusMode::Recursive,
         );
