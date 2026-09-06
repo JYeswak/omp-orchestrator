@@ -1,0 +1,9 @@
+{
+  "issues": [
+    {"id": "p0", "priority": 0, "status": "open"},
+    {"id": "p2", "priority": 2, "status": "open"}
+  ],
+  "dependencies": [
+    {"issue_id": "p0", "depends_on_id": "p2", "type": "blocks"}
+  ]
+}

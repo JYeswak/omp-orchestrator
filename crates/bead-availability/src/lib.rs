@@ -15,6 +15,13 @@ use std::fmt;
 use std::time::Duration;
 use subprocess_contract::{run_output, RunError};
 
+
+mod inversion;
+pub use inversion::{
+    classify, classify_with, is_live, parse_graph_json, Classification, DagEdge, DagIssue,
+    Inversion, InversionType, ScanConfig, ScanError, BR_HAS_NO_INHERITANCE, DETECT_TRANSITIVE,
+};
+
 const BR_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
