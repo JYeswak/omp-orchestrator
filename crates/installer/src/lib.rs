@@ -71,6 +71,8 @@ pub enum InstallError {
     HookMergeFailed {
         backups: Vec<String>,
     },
+    /// Zero detected agent families. An empty scan is ERROR, never clean.
+    EmptyAgentScan,
 }
 
 impl fmt::Display for InstallError {
@@ -135,6 +137,10 @@ impl fmt::Display for InstallError {
                 formatter,
                 "L0_HOOK_MERGE: restored from backups {}",
                 backups.join(" ")
+            ),
+            Self::EmptyAgentScan => write!(
+                formatter,
+                "L0_EMPTY_SCAN: zero agents is ERROR, never a success report"
             ),
         }
     }
@@ -256,6 +262,23 @@ pub fn merge_hooks(
         }
     }
     Ok(backups)
+}
+
+/// Detected agent families. Empty is unrepresentable as success.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentScan {
+    pub families: Vec<String>,
+}
+
+/// L0-GATE / LAW-L0-OBSERVABLE-REFUSAL. Zero agents is an empty-scan ERROR,
+/// never `clean`, PASS, or a zero-agent success report.
+pub fn classify_agent_scan(detected: &[&str]) -> Result<AgentScan, InstallError> {
+    if detected.is_empty() {
+        return Err(InstallError::EmptyAgentScan);
+    }
+    Ok(AgentScan {
+        families: detected.iter().map(|family| (*family).to_owned()).collect(),
+    })
 }
 // ── BOUNDED SPAWNS (bead omp-orchestrator-n4q) ────────────────────────────────
 

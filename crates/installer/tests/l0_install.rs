@@ -1,8 +1,8 @@
 use installer::{
-    check_build_fence, classify_restart_postcondition, git_head, git_rev_parse_short,
-    install_binary, merge_hooks, publish_atomic, refuse_path_collisions, resolve_repo_ownership,
-    stage_artifact_stream, verify_identity, verify_minisign_policy, HookWrite, InstallError,
-    RepoOwnership, RestartPostcondition,
+    check_build_fence, classify_agent_scan, classify_restart_postcondition, git_head,
+    git_rev_parse_short, install_binary, merge_hooks, publish_atomic, refuse_path_collisions,
+    resolve_repo_ownership, stage_artifact_stream, verify_identity, verify_minisign_policy,
+    HookWrite, InstallError, RepoOwnership, RestartPostcondition,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -474,4 +474,24 @@ fn hook_merge_injected_failure_restores_pre_merge_bytes() {
     }
     assert_eq!(fs::read(&first).expect("first"), b"first-orig");
     assert_eq!(fs::read(&second).expect("second"), b"second-orig");
+}
+
+#[test]
+fn zero_agents_is_error_not_clean() {
+    let error = classify_agent_scan(&[]).expect_err("empty-scan must not pass");
+    assert!(
+        matches!(error, InstallError::EmptyAgentScan),
+        "wrong refusal: {error}"
+    );
+    let text = error.to_string();
+    assert!(
+        text.contains("L0_EMPTY_SCAN"),
+        "empty-scan ERROR must name the reason code: {text}"
+    );
+    let lower = text.to_ascii_lowercase();
+    assert!(!lower.contains("clean"), "must not report clean: {text}");
+    assert!(!text.contains("PASS"), "must not report PASS: {text}");
+
+    let scan = classify_agent_scan(&["omp"]).expect("one family is a scan, not empty");
+    assert_eq!(scan.families, ["omp"]);
 }
