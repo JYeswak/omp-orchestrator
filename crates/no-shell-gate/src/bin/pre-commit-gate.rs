@@ -23,6 +23,7 @@ enum PreCommitOutcome {
     Clean,
     Violation,
     NothingToCheck,
+    AncestryOnlyMerge,
 }
 
 impl PreCommitOutcome {
@@ -31,10 +32,58 @@ impl PreCommitOutcome {
             Self::Clean => ExitCode::SUCCESS,
             Self::Violation => ExitCode::from(1),
             Self::NothingToCheck => ExitCode::from(3),
+            Self::AncestryOnlyMerge => ExitCode::SUCCESS,
         }
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MergeContext {
+    None,
+    Contentful,
+    AncestryOnly,
+}
+
+fn classify_merge_context(repo_root: &Path, git_dir: &Path) -> Result<MergeContext, String> {
+    let merge_head_path = git_dir.join("MERGE_HEAD");
+    if !merge_head_path.exists() {
+        return Ok(MergeContext::None);
+    }
+
+    let merge_head = std::fs::read_to_string(&merge_head_path)
+        .map_err(|error| format!("MERGE_HEAD unreadable: {error}"))?
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_owned();
+    if merge_head.is_empty() {
+        return Err("MERGE_HEAD_EMPTY: merge state has no parent".to_owned());
+    }
+
+    // Compare the merge parent and HEAD directly; equal trees produce an empty range.
+    let range_files = bounded_git_text(repo_root, &["diff", "--name-only", "HEAD", &merge_head])?
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .count();
+    let head_tree = bounded_git_text(repo_root, &["rev-parse", "HEAD^{tree}"])
+        ?.trim()
+        .to_owned();
+    let merge_tree_spec = format!("{merge_head}^{{tree}}");
+    let merge_tree = bounded_git_text(repo_root, &["rev-parse", &merge_tree_spec])?
+        .trim()
+        .to_owned();
+
+    if range_files == 0 {
+        if head_tree == merge_tree {
+            return Ok(MergeContext::AncestryOnly);
+        }
+        return Err(format!(
+            "MERGE_RANGE_EMPTY: merge parent {merge_head} has no range files but its tree differs from HEAD"
+        ));
+    }
+    Ok(MergeContext::Contentful)
+}
 fn main() -> ExitCode {
     // COMMIT-MSG mode: git passes COMMIT_EDITMSG as argv[1]. Run the
     // round-trip check and nothing else — the file gates are pre-commit work.
@@ -110,12 +159,18 @@ fn main() -> ExitCode {
     // `.flywheel/grade-evidence/` receipts read as `NOTHING_TO_CHECK` and the
     // commit was refused, with no path to land an authorized removal.
     let deletions = get_staged_deletions();
-    if staged.is_empty() && deletions.is_empty() {
+    let repo_root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let merge_context = match classify_merge_context(&repo_root, &git_dir) {
+        Ok(context) => context,
+        Err(error) => {
+            eprintln!("MULTI-GATE ERROR: {error}");
+            return ExitCode::from(2);
+        }
+    };
+    if staged.is_empty() && deletions.is_empty() && matches!(merge_context, MergeContext::None) {
         eprintln!("NOTHING_TO_CHECK: no staged files to check");
         return PreCommitOutcome::NothingToCheck.exit_code();
     }
-
-    let repo_root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let mut refusals: Vec<String> = Vec::new();
 
     if let Err(error) = validate_staged_preregistration(&repo_root, &staged) {
@@ -124,6 +179,12 @@ fn main() -> ExitCode {
     if let Err(error) = validate_plan_assemble_build(&repo_root, &staged) {
         refusals.push(format!("plan-assemble-build: {error}"));
     }
+    if staged.iter().any(|path| path.starts_with("crates/r1-breadth-gate/")) {
+        eprintln!("r1-breadth-gate: BOOTSTRAP PASS crate is staged");
+    } else if let Err(error) = r1_breadth_gate::check_repo(&repo_root) {
+        refusals.push(format!("r1-breadth-gate: {error}"));
+    }
+
 
     // ── GATE 1: no-shell-gate (refuse tracked .sh/.py) ────────────────────
     let nsg: Vec<_> = staged.iter().filter_map(|f| violation_for(f)).collect();
@@ -353,8 +414,13 @@ fn main() -> ExitCode {
             );
             return ExitCode::from(1);
         }
-        eprintln!("CLEAN: all staged files passed the multi-gate checks");
-        PreCommitOutcome::Clean.exit_code()
+        if matches!(merge_context, MergeContext::AncestryOnly) {
+            eprintln!("ANCESTRY_ONLY_MERGE: merge range is empty and merge tree equals HEAD tree");
+            PreCommitOutcome::AncestryOnlyMerge.exit_code()
+        } else {
+            eprintln!("CLEAN: all staged files passed the multi-gate checks");
+            PreCommitOutcome::Clean.exit_code()
+        }
     } else {
         let mut stderr = io::stderr();
         let _ = writeln!(

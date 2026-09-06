@@ -99,7 +99,7 @@ fn stderr(output: &Output) -> String {
 }
 
 fn top_level_outcome(stderr: &str) -> &'static str {
-    let outcomes = ["CLEAN:", "VIOLATION:", "NOTHING_TO_CHECK:"];
+    let outcomes = ["CLEAN:", "VIOLATION:", "NOTHING_TO_CHECK:", "ANCESTRY_ONLY_MERGE:"];
     let matches: Vec<_> = stderr
         .lines()
         .filter_map(|line| outcomes.iter().find(|outcome| line.starts_with(*outcome)))
@@ -213,4 +213,53 @@ fn collapsing_whole_commit_marker_into_gate_note_is_red() {
         red.is_err(),
         "a whole-commit marker collapsed into a per-gate note must be rejected: {collapsed}"
     );
+}
+/// The same run proves the two empty-index states are not collapsed: no merge is
+/// NOTHING_TO_CHECK, while a real ancestry-only merge is an explicit successful decision.
+#[test]
+fn ancestry_only_merge_runs_gate_and_preserves_empty_index_refusal() {
+    let dir = fresh_git_tree("ancestry-only-merge");
+    run_git(&dir, &["branch", "-M", "main"], "rename fixture branch");
+
+    let empty = run_gate(&dir);
+    let empty_error = stderr(&empty);
+    assert_eq!(empty.status.code(), Some(3), "a clean index without merge state must refuse: {empty_error}");
+    assert!(
+        empty_error.contains("NOTHING_TO_CHECK: no staged files to check"),
+        "empty non-merge gate stderr: {empty_error}"
+    );
+
+    let marker = dir.join("docs/plan/merge-marker.txt");
+    fs::write(&marker, "same patch\n").expect("write main patch");
+    run_git(&dir, &["add", "--", "docs/plan/merge-marker.txt"], "stage main patch");
+    run_git(&dir, &["-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "main equivalent patch [test]"], "commit main patch");
+    let parent = String::from_utf8_lossy(&run_git(&dir, &["rev-parse", "HEAD^"], "read merge base").stdout).trim().to_owned();
+
+    run_git(&dir, &["switch", "-c", "ci/fence-16l-13ca3f5", &parent], "create duplicate patch branch");
+    fs::write(&marker, "same patch\n").expect("write duplicate patch");
+    run_git(&dir, &["add", "--", "docs/plan/merge-marker.txt"], "stage duplicate patch");
+    run_git(&dir, &["-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "duplicate patch branch [test]"], "commit duplicate patch");
+    run_git(&dir, &["switch", "main"], "return to main");
+
+    let cherry = run_git(&dir, &["cherry", "-v", "main", "ci/fence-16l-13ca3f5"], "verify patch-id duplicate");
+    assert!(String::from_utf8_lossy(&cherry.stdout).lines().any(|line| line.trim_start().starts_with('-')), "branch commit must be already represented by patch-id: {:?}", String::from_utf8_lossy(&cherry.stdout));
+    run_git(&dir, &["merge", "--no-commit", "--no-ff", "ci/fence-16l-13ca3f5"], "create ancestry-only merge");
+
+    assert!(dir.join(".git/MERGE_HEAD").is_file(), "the live merge state must exist");
+    for filter in ["ACMR", "D"] {
+        let diff = run_git(&dir, &["diff", "--cached", "--name-only", &format!("--diff-filter={filter}")], "verify empty staged merge set");
+        assert!(diff.stdout.is_empty(), "merge index must be empty for {filter}: {:?}", String::from_utf8_lossy(&diff.stdout));
+    }
+    let merge_tree = String::from_utf8_lossy(&run_git(&dir, &["write-tree"], "read merge index tree").stdout).trim().to_owned();
+    let head_tree = String::from_utf8_lossy(&run_git(&dir, &["rev-parse", "HEAD^{tree}"], "read HEAD tree").stdout).trim().to_owned();
+    assert_eq!(merge_tree, head_tree, "the merge must be ancestry-only");
+
+    let output = run_gate(&dir);
+    let error = stderr(&output);
+    assert_eq!(output.status.code(), Some(0), "ancestry-only merge must reach the gate: {error}");
+    assert_eq!(top_level_outcome(&error), "ANCESTRY_ONLY_MERGE:", "the merge decision must be explicit: {error}");
+    assert!(!error.contains("NOTHING_TO_CHECK"), "merge state must not collapse into empty-index refusal: {error}");
+
+    run_git(&dir, &["merge", "--abort"], "abort fixture merge");
+    fs::remove_dir_all(dir).expect("remove merge fixture");
 }
