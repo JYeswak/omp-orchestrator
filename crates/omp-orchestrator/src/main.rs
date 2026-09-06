@@ -1636,7 +1636,29 @@ fn authorize_bead_dispatch_as(
 ) -> Result<String, String> {
     let receiver_agent = receiver_agent_for_dispatch(config, pane, bead, snapshot)?;
     let claim_identity = tracker_assignee_agent(claim_owner).unwrap_or(claim_owner);
-    let authorization = if claim_identity == receiver_agent {
+    let canonical_snapshot = tracker_assignee_agent(claim_owner).map(|_| {
+        BeadSnapshot::new_with_acceptance(
+            snapshot.id(),
+            snapshot.title(),
+            snapshot.description(),
+            snapshot.acceptance_criteria(),
+            snapshot.status_label(),
+            Some(claim_owner),
+        )
+    });
+    let authorization = if let Some(canonical_snapshot) = canonical_snapshot.as_ref() {
+        authorize(&DispatchIntent::bead(bead, claim_owner), Some(canonical_snapshot)).and_then(|permit| {
+            let identity = if claim_identity == receiver_agent {
+                claim_identity
+            } else {
+                &receiver_agent
+            };
+            identities
+                .resolve(identity)
+                .map(|_| permit)
+                .map_err(ClaimFenceError::AssigneeIdentity)
+        })
+    } else if claim_identity == receiver_agent {
         authorize_with_identities(
             &DispatchIntent::bead(bead, claim_identity),
             Some(snapshot),
@@ -1934,7 +1956,7 @@ fn authorize_dispatch_preflight(
     let intent = Intent {
         action: TypedAction::DispatchPacket,
         pane_dispatchable: pane_observation.is_dispatchable,
-        two_captures: pane_observation.is_dispatchable,
+        two_captures: matches!(pane_observation.liveness.as_str(), "CONFIRMED_IDLE" | "NEWLY_IDLE"),
         packet_complete: packet_is_complete(packet),
         finding_has_bead: !bead.trim().is_empty(),
     };
@@ -1965,7 +1987,7 @@ fn begin_dispatch_lifecycle(
     let intent = Intent {
         action: TypedAction::DispatchPacket,
         pane_dispatchable: pane_observation.is_dispatchable,
-        two_captures: pane_observation.is_dispatchable,
+        two_captures: matches!(pane_observation.liveness.as_str(), "CONFIRMED_IDLE" | "NEWLY_IDLE"),
         packet_complete: packet_is_complete(packet),
         finding_has_bead: !bead.trim().is_empty(),
     };
@@ -2121,7 +2143,7 @@ fn gate_peer_grading_inner(
         let intent = Intent {
             action: TypedAction::DispatchPacket,
             pane_dispatchable: grader.is_dispatchable,
-            two_captures: grader.is_dispatchable,
+            two_captures: matches!(grader.liveness.as_str(), "CONFIRMED_IDLE" | "NEWLY_IDLE"),
             packet_complete: true,
             finding_has_bead: true,
         };
