@@ -56,6 +56,7 @@ pub enum FollowUpVerdict {
     SilentPastDeadline {
         bead_id: String,
         minutes_since_dispatch: u64,
+        pane_id: Option<String>,
     },
     /// The bead was reassigned — not silent, re-dispatch needed.
     Reassigned {
@@ -94,10 +95,12 @@ impl fmt::Display for FollowUpVerdict {
             Self::SilentPastDeadline {
                 bead_id,
                 minutes_since_dispatch,
+                pane_id,
             } => {
                 write!(
                     formatter,
-                    "SILENT_PAST_DEADLINE: {bead_id} dispatched {minutes_since_dispatch}m ago, no verdict comment — investigate, do not refill"
+                    "SILENT_PAST_DEADLINE: {bead_id} dispatched {minutes_since_dispatch}m ago, pane={} no verdict comment — investigate, do not refill",
+                    pane_id.as_deref().unwrap_or("unknown")
                 )
             }
             Self::Reassigned {
@@ -119,6 +122,15 @@ impl fmt::Display for FollowUpVerdict {
     }
 }
 
+/// Extract the pane component of the canonical tracker assignee. Legacy names
+/// remain valid but intentionally yield None rather than inventing pane ownership.
+fn pane_from_assignee(assignee: &str) -> Option<String> {
+    assignee
+        .split(';')
+        .find_map(|part| part.strip_prefix("pane="))
+        .filter(|pane| !pane.is_empty())
+        .map(str::to_owned)
+}
 /// The pure classifier: given pre-captured bead state, classify the follow-up.
 ///
 /// All inputs are pre-captured by the I/O-bound wrapper:
@@ -224,6 +236,7 @@ pub fn classify_followup(
         return FollowUpVerdict::SilentPastDeadline {
             bead_id: bead_id.to_owned(),
             minutes_since_dispatch: minutes_elapsed,
+            pane_id: pane_from_assignee(assigned_to),
         };
     }
 
@@ -370,7 +383,8 @@ mod tests {
                 "{}",
                 FollowUpVerdict::SilentPastDeadline {
                     bead_id: "b".to_owned(),
-                    minutes_since_dispatch: 120
+                    minutes_since_dispatch: 120,
+                    pane_id: None
                 }
             )
         );
@@ -444,17 +458,7 @@ mod tests {
     /// authorities, one store.
     #[test]
     fn a_refused_reason_does_not_reopen_the_bead() {
-        let prose = classify_followup(
-            "b",
-            true,
-            Some("just fixed it"),
-            "w",
-            "w",
-            &[],
-            1,
-            60,
-            true,
-        );
+        let prose = classify_followup("b", true, Some("just fixed it"), "w", "w", &[], 1, 60, true);
         assert!(
             matches!(prose, FollowUpVerdict::Finished { .. }),
             "the bead IS closed; only the reason is refused: {prose:?}"

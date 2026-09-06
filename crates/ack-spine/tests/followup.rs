@@ -21,7 +21,7 @@ fn dispatched_silent_past_deadline_is_typed() {
         None,
         "SilverWolf", // current assignee
         "SilverWolf", // original assignee (unchanged)
-        &[],        // no verdict comment
+        &[],          // no verdict comment
         120,          // 120 minutes since dispatch
         90,           // deadline: 90 minutes
         true,         // tracker readable
@@ -30,6 +30,7 @@ fn dispatched_silent_past_deadline_is_typed() {
         FollowUpVerdict::SilentPastDeadline {
             bead_id,
             minutes_since_dispatch,
+            ..
         } => {
             assert_eq!(bead_id, "omp-orchestrator-he6");
             assert_eq!(*minutes_since_dispatch, 120);
@@ -40,6 +41,26 @@ fn dispatched_silent_past_deadline_is_typed() {
     match followup_action(&verdict) {
         FollowUpAction::NeedsFollowUp(_) => {}
         FollowUpAction::Healthy => panic!("a silent bead must not be Healthy"),
+    }
+}
+#[test]
+fn canonical_assignee_preserves_pane_for_silent_followup() {
+    let verdict = classify_followup(
+        "fw20",
+        false,
+        None,
+        "pane=%8;incarnation=42;agent=WildStone",
+        "pane=%8;incarnation=42;agent=WildStone",
+        &[],
+        120,
+        90,
+        true,
+    );
+    match verdict {
+        FollowUpVerdict::SilentPastDeadline { pane_id, .. } => {
+            assert_eq!(pane_id.as_deref(), Some("%8"));
+        }
+        other => panic!("expected attributed silence, got {other:?}"),
     }
 }
 
@@ -57,8 +78,8 @@ fn verdict_posted_is_healthy() {
         "SilverWolf",
         "SilverWolf",
         &[SUBSTANTIVE.to_owned()], // verdict comment present
-        60,   // 60 minutes since dispatch
-        90,   // deadline: 90 minutes
+        60,                        // 60 minutes since dispatch
+        90,                        // deadline: 90 minutes
         true,
     );
     assert!(
@@ -84,7 +105,7 @@ fn reassigned_bead_is_not_silent() {
         None,
         "GreenFrog", // current assignee (CHANGED)
         "AmberGate", // original assignee
-        &[],       // no verdict comment
+        &[],         // no verdict comment
         180,         // well past deadline
         90,
         true,
@@ -109,12 +130,19 @@ fn reassigned_bead_is_not_silent() {
 #[test]
 fn tracker_error_is_not_verdict_posted() {
     let verdict = classify_followup(
-        "any-bead", /* bead_closed = */ false,
+        "any-bead",
+        /* bead_closed = */ false,
         // An unclosed bead has no close reason to read, so the honest input is
         // None -> CloseReasonVerdict::Unread. Added when K9 threaded the real
         // reason through; every one of these cases is unclosed.
         /* close_reason = */
-        None, "anyone", "anyone", &[], 0, 90, false, // tracker UNREADABLE
+        None,
+        "anyone",
+        "anyone",
+        &[],
+        0,
+        90,
+        false, // tracker UNREADABLE
     );
     assert!(
         matches!(verdict, FollowUpVerdict::TrackerError { .. }),
@@ -140,8 +168,8 @@ fn within_deadline_and_working_is_healthy() {
         "BlueLantern",
         "BlueLantern",
         &[], // no verdict yet
-        30,    // only 30 minutes elapsed
-        90,    // deadline: 90 minutes
+        30,  // only 30 minutes elapsed
+        90,  // deadline: 90 minutes
         true,
     );
     // UPDATED BY `ipg.19`, and this leg PINNED THE DEFECT. Its own comment said the
