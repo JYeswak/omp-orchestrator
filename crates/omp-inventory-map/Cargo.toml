@@ -22,5 +22,8 @@ regex = "1"
 text-structure = { path = "../text-structure" }
 subprocess-contract = { path = "../subprocess-contract" }
 
+[dev-dependencies]
+sha2 = "0.10"
+
 [lints.rust]
 unsafe_code = "forbid"
