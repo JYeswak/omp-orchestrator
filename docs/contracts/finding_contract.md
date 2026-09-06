@@ -161,6 +161,65 @@ can. The mutation leg confirms attribution: swapping publish ahead of spool make
 
 A publisher failure leaves the row `.pending`, so the sweep can finish it — asserted, not implied.
 
+### 3.3 `FC-L6` the decision set is a CLOSED enum — no open agent-supplied variant
+
+**Decided 2026-09-06 from `/rigor-atlas`, not from preference.** The prescription
+`fail-closed-gate-as-a-closed-enum` (epistemic `KNOW`; kinds control-kernel, audit-kernel,
+fs-kernel, tool) rules against an open escape hatch in one sentence:
+
+> *"Default-to-candidate-unless-disqualified silently ships on the day a new trigger is added and
+> nobody wires it."*
+
+An `AgentDiscoveredGap { key, what, why }` variant carrying a caller-supplied key **is**
+default-to-candidate-unless-disqualified: it admits any condition an agent invents, so nothing can
+be proved unreachable and no reviewer can enumerate what the gate covers. The corpus shows the
+alternative concretely — **frankenfs enumerates 13 named refusal reason codes**
+(`missing_epoch_barrier_artifact`, `stale_crash_matrix_or_missing_fsync_evidence`,
+`runtime_kill_switch_engaged`, `config_default_attempt`, …) rather than one open arm.
+Exemplars: `frankengit/crates/fgit-statistics/src/fallback.rs:11`,
+`frankenfs/crates/ffs-fuse/src/lib.rs:7486`.
+
+**So `SupervisorDecision` grows by NAMED VARIANT**, and each new variant owes the card's mandatory
+proof: *a test that walks every enum variant and exhibits an input on which selection returns that
+reason.* That is this repo's BUILT ≠ WIRED rule, already compiled.
+
+**PINNED DEFECT — the law is stated and UNENFORCED.** Measured 2026-09-06: `SupervisorDecision`
+has 10 variants (`GateUnwired`, `Dispatch`, `EscalateIdleIncident`, `MonitorBlind`,
+`QueueUnreadable`, `AwaitingHuman`, `WorkspaceUnloaded`, `AuthorizedIdle`, `QueueEmptyNeedsJosh`,
+`SupervisedWorking`) and **none can express an agent-discovered gap**. Six findings were filed that
+evening by hand-rolled `br create` — `vxr6`, `b4iv`, `q8zl`, `o9kd`, `9y8d`, `n2gd` — because
+`finding_for` could not represent any of them. There is no per-variant reachability leg today.
+
+### 3.4 `FC-L7` comment first, bead at the threshold — the policy is already typed
+
+`finding-dispatch/src/lib.rs:147-159` already decides this and the doc comment at `:146` states the
+intent verbatim: *"avoids duplicate beads when a caller keeps observing the same condition after
+filing."*
+
+```
+recurrence_count <  FINDING_THRESHOLD  ->  NotYet::BelowThreshold    nothing durable yet
+recurrence_count == FINDING_THRESHOLD  ->  Owed(Finding)             NEW BEAD, exactly once
+recurrence_count >  FINDING_THRESHOLD  ->  NotYet::AlreadyEmitted    never a second bead
+```
+
+`FINDING_THRESHOLD = 3` (`:45`). So: **first two sightings accrue as comments on the existing bead;
+the third mints one bead; every later sighting is a comment.** `EscalateIdleIncident`'s own
+acceptance already says where evidence goes — *"names the idle panes and queue evidence in its bead
+comments, and routes the bead to a worker."* Identity is the CONDITION, never the observation.
+
+**Separately, new-vs-extend for the artifact itself** is decided by the upstream five-part test at
+`frankentui/docs/migration-map.md:193` — add new only when ALL of cross-cutting, clean downward
+layering, feature-gateable, independently testable, and single statable responsibility hold;
+otherwise extend. Applied 2026-09-06: `n2gd` (query surface: forecast/diff/why) is legitimately
+separate from `9y8d` (storage: at-send/at-tick capture) because the dependency runs strictly
+downward and each is independently testable; the edge `n2gd -> 9y8d` was recorded rather than
+merging them.
+
+**PINNED DEFECT — the threshold binds `SupervisorDecision` only.** An agent-discovered gap has **no
+recurrence key**, so nothing counts its sightings and `AlreadyEmitted` cannot fire for it. Measured:
+five of the six beads above were filed at `seen=1`, and `q8zl` at `seen=2` — all below threshold
+under this law. No leg enforces it.
+
 ## Validation
 
 ```bash
@@ -172,6 +231,24 @@ Expect **12 passed**. Three of those legs (`l2_filed_carries_whatever_…`,
 `l5_a_waiver_carries_no_expiry_so_it_is_permanent_today`) are **pinned defects**: they pass because
 the law is unenforced, and they go RED the moment it is enforced. Their failure is the signal that
 this document must be updated, not that the code broke.
+
+`FC-L6` and `FC-L7` have **no legs at all**, which is a weaker state than a pinned defect — a
+pinned defect at least runs. Their measured status is re-derivable with one command:
+
+```bash
+cd /Users/josh/Developer/omp-orchestrator && \
+  printf 'SupervisorDecision variants: %s\n' \
+    "$(sed -n '14,55p' crates/finding-dispatch/src/lib.rs | grep -cE '^\s+[A-Z][A-Za-z]+')" && \
+  printf 'FINDING_THRESHOLD: %s\n' \
+    "$(grep -oE 'FINDING_THRESHOLD: u32 = [0-9]+' crates/finding-dispatch/src/lib.rs)" && \
+  printf 'per-variant reachability legs: %s\n' \
+    "$(grep -rc 'SupervisorDecision::' crates/finding-dispatch/tests/ 2>/dev/null | paste -sd+ - | bc 2>/dev/null || echo 0)"
+```
+
+Expect `variants: 10`, `FINDING_THRESHOLD: u32 = 3`. **`FC-L6` is satisfied only when the
+reachability count equals the variant count**; any lower number names how many variants cannot be
+proved reachable. A zero is an ERROR, never a pass — an unrun census reports identically to a
+complete one.
 
 ## Cross-References
 
