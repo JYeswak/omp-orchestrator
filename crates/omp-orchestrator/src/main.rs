@@ -22,7 +22,10 @@ use asupersync::time::{sleep, timeout};
 use asupersync::Cx;
 use finding::{BrPublisher, FindingError};
 use finding_dispatch::{MaybeFinding, NotYet};
-use dispatch_claim_fence::{authorize, parse_br_show_json, BeadSnapshot, DispatchIntent};
+use dispatch_claim_fence::{
+    authorize, authorize_with_identities, parse_br_show_json, BeadSnapshot, ClaimFenceError,
+    DispatchIntent, IdentityRecord, IdentityRegistries,
+};
 use dispatch_silence_watch::SilenceVerdict;
 use ntm_fleet_monitor::parse_activity_json;
 use omp_orchestrator::{
@@ -133,6 +136,11 @@ pub struct Config {
     tick_monitor_state: PathBuf,
     pending_dispatch: PathBuf,
     finding_spool: PathBuf,
+    /// JSON snapshot of the parent-owned subagent identity namespace.
+    ///
+    /// This is intentionally an explicit input. A missing, unreadable, or empty snapshot
+    /// must refuse dispatch rather than turning an unreachable registry into accept-anything.
+    subagent_registry: PathBuf,
     receiver_agent: String,
     /// This supervisor's own Agent Mail identity, for a signed FROM on the
     /// durable dispatch-result notification.
@@ -532,6 +540,9 @@ impl Config {
         let finding_spool = env::var_os("OMP_FINDING_SPOOL")
             .map(PathBuf::from)
             .unwrap_or_else(|| heartbeat_ledger.with_file_name("omp-orchestrator.findings"));
+        let subagent_registry = env::var_os("OMP_SUBAGENT_REGISTRY")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| heartbeat_ledger.with_file_name("omp-orchestrator.subagents.json"));
         // yfp2: resolve the mail identity through the kernel, KEEPING the variable it came
         // from. `sender_identity::first_candidate` walks the same list in the same order;
         // what is new is that the list is TYPED, so an ambient value can be refused by name
@@ -556,6 +567,7 @@ impl Config {
             tick_monitor_state,
             pending_dispatch,
             finding_spool,
+            subagent_registry,
             receiver_agent,
             mail_sender: resolved_sender
                 .as_ref()
@@ -1330,6 +1342,135 @@ async fn load_bead_snapshot(cx: &Cx, config: &Config, bead: &str) -> Result<Bead
     parse_br_show_json(&show).map_err(|error| format!("DISPATCH_BLOCKED bead={bead} {error}"))
 }
 
+/// Read the parent-owned subagent registry snapshot used by dispatch admission.
+///
+/// The snapshot is deliberately a narrow JSON contract: either an array of
+/// {"name":"...","actor_id":"..."} records or an object containing that
+/// array under "subagents". Empty arrays remain valid input to the identity kernel,
+/// which turns them into the required typed anti-vacuity refusal.
+fn load_subagent_identity_records(path: &Path) -> Result<Vec<IdentityRecord>, String> {
+    let text = fs::read_to_string(path).map_err(|error| {
+        format!(
+            "IDENTITY_REGISTRY_UNAVAILABLE checked=agent_mail,subagents missing=subagents path={} error={error}",
+            path.display()
+        )
+    })?;
+    let value: Value = serde_json::from_str(&text).map_err(|error| {
+        format!(
+            "IDENTITY_REGISTRY_UNAVAILABLE checked=agent_mail,subagents missing=subagents path={} error=invalid_json:{error}",
+            path.display()
+        )
+    })?;
+    let rows: &[Value] = match &value {
+        Value::Array(rows) => rows,
+        Value::Object(object) => object
+            .get("subagents")
+            .and_then(Value::as_array)
+            .map(Vec::as_slice)
+            .ok_or_else(|| {
+                format!(
+                    "IDENTITY_REGISTRY_UNAVAILABLE checked=agent_mail,subagents missing=subagents path={} error=expected_array_or_subagents_array",
+                    path.display()
+                )
+            })?,
+        _ => {
+            return Err(format!(
+                "IDENTITY_REGISTRY_UNAVAILABLE checked=agent_mail,subagents missing=subagents path={} error=expected_array_or_subagents_array",
+                path.display()
+            ));
+        }
+    };
+    rows.iter()
+        .enumerate()
+        .map(|(index, row)| {
+            let object = row.as_object().ok_or_else(|| {
+                format!(
+                    "IDENTITY_REGISTRY_UNAVAILABLE checked=agent_mail,subagents missing=subagents path={} error=entry_{index}_not_object",
+                    path.display()
+                )
+            })?;
+            let name = object
+                .get("name")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+                .ok_or_else(|| {
+                    format!(
+                        "IDENTITY_REGISTRY_UNAVAILABLE checked=agent_mail,subagents missing=subagents path={} error=entry_{index}_name_missing",
+                        path.display()
+                    )
+                })?;
+            let actor_id = object
+                .get("actor_id")
+                .or_else(|| object.get("id"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|actor_id| !actor_id.is_empty())
+                .ok_or_else(|| {
+                    format!(
+                        "IDENTITY_REGISTRY_UNAVAILABLE checked=agent_mail,subagents missing=subagents path={} error=entry_{index}_actor_id_missing",
+                        path.display()
+                    )
+                })?;
+            Ok(IdentityRecord::subagent(name, actor_id))
+        })
+        .collect()
+}
+
+/// Take both identity snapshots before a bead packet can be authorized.
+///
+/// Agent Mail contributes the live roster. The parent-owned subagent registry
+/// is an explicit snapshot because sibling panes cannot query a parent's hub
+/// namespace. Either unavailable source refuses; neither source is replaced by
+/// a permissive fallback.
+async fn load_identity_registries(
+    cx: &Cx,
+    config: &Config,
+) -> Result<IdentityRegistries, String> {
+    let project = ProjectKey::new(config.repo.display().to_string());
+    let client = MailClient::discover().with_request_timeout(MAIL_REQUEST_TIMEOUT);
+    let agent_mail_names = mail::list_agents(cx, &client, &project)
+        .await
+        .map_err(|error| {
+            format!(
+                "IDENTITY_REGISTRY_UNAVAILABLE checked=agent_mail,subagents missing=agent_mail error={error}"
+            )
+        })?;
+    let agent_mail = agent_mail_names
+        .iter()
+        .map(|agent| IdentityRecord::agent_mail(agent.as_str(), agent.as_str()))
+        .collect();
+    let subagents = load_subagent_identity_records(&config.subagent_registry)?;
+    let registries = IdentityRegistries::new(agent_mail, subagents);
+    for alias in registries.duplicate_aliases() {
+        let names = alias
+            .names()
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .join(",");
+        eprintln!(
+            "ASSIGNEE_ALIAS_DATA actor_id={} names=[{}]",
+            alias.actor_id(),
+            names
+        );
+    }
+    Ok(registries)
+}
+
+fn ensure_dispatch_receiver_identity(
+    identities: &IdentityRegistries,
+    bead: &str,
+    pane: &str,
+    receiver_agent: &str,
+) -> Result<(), String> {
+    identities.resolve(receiver_agent).map(|_| ()).map_err(|error| {
+        format!(
+            "DISPATCH_BLOCKED bead={bead} pane={pane} reason={error} receiver_agent={receiver_agent}"
+        )
+    })
+}
+
 /// Refuse the dispatch when the bead's claim state is illegal.
 ///
 /// `#[must_use]` is LOAD-BEARING, not decoration. MEASURED 2026-09-02: with the consult
@@ -1399,6 +1540,22 @@ fn receiver_agent_for_dispatch(
 /// It is normally the receiver, except for an unclaimed bead where the
 /// supervisor holds an explicit supervisor:<pid> claim until handoff.
 #[cfg(test)]
+fn test_identity_registries() -> IdentityRegistries {
+    IdentityRegistries::new(
+        vec![
+            IdentityRecord::agent_mail("AmberGate", "agent-mail:amber"),
+            IdentityRecord::agent_mail("BlueLantern", "agent-mail:blue"),
+            IdentityRecord::agent_mail("GreenFrog", "agent-mail:green"),
+            IdentityRecord::agent_mail("SilverWolf", "agent-mail:silver"),
+        ],
+        vec![
+            IdentityRecord::subagent("MailMining", "subagent:mail-mining"),
+            IdentityRecord::subagent("ExtractTwo", "subagent:extract-two"),
+        ],
+    )
+}
+
+#[cfg(test)]
 fn authorize_bead_dispatch(
     config: &Config,
     pane: &str,
@@ -1406,7 +1563,8 @@ fn authorize_bead_dispatch(
     snapshot: &BeadSnapshot,
 ) -> Result<String, String> {
     let receiver_agent = receiver_agent_for_dispatch(config, pane, bead, snapshot)?;
-    authorize_bead_dispatch_as(config, pane, bead, snapshot, &receiver_agent)
+    let identities = test_identity_registries();
+    authorize_bead_dispatch_as(config, pane, bead, snapshot, &receiver_agent, &identities)
 }
 
 fn authorize_bead_dispatch_as(
@@ -1415,14 +1573,30 @@ fn authorize_bead_dispatch_as(
     bead: &str,
     snapshot: &BeadSnapshot,
     claim_owner: &str,
+    identities: &IdentityRegistries,
 ) -> Result<String, String> {
     let receiver_agent = receiver_agent_for_dispatch(config, pane, bead, snapshot)?;
-    match authorize(&DispatchIntent::bead(bead, claim_owner), Some(snapshot)) {
+    let authorization = if claim_owner == receiver_agent {
+        authorize_with_identities(
+            &DispatchIntent::bead(bead, claim_owner),
+            Some(snapshot),
+            identities,
+        )
+    } else {
+        authorize(&DispatchIntent::bead(bead, claim_owner), Some(snapshot)).and_then(|permit| {
+            identities
+                .resolve(&receiver_agent)
+                .map(|_| permit)
+                .map_err(ClaimFenceError::AssigneeIdentity)
+        })
+    };
+    match authorization {
         Ok(_) => Ok(receiver_agent),
         Err(error) => Err(format!(
-            "DISPATCH_BLOCKED bead={bead} pane={pane} reason={} status={} assignee={} \
+            "DISPATCH_BLOCKED bead={bead} pane={pane} reason={} detail={} status={} assignee={} \
              receiver_agent={receiver_agent} claim_owner={claim_owner} owner=josh next_action=claim-bead command=\"{}\"",
             error.code(),
+            error,
             snapshot.status_label(),
             snapshot.assignee().unwrap_or("unassigned"),
             error
@@ -1585,11 +1759,13 @@ async fn prepare_bead_dispatch(
     config: &Config,
     pane: &str,
     bead: &str,
+    identities: &IdentityRegistries,
     tick: u64,
     claim_enabled: bool,
 ) -> Result<(BeadSnapshot, String), String> {
     let initial = load_bead_snapshot(cx, config, bead).await?;
     let receiver_agent = receiver_agent_for_dispatch(config, pane, bead, &initial)?;
+    ensure_dispatch_receiver_identity(identities, bead, pane, &receiver_agent)?;
     validate_receiver_pane(config, pane, bead, &receiver_agent)?;
     let (snapshot, claim_owner) = claim_bead_for_supervisor(
         cx,
@@ -1602,7 +1778,8 @@ async fn prepare_bead_dispatch(
         claim_enabled,
     )
     .await?;
-    let receiver_agent = authorize_bead_dispatch_as(config, pane, bead, &snapshot, &claim_owner)?;
+    let receiver_agent =
+        authorize_bead_dispatch_as(config, pane, bead, &snapshot, &claim_owner, identities)?;
     Ok((snapshot, receiver_agent))
 }
 
@@ -2591,6 +2768,44 @@ fn intent_clear_reason(error: &str) -> Option<&'static str> {
     }
     // Anything else after the marker was written failed before a receipt claim.
     Some("DISPATCH_FAILED_BEFORE_RECEIPT")
+}
+
+/// The status WORD for a dispatch that did not return a confirmed receipt.
+///
+/// # `DISPATCH_FAILED` was one word doing the work of two
+///
+/// The report site had exactly two words for three outcomes — `Ok` meant confirmed and
+/// every `Err` meant `DISPATCH_FAILED` — so a dispatch that LANDED and was merely
+/// awaiting its ACK was reported in the same word as a dispatch that never arrived.
+///
+/// MEASURED 2026-09-05, twice within minutes on different panes and beads:
+/// ```text
+/// pane=%9 bead=y6v5 status=DISPATCH_FAILED ... ACK_PENDING_WORKER_BUSY owes_human=false
+/// pane=%8 bead=93lo status=DISPATCH_FAILED ... ACK_PENDING_WORKER_BUSY owes_human=false
+/// ```
+/// Both packets were submitted and both workers were observed busy. The wait's own
+/// heartbeat wrote `ACK_WAIT_PENDING` for these cases with the comment *"a retryable
+/// typed row, and NOT an error ... the ack is late, not absent"* — and the status word
+/// then contradicted it. That contradiction is why an entire session read as a dispatch
+/// outage: `DISPATCH_FAILED` on packets that had plainly arrived.
+///
+/// # Why this reads the error text
+///
+/// Deliberately the same shape as [`intent_clear_reason`] directly above, which already
+/// derives the marker decision from this string. A second convention for the same
+/// classification would be worse than reusing an imperfect one; when the dispatch result
+/// becomes a typed enum both should move together. The two markers it keys on are emitted
+/// as a pair by one `format!` in `send_and_verify`, so they cannot drift apart silently.
+///
+/// NO-CLAIM: this changes only the WORD. It does not claim delivery — the verdict stays
+/// `INDETERMINATE`, the marker stays Live as a double-send guard via
+/// [`intent_clear_reason`], and a pane that never acks still owes a human on the arm
+/// where `owes_human=true`.
+fn dispatch_status_word(error: &str) -> &'static str {
+    if error.contains("ACK_STAGE_RETRY_BLOCKED") && error.contains("owes_human=false") {
+        return "DISPATCH_UNCONFIRMED_ACK_PENDING";
+    }
+    "DISPATCH_FAILED"
 }
 
 fn bead_from_marker_detail(detail: &str) -> String {
@@ -4074,9 +4289,10 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             // produced.
             let mut spine = ack_spine::ledger::StepLedger::new();
             emit_step(cx, &mut spine, StepKind::BeadSelected, bead, &pane, config, "selected from the bv-ordered ready queue").await?;
+            let identities = load_identity_registries(cx, config).await?;
             let dispatch_result = async {
                 let (snapshot, receiver_agent) =
-                    prepare_bead_dispatch(cx, config, &pane, bead, tick, true).await?;
+                    prepare_bead_dispatch(cx, config, &pane, bead, &identities, tick, true).await?;
                 let pane_observation = observation
                     .panes
                     .iter()
@@ -4164,7 +4380,11 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             }
             let report_detail = match &dispatch_result {
                 Ok(outcome) => outcome.detail.clone(),
-                Err(error) => format!("status=DISPATCH_FAILED detail={}", one_line_detail(error)),
+                Err(error) => format!(
+                    "status={} detail={}",
+                    dispatch_status_word(error),
+                    one_line_detail(error)
+                ),
             };
             // This now escalates ONLY when the ledger write itself failed. A
             // bounced courtesy notify to the result pane is downgraded to a
@@ -4488,6 +4708,18 @@ async fn render_dispatch_command(
     request: &DispatchRenderRequest,
 ) -> Result<String, String> {
     let snapshot = load_bead_snapshot(cx, config, &request.bead).await?;
+    let identities = load_identity_registries(cx, config).await?;
+    let receiver_agent =
+        receiver_agent_for_dispatch(config, &request.pane, &request.bead, &snapshot)?;
+    ensure_dispatch_receiver_identity(&identities, &request.bead, &request.pane, &receiver_agent)?;
+    authorize_bead_dispatch_as(
+        config,
+        &request.pane,
+        &request.bead,
+        &snapshot,
+        &receiver_agent,
+        &identities,
+    )?;
     let traps = request
         .traps_file
         .as_deref()
@@ -4673,6 +4905,12 @@ mod tests {
         let tmux_tmpdir = root.join("tmux");
         std::fs::create_dir_all(&repo).expect("fixture repository");
         std::fs::create_dir_all(&tmux_tmpdir).expect("fixture tmux directory");
+        let subagent_registry = root.join("subagents.json");
+        std::fs::write(
+            &subagent_registry,
+            r#"[{"name":"AmberGate","actor_id":"agent-mail:amber"},{"name":"BlueLantern","actor_id":"agent-mail:blue"},{"name":"GreenFrog","actor_id":"agent-mail:green"},{"name":"SilverWolf","actor_id":"agent-mail:silver"},{"name":"MailMining","actor_id":"subagent:mail-mining"},{"name":"ExtractTwo","actor_id":"subagent:extract-two"}]"#,
+        )
+        .expect("fixture subagent registry");
         Config {
             repo,
             reap_finished_panes: "reap-finished-panes".to_owned(),
@@ -4692,6 +4930,10 @@ mod tests {
             tick_monitor_state: root.join("state"),
             pending_dispatch: root.join("pending"),
             finding_spool: root.join("findings"),
+            // The fixture writes the same six namespace records used by the identity tests.
+            // It is intentionally non-empty so known-good dispatch tests exercise resolution
+            // rather than the absent-registry anti-vacuity refusal.
+            subagent_registry,
             receiver_agent: "BlueLantern".to_owned(),
             // EMPTY ON PURPOSE. A populated identity here would make every
             // test that reaches `report_dispatch_result` send REAL mail to the
@@ -4702,6 +4944,21 @@ mod tests {
             mail_sender: String::new(),
             omp_binary: PathBuf::from("omp"),
         }
+    }
+
+    fn test_identity_registries() -> IdentityRegistries {
+        IdentityRegistries::new(
+            vec![
+                IdentityRecord::agent_mail("AmberGate", "agent-mail:amber"),
+                IdentityRecord::agent_mail("BlueLantern", "agent-mail:blue"),
+                IdentityRecord::agent_mail("GreenFrog", "agent-mail:green"),
+                IdentityRecord::agent_mail("SilverWolf", "agent-mail:silver"),
+            ],
+            vec![
+                IdentityRecord::subagent("MailMining", "subagent:mail-mining"),
+                IdentityRecord::subagent("ExtractTwo", "subagent:extract-two"),
+            ],
+        )
     }
 
     /// The four repo shapes the docs gate must distinguish. Measured 2026-09-05:
@@ -4804,7 +5061,8 @@ mod tests {
         let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
         runtime.block_on(async {
             let cx = Cx::current().expect("runtime context");
-            prepare_bead_dispatch(&cx, config, pane, bead, tick, claim_enabled).await
+            let identities = test_identity_registries();
+            prepare_bead_dispatch(&cx, config, pane, bead, &identities, tick, claim_enabled).await
         })
     }
 
@@ -5285,13 +5543,33 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
         );
     }
 
+    /// `--session` is MANDATORY, and its absence is what captured another repo.
+    ///
+    /// MEASURED 2026-09-05 (`ma3b`): the sweep ran unscoped and enumerated EVERY tmux
+    /// session, so our tick reaped `control-plane`'s panes and wrote 3,673 transcript
+    /// files for a repo we do not own into the shared reaped directory. These two legs
+    /// asserted the pre-fix two-argument form and went red when the caller was scoped,
+    /// which is the tests being stale rather than the code being wrong.
     #[test]
     fn finished_pane_reaper_receives_the_same_repository() {
         let temp = tempfile::tempdir().expect("reaper fixture");
         let config = fixture_config(temp.path().join("heartbeat.jsonl"));
+        let args = finished_pane_reaper_args(&config);
         assert_eq!(
-            finished_pane_reaper_args(&config),
-            vec!["--repo".to_owned(), config.repo.display().to_string()]
+            args,
+            vec![
+                "--repo".to_owned(),
+                config.repo.display().to_string(),
+                "--session".to_owned(),
+                config.session.clone(),
+            ]
+        );
+        // Stated separately so a future arg reshuffle still fails on the SCOPE rather
+        // than only on positional equality. A widen-to-all-sessions default is exactly
+        // how control-plane's panes were captured.
+        assert!(
+            args.iter().any(|arg| arg == "--session"),
+            "an unscoped sweep enumerates every tmux session: {args:?}"
         );
     }
     #[test]
@@ -5303,8 +5581,8 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
         let summary = run_reaper_for_test(&config).expect("reaper output");
         assert_eq!(
             summary,
-            format!("--repo {}", temp.path().display()),
-            "the production helper must invoke the configured reaper with the repository root"
+            format!("--repo {} --session {}", temp.path().display(), config.session),
+            "the production helper must invoke the reaper with the repository root AND the session scope"
         );
     }
     #[test]
@@ -5373,6 +5651,54 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
             authorize_bead_dispatch(&config, "%1408", "receiver-assignment-test", &snapshot)
                 .expect("an assigned bead should supply the receiver agent when config is unset");
         assert_eq!(receiver_agent, "SilverWolf");
+    }
+
+    #[test]
+    fn production_dispatch_identity_gate_covers_both_namespaces_and_unknowns() {
+        let (_temp, mut config) = isolated_fixture_config();
+        config.receiver_agent.clear();
+        let identities = test_identity_registries();
+
+        for assignee in ["MailMining", "AmberGate"] {
+            let snapshot = BeadSnapshot::new(
+                "u21m-production-test",
+                "title",
+                "description",
+                "in_progress",
+                Some(assignee),
+            );
+            let receiver = authorize_bead_dispatch_as(
+                &config,
+                "%1408",
+                "u21m-production-test",
+                &snapshot,
+                assignee,
+                &identities,
+            )
+            .expect("known identities in either namespace must pass production dispatch");
+            assert_eq!(receiver, assignee);
+        }
+
+        let snapshot = BeadSnapshot::new(
+            "u21m-production-test",
+            "title",
+            "description",
+            "in_progress",
+            Some("WildcardFix"),
+        );
+        let error = authorize_bead_dispatch_as(
+            &config,
+            "%1408",
+            "u21m-production-test",
+            &snapshot,
+            "WildcardFix",
+            &identities,
+        )
+        .expect_err("an unknown assignee must be refused before packet construction");
+        assert!(error.contains("WildcardFix"), "{error}");
+        assert!(error.contains("agent_mail"), "{error}");
+        assert!(error.contains("subagents"), "{error}");
+        assert!(error.contains("ASSIGNEE_IDENTITY_REFUSED"), "{error}");
     }
 
     /// The known-bad is the real incident, replayed from the heartbeat ledger.
@@ -5841,6 +6167,54 @@ exit 2
             assert!(
                 !v.starts_with("unavailable:"),
                 "value {v:?} must NOT be treated as a skip; fail-closed is the default"
+            );
+        }
+    }
+
+    /// KNOWN-BAD: the exact line measured on `%8` must not say `DISPATCH_FAILED`.
+    ///
+    /// Verbatim from a live tick 2026-09-05, minus the leading `status=` this function
+    /// supplies. If this reverts, the loop resumes reporting landed packets as failures.
+    #[test]
+    fn an_ack_pending_dispatch_is_not_reported_as_failed() {
+        let measured = "ACK_STAGE_RETRY_BLOCKED pane=%8 bead=omp-orchestrator-93lo \
+                        action=AWAIT_HUMAN verdict=INDETERMINATE reason=ack_readback_missing \
+                        after=90s discriminator=ACK_PENDING_WORKER_BUSY \
+                        discriminator_reason=NONE owes_human=false";
+        assert_eq!(
+            dispatch_status_word(measured),
+            "DISPATCH_UNCONFIRMED_ACK_PENDING",
+            "a submitted packet awaiting its ACK is not a failed dispatch"
+        );
+    }
+
+    /// KNOWN-GOOD: the arm that DOES owe a human keeps the failure word.
+    ///
+    /// Without this leg the helper could return the softer word unconditionally, which
+    /// is the failure mode the softening invites — a loop that can no longer say failed.
+    #[test]
+    fn an_ack_that_owes_a_human_still_reports_failed() {
+        let owed = "ACK_STAGE_RETRY_BLOCKED pane=%8 bead=b action=AWAIT_HUMAN \
+                    verdict=INDETERMINATE reason=ack_readback_missing after=90s \
+                    discriminator=ACK_ABSENT_WORKER_IDLE discriminator_reason=NONE \
+                    owes_human=true";
+        assert_eq!(dispatch_status_word(owed), "DISPATCH_FAILED");
+    }
+
+    /// Every OTHER error keeps the failure word. Both markers are required, so a
+    /// non-ACK failure that happens to carry `owes_human=false` is still a failure.
+    #[test]
+    fn unrelated_failures_are_not_softened() {
+        for error in [
+            "RECEIVER_OBSERVATION_MISSING pane=%8 bead=b",
+            "SENDER_IDENTITY_REFUSED pane=%6 owes_human=false",
+            "ACK_STAGE_RETRY_BLOCKED pane=%8 bead=b owes_human=unknown",
+            "",
+        ] {
+            assert_eq!(
+                dispatch_status_word(error),
+                "DISPATCH_FAILED",
+                "error {error:?} must keep the failure word"
             );
         }
     }
