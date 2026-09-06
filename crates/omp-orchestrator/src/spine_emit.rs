@@ -45,8 +45,7 @@ use std::path::{Path, PathBuf};
 /// the refusal scrolls past in-pane, and the agent believes the close landed — so
 /// the presence of one of these prefixes is what distinguishes a graded close from
 /// an attempted one.
-pub const GRADED_CLOSE_PREFIXES: &[&str] =
-    &["MUTATION-VERIFIED", "DONE", "APPROVED", "WONTFIX"];
+pub const GRADED_CLOSE_PREFIXES: &[&str] = &["MUTATION-VERIFIED", "DONE", "APPROVED", "WONTFIX"];
 
 /// What the supervisor knows about a bead it dispatched earlier.
 ///
@@ -251,7 +250,10 @@ mod tests {
     #[test]
     fn an_unfinished_bead_owes_no_completion_row() {
         for status in ["open", "in_progress", "blocked"] {
-            assert!(completion_kinds(&prior(status, None)).is_empty(), "{status}");
+            assert!(
+                completion_kinds(&prior(status, None)).is_empty(),
+                "{status}"
+            );
         }
     }
 
@@ -274,6 +276,35 @@ mod tests {
         assert_eq!(send_kind(7), StepKind::Redispatched);
     }
 
+    /// Fixture saga: an earlier packet exists, the bead is eligible again, and
+    /// the production ledger primitive must emit a typed Redispatched row.
+    #[test]
+    fn a_redispatch_fixture_emits_a_typed_ledger_row() {
+        let runtime = asupersync::runtime::RuntimeBuilder::current_thread()
+            .build()
+            .expect("fixture runtime");
+        runtime.block_on(async {
+            let cx = asupersync::Cx::current().expect("fixture context");
+            let mut ledger = ack_spine::ledger::StepLedger::new();
+            let kind = send_kind(1);
+            ack_spine::ledger::step(
+                &cx,
+                &mut ledger,
+                kind,
+                "bead-fixture",
+                "%fixture",
+                "omp-orchestrator-fixture",
+                "prior dispatch had no completion; retrying",
+                |_cx| async {},
+            )
+            .await
+            .expect("redispatch fixture step");
+            ledger.assert_non_empty().expect("fixture is not vacuous");
+            ledger.assert_step_count().expect("fixture step count");
+            assert_eq!(ledger.last_kind(), Some(StepKind::Redispatched));
+            assert!(ledger.to_jsonl().contains("\"kind\":\"redispatched\""));
+        });
+    }
     /// The persisted-ledger reader, both directions.
     #[test]
     fn recorded_closures_reads_typed_rows_and_ignores_everything_else() {
