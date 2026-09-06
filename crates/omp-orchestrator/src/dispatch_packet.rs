@@ -6,6 +6,10 @@ use std::path::Path;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PacketError {
     PacketFieldMissing(&'static str),
+    FiledOnlyRecord {
+        bead: String,
+        marker: &'static str,
+    },
     PacketAddsScope {
         bead: String,
         line: usize,
@@ -19,6 +23,10 @@ impl fmt::Display for PacketError {
             Self::PacketFieldMissing(field) => {
                 write!(formatter, "PacketFieldMissing(\"{field}\")")
             }
+            Self::FiledOnlyRecord { bead, marker } => write!(
+                formatter,
+                "PACKET_REFUSED_FILED_ONLY bead={bead} marker={marker} reason=record-not-implementable"
+            ),
             Self::PacketAddsScope {
                 bead,
                 line,
@@ -31,11 +39,70 @@ impl fmt::Display for PacketError {
     }
 }
 
-impl std::error::Error for PacketError {}
-
 fn nonempty(value: &str) -> Option<&str> {
     let value = value.trim();
     (!value.is_empty()).then_some(value)
+}
+
+fn strip_nonsemantic(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut output = String::with_capacity(text.len());
+    let mut index = 0;
+    while index < chars.len() {
+        let quote = chars[index];
+        if !matches!(quote, '\'' | '"' | '\u{60}') {
+            output.push(quote);
+            index += 1;
+            continue;
+        }
+        let mut end = index + 1;
+        let mut escaped = false;
+        while end < chars.len() {
+            if quote != '\u{60}' && chars[end] == '\n' {
+                break;
+            }
+            if chars[end] == quote && !escaped {
+                break;
+            }
+            if chars[end] == '\\' {
+                escaped = !escaped;
+            } else {
+                escaped = false;
+            }
+            end += 1;
+        }
+        if end < chars.len() && chars[end] == quote {
+            for _ in index..=end {
+                output.push(' ');
+            }
+            index = end + 1;
+        } else {
+            output.push(quote);
+            index += 1;
+        }
+    }
+    output
+}
+
+fn filed_only_marker(text: &str) -> Option<&'static str> {
+    let lower = strip_nonsemantic(text).to_ascii_lowercase();
+    if lower.contains("file not claim") {
+        return Some("FILE NOT CLAIM");
+    }
+    if lower.contains("filed only") {
+        return Some("filed only");
+    }
+    let contextual = lower.lines().any(|line| {
+        let line = line.trim_start();
+        (line.starts_with("status:") || line.starts_with("stage:") || line.starts_with("marker:"))
+            && line.contains("do not claim")
+    });
+    contextual.then_some("do not claim")
+}
+
+fn filed_only_marker_for(snapshot: &BeadSnapshot) -> Option<&'static str> {
+    filed_only_marker(snapshot.description())
+        .or_else(|| filed_only_marker(snapshot.acceptance_criteria()))
 }
 
 fn section_from_description(description: &str, heading: &str) -> Option<String> {
@@ -160,6 +227,12 @@ pub fn render_with_pane(
     traps: Option<&str>,
 ) -> Result<String, PacketError> {
     let bead = nonempty(snapshot.id()).ok_or(PacketError::PacketFieldMissing("objective"))?;
+    if let Some(marker) = filed_only_marker_for(snapshot) {
+        return Err(PacketError::FiledOnlyRecord {
+            bead: bead.to_owned(),
+            marker,
+        });
+    }
     let objective = format!("Complete bead {bead}: {}", snapshot.title().trim());
     let target = target.display().to_string();
     let scope = scope(snapshot);
@@ -246,7 +319,6 @@ pub fn render_grading_packet(
         "GRADE ASSIGNMENT (not implementation)\nObserver: {observer_pane} (may be WORKING; observer is not the grader).\nGrader pane: {grader_pane}\nDo not implement. Re-run the bead's acceptance. Close with MUTATION-VERIFIED if it holds; otherwise GAP/UNKNOWN.\nYou are not the author if your pane is distinct from ACK pane-scoped keys.\n\n{work}"
     ))
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -419,5 +491,4 @@ mod tests {
         .expect_err("same pane");
         assert!(matches!(error, PacketError::PacketAddsScope { .. }));
     }
-
 }

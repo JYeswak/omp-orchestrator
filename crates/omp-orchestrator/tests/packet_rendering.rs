@@ -153,3 +153,42 @@ fn every_rendered_bead_packet_carries_the_ack_instruction() {
     );
     assert!(packet.contains("ACK kxe.4 on $TMUX_PANE --"), "{packet}");
 }
+
+#[test]
+fn filed_only_record_is_refused_before_packet_render() {
+    let error = render(
+        &bead(
+            "omp-orchestrator-s1-l0-t14-pccb",
+            "STATUS: filed only; do not claim or implement in this bead.",
+            "Run the recorded acceptance only; expect no implementation.",
+        ),
+        Path::new("/repo"),
+        None,
+        None,
+    )
+    .expect_err("filed-only records must not become work packets");
+    assert!(error.to_string().contains("PACKET_REFUSED_FILED_ONLY"));
+    assert!(matches!(
+        error,
+        PacketError::FiledOnlyRecord {
+            bead,
+            marker: "filed only"
+        } if bead == "omp-orchestrator-s1-l0-t14-pccb"
+    ));
+}
+
+#[test]
+fn quoted_filed_only_language_is_not_a_marker() {
+    let packet = render(
+        &bead(
+            "b4iv",
+            "This audit quotes 'filed only' and 'do not claim' as examples.",
+            "Run cargo test -p b4iv; expect exit 0",
+        ),
+        Path::new("/repo"),
+        None,
+        None,
+    )
+    .expect("quoted marker language must be ignored");
+    assert!(packet.contains("Objective: Complete bead b4iv"));
+}

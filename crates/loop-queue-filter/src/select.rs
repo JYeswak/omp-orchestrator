@@ -17,7 +17,6 @@ use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-
 /// Pane-scoped assignee: unique on one tmux server for one occupancy window.
 #[allow(dead_code)]
 const PANE_SCOPED: &str = r"^pane[0-9]+-%[0-9]+$";
@@ -49,6 +48,9 @@ pub fn rank_ready(triage: &[u8], ready: &[String]) -> Result<Vec<String>, String
         .ok_or_else(|| {
             "QUEUE_UNRANKED bv triage has no .triage.recommendations array".to_owned()
         })?;
+    if recs.is_empty() {
+        return Err("QUEUE_UNRANKED bv triage .triage.recommendations is empty".to_owned());
+    }
     let mut ranked: Vec<(u64, i64, String)> = Vec::new();
     for row in recs {
         let Some(id) = row.get("id").and_then(Value::as_str) else {
@@ -71,7 +73,10 @@ pub fn rank_ready(triage: &[u8], ready: &[String]) -> Result<Vec<String>, String
         {
             continue;
         }
-        let priority = row.get("priority").and_then(Value::as_u64).unwrap_or(u64::MAX);
+        let priority = row
+            .get("priority")
+            .and_then(Value::as_u64)
+            .unwrap_or(u64::MAX);
         let score = row
             .get("score")
             .and_then(Value::as_f64)
@@ -92,6 +97,7 @@ pub fn rank_ready(triage: &[u8], ready: &[String]) -> Result<Vec<String>, String
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RankWindow {
     EmptyReady,
+    FilteredFiledOnly,
     RecommendationsOnly,
     RecommendationsPlusPriorityFallback,
     PriorityFallback,
@@ -100,6 +106,7 @@ impl RankWindow {
     pub const fn label(self) -> &'static str {
         match self {
             Self::EmptyReady => "EMPTY_READY",
+            Self::FilteredFiledOnly => "FILTERED_FILED_ONLY",
             Self::RecommendationsOnly => "RECOMMENDATIONS_ONLY",
             Self::RecommendationsPlusPriorityFallback => "RECOMMENDATIONS_PLUS_PRIORITY_FALLBACK",
             Self::PriorityFallback => "PRIORITY_FALLBACK",
@@ -126,12 +133,22 @@ pub fn rank_ready_with_priorities(
         .get("triage")
         .and_then(|t| t.get("recommendations"))
         .and_then(Value::as_array)
-        .ok_or_else(|| "QUEUE_UNRANKED bv triage has no .triage.recommendations array".to_owned())?;
-    let mut scored = BTreeMap::new();
+        .ok_or_else(|| {
+            "QUEUE_UNRANKED bv triage has no .triage.recommendations array".to_owned()
+        })?;
+    if recs.is_empty() {
+        return Err("QUEUE_UNRANKED bv triage .triage.recommendations is empty".to_owned());
+    }
     let mut ranked: Vec<(u64, i64, String)> = Vec::new();
+    let mut scored: BTreeMap<String, (u64, i64)> = BTreeMap::new();
     for row in recs {
-        let Some(id) = row.get("id").and_then(Value::as_str) else { continue };
-        let priority = row.get("priority").and_then(Value::as_u64).unwrap_or(u64::MAX);
+        let Some(id) = row.get("id").and_then(Value::as_str) else {
+            continue;
+        };
+        let priority = row
+            .get("priority")
+            .and_then(Value::as_u64)
+            .unwrap_or(u64::MAX);
         let score = row
             .get("score")
             .and_then(Value::as_f64)
@@ -139,12 +156,22 @@ pub fn rank_ready_with_priorities(
             .unwrap_or(0);
         scored.insert(id.to_owned(), (priority, score));
         if !ready.iter().any(|candidate| candidate == id)
-            || row.get("type").and_then(Value::as_str).is_some_and(|kind| kind.eq_ignore_ascii_case("epic"))
-            || row.get("assignee").and_then(Value::as_str).is_some_and(|who| !who.trim().is_empty())
+            || row
+                .get("type")
+                .and_then(Value::as_str)
+                .is_some_and(|kind| kind.eq_ignore_ascii_case("epic"))
+            || row
+                .get("assignee")
+                .and_then(Value::as_str)
+                .is_some_and(|who| !who.trim().is_empty())
         {
             continue;
         }
-        ranked.push((ready_priorities.get(id).copied().unwrap_or(priority), score, id.to_owned()));
+        ranked.push((
+            ready_priorities.get(id).copied().unwrap_or(priority),
+            score,
+            id.to_owned(),
+        ));
     }
     ranked.sort();
     let mut ids: Vec<String> = ranked.iter().map(|(_, _, id)| id.clone()).collect();
@@ -154,7 +181,15 @@ pub fn rank_ready_with_priorities(
         .filter(|(_, id)| !ids.iter().any(|chosen| chosen == *id))
         .map(|(index, id)| {
             let (fallback_priority, score) = scored.get(id).copied().unwrap_or((u64::MAX, 0));
-            (ready_priorities.get(id).copied().unwrap_or(fallback_priority), score, index, id.clone())
+            (
+                ready_priorities
+                    .get(id)
+                    .copied()
+                    .unwrap_or(fallback_priority),
+                score,
+                index,
+                id.clone(),
+            )
         })
         .collect();
     remaining.sort();
@@ -167,6 +202,97 @@ pub fn rank_ready_with_priorities(
         RankWindow::PriorityFallback
     } else if ids.len() > ranked_count {
         RankWindow::RecommendationsPlusPriorityFallback
+    } else {
+        RankWindow::RecommendationsOnly
+    };
+    Ok(RankedOrder { ids, window })
+}
+
+/// Rank the ready set with bv's complete PageRank map.
+///
+/// The robot-triage command intentionally returns only the top ten
+/// recommendations, which can all be blocked or already assigned. The insights
+/// payload carries the full graph metric map, so filtering those ten rows must not
+/// demote the whole ready set to br priority ordering.
+pub fn rank_ready_with_pagerank(
+    triage: &[u8],
+    ready: &[String],
+    insights: &[u8],
+) -> Result<RankedOrder, String> {
+    let triage_value: Value = serde_json::from_slice(triage)
+        .map_err(|error| format!("QUEUE_UNRANKED bv triage JSON: {error}"))?;
+    let recs = triage_value
+        .get("triage")
+        .and_then(|t| t.get("recommendations"))
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            "QUEUE_UNRANKED bv triage has no .triage.recommendations array".to_owned()
+        })?;
+    if recs.is_empty() {
+        return Err("QUEUE_UNRANKED bv triage .triage.recommendations is empty".to_owned());
+    }
+
+    let insights_value: Value = serde_json::from_slice(insights)
+        .map_err(|error| format!("QUEUE_UNRANKED bv insights JSON: {error}"))?;
+    let triage_hash = triage_value
+        .get("data_hash")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "QUEUE_UNRANKED bv triage has no data_hash".to_owned())?;
+    let insights_hash = insights_value
+        .get("data_hash")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "QUEUE_UNRANKED bv insights has no data_hash".to_owned())?;
+    if triage_hash != insights_hash {
+        return Err(format!(
+            "QUEUE_UNRANKED bv snapshot mismatch triage={triage_hash} insights={insights_hash}"
+        ));
+    }
+    let page_rank_state = insights_value
+        .get("status")
+        .and_then(|status| status.get("PageRank"))
+        .and_then(|page_rank| page_rank.get("state"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| "QUEUE_UNRANKED bv insights has no PageRank status".to_owned())?;
+    if page_rank_state != "computed" {
+        return Err(format!(
+            "QUEUE_UNRANKED bv insights PageRank state={page_rank_state}"
+        ));
+    }
+    let page_ranks = insights_value
+        .get("full_stats")
+        .and_then(|stats| stats.get("pagerank"))
+        .and_then(Value::as_object)
+        .ok_or_else(|| "QUEUE_UNRANKED bv insights has no full_stats.pagerank map".to_owned())?;
+    if page_ranks.is_empty() {
+        return Err("QUEUE_UNRANKED bv insights full_stats.pagerank is empty".to_owned());
+    }
+
+    let mut ranked: Vec<(i64, String)> = Vec::with_capacity(ready.len());
+    for id in ready {
+        let score = match page_ranks.get(id) {
+            Some(value) => value.as_f64().ok_or_else(|| {
+                format!("QUEUE_UNRANKED bv insights PageRank is not numeric for {id}")
+            })?,
+            // bv omits zero-valued nodes from its sparse metric map.
+            None => 0.0,
+        };
+        if !score.is_finite() || score < 0.0 {
+            return Err(format!(
+                "QUEUE_UNRANKED bv insights PageRank is invalid for {id}: {score}"
+            ));
+        }
+        let scaled = score * 1_000_000_000_000_000.0;
+        if !scaled.is_finite() || scaled > i64::MAX as f64 {
+            return Err(format!(
+                "QUEUE_UNRANKED bv insights PageRank is out of range for {id}: {score}"
+            ));
+        }
+        ranked.push((-(scaled.round() as i64), id.clone()));
+    }
+    ranked.sort();
+    let ids = ranked.into_iter().map(|(_, id)| id).collect::<Vec<_>>();
+    let window = if ready.is_empty() {
+        RankWindow::EmptyReady
     } else {
         RankWindow::RecommendationsOnly
     };
@@ -215,8 +341,14 @@ fn first_actionable_blocker(
         let Some(id) = row.get("id").and_then(Value::as_str) else {
             continue;
         };
-        let actionable = row.get("actionable").and_then(Value::as_bool).unwrap_or(false);
-        let unblocks = row.get("unblocks_count").and_then(Value::as_u64).unwrap_or(0);
+        let actionable = row
+            .get("actionable")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let unblocks = row
+            .get("unblocks_count")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
         if !actionable || unblocks == 0 {
             continue;
         }
@@ -231,11 +363,64 @@ fn first_actionable_blocker(
     Ok(None)
 }
 
+fn strip_nonsemantic(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut output = String::with_capacity(text.len());
+    let mut index = 0;
+    while index < chars.len() {
+        let quote = chars[index];
+        if !matches!(quote, '\'' | '"' | '\u{60}') {
+            output.push(quote);
+            index += 1;
+            continue;
+        }
+        let mut end = index + 1;
+        let mut escaped = false;
+        while end < chars.len() {
+            if quote != '\u{60}' && chars[end] == '\n' {
+                break;
+            }
+            if chars[end] == quote && !escaped {
+                break;
+            }
+            if chars[end] == '\\' {
+                escaped = !escaped;
+            } else {
+                escaped = false;
+            }
+            end += 1;
+        }
+        if end < chars.len() && chars[end] == quote {
+            for _ in index..=end {
+                output.push(' ');
+            }
+            index = end + 1;
+        } else {
+            output.push(quote);
+            index += 1;
+        }
+    }
+    output
+}
+
+fn filed_only_marker(text: &str) -> bool {
+    let lower = strip_nonsemantic(text).to_ascii_lowercase();
+    if lower.contains("file not claim") || lower.contains("filed only") {
+        return true;
+    }
+    lower.lines().any(|line| {
+        let line = line.trim_start();
+        (line.starts_with("status:") || line.starts_with("stage:") || line.starts_with("marker:"))
+            && line.contains("do not claim")
+    })
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct BeadComments {
     id: String,
     status: String,
     assignee: String,
+    filed_only: bool,
     authors: Vec<String>,
     texts: Vec<String>,
 }
@@ -246,9 +431,8 @@ fn parse_jsonl(jsonl: &str) -> Result<Vec<BeadComments>, String> {
         if line.trim().is_empty() {
             continue;
         }
-        let value: Value = serde_json::from_str(line).map_err(|error| {
-            format!("QUEUE_UNRANKED comments jsonl line {i}: {error}")
-        })?;
+        let value: Value = serde_json::from_str(line)
+            .map_err(|error| format!("QUEUE_UNRANKED comments jsonl line {i}: {error}"))?;
         let id = value
             .get("id")
             .and_then(Value::as_str)
@@ -265,6 +449,15 @@ fn parse_jsonl(jsonl: &str) -> Result<Vec<BeadComments>, String> {
             .unwrap_or("")
             .trim()
             .to_owned();
+        let description = value
+            .get("description")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let acceptance = value
+            .get("acceptance_criteria")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let filed_only = filed_only_marker(description) || filed_only_marker(acceptance);
         let mut authors = Vec::new();
         let mut texts = Vec::new();
         if let Some(comments) = value.get("comments").and_then(Value::as_array) {
@@ -281,11 +474,25 @@ fn parse_jsonl(jsonl: &str) -> Result<Vec<BeadComments>, String> {
             id,
             status,
             assignee,
+            filed_only,
             authors,
             texts,
         });
     }
     Ok(out)
+}
+
+fn dispatchable_ready_ids(ready: &[String], jsonl: &str) -> Result<Vec<String>, String> {
+    let filed_ids: BTreeSet<String> = parse_jsonl(jsonl)?
+        .into_iter()
+        .filter(|bead| bead.filed_only)
+        .map(|bead| bead.id)
+        .collect();
+    Ok(ready
+        .iter()
+        .filter(|id| !filed_ids.contains(*id))
+        .cloned()
+        .collect())
 }
 
 fn done_evidence(bead: &BeadComments) -> bool {
@@ -298,10 +505,12 @@ fn done_evidence(bead: &BeadComments) -> bool {
 }
 
 /// Open or in_progress with DONE evidence. Closed, grading, blocked, and
-/// tombstone are never reapable. `grading` is terminal for this slot: the
+/// tombstone are never reapable. grading is terminal for this slot: the
 /// bead is already out for a grader; re-offering is a second dispatch.
 fn is_reapable(bead: &BeadComments) -> bool {
-    matches!(bead.status.as_str(), "open" | "in_progress") && done_evidence(bead)
+    !bead.filed_only
+        && matches!(bead.status.as_str(), "open" | "in_progress")
+        && done_evidence(bead)
 }
 
 fn pane_scoped_authors(bead: &BeadComments) -> BTreeSet<String> {
@@ -333,9 +542,7 @@ pub fn comment_count(jsonl: &str, id: &str) -> Result<usize, String> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GradingSlot {
     Offer(String),
-    Skip {
-        reason: &'static str,
-    },
+    Skip { reason: &'static str },
 }
 
 impl fmt::Display for GradingSlot {
@@ -351,9 +558,11 @@ impl fmt::Display for GradingSlot {
 pub fn grading_slot(jsonl: &str, ready: &[String], grader: &str) -> GradingSlot {
     let beads = match parse_jsonl(jsonl) {
         Ok(beads) => beads,
-        Err(_) => return GradingSlot::Skip {
-            reason: "unreadable_jsonl",
-        },
+        Err(_) => {
+            return GradingSlot::Skip {
+                reason: "unreadable_jsonl",
+            }
+        }
     };
     if beads.is_empty() {
         return GradingSlot::Skip {
@@ -385,9 +594,7 @@ pub fn grading_slot(jsonl: &str, ready: &[String], grader: &str) -> GradingSlot 
             saw_empty_authors = true;
             continue;
         }
-        if authors_include_pane(&authors, grader)
-            || authors.contains(grader)
-        {
+        if authors_include_pane(&authors, grader) || authors.contains(grader) {
             saw_self = true;
             continue;
         }
@@ -408,19 +615,14 @@ pub fn grading_slot(jsonl: &str, ready: &[String], grader: &str) -> GradingSlot 
     }
 }
 
-fn first_grading_assignment(
-    jsonl: &str,
-    ready: &[String],
-    grader: &str,
-) -> Option<String> {
+fn first_grading_assignment(jsonl: &str, ready: &[String], grader: &str) -> Option<String> {
     match grading_slot(jsonl, ready, grader) {
         GradingSlot::Offer(id) => Some(id),
         GradingSlot::Skip { .. } => None,
     }
 }
 
-
-/// Full dispatch order. `grader` must be pane-scoped (`pane4-%9`) to take a grading slot.
+/// Full dispatch order. grader must be pane-scoped (pane4-%9) to take a grading slot.
 pub fn select_dispatch_order(
     triage: &[u8],
     ready: &[String],
@@ -429,17 +631,18 @@ pub fn select_dispatch_order(
 ) -> Result<Vec<String>, String> {
     let value: Value = serde_json::from_slice(triage)
         .map_err(|error| format!("QUEUE_UNRANKED bv triage JSON: {error}"))?;
+    let dispatchable_ready = dispatchable_ready_ids(ready, jsonl)?;
     let assigned = assigned_ids(&value);
     let mut out: Vec<String> = Vec::new();
-    if let Some(blocker) = first_actionable_blocker(&value, ready, &assigned)? {
+    if let Some(blocker) = first_actionable_blocker(&value, &dispatchable_ready, &assigned)? {
         out.push(blocker);
     }
-    if let Some(grade) = first_grading_assignment(jsonl, ready, grader) {
+    if let Some(grade) = first_grading_assignment(jsonl, &dispatchable_ready, grader) {
         if !out.iter().any(|id| id == &grade) {
             out.push(grade);
         }
     }
-    let ranked = rank_ready(triage, ready)?;
+    let ranked = rank_ready(triage, &dispatchable_ready)?;
     for id in ranked {
         if !out.iter().any(|chosen| chosen == &id) {
             out.push(id);
@@ -458,26 +661,64 @@ pub fn select_dispatch_order_with_priorities(
 ) -> Result<RankedOrder, String> {
     let value: Value = serde_json::from_slice(triage)
         .map_err(|error| format!("QUEUE_UNRANKED bv triage JSON: {error}"))?;
+    let dispatchable_ready = dispatchable_ready_ids(ready, jsonl)?;
     let assigned = assigned_ids(&value);
     let mut out: Vec<String> = Vec::new();
-    if let Some(blocker) = first_actionable_blocker(&value, ready, &assigned)? {
+    if let Some(blocker) = first_actionable_blocker(&value, &dispatchable_ready, &assigned)? {
         out.push(blocker);
     }
-    if let Some(grade) = first_grading_assignment(jsonl, ready, grader) {
+    if let Some(grade) = first_grading_assignment(jsonl, &dispatchable_ready, grader) {
         if !out.iter().any(|id| id == &grade) {
             out.push(grade);
         }
     }
-    let ranked = rank_ready_with_priorities(triage, ready, ready_priorities)?;
+    let ranked = rank_ready_with_priorities(triage, &dispatchable_ready, ready_priorities)?;
+    let window = if !ready.is_empty() && dispatchable_ready.is_empty() {
+        RankWindow::FilteredFiledOnly
+    } else {
+        ranked.window
+    };
     for id in ranked.ids {
         if !out.iter().any(|chosen| chosen == &id) {
             out.push(id);
         }
     }
-    Ok(RankedOrder {
-        ids: out,
-        window: ranked.window,
-    })
+    Ok(RankedOrder { ids: out, window })
+}
+
+/// Full dispatch order using bv's complete PageRank ready frontier.
+pub fn select_dispatch_order_with_pagerank(
+    triage: &[u8],
+    ready: &[String],
+    insights: &[u8],
+    jsonl: &str,
+    grader: &str,
+) -> Result<RankedOrder, String> {
+    let value: Value = serde_json::from_slice(triage)
+        .map_err(|error| format!("QUEUE_UNRANKED bv triage JSON: {error}"))?;
+    let dispatchable_ready = dispatchable_ready_ids(ready, jsonl)?;
+    let assigned = assigned_ids(&value);
+    let mut out: Vec<String> = Vec::new();
+    if let Some(blocker) = first_actionable_blocker(&value, &dispatchable_ready, &assigned)? {
+        out.push(blocker);
+    }
+    if let Some(grade) = first_grading_assignment(jsonl, &dispatchable_ready, grader) {
+        if !out.iter().any(|id| id == &grade) {
+            out.push(grade);
+        }
+    }
+    let ranked = rank_ready_with_pagerank(triage, &dispatchable_ready, insights)?;
+    let window = if !ready.is_empty() && dispatchable_ready.is_empty() {
+        RankWindow::FilteredFiledOnly
+    } else {
+        ranked.window
+    };
+    for id in ranked.ids {
+        if !out.iter().any(|chosen| chosen == &id) {
+            out.push(id);
+        }
+    }
+    Ok(RankedOrder { ids: out, window })
 }
 
 /// One pane as the assignment path sees it. The observer may be WORKING;
@@ -752,7 +993,6 @@ pub fn assign_peer_grade(
     })
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -803,10 +1043,7 @@ mod tests {
             {"id":"older-p1","priority":1,"score":0.9,"type":"epic"},
             {"id":"p0-now","priority":0,"score":0.1,"assignee":"pane3-%8"}
         ]}}"#;
-        let priorities = BTreeMap::from([
-            ("older-p1".to_owned(), 1),
-            ("p0-now".to_owned(), 0),
-        ]);
+        let priorities = BTreeMap::from([("older-p1".to_owned(), 1), ("p0-now".to_owned(), 0)]);
         let ranked = rank_ready_with_priorities(triage, &ready, &priorities).unwrap();
         assert_eq!(ranked.window, RankWindow::PriorityFallback);
         assert_eq!(ranked.ids, vec!["p0-now", "older-p1"]);
@@ -828,7 +1065,7 @@ mod tests {
     #[test]
     fn empty_ready_set_has_a_typed_empty_rank_window() {
         let ranked = rank_ready_with_priorities(
-            br#"{"triage":{"recommendations":[]}}"#,
+            br#"{"triage":{"recommendations":[{"id":"not-ready","score":1.0}]}}"#,
             &[],
             &BTreeMap::new(),
         )
@@ -838,11 +1075,46 @@ mod tests {
     }
 
     #[test]
+    fn pagerank_reaches_ready_beads_beyond_top_ten_recommendations() {
+        let ready = vec!["low".to_owned(), "high".to_owned()];
+        let triage = br#"{"data_hash":"fixture","triage":{"recommendations":[
+            {"id":"blocked","status":"blocked","score":0.99}
+        ]}}"#;
+        let insights = br#"{"data_hash":"fixture","status":{"PageRank":{"state":"computed"}},
+            "full_stats":{"pagerank":{"low":0.1,"high":0.9}}}"#;
+        let ranked = rank_ready_with_pagerank(triage, &ready, insights).unwrap();
+        assert_eq!(ranked.window, RankWindow::RecommendationsOnly);
+        assert_eq!(ranked.ids, vec!["high", "low"]);
+    }
+
+    #[test]
+    fn pagerank_dispatch_order_is_not_br_priority_order() {
+        let ready = vec!["low".to_owned(), "high".to_owned()];
+        let triage =
+            br#"{"data_hash":"fixture","triage":{"blockers_to_clear":[],"recommendations":[
+            {"id":"blocked","status":"blocked","score":0.99}
+        ]}}"#;
+        let insights = br#"{"data_hash":"fixture","status":{"PageRank":{"state":"computed"}},
+            "full_stats":{"pagerank":{"low":0.1,"high":0.9}}}"#;
+        let ordered = select_dispatch_order_with_pagerank(
+            triage,
+            &ready,
+            insights,
+            empty_jsonl(),
+            "pane4-%9",
+        )
+        .unwrap();
+        assert_eq!(ordered.window, RankWindow::RecommendationsOnly);
+        assert_eq!(ordered.ids, vec!["high", "low"]);
+    }
+
+    #[test]
     fn missing_recommendations_is_a_typed_refusal_not_silent_fifo() {
         let ready = vec!["a".to_owned()];
         for payload in [
             &br#"{"triage":{}}"#[..],
             &br#"{"triage":{"quick_ref":{"top_picks":["a"]}}}"#[..],
+            &br#"{"triage":{"recommendations":[]}}"#[..],
             &br#"{}"#[..],
         ] {
             let error = rank_ready(payload, &ready).expect_err("must refuse");
@@ -858,10 +1130,8 @@ mod tests {
     }
 
     fn triage_with_blockers(blockers: &str, recs: &str) -> Vec<u8> {
-        format!(
-            r#"{{"triage":{{"blockers_to_clear":{blockers},"recommendations":{recs}}}}}"#
-        )
-        .into_bytes()
+        format!(r#"{{"triage":{{"blockers_to_clear":{blockers},"recommendations":{recs}}}}}"#)
+            .into_bytes()
     }
 
     #[test]
@@ -873,7 +1143,13 @@ mod tests {
         );
         let ordered = select_dispatch_order(&triage, &ready, empty_jsonl(), "pane4-%9").unwrap();
         assert_eq!(ordered.first().map(String::as_str), Some("blocker"));
-        assert_eq!(rank_ready(&triage, &ready).unwrap().first().map(String::as_str), Some("p0-leaf"));
+        assert_eq!(
+            rank_ready(&triage, &ready)
+                .unwrap()
+                .first()
+                .map(String::as_str),
+            Some("p0-leaf")
+        );
     }
 
     #[test]
@@ -894,10 +1170,7 @@ mod tests {
         let triage = br#"{"triage":{"recommendations":[{"id":"a","priority":0,"score":1.0}]}}"#;
         let error = select_dispatch_order(triage, &ready, empty_jsonl(), "pane4-%9")
             .expect_err("must refuse");
-        assert!(
-            error.starts_with("QUEUE_UNRANKED"),
-            "{error}"
-        );
+        assert!(error.starts_with("QUEUE_UNRANKED"), "{error}");
         assert!(error.contains("blockers_to_clear"), "{error}");
     }
 
@@ -941,10 +1214,7 @@ mod tests {
     #[test]
     fn unproven_grader_identity_skips_grading_and_keeps_ranked_head() {
         let ready = vec!["reap-me".to_owned()];
-        let triage = triage_with_blockers(
-            "[]",
-            r#"[{"id":"reap-me","priority":0,"score":0.5}]"#,
-        );
+        let triage = triage_with_blockers("[]", r#"[{"id":"reap-me","priority":0,"score":0.5}]"#);
         let jsonl = reapable_jsonl("reap-me", "pane3-%8", "pane3-%8");
         let ordered = select_dispatch_order(&triage, &ready, &jsonl, "WildStone")
             .expect("grading skip must not refuse the cycle");
@@ -1018,7 +1288,11 @@ mod tests {
             Some("omp-orchestrator-plan-02-lwdo.1")
         );
         assert_eq!(
-            grading_slot(&jsonl, &["omp-orchestrator-plan-02-lwdo.1".to_owned()], "pane4-%9"),
+            grading_slot(
+                &jsonl,
+                &["omp-orchestrator-plan-02-lwdo.1".to_owned()],
+                "pane4-%9"
+            ),
             GradingSlot::Skip {
                 reason: "no_reapable_bead"
             }
@@ -1049,8 +1323,6 @@ mod tests {
             }
         );
     }
-
-
 
     #[test]
     fn healthy_case_matches_rank_ready() {
@@ -1119,21 +1391,20 @@ mod tests {
         ];
         let jsonl = jsonl_done_ack("reap-me", "%8");
         let assigned = assign_peer_grade("%9", &panes, &jsonl).expect("peer not observer");
-        assert_eq!(assigned.grader_pane, "%3", "idle observer must never be the grader: {assigned:?}");
+        assert_eq!(
+            assigned.grader_pane, "%3",
+            "idle observer must never be the grader: {assigned:?}"
+        );
         assert_ne!(assigned.grader_pane, "%9");
         assert_eq!(assigned.grader_assignee, "pane3-%3");
     }
-
 
     #[test]
     fn assign_peer_grade_refuses_a_pane_carrying_its_own_dispatch() {
         let panes = vec![pane("%3", "LIVE", true)];
         let error = require_idle_grader("%3", &panes).expect_err("working grader");
         let text = error.to_string();
-        assert!(
-            text.starts_with("GRADER_CARRYING_OWN_DISPATCH"),
-            "{text}"
-        );
+        assert!(text.starts_with("GRADER_CARRYING_OWN_DISPATCH"), "{text}");
         assert!(text.contains("pane=%3"), "{text}");
         assert!(text.contains("is_working=true"), "{text}");
     }
@@ -1141,7 +1412,10 @@ mod tests {
     #[test]
     fn assign_peer_grade_empty_observation_is_typed() {
         let error = assign_peer_grade("%9", &[], "").expect_err("empty");
-        assert_eq!(error.to_string(), "EMPTY_OBSERVATION no eligible grader can be decided from an empty pane set");
+        assert_eq!(
+            error.to_string(),
+            "EMPTY_OBSERVATION no eligible grader can be decided from an empty pane set"
+        );
     }
 
     #[test]
@@ -1161,12 +1435,9 @@ mod tests {
 
     #[test]
     fn assign_peer_grade_no_idle_pane_is_typed() {
-        let panes = vec![
-            pane("%9", "LIVE", true),
-            pane("%3", "NEWLY_IDLE", false),
-        ];
-        let error = assign_peer_grade("%9", &panes, &jsonl_done_ack("reap-me", "%9"))
-            .expect_err("no idle");
+        let panes = vec![pane("%9", "LIVE", true), pane("%3", "NEWLY_IDLE", false)];
+        let error =
+            assign_peer_grade("%9", &panes, &jsonl_done_ack("reap-me", "%9")).expect_err("no idle");
         assert_eq!(error.to_string(), "NO_ELIGIBLE_GRADER reason=no_idle_pane");
     }
 
@@ -1198,5 +1469,64 @@ mod tests {
             "NO_ELIGIBLE_GRADER reason=no_distinct_idle_peer"
         );
     }
+    fn filed_only_fixture() -> String {
+        concat!(
+            r#"{"id":"filed","status":"open","description":"STATUS: filed only; do not claim or implement this record.","acceptance_criteria":"Run the recorded check; expect exit 0.","comments":[]}
+"#,
+            r#"{"id":"normal","status":"open","description":"Implement the normal work item.","acceptance_criteria":"Run cargo test; expect exit 0.","comments":[]}
+"#,
+        )
+        .to_owned()
+    }
 
+    #[test]
+    fn filed_only_ready_records_are_filtered_from_dispatch_order() {
+        let ready = vec!["filed".to_owned(), "normal".to_owned()];
+        let triage = br#"{"data_hash":"fixture","triage":{"blockers_to_clear":[],"recommendations":[{"id":"filed","priority":0,"score":1.0},{"id":"normal","priority":1,"score":0.1}]}}"#
+            .to_vec();
+        let jsonl = filed_only_fixture();
+        let ordered =
+            select_dispatch_order(&triage, &ready, &jsonl, "pane4-%9").expect("selector pass");
+        assert_eq!(ordered, vec!["normal"]);
+
+        let priorities = BTreeMap::from([("filed".to_owned(), 0), ("normal".to_owned(), 1)]);
+        let ranked =
+            select_dispatch_order_with_priorities(&triage, &ready, &priorities, &jsonl, "pane4-%9")
+                .expect("priority selector pass");
+        assert_eq!(ranked.ids, vec!["normal"]);
+        assert_ne!(ranked.ids, vec!["filed"]);
+
+        let insights = br#"{"data_hash":"fixture","status":{"PageRank":{"state":"computed"}},"full_stats":{"pagerank":{"filed":1.0,"normal":0.1}}}"#;
+        let pageranked =
+            select_dispatch_order_with_pagerank(&triage, &ready, insights, &jsonl, "pane4-%9")
+                .expect("pagerank selector pass");
+        assert_eq!(pageranked.ids, vec!["normal"]);
+    }
+
+    #[test]
+    fn quoted_filed_only_language_does_not_filter_a_real_record() {
+        let ready = vec!["b4iv".to_owned()];
+        let triage = triage_with_blockers("[]", r#"[{"id":"b4iv","priority":0,"score":1.0}]"#);
+        let jsonl = r#"{"id":"b4iv","status":"open","description":"This audit quotes 'filed only' and 'do not claim' as examples.","acceptance_criteria":"Run cargo test; expect exit 0.","comments":[]}"#;
+        let ordered =
+            select_dispatch_order(&triage, &ready, jsonl, "pane4-%9").expect("selector pass");
+        assert_eq!(ordered, vec!["b4iv"]);
+    }
+
+    #[test]
+    fn all_filed_only_ready_records_report_a_typed_filtered_window() {
+        let ready = vec!["filed".to_owned()];
+        let triage = triage_with_blockers("[]", r#"[{"id":"filed","priority":0,"score":1.0}]"#);
+        let priorities = BTreeMap::from([("filed".to_owned(), 0)]);
+        let ranked = select_dispatch_order_with_priorities(
+            &triage,
+            &ready,
+            &priorities,
+            &filed_only_fixture(),
+            "pane4-%9",
+        )
+        .expect("selector pass");
+        assert!(ranked.ids.is_empty());
+        assert_eq!(ranked.window, RankWindow::FilteredFiledOnly);
+    }
 }
