@@ -862,7 +862,8 @@ const NARROWING_ALLOWANCE: &[(&str, &str)] = &[
     ("crates/crate-soundness-verify/src/main.rs:85:EXIT_RED as u8", "ALLOWANCE CATEGORY-1: EXIT_RED is a closed literal status code; its documented value is 1 and cannot wrap."),
     ("crates/crate-soundness-verify/src/main.rs:190:EXIT_RED as u8", "ALLOWANCE CATEGORY-1: EXIT_RED is a closed literal status code; its documented value is 1 and cannot wrap."),
     ("crates/dispatcher-deadman/src/main.rs:185:verdict.exit as u8", "ALLOWANCE CATEGORY-2: verdict.exit forwards the child/status contract under XC-PT-VERDICT; range validation remains outside this gate."),
-    ("crates/fleet-monitor/src/main.rs:455:EXIT_CANNOT_OBSERVE as u8", "ALLOWANCE CATEGORY-1: EXIT_CANNOT_OBSERVE is a named closed literal status code; its documented value is 78 and cannot wrap."),
+    ("crates/fleet-monitor/src/main.rs:457:EXIT_CANNOT_OBSERVE as u8", "ALLOWANCE CATEGORY-1: EXIT_CANNOT_OBSERVE is a named closed literal status code; its documented value is 69 and cannot wrap."),
+
     ("crates/fleet-monitor/src/main.rs:490:rc as u8", "ALLOWANCE CATEGORY-2: rc forwards the child/status contract under XC-PT-RC; range validation remains outside this gate."),
     ("crates/loop-driver/src/main.rs:40:output.code as u8", "ALLOWANCE CATEGORY-2: output.code forwards the child status under XC-PT-OUTPUT; range validation remains outside this gate."),
     ("crates/loop-driver/src/main.rs:57:output.code as u8", "ALLOWANCE CATEGORY-2: output.code forwards the child status under XC-PT-OUTPUT; range validation remains outside this gate."),
@@ -1096,3 +1097,23 @@ fn a_planted_narrowing_cast_is_red_and_the_known_good_shape_is_clean() {
     );
     let _ = fs::remove_dir_all(&good);
 }
+
+/// A name bound to two values means a reader who learned one crate is confidently
+/// wrong in the next. Shown RED against today's tree (`EXIT_CONFIG = {64, 78}`)
+/// before cas lands; GREEN after fleet-composite stops using that name for 64.
+#[test]
+fn no_exit_constant_name_is_bound_to_two_values() {
+    let scan = scan(&repo_root());
+    let collisions: Vec<String> = scan
+        .consts
+        .iter()
+        .filter(|(_, values)| values.len() != 1)
+        .map(|(name, values)| format!("{name} = {values:?}"))
+        .collect();
+    assert!(
+        collisions.is_empty(),
+        "exit constant name bound to two values: {}",
+        collisions.join("; ")
+    );
+}
+

@@ -11,9 +11,9 @@ use std::process::{Command, ExitCode};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use subprocess_contract::{bounded_output, BoundedOutcome};
 
-const EXIT_USAGE: u8 = 2;
-/// A repository or `$HOME` could not be resolved; distinct from usage errors.
-const EXIT_CONFIG: u8 = 64;
+const EXIT_CLI: u8 = 2;
+/// Could not resolve a repository or `$HOME`. Claims `sysexits.h` `EX_USAGE` (64).
+const EXIT_USAGE: u8 = 64;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Marker entries that identify a repository root while walking up from the cwd.
@@ -562,7 +562,7 @@ fn main() -> ExitCode {
                     Some(value) => value,
                     None => {
                         eprintln!("usage error: --repo requires a path\n{USAGE}");
-                        return ExitCode::from(EXIT_USAGE);
+                        return ExitCode::from(EXIT_CLI);
                     }
                 };
                 flag = Some(value.clone());
@@ -578,7 +578,7 @@ fn main() -> ExitCode {
                     flag = Some(value.to_owned());
                 } else {
                     eprintln!("usage error: unknown argument {argument}\n{USAGE}");
-                    return ExitCode::from(EXIT_USAGE);
+                    return ExitCode::from(EXIT_CLI);
                 }
             }
         }
@@ -631,7 +631,7 @@ fn main() -> ExitCode {
         "--selftest" | "selftest" => selftest_exit(),
         _ => {
             eprintln!("usage error: unknown command {command}\n{USAGE}");
-            ExitCode::from(EXIT_USAGE)
+            ExitCode::from(EXIT_CLI)
         }
     }
 }
@@ -654,7 +654,7 @@ fn resolve_repo_for_report(flag: Option<&str>) -> Result<PathBuf, ConfigError> {
 /// not be found and how to provide it.
 fn config_error_exit(error: &ConfigError) -> ExitCode {
     eprintln!("fleet-composite: config error: {error}");
-    ExitCode::from(EXIT_CONFIG)
+    ExitCode::from(EXIT_USAGE)
 }
 
 #[cfg(test)]

@@ -568,7 +568,7 @@ pub fn resolve_self_session(pane_id: Option<&str>, census: &str) -> SelfScope {
     }
 }
 
-pub const EXIT_CANNOT_OBSERVE: i32 = 78;
+pub const EXIT_CANNOT_OBSERVE: i32 = 69;
 
 /// The environment handed to `check.sh --publish`. Held as data so the differential can assert the
 /// Rust and shell callers build the SAME invocation.
