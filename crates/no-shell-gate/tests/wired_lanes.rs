@@ -828,20 +828,27 @@ fn workspace_crate_names(root: &Path) -> Vec<String> {
     out
 }
 
-fn validate_allowance_rows(rows: &[(&str, &str)], leg: &str) {
-    for (subject, reason) in rows {
-        assert!(
-            !subject.trim().is_empty(),
-            "{} allowance row has an empty subject",
-            leg
-        );
-        assert!(
-            reason.trim().len() >= 8,
-            "{} allowance row '{}' carries no reason — a bare path silences nothing",
-            leg,
-            subject
-        );
+fn validate_allowance_rows(
+    rows: &[(&str, &str, &str, &str)],
+    leg: &str,
+) -> Result<(), String> {
+    for (subject, reason, owner, dies_when) in rows {
+        if subject.trim().is_empty() {
+            return Err(format!("{leg} allowance row has an empty subject"));
+        }
+        if reason.trim().len() < 8 {
+            return Err(format!(
+                "{leg} allowance row '{subject}' carries no reason — a bare path silences nothing"
+            ));
+        }
+        if owner.trim().is_empty() {
+            return Err(format!("{leg} allowance row '{subject}' has an empty owner"));
+        }
+        if dies_when.trim().is_empty() {
+            return Err(format!("{leg} allowance row '{subject}' has an empty dies_when"));
+        }
     }
+    Ok(())
 }
 
 fn inherits_workspace_lints(manifest: &str) -> bool {
@@ -883,7 +890,7 @@ fn crate_forbids_unsafe(root: &Path, manifest: &str) -> bool {
 }
 
 // ── LEG 2: SURFACE DECLARED ─────────────────────────────────────────────────
-const SURFACE_ALLOWANCE: &[(&str, &str)] = &[];
+const SURFACE_ALLOWANCE: &[(&str, &str, &str, &str)] = &[];
 
 #[test]
 fn every_crate_is_declared_in_the_surface_map() {
@@ -903,7 +910,7 @@ fn every_crate_is_declared_in_the_surface_map() {
     );
     let on_disk = workspace_crate_names(&root);
     assert!(!on_disk.is_empty(), "ANTI-VACUITY: zero crates on disk");
-    validate_allowance_rows(SURFACE_ALLOWANCE, "leg2-surface");
+    validate_allowance_rows(SURFACE_ALLOWANCE, "leg2-surface").expect("allowance rows must validate");
 
     let undeclared: Vec<_> = on_disk.iter().filter(|c| !declared.contains(*c)).collect();
     let ghosts: Vec<_> = declared
@@ -923,16 +930,16 @@ fn every_crate_is_declared_in_the_surface_map() {
 }
 
 // ── LEG 3: ASUPERSYNC CONFORMANCE — forbid(unsafe_code) ────────────────────
-const FORBID_ALLOWANCE: &[(&str, &str)] = &[];
+const FORBID_ALLOWANCE: &[(&str, &str, &str, &str)] = &[];
 
 #[test]
 fn every_crate_declares_the_forbid_lint() {
     let root = repo_root();
     let crates = workspace_crate_names(&root);
     assert!(!crates.is_empty(), "ANTI-VACUITY: zero crates scanned");
-    validate_allowance_rows(FORBID_ALLOWANCE, "leg3-forbid");
+    validate_allowance_rows(FORBID_ALLOWANCE, "leg3-forbid").expect("allowance rows must validate");
 
-    let allowed: std::collections::HashSet<_> = FORBID_ALLOWANCE.iter().map(|(c, _)| *c).collect();
+    let allowed: std::collections::HashSet<_> = FORBID_ALLOWANCE.iter().map(|(c, _, _, _)| *c).collect();
     let mut missing = Vec::new();
     for name in &crates {
         let manifest = root.join("crates").join(name).join("Cargo.toml");
@@ -951,40 +958,40 @@ fn every_crate_declares_the_forbid_lint() {
 }
 
 // ── LEG 5: NO PUBLIC-TYPE-NAME COLLISIONS ──────────────────────────────────
-const COLLISION_ALLOWANCE: &[(&str, &str)] = &[
-    ("Finding", "finding and finding-dispatch both model a scan result; unification is -232 scope, not this gate"),
-    ("LintReport", "state-wildcard-lint and path-literal-guard predate the shared crate; same -232 scope"),
-    ("Violation", "three gate crates declare it; aliasing to a shared type is a cross-crate refactor owned by the integrator"),
-    ("Observation", "REQUIRES A DECISION not an allowance: tick-monitor produces what omp-orchestrator consumes and each declares an incompatible struct — the free_capacity seam (filter FIXED -oco; seam still open, 09 M1)"),
+const COLLISION_ALLOWANCE: &[(&str, &str, &str, &str)] = &[
+    ("Finding", "finding and finding-dispatch both model a scan result; unification is -232 scope, not this gate", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("LintReport", "state-wildcard-lint and path-literal-guard predate the shared crate; same -232 scope", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("Violation", "three gate crates declare it; aliasing to a shared type is a cross-crate refactor owned by the integrator", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("Observation", "REQUIRES A DECISION not an allowance: tick-monitor produces what omp-orchestrator consumes and each declares an incompatible struct — the free_capacity seam (filter FIXED -oco; seam still open, 09 M1)", "type-vocabulary-owner", "when omp-types owns the shared type"),
     ("GateError", "no-shell-gate declares GitFailed/empty-scan for a FILE-EXTENSION scan; \
      porting-gate declares EmptyCandidates/InvalidCandidate/Io/Metadata for a CRATE-ARRIVAL \
      check. Same name, disjoint domains, no shared caller. Dies when a workspace error trait \
-     exists; until then unifying them would couple two gates that share nothing but a suffix"),
-    ("DispatchIntent", "dispatch-claim-fence declares an enum (Bead/Broadcast/Correction) for the fence; ack-spine declares a struct (bead_id/pane_id/session) for the ledger — different domains, same name. Dies when omp-types provides the shared vocabulary"),
-    ("AllowRow", "path-literal-guard and state-wildcard-lint each own an allowlist row type; dies when a shared allowance schema lands"),
-    ("Candidate", "sender-identity and silent-success-census name unrelated candidates; dies when omp-types owns Candidate"),
-    ("Config", "cargo-lane-budget and crate-soundness-verify configs are disjoint; dies when a workspace Config type exists"),
-    ("ConfigError", "admission-reason and inbox-monitor parse different configs; dies when a shared error trait exists"),
-    ("Decision", "decision-ledger / kernel-only-operator-hook / refill-idle-panes; HD row vs hook decision vs refill decision. Dies when omp-types Decision lands"),
-    ("EventPage", "agent-mail-native and inbox-monitor page different event stores; dies when mail EventPage is canonical"),
-    ("GateReport", "kernel-bypass-gate and preregistration-gate reports are gate-local; dies when GateReport lives in omp-types"),
-    ("GateVerdict", "crate-atom-gate / staged-build-gate / wired-but-inert-guard; dies when a shared GateVerdict exists"),
-    ("LedgerError", "ack-spine / admission-reason / decision-ledger / orchestration-tick-gate; dies when LedgerError is one type"),
-    ("Lifecycle", "omp-rpc-session redeclares omp-types Lifecycle; dies when rpc-session re-exports omp-types"),
-    ("Liveness", "bead-holder and tick-monitor; dies when PaneLiveness from omp-types is the only name"),
-    ("Outcome", "agent-mail-native / lifecycle-event / tick-monitor; dies when asupersync Outcome is the only Outcome"),
-    ("PacketError", "agent-mail-native and omp-orchestrator packet errors; dies when PacketError is canonical"),
-    ("PaneObservation", "omp-orchestrator redeclares omp-types PaneObservation; dies when the supervisor re-exports omp-types"),
-    ("PaneRow", "pane-truth and refill-idle-panes; dies when pane-truth is the sole PaneRow"),
-    ("ParseError", "inbox-monitor and kernel-only-operator-hook; dies when a shared parse error exists"),
-    ("Report", "asupersync-conformance / cargo-lane-budget / tick-monitor; dies when Report is namespaced per crate or unified"),
-    ("Row", "crate-atom-gate and decision-ledger; dies when Row is not a public type name"),
-    ("Rule", "admission-reason and composer-typed; dies when Rule is crate-private or unified"),
-    ("Rules", "admission-reason and composer-typed; dies when Rules is crate-private or unified"),
-    ("ScanError", "asupersync-conformance and wired-but-inert-guard; dies when ScanError is crate-private"),
-    ("ScanMode", "path-literal-guard and state-wildcard-lint; dies when ScanMode is shared"),
-    ("Stage", "agent-mail-native and tick-monitor lifecycle stage; dies when omp-types owns Stage"),
-    ("Verdict", "no-shell-gate / path-literal-guard / state-wildcard-lint; dies when omp-types Verdict exists"),
+     exists; until then unifying them would couple two gates that share nothing but a suffix", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("DispatchIntent", "dispatch-claim-fence declares an enum (Bead/Broadcast/Correction) for the fence; ack-spine declares a struct (bead_id/pane_id/session) for the ledger — different domains, same name. Dies when omp-types provides the shared vocabulary", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("AllowRow", "path-literal-guard and state-wildcard-lint each own an allowlist row type; dies when a shared allowance schema lands", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("Candidate", "sender-identity and silent-success-census name unrelated candidates; dies when omp-types owns Candidate", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("Config", "cargo-lane-budget and crate-soundness-verify configs are disjoint; dies when a workspace Config type exists", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("ConfigError", "admission-reason and inbox-monitor parse different configs; dies when a shared error trait exists", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("Decision", "decision-ledger / kernel-only-operator-hook / refill-idle-panes; HD row vs hook decision vs refill decision. Dies when omp-types Decision lands", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("EventPage", "agent-mail-native and inbox-monitor page different event stores; dies when mail EventPage is canonical", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("GateReport", "kernel-bypass-gate and preregistration-gate reports are gate-local; dies when GateReport lives in omp-types", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("GateVerdict", "crate-atom-gate / staged-build-gate / wired-but-inert-guard; dies when a shared GateVerdict exists", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("LedgerError", "ack-spine / admission-reason / decision-ledger / orchestration-tick-gate; dies when LedgerError is one type", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("Lifecycle", "omp-rpc-session redeclares omp-types Lifecycle; dies when rpc-session re-exports omp-types", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("Liveness", "bead-holder and tick-monitor; dies when PaneLiveness from omp-types is the only name", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("Outcome", "agent-mail-native / lifecycle-event / tick-monitor; dies when asupersync Outcome is the only Outcome", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("PacketError", "agent-mail-native and omp-orchestrator packet errors; dies when PacketError is canonical", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("PaneObservation", "omp-orchestrator redeclares omp-types PaneObservation; dies when the supervisor re-exports omp-types", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("PaneRow", "pane-truth and refill-idle-panes; dies when pane-truth is the sole PaneRow", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("ParseError", "inbox-monitor and kernel-only-operator-hook; dies when a shared parse error exists", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("Report", "asupersync-conformance / cargo-lane-budget / tick-monitor; dies when Report is namespaced per crate or unified", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("Row", "crate-atom-gate and decision-ledger; dies when Row is not a public type name", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("Rule", "admission-reason and composer-typed; dies when Rule is crate-private or unified", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("Rules", "admission-reason and composer-typed; dies when Rules is crate-private or unified", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("ScanError", "asupersync-conformance and wired-but-inert-guard; dies when ScanError is crate-private", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("ScanMode", "path-literal-guard and state-wildcard-lint; dies when ScanMode is shared", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("Stage", "agent-mail-native and tick-monitor lifecycle stage; dies when omp-types owns Stage", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("Verdict", "no-shell-gate / path-literal-guard / state-wildcard-lint; dies when omp-types Verdict exists", "type-vocabulary-owner", "when omp-types owns the shared type"),
 ];
 
 #[test]
@@ -992,7 +999,7 @@ fn no_public_type_name_collisions_across_crates() {
     let root = repo_root();
     let crates = workspace_crate_names(&root);
     assert!(!crates.is_empty(), "ANTI-VACUITY: zero crates scanned");
-    validate_allowance_rows(COLLISION_ALLOWANCE, "leg5-collision");
+    validate_allowance_rows(COLLISION_ALLOWANCE, "leg5-collision").expect("collision rows must validate");
 
     let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     let mut collisions: Vec<(String, String, String)> = Vec::new();
@@ -1039,7 +1046,7 @@ fn no_public_type_name_collisions_across_crates() {
     }
     let allowed: std::collections::HashSet<_> = COLLISION_ALLOWANCE
         .iter()
-        .map(|(n, _)| n.to_owned())
+        .map(|(n, _, _, _)| n.to_owned())
         .collect();
     let unallowed: Vec<_> = collisions
         .iter()
@@ -1070,19 +1077,27 @@ mod ipg18_contract {
         line: usize,
     }
 
-    fn validate_leg2_allowance(rows: &[(&str, &str)]) -> Result<(), String> {
-        for (subject, reason) in rows {
-            if subject.trim().is_empty() || reason.trim().len() < 8 {
-                return Err("leg2-surface allowance requires subject and reason".to_owned());
+    fn validate_leg2_allowance(rows: &[(&str, &str, &str, &str)]) -> Result<(), String> {
+        for (subject, reason, owner, dies_when) in rows {
+            if subject.trim().is_empty()
+                || reason.trim().len() < 8
+                || owner.trim().is_empty()
+                || dies_when.trim().is_empty()
+            {
+                return Err("leg2-surface allowance requires subject, reason, owner, and dies_when".to_owned());
             }
         }
         Ok(())
     }
 
-    fn validate_leg3_allowance(rows: &[(&str, &str)]) -> Result<(), String> {
-        for (subject, reason) in rows {
-            if subject.trim().is_empty() || reason.trim().len() < 8 {
-                return Err("leg3-asupersync allowance requires subject and reason".to_owned());
+    fn validate_leg3_allowance(rows: &[(&str, &str, &str, &str)]) -> Result<(), String> {
+        for (subject, reason, owner, dies_when) in rows {
+            if subject.trim().is_empty()
+                || reason.trim().len() < 8
+                || owner.trim().is_empty()
+                || dies_when.trim().is_empty()
+            {
+                return Err("leg3-asupersync allowance requires subject, reason, owner, and dies_when".to_owned());
             }
         }
         Ok(())
@@ -1097,10 +1112,14 @@ mod ipg18_contract {
         Ok(())
     }
 
-    fn validate_leg5_allowance(rows: &[(&str, &str)]) -> Result<(), String> {
-        for (subject, reason) in rows {
-            if subject.trim().is_empty() || reason.trim().len() < 8 {
-                return Err("leg5-collision allowance requires subject and reason".to_owned());
+    fn validate_leg5_allowance(rows: &[(&str, &str, &str, &str)]) -> Result<(), String> {
+        for (subject, reason, owner, dies_when) in rows {
+            if subject.trim().is_empty()
+                || reason.trim().len() < 8
+                || owner.trim().is_empty()
+                || dies_when.trim().is_empty()
+            {
+                return Err("leg5-collision allowance requires subject, reason, owner, and dies_when".to_owned());
             }
         }
         Ok(())
@@ -1264,14 +1283,14 @@ mod ipg18_contract {
 
     #[test]
     fn every_leg_has_an_independent_allowance_validator() {
-        assert!(validate_leg2_allowance(&[("crate", "named reason")]).is_ok());
-        assert!(validate_leg3_allowance(&[("crate", "named reason")]).is_ok());
+        assert!(validate_leg2_allowance(&[("crate", "named reason", "owner", "dies when condition")]).is_ok());
+        assert!(validate_leg3_allowance(&[("crate", "named reason", "owner", "dies when condition")]).is_ok());
         assert!(validate_leg4_allowance(&[("Type", "named reason")]).is_ok());
-        assert!(validate_leg5_allowance(&[("Type", "named reason")]).is_ok());
-        assert!(validate_leg2_allowance(&[("crate", "")]).is_err());
-        assert!(validate_leg3_allowance(&[("crate", "")]).is_err());
+        assert!(validate_leg5_allowance(&[("Type", "named reason", "owner", "dies when condition")]).is_ok());
+        assert!(validate_leg2_allowance(&[("crate", "", "owner", "dies when condition")]).is_err());
+        assert!(validate_leg3_allowance(&[("crate", "", "owner", "dies when condition")]).is_err());
         assert!(validate_leg4_allowance(&[("Type", "")]).is_err());
-        assert!(validate_leg5_allowance(&[("Type", "")]).is_err());
+        assert!(validate_leg5_allowance(&[("Type", "", "owner", "dies when condition")]).is_err());
     }
 
     #[test]
@@ -1411,21 +1430,21 @@ mod ipg18_more {
     use super::*;
     use std::collections::HashSet;
 
-    const ASUPERSYNC_SCAN_ALLOWANCE: &[(&str, &str)] = &[
-        ("ack-spine", "syntactic async/cx-first mismatch; dies when every async fn takes &Cx first"),
-        ("agent-mail-native", "syntactic async/cx-first mismatch; dies when every async fn takes &Cx first"),
-        ("asupersync-conformance", "scanner crate itself has async helpers without Cx; dies when its async fns take &Cx"),
-        ("crate-soundness-verify", "async/cx-first mismatch; dies when its async fns take &Cx first"),
-        ("extraction-roster", "async/cx-first mismatch; dies when its async fns take &Cx first"),
-        ("omp-orchestrator", "async/cx-first mismatch on the supervisor; dies when every async fn takes &Cx first"),
-        ("omp-rpc-session", "async/cx-first mismatch; dies when every async fn takes &Cx first"),
-        ("plan-assemble", "async/cx-first mismatch; dies when every async fn takes &Cx first"),
-        ("preregistration-gate", "async/cx-first and spawn-triage drift; dies when scan is clean"),
-        ("staged-build-gate", "async/cx-first mismatch; dies when every async fn takes &Cx first"),
-        ("finding", "workspace-lints inherit forbid; syntactic scan misses it until scanner reads workspace.lints"),
-        ("finding-dispatch", "workspace-lints inherit forbid; syntactic scan misses it until scanner reads workspace.lints"),
-        ("lifecycle-event", "workspace-lints inherit forbid; syntactic scan misses it until scanner reads workspace.lints"),
-        ("lifecycle-monitor", "workspace-lints inherit forbid; syntactic scan misses it until scanner reads workspace.lints"),
+    const ASUPERSYNC_SCAN_ALLOWANCE: &[(&str, &str, &str, &str)] = &[
+        ("ack-spine", "syntactic async/cx-first mismatch; dies when every async fn takes &Cx first", "asupersync-port-owner", "when all async functions take &Cx first"),
+        ("agent-mail-native", "syntactic async/cx-first mismatch; dies when every async fn takes &Cx first", "asupersync-port-owner", "when all async functions take &Cx first"),
+        ("asupersync-conformance", "scanner crate itself has async helpers without Cx; dies when its async fns take &Cx", "asupersync-port-owner", "when all async functions take &Cx first"),
+        ("crate-soundness-verify", "async/cx-first mismatch; dies when its async fns take &Cx first", "asupersync-port-owner", "when all async functions take &Cx first"),
+        ("extraction-roster", "async/cx-first mismatch; dies when its async fns take &Cx first", "asupersync-port-owner", "when all async functions take &Cx first"),
+        ("omp-orchestrator", "async/cx-first mismatch on the supervisor; dies when every async fn takes &Cx first", "asupersync-port-owner", "when all async functions take &Cx first"),
+        ("omp-rpc-session", "async/cx-first mismatch; dies when every async fn takes &Cx first", "asupersync-port-owner", "when all async functions take &Cx first"),
+        ("plan-assemble", "async/cx-first mismatch; dies when every async fn takes &Cx first", "asupersync-port-owner", "when all async functions take &Cx first"),
+        ("preregistration-gate", "async/cx-first and spawn-triage drift; dies when scan is clean", "asupersync-port-owner", "when all async functions take &Cx first"),
+        ("staged-build-gate", "async/cx-first mismatch; dies when every async fn takes &Cx first", "asupersync-port-owner", "when all async functions take &Cx first"),
+        ("finding", "workspace-lints inherit forbid; syntactic scan misses it until scanner reads workspace.lints", "asupersync-port-owner", "when all async functions take &Cx first"),
+        ("finding-dispatch", "workspace-lints inherit forbid; syntactic scan misses it until scanner reads workspace.lints", "asupersync-port-owner", "when all async functions take &Cx first"),
+        ("lifecycle-event", "workspace-lints inherit forbid; syntactic scan misses it until scanner reads workspace.lints", "asupersync-port-owner", "when all async functions take &Cx first"),
+        ("lifecycle-monitor", "workspace-lints inherit forbid; syntactic scan misses it until scanner reads workspace.lints", "asupersync-port-owner", "when all async functions take &Cx first"),
     ];
 
     fn leg2_membership_violations(
@@ -1495,8 +1514,8 @@ mod ipg18_more {
             !report.spawn_sites.is_empty(),
             "ANTI-VACUITY: leg3 scanned zero raw sites"
         );
-        validate_allowance_rows(ASUPERSYNC_SCAN_ALLOWANCE, "leg3-asupersync-scan");
-        let allowed: HashSet<&str> = ASUPERSYNC_SCAN_ALLOWANCE.iter().map(|(n, _)| *n).collect();
+        validate_allowance_rows(ASUPERSYNC_SCAN_ALLOWANCE, "leg3-asupersync-scan").expect("allowance rows must validate");
+        let allowed: HashSet<&str> = ASUPERSYNC_SCAN_ALLOWANCE.iter().map(|(n, _, _, _)| *n).collect();
         let mut violations = Vec::new();
         for row in &report.crates {
             let manifest_path = root.join("crates").join(&row.name).join("Cargo.toml");
@@ -1913,4 +1932,28 @@ fn reachability_census_rejects_empty_inputs() {
     };
     assert!(classify_member(&member, &[], STRIP_TEST_CODE).is_err());
     assert!(enforce_reachability(&[], &[], &std::collections::BTreeMap::new()).is_err());
+}
+
+#[test]
+fn allowance_rows_require_owner_and_dies_when() {
+    let valid = [("subject", "valid reason", "owner", "dies when condition")];
+    validate_allowance_rows(&valid, "xm0n.8").expect("complete allowance row");
+
+    let ownerless = [("planted-ownerless", "valid reason", "", "dies when condition")];
+    let owner_error = validate_allowance_rows(&ownerless, "xm0n.8")
+        .expect_err("ownerless allowance row must be refused");
+    assert!(owner_error.contains("planted-ownerless"));
+    assert!(owner_error.contains("owner"));
+
+    let deathless = [("planted-deathless", "valid reason", "owner", "")];
+    let death_error = validate_allowance_rows(&deathless, "xm0n.8")
+        .expect_err("deathless allowance row must be refused");
+    assert!(death_error.contains("planted-deathless"));
+    assert!(death_error.contains("dies_when"));
+
+    let reasonless = [("short-reason", "seven!", "owner", "dies when condition")];
+    assert!(
+        validate_allowance_rows(&reasonless, "xm0n.8").is_err(),
+        "reason length below eight must remain refused"
+    );
 }
