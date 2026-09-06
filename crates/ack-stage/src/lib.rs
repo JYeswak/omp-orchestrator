@@ -416,6 +416,31 @@ impl AckReadback {
         })
     }
 
+    /// Same as [`Self::from_comments_json`], but a `[]` census is a pending
+    /// empty read-back rather than `EmptyAckCensus`.
+    ///
+    /// The wait loop must retry until the receipt bound; aborting on the first
+    /// empty poll is how ACKs at +16s (dmpv) never became `receiver_verified`.
+    /// Callers that need the loud empty error keep [`Self::from_comments_json`].
+    pub fn from_comments_json_pending(
+        bead_id: impl Into<String>,
+        pane_id: impl Into<String>,
+        bytes: &[u8],
+    ) -> Result<Self, AckReadbackError> {
+        let bead_id = bead_id.into();
+        let pane_id = pane_id.into();
+        match Self::from_comments_json(&bead_id, &pane_id, bytes) {
+            Err(AckReadbackError::EmptyAckCensus) => Ok(Self {
+                bead_id,
+                pane_id,
+                comments: Vec::new(),
+                dispatch_issued_at: None,
+            }),
+            other => other,
+        }
+    }
+
+
     /// Bind this read-back to a dispatch. `issued_at` is the MARKER field.
     #[must_use]
     pub fn with_dispatch_issued_at(mut self, issued_at: u64) -> Self {
@@ -1306,6 +1331,37 @@ mod tests {
             }
         ));
     }
+
+    #[test]
+    fn empty_census_pending_is_missing_not_an_abort() {
+        let readback = AckReadback::from_comments_json_pending(
+            "omp-orchestrator-ack-stage-qhl",
+            "%1413",
+            br#"[]"#,
+        )
+        .expect("empty census is pending during the wait");
+        assert!(readback.comments.is_empty());
+        assert_eq!(
+            readback.match_verdict_for("omp-orchestrator-ack-stage-qhl", "%1413"),
+            AckReadbackVerdict::Missing
+        );
+        let still_loud =
+            AckReadback::from_comments_json("omp-orchestrator-ack-stage-qhl", "%1413", br#"[]"#)
+                .expect_err("loud empty census remains for fail-closed callers");
+        assert_eq!(still_loud, AckReadbackError::EmptyAckCensus);
+    }
+
+    #[test]
+    fn pending_empty_does_not_verify_without_an_ack() {
+        let readback = AckReadback::from_comments_json_pending(
+            "omp-orchestrator-dmpv",
+            "%9",
+            br#"[]"#,
+        )
+        .expect("pending");
+        assert!(readback.matching_comment().is_none());
+    }
+
 
     #[test]
     fn an_empty_ack_census_is_an_error() {

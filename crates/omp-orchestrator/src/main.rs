@@ -1037,7 +1037,7 @@ async fn read_ack_readback(
         "br comments list",
         invoke(cx, config, &config.br, &args).await?,
     )?;
-    let readback = AckReadback::from_comments_json(bead, pane, &bytes).map_err(|error| {
+    let readback = AckReadback::from_comments_json_pending(bead, pane, &bytes).map_err(|error| {
         format!("ACK_STAGE_INDETERMINATE bead={bead} pane={pane} comment read-back: {error}")
     })?;
     Ok(match dispatch_marker_issued_at(config, pane) {
@@ -4930,7 +4930,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     let ready = require_success(&config.br, ready_output).map_err(|error| {
         format!("QUEUE_UNREADABLE owner=josh next_action=repair-br-or-escalate: {error}")
     })?;
-    let (ready_ids, _) = parse_ready(&ready)?;
+    let (ready_ids, ready_priorities) = parse_ready(&ready)?;
     let triage_args = vec!["--robot-triage".to_owned()];
     let mut bead_ids = match invoke(cx, config, &config.bv, &triage_args).await {
         Ok(output) => {
@@ -4950,6 +4950,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             let order = loop_queue_filter::select::select_dispatch_order_with_pagerank(
                 &triage,
                 &ready_ids,
+                &ready_priorities,
                 &insights,
                 &jsonl,
                 &config.receiver_agent,
@@ -4957,9 +4958,10 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             match order.window {
                 loop_queue_filter::select::RankWindow::RecommendationsOnly => {
                     let detail = format!(
-                        "window={} rank_source=bv.full_stats.pagerank ready={}",
+                        "window={} rank_source=bv.full_stats.pagerank ready={} scored={}",
                         order.window.label(),
-                        ready_ids.len()
+                        ready_ids.len(),
+                        order.scored
                     );
                     write_heartbeat(config, tick, "QUEUE_RANK_RECOMMENDATIONS", &detail)?;
                     println!("QUEUE_RANK_RECOMMENDATIONS {detail}");
@@ -4975,9 +4977,10 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                         _ => "QUEUE_RANK_FALLBACK",
                     };
                     let detail = format!(
-                        "window={} rank_source=bv.full_stats.pagerank ready={}",
+                        "window={} rank_source=bv.full_stats.pagerank ready={} scored={}",
                         window.label(),
-                        ready_ids.len()
+                        ready_ids.len(),
+                        order.scored
                     );
                     write_heartbeat(config, tick, status, &detail)?;
                     println!("{status} {detail}");
