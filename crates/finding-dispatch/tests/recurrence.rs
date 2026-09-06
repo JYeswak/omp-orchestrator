@@ -20,7 +20,7 @@ fn expect_not_yet(outcome: MaybeFinding, expected: NotYet) {
     }
 }
 
-fn recurring_decisions() -> [SupervisorDecision; 4] {
+fn recurring_decisions() -> [SupervisorDecision; 5] {
     [
         SupervisorDecision::EscalateIdleIncident {
             dispatchable_count: 2,
@@ -34,6 +34,11 @@ fn recurring_decisions() -> [SupervisorDecision; 4] {
         },
         SupervisorDecision::WorkspaceUnloaded {
             detail: "workspace marker missing".to_owned(),
+        },
+        SupervisorDecision::GateUnwired {
+            unwired: vec![
+                "POSITIVE_CONTROL_FAILED: no-shell-gate must be reachable".to_owned(),
+            ],
         },
     ]
 }
@@ -145,4 +150,55 @@ fn mutation_leg_threshold_change_would_fail_boundary() {
         },
     );
     assert!(finding_for(&decision, 3).is_owed());
+}
+
+#[test]
+fn k0i6_third_gate_unwired_preserves_every_unreachable_name() {
+    let names = [
+        "POSITIVE_CONTROL_FAILED: no-shell-gate must be reachable",
+        "path-literal-guard",
+    ];
+    let decision = SupervisorDecision::GateUnwired {
+        unwired: names.iter().map(|n| (*n).to_owned()).collect(),
+    };
+    expect_not_yet(
+        finding_for(&decision, 1),
+        NotYet::BelowThreshold {
+            seen: 1,
+            threshold: FINDING_THRESHOLD,
+        },
+    );
+    expect_not_yet(
+        finding_for(&decision, 2),
+        NotYet::BelowThreshold {
+            seen: 2,
+            threshold: FINDING_THRESHOLD,
+        },
+    );
+    let finding = finding_for(&decision, FINDING_THRESHOLD)
+        .into_owed()
+        .expect("third GateUnwired observation files");
+    let body = finding.body();
+    for name in names {
+        assert!(
+            body.contains(name),
+            "finding must preserve unreachable gate name {name:?}, got {body}"
+        );
+    }
+    assert!(
+        body.contains("repair-gate-trigger"),
+        "finding must route trigger repair before dispatch resumes, got {body}"
+    );
+    assert!(
+        finding.labels().iter().any(|l| l == "repair-gate-trigger"),
+        "repair-gate-trigger must be a label so the finding routes, got {:?}",
+        finding.labels()
+    );
+    expect_not_yet(
+        finding_for(&decision, FINDING_THRESHOLD + 1),
+        NotYet::AlreadyEmitted {
+            seen: FINDING_THRESHOLD + 1,
+            threshold: FINDING_THRESHOLD,
+        },
+    );
 }

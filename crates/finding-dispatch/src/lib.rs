@@ -239,13 +239,14 @@ pub fn finding_for(decision: &SupervisorDecision, recurrence_count: u32) -> Mayb
         SupervisorDecision::GateUnwired { unwired } => (
             "Escalate recurring unwired-gate condition".to_owned(),
             format!(
-                "The gate census repeatedly found unreachable gates, so their protections cannot be treated as active. Observed unwired gates: {unwired:?}"
+                "The gate census repeatedly found unreachable gates, so their protections cannot be treated as active. Observed unwired gates: {unwired:?}. next_action=repair-gate-trigger — dispatch must not resume until every named gate is independently reachable."
             ),
             "Run the supervisor for three consecutive gate-unwired observations; verify the third observation produces this finding, preserves every unreachable gate name, and routes trigger repair before dispatch resumes.".to_owned(),
             vec![
                 "supervisor".to_owned(),
                 "gate-unwired".to_owned(),
                 "dispatch-safety".to_owned(),
+                "repair-gate-trigger".to_owned(),
             ],
         ),
         SupervisorDecision::SupervisedWorking { .. }
