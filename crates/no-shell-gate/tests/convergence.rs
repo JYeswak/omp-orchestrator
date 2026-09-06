@@ -6,7 +6,7 @@
 //! no new findings - once all sections are done". This encodes that as a gate so
 //! the conversion cannot be started on a feeling.
 
-use std::{collections::BTreeMap, fs, path::PathBuf};
+use std::{collections::BTreeMap, fs, path::{Path, PathBuf}};
 
 /// The sections the convergence verdict covers.
 ///
@@ -79,9 +79,7 @@ struct Row {
 /// - `capability` a re-check of an ALREADY-CONVERGED section; a finding un-converges it
 /// - `held_out`   the withheld lens, run once at the end across everything
 
-fn ledger() -> Vec<Row> {
-    let p = plan_dir().join("CONVERGENCE.jsonl");
-    let t = fs::read_to_string(&p).unwrap_or_default();
+fn parse_ledger_text(t: &str) -> Vec<Row> {
     let mut out = Vec::new();
     for line in t.lines().filter(|l| !l.trim().is_empty()) {
         // deliberately minimal: no serde dependency for a gate that must never fail to build
@@ -110,7 +108,6 @@ fn ledger() -> Vec<Row> {
             continue;
         };
         let role = get("role").unwrap_or_else(|| "hillclimb".to_owned());
-        // Absent => false. An unrecorded check is not a check.
         let gates_green = get("gates_green").as_deref() == Some("true");
         out.push(Row {
             section,
@@ -122,6 +119,12 @@ fn ledger() -> Vec<Row> {
         });
     }
     out
+}
+
+fn ledger() -> Vec<Row> {
+    let p = plan_dir().join("CONVERGENCE.jsonl");
+    let t = fs::read_to_string(&p).unwrap_or_default();
+    parse_ledger_text(&t)
 }
 
 /// Two consecutive clean rounds under two DIFFERENT lenses.
@@ -147,9 +150,44 @@ fn converged(rows: &[Row], section: &str) -> bool {
 /// grinding a neighbour. Several findings this session were cross-section: the
 /// 370-vs-379 count propagated from 06-gates into 01-idea, and the AgentEndEvent
 /// refutation had to be chased across five files.
+const CAPABILITY_FLOOR_GUARD: bool = true;
+
 fn capability_regressed(rows: &[Row], section: &str) -> bool {
+    capability_regressed_guarded(rows, section, CAPABILITY_FLOOR_GUARD)
+}
+
+fn capability_regressed_guarded(rows: &[Row], section: &str, enforce: bool) -> bool {
+    if !enforce {
+        return false;
+    }
     rows.iter()
         .any(|r| r.section == section && r.role == "capability" && r.new_findings > 0)
+}
+
+fn check_capability_floor(path: &Path) -> Result<(), String> {
+    check_capability_floor_guarded(path, CAPABILITY_FLOOR_GUARD)
+}
+
+fn check_capability_floor_guarded(path: &Path, enforce: bool) -> Result<(), String> {
+    let text = fs::read_to_string(path).map_err(|error| {
+        format!("UNREADABLE specimen={} detail={error}", path.display())
+    })?;
+    if text.trim().is_empty() {
+        return Err(format!("EMPTY_SCAN specimen={}", path.display()));
+    }
+    let rows = parse_ledger_text(&text);
+    if rows.is_empty() {
+        return Err(format!("EMPTY_SCAN specimen={}", path.display()));
+    }
+    for section in rows.iter().map(|row| row.section.as_str()) {
+        if capability_regressed_guarded(&rows, section, enforce) {
+            return Err(format!(
+                "CAPABILITY_REGRESSED specimen={} section={section}",
+                path.display()
+            ));
+        }
+    }
+    Ok(())
 }
 
 #[test]
@@ -437,4 +475,98 @@ fn the_convergence_predicate_is_strict() {
         !converged(&[], "x"),
         "an empty ledger must never report convergence"
     );
+}
+
+fn plant_ledger(name: &str, body: &str) -> PathBuf {
+    let path = std::env::temp_dir().join(format!(
+        "ibpa13-{name}-{}-{}.jsonl",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    fs::write(&path, body).expect("plant ledger specimen");
+    path
+}
+
+#[test]
+fn the_live_ledger_contains_role_rows() {
+    let rows = ledger();
+    assert!(!rows.is_empty(), "EMPTY_SCAN: live CONVERGENCE.jsonl must not be empty");
+    assert!(
+        rows.iter().any(|row| row.role == "capability"),
+        "live ledger must contain capability role rows"
+    );
+    assert!(
+        rows.iter().any(|row| row.role == "held_out"),
+        "live ledger must contain held_out role rows"
+    );
+}
+
+#[test]
+fn planted_capability_regression_names_the_specimen() {
+    let path = plant_ledger(
+        "capability-regressed",
+        r#"{"section":"06-gates","round":10,"lens":"investor","role":"capability","new_findings":3,"gates_green":true}
+"#,
+    );
+    let err = check_capability_floor(&path).expect_err("known-bad specimen must refuse");
+    assert!(
+        err.contains("CAPABILITY_REGRESSED"),
+        "{err}"
+    );
+    assert!(
+        err.contains(path.file_name().unwrap().to_str().unwrap()),
+        "refusal must name the specimen: {err}"
+    );
+    let _ = fs::remove_file(&path);
+}
+
+#[test]
+fn clean_capability_recheck_is_ok() {
+    let path = plant_ledger(
+        "capability-clean",
+        r#"{"section":"06-gates","round":10,"lens":"investor","role":"capability","new_findings":0,"gates_green":true}
+"#,
+    );
+    check_capability_floor(&path).expect("clean fixture must pass");
+    assert!(path.is_file() && fs::metadata(&path).unwrap().len() > 0);
+    let _ = fs::remove_file(&path);
+}
+
+#[test]
+fn empty_scan_set_is_an_error_not_a_pass() {
+    let path = plant_ledger("empty", "");
+    let err = check_capability_floor(&path).expect_err("empty specimen must refuse");
+    assert!(err.contains("EMPTY_SCAN"), "{err}");
+    assert!(
+        err.contains(path.file_name().unwrap().to_str().unwrap()),
+        "empty refusal must name the specimen: {err}"
+    );
+    let _ = fs::remove_file(&path);
+}
+
+#[test]
+fn deleting_the_capability_floor_guard_goes_red() {
+    let path = plant_ledger(
+        "mutation",
+        r#"{"section":"06-gates","round":10,"lens":"investor","role":"capability","new_findings":3,"gates_green":true}
+"#,
+    );
+    assert!(
+        check_capability_floor(&path).is_err(),
+        "guard present refuses known-bad"
+    );
+    assert!(
+        check_capability_floor_guarded(&path, false).is_ok(),
+        "inverted guard misses CAPABILITY_REGRESSED — RED"
+    );
+    assert!(
+        check_capability_floor(&path).is_err(),
+        "restore still refuses"
+    );
+    let source = include_str!("convergence.rs");
+    assert!(source.contains("CAPABILITY_FLOOR_GUARD: bool = true"));
+    let _ = fs::remove_file(&path);
 }
