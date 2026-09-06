@@ -350,6 +350,41 @@ file  →  claim  →  dispatch  →  ACK  →  observe  →  verify  →  close
 **The mechanical form:** the dispatch site must emit the ACK instruction itself, so a human writing
 markdown cannot omit it. Tracked as `omp-orchestrator-93lo`.
 
+**RESOLVED IN PRACTICE 2026-09-05, and the fix was one sentence in the packet.** The claim above
+that *"zero ACK-prefixed comments existed anywhere in the tracker"* is **no longer true** and must
+not be cited as current. Three dispatches that carried the instruction as a **mandatory first line**
+produced the first admissible delivery evidence this repository has ever recorded:
+
+```
+[WildStone] ACK iis6 on %9 -- grading by re-execution, not the implementer report.
+[WildStone] ACK iis6 on %9 -- GRADE PASS MUTATION-VERIFIED. RRL6_VIOLATED=no:...
+[WildStone] ACK gcyf on %9 -- DONE 102afde. Did not touch main.rs.
+```
+
+**Nothing in the sender changed.** `ack-stage` was correct the whole time; the packets simply began
+asking. The measured cost of not asking was every dispatch of the prior session reading
+`unproven_transport` while packets landed — which is why this row is worth more as a *correction*
+than it was as a finding.
+
+**And the correction is the load-bearing part, per this file's own rule about stale doctrine.** A
+doctrine row asserting a mechanism is broken *licenses routing around it indefinitely*. Left
+uncorrected, this section would have kept telling readers the ACK path produces nothing, long after
+it started producing everything — the identical failure mode as the `refill-idle-panes` row that
+claimed a kernel carried control-plane paths for hours after it had been rebuilt clean.
+
+**What it bought beyond a receipt.** The `iis6` ACK carried `RRL6_VIOLATED=no` with an argument
+against the law it might have broken, `TREE_PINNED=yes`, and a `NO_CLAIM` that explicitly declined
+to credit the implementer for an uncommitted half. The ACK line is where a grader's *reasoning*
+becomes checkable, not merely its arrival — so the structured tail (`MUTATION_RED=`, `SHA=`,
+`POSITIVE_CONTROL=`) is not ceremony. It is the field that caught `WIRED_TO=dispatch_packet` naming
+a caller that does not exist.
+
+**STILL OPEN, and it is the whole mechanical fix.** Every one of those ACKs happened because a human
+wrote the instruction into a hand-authored packet. `omp-orchestrator-93lo` — emit the instruction
+from the dispatch site — remains **unlanded**, so the protocol still depends on the conductor
+remembering. Three ACKs prove the receiver half works when asked; they prove nothing about the next
+packet a tired operator writes.
+
 **NO-CLAIM.** An ACK proves the packet **arrived and was read** — nothing about the work. Acceptance
 evidence is still the bead's own criteria, re-run by a grader who is not the implementer. And an ACK
 is forgeable by construction: it is a comment any agent can write, so it is a *delivery* receipt,
