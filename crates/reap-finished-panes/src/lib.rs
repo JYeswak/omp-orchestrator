@@ -194,11 +194,51 @@ pub fn require_panes<T>(panes: &[T]) -> Result<(), &'static str> {
     }
 }
 
+/// Typed refusal when the sweep is invoked without a session. An absent scope
+/// must never widen to every tmux session on the server.
+pub const MISSING_SESSION_REFUSAL: &str = "SCOPE_REFUSED reason=MISSING_SESSION \
+    next_action=pass --session <tmux-session> -- an unscoped sweep enumerates every \
+    tmux session on this server, including repos this process does not own";
+
+/// Keep only panes whose tmux session name equals `session`.
+pub fn filter_panes_to_session(
+    panes: &[(String, String)],
+    session: &str,
+) -> Vec<(String, String)> {
+    panes
+        .iter()
+        .filter(|(name, _)| name == session)
+        .cloned()
+        .collect()
+}
+
+/// Panes that would be stolen if the filter were skipped. Known-bad when nonempty
+/// after a scoped sweep.
+pub fn foreign_sessions_in(panes: &[(String, String)], session: &str) -> Vec<String> {
+    panes
+        .iter()
+        .filter(|(name, _)| name != session)
+        .map(|(name, idx)| format!("{name}:{idx}"))
+        .collect()
+}
+
+/// Per-repo write dir so two supervisors cannot read each other's transcripts
+/// as their own. `base` is typically `~/.local/state/flywheel/reaped`.
+pub fn scoped_artifact_dir(base: &Path, repo: &Path) -> PathBuf {
+    let name = repo
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown-repo");
+    base.join(safe_component(name))
+}
+
 pub fn resolve_pane_id(session: &str, idx: &str, timeout: Duration) -> Result<String, String> {
     let mut cmd = Command::new("tmux");
     cmd.args([
         "list-panes",
-        "-a",
+        "-s",
+        "-t",
+        session,
         "-F",
         "#{pane_id} #{session_name}:#{window_index}.#{pane_index}",
     ]);
@@ -685,5 +725,84 @@ mod tests {
             let mut g = ReapFinishedPanesRules::default();
             assert!(g.disable(rule.as_str()), "{}", rule.as_str());
         }
+    }
+
+    #[test]
+    fn foreign_session_panes_are_excluded_from_the_sweep() {
+        let mixed = vec![
+            ("control-plane".into(), "1".into()),
+            ("omp-orchestrator".into(), "3".into()),
+            ("control-plane".into(), "4".into()),
+            ("omp-orchestrator".into(), "8".into()),
+        ];
+        let scoped = filter_panes_to_session(&mixed, "omp-orchestrator");
+        let stolen = foreign_sessions_in(&scoped, "omp-orchestrator");
+        assert!(
+            stolen.is_empty(),
+            "KNOWN-BAD: a foreign pane remaining after filter is a stolen sweep: {stolen:?}"
+        );
+        assert_eq!(
+            scoped,
+            vec![
+                ("omp-orchestrator".into(), "3".into()),
+                ("omp-orchestrator".into(), "8".into()),
+            ]
+        );
+        assert!(
+            !foreign_sessions_in(&mixed, "omp-orchestrator").is_empty(),
+            "the mixed set must contain foreign panes or the known-bad leg is vacuous"
+        );
+    }
+
+    #[test]
+    fn this_session_panes_are_kept() {
+        let ours = vec![
+            ("omp-orchestrator".into(), "5".into()),
+            ("omp-orchestrator".into(), "9".into()),
+        ];
+        let scoped = filter_panes_to_session(&ours, "omp-orchestrator");
+        assert_eq!(scoped, ours, "KNOWN-GOOD: in-session panes must be swept");
+        require_panes(&scoped).expect("in-session set is not empty");
+    }
+
+    #[test]
+    fn empty_in_scope_pane_set_is_an_error() {
+        let mixed = vec![("control-plane".into(), "1".into())];
+        let scoped = filter_panes_to_session(&mixed, "omp-orchestrator");
+        assert!(
+            require_panes(&scoped).is_err(),
+            "ANTI-VACUITY: empty in-scope set must refuse, never nothing-to-reap"
+        );
+    }
+
+    #[test]
+    fn missing_session_refusal_is_typed() {
+        assert!(MISSING_SESSION_REFUSAL.starts_with("SCOPE_REFUSED"));
+        assert!(MISSING_SESSION_REFUSAL.contains("MISSING_SESSION"));
+        assert!(!MISSING_SESSION_REFUSAL.contains("control-plane"));
+    }
+
+    /// Two repos must not share a write dir. Paths are DELIBERATELY not `$HOME`-rooted.
+    ///
+    /// This test previously used two `$HOME`-rooted absolute repo paths, which made
+    /// `path-literal-guard`'s `zero_home_path_literals_across_crates_src` leg RED
+    /// repo-wide — a real current-tree failure attributed here by pane `%7` during a
+    /// grading rerun, not a defect in the crate it was grading. The invariant needs two
+    /// DISTINCT repo paths with distinct basenames; it never needed real ones.
+    ///
+    /// AND MY FIRST FIX FAILED FOR THE FUNNIEST REASON AVAILABLE: this comment quoted the
+    /// offending literals verbatim while explaining why they were removed, so the gate
+    /// stayed RED on the warning itself. That is `AGENTS.md`'s recorded seventh instance
+    /// of a doc comment containing the needle it warns about. The gate does not strip
+    /// comments before matching, which is a known gap; the right move here was to stop
+    /// writing the literal, not to widen the gate.
+    #[test]
+    fn artifact_dir_separates_repos() {
+        let base = PathBuf::from("/tmp/reaped-base");
+        let a = scoped_artifact_dir(&base, Path::new("/src/repos/omp-orchestrator"));
+        let b = scoped_artifact_dir(&base, Path::new("/src/repos/control-plane"));
+        assert_ne!(a, b, "two repos must not share a write dir");
+        assert!(a.ends_with("omp-orchestrator"));
+        assert!(b.ends_with("control-plane"));
     }
 }
