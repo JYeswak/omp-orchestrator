@@ -88,6 +88,13 @@ use std::path::{Component, Path, PathBuf};
 /// The home-path literal this gate forbids.
 pub const USER_HOME_LITERAL: &str = concat!("/Users/", "josh");
 
+/// Host-local selector binary. Split so this source never contains the contiguous
+/// path that would itself trip the gate (09.10 / bcrn.4).
+pub const HOST_BV_LITERAL: &str = concat!("/opt/homebrew/bin/", "bv");
+
+/// Every contiguous literal a `crates/*/src` file must not spell.
+pub const FORBIDDEN_LITERALS: &[&str] = &[USER_HOME_LITERAL, HOST_BV_LITERAL];
+
 /// Which files a scan covered. Named, because a verdict whose scope is implied is a
 /// verdict a reader cannot check.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -352,7 +359,10 @@ pub fn repo_root() -> PathBuf {
 /// Both modes route through this, so a scoped run and a sweep can never disagree about
 /// WHAT is in scope — only about which subset was read.
 pub fn is_in_scan_scope(relative: &Path) -> bool {
-    if !relative.extension().is_some_and(|extension| extension == "rs") {
+    if !relative
+        .extension()
+        .is_some_and(|extension| extension == "rs")
+    {
         return false;
     }
     let parts: Vec<&std::ffi::OsStr> = relative
@@ -374,7 +384,7 @@ fn scan_one(root: &Path, path: &Path, hits: &mut Vec<Hit>, lines: &mut Vec<Strin
     let text = fs::read_to_string(path)
         .unwrap_or_else(|error| panic!("cannot read {}: {error}", path.display()));
     for (index, line) in text.lines().enumerate() {
-        if line.contains(USER_HOME_LITERAL) {
+        if FORBIDDEN_LITERALS.iter().any(|needle| line.contains(needle)) {
             hits.push(Hit {
                 file: path.strip_prefix(root).unwrap_or(path).to_path_buf(),
                 line: index + 1,
@@ -428,9 +438,8 @@ pub fn scan(root: &Path) -> ScanReport {
         Err(error) => panic!("cannot read {}: {error}", crates_dir.display()),
     };
     for entry in entries {
-        let entry = entry.unwrap_or_else(|error| {
-            panic!("cannot enumerate {}: {error}", crates_dir.display())
-        });
+        let entry = entry
+            .unwrap_or_else(|error| panic!("cannot enumerate {}: {error}", crates_dir.display()));
         let src = entry.path().join("src");
         if src.is_dir() {
             stack.push(src);
@@ -512,6 +521,23 @@ mod tests {
         format!("const REPO: &str = \"{USER_HOME_LITERAL}\";\n")
     }
 
+    fn planted_host_bv_line() -> String {
+        format!("const BV: &str = \"{HOST_BV_LITERAL}\";\n")
+    }
+
+    /// 09.10: hard-coding the host selector path in crates/*/src is a Violation.
+    #[test]
+    fn hardcoding_host_bv_path_is_a_violation() {
+        let root = std::env::temp_dir().join(format!("plg-host-bv-{}", std::process::id()));
+        let src = root.join("crates/loop-queue-filter/src");
+        fs::create_dir_all(&src).expect("create fixture tree");
+        fs::write(src.join("selector.rs"), planted_host_bv_line()).expect("plant host bv path");
+        let report = scan(&root);
+        assert_eq!(report.verdict(), Verdict::Violation, "{report:?}");
+        assert_eq!(report.hits.len(), 1, "{:?}", report.hits);
+        let _ = fs::remove_dir_all(&root);
+    }
+
     /// The scanner finds a planted literal in a fake `crates/*/src` tree.
     #[test]
     fn scanner_names_file_and_line_of_a_planted_literal() {
@@ -527,10 +553,19 @@ mod tests {
         let report = scan(&root);
         assert_eq!(report.mode, ScanMode::RepoWide);
         assert_eq!(report.scanned.len(), 2, "scan set: {:?}", report.scanned);
-        assert_eq!(report.hits.len(), 1, "planted literal must be caught: {:?}", report.hits);
+        assert_eq!(
+            report.hits.len(),
+            1,
+            "planted literal must be caught: {:?}",
+            report.hits
+        );
         assert_eq!(report.verdict(), Verdict::Violation);
         let hit = &report.hits[0];
-        assert!(hit.file.ends_with("dirty.rs"), "wrong file: {}", hit.file.display());
+        assert!(
+            hit.file.ends_with("dirty.rs"),
+            "wrong file: {}",
+            hit.file.display()
+        );
         assert_eq!(hit.line, 1, "wrong line: {hit:?}");
 
         let _ = fs::remove_dir_all(&root);
@@ -543,7 +578,10 @@ mod tests {
         fs::create_dir_all(&root).expect("create empty root");
         let report = scan(&root);
         assert!(report.scanned.is_empty(), "expected an empty scan set");
-        assert!(!report.is_pass(), "an empty scan set is an ERROR, never a pass");
+        assert!(
+            !report.is_pass(),
+            "an empty scan set is an ERROR, never a pass"
+        );
         assert_eq!(report.verdict(), Verdict::VacuousError);
         let _ = fs::remove_dir_all(&root);
     }
@@ -609,7 +647,10 @@ mod tests {
         let report = scan_paths(&root, &["AGENTS.md", "crates/example/tests/it.rs"]);
         assert!(report.scanned.is_empty(), "{:?}", report.scanned);
         assert_eq!(report.verdict(), Verdict::NothingToCheck);
-        assert!(!report.is_pass(), "nothing-to-check must not read as a pass");
+        assert!(
+            !report.is_pass(),
+            "nothing-to-check must not read as a pass"
+        );
         assert_eq!(report.skipped.len(), 2);
         assert!(report
             .skipped
@@ -641,7 +682,10 @@ mod tests {
             "crates/x/src/bin/y.rs",
             "crates/x/src/a/b/c.rs",
         ] {
-            assert!(is_in_scan_scope(Path::new(inside)), "{inside} must be in scope");
+            assert!(
+                is_in_scan_scope(Path::new(inside)),
+                "{inside} must be in scope"
+            );
         }
         for outside in [
             "crates/x/tests/it.rs",
@@ -653,7 +697,10 @@ mod tests {
             "AGENTS.md",
             "docs/plan/PLAN.md",
         ] {
-            assert!(!is_in_scan_scope(Path::new(outside)), "{outside} must be out of scope");
+            assert!(
+                !is_in_scan_scope(Path::new(outside)),
+                "{outside} must be out of scope"
+            );
         }
     }
 

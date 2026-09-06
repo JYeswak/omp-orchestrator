@@ -7,6 +7,7 @@
 
 
 pub mod select;
+pub mod selector;
 use regex::Regex;
 use serde_json::{Map, Value};
 use std::{

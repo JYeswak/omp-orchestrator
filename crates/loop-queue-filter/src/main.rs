@@ -3,6 +3,7 @@
 use loop_queue_filter::select::{
     assign_peer_grade, parse_observed_panes, require_idle_grader,
 };
+use loop_queue_filter::selector::select_graph;
 use std::io::{self, Read};
 use std::process::ExitCode;
 
@@ -103,6 +104,54 @@ fn assign_grade_cli(args: &[String]) -> ExitCode {
     }
 }
 
+fn select_graph_cli(args: &[String]) -> ExitCode {
+    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
+        println!(
+            "usage: loop-queue-filter select-graph [--receipt FILE]\n\
+             Resolves `bv` on PATH. Missing binary: SELECTOR_UNAVAILABLE program=bv (exit 2).\n\
+             Present: one JSON receipt, exit 0. Recency is not a fallback."
+        );
+        return ExitCode::SUCCESS;
+    }
+    let mut receipt_path = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--receipt" => {
+                index += 1;
+                receipt_path = args.get(index).cloned();
+                if receipt_path.as_ref().map(|s| s.is_empty()).unwrap_or(true) {
+                    eprintln!("SELECTOR_REFUSED reason=receipt_path_missing");
+                    return ExitCode::from(2);
+                }
+            }
+            other => {
+                eprintln!("SELECTOR_REFUSED unknown argument {other}");
+                return ExitCode::from(2);
+            }
+        }
+        index += 1;
+    }
+    let path = std::env::var("PATH").unwrap_or_default();
+    match select_graph(&path) {
+        Ok(receipt) => {
+            let json = receipt.to_json();
+            println!("{json}");
+            if let Some(path) = receipt_path {
+                if std::fs::write(&path, format!("{json}\n")).is_err() {
+                    eprintln!("SELECTOR_RECEIPT_WRITE_FAILED path={path}");
+                    return ExitCode::from(1);
+                }
+            }
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            ExitCode::from(2)
+        }
+    }
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.first().map(String::as_str) == Some("--selftest-guard") {
@@ -111,6 +160,9 @@ fn main() -> ExitCode {
     }
     if args.first().map(String::as_str) == Some("assign-grade") {
         return assign_grade_cli(&args[1..]);
+    }
+    if args.first().map(String::as_str) == Some("select-graph") {
+        return select_graph_cli(&args[1..]);
     }
     let mut input = String::new();
     if io::stdin().read_to_string(&mut input).is_err() {

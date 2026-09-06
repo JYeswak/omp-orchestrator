@@ -13,5 +13,8 @@ path = "src/main.rs"
 regex = "1"
 serde_json = "1"
 
+[dev-dependencies]
+path-literal-guard = { path = "../path-literal-guard" }
+
 [lints.rust]
 unsafe_code = "forbid"
