@@ -4906,6 +4906,25 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             "ratchet=on-time"
         }
     );
+    if let Some(omp_orchestrator::SupervisorDecision::GateUnwired { unwired }) =
+        omp_orchestrator::gate_census_decision(&Some(advisory_census.clone()))
+    {
+        let joined = unwired.join(" ");
+        let line = omp_orchestrator::resident_tick::gate_unwired_line(&unwired);
+        write_heartbeat(
+            config,
+            tick,
+            "GATE_UNWIRED",
+            &format!("unwired={joined} owner=josh"),
+        )?;
+        write_heartbeat(config, tick, "NO_DISPATCH_TICK", "skip_reap=true")?;
+        eprintln!("{line}");
+        if omp_orchestrator::resident_tick::SURVIVE_GATE_UNWIRED {
+            return Ok(());
+        }
+        return Err(format!("GATE_UNWIRED unwired={joined}"));
+    }
+
 
     // eg0m: THE CLOSE HALF, RECONCILED EVERY TICK — ahead of the pending-dispatch
     // fence and every other branch that can abort, for the reason `leht` measured:
@@ -5806,37 +5825,15 @@ async fn run_supervisor(cx: &Cx, config: Config) -> Result<(), String> {
         if let Err(error) = run_cycle(cx, &config, tick).await {
             let _ = write_heartbeat(&config, tick, "SUPERVISOR_REFUSED", &error);
             eprintln!("SUPERVISOR_REFUSED {error}");
-            // A PER-TICK REFUSAL IS A VERDICT, NOT A CRASH — the loop continues.
-            //
-            // MEASURED 2026-09-06: returning Err here ended the process, and under a
-            // `restart: on-failure` policy that produced a LIVELOCK the loop could never
-            // escape. Five consecutive ticks refused identically:
-            //
-            //   DISPATCH_PREFLIGHT_REFUSED ... reason=Refused { SingleCaptureLiveness }
-            //   pane_dispatchable=true two_captures=false packet_complete=true
-            //   [daemon exited with code 1; restarting in 4000ms]
-            //
-            // The refusal itself was correct for a single capture. The fixed path
-            // now treats tick-monitor's retained dispatchable evidence as the
-            // two-capture proof, so a restarted resident can use prior rows on tick 1.
-            // A genuinely one-capture pane still has is_dispatchable=false and refuses.
-            // restart destroyed the very evidence the next attempt needed. Beads were
-            // claimed and intent-cleared on each pass (smcq, lwdo.2, xm0n.1, xm0n.2),
-            // so the livelock churned tracker state while making no progress.
-            //
-            // This is the exit-code-as-payload class already recorded for
-            // `inbox-monitor` (`i3r6`, nonzero on SUCCESS) and
-            // `am file_reservations reserve` (`loz3`, zero on REFUSAL). Here a typed
-            // refusal was encoded as process failure. The refusal is already durable —
-            // a `SUPERVISOR_REFUSED` heartbeat row plus `DISPATCH_INTENT_CLEARED` — so
-            // exiting added no evidence and removed all progress.
-            //
-            // NO-CLAIM: this makes a refusal non-fatal. It does NOT make it invisible;
-            // the row is still written and still printed. A refusal that repeats forever
-            // is now a visible standing condition rather than a restart loop, which is
-            // strictly easier to observe but is not itself a fix for the underlying
-            // cause.
+            // A PER-TICK REFUSAL IS A VERDICT, NOT A CRASH — the loop continues
+            // unless SURVIVE_GATE_UNWIRED is mutated to false (the crash-loop shape).
+            if error.contains("GATE_UNWIRED")
+                && !omp_orchestrator::resident_tick::SURVIVE_GATE_UNWIRED
+            {
+                return Err(error);
+            }
         }
+
         if config.max_ticks.is_some_and(|max| tick >= max) {
             println!("SUPERVISOR_STOP tick={tick} reason=bounded_test_run");
             return Ok(());
@@ -5956,9 +5953,10 @@ fn main() -> std::process::ExitCode {
     let runtime = match RuntimeBuilder::current_thread().build() {
         Ok(runtime) => runtime,
         Err(error) => {
-            eprintln!("SUPERVISOR_REFUSED runtime={error}");
+            eprintln!("SUPERVISOR_FATAL runtime_build detail={error}");
             return std::process::ExitCode::from(1);
         }
+
     };
     if grade_request.is_some() {
         let grader_pane = env::var("TMUX_PANE").unwrap_or_default();
@@ -6016,7 +6014,8 @@ fn main() -> std::process::ExitCode {
     }
 
     let result = runtime.block_on(async move {
-        let cx = Cx::current().ok_or_else(|| "SUPERVISOR_REFUSED no runtime context".to_owned())?;
+        let cx =
+            Cx::current().ok_or_else(|| "SUPERVISOR_FATAL no_runtime_context".to_owned())?;
         if config.omp_quick {
             run_omp_quick(&cx, &config)
                 .await
@@ -6028,7 +6027,7 @@ fn main() -> std::process::ExitCode {
     match result {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("SUPERVISOR_REFUSED {error}");
+            eprintln!("SUPERVISOR_FATAL {error}");
             std::process::ExitCode::from(1)
         }
     }

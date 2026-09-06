@@ -37,6 +37,9 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use text_structure::code_only;
 pub mod target_directory;
+pub mod resident_tick;
+pub mod resident_liveness;
+
 
 // ── IDLE_AUTHORIZATION ─────────────────────────────────────────────────────────
 
@@ -371,6 +374,11 @@ pub struct GateCensusRow {
 pub struct GateCensus {
     pub rows: Vec<GateCensusRow>,
 }
+
+/// uds-k0i6 canary. Empty / all-unreachable census. Do not weaken this text.
+pub const POSITIVE_CONTROL_FAILED_UNWIRED: &str =
+    "POSITIVE_CONTROL_FAILED: no independently reachable gate in this census";
+
 
 /// Advisory rows that are allowed to be non-`Reachable` without stopping the loop,
 /// each with the reason it is not yet blocking.
@@ -1183,6 +1191,31 @@ pub fn crate_ships_a_bin(repo_root: &Path, crate_name: &str) -> bool {
 pub use finding_dispatch::SupervisorDecision;
 
 
+/// First check of `decide()`, also used by the resident cycle to skip reap on GATE_UNWIRED.
+pub fn gate_census_decision(census: &Option<GateCensus>) -> Option<SupervisorDecision> {
+    match census {
+        Some(census) => {
+            if !census.positive_control_passes() {
+                return Some(SupervisorDecision::GateUnwired {
+                    unwired: vec![POSITIVE_CONTROL_FAILED_UNWIRED.to_owned()],
+                });
+            }
+            let unwired: Vec<String> = census
+                .unwired_gates()
+                .iter()
+                .map(|r| r.gate.clone())
+                .collect();
+            if !unwired.is_empty() {
+                return Some(SupervisorDecision::GateUnwired { unwired });
+            }
+            None
+        }
+        None => Some(SupervisorDecision::GateUnwired {
+            unwired: vec!["CENSUS_NOT_PERFORMED".to_owned()],
+        }),
+    }
+}
+
 /// The pure deciding function: given an observation and the authorization state,
 /// produce the supervisor's decision. This is where the three deciding legs are
 /// encoded. It is PURE so the deciding legs are testable without subprocesses.
@@ -1191,31 +1224,10 @@ pub fn decide(observation: &Observation, authorization: &IdleAuthorization) -> S
     // a reachable trigger, the supervisor refuses: it cannot dispatch into a
     // repo whose guarantees cannot fire. This is UNREACHABLE-AROUND — no
     // branch after this may return SupervisedWorking or AuthorizedIdle.
-    match &observation.gate_census {
-        Some(census) => {
-            if !census.positive_control_passes() {
-                return SupervisorDecision::GateUnwired {
-                    unwired: vec![
-                        "POSITIVE_CONTROL_FAILED: no independently reachable gate in this census"
-                            .to_owned(),
-                    ],
-                };
-            }
-            let unwired: Vec<String> = census
-                .unwired_gates()
-                .iter()
-                .map(|r| r.gate.clone())
-                .collect();
-            if !unwired.is_empty() {
-                return SupervisorDecision::GateUnwired { unwired };
-            }
-        }
-        None => {
-            return SupervisorDecision::GateUnwired {
-                unwired: vec!["CENSUS_NOT_PERFORMED".to_owned()],
-            };
-        }
+    if let Some(decision) = gate_census_decision(&observation.gate_census) {
+        return decision;
     }
+
     // The monitor must have produced a readable census.
     // (In the real wiring, this is where a tick-monitor invoke failure surfaces.)
     if observation.panes.is_empty() {
@@ -1227,7 +1239,11 @@ pub fn decide(observation: &Observation, authorization: &IdleAuthorization) -> S
     // The queue must be readable.
     if !observation.queue.readable {
         return SupervisorDecision::QueueUnreadable {
-            detail: "br ready produced no parseable output".to_owned(),
+            detail: format!(
+                "{} {} produced no parseable output",
+                finding::BR,
+                loop_queue_filter::READY_SUBCOMMAND
+            ),
         };
     }
 
