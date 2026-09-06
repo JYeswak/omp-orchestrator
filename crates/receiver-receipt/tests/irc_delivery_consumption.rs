@@ -149,6 +149,14 @@ fn known_bad_sender_exit_mapping_is_named_and_refused() {
 
 #[test]
 fn deleting_the_mapping_guard_turns_known_bad_red() {
+    let production = fs::read_to_string(
+        repo_root().join("crates/receiver-receipt/src/irc_delivery.rs"),
+    )
+    .expect("production");
+    assert!(
+        production.contains("PANE_TRANSPORT_HAS_NO_IRC_RECEIPT"),
+        "deleting PANE_TRANSPORT_HAS_NO_IRC_RECEIPT from irc_delivery.rs turns this RED"
+    );
     let specimen = r#"
         fn from_exit(sender_exit: i32) -> IrcDeliveryReceipt {
             IrcDeliveryReceipt { to: "x".into(), outcome: IrcDeliveryOutcome::Injected, error: None }
@@ -156,16 +164,10 @@ fn deleting_the_mapping_guard_turns_known_bad_red() {
     "#;
     assert!(
         maps_sender_exit_onto_irc_receipt(specimen),
-        "guard present: specimen is RED"
-    );
-    fn guard_deleted(_text: &str) -> bool {
-        false
-    }
-    assert!(
-        !guard_deleted(specimen),
-        "deleting the guard would miss the specimen — this leg documents RED"
+        "guard must still classify a sender-exit mapping specimen as known-bad"
     );
 }
+
 
 #[test]
 fn positive_control_clean_surface_records_typed_refusal_not_sender_exit() {

@@ -56,8 +56,9 @@ use orchestration_tick_gate::{
 };
 use pane_dispatch_fence::{admit_at_send, IncarnationMint, Occupancy, PaneIncarnation, Presented};
 use receiver_receipt::{
-    escalate_non_delivery, observe_capture, ComposerEvidence, NonDeliveryEscalation,
-    ObservationIdentity, PostSendObservation, ReceiptReason, ReceiptVerdict,
+    escalate_non_delivery, observe_capture, pane_transport_cannot_use_irc_receipt,
+    ComposerEvidence, NonDeliveryEscalation, ObservationIdentity, PostSendObservation,
+    ReceiptReason, ReceiptVerdict,
 };
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
@@ -1100,11 +1101,14 @@ fn write_transport_receipt(
     bead: &str,
     transport: &TransportReceipt,
 ) -> Result<(), String> {
+    let irc_missing = pane_transport_cannot_use_irc_receipt(transport.kind().label(), 0)
+        .expect_err("ntm/tmux cannot mint IrcDeliveryReceipt; sender exit is not delivery");
     let detail = serde_json::json!({
         "bead": bead,
         "pane": pane,
         "transport": transport.kind().label(),
         "raw_transport_json": transport.raw_json(),
+        "irc_delivery": irc_missing.to_string(),
     })
     .to_string();
     write_heartbeat(config, tick, "TRANSPORT_RECEIPT_CAPTURED", &detail)
