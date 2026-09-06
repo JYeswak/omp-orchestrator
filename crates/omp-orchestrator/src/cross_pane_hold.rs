@@ -13,6 +13,15 @@
 use ntm_fleet_monitor::bead_lifecycle::ledger::InFlightIdentity;
 use std::fmt;
 
+/// The hold's dispatch intent. Work obeys the cross-pane duplicate guard;
+/// Grade is admitted only after the caller has proven a non-author target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HoldIntent {
+    Work,
+    Grade,
+}
+
+
 /// Zero in-flight holders is a typed state, distinct from a holder the tracker
 /// cannot name (empty/placeholder pane on an in-flight identity).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -74,7 +83,7 @@ fn pane_named(pane: &str) -> bool {
     !trimmed.is_empty() && !trimmed.contains('<') && !trimmed.contains('>')
 }
 
-/// Admit a dispatch of `bead` to `target_pane`.
+/// Admit a normal work dispatch of `bead` to `target_pane`.
 ///
 /// Tracker `open` releases a prior pane (reap/abandon). Same-pane retry is
 /// allowed here; w5re is the same-pane double-send guard.
@@ -84,6 +93,27 @@ pub fn admit(
     tracker_status: &str,
     identities: &[InFlightIdentity],
 ) -> Result<(), CrossPaneRefuse> {
+    admit_with_intent(
+        HoldIntent::Work,
+        bead,
+        target_pane,
+        tracker_status,
+        identities,
+    )
+}
+
+/// Admit a grade delivery after the caller proves the target is not an author.
+/// A grade is a distinct intent, not a second work dispatch of the same bead.
+pub fn admit_with_intent(
+    intent: HoldIntent,
+    bead: &str,
+    target_pane: &str,
+    tracker_status: &str,
+    identities: &[InFlightIdentity],
+) -> Result<(), CrossPaneRefuse> {
+    if intent == HoldIntent::Grade {
+        return Ok(());
+    }
     admit_with_hold(true, bead, target_pane, tracker_status, identities)
 }
 
@@ -143,6 +173,15 @@ mod tests {
         assert!(rendered.contains("CROSS_PANE_DUPLICATE"));
         assert!(rendered.contains("held_pane=%7"));
         assert!(rendered.contains("target_pane=%8"));
+    }
+    #[test]
+    fn grade_intent_bypasses_work_hold_without_disarming_work_guard() {
+        let identities = vec![named("%7")];
+        admit_with_intent(HoldIntent::Grade, "lef1", "%8", "in_progress", &identities)
+            .expect("a non-author grade delivery must bypass the work hold");
+        let work = admit("lef1", "%8", "in_progress", &identities)
+            .expect_err("the same bead as work must remain held");
+        assert!(work.to_string().contains("CROSS_PANE_DUPLICATE"));
     }
 
     #[test]
