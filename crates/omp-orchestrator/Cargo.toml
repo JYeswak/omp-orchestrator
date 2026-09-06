@@ -30,6 +30,7 @@ asupersync = { workspace = true }
 dispatch-claim-fence = { path = "../dispatch-claim-fence" }
 dispatch-silence-watch = { path = "../dispatch-silence-watch" }
 composer-typed = { path = "../composer-typed" }
+pane-dispatch-fence = { path = "../pane-dispatch-fence" }
 finding = { path = "../finding" }
 finding-dispatch = { path = "../finding-dispatch" }
 omp-rpc-session = { path = "../omp-rpc-session" }
@@ -39,6 +40,7 @@ ntm-fleet-monitor = { path = "../ntm-fleet-monitor" }
 serde_json = "1"
 lifecycle-event = { path = "../lifecycle-event" }
 lifecycle-monitor = { path = "../lifecycle-monitor" }
+text-structure = { path = "../text-structure" }
 
 [lints.rust]
 unsafe_code = "forbid"

@@ -13,18 +13,14 @@
 //! NO-CLAIM: the lease refuses stale effects; it does not prove the receiver is
 //! alive, does not prove delivery, and does not survive an ntm pane renumbering
 //! the observer never saw.
-//!
-//! DECLARED_NOT_WIRED: `admit_at_send` is not called from
-//! `crates/omp-orchestrator/src/main.rs` (held by `%7` for `u8nw`). The check
-//! belongs immediately BEFORE send, not at enqueue and not from a cached
-//! snapshot.
+//! Caller: `crates/omp-orchestrator/src/main.rs` `admit_immediately_before_send`,
+//! immediately before tmux/ntm send. Not at enqueue, not from a cached snapshot.
 
 use std::num::NonZeroU64;
 use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 
-/// Call site is deferred. This names the debt; it is not a caller.
-pub const DECLARED_NOT_WIRED: &str =
-    "call site deferred: crates/omp-orchestrator/src/main.rs held by %7/u8nw";
+/// Wired at `crates/omp-orchestrator/src/main.rs` `admit_immediately_before_send`.
+pub const CALLER: &str = "crates/omp-orchestrator/src/main.rs:admit_immediately_before_send";
 
 /// Measured 2026-09-06. Age is recorded so a grader can see it was not used.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -548,6 +544,6 @@ mod tests {
     #[test]
     fn zero_is_unmintable_not_an_incarnation() {
         assert_eq!(PaneIncarnation::new(0), None);
-        assert!(DECLARED_NOT_WIRED.contains("deferred"));
+        assert!(CALLER.contains("admit_immediately_before_send"));
     }
 }

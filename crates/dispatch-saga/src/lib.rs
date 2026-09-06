@@ -16,6 +16,7 @@
 //! DECLARED_NOT_WIRED: call site is `crates/omp-orchestrator/src/main.rs`
 //! (held by `%7` for `u8nw`).
 
+use omp_types::ChildOutcome;
 use pane_dispatch_fence::PaneIncarnation;
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
@@ -23,17 +24,6 @@ use std::num::NonZeroU32;
 /// Call site deferred. This names the debt; it is not a caller.
 pub const DECLARED_NOT_WIRED: &str =
     "call site deferred: crates/omp-orchestrator/src/main.rs held by %7/u8nw";
-
-/// Child-process result. Not saga state. Not named `Outcome`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ChildOutcome {
-    Completed,
-    Nonzero,
-    Signalled,
-    TimedOut,
-    Cancelled,
-    Unspawned,
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ClaimState {
@@ -398,11 +388,14 @@ mod tests {
             Self { calls: Cell::new(0) }
         }
     }
-
     impl Transport for SendStub {
         fn send(&mut self, _key: &DispatchKey) -> ChildOutcome {
             self.calls.set(self.calls.get() + 1);
-            ChildOutcome::Completed
+            ChildOutcome::Completed {
+                code: Some(0),
+                stdout: String::new(),
+                stderr: String::new(),
+            }
         }
     }
 
@@ -425,7 +418,14 @@ mod tests {
         let mut saga = claimed(key_5rh());
         let mut stub = SendStub::new();
         let receipt = execute(&mut saga, &mut stub).expect("first send");
-        assert_eq!(receipt.child, ChildOutcome::Completed);
+        assert_eq!(
+            receipt.child,
+            ChildOutcome::Completed {
+                code: Some(0),
+                stdout: String::new(),
+                stderr: String::new(),
+            }
+        );
         assert_eq!(saga.dispatch(), DispatchState::Sent);
         assert_eq!(stub.calls.get(), 1);
     }
@@ -585,7 +585,10 @@ mod tests {
 
     #[test]
     fn child_outcome_is_not_saga_state() {
-        let _child = ChildOutcome::TimedOut;
+        let _child = ChildOutcome::TimedOut {
+            after_ms: 0,
+            group_killed: false,
+        };
         let _dispatch = DispatchState::Unknown;
         assert_ne!(std::mem::size_of::<ChildOutcome>(), 0);
         assert_ne!(std::mem::size_of::<DispatchState>(), 0);

@@ -27,6 +27,9 @@ use dispatch_claim_fence::{
     DispatchIntent, IdentityRecord, IdentityRegistries,
 };
 use dispatch_silence_watch::SilenceVerdict;
+use pane_dispatch_fence::{
+    admit_at_send, IncarnationMint, Occupancy, Presented,
+};
 use ntm_fleet_monitor::parse_activity_json;
 use omp_orchestrator::{
     applicable, census_gates, decide, dispatch_packet, read_idle_authorization, GateCensus,
@@ -41,8 +44,9 @@ use receiver_receipt::{
     ObservationIdentity, PostSendObservation, ReceiptReason, ReceiptVerdict,
 };
 use serde_json::{json, Value};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::env;
+use std::sync::{LazyLock, Mutex};
 use ack_spine::ledger::StepKind;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
@@ -2063,6 +2067,35 @@ fn gate_peer_grading_inner(
     Ok(None)
 }
 
+static PANE_OCCUPANCY_MINT: LazyLock<IncarnationMint> = LazyLock::new(IncarnationMint::new);
+static PANE_OCCUPANCIES: LazyLock<Mutex<BTreeMap<String, Occupancy>>> =
+    LazyLock::new(|| Mutex::new(BTreeMap::new()));
+
+/// Live occupancy check immediately before tmux/ntm send. Not at enqueue.
+fn admit_immediately_before_send(session: &str, pane: &str) -> Result<(), String> {
+    let live = std::process::id() as u32;
+    let key = format!("{session}\0{pane}");
+    let mut map = PANE_OCCUPANCIES
+        .lock()
+        .map_err(|_| "INCARNATION_STORE_POISONED".to_owned())?;
+    let occupancy = map
+        .entry(key)
+        .or_insert_with(|| Occupancy::unminted(session, pane));
+    if occupancy.current().is_none() {
+        occupancy.occupy(&PANE_OCCUPANCY_MINT, live);
+    }
+    let presented = Presented {
+        session: session.to_owned(),
+        pane: pane.to_owned(),
+        incarnation: occupancy.current(),
+        marker_pid: Some(live),
+    };
+    admit_at_send(occupancy, &presented, live).map_err(|refusal| {
+        format!("DISPATCH_BLOCKED pane={pane} incarnation_refused={refusal:?}")
+    })?;
+    Ok(())
+}
+
 async fn send_and_verify(
     cx: &Cx,
     config: &Config,
@@ -2127,6 +2160,7 @@ async fn send_and_verify(
     lifecycle
         .dispatch(dispatch_receipt, dispatch_evidence)
         .map_err(|error| format!("LIFECYCLE_LEDGER_REFUSED bead={bead} pane={pane} error={error}"))?;
+    admit_immediately_before_send(&config.session, pane)?;
     let codex = receiver_is_codex(cx, config, pane).await?;
     let transport = if codex {
         let typed_args = vec![
@@ -2279,6 +2313,7 @@ async fn send_and_verify(
         if stage.action.is_retry() {
             match recovery {
                 Some(NonDeliveryEscalation::ResendDirect) => {
+                    admit_immediately_before_send(&config.session, pane)?;
                     let resend_args = vec![
                         "send-keys".to_owned(),
                         "-t".to_owned(),
@@ -2312,6 +2347,7 @@ async fn send_and_verify(
                     attempts_so_far += 1;
                 }
                 Some(NonDeliveryEscalation::SubmitParked) => {
+                    admit_immediately_before_send(&config.session, pane)?;
                     let enter_args = vec![
                         "send-keys".to_owned(),
                         "-t".to_owned(),
@@ -3918,6 +3954,7 @@ async fn notify_dispatch_result(
     bead: &str,
     result: &str,
 ) -> Result<(), String> {
+    admit_immediately_before_send(&config.session, RESULT_PANE)?;
     let args = dispatch_result_ntm_args(&config.session, pane, bead, tick, result);
     let stdout = require_success(&config.ntm, invoke(cx, config, &config.ntm, &args).await?)?;
     let receipt = TransportReceipt::capture_ntm(&stdout).map_err(|error| {
@@ -7046,6 +7083,48 @@ Stop: now
         assert!(sender_from_verified_pane(&missing)
             .expect_err("missing sender must refuse")
             .contains("agent_name_missing"));
+    }
+
+    #[test]
+    fn admit_immediately_before_send_admits_live_pane() {
+        admit_immediately_before_send("omp-orchestrator", "%9")
+            .expect("live occupancy must admit");
+    }
+
+    #[test]
+    fn stale_incarnation_is_refused_typed() {
+        let mint = IncarnationMint::new();
+        let mut occupancy = Occupancy::unminted("omp-orchestrator", "%N");
+        let first = occupancy.occupy(&mint, std::process::id() as u32);
+        occupancy
+            .advance_lease(
+                pane_dispatch_fence::Lease::Admitting,
+                pane_dispatch_fence::Lease::Draining,
+            )
+            .unwrap();
+        occupancy
+            .advance_lease(
+                pane_dispatch_fence::Lease::Draining,
+                pane_dispatch_fence::Lease::Revoked,
+            )
+            .unwrap();
+        let second = occupancy.occupy(&mint, std::process::id() as u32);
+        let presented = Presented {
+            session: "omp-orchestrator".into(),
+            pane: "%N".into(),
+            incarnation: Some(first),
+            marker_pid: Some(std::process::id() as u32),
+        };
+        match admit_at_send(&occupancy, &presented, std::process::id() as u32) {
+            Err(pane_dispatch_fence::AdmissionRefusal::StaleIncarnation {
+                presented,
+                current,
+            }) => {
+                assert_eq!(presented, first);
+                assert_eq!(current, second);
+            }
+            other => panic!("expected StaleIncarnation, got {other:?}"),
+        }
     }
 
 }
