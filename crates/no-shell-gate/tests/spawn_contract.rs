@@ -45,6 +45,9 @@
 //! strictly stronger than nothing.
 
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+
+static SPAWN_CENSUS_LOCK: Mutex<()> = Mutex::new(());
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -303,34 +306,81 @@ fn declares_contract(root: &Path, crate_name: &str) -> bool {
         .unwrap_or(false)
 }
 
-#[test]
-fn every_spawning_crate_routes_through_the_contract_or_is_allowed() {
-    let root = repo_root();
-    let spawners = crates_with_spawn(&root);
-    assert!(
-        !spawners.is_empty(),
-        "ANTI-VACUITY: no crate contains Command::new. This workspace drives tmux, ntm, br \
-         and cargo, so a zero here means the scan is broken — the silent-false-zero defect, \
-         not a clean bill."
-    );
+fn unrouted_spawners(root: &Path) -> Result<Vec<String>, String> {
+    let spawners = crates_with_spawn(root);
+    if spawners.is_empty() {
+        return Err(
+            "ANTI-VACUITY: no crate contains Command::new; the spawn census is empty".to_owned(),
+        );
+    }
     let allowed: std::collections::HashSet<&str> =
         SPAWN_ALLOWANCE.iter().map(|(c, _)| *c).collect();
     let unrouted: Vec<String> = spawners
         .iter()
-        .filter(|(c, _)| !declares_contract(&root, c) && !allowed.contains(c.as_str()))
+        .filter(|(c, _)| !declares_contract(root, c) && !allowed.contains(c.as_str()))
         .map(|(c, n)| format!("{c} ({n} site(s))"))
         .collect();
-    assert!(
-        unrouted.is_empty(),
-        "{} crate(s) spawn child processes with no subprocess-contract dependency and no \
-         allowance row:\n{:#?}\n\n\
-         AGENTS.md: every subprocess is cancellable work with a deadline — kill the process \
-         GROUP, drain both pipes, and a timeout is not a verdict. A bare Command::new \
-         satisfies none of those.\n\n\
-         Either add the dependency, or add a row to SPAWN_ALLOWANCE with the reason.",
-        unrouted.len(),
-        unrouted
-    );
+    if unrouted.is_empty() {
+        Ok(unrouted)
+    } else {
+        Err(format!(
+            "{} crate(s) spawn child processes with no subprocess-contract dependency and no allowance row: {:?}",
+            unrouted.len(), unrouted
+        ))
+    }
+}
+
+#[test]
+fn every_spawning_crate_routes_through_the_contract_or_is_allowed() {
+    let _lock = SPAWN_CENSUS_LOCK.lock().expect("spawn census lock");
+    let root = repo_root();
+    let unrouted = unrouted_spawners(&root).unwrap_or_else(|error| panic!("{error}"));
+    assert!(unrouted.is_empty());
+}
+
+struct InTreeSpecimen {
+    path: PathBuf,
+}
+
+impl Drop for InTreeSpecimen {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.path);
+    }
+}
+
+#[test]
+fn known_bad_in_tree_spawn_specimen_is_named() {
+    let _lock = SPAWN_CENSUS_LOCK.lock().expect("spawn census lock");
+    let path = repo_root()
+        .join("crates")
+        .join(format!("w3yb1-spawn-specimen-{}", std::process::id()));
+    std::fs::create_dir_all(path.join("src")).expect("specimen source directory");
+    std::fs::write(
+        path.join("Cargo.toml"),
+        "[package]\nname=\"w3yb1-spawn-specimen\"\nversion=\"0.0.0\"\nedition=\"2024\"\n",
+    )
+    .expect("specimen manifest");
+    std::fs::write(
+        path.join("src/lib.rs"),
+        "pub fn violates_contract() { let _ = std::process::Command::new(\"omp\"); }\n",
+    )
+    .expect("specimen source");
+    let _fixture = InTreeSpecimen { path: path.clone() };
+    let error = unrouted_spawners(&repo_root()).expect_err(&format!(
+        "known-bad specimen must be refused: {}",
+        path.display()
+    ));
+    assert!(error.contains("w3yb1-spawn-specimen"), "{error}");
+}
+
+#[test]
+fn empty_spawn_census_is_an_error() {
+    let root = std::env::temp_dir().join(format!("w3yb1-empty-census-{}", std::process::id()));
+    std::fs::create_dir_all(root.join("crates")).expect("empty census fixture");
+    let result = unrouted_spawners(&root);
+    std::fs::remove_dir_all(&root).expect("remove empty census fixture");
+    let error = result.expect_err("empty spawn scan must be an error");
+    assert!(error.contains("ANTI-VACUITY"), "{error}");
 }
 
 #[test]

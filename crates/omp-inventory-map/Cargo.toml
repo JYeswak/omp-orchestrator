@@ -19,6 +19,8 @@ asupersync = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 regex = "1"
+text-structure = { path = "../text-structure" }
+subprocess-contract = { path = "../subprocess-contract" }
 
 [lints.rust]
 unsafe_code = "forbid"

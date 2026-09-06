@@ -1,10 +1,14 @@
+use asupersync::runtime::RuntimeBuilder;
+use asupersync::types::Budget;
 use omp_inventory_map::{
-    InventoryInputs, ProbeState, SurfaceMapAuditOutcome, audit_surface_map_text,
-    build_inventory_map, classify_trigger_data, parse_cargo_metadata, parse_cli_commands,
-    parse_rpc_slash_commands,
+    InventoryInputs, ProbeConfig, ProbeState, SurfaceMapAuditOutcome, audit_surface_map_text,
+    build_inventory_map, classify_trigger_data, collect_inventory, parse_cargo_metadata,
+    parse_cli_commands, parse_rpc_slash_commands,
 };
 use serde_json::json;
-
+use std::path::PathBuf;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 fn metadata(names: &[&str]) -> String {
     json!({
         "workspace_root": "/fixture/workspace",
@@ -155,4 +159,50 @@ fn malformed_row_and_duplicate_declaration_are_typed() {
         SurfaceMapAuditOutcome::MalformedRow { package_name, detail, .. }
             if package_name.as_deref() == Some("alpha") && detail.contains("omp_surface")
     )));
+}
+
+#[test]
+fn hung_omp_probe_becomes_unknown_with_typed_timeout() {
+    let root = std::env::temp_dir().join(format!(
+        "omp-inventory-map-hung-probe-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&root).expect("fixture root");
+    let fake_omp = root.join("omp-hang");
+    std::fs::write(&fake_omp, "#!/bin/sh\nsleep 30\n").expect("hung omp fixture");
+    #[cfg(unix)]
+    {
+        let mut permissions = std::fs::metadata(&fake_omp).expect("fixture metadata").permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&fake_omp, permissions).expect("fixture executable");
+    }
+
+    let config = ProbeConfig {
+        repo_root: PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+        omp_program: fake_omp,
+        cargo_program: PathBuf::from("cargo"),
+        find_program: PathBuf::from("find"),
+    };
+    let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
+    let cx = runtime.request_cx_with_budget(Budget::INFINITE);
+    let map = runtime
+        .block_on(async { collect_inventory(&cx, &config).await })
+        .expect("required cargo metadata still succeeds");
+    let timed_out: Vec<_> = map
+        .probes
+        .iter()
+        .filter(|probe| probe.detail.contains("TIMEOUT"))
+        .collect();
+    assert!(!timed_out.is_empty(), "hung omp must produce timeout evidence");
+    assert!(
+        timed_out
+            .iter()
+            .all(|probe| probe.state == ProbeState::Unknown),
+        "timeout evidence must never be Known: {timed_out:?}"
+    );
+    assert!(
+        timed_out.iter().any(|probe| probe.name == "omp_version"),
+        "the hung omp version probe must be named in timeout evidence: {timed_out:?}"
+    );
+    std::fs::remove_dir_all(root).expect("remove fixture root");
 }

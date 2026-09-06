@@ -16,14 +16,15 @@ pub mod addressable;
 
 
 use asupersync::Cx;
-use asupersync::process::{
-    Command, Output, ProcessError, ProcessGroupMode, ProcessSignalTarget, Stdio,
-};
+use asupersync::process::{Command, Output};
+use asupersync::time::timeout;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
+use subprocess_contract::{run_output, RunError};
 use text_structure::toml_code_only;
 
 pub const SCHEMA_VERSION: &str = "omp-inventory-map/v1";
@@ -63,6 +64,7 @@ pub enum InventoryError {
     MalformedMetadata(String),
     InvalidInput(String),
     Process { command: String, detail: String },
+    Timeout { command: String },
     Cancelled,
     OutputTooLarge { command: String, bytes: usize },
 }
@@ -78,6 +80,7 @@ impl fmt::Display for InventoryError {
             Self::Process { command, detail } => {
                 write!(formatter, "PROCESS_ERROR command={command} detail={detail}")
             }
+            Self::Timeout { command } => write!(formatter, "TIMEOUT command={command}"),
             Self::Cancelled => formatter.write_str("CANCELLED inventory probe context"),
             Self::OutputTooLarge { command, bytes } => {
                 write!(
@@ -1556,15 +1559,7 @@ fn command_display(program: &Path, args: &[String]) -> String {
     parts.join(" ")
 }
 
-fn configure_process(command: &mut Command) {
-    command
-        .process_group_mode(ProcessGroupMode::NewProcessGroup)
-        .signal_target(ProcessSignalTarget::ProcessGroup)
-        .kill_on_drop(true)
-        .stdin(Stdio::Null)
-        .stdout(Stdio::Pipe)
-        .stderr(Stdio::Pipe);
-}
+const PROBE_DEADLINE: Duration = Duration::from_secs(5);
 
 async fn run_process(
     cx: &Cx,
@@ -1578,25 +1573,32 @@ async fn run_process(
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
     }
-    configure_process(&mut command);
     let command_name = command_display(program, args);
-    let output = command
-        .output_async(cx)
-        .await
-        .map_err(|error| match error {
-            ProcessError::Io(error) => InventoryError::Process {
-                command: command_name.clone(),
+    let output = match timeout(
+        cx.now_for_observability(),
+        PROBE_DEADLINE,
+        run_output(cx, command),
+    )
+    .await
+    {
+        Ok(Ok(output)) => output,
+        Ok(Err(RunError::Timeout)) | Err(_) => {
+            return Err(InventoryError::Timeout {
+                command: command_name,
+            });
+        }
+        Ok(Err(RunError::Cancelled(_))) => return Err(InventoryError::Cancelled),
+        Ok(Err(RunError::Process(error))) => {
+            return Err(InventoryError::Process {
+                command: command_name,
                 detail: error.to_string(),
-            },
-            other => InventoryError::Process {
-                command: command_name.clone(),
-                detail: other.to_string(),
-            },
-        })?;
+            });
+        }
+    };
     let total = output.stdout.len().saturating_add(output.stderr.len());
     if total > MAX_PROBE_BYTES {
         return Err(InventoryError::OutputTooLarge {
-            command: command_name,
+            command: command_display(program, args),
             bytes: total,
         });
     }
