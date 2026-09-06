@@ -19,6 +19,14 @@ pub enum LedgerError {
     Empty,
     /// A step and its corresponding row diverged.
     CountMismatch { rows: usize, steps_taken: usize },
+    /// A HEAD-derived figure was recorded from a mutable worktree.
+    HeadDerivedFromWorktree { figure: String, path: String },
+    /// A HEAD-derived figure was read from a different HEAD revision.
+    HeadRevisionMismatch {
+        figure: String,
+        expected: String,
+        observed: String,
+    },
 }
 
 impl fmt::Display for LedgerError {
@@ -32,12 +40,87 @@ impl fmt::Display for LedgerError {
                 f,
                 "STEP_COUNT_ASSERTION_FAILED: rows={rows} steps_taken={steps_taken}"
             ),
+            Self::HeadDerivedFromWorktree { figure, path } => write!(
+                f,
+                "HEAD_FIGURE_WORKTREE_REFUSED figure={figure} read_path={path}"
+            ),
+            Self::HeadRevisionMismatch {
+                figure,
+                expected,
+                observed,
+            } => write!(
+                f,
+                "HEAD_FIGURE_REVISION_MISMATCH figure={figure} expected_head={expected} observed_head={observed}"
+            ),
         }
     }
 }
 
 impl std::error::Error for LedgerError {}
+/// Which immutable or mutable source supplied a derived figure.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TreeSource {
+    Head { revision: String },
+    Worktree { path: String },
+}
 
+impl TreeSource {
+    pub fn head(revision: impl Into<String>) -> Self {
+        Self::Head {
+            revision: revision.into(),
+        }
+    }
+
+    pub fn worktree(path: impl Into<String>) -> Self {
+        Self::Worktree { path: path.into() }
+    }
+}
+
+/// A figure derived from a committed HEAD, with separate valid and observed times.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeadDerivedFigure {
+    pub name: String,
+    pub value: String,
+    pub valid_at_unix: i64,
+    pub observed_at_unix: i64,
+    pub head_revision: String,
+    pub read_from: TreeSource,
+}
+
+impl HeadDerivedFigure {
+    pub fn new(
+        name: impl Into<String>,
+        value: impl Into<String>,
+        valid_at_unix: i64,
+        observed_at_unix: i64,
+        head_revision: impl Into<String>,
+        read_from: TreeSource,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            value: value.into(),
+            valid_at_unix,
+            observed_at_unix,
+            head_revision: head_revision.into(),
+            read_from,
+        }
+    }
+
+    fn validate_head_provenance(&self) -> Result<(), LedgerError> {
+        match &self.read_from {
+            TreeSource::Head { revision } if revision == &self.head_revision => Ok(()),
+            TreeSource::Head { revision } => Err(LedgerError::HeadRevisionMismatch {
+                figure: self.name.clone(),
+                expected: self.head_revision.clone(),
+                observed: revision.clone(),
+            }),
+            TreeSource::Worktree { path } => Err(LedgerError::HeadDerivedFromWorktree {
+                figure: self.name.clone(),
+                path: path.clone(),
+            }),
+        }
+    }
+}
 /// Errors from the cancel-correct step primitive.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StepError {
@@ -138,14 +221,15 @@ impl StepKind {
     }
 }
 
-/// One typed row in the step ledger.
+/// One typed row in the step ledger; `valid_at_unix` is when it was true and `observed_at_unix` is when it was recorded.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StepRecord {
     pub kind: StepKind,
     pub bead_id: String,
     pub pane_id: String,
     pub session: String,
-    pub ts_unix: i64,
+    pub valid_at_unix: i64,
+    pub observed_at_unix: i64,
     pub detail: String,
 }
 
@@ -168,13 +252,26 @@ impl fmt::Display for StepRecord {
 pub struct StepLedger {
     rows: Vec<StepRecord>,
     steps_taken: usize,
+    head_derived_figures: Vec<HeadDerivedFigure>,
 }
 
 impl StepLedger {
     pub fn new() -> Self {
         Self::default()
     }
+    /// Record a figure only when it was derived and read from the same immutable HEAD.
+    pub fn record_head_derived_figure(
+        &mut self,
+        figure: HeadDerivedFigure,
+    ) -> Result<(), LedgerError> {
+        figure.validate_head_provenance()?;
+        self.head_derived_figures.push(figure);
+        Ok(())
+    }
 
+    pub fn head_derived_figures(&self) -> &[HeadDerivedFigure] {
+        &self.head_derived_figures
+    }
     /// Emit one row and account for its step. This is intentionally private:
     /// the public `step` primitive is the single emission path.
     fn emit(&mut self, record: StepRecord) {
@@ -249,8 +346,8 @@ impl StepLedger {
     /// A `serde_json::Map` is deliberately NOT used. Without the
     /// `preserve_order` feature it is a `BTreeMap`, so building rows through it
     /// would silently ALPHABETISE this contract into
-    /// `bead, detail, kind, pane, session, ts`. A derived `Serialize` struct
-    /// emits in declaration order, because serde calls `serialize_field` in
+    /// `bead, detail, kind, pane, session, ts, detail, valid_at, observed_at`.
+    /// A derived `Serialize` struct emits in declaration order, because serde calls `serialize_field` in
     /// declaration order and the JSON serialiser writes them in call order.
     pub fn to_jsonl(&self) -> String {
         /// The wire projection. DECLARATION ORDER IS THE FIELD ORDER, and it
@@ -263,6 +360,8 @@ impl StepLedger {
             session: &'row str,
             ts: i64,
             detail: &'row str,
+            valid_at: i64,
+            observed_at: i64,
         }
 
         self.rows
@@ -273,8 +372,10 @@ impl StepLedger {
                     bead: &row.bead_id,
                     pane: &row.pane_id,
                     session: &row.session,
-                    ts: row.ts_unix,
+                    ts: row.observed_at_unix,
                     detail: &row.detail,
+                    valid_at: row.valid_at_unix,
+                    observed_at: row.observed_at_unix,
                 };
                 // A serialisation failure here is unreachable: every field is a
                 // `str` or an `i64`, and serde_json only fails on non-string map
@@ -284,7 +385,7 @@ impl StepLedger {
                 // function exists to remove.
                 serde_json::to_string(&wire).unwrap_or_else(|error| {
                     format!(
-                        r#"{{"kind":"serialization_failed","bead":"","pane":"","session":"","ts":0,"detail":{}}}"#,
+                        r#"{{"kind":"serialization_failed","bead":"","pane":"","session":"","ts":0,"detail":{},"valid_at":0,"observed_at":0}}"#,
                         serde_json::Value::String(error.to_string())
                     )
                 })
@@ -321,9 +422,13 @@ where
         });
     }
 
+    let valid_at_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or(0);
     effect(cx).await;
 
-    let ts_unix = std::time::SystemTime::now()
+    let observed_at_unix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_secs() as i64)
         .unwrap_or(0);
@@ -332,7 +437,8 @@ where
         bead_id: bead_id.to_owned(),
         pane_id: pane_id.to_owned(),
         session: session.to_owned(),
-        ts_unix,
+        valid_at_unix,
+        observed_at_unix,
         detail: detail.to_owned(),
     });
 
@@ -459,7 +565,76 @@ mod tests {
         let ledger = StepLedger::new();
         assert_eq!(ledger.assert_non_empty(), Err(LedgerError::Empty));
     }
+    #[test]
+    fn bitemporal_fields_are_distinct_and_matching_head_is_accepted() {
+        let figure = HeadDerivedFigure::new(
+            "workspace_crates",
+            "81",
+            100,
+            200,
+            "HEAD-abc",
+            TreeSource::head("HEAD-abc"),
+        );
+        assert_ne!(figure.valid_at_unix, figure.observed_at_unix);
 
+        let mut ledger = StepLedger::new();
+        ledger
+            .record_head_derived_figure(figure)
+            .expect("matching immutable HEAD is admissible");
+        let recorded = &ledger.head_derived_figures()[0];
+        assert_eq!(recorded.valid_at_unix, 100);
+        assert_eq!(recorded.observed_at_unix, 200);
+        assert_eq!(recorded.head_revision, "HEAD-abc");
+    }
+
+    #[test]
+    fn head_derived_figure_rejects_worktree_read() {
+        let figure = HeadDerivedFigure::new(
+            "workspace_crates",
+            "81",
+            100,
+            200,
+            "HEAD-abc",
+            TreeSource::worktree("/repo"),
+        );
+        let mut ledger = StepLedger::new();
+        let error = ledger
+            .record_head_derived_figure(figure)
+            .expect_err("HEAD-derived evidence must not use a worktree read");
+        assert_eq!(
+            error,
+            LedgerError::HeadDerivedFromWorktree {
+                figure: "workspace_crates".to_owned(),
+                path: "/repo".to_owned(),
+            }
+        );
+        assert!(error.to_string().contains("HEAD_FIGURE_WORKTREE_REFUSED"));
+        assert!(ledger.head_derived_figures().is_empty());
+    }
+
+    #[test]
+    fn head_derived_figure_rejects_different_head_revision() {
+        let figure = HeadDerivedFigure::new(
+            "workspace_crates",
+            "81",
+            100,
+            200,
+            "HEAD-abc",
+            TreeSource::head("HEAD-def"),
+        );
+        let mut ledger = StepLedger::new();
+        let error = ledger
+            .record_head_derived_figure(figure)
+            .expect_err("evidence from another HEAD must be refused");
+        assert_eq!(
+            error,
+            LedgerError::HeadRevisionMismatch {
+                figure: "workspace_crates".to_owned(),
+                expected: "HEAD-abc".to_owned(),
+                observed: "HEAD-def".to_owned(),
+            }
+        );
+    }
     #[test]
     fn jsonl_serialization_round_trips() {
         let mut ledger = StepLedger::new();
@@ -468,7 +643,8 @@ mod tests {
             bead_id: "cp-1".to_owned(),
             pane_id: "%5".to_owned(),
             session: "s".to_owned(),
-            ts_unix: 1,
+            valid_at_unix: 1,
+            observed_at_unix: 1,
             detail: "selected".to_owned(),
         });
         let jsonl = ledger.to_jsonl();
@@ -504,7 +680,8 @@ mod tests {
             bead_id: format!("bead-{HOSTILE}"),
             pane_id: format!("%1408-{HOSTILE}"),
             session: format!("session-{HOSTILE}"),
-            ts_unix: 1_767_331_200,
+            valid_at_unix: 1_767_331_200,
+            observed_at_unix: 1_767_331_200,
             detail: HOSTILE.to_owned(),
         });
         let jsonl = ledger.to_jsonl();
@@ -542,6 +719,8 @@ mod tests {
         );
         assert_eq!(parsed["kind"], serde_json::json!("packet_sent"));
         assert_eq!(parsed["ts"], serde_json::json!(1_767_331_200));
+        assert_eq!(parsed["valid_at"], serde_json::json!(1_767_331_200));
+        assert_eq!(parsed["observed_at"], serde_json::json!(1_767_331_200));
     }
 
     /// ANTI-VACUITY for the leg above: it must not be satisfiable by an empty
@@ -568,13 +747,13 @@ mod tests {
     ///
     /// Any existing consumer of this file — a `jq` filter, an eyeball, a diff
     /// against a stored artifact — depends on the key order the `format!` string
-    /// literal produced: `kind, bead, pane, session, ts, detail`. Replacing the
+    /// literal produced: `kind, bead, pane, session, ts, detail, valid_at, observed_at`. Replacing the
     /// emitter is only safe if that order survives, so it is asserted here
     /// rather than assumed from the doc comment.
     ///
     /// This is the leg that would have caught a `serde_json::Map`, which without
     /// `preserve_order` is a `BTreeMap` and alphabetises to
-    /// `bead, detail, kind, pane, session, ts`.
+    /// `bead, detail, kind, pane, session, ts, detail, valid_at, observed_at`.
     #[test]
     fn the_serde_emitter_preserves_the_pre_fix_key_order() {
         let mut ledger = StepLedger::new();
@@ -583,7 +762,8 @@ mod tests {
             bead_id: "cp-1".to_owned(),
             pane_id: "%5".to_owned(),
             session: "s".to_owned(),
-            ts_unix: 7,
+            valid_at_unix: 7,
+            observed_at_unix: 7,
             detail: "selected".to_owned(),
         });
         let line = ledger.to_jsonl();
@@ -592,14 +772,14 @@ mod tests {
         // no-op on values that need no escaping, which is what makes it safe.
         assert_eq!(
             line,
-            r#"{"kind":"bead_selected","bead":"cp-1","pane":"%5","session":"s","ts":7,"detail":"selected"}"#,
+            r#"{"kind":"bead_selected","bead":"cp-1","pane":"%5","session":"s","ts":7,"detail":"selected","valid_at":7,"observed_at":7}"#,
             "a benign row must be byte-identical to what the format! literal produced"
         );
 
         // And the order independently, by position, so a future field addition
         // cannot silently move an existing one.
         let mut cursor = 0usize;
-        for key in ["kind", "bead", "pane", "session", "ts", "detail"] {
+        for key in ["kind", "bead", "pane", "session", "ts", "detail", "valid_at", "observed_at"] {
             let needle = format!("\"{key}\":");
             let at = line[cursor..].find(&needle).unwrap_or_else(|| {
                 panic!("key `{key}` missing or out of order after byte {cursor}: {line}")

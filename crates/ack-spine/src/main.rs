@@ -7,7 +7,7 @@
 
 use ack_spine::authorities::{AckAuthority, DeliveryAuthority, ReceiptVerdict, TransportAuthority};
 use ack_spine::spine::{AckSpine, DispatchIntent};
-use ack_spine::{step, StepKind, StepLedger};
+use ack_spine::{step, HeadDerivedFigure, StepKind, StepLedger, TreeSource};
 use asupersync::runtime::RuntimeBuilder;
 use asupersync::Cx;
 use std::process::ExitCode;
@@ -209,6 +209,17 @@ async fn selftest(cx: &Cx) -> Result<(), String> {
         .map_err(|error| error.to_string())?;
     ledger
         .assert_non_empty()
+        .map_err(|error| error.to_string())?;
+    let head_figure = HeadDerivedFigure::new(
+        "selftest_steps",
+        ledger.steps_taken().to_string(),
+        1,
+        2,
+        "selftest-head",
+        TreeSource::head("selftest-head"),
+    );
+    ledger
+        .record_head_derived_figure(head_figure)
         .map_err(|error| error.to_string())?;
     // ACCEPTANCE 4: the durable-path invariant is asserted BY `--selftest`, so
     // mutating the resolved path fails the selftest rather than only a unit test.
