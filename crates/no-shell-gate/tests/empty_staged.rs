@@ -284,3 +284,17 @@ fn ancestry_only_merge_runs_gate_and_preserves_empty_index_refusal() {
     run_git(&dir, &["cat-file", "-e", &format!("{branch_tip}^{{commit}}")], "resolve branch object");
     fs::remove_dir_all(dir).expect("remove merge fixture");
 }
+/// A deletion-only staged set is real work and must reach GATE 5 rather than the
+/// top-level empty-index refusal. The exact historical 243-row deletion is a
+/// separate input size; this regression asserts the same decision boundary.
+#[test]
+fn deletion_only_staged_set_reaches_pre_delete_gate() {
+    let dir = fresh_git_tree("deletion-only");
+    run_git(&dir, &["rm", "-q", "--", "docs/plan/HYPOTHESES.jsonl"], "stage deletion-only fixture");
+    let output = run_gate(&dir);
+    let error = stderr(&output);
+    assert_ne!(output.status.code(), Some(3), "deletion-only work must not be NOTHING_TO_CHECK: {error}");
+    assert!(!error.contains("NOTHING_TO_CHECK: no staged files to check"), "deletion-only work must reach the gates: {error}");
+    assert_eq!(top_level_outcome(&error), "CLEAN:", "deletion-only work must run the normal gate path: {error}");
+    fs::remove_dir_all(dir).expect("remove deletion fixture");
+}
