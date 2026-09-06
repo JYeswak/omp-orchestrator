@@ -33,6 +33,15 @@ fn zrq_positive_control_carries_required_packet_fields() {
         );
     }
     assert!(packet.contains("Run cargo test -p zrq; expect exit 0"));
+    assert!(
+        packet.contains("br comments add omp-orchestrator-zrq"),
+        "{packet}"
+    );
+    assert!(packet.contains("ACK zrq on $TMUX_PANE --"), "{packet}");
+    assert!(
+        packet.contains("An ACK proves arrival and reading, never the work."),
+        "{packet}"
+    );
     assert!(packet.contains("Every bead requires current-state validation: re-run br show omp-orchestrator-zrq --json immediately before editing;"), "{packet}");
     assert!(packet.contains("Why this, why now: the selector chose this bead"));
 }
@@ -121,4 +130,26 @@ fn pane_and_supervisor_handoff_are_carried() {
     .expect("pane packet should render");
     assert!(packet.contains("Pane: %1414"), "{packet}");
     assert!(packet.contains("Handoff: supervisor:123"), "{packet}");
+}
+
+#[test]
+fn every_rendered_bead_packet_carries_the_ack_instruction() {
+    let packet = render_with_pane(
+        &bead(
+            "omp-orchestrator-kxe.4",
+            "body",
+            "Run cargo test -p kxe; expect exit 0",
+        ),
+        Path::new("/repo"),
+        Some("%1413"),
+        Some("WildStone"),
+        None,
+        None,
+    )
+    .expect("packet should render");
+    assert!(
+        packet.contains("br comments add omp-orchestrator-kxe.4"),
+        "{packet}"
+    );
+    assert!(packet.contains("ACK kxe.4 on $TMUX_PANE --"), "{packet}");
 }

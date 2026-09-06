@@ -1,3 +1,4 @@
+use ack_stage::ack_instruction;
 use dispatch_claim_fence::BeadSnapshot;
 use std::fmt;
 use std::path::Path;
@@ -199,8 +200,9 @@ pub fn render_with_pane(
     let pane_line = pane
         .and_then(nonempty)
         .map_or_else(String::new, |pane| format!("Pane: {pane}\n"));
+    let ack = ack_instruction(bead);
     let mut packet = format!(
-        "Objective: {objective}\n\nTarget: {target}. Read br show {bead} --json IN FULL before starting.\nEvery bead requires current-state validation: re-run br show {bead} --json immediately before editing; validate the bead's assumptions against the current repository and DAG; if the bead, plan, owner, files, dependencies, or acceptance changed, STOP and report it.\n{pane_line}{handoff}\nScope:\n{scope}\n\nAcceptance:\n{acceptance}\n\n{done}\n\nStop: {stop}.\n"
+        "Objective: {objective}\n\nTarget: {target}. Read br show {bead} --json IN FULL before starting.\nEvery bead requires current-state validation: re-run br show {bead} --json immediately before editing; validate the bead's assumptions against the current repository and DAG; if the bead, plan, owner, files, dependencies, or acceptance changed, STOP and report it.\n{pane_line}{handoff}\nScope:\n{scope}\n\nAcceptance:\n{acceptance}\n\n{done}\n\nReceiver ACK (required; run exactly):\n{ack}\nThe ACK line must begin byte-exactly with ACK <token> on <pane_id> --. An ACK proves arrival and reading, never the work.\n\nStop: {stop}.\n"
     );
     if let Some(why_now) = why_now.and_then(nonempty) {
         packet.push_str(&format!("\nWhy this, why now: {why_now}\n"));
