@@ -162,66 +162,114 @@ fn artifact_hash_prefix(path: &Path, n: usize) -> Option<String> {
     gunzip(path).map(|bytes| sha256_hex_prefix(&bytes, n))
 }
 
-#[test]
-fn every_preserved_artifact_exists_and_matches_its_cited_hash() {
-    let root = repo_root();
-    let dir = root.join(".flywheel/inventory-artifacts");
-    assert!(
-        !PRESERVED.is_empty(),
-        "ANTI-VACUITY: no preserved artifacts declared — the registry is empty, which \
-         is not the same as verified"
-    );
+fn hashes_match(got: &str, want: &str) -> bool {
+    got == want
+}
+
+/// Verify every declared member. Empty declaration is ERROR, never a pass.
+fn verify_preserved_inventory(
+    dir: &Path,
+    members: &[(&str, &str, &str)],
+) -> Result<usize, String> {
+    if members.is_empty() {
+        return Err(format!(
+            "ARTIFACT_PROVENANCE_EMPTY dir={} no declared members — anti-vacuity failure",
+            dir.display()
+        ));
+    }
     let mut problems = Vec::new();
     let mut checked = 0usize;
-    for (file, want, cited_by) in PRESERVED {
-        let p = dir.join(file);
-        if !p.is_file() {
-            problems.push(format!("{file} MISSING (cited by {cited_by})"));
+    for (file, want, cited_by) in members {
+        let path = dir.join(file);
+        if !path.is_file() {
+            problems.push(format!(
+                "ARTIFACT_PROVENANCE_MISSING member={file} cited_by={cited_by}"
+            ));
             continue;
         }
-        let Some(got) = artifact_hash_prefix(&p, want.len()) else {
-            problems.push(format!("{file} could not be decompressed"));
+        let Some(got) = artifact_hash_prefix(&path, want.len()) else {
+            problems.push(format!(
+                "ARTIFACT_PROVENANCE_UNREADABLE member={file}"
+            ));
             continue;
         };
         checked += 1;
-        if got != *want {
+        if !hashes_match(&got, want) {
             problems.push(format!(
-                "{file} hash drift: cited {want}, got {got} (cited by {cited_by})"
+                "ARTIFACT_PROVENANCE_HASH_MISMATCH member={file} cited={want} got={got} cited_by={cited_by}"
             ));
         }
     }
-    assert!(
-        checked > 0,
-        "ANTI-VACUITY: zero artifacts were actually hashed — every row failed before \
-         the comparison, so this proves nothing about content"
-    );
-    assert!(
-        problems.is_empty(),
-        "{} preserved artifact problem(s):\n{:#?}\n\n\
-         A plan citing /tmp is a plan citing nothing after the next reboot. These \
-         copies are the provenance; if one drifts, the claim built on it is unmoored.",
-        problems.len(),
-        problems
-    );
+    if !problems.is_empty() {
+        return Err(problems.join("\n"));
+    }
+    if checked == 0 {
+        return Err(format!(
+            "ARTIFACT_PROVENANCE_EMPTY dir={} zero members hashed — anti-vacuity failure",
+            dir.display()
+        ));
+    }
+    Ok(checked)
+
+}
+
+#[test]
+fn every_preserved_artifact_exists_and_matches_its_cited_hash() {
+    let dir = repo_root().join(".flywheel/inventory-artifacts");
+    let checked = verify_preserved_inventory(&dir, PRESERVED)
+        .expect("intact inventory must pass");
+    assert_eq!(checked, PRESERVED.len());
 }
 
 #[test]
 fn a_corrupted_copy_is_rejected_by_the_provenance_gate() {
     let root = repo_root();
     let source = root.join(".flywheel/inventory-artifacts/agent-end-raw-frame.json.gz");
-    let mutant = std::env::temp_dir().join(format!(
-        "omp-artifact-provenance-mutant-{}.json.gz",
+    let dir = std::env::temp_dir().join(format!(
+        "omp-artifact-provenance-corrupt-{}",
         std::process::id()
     ));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let mutant = dir.join("agent-end-raw-frame.json.gz");
     let mut bytes = std::fs::read(&source).expect("preserved artifact exists");
     let offset = bytes.len() / 2;
     bytes[offset] ^= 0x01;
     std::fs::write(&mutant, bytes).expect("write corrupted artifact copy");
-
-    assert_ne!(
-        artifact_hash_prefix(&mutant, "d8bd80c6949b2ec4".len()).as_deref(),
-        Some("d8bd80c6949b2ec4"),
-        "the known-bad corrupted copy must be rejected"
+    let error = verify_preserved_inventory(
+        &dir,
+        &[(
+            "agent-end-raw-frame.json.gz",
+            "d8bd80c6949b2ec4",
+            "known-bad corrupt",
+        )],
+    )
+    .expect_err("corrupted member must be RED");
+    assert!(
+        error.contains("member=agent-end-raw-frame.json.gz"),
+        "{error}"
     );
-    let _ = std::fs::remove_file(mutant);
+    assert!(
+        error.contains("ARTIFACT_PROVENANCE_HASH_MISMATCH")
+            || error.contains("ARTIFACT_PROVENANCE_UNREADABLE"),
+        "{error}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn empty_declared_member_set_is_anti_vacuity_failure() {
+    let dir = repo_root().join(".flywheel/inventory-artifacts");
+    let error = verify_preserved_inventory(&dir, &[]).expect_err("empty declaration");
+    assert!(
+        error.contains("ARTIFACT_PROVENANCE_EMPTY"),
+        "{error}"
+    );
+    assert!(error.contains("no declared members"), "{error}");
+}
+
+#[test]
+fn hash_comparison_is_equality_not_always_true() {
+    assert!(hashes_match("abc", "abc"));
+    assert!(!hashes_match("abc", "abd"));
+}
+

@@ -42,9 +42,9 @@ path      = ".flywheel/inventory-artifacts/"
 format    = "gzip-artifact-set"
 required  = ["artifact", "content_sha256", "source", "captured_at"]
 optional  = ["compressed_sha256", "source_revision", "command", "note"]
-writer    = "artifact_provenance gate"
+writer    = "crates/no-shell-gate/tests/artifact_provenance.rs via cargo test -p no-shell-gate --test artifact_provenance"
 reader    = "plan provenance claims and evidence reviewers"
-note      = "Preserved compressed evidence is distinct from volatile /tmp inputs. The gate must verify each declared member's content hash; a directory with no declared members is an anti-vacuity failure."
+note      = "Preserved compressed evidence is distinct from volatile /tmp inputs. The gate must verify each declared member's content hash; a directory with no declared members is an anti-vacuity failure. Writer is the verifier that runs; captures are preserved by plan panes under path."
 
 [artifacts.crate_surface]
 path      = "OMP-SURFACE-MAP.toml"
