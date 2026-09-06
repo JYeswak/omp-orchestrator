@@ -10,8 +10,9 @@
 //! ownership. A missing or malformed probe is represented as `UNKNOWN` and
 //! never upgraded to a healthy result.
 
-
 pub mod types_inventory;
+pub mod census_invariants;
+
 use asupersync::Cx;
 use asupersync::process::{
     Command, Output, ProcessError, ProcessGroupMode, ProcessSignalTarget, Stdio,
@@ -21,6 +22,7 @@ use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
+use text_structure::toml_code_only;
 
 pub const SCHEMA_VERSION: &str = "omp-inventory-map/v1";
 pub const CRATE_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -184,10 +186,20 @@ pub struct OmpCoverageRow {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoverageTableError {
     Empty,
-    Malformed { line: usize, detail: String },
-    DuplicateSurface { surface: String },
-    InvalidClassification { surface: String, classification: String },
-    MissingOmpAlternative { surface: String },
+    Malformed {
+        line: usize,
+        detail: String,
+    },
+    DuplicateSurface {
+        surface: String,
+    },
+    InvalidClassification {
+        surface: String,
+        classification: String,
+    },
+    MissingOmpAlternative {
+        surface: String,
+    },
     NoPositiveControl,
 }
 
@@ -195,10 +207,18 @@ impl fmt::Display for CoverageTableError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Empty => f.write_str("EMPTY_COVERAGE_TABLE"),
-            Self::Malformed { line, detail } => write!(f, "MALFORMED_COVERAGE_ROW line={line} {detail}"),
+            Self::Malformed { line, detail } => {
+                write!(f, "MALFORMED_COVERAGE_ROW line={line} {detail}")
+            }
             Self::DuplicateSurface { surface } => write!(f, "DUPLICATE_COVERAGE_SURFACE {surface}"),
-            Self::InvalidClassification { surface, classification } => {
-                write!(f, "INVALID_COVERAGE_CLASSIFICATION surface={surface} value={classification}")
+            Self::InvalidClassification {
+                surface,
+                classification,
+            } => {
+                write!(
+                    f,
+                    "INVALID_COVERAGE_CLASSIFICATION surface={surface} value={classification}"
+                )
             }
             Self::MissingOmpAlternative { surface } => {
                 write!(f, "MISSING_OMP_ALTERNATIVE surface={surface}")
@@ -236,14 +256,17 @@ pub fn parse_omp_coverage_table(text: &str) -> Result<Vec<OmpCoverageRow>, Cover
         if raw_line.trim().is_empty() {
             continue;
         }
-        let value: Value = serde_json::from_str(raw_line).map_err(|error| CoverageTableError::Malformed {
-            line,
-            detail: error.to_string(),
-        })?;
-        let object = value.as_object().ok_or_else(|| CoverageTableError::Malformed {
-            line,
-            detail: "row must be a JSON object".to_owned(),
-        })?;
+        let value: Value =
+            serde_json::from_str(raw_line).map_err(|error| CoverageTableError::Malformed {
+                line,
+                detail: error.to_string(),
+            })?;
+        let object = value
+            .as_object()
+            .ok_or_else(|| CoverageTableError::Malformed {
+                line,
+                detail: "row must be a JSON object".to_owned(),
+            })?;
         for field in REQUIRED_FIELDS {
             if !object.contains_key(*field) {
                 return Err(CoverageTableError::Malformed {
@@ -252,12 +275,11 @@ pub fn parse_omp_coverage_table(text: &str) -> Result<Vec<OmpCoverageRow>, Cover
                 });
             }
         }
-        let row: OmpCoverageRow = serde_json::from_value(value).map_err(|error| {
-            CoverageTableError::Malformed {
+        let row: OmpCoverageRow =
+            serde_json::from_value(value).map_err(|error| CoverageTableError::Malformed {
                 line,
                 detail: error.to_string(),
-            }
-        })?;
+            })?;
         if row.surface.is_empty() || row.tool.is_empty() || row.kind.is_empty() {
             return Err(CoverageTableError::Malformed {
                 line,
@@ -276,10 +298,17 @@ pub fn parse_omp_coverage_table(text: &str) -> Result<Vec<OmpCoverageRow>, Cover
                 .as_ref()
                 .is_none_or(|alternative| alternative.trim().is_empty())
         {
-            return Err(CoverageTableError::MissingOmpAlternative { surface: row.surface });
+            return Err(CoverageTableError::MissingOmpAlternative {
+                surface: row.surface,
+            });
         }
-        if rows.iter().any(|existing: &OmpCoverageRow| existing.surface == row.surface) {
-            return Err(CoverageTableError::DuplicateSurface { surface: row.surface });
+        if rows
+            .iter()
+            .any(|existing: &OmpCoverageRow| existing.surface == row.surface)
+        {
+            return Err(CoverageTableError::DuplicateSurface {
+                surface: row.surface,
+            });
         }
         rows.push(row);
     }
@@ -298,22 +327,6 @@ enum SurfaceMapSection {
     Meta,
     Crate(usize),
 }
-fn strip_toml_comment(line: &str) -> &str {
-    let mut quoted = false;
-    let mut escaped = false;
-    for (index, character) in line.char_indices() {
-        match (quoted, escaped, character) {
-            (false, _, '#') => return &line[..index],
-            (true, false, '"') => quoted = false,
-            (false, false, '"') => quoted = true,
-            (true, false, character) if character == 92u8 as char => escaped = true,
-            (true, true, _) => escaped = false,
-            _ => {}
-        }
-    }
-    line
-}
-
 fn valid_surface_map_package_name(name: &str) -> bool {
     !name.is_empty()
         && name
@@ -408,7 +421,8 @@ pub fn parse_surface_map(input: &str) -> SurfaceMap {
 
     for (line_index, raw_line) in input.lines().enumerate() {
         let line = line_index + 1;
-        let content = strip_toml_comment(raw_line).trim();
+        let toml_line = toml_code_only(raw_line);
+        let content = toml_line.trim();
         if content.is_empty() {
             continue;
         }
@@ -706,6 +720,10 @@ pub struct InventoryRow {
     pub map_to_none_reason: Option<String>,
     pub orphan_disposition: String,
     pub orphan_reason: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vacuity_mode: Option<census_invariants::VacuityMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vacuity_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -728,6 +746,10 @@ pub struct InventoryNode {
     pub map_to_none_reason: Option<String>,
     pub orphan_disposition: String,
     pub orphan_reason: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vacuity_mode: Option<census_invariants::VacuityMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vacuity_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1148,6 +1170,15 @@ fn row(
     let map_to_none_reason = owner
         .map(|_| None)
         .unwrap_or_else(|| Some(orphan_reason.clone()));
+    let identity = if kind == "workspace_crate" {
+        id.strip_prefix("crate:")
+            .unwrap_or(id.as_str())
+            .to_owned()
+    } else {
+        kind.clone()
+    };
+    let (must_be_true, negative_evidence) =
+        census_invariants::invariants_for_kind(&kind, &identity);
     InventoryRow {
         id,
         surface,
@@ -1158,11 +1189,8 @@ fn row(
         crate_should_own: should_own,
         inputs,
         outputs,
-        must_be_true: vec![
-            "The source probe is non-empty before a known verdict is emitted.".to_owned(),
-            "A versioned inventory envelope carries the probe state.".to_owned(),
-        ],
-        negative_evidence: vec![NO_SOURCE_GREP.to_owned()],
+        must_be_true,
+        negative_evidence,
         classification,
         status,
         map_to_none_reason,
@@ -1172,6 +1200,8 @@ fn row(
             "NAMED_REASON".to_owned()
         },
         orphan_reason,
+        vacuity_mode: None,
+        vacuity_reason: None,
     }
 }
 
@@ -1195,6 +1225,8 @@ fn node_from_row(source: String, row: &InventoryRow) -> InventoryNode {
         map_to_none_reason: row.map_to_none_reason.clone(),
         orphan_disposition: row.orphan_disposition.clone(),
         orphan_reason: row.orphan_reason.clone(),
+        vacuity_mode: row.vacuity_mode,
+        vacuity_reason: row.vacuity_reason.clone(),
     }
 }
 
@@ -1369,6 +1401,8 @@ pub fn build_inventory_map(inputs: InventoryInputs) -> Result<InventoryMap, Inve
         orphan_disposition: "NAMED_REASON".to_owned(),
         orphan_reason: "External installation is the source, not an adopted workspace owner."
             .to_owned(),
+        vacuity_mode: None,
+        vacuity_reason: None,
     });
     for current in &rows {
         nodes.push(node_from_row(

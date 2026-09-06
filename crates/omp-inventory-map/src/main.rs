@@ -2,6 +2,9 @@
 
 use asupersync::runtime::RuntimeBuilder;
 use asupersync::types::Budget;
+use omp_inventory_map::census_invariants::{
+    CensusInvariantError, CensusInvariantRow, check_census_invariants,
+};
 use omp_inventory_map::{
     CRATE_VERSION, EXPECTED_OMP_VERSION, InventoryMap, ProbeConfig, ProbeState, SCHEMA_VERSION,
     SurfaceMapAudit, collect_inventory, collect_surface_map_audit,
@@ -111,6 +114,21 @@ fn map_status(map: &InventoryMap) -> &'static str {
     }
 }
 
+fn census_rows(map: &InventoryMap) -> Vec<CensusInvariantRow> {
+    map.rows
+        .iter()
+        .map(|row| CensusInvariantRow {
+            id: row.id.clone(),
+            kind: row.kind.clone(),
+            must_be_true: row.must_be_true.clone(),
+            negative_evidence: row.negative_evidence.clone(),
+            vacuity_mode: row.vacuity_mode,
+            vacuity_reason: row.vacuity_reason.clone(),
+        })
+        .collect()
+}
+
+
 fn collect(command: String, config: ProbeConfig) -> ExitCode {
     let runtime = match RuntimeBuilder::current_thread().build() {
         Ok(runtime) => runtime,
@@ -128,22 +146,49 @@ fn collect(command: String, config: ProbeConfig) -> ExitCode {
     };
     let cx = runtime.request_cx_with_budget(Budget::INFINITE);
     match runtime.block_on(async { collect_inventory(&cx, &config).await }) {
-        Ok(map) => {
-            let status = map_status(&map);
-            let code = if status == "OK" { 0 } else { 2 };
-            let envelope = RobotEnvelope {
-                schema_version: SCHEMA_VERSION,
-                command,
-                status,
-                data: Some(map),
-                error: None,
-            };
-            if print_json(&envelope).is_err() {
-                ExitCode::from(1)
-            } else {
-                ExitCode::from(code)
+        Ok(map) => match check_census_invariants(&census_rows(&map)) {
+            Ok(()) => {
+                let status = map_status(&map);
+                let code = if status == "OK" { 0 } else { 2 };
+                let envelope = RobotEnvelope {
+                    schema_version: SCHEMA_VERSION,
+                    command,
+                    status,
+                    data: Some(map),
+                    error: None,
+                };
+                if print_json(&envelope).is_err() {
+                    ExitCode::from(1)
+                } else {
+                    ExitCode::from(code)
+                }
             }
-        }
+            Err(CensusInvariantError::EmptyCensus) => {
+                let envelope = RobotEnvelope::<InventoryMap> {
+                    schema_version: SCHEMA_VERSION,
+                    command,
+                    status: "ERROR",
+                    data: None,
+                    error: Some(CensusInvariantError::EmptyCensus.to_string()),
+                };
+                let _ = print_json(&envelope);
+                ExitCode::from(1)
+            }
+            Err(error) => {
+                let envelope = RobotEnvelope {
+                    schema_version: SCHEMA_VERSION,
+                    command,
+                    status: "VACUOUS_INVARIANT_SET",
+                    data: Some(map),
+                    error: Some(error.to_string()),
+                };
+                if print_json(&envelope).is_err() {
+                    ExitCode::from(1)
+                } else {
+                    ExitCode::from(2)
+                }
+            }
+        },
         Err(error) => {
             let envelope = RobotEnvelope::<Value> {
                 schema_version: SCHEMA_VERSION,
