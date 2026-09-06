@@ -7,7 +7,7 @@ Assembled from docs/plan/. The section files and round ledgers are the source of
 Edit a section or round ledger, then re-assemble — never edit here, and never re-stamp this file's
 mtime to satisfy the freshness gate (§12.11 records the author doing exactly that).
 
-<!-- PLAN_STAMP {"schema":"plan-stamp/v1","generator":"plan-assemble","round_range":"15-23 (22 void)","required_rounds":[15,16,17,18,19,20,21,23],"sections":13,"round_files":["round16-AdversaryEye.jsonl","round16-DeltaEye.jsonl","round16-GreenFrog.jsonl","round16-SchemaEye.jsonl","round16-TraceEye.jsonl","round17-GreenFrog.jsonl","round18-GreenFrog.jsonl","round19-GreenFrog.jsonl","round20-GreenFrog.jsonl","round21-GreenFrog.jsonl","round23-AmberGate.jsonl","round23-BlueLantern.jsonl","round23-GreenFrog.jsonl","round23-SilverWolf.jsonl"],"excluded_round_files":["round22-Opus.jsonl","round24-BlueLantern.jsonl"],"ledgers":["FINDINGS.jsonl","CONVERGENCE.jsonl"],"source_fingerprint":"fnv1a64:6b7ccfd533e2404e"} -->
+<!-- PLAN_STAMP {"schema":"plan-stamp/v1","generator":"plan-assemble","round_range":"15-23 (22 void)","required_rounds":[15,16,17,18,19,20,21,23],"sections":13,"round_files":["round16-AdversaryEye.jsonl","round16-DeltaEye.jsonl","round16-GreenFrog.jsonl","round16-SchemaEye.jsonl","round16-TraceEye.jsonl","round17-GreenFrog.jsonl","round18-GreenFrog.jsonl","round19-GreenFrog.jsonl","round20-GreenFrog.jsonl","round21-GreenFrog.jsonl","round23-AmberGate.jsonl","round23-BlueLantern.jsonl","round23-GreenFrog.jsonl","round23-SilverWolf.jsonl"],"excluded_round_files":["round22-Opus.jsonl","round24-BlueLantern.jsonl"],"ledgers":["FINDINGS.jsonl","CONVERGENCE.jsonl"],"source_fingerprint":"fnv1a64:6dc18ecd8eb5b9f8"} -->
 > ## Three things a reader should know before the contents
 
 > **1. The headline finding was refuted, and it was the first of eight.** §10 claimed a typed
@@ -1370,13 +1370,13 @@ brief still marks OQ-1–OQ-3 as BLOCKS_PLAN unknowns; gates 1–4 and 12 are th
 
 | gate | test | status now | precommitted pass / kill rule |
 |---|---|---|---|
-| 8 | reachable population, sourced from named fleet operators | **OPEN / UNKNOWN** — no external population sample | pass if 5 qualified operators provide a redacted mismatch; kill/narrow if fewer than 2 do |
+| 8 | reachable population, sourced from named fleet operators | **NARROW** — 0 external mismatch receipts (NUMBERS `gate8_operator_mismatch_receipts`) | pass if 5 qualified operators provide a redacted mismatch; kill/narrow if fewer than 2 do |
 | 9 | bottom-up reachable economics | **OPEN / UNKNOWN** — no baseline minutes, volume, or ACV | pass if measured annualized avoided operator cost is at least 3× proposed annual price for 3 of 5 operators; otherwise narrow or kill |
 | 10 | distribution access | **OPEN / UNKNOWN** — no acquisition route or funnel | pass if 3 of 5 qualified buyers name an reachable channel and accept a concierge introduction; otherwise do not promote |
 | 11 | first-value path | **PARTIAL** — local enforcement exists, OMP supervisor integration does not | pass if 4 of 5 redacted replays produce a reviewable completion → receipt → typed close/refusal; kill this wedge if fewer than 2 do |
 | 12 | paid commitment at the proposed 500/month | **OPEN / UNKNOWN** — price is a test, not a validated fact | pass if 3 of 5 qualified economic buyers sign a non-binding letter of intent after replay; zero is a kill signal |
 | 13 | unit economics | **OPEN / UNKNOWN** — support, onboarding, compute, and acquisition cost unmeasured | pass if fully loaded recurring cost is below one third of 500/month for the measured cohort; otherwise reprice or kill |
-| 14 | recurrence and retention reason | **OPEN / UNKNOWN** — one stand-down is not recurrence | pass if 4 of 5 operators report the mismatch at least monthly over a 30-day diary; otherwise narrow |
+| 14 | recurrence and retention reason | **NARROW** — 0 diary operators (NUMBERS `gate14_diary_operators_monthly`); 30-day cohort not started | pass if 4 of 5 operators report the mismatch at least monthly over a 30-day diary; otherwise narrow |
 | 15 | rights, security, and licensing | **OPEN / UNKNOWN** — data-use rights, secrets, permissions, and licenses unreviewed | pass only with written rights and license review, no unresolved secret/permission blocker, and a fail-closed access test |
 | 16 | defensibility / compounding asset | **OPEN / UNKNOWN** — no measured moat against scripts, labor, or native tools | pass only if 3 of 5 buyers choose the receipt contract over their strongest substitute and retained evidence improves the next replay; otherwise treat as commodity |
 | 17 | proportionality against substitutes | **OPEN / UNKNOWN** — no 3× incremental comparison exists | pass if measured time/rework reduction is at least 3× incremental adoption cost for 3 of 5 operators; otherwise do not build |
@@ -3097,129 +3097,277 @@ implies a receiver-verification path that, as Diagram 6 shows, we have measured 
 be absent. Generating from the census means the picture degrades when the system
 degrades. It is a load-bearing artifact, not decoration.
 
-The source of truth for Diagrams 1, 2 and 6's node set is the built scanner at
-`/Volumes/BuildShared/cargo-targets/debug/omp-inventory-map`. The 2026-08-31 capture is
-preserved at `.flywheel/inventory-artifacts/inv.txt.gz` (decompressed 544,697 bytes;
-compressed SHA-256 `8f62893e6a4a04a9b4e8922781a5f8a687f73ca84f5c4ea9d69c5f8998ae0561`,
-exit 2). The newer scanner capture is preserved at
-`.flywheel/inventory-artifacts/omp-inventory-map-2026-08-31.json.gz` (decompressed
-3,032,388 bytes; compressed SHA-256 `8de42c7cb9e653a79b9781602b16db21e4e281346e42c47c95e71041d9404f52`,
-exit 2). These are retained historical snapshots, not a current live diagram feed.
-Diagrams 3 and 4 are generated from the five-stage control loop (formerly "five-stage" — renamed, the table has five stages and seven rows) table and gate-leg table
-in §00 (`docs/plan/00-brief.md` §3.5, §4); the `find`/`grep` invocations behind those
-tables are reproduced under each diagram rather than re-derived.
+The source of truth for Diagram 1 is the current Cargo metadata snapshot recorded for this revision. The source of truth for Diagram 2 is the retained inventory-map JSON snapshot named below. Both are rendered by the reachable Rust frankenmermaid command; neither diagram is hand-drawn.
 
-**A requirement this section discovered, written down here per R11.** Nothing in this
-repo currently regenerates these diagrams. A generated diagram that is generated
-*once* is a hand-drawn diagram with better provenance, and it rots on exactly the same
-schedule. The requirement is therefore: **the diagram set must be emitted by a command
-and diffed in CI**, so that a merge which changes the crate DAG and does not change
-Diagram 1 fails. That command does not exist today; it is the natural second consumer
-of `omp-inventory-map` and would take its `consumes` count from 1 crate to 2. Until it
-exists, treat every diagram below as a snapshot dated 2026-08-31, not as a live view.
+The regeneration command is:
+cargo metadata --no-deps --format-version 1 --offline > .flywheel/diagram-artifacts/7wn9.3-cargo-metadata.json
+cargo run -p omp-inventory-map --bin frankenmermaid -- --metadata .flywheel/diagram-artifacts/7wn9.3-cargo-metadata.json --inventory .flywheel/diagram-artifacts/7wn9.3-inventory-map.json --output-dir docs/plan/diagrams --write
+
+Diagram 1 is generated from the current workspace graph. Diagram 2 is generated from the preserved inventory-map data counts; its source revision and hashes are recorded in the receipt. The generator has a check mode that refuses hand-edited drift.
+
+Diagrams 3 and 4 are generated from the five-stage control loop and gate-leg tables in §00; the find and grep invocations behind those tables remain reproduced under each diagram rather than re-derived.
 
 ---
 
 ## Diagram 1 — Crate dependency DAG (MEASURED)
 
 ```mermaid
+%% GENERATED BY frankenmermaid; source=cargo metadata; packages=81 path_dependency_edges=157
 graph TD
-    subgraph GATES["no-shell-gate family (5 crates)"]
-        no_shell_gate[no-shell-gate]
-        path_literal_guard[path-literal-guard]
-        pre_delete_citation_check[pre-delete-citation-check]
-        state_wildcard_lint[state-wildcard-lint]
-        undrained_pipe_lint[undrained-pipe-lint]
-    end
-
-    subgraph ACK["ack / receipt family"]
-        ack_spine[ack-spine]
-        ack_stage[ack-stage]
-        receiver_receipt[receiver-receipt]
-        tick_monitor[tick-monitor]
-        finding[finding]
-        finding_dispatch[finding-dispatch]
-    end
-
-    subgraph CORE["orchestrator core"]
-        omp_orchestrator[omp-orchestrator]
-        dispatch_claim_fence[dispatch-claim-fence]
-        omp_rpc_session[omp-rpc-session]
-    end
-
-    subgraph FENCE["process-boundary crates"]
-        subprocess_contract[subprocess-contract]
-        kernel_only_operator_hook[kernel-only-operator-hook]
-        pane_dispatch_fence[pane-dispatch-fence]
-    end
-
-    ack_spine --> finding
-    finding --> subprocess_contract
-    ack_stage --> receiver_receipt
-    ack_stage --> tick_monitor
-    receiver_receipt --> tick_monitor
-    finding_dispatch --> finding
-    finding_dispatch --> omp_orchestrator
-    omp_orchestrator --> ack_stage
-    omp_orchestrator --> dispatch_claim_fence
-    omp_orchestrator --> omp_rpc_session
-    omp_orchestrator --> receiver_receipt
-    omp_orchestrator --> subprocess_contract
-    kernel_only_operator_hook --> subprocess_contract
-    no_shell_gate --> path_literal_guard
-    no_shell_gate --> pre_delete_citation_check
-    no_shell_gate --> state_wildcard_lint
-    no_shell_gate --> undrained_pipe_lint
-    pane_dispatch_fence --> subprocess_contract
+    n0[ack-spine]
+    n1[ack-stage]
+    n2[admission-reason]
+    n3[agent-mail-native]
+    n4[asupersync-conformance]
+    n5[bead-availability]
+    n6[bead-holder]
+    n7[cargo-lane-budget]
+    n8[commit-build-fence]
+    n9[composer-typed]
+    n10[convergence-stamp]
+    n11[crate-atom-gate]
+    n12[crate-soundness-verify]
+    n13[decision-ledger]
+    n14[dispatch-claim-fence]
+    n15[dispatch-saga]
+    n16[dispatch-silence-watch]
+    n17[dispatcher-deadman]
+    n18[extraction-roster]
+    n19[fast-dispatch]
+    n20[finding]
+    n21[finding-dispatch]
+    n22[fleet-composite]
+    n23[fleet-monitor]
+    n24[fleet-reconcile]
+    n25[fleet-truth]
+    n26[fuzz-build-gate]
+    n27[grader-attribution-gate]
+    n28[inbox-monitor]
+    n29[installer]
+    n30[kernel-bypass-gate]
+    n31[kernel-only-operator-hook]
+    n32[lifecycle-event]
+    n33[lifecycle-monitor]
+    n34[loop-coverage]
+    n35[loop-driver]
+    n36[loop-queue-filter]
+    n37[loop-switch]
+    n38[loop-tick]
+    n39[named-test-filter-gate]
+    n40[no-shell-gate]
+    n41[ntm-fleet-monitor]
+    n42[omp-idle-dispatch]
+    n43[omp-inventory-map]
+    n44[omp-orchestrator]
+    n45[omp-rpc-session]
+    n46[omp-surface-consumption]
+    n47[omp-types]
+    n48[ompo-start]
+    n49[oracle-compare]
+    n50[oracle-pane-state-differential]
+    n51[orchestration-tick-gate]
+    n52[pane-dispatch-fence]
+    n53[pane-dispatch-ready]
+    n54[pane-oracle-diff]
+    n55[pane-truth]
+    n56[path-literal-guard]
+    n57[plan-assemble]
+    n58[porting-gate]
+    n59[pre-delete-citation-check]
+    n60[preregistration-gate]
+    n61[r1-breadth-gate]
+    n62[reap-finished-panes]
+    n63[receiver-receipt]
+    n64[refill-idle-panes]
+    n65[response-envelope-check]
+    n66[s1-coverage]
+    n67[s2-gate]
+    n68[scratch-home]
+    n69[sender-identity]
+    n70[silent-success-census]
+    n71[staged-build-gate]
+    n72[state-wildcard-lint]
+    n73[subprocess-contract]
+    n74[text-structure]
+    n75[tick-dispatch]
+    n76[tick-monitor]
+    n77[undrained-pipe-lint]
+    n78[verify-dispatch]
+    n79[wired-but-inert-guard]
+    n80[worker-oracle-gate]
+    n0 --> n20
+    n0 --> n36
+    n0 --> n63
+    n0 --> n68
+    n0 --> n73
+    n0 --> n76
+    n1 --> n63
+    n1 --> n76
+    n2 --> n73
+    n3 --> n47
+    n3 --> n73
+    n3 --> n76
+    n4 --> n77
+    n5 --> n73
+    n6 --> n73
+    n7 --> n73
+    n11 --> n20
+    n11 --> n36
+    n11 --> n73
+    n12 --> n73
+    n15 --> n47
+    n15 --> n52
+    n16 --> n20
+    n16 --> n73
+    n17 --> n73
+    n18 --> n73
+    n19 --> n20
+    n19 --> n36
+    n19 --> n37
+    n19 --> n73
+    n19 --> n76
+    n20 --> n73
+    n21 --> n20
+    n22 --> n73
+    n23 --> n41
+    n23 --> n73
+    n23 --> n76
+    n24 --> n73
+    n24 --> n76
+    n25 --> n20
+    n25 --> n73
+    n25 --> n76
+    n26 --> n73
+    n28 --> n3
+    n28 --> n73
+    n28 --> n76
+    n29 --> n32
+    n29 --> n71
+    n29 --> n73
+    n31 --> n32
+    n31 --> n33
+    n31 --> n73
+    n32 --> n47
+    n33 --> n32
+    n34 --> n20
+    n34 --> n36
+    n34 --> n76
+    n35 --> n37
+    n35 --> n73
+    n35 --> n76
+    n36 --> n56
+    n38 --> n20
+    n38 --> n36
+    n38 --> n73
+    n38 --> n76
+    n40 --> n4
+    n40 --> n10
+    n40 --> n11
+    n40 --> n20
+    n40 --> n44
+    n40 --> n51
+    n40 --> n56
+    n40 --> n59
+    n40 --> n60
+    n40 --> n61
+    n40 --> n71
+    n40 --> n72
+    n40 --> n73
+    n40 --> n74
+    n40 --> n77
+    n41 --> n34
+    n42 --> n20
+    n42 --> n36
+    n42 --> n73
+    n42 --> n76
+    n43 --> n73
+    n43 --> n74
+    n44 --> n0
+    n44 --> n1
+    n44 --> n3
+    n44 --> n6
+    n44 --> n9
+    n44 --> n13
+    n44 --> n14
+    n44 --> n16
+    n44 --> n20
+    n44 --> n21
+    n44 --> n32
+    n44 --> n33
+    n44 --> n36
+    n44 --> n41
+    n44 --> n45
+    n44 --> n51
+    n44 --> n52
+    n44 --> n63
+    n44 --> n69
+    n44 --> n73
+    n44 --> n74
+    n44 --> n76
+    n44 --> n80
+    n46 --> n73
+    n47 --> n73
+    n49 --> n73
+    n50 --> n49
+    n50 --> n73
+    n50 --> n76
+    n51 --> n11
+    n52 --> n73
+    n53 --> n47
+    n53 --> n73
+    n53 --> n76
+    n54 --> n49
+    n54 --> n73
+    n54 --> n76
+    n55 --> n73
+    n55 --> n73
+    n55 --> n76
+    n57 --> n60
+    n58 --> n73
+    n59 --> n20
+    n60 --> n73
+    n62 --> n53
+    n62 --> n73
+    n62 --> n76
+    n63 --> n55
+    n63 --> n76
+    n64 --> n14
+    n64 --> n20
+    n64 --> n24
+    n64 --> n36
+    n64 --> n49
+    n64 --> n73
+    n64 --> n76
+    n66 --> n73
+    n68 --> n73
+    n70 --> n73
+    n70 --> n74
+    n71 --> n73
+    n75 --> n49
+    n75 --> n73
+    n75 --> n76
+    n76 --> n32
+    n76 --> n33
+    n76 --> n47
+    n78 --> n20
+    n78 --> n73
+    n79 --> n73
 ```
 
-**HISTORICAL GRAPH SNAPSHOT.** The following edge, degree, and `/tmp` extraction claims are the preserved `inv.txt.gz` snapshot above. They are not current workspace counts; current map and metadata authorities live in `NUMBERS.toml` and the current census sections.
-**MEASURED.** Source: all 18 `path-depends-on` edges in `/tmp/inv.txt`, extracted with
-`python3 -c "import json; d=json.load(open('/tmp/inv.txt'))['data']; [print(e['from'],'->',e['to']) for e in d['edges'] if e['relation']=='path-depends-on']"`.
-Every edge in the picture is one line of that output; the four subgraph groupings are
-the only editorial act, and they change no edge.
+**GENERATED CURRENT GRAPH.** The block above is the exact output of frankenmermaid against Cargo metadata at the recorded revision: 81 packages and 157 path-dependency edges. Every rendered edge is one path dependency from that metadata input; no edge was drawn from memory.
 
-Degrees, from the same file via
-`python3 -c "...collections.Counter(e['to'] ...)"`:
+The generator's check mode compares this output byte-for-byte and returns DIAGRAM_DRIFT when an edge is hand-edited. Empty or malformed metadata is a typed DIAGRAM_INPUT error, never a zero-edge pass.
 
-- **17 of 26 crates appear in the DAG at all. 9 are isolated** — `commit-build-fence`, — HISTORICAL as of 2026-09-02.
-  `composer-typed`, `dispatch-silence-watch`, `fleet-composite`, `installer`,
-  `kernel-bypass-gate`, `loop-queue-filter`, `omp-inventory-map`, `omp-types`. That
-  `omp-types` — the crate that exists specifically to be the shared vocabulary,
-  re-exporting `Budget` and `Outcome` only — the `AckKind`/`DeliveryClass`/`ObligationLedger` half is blocked upstream (corrected, brief §3.7)
-  from asupersync at pinned rev `fa3c01aec` — has **zero dependents** is the single
-  most damaging fact this diagram contains. The convergence crate is not converged
-  onto. That is why the type inventory still measures 6 distinct Verdict-shaped types
-  with no shared trait and 17 ack/receipt types in 3 incompatible dialects.
-- **Hub:** `subprocess-contract`, in-degree 4 (`finding`, `omp-orchestrator`,
-  `kernel-only-operator-hook`, `pane-dispatch-fence`). It is the correct hub — the
-  process-boundary contract is what should be universal — but only 4 of 26 crates depend on it — HISTORICAL as of 2026-09-02.
-  directly (6 reach it transitively; 22 do not route through it at all), against 29 raw spawn
-  sites measured in the repo.
-- **8 leaves** (out-degree 0): `dispatch-claim-fence`, `omp-rpc-session`, — HISTORICAL as of 2026-09-02.
-  `path-literal-guard`, `pre-delete-citation-check`, `state-wildcard-lint`,
-  `subprocess-contract`, `tick-monitor`, `undrained-pipe-lint`.
-- **5 roots** (in-degree 0): `ack-spine`, `finding-dispatch`,
-  `kernel-only-operator-hook`, `no-shell-gate`, `pane-dispatch-fence`. Five roots
-  means five independent entry points and no single composition point — there is no
-  crate that, if you built it, builds the system.
-- **Max fan-out:** `omp-orchestrator` at 5, then `no-shell-gate` at 4.
-
-**The objection an investor should raise here:** "a 17-node DAG with 9 orphans is not
-an architecture, it is a pile of crates that happen to share a workspace." That is
-close to correct today. The answer is not a defence, it is the milestone: convergence
-onto `omp-types` and `subprocess-contract` is the measurable target, and the
-measurement is the in-degree of those two nodes in a re-run of this exact command.
-Today `omp-types` in-degree is 0. That number is the scoreboard.
+**NO-CLAIM:** this diagram proves the metadata graph rendered at generation time. It does not prove that every package is semantically healthy, that a path dependency is desirable, or that the installed generator binary matches this source revision.
 
 ---
 
 ## Diagram 2 — OMP surface consumption (MEASURED)
 
 ```mermaid
+%% GENERATED BY frankenmermaid; source=inventory map data.counts; rows=981 workspace_crates=26
 graph LR
     inv["crate:omp-inventory-map<br/>(1 of 26 crates)"]
-
     inv -->|consumes| t_cli["type_root:cli"]
     inv -->|consumes| t_cmd["type_root:commands"]
     inv -->|consumes| t_rpc["type_root:jsonrpc"]
@@ -3227,39 +3375,23 @@ graph LR
     inv -->|consumes| h_get["rpc_handler:get_available_commands"]
     inv -->|consumes| s_probe["slash_command:UNKNOWN_PROBE"]
     inv -->|consumes| tr_mode["transport:--mode=&lt;value&gt;"]
-
-    subgraph UNTOUCHED["surface reachable by zero crates"]
-        mass["176 remaining census rows<br/>39 cli_commands · 57 type_roots · 14 declarations<br/>42 rpc_handlers · 3 omp_methods<br/>157 CAPABILITY_NOT_USED"]
+    subgraph UNTOUCHED["surface not yet consumed"]
+        mass["981 census rows<br/>39 cli_commands · 57 type_roots · 14 declarations<br/>42 rpc_handlers · 799 slash_commands · 3 omp_methods<br/>157 CAPABILITY_NOT_USED · 806 MAPPED_BY_DIRECT_PROBE · 18 SCRAPED_OR_OBSERVED_ALTERNATIVE"]
     end
-
-    subgraph SILENT["25 of 26 workspace crates"]
-        others["consume zero OMP surface"]
+    subgraph SILENT["workspace crates with no consumed surface"]
+        others["derived from the same counts"]
     end
-
     others -.->|no edge exists| UNTOUCHED
-
     style inv fill:#2d5016,color:#fff
     style UNTOUCHED fill:#4a1010,color:#fff
     style SILENT fill:#4a1010,color:#fff
 ```
 
-**MEASURED.** Source: all 7 `consumes` edges in `/tmp/inv.txt`, extracted with
-`python3 -c "... [print(e['from'],'->',e['to']) for e in d['edges'] if e['relation']=='consumes']"`;
-the row and classification counts come from `d['counts']` and
-`collections.Counter(r['classification'] for r in d['rows'])` on the same file. The
-dashed `no edge exists` arrow is drawn to represent an **absence** in the data and is
-the only line in the diagram that is not itself an edge in the census — it is labelled
-as such.
+**GENERATED FROM RETAINED INVENTORY DATA.** The block above is the exact output of frankenmermaid against the preserved inventory-map JSON. It carries rows=981 and workspace_crates=26 from data.rows and data.counts, plus the classification counts derived from the same rows.
 
-Every one of the 7 edges carries the same evidence string, `"direct process probe — HISTORICAL as of 2026-09-02.
-produced this row"`. That is honest and it is also the whole problem: the only crate
-that touches the OMP surface is the crate whose job is to *scan* the OMP surface. The
-census measures the observer observing itself. Of 183 rows, 157 classify — HISTORICAL as of 2026-09-02.
-`CAPABILITY_NOT_USED`, 18 `SCRAPED_OR_OBSERVED_ALTERNATIVE`, 8 `MAPPED_BY_DIRECT_PROBE`.
+The retained map is an input snapshot, not a current workspace census. A missing data object, missing counts, or empty rows is a typed refusal; the generator never emits a zero-count diagram for absent input.
 
-**NO-CLAIM:** this diagram does not claim the 176 untouched rows are *useful* surface,
-nor that consuming them would be desirable. It claims only that they are unconsumed.
-Deciding which subset is worth wiring is a design act this diagram cannot perform.
+**NO-CLAIM:** Diagram 2 reports the retained inventory snapshot's counts. It does not claim that the 26-crate snapshot is the current 81-package workspace or that the classifications are fresh.
 
 ---
 
@@ -3354,6 +3486,9 @@ gate is a slower death than no gate at all. A full four-leg row raises the floor
 of defect; it never guarantees the class is absent.
 
 **HISTORICAL ADDRESSABILITY SNAPSHOT.** The old --help refusal, 13-test count, and 544,697-byte output below were measured before the retained artifact update. Current source has 28 test markers and the current debug --help probe emits 158 bytes at exit 1. No current ADDRESSABLE pass is claimed without a retained command/output/revision receipt.
+
+**CURRENT ADDRESSABLE (bead `omp-orchestrator-plan-04-7wn9.1`).** `omp-inventory-map --help` is a versioned JSON envelope, exit 0, names `doctor`. Receipt: `crates/omp-inventory-map/artifacts/ADDRESSABLE.receipt.toml`. This is the Diagram 4 / 06 gate-leg ADDRESSABLE column for this crate; other diagram nodes stay unmeasured.
+
 A sixth required property fell out of this session and is not in the table because
 nothing measures it yet: **ADDRESSABLE**. `omp-inventory-map --help` returns
 `{"status":"ERROR","error":"CONFIG_ERROR unknown argument --help"}`. The gate is
@@ -3361,34 +3496,15 @@ built, its 13 tests pass, and `types_inventory.rs:heading_built_its_13_tests_pas
 `Observation` from the allowance list so the name collision *demands* convergence
 rather than tolerating it. It is correct and it is undiscoverable. A gate nobody can
 invoke has a real-world firing rate of zero regardless of its test count.
-**CURRENT ACCEPTANCE AUTHORITY (PROJECTED).** The diagram generator remains unbuilt, so the
-diagrams remain a labelled snapshot rather than a live generated view. The owner is
-**BlueLantern** for this authority contract. Registry row 'generator_acceptance' in
-'docs/plan/CROSS-SECTION-AUTHORITY.jsonl' carries the executable acceptance command and the
-failure result CROSS_SECTION_GENERATOR_ACCEPTANCE_FAILURE; the gate itself runs:
+**CURRENT ACCEPTANCE AUTHORITY (MEASURED).** The Rust frankenmermaid generator is now reachable as `omp-inventory-map --bin frankenmermaid`. Its unit contract tests cover metadata edge counting, hand-edited drift refusal, inventory count rendering, and empty or missing input refusal.
 
-    cargo test --quiet -p no-shell-gate --test cross_section_authority
+The reproducible acceptance surface is:
+    cargo test -p omp-inventory-map --bin frankenmermaid -- --nocapture
+    cargo run -p omp-inventory-map --bin frankenmermaid -- --metadata .flywheel/diagram-artifacts/7wn9.3-cargo-metadata.json --inventory .flywheel/diagram-artifacts/7wn9.3-inventory-map.json --output-dir docs/plan/diagrams --check
 
-The required future generator RED leg is explicit: change one measured crate edge, regenerate the
-diagram, and require the checked-in artifact diff to fail. Until that child implementation lands,
-the status is **PROJECTED**, not EXISTS.
+The check command returns DIAGRAM_DRIFT for a hand-edited edge and DIAGRAM_INPUT_EMPTY or DIAGRAM_INPUT_MISSING for degenerate inputs. The generator is a trigger, not a prose claim: its output is checked byte-for-byte against the retained diagrams.
 
-**What would Jeffrey do.** Searched the mirror at
-/Volumes/ZestData/dicklesworthstone-mirror (210 filesystem .git entries, not validated as git work-trees) for diagram-generation and
-contract-test prior art: `grep -rl "mermaid" --include=*.rs` surfaces
-`franken_markdown/src/pdf.rs` and `franken_markdown/tests/cli_contract.rs`, i.e. a
-*renderer* for mermaid plus a CLI-contract test harness — the useful borrow is the
-`cli_contract.rs` shape, a test that asserts the CLI's own advertised surface, which
-   is exactly the missing ADDRESSABLE leg. Searched for a generated-architecture-diagram
-gate specifically: **RETRACTED as a false zero, 2026-09-01.** The original scan globbed
-`*/*.rs` and `*/src/**/*.rs` and never descended into crate subdirectories; a full recursive walk
-finds **293 mirror `.rs` files containing `mermaid`**, topped by an entire **`frankenmermaid`
-monorepo (190 files: fm-parser, fm-render-*, fm-cli)** — mermaid generation with parsers,
-renderers, and a CLI — plus `beads_rust`'s `br dep --format mermaid`
-(`src/cli/commands/dep.rs:render_dep_tree_mermaid`, `render_dep_tree_mermaid`, with e2e contract tests) emitting
-mermaid directly from a dependency graph, and ftui-extras renderers. What remains ours to build
-is the DELTA none of them ships: regenerating Diagram 1 from the live census inside CI and
-failing the diff when the crate DAG moves — the generator-as-gate, not the generator.
+**What would Jeffrey do.** The useful prior art remains the mirror's frankenmermaid renderer and beads_rust's br dep Mermaid emitter. The local delta is now present: this repository has a Rust generator, a known-good metadata edge count, a drift gate, and an anti-vacuity refusal rather than a hand-maintained diagram.
 
 ---
 
@@ -3474,46 +3590,30 @@ nothing exists outside their reach.
 
 ---
 
-## 4.7 BLOCKER resolution — the provenance was clearable, which is worse than stale
+## 4.7 BLOCKER resolution — the diagrams are now generated and checkable
 
-`GradeDiagrams` filed:
+`GradeDiagrams`'s blocker was correct: the old diagrams were labelled snapshots with no generator command behind them. The blocker is resolved by the reachable Rust frankenmermaid binary and its byte-for-byte check mode.
 
-> The brief documents a fresh 2026-08-31 capture at
-> `/tmp/omp-inventory-map-2026-08-31.json` (3,032,388 bytes), but the diagrams
-> section cites sources from `/tmp/inv.txt` (544,697 bytes, round-10 historical). A
-> diagram cannot be dated 2026-08-31 while sourced from data predating that capture.
+## Provenance and regeneration
 
-Measured. Both artifacts exist, **and both are dated 2026-08-31** — so the date claim
-is technically true and still misleading:
+The diagrams now have named inputs, a source revision, a generator command, output hashes, and no obsolete capture-time label.
 
-| artifact | size | mtime | sha256 (16) |
-|---|---:|---|---|
-| `/tmp/inv.txt` — **what the diagrams use, 5 citations** | 544,697 | 16:50 | `86491732a5581a6d` |
-| `/tmp/omp-inventory-map-2026-08-31.json` — what the brief cites | 3,032,388 | 23:01 | `876809f0779a81b3` |
+| input or output | bytes | SHA-256 |
+|---|---:|---|
+| current Cargo metadata JSON | 330886 | 54b36fdfcc043bcc1e4a2adc99a2ad26725ac49fff3cc911ff7df3720eada7c6 |
+| retained inventory-map JSON | 3032388 | 876809f0779a81b31126564b2b166a7a883c4f5365b499561242013c7dd4c899 |
+| generated Diagram 1 | 4687 | 777c0a03382cda921f02faefcc9540aec3f1950b6a9d4f64b3e3611c5617d402 |
+| generated Diagram 2 | 1134 | aa67624261702cb2a6aa593150d46bfabdf3a39b99d3b733461fc92164792869 |
+| source revision | — | b60cad3e4038a167a7effafb8ca8453403554df3 |
 
-Six hours and 5.6× apart. The diagrams are built from the **earlier, smaller** capture
-while the brief cites the later one, and nothing in either document says so.
+Write command:
+cargo metadata --no-deps --format-version 1 --offline > .flywheel/diagram-artifacts/7wn9.3-cargo-metadata.json
+cargo run -p omp-inventory-map --bin frankenmermaid -- --metadata .flywheel/diagram-artifacts/7wn9.3-cargo-metadata.json --inventory .flywheel/diagram-artifacts/7wn9.3-inventory-map.json --output-dir docs/plan/diagrams --write
 
-### Provenance finding disposition
-**Resolved:** the earlier capture paths were ephemeral `/tmp` locations. The bytes are now preserved and hash-identified under `.flywheel/inventory-artifacts/`; the source-era paths below are historical evidence, not current dependencies.
+Check command:
+cargo run -p omp-inventory-map --bin frankenmermaid -- --metadata .flywheel/diagram-artifacts/7wn9.3-cargo-metadata.json --inventory .flywheel/diagram-artifacts/7wn9.3-inventory-map.json --output-dir docs/plan/diagrams --check
 
-The diagrams are still **not regenerated from the fresh capture**. §R4 records the separate system gap: generator command = NONE and CI job = NONE. The honest state is a labelled, preserved 16:50 snapshot, not a live view. The 23:01 capture remains preserved for comparison.
-
-**Current retained artifacts:** `inv.txt.gz` decompresses to 544,697 bytes and `omp-inventory-map-2026-08-31.json.gz` decompresses to 3,032,388 bytes. Their compressed hashes are recorded above and enforced by the artifact-provenance gate.
-
-### What is corrected and what is not
-
-**Corrected:** the diagrams are hereby labelled as sourced from the **16:50 capture**,
-not the 23:01 one, with size and hash recorded above so the claim is checkable.
-
-**NOT corrected:** the diagrams are not regenerated from the fresh capture. §R4 of
-this section already records why — *"Nothing in this repo currently regenerates these
-diagrams … that command does not exist today"* — and building it is a separate piece
-of work. So the honest state is: **the diagrams reflect a 16:50 snapshot, which is
-labelled, hashed, and preserved, and they are not current.** Row counts in Diagram 2
-(176 census rows) are from that capture; the 23:01 capture holds 981 rows. — HISTORICAL as of 2026-09-02.
-
-That gap is now stated in the document; the retained artifacts make the historical comparison reproducible without depending on ephemeral source-era paths.
+The generator refuses missing, malformed, or empty metadata and inventory inputs. Diagram 1 is current to the recorded Cargo metadata revision; Diagram 2 remains explicitly tied to the retained inventory snapshot and its counts.
 
 
 ---
@@ -4076,6 +4176,14 @@ The historical walk produced 31/409; `00-brief.md` §3.5 records an older 31/406
 | `kernel-bypass-gate` | 6 | 1 | 1 | 0 | 0 |
 | `pre-delete-citation-check` | 6 | 1 | 1 | 0 | 0 |
 | `path-literal-guard` | 3 | 1 | 0 | 0 | 2 |
+
+
+**CURRENT ADDRESSABLE (bead `omp-orchestrator-plan-04-7wn9.1`).** Sixth gate property: `--help` exits 0 and names the run command. Receipt: `crates/omp-inventory-map/artifacts/ADDRESSABLE.receipt.toml`. Other members remain unmeasured here.
+
+| crate | ADDRESSABLE | receipt |
+|---|---|---|
+| `omp-inventory-map` | PASS | `crates/omp-inventory-map/artifacts/ADDRESSABLE.receipt.toml` (`--help` exit 0, sha256 `b5d1f2ca13f59ea6d9fe8542d012ce61b7e9e0dfe678ac6340dfcc279221bf95`, contains `doctor`) |
+| remaining gate crates in this table | unmeasured | — |
 
 **0 of 8 gates mutate production source through the real hook** — the only definition that survives typing. `1 of 8` reaches a real temp tree (`omp-inventory-map`, TREE); `2 of 8` mutate a fixture string; `1 of 8` has an affordance nothing flips (`no-shell-gate`). *This paragraph said `2 of 8 … no-shell-gate and undrained-pipe-lint` until the column was rebuilt on what the mutation ACTS ON rather than what a test is NAMED; see `00-brief.md` §3.5, which moved this headline four times.* **4 of 8 have no mutation leg**: `commit-build-fence`, `kernel-bypass-gate`, `pre-delete-citation-check`, `path-literal-guard`. 4 of 8 have no anti-vacuity leg. 2 of 8 have no known-bad. 1 of 8 has no known-good.
 
@@ -7841,7 +7949,7 @@ runbook nobody finishes reading.
 | `ipg.1` | PLAN | plan-mode, modes, goals | [`omp_surface_coverage_ipg1.md`](../inventories/omp_surface_coverage_ipg1.md) |
 | `ipg.2` | BEADS | task, commands, slash-commands | [`omp_surface_coverage_ipg2.md`](../inventories/omp_surface_coverage_ipg2.md) |
 | `ipg.3` | TRIAGE | registry, capability, discovery | [`omp_surface_coverage_ipg3.md`](../inventories/omp_surface_coverage_ipg3.md) |
-| `ipg.4` | DISPATCH | irc, collab, jsonrpc, mcp, launch, exec, subprocess | **no coverage document — see below** |
+| `ipg.4` | DISPATCH | irc, collab, jsonrpc, mcp, launch, exec, subprocess | [`omp_surface_coverage_ipg4.md`](../inventories/omp_surface_coverage_ipg4.md) |
 | `ipg.5` | OBSERVE | session, live, tui, sharpshooter | [`omp_surface_coverage_ipg5.md`](../inventories/omp_surface_coverage_ipg5.md) |
 | `ipg.6` | VERIFY | eval, if-bench, hindsight, debug, dap, autoresearch, autolearn, advisor | [`omp_surface_coverage_ipg6.md`](../inventories/omp_surface_coverage_ipg6.md) |
 | `ipg.7` | MEMORY | memories, memory-backend, mnemopi, blob-broker, export | [`omp_surface_coverage_ipg7.md`](../inventories/omp_surface_coverage_ipg7.md) |
@@ -7850,15 +7958,17 @@ runbook nobody finishes reading.
 | `ipg.10` | IO | web, exa, stt, tts, ssh, internal-urls, tools, cli | [`omp_surface_coverage_ipg10.md`](../inventories/omp_surface_coverage_ipg10.md) |
 | `ipg.11` | RUNTIME | async, utils, lib, tiny, vibe, auto-thinking | [`omp_surface_coverage_ipg11.md`](../inventories/omp_surface_coverage_ipg11.md) |
 
-**What the split made visible in the first minute.** Wave `ipg.4` (DISPATCH) has a bead and no
+**What the split made visible in the first minute.** Wave `ipg.4` (DISPATCH) had a bead and no
 coverage document. Its seven surfaces include `subprocess`, `exec`, `launch`, `jsonrpc` and `mcp` —
 this orchestrator's own transport boundary — and the bead id has since been reused by three Phase 1
 contracts (`docs/contracts/subprocess_contract.md`, `cancellation_contract.md`,
 `dispatch_claim_contract.md`), so the sweep will never be filed under it. Round 13 recorded
 `ipg.4 absent` against this section and it survived ten further rounds, because a missing `##`
 heading inside a 21-heading file is invisible, while a missing file in a directory of eleven is one
-`ls`. The index carries three more measurements of the same kind: 50 surfaces classified but only
-12 rows in `docs/plan/OMP-COVERAGE-TABLE.jsonl`, and four different table schemas for one concern. — HISTORICAL as of 2026-09-02.
+`ls`. Closed by `5d505f9` (`docs(coverage): map dispatch surfaces and alternatives`), which added
+[`omp_surface_coverage_ipg4.md`](../inventories/omp_surface_coverage_ipg4.md). The index still
+carries three more measurements of the same kind: 50 surfaces classified but only 12 rows in
+`docs/plan/OMP-COVERAGE-TABLE.jsonl`, and four different table schemas for one concern. — HISTORICAL as of 2026-09-02; coverage file closed `5d505f9`.
 
 **Appendix A stayed.** It is a `jsm` skill sweep about how this plan is being graded, not a surface
 classification; it belongs with the runbook's AAR material above, and moving it would have been a
@@ -7965,8 +8075,8 @@ bounded external boundary. The authenticated Agent Mail daemon/MCP HTTP path is 
   status; `DISPATCH_RESULT_SEND_FAILED` is its own restrictive outcome.
 - `am_delivery_events` — durable `inbox-events --after <cursor>`; cursor is a global monotonic
   sequence position with a recipient-specific tail and oldest-available position, not a message ID or read state.
-  Consumers MUST pair the stored cursor with the same recipient and refuse continuity when it is below
-  that recipient's oldest-available position; this is an ambiguity refusal, not a claim that events were evicted.
+  Continuity is daemon-side `CURSOR_EXPIRED` only (`omp-orchestrator-f1rn`). `oldest_available_cursor`
+  is a per-recipient first-delivery marker, not an eviction floor; do not refuse locally when it exceeds a stored cursor.
 - `am_inbox_state` — daemon-backed inbox readback with `read_ts`; pair it with delivery events to
   distinguish delivered, unread, and acknowledged. A recipient tail of zero is a real no-events state.
 - `am_thread`, `am_timeline`, `am_search` — retrieval with explicit authority/backend and source
@@ -8091,13 +8201,13 @@ latency and to make the cursor-bearing timeout the expected path.
   is a gate-asymmetry finding requiring either a runtime-constructed fixture or a named gate fix; the
   fixture itself is not silently promoted as proof.
 - Agent Mail `inbox_events_unavailable` is correct fail-closed behavior and is excluded from the
-  silent-success census. The daemon `CURSOR_EXPIRED` clamp remains a source defect defended by
-  `agent-mail-native` continuity checks and reported upstream.
+  silent-success census. Continuity authority is daemon-side `CURSOR_EXPIRED` only
+  (`omp-orchestrator-f1rn`); there is no client continuity guard.
 
 **Defect disposition:** every Agent Mail defect must become one of: fixed at source and upstreamed;
 defended in `agent-mail-native` with a typed refusal; or retained as a named finding with a
-reproduction command. Reported current disposition is: the cursor-clamping defect is defended by
-`journey::verify_resume_continuity` / `journey::resume_from` and reported upstream; the default wait
+reproduction command. Reported current disposition is: cursor continuity is daemon-side
+`CURSOR_EXPIRED` only (`omp-orchestrator-f1rn`, deletion `a3f254e`); the default wait
 requires an explicit caller timeout for latency/cursor preservation and remains a source hardening item; the search alias defect is a source-fix
 candidate; `inbox_events_unavailable` is a correct fail-closed result and is excluded from the census.
 No defect remains a note.
