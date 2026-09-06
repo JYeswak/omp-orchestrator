@@ -9,7 +9,10 @@
 pub mod steps;
 pub mod spawn;
 pub mod pack;
+pub mod inception;
+pub mod foundation;
 
+pub use foundation::{append_s1_foundation, s1_row, s1_rows_citing_inception, INCEPTION_REF, SOURCE};
 pub use pack::{retain_pack_receipt, PackError, PackReceipt, SendAttempt, TICK_ZERO_TARGET};
 pub use spawn::{
     generate_wave, panes_from_list_panes, sha256_hex, spawn_retain_wave_hash, verify_retained_hash,

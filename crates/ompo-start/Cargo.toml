@@ -14,7 +14,12 @@ name = "ompo_start"
 path = "src/lib.rs"
 
 [dependencies]
+serde_json = "1"
 sha2 = "0.11"
+
+[[bin]]
+name = "ompo-start-foundation-append"
+path = "src/bin/foundation_append.rs"
 
 [dev-dependencies]
 tempfile = "3"
