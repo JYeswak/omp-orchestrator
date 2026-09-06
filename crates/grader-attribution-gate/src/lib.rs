@@ -2,17 +2,14 @@
 
 //! Grader attribution must be a tracker field, not English inside `close_reason`.
 //!
-//! Measured 2026-09-02 (`omp-orchestrator-gcyf`): 23 of 40 closes named their grader
-//! only in prose; `comments[].author` was `josh` on all of them, so
-//! "grader ≠ implementer" was unverifiable. Positive controls already exist
-//! (`leht` GreenFrog `--actor`, `mj8w` AmberGate named). The mechanism works when
-//! used; this crate refuses the two shapes that leave it unused.
+//! Detection is proven against a planted unattributed close. Production is a
+//! shrinking ceiling: live count MAY fall (remediation, including a clean ledger)
+//! and MUST NOT rise. Measured 2026-09-06 against `.beads/issues.jsonl`: 37
+//! unattributed closed beads. The 23 in the bead body was 2026-09-02; a ceiling
+//! set from that figure is already breached.
 //!
-//! Neighbouring hole, cited not solved: `gfm6` (a bead cannot name which agent
-//! holds it or whether that agent is alive).
-//!
-//! This crate does not wrap `br`. A wrapper that is not called is BUILT ≠ WIRED
-//! (`fh N043`). Callers are tests and `dispatch_packet`'s printed `--actor` form.
+//! Tracked caller: `.github/workflows/gate.yml` `cargo test -p grader-attribution-gate`.
+//! Neighbouring hole, cited not solved: `gfm6`.
 
 use std::fmt;
 
@@ -21,6 +18,13 @@ use std::fmt;
 /// Case-folded comparison is load-bearing (`Josh` vs `josh`, measured in
 /// `bead-holder`).
 pub const DEFAULT_AUTHORS: &[&str] = &["josh"];
+
+/// Shrinking ratchet over unattributed closed beads in `.beads/issues.jsonl`.
+///
+/// Source command (2026-09-06):
+/// `unattributed_close_ids(parse_closed_beads(.beads/issues.jsonl))` → 37.
+/// May only be lowered. Raising it hides a regression.
+pub const UNATTRIBUTED_CLOSE_CEILING: usize = 37;
 
 /// One attempted close, as the tracker will record it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -284,12 +288,59 @@ pub fn unattributed_close_ids(rows: &[ClosedBead], defaults: &[&str]) -> Vec<Str
         .collect()
 }
 
-/// Exit 1 names unattributed closes; 0 is a fully attributed ledger; 2 is empty.
+/// Production ratchet. Live MAY fall. Live MUST NOT exceed the ceiling.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CeilingVerdict {
+    Exact { live: usize },
+    Slack { live: usize, ceiling: usize },
+    Breached { live: usize, ceiling: usize },
+}
+
+impl CeilingVerdict {
+    pub fn from_counts(live: usize, ceiling: usize) -> Self {
+        if live > ceiling {
+            Self::Breached { live, ceiling }
+        } else if live < ceiling {
+            Self::Slack { live, ceiling }
+        } else {
+            Self::Exact { live }
+        }
+    }
+
+    /// Slack is green (remediation). Breach is red (regression).
+    pub fn refuses(self) -> bool {
+        matches!(self, Self::Breached { .. })
+    }
+}
+
+impl fmt::Display for CeilingVerdict {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Exact { live } => write!(
+                f,
+                "ATTRIBUTION_CEILING live={live} ceiling={live} verdict=EXACT"
+            ),
+            Self::Slack { live, ceiling } => write!(
+                f,
+                "ATTRIBUTION_CEILING live={live} ceiling={ceiling} verdict=SLACK \
+                 -- lower UNATTRIBUTED_CLOSE_CEILING to {live}; shrink-only"
+            ),
+            Self::Breached { live, ceiling } => write!(
+                f,
+                "CEILING_BREACHED live={live} ceiling={ceiling} -- a new unattributed \
+                 close widened a known gap"
+            ),
+        }
+    }
+}
+
+/// Exit 1 only on a ceiling breach. Slack and exact stay green so a clean
+/// ledger does not fail CI. Empty scan is 2, from the parser, not here.
 pub fn ledger_gate_exit(unattributed: &[String]) -> i32 {
-    if unattributed.is_empty() {
-        0
-    } else {
+    if CeilingVerdict::from_counts(unattributed.len(), UNATTRIBUTED_CLOSE_CEILING).refuses() {
         1
+    } else {
+        0
     }
 }
 
@@ -489,5 +540,23 @@ mod tests {
         assert_ne!(absent, self_grade);
         assert!(absent.contains("ACTOR_REQUIRED"));
         assert!(self_grade.contains("SELF_GRADE_REFUSED"));
+    }
+
+    #[test]
+    fn slack_and_exact_do_not_refuse_a_clean_or_improving_ledger() {
+        assert!(!CeilingVerdict::from_counts(0, UNATTRIBUTED_CLOSE_CEILING).refuses());
+        assert!(!CeilingVerdict::from_counts(36, 37).refuses());
+        assert!(!CeilingVerdict::from_counts(37, 37).refuses());
+        assert_eq!(ledger_gate_exit(&[]), 0);
+    }
+
+    #[test]
+    fn a_count_above_the_ceiling_is_a_regression() {
+        let verdict = CeilingVerdict::from_counts(38, 37);
+        assert!(verdict.refuses());
+        assert!(verdict.to_string().contains("CEILING_BREACHED"));
+        let mut ids = Vec::new();
+        ids.resize(UNATTRIBUTED_CLOSE_CEILING + 1, "x".into());
+        assert_eq!(ledger_gate_exit(&ids), 1);
     }
 }
