@@ -31,11 +31,10 @@
 pub mod commit_serialization;
 pub mod def_ids;
 pub mod firing_ledger;
-
+pub mod head_compiles;
 use std::fmt;
 use std::path::Path;
 use std::process::Command;
-
 /// Bound for hook-context git index reads (ls-files/diff). AmberGate's
 /// contract: a wedged git fails the gate CLOSED (typed, exit 3 class),
 /// never hangs the hook, never reads as a clean scan.

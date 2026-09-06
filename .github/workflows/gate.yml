@@ -31,20 +31,13 @@
 # step. GitHub Actions does not resolve YAML anchors, so the step is repeated per
 # job rather than shared.
 #
-# NOT BUILT HERE, DELIBERATELY: TWO crates do not compile at HEAD on EITHER
-# channel, and no job below builds either of them.
-#   - `crates/loop-driver`   — E0599, `asupersync::Cx::for_request()` is
-#     upstream-gated behind `cfg(any(test, feature = "test-internals"))`.
-#   - `crates/fleet-monitor` — 23 errors in the bin (33 with tests), from
-#     `E0433 cannot find type Stdio` at src/main.rs:586. It reads GREEN in a dirty
-#     worktree only because a sibling holds a ~320-line uncommitted diff on that
-#     file; it was found by measuring a `git archive` export instead. The worktree
-#     was the lie, which is the same reason the debt ceilings in
-#     `kernel-bypass-gate` are pinned to `git archive HEAD`.
-# Both were control-run on nightly-2026-08-23 and fail identically, so neither is
-# a consequence of the stable pin. Do not add a `cargo check --workspace` job
-# without fixing both first; it would go red immediately and read as a regression
-# from the stable flip, which it is not.
+# HISTORICAL EXCLUSION NOTE: this was the pre-3b5u worktree-only state. The
+# committed-tree job below now builds the complete archived workspace, including
+# these crates, so this note is retained only as incident provenance:
+#   - crates/loop-driver — previously failed with an upstream-gated API.
+#   - crates/fleet-monitor — previously failed with missing Stdio imports.
+# The current archive gate is the authority for whether HEAD compiles. Do not
+# infer committed-tree health from a dirty checkout or from this historical note.
 name: gate
 
 on:
@@ -154,7 +147,27 @@ jobs:
       # pre-commit hook run, so the refusal is not reachable only from `cargo test`.
       - name: No new round until one stamped doc covers every round
         run: cargo run --quiet -p convergence-stamp -- --repo . --check
-  path-literal-guard:
+  head-compiles-as-committed:
+    # REACHABLE TRIGGER: this job runs on push, pull_request, and manual dispatch.
+    # VERDICT CONSUMER: the final step reads the receipt emitted by the gate; a
+    # red build is not left as an unread CI status.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Rust toolchain (pinned by rust-toolchain.toml)
+        run: |
+          rustup show active-toolchain
+          cargo --version
+          rustc --version
+      - name: Verify committed HEAD from a clean archive
+        run: cargo run --quiet -p no-shell-gate --bin head-compiles-gate -- --repo . --receipt "$RUNNER_TEMP/head-compiles.receipt"
+      - name: Read committed-tree verdict
+        run: |
+          cat "$RUNNER_TEMP/head-compiles.receipt"
+          grep -q '^HEAD_COMPILES_GATE PASS ' "$RUNNER_TEMP/head-compiles.receipt"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
