@@ -279,6 +279,15 @@ pub struct ReceiverVerifiedCandidate {
     pub receiver_event_id: EventId,
 }
 
+/// One outstanding grade with identifiers a dispatcher can send.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActiveGradingClaim {
+    pub bead: String,
+    pub receiver_pane: String,
+    pub grader_pane: String,
+}
+
+
 impl std::fmt::Debug for LifecycleLedger {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LifecycleLedger")
@@ -370,22 +379,53 @@ impl LifecycleLedger {
         });
         Ok(candidates)
     }
-
-    pub fn active_grading_panes(path: impl AsRef<Path>) -> Result<BTreeSet<String>, LedgerError> {
+    /// Outstanding grading rows with real bead / pane identifiers.
+    /// Angle-bracket placeholders are refused, not returned.
+    pub fn active_grading_claims(
+        path: impl AsRef<Path>,
+    ) -> Result<Vec<ActiveGradingClaim>, LedgerError> {
         let mut latest = BTreeMap::new();
         for row in read_rows(path.as_ref())? {
             let identity = row_identity(&row)?;
             latest.insert(identity_key(&identity), row);
         }
-        let mut panes = BTreeSet::new();
+        let mut claims = Vec::new();
         for row in latest.values() {
-            if row.get("status").and_then(Value::as_str) != Some(LifecycleStatus::Grading.as_str()) {
+            if row.get("status").and_then(Value::as_str) != Some(LifecycleStatus::Grading.as_str())
+            {
                 continue;
             }
-            panes.insert(row_string(row, "grader_pane")?);
+            let identity = row_identity(row)?;
+            let bead = identity.bead.as_str().to_owned();
+            let receiver_pane = identity.target.pane.clone();
+            let grader_pane = row_string(row, "grader_pane")?;
+            for (field, value) in [
+                ("bead", bead.as_str()),
+                ("receiver_pane", receiver_pane.as_str()),
+                ("grader_pane", grader_pane.as_str()),
+            ] {
+                if value.is_empty() || value.contains('<') || value.contains('>') {
+                    return Err(LedgerError::MalformedExistingRow {
+                        line: format!("placeholder_identity field={field} value={value}"),
+                    });
+                }
+            }
+            claims.push(ActiveGradingClaim {
+                bead,
+                receiver_pane,
+                grader_pane,
+            });
         }
-        Ok(panes)
+        Ok(claims)
     }
+
+    pub fn active_grading_panes(path: impl AsRef<Path>) -> Result<BTreeSet<String>, LedgerError> {
+        Ok(Self::active_grading_claims(path)?
+            .into_iter()
+            .map(|claim| claim.grader_pane)
+            .collect())
+    }
+
 
     pub fn resume(
         path: impl Into<PathBuf>,

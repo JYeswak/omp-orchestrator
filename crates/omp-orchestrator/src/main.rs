@@ -1980,17 +1980,30 @@ fn gate_peer_grading_inner(
     tick: u64,
     preferred_grader_pane: Option<&str>,
 ) -> Result<Option<PeerGradeClaim>, String> {
-    let active = LifecycleLedger::active_grading_panes(&config.bead_lifecycle_ledger)
+    let active = LifecycleLedger::active_grading_claims(&config.bead_lifecycle_ledger)
         .map_err(|error| format!("PEER_GRADING_LEDGER_UNREADABLE error={error}"))?;
     if !active.is_empty() {
+        let mut in_flight = Vec::new();
+        for claim in &active {
+            refuse_placeholder_identity("bead", &claim.bead)?;
+            refuse_placeholder_identity("receiver_pane", &claim.receiver_pane)?;
+            refuse_placeholder_identity("grader_pane", &claim.grader_pane)?;
+            let grader_idle = observation.panes.iter().any(|pane| {
+                pane.pane_id == claim.grader_pane && pane.is_dispatchable
+            });
+            if grader_idle {
+                return Ok(Some(PeerGradeClaim {
+                    bead: claim.bead.clone(),
+                    receiver_pane: claim.receiver_pane.clone(),
+                    grader_pane: claim.grader_pane.clone(),
+                }));
+            }
+            in_flight.push(claim.grader_pane.clone());
+        }
         observation
             .panes
-            .retain(|pane| !active.contains(&pane.pane_id));
-        return Ok(Some(PeerGradeClaim {
-            bead: "<active-peer-grade>".to_owned(),
-            receiver_pane: "<ledger>".to_owned(),
-            grader_pane: active.into_iter().collect::<Vec<_>>().join(","),
-        }));
+            .retain(|pane| !in_flight.iter().any(|grader| grader == &pane.pane_id));
+        return Ok(None);
     }
 
     let candidates = LifecycleLedger::receiver_verified_candidates(
@@ -2086,9 +2099,6 @@ fn gate_peer_grading_inner(
             evidence,
         )
         .map_err(|error| format!("PEER_GRADING_REFUSED error={error}"))?;
-        observation
-            .panes
-            .retain(|pane| pane.pane_id != grader_pane);
         return Ok(Some(PeerGradeClaim {
             bead,
             receiver_pane,
@@ -2097,6 +2107,16 @@ fn gate_peer_grading_inner(
     }
     Ok(None)
 }
+
+fn refuse_placeholder_identity(field: &str, value: &str) -> Result<(), String> {
+    if value.is_empty() || value.contains('<') || value.contains('>') {
+        return Err(format!(
+            "PEER_GRADING_REFUSED reason=placeholder_identity field={field} value={value}"
+        ));
+    }
+    Ok(())
+}
+
 
 static PANE_OCCUPANCY_MINT: LazyLock<IncarnationMint> = LazyLock::new(IncarnationMint::new);
 static PANE_OCCUPANCIES: LazyLock<Mutex<BTreeMap<String, Occupancy>>> =
@@ -4304,27 +4324,11 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         format!("QUEUE_UNREADABLE owner=josh next_action=repair-br-or-escalate: {error}")
     })?;
     let ready_ids = parse_ready(&ready)?;
-    // FULL DISPATCH ORDER, from the selector crate — blockers, then grading, then rank.
-    //
-    // `rank_ready` used to live HERE, in the binary, while `loop-queue-filter` — which
-    // AGENTS.md names the "fail-closed queue selector" — sat unused. That was a handroll
-    // of a kernel we own, and pane %9 surfaced it by asking which home was correct rather
-    // than guessing. The logic now lives in that crate (`fb76748`, 19 legs) and this is a
-    // thin caller. `omp-orchestrator-2ceb.1`.
-    //
-    // A silent FIFO fallback is exactly the defect `2ceb` names, so an unreadable ranking
-    // is a TYPED REFUSAL that stops the cycle rather than a quiet degradation to whatever
-    // `br ready` returned first.
     let triage_args = vec!["--robot-triage".to_owned()];
-    let bead_ids = match invoke(cx, config, &config.bv, &triage_args).await {
+    let mut bead_ids = match invoke(cx, config, &config.bv, &triage_args).await {
         Ok(output) => {
             let triage = require_success(&config.bv, output)
                 .map_err(|error| format!("QUEUE_UNRANKED owner=josh next_action=repair-bv: {error}"))?;
-            // Comment evidence for the grading slot. `br list --json` has NO `comments`
-            // key — a classifier keyed on it reports zero reapable for every row — so the
-            // JSONL is the only surface carrying it. An unreadable ledger degrades to
-            // rank-only ordering rather than refusing the whole cycle: grading priority is
-            // an OPTIMISATION over a correct order, whereas an unranked queue is not.
             let jsonl = fs::read_to_string(config.repo.join(".beads/issues.jsonl"))
                 .unwrap_or_default();
             loop_queue_filter::select::select_dispatch_order(
@@ -4340,6 +4344,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             ));
         }
     };
+
     observation.queue = QueueState {
         ready_count: bead_ids.len(),
         readable: true,
@@ -4378,9 +4383,12 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         &observation.panes,
         &observation.queue,
     );
-    let decision = decide(&observation, &authorization);
+    let mut decision = decide(&observation, &authorization);
     if matches!(&decision, SupervisorDecision::Dispatch { .. }) {
         if let Some(claim) = gate_peer_grading(config, &mut observation, tick)? {
+            refuse_placeholder_identity("bead", &claim.bead)?;
+            refuse_placeholder_identity("receiver_pane", &claim.receiver_pane)?;
+            refuse_placeholder_identity("grader_pane", &claim.grader_pane)?;
             let detail = format!(
                 "bead={} receiver_pane={} grader_pane={} requirement=peer-grading-before-new-work",
                 claim.bead, claim.receiver_pane, claim.grader_pane
@@ -4390,9 +4398,15 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                 "PEER_GRADING_REQUIRED tick={tick} session={} {detail}",
                 config.session
             );
-            return Ok(());
+            decision = SupervisorDecision::Dispatch {
+                pane: claim.grader_pane.clone(),
+                bead_hint: claim.bead.clone(),
+            };
+            bead_ids.retain(|id| id != &claim.bead);
+            bead_ids.insert(0, claim.bead);
         }
     }
+
     file_supervisor_finding(cx, config, tick, &decision).await?;
     emit_s1_l3_l5(cx, config, &decision).await;
     observe_s1_after_emit(config);
@@ -7307,9 +7321,30 @@ Stop: now
                 .collect::<Vec<_>>(),
             vec!["%1414".to_owned()]
         );
-        assert!(observation.panes.iter().all(|pane| pane.pane_id != "%1414"));
+        assert!(
+            observation.panes.iter().any(|pane| pane.pane_id == "%1414"),
+            "grader must remain observable so the tick can dispatch the grade"
+        );
+        let mut still_idle = Observation {
+            panes: vec![idle("%1409"), idle("%1414")],
+            queue: QueueState {
+                ready_count: 1,
+                readable: true,
+            },
+            gate_census: Some(GateCensus { rows: Vec::new() }),
+        };
+        let again = gate_peer_grading(&config, &mut still_idle, 78)
+            .unwrap()
+            .expect("outstanding idle grade must stay dispatchable");
+        assert_eq!(again.bead, "peer-bead");
+        assert!(!again.bead.contains('<'), "placeholder bead={:?}", again.bead);
+        assert_eq!(again.grader_pane, "%1414");
+        let err = refuse_placeholder_identity("bead", "<active-peer-grade>")
+            .expect_err("placeholder");
+        assert!(err.contains("reason=placeholder_identity"), "{err}");
         drop(temp);
     }
+
 
     #[test]
     fn grade_claim_parser_requires_the_claim_flag() {
