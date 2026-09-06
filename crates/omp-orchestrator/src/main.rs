@@ -60,7 +60,7 @@ use lifecycle_event::{
 use lifecycle_monitor::{load_metrics, observe_layer, verify_artifact};
 use ntm_fleet_monitor::{classify, Approved, Intent, TypedAction};
 use ntm_fleet_monitor::bead_lifecycle::{
-    BeadId, DispatchReceipt, DispatchTarget, EvidencePolicy, EventId, ReceiverEvidence,
+    BeadId, DispatchReceipt, DispatchTarget, EvidencePolicy, EventId, ReceiverEvidence, RedispatchPlan,
 };
 use ntm_fleet_monitor::bead_lifecycle::ledger::{
     packet_digest, InvokerClass, LedgerEvidence, LifecycleIdentity, LifecycleLedger,
@@ -132,6 +132,8 @@ pub struct Config {
     max_ticks: Option<u64>,
     tick_monitor: String,
     br: String,
+    /// Path to `bv`, the dependency-graph planning brain used for ranked selection.
+    bv: String,
     ntm: String,
     tmux_tmpdir: PathBuf,
     exclude_panes: Vec<String>,
@@ -570,6 +572,10 @@ impl Config {
             tick_monitor: env::var("OMP_TICK_MONITOR_BIN")
                 .unwrap_or_else(|_| "tick-monitor".to_owned()),
             br: env::var("OMP_BR_BIN").unwrap_or_else(|_| "br".to_owned()),
+            // The planning brain. Ranked selection is MANDATORY, so an absent `bv`
+            // must surface as a typed QUEUE_UNRANKED refusal at the call site rather
+            // than as a silent fall back to creation order.
+            bv: env::var("OMP_BV_BIN").unwrap_or_else(|_| "bv".to_owned()),
             ntm: env::var("OMP_NTM_BIN").unwrap_or_else(|_| "ntm".to_owned()),
             tmux_tmpdir,
             run_subcommand,
@@ -780,6 +786,87 @@ fn parse_ready(bytes: &[u8]) -> Result<Vec<String>, String> {
         ids.push(id.to_owned());
     }
     Ok(ids)
+}
+
+/// Reorder the ready queue by `bv`'s graph triage instead of taking `br ready` order.
+///
+/// # `br ready` order is CREATION ORDER, and that is FIFO by another name
+///
+/// MEASURED 2026-09-06: `parse_ready` above filters empty ids and nothing else, and the
+/// caller took `bead_ids.first()`. So selection was whatever `br` happened to return
+/// first. Live consequence in one session: the loop dispatched `28dq` (P1), `dmpv` (P1),
+/// `jg9x` (P1) and `xv30` (P1) while **26 P0 beads sat ready**, and it never consulted
+/// the dependency graph at all — `git grep 'Command::new("bv")'` over `crates/*/src`
+/// returned zero. `omp-orchestrator-2ceb` filed this independently as "selects work FIFO
+/// by creation date and never consults bv".
+///
+/// # Why the graph and not just the priority integer
+///
+/// Priority alone re-creates easy-bead cherry-picking: twenty P0 leaves outrank one P0
+/// articulation point whose closure unblocks them. `bv` scores PageRank over the
+/// dependency DAG, so `unblocks_ids` is priced in. Order is (priority ASC, score DESC).
+///
+/// # What this deliberately does NOT do
+///
+/// `bv --robot-triage` returns a BOUNDED recommendation list (10 rows measured), not a
+/// total order over 360 ready beads. So ranked rows go first and the remaining ready ids
+/// keep their prior order behind them. This is a ranked HEAD, not a sorted queue, and
+/// saying otherwise would overclaim.
+///
+/// Epic containers are excluded: AGENTS.md records that an epic's PageRank accumulates
+/// from every child, so epics top the list and can never close until their children do.
+/// Assigned rows are excluded so a dispatched bead is not re-offered.
+fn rank_ready(triage: &[u8], ready: &[String]) -> Result<Vec<String>, String> {
+    let value: Value = serde_json::from_slice(triage)
+        .map_err(|error| format!("QUEUE_UNRANKED bv triage JSON: {error}"))?;
+    let recs = value
+        .get("triage")
+        .and_then(|t| t.get("recommendations"))
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            // `.quick_ref.top_picks` is NOT an acceptable fallback: AGENTS.md measured it
+            // reporting unblocks=0 and omitting high scorers.
+            "QUEUE_UNRANKED bv triage has no .triage.recommendations array".to_owned()
+        })?;
+    let mut ranked: Vec<(u64, i64, String)> = Vec::new();
+    for row in recs {
+        let Some(id) = row.get("id").and_then(Value::as_str) else {
+            continue;
+        };
+        if !ready.iter().any(|candidate| candidate == id) {
+            continue;
+        }
+        if row
+            .get("type")
+            .and_then(Value::as_str)
+            .is_some_and(|kind| kind.eq_ignore_ascii_case("epic"))
+        {
+            continue;
+        }
+        if row
+            .get("assignee")
+            .and_then(Value::as_str)
+            .is_some_and(|who| !who.trim().is_empty())
+        {
+            continue;
+        }
+        let priority = row.get("priority").and_then(Value::as_u64).unwrap_or(u64::MAX);
+        // Scores are fractional; scale so the sort key stays integral and total.
+        let score = row
+            .get("score")
+            .and_then(Value::as_f64)
+            .map(|s| -((s * 1_000_000.0) as i64))
+            .unwrap_or(0);
+        ranked.push((priority, score, id.to_owned()));
+    }
+    ranked.sort();
+    let mut out: Vec<String> = ranked.into_iter().map(|(_, _, id)| id).collect();
+    for id in ready {
+        if !out.iter().any(|chosen| chosen == id) {
+            out.push(id.clone());
+        }
+    }
+    Ok(out)
 }
 
 async fn capture_pane(cx: &Cx, config: &Config, pane: &str) -> Result<Vec<u8>, String> {
@@ -2466,6 +2553,33 @@ async fn send_and_verify(
                 // working capture cannot discriminate and must say so rather than
                 // letting the reader assume it did.
                 .unwrap_or_else(|| " discriminator=NO_WORKING_CAPTURE owes_human=unknown".to_owned());
+            let redispatch_at_ms = now_unix().saturating_mul(1_000);
+            let redispatch_id = EventId::new(format!("{bead}:redispatch-required:{tick}"))
+                .map_err(|error| error.to_string())?;
+            let redispatch_plan = RedispatchPlan::new(
+                redispatch_id.clone(),
+                BeadId::new(bead).map_err(|error| error.to_string())?,
+                DispatchTarget::new(config.session.clone(), pane)
+                    .map_err(|error| error.to_string())?,
+                format!("receiver_not_reported action={action}"),
+            )
+            .map_err(|error| error.to_string())?;
+            let redispatch_evidence = LedgerEvidence::new(
+                redispatch_id,
+                redispatch_at_ms,
+                EvidencePolicy::new(redispatch_at_ms, 0),
+                [
+                    ("reason", "receiver_not_reported"),
+                    ("action", action),
+                    ("delivery", stage.delivery.label()),
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+            lifecycle
+                .require_redispatch(redispatch_plan, redispatch_evidence)
+                .map_err(|error| {
+                    format!("LIFECYCLE_LEDGER_REFUSED bead={bead} pane={pane} error={error}")
+                })?;
             return Err(format!(
                 "ACK_STAGE_RETRY_BLOCKED pane={pane} bead={bead} action={action} verdict={} reason={} after={}s{discriminator}",
                 stage.delivery.label(),
@@ -4252,7 +4366,23 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     let ready = require_success(&config.br, ready_output).map_err(|error| {
         format!("QUEUE_UNREADABLE owner=josh next_action=repair-br-or-escalate: {error}")
     })?;
-    let bead_ids = parse_ready(&ready)?;
+    let ready_ids = parse_ready(&ready)?;
+    // PRIORITY AND GRAPH ORDER, not creation order. A silent FIFO fallback is exactly
+    // the defect (`2ceb`), so an unreadable ranking is a TYPED REFUSAL that stops the
+    // cycle rather than a quiet degradation to whatever `br` returned first.
+    let triage_args = vec!["--robot-triage".to_owned()];
+    let bead_ids = match invoke(cx, config, &config.bv, &triage_args).await {
+        Ok(output) => {
+            let triage = require_success(&config.bv, output)
+                .map_err(|error| format!("QUEUE_UNRANKED owner=josh next_action=repair-bv: {error}"))?;
+            rank_ready(&triage, &ready_ids)?
+        }
+        Err(error) => {
+            return Err(format!(
+                "QUEUE_UNRANKED owner=josh next_action=repair-bv-or-escalate: {error}"
+            ));
+        }
+    };
     observation.queue = QueueState {
         ready_count: bead_ids.len(),
         readable: true,
@@ -4988,6 +5118,7 @@ mod tests {
             tick_monitor: "tick-monitor".to_owned(),
             run_subcommand: false,
             br: "br".to_owned(),
+            bv: "bv".to_owned(),
             ntm: "ntm".to_owned(),
             tmux_tmpdir,
             exclude_panes: Vec::new(),
@@ -6329,6 +6460,77 @@ exit 2
                     discriminator=ACK_ABSENT_WORKER_IDLE discriminator_reason=NONE \
                     owes_human=true";
         assert_eq!(dispatch_status_word(owed), "DISPATCH_FAILED");
+    }
+
+    /// KNOWN-BAD for `2ceb`: a P0 articulation point must outrank an OLDER P1 leaf.
+    ///
+    /// Under creation order the P1 leaf wins because it is first in `br ready`. This is
+    /// the leg that fails on the pre-fix code, and it is the whole point of the bead:
+    /// measured live, the loop dispatched four P1 beads while 26 P0s sat ready.
+    #[test]
+    fn ranking_prefers_a_p0_articulation_point_over_an_older_p1_leaf() {
+        let ready = vec!["old-p1-leaf".to_owned(), "p0-articulation".to_owned()];
+        let triage = br#"{"triage":{"recommendations":[
+            {"id":"old-p1-leaf","priority":1,"score":0.9},
+            {"id":"p0-articulation","priority":0,"score":0.2}
+        ]}}"#;
+        let ranked = rank_ready(triage, &ready).expect("ranked");
+        assert_eq!(
+            ranked.first().map(String::as_str),
+            Some("p0-articulation"),
+            "priority outranks both creation order and a higher graph score: {ranked:?}"
+        );
+    }
+
+    /// Within one priority, the GRAPH score decides — otherwise priority alone
+    /// re-creates easy-bead cherry-picking, where many P0 leaves outrank the one P0
+    /// whose closure unblocks them.
+    #[test]
+    fn within_a_priority_the_graph_score_decides() {
+        let ready = vec!["low".to_owned(), "high".to_owned()];
+        let triage = br#"{"triage":{"recommendations":[
+            {"id":"low","priority":0,"score":0.10},
+            {"id":"high","priority":0,"score":0.80}
+        ]}}"#;
+        let ranked = rank_ready(triage, &ready).expect("ranked");
+        assert_eq!(ranked.first().map(String::as_str), Some("high"));
+    }
+
+    /// Epics and already-assigned rows are excluded, and every ready id still survives.
+    ///
+    /// An epic's PageRank accumulates from every child, so it tops the list and can
+    /// never close until its children do; an assigned bead must not be re-offered. But
+    /// exclusion from the RANKED HEAD must not drop a bead from the queue entirely.
+    #[test]
+    fn epics_and_assigned_rows_are_not_ranked_but_are_not_lost() {
+        let ready = vec!["epic".to_owned(), "taken".to_owned(), "free".to_owned()];
+        let triage = br#"{"triage":{"recommendations":[
+            {"id":"epic","priority":0,"score":0.99,"type":"epic"},
+            {"id":"taken","priority":0,"score":0.98,"assignee":"pane3-%8"},
+            {"id":"free","priority":2,"score":0.01}
+        ]}}"#;
+        let ranked = rank_ready(triage, &ready).expect("ranked");
+        assert_eq!(ranked.first().map(String::as_str), Some("free"));
+        assert_eq!(ranked.len(), 3, "no ready id may be dropped: {ranked:?}");
+    }
+
+    /// ANTI-VACUITY: a triage payload with no recommendations array is a typed REFUSAL,
+    /// never a silent fall back to creation order. A quiet FIFO degradation is the
+    /// defect `2ceb` names, and it would be indistinguishable from working ranking.
+    #[test]
+    fn missing_recommendations_is_a_typed_refusal_not_silent_fifo() {
+        let ready = vec!["a".to_owned()];
+        for payload in [
+            &br#"{"triage":{}}"#[..],
+            &br#"{"triage":{"quick_ref":{"top_picks":["a"]}}}"#[..],
+            &br#"{}"#[..],
+        ] {
+            let error = rank_ready(payload, &ready).expect_err("must refuse");
+            assert!(
+                error.starts_with("QUEUE_UNRANKED"),
+                "refusal must be typed and named: {error}"
+            );
+        }
     }
 
     /// KNOWN-BAD: the verbatim `dmpv` line must not say `DISPATCH_FAILED`.
