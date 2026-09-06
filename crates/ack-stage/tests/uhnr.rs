@@ -97,9 +97,54 @@ fn busy_pane_without_ack_remains_indeterminate() {
             ..
         }
     ));
-    assert!(matches!(result.action, ack_stage::AckAction::AwaitHuman { .. }));
+    assert!(matches!(result.action, ack_stage::AckAction::Retry { .. }));
 }
 
+#[test]
+fn eg0m_pane_mismatch_is_machine_remeasurable_not_human_escalation() {
+    let comments = br#"[
+        {"text":"ACK eg0m on %1397 -- agent=control-plane","created_at":1},
+        {"text":"ACK eg0m on %1414 -- agent=other-session","created_at":2},
+        {"text":"ACK eg0m on %8 -- agent=WildStone","created_at":3},
+        {"text":"ACK eg0m on %8 -- agent=WildStone","created_at":4},
+        {"text":"ACK eg0m on %9 -- agent=WildStone","created_at":5},
+        {"text":"ACK eg0m on %9 -- agent=WildStone","created_at":6},
+        {"text":"ACK eg0m on %9 -- agent=WildStone","created_at":7}
+    ]"#;
+    let readback = AckReadback::from_comments_json("omp-orchestrator-eg0m", "%1414", comments)
+        .expect("copied eg0m comment-shape fixture")
+        .with_dispatch_issued_at(0);
+    let result = assess(&AckStageInput {
+        bead_id: "omp-orchestrator-eg0m".into(),
+        pane_id: "%1414".into(),
+        transport: ntm(),
+        pre_send: observation(PaneState::Idle, 100, 1),
+        post_send: PostSendObservation::Present(observation(
+            PaneState::Working { timer_secs: 1 },
+            110,
+            1,
+        )),
+        ack: readback,
+        attempts_so_far: 0,
+        session_pane_ids: vec!["%8".into()],
+    });
+    assert_eq!(result.ack_verdict.label(), "ACK_PANE_MISMATCH");
+    assert!(matches!(result.action, ack_stage::AckAction::Retry { .. }));
+    assert_ne!(result.action.label(), "AWAIT_HUMAN");
+}
+
+#[test]
+fn unreachable_ack_wait_still_owes_a_human() {
+    let first = observation(PaneState::Working { timer_secs: 120 }, 1_000, 1);
+    let last = observation(PaneState::Idle, 1_080, 1);
+    let verdict = classify_ack_wait(&first, &last);
+    assert!(matches!(verdict, AckWaitVerdict::Unreachable { .. }));
+    assert!(verdict.owes_a_human());
+    assert_eq!(
+        ack_stage::HumanRequiredReason::from_ack_wait(&verdict),
+        Some(ack_stage::HumanRequiredReason::PaneUnreachable)
+    );
+}
 #[test]
 fn comment_and_transport_arms_are_distinct() {
     let comment_result = assess(&input(
@@ -126,10 +171,20 @@ fn empty_unparseable_and_busy_states_have_distinct_names() {
     let empty = AckReadback::from_comments_json(BEAD, PANE, b"[]").unwrap_err();
     assert_eq!(empty, AckReadbackError::EmptyAckCensus);
     assert_eq!(empty.to_string(), "ACK_CENSUS_EMPTY");
-
     let unparseable = AckReadback::from_comments_json(BEAD, PANE, br#"[{"id":1}]"#).unwrap_err();
     assert!(matches!(unparseable, AckReadbackError::MissingText(0)));
     assert_ne!(unparseable.to_string(), empty.to_string());
+
+    let indeterminate = ack_stage::decide(
+        &ReceiptVerdict::Indeterminate {
+            pane_id: PANE.into(),
+            reason: ReceiptReason::AckReadbackMissing,
+        },
+        0,
+    );
+    assert_eq!(indeterminate.label(), "RETRY");
+    assert_ne!(indeterminate.label(), empty.to_string());
+    assert_ne!(indeterminate.label(), "AWAIT_HUMAN");
 
     let busy = AckWaitVerdict::BusyStillWorking {
         timer_from: 1,

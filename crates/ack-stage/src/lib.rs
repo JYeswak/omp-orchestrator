@@ -7,7 +7,7 @@
 //! requires the ntm transport, both receiver signals, and a verbatim matching br comment.
 
 use receiver_receipt::{
-    assess_receiver_receipt, PostSendObservation, ReceiptReason, ReceiptVerdict,
+    assess_receiver_receipt, AckWaitVerdict, PostSendObservation, ReceiptReason, ReceiptVerdict,
 };
 use serde_json::Value;
 use std::fmt;
@@ -69,6 +69,54 @@ pub enum TransportReceipt {
     TmuxSendKeysLiteral(TmuxSendKeysMeasurement),
 }
 
+/// Reasons that are allowed to interrupt Joshua rather than remain machine work.
+///
+/// The pane-specific variants are the only ones currently emitted by this crate;
+/// the policy categories stay explicit here so a future caller cannot smuggle a
+/// prose reason into AWAIT_HUMAN without choosing a reviewed category.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HumanRequiredReason {
+    MoneySpending,
+    IrreversibleAction,
+    CredentialsOrApiKeys,
+    ScopeOrTaste,
+    CrossRepoConflict,
+    PaneDialog,
+    PaneUnreachable,
+}
+
+impl HumanRequiredReason {
+    pub fn from_receipt_verdict(verdict: &ReceiptVerdict) -> Option<Self> {
+        if !verdict.owes_a_human() {
+            return None;
+        }
+        match verdict {
+            ReceiptVerdict::Indeterminate { reason, .. } => {
+                matches!(reason, ReceiptReason::DialogOpen).then_some(Self::PaneDialog)
+            }
+            ReceiptVerdict::ReceiptConfirmed { .. }
+            | ReceiptVerdict::AckConfirmed { .. }
+            | ReceiptVerdict::NoReceipt { .. }
+            | ReceiptVerdict::Dead { .. } => None,
+        }
+    }
+    pub fn from_ack_wait(verdict: &AckWaitVerdict) -> Option<Self> {
+        verdict
+            .owes_a_human()
+            .then_some(Self::PaneUnreachable)
+    }
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::MoneySpending => "MONEY_SPENDING",
+            Self::IrreversibleAction => "IRREVERSIBLE_ACTION",
+            Self::CredentialsOrApiKeys => "CREDENTIALS_OR_API_KEYS",
+            Self::ScopeOrTaste => "SCOPE_OR_TASTE",
+            Self::CrossRepoConflict => "CROSS_REPO_CONFLICT",
+            Self::PaneDialog => "PANE_DIALOG",
+            Self::PaneUnreachable => "PANE_UNREACHABLE",
+        }
+    }
+}
 /// Why a transport receipt could not be captured as typed evidence.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransportReceiptError {
@@ -588,7 +636,7 @@ pub enum AckAction {
     /// Stop sending and await a human response to the dialog.
     AwaitHuman {
         pane_id: String,
-        reason: ReceiptReason,
+        reason: HumanRequiredReason,
     },
     /// Stop scheduling work for a pane absent from a non-empty census.
     AbandonDeadPane { pane_id: String },
@@ -619,20 +667,27 @@ impl AckAction {
 ///
 /// `attempts_so_far` is durable caller state. A `NO_RECEIPT` can retry only while it is
 /// below [`MAX_RETRY_ATTEMPTS`]. `WEDGED_UNSUBMITTED` is deliberately checked first and
-/// never becomes a retry, even when its retry budget is unused. `INDETERMINATE` always
-/// waits rather than burying a human dialog with another packet.
+/// never becomes a retry, even when its retry budget is unused. An INDETERMINATE verdict
+/// either owes a human under receiver-receipt's authority or re-measures within the same
+/// bounded attempt budget; exhaustion is RETRY_EXHAUSTED, never an implicit escalation.
 pub fn decide(verdict: &ReceiptVerdict, attempts_so_far: u32) -> AckAction {
     match verdict {
-        ReceiptVerdict::ReceiptConfirmed { pane_id, .. } | ReceiptVerdict::AckConfirmed { pane_id, .. } => AckAction::RecordReceipt {
+        ReceiptVerdict::ReceiptConfirmed { pane_id, .. }
+        | ReceiptVerdict::AckConfirmed { pane_id, .. } => AckAction::RecordReceipt {
             pane_id: pane_id.clone(),
         },
         ReceiptVerdict::Dead { pane_id } => AckAction::AbandonDeadPane {
             pane_id: pane_id.clone(),
         },
-        ReceiptVerdict::Indeterminate { pane_id, reason } => AckAction::AwaitHuman {
-            pane_id: pane_id.clone(),
-            reason: reason.clone(),
-        },
+        ReceiptVerdict::Indeterminate { pane_id, .. } => {
+            if let Some(human_reason) = HumanRequiredReason::from_receipt_verdict(verdict) {
+                return AckAction::AwaitHuman {
+                    pane_id: pane_id.clone(),
+                    reason: human_reason,
+                };
+            }
+            decide_remeasure(pane_id, attempts_so_far)
+        }
         ReceiptVerdict::NoReceipt { pane_id, reason } => {
             if matches!(reason, ReceiptReason::WedgedUnsubmitted) {
                 return AckAction::Unstick {
@@ -640,18 +695,22 @@ pub fn decide(verdict: &ReceiptVerdict, attempts_so_far: u32) -> AckAction {
                     reason: reason.clone(),
                 };
             }
-            if attempts_so_far < MAX_RETRY_ATTEMPTS {
-                AckAction::Retry {
-                    pane_id: pane_id.clone(),
-                    attempt: attempts_so_far + 1,
-                    max_attempts: MAX_RETRY_ATTEMPTS,
-                }
-            } else {
-                AckAction::RetryExhausted {
-                    pane_id: pane_id.clone(),
-                    attempts: attempts_so_far,
-                }
-            }
+            decide_remeasure(pane_id, attempts_so_far)
+        }
+    }
+}
+
+fn decide_remeasure(pane_id: &str, attempts_so_far: u32) -> AckAction {
+    if attempts_so_far < MAX_RETRY_ATTEMPTS {
+        AckAction::Retry {
+            pane_id: pane_id.to_owned(),
+            attempt: attempts_so_far + 1,
+            max_attempts: MAX_RETRY_ATTEMPTS,
+        }
+    } else {
+        AckAction::RetryExhausted {
+            pane_id: pane_id.to_owned(),
+            attempts: attempts_so_far,
         }
     }
 }
@@ -794,12 +853,14 @@ pub fn classify_dispatch(result: &AckStageResult, window_secs: u64) -> DispatchV
             reason: result.delivery.label().to_owned(),
             transport,
         },
-        AckAction::Unstick { reason, .. } | AckAction::AwaitHuman { reason, .. } => {
-            DispatchVerdict::Failed(format!(
-                "action={} reason={reason:?}",
-                result.action.label()
-            ))
-        }
+        AckAction::Unstick { reason, .. } => DispatchVerdict::Failed(format!(
+            "action={} reason={reason:?}",
+            result.action.label()
+        )),
+        AckAction::AwaitHuman { reason, .. } => DispatchVerdict::Failed(format!(
+            "action={} reason={reason:?}",
+            result.action.label()
+        )),
         AckAction::AbandonDeadPane { pane_id } => {
             DispatchVerdict::Failed(format!("action=abandon_dead_pane pane={pane_id}"))
         }
@@ -940,7 +1001,7 @@ mod tests {
             attempts_so_far: 0,
             session_pane_ids: Vec::new(),
         });
-        assert_eq!(result.action.label(), "AWAIT_HUMAN");
+        assert_eq!(result.action.label(), "RETRY");
         assert!(matches!(
             result.delivery,
             ReceiptVerdict::Indeterminate {
@@ -971,7 +1032,7 @@ mod tests {
     }
 
     #[test]
-    fn missing_ack_is_indeterminate_and_never_retries() {
+    fn missing_ack_is_indeterminate_and_remeasures() {
         let result = assess(&AckStageInput {
             bead_id: "omp-orchestrator-ack-stage-qhl".into(),
             pane_id: "%1413".into(),
@@ -982,8 +1043,8 @@ mod tests {
             attempts_so_far: 0,
             session_pane_ids: Vec::new(),
         });
-        assert_eq!(result.action.label(), "AWAIT_HUMAN");
-        assert!(!result.action.is_retry());
+        assert_eq!(result.action.label(), "RETRY");
+        assert!(result.action.is_retry());
         assert!(matches!(
             result.delivery,
             ReceiptVerdict::Indeterminate {
@@ -1010,8 +1071,8 @@ mod tests {
             attempts_so_far: 0,
             session_pane_ids: Vec::new(),
         });
-        assert_eq!(result.action.label(), "AWAIT_HUMAN");
-        assert!(!result.action.is_retry());
+        assert_eq!(result.action.label(), "RETRY");
+        assert!(result.action.is_retry());
         assert!(matches!(
             result.delivery,
             ReceiptVerdict::Indeterminate {
@@ -1094,6 +1155,19 @@ mod tests {
         assert!(!action.is_retry());
     }
 
+    #[test]
+    fn indeterminate_remeasurement_exhausts_without_escalation() {
+        let action = decide(
+            &ReceiptVerdict::Indeterminate {
+                pane_id: "%p".into(),
+                reason: ReceiptReason::AckReadbackMissing,
+            },
+            MAX_RETRY_ATTEMPTS,
+        );
+        assert_eq!(action.label(), "RETRY_EXHAUSTED");
+        assert!(!action.is_retry());
+        assert_ne!(action.label(), "AWAIT_HUMAN");
+    }
     #[test]
     fn indeterminate_dialog_never_retries() {
         let action = decide(

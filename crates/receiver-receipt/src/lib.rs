@@ -189,8 +189,21 @@ impl ReceiptVerdict {
             Self::NoReceipt { reason, .. } | Self::Indeterminate { reason, .. } => Some(reason),
         }
     }
-}
 
+    /// Whether the receipt evidence itself names a condition that already owes a
+    /// human. All other indeterminate receipt evidence remains machine work: the
+    /// caller must re-measure it instead of turning uncertainty into escalation.
+    pub const fn owes_a_human(&self) -> bool {
+        matches!(
+            self,
+            Self::Indeterminate {
+                reason: ReceiptReason::DialogOpen,
+                ..
+            }
+        )
+    }
+
+}
 /// How far a post-send timer may exceed the OBSERVED SPAN before the receipt is
 /// unattributable.
 ///
@@ -300,7 +313,7 @@ pub enum AckWaitVerdict {
 
 impl AckWaitVerdict {
     /// Whether a human must be interrupted. Only `Unreachable` earns that.
-    pub fn owes_a_human(&self) -> bool {
+    pub const fn owes_a_human(&self) -> bool {
         matches!(self, AckWaitVerdict::Unreachable { .. })
     }
 
