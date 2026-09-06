@@ -18,6 +18,9 @@
 //! group kill) rather than a bare `Command::output`, per the atom's cross-cutting rule.
 
 use crate_atom_gate::metric_auth::require_vector_text;
+use crate_atom_gate::workspace_hygiene::{
+    crate_names_from_git_paths, extra_glob_members, HygieneError,
+};
 use crate_atom_gate::{
     assess_crate, ceiling_breaches, parse_allowances, verdict, Allowances, Caller, CrateFacts,
     GateVerdict, Part, PartStatus, Row, WIRED_CALLERS,
@@ -102,6 +105,7 @@ fn main() -> ExitCode {
             },
         },
     };
+    outcome = fold_untracked(outcome, measure_untracked_members(&repo));
     emit(&outcome, &rows, want_json)
 }
 
@@ -496,4 +500,94 @@ fn is_missing(status: &PartStatus) -> bool {
 #[allow(dead_code)]
 fn breaches(rows: &[Row], allowances: &Allowances) -> Vec<String> {
     ceiling_breaches(rows, allowances)
+}
+
+const GIT_DEADLINE: Duration = Duration::from_secs(30);
+
+fn git_name_only(repo: &Path, args: &[&str]) -> Result<Vec<String>, String> {
+    let mut command = Command::new("git");
+    command.current_dir(repo).args(args);
+    match bounded_output(&mut command, GIT_DEADLINE) {
+        BoundedOutcome::Completed(output) if output.status.success() => Ok(String::from_utf8_lossy(
+            &output.stdout,
+        )
+        .lines()
+        .filter(|line| !line.is_empty())
+        .map(str::to_owned)
+        .collect()),
+        BoundedOutcome::Completed(output) => Err(format!(
+            "GIT_FAILED args={args:?} status={:?} stderr={}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr)
+                .lines()
+                .next()
+                .unwrap_or("")
+        )),
+        BoundedOutcome::TimedOut { .. } => Err("GIT_TIMEOUT: instrument could not look".to_owned()),
+        BoundedOutcome::Unspawned(error) => Err(format!("GIT_UNSPAWNED detail={error}")),
+    }
+}
+
+fn disk_crate_names(repo: &Path) -> Result<BTreeSet<String>, String> {
+    let crates_dir = repo.join("crates");
+    let entries = std::fs::read_dir(&crates_dir).map_err(|error| {
+        format!(
+            "CRATES_DIR_UNREADABLE path={} detail={error}",
+            crates_dir.display()
+        )
+    })?;
+    let mut names = BTreeSet::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("CRATES_DIR_ENTRY detail={error}"))?;
+        let path = entry.path();
+        if path.is_dir() && path.join("Cargo.toml").is_file() {
+            if let Some(name) = entry.file_name().to_str() {
+                names.insert(name.to_owned());
+            }
+        }
+    }
+    Ok(names)
+}
+
+fn measure_untracked_members(repo: &Path) -> Result<Vec<String>, String> {
+    let disk = disk_crate_names(repo)?;
+    let committed = crate_names_from_git_paths(git_name_only(
+        repo,
+        &["ls-tree", "-r", "--name-only", "HEAD"],
+    )?);
+    let staged = crate_names_from_git_paths(git_name_only(
+        repo,
+        &["diff", "--cached", "--name-only"],
+    )?);
+    extra_glob_members(&disk, &committed, &staged).map_err(|error| error.to_string())
+}
+
+fn fold_untracked(outcome: GateVerdict, extras: Result<Vec<String>, String>) -> GateVerdict {
+    match extras {
+        Err(reason) if reason.contains("WORKSPACE_HYGIENE_UNRUN") => GateVerdict::Unrun { reason },
+        Err(reason) => GateVerdict::InstrumentError { reason },
+        Ok(names) if names.is_empty() => outcome,
+        Ok(names) => {
+            let reason = format!(
+                "UNTRACKED_GLOB_MEMBER crates=[{}] next_action=add-or-delete — cargo crates/* loads disk members git ls-tree HEAD does not see",
+                names.join(",")
+            );
+            match outcome {
+                GateVerdict::Refused { mut reasons } => {
+                    reasons.push(reason);
+                    GateVerdict::Refused { reasons }
+                }
+                GateVerdict::Pass
+                | GateVerdict::Unrun { .. }
+                | GateVerdict::InstrumentError { .. } => GateVerdict::Refused {
+                    reasons: vec![reason],
+                },
+            }
+        }
+    }
+}
+
+#[allow(dead_code)]
+fn hygiene_empty_is_unrun(error: HygieneError) -> bool {
+    matches!(error, HygieneError::EmptyDiskScan)
 }

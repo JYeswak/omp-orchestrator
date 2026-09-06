@@ -1,0 +1,21 @@
+[package]
+license.workspace = true
+name = "fuzz-build-gate"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Fuzz-build and crash-regression admission gate over the root fuzz/ workspace"
+
+[lib]
+name = "fuzz_build_gate"
+path = "src/lib.rs"
+
+[[bin]]
+name = "fuzz-build-gate"
+path = "src/main.rs"
+
+[dependencies]
+subprocess-contract = { path = "../subprocess-contract" }
+
+[lints.rust]
+unsafe_code = "forbid"

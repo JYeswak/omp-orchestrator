@@ -40,6 +40,7 @@
 //! gaps are declared, owned, and mechanically forced downward.
 
 pub mod metric_auth;
+pub mod workspace_hygiene;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
