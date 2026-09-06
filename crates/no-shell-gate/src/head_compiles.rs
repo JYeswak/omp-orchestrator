@@ -27,6 +27,7 @@ pub enum GateError {
     ArchiveFailed(String),
     ArchiveTimedOut,
     ArchiveEmpty,
+    BuildSpawnFailed(String),
     ExportCreateFailed { path: PathBuf, detail: String },
     ExportEmpty { path: PathBuf, detail: String },
     ExportExtractFailed(String),
@@ -84,6 +85,9 @@ impl fmt::Display for GateError {
             Self::BuildTimedOut => formatter.write_str(
                 "ERROR HEAD_COMPILE_TIMEOUT cargo check exceeded its bounded deadline",
             ),
+            Self::BuildSpawnFailed(detail) => {
+                write!(formatter, "ERROR HEAD_COMPILE_SPAWN_FAILED {detail}")
+            }
             Self::ReceiptFailed { path, detail } => {
                 write!(formatter, "ERROR RECEIPT_WRITE_FAILED path={} detail={detail}", path.display())
             }
@@ -291,12 +295,11 @@ fn build_export(export: &Path) -> Result<(), GateError> {
             &String::from_utf8_lossy(&output.stderr),
         )),
         BoundedOutcome::TimedOut => Err(GateError::BuildTimedOut),
-        BoundedOutcome::Unspawned(error) => Err(GateError::DependencyResolutionFailed(format!(
+        BoundedOutcome::Unspawned(error) => Err(GateError::BuildSpawnFailed(format!(
             "cargo spawn_error={error}"
         ))),
     }
 }
-
 fn write_receipt(path: &Path, text: &str) -> Result<(), GateError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|error| GateError::ReceiptFailed {
