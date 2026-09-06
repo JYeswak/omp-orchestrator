@@ -9,7 +9,7 @@
 //! These are the legs whose failure would make the monitors silently wrong rather than
 //! loudly broken. Each one corresponds to a defect measured on 2026-08-31.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tick_monitor::*;
 
 /// The four status lines below are VERBATIM captures from live panes on 2026-08-31, not
@@ -313,6 +313,56 @@ fn a_missing_binary_is_typed_not_a_panic() {
         ChildOutcome::SpawnFailed { .. }
     ));
 }
+
+#[test]
+fn reader_join_is_bounded_when_a_setsid_grandchild_holds_the_pipe() {
+    // Known-bad: grandchild in a new session keeps the inherited stdout FD open
+    // after the child exits, so read_all never EOFs. Bare JoinHandle::join hung
+    // forever here (tick-monitor/src/lib.rs:136-137 before znwo). Assert wall
+    // clock, not exit code: a harness timeout of a hang also "exits 0".
+    let start = Instant::now();
+    let _out = run(
+        &["/bin/sh", "-c", "setsid /bin/sleep 30 &"],
+        Duration::from_millis(200),
+    );
+    let elapsed = start.elapsed();
+    eprintln!("znwo known-bad elapsed={elapsed:?}");
+
+    assert!(
+        elapsed < Duration::from_secs(3),
+        "reader join hung: elapsed={elapsed:?} (must be < 3s; recv 200ms + kill 300ms + READER_JOIN_GRACE 1s)"
+    );
+}
+
+#[test]
+fn clean_child_stdout_and_stderr_are_byte_identical() {
+    // Known-good: over-strict bound that truncates healthy output is worse than
+    // the hang — observe callers would silently lose data.
+    let out = run(
+        &[
+            "/bin/sh",
+            "-c",
+            "printf %s znwo-stdout-payload; printf %s znwo-stderr-payload >&2",
+        ],
+        Duration::from_secs(5),
+    );
+    match out {
+        ChildOutcome::Completed {
+            stdout,
+            stderr,
+            code,
+        } => {
+            assert_eq!(code, Some(0), "clean child must complete");
+            assert_eq!(stdout, "znwo-stdout-payload", "stdout truncated or altered");
+            assert_eq!(stderr, "znwo-stderr-payload", "stderr truncated or altered");
+        }
+        other => panic!(
+            "clean child must Complete with full pipes, got {}",
+            other.kind()
+        ),
+    }
+}
+
 
 #[test]
 fn a_just_finished_pane_is_newly_idle_not_live() {

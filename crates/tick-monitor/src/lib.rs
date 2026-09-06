@@ -39,7 +39,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 // ---------------------------------------------------------------------------
 // json
@@ -133,8 +133,8 @@ pub fn run(argv: &[&str], timeout: Duration) -> ChildOutcome {
         }
     };
 
-    let stdout = out_thread.join().unwrap_or_default();
-    let stderr = err_thread.join().unwrap_or_default();
+    let stdout = join_reader(out_thread);
+    let stderr = join_reader(err_thread);
 
     if timed_out {
         ChildOutcome::TimedOut {
@@ -157,6 +157,25 @@ fn read_all<R: Read>(pipe: Option<R>) -> String {
     }
     String::from_utf8_lossy(&buf).into_owned()
 }
+
+/// Copied from `subprocess-contract` `join_reader` (`src/lib.rs:160-169`).
+/// The reference crate's group-kill properties are under triage in `chj5`;
+/// this is the join bound only. A hang here stalls KERNEL-ONLY observe.
+const READER_JOIN_GRACE: Duration = Duration::from_secs(1);
+
+fn join_reader(handle: thread::JoinHandle<String>) -> String {
+    let deadline = Instant::now() + READER_JOIN_GRACE;
+    while Instant::now() < deadline {
+        if handle.is_finished() {
+            return handle.join().unwrap_or_default();
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+    String::new()
+}
+
+
+
 
 /// Signal the process GROUP (`-pid`), TERM then KILL. Dependency-free: this crate has no
 /// `libc`, so the signal goes through `/bin/kill`, which accepts a negative pgid.
