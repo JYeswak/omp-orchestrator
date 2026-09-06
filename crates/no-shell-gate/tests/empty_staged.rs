@@ -21,6 +21,17 @@ fn fresh_git_tree(test: &str) -> PathBuf {
         std::process::id(),
         FIXTURE_SEQ.fetch_add(1, Ordering::SeqCst)
     ));
+    fs::create_dir_all(dir.join("docs/plan/flow/boxes")).expect("create R1 fixture");
+    fs::write(
+        dir.join("docs/plan/flow/CONTRACT.md"),
+        "R1_POPULATION_BOXES=fixture\n",
+    )
+    .expect("write R1 contract fixture");
+    fs::write(
+        dir.join("docs/plan/flow/boxes/fixture.toml"),
+        "id = \"fixture\"\nkernel_input = \"input\"\nkernel_output = \"output\"\nevent_row = \"event\"\nvalidator = \"validator\"\nmeasured = \"measured\"\n",
+    )
+    .expect("write R1 box fixture");
     fs::create_dir_all(dir.join("crates/example/src")).expect("create fixture tree");
     fs::create_dir_all(dir.join("docs/plan")).expect("create fixture plan");
     fs::write(
@@ -243,6 +254,8 @@ fn ancestry_only_merge_runs_gate_and_preserves_empty_index_refusal() {
 
     let cherry = run_git(&dir, &["cherry", "-v", "main", "ci/fence-16l-13ca3f5"], "verify patch-id duplicate");
     assert!(String::from_utf8_lossy(&cherry.stdout).lines().any(|line| line.trim_start().starts_with('-')), "branch commit must be already represented by patch-id: {:?}", String::from_utf8_lossy(&cherry.stdout));
+    let branch_tip = String::from_utf8_lossy(&run_git(&dir, &["rev-parse", "ci/fence-16l-13ca3f5"], "read duplicate branch tip").stdout).trim().to_owned();
+    run_git(&dir, &["update-ref", "refs/branch-rationalization-backup/ci-fence-16l-13ca3f5", &branch_tip], "record branch backup ref");
     run_git(&dir, &["merge", "--no-commit", "--no-ff", "ci/fence-16l-13ca3f5"], "create ancestry-only merge");
 
     assert!(dir.join(".git/MERGE_HEAD").is_file(), "the live merge state must exist");
@@ -260,6 +273,14 @@ fn ancestry_only_merge_runs_gate_and_preserves_empty_index_refusal() {
     assert_eq!(top_level_outcome(&error), "ANCESTRY_ONLY_MERGE:", "the merge decision must be explicit: {error}");
     assert!(!error.contains("NOTHING_TO_CHECK"), "merge state must not collapse into empty-index refusal: {error}");
 
-    run_git(&dir, &["merge", "--abort"], "abort fixture merge");
+    let bundle = dir.join("ci-fence-16l-13ca3f5.bundle");
+    let bundle_path = bundle.to_str().expect("bundle path is UTF-8");
+    run_git(&dir, &["bundle", "create", bundle_path, "main", "ci/fence-16l-13ca3f5"], "create object bundle");
+    run_git(&dir, &["commit", "--no-edit", "-q"], "commit ancestry-only merge");
+    run_git(&dir, &["branch", "-d", "ci/fence-16l-13ca3f5"], "safe-delete merged branch");
+    let backup = String::from_utf8_lossy(&run_git(&dir, &["rev-parse", "refs/branch-rationalization-backup/ci-fence-16l-13ca3f5"], "resolve backup ref").stdout).trim().to_owned();
+    assert_eq!(backup, branch_tip, "backup ref must preserve the deleted branch tip");
+    run_git(&dir, &["bundle", "verify", bundle_path], "verify object bundle");
+    run_git(&dir, &["cat-file", "-e", &format!("{branch_tip}^{{commit}}")], "resolve branch object");
     fs::remove_dir_all(dir).expect("remove merge fixture");
 }
