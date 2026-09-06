@@ -53,19 +53,59 @@ pub struct TargetRecord {
     pub surface_marker: String,
 }
 
+/// Namespace applied to every measurement result. LIVE_XAI and
+/// SINGLE-MODEL ALTERNATIVES are WWJD-only planning surfaces, not this
+/// repository's worker-oracle measurement domain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+
+pub enum MeasurementNamespace {
+    Unmeasured,
+    Simulation,
+    LiveMechanical,
+    LiveNativeObserve,
+    AdapterAbsent,
+}
+
+impl MeasurementNamespace {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Unmeasured => "UNMEASURED",
+            Self::Simulation => "SIMULATION",
+            Self::LiveMechanical => "LIVE_MECHANICAL",
+            Self::LiveNativeObserve => "LIVE_NATIVE_OBSERVE",
+            Self::AdapterAbsent => "ADAPTER_ABSENT",
+        }
+    }
+
+    pub const fn authorizes_acceptance(self) -> bool {
+        matches!(self, Self::LiveMechanical | Self::LiveNativeObserve)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CensusReport {
     pub ledger_targets: usize,
     pub ledger_host_bound: usize,
     pub marker_matches: usize,
     pub source_host_bound: usize,
+    pub namespace: MeasurementNamespace,
+}
+
+impl CensusReport {
+    pub fn require_acceptance(&self) -> Result<(), OracleError> {
+        if self.namespace.authorizes_acceptance() {
+            Ok(())
+        } else {
+            Err(OracleError::MeasurementNamespaceRefused { namespace: self.namespace })
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TargetVerdict {
-    TreePure { target: String },
-    HostBoundLocal { target: String },
-    HostBoundRemote { target: String, worker: String },
+    TreePure { target: String, namespace: MeasurementNamespace },
+    HostBoundLocal { target: String, namespace: MeasurementNamespace },
+    HostBoundRemote { target: String, worker: String, namespace: MeasurementNamespace },
 }
 
 #[derive(Debug)]
@@ -80,6 +120,7 @@ pub enum OracleError {
     MissingSurfaceMarker { target: String, marker: String },
     ZeroHostBound { source_host_bound: usize },
     MissingTarget(String),
+    MeasurementNamespaceRefused { namespace: MeasurementNamespace },
     HostBoundRefused { target: String, worker: String, surface: &'static str },
 }
 
@@ -96,7 +137,27 @@ impl fmt::Display for OracleError {
             Self::MissingSurfaceMarker { target, marker } => write!(f, "WORKER_ORACLE_REFUSED target={target} reason=ledger_marker_not_found marker={marker}"),
             Self::ZeroHostBound { source_host_bound } => write!(f, "WORKER_ORACLE_REFUSED reason=host_bound_ledger_empty grep_host_bound={source_host_bound}"),
             Self::MissingTarget(target) => write!(f, "WORKER_ORACLE_REFUSED reason=target_not_in_ledger target={target}"),
+            Self::MeasurementNamespaceRefused { namespace } => write!(f, "WORKER_ORACLE_REFUSED reason=measurement_namespace={} cannot_authorize_acceptance", namespace.label()),
             Self::HostBoundRefused { target, worker, surface } => write!(f, "HOST_BOUND_REFUSED target={target} worker={worker} surface={surface}"),
+        }
+    }
+}
+
+impl OracleError {
+    pub const fn namespace(&self) -> MeasurementNamespace {
+        match self {
+            Self::MeasurementNamespaceRefused { namespace } => *namespace,
+            Self::HostBoundRefused { .. } => MeasurementNamespace::AdapterAbsent,
+            Self::Io { .. }
+            | Self::MissingLedger(_)
+            | Self::EmptyLedger(_)
+            | Self::MalformedLedger { .. }
+            | Self::MissingSource { .. }
+            | Self::MissingSurfaceMarker { .. }
+            | Self::MissingTarget(_) => MeasurementNamespace::Unmeasured,
+            Self::DuplicateTarget(_)
+            | Self::InvalidClassification { .. }
+            | Self::ZeroHostBound { .. } => MeasurementNamespace::LiveMechanical,
         }
     }
 }
@@ -220,13 +281,13 @@ pub fn census(repo_root: &Path) -> Result<CensusReport, OracleError> {
     if ledger_host_bound != marker_matches || ledger_host_bound != source_host_bound {
         return Err(OracleError::ZeroHostBound { source_host_bound });
     }
-    Ok(CensusReport { ledger_targets: rows.len(), ledger_host_bound, marker_matches, source_host_bound })
+    Ok(CensusReport { ledger_targets: rows.len(), ledger_host_bound, marker_matches, source_host_bound, namespace: MeasurementNamespace::LiveMechanical })
 }
 
 pub fn classify_target(repo_root: &Path, target: &str, worker: &str) -> Result<TargetVerdict, OracleError> {
     let row = load_ledger(repo_root)?.into_iter().find(|row| row.target == target).ok_or_else(|| OracleError::MissingTarget(target.to_owned()))?;
-    if row.classification == Classification::TreePure { return Ok(TargetVerdict::TreePure { target: target.to_owned() }); }
-    if worker.trim().is_empty() || worker == "local" { return Ok(TargetVerdict::HostBoundLocal { target: target.to_owned() }); }
+    if row.classification == Classification::TreePure { return Ok(TargetVerdict::TreePure { target: target.to_owned(), namespace: MeasurementNamespace::LiveMechanical }); }
+    if worker.trim().is_empty() || worker == "local" { return Ok(TargetVerdict::HostBoundLocal { target: target.to_owned(), namespace: MeasurementNamespace::LiveMechanical }); }
     let git_path = repo_root.join(".git");
     if !git_path.exists() { return Err(OracleError::HostBoundRefused { target: target.to_owned(), worker: worker.to_owned(), surface: "no git history on worker" }); }
     let git_config = git_path.join("config");
@@ -237,11 +298,13 @@ pub fn classify_target(repo_root: &Path, target: &str, worker: &str) -> Result<T
     if !git_path.join("hooks/pre-commit").exists() {
         return Err(OracleError::HostBoundRefused { target: target.to_owned(), worker: worker.to_owned(), surface: "path not synced: .git/hooks/pre-commit" });
     }
-    Ok(TargetVerdict::HostBoundRemote { target: target.to_owned(), worker: worker.to_owned() })
+    Ok(TargetVerdict::HostBoundRemote { target: target.to_owned(), worker: worker.to_owned(), namespace: MeasurementNamespace::LiveMechanical })
 }
 
 pub fn admission_check(repo_root: &Path) -> Result<CensusReport, OracleError> {
-    census(repo_root)
+    let report = census(repo_root)?;
+    report.require_acceptance()?;
+    Ok(report)
 }
 
 #[cfg(test)]
@@ -279,11 +342,13 @@ url = https://example.invalid/repo
     fn remote_host_bound_target_refuses_missing_surface_with_text() {
         let temp = fixture();
         fs::remove_dir_all(temp.path().join(".git")).unwrap();
-        let error = classify_target(temp.path(), "demo::test", "contabo-4").unwrap_err().to_string();
-        assert!(error.contains("HOST_BOUND_REFUSED"));
-        assert!(error.contains("no git history on worker"));
-    }
+        let error = classify_target(temp.path(), "demo::test", "contabo-4").unwrap_err();
+        assert_eq!(error.namespace(), MeasurementNamespace::AdapterAbsent);
+        let text = error.to_string();
+        assert!(text.contains("HOST_BOUND_REFUSED"));
+        assert!(text.contains("no git history on worker"));
 
+    }
     #[test]
     fn zero_host_bound_ledger_is_an_error_when_tests_use_host_surfaces() {
         let temp = fixture();
@@ -292,6 +357,34 @@ url = https://example.invalid/repo
         let error = census(temp.path()).unwrap_err().to_string();
         assert!(error.contains("host_bound_ledger_empty"));
         assert!(error.contains("grep_host_bound=1"));
+    }
+
+    #[test]
+    fn measurement_namespace_is_required_and_non_live_cannot_authorize() {
+        let blocked = [
+            MeasurementNamespace::Unmeasured,
+            MeasurementNamespace::Simulation,
+            MeasurementNamespace::AdapterAbsent,
+        ];
+        for namespace in blocked {
+            let report = CensusReport {
+                ledger_targets: 1,
+                ledger_host_bound: 1,
+                marker_matches: 1,
+                source_host_bound: 1,
+                namespace,
+            };
+            let error = report.require_acceptance().expect_err("non-live evidence cannot authorize");
+            assert!(error.to_string().contains(namespace.label()), "{error}");
+        }
+        let live = CensusReport {
+            ledger_targets: 1,
+            ledger_host_bound: 1,
+            marker_matches: 1,
+            source_host_bound: 1,
+            namespace: MeasurementNamespace::LiveMechanical,
+        };
+        live.require_acceptance().expect("live mechanical evidence authorizes");
     }
 
     #[test]

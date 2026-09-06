@@ -10,7 +10,7 @@ fn usage() {
 }
 
 fn report(report: CensusReport) -> ExitCode {
-    println!("WORKER_ORACLE_CENSUS PASS ledger_targets={} ledger_host_bound={} marker_matches={} grep_host_bound={}", report.ledger_targets, report.ledger_host_bound, report.marker_matches, report.source_host_bound);
+    println!("WORKER_ORACLE_CENSUS PASS namespace={} ledger_targets={} ledger_host_bound={} marker_matches={} grep_host_bound={}", report.namespace.label(), report.ledger_targets, report.ledger_host_bound, report.marker_matches, report.source_host_bound);
     ExitCode::SUCCESS
 }
 
@@ -35,9 +35,9 @@ fn main() -> ExitCode {
     if mode != "target" { usage(); return ExitCode::from(2); }
     let Some(target) = args.get(1) else { usage(); return ExitCode::from(2); };
     match classify_target(&repo, target, &worker) {
-        Ok(TargetVerdict::TreePure { target }) => { println!("TREE_PURE PASS target={target}"); ExitCode::SUCCESS }
-        Ok(TargetVerdict::HostBoundLocal { target }) => { println!("HOST_BOUND PASS target={target} worker=local"); ExitCode::SUCCESS }
-        Ok(TargetVerdict::HostBoundRemote { target, worker }) => { println!("HOST_BOUND PASS target={target} worker={worker}"); ExitCode::SUCCESS }
+        Ok(TargetVerdict::TreePure { target, namespace }) => { println!("TREE_PURE PASS namespace={} target={target}", namespace.label()); ExitCode::SUCCESS }
+        Ok(TargetVerdict::HostBoundLocal { target, namespace }) => { println!("HOST_BOUND PASS namespace={} target={target} worker=local", namespace.label()); ExitCode::SUCCESS }
+        Ok(TargetVerdict::HostBoundRemote { target, worker, namespace }) => { println!("HOST_BOUND PASS namespace={} target={target} worker={worker}", namespace.label()); ExitCode::SUCCESS }
         Err(error) => { eprintln!("{error}"); ExitCode::from(1) }
     }
 }
