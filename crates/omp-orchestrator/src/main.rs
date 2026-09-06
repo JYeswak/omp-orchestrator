@@ -340,10 +340,10 @@ async fn run_peer_grade_claim(
     if !observation
         .panes
         .iter()
-        .any(|pane| pane.pane_id == grader_pane && pane.is_dispatchable && pane.liveness == "CONFIRMED_IDLE")
+        .any(|pane| pane.pane_id == grader_pane && pane.is_dispatchable)
     {
         return Err(format!(
-            "PEER_GRADING_REFUSED grader_pane={grader_pane} reason=current_pane_not_confirmed_idle"
+            "PEER_GRADING_REFUSED grader_pane={grader_pane} reason=current_pane_not_dispatchable"
         ));
     }
     match gate_peer_grading_for_pane(config, &mut observation, now_unix(), grader_pane)? {
@@ -1777,6 +1777,7 @@ async fn prepare_bead_dispatch(
     cx: &Cx,
     config: &Config,
     pane: &str,
+    pane_observation: &PaneObservation,
     bead: &str,
     identities: &IdentityRegistries,
     tick: u64,
@@ -1786,6 +1787,25 @@ async fn prepare_bead_dispatch(
     let receiver_agent = receiver_agent_for_dispatch(config, pane, bead, &initial)?;
     ensure_dispatch_receiver_identity(identities, bead, pane, &receiver_agent)?;
     validate_receiver_pane(config, pane, bead, &receiver_agent)?;
+    // This is deliberately before claim_bead_for_supervisor. A refused pane must
+    // not become tracker state: file -> claim -> dispatch is only valid after
+    // the dispatch preflight has authorized the pane and packet.
+    let packet = dispatch_packet::render_with_pane(
+        &initial,
+        &config.repo,
+        Some(pane),
+        Some(&receiver_agent),
+        None,
+        None,
+    )
+    .map_err(|error| format!("DISPATCH_PACKET_REFUSED bead={bead} pane={pane} error={error}"))?;
+    authorize_dispatch_preflight(pane_observation, &packet, bead, pane)?;
+    println!(
+        "DISPATCH_PREFLIGHT verdict=autonomous bead={bead} pane={pane} pane_dispatchable={} two_captures={} packet_complete={}",
+        pane_observation.is_dispatchable,
+        pane_observation.is_dispatchable,
+        packet_is_complete(&packet),
+    );
     let (snapshot, claim_owner) = claim_bead_for_supervisor(
         cx,
         config,
@@ -1865,8 +1885,7 @@ fn authorize_dispatch_preflight(
     let intent = Intent {
         action: TypedAction::DispatchPacket,
         pane_dispatchable: pane_observation.is_dispatchable,
-        two_captures: pane_observation.is_dispatchable
-            && pane_observation.liveness == "CONFIRMED_IDLE",
+        two_captures: pane_observation.is_dispatchable,
         packet_complete: packet_is_complete(packet),
         finding_has_bead: !bead.trim().is_empty(),
     };
@@ -1897,8 +1916,7 @@ fn begin_dispatch_lifecycle(
     let intent = Intent {
         action: TypedAction::DispatchPacket,
         pane_dispatchable: pane_observation.is_dispatchable,
-        two_captures: pane_observation.is_dispatchable
-            && pane_observation.liveness == "CONFIRMED_IDLE",
+        two_captures: pane_observation.is_dispatchable,
         packet_complete: packet_is_complete(packet),
         finding_has_bead: !bead.trim().is_empty(),
     };
@@ -1980,7 +1998,7 @@ fn gate_peer_grading_inner(
     let idle = observation
         .panes
         .iter()
-        .filter(|pane| pane.is_dispatchable && pane.liveness == "CONFIRMED_IDLE")
+        .filter(|pane| pane.is_dispatchable)
         .collect::<Vec<_>>();
     for candidate in candidates {
         let Some(receiver_pane) = idle
@@ -2027,7 +2045,7 @@ fn gate_peer_grading_inner(
         let intent = Intent {
             action: TypedAction::DispatchPacket,
             pane_dispatchable: grader.is_dispatchable,
-            two_captures: grader.is_dispatchable && grader.liveness == "CONFIRMED_IDLE",
+            two_captures: grader.is_dispatchable,
             packet_complete: true,
             finding_has_bead: true,
         };
@@ -2123,13 +2141,6 @@ async fn send_and_verify(
         None,
     )
     .map_err(|error| format!("DISPATCH_PACKET_REFUSED bead={bead} pane={pane} error={error}"))?;
-    authorize_dispatch_preflight(pane_observation, &packet, bead, pane)?;
-    println!(
-        "DISPATCH_PREFLIGHT verdict=autonomous bead={bead} pane={pane} pane_dispatchable={} two_captures={} packet_complete={}",
-        pane_observation.is_dispatchable,
-        pane_observation.is_dispatchable && pane_observation.liveness == "CONFIRMED_IDLE",
-        packet_is_complete(&packet),
-    );
     let staged = env::temp_dir().join(format!(
         "omp-orchestrator-dispatch-{}-{}-{}.txt",
         std::process::id(),
@@ -4437,18 +4448,18 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             // `step` still buys is real: a cancellation checkpoint on both sides of
             // each record, and `assert_step_count` refusing a row that no step
             // produced.
+            let pane_observation = observation
+                .panes
+                .iter()
+                .find(|candidate| candidate.pane_id == pane)
+                .cloned()
+                .ok_or_else(|| format!("DISPATCH_PREFLIGHT_REFUSED bead={bead} pane={pane} observation_row_missing"))?;
             let mut spine = ack_spine::ledger::StepLedger::new();
             emit_step(cx, &mut spine, StepKind::BeadSelected, bead, &pane, config, "selected from the bv-ordered ready queue").await?;
             let identities = load_identity_registries(cx, config).await?;
             let dispatch_result = async {
                 let (snapshot, receiver_agent) =
-                    prepare_bead_dispatch(cx, config, &pane, bead, &identities, tick, true).await?;
-                let pane_observation = observation
-                    .panes
-                    .iter()
-                    .find(|candidate| candidate.pane_id == pane)
-                    .cloned()
-                    .ok_or_else(|| format!("DISPATCH_PREFLIGHT_REFUSED bead={bead} pane={pane} observation_row_missing"))?;
+                    prepare_bead_dispatch(cx, config, &pane, &pane_observation, bead, &identities, tick, true).await?;
                 let dispatch_epoch = now_unix() as i64;
                 write_dispatch_intent(config, &pane, bead)?;
                 emit_step(cx, &mut spine, StepKind::FenceChecked, bead, &pane, config, "per-pane dispatch fence passed; intent written").await?;
@@ -4853,10 +4864,10 @@ async fn run_supervisor(cx: &Cx, config: Config) -> Result<(), String> {
             //   pane_dispatchable=true two_captures=false packet_complete=true
             //   [daemon exited with code 1; restarting in 4000ms]
             //
-            // The refusal itself was CORRECT: `two_captures` requires
-            // `liveness == "CONFIRMED_IDLE"` (:1868), and a freshly restarted supervisor
-            // has only ONE capture in its own state file, so every pane reads
-            // `NEWLY_IDLE` on tick 1. Exiting then guaranteed another tick 1 — the
+            // The refusal itself was correct for a single capture. The fixed path
+            // now treats tick-monitor's retained dispatchable evidence as the
+            // two-capture proof, so a restarted resident can use prior rows on tick 1.
+            // A genuinely one-capture pane still has is_dispatchable=false and refuses.
             // restart destroyed the very evidence the next attempt needed. Beads were
             // claimed and intent-cleared on each pass (smcq, lwdo.2, xm0n.1, xm0n.2),
             // so the livelock churned tracker state while making no progress.
@@ -5232,9 +5243,22 @@ mod tests {
         })
     }
 
-    fn run_prepare_for_test(
+    fn retained_dispatchable_pane(pane: &str) -> PaneObservation {
+        PaneObservation {
+            pane_id: pane.to_owned(),
+            state: "IDLE".to_owned(),
+            liveness: "NEWLY_IDLE".to_owned(),
+            is_dispatchable: true,
+            is_free_capacity: true,
+            is_working: false,
+            awaits_human: false,
+        }
+    }
+
+    fn run_prepare_for_test_with_observation(
         config: &Config,
         pane: &str,
+        pane_observation: PaneObservation,
         bead: &str,
         tick: u64,
         claim_enabled: bool,
@@ -5243,10 +5267,26 @@ mod tests {
         runtime.block_on(async {
             let cx = Cx::current().expect("runtime context");
             let identities = test_identity_registries();
-            prepare_bead_dispatch(&cx, config, pane, bead, &identities, tick, claim_enabled).await
+            prepare_bead_dispatch(&cx, config, pane, &pane_observation, bead, &identities, tick, claim_enabled).await
         })
     }
 
+    fn run_prepare_for_test(
+        config: &Config,
+        pane: &str,
+        bead: &str,
+        tick: u64,
+        claim_enabled: bool,
+    ) -> Result<(BeadSnapshot, String), String> {
+        run_prepare_for_test_with_observation(
+            config,
+            pane,
+            retained_dispatchable_pane(pane),
+            bead,
+            tick,
+            claim_enabled,
+        )
+    }
     fn executable_reaper(temp: &tempfile::TempDir, body: &str) -> PathBuf {
         let path = temp.path().join("reaper");
         std::fs::write(&path, body).expect("write reaper fixture");
@@ -5326,7 +5366,10 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
         )
         .unwrap();
         assert!(observation.panes[0].is_free_capacity);
+        assert_eq!(observation.panes[0].liveness, "UNPROVEN");
+        assert!(observation.panes[0].is_free_capacity);
         assert!(!observation.panes[0].is_dispatchable);
+
     }
 
     #[test]
@@ -6086,9 +6129,9 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
             r#"#!/bin/sh
 if [ "$1" = "show" ]; then
   if [ -e "{state_path}" ]; then
-    printf '[{{"id":"{bead}","title":"title","description":"description","status":"in_progress","assignee":"{supervisor}"}}]\n'
+    printf '%s\n' '[{{"id":"{bead}","title":"title","description":"Objective: x\nTarget: y\nScope:\nreal\nAcceptance:\nrun\nDone: exit 0\nStop: now","status":"in_progress","assignee":"{supervisor}"}}]'
   else
-    printf '[{{"id":"{bead}","title":"title","description":"description","status":"open","assignee":null}}]\n'
+    printf '%s\n' '[{{"id":"{bead}","title":"title","description":"Objective: x\nTarget: y\nScope:\nreal\nAcceptance:\nrun\nDone: exit 0\nStop: now","status":"open","assignee":null}}]'
   fi
   exit 0
 fi
@@ -6143,6 +6186,30 @@ exit 2
         );
     }
 
+    #[test]
+    fn preflight_refusal_leaves_tracker_unclaimed() {
+        let temp = tempfile::tempdir().expect("preflight claim-order fixture");
+        let bead = "omp-orchestrator-t7us-single-capture";
+        let (config, state, args, _supervisor) = open_bead_br_fixture(&temp, bead);
+        let pane = PaneObservation {
+            pane_id: "%1408".to_owned(),
+            state: "IDLE".to_owned(),
+            liveness: "UNPROVEN".to_owned(),
+            is_dispatchable: false,
+            is_free_capacity: true,
+            is_working: false,
+            awaits_human: false,
+        };
+
+        let error = run_prepare_for_test_with_observation(
+            &config, "%1408", pane, bead, 17, true,
+        )
+        .expect_err("one capture must refuse before tracker claim");
+        assert!(error.contains("DISPATCH_PREFLIGHT_REFUSED"), "{error}");
+        assert!(error.contains("SingleCaptureLiveness"), "{error}");
+        assert!(!state.exists(), "preflight refusal must not mutate tracker state");
+        assert!(!args.exists(), "preflight refusal must not invoke br update");
+    }
     #[test]
     fn disabling_supervisor_claim_preserves_known_bad_refusal() {
         let temp = tempfile::tempdir().expect("claim mutation fixture tempdir");
@@ -7042,12 +7109,12 @@ exit 2
     }
 
     #[test]
-    fn lifecycle_selection_preflight_rejects_single_capture_independently() {
+    fn lifecycle_selection_accepts_retained_window_without_idle_label() {
         let (_temp, config) = isolated_fixture_config();
         let pane = PaneObservation {
             pane_id: "%7".to_owned(),
             state: "IDLE".to_owned(),
-            liveness: "UNPROVEN".to_owned(),
+            liveness: "NEWLY_IDLE".to_owned(),
             is_dispatchable: true,
             is_free_capacity: true,
             is_working: false,
@@ -7062,17 +7129,15 @@ run
 Done: exit 0
 Stop: now
 "#;
-        let error = begin_dispatch_lifecycle(&config, "%7", &pane, "bead", packet, 7)
-            .expect_err("the lifecycle selection site must reject one-capture liveness");
-        assert!(error.contains("SingleCaptureLiveness"), "{error}");
+        begin_dispatch_lifecycle(&config, "%7", &pane, "bead", packet, 7)
+            .expect("retained two-capture evidence must authorize without the label");
     }
-
     #[test]
-    fn dispatch_preflight_accepts_confirmed_idle_complete_packet() {
+    fn dispatch_preflight_accepts_retained_dispatchable_evidence() {
         let pane = PaneObservation {
             pane_id: "%7".to_owned(),
             state: "IDLE".to_owned(),
-            liveness: "CONFIRMED_IDLE".to_owned(),
+            liveness: "NEWLY_IDLE".to_owned(),
             is_dispatchable: true,
             is_free_capacity: true,
             is_working: false,
@@ -7080,7 +7145,7 @@ Stop: now
         };
         let packet = "Objective: x\nTarget: y\nScope:\nreal\nAcceptance:\nrun\nDone: exit 0\nStop: now\n";
         authorize_dispatch_preflight(&pane, packet, "bead", "%7")
-            .expect("confirmed two-capture liveness and complete packet must authorize");
+            .expect("retained two-capture evidence and complete packet must authorize");
     }
 
     #[test]
