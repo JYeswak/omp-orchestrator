@@ -1,8 +1,9 @@
 use installer::{
     check_build_fence, classify_agent_scan, classify_restart_postcondition, git_head,
     git_rev_parse_short, install_binary, merge_hooks, publish_atomic, refuse_path_collisions,
-    resolve_repo_ownership, stage_artifact_stream, verify_identity, verify_minisign_policy,
-    HookWrite, InstallError, RepoOwnership, RestartPostcondition,
+    resolve_repo_ownership, seal_install_report, stage_artifact_stream, verify_identity,
+    verify_minisign_policy, AgentOutcome, HookWrite, IdentityCheck, InstallError, RepoOwnership,
+    RestartPostcondition,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -495,3 +496,78 @@ fn zero_agents_is_error_not_clean() {
     let scan = classify_agent_scan(&["omp"]).expect("one family is a scan, not empty");
     assert_eq!(scan.families, ["omp"]);
 }
+
+fn sample_identity() -> IdentityCheck {
+    IdentityCheck {
+        binary_name: "installer".to_owned(),
+        repo_ownership: RepoOwnership::ThisRepo,
+        head_sha: "abc123def".to_owned(),
+        build_id_in_binary: Some("abc123def".to_owned()),
+        version_output: Some("installer 0.1.0 build_id=abc123def".to_owned()),
+        consistent: true,
+    }
+}
+
+#[test]
+fn install_report_contains_outcomes_backups_path_hits_digest_and_identity() {
+    let detected = classify_agent_scan(&["omp", "codex"]).expect("scan");
+    let report = seal_install_report(
+        &detected,
+        vec![
+            AgentOutcome {
+                family: "omp".to_owned(),
+                outcome: "installed".to_owned(),
+            },
+            AgentOutcome {
+                family: "codex".to_owned(),
+                outcome: "installed".to_owned(),
+            },
+        ],
+        vec![PathBuf::from("/tmp/pre-commit.bak.1")],
+        vec![PathBuf::from("/usr/sbin/installer")],
+        sample_identity(),
+    )
+    .expect("complete report is success");
+    let text = report.to_string();
+    assert!(text.starts_with("L0-REPORT"), "{text}");
+    assert!(
+        text.contains("omp=installed") && text.contains("codex=installed"),
+        "{text}"
+    );
+    assert!(text.contains("backups=/tmp/pre-commit.bak.1"), "{text}");
+    assert!(text.contains("path_hits=/usr/sbin/installer"), "{text}");
+    assert!(
+        text.contains("digest=") && !report.digest.is_empty(),
+        "{text}"
+    );
+    assert!(
+        text.contains("identity=installer") && text.contains("HEAD=abc123def"),
+        "{text}"
+    );
+}
+
+#[test]
+fn install_report_refuses_when_one_detected_agent_is_dropped() {
+    let detected = classify_agent_scan(&["omp", "codex"]).expect("scan");
+    let error = seal_install_report(
+        &detected,
+        vec![AgentOutcome {
+            family: "omp".to_owned(),
+            outcome: "installed".to_owned(),
+        }],
+        vec![PathBuf::from("/tmp/pre-commit.bak.1")],
+        vec![PathBuf::from("/usr/sbin/installer")],
+        sample_identity(),
+    )
+    .expect_err("dropping codex must fail completeness");
+    match error {
+        InstallError::IncompleteInstallReport { missing } => {
+            assert_eq!(missing, vec!["codex".to_owned()]);
+            let text = InstallError::IncompleteInstallReport { missing }.to_string();
+            assert!(text.starts_with("L0-REPORT"), "{text}");
+            assert!(text.contains("codex"), "{text}");
+        }
+        other => panic!("expected IncompleteInstallReport, got {other:?}"),
+    }
+}
+

@@ -73,6 +73,10 @@ pub enum InstallError {
     },
     /// Zero detected agent families. An empty scan is ERROR, never clean.
     EmptyAgentScan,
+    /// L0-REPORT missing a detected agent, digest, or identity.
+    IncompleteInstallReport {
+        missing: Vec<String>,
+    },
 }
 
 impl fmt::Display for InstallError {
@@ -141,6 +145,11 @@ impl fmt::Display for InstallError {
             Self::EmptyAgentScan => write!(
                 formatter,
                 "L0_EMPTY_SCAN: zero agents is ERROR, never a success report"
+            ),
+            Self::IncompleteInstallReport { missing } => write!(
+                formatter,
+                "L0-REPORT: incomplete; missing {}",
+                missing.join(",")
             ),
         }
     }
@@ -281,6 +290,125 @@ pub fn classify_agent_scan(detected: &[&str]) -> Result<AgentScan, InstallError>
     })
 }
 // ── BOUNDED SPAWNS (bead omp-orchestrator-n4q) ────────────────────────────────
+
+/// Per-agent durable outcome. Empty family is unrepresentable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentOutcome {
+    pub family: String,
+    pub outcome: String,
+}
+
+/// L0-REPORT. One document with agent outcomes, backups, PATH hits, digest,
+/// and identity. Success is unreachable until this seals.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstallReport {
+    pub agent_outcomes: Vec<AgentOutcome>,
+    pub backups: Vec<PathBuf>,
+    pub path_hits: Vec<PathBuf>,
+    pub digest: String,
+    pub identity: IdentityCheck,
+}
+
+impl fmt::Display for InstallReport {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let agents = self
+            .agent_outcomes
+            .iter()
+            .map(|row| format!("{}={}", row.family, row.outcome))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let backups = self
+            .backups
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>()
+            .join(" ");
+        let hits = self
+            .path_hits
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>()
+            .join(" ");
+        write!(
+            formatter,
+            "L0-REPORT agents={agents} backups={backups} path_hits={hits} digest={} identity={} HEAD={} consistent={} legs={}",
+            self.digest,
+            self.identity.binary_name,
+            self.identity.head_sha,
+            self.identity.consistent,
+            self.identity.identity_legs()
+        )
+    }
+}
+
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
+/// Seal the L0-REPORT. Missing a detected agent, digest, or identity is ERROR,
+/// never a success. Empty detected scan is EmptyAgentScan, not a blank report.
+pub fn seal_install_report(
+    detected: &AgentScan,
+    outcomes: Vec<AgentOutcome>,
+    backups: Vec<PathBuf>,
+    path_hits: Vec<PathBuf>,
+    identity: IdentityCheck,
+) -> Result<InstallReport, InstallError> {
+    if detected.families.is_empty() {
+        return Err(InstallError::EmptyAgentScan);
+    }
+    let mut missing = Vec::new();
+    for family in &detected.families {
+        if !outcomes.iter().any(|row| row.family == *family) {
+            missing.push(family.clone());
+        }
+    }
+    if identity.binary_name.trim().is_empty() || identity.head_sha.trim().is_empty() {
+        missing.push("identity".to_owned());
+    }
+    if !missing.is_empty() {
+        return Err(InstallError::IncompleteInstallReport { missing });
+    }
+    let canonical = format!(
+        "agents={}|backups={}|hits={}|identity={}:{}",
+        outcomes
+            .iter()
+            .map(|row| format!("{}={}", row.family, row.outcome))
+            .collect::<Vec<_>>()
+            .join(","),
+        backups
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>()
+            .join(","),
+        path_hits
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>()
+            .join(","),
+        identity.binary_name,
+        identity.head_sha
+    );
+    let digest = format!("{:016x}", fnv1a64(canonical.as_bytes()));
+    let report = InstallReport {
+        agent_outcomes: outcomes,
+        backups,
+        path_hits,
+        digest,
+        identity,
+    };
+    if report.digest.is_empty() {
+        return Err(InstallError::IncompleteInstallReport {
+            missing: vec!["digest".to_owned()],
+        });
+    }
+    Ok(report)
+}
 
 /// Local git reads are network-free but a foreign host can still hang them
 /// (credential prompt, stale lock). 30s bounds the hang without racing the
