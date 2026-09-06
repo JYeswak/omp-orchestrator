@@ -8,7 +8,9 @@
 
 pub mod steps;
 pub mod spawn;
+pub mod pack;
 
+pub use pack::{retain_pack_receipt, PackError, PackReceipt, SendAttempt, TICK_ZERO_TARGET};
 pub use spawn::{
     generate_wave, panes_from_list_panes, sha256_hex, spawn_retain_wave_hash, verify_retained_hash,
     PaneId, SpawnReceipt, SpawnWaveError,
