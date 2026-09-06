@@ -8,6 +8,7 @@
 //! Install FAILS if any pair disagrees.
 
 use std::fmt;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -663,6 +664,69 @@ fn staged_install_path(install_path: &Path) -> PathBuf {
         .map(|duration| duration.as_nanos())
         .unwrap_or(0);
     install_path.with_file_name(format!(".{name}.staged.{}-{nonce}", std::process::id()))
+}
+
+/// Write `expected_len` bytes from `stream` into a same-directory staged temp.
+/// The temp exists only after the bounded stream completes. Interrupt or short
+/// read removes any partial file so it is not eligible for rename.
+pub fn stage_artifact_stream<R: Read>(
+    dest_dir: &Path,
+    dest_name: &str,
+    mut stream: R,
+    expected_len: u64,
+) -> Result<PathBuf, InstallError> {
+    std::fs::create_dir_all(dest_dir).map_err(|error| InstallError::IoError {
+        path: dest_dir.display().to_string(),
+        detail: format!("create staging directory failed: {error}"),
+    })?;
+    let dest = dest_dir.join(dest_name);
+    let staged_path = staged_install_path(&dest);
+    let write = (|| -> Result<PathBuf, InstallError> {
+        let mut file = std::fs::File::create(&staged_path).map_err(|error| InstallError::IoError {
+            path: staged_path.display().to_string(),
+            detail: format!("create staged file failed: {error}"),
+        })?;
+        let mut buf = [0u8; 8192];
+        let mut written = 0u64;
+        loop {
+            let n = stream.read(&mut buf).map_err(|error| InstallError::IoError {
+                path: staged_path.display().to_string(),
+                detail: format!("STREAM_INCOMPLETE: {error}"),
+            })?;
+            if n == 0 {
+                break;
+            }
+            file.write_all(&buf[..n]).map_err(|error| InstallError::IoError {
+                path: staged_path.display().to_string(),
+                detail: format!("staged write failed: {error}"),
+            })?;
+            written += n as u64;
+            if written > expected_len {
+                return Err(InstallError::IoError {
+                    path: staged_path.display().to_string(),
+                    detail: "STREAM_INCOMPLETE: longer than bound".to_owned(),
+                });
+            }
+        }
+        file.flush().map_err(|error| InstallError::IoError {
+            path: staged_path.display().to_string(),
+            detail: format!("staged flush failed: {error}"),
+        })?;
+        if written != expected_len {
+            return Err(InstallError::IoError {
+                path: staged_path.display().to_string(),
+                detail: format!("STREAM_INCOMPLETE: wrote {written} expected {expected_len}"),
+            });
+        }
+        Ok(staged_path.clone())
+    })();
+    match write {
+        Ok(path) => Ok(path),
+        Err(error) => {
+            let _ = std::fs::remove_file(&staged_path);
+            Err(error)
+        }
+    }
 }
 
 pub fn install_binary(

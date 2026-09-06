@@ -1,7 +1,7 @@
 use installer::{
     check_build_fence, classify_restart_postcondition, git_head, git_rev_parse_short,
-    install_binary, resolve_repo_ownership, verify_identity, InstallError, RepoOwnership,
-    RestartPostcondition,
+    install_binary, resolve_repo_ownership, stage_artifact_stream, verify_identity, InstallError,
+    RepoOwnership, RestartPostcondition,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -183,5 +183,72 @@ fn real_restart_postcondition_lattice_is_restrictive() {
     assert_eq!(
         classify_restart_postcondition(Some(10), Some(11), false),
         RestartPostcondition::IdentityMismatch
+    );
+}
+
+#[test]
+fn artifact_staging_complete_same_directory_temp() {
+    let dir = TempDir::new("artifact-staging-complete");
+    let payload = b"complete-archive-bytes";
+    let staged = stage_artifact_stream(dir.path(), "installer", payload.as_slice(), payload.len() as u64)
+        .expect("complete stream stages");
+    assert_eq!(staged.parent(), Some(dir.path()));
+    assert!(staged
+        .file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n.contains(".staged.")));
+    assert_eq!(fs::read(&staged).expect("read staged"), payload);
+    assert!(!dir.path().join("installer").exists(), "must not publish before rename");
+}
+
+struct CutReader {
+    data: &'static [u8],
+    pos: usize,
+    cut: usize,
+}
+
+impl std::io::Read for CutReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if self.pos >= self.cut {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Interrupted,
+                "stream interrupted",
+            ));
+        }
+        let n = (self.cut - self.pos).min(buf.len()).min(self.data.len() - self.pos);
+        buf[..n].copy_from_slice(&self.data[self.pos..self.pos + n]);
+        self.pos += n;
+        Ok(n)
+    }
+}
+
+#[test]
+fn artifact_staging_interrupt_leaves_no_publishable_temp() {
+    let dir = TempDir::new("artifact-staging-interrupt");
+    let data: &'static [u8] = b"0123456789abcdef";
+    let error = stage_artifact_stream(
+        dir.path(),
+        "installer",
+        CutReader {
+            data,
+            pos: 0,
+            cut: 4,
+        },
+        data.len() as u64,
+    )
+    .expect_err("interrupted stream must not stage");
+    match error {
+        InstallError::IoError { detail, .. } => {
+            assert!(detail.contains("STREAM_INCOMPLETE"), "{detail}");
+        }
+        other => panic!("expected STREAM_INCOMPLETE, got {other:?}"),
+    }
+    let leftovers: Vec<_> = fs::read_dir(dir.path())
+        .expect("read dest")
+        .map(|e| e.expect("entry").file_name())
+        .collect();
+    assert!(
+        leftovers.is_empty(),
+        "interrupted stream left publishable temp: {leftovers:?}"
     );
 }
