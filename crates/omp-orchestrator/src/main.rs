@@ -156,6 +156,7 @@ pub struct Config {
     max_ticks: Option<u64>,
     tick_monitor: String,
     br: String,
+    am: String,
     /// Path to `bv`, the dependency-graph planning brain used for ranked selection.
     bv: String,
     ntm: String,
@@ -640,6 +641,10 @@ impl Config {
             tick_monitor: env::var("OMP_TICK_MONITOR_BIN")
                 .unwrap_or_else(|_| "tick-monitor".to_owned()),
             br: env::var("OMP_BR_BIN").unwrap_or_else(|_| "br".to_owned()),
+            am: env::var("OMP_AM_BIN")
+                .ok()
+                .filter(|path| !path.trim().is_empty())
+                .unwrap_or_else(|| "am".to_owned()),
             // The planning brain. Ranked selection is MANDATORY, so an absent `bv`
             // must surface as a typed QUEUE_UNRANKED refusal at the call site rather
             // than as a silent fall back to creation order.
@@ -1349,7 +1354,76 @@ fn process_output_text(program: &str, output: &Output) -> String {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ActiveReservationLease {
+    id: i64,
+    path: String,
+    holder: String,
+    reason: String,
+}
+
+fn parse_active_reservation_leases(text: &str, bead: &str) -> Vec<ActiveReservationLease> {
+    text.lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            let id = fields.next()?.parse::<i64>().ok()?;
+            let path = fields.next()?.to_owned();
+            let holder = fields.next()?.to_owned();
+            let _expires = fields.next()?;
+            let reason = fields.collect::<Vec<_>>().join(" ");
+            reason.contains(bead).then_some(ActiveReservationLease {
+                id,
+                path,
+                holder,
+                reason,
+            })
+        })
+        .collect()
+}
+
+async fn active_reservation_leases(
+    cx: &Cx,
+    config: &Config,
+    bead: &str,
+) -> Result<Vec<ActiveReservationLease>, String> {
+    if config.am.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    let args = vec![
+        "file_reservations".to_owned(),
+        "list".to_owned(),
+        "--active-only".to_owned(),
+        config.repo.display().to_string(),
+    ];
+    let output = invoke(cx, config, &config.am, &args).await?;
+    if !output.status.success() {
+        return Err(process_output_text(&config.am, &output));
+    }
+    Ok(parse_active_reservation_leases(
+        &String::from_utf8_lossy(&output.stdout),
+        bead,
+    ))
+}
+
 async fn close_and_read_back(cx: &Cx, config: &Config, bead: &str, reason: &str) -> CloseReadback {
+    let leases = match active_reservation_leases(cx, config, bead).await {
+        Ok(leases) => leases,
+        Err(detail) => {
+            return CloseReadback::PolicyRefused {
+                refusal: format!(
+                    "CLOSE_REFUSED_RESERVATION_CHECK bead={bead} detail={detail}"
+                ),
+            };
+        }
+    };
+    if let Some(lease) = leases.first() {
+        return CloseReadback::PolicyRefused {
+            refusal: format!(
+                "CLOSE_REFUSED_RESERVATION_LEASE bead={bead} reservation_id={} holder={} path={} reason={} next_action=release_reservation",
+                lease.id, lease.holder, lease.path, lease.reason
+            ),
+        };
+    }
     let close_args = vec![
         "close".to_owned(),
         bead.to_owned(),
@@ -5991,6 +6065,7 @@ mod tests {
             tick_monitor: "tick-monitor".to_owned(),
             run_subcommand: false,
             br: "br".to_owned(),
+            am: String::new(),
             bv: "bv".to_owned(),
             ntm: "ntm".to_owned(),
             tmux_tmpdir,
@@ -8858,5 +8933,47 @@ Stop: now
         assert_eq!(restored, with);
         let source = include_str!("main.rs");
         assert!(source.contains("tracker_assignee_with_composite(true,"));
+    }
+    #[test]
+    fn close_readback_refuses_active_reservation_named_for_bead() {
+        let temp = tempfile::tempdir().expect("reservation refusal fixture");
+        let br = executable_reaper(
+            &temp,
+            "#!/bin/sh\nprintf '%s\n' '[{\"id\":\"bead\",\"status\":\"closed\"}]'\n",
+        );
+        let am = temp.path().join("am");
+        std::fs::write(
+            &am,
+            "#!/bin/sh\nprintf '%s\n' 'ID PATTERN AGENT EXPIRES REASON'\nprintf '%s\n' '112933 var/agent-tmp/lease WildStone 2099-01-01T00:00:00Z omp-orchestrator-test-bead'\n",
+        )
+        .expect("write am fixture");
+        let mut permissions = std::fs::metadata(&am).expect("am metadata").permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&am, permissions).expect("make am executable");
+
+        let mut config = fixture_config(temp.path().join("heartbeat.jsonl"));
+        config.br = br.display().to_string();
+        config.am = am.display().to_string();
+        let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
+        let result = runtime.block_on(async {
+            let cx = Cx::current().expect("runtime context");
+            close_and_read_back(
+                &cx,
+                &config,
+                "omp-orchestrator-test-bead",
+                "DONE: verified",
+            )
+            .await
+        });
+        match result {
+            CloseReadback::PolicyRefused { refusal } => {
+                assert!(refusal.contains("CLOSE_REFUSED_RESERVATION_LEASE"), "{refusal}");
+                assert!(refusal.contains("reservation_id=112933"), "{refusal}");
+                assert!(refusal.contains("holder=WildStone"), "{refusal}");
+                assert!(refusal.contains("path=var/agent-tmp/lease"), "{refusal}");
+                assert!(refusal.contains("omp-orchestrator-test-bead"), "{refusal}");
+            }
+            other => panic!("active reservation must refuse close, got {other:?}"),
+        }
     }
 }
