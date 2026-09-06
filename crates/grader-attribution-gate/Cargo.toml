@@ -5,10 +5,16 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 description = "Refuse unattributed and self-grades so grader != implementer is tracker-visible"
-
 [lib]
 name = "grader_attribution_gate"
 path = "src/lib.rs"
+
+[[bin]]
+name = "grader-attribution-gate"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1"
 
 [lints.rust]
 unsafe_code = "forbid"

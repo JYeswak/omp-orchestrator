@@ -204,6 +204,95 @@ pub fn scan_closes(
         .collect())
 }
 
+/// One closed bead as recorded in `.beads/issues.jsonl`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClosedBead {
+    pub id: String,
+    pub closed_at: String,
+    pub close_reason: String,
+    pub comment_authors: Vec<String>,
+}
+
+/// Parse closed rows from the production JSONL. Zero closed rows is EmptyScan.
+pub fn parse_closed_beads(jsonl: &str) -> Result<Vec<ClosedBead>, EmptyScan> {
+    let mut rows = Vec::new();
+    for line in jsonl.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        if value.get("status").and_then(|s| s.as_str()) != Some("closed") {
+            continue;
+        }
+        let id = value
+            .get("id")
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .to_owned();
+        if id.is_empty() {
+            continue;
+        }
+        let authors = value
+            .get("comments")
+            .and_then(|c| c.as_array())
+            .map(|comments| {
+                comments
+                    .iter()
+                    .filter_map(|comment| {
+                        comment
+                            .get("author")
+                            .and_then(|author| author.as_str())
+                            .map(str::to_owned)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        rows.push(ClosedBead {
+            id,
+            closed_at: value
+                .get("closed_at")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_owned(),
+            close_reason: value
+                .get("close_reason")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_owned(),
+            comment_authors: authors,
+        });
+    }
+    if rows.is_empty() {
+        Err(EmptyScan)
+    } else {
+        Ok(rows)
+    }
+}
+
+/// Closed beads whose comments are only the git default author (or have none).
+pub fn unattributed_close_ids(rows: &[ClosedBead], defaults: &[&str]) -> Vec<String> {
+    rows.iter()
+        .filter(|row| {
+            !row
+                .comment_authors
+                .iter()
+                .any(|author| !is_default_author(author, defaults))
+        })
+        .map(|row| row.id.clone())
+        .collect()
+}
+
+/// Exit 1 names unattributed closes; 0 is a fully attributed ledger; 2 is empty.
+pub fn ledger_gate_exit(unattributed: &[String]) -> i32 {
+    if unattributed.is_empty() {
+        0
+    } else {
+        1
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

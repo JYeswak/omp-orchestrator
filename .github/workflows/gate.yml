@@ -178,6 +178,34 @@ jobs:
           cargo --version
           rustc --version
       - run: cargo test -p path-literal-guard
+  grader-attribution-gate:
+    # TRACKED CALLER for omp-orchestrator-gcyf. The chokepoint is the committed
+    # ledger, not br close (panes invoke br by hand). cargo test reads
+    # .beads/issues.jsonl; cargo run names ATTRIBUTION_ABSENT rows.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history — see the no-shell-gate job for why
+      - name: Cargo cache — registry, git DB and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cargo/git/checkouts/
+            target/
+          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ github.job }}-
+            cargo-${{ runner.os }}-
+      - name: Rust toolchain (pinned by rust-toolchain.toml)
+        run: |
+          cargo --version
+          rustc --version
+      - name: Gate tests — production ledger, iis6 pass, leht/mj8w positive control
+        run: cargo test -p grader-attribution-gate
   undrained-pipe-lint:
     runs-on: ubuntu-latest
     steps:
@@ -284,8 +312,54 @@ jobs:
           cargo --version
           rustc --version
       - run: cargo test -p installer
-      - name: installer --check must agree with the workspace
-        run: cargo run --quiet -p installer -- --check
+      # THIS LEG USED TO CARRY ZERO BITS. Reported by the InstallerBuildBreak lane,
+      # re-measured here. `--check` SKIPS every declared binary that is not installed,
+      # and a fresh runner never has one, so the drift denominator is always 0 and the
+      # step could not go red. Verbatim, `--check --bin-dir <empty dir>`:
+      #
+      #   installer --check: HEAD=6777b98
+      #     omp-orchestrator: NOT INSTALLED (skipped)
+      #     tick-monitor: NOT INSTALLED (skipped)
+      #     pane-truth: NOT INSTALLED (skipped)
+      #     installer: NOT INSTALLED (skipped)
+      #   INSTALLER IDENTITY OK: 0/0 binaries consistent with HEAD 6777b98
+      #   EXIT=0
+      #
+      # That is the inverse of the kernel-bypass-gate finding in this same commit
+      # series: there a gate had no reachable GREEN leg, here it has no reachable RED
+      # one. Both are uninformative — a verdict that cannot vary carries no bits.
+      #
+      # WHY NOT `--install installer` FIRST, which would give a real 1/1 denominator:
+      # measured locally, that path works (1/1, IDENTITY OK, exit 0) but it shells
+      # `cargo build --release -p installer` (crates/installer/src/lib.rs:366) and then
+      # `launchctl` (:548, :605), which does not exist on ubuntu-latest. Adding a
+      # release build plus an unverifiable macOS-only spawn to the workflow we are
+      # trying to make reliable would trade a vacuous green for a probable new red on
+      # a guess. NOT DONE. Wants an installed-fixture leg or a named debt row.
+      #
+      # WHAT IS LANDED is the part that can be proven: an explicit throwaway --bin-dir
+      # for both legs, so neither depends on ~/.local/bin existing on a runner (it does
+      # not, and this step has NEVER executed on a runner — the installer job died at
+      # compile on all twelve failed runs, so the old unqualified `--check` is
+      # unproven, not proven), plus a KNOWN-BAD leg that makes the MISMATCH path
+      # demonstrably reachable there. Both outcomes below were measured locally at
+      # 6777b98: 0/0 exit 0, and MISMATCH exit 1.
+      - name: installer --check, with a known-BAD leg so the verdict can vary
+        run: |
+          set -euo pipefail
+          bin="$RUNNER_TEMP/installer-bin"
+          mkdir -p "$bin"
+          echo "--- leg 1 (known-GOOD): empty bin dir must be accepted, 0/0"
+          cargo run --quiet -p installer -- --check --bin-dir "$bin"
+          echo "--- leg 2 (known-BAD): a drifted installed binary must REFUSE"
+          cp /bin/echo "$bin/installer"
+          if cargo run --quiet -p installer -- --check --bin-dir "$bin"; then
+            echo "REFUSED: --check accepted a binary that is not this HEAD."
+            echo "The drift comparison is not reachable on this runner, so leg 1's"
+            echo "green means nothing. Fix the checker, do not delete this leg."
+            exit 1
+          fi
+          echo "installer --check: 0/0 accepted and MISMATCH refused, both observed here"
   omp-inventory-map:
     # WIRING: this is one of the eight gates §06 is built around and CI did not
     # invoke it. Caught by wired_lanes, not by a human. the only gate that mutates a real filesystem tree (TREE leg); it was never run by CI.
