@@ -2030,11 +2030,14 @@ fn gate_peer_grading_inner(
                 .find(|pane| pane.pane_id != receiver_pane)
                 .map(|pane| pane.pane_id.clone())
             else {
-                return Err(format!(
-                    "PEER_GRADING_REFUSED bead={} receiver_pane={} reason=no_distinct_idle_peer",
+                let detail = format!(
+                    "bead={} receiver_pane={} reason=no_distinct_idle_peer next_action=continue-ranked-dispatch",
                     candidate.identity.bead.as_str(),
                     receiver_pane,
-                ));
+                );
+                write_heartbeat(config, tick, "PEER_GRADING_SKIPPED", &detail)?;
+                println!("PEER_GRADING_SKIPPED {detail}");
+                return Ok(None);
             };
             grader_pane
         };
@@ -7262,6 +7265,24 @@ Stop: now
         let self_grade = gate_peer_grading_for_pane(&config, &mut self_only, 76, "%1409")
             .expect_err("a pane cannot self-grade its own receiver-verified bead");
         assert!(self_grade.contains("reason=self_grade"), "{self_grade}");
+
+        let mut no_peer = Observation {
+            panes: vec![idle("%1409")],
+            queue: QueueState {
+                ready_count: 1,
+                readable: true,
+            },
+            gate_census: Some(GateCensus { rows: Vec::new() }),
+        };
+        assert!(
+            gate_peer_grading(&config, &mut no_peer, 76)
+                .expect("missing distinct peer must degrade")
+                .is_none(),
+            "no distinct peer must skip grading rather than refuse the tick"
+        );
+        let heartbeat = std::fs::read_to_string(&config.heartbeat_ledger).expect("skip heartbeat");
+        assert!(heartbeat.contains("PEER_GRADING_SKIPPED"), "{heartbeat}");
+        assert!(heartbeat.contains("reason=no_distinct_idle_peer"), "{heartbeat}");
 
         let claim = gate_peer_grading(&config, &mut observation, 77)
             .unwrap()
