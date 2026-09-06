@@ -770,22 +770,28 @@ fn parse_observation(bytes: &[u8], gate_census: GateCensus) -> Result<Observatio
     })
 }
 
-fn parse_ready(bytes: &[u8]) -> Result<Vec<String>, String> {
+fn parse_ready(bytes: &[u8]) -> Result<(Vec<String>, BTreeMap<String, u64>), String> {
     let value: Value = serde_json::from_slice(bytes)
         .map_err(|error| format!("QUEUE_UNREADABLE br ready JSON: {error}"))?;
     let rows = value
         .as_array()
         .ok_or_else(|| "QUEUE_UNREADABLE br ready did not return an array".to_owned())?;
     let mut ids = Vec::with_capacity(rows.len());
+    let mut priorities = BTreeMap::new();
     for (index, row) in rows.iter().enumerate() {
         let id = row
             .get("id")
             .and_then(Value::as_str)
             .filter(|id| !id.trim().is_empty())
             .ok_or_else(|| format!("QUEUE_UNREADABLE br ready row {index} has no non-empty id"))?;
+        let priority = row
+            .get("priority")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| format!("QUEUE_UNREADABLE br ready row {index} has no priority"))?;
         ids.push(id.to_owned());
+        priorities.insert(id.to_owned(), priority);
     }
-    Ok(ids)
+    Ok((ids, priorities))
 }
 
 
@@ -4323,7 +4329,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     let ready = require_success(&config.br, ready_output).map_err(|error| {
         format!("QUEUE_UNREADABLE owner=josh next_action=repair-br-or-escalate: {error}")
     })?;
-    let ready_ids = parse_ready(&ready)?;
+    let (ready_ids, ready_priorities) = parse_ready(&ready)?;
     let triage_args = vec!["--robot-triage".to_owned()];
     let mut bead_ids = match invoke(cx, config, &config.bv, &triage_args).await {
         Ok(output) => {
@@ -4331,12 +4337,31 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                 .map_err(|error| format!("QUEUE_UNRANKED owner=josh next_action=repair-bv: {error}"))?;
             let jsonl = fs::read_to_string(config.repo.join(".beads/issues.jsonl"))
                 .unwrap_or_default();
-            loop_queue_filter::select::select_dispatch_order(
+            let order = loop_queue_filter::select::select_dispatch_order_with_priorities(
                 &triage,
                 &ready_ids,
+                &ready_priorities,
                 &jsonl,
                 &config.receiver_agent,
-            )?
+            )?;
+            match order.window {
+                loop_queue_filter::select::RankWindow::RecommendationsOnly => {}
+                window => {
+                    let status = if matches!(window, loop_queue_filter::select::RankWindow::EmptyReady) {
+                        "QUEUE_RANK_WINDOW_EMPTY"
+                    } else {
+                        "QUEUE_RANK_FALLBACK"
+                    };
+                    write_heartbeat(
+                        config,
+                        tick,
+                        status,
+                        &format!("window={} priority_source=br_ready ready={}", window.label(), ready_ids.len()),
+                    )?;
+                    println!("{status} window={} priority_source=br_ready ready={}", window.label(), ready_ids.len());
+                }
+            }
+            order.ids
         }
         Err(error) => {
             return Err(format!(

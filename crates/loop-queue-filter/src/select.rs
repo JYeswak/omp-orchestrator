@@ -14,7 +14,7 @@
 //! on a forced-guess path).
 
 use serde_json::Value;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 
@@ -87,6 +87,90 @@ pub fn rank_ready(triage: &[u8], ready: &[String]) -> Result<Vec<String>, String
         }
     }
     Ok(out)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RankWindow {
+    EmptyReady,
+    RecommendationsOnly,
+    RecommendationsPlusPriorityFallback,
+    PriorityFallback,
+}
+impl RankWindow {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::EmptyReady => "EMPTY_READY",
+            Self::RecommendationsOnly => "RECOMMENDATIONS_ONLY",
+            Self::RecommendationsPlusPriorityFallback => "RECOMMENDATIONS_PLUS_PRIORITY_FALLBACK",
+            Self::PriorityFallback => "PRIORITY_FALLBACK",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RankedOrder {
+    pub ids: Vec<String>,
+    pub window: RankWindow,
+}
+
+/// Rank every ready bead. br ready supplies the authoritative priority;
+/// bv's score only breaks ties for beads it actually scored.
+pub fn rank_ready_with_priorities(
+    triage: &[u8],
+    ready: &[String],
+    ready_priorities: &BTreeMap<String, u64>,
+) -> Result<RankedOrder, String> {
+    let value: Value = serde_json::from_slice(triage)
+        .map_err(|error| format!("QUEUE_UNRANKED bv triage JSON: {error}"))?;
+    let recs = value
+        .get("triage")
+        .and_then(|t| t.get("recommendations"))
+        .and_then(Value::as_array)
+        .ok_or_else(|| "QUEUE_UNRANKED bv triage has no .triage.recommendations array".to_owned())?;
+    let mut scored = BTreeMap::new();
+    let mut ranked: Vec<(u64, i64, String)> = Vec::new();
+    for row in recs {
+        let Some(id) = row.get("id").and_then(Value::as_str) else { continue };
+        let priority = row.get("priority").and_then(Value::as_u64).unwrap_or(u64::MAX);
+        let score = row
+            .get("score")
+            .and_then(Value::as_f64)
+            .map(|value| -((value * 1_000_000.0) as i64))
+            .unwrap_or(0);
+        scored.insert(id.to_owned(), (priority, score));
+        if !ready.iter().any(|candidate| candidate == id)
+            || row.get("type").and_then(Value::as_str).is_some_and(|kind| kind.eq_ignore_ascii_case("epic"))
+            || row.get("assignee").and_then(Value::as_str).is_some_and(|who| !who.trim().is_empty())
+        {
+            continue;
+        }
+        ranked.push((ready_priorities.get(id).copied().unwrap_or(priority), score, id.to_owned()));
+    }
+    ranked.sort();
+    let mut ids: Vec<String> = ranked.iter().map(|(_, _, id)| id.clone()).collect();
+    let mut remaining: Vec<(u64, i64, usize, String)> = ready
+        .iter()
+        .enumerate()
+        .filter(|(_, id)| !ids.iter().any(|chosen| chosen == *id))
+        .map(|(index, id)| {
+            let (fallback_priority, score) = scored.get(id).copied().unwrap_or((u64::MAX, 0));
+            (ready_priorities.get(id).copied().unwrap_or(fallback_priority), score, index, id.clone())
+        })
+        .collect();
+    remaining.sort();
+    let had_ranked = !ids.is_empty();
+    let ranked_count = ids.len();
+    ids.extend(remaining.into_iter().map(|(_, _, _, id)| id));
+    let window = if ready.is_empty() {
+        RankWindow::EmptyReady
+    } else if !had_ranked {
+        RankWindow::PriorityFallback
+    } else if ids.len() > ranked_count {
+        RankWindow::RecommendationsPlusPriorityFallback
+    } else {
+        RankWindow::RecommendationsOnly
+    };
+    Ok(RankedOrder { ids, window })
 }
 
 fn assigned_ids(triage: &Value) -> BTreeSet<String> {
@@ -364,8 +448,40 @@ pub fn select_dispatch_order(
     Ok(out)
 }
 
+/// Full dispatch order with authoritative ready-set priorities.
+pub fn select_dispatch_order_with_priorities(
+    triage: &[u8],
+    ready: &[String],
+    ready_priorities: &BTreeMap<String, u64>,
+    jsonl: &str,
+    grader: &str,
+) -> Result<RankedOrder, String> {
+    let value: Value = serde_json::from_slice(triage)
+        .map_err(|error| format!("QUEUE_UNRANKED bv triage JSON: {error}"))?;
+    let assigned = assigned_ids(&value);
+    let mut out: Vec<String> = Vec::new();
+    if let Some(blocker) = first_actionable_blocker(&value, ready, &assigned)? {
+        out.push(blocker);
+    }
+    if let Some(grade) = first_grading_assignment(jsonl, ready, grader) {
+        if !out.iter().any(|id| id == &grade) {
+            out.push(grade);
+        }
+    }
+    let ranked = rank_ready_with_priorities(triage, ready, ready_priorities)?;
+    for id in ranked.ids {
+        if !out.iter().any(|chosen| chosen == &id) {
+            out.push(id);
+        }
+    }
+    Ok(RankedOrder {
+        ids: out,
+        window: ranked.window,
+    })
+}
+
 /// One pane as the assignment path sees it. The observer may be WORKING;
-/// the grader must not be.
+/// the grader must not.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObservedPane {
     pub pane_id: String,
@@ -678,6 +794,47 @@ mod tests {
         let ranked = rank_ready(triage, &ready).expect("ranked");
         assert_eq!(ranked.first().map(String::as_str), Some("free"));
         assert_eq!(ranked.len(), 3, "no ready id may be dropped: {ranked:?}");
+    }
+
+    #[test]
+    fn priority_fallback_uses_ready_priority_when_recommendations_do_not_survive() {
+        let ready = vec!["older-p1".to_owned(), "p0-now".to_owned()];
+        let triage = br#"{"triage":{"recommendations":[
+            {"id":"older-p1","priority":1,"score":0.9,"type":"epic"},
+            {"id":"p0-now","priority":0,"score":0.1,"assignee":"pane3-%8"}
+        ]}}"#;
+        let priorities = BTreeMap::from([
+            ("older-p1".to_owned(), 1),
+            ("p0-now".to_owned(), 0),
+        ]);
+        let ranked = rank_ready_with_priorities(triage, &ready, &priorities).unwrap();
+        assert_eq!(ranked.window, RankWindow::PriorityFallback);
+        assert_eq!(ranked.ids, vec!["p0-now", "older-p1"]);
+    }
+
+    #[test]
+    fn surviving_recommendations_still_use_priority_then_score() {
+        let ready = vec!["p1".to_owned(), "p0".to_owned()];
+        let triage = br#"{"triage":{"recommendations":[
+            {"id":"p1","priority":1,"score":0.99},
+            {"id":"p0","priority":0,"score":0.01}
+        ]}}"#;
+        let priorities = BTreeMap::from([("p1".to_owned(), 1), ("p0".to_owned(), 0)]);
+        let ranked = rank_ready_with_priorities(triage, &ready, &priorities).unwrap();
+        assert_eq!(ranked.window, RankWindow::RecommendationsOnly);
+        assert_eq!(ranked.ids, vec!["p0", "p1"]);
+    }
+
+    #[test]
+    fn empty_ready_set_has_a_typed_empty_rank_window() {
+        let ranked = rank_ready_with_priorities(
+            br#"{"triage":{"recommendations":[]}}"#,
+            &[],
+            &BTreeMap::new(),
+        )
+        .unwrap();
+        assert_eq!(ranked.window, RankWindow::EmptyReady);
+        assert!(ranked.ids.is_empty());
     }
 
     #[test]
