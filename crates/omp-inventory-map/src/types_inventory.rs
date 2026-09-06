@@ -538,14 +538,8 @@ pub fn missing_vocabulary() -> Vec<MissingTypeRow> {
         },
         MissingTypeRow {
             name: "ObligationLedger".to_owned(),
-            status: MissingStatus::AbsentEverywhere,
-            evidence: "Exact name absent BOTH sides (derived: grep of asupersync \
-                       src/ at fa3c01aec and of crates/). Nearest upstream: \
-                       CrdtObligationLedger obligation/crdt.rs:219 and \
-                       LedgerSnapshot crdt.rs:507 — CRDT obligation entries, not \
-                       the reserve/commit/abort ledger the bead describes. Do not \
-                       map this row onto the CRDT types without a semantics \
-                       decision."
+            status: MissingStatus::PresentUpstreamUsable,
+            evidence: "Upstream ObligationLedger is defined at asupersync obligation/ledger.rs:441 and its module is public at obligation/mod.rs:70. A temporary omp-types re-export compiled at pinned asupersync rev fa3c01aec via remote RCH check on contabo-4 (exit 0, 2026-09-06)."
                 .to_owned(),
         },
         MissingTypeRow {
@@ -913,10 +907,7 @@ impl TypeInventory {
             let triaged = VOCABULARY_SPLITS
                 .iter()
                 .find(|(name, set, _, _)| *name == c.name && *set == key);
-            let detail = match (
-                c.crates.iter().any(|k| k == VOCABULARY_CRATE),
-                triaged,
-            ) {
+            let detail = match (c.crates.iter().any(|k| k == VOCABULARY_CRATE), triaged) {
                 (true, Some((_, _, owner, resolution))) => format!(
                     "VOCABULARY SPLIT against {VOCABULARY_CRATE}, TRIAGED — \
                      owner={owner}: {resolution}"
@@ -1228,7 +1219,7 @@ mod tests {
             ("Grade", MissingStatus::AbsentEverywhere),
             ("DeliveryClass", MissingStatus::PresentUpstreamBlocked),
             ("AckKind", MissingStatus::PresentUpstreamBlocked),
-            ("ObligationLedger", MissingStatus::AbsentEverywhere),
+            ("ObligationLedger", MissingStatus::PresentUpstreamUsable),
             ("Budget", MissingStatus::PresentUpstreamUsable),
             ("Outcome", MissingStatus::PresentWrongSemantics),
         ];
@@ -1434,7 +1425,9 @@ mod tests {
             .check()
             .expect_err("the Observation collision is REFUSED until the seam convergence lands");
         assert!(
-            !errs.iter().any(|e| e.contains("STALE VOCABULARY-SPLIT ROW")),
+            !errs
+                .iter()
+                .any(|e| e.contains("STALE VOCABULARY-SPLIT ROW")),
             "a VOCABULARY_SPLITS row no longer matches a real split: {errs:?}"
         );
         assert!(
@@ -1445,7 +1438,11 @@ mod tests {
         // ACTIONABILITY: every refusal must carry the type, both crates, and
         // a site. A refusal a reader cannot act on is the unread red.
         for c in inv.disallowed() {
-            assert!(c.crates.len() >= 2, "{} claims fewer than two crates", c.name);
+            assert!(
+                c.crates.len() >= 2,
+                "{} claims fewer than two crates",
+                c.name
+            );
             assert!(
                 c.sites.len() >= 2,
                 "{} must carry a file:line per declaring crate: {:?}",
@@ -1466,8 +1463,9 @@ mod tests {
         // sharp class is not buried in the undifferentiated wall.
         for c in inv.vocabulary_splits() {
             assert!(
-                errs.iter().any(|e| e.contains(&format!("COLLISION {}", c.name))
-                    && e.contains("VOCABULARY SPLIT")),
+                errs.iter()
+                    .any(|e| e.contains(&format!("COLLISION {}", c.name))
+                        && e.contains("VOCABULARY SPLIT")),
                 "split {} must be labelled a VOCABULARY SPLIT: {errs:?}",
                 c.name
             );
@@ -1593,7 +1591,9 @@ mod tests {
             "omp-inventory-map",
             &[("InventoryMap", TypeKind::Struct)],
         )]);
-        let errs = absent.check().expect_err("a row for an absent crate is drift");
+        let errs = absent
+            .check()
+            .expect_err("a row for an absent crate is drift");
         assert!(
             errs.iter()
                 .any(|e| e.contains("STALE NAMED-ZERO ROW") && e.contains("not in the workspace")),
@@ -1643,7 +1643,11 @@ mod tests {
             crate_with("cargo-lane-budget", &[("Config", TypeKind::Struct)]),
             crate_with("crate-soundness-verify", &[("Config", TypeKind::Struct)]),
         ]);
-        assert_eq!(leafs.collisions.len(), 1, "the collision itself is detected");
+        assert_eq!(
+            leafs.collisions.len(),
+            1,
+            "the collision itself is detected"
+        );
         assert!(
             leafs.vocabulary_splits().is_empty(),
             "a leaf+leaf collision must NOT be a vocabulary split"
@@ -1673,7 +1677,11 @@ mod tests {
         let (owner, other) = row_set
             .split_once('+')
             .expect("a split row names two crates");
-        let leaf = if owner == VOCABULARY_CRATE { other } else { owner };
+        let leaf = if owner == VOCABULARY_CRATE {
+            other
+        } else {
+            owner
+        };
         let covered = assemble(vec![
             crate_with(VOCABULARY_CRATE, &[(row_name, TypeKind::Enum)]),
             crate_with(leaf, &[(row_name, TypeKind::Enum)]),
@@ -1744,9 +1752,7 @@ mod tests {
     #[test]
     fn lifecycle_decision_is_a_decision_not_an_allowance() {
         assert!(
-            !ALLOWED_COLLISIONS
-                .iter()
-                .any(|(n, _, _)| *n == "Lifecycle"),
+            !ALLOWED_COLLISIONS.iter().any(|(n, _, _)| *n == "Lifecycle"),
             "Lifecycle must NOT be an allowance row — the enums are \
              variant-identical, which is a convergence, not an accepted \
              coincidence"
@@ -1762,10 +1768,7 @@ mod tests {
         // PaneObservation deliberately has NO decision of its own: it is
         // step 3 of the Observation migration. Two rows for one fact is the
         // defect the deleted assert_eq! carried in its own comment.
-        let decided: Vec<String> = seam_decisions()
-            .into_iter()
-            .map(|d| d.type_name)
-            .collect();
+        let decided: Vec<String> = seam_decisions().into_iter().map(|d| d.type_name).collect();
         assert_eq!(decided, ["Observation", "Lifecycle"]);
         assert!(
             observation_seam_decision().migration[2].contains("PaneObservation"),

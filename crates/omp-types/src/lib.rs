@@ -108,6 +108,7 @@ pub use asupersync::types::{
 /// leaks an obligation only a human notices — measured as the pending-dispatch marker surviving
 /// **162 refused ticks** because nothing owned its release.
 pub use asupersync::types::{ObligationId, RegionId, TaskId, Time};
+pub use asupersync::obligation::ledger::ObligationLedger;
 
 #[cfg(test)]
 mod tests {
