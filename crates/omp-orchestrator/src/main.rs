@@ -894,6 +894,35 @@ async fn post_send_observation(
     )
 }
 
+/// Read the ACK readback for `bead` on `pane`, bound to THIS dispatch.
+///
+/// # `issued_at` is what makes a stale ACK absent instead of delivered
+///
+/// MEASURED 2026-09-05: a live tick returned `ACK_PANE_MISMATCH expected=%8 got=%1414`
+/// because the readback matched `[BlueLantern] at 2026-09-02 22:31 UTC / ACK 16l on
+/// %1414` — a three-day-old ACK from a control-plane pane. `ma3b` fixed the SCOPE half
+/// (whose pane); `y903` fixed the RECENCY half (when), giving `AckReadback` an
+/// `Option<u64> dispatch_issued_at` and `with_dispatch_issued_at`. Both fixes were
+/// correct at the callee and unwired here — the third time that shape appeared in one
+/// session, alongside `--session` on the reaper and `grade --claim`'s missing CLI.
+///
+/// Without the binding, `dispatch_issued_at: None` means an ACK from the right pane
+/// written BEFORE this dispatch still reads as delivery. That is routine in this fleet:
+/// `2yf` and `nh5` both went to panes that had held them before.
+///
+/// The value comes from the pending-dispatch MARKER, never wall clock — a marker written
+/// by another process is the only clock both sides share, and `y903`'s own report is
+/// explicit that it "compares tracker created_at to the pending-dispatch marker, never
+/// wall clock". An unreadable or absent marker yields `None`, which degrades to the prior
+/// behaviour rather than refusing: a missing marker must not turn a real delivery into a
+/// failure.
+///
+/// # NO-CLAIM
+///
+/// Recency plus scope makes a stale foreign ACK unusable. Neither guard distinguishes two
+/// dispatches of the SAME bead to the SAME pane inside one window — `y903` proposed a
+/// per-dispatch nonce as the stronger fix and deliberately did not build it, because the
+/// ACK token is per-BEAD (`ack-stage/src/lib.rs:243-253`), not per-dispatch.
 async fn read_ack_readback(
     cx: &Cx,
     config: &Config,
@@ -910,9 +939,30 @@ async fn read_ack_readback(
         "br comments list",
         invoke(cx, config, &config.br, &args).await?,
     )?;
-    AckReadback::from_comments_json(bead, pane, &bytes).map_err(|error| {
+    let readback = AckReadback::from_comments_json(bead, pane, &bytes).map_err(|error| {
         format!("ACK_STAGE_INDETERMINATE bead={bead} pane={pane} comment read-back: {error}")
+    })?;
+    Ok(match dispatch_marker_issued_at(config, pane) {
+        Some(issued_at) => readback.with_dispatch_issued_at(issued_at),
+        None => readback,
     })
+}
+
+/// The `issued_at` recorded in this pane's pending-dispatch marker, if readable.
+///
+/// Returns `None` for a missing, unreadable, or non-numeric marker. `None` is a
+/// DEGRADE, not a refusal: the recency guard is then inactive and the readback behaves as
+/// it did before `y903`. Refusing here would convert every dispatch whose marker was
+/// already cleared into a failure.
+fn dispatch_marker_issued_at(config: &Config, pane: &str) -> Option<u64> {
+    let path = config
+        .pending_dispatch
+        .with_extension(pane.trim_start_matches('%'));
+    let text = fs::read_to_string(path).ok()?;
+    serde_json::from_str::<serde_json::Value>(text.trim())
+        .ok()?
+        .get("issued_at")
+        .and_then(serde_json::Value::as_u64)
 }
 
 fn write_transport_receipt(
