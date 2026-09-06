@@ -5,6 +5,8 @@
 //! The Python file remains the differential oracle.  This module deliberately keeps the
 //! selector's lexical rules and ordering visible: changing one rule must change a named test.
 
+
+pub mod select;
 use regex::Regex;
 use serde_json::{Map, Value};
 use std::{
