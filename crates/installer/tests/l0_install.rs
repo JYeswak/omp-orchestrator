@@ -1,8 +1,8 @@
 use installer::{
     check_build_fence, classify_restart_postcondition, git_head, git_rev_parse_short,
-    install_binary, publish_atomic, refuse_path_collisions, resolve_repo_ownership,
-    stage_artifact_stream, verify_identity, verify_minisign_policy, InstallError, RepoOwnership,
-    RestartPostcondition,
+    install_binary, merge_hooks, publish_atomic, refuse_path_collisions, resolve_repo_ownership,
+    stage_artifact_stream, verify_identity, verify_minisign_policy, HookWrite, InstallError,
+    RepoOwnership, RestartPostcondition,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -376,4 +376,60 @@ fn path_collision_usr_sbin_first_refuses_without_overwrite() {
         other => panic!("expected PathCollision, got {other:?}"),
     }
     assert_eq!(fs::read(&dest).expect("read after"), before, "no overwrite");
+}
+
+#[test]
+fn hook_merge_backups_before_write() {
+    let dir = TempDir::new("hook-merge-ok");
+    let hook = dir.path().join("pre-commit");
+    fs::write(&hook, b"pre-merge").expect("seed");
+    let backups = merge_hooks(
+        &[HookWrite {
+            path: hook.clone(),
+            merged: b"post-merge".to_vec(),
+        }],
+        None,
+    )
+    .expect("merge");
+    assert_eq!(backups.len(), 1);
+    assert!(backups[0].file_name().unwrap().to_string_lossy().contains(".bak."));
+    assert_eq!(fs::read(&backups[0]).expect("backup"), b"pre-merge");
+    assert_eq!(fs::read(&hook).expect("hook"), b"post-merge");
+}
+
+#[test]
+fn hook_merge_injected_failure_restores_pre_merge_bytes() {
+    let dir = TempDir::new("hook-merge-fail");
+    let first = dir.path().join("pre-commit");
+    let second = dir.path().join("post-commit");
+    fs::write(&first, b"first-orig").expect("seed first");
+    fs::write(&second, b"second-orig").expect("seed second");
+    let error = merge_hooks(
+        &[
+            HookWrite {
+                path: first.clone(),
+                merged: b"first-new".to_vec(),
+            },
+            HookWrite {
+                path: second.clone(),
+                merged: b"second-new".to_vec(),
+            },
+        ],
+        Some(1),
+    )
+    .expect_err("fail the second hook write");
+    match error {
+        InstallError::HookMergeFailed { backups } => {
+            assert_eq!(backups.len(), 2);
+            let text = InstallError::HookMergeFailed {
+                backups: backups.clone(),
+            }
+            .to_string();
+            assert!(text.starts_with("L0_HOOK_MERGE"), "{text}");
+            assert!(text.contains(&backups[0]) && text.contains(&backups[1]), "{text}");
+        }
+        other => panic!("expected HookMergeFailed, got {other:?}"),
+    }
+    assert_eq!(fs::read(&first).expect("first"), b"first-orig");
+    assert_eq!(fs::read(&second).expect("second"), b"second-orig");
 }

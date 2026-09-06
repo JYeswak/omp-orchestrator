@@ -67,6 +67,10 @@ pub enum InstallError {
     PathCollision {
         hits: Vec<String>,
     },
+    /// Hook merge rolled back to timestamped backups.
+    HookMergeFailed {
+        backups: Vec<String>,
+    },
 }
 
 impl fmt::Display for InstallError {
@@ -127,6 +131,11 @@ impl fmt::Display for InstallError {
             Self::PathCollision { hits } => {
                 write!(formatter, "L0_PATH_COLLISION: {}", hits.join(" "))
             }
+            Self::HookMergeFailed { backups } => write!(
+                formatter,
+                "L0_HOOK_MERGE: restored from backups {}",
+                backups.join(" ")
+            ),
         }
     }
 }
@@ -186,6 +195,67 @@ pub fn refuse_path_collisions(
     } else {
         Err(InstallError::PathCollision { hits })
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HookWrite {
+    pub path: PathBuf,
+    pub merged: Vec<u8>,
+}
+
+fn timestamped_backup_path(path: &Path) -> PathBuf {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("hook");
+    path.with_file_name(format!("{name}.bak.{nanos}"))
+}
+
+/// L0-HOOK-MERGE. Backup every file first, then write. Injected failure after
+/// `fail_after` writes restores pre-merge bytes from those backups.
+pub fn merge_hooks(
+    writes: &[HookWrite],
+    fail_after: Option<usize>,
+) -> Result<Vec<PathBuf>, InstallError> {
+    let mut backups = Vec::new();
+    let mut originals = Vec::new();
+    for write in writes {
+        let original = std::fs::read(&write.path).unwrap_or_default();
+        let backup = timestamped_backup_path(&write.path);
+        std::fs::write(&backup, &original).map_err(|error| InstallError::IoError {
+            path: backup.display().to_string(),
+            detail: format!("hook backup failed: {error}"),
+        })?;
+        backups.push(backup);
+        originals.push(original);
+    }
+    for (index, write) in writes.iter().enumerate() {
+        if Some(index) == fail_after {
+            for (path, bytes) in writes.iter().map(|w| &w.path).zip(originals.iter()) {
+                let _ = std::fs::write(path, bytes);
+            }
+            return Err(InstallError::HookMergeFailed {
+                backups: backups
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect(),
+            });
+        }
+        if let Err(error) = std::fs::write(&write.path, &write.merged) {
+            for (path, bytes) in writes.iter().map(|w| &w.path).zip(originals.iter()) {
+                let _ = std::fs::write(path, bytes);
+            }
+            return Err(InstallError::IoError {
+                path: write.path.display().to_string(),
+                detail: format!("hook write failed: {error}"),
+            });
+        }
+    }
+    Ok(backups)
 }
 // ── BOUNDED SPAWNS (bead omp-orchestrator-n4q) ────────────────────────────────
 
