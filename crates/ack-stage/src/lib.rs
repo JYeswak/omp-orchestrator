@@ -410,7 +410,12 @@ impl AckReadback {
             return AckReadbackVerdict::Missing;
         }
         let prefix = format!("ACK {} on ", ack_token(bead_id));
-        for comment in &self.comments {
+        // NEWEST-WINS among fresh in-session ACKs. MEASURED 2026-09-06 on eg0m:
+        // `br comments list --json` is oldest-first; first-match returned
+        // `ACK_PANE_MISMATCH got=%8` (id=1591, 02:18:18Z) and never saw the three
+        // later `%9` ACKs. `issued_at=None` (marker cleared) made every ACK "fresh".
+        let mut newest: Option<(u64, usize, &str, &str)> = None;
+        for (index, comment) in self.comments.iter().enumerate() {
             let Some(rest) = comment.text.strip_prefix(&prefix) else {
                 continue;
             };
@@ -420,21 +425,33 @@ impl AckReadback {
             if !self.is_fresh(comment.created_at) {
                 continue;
             }
-            if got == pane_id {
-                return AckReadbackVerdict::Matched {
-                    comment: comment.text.clone(),
-                };
+            let in_session = got == pane_id || session_pane_ids.iter().any(|id| id == got);
+            if !in_session {
+                continue;
             }
-            let in_session = session_pane_ids.iter().any(|id| id == got);
-            if in_session {
-                return AckReadbackVerdict::AckPaneMismatch {
-                    expected: pane_id.to_owned(),
-                    got: got.to_owned(),
-                };
+            let ts = comment.created_at.unwrap_or(0);
+            let take = match newest {
+                None => true,
+                Some((prev_ts, prev_index, _, _)) => {
+                    ts > prev_ts || (ts == prev_ts && index > prev_index)
+                }
+            };
+            if take {
+                newest = Some((ts, index, got, comment.text.as_str()));
             }
         }
-        AckReadbackVerdict::Missing
+        match newest {
+            None => AckReadbackVerdict::Missing,
+            Some((_, _, got, text)) if got == pane_id => AckReadbackVerdict::Matched {
+                comment: text.to_owned(),
+            },
+            Some((_, _, got, _)) => AckReadbackVerdict::AckPaneMismatch {
+                expected: pane_id.to_owned(),
+                got: got.to_owned(),
+            },
+        }
     }
+
 
     /// Match only a read-back bound to the stage's bead and pane.
     pub fn matching_comment_for(&self, bead_id: &str, pane_id: &str) -> Option<&str> {
@@ -1407,6 +1424,78 @@ mod tests {
             AckReadbackVerdict::Missing
         );
     }
+
+    /// MEASURED 2026-09-06: `br comments list --json` is oldest-first.
+    /// First-match with marker absent selected `%8` (02:18:18Z) and never saw
+    /// later `%9` ACKs. Newest-wins must Matched on `%9`.
+    #[test]
+    fn eg0m_real_census_marker_absent_is_newest_percent_9_not_mismatch_8() {
+        let json = br#"[
+            {"id":600,"text":"ACK eg0m on %1397 -- orchestrator claiming","created_at":"2026-09-02T20:28:53Z"},
+            {"id":607,"text":"ACK eg0m on %1414 -- starting","created_at":"2026-09-02T20:43:38Z"},
+            {"id":635,"text":"ACK eg0m on %1408","created_at":"2026-09-02T21:21:27Z"},
+            {"id":1591,"text":"ACK eg0m on %8 -- agent= title=omp-orchestrator__omp_2","created_at":"2026-09-06T02:18:18Z"},
+            {"id":1592,"text":"ACK eg0m on %8 -- agent=WildStone title=omp-orchestrator__omp_2","created_at":"2026-09-06T02:18:57Z"},
+            {"id":1744,"text":"ACK eg0m on %9 -- agent=WildStone title=omp-orchestrator__omp-grok_1","created_at":"2026-09-06T05:55:51Z"},
+            {"id":1749,"text":"ACK eg0m on %9 -- agent=WildStone title=omp-orchestrator__omp-grok_1","created_at":"2026-09-06T06:19:30Z"},
+            {"id":1759,"text":"ACK eg0m on %9 -- agent=WildStone title=omp-orchestrator__omp-grok_1","created_at":"2026-09-06T06:43:35Z"}
+        ]"#;
+        let readback = AckReadback::from_comments_json("omp-orchestrator-eg0m", "%9", json)
+            .expect("real census must parse");
+        assert!(
+            readback.dispatch_issued_at.is_none(),
+            "from_comments_json leaves issued_at unbound; marker ABSENT"
+        );
+        let session = vec![
+            "%5".into(),
+            "%6".into(),
+            "%7".into(),
+            "%8".into(),
+            "%9".into(),
+        ];
+        let verdict = readback.match_verdict_in_session("omp-orchestrator-eg0m", "%9", &session);
+        assert!(
+            matches!(
+                verdict,
+                AckReadbackVerdict::Matched { ref comment } if comment.contains(" on %9 --")
+            ),
+            "SELECTION must be newest %9, not first-match %8: {verdict:?}"
+        );
+        assert!(
+            !matches!(verdict, AckReadbackVerdict::AckPaneMismatch { .. }),
+            "marker-absent stale %8 must not be ACK_PANE_MISMATCH: {verdict:?}"
+        );
+    }
+
+    #[test]
+    fn only_wrong_pane_in_session_is_still_mismatch() {
+        let json = br#"[{"id":1,"text":"ACK eg0m on %8 -- agent=WildStone title=only-wrong","created_at":"2026-09-06T02:18:18Z"}]"#;
+        let readback = AckReadback::from_comments_json("omp-orchestrator-eg0m", "%9", json).unwrap();
+        let verdict = readback.match_verdict_in_session(
+            "omp-orchestrator-eg0m",
+            "%9",
+            &["%8".into(), "%9".into()],
+        );
+        assert_eq!(
+            verdict,
+            AckReadbackVerdict::AckPaneMismatch {
+                expected: "%9".into(),
+                got: "%8".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn zero_ack_prefix_comments_are_absent_not_mismatch() {
+        let json = br#"[{"id":1,"text":"ORCHESTRATOR: not an ACK","created_at":"2026-09-02T19:17:13Z"}]"#;
+        let readback = AckReadback::from_comments_json("omp-orchestrator-eg0m", "%9", json).unwrap();
+        assert_eq!(
+            readback.match_verdict_in_session("omp-orchestrator-eg0m", "%9", &["%8".into(), "%9".into()]),
+            AckReadbackVerdict::Missing
+        );
+    }
+
+
 
     #[test]
     fn undatable_comment_fails_closed_under_recency() {

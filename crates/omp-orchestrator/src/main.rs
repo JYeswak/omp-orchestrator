@@ -987,12 +987,12 @@ async fn read_ack_readback(
     })
 }
 
-/// The `issued_at` recorded in this pane's pending-dispatch marker, if readable.
-///
 /// Returns `None` for a missing, unreadable, or non-numeric marker. `None` is a
-/// DEGRADE, not a refusal: the recency guard is then inactive and the readback behaves as
-/// it did before `y903`. Refusing here would convert every dispatch whose marker was
-/// already cleared into a failure.
+/// DEGRADE of the recency *timestamp*, not of ACK selection: `ack-stage`
+/// `match_verdict_in_session` then falls back to the NEWEST fresh in-session ACK
+/// (`mgdz`). Refusing here would convert every dispatch whose marker was already
+/// cleared into a failure. First-match-with-no-filter is what livelocked eg0m.
+
 fn dispatch_marker_issued_at(config: &Config, pane: &str) -> Option<u64> {
     let path = config
         .pending_dispatch
