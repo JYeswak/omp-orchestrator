@@ -14,7 +14,7 @@
 
 use orchestration_tick_gate::{
     append_receipt, build_receipt, detect_gap, validate_receipt, PaneDisposition, Receipt,
-    TICK_OUTCOME_STATUSES,
+    TickVerdict, TICK_OUTCOME_STATUSES,
 };
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -59,6 +59,7 @@ fn a_real_row(ts: u64, tick: u64) -> Value {
         }],
             fallback_reason: "decision=supervised-working; this tick did not dispatch to this pane",
             claims: vec![json!({ "figure": "free_capacity=2", "command": "tick-monitor observe" })],
+            verdict: TickVerdict::Unmeasured,
             not_done: vec![json!("outcome not yet observed at row time")],
         })
 }
@@ -117,6 +118,7 @@ fn every_free_pane_is_named_exactly_once_by_construction() {
             dispositions: &[],
             fallback_reason: "decision=authorized-idle; nothing was dispatched",
             claims: vec![json!({ "figure": "f", "command": "c" })],
+            verdict: TickVerdict::Unmeasured,
             not_done: vec![],
         });
     assert_eq!(validate_receipt(&row), Ok(()));
@@ -138,6 +140,7 @@ fn every_free_pane_is_named_exactly_once_by_construction() {
             receipt: "r".to_owned(),
         }],
             fallback_reason: "not free",
+            verdict: TickVerdict::Unmeasured,
             claims: vec![json!({ "figure": "f", "command": "c" })],
             not_done: vec![],
         });
@@ -157,6 +160,7 @@ fn every_free_pane_is_named_exactly_once_by_construction() {
             reason: "   ".to_owned(),
         }],
             fallback_reason: "the fallback reason",
+            verdict: TickVerdict::Unmeasured,
             claims: vec![json!({ "figure": "f", "command": "c" })],
             not_done: vec![],
         });
@@ -274,6 +278,7 @@ fn an_unmeasured_figure_is_null_and_never_zero() {
             source: "src",
             dispositions: &[],
             fallback_reason: "none",
+            verdict: TickVerdict::Unmeasured,
             claims: vec![json!({ "figure": "f", "command": "c" })],
             not_done: vec![],
         });
@@ -298,6 +303,7 @@ fn an_unmeasured_figure_is_null_and_never_zero() {
             source: "src",
             dispositions: &[],
             fallback_reason: "none",
+            verdict: TickVerdict::Unmeasured,
             claims: vec![json!({ "figure": "f", "command": "c" })],
             not_done: vec![],
         });

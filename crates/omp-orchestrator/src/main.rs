@@ -18,7 +18,9 @@ use agent_mail_native::journey::{
 use agent_mail_native::{MailClient, MailError};
 use agent_mail_native::identity::{resolve_pane_identity, BindingStatus, PaneIdentity};
 use asupersync::process::{Command, Output};
-use orchestration_tick_gate::{append_receipt, build_receipt, PaneDisposition, Receipt};
+use orchestration_tick_gate::{
+    append_receipt, build_receipt, PaneDisposition, Receipt, TickVerdict,
+};
 use asupersync::runtime::RuntimeBuilder;
 use asupersync::time::{sleep, timeout};
 use asupersync::Cx;
@@ -588,6 +590,16 @@ impl Config {
         // rather than signed with.
         let resolved_sender =
             sender_identity::first_candidate(&|name| env::var(name).ok());
+        let policy_text = fs::read_to_string(repo.join("config.toml")).ok();
+        let policy = parse_dispatch_policy(policy_text.as_deref());
+        if interval == DEFAULT_INTERVAL {
+            interval = policy.interval;
+        }
+        if command_timeout == DEFAULT_COMMAND_TIMEOUT {
+            command_timeout = policy.command_timeout;
+        }
+        policy.log_live();
+
         Ok(Self {
             repo,
             session,
@@ -2344,6 +2356,172 @@ fn refuse_terminal_status_at_send(bead: &str, status: &str) -> Result<(), String
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AtSendCapture {
+    status: String,
+    assignee: String,
+    has_acceptance: bool,
+    filed_only: bool,
+}
+
+impl AtSendCapture {
+    fn from_snapshot(snapshot: &BeadSnapshot) -> Self {
+        let acceptance = snapshot.acceptance_criteria().trim();
+        let description = snapshot.description();
+        Self {
+            status: snapshot.status_label().to_owned(),
+            assignee: snapshot.assignee().unwrap_or("").to_owned(),
+            has_acceptance: !acceptance.is_empty(),
+            filed_only: description.to_ascii_lowercase().contains("filed only"),
+        }
+    }
+
+    fn detail(&self, bead: &str, pane: &str) -> String {
+        format!(
+            "bead={bead} pane={pane} at_send_status={} at_send_assignee={} at_send_has_acceptance={} at_send_filed_only={}",
+            self.status,
+            if self.assignee.is_empty() { "none" } else { &self.assignee },
+            self.has_acceptance,
+            self.filed_only
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AlignmentClass {
+    Pass,
+    Fail,
+    Unknown,
+}
+
+impl AlignmentClass {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Pass => "PASS",
+            Self::Fail => "FAIL",
+            Self::Unknown => "UNKNOWN",
+        }
+    }
+}
+
+fn field_from_detail(detail: &str, key: &str) -> Option<String> {
+    field_after(detail, key)
+}
+
+fn classify_send_alignment(detail: &str) -> AlignmentClass {
+    let status = field_from_detail(detail, "at_send_status=");
+    let assignee = field_from_detail(detail, "at_send_assignee=");
+    let acc = field_from_detail(detail, "at_send_has_acceptance=");
+    let fld = field_from_detail(detail, "at_send_filed_only=");
+    let (Some(status), Some(assignee), Some(acc), Some(fld)) = (status, assignee, acc, fld) else {
+        return AlignmentClass::Unknown;
+    };
+    let clm = assignee != "none" && !assignee.is_empty();
+    let acc_ok = acc == "true";
+    let trm = !matches!(status.as_str(), "closed" | "blocked" | "tombstone");
+    let fld_ok = fld == "false";
+    if clm && acc_ok && trm && fld_ok {
+        AlignmentClass::Pass
+    } else {
+        AlignmentClass::Fail
+    }
+}
+
+fn classify_alignment_window(details: &[String]) -> Result<Vec<AlignmentClass>, String> {
+    if details.is_empty() {
+        return Err("ALIGNMENT_SCAN_EMPTY -- an empty send window is an ERROR, never a pass".to_owned());
+    }
+    Ok(details.iter().map(|d| classify_send_alignment(d)).collect())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DispatchPolicy {
+    interval: Duration,
+    command_timeout: Duration,
+    receipt_timeout: Duration,
+    receipt_poll: Duration,
+    pending_dispatch_max_age: Duration,
+    mail_request_timeout: Duration,
+    origin: &'static str,
+}
+
+impl DispatchPolicy {
+    fn defaults() -> Self {
+        Self {
+            interval: DEFAULT_INTERVAL,
+            command_timeout: DEFAULT_COMMAND_TIMEOUT,
+            receipt_timeout: RECEIPT_TIMEOUT,
+            receipt_poll: RECEIPT_POLL,
+            pending_dispatch_max_age: Duration::from_secs(PENDING_DISPATCH_MAX_AGE_SECS),
+            mail_request_timeout: MAIL_REQUEST_TIMEOUT,
+            origin: "defaults",
+        }
+    }
+
+    fn log_live(&self) {
+        eprintln!(
+            "DISPATCH_POLICY origin={} interval_secs={} command_timeout_secs={} receipt_timeout_secs={} receipt_poll_ms={} pending_dispatch_max_age_secs={} mail_request_timeout_secs={}",
+            self.origin,
+            self.interval.as_secs(),
+            self.command_timeout.as_secs(),
+            self.receipt_timeout.as_secs(),
+            self.receipt_poll.as_millis(),
+            self.pending_dispatch_max_age.as_secs(),
+            self.mail_request_timeout.as_secs()
+        );
+    }
+}
+
+fn parse_dispatch_policy(text: Option<&str>) -> DispatchPolicy {
+    let defaults = DispatchPolicy::defaults();
+    let Some(text) = text else {
+        return defaults;
+    };
+    let Some(section) = text.split("[dispatch]").nth(1) else {
+        return defaults;
+    };
+    let section = section.split('[').next().unwrap_or(section);
+    let mut policy = defaults;
+    policy.origin = "config.toml";
+    let mut parsed_any = false;
+    for line in section.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((key, raw)) = line.split_once('=') else {
+            continue;
+        };
+        let key = key.trim();
+        let Ok(value) = raw.trim().trim_matches('"').parse::<u64>() else {
+            return DispatchPolicy {
+                origin: "malformed-fallback",
+                ..DispatchPolicy::defaults()
+            };
+        };
+        parsed_any = true;
+        match key {
+            "interval_secs" => policy.interval = Duration::from_secs(value),
+            "command_timeout_secs" => policy.command_timeout = Duration::from_secs(value),
+            "receipt_timeout_secs" => policy.receipt_timeout = Duration::from_secs(value),
+            "receipt_poll_ms" => policy.receipt_poll = Duration::from_millis(value),
+            "pending_dispatch_max_age_secs" => {
+                policy.pending_dispatch_max_age = Duration::from_secs(value)
+            }
+            "mail_request_timeout_secs" => {
+                policy.mail_request_timeout = Duration::from_secs(value)
+            }
+            _ => {}
+        }
+    }
+    if parsed_any {
+        policy
+    } else {
+        DispatchPolicy::defaults()
+    }
+}
+
+
 async fn send_and_verify(
     cx: &Cx,
     config: &Config,
@@ -2357,6 +2535,8 @@ async fn send_and_verify(
 ) -> Result<DispatchVerdict, String> {
     let at_send = load_bead_snapshot(cx, config, bead).await?;
     refuse_terminal_status_at_send(bead, at_send.status_label())?;
+    let capture = AtSendCapture::from_snapshot(&at_send);
+    write_heartbeat(config, tick, "AT_SEND_CAPTURE", &capture.detail(bead, pane))?;
     let packet = dispatch_packet::render_with_pane(
         snapshot,
         &config.repo,
@@ -2895,6 +3075,7 @@ fn write_tick_receipt(
             "figure": format!("free_capacity={} attention={attention} dead={}", free.len(), match dead { Some(count) => count.to_string(), None => "unmeasured".to_owned() }),
             "command": "./target/debug/omp-orchestrator --once --session <session> (this row's own tick)",
         })],
+            verdict: TickVerdict::Unmeasured,
             not_done: vec![
             serde_json::json!("observed.dead is null: PaneObservation carries no dead flag, so this tick could not measure it"),
             serde_json::json!("the dispatch OUTCOME: this row is written before the decision executes, so it records what was DECIDED. ack-spine steps and the heartbeat record what happened"),
@@ -6465,6 +6646,72 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
             "fresh show then refuse must precede tmux/ntm send (load={load} refuse={recheck} send={transport})"
         );
     }
+
+    #[test]
+    fn at_send_capture_is_readable_from_the_ledger_without_the_tracker() {
+        let capture = AtSendCapture {
+            status: "in_progress".into(),
+            assignee: "WildStone".into(),
+            has_acceptance: true,
+            filed_only: false,
+        };
+        let detail = capture.detail("omp-orchestrator-y6yg", "%7");
+        let row = serde_json::json!({
+            "status": "AT_SEND_CAPTURE",
+            "detail": detail,
+        });
+        let read = row.get("detail").and_then(Value::as_str).unwrap();
+        assert!(read.contains("at_send_status=in_progress"), "{read}");
+        assert!(read.contains("at_send_assignee=WildStone"), "{read}");
+        assert!(read.contains("at_send_has_acceptance=true"), "{read}");
+        assert_eq!(classify_send_alignment(read), AlignmentClass::Pass);
+    }
+
+    #[test]
+    fn parked_after_send_classifies_pass_not_fail() {
+        // y6yg parked AFTER ticks 11/14/15. At-send status was in_progress.
+        let at_send = "bead=omp-orchestrator-y6yg pane=%7 at_send_status=in_progress at_send_assignee=WildStone at_send_has_acceptance=true at_send_filed_only=false";
+        assert_eq!(classify_send_alignment(at_send), AlignmentClass::Pass);
+        let later_tracker_status = "blocked";
+        assert_ne!(
+            later_tracker_status, "in_progress",
+            "the tracker now shows blocked; alignment must ignore that"
+        );
+        let without_capture = "bead=omp-orchestrator-y6yg pane=%7 status=blocked";
+        assert_eq!(
+            classify_send_alignment(without_capture),
+            AlignmentClass::Unknown,
+            "removing at-send capture must not classify PASS from current status"
+        );
+    }
+
+    #[test]
+    fn alignment_window_has_pass_and_fail_and_empty_is_error() {
+        let pass = "bead=a pane=%1 at_send_status=in_progress at_send_assignee=WildStone at_send_has_acceptance=true at_send_filed_only=false".to_owned();
+        let fail = "bead=b pane=%1 at_send_status=closed at_send_assignee=none at_send_has_acceptance=false at_send_filed_only=true".to_owned();
+        let classes = classify_alignment_window(&[pass, fail]).expect("window");
+        assert!(classes.iter().any(|c| *c == AlignmentClass::Pass));
+        assert!(classes.iter().any(|c| *c == AlignmentClass::Fail));
+        let empty = classify_alignment_window(&[]).expect_err("empty");
+        assert!(empty.contains("ALIGNMENT_SCAN_EMPTY"), "{empty}");
+    }
+
+    #[test]
+    fn dispatch_policy_falls_back_and_says_so() {
+        let missing = parse_dispatch_policy(None);
+        assert_eq!(missing.origin, "defaults");
+        assert_eq!(missing.interval, DEFAULT_INTERVAL);
+        let malformed = parse_dispatch_policy(Some("[dispatch]\ninterval_secs = not-a-number\n"));
+        assert_eq!(malformed.origin, "malformed-fallback");
+        let live = parse_dispatch_policy(Some(
+            "[dispatch]\ninterval_secs = 45\ncommand_timeout_secs = 12\nreceipt_timeout_secs = 90\nreceipt_poll_ms = 100\npending_dispatch_max_age_secs = 120\nmail_request_timeout_secs = 5\n",
+        ));
+        assert_eq!(live.origin, "config.toml");
+        assert_eq!(live.interval, Duration::from_secs(45));
+        assert_eq!(live.command_timeout, Duration::from_secs(12));
+        assert_eq!(live.pending_dispatch_max_age, Duration::from_secs(120));
+    }
+
 
 
 

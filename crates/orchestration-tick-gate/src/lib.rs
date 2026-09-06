@@ -14,6 +14,57 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// The result class for a missing or empty ledger.
+
+/// Per-tick verdict. Missing evidence never promotes: UNMEASURED cannot satisfy a gate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TickVerdict {
+    ObservedPass,
+    ObservedFail,
+    Blocked,
+    Unmeasured,
+    Simulation,
+}
+
+impl TickVerdict {
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::ObservedPass => "OBSERVED_PASS",
+            Self::ObservedFail => "OBSERVED_FAIL",
+            Self::Blocked => "BLOCKED",
+            Self::Unmeasured => "UNMEASURED",
+            Self::Simulation => "SIMULATION",
+        }
+    }
+
+    #[must_use]
+    pub fn parse(raw: &str) -> Self {
+        match raw {
+            "OBSERVED_PASS" => Self::ObservedPass,
+            "OBSERVED_FAIL" => Self::ObservedFail,
+            "BLOCKED" => Self::Blocked,
+            "SIMULATION" => Self::Simulation,
+            _ => Self::Unmeasured,
+        }
+    }
+
+    /// UNMEASURED never satisfies a gate.
+    #[must_use]
+    pub fn satisfies_gate(self) -> bool {
+        matches!(self, Self::ObservedPass)
+    }
+
+    /// BLOCKED (and UNMEASURED/SIMULATION) are transparent to a failure streak.
+    #[must_use]
+    pub fn next_fail_streak(self, streak: u32) -> u32 {
+        match self {
+            Self::ObservedFail => streak.saturating_add(1),
+            Self::ObservedPass => 0,
+            Self::Blocked | Self::Unmeasured | Self::Simulation => streak,
+        }
+    }
+}
+
 pub const NOTHING_TO_CHECK: &str = "NOTHING_TO_CHECK";
 
 /// A receipt validation failure with a stable row/law marker.
@@ -435,6 +486,8 @@ pub struct Receipt<'a> {
     pub fallback_reason: &'a str,
     /// Self-reported measured claims, each carrying a producing command (OC-L4).
     pub claims: Vec<Value>,
+    /// Typed per-tick verdict. Always written; never omitted.
+    pub verdict: TickVerdict,
     /// What this row does NOT establish. The honesty boundary, stated in the row.
     pub not_done: Vec<Value>,
 }
@@ -451,10 +504,12 @@ pub fn build_receipt(receipt: &mut Receipt<'_>) -> Value {
         dispositions,
         fallback_reason,
         claims,
+        verdict,
         not_done,
     } = receipt;
     let (ts, tick, attention, dead) = (*ts, *tick, *attention, *dead);
     let (free_capacity, source, fallback_reason) = (*free_capacity, *source, *fallback_reason);
+    let verdict = *verdict;
     let dispositions: &[PaneDisposition] = dispositions;
     let claims = std::mem::take(claims);
     let not_done = std::mem::take(not_done);
@@ -510,12 +565,10 @@ pub fn build_receipt(receipt: &mut Receipt<'_>) -> Value {
     serde_json::json!({
         "ts": ts,
         "tick": tick,
+        "verdict": verdict.label(),
         "observed": {
             "free_capacity": free_capacity,
             "attention": attention,
-            // `null`, NOT 0, when the caller cannot measure it. A zero here would be a
-            // fabricated figure in the one artifact whose purpose is auditability, and it
-            // is the same class as coercing an UNKNOWN into a negative answer.
             "dead": match dead { Some(count) => Value::from(count), None => Value::Null },
             "source": source,
         },
@@ -569,3 +622,28 @@ pub fn append_receipt(path: &Path, receipt: &Value) -> Result<(), String> {
         format!("TICK_ROW_WRITE_FAILED rename {error}")
     })
 }
+
+#[cfg(test)]
+mod verdict_tests {
+    use super::TickVerdict;
+
+    #[test]
+    fn unmeasured_never_satisfies_a_gate() {
+        assert!(!TickVerdict::Unmeasured.satisfies_gate());
+        assert!(!TickVerdict::Blocked.satisfies_gate());
+        assert!(!TickVerdict::Simulation.satisfies_gate());
+        assert!(!TickVerdict::ObservedFail.satisfies_gate());
+        assert!(TickVerdict::ObservedPass.satisfies_gate());
+        assert_eq!(TickVerdict::parse("missing"), TickVerdict::Unmeasured);
+    }
+
+    #[test]
+    fn blocked_is_transparent_to_a_failure_streak() {
+        let fail = TickVerdict::ObservedFail.next_fail_streak(2);
+        assert_eq!(fail, 3);
+        assert_eq!(TickVerdict::Blocked.next_fail_streak(fail), fail);
+        assert_eq!(TickVerdict::Unmeasured.next_fail_streak(fail), fail);
+        assert_eq!(TickVerdict::ObservedPass.next_fail_streak(fail), 0);
+    }
+}
+
