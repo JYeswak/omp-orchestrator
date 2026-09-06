@@ -4828,7 +4828,37 @@ async fn run_supervisor(cx: &Cx, config: Config) -> Result<(), String> {
         tick += 1;
         if let Err(error) = run_cycle(cx, &config, tick).await {
             let _ = write_heartbeat(&config, tick, "SUPERVISOR_REFUSED", &error);
-            return Err(error);
+            eprintln!("SUPERVISOR_REFUSED {error}");
+            // A PER-TICK REFUSAL IS A VERDICT, NOT A CRASH — the loop continues.
+            //
+            // MEASURED 2026-09-06: returning Err here ended the process, and under a
+            // `restart: on-failure` policy that produced a LIVELOCK the loop could never
+            // escape. Five consecutive ticks refused identically:
+            //
+            //   DISPATCH_PREFLIGHT_REFUSED ... reason=Refused { SingleCaptureLiveness }
+            //   pane_dispatchable=true two_captures=false packet_complete=true
+            //   [daemon exited with code 1; restarting in 4000ms]
+            //
+            // The refusal itself was CORRECT: `two_captures` requires
+            // `liveness == "CONFIRMED_IDLE"` (:1868), and a freshly restarted supervisor
+            // has only ONE capture in its own state file, so every pane reads
+            // `NEWLY_IDLE` on tick 1. Exiting then guaranteed another tick 1 — the
+            // restart destroyed the very evidence the next attempt needed. Beads were
+            // claimed and intent-cleared on each pass (smcq, lwdo.2, xm0n.1, xm0n.2),
+            // so the livelock churned tracker state while making no progress.
+            //
+            // This is the exit-code-as-payload class already recorded for
+            // `inbox-monitor` (`i3r6`, nonzero on SUCCESS) and
+            // `am file_reservations reserve` (`loz3`, zero on REFUSAL). Here a typed
+            // refusal was encoded as process failure. The refusal is already durable —
+            // a `SUPERVISOR_REFUSED` heartbeat row plus `DISPATCH_INTENT_CLEARED` — so
+            // exiting added no evidence and removed all progress.
+            //
+            // NO-CLAIM: this makes a refusal non-fatal. It does NOT make it invisible;
+            // the row is still written and still printed. A refusal that repeats forever
+            // is now a visible standing condition rather than a restart loop, which is
+            // strictly easier to observe but is not itself a fix for the underlying
+            // cause.
         }
         if config.max_ticks.is_some_and(|max| tick >= max) {
             println!("SUPERVISOR_STOP tick={tick} reason=bounded_test_run");
