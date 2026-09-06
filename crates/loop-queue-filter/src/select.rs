@@ -204,16 +204,20 @@ fn parse_jsonl(jsonl: &str) -> Result<Vec<BeadComments>, String> {
     Ok(out)
 }
 
-fn is_reapable(bead: &BeadComments) -> bool {
-    if bead.status != "in_progress" {
-        return false;
-    }
+fn done_evidence(bead: &BeadComments) -> bool {
     bead.texts.iter().any(|t| {
         t.contains("MUTATION-VERIFIED")
             || t.contains("STAGE: IMPL -> GRADING")
             || t.contains("DONE ")
             || t.starts_with("DONE")
     })
+}
+
+/// Open or in_progress with DONE evidence. Closed, grading, blocked, and
+/// tombstone are never reapable. `grading` is terminal for this slot: the
+/// bead is already out for a grader; re-offering is a second dispatch.
+fn is_reapable(bead: &BeadComments) -> bool {
+    matches!(bead.status.as_str(), "open" | "in_progress") && done_evidence(bead)
 }
 
 fn pane_scoped_authors(bead: &BeadComments) -> BTreeSet<String> {
@@ -239,38 +243,98 @@ pub fn comment_count(jsonl: &str, id: &str) -> Result<usize, String> {
         .unwrap_or(0))
 }
 
+/// Grading priority is an optimisation over an already-correct ranked order.
+/// Unreadable JSONL / no eligible grader SKIP the slot. They do not refuse
+/// the cycle. Ranking refusals stay in [`select_dispatch_order`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GradingSlot {
+    Offer(String),
+    Skip {
+        reason: &'static str,
+    },
+}
+
+impl fmt::Display for GradingSlot {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Offer(id) => write!(formatter, "GRADING_SLOT_OFFER bead={id}"),
+            Self::Skip { reason } => write!(formatter, "GRADING_SLOT_SKIP reason={reason}"),
+        }
+    }
+}
+
+/// Decide the grading slot. Never a silent empty: a skip always names why.
+pub fn grading_slot(jsonl: &str, ready: &[String], grader: &str) -> GradingSlot {
+    let beads = match parse_jsonl(jsonl) {
+        Ok(beads) => beads,
+        Err(_) => return GradingSlot::Skip {
+            reason: "unreadable_jsonl",
+        },
+    };
+    if beads.is_empty() {
+        return GradingSlot::Skip {
+            reason: "empty_grading_slot",
+        };
+    }
+    let reapable: Vec<&BeadComments> = beads
+        .iter()
+        .filter(|bead| ready.iter().any(|id| id == &bead.id) && is_reapable(bead))
+        .collect();
+    if reapable.is_empty() {
+        return GradingSlot::Skip {
+            reason: "no_reapable_bead",
+        };
+    }
+    if !pane_scoped(grader) {
+        return GradingSlot::Skip {
+            reason: "grader_not_pane_scoped",
+        };
+    }
+    let mut saw_empty_authors = false;
+    let mut saw_self = false;
+    for id in ready {
+        let Some(bead) = reapable.iter().find(|bead| &bead.id == id) else {
+            continue;
+        };
+        let authors = author_panes(bead);
+        if authors.is_empty() {
+            saw_empty_authors = true;
+            continue;
+        }
+        if authors_include_pane(&authors, grader)
+            || authors.contains(grader)
+        {
+            saw_self = true;
+            continue;
+        }
+        return GradingSlot::Offer(id.clone());
+    }
+    if saw_empty_authors {
+        return GradingSlot::Skip {
+            reason: "grader_identity_unresolved",
+        };
+    }
+    if saw_self {
+        return GradingSlot::Skip {
+            reason: "no_distinct_idle_peer",
+        };
+    }
+    GradingSlot::Skip {
+        reason: "no_reapable_bead",
+    }
+}
+
 fn first_grading_assignment(
     jsonl: &str,
     ready: &[String],
     grader: &str,
-) -> Result<Option<String>, String> {
-    if !pane_scoped(grader) {
-        let beads = parse_jsonl(jsonl)?;
-        if beads.iter().any(|b| ready.iter().any(|r| r == &b.id) && is_reapable(b)) {
-            return Err("GRADER_IDENTITY_UNRESOLVED grader is not pane-scoped".to_owned());
-        }
-        return Ok(None);
+) -> Option<String> {
+    match grading_slot(jsonl, ready, grader) {
+        GradingSlot::Offer(id) => Some(id),
+        GradingSlot::Skip { .. } => None,
     }
-    let beads = parse_jsonl(jsonl)?;
-    for id in ready {
-        let Some(bead) = beads.iter().find(|b| &b.id == id) else {
-            continue;
-        };
-        if !is_reapable(bead) {
-            continue;
-        }
-        let authors = pane_scoped_authors(bead);
-        if authors.is_empty() {
-            // Cannot prove distinct from WildStone-style authors. Do not offer.
-            continue;
-        }
-        if authors.contains(grader) {
-            continue;
-        }
-        return Ok(Some(id.clone()));
-    }
-    Ok(None)
 }
+
 
 /// Full dispatch order. `grader` must be pane-scoped (`pane4-%9`) to take a grading slot.
 pub fn select_dispatch_order(
@@ -286,7 +350,7 @@ pub fn select_dispatch_order(
     if let Some(blocker) = first_actionable_blocker(&value, ready, &assigned)? {
         out.push(blocker);
     }
-    if let Some(grade) = first_grading_assignment(jsonl, ready, grader)? {
+    if let Some(grade) = first_grading_assignment(jsonl, ready, grader) {
         if !out.iter().any(|id| id == &grade) {
             out.push(grade);
         }
@@ -686,6 +750,12 @@ mod tests {
         )
     }
 
+    fn reapable_jsonl_status(id: &str, status: &str, assignee: &str, author: &str) -> String {
+        format!(
+            r#"{{"id":"{id}","status":"{status}","assignee":"{assignee}","comments":[{{"author":"{author}","text":"DONE work"}}]}}"#
+        )
+    }
+
     #[test]
     fn grading_outranks_ranked_head_when_grader_is_distinct() {
         let ready = vec!["feature".to_owned(), "reap-me".to_owned()];
@@ -712,20 +782,118 @@ mod tests {
     }
 
     #[test]
-    fn unproven_grader_identity_refuses_when_reapable_exists() {
+    fn unproven_grader_identity_skips_grading_and_keeps_ranked_head() {
         let ready = vec!["reap-me".to_owned()];
         let triage = triage_with_blockers(
             "[]",
             r#"[{"id":"reap-me","priority":0,"score":0.5}]"#,
         );
         let jsonl = reapable_jsonl("reap-me", "pane3-%8", "pane3-%8");
-        let error = select_dispatch_order(&triage, &ready, &jsonl, "WildStone")
-            .expect_err("must refuse");
-        assert!(
-            error.starts_with("GRADER_IDENTITY_UNRESOLVED"),
-            "{error}"
+        let ordered = select_dispatch_order(&triage, &ready, &jsonl, "WildStone")
+            .expect("grading skip must not refuse the cycle");
+        assert_eq!(ordered.first().map(String::as_str), Some("reap-me"));
+        assert_eq!(
+            grading_slot(&jsonl, &ready, "WildStone"),
+            GradingSlot::Skip {
+                reason: "grader_not_pane_scoped"
+            }
         );
     }
+
+    #[test]
+    fn no_distinct_idle_peer_skips_grading_and_returns_ranked_head() {
+        let ready = vec!["feature".to_owned(), "reap-me".to_owned()];
+        let triage = triage_with_blockers(
+            "[]",
+            r#"[{"id":"feature","priority":0,"score":0.99},{"id":"reap-me","priority":2,"score":0.01}]"#,
+        );
+        let jsonl = reapable_jsonl("reap-me", "pane4-%9", "pane4-%9");
+        let ordered = select_dispatch_order(&triage, &ready, &jsonl, "pane4-%9").unwrap();
+        assert_eq!(ordered.first().map(String::as_str), Some("feature"));
+        assert_eq!(
+            grading_slot(&jsonl, &ready, "pane4-%9"),
+            GradingSlot::Skip {
+                reason: "no_distinct_idle_peer"
+            }
+        );
+    }
+
+    #[test]
+    fn unreadable_ranking_still_refuses_when_jsonl_is_fine() {
+        let ready = vec!["reap-me".to_owned()];
+        let jsonl = reapable_jsonl("reap-me", "pane3-%8", "pane3-%8");
+        let error = select_dispatch_order(br#"{}"#, &ready, &jsonl, "pane4-%9")
+            .expect_err("ranking must still refuse");
+        assert!(error.starts_with("QUEUE_UNRANKED"), "{error}");
+    }
+
+    #[test]
+    fn empty_grading_slot_is_a_typed_skip() {
+        assert_eq!(
+            grading_slot("", &["a".to_owned()], "pane4-%9").to_string(),
+            "GRADING_SLOT_SKIP reason=empty_grading_slot"
+        );
+        assert_eq!(
+            grading_slot("not-json", &["a".to_owned()], "pane4-%9").to_string(),
+            "GRADING_SLOT_SKIP reason=unreadable_jsonl"
+        );
+    }
+
+    #[test]
+    fn closed_lwdo1_row_is_not_offered() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../.beads/issues.jsonl");
+        let jsonl = std::fs::read_to_string(path).expect("issues.jsonl");
+        assert!(
+            jsonl.contains("\"id\":\"omp-orchestrator-plan-02-lwdo.1\""),
+            "C38: the known-bad row must be the real lwdo.1 line"
+        );
+        let ready = vec![
+            "feature".to_owned(),
+            "omp-orchestrator-plan-02-lwdo.1".to_owned(),
+        ];
+        let triage = triage_with_blockers(
+            "[]",
+            r#"[{"id":"feature","priority":0,"score":0.99},{"id":"omp-orchestrator-plan-02-lwdo.1","priority":2,"score":0.01}]"#,
+        );
+        let ordered = select_dispatch_order(&triage, &ready, &jsonl, "pane4-%9").unwrap();
+        assert_ne!(
+            ordered.first().map(String::as_str),
+            Some("omp-orchestrator-plan-02-lwdo.1")
+        );
+        assert_eq!(
+            grading_slot(&jsonl, &["omp-orchestrator-plan-02-lwdo.1".to_owned()], "pane4-%9"),
+            GradingSlot::Skip {
+                reason: "no_reapable_bead"
+            }
+        );
+    }
+
+    #[test]
+    fn in_progress_done_bead_is_still_offered() {
+        let jsonl = reapable_jsonl("reap-me", "pane3-%8", "pane3-%8");
+        assert_eq!(
+            grading_slot(&jsonl, &["reap-me".to_owned()], "pane4-%9"),
+            GradingSlot::Offer("reap-me".to_owned())
+        );
+    }
+
+    #[test]
+    fn open_done_bead_is_offered_and_grading_status_is_not() {
+        let open = reapable_jsonl_status("open-done", "open", "pane3-%8", "pane3-%8");
+        assert_eq!(
+            grading_slot(&open, &["open-done".to_owned()], "pane4-%9"),
+            GradingSlot::Offer("open-done".to_owned())
+        );
+        let grading = reapable_jsonl_status("already-out", "grading", "pane3-%8", "pane3-%8");
+        assert_eq!(
+            grading_slot(&grading, &["already-out".to_owned()], "pane4-%9"),
+            GradingSlot::Skip {
+                reason: "no_reapable_bead"
+            }
+        );
+    }
+
+
 
     #[test]
     fn healthy_case_matches_rank_ready() {
