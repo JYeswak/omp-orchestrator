@@ -1,0 +1,86 @@
+{
+  "success": true,
+  "context": {
+    "project_type": "rust",
+    "frameworks": [],
+    "tools": [
+      "github"
+    ],
+    "tags": [
+      "lang-rust",
+      "tool-github",
+      "active-other",
+      "active-config",
+      "active-scripts",
+      "active-docs",
+      "active-rust-code",
+      "active-tests"
+    ]
+  },
+  "suggestions": [
+    {
+      "rank": 1,
+      "skill_id": "411ac5f0-9e6d-4252-ab1b-c102cbec6526",
+      "skill_name": "idea-wizard",
+      "description": "Generate and operationalize improvement ideas for projects. Use when brainstorming features, planning improvements, creating beads from ideas, or \"what should we build next\".",
+      "score": 1.010800177715296,
+      "reason": "Popularity: 500%"
+    },
+    {
+      "rank": 2,
+      "skill_id": "24b1ec46-ff21-4bd2-aeb0-d0e0bac7181d",
+      "skill_name": "ntm",
+      "description": "Orchestrates NTM tmux agent swarms and robot APIs. Use when spawning/sending panes, robot state, triaging work, locks/mail, safety, pipelines, serve, code-first/batch-verify waves, or NTM errors.",
+      "score": 1.010800177715296,
+      "reason": "Popularity: 500%"
+    },
+    {
+      "rank": 3,
+      "skill_id": "ae48e41f-d817-4ca7-8e79-806fc47f3d06",
+      "skill_name": "ui-polish",
+      "description": "Iterative UI/UX polishing for Stripe-level visual quality. Use when app already works and looks decent, wanting to elevate to world-class through multiple passes. Not for complete overhauls.",
+      "score": 1.010800177715296,
+      "reason": "Popularity: 500%"
+    },
+    {
+      "rank": 4,
+      "skill_id": "04fca2ce-2a08-48ad-8540-8cfeca2665b0",
+      "skill_name": "multi-pass-bug-hunting",
+      "description": "Systematic audit-fix-rescan cycle for comprehensive bug elimination. Use when code review, deep audit, \"find all bugs\", or pre-release hardening.",
+      "score": 0.8832458479387901,
+      "reason": "Popularity: 400%"
+    },
+    {
+      "rank": 5,
+      "skill_id": "e7fe3b69-95a5-4763-ae0a-e89b4f210169",
+      "skill_name": "asupersync-mega-skill",
+      "description": "Replace Tokio stacks with Asupersync. Use when migrating Tokio/axum/hyper/tonic apps, designing Cx/region services, debugging internals, or classifying proof/ATP evidence.",
+      "score": 0.5631943062789803,
+      "reason": "Context match: 100%"
+    },
+    {
+      "rank": 6,
+      "skill_id": "a411bb48-1f9c-4745-b8ea-62f20866ac89",
+      "skill_name": "dcg",
+      "description": "Handle blocked destructive commands. Use when dcg blocks rm -rf, git reset --hard, DROP DATABASE, kubectl delete, or when configuring agent safety guardrails.",
+      "score": 0.5631943062789803,
+      "reason": "Context match: 100%"
+    },
+    {
+      "rank": 7,
+      "skill_id": "4d847e81-0d7d-448f-8ac3-a7ad30debacc",
+      "skill_name": "dsr",
+      "description": "Doodlestein Self-Releaser - fallback release infrastructure for when GitHub Actions is throttled. Local builds, cross-platform releases, supply chain security. Use when: GH Actions slow, local release, build hosts, dsr command.",
+      "score": 0.5631943062789803,
+      "reason": "Context match: 100%"
+    },
+    {
+      "rank": 8,
+      "skill_id": "5cb2a379-0cac-4102-a87a-17237e781258",
+      "skill_name": "extreme-software-optimization",
+      "description": "Profile-driven performance optimization with behavior proofs. Use when: optimize, slow, bottleneck, hotspot, profile, p95, latency, throughput, or algorithmic improvements.",
+      "score": 0.5631943062789803,
+      "reason": "Context match: 100%"
+    }
+  ]
+}
