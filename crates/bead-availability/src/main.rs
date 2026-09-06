@@ -2,7 +2,11 @@
 
 use asupersync::runtime::RuntimeBuilder;
 use asupersync::Cx;
-use bead_availability::{classify, collect_live, parse_graph_json, ScanError};
+use bead_availability::{
+    classify, collect_live, measure_family, parse_graph_json, parse_issues_jsonl, ScanError,
+    FAMILY_NEEDLES, NO_CLAIM,
+};
+
 use std::env;
 use std::path::Path;
 use std::process::ExitCode;
@@ -13,19 +17,23 @@ static BUILD_ID_MARKER: &[u8] = concat!("build_id=", env!("OMP_BUILD_ID")).as_by
 fn usage() -> &'static str {
     "usage: bead-availability [--json] [--br PATH] [--version]\n\
             bead-availability --graph PATH.json\n\
-            live blockers: closed blockers are RELEASED\n\
-            --graph: classify live blocks-edges as Direct/Transitive/InheritanceFailure"
+            bead-availability --definition-quality [--issues PATH]\n\
+            exit --definition-quality: 0 at-or-above floor, 1 below-floor, 2 vacuous/unreadable"
 }
+
 
 fn main() -> ExitCode {
     let mut json = false;
     let mut br_program = String::from("br");
     let mut graph: Option<String> = None;
+    let mut definition_quality = false;
+    let mut issues_path: Option<String> = None;
     let args = env::args().skip(1).collect::<Vec<_>>();
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
             "--json" => json = true,
+            "--definition-quality" => definition_quality = true,
             "--version" => {
                 println!("bead-availability 0.1.0 build_id={}", env!("OMP_BUILD_ID"));
                 return ExitCode::SUCCESS;
@@ -44,6 +52,17 @@ fn main() -> ExitCode {
             }
             value if value.starts_with("--graph=") => {
                 graph = Some(value[8..].to_owned());
+            }
+            value if value == "--issues" => {
+                index += 1;
+                let Some(path) = args.get(index) else {
+                    eprintln!("BEAD_AVAILABILITY_USAGE missing value for --issues");
+                    return ExitCode::from(2);
+                };
+                issues_path = Some(path.clone());
+            }
+            value if value.starts_with("--issues=") => {
+                issues_path = Some(value[9..].to_owned());
             }
             value if value == "--br" => {
                 index += 1;
@@ -64,9 +83,13 @@ fn main() -> ExitCode {
         index += 1;
     }
 
+    if definition_quality {
+        return run_definition_quality(issues_path.as_deref().unwrap_or(".beads/issues.jsonl"), json);
+    }
     if let Some(path) = graph {
         return run_graph(Path::new(&path));
     }
+
 
     let runtime = match RuntimeBuilder::current_thread().build() {
         Ok(runtime) => runtime,
@@ -142,3 +165,48 @@ fn run_graph(path: &Path) -> ExitCode {
         }
     }
 }
+
+fn run_definition_quality(path: &str, json: bool) -> ExitCode {
+    // Exit 0 = at-or-above floor; 1 = below-floor; 2 = vacuous/unreadable.
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) => {
+            eprintln!("DEFINITION_QUALITY_UNREADABLE path={path} error={error}");
+            return ExitCode::from(2);
+        }
+    };
+    match parse_issues_jsonl(&text, FAMILY_NEEDLES) {
+        Ok(beads) => match measure_family(&beads) {
+            Ok(report) => {
+                let success = !report.below_floor();
+                if json {
+                    println!("{}", report.to_json(success));
+                } else {
+                    eprintln!(
+                        "DEFINITION_QUALITY beads={} specific_milli={} floor_milli={} cluster={} suffix_bytes={} specimen={} {}",
+                        report.bead_count,
+                        report.specific_milli,
+                        report.floor_milli,
+                        report.cluster_size,
+                        report.cluster_suffix_bytes,
+                        report.named_specimen_hit,
+                        NO_CLAIM
+                    );
+                }
+                if !success {
+                    eprintln!("DEFINITION_QUALITY_BELOW_FLOOR");
+                }
+                ExitCode::from(report.exit_code())
+            }
+            Err(vacuity) => {
+                eprintln!("{vacuity}");
+                ExitCode::from(vacuity.exit_code())
+            }
+        },
+        Err(vacuity) => {
+            eprintln!("{vacuity}");
+            ExitCode::from(vacuity.exit_code())
+        }
+    }
+}
+

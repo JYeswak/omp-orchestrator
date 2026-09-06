@@ -22,6 +22,13 @@ pub use inversion::{
     Inversion, InversionType, ScanConfig, ScanError, BR_HAS_NO_INHERITANCE, DETECT_TRANSITIVE,
 };
 
+mod definition_quality;
+pub use definition_quality::{
+    advertised_floor, enforced_floor, measure_family, parse_issues_jsonl, FamilyReport, Vacuity,
+    EXIT_BELOW_FLOOR, EXIT_OK, EXIT_VACUOUS, FAMILY_NEEDLES, NO_CLAIM, SPECIFICITY_FLOOR_MILLI,
+};
+
+
 const BR_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
