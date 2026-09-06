@@ -276,35 +276,15 @@ mod tests {
         assert_eq!(send_kind(7), StepKind::Redispatched);
     }
 
-    /// Fixture saga: an earlier packet exists, the bead is eligible again, and
-    /// the production ledger primitive must emit a typed Redispatched row.
+    /// `Redispatched` is selected by `send_kind`; the supervisor emit site in
+    /// `main.rs` is the production caller. A `ledger::step(` call here would keep
+    /// the census GREEN after deleting that emit site (eg0m acceptance 4).
     #[test]
-    fn a_redispatch_fixture_emits_a_typed_ledger_row() {
-        let runtime = asupersync::runtime::RuntimeBuilder::current_thread()
-            .build()
-            .expect("fixture runtime");
-        runtime.block_on(async {
-            let cx = asupersync::Cx::current().expect("fixture context");
-            let mut ledger = ack_spine::ledger::StepLedger::new();
-            let kind = send_kind(1);
-            ack_spine::ledger::step(
-                &cx,
-                &mut ledger,
-                kind,
-                "bead-fixture",
-                "%fixture",
-                "omp-orchestrator-fixture",
-                "prior dispatch had no completion; retrying",
-                |_cx| async {},
-            )
-            .await
-            .expect("redispatch fixture step");
-            ledger.assert_non_empty().expect("fixture is not vacuous");
-            ledger.assert_step_count().expect("fixture step count");
-            assert_eq!(ledger.last_kind(), Some(StepKind::Redispatched));
-            assert!(ledger.to_jsonl().contains("\"kind\":\"redispatched\""));
-        });
+    fn a_redispatch_is_a_distinct_kind_on_the_wire() {
+        assert_eq!(StepKind::Redispatched.as_str(), "redispatched");
+        assert_ne!(StepKind::Redispatched.as_str(), StepKind::PacketSent.as_str());
     }
+
     /// The persisted-ledger reader, both directions.
     #[test]
     fn recorded_closures_reads_typed_rows_and_ignores_everything_else() {

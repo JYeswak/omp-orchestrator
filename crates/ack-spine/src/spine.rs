@@ -16,8 +16,8 @@
 use crate::ack::{detect_ack, AckVerdict};
 use crate::authorities::{AckAuthority, AckEvidence, DeliveryAuthority, TransportAuthority};
 use crate::ledger::{self, StepError, StepKind, StepLedger};
-use receiver_receipt::ReceiptVerdict;
 use asupersync::Cx;
+use receiver_receipt::ReceiptVerdict;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs;
@@ -114,14 +114,16 @@ impl PendingDispatchStore {
     }
 
     pub fn persist(&self, pending: &PendingDispatch) -> Result<(), SpineError> {
-        let parent = self.path.parent().filter(|path| !path.as_os_str().is_empty());
+        let parent = self
+            .path
+            .parent()
+            .filter(|path| !path.as_os_str().is_empty());
         if let Some(parent) = parent {
             fs::create_dir_all(parent)?;
         }
-        let temporary = self.path.with_extension(format!(
-            "pending-{}.tmp",
-            std::process::id()
-        ));
+        let temporary = self
+            .path
+            .with_extension(format!("pending-{}.tmp", std::process::id()));
         let encoded = serde_json::to_vec_pretty(pending)?;
         fs::write(&temporary, encoded)?;
         fs::rename(temporary, &self.path)?;
@@ -314,6 +316,13 @@ impl AckSpine {
                 ),
             ),
             DeliveryAuthority::Observed {
+                receipt: ReceiptVerdict::AckConfirmed { pane_id, comment },
+            } => (
+                StepKind::ReceiverVerified,
+                format!("delivery ack confirmed pane={pane_id} comment={comment}"),
+            ),
+
+            DeliveryAuthority::Observed {
                 receipt: ReceiptVerdict::NoReceipt { pane_id, reason },
             } => (
                 StepKind::ReceiverTimedOut,
@@ -341,11 +350,7 @@ impl AckSpine {
     }
 
     /// Record only durable bead-comment read-back truth.
-    pub async fn record_ack(
-        &mut self,
-        cx: &Cx,
-        authority: AckAuthority,
-    ) -> Result<(), SpineError> {
+    pub async fn record_ack(&mut self, cx: &Cx, authority: AckAuthority) -> Result<(), SpineError> {
         let detail = match &authority {
             AckAuthority::ReadBack { comment_id, .. } => {
                 format!("ack read back: {comment_id}")
