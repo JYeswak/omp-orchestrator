@@ -496,6 +496,101 @@ fn dispatchable_survives_fresh_reads_and_busy_revokes_it() {
 }
 
 #[test]
+fn dispatchable_is_rederived_on_reads_two_and_three() {
+    let temp = tempfile::tempdir().expect("three-read state fixture");
+    let path = temp.path().join("state.tsv");
+    let first = obs_at("%stable", PaneState::Idle, 100);
+    let second = obs_at("%stable", PaneState::Idle, 180);
+    let third = obs_at("%stable", PaneState::Idle, 185);
+
+    let first_live = liveness(None, &first);
+    let first_evidence = derive_dispatchable_evidence(
+        None,
+        &first.state,
+        &first_live,
+        None,
+        first.at,
+    );
+    let first_report = partition_capacity(
+        &[CapacityObservation::with_evidence(
+            "%stable",
+            first.state.clone(),
+            first_live,
+            first_evidence,
+        )],
+        &[],
+        first.at,
+    )
+    .expect("the first observed pane is not monitor-blind");
+    assert!(first_report.dispatchable.is_empty());
+
+    save(
+        &path,
+        &State {
+            panes: vec![first.clone()],
+            ..Default::default()
+        },
+    )
+    .expect("persist first read");
+    let first_state = load(&path);
+    let second_live = liveness(first_state.panes.first(), &second);
+    let second_evidence = derive_dispatchable_evidence(
+        first_state.panes.first(),
+        &second.state,
+        &second_live,
+        first_state.dispatchable_evidence_for("%stable"),
+        second.at,
+    )
+    .expect("the second read must establish dispatchable evidence");
+    let second_report = partition_capacity(
+        &[CapacityObservation::with_evidence(
+            "%stable",
+            second.state.clone(),
+            second_live,
+            Some(second_evidence),
+        )],
+        &[],
+        second.at,
+    )
+    .expect("the second observed pane is not monitor-blind");
+    assert_eq!(second_report.dispatchable, vec!["%stable".to_owned()]);
+
+    save(
+        &path,
+        &State {
+            previous_panes: first_state.panes,
+            panes: vec![second],
+            dispatchable_evidence: vec![("%stable".to_owned(), second_evidence)],
+            ..Default::default()
+        },
+    )
+    .expect("persist second read");
+    let second_state = load(&path);
+    let third_live = liveness(second_state.panes.first(), &third);
+    let third_evidence = derive_dispatchable_evidence(
+        second_state.panes.first(),
+        &third.state,
+        &third_live,
+        second_state.dispatchable_evidence_for("%stable"),
+        third.at,
+    )
+    .expect("the third read must retain the prior proof");
+    let third_report = partition_capacity(
+        &[CapacityObservation::with_evidence(
+            "%stable",
+            third.state,
+            third_live,
+            Some(third_evidence),
+        )],
+        &[],
+        third.at,
+    )
+    .expect("the third observed pane is not monitor-blind");
+    assert_eq!(third_report.dispatchable, second_report.dispatchable);
+    assert_eq!(third_evidence, second_evidence);
+}
+
+#[test]
 fn a_busy_fleet_has_no_free_capacity() {
     let rows = vec![
         CapacityObservation::new(
@@ -675,6 +770,63 @@ fn dialog_survives_the_state_file_round_trip() {
     assert_eq!(back.panes[0].sequence, 1);
     assert_eq!(back.panes[0].changed_at, "test");
     std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn state_retains_previous_and_current_observations_for_span_derivation() {
+    let temp = tempfile::tempdir().expect("state fixture");
+    let path = temp.path().join("state.tsv");
+    let first = tick_monitor::Observation {
+        pane_id: "%idle".into(),
+        state: tick_monitor::PaneState::Idle,
+        hash: 1,
+        at: 100,
+        epoch: "epoch".into(),
+        sequence: 1,
+        changed_at: "100".into(),
+    };
+    let second = tick_monitor::Observation {
+        pane_id: "%idle".into(),
+        state: tick_monitor::PaneState::Idle,
+        hash: 1,
+        at: 180,
+        epoch: "epoch".into(),
+        sequence: 2,
+        changed_at: "180".into(),
+    };
+    tick_monitor::save(
+        &path,
+        &tick_monitor::State {
+            panes: vec![first.clone()],
+            ..Default::default()
+        },
+    )
+    .expect("first observation write");
+    let first_state = tick_monitor::load(&path);
+    assert!(first_state.previous_panes.is_empty());
+    assert_eq!(first_state.panes, vec![first.clone()]);
+
+    tick_monitor::save(
+        &path,
+        &tick_monitor::State {
+            previous_panes: first_state.panes.clone(),
+            panes: vec![second.clone()],
+            ..Default::default()
+        },
+    )
+    .expect("second observation write");
+    let second_state = tick_monitor::load(&path);
+    assert_eq!(second_state.previous_panes, vec![first]);
+    assert_eq!(second_state.panes, vec![second.clone()]);
+    assert_eq!(tick_monitor::liveness(second_state.panes.first(), &tick_monitor::Observation {
+        pane_id: "%idle".into(),
+        state: tick_monitor::PaneState::Idle,
+        hash: 1,
+        at: 260,
+        epoch: "epoch".into(),
+        sequence: 3,
+        changed_at: "260".into(),
+    }), tick_monitor::Liveness::ConfirmedIdle);
 }
 
 #[test]
@@ -1025,6 +1177,10 @@ fn a_second_live_writer_is_refused() {
     let err = tick_monitor::check_ownership(&p, owner + 1)
         .expect_err("a different LIVE owner must be refused");
     assert!(
+        err.contains(tick_monitor::STATE_OWNER_COLLISION),
+        "refusal must name the detector, not just a nonzero rc: {err}"
+    );
+    assert!(
         err.contains("LEDGER CONTENDED"),
         "refusal must name the condition: {err}"
     );
@@ -1105,6 +1261,44 @@ fn the_same_session_is_stable_across_calls() {
         tick_monitor::state_path("franken-harvest"),
         tick_monitor::state_path("franken-harvest"),
         "a watcher restarting must find its own prior state, not a fresh one"
+    );
+}
+
+#[test]
+fn scoped_session_paths_do_not_emit_owner_collision() {
+    let a = tick_monitor::state_path("control-plane");
+    let b = tick_monitor::state_path("omp-orchestrator");
+    assert_ne!(a, b, "distinct sessions must not share a path");
+    let owner = std::process::id();
+    let dir = tempfile::tempdir().unwrap();
+    let shared_would_be = dir.path().join("shared.tsv");
+    let scoped_a = dir.path().join("control-plane.tsv");
+    let scoped_b = dir.path().join("omp-orchestrator.tsv");
+    tick_monitor::save(
+        &scoped_a,
+        &tick_monitor::State {
+            owner_pid: owner,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(
+        tick_monitor::check_ownership(&scoped_b, owner + 1).is_ok(),
+        "a different session's path is not a collision"
+    );
+    tick_monitor::save(
+        &shared_would_be,
+        &tick_monitor::State {
+            owner_pid: owner,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let err = tick_monitor::check_ownership(&shared_would_be, owner + 1)
+        .expect_err("two configs sharing a state path must collide");
+    assert!(
+        err.contains(tick_monitor::STATE_OWNER_COLLISION),
+        "shared path must name the detector: {err}"
     );
 }
 

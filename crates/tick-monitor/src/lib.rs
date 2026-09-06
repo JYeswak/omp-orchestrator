@@ -498,6 +498,31 @@ impl DispatchableEvidence {
     }
 }
 
+/// Re-derive a dispatch proof from the current observation and retained evidence.
+///
+/// A read never consumes the proof. A confirmed two-capture idle result creates it;
+/// subsequent idle reads carry the same bounded evidence until expiry or a busy state.
+pub fn derive_dispatchable_evidence(
+    previous: Option<&Observation>,
+    current_state: &PaneState,
+    current_liveness: &Liveness,
+    retained: Option<DispatchableEvidence>,
+    now: u64,
+) -> Option<DispatchableEvidence> {
+    if matches!(current_liveness, Liveness::ConfirmedIdle) {
+        Some(DispatchableEvidence {
+            proven_at: previous.map(|observation| observation.at).unwrap_or(now),
+            valid_until: now.saturating_add(DISPATCHABLE_VALIDITY_SECS),
+        })
+    } else if matches!(current_state, PaneState::Idle)
+        && previous.is_some_and(|observation| matches!(&observation.state, PaneState::Idle))
+    {
+        retained.filter(|evidence| evidence.is_fresh_at(now))
+    } else {
+        None
+    }
+}
+
 /// One pane's current classifier state plus its two-capture evidence.
 ///
 /// The observer emits PaneState::Idle in the lifecycle census and derives both capacity
@@ -1141,6 +1166,11 @@ pub struct State {
     pub blocker_streak: u32,
     pub red_streak: u32,
     pub panes: Vec<Observation>,
+    /// The observation immediately preceding panes, retained for explicit span provenance.
+    ///
+    /// Keeping both sides in durable state makes a two-capture window inspectable rather
+    /// than dependent on a caller remembering which one-shot read happened first.
+    pub previous_panes: Vec<Observation>,
     pub commits: Vec<(String, String)>,
     /// The pid that owns this ledger.
     ///
@@ -1393,6 +1423,36 @@ pub fn state_path(session: &str) -> PathBuf {
         .join("tick-monitor.tsv")
 }
 
+fn parse_observation_record(fields: &[&str]) -> Option<Observation> {
+    let [_, id, label, timer, hash, at, epoch, sequence, changed_at] = fields else {
+        return None;
+    };
+    let state = match *label {
+        "WORKING" => PaneState::Working {
+            timer_secs: timer.parse().unwrap_or(0),
+        },
+        "IDLE" => PaneState::Idle,
+        "WEDGED" => PaneState::Wedged,
+        "DIALOG" => PaneState::Dialog {
+            timer_secs: timer.parse().unwrap_or(0),
+        },
+        "PROVIDER_ERROR_402" => PaneState::ProviderError402,
+        _ => PaneState::Unproven,
+    };
+    let Ok(sequence) = sequence.parse::<u64>() else {
+        return None;
+    };
+    Some(Observation {
+        pane_id: (*id).to_owned(),
+        state,
+        hash: hash.parse().unwrap_or(0),
+        at: at.parse().unwrap_or(0),
+        epoch: (*epoch).to_owned(),
+        sequence,
+        changed_at: (*changed_at).to_owned(),
+    })
+}
+
 pub fn load(path: &Path) -> State {
     let mut st = State::default();
     let Ok(text) = std::fs::read_to_string(path) else {
@@ -1427,31 +1487,15 @@ pub fn load(path: &Path) -> State {
                 }
             }
             ["commit", repo, sha] => st.commits.push(((*repo).to_owned(), (*sha).to_owned())),
-            ["pane", id, label, timer, hash, at, epoch, sequence, changed_at] => {
-                let state = match *label {
-                    "WORKING" => PaneState::Working {
-                        timer_secs: timer.parse().unwrap_or(0),
-                    },
-                    "IDLE" => PaneState::Idle,
-                    "WEDGED" => PaneState::Wedged,
-                    "DIALOG" => PaneState::Dialog {
-                        timer_secs: timer.parse().unwrap_or(0),
-                    },
-                    "PROVIDER_ERROR_402" => PaneState::ProviderError402,
-                    _ => PaneState::Unproven,
-                };
-                let Ok(sequence) = sequence.parse::<u64>() else {
-                    continue;
-                };
-                st.panes.push(Observation {
-                    pane_id: (*id).to_owned(),
-                    state,
-                    hash: hash.parse().unwrap_or(0),
-                    at: at.parse().unwrap_or(0),
-                    epoch: (*epoch).to_owned(),
-                    sequence,
-                    changed_at: (*changed_at).to_owned(),
-                });
+            ["previous_pane", ..] => {
+                if let Some(observation) = parse_observation_record(f.as_slice()) {
+                    st.previous_panes.push(observation);
+                }
+            }
+            ["pane", ..] => {
+                if let Some(observation) = parse_observation_record(f.as_slice()) {
+                    st.panes.push(observation);
+                }
             }
             _ => {}
         }
@@ -1479,6 +1523,9 @@ fn pid_is_live(pid: u32) -> bool {
             .unwrap_or(false)
 }
 
+/// Detector name: two configs sharing one state path with different live pids.
+pub const STATE_OWNER_COLLISION: &str = "TICK_MONITOR_STATE_OWNER_COLLISION";
+
 /// Refuse to write a ledger a different LIVE process owns.
 ///
 /// Fail-closed: two writers silently corrupt the gap arithmetic that the
@@ -1490,13 +1537,34 @@ pub fn check_ownership(path: &Path, my_pid: u32) -> Result<(), String> {
         return Ok(());
     }
     Err(format!(
-        "LEDGER CONTENDED: {} is owned by live pid {existing}, not this process ({my_pid}).\n\
+        "{STATE_OWNER_COLLISION} LEDGER CONTENDED: {} is owned by live pid {existing}, not this process ({my_pid}).\n\
          Two watchers on one ledger make `last_tick` advance on the wrong cadence, and the \
          resulting gap decay disables the two-capture liveness rule silently — it reports \
          gap_too_short, never an error. Stop the other watcher or give this one its own \
          --state path.",
         path.display()
     ))
+}
+
+fn append_observation_record(out: &mut String, tag: &str, observation: &Observation) {
+    let timer = match &observation.state {
+        PaneState::Working { timer_secs } | PaneState::Dialog { timer_secs } => *timer_secs,
+        PaneState::Idle
+        | PaneState::Wedged
+        | PaneState::ProviderError402
+        | PaneState::Unproven => 0,
+    };
+    out.push_str(&format!(
+        "{tag}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+        observation.pane_id,
+        observation.state.label(),
+        timer,
+        observation.hash,
+        observation.at,
+        observation.epoch,
+        observation.sequence,
+        observation.changed_at
+    ));
 }
 
 pub fn save(path: &Path, st: &State) -> std::io::Result<()> {
@@ -1523,27 +1591,11 @@ pub fn save(path: &Path, st: &State) -> std::io::Result<()> {
     for (repo, sha) in &st.commits {
         out.push_str(&format!("commit\t{repo}\t{sha}\n"));
     }
-    for p in &st.panes {
-        // Both timer-bearing states must be written. A `_ => 0` catch-all silently zeroed
-        // DIALOG's timer -- caught by the round-trip leg, not by review.
-        let timer = match &p.state {
-            PaneState::Working { timer_secs } | PaneState::Dialog { timer_secs } => *timer_secs,
-            PaneState::Idle
-            | PaneState::Wedged
-            | PaneState::ProviderError402
-            | PaneState::Unproven => 0,
-        };
-        out.push_str(&format!(
-            "pane\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
-            p.pane_id,
-            p.state.label(),
-            timer,
-            p.hash,
-            p.at,
-            p.epoch,
-            p.sequence,
-            p.changed_at
-        ));
+    for observation in &st.previous_panes {
+        append_observation_record(&mut out, "previous_pane", observation);
+    }
+    for observation in &st.panes {
+        append_observation_record(&mut out, "pane", observation);
     }
     // Write-then-rename so a crash mid-write cannot leave a truncated state file that
     // reads as "no prior capture" and silently downgrades every pane to Unproven.

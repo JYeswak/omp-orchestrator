@@ -222,6 +222,13 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
     let state_file = flag(args, "--state")
         .map(PathBuf::from)
         .unwrap_or_else(|| state_path(session_of(args)));
+    // observe is the production caller (omp-orchestrator passes --state every tick).
+    // watch already refused a live foreign owner; observe used to load+overwrite
+    // silently, which is the measured collision: two residents, one file, UNPROVEN forever.
+    if let Err(why) = tick_monitor::check_ownership(&state_file, std::process::id()) {
+        eprintln!("{why}");
+        return Err(3);
+    }
     let prior = load(&state_file);
     let now = now_unix();
     let epoch = if prior.observation_epoch.is_empty() {
@@ -283,23 +290,13 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
         };
         let prev = prior.panes.iter().find(|p| &p.pane_id == id);
         let live = liveness(prev, &o);
-        let dispatchable_evidence = if matches!(&live, Liveness::ConfirmedIdle) {
-            let proven_at = prev.map(|observation| observation.at).unwrap_or(now);
-            Some(DispatchableEvidence {
-                proven_at,
-                valid_until: now.saturating_add(DISPATCHABLE_VALIDITY_SECS),
-            })
-        } else if matches!(&state, PaneState::Idle)
-            && prev
-                .map(|observation| matches!(&observation.state, PaneState::Idle))
-                .unwrap_or(false)
-        {
-            prior
-                .dispatchable_evidence_for(id)
-                .filter(|evidence| evidence.is_fresh_at(now))
-        } else {
-            None
-        };
+        let dispatchable_evidence = derive_dispatchable_evidence(
+            prev,
+            &state,
+            &live,
+            prior.dispatchable_evidence_for(id),
+            now,
+        );
         if let Some(evidence) = dispatchable_evidence {
             if !excluded.contains(&id.as_str()) {
                 current_dispatchable_evidence.push((id.clone(), evidence));
@@ -480,6 +477,7 @@ fn observe_core(args: &[String]) -> Result<String, i32> {
             last_blocker: prior.last_blocker,
             blocker_streak: prior.blocker_streak,
             red_streak: prior.red_streak,
+            previous_panes: prior.panes,
             panes: obs,
             dispatchable_evidence: current_dispatchable_evidence,
             commits: heads,
