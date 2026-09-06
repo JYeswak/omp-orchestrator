@@ -6,35 +6,43 @@
 //! loop. It is intentionally not a report-only monitor: a managed session may
 //! idle only with a bound Josh authorization token.
 
+use ack_stage::cell_matrix::{self, DispatchCellMatrix};
 use ack_stage::{
     assess as assess_ack_stage, AckAction, AckReadback, AckReadbackVerdict, AckStageInput,
     AckStageResult, TransportReceipt,
 };
-use ack_stage::cell_matrix::{self, DispatchCellMatrix};
 
+use ack_spine::ledger::StepKind;
+use agent_mail_native::identity::{resolve_pane_identity, BindingStatus, PaneIdentity};
 use agent_mail_native::journey::{
     self as mail, AgentName, DeliveryReceipt, ProjectKey, SendRequest,
 };
 use agent_mail_native::{MailClient, MailError};
-use agent_mail_native::identity::{resolve_pane_identity, BindingStatus, PaneIdentity};
 use asupersync::process::{Command, Output};
-use orchestration_tick_gate::{
-    append_receipt, build_receipt, PaneDisposition, Receipt, TickVerdict,
-};
 use asupersync::runtime::RuntimeBuilder;
 use asupersync::time::{sleep, timeout};
 use asupersync::Cx;
-use finding::{BrPublisher, FindingError};
-use finding_dispatch::{MaybeFinding, NotYet};
 use dispatch_claim_fence::{
     authorize, authorize_with_identities, parse_br_show_json, BeadSnapshot, ClaimFenceError,
     DispatchIntent, IdentityRecord, IdentityRegistries,
 };
 use dispatch_silence_watch::{clears_pending_dispatch_intent, SilenceVerdict};
-use pane_dispatch_fence::{
-    admit_at_send, IncarnationMint, Occupancy, PaneIncarnation, Presented,
+use finding::{BrPublisher, FindingError};
+use finding_dispatch::{MaybeFinding, NotYet};
+use lifecycle_event::{
+    default_repo_journal, emit as emit_lifecycle, DurableJournal, EmitOutcome, Layer,
+    LifecycleEvent, ReasonCode,
+};
+use lifecycle_monitor::{load_metrics, observe_layer, verify_artifact};
+use ntm_fleet_monitor::bead_lifecycle::ledger::{
+    packet_digest, InvokerClass, LedgerEvidence, LifecycleIdentity, LifecycleLedger,
+};
+use ntm_fleet_monitor::bead_lifecycle::{
+    BeadId, DispatchReceipt, DispatchTarget, EventId, EvidencePolicy, ReceiverEvidence,
+    RedispatchPlan,
 };
 use ntm_fleet_monitor::parse_activity_json;
+use ntm_fleet_monitor::{classify, Approved, Intent, TypedAction};
 use omp_orchestrator::{
     applicable, census_gates, cross_pane_hold, decide, dispatch_packet, read_idle_authorization,
     GateCensus, Observation, PaneObservation, QueueState, SupervisorDecision,
@@ -43,6 +51,10 @@ use omp_rpc_session::{
     run_session, OmpCommand, RpcError, RpcSessionConfig, NO_CLAIM_BOUNDARY, OMP_RPC_SCHEMA_VERSION,
     OMP_SURFACE,
 };
+use orchestration_tick_gate::{
+    append_receipt, build_receipt, PaneDisposition, Receipt, TickVerdict,
+};
+use pane_dispatch_fence::{admit_at_send, IncarnationMint, Occupancy, PaneIncarnation, Presented};
 use receiver_receipt::{
     escalate_non_delivery, observe_capture, ComposerEvidence, NonDeliveryEscalation,
     ObservationIdentity, PostSendObservation, ReceiptReason, ReceiptVerdict,
@@ -50,27 +62,12 @@ use receiver_receipt::{
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
-use std::sync::{LazyLock, Mutex};
-use ack_spine::ledger::StepKind;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use subprocess_contract::run_output;
-use lifecycle_event::{
-    default_repo_journal, emit as emit_lifecycle, DurableJournal, Layer, LifecycleEvent, EmitOutcome,
-    ReasonCode,
-};
-use lifecycle_monitor::{load_metrics, observe_layer, verify_artifact};
-use ntm_fleet_monitor::{classify, Approved, Intent, TypedAction};
-use ntm_fleet_monitor::bead_lifecycle::{
-    BeadId, DispatchReceipt, DispatchTarget, EvidencePolicy, EventId, ReceiverEvidence, RedispatchPlan,
-};
-use ntm_fleet_monitor::bead_lifecycle::ledger::{
-    packet_digest, InvokerClass, LedgerEvidence, LifecycleIdentity, LifecycleLedger,
-    GradingClaimScan,
-};
-
 
 const DEFAULT_INTERVAL: Duration = Duration::from_secs(90);
 const DEFAULT_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
@@ -264,10 +261,9 @@ fn parse_dispatch_render_args(args: &[String]) -> Result<Option<DispatchRenderRe
             }
             "--traps-file" => {
                 index += 1;
-                traps_file = Some(PathBuf::from(
-                    args.get(index)
-                        .ok_or_else(|| "CONFIG_REFUSED --traps-file requires a path".to_owned())?,
-                ));
+                traps_file = Some(PathBuf::from(args.get(index).ok_or_else(|| {
+                    "CONFIG_REFUSED --traps-file requires a path".to_owned()
+                })?));
             }
             other => return Err(format!("CONFIG_REFUSED unknown dispatch argument {other}")),
         }
@@ -292,9 +288,7 @@ fn parse_close_readback_args(args: &[String]) -> Result<Option<CloseRequest>, St
         return Ok(None);
     }
     if args.len() != 4 || args.get(2).map(String::as_str) != Some("--reason") {
-        return Err(
-            "CONFIG_REFUSED close-readback requires BEAD --reason REASON".to_owned(),
-        );
+        return Err("CONFIG_REFUSED close-readback requires BEAD --reason REASON".to_owned());
     }
     let bead = args[1].trim();
     if bead.is_empty() {
@@ -414,6 +408,38 @@ fn default_tick_monitor_state(heartbeat_ledger: &Path, session: &str) -> PathBuf
         "omp-orchestrator-{session}.tick-monitor-state.json"
     ))
 }
+
+fn default_pending_dispatch(heartbeat_ledger: &Path, session: &str) -> PathBuf {
+    heartbeat_ledger.with_file_name(format!(
+        "omp-orchestrator-{session}.pending-dispatch"
+    ))
+}
+
+/// A second session in one HOME must not reuse a fixed state/pending path.
+fn refuse_session_path_collision(
+    session: &str,
+    paths: &[(&str, &Path)],
+) -> Result<(), String> {
+    if paths.is_empty() {
+        return Err(
+            "SESSION_PATH_COLLISION empty scan set is ERROR, never a pass".to_owned(),
+        );
+    }
+    for (label, path) in paths {
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("");
+        if !name.contains(session) {
+            return Err(format!(
+                "SESSION_PATH_COLLISION {label} path={} session={session} would reuse a fixed path",
+                path.display()
+            ));
+        }
+    }
+    Ok(())
+}
+
 
 impl Config {
     fn from_args(args: &[String]) -> Result<Self, String> {
@@ -568,16 +594,22 @@ impl Config {
         let bead_lifecycle_ledger = env::var_os("OMP_BEAD_LIFECYCLE_LEDGER")
             .map(PathBuf::from)
             .unwrap_or_else(|| {
-                heartbeat_ledger.with_file_name(format!("omp-orchestrator-{session}.bead-lifecycle.jsonl"))
+                heartbeat_ledger
+                    .with_file_name(format!("omp-orchestrator-{session}.bead-lifecycle.jsonl"))
             });
         let tick_monitor_state = env::var_os("OMP_TICK_MONITOR_STATE")
             .map(PathBuf::from)
             .unwrap_or_else(|| default_tick_monitor_state(&heartbeat_ledger, &session));
         let pending_dispatch = env::var_os("OMP_PENDING_DISPATCH")
             .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                heartbeat_ledger.with_file_name("omp-orchestrator.pending-dispatch")
-            });
+            .unwrap_or_else(|| default_pending_dispatch(&heartbeat_ledger, &session));
+        refuse_session_path_collision(
+            &session,
+            &[
+                ("tick_monitor_state", tick_monitor_state.as_path()),
+                ("pending_dispatch", pending_dispatch.as_path()),
+            ],
+        )?;
         let finding_spool = env::var_os("OMP_FINDING_SPOOL")
             .map(PathBuf::from)
             .unwrap_or_else(|| heartbeat_ledger.with_file_name("omp-orchestrator.findings"));
@@ -588,8 +620,7 @@ impl Config {
         // from. `sender_identity::first_candidate` walks the same list in the same order;
         // what is new is that the list is TYPED, so an ambient value can be refused by name
         // rather than signed with.
-        let resolved_sender =
-            sender_identity::first_candidate(&|name| env::var(name).ok());
+        let resolved_sender = sender_identity::first_candidate(&|name| env::var(name).ok());
         let policy_text = fs::read_to_string(repo.join("config.toml")).ok();
         let policy = parse_dispatch_policy(policy_text.as_deref());
         if interval == DEFAULT_INTERVAL {
@@ -808,23 +839,20 @@ fn parse_observation(bytes: &[u8], gate_census: GateCensus) -> Result<Observatio
 }
 
 fn parse_ready(bytes: &[u8]) -> Result<(Vec<String>, BTreeMap<String, u64>), String> {
-    let value: Value = serde_json::from_slice(bytes)
-        .map_err(|error| {
-            format!(
-                "QUEUE_UNREADABLE {} {} JSON: {error}",
-                finding::BR,
-                loop_queue_filter::READY_SUBCOMMAND
-            )
-        })?;
-    let rows = value
-        .as_array()
-        .ok_or_else(|| {
-            format!(
-                "QUEUE_UNREADABLE {} {} did not return an array",
-                finding::BR,
-                loop_queue_filter::READY_SUBCOMMAND
-            )
-        })?;
+    let value: Value = serde_json::from_slice(bytes).map_err(|error| {
+        format!(
+            "QUEUE_UNREADABLE {} {} JSON: {error}",
+            finding::BR,
+            loop_queue_filter::READY_SUBCOMMAND
+        )
+    })?;
+    let rows = value.as_array().ok_or_else(|| {
+        format!(
+            "QUEUE_UNREADABLE {} {} did not return an array",
+            finding::BR,
+            loop_queue_filter::READY_SUBCOMMAND
+        )
+    })?;
     let mut ids = Vec::with_capacity(rows.len());
     let mut priorities = BTreeMap::new();
     for (index, row) in rows.iter().enumerate() {
@@ -839,22 +867,18 @@ fn parse_ready(bytes: &[u8]) -> Result<(Vec<String>, BTreeMap<String, u64>), Str
                     loop_queue_filter::READY_SUBCOMMAND
                 )
             })?;
-        let priority = row
-            .get("priority")
-            .and_then(Value::as_u64)
-            .ok_or_else(|| {
-                format!(
-                    "QUEUE_UNREADABLE {} {} row {index} has no priority",
-                    finding::BR,
-                    loop_queue_filter::READY_SUBCOMMAND
-                )
-            })?;
+        let priority = row.get("priority").and_then(Value::as_u64).ok_or_else(|| {
+            format!(
+                "QUEUE_UNREADABLE {} {} row {index} has no priority",
+                finding::BR,
+                loop_queue_filter::READY_SUBCOMMAND
+            )
+        })?;
         ids.push(id.to_owned());
         priorities.insert(id.to_owned(), priority);
     }
     Ok((ids, priorities))
 }
-
 
 async fn capture_pane(cx: &Cx, config: &Config, pane: &str) -> Result<Vec<u8>, String> {
     let args = vec![
@@ -1037,9 +1061,10 @@ async fn read_ack_readback(
         "br comments list",
         invoke(cx, config, &config.br, &args).await?,
     )?;
-    let readback = AckReadback::from_comments_json_pending(bead, pane, &bytes).map_err(|error| {
-        format!("ACK_STAGE_INDETERMINATE bead={bead} pane={pane} comment read-back: {error}")
-    })?;
+    let readback =
+        AckReadback::from_comments_json_pending(bead, pane, &bytes).map_err(|error| {
+            format!("ACK_STAGE_INDETERMINATE bead={bead} pane={pane} comment read-back: {error}")
+        })?;
     Ok(match dispatch_marker_issued_at(config, pane) {
         Some(issued_at) => readback.with_dispatch_issued_at(issued_at),
         None => readback,
@@ -1106,7 +1131,12 @@ async fn emit_step(
         |_cx| async {},
     )
     .await
-    .map_err(|error| format!("SPINE_STEP_REFUSED kind={} bead={bead} {error}", kind.as_str()))
+    .map_err(|error| {
+        format!(
+            "SPINE_STEP_REFUSED kind={} bead={bead} {error}",
+            kind.as_str()
+        )
+    })
 }
 
 /// Append the cycle's typed rows to the spine ledger.
@@ -1159,7 +1189,6 @@ fn prior_dispatch_count(config: &Config, bead: &str) -> usize {
     omp_orchestrator::spine_emit::prior_send_count(&heartbeat, &spine, bead)
 }
 
-
 /// THE CLOSE HALF. Emit `Closed` and `GradeReceived` for beads this supervisor
 /// dispatched that have since finished.
 ///
@@ -1175,18 +1204,15 @@ fn prior_dispatch_count(config: &Config, bead: &str) -> usize {
 /// `br show` is a subprocess per bead, so the pass is capped and cancellation is
 /// checked between beads. A reconcile that could grow with history would make every
 /// tick slower than the last.
-async fn reconcile_completions(
-    cx: &Cx,
-    config: &Config,
-    tick: u64,
-) -> Result<usize, String> {
+async fn reconcile_completions(cx: &Cx, config: &Config, tick: u64) -> Result<usize, String> {
     const MAX_BEADS_PER_TICK: usize = 6;
     let Ok(heartbeat) = fs::read_to_string(&config.heartbeat_ledger) else {
         return Ok(0);
     };
     let spine_path = omp_orchestrator::spine_emit::spine_ledger_path(&config.heartbeat_ledger);
-    let recorded =
-        omp_orchestrator::spine_emit::recorded_closures(&fs::read_to_string(&spine_path).unwrap_or_default());
+    let recorded = omp_orchestrator::spine_emit::recorded_closures(
+        &fs::read_to_string(&spine_path).unwrap_or_default(),
+    );
     let mut candidates: Vec<(String, String)> = Vec::new();
     for line in heartbeat.lines().rev() {
         if !line.contains("\"DISPATCHED\"") {
@@ -1323,12 +1349,7 @@ fn process_output_text(program: &str, output: &Output) -> String {
     }
 }
 
-async fn close_and_read_back(
-    cx: &Cx,
-    config: &Config,
-    bead: &str,
-    reason: &str,
-) -> CloseReadback {
+async fn close_and_read_back(cx: &Cx, config: &Config, bead: &str, reason: &str) -> CloseReadback {
     let close_args = vec![
         "close".to_owned(),
         bead.to_owned(),
@@ -1505,10 +1526,7 @@ fn load_subagent_identity_records(path: &Path) -> Result<Vec<IdentityRecord>, St
 /// is an explicit snapshot because sibling panes cannot query a parent's hub
 /// namespace. Either unavailable source refuses; neither source is replaced by
 /// a permissive fallback.
-async fn load_identity_registries(
-    cx: &Cx,
-    config: &Config,
-) -> Result<IdentityRegistries, String> {
+async fn load_identity_registries(cx: &Cx, config: &Config) -> Result<IdentityRegistries, String> {
     let project = ProjectKey::new(config.repo.display().to_string());
     let client = MailClient::discover().with_request_timeout(MAIL_REQUEST_TIMEOUT);
     let agent_mail_names = mail::list_agents(cx, &client, &project)
@@ -1648,8 +1666,6 @@ fn tracker_assignee_pane(assignee: &str) -> Option<&str> {
     })
 }
 
-
-
 fn receiver_agent_for_dispatch(
     config: &Config,
     pane: &str,
@@ -1729,7 +1745,11 @@ fn authorize_bead_dispatch_as(
         )
     });
     let authorization = if let Some(canonical_snapshot) = canonical_snapshot.as_ref() {
-        authorize(&DispatchIntent::bead(bead, claim_owner), Some(canonical_snapshot)).and_then(|permit| {
+        authorize(
+            &DispatchIntent::bead(bead, claim_owner),
+            Some(canonical_snapshot),
+        )
+        .and_then(|permit| {
             let identity = if claim_identity == receiver_agent {
                 claim_identity
             } else {
@@ -1926,7 +1946,9 @@ async fn prepare_bead_dispatch(
     identities: &IdentityRegistries,
     tick: u64,
     claim_enabled: bool,
+    hold_intent: cross_pane_hold::HoldIntent,
 ) -> Result<(BeadSnapshot, String), String> {
+
     let initial = load_bead_snapshot(cx, config, bead).await?;
     let receiver_agent = receiver_agent_for_dispatch(config, pane, bead, &initial)?;
     ensure_dispatch_receiver_identity(identities, bead, pane, &receiver_agent)?;
@@ -1937,9 +1959,7 @@ async fn prepare_bead_dispatch(
                 "DISPATCH_BLOCKED bead={bead} pane={pane} reason=LIFECYCLE_LEDGER_UNREADABLE error={error}"
             )
         })?;
-    if let Err(refuse) =
-        cross_pane_hold::admit(bead, pane, initial.status_label(), &in_flight)
-    {
+    if let Err(refuse) = cross_pane_hold::admit_with_intent(hold_intent, bead, pane, initial.status_label(), &in_flight) {
         return Err(format!(
             "DISPATCH_BLOCKED bead={bead} pane={pane} reason={refuse} owner=josh next_action=wait-for-reap-or-abandon"
         ));
@@ -1956,26 +1976,26 @@ async fn prepare_bead_dispatch(
         None,
     )
     .map_err(|error| format!("DISPATCH_PACKET_REFUSED bead={bead} pane={pane} error={error}"))?;
-authorize_dispatch_preflight(pane_observation, &packet, bead, pane)?;
-let incarnation = admit_immediately_before_send(&config.session, pane)?;
-println!(
+    authorize_dispatch_preflight(pane_observation, &packet, bead, pane)?;
+    let incarnation = admit_immediately_before_send(&config.session, pane)?;
+    println!(
     "DISPATCH_PREFLIGHT verdict=autonomous bead={bead} pane={pane} pane_dispatchable={} two_captures={} packet_complete={}",
     matches!(pane_observation.liveness.as_str(), "CONFIRMED_IDLE" | "NEWLY_IDLE"),
     pane_observation.is_dispatchable,
     packet_is_complete(&packet),
 );
-let (snapshot, claim_owner) = claim_bead_for_supervisor(
-    cx,
-    config,
-    pane,
-    bead,
-    initial,
-    &receiver_agent,
-    incarnation,
-    tick,
-    claim_enabled,
-)
-.await?;
+    let (snapshot, claim_owner) = claim_bead_for_supervisor(
+        cx,
+        config,
+        pane,
+        bead,
+        initial,
+        &receiver_agent,
+        incarnation,
+        tick,
+        claim_enabled,
+    )
+    .await?;
     let receiver_agent =
         authorize_bead_dispatch_as(config, pane, bead, &snapshot, &claim_owner, identities)?;
     Ok((snapshot, receiver_agent))
@@ -2044,7 +2064,10 @@ fn authorize_dispatch_preflight(
     let intent = Intent {
         action: TypedAction::DispatchPacket,
         pane_dispatchable: pane_observation.is_dispatchable,
-        two_captures: matches!(pane_observation.liveness.as_str(), "CONFIRMED_IDLE" | "NEWLY_IDLE"),
+        two_captures: matches!(
+            pane_observation.liveness.as_str(),
+            "CONFIRMED_IDLE" | "NEWLY_IDLE"
+        ),
         packet_complete: packet_is_complete(packet),
         finding_has_bead: !bead.trim().is_empty(),
     };
@@ -2069,13 +2092,16 @@ fn begin_dispatch_lifecycle(
     tick: u64,
 ) -> Result<LifecycleLedger, String> {
     let bead_id = BeadId::new(bead).map_err(|error| error.to_string())?;
-    let target = DispatchTarget::new(config.session.clone(), pane)
-        .map_err(|error| error.to_string())?;
+    let target =
+        DispatchTarget::new(config.session.clone(), pane).map_err(|error| error.to_string())?;
     let now_ms = now_unix().saturating_mul(1_000);
     let intent = Intent {
         action: TypedAction::DispatchPacket,
         pane_dispatchable: pane_observation.is_dispatchable,
-        two_captures: matches!(pane_observation.liveness.as_str(), "CONFIRMED_IDLE" | "NEWLY_IDLE"),
+        two_captures: matches!(
+            pane_observation.liveness.as_str(),
+            "CONFIRMED_IDLE" | "NEWLY_IDLE"
+        ),
         packet_complete: packet_is_complete(packet),
         finding_has_bead: !bead.trim().is_empty(),
     };
@@ -2096,7 +2122,10 @@ fn begin_dispatch_lifecycle(
         now_ms,
         EvidencePolicy::new(now_ms, 0),
         [
-            ("decision".to_owned(), format!("dispatch preflight passed pane={pane}")),
+            (
+                "decision".to_owned(),
+                format!("dispatch preflight passed pane={pane}"),
+            ),
             ("run_id".to_owned(), lifecycle_run_id().to_owned()),
             ("build_id".to_owned(), BUILD_ID.to_owned()),
             ("pid".to_owned(), std::process::id().to_string()),
@@ -2137,142 +2166,175 @@ pub fn gate_peer_grading_for_pane(
     gate_peer_grading_inner(config, observation, tick, Some(grader_pane))
 }
 
+fn peer_grade_error_detail(error: &loop_queue_filter::select::AssignGradeError) -> String {
+    match error {
+        loop_queue_filter::select::AssignGradeError::EmptyObservation => {
+            "reason=empty_observation".to_owned()
+        }
+        loop_queue_filter::select::AssignGradeError::ObserverPaneUnresolved => {
+            "reason=observer_pane_unresolved".to_owned()
+        }
+        loop_queue_filter::select::AssignGradeError::NoEligibleGrader { reason } => {
+            format!("reason={reason}")
+        }
+        loop_queue_filter::select::AssignGradeError::GraderCarryingOwnDispatch {
+            pane,
+            liveness,
+            is_working,
+        } => format!(
+            "reason=grader_carrying_own_dispatch pane={pane} liveness={liveness} is_working={is_working}"
+        ),
+        loop_queue_filter::select::AssignGradeError::GraderIdentityUnresolved { detail } => {
+            format!("reason=grader_identity_unresolved detail={detail}")
+        }
+        loop_queue_filter::select::AssignGradeError::Jsonl(detail) => {
+            format!("reason=tracker_unreadable detail={detail}")
+        }
+    }
+}
+
+fn peer_grading_skip(
+    config: &Config,
+    tick: u64,
+    status: &str,
+    detail: &str,
+) -> Result<Option<PeerGradeClaim>, String> {
+    write_heartbeat(config, tick, status, detail)?;
+    println!("{status} {detail}");
+    Ok(None)
+}
+
 fn gate_peer_grading_inner(
     config: &Config,
     observation: &mut Observation,
     tick: u64,
     preferred_grader_pane: Option<&str>,
 ) -> Result<Option<PeerGradeClaim>, String> {
-    let scan = LifecycleLedger::active_grading_claims(
-        &config.bead_lifecycle_ledger,
-        config.repo.join(".beads/issues.jsonl"),
-    )
-    .map_err(|error| format!("PEER_GRADING_LEDGER_UNREADABLE error={error}"))?;
-    if let GradingClaimScan::Active(active) = &scan {
-        let mut in_flight = Vec::new();
-        for claim in active {
-            refuse_placeholder_identity("bead", &claim.bead)?;
-            refuse_placeholder_identity("receiver_pane", &claim.receiver_pane)?;
-            refuse_placeholder_identity("grader_pane", &claim.grader_pane)?;
-            let grader_idle = observation.panes.iter().any(|pane| {
-                pane.pane_id == claim.grader_pane && pane.is_dispatchable
-            });
-            if grader_idle {
-                return Ok(Some(PeerGradeClaim {
-                    bead: claim.bead.clone(),
-                    receiver_pane: claim.receiver_pane.clone(),
-                    grader_pane: claim.grader_pane.clone(),
-                }));
-            }
-            in_flight.push(claim.grader_pane.clone());
-        }
-        observation
-            .panes
-            .retain(|pane| !in_flight.iter().any(|grader| grader == &pane.pane_id));
-        return Ok(None);
-    }
-
-
     let candidates = LifecycleLedger::receiver_verified_candidates(
         &config.bead_lifecycle_ledger,
         config.repo.join(".beads/issues.jsonl"),
     )
-        .map_err(|error| format!("PEER_GRADING_LEDGER_UNREADABLE error={error}"))?;
-    let idle = observation
+    .map_err(|error| format!("PEER_GRADING_LEDGER_UNREADABLE error={error}"))?;
+    if candidates.is_empty() {
+        return peer_grading_skip(
+            config,
+            tick,
+            "PEER_GRADING_LEDGER_EMPTY",
+            "reason=no_receiver_verified_candidate next_action=continue-ranked-dispatch",
+        );
+    }
+
+    // Restrict the shared selector to lifecycle-verified candidates. Selection itself is
+    // delegated to the kernel that walks every dispatchable non-author pane.
+    let tracker_path = config.repo.join(".beads/issues.jsonl");
+    let tracker_text = fs::read_to_string(&tracker_path).map_err(|error| {
+        format!(
+            "PEER_GRADING_LEDGER_UNREADABLE path={} error={error}",
+            tracker_path.display()
+        )
+    })?;
+    let candidate_ids: BTreeSet<String> = candidates
+        .iter()
+        .map(|candidate| candidate.identity.bead.as_str().to_owned())
+        .collect();
+    let candidate_jsonl = tracker_text
+        .lines()
+        .filter(|line| {
+            serde_json::from_str::<Value>(line)
+                .ok()
+                .and_then(|row| {
+                    row.get("id")
+                        .and_then(Value::as_str)
+                        .map(|id| candidate_ids.contains(id))
+                })
+                .unwrap_or(false)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    if candidate_jsonl.is_empty() {
+        return Err(
+            "PEER_GRADING_LEDGER_UNREADABLE reason=receiver_verified_tracker_row_missing".to_owned(),
+        );
+    }
+    let ledger_text = fs::read_to_string(&config.bead_lifecycle_ledger).map_err(|error| {
+        format!(
+            "PEER_GRADING_LEDGER_UNREADABLE path={} error={error}",
+            config.bead_lifecycle_ledger.display()
+        )
+    })?;
+    let observed_panes = observation
         .panes
         .iter()
-        .filter(|pane| pane.is_dispatchable)
+        .map(|pane| loop_queue_filter::select::ObservedPane {
+            pane_id: pane.pane_id.clone(),
+            liveness: pane.liveness.clone(),
+            is_dispatchable: pane.is_dispatchable,
+            is_working: pane.is_working,
+        })
         .collect::<Vec<_>>();
-    for candidate in candidates {
-        let Some(receiver_pane) = idle
+    let selected_panes = if let Some(preferred) = preferred_grader_pane {
+        if !observed_panes
             .iter()
-            .find(|pane| pane.pane_id == candidate.identity.target.pane)
-            .map(|pane| pane.pane_id.clone())
-        else {
-            continue;
-        };
-        let grader_pane = if let Some(preferred) = preferred_grader_pane {
-            if preferred == receiver_pane.as_str() {
-                return Err(format!(
-                    "PEER_GRADING_REFUSED bead={} receiver_pane={} reason=self_grade",
-                    candidate.identity.bead.as_str(),
-                    receiver_pane,
-                ));
-            }
-            if !idle.iter().any(|pane| pane.pane_id == preferred) {
-                return Err(format!(
-                    "PEER_GRADING_REFUSED bead={} grader_pane={} reason=preferred_grader_not_idle",
-                    candidate.identity.bead.as_str(),
-                    preferred,
-                ));
-            }
-            preferred.to_owned()
-        } else {
-            let Some(grader_pane) = idle
-                .iter()
-                .find(|pane| pane.pane_id != receiver_pane)
-                .map(|pane| pane.pane_id.clone())
-            else {
-                let detail = format!(
-                    "bead={} receiver_pane={} reason=no_distinct_idle_peer next_action=continue-ranked-dispatch",
-                    candidate.identity.bead.as_str(),
-                    receiver_pane,
-                );
-                write_heartbeat(config, tick, "PEER_GRADING_SKIPPED", &detail)?;
-                println!("PEER_GRADING_SKIPPED {detail}");
-                return Ok(None);
-            };
-            grader_pane
-        };
-        let grader = idle
+            .any(|pane| pane.pane_id == preferred && pane.is_dispatchable)
+        {
+            return Err(format!(
+                "PEER_GRADING_REFUSED grader_pane={preferred} reason=preferred_grader_not_idle"
+            ));
+        }
+        observed_panes
             .iter()
-            .find(|pane| pane.pane_id == grader_pane)
-            .ok_or_else(|| format!("PEER_GRADING_REFUSED grader_pane={grader_pane} observation_row_missing"))?;
-        let intent = Intent {
-            action: TypedAction::DispatchPacket,
-            pane_dispatchable: grader.is_dispatchable,
-            two_captures: matches!(grader.liveness.as_str(), "CONFIRMED_IDLE" | "NEWLY_IDLE"),
-            packet_complete: true,
-            finding_has_bead: true,
-        };
-        let approval = Approved::authorize(classify(intent))
-            .map_err(|error| format!("PEER_GRADING_REFUSED reason={error:?}"))?;
-        let now_ms = now_unix().saturating_mul(1_000);
-        let event_id = EventId::new(run_scoped_event_key(
-            "peer-grade",
-            candidate.identity.bead.as_str(),
-            tick,
-            &format!(":{grader_pane}"),
-        ))
-        .map_err(|error| error.to_string())?;
-        let evidence = LedgerEvidence::new(
-            event_id,
-            now_ms,
-            EvidencePolicy::new(now_ms, 0),
-            [
-                ("source", "omp-orchestrator"),
-                ("receiver_event_id", candidate.receiver_event_id.as_str()),
-                ("receiver_pane", receiver_pane.as_str()),
-                ("grader_pane", grader_pane.as_str()),
-            ],
-        )
-        .map_err(|error| error.to_string())?;
-        let bead = candidate.identity.bead.as_str().to_owned();
-        LifecycleLedger::claim_peer_grading(
-            &config.bead_lifecycle_ledger,
-            candidate,
-            approval,
-            grader_pane.clone(),
-            evidence,
-        )
-        .map_err(|error| format!("PEER_GRADING_REFUSED error={error}"))?;
-        return Ok(Some(PeerGradeClaim {
-            bead,
-            receiver_pane,
-            grader_pane,
-        }));
-    }
-    Ok(None)
+            .filter(|pane| pane.pane_id == preferred)
+            .cloned()
+            .collect::<Vec<_>>()
+    } else {
+        observed_panes.clone()
+    };
+    let assignment = match loop_queue_filter::select::assign_peer_grade_with_ledger(
+        "__orchestrator__",
+        &selected_panes,
+        &candidate_jsonl,
+        &ledger_text,
+    ) {
+        Ok(assignment) => assignment,
+        Err(loop_queue_filter::select::AssignGradeError::NoEligibleGrader { reason })
+            if preferred_grader_pane.is_some() && reason == "no_distinct_idle_peer" =>
+        {
+            let bead = candidates
+                .first()
+                .map(|candidate| candidate.identity.bead.as_str())
+                .unwrap_or("unknown");
+            return Err(format!(
+                "PEER_GRADING_REFUSED bead={bead} grader_pane={} reason=self_grade",
+                preferred_grader_pane.unwrap_or("unknown")
+            ));
+        }
+        Err(error) => {
+            let detail = format!(
+                "candidate_count={} observed_panes={} {} next_action=continue-ranked-dispatch",
+                candidates.len(),
+                selected_panes.len(),
+                peer_grade_error_detail(&error)
+            );
+            return peer_grading_skip(config, tick, "PEER_GRADING_SKIPPED", &detail);
+        }
+    };
+    let candidate = candidates
+        .iter()
+        .find(|candidate| candidate.identity.bead.as_str() == assignment.bead)
+        .ok_or_else(|| {
+            format!(
+                "PEER_GRADING_LEDGER_UNREADABLE bead={} reason=assignment_not_receiver_verified",
+                assignment.bead
+            )
+        })?;
+    refuse_placeholder_identity("bead", &assignment.bead)?;
+    refuse_placeholder_identity("receiver_pane", &candidate.identity.target.pane)?;
+    refuse_placeholder_identity("grader_pane", &assignment.grader_pane)?;
+    Ok(Some(PeerGradeClaim {
+        bead: assignment.bead,
+        receiver_pane: candidate.identity.target.pane.clone(),
+        grader_pane: assignment.grader_pane,
+    }))
 }
 
 fn refuse_placeholder_identity(field: &str, value: &str) -> Result<(), String> {
@@ -2283,7 +2345,6 @@ fn refuse_placeholder_identity(field: &str, value: &str) -> Result<(), String> {
     }
     Ok(())
 }
-
 
 static PANE_OCCUPANCY_MINT: LazyLock<IncarnationMint> = LazyLock::new(IncarnationMint::new);
 static PANE_OCCUPANCIES: LazyLock<Mutex<BTreeMap<String, Occupancy>>> =
@@ -2322,8 +2383,14 @@ fn admit_immediately_before_send(session: &str, pane: &str) -> Result<PaneIncarn
 #[derive(Debug)]
 enum DispatchVerdict {
     Delivered(AckStageResult),
-    Indeterminate { reason: String, transport: String },
-    AckPending { after_secs: u64, discriminator: String },
+    Indeterminate {
+        reason: String,
+        transport: String,
+    },
+    AckPending {
+        after_secs: u64,
+        discriminator: String,
+    },
     Failed(String),
 }
 
@@ -2429,7 +2496,9 @@ fn classify_send_alignment(detail: &str) -> AlignmentClass {
 
 fn classify_alignment_window(details: &[String]) -> Result<Vec<AlignmentClass>, String> {
     if details.is_empty() {
-        return Err("ALIGNMENT_SCAN_EMPTY -- an empty send window is an ERROR, never a pass".to_owned());
+        return Err(
+            "ALIGNMENT_SCAN_EMPTY -- an empty send window is an ERROR, never a pass".to_owned(),
+        );
     }
     Ok(details.iter().map(|d| classify_send_alignment(d)).collect())
 }
@@ -2508,9 +2577,7 @@ fn parse_dispatch_policy(text: Option<&str>) -> DispatchPolicy {
             "pending_dispatch_max_age_secs" => {
                 policy.pending_dispatch_max_age = Duration::from_secs(value)
             }
-            "mail_request_timeout_secs" => {
-                policy.mail_request_timeout = Duration::from_secs(value)
-            }
+            "mail_request_timeout_secs" => policy.mail_request_timeout = Duration::from_secs(value),
             _ => {}
         }
     }
@@ -2520,7 +2587,6 @@ fn parse_dispatch_policy(text: Option<&str>) -> DispatchPolicy {
         DispatchPolicy::defaults()
     }
 }
-
 
 async fn send_and_verify(
     cx: &Cx,
@@ -2558,16 +2624,17 @@ async fn send_and_verify(
     let pre_identity = ntm_output_identity(cx, config, pane).await?;
     let pre_observation =
         observe_capture(pane, &String::from_utf8_lossy(before), pre_at, pre_identity);
-    let mut lifecycle = begin_dispatch_lifecycle(config, pane, pane_observation, bead, &packet, tick)
-        .map_err(|error| format!("LIFECYCLE_LEDGER_REFUSED bead={bead} pane={pane} error={error}"))?;
+    let mut lifecycle =
+        begin_dispatch_lifecycle(config, pane, pane_observation, bead, &packet, tick).map_err(
+            |error| format!("LIFECYCLE_LEDGER_REFUSED bead={bead} pane={pane} error={error}"),
+        )?;
     let dispatch_at_ms = now_unix().saturating_mul(1_000);
     let dispatch_id = EventId::new(run_scoped_event_key("dispatch", bead, tick, ""))
         .map_err(|error| error.to_string())?;
     let dispatch_receipt = DispatchReceipt::new(
         dispatch_id.clone(),
         BeadId::new(bead).map_err(|error| error.to_string())?,
-        DispatchTarget::new(config.session.clone(), pane)
-            .map_err(|error| error.to_string())?,
+        DispatchTarget::new(config.session.clone(), pane).map_err(|error| error.to_string())?,
         format!("dispatch bead {bead}"),
         dispatch_at_ms,
     )
@@ -2582,7 +2649,9 @@ async fn send_and_verify(
     .map_err(|error| error.to_string())?;
     lifecycle
         .dispatch(dispatch_receipt, dispatch_evidence)
-        .map_err(|error| format!("LIFECYCLE_LEDGER_REFUSED bead={bead} pane={pane} error={error}"))?;
+        .map_err(|error| {
+            format!("LIFECYCLE_LEDGER_REFUSED bead={bead} pane={pane} error={error}")
+        })?;
     admit_immediately_before_send(&config.session, pane)?;
     let codex = receiver_is_codex(cx, config, pane).await?;
     let transport = if codex {
@@ -2671,7 +2740,10 @@ async fn send_and_verify(
         let (post_send, pane_capture) = post_send_observation(cx, config, pane).await;
         if let receiver_receipt::PostSendObservation::Present(observation) = &post_send {
             if first_working.is_none()
-                && matches!(observation.state, receiver_receipt::PaneState::Working { .. })
+                && matches!(
+                    observation.state,
+                    receiver_receipt::PaneState::Working { .. }
+                )
             {
                 first_working = Some(observation.clone());
             }
@@ -2830,9 +2902,7 @@ async fn send_and_verify(
             // discriminator is whether the timer ADVANCED across
             // `OBSERVATION_WINDOW_MIN_SECS`.
             let discriminated = match (&first_working, &latest) {
-                (Some(first), Some(last)) => {
-                    Some(receiver_receipt::classify_ack_wait(first, last))
-                }
+                (Some(first), Some(last)) => Some(receiver_receipt::classify_ack_wait(first, last)),
                 _ => None,
             };
             if let Some(verdict) = &discriminated {
@@ -2886,10 +2956,13 @@ async fn send_and_verify(
                 // Absent evidence is NAMED, never silently absent: a wait with no
                 // working capture cannot discriminate and must say so rather than
                 // letting the reader assume it did.
-                .unwrap_or_else(|| " discriminator=NO_WORKING_CAPTURE owes_human=unknown".to_owned());
+                .unwrap_or_else(|| {
+                    " discriminator=NO_WORKING_CAPTURE owes_human=unknown".to_owned()
+                });
             let redispatch_at_ms = now_unix().saturating_mul(1_000);
-            let redispatch_id = EventId::new(run_scoped_event_key("redispatch-required", bead, tick, ""))
-                .map_err(|error| error.to_string())?;
+            let redispatch_id =
+                EventId::new(run_scoped_event_key("redispatch-required", bead, tick, ""))
+                    .map_err(|error| error.to_string())?;
             let redispatch_plan = RedispatchPlan::new(
                 redispatch_id.clone(),
                 BeadId::new(bead).map_err(|error| error.to_string())?,
@@ -3007,10 +3080,7 @@ fn observe_s1_after_emit(config: &Config) {
             .map(|s| s.stall_after_ms)
             .unwrap_or(60_000);
         if let Err(error) = observe_layer(&journal, layer, stall) {
-            eprintln!(
-                "LIFECYCLE_MONITOR_{} {error}",
-                layer.as_str()
-            );
+            eprintln!("LIFECYCLE_MONITOR_{} {error}", layer.as_str());
         }
     }
     match verify_artifact(&journal) {
@@ -3018,7 +3088,6 @@ fn observe_s1_after_emit(config: &Config) {
         Err(error) => eprintln!("LIFECYCLE_ARTIFACT_UNVERIFIED {error}"),
     }
 }
-
 
 fn write_tick_receipt(
     config: &Config,
@@ -3444,7 +3513,10 @@ where
                     "pane={pane} bead={bead} reason=ACKNOWLEDGED owner=loop next_action=continue detail={detail}"
                 );
                 write_heartbeat(config, tick, "DISPATCH_INTENT_CLEARED", &cleared_detail)?;
-                println!("DISPATCH_INTENT_CLEARED tick={tick} session={} {cleared_detail}", config.session);
+                println!(
+                    "DISPATCH_INTENT_CLEARED tick={tick} session={} {cleared_detail}",
+                    config.session
+                );
                 cleared.push((pane, bead, "ACKNOWLEDGED"));
             }
             PendingDispatch::Live { detail, age_secs } => {
@@ -3458,7 +3530,10 @@ where
                                 "pane={pane} bead={bead} age_secs={age_secs} owner=loop next_action=continue"
                             );
                             write_heartbeat(config, tick, "ACK_RECEIVED_LATE", &late)?;
-                            println!("ACK_RECEIVED_LATE tick={tick} session={} {late}", config.session);
+                            println!(
+                                "ACK_RECEIVED_LATE tick={tick} session={} {late}",
+                                config.session
+                            );
                             cleared.push((pane, bead, "ACK_RECEIVED_LATE"));
                             continue;
                         }
@@ -3490,7 +3565,10 @@ where
                                 "pane={pane} bead={bead} age_secs={age_secs} owner=loop next_action=continue"
                             );
                             write_heartbeat(config, tick, "ACK_RECEIVED_LATE", &late)?;
-                            println!("ACK_RECEIVED_LATE tick={tick} session={} {late}", config.session);
+                            println!(
+                                "ACK_RECEIVED_LATE tick={tick} session={} {late}",
+                                config.session
+                            );
                             cleared.push((pane, bead, "ACK_RECEIVED_LATE"));
                             continue;
                         }
@@ -3956,7 +4034,9 @@ fn pending_dispatch_path(config: &Config, pane: &str) -> PathBuf {
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_else(|| "omp-orchestrator.pending-dispatch".to_owned());
-    config.pending_dispatch.with_file_name(format!("{base}.{slug}"))
+    config
+        .pending_dispatch
+        .with_file_name(format!("{base}.{slug}"))
 }
 
 /// Every pending-dispatch marker on disk, classified, paired with the pane it
@@ -4089,7 +4169,10 @@ fn write_dispatch_intent(config: &Config, pane: &str, bead: &str) -> Result<(), 
 fn acknowledge_dispatch_intent(config: &Config, pane: &str) -> Result<(), String> {
     let path = pending_dispatch_path(config, pane);
     let text = fs::read_to_string(&path).map_err(|error| {
-        format!("DISPATCH_ACKNOWLEDGE_READ_FAILED pane={pane} path={} error={error}", path.display())
+        format!(
+            "DISPATCH_ACKNOWLEDGE_READ_FAILED pane={pane} path={} error={error}",
+            path.display()
+        )
     })?;
     let mut value = serde_json::from_str::<Value>(&text)
         .map_err(|error| format!("DISPATCH_ACKNOWLEDGE_MALFORMED pane={pane} error={error}"))?;
@@ -4097,18 +4180,29 @@ fn acknowledge_dispatch_intent(config: &Config, pane: &str) -> Result<(), String
         .as_object_mut()
         .ok_or_else(|| format!("DISPATCH_ACKNOWLEDGE_NOT_OBJECT pane={pane}"))?;
     object.insert("acknowledged_at".to_owned(), json!(now_unix()));
-    let bytes = serde_json::to_vec(&value)
-        .map_err(|error| format!("DISPATCH_ACKNOWLEDGE_SERIALIZE_FAILED pane={pane} error={error}"))?;
+    let bytes = serde_json::to_vec(&value).map_err(|error| {
+        format!("DISPATCH_ACKNOWLEDGE_SERIALIZE_FAILED pane={pane} error={error}")
+    })?;
     let temp = path.with_extension(format!("ack-{}.tmp", std::process::id()));
     let mut file = OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(&temp)
-        .map_err(|error| format!("DISPATCH_ACKNOWLEDGE_TEMP_FAILED path={} error={error}", temp.display()))?;
+        .map_err(|error| {
+            format!(
+                "DISPATCH_ACKNOWLEDGE_TEMP_FAILED path={} error={error}",
+                temp.display()
+            )
+        })?;
     file.write_all(&bytes)
         .and_then(|_| file.write_all(b"\n"))
         .and_then(|_| file.sync_data())
-        .map_err(|error| format!("DISPATCH_ACKNOWLEDGE_WRITE_FAILED path={} error={error}", temp.display()))?;
+        .map_err(|error| {
+            format!(
+                "DISPATCH_ACKNOWLEDGE_WRITE_FAILED path={} error={error}",
+                temp.display()
+            )
+        })?;
     fs::rename(&temp, &path)
         .map_err(|error| format!("DISPATCH_ACKNOWLEDGE_RENAME_FAILED pane={pane} error={error}"))
 }
@@ -4255,10 +4349,12 @@ fn sender_from_verified_pane(identity: &PaneIdentity) -> Result<AgentName, Strin
             identity.pane_id
         ));
     }
-    identity
-        .agent_name
-        .clone()
-        .ok_or_else(|| format!("SENDER_IDENTITY_REFUSED pane={} reason=agent_name_missing", identity.pane_id))
+    identity.agent_name.clone().ok_or_else(|| {
+        format!(
+            "SENDER_IDENTITY_REFUSED pane={} reason=agent_name_missing",
+            identity.pane_id
+        )
+    })
 }
 
 /// Resolve TMUX_PANE through the existing K0 kernel immediately before sending.
@@ -4749,7 +4845,12 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         Ok(0) => {}
         Ok(steps) => println!("SPINE_COMPLETIONS_RECORDED steps={steps}"),
         Err(error) => {
-            write_heartbeat(config, tick, "SPINE_RECONCILE_DEGRADED", &one_line_detail(&error))?;
+            write_heartbeat(
+                config,
+                tick,
+                "SPINE_RECONCILE_DEGRADED",
+                &one_line_detail(&error),
+            )?;
             println!("SPINE_RECONCILE_DEGRADED {}", one_line_detail(&error));
         }
     }
@@ -4854,9 +4955,11 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     // dispatchable. Before this, a marker naming one pane refused every pane.
     if !marker_blocked_panes.is_empty() {
         let before = observation.panes.len();
-        observation
-            .panes
-            .retain(|pane| !marker_blocked_panes.iter().any(|held| held == &pane.pane_id));
+        observation.panes.retain(|pane| {
+            !marker_blocked_panes
+                .iter()
+                .any(|held| held == &pane.pane_id)
+        });
         println!(
             "MARKER_PANE_WITHHELD tick={tick} session={} panes=[{}] panes_before={before} panes_after={}",
             config.session,
@@ -4934,8 +5037,9 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     let triage_args = vec!["--robot-triage".to_owned()];
     let mut bead_ids = match invoke(cx, config, &config.bv, &triage_args).await {
         Ok(output) => {
-            let triage = require_success(&config.bv, output)
-                .map_err(|error| format!("QUEUE_UNRANKED owner=josh next_action=repair-bv: {error}"))?;
+            let triage = require_success(&config.bv, output).map_err(|error| {
+                format!("QUEUE_UNRANKED owner=josh next_action=repair-bv: {error}")
+            })?;
             let insights_args = vec!["--robot-insights".to_owned()];
             let insights_output = invoke(cx, config, &config.bv, &insights_args)
                 .await
@@ -4945,8 +5049,8 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             let insights = require_success(&config.bv, insights_output).map_err(|error| {
                 format!("QUEUE_UNRANKED owner=josh next_action=repair-bv-insights: {error}")
             })?;
-            let jsonl = fs::read_to_string(config.repo.join(".beads/issues.jsonl"))
-                .unwrap_or_default();
+            let jsonl =
+                fs::read_to_string(config.repo.join(".beads/issues.jsonl")).unwrap_or_default();
             let order = loop_queue_filter::select::select_dispatch_order_with_pagerank(
                 &triage,
                 &ready_ids,
@@ -5029,9 +5133,13 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         &observation.panes,
         &observation.queue,
     );
+    let mut hold_intent = cross_pane_hold::HoldIntent::Work;
     let mut decision = decide(&observation, &authorization);
+
     if matches!(&decision, SupervisorDecision::Dispatch { .. }) {
         if let Some(claim) = gate_peer_grading(config, &mut observation, tick)? {
+            hold_intent = cross_pane_hold::HoldIntent::Grade;
+
             refuse_placeholder_identity("bead", &claim.bead)?;
             refuse_placeholder_identity("receiver_pane", &claim.receiver_pane)?;
             refuse_placeholder_identity("grader_pane", &claim.grader_pane)?;
@@ -5109,7 +5217,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                 Some(id) => id,
                 None if skipped.is_empty() => {
                     return Err(
-                        "QUEUE_UNREADABLE ready count changed before bead selection".to_owned(),
+                        "QUEUE_UNREADABLE ready count changed before bead selection".to_owned()
                     );
                 }
                 None => return Ok(()),
@@ -5135,11 +5243,21 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                 .cloned()
                 .ok_or_else(|| format!("DISPATCH_PREFLIGHT_REFUSED bead={bead} pane={pane} observation_row_missing"))?;
             let mut spine = ack_spine::ledger::StepLedger::new();
-            emit_step(cx, &mut spine, StepKind::BeadSelected, bead, &pane, config, "selected from the bv-ordered ready queue").await?;
+            emit_step(
+                cx,
+                &mut spine,
+                StepKind::BeadSelected,
+                bead,
+                &pane,
+                config,
+                "selected from the bv-ordered ready queue",
+            )
+            .await?;
             let identities = load_identity_registries(cx, config).await?;
             let dispatch_result = async {
                 let (snapshot, receiver_agent) =
-                    prepare_bead_dispatch(cx, config, &pane, &pane_observation, bead, &identities, tick, true).await?;
+                    prepare_bead_dispatch(cx, config, &pane, &pane_observation, bead, &identities, tick, true, hold_intent).await?;
+
                 let dispatch_epoch = now_unix() as i64;
                 write_dispatch_intent(config, &pane, bead)?;
                 emit_step(cx, &mut spine, StepKind::FenceChecked, bead, &pane, config, "per-pane dispatch fence passed; intent written").await?;
@@ -5775,8 +5893,8 @@ fn main() -> std::process::ExitCode {
             return std::process::ExitCode::from(2);
         }
         let outcome = runtime.block_on(async {
-            let cx = Cx::current()
-                .ok_or_else(|| "SUPERVISOR_REFUSED no runtime context".to_owned())?;
+            let cx =
+                Cx::current().ok_or_else(|| "SUPERVISOR_REFUSED no runtime context".to_owned())?;
             run_peer_grade_claim(&cx, &config, &grader_pane).await
         });
         return match outcome {
@@ -5790,8 +5908,8 @@ fn main() -> std::process::ExitCode {
 
     if let Some(request) = dispatch_request {
         let outcome = runtime.block_on(async {
-            let cx = Cx::current()
-                .ok_or_else(|| "SUPERVISOR_REFUSED no runtime context".to_owned())?;
+            let cx =
+                Cx::current().ok_or_else(|| "SUPERVISOR_REFUSED no runtime context".to_owned())?;
             render_dispatch_command(&cx, &config, &request).await
         });
         return match outcome {
@@ -5808,8 +5926,8 @@ fn main() -> std::process::ExitCode {
 
     if let Some(request) = close_request {
         let outcome = runtime.block_on(async {
-            let cx = Cx::current()
-                .ok_or_else(|| "SUPERVISOR_REFUSED no runtime context".to_owned())?;
+            let cx =
+                Cx::current().ok_or_else(|| "SUPERVISOR_REFUSED no runtime context".to_owned())?;
             Ok::<CloseReadback, String>(
                 close_and_read_back(&cx, &config, &request.bead, &request.reason).await,
             )
@@ -5952,11 +6070,17 @@ mod tests {
     #[test]
     fn sections_present_but_assembly_missing_still_refuses() {
         // The REAL defect this gate exists for. Must keep refusing.
-        let (_g, config) = shape_fixture(&[("01-intro.md", "a section body long enough to probe")], None);
+        let (_g, config) = shape_fixture(
+            &[("01-intro.md", "a section body long enough to probe")],
+            None,
+        );
         match docs_are_stale(&config) {
             Ok(DocsVerdict::Stale(why)) => {
                 assert!(why.contains("assembly absent"), "{why}");
-                assert!(why.contains("1 numbered sections") || why.contains("while 1"), "{why}");
+                assert!(
+                    why.contains("1 numbered sections") || why.contains("while 1"),
+                    "{why}"
+                );
             }
             other => panic!("sections without an assembly must be Stale, got {other:?}"),
         }
@@ -5977,7 +6101,8 @@ mod tests {
     fn stale_content_is_detected_and_fresh_content_is_not() {
         let body = "this is the section body, long enough that the 240-char probe is non-empty";
         // FRESH: the section's bytes appear in the assembly.
-        let (_g1, fresh) = shape_fixture(&[("01-a.md", body)], Some(&format!("preamble\n{body}\n")));
+        let (_g1, fresh) =
+            shape_fixture(&[("01-a.md", body)], Some(&format!("preamble\n{body}\n")));
         assert!(
             matches!(docs_are_stale(&fresh), Ok(DocsVerdict::Fresh)),
             "a section contained in the assembly is Fresh"
@@ -5985,7 +6110,9 @@ mod tests {
         // STALE, fires-on-known-bad: same shape, section NOT in the assembly.
         let (_g2, stale) = shape_fixture(&[("01-a.md", body)], Some("preamble only\n"));
         match docs_are_stale(&stale) {
-            Ok(DocsVerdict::Stale(why)) => assert!(why.contains("01-a.md"), "must NAME the section: {why}"),
+            Ok(DocsVerdict::Stale(why)) => {
+                assert!(why.contains("01-a.md"), "must NAME the section: {why}")
+            }
             other => panic!("a section missing from the assembly must be Stale, got {other:?}"),
         }
     }
@@ -6027,7 +6154,18 @@ mod tests {
         runtime.block_on(async {
             let cx = Cx::current().expect("runtime context");
             let identities = test_identity_registries();
-            prepare_bead_dispatch(&cx, config, pane, &pane_observation, bead, &identities, tick, claim_enabled).await
+            prepare_bead_dispatch(
+                &cx,
+                config,
+                pane,
+                &pane_observation,
+                bead,
+                &identities,
+                tick,
+                claim_enabled,
+                cross_pane_hold::HoldIntent::Work,
+            )
+            .await
         })
     }
 
@@ -6129,7 +6267,6 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
         assert_eq!(observation.panes[0].liveness, "UNPROVEN");
         assert!(observation.panes[0].is_free_capacity);
         assert!(!observation.panes[0].is_dispatchable);
-
     }
 
     #[test]
@@ -6367,9 +6504,7 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
     #[test]
     fn receiver_observation_missing_clears_the_marker_ack_wait_does_not() {
         assert_eq!(
-            intent_clear_reason(
-                "RECEIVER_OBSERVATION_MISSING pane=%1413 identity row absent"
-            ),
+            intent_clear_reason("RECEIVER_OBSERVATION_MISSING pane=%1413 identity row absent"),
             Some("RECEIVER_OBSERVATION_MISSING"),
             "d6q2: missing receiver observation must not latch"
         );
@@ -6440,12 +6575,7 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
         let root = temp.path().to_path_buf();
         let mut config = fixture_config(root.join("heartbeat.jsonl"));
         config.pending_dispatch = root.join("pending");
-        let path = plant_intent(
-            &config,
-            "%1413",
-            "omp-orchestrator-first-bead",
-            now_unix(),
-        );
+        let path = plant_intent(&config, "%1413", "omp-orchestrator-first-bead", now_unix());
         let MarkerFence::Proceed(outcome) = process_pending_markers(&config, 1).unwrap() else {
             panic!("fresh marker must stay Live, not StopUndatable");
         };
@@ -6479,10 +6609,15 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
         assert_ne!(v.status_word(), "DISPATCH_FAILED");
         let pending = DispatchVerdict::AckPending {
             after_secs: 90,
-            discriminator: " discriminator=ACK_PENDING_WORKER_BUSY discriminator_reason=NONE owes_human=false".to_owned(),
+            discriminator:
+                " discriminator=ACK_PENDING_WORKER_BUSY discriminator_reason=NONE owes_human=false"
+                    .to_owned(),
         };
         assert_eq!(pending.status_word(), "ACK_PENDING");
-        assert_eq!(DispatchVerdict::Failed("TIMEOUT program=tmux".into()).status_word(), "DISPATCH_FAILED");
+        assert_eq!(
+            DispatchVerdict::Failed("TIMEOUT program=tmux".into()).status_word(),
+            "DISPATCH_FAILED"
+        );
     }
 
     #[test]
@@ -6502,12 +6637,18 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
         .unwrap() else {
             panic!("late ACK on Live must Proceed");
         };
-        assert!(!path.exists(), "ACK_RECEIVED_LATE must clear the live marker");
+        assert!(
+            !path.exists(),
+            "ACK_RECEIVED_LATE must clear the live marker"
+        );
         assert!(outcome.blocked_panes.is_empty(), "{outcome:?}");
         assert_eq!(outcome.cleared[0].2, "ACK_RECEIVED_LATE");
         let heartbeat = std::fs::read_to_string(&config.heartbeat_ledger).unwrap();
         assert!(heartbeat.contains("ACK_RECEIVED_LATE"), "{heartbeat}");
-        assert!(!heartbeat.contains("DISPATCH_INTENT_EXPIRED"), "{heartbeat}");
+        assert!(
+            !heartbeat.contains("DISPATCH_INTENT_EXPIRED"),
+            "{heartbeat}"
+        );
     }
 
     #[test]
@@ -6527,11 +6668,17 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
         .unwrap() else {
             panic!("late ACK on Expired must Proceed");
         };
-        assert!(!path.exists(), "ACK_RECEIVED_LATE must clear the expired marker");
+        assert!(
+            !path.exists(),
+            "ACK_RECEIVED_LATE must clear the expired marker"
+        );
         assert_eq!(outcome.cleared[0].2, "ACK_RECEIVED_LATE");
         let heartbeat = std::fs::read_to_string(&config.heartbeat_ledger).unwrap();
         assert!(heartbeat.contains("ACK_RECEIVED_LATE"), "{heartbeat}");
-        assert!(!heartbeat.contains("DISPATCH_INTENT_EXPIRED"), "{heartbeat}");
+        assert!(
+            !heartbeat.contains("DISPATCH_INTENT_EXPIRED"),
+            "{heartbeat}"
+        );
     }
 
     #[test]
@@ -6594,11 +6741,8 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
             send_ts > close_ts,
             "q8zl only: send timestamp must be later than close"
         );
-        let err = refuse_terminal_status_at_send(
-            "omp-orchestrator-plan-12-ibpa.11",
-            "closed",
-        )
-        .expect_err("closed at send must refuse, not transmit");
+        let err = refuse_terminal_status_at_send("omp-orchestrator-plan-12-ibpa.11", "closed")
+            .expect_err("closed at send must refuse, not transmit");
         assert!(err.contains("STALE_QUEUE_SNAPSHOT"), "{err}");
         assert!(err.contains("status=closed"), "{err}");
         assert!(err.contains("omp-orchestrator-plan-12-ibpa.11"), "{err}");
@@ -6618,7 +6762,6 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
         assert!(err.contains("STALE_QUEUE_SNAPSHOT"), "{err}");
         assert!(err.contains("status=blocked"), "{err}");
     }
-
 
     #[test]
     fn open_acceptance_bearing_bead_is_not_refused_at_send() {
@@ -6715,9 +6858,6 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
         assert_eq!(live.pending_dispatch_max_age, Duration::from_secs(120));
     }
 
-
-
-
     #[test]
     fn acknowledged_dispatch_marker_clears_only_on_next_cycle() {
         let temp = tempfile::tempdir().expect("acknowledged marker tempdir");
@@ -6733,7 +6873,10 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
 
         record_successful_dispatch(&config, 1, "%1413", "omp-orchestrator-success-bead")
             .expect("success must acknowledge marker");
-        assert!(path.exists(), "acknowledgment must retain the marker for the next cycle");
+        assert!(
+            path.exists(),
+            "acknowledgment must retain the marker for the next cycle"
+        );
         assert!(
             matches!(
                 read_pending_dispatches(&config)
@@ -6748,13 +6891,19 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
         let MarkerFence::Proceed(outcome) = process_pending_markers(&config, 1).unwrap() else {
             panic!("acknowledged marker must proceed after clearing");
         };
-        assert_eq!(outcome.cleared, vec![(
-            "%1413".to_owned(),
-            "omp-orchestrator-success-bead".to_owned(),
-            "ACKNOWLEDGED",
-        )]);
+        assert_eq!(
+            outcome.cleared,
+            vec![(
+                "%1413".to_owned(),
+                "omp-orchestrator-success-bead".to_owned(),
+                "ACKNOWLEDGED",
+            )]
+        );
         assert!(outcome.blocked_panes.is_empty());
-        assert!(!path.exists(), "next cycle must clear the acknowledged marker");
+        assert!(
+            !path.exists(),
+            "next cycle must clear the acknowledged marker"
+        );
     }
 
     #[test]
@@ -6822,19 +6971,90 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
     }
 
     #[test]
+    fn pending_dispatch_default_is_session_scoped() {
+        let hb = PathBuf::from("/state/flywheel/omp-orchestrator-control-plane.heartbeat.jsonl");
+        let a = default_pending_dispatch(&hb, "control-plane");
+        let b = default_pending_dispatch(&hb, "omp-orchestrator");
+        assert_ne!(a, b, "distinct sessions must not share pending-dispatch");
+        assert!(
+            a.ends_with("omp-orchestrator-control-plane.pending-dispatch"),
+            "{}",
+            a.display()
+        );
+        assert!(
+            b.ends_with("omp-orchestrator-omp-orchestrator.pending-dispatch"),
+            "{}",
+            b.display()
+        );
+    }
+
+    #[test]
+    fn second_session_refuses_reusing_session_a_fixed_pending_path() {
+        let shared = PathBuf::from("/home/josh/.local/state/flywheel/omp-orchestrator.pending-dispatch");
+        let error = refuse_session_path_collision(
+            "B",
+            &[("pending_dispatch", shared.as_path())],
+        )
+        .expect_err("session B must not reuse the unscoped basename");
+        assert!(
+            error.starts_with("SESSION_PATH_COLLISION"),
+            "{error}"
+        );
+        assert!(
+            error.contains("path=/home/josh/.local/state/flywheel/omp-orchestrator.pending-dispatch"),
+            "{error}"
+        );
+        assert!(error.contains("session=B"), "{error}");
+    }
+
+    #[test]
+    fn session_path_collision_empty_scan_is_error() {
+        let error = refuse_session_path_collision("B", &[]).expect_err("empty");
+        assert!(
+            error.contains("empty scan set"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn two_sessions_in_one_home_get_distinct_pending_dispatch_paths() {
+        assert!(
+            std::env::var_os("OMP_PENDING_DISPATCH").is_none(),
+            "this test measures the default path; OMP_PENDING_DISPATCH overrides it"
+        );
+        let a = Config::from_args(&["--session".to_owned(), "control-plane".to_owned()]).unwrap();
+        let b =
+            Config::from_args(&["--session".to_owned(), "omp-orchestrator".to_owned()]).unwrap();
+        assert_ne!(
+            a.pending_dispatch, b.pending_dispatch,
+            "{} vs {}",
+            a.pending_dispatch.display(),
+            b.pending_dispatch.display()
+        );
+        refuse_session_path_collision(
+            "control-plane",
+            &[
+                ("tick_monitor_state", a.tick_monitor_state.as_path()),
+                ("pending_dispatch", a.pending_dispatch.as_path()),
+            ],
+        )
+        .expect("session A keys must be clean");
+    }
+
+
+
+    #[test]
     fn two_configs_different_sessions_resolve_different_state_paths() {
         assert!(
             std::env::var_os("OMP_TICK_MONITOR_STATE").is_none(),
             "this test measures the default path; OMP_TICK_MONITOR_STATE overrides it"
         );
         let a = Config::from_args(&["--session".to_owned(), "control-plane".to_owned()]).unwrap();
-        let b = Config::from_args(&[
-            "--session".to_owned(),
-            "omp-orchestrator".to_owned(),
-        ])
-        .unwrap();
+        let b =
+            Config::from_args(&["--session".to_owned(), "omp-orchestrator".to_owned()]).unwrap();
         assert_ne!(
-            a.tick_monitor_state, b.tick_monitor_state,
+            a.tick_monitor_state,
+            b.tick_monitor_state,
             "different sessions must not share capture state: {} vs {}",
             a.tick_monitor_state.display(),
             b.tick_monitor_state.display()
@@ -6854,7 +7074,6 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
             "identical sessions collide on one path"
         );
     }
-
 
     #[test]
     fn unknown_positional_is_refused() {
@@ -7272,14 +7491,18 @@ exit 2
             awaits_human: false,
         };
 
-        let error = run_prepare_for_test_with_observation(
-            &config, "%1408", pane, bead, 17, true,
-        )
-        .expect_err("one capture must refuse before tracker claim");
+        let error = run_prepare_for_test_with_observation(&config, "%1408", pane, bead, 17, true)
+            .expect_err("one capture must refuse before tracker claim");
         assert!(error.contains("DISPATCH_PREFLIGHT_REFUSED"), "{error}");
         assert!(error.contains("SingleCaptureLiveness"), "{error}");
-        assert!(!state.exists(), "preflight refusal must not mutate tracker state");
-        assert!(!args.exists(), "preflight refusal must not invoke br update");
+        assert!(
+            !state.exists(),
+            "preflight refusal must not mutate tracker state"
+        );
+        assert!(
+            !args.exists(),
+            "preflight refusal must not invoke br update"
+        );
     }
     #[test]
     fn disabling_supervisor_claim_preserves_known_bad_refusal() {
@@ -7583,10 +7806,6 @@ exit 2
         assert_eq!(dispatch_status_word(owed), "DISPATCH_FAILED");
     }
 
-
-
-
-
     /// KNOWN-BAD: the verbatim `dmpv` line must not say `DISPATCH_FAILED`.
     ///
     /// Measured on the live loop 2026-09-05 at `tick=2`. The packet had landed — bead
@@ -7669,7 +7888,9 @@ exit 2
             .expect("pane-one result report");
 
         let args = std::fs::read_to_string(capture).expect("captured ntm args");
-        assert!(args.lines().any(|line| line == tick_monitor::ntm_send_arg("test-session")));
+        assert!(args
+            .lines()
+            .any(|line| line == tick_monitor::ntm_send_arg("test-session")));
         assert!(args.lines().any(|line| line == "--panes=1"));
         assert!(args.lines().any(|line| line.contains("DISPATCH_RESULT")));
         let heartbeat = std::fs::read_to_string(heartbeat).expect("heartbeat");
@@ -7904,7 +8125,8 @@ exit 2
 
     #[test]
     fn a_plain_timeout_envelope_is_not_fd_exhaustion() {
-        let envelope = r#"{"class":"timeout","error":{"type":"timeout","message":"deadline exceeded"}}"#;
+        let envelope =
+            r#"{"class":"timeout","error":{"type":"timeout","message":"deadline exceeded"}}"#;
         assert_eq!(
             classify_mail_envelope_status(envelope),
             "DISPATCH_RESULT_MAIL_TIMED_OUT"
@@ -7919,7 +8141,6 @@ exit 2
             operation: "send_message".to_owned(),
         }));
     }
-
 
     #[test]
     fn the_durable_notification_degrades_without_erasing_the_dispatch_record() {
@@ -8115,8 +8336,7 @@ exit 2
         let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
         let result = runtime.block_on(async {
             let cx = Cx::current().expect("runtime context");
-            close_and_read_back(&cx, &config, "bead", "prose reason")
-                .await
+            close_and_read_back(&cx, &config, "bead", "prose reason").await
         });
         match result {
             CloseReadback::PolicyRefused { refusal } => {
@@ -8139,10 +8359,14 @@ exit 2
         let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
         let result = runtime.block_on(async {
             let cx = Cx::current().expect("runtime context");
-            close_and_read_back(&cx, &config, "bead", "DONE: verified")
-                .await
+            close_and_read_back(&cx, &config, "bead", "DONE: verified").await
         });
-        assert_eq!(result, CloseReadback::Closed { status: "closed".to_owned() });
+        assert_eq!(
+            result,
+            CloseReadback::Closed {
+                status: "closed".to_owned()
+            }
+        );
     }
 
     #[test]
@@ -8157,8 +8381,7 @@ exit 2
         let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
         let result = runtime.block_on(async {
             let cx = Cx::current().expect("runtime context");
-            close_and_read_back(&cx, &config, "bead", "DONE: verified")
-                .await
+            close_and_read_back(&cx, &config, "bead", "DONE: verified").await
         });
         match result {
             CloseReadback::Unread { detail } => {
@@ -8250,7 +8473,8 @@ Stop: now
             is_working: false,
             awaits_human: false,
         };
-        let packet = "Objective: x\nTarget: y\nScope:\nreal\nAcceptance:\nrun\nDone: exit 0\nStop: now\n";
+        let packet =
+            "Objective: x\nTarget: y\nScope:\nreal\nAcceptance:\nrun\nDone: exit 0\nStop: now\n";
         authorize_dispatch_preflight(&pane, packet, "bead", "%7")
             .expect("retained two-capture evidence and complete packet must authorize");
     }
@@ -8263,13 +8487,15 @@ Stop: now
         ));
     }
     #[test]
-    fn peer_grade_claim_blocks_new_work_until_a_distinct_pane_is_named() {
+    fn peer_grade_assignment_uses_any_idle_non_author_without_reservation() {
+
         let (temp, config) = isolated_fixture_config();
         std::fs::create_dir_all(config.repo.join(".beads")).unwrap();
         std::fs::write(
             config.repo.join(".beads/issues.jsonl"),
-            r#"{"id":"peer-bead","status":"in_progress"}
+            r#"{"id":"peer-bead","status":"in_progress","assignee":"pane3-%1409","comments":[{"author":"pane3-%1409","text":"DONE peer work"}]}
 "#,
+
         )
         .unwrap();
         let now_ms = now_unix().saturating_mul(1_000);
@@ -8393,7 +8619,10 @@ Stop: now
         );
         let heartbeat = std::fs::read_to_string(&config.heartbeat_ledger).expect("skip heartbeat");
         assert!(heartbeat.contains("PEER_GRADING_SKIPPED"), "{heartbeat}");
-        assert!(heartbeat.contains("reason=no_distinct_idle_peer"), "{heartbeat}");
+        assert!(
+            heartbeat.contains("reason=no_distinct_idle_peer"),
+            "{heartbeat}"
+        );
 
         let claim = gate_peer_grading(&config, &mut observation, 77)
             .unwrap()
@@ -8401,16 +8630,16 @@ Stop: now
         assert_eq!(claim.bead, "peer-bead");
         assert_eq!(claim.receiver_pane, "%1409");
         assert_eq!(claim.grader_pane, "%1414");
-        assert_eq!(
+        assert!(
             LifecycleLedger::active_grading_panes(
                 &config.bead_lifecycle_ledger,
                 config.repo.join(".beads/issues.jsonl"),
             )
             .unwrap()
-            .into_iter()
-            .collect::<Vec<_>>(),
-            vec!["%1414".to_owned()]
+            .is_empty(),
+            "selecting a grade must not create a pane-pinned reservation"
         );
+
 
         assert!(
             observation.panes.iter().any(|pane| pane.pane_id == "%1414"),
@@ -8426,16 +8655,19 @@ Stop: now
         };
         let again = gate_peer_grading(&config, &mut still_idle, 78)
             .unwrap()
-            .expect("outstanding idle grade must stay dispatchable");
+            .expect("the same candidate remains gradeable without a reservation");
         assert_eq!(again.bead, "peer-bead");
-        assert!(!again.bead.contains('<'), "placeholder bead={:?}", again.bead);
+        assert!(
+            !again.bead.contains('<'),
+            "placeholder bead={:?}",
+            again.bead
+        );
         assert_eq!(again.grader_pane, "%1414");
-        let err = refuse_placeholder_identity("bead", "<active-peer-grade>")
-            .expect_err("placeholder");
+        let err =
+            refuse_placeholder_identity("bead", "<active-peer-grade>").expect_err("placeholder");
         assert!(err.contains("reason=placeholder_identity"), "{err}");
         drop(temp);
     }
-
 
     #[test]
     fn grade_claim_parser_requires_the_claim_flag() {
@@ -8448,17 +8680,22 @@ Stop: now
         .expect("valid grade claim syntax")
         .expect("grade claim request");
         assert_eq!(request, vec!["--repo".to_owned(), "/repo".to_owned()]);
-        let error = parse_grade_claim_args(&["grade".to_owned()])
-            .expect_err("bare grade must refuse");
+        let error =
+            parse_grade_claim_args(&["grade".to_owned()]).expect_err("bare grade must refuse");
         assert!(error.contains("--claim"), "{error}");
     }
 
     #[test]
     fn empty_peer_candidate_is_a_typed_outcome_not_success() {
-        assert_eq!(peer_grade_outcome_wire(&PeerGradeCommandOutcome::NoCandidate), "PEER_GRADE_EMPTY");
-        assert_eq!(peer_grade_outcome_wire(&PeerGradeCommandOutcome::ActivePeerGrade), "PEER_GRADE_ACTIVE");
+        assert_eq!(
+            peer_grade_outcome_wire(&PeerGradeCommandOutcome::NoCandidate),
+            "PEER_GRADE_EMPTY"
+        );
+        assert_eq!(
+            peer_grade_outcome_wire(&PeerGradeCommandOutcome::ActivePeerGrade),
+            "PEER_GRADE_ACTIVE"
+        );
     }
-
 
     #[test]
     fn verified_live_pane_identity_supplies_sender() {
@@ -8501,8 +8738,7 @@ Stop: now
 
     #[test]
     fn admit_immediately_before_send_admits_live_pane() {
-        admit_immediately_before_send("omp-orchestrator", "%9")
-            .expect("live occupancy must admit");
+        admit_immediately_before_send("omp-orchestrator", "%9").expect("live occupancy must admit");
     }
 
     #[test]
@@ -8530,10 +8766,7 @@ Stop: now
             marker_pid: Some(std::process::id() as u32),
         };
         match admit_at_send(&occupancy, &presented, std::process::id() as u32) {
-            Err(pane_dispatch_fence::AdmissionRefusal::StaleIncarnation {
-                presented,
-                current,
-            }) => {
+            Err(pane_dispatch_fence::AdmissionRefusal::StaleIncarnation { presented, current }) => {
                 assert_eq!(presented, first);
                 assert_eq!(current, second);
             }
@@ -8544,11 +8777,19 @@ Stop: now
     #[test]
     fn selected_event_key_changes_across_runs_and_preserves_same_run_replay() {
         let first = selected_event_key_for_run("omp-orchestrator-eg0m", 2, "build-a:pid101:start1");
-        let second = selected_event_key_for_run("omp-orchestrator-eg0m", 2, "build-a:pid202:start2");
-        let replay = selected_event_key_for_run("omp-orchestrator-eg0m", 2, "build-a:pid101:start1");
+        let second =
+            selected_event_key_for_run("omp-orchestrator-eg0m", 2, "build-a:pid202:start2");
+        let replay =
+            selected_event_key_for_run("omp-orchestrator-eg0m", 2, "build-a:pid101:start1");
 
-        assert_ne!(first, second, "fresh runs must not collide at the same tick");
-        assert_eq!(first, replay, "same-run duplicate selection must remain idempotent");
+        assert_ne!(
+            first, second,
+            "fresh runs must not collide at the same tick"
+        );
+        assert_eq!(
+            first, replay,
+            "same-run duplicate selection must remain idempotent"
+        );
         assert!(first.contains(":selected:build-a:pid101:start1:2"));
         assert!(second.contains(":selected:build-a:pid202:start2:2"));
     }
