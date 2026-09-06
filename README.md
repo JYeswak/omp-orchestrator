@@ -178,7 +178,7 @@ it makes the choice visible, it does not force a rewrite.
 1. **No `.sh`, no `.py`.** A Rust gate walks `git ls-files` and refuses either extension. It lands
    *before* the first crate is copied, because a gate that arrives after the mess gets weakened to
    make the build pass. Planted known-bad both directions plus a mutation leg.
-2. **`#![forbid(unsafe_code)]` in every crate.** Measured 2026-09-06: **74 of 78** workspace
+2. **`#![forbid(unsafe_code)]` in every crate.** Measured 2026-09-06 from `NUMBERS.toml` authorities: **74 of 81** workspace
    crates carry `unsafe_code = "forbid"` in `Cargo.toml` (authority: `NUMBERS.toml`
    `[figures.crates_forbidding_unsafe]` + `cargo metadata --format-version 1 --no-deps --offline`).
    A crate that will not compile under the lint is a finding, not a reason to drop the lint.
