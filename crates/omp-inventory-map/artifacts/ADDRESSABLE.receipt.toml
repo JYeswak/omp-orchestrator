@@ -1,0 +1,24 @@
+# ADDRESSABLE receipt for omp-inventory-map --help
+# Bead: omp-orchestrator-plan-04-7wn9.1
+#
+# Measured on the worktree that lands this file. `git_head_at_measurement` is
+# HEAD *before* this commit; re-run the command after landing to refresh.
+
+command = "cargo run -q -p omp-inventory-map --offline -- --help"
+exit = 0
+output_bytes = 649
+output_sha256 = "b5d1f2ca13f59ea6d9fe8542d012ce61b7e9e0dfe678ac6340dfcc279221bf95"
+git_head_at_measurement = "8092bafb40d048c50ee8145b77b2a16805838c5a"
+contains_doctor = true
+schema_version = "omp-inventory-map/v1"
+run_command = "doctor"
+
+[types]
+command = "cargo run -q -p omp-inventory-map --offline -- types --repo ."
+observation_count = 37
+exit = 2
+note = "exit 2 is the type-collision REFUSED envelope; Observation count > 0 is the ADDRESSABLE observability bar"
+
+[cli_contract]
+command = "cargo test -p omp-inventory-map --offline --test cli_contract"
+expect_exit = 0

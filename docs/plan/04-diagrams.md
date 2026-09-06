@@ -270,6 +270,9 @@ gate is a slower death than no gate at all. A full four-leg row raises the floor
 of defect; it never guarantees the class is absent.
 
 **HISTORICAL ADDRESSABILITY SNAPSHOT.** The old --help refusal, 13-test count, and 544,697-byte output below were measured before the retained artifact update. Current source has 28 test markers and the current debug --help probe emits 158 bytes at exit 1. No current ADDRESSABLE pass is claimed without a retained command/output/revision receipt.
+
+**CURRENT ADDRESSABLE (bead `omp-orchestrator-plan-04-7wn9.1`).** `omp-inventory-map --help` is a versioned JSON envelope, exit 0, names `doctor`. Receipt: `crates/omp-inventory-map/artifacts/ADDRESSABLE.receipt.toml`. This is the Diagram 4 / 06 gate-leg ADDRESSABLE column for this crate; other diagram nodes stay unmeasured.
+
 A sixth required property fell out of this session and is not in the table because
 nothing measures it yet: **ADDRESSABLE**. `omp-inventory-map --help` returns
 `{"status":"ERROR","error":"CONFIG_ERROR unknown argument --help"}`. The gate is

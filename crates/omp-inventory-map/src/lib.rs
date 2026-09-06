@@ -12,6 +12,8 @@
 
 pub mod types_inventory;
 pub mod census_invariants;
+pub mod addressable;
+
 
 use asupersync::Cx;
 use asupersync::process::{

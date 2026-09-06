@@ -2,6 +2,7 @@
 
 use asupersync::runtime::RuntimeBuilder;
 use asupersync::types::Budget;
+use omp_inventory_map::addressable;
 use omp_inventory_map::census_invariants::{
     CensusInvariantError, CensusInvariantRow, check_census_invariants,
 };
@@ -28,13 +29,18 @@ impl Arguments {
         let mut config = ProbeConfig::default();
         let mut first = true;
         while let Some(value) = values.next() {
+            if value == "--help" || value == "-h" {
+                command = "help".to_owned();
+                first = false;
+                continue;
+            }
             if value == "--json" {
                 continue;
             }
             if first
                 && matches!(
                     value.as_str(),
-                    "doctor" | "health" | "audit" | "version" | "types"
+                    "doctor" | "health" | "audit" | "version" | "types" | "help"
                 )
             {
                 command = value;
@@ -106,6 +112,17 @@ fn version() -> Result<(), String> {
         error: None,
     })
 }
+
+fn help() -> Result<(), String> {
+    print_json(&RobotEnvelope {
+        schema_version: SCHEMA_VERSION,
+        command: "help".to_owned(),
+        status: "OK",
+        data: Some(addressable::help_data()),
+        error: None,
+    })
+}
+
 
 fn map_status(map: &InventoryMap) -> &'static str {
     match map.state {
@@ -264,6 +281,13 @@ fn main() -> ExitCode {
             return ExitCode::from(1);
         }
     };
+    if arguments.command == "help" {
+        return if help().is_ok() {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::from(1)
+        };
+    }
     if arguments.command == "version" {
         return if version().is_ok() {
             ExitCode::SUCCESS

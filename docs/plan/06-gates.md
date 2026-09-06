@@ -37,6 +37,14 @@ The historical walk produced 31/409; `00-brief.md` §3.5 records an older 31/406
 | `pre-delete-citation-check` | 6 | 1 | 1 | 0 | 0 |
 | `path-literal-guard` | 3 | 1 | 0 | 0 | 2 |
 
+
+**CURRENT ADDRESSABLE (bead `omp-orchestrator-plan-04-7wn9.1`).** Sixth gate property: `--help` exits 0 and names the run command. Receipt: `crates/omp-inventory-map/artifacts/ADDRESSABLE.receipt.toml`. Other members remain unmeasured here.
+
+| crate | ADDRESSABLE | receipt |
+|---|---|---|
+| `omp-inventory-map` | PASS | `crates/omp-inventory-map/artifacts/ADDRESSABLE.receipt.toml` (`--help` exit 0, sha256 `b5d1f2ca13f59ea6d9fe8542d012ce61b7e9e0dfe678ac6340dfcc279221bf95`, contains `doctor`) |
+| remaining gate crates in this table | unmeasured | — |
+
 **0 of 8 gates mutate production source through the real hook** — the only definition that survives typing. `1 of 8` reaches a real temp tree (`omp-inventory-map`, TREE); `2 of 8` mutate a fixture string; `1 of 8` has an affordance nothing flips (`no-shell-gate`). *This paragraph said `2 of 8 … no-shell-gate and undrained-pipe-lint` until the column was rebuilt on what the mutation ACTS ON rather than what a test is NAMED; see `00-brief.md` §3.5, which moved this headline four times.* **4 of 8 have no mutation leg**: `commit-build-fence`, `kernel-bypass-gate`, `pre-delete-citation-check`, `path-literal-guard`. 4 of 8 have no anti-vacuity leg. 2 of 8 have no known-bad. 1 of 8 has no known-good.
 
 **Historical disagreement with the brief.** `00-brief.md` §3.5 states "1 of 8 gates has all four legs" and "5 of 8 have no mutation leg." Those are historical summary prose and contradict its older table. Recomputing this section's aligned snapshot:
