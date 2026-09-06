@@ -759,6 +759,54 @@ pub fn stage_artifact_stream<R: Read>(
     }
 }
 
+/// L0-ATOMIC-RENAME. Only a complete same-directory staged temp is renamed.
+/// A staged file mutated after verification (length ≠ expected_len) is refused.
+pub fn publish_atomic(
+    staged: &Path,
+    dest: &Path,
+    expected_len: u64,
+) -> Result<(), InstallError> {
+    if staged.parent() != dest.parent() {
+        return Err(InstallError::IoError {
+            path: dest.display().to_string(),
+            detail: "ATOMIC_REFUSED: staged file is not in the destination directory".to_owned(),
+        });
+    }
+    let staged_name = staged
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("");
+    if !staged_name.contains(".staged.") {
+        return Err(InstallError::IoError {
+            path: staged.display().to_string(),
+            detail: "ATOMIC_REFUSED: not a staged temporary".to_owned(),
+        });
+    }
+    let meta = std::fs::metadata(staged).map_err(|error| InstallError::IoError {
+        path: staged.display().to_string(),
+        detail: format!("stat staged failed: {error}"),
+    })?;
+    if meta.len() != expected_len {
+        return Err(InstallError::IoError {
+            path: staged.display().to_string(),
+            detail: format!(
+                "ATOMIC_REFUSED: staged length {} != verified length {expected_len}",
+                meta.len()
+            ),
+        });
+    }
+    if dest.exists() {
+        return Err(InstallError::IoError {
+            path: dest.display().to_string(),
+            detail: "ATOMIC_REFUSED: destination already exists".to_owned(),
+        });
+    }
+    std::fs::rename(staged, dest).map_err(|error| InstallError::IoError {
+        path: dest.display().to_string(),
+        detail: format!("atomic publish failed: {error}"),
+    })?;
+    Ok(())
+}
 pub fn install_binary(
     source: &Path,
     install_dir: &Path,

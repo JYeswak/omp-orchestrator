@@ -1,6 +1,6 @@
 use installer::{
     check_build_fence, classify_restart_postcondition, git_head, git_rev_parse_short,
-    install_binary, resolve_repo_ownership, stage_artifact_stream, verify_identity,
+    install_binary, publish_atomic, resolve_repo_ownership, stage_artifact_stream, verify_identity,
     verify_minisign_policy, InstallError, RepoOwnership, RestartPostcondition,
 };
 use std::fs;
@@ -284,4 +284,47 @@ fn required_minisign_missing_refuses() {
     let error = verify_minisign_policy(false, true, true)
         .expect_err("T04: missing .minisig is refuse not PASS");
     assert!(error.to_string().contains("L0_MINISIGN_REFUSED"));
+}
+
+#[test]
+fn atomic_publication_renames_complete_staged() {
+    let dir = TempDir::new("atomic-publication-complete");
+    let payload = b"complete-publish-bytes";
+    let dest = dir.path().join("installer");
+    let staged = stage_artifact_stream(
+        dir.path(),
+        "installer",
+        payload.as_slice(),
+        payload.len() as u64,
+    )
+    .expect("stage");
+    publish_atomic(&staged, &dest, payload.len() as u64).expect("rename complete staged");
+    assert_eq!(fs::read(&dest).expect("published"), payload);
+    assert!(!staged.exists(), "staged temp must be consumed by rename");
+}
+
+#[test]
+fn atomic_publication_refuses_mutated_staged() {
+    let dir = TempDir::new("atomic-publication-mutated");
+    let payload = b"verified-bytes";
+    let dest = dir.path().join("installer");
+    let staged = stage_artifact_stream(
+        dir.path(),
+        "installer",
+        payload.as_slice(),
+        payload.len() as u64,
+    )
+    .expect("stage");
+    let mut mutated = payload.to_vec();
+    mutated.push(b'X');
+    fs::write(&staged, &mutated).expect("mutate after verification");
+    let error = publish_atomic(&staged, &dest, payload.len() as u64)
+        .expect_err("mutated staged must refuse rename");
+    match error {
+        InstallError::IoError { detail, .. } => {
+            assert!(detail.contains("ATOMIC_REFUSED"), "{detail}");
+        }
+        other => panic!("expected ATOMIC_REFUSED, got {other:?}"),
+    }
+    assert!(!dest.exists(), "partial/mutated dest must not appear");
 }
