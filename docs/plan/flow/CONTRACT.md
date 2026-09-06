@@ -312,3 +312,28 @@ resolution = ""            # filled by the owner: accepted | refuted(with eviden
 ```
 The owner answers every row in the next wave. `refuted` needs evidence the reviewer can re-run;
 `escalated` means Joshua decides. A wave closes when every row has a resolution.
+
+## R3 seventh class — UNBUILT (bead omp-orchestrator-1qzt)
+
+Atlas Arc R3 ships six dispositions: `ASSUME_REVERSIBLY`, `BLOCKS_PLAN`, `DEFER_TO_BEAD`,
+`OUT_OF_SCOPE`, `HUMAN_DECISION`, `BLOCKS_BUILD`. Those six are insufficient for this
+spine. `docs/plan/flow/unknowns/CENSUS.json` measured 177 `[[box.gap]]` rows; **150** have
+a known closer (named bead, `MISSING`+wire, add-fuzz, register-claim). Forcing
+`BLOCKS_PLAN` or `HUMAN_DECISION` onto them manufactures uncertainty and idles panes on
+questions that are not questions.
+
+**UNBUILT** is the seventh class. It is known work, not an unknown. Same shape as
+`DECLARED-UNEXTRACTABLE` and `UNFALSIFIABLE-RUNNER`: fewer buckets than the data.
+The typing function is `docs/plan/flow/unknowns/R3-disposition.mmd` (`UNBUILT seventh`
+on the "named bead / MISSING+wire" arm). Do **not** open an HD row whose question is
+"should we add a fuzz/SLO/claim row".
+
+Census command (re-run, do not copy):
+
+```
+python3 -c 'import json; print(json.load(open("docs/plan/flow/unknowns/CENSUS.json"))["UNBUILT"])'
+```
+
+NO-CLAIM: this records the vocabulary. It does not close `02ai` and does not rewrite
+`boxes/*.toml`.
+
