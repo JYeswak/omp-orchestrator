@@ -30,6 +30,7 @@
 
 pub mod spine_emit;
 pub mod dispatch_packet;
+pub mod cross_pane_hold;
 
 use std::collections::BTreeSet;
 use std::fmt;

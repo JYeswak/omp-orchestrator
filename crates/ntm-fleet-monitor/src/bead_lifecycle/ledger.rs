@@ -100,6 +100,12 @@ impl LifecycleIdentity {
             invoker,
         })
     }
+
+    /// Bead|repo|session|pane|digest|invoker. Pane is in the key, so two panes
+    /// are two identities — callers that need a *bead* hold must collapse by bead.
+    pub fn key(&self) -> String {
+        identity_key(self)
+    }
 }
 
 /// Evidence attached to one transition. Empty evidence is unrepresentable.
@@ -317,6 +323,13 @@ impl std::fmt::Debug for LifecycleLedger {
     }
 }
 
+/// One in-flight lifecycle identity for a bead. Pane may be a placeholder.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InFlightIdentity {
+    pub pane: String,
+    pub identity_key: String,
+}
+
 impl LifecycleLedger {
     /// Start a lifecycle and persist its selected row.
     pub fn start(
@@ -343,6 +356,46 @@ impl LifecycleLedger {
         let row = ledger.row("selected", LifecycleStatus::Selected, &selected, Map::new());
         ledger.append_rows(vec![(selected.id.as_str().to_owned(), row)])?;
         Ok(ledger)
+    }
+
+    /// Latest non-released identity per identity_key for one bead.
+    ///
+    /// identity_key includes pane, so a bead dispatched to %7 and %8 is two
+    /// keys. The cross-pane hold collapses this list. Released statuses
+    /// (closed, blocked, redispatch_required) are omitted so a reaped pane
+    /// does not strand the bead.
+    pub fn in_flight_for_bead(
+        path: impl AsRef<Path>,
+        bead: &str,
+    ) -> Result<Vec<InFlightIdentity>, LedgerError> {
+        let mut latest = BTreeMap::new();
+        for row in read_rows(path.as_ref())? {
+            let identity = row_identity(&row)?;
+            if identity.bead.as_str() != bead {
+                continue;
+            }
+            let status = row_string(&row, "status")?;
+            latest.insert(identity.key(), (identity, status));
+        }
+        let mut out = Vec::new();
+        for (key, (identity, status)) in latest {
+            if matches!(
+                status.as_str(),
+                "closed" | "blocked" | "redispatch_required"
+            ) {
+                continue;
+            }
+            out.push(InFlightIdentity {
+                pane: identity.target.pane.clone(),
+                identity_key: key,
+            });
+        }
+        out.sort_by(|left, right| {
+            left.pane
+                .cmp(&right.pane)
+                .then_with(|| left.identity_key.cmp(&right.identity_key))
+        });
+        Ok(out)
     }
 
     pub fn path(&self) -> &Path {
