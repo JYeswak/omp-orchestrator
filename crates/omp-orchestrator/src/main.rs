@@ -4160,6 +4160,9 @@ fn mail_recipient(config: &Config, pane: &str) -> Result<AgentName, String> {
 /// these into a single "notify failed" row would reproduce the measured
 /// `am agent start` defect, where an auth failure was reported as absence.
 fn mail_failure_row(error: &MailError) -> &'static str {
+    if mail_error_is_fd_exhaustion(error) {
+        return "DISPATCH_RESULT_MAIL_FD_EXHAUSTION";
+    }
     match error {
         MailError::Unreachable { .. } => "DISPATCH_RESULT_MAIL_UNREACHABLE",
         MailError::Unauthorized { .. } => "DISPATCH_RESULT_MAIL_UNAUTHORIZED",
@@ -4176,6 +4179,62 @@ fn mail_failure_row(error: &MailError) -> &'static str {
         }
         MailError::UnexpectedStatus { .. } => "DISPATCH_RESULT_MAIL_UNEXPECTED_STATUS",
     }
+}
+
+/// smcq: daemon fd_exhaustion is a NAMED status, never UNREACHABLE/TIMED_OUT.
+fn mail_error_is_fd_exhaustion(error: &MailError) -> bool {
+    match error {
+        MailError::ToolRefused { kind, message, .. } => {
+            kind.eq_ignore_ascii_case("fd_exhaustion")
+                || message.contains("fd_exhaustion")
+                || message.contains("Too many open files")
+        }
+        MailError::Rpc { message, .. } => {
+            message.contains("fd_exhaustion") || message.contains("Too many open files")
+        }
+        MailError::Protocol { detail }
+        | MailError::Codec { detail }
+        | MailError::Unreachable { detail, .. } => {
+            detail.contains("fd_exhaustion") || detail.contains("Too many open files")
+        }
+        MailError::TimedOut { .. }
+        | MailError::Unauthorized { .. }
+        | MailError::MissingCredential { .. }
+        | MailError::Cancelled(_)
+        | MailError::UnexpectedStatus { .. }
+        | MailError::CursorAhead { .. }
+        | MailError::CursorExpired { .. }
+        | MailError::EmptyCatalogue => false,
+    }
+}
+
+/// Classify a daemon failure envelope. Keys `class` and
+/// `db_error_classification` are the live `am` shape.
+fn classify_mail_envelope_status(envelope: &str) -> &'static str {
+    let Ok(value) = serde_json::from_str::<Value>(envelope) else {
+        return "DISPATCH_RESULT_MAIL_PROTOCOL";
+    };
+    let class = value
+        .get("class")
+        .or_else(|| value.get("db_error_classification"))
+        .or_else(|| value.pointer("/error/type"))
+        .or_else(|| value.pointer("/error/class"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if class.eq_ignore_ascii_case("fd_exhaustion") {
+        return "DISPATCH_RESULT_MAIL_FD_EXHAUSTION";
+    }
+    let message = value
+        .pointer("/error/message")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if message.contains("Too many open files") {
+        return "DISPATCH_RESULT_MAIL_FD_EXHAUSTION";
+    }
+    if class.eq_ignore_ascii_case("timeout") || message.contains("deadline exceeded") {
+        return "DISPATCH_RESULT_MAIL_TIMED_OUT";
+    }
+    "DISPATCH_RESULT_MAIL_PROTOCOL"
 }
 
 /// Send the dispatch result to the receiver as DURABLE mail, then read the
@@ -4690,36 +4749,57 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     let ready = require_success(&config.br, ready_output).map_err(|error| {
         format!("QUEUE_UNREADABLE owner=josh next_action=repair-br-or-escalate: {error}")
     })?;
-    let (ready_ids, ready_priorities) = parse_ready(&ready)?;
+    let (ready_ids, _) = parse_ready(&ready)?;
     let triage_args = vec!["--robot-triage".to_owned()];
     let mut bead_ids = match invoke(cx, config, &config.bv, &triage_args).await {
         Ok(output) => {
             let triage = require_success(&config.bv, output)
                 .map_err(|error| format!("QUEUE_UNRANKED owner=josh next_action=repair-bv: {error}"))?;
+            let insights_args = vec!["--robot-insights".to_owned()];
+            let insights_output = invoke(cx, config, &config.bv, &insights_args)
+                .await
+                .map_err(|error| {
+                    format!("QUEUE_UNRANKED owner=josh next_action=repair-bv-insights: {error}")
+                })?;
+            let insights = require_success(&config.bv, insights_output).map_err(|error| {
+                format!("QUEUE_UNRANKED owner=josh next_action=repair-bv-insights: {error}")
+            })?;
             let jsonl = fs::read_to_string(config.repo.join(".beads/issues.jsonl"))
                 .unwrap_or_default();
-            let order = loop_queue_filter::select::select_dispatch_order_with_priorities(
+            let order = loop_queue_filter::select::select_dispatch_order_with_pagerank(
                 &triage,
                 &ready_ids,
-                &ready_priorities,
+                &insights,
                 &jsonl,
                 &config.receiver_agent,
             )?;
             match order.window {
-                loop_queue_filter::select::RankWindow::RecommendationsOnly => {}
+                loop_queue_filter::select::RankWindow::RecommendationsOnly => {
+                    let detail = format!(
+                        "window={} rank_source=bv.full_stats.pagerank ready={}",
+                        order.window.label(),
+                        ready_ids.len()
+                    );
+                    write_heartbeat(config, tick, "QUEUE_RANK_RECOMMENDATIONS", &detail)?;
+                    println!("QUEUE_RANK_RECOMMENDATIONS {detail}");
+                }
                 window => {
-                    let status = if matches!(window, loop_queue_filter::select::RankWindow::EmptyReady) {
-                        "QUEUE_RANK_WINDOW_EMPTY"
-                    } else {
-                        "QUEUE_RANK_FALLBACK"
+                    let status = match window {
+                        loop_queue_filter::select::RankWindow::EmptyReady => {
+                            "QUEUE_RANK_WINDOW_EMPTY"
+                        }
+                        loop_queue_filter::select::RankWindow::FilteredFiledOnly => {
+                            "QUEUE_RANK_FILTERED_FILED_ONLY"
+                        }
+                        _ => "QUEUE_RANK_FALLBACK",
                     };
-                    write_heartbeat(
-                        config,
-                        tick,
-                        status,
-                        &format!("window={} priority_source=br_ready ready={}", window.label(), ready_ids.len()),
-                    )?;
-                    println!("{status} window={} priority_source=br_ready ready={}", window.label(), ready_ids.len());
+                    let detail = format!(
+                        "window={} rank_source=bv.full_stats.pagerank ready={}",
+                        window.label(),
+                        ready_ids.len()
+                    );
+                    write_heartbeat(config, tick, status, &detail)?;
+                    println!("{status} {detail}");
                 }
             }
             order.ids
@@ -7555,6 +7635,41 @@ exit 2
             })
         );
     }
+
+    #[test]
+    fn fd_exhaustion_envelope_is_a_named_status_not_unreachable_or_timeout() {
+        let envelope = r#"{"class":"fd_exhaustion","db_error_classification":"fd_exhaustion","error":{"type":"fd_exhaustion","message":"Too many open files (os error 24)"}}"#;
+        let status = classify_mail_envelope_status(envelope);
+        assert_eq!(status, "DISPATCH_RESULT_MAIL_FD_EXHAUSTION");
+        assert_ne!(status, "DISPATCH_RESULT_MAIL_UNREACHABLE");
+        assert_ne!(status, "DISPATCH_RESULT_MAIL_TIMED_OUT");
+        let via_error = mail_failure_row(&MailError::ToolRefused {
+            tool: "file_reservation_paths".to_owned(),
+            kind: "fd_exhaustion".to_owned(),
+            message: "Too many open files (os error 24)".to_owned(),
+            recoverable: true,
+        });
+        assert_eq!(via_error, "DISPATCH_RESULT_MAIL_FD_EXHAUSTION");
+    }
+
+    #[test]
+    fn a_plain_timeout_envelope_is_not_fd_exhaustion() {
+        let envelope = r#"{"class":"timeout","error":{"type":"timeout","message":"deadline exceeded"}}"#;
+        assert_eq!(
+            classify_mail_envelope_status(envelope),
+            "DISPATCH_RESULT_MAIL_TIMED_OUT"
+        );
+        assert_eq!(
+            mail_failure_row(&MailError::TimedOut {
+                operation: "send_message".to_owned(),
+            }),
+            "DISPATCH_RESULT_MAIL_TIMED_OUT"
+        );
+        assert!(!mail_error_is_fd_exhaustion(&MailError::TimedOut {
+            operation: "send_message".to_owned(),
+        }));
+    }
+
 
     #[test]
     fn the_durable_notification_degrades_without_erasing_the_dispatch_record() {
