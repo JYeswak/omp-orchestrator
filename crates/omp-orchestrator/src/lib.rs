@@ -34,6 +34,7 @@ pub mod dispatch_packet;
 use std::collections::BTreeSet;
 use std::fmt;
 use std::path::{Path, PathBuf};
+use text_structure::code_only;
 pub mod target_directory;
 
 // ── IDLE_AUTHORIZATION ─────────────────────────────────────────────────────────
@@ -551,10 +552,20 @@ pub const COVERAGE_WAVE_OUTPUT_CRATES: &[&str] = &[
 ];
 
 impl GateCensus {
-    /// The positive control: this gate MUST be reachable, or the census itself
-    /// is broken and its output is untrustworthy.
-    pub fn positive_control_gate() -> &'static str {
-        "no-shell-gate"
+    /// First independently-reachable gate this census measured.
+    ///
+    /// WHY NOT a named crate: a hardcoded canary exists in omp-orchestrator
+    /// only. Serving any other repo made `positive_control_passes` false forever
+    /// and the supervisor could never dispatch (uds-k0i6: `POSITIVE_CONTROL_FAILED`
+    /// with free_capacity=3 dispatchable=2). The anti-vacuity control is "THIS
+    /// census independently verified SOME gate", not "a crate from another repo
+    /// is present". Empty / all-unreachable returns `None`: a scan that verified
+    /// nothing is not a green fleet. Weakening that is escalation-only.
+    pub fn derived_positive_control(&self) -> Option<&str> {
+        self.rows
+            .iter()
+            .find(|r| r.reachability.is_reachable())
+            .map(|r| r.gate.as_str())
     }
 
     /// Rows that are not reachable AND may stop the fleet.
@@ -591,13 +602,11 @@ impl GateCensus {
             .all(|r| r.reachability.is_reachable())
     }
 
-    /// The POSITIVE CONTROL: no-shell-gate must be reachable, or the census
-    /// is broken and every "unreachable" verdict is suspect (a census that
-    /// reports everything unreachable is indistinguishable from a broken one).
+    /// The POSITIVE CONTROL: at least one gate in THIS census was independently
+    /// verified reachable. A census that reports everything unreachable, or that
+    /// scanned nothing, is indistinguishable from a broken probe.
     pub fn positive_control_passes(&self) -> bool {
-        self.rows
-            .iter()
-            .any(|r| r.gate == Self::positive_control_gate() && r.reachability.is_reachable())
+        self.derived_positive_control().is_some()
     }
 }
 
@@ -716,7 +725,7 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
     let mut rows = Vec::new();
 
     // no-shell-gate: .git/hooks/pre-commit is the REAL trigger (proven to bite
-    // 2026-08-31, exit 1 naming the file). This is the positive control.
+    // 2026-08-31, exit 1 naming the file). Curated blocking row, not the canary.
     let nsg_reachable = hook_path.exists();
     rows.push(GateCensusRow {
         gate: "no-shell-gate".into(),
@@ -1097,7 +1106,7 @@ fn rust_sources_contain(dir: &Path, needle: &str) -> bool {
             }
         } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
             if let Ok(text) = std::fs::read_to_string(&path) {
-                if strip_rust_comments(&text).contains(needle) {
+                if code_only(&text).contains(needle) {
                     return true;
                 }
             }
@@ -1106,51 +1115,8 @@ fn rust_sources_contain(dir: &Path, needle: &str) -> bool {
     false
 }
 
-/// Blank out `//`-to-end-of-line and `/* … */` spans, preserving line structure.
-///
-/// Deliberately NOT a parser: it does not track string literals, so a needle
-/// inside a string containing `//` could be over-stripped. That direction is safe
-/// for this use — over-stripping can only make the census report LESS reachability,
-/// never more, and the failure mode this exists to stop is a false GREEN.
-fn strip_rust_comments(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut chars = text.chars().peekable();
-    let mut in_block = false;
-    while let Some(c) = chars.next() {
-        if in_block {
-            if c == '*' && chars.peek() == Some(&'/') {
-                chars.next();
-                in_block = false;
-            } else if c == '\n' {
-                out.push('\n');
-            }
-            continue;
-        }
-        if c == '/' {
-            match chars.peek() {
-                Some('/') => {
-                    // Line comment: consume to the newline, keeping the newline so
-                    // line numbers in any future diagnostic still line up.
-                    for next in chars.by_ref() {
-                        if next == '\n' {
-                            out.push('\n');
-                            break;
-                        }
-                    }
-                    continue;
-                }
-                Some('*') => {
-                    chars.next();
-                    in_block = true;
-                    continue;
-                }
-                _ => {}
-            }
-        }
-        out.push(c);
-    }
-    out
-}
+/// Shared structure-keyed comment masking; prose cannot manufacture a gate caller.
+// structure-keyed: text-structure::code_only preserves lines while removing comments.
 
 /// How many OTHER workspace manifests declare a path dependency on `crate_name`.
 ///
@@ -1227,10 +1193,10 @@ pub fn decide(observation: &Observation, authorization: &IdleAuthorization) -> S
         Some(census) => {
             if !census.positive_control_passes() {
                 return SupervisorDecision::GateUnwired {
-                    unwired: vec![format!(
-                        "POSITIVE_CONTROL_FAILED: {} must be reachable",
-                        GateCensus::positive_control_gate()
-                    )],
+                    unwired: vec![
+                        "POSITIVE_CONTROL_FAILED: no independently reachable gate in this census"
+                            .to_owned(),
+                    ],
                 };
             }
             let unwired: Vec<String> = census
@@ -1388,14 +1354,29 @@ mod tests {
     /// branch under test.
     fn passing_census() -> GateCensus {
         GateCensus {
-            rows: vec![GateCensusRow {
-                gate: GateCensus::positive_control_gate().to_owned(),
-                reachability: GateReachability::Reachable {
-                    trigger: ".git/hooks/pre-commit".to_owned(),
-                },
-                // The positive control is triaged, so it BLOCKS.
-                disposition: CensusDisposition::Blocking,
-            }],
+            rows: vec![reachable_blocking("registry-check")],
+        }
+    }
+
+    fn reachable_blocking(gate: &str) -> GateCensusRow {
+        GateCensusRow {
+            gate: gate.to_owned(),
+            reachability: GateReachability::Reachable {
+                trigger: format!("crates/{gate}"),
+            },
+            disposition: CensusDisposition::Blocking,
+        }
+    }
+
+    fn unreachable_advisory(gate: &str) -> GateCensusRow {
+        GateCensusRow {
+            gate: gate.to_owned(),
+            reachability: GateReachability::Unreachable {
+                reason: "no independently verified trigger".to_owned(),
+            },
+            disposition: CensusDisposition::Advisory {
+                reason: "untriaged derived row".to_owned(),
+            },
         }
     }
 
@@ -1825,6 +1806,91 @@ mod tests {
             "unreadable queue must be typed, got {decision:?}"
         );
     }
+
+    // ── POSITIVE CONTROL IS DERIVED PER SERVED REPO (uds-k0i6) ─────────────
+
+    fn decide_ready(census: GateCensus) -> SupervisorDecision {
+        decide(
+            &Observation {
+                panes: vec![pane("%1409", "IDLE", true)],
+                queue: QueueState {
+                    ready_count: 3,
+                    readable: true,
+                },
+                gate_census: Some(census),
+            },
+            &IdleAuthorization::Unauthorized { why: "test" },
+        )
+    }
+
+    #[test]
+    fn k0i6_serving_uds_passes_on_registry_check() {
+        let census = GateCensus {
+            rows: vec![reachable_blocking("registry-check")],
+        };
+        assert_eq!(census.derived_positive_control(), Some("registry-check"));
+        assert!(census.positive_control_passes());
+        match decide_ready(census) {
+            SupervisorDecision::Dispatch { pane, .. } => {
+                assert_eq!(pane, "%1409", "cleared canary must still dispatch")
+            }
+            other => panic!("uds canary must clear the gate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn k0i6_empty_census_still_refuses() {
+        let census = GateCensus { rows: vec![] };
+        assert!(
+            census.unwired_gates().is_empty(),
+            "vacuity: scanned nothing so unwired=0, and that must still refuse"
+        );
+        assert!(!census.positive_control_passes());
+        match decide_ready(census) {
+            SupervisorDecision::GateUnwired { unwired } => {
+                assert!(
+                    unwired.iter().any(|u| u.contains("POSITIVE_CONTROL_FAILED")),
+                    "empty census must name POSITIVE_CONTROL_FAILED, got {unwired:?}"
+                );
+            }
+            other => panic!("empty census must refuse, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn k0i6_all_unreachable_still_refuses() {
+        let census = GateCensus {
+            rows: vec![
+                unreachable_advisory("close-cites"),
+                unreachable_advisory("uds-drift"),
+            ],
+        };
+        assert!(
+            census.unwired_gates().is_empty(),
+            "advisory unreachables must not count as blocking unwired"
+        );
+        assert!(!census.positive_control_passes());
+        match decide_ready(census) {
+            SupervisorDecision::GateUnwired { unwired } => {
+                assert!(
+                    unwired.iter().any(|u| u.contains("POSITIVE_CONTROL_FAILED")),
+                    "got {unwired:?}"
+                );
+            }
+            other => panic!("all-unreachable must refuse, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn k0i6_derived_canary_ignores_foreign_crate_name() {
+        // Mutation target: if positive_control_passes looks up a hardcoded
+        // crate name, this census (reachable uds gate, that crate absent) REDs.
+        let census = GateCensus {
+            rows: vec![reachable_blocking("closure-check")],
+        };
+        assert_eq!(census.derived_positive_control(), Some("closure-check"));
+        assert!(census.positive_control_passes());
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2099,11 +2165,10 @@ mod kernel_tests {
     fn gates() -> Option<GateCensus> {
         Some(GateCensus {
             rows: vec![GateCensusRow {
-                gate: GateCensus::positive_control_gate().to_owned(),
+                gate: "registry-check".to_owned(),
                 reachability: GateReachability::Reachable {
-                    trigger: ".git/hooks/pre-commit".to_owned(),
+                    trigger: "crates/registry-check".to_owned(),
                 },
-                // The positive control is triaged, so it BLOCKS.
                 disposition: CensusDisposition::Blocking,
             }],
         })
