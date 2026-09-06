@@ -1,0 +1,14 @@
+[package]
+license.workspace = true
+name = "grader-attribution-gate"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Refuse unattributed and self-grades so grader != implementer is tracker-visible"
+
+[lib]
+name = "grader_attribution_gate"
+path = "src/lib.rs"
+
+[lints.rust]
+unsafe_code = "forbid"

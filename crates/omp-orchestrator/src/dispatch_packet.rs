@@ -101,7 +101,7 @@ fn explicit_done_signal(bead: &str, acceptance: &str) -> Option<String> {
         return Some(format!("Done: re-run {command}; expect exit code {code}."));
     }
     Some(format!(
-        "Done: br comments add {bead} --actor <you> \"DONE ...\" then the grader re-runs the bead's acceptance"
+        "Done: br comments add {bead} --actor <you> \"DONE ...\" then a DIFFERENT agent: br close {bead} --actor <grader> --reason \"MUTATION-VERIFIED ...\" (grader re-runs the bead's acceptance; read status back)"
     ))
 }
 
@@ -328,5 +328,25 @@ mod tests {
         assert!(error
             .to_string()
             .contains("br update 8e1g --acceptance-criteria"));
+    }
+
+    #[test]
+    fn packet_prints_actor_on_comment_and_close() {
+        let packet = render(
+            &snapshot("omp-orchestrator-gcyf", "body", "typed acceptance"),
+            Path::new("/repo"),
+            None,
+            None,
+        )
+        .expect("packet should render");
+        assert!(
+            packet.contains("br comments add omp-orchestrator-gcyf --actor"),
+            "a92y/gcyf: comment instruction must print --actor"
+        );
+        assert!(
+            packet.contains("br close omp-orchestrator-gcyf --actor"),
+            "8zx1/gcyf: grade close instruction must print --actor"
+        );
+        assert!(packet.contains("DIFFERENT agent"));
     }
 }
