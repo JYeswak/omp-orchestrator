@@ -372,6 +372,16 @@ fn peer_grade_command_exit(outcome: PeerGradeCommandOutcome) -> std::process::Ex
     }
 }
 
+/// Capture state is per-session. Heartbeat already was; this path was not.
+/// Two residents on one box (`--session control-plane` vs `--session omp-orchestrator`)
+/// previously shared `omp-orchestrator.tick-monitor-state.json`, so every tick read
+/// `why=no_prior_capture` and dispatchable stayed empty.
+fn default_tick_monitor_state(heartbeat_ledger: &Path, session: &str) -> PathBuf {
+    heartbeat_ledger.with_file_name(format!(
+        "omp-orchestrator-{session}.tick-monitor-state.json"
+    ))
+}
+
 impl Config {
     fn from_args(args: &[String]) -> Result<Self, String> {
         let mut repo = env::var_os("OMP_REPO")
@@ -529,9 +539,7 @@ impl Config {
             });
         let tick_monitor_state = env::var_os("OMP_TICK_MONITOR_STATE")
             .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                heartbeat_ledger.with_file_name("omp-orchestrator.tick-monitor-state.json")
-            });
+            .unwrap_or_else(|| default_tick_monitor_state(&heartbeat_ledger, &session));
         let pending_dispatch = env::var_os("OMP_PENDING_DISPATCH")
             .map(PathBuf::from)
             .unwrap_or_else(|| {
@@ -5508,6 +5516,35 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
             "flag-only form must not require the subcommand"
         );
         assert_eq!(config.max_ticks, Some(1));
+    }
+
+    #[test]
+    fn tick_monitor_state_default_is_session_scoped() {
+        let hb = PathBuf::from("/state/flywheel/omp-orchestrator-control-plane.heartbeat.jsonl");
+        let a = default_tick_monitor_state(&hb, "control-plane");
+        let b = default_tick_monitor_state(&hb, "omp-orchestrator");
+        assert_ne!(a, b, "distinct sessions must not share capture state");
+        assert!(
+            a.ends_with("omp-orchestrator-control-plane.tick-monitor-state.json"),
+            "session must be in the filename: {}",
+            a.display()
+        );
+        assert!(
+            b.ends_with("omp-orchestrator-omp-orchestrator.tick-monitor-state.json"),
+            "session must be in the filename: {}",
+            b.display()
+        );
+    }
+
+    #[test]
+    fn tick_monitor_state_default_does_not_collide_with_unscoped_legacy() {
+        let hb = PathBuf::from("/state/flywheel/omp-orchestrator.heartbeat.jsonl");
+        let scoped = default_tick_monitor_state(&hb, "control-plane");
+        let legacy = hb.with_file_name("omp-orchestrator.tick-monitor-state.json");
+        assert_ne!(
+            scoped, legacy,
+            "the unscoped legacy path is the measured collision"
+        );
     }
 
     #[test]
