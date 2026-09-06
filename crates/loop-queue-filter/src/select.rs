@@ -118,6 +118,7 @@ impl RankWindow {
 pub struct RankedOrder {
     pub ids: Vec<String>,
     pub window: RankWindow,
+    pub scored: usize,
 }
 
 /// Rank every ready bead. br ready supplies the authoritative priority;
@@ -205,7 +206,11 @@ pub fn rank_ready_with_priorities(
     } else {
         RankWindow::RecommendationsOnly
     };
-    Ok(RankedOrder { ids, window })
+    Ok(RankedOrder {
+        ids,
+        window,
+        scored: 0,
+    })
 }
 
 /// Rank the ready set with bv's complete PageRank map.
@@ -217,6 +222,7 @@ pub fn rank_ready_with_priorities(
 pub fn rank_ready_with_pagerank(
     triage: &[u8],
     ready: &[String],
+    ready_priorities: &BTreeMap<String, u64>,
     insights: &[u8],
 ) -> Result<RankedOrder, String> {
     let triage_value: Value = serde_json::from_slice(triage)
@@ -230,6 +236,9 @@ pub fn rank_ready_with_pagerank(
         })?;
     if recs.is_empty() {
         return Err("QUEUE_UNRANKED bv triage .triage.recommendations is empty".to_owned());
+    }
+    if ready.is_empty() {
+        return Err("QUEUE_UNRANKED bv ready set is empty".to_owned());
     }
 
     let insights_value: Value = serde_json::from_slice(insights)
@@ -267,7 +276,8 @@ pub fn rank_ready_with_pagerank(
         return Err("QUEUE_UNRANKED bv insights full_stats.pagerank is empty".to_owned());
     }
 
-    let mut ranked: Vec<(i64, String)> = Vec::with_capacity(ready.len());
+    let mut ranked: Vec<(i64, u64, String)> = Vec::with_capacity(ready.len());
+    let mut scored = 0usize;
     for id in ready {
         let score = match page_ranks.get(id) {
             Some(value) => value.as_f64().ok_or_else(|| {
@@ -281,22 +291,33 @@ pub fn rank_ready_with_pagerank(
                 "QUEUE_UNRANKED bv insights PageRank is invalid for {id}: {score}"
             ));
         }
+        if score > 0.0 {
+            scored += 1;
+        }
+        let priority = ready_priorities
+            .get(id)
+            .copied()
+            .ok_or_else(|| format!("QUEUE_UNRANKED br ready row has no priority for {id}"))?;
         let scaled = score * 1_000_000_000_000_000.0;
         if !scaled.is_finite() || scaled > i64::MAX as f64 {
             return Err(format!(
                 "QUEUE_UNRANKED bv insights PageRank is out of range for {id}: {score}"
             ));
         }
-        ranked.push((-(scaled.round() as i64), id.clone()));
+        ranked.push((-(scaled.round() as i64), priority, id.clone()));
+    }
+    if scored == 0 {
+        return Err(
+            "QUEUE_UNRANKED bv insights has no nonzero PageRank score in the ready set".to_owned(),
+        );
     }
     ranked.sort();
-    let ids = ranked.into_iter().map(|(_, id)| id).collect::<Vec<_>>();
-    let window = if ready.is_empty() {
-        RankWindow::EmptyReady
-    } else {
-        RankWindow::RecommendationsOnly
-    };
-    Ok(RankedOrder { ids, window })
+    let ids = ranked.into_iter().map(|(_, _, id)| id).collect::<Vec<_>>();
+    Ok(RankedOrder {
+        ids,
+        window: RankWindow::RecommendationsOnly,
+        scored,
+    })
 }
 
 fn assigned_ids(triage: &Value) -> BTreeSet<String> {
@@ -673,6 +694,7 @@ pub fn select_dispatch_order_with_priorities(
         }
     }
     let ranked = rank_ready_with_priorities(triage, &dispatchable_ready, ready_priorities)?;
+    let scored = ranked.scored;
     let window = if !ready.is_empty() && dispatchable_ready.is_empty() {
         RankWindow::FilteredFiledOnly
     } else {
@@ -683,13 +705,18 @@ pub fn select_dispatch_order_with_priorities(
             out.push(id);
         }
     }
-    Ok(RankedOrder { ids: out, window })
+    Ok(RankedOrder {
+        ids: out,
+        window,
+        scored,
+    })
 }
 
 /// Full dispatch order using bv's complete PageRank ready frontier.
 pub fn select_dispatch_order_with_pagerank(
     triage: &[u8],
     ready: &[String],
+    ready_priorities: &BTreeMap<String, u64>,
     insights: &[u8],
     jsonl: &str,
     grader: &str,
@@ -707,18 +734,26 @@ pub fn select_dispatch_order_with_pagerank(
             out.push(grade);
         }
     }
-    let ranked = rank_ready_with_pagerank(triage, &dispatchable_ready, insights)?;
-    let window = if !ready.is_empty() && dispatchable_ready.is_empty() {
-        RankWindow::FilteredFiledOnly
-    } else {
-        ranked.window
-    };
+    if !ready.is_empty() && dispatchable_ready.is_empty() {
+        return Ok(RankedOrder {
+            ids: out,
+            window: RankWindow::FilteredFiledOnly,
+            scored: 0,
+        });
+    }
+    let ranked = rank_ready_with_pagerank(triage, &dispatchable_ready, ready_priorities, insights)?;
+    let scored = ranked.scored;
+    let window = ranked.window;
     for id in ranked.ids {
         if !out.iter().any(|chosen| chosen == &id) {
             out.push(id);
         }
     }
-    Ok(RankedOrder { ids: out, window })
+    Ok(RankedOrder {
+        ids: out,
+        window,
+        scored,
+    })
 }
 
 /// One pane as the assignment path sees it. The observer may be WORKING;
@@ -1154,19 +1189,22 @@ mod tests {
     #[test]
     fn pagerank_reaches_ready_beads_beyond_top_ten_recommendations() {
         let ready = vec!["low".to_owned(), "high".to_owned()];
+        let priorities = BTreeMap::from([("low".to_owned(), 1), ("high".to_owned(), 3)]);
         let triage = br#"{"data_hash":"fixture","triage":{"recommendations":[
             {"id":"blocked","status":"blocked","score":0.99}
         ]}}"#;
         let insights = br#"{"data_hash":"fixture","status":{"PageRank":{"state":"computed"}},
             "full_stats":{"pagerank":{"low":0.1,"high":0.9}}}"#;
-        let ranked = rank_ready_with_pagerank(triage, &ready, insights).unwrap();
+        let ranked = rank_ready_with_pagerank(triage, &ready, &priorities, insights).unwrap();
         assert_eq!(ranked.window, RankWindow::RecommendationsOnly);
         assert_eq!(ranked.ids, vec!["high", "low"]);
+        assert_eq!(ranked.scored, 2);
     }
 
     #[test]
     fn pagerank_dispatch_order_is_not_br_priority_order() {
         let ready = vec!["low".to_owned(), "high".to_owned()];
+        let priorities = BTreeMap::from([("low".to_owned(), 0), ("high".to_owned(), 3)]);
         let triage =
             br#"{"data_hash":"fixture","triage":{"blockers_to_clear":[],"recommendations":[
             {"id":"blocked","status":"blocked","score":0.99}
@@ -1176,6 +1214,7 @@ mod tests {
         let ordered = select_dispatch_order_with_pagerank(
             triage,
             &ready,
+            &priorities,
             insights,
             empty_jsonl(),
             "pane4-%9",
@@ -1183,6 +1222,75 @@ mod tests {
         .unwrap();
         assert_eq!(ordered.window, RankWindow::RecommendationsOnly);
         assert_eq!(ordered.ids, vec!["high", "low"]);
+        assert_eq!(ordered.scored, 2);
+    }
+
+    #[test]
+    fn equal_pagerank_uses_priority_before_id() {
+        let ready = vec!["a-p3".to_owned(), "z-p0".to_owned()];
+        let priorities = BTreeMap::from([("a-p3".to_owned(), 3), ("z-p0".to_owned(), 0)]);
+        let triage = br#"{"data_hash":"fixture","triage":{"recommendations":[{"id":"anchor"}]}}"#;
+        let insights = br#"{"data_hash":"fixture","status":{"PageRank":{"state":"computed"}},"full_stats":{"pagerank":{"a-p3":0.5,"z-p0":0.5}}}"#;
+        let ranked = rank_ready_with_pagerank(triage, &ready, &priorities, insights).unwrap();
+        assert_eq!(
+            ranked.ids,
+            vec!["z-p0", "a-p3"],
+            "equal scores must use priority: {ranked:?}"
+        );
+        assert_eq!(ranked.scored, 2);
+    }
+
+    #[test]
+    fn higher_pagerank_outranks_priority() {
+        let ready = vec!["p3".to_owned(), "p0".to_owned()];
+        let priorities = BTreeMap::from([("p3".to_owned(), 3), ("p0".to_owned(), 0)]);
+        let triage = br#"{"data_hash":"fixture","triage":{"recommendations":[{"id":"anchor"}]}}"#;
+        let insights = br#"{"data_hash":"fixture","status":{"PageRank":{"state":"computed"}},"full_stats":{"pagerank":{"p3":0.9,"p0":0.1}}}"#;
+        let ranked = rank_ready_with_pagerank(triage, &ready, &priorities, insights).unwrap();
+        assert_eq!(
+            ranked.ids,
+            vec!["p3", "p0"],
+            "graph score remains primary: {ranked:?}"
+        );
+    }
+
+    #[test]
+    fn current_live_scored_head_is_pinned() {
+        let ready = vec![
+            "omp-orchestrator-kldh".to_owned(),
+            "omp-orchestrator-plan-04-7wn9.3".to_owned(),
+            "omp-orchestrator-plan-11-vcd7.7".to_owned(),
+        ];
+        let priorities = BTreeMap::from([
+            ("omp-orchestrator-kldh".to_owned(), 1),
+            ("omp-orchestrator-plan-04-7wn9.3".to_owned(), 2),
+            ("omp-orchestrator-plan-11-vcd7.7".to_owned(), 2),
+        ]);
+        let triage = br#"{"data_hash":"fixture","triage":{"recommendations":[{"id":"anchor"}]}}"#;
+        let insights = br#"{"data_hash":"fixture","status":{"PageRank":{"state":"computed"}},"full_stats":{"pagerank":{"omp-orchestrator-kldh":0.00107696675300789,"omp-orchestrator-plan-04-7wn9.3":0.000984621986015491,"omp-orchestrator-plan-11-vcd7.7":0.0009649276036815638}}}"#;
+        let ranked = rank_ready_with_pagerank(triage, &ready, &priorities, insights).unwrap();
+        assert_eq!(
+            ranked.ids,
+            vec![
+                "omp-orchestrator-kldh",
+                "omp-orchestrator-plan-04-7wn9.3",
+                "omp-orchestrator-plan-11-vcd7.7",
+            ]
+        );
+        assert_eq!(ranked.scored, 3);
+    }
+
+    #[test]
+    fn empty_or_all_zero_pagerank_is_a_typed_refusal() {
+        let priorities = BTreeMap::from([("p0".to_owned(), 0)]);
+        let triage = br#"{"data_hash":"fixture","triage":{"recommendations":[{"id":"anchor"}]}}"#;
+        let insights = br#"{"data_hash":"fixture","status":{"PageRank":{"state":"computed"}},"full_stats":{"pagerank":{"p0":0.0}}}"#;
+        let empty = rank_ready_with_pagerank(triage, &[], &priorities, insights)
+            .expect_err("empty ready set must refuse");
+        assert!(empty.contains("ready set is empty"), "{empty}");
+        let zero = rank_ready_with_pagerank(triage, &["p0".to_owned()], &priorities, insights)
+            .expect_err("all-zero PageRank must refuse");
+        assert!(zero.contains("no nonzero PageRank"), "{zero}");
     }
 
     #[test]
@@ -1477,7 +1585,9 @@ mod tests {
     }
 
     fn ledger_row(bead: &str, pane: &str) -> String {
-        format!(r#"{{"bead":"{bead}","event":"dispatched","pane":"{pane}","grader_pane":"{pane}"}}"#)
+        format!(
+            r#"{{"bead":"{bead}","event":"dispatched","pane":"{pane}","grader_pane":"{pane}"}}"#
+        )
     }
 
     #[test]
@@ -1510,9 +1620,7 @@ mod tests {
         );
         let without = assign_peer_grade("%9", &panes, jsonl).expect_err("ledger removed");
         assert!(
-            without
-                .to_string()
-                .contains("missing_attribution count=1"),
+            without.to_string().contains("missing_attribution count=1"),
             "known-bad must fail when ledger source is removed: {without}"
         );
     }
@@ -1530,10 +1638,7 @@ mod tests {
         );
         let error = assign_peer_grade("%9", &panes, jsonl).expect_err("unattributed");
         let text = error.to_string();
-        assert!(
-            text.starts_with("GRADER_IDENTITY_UNRESOLVED"),
-            "{text}"
-        );
+        assert!(text.starts_with("GRADER_IDENTITY_UNRESOLVED"), "{text}");
         assert!(text.contains("missing_attribution count=2"), "{text}");
         assert!(!text.contains("no_distinct_idle_peer"), "{text}");
     }
@@ -1550,7 +1655,6 @@ mod tests {
             "NO_ELIGIBLE_GRADER reason=empty_reapable_set"
         );
     }
-
 
     #[test]
     fn assign_peer_grade_refuses_a_pane_carrying_its_own_dispatch() {
@@ -1650,9 +1754,15 @@ mod tests {
         assert_ne!(ranked.ids, vec!["filed"]);
 
         let insights = br#"{"data_hash":"fixture","status":{"PageRank":{"state":"computed"}},"full_stats":{"pagerank":{"filed":1.0,"normal":0.1}}}"#;
-        let pageranked =
-            select_dispatch_order_with_pagerank(&triage, &ready, insights, &jsonl, "pane4-%9")
-                .expect("pagerank selector pass");
+        let pageranked = select_dispatch_order_with_pagerank(
+            &triage,
+            &ready,
+            &priorities,
+            insights,
+            &jsonl,
+            "pane4-%9",
+        )
+        .expect("pagerank selector pass");
         assert_eq!(pageranked.ids, vec!["normal"]);
     }
 
