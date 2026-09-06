@@ -2,8 +2,73 @@
 
 use dispatch_silence_watch::{
     classify, classify_from_read, clears_pending_dispatch_intent, has_posted_verdict,
-    SilenceVerdict, TrackerRead,
+    parse_bead_assignee, resolve_br_id, BeadIdMatchKind, BeadIdResolutionError, SilenceVerdict,
+    TrackerRead,
 };
+#[test]
+fn short_br_id_is_canonicalized_before_exact_assignee_read() {
+    let response =
+        r#"[{"id":"omp-orchestrator-omp-coverage-mission-ipg.18","assignee":"WildStone"}]"#;
+    let resolution = resolve_br_id(response, "ipg.18").expect("br suffix result");
+    assert_eq!(resolution.match_kind, BeadIdMatchKind::Suffix);
+    assert_eq!(
+        resolution.canonical_id,
+        "omp-orchestrator-omp-coverage-mission-ipg.18"
+    );
+    let error =
+        parse_bead_assignee(response, "ipg.18").expect_err("short id must not enter exact reader");
+    assert!(error.to_string().starts_with("UNRESOLVED-SHORT-ID"));
+    assert_eq!(
+        parse_bead_assignee(response, &resolution.canonical_id)
+            .expect("canonical assignee read")
+            .as_deref(),
+        Some("WildStone")
+    );
+}
+
+#[test]
+fn canonical_br_id_is_an_exact_match_on_both_surfaces() {
+    let response = r#"[{"id":"omp-orchestrator-pgzx","assignee":"WildStone"}]"#;
+    let resolution = resolve_br_id(response, "omp-orchestrator-pgzx").expect("canonical result");
+    assert_eq!(resolution.match_kind, BeadIdMatchKind::Exact);
+    assert_eq!(resolution.canonical_id, resolution.requested_id);
+    assert_eq!(
+        parse_bead_assignee(response, &resolution.canonical_id)
+            .expect("canonical assignee read")
+            .as_deref(),
+        Some("WildStone")
+    );
+}
+
+#[test]
+fn unresolved_short_id_is_typed_not_a_missing_bead() {
+    let response = r#"{"error":{"code":"ISSUE_NOT_FOUND"}}"#;
+    let error = resolve_br_id(response, "not-a-real-suffix").expect_err("unresolved short id");
+    assert_eq!(
+        error,
+        BeadIdResolutionError::UnresolvedShortId {
+            requested_id: "not-a-real-suffix".into()
+        }
+    );
+    assert!(error.to_string().starts_with("UNRESOLVED-SHORT-ID"));
+}
+
+#[test]
+fn ambiguous_suffix_is_an_error_not_first_match() {
+    let response = r#"{"error":{"code":"AMBIGUOUS_ID","context":{"matches":["omp-orchestrator-alpha-p","omp-orchestrator-beta-p"]}}}"#;
+    let error = resolve_br_id(response, "p").expect_err("ambiguous suffix");
+    assert_eq!(
+        error,
+        BeadIdResolutionError::Ambiguous {
+            requested_id: "p".into(),
+            matches: vec![
+                "omp-orchestrator-alpha-p".into(),
+                "omp-orchestrator-beta-p".into()
+            ]
+        }
+    );
+    assert!(error.to_string().starts_with("AMBIGUOUS-BEAD-ID"));
+}
 
 const NOW: i64 = 1_000_000;
 const DISPATCH: i64 = NOW - 7200; // 2 hours ago
@@ -96,7 +161,9 @@ fn quoting_error_colon_on_successful_read_is_not_tracker_error() {
     );
     assert_ne!(v, SilenceVerdict::TrackerError);
     assert_eq!(v, SilenceVerdict::VerdictPosted);
-    assert!(!clears_pending_dispatch_intent(SilenceVerdict::SilentPastDeadline));
+    assert!(!clears_pending_dispatch_intent(
+        SilenceVerdict::SilentPastDeadline
+    ));
 }
 
 #[test]

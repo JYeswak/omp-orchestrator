@@ -61,17 +61,41 @@ fn main() -> ExitCode {
     let mut show_command = Command::new(finding::BR);
     show_command.args(["show", bead_id, "--json"]);
     show_command.current_dir(repo);
-    let current_assignee = match dispatch_silence_watch::tracker_read_from(
-        subprocess_contract::bounded_output(&mut show_command, TRACKER_READ_DEADLINE),
-    ) {
-        dispatch_silence_watch::TrackerRead::Read(text) => {
-            dispatch_silence_watch::parse_bead_assignee(&text, bead_id).unwrap_or_default()
-        }
-        dispatch_silence_watch::TrackerRead::TrackerError(reason) => {
-            eprintln!("TRACKER_ERROR: br show: {reason} for {bead_id}");
-            return ExitCode::from(3);
-        }
-    };
+    let (current_assignee, canonical_bead_id, id_match_kind) =
+        match dispatch_silence_watch::tracker_read_from(subprocess_contract::bounded_output(
+            &mut show_command,
+            TRACKER_READ_DEADLINE,
+        )) {
+            dispatch_silence_watch::TrackerRead::Read(text) => {
+                let resolution = match dispatch_silence_watch::resolve_br_id(&text, bead_id) {
+                    Ok(resolution) => resolution,
+                    Err(error) => {
+                        eprintln!("BEAD_ID_ERROR: {error} for {bead_id}");
+                        return ExitCode::from(3);
+                    }
+                };
+                let current_assignee = match dispatch_silence_watch::parse_bead_assignee(
+                    &text,
+                    &resolution.canonical_id,
+                ) {
+                    Ok(Some(assignee)) => assignee,
+                    Ok(None) => String::new(),
+                    Err(error) => {
+                        eprintln!("BEAD_ID_ERROR: {error} for {bead_id}");
+                        return ExitCode::from(3);
+                    }
+                };
+                (
+                    current_assignee,
+                    resolution.canonical_id,
+                    resolution.match_kind,
+                )
+            }
+            dispatch_silence_watch::TrackerRead::TrackerError(reason) => {
+                eprintln!("TRACKER_ERROR: br show: {reason} for {bead_id}");
+                return ExitCode::from(3);
+            }
+        };
     let verdict = dispatch_silence_watch::classify_from_read(
         comments_read,
         &current_assignee,
@@ -82,7 +106,7 @@ fn main() -> ExitCode {
     );
 
     println!(
-        "bead={bead_id} verdict={verdict} detector={}",
+        "bead={bead_id} canonical_bead_id={canonical_bead_id} id_resolution={id_match_kind:?} verdict={verdict} detector={}",
         verdict.detector()
     );
     if verdict == dispatch_silence_watch::SilenceVerdict::SilentPastDeadline {

@@ -159,23 +159,218 @@ pub fn classify_from_read(
     }
 }
 
-/// Extract the current assignee from the raw stdout of
-/// `br show <bead_id> --json`. Returns None if the JSON cannot be parsed,
-/// the bead id does not match, or the assignee field is absent/empty/"none".
-pub fn parse_bead_assignee(text: &str, expected_id: &str) -> Option<String> {
-    let value: serde_json::Value = serde_json::from_str(text).ok()?;
-    let row = match &value {
-        serde_json::Value::Array(rows) => rows.first()?,
-        value => value,
-    };
-    if row.get("id").and_then(serde_json::Value::as_str) != Some(expected_id) {
-        return None;
+/// How br show matched the caller's bead identifier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BeadIdMatchKind {
+    /// The caller supplied the canonical tracker id.
+    Exact,
+    /// br resolved the caller's suffix to the canonical tracker id.
+    Suffix,
+}
+
+/// Canonical bead identity returned by br show <id> --json.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CanonicalBeadId {
+    /// The identifier supplied by the agent or dispatch record.
+    pub requested_id: String,
+    /// The full identifier emitted by br and safe for exact readers.
+    pub canonical_id: String,
+    /// Whether resolution was exact or suffix-based.
+    pub match_kind: BeadIdMatchKind,
+}
+
+/// Why a br show identifier could not be canonicalized.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BeadIdResolutionError {
+    /// The requested identifier was empty.
+    EmptyRequestedId,
+    /// The br show response was not valid JSON.
+    InvalidJson,
+    /// br show returned no bead rows.
+    EmptyResult { requested_id: String },
+    /// br could not resolve a short identifier.
+    UnresolvedShortId { requested_id: String },
+    /// The suffix matched more than one bead.
+    Ambiguous {
+        requested_id: String,
+        matches: Vec<String>,
+    },
+    /// A successful response did not include a usable id.
+    MissingCanonicalId { requested_id: String },
+    /// The response id did not equal or end with the requested suffix.
+    UnexpectedCanonicalId {
+        requested_id: String,
+        canonical_id: String,
+    },
+    /// br returned an error response this reader does not understand.
+    TrackerError { requested_id: String, code: String },
+}
+
+impl fmt::Display for BeadIdResolutionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EmptyRequestedId => formatter.write_str("EMPTY-BEAD-ID"),
+            Self::InvalidJson => formatter.write_str("INVALID-BR-ID-RESPONSE"),
+            Self::EmptyResult { requested_id } => {
+                write!(formatter, "EMPTY-BEAD-ID-RESULT requested={requested_id}")
+            }
+            Self::UnresolvedShortId { requested_id } => {
+                write!(formatter, "UNRESOLVED-SHORT-ID requested={requested_id}")
+            }
+            Self::Ambiguous {
+                requested_id,
+                matches,
+            } => write!(
+                formatter,
+                "AMBIGUOUS-BEAD-ID requested={requested_id} matches={}",
+                matches.join(",")
+            ),
+            Self::MissingCanonicalId { requested_id } => {
+                write!(formatter, "MISSING-CANONICAL-ID requested={requested_id}")
+            }
+            Self::UnexpectedCanonicalId {
+                requested_id,
+                canonical_id,
+            } => write!(
+                formatter,
+                "UNEXPECTED-CANONICAL-ID requested={requested_id} canonical={canonical_id}"
+            ),
+            Self::TrackerError { requested_id, code } => {
+                write!(
+                    formatter,
+                    "BR-ID-ERROR requested={requested_id} code={code}"
+                )
+            }
+        }
     }
-    row.get("assignee")
+}
+
+/// Resolve the canonical id from one successful br show JSON response.
+///
+/// The caller must use CanonicalBeadId::canonical_id for exact-match readers.
+/// A multi-row response is never reduced to its first row.
+pub fn resolve_br_id(
+    text: &str,
+    requested_id: &str,
+) -> Result<CanonicalBeadId, BeadIdResolutionError> {
+    if requested_id.trim().is_empty() {
+        return Err(BeadIdResolutionError::EmptyRequestedId);
+    }
+    let value: serde_json::Value =
+        serde_json::from_str(text).map_err(|_| BeadIdResolutionError::InvalidJson)?;
+    let rows = match &value {
+        serde_json::Value::Array(rows) => rows.as_slice(),
+        serde_json::Value::Object(object) if object.contains_key("error") => {
+            let error = object.get("error").and_then(serde_json::Value::as_object);
+            let code = error
+                .and_then(|entry| entry.get("code"))
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("UNKNOWN")
+                .to_owned();
+            if code == "AMBIGUOUS_ID" {
+                let matches = error
+                    .and_then(|entry| entry.get("context"))
+                    .and_then(|context| context.get("matches"))
+                    .and_then(serde_json::Value::as_array)
+                    .map(|values| {
+                        values
+                            .iter()
+                            .filter_map(serde_json::Value::as_str)
+                            .map(str::to_owned)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                return Err(BeadIdResolutionError::Ambiguous {
+                    requested_id: requested_id.to_owned(),
+                    matches,
+                });
+            }
+            if code == "ISSUE_NOT_FOUND" && !requested_id.starts_with("omp-orchestrator-") {
+                return Err(BeadIdResolutionError::UnresolvedShortId {
+                    requested_id: requested_id.to_owned(),
+                });
+            }
+            return Err(BeadIdResolutionError::TrackerError {
+                requested_id: requested_id.to_owned(),
+                code,
+            });
+        }
+        serde_json::Value::Object(_) => std::slice::from_ref(&value),
+        _ => return Err(BeadIdResolutionError::InvalidJson),
+    };
+    let row = match rows {
+        [] => {
+            return Err(BeadIdResolutionError::EmptyResult {
+                requested_id: requested_id.to_owned(),
+            })
+        }
+        [row] => row,
+        rows => {
+            let matches = rows
+                .iter()
+                .filter_map(|row| row.get("id").and_then(serde_json::Value::as_str))
+                .map(str::to_owned)
+                .collect();
+            return Err(BeadIdResolutionError::Ambiguous {
+                requested_id: requested_id.to_owned(),
+                matches,
+            });
+        }
+    };
+    let canonical_id = row
+        .get("id")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| BeadIdResolutionError::MissingCanonicalId {
+            requested_id: requested_id.to_owned(),
+        })?;
+    let match_kind = if canonical_id == requested_id {
+        BeadIdMatchKind::Exact
+    } else if canonical_id.ends_with(&format!("-{requested_id}")) {
+        BeadIdMatchKind::Suffix
+    } else {
+        return Err(BeadIdResolutionError::UnexpectedCanonicalId {
+            requested_id: requested_id.to_owned(),
+            canonical_id: canonical_id.to_owned(),
+        });
+    };
+    Ok(CanonicalBeadId {
+        requested_id: requested_id.to_owned(),
+        canonical_id: canonical_id.to_owned(),
+        match_kind,
+    })
+}
+
+/// Extract the current assignee from a br show response after canonicalizing
+/// the caller's identifier. Passing a suffix to this exact reader returns the
+/// typed UNRESOLVED-SHORT-ID diagnostic instead of silently reporting absence.
+pub fn parse_bead_assignee(
+    text: &str,
+    expected_id: &str,
+) -> Result<Option<String>, BeadIdResolutionError> {
+    let resolution = resolve_br_id(text, expected_id)?;
+    if resolution.match_kind != BeadIdMatchKind::Exact {
+        return Err(BeadIdResolutionError::UnresolvedShortId {
+            requested_id: expected_id.to_owned(),
+        });
+    }
+    let value: serde_json::Value =
+        serde_json::from_str(text).map_err(|_| BeadIdResolutionError::InvalidJson)?;
+    let row = match &value {
+        serde_json::Value::Array(rows) => {
+            rows.first()
+                .ok_or_else(|| BeadIdResolutionError::EmptyResult {
+                    requested_id: expected_id.to_owned(),
+                })?
+        }
+        serde_json::Value::Object(_) => &value,
+        _ => return Err(BeadIdResolutionError::InvalidJson),
+    };
+    Ok(row
+        .get("assignee")
         .and_then(serde_json::Value::as_str)
         .map(str::trim)
         .filter(|v| !v.is_empty() && *v != "none")
-        .map(str::to_owned)
+        .map(str::to_owned))
 }
 
 /// How a tracker read-back turned out, typed so a bounded timeout can never
