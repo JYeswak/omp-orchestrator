@@ -787,6 +787,20 @@ mod tests {
     }
 
     #[test]
+    fn assign_peer_grade_excludes_a_confirmed_idle_observer() {
+        let panes = vec![
+            pane("%9", "CONFIRMED_IDLE", false),
+            pane("%3", "CONFIRMED_IDLE", false),
+        ];
+        let jsonl = jsonl_done_ack("reap-me", "%8");
+        let assigned = assign_peer_grade("%9", &panes, &jsonl).expect("peer not observer");
+        assert_eq!(assigned.grader_pane, "%3", "idle observer must never be the grader: {assigned:?}");
+        assert_ne!(assigned.grader_pane, "%9");
+        assert_eq!(assigned.grader_assignee, "pane3-%3");
+    }
+
+
+    #[test]
     fn assign_peer_grade_refuses_a_pane_carrying_its_own_dispatch() {
         let panes = vec![pane("%3", "LIVE", true)];
         let error = require_idle_grader("%3", &panes).expect_err("working grader");
