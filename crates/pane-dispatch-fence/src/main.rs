@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use pane_dispatch_fence as _;
 use asupersync::Cx;
 use asupersync::process::Command;
 use asupersync::runtime::RuntimeBuilder;

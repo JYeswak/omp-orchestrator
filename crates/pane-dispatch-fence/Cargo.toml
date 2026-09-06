@@ -9,6 +9,10 @@ description = "Cross-process per-pane admission fence for control-plane dispatch
 name = "pane-dispatch-fence"
 path = "src/main.rs"
 
+[lib]
+name = "pane_dispatch_fence"
+path = "src/lib.rs"
+
 [dependencies]
 asupersync = { workspace = true }
 subprocess-contract = { path = "../subprocess-contract" }
