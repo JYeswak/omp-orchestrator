@@ -7,6 +7,7 @@
 //! This crate parses `N passed` and requires N >= 1.
 //! Unparseable output is a named error, never a pass.
 
+use input_manifest::{CargoInputBound, CargoTestResult, InputManifest, ManifestError};
 use serde_json::Value;
 use std::fmt;
 use std::path::Path;
@@ -24,6 +25,7 @@ pub enum GradeError {
     Unparseable,
     Vacuous { passed: u64, filtered: u64 },
     CargoFailed { exit: i32, passed: u64 },
+    ManifestRejected { state: String, detail: String },
 }
 
 impl fmt::Display for GradeError {
@@ -31,7 +33,7 @@ impl fmt::Display for GradeError {
         match self {
             Self::Unparseable => write!(
                 f,
-                "NAMED_TEST_UNPARSEABLE: no `{RESULT_MARKER}` line — not a pass"
+                "NAMED_TEST_UNPARSEABLE: no result line — not a pass"
             ),
             Self::Vacuous { passed, filtered } => write!(
                 f,
@@ -40,19 +42,44 @@ impl fmt::Display for GradeError {
             Self::CargoFailed { exit, passed } => {
                 write!(f, "NAMED_TEST_CARGO_FAILED: exit={exit} passed={passed}")
             }
+            Self::ManifestRejected { state, detail } => {
+                write!(f, "NAMED_TEST_MANIFEST_REJECTED: state={state} detail={detail}")
+            }
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Grade {
-    Admit { passed: u64 },
-    Refuse(GradeError),
+    Admit {
+        passed: u64,
+        manifest: InputManifest,
+    },
+    Refuse {
+        error: GradeError,
+        manifest: InputManifest,
+    },
 }
 
 impl Grade {
     pub fn is_admit(&self) -> bool {
         matches!(self, Self::Admit { .. })
+    }
+
+    pub fn manifest(&self) -> &InputManifest {
+        match self {
+            Self::Admit { manifest, .. } | Self::Refuse { manifest, .. } => manifest,
+        }
+    }
+
+    pub fn acceptance_evidence(&self) -> Result<u64, GradeError> {
+        match self {
+            Self::Admit { passed, manifest } => manifest
+                .require_full()
+                .map(|()| *passed)
+                .map_err(manifest_rejection),
+            Self::Refuse { error, .. } => Err(error.clone()),
+        }
     }
 }
 
@@ -91,20 +118,54 @@ fn number_before(haystack: &str, needle: &str) -> Option<u64> {
     }
 }
 
-/// Grade cargo test output. Exit 0 with 0 passed is refuse.
+/// Grade cargo test output. Exit 0 with 0 passed is refuse. The default
+/// path consumes every target line and carries FULL.
 pub fn grade(output: &str, exit: i32) -> Grade {
-    match parse_tally(output) {
-        Err(err) => Grade::Refuse(err),
-        Ok(tally) if tally.passed == 0 => Grade::Refuse(GradeError::Vacuous {
-            passed: tally.passed,
-            filtered: tally.filtered,
-        }),
-        Ok(tally) if exit != 0 => Grade::Refuse(GradeError::CargoFailed {
-            exit,
-            passed: tally.passed,
-        }),
-        Ok(tally) => Grade::Admit {
-            passed: tally.passed,
+    grade_with_bound(output, exit, CargoInputBound::All)
+}
+
+/// Grade a deliberately bounded extraction. Dropped target lines are declared
+/// PARTIAL and cannot become acceptance evidence.
+pub fn grade_with_bound(output: &str, exit: i32, bound: CargoInputBound) -> Grade {
+    let result = match CargoTestResult::extract(output, bound, "cargo test") {
+        Ok(result) => result,
+        Err(error) => {
+            let manifest =
+                InputManifest::refused(error.to_string()).expect("extraction refusal has a reason");
+            return Grade::Refuse {
+                error: GradeError::Unparseable,
+                manifest,
+            };
+        }
+    };
+    let passed = result.passed();
+    let manifest = result.manifest;
+    if passed == 0 {
+        Grade::Refuse {
+            error: GradeError::Vacuous {
+                passed,
+                filtered: result.targets.iter().map(|target| target.filtered).sum(),
+            },
+            manifest,
+        }
+    } else if exit != 0 {
+        Grade::Refuse {
+            error: GradeError::CargoFailed { exit, passed },
+            manifest,
+        }
+    } else {
+        Grade::Admit { passed, manifest }
+    }
+}
+
+fn manifest_rejection(error: ManifestError) -> GradeError {
+    match error {
+        ManifestError::NonCitable { state, detail } => {
+            GradeError::ManifestRejected { state, detail }
+        }
+        other => GradeError::ManifestRejected {
+            state: "REFUSED".to_owned(),
+            detail: other.to_string(),
         },
     }
 }

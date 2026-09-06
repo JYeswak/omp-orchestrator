@@ -390,8 +390,17 @@ evidence is still the bead's own criteria, re-run by a grader who is not the imp
 is forgeable by construction: it is a comment any agent can write, so it is a *delivery* receipt,
 never a *progress* one.
 
----
+### THE INPUT MANIFEST IS A FIELD, NOT PROSE
 
+Any tool, census, or grade result used as evidence MUST carry a required InputManifest field. The field has exactly three states: FULL, PARTIAL with bound_kind, bound_value, and source, or REFUSED with reason. There is no Default implementation: omitting the manifest is a construction error, not an implicit FULL.
+
+An empty scan or result set is the typed EmptyScanSet error, distinct from FULL with zero rows and distinct from PARTIAL. PARTIAL and REFUSED results are non-citable acceptance evidence; the grade-ingestion boundary MUST reject them before a bead can close. A non-recursive or otherwise bounded instrument MUST emit PARTIAL with its bound named, or REFUSED; it MUST NOT silently slice or answer an empty set.
+
+The mechanical form is deliberate: the manifest is a serialized struct field on the emitted artifact, not a log line, comment, or convention. Source paths from state files and pane transcripts are tagged SelfReferentialCorpus; a corpus containing only those hits MUST NOT report FULL. This is the neighbouring rule to file -> claim -> dispatch: the result carries what input was actually consumed before anyone cites it.
+
+NO-CLAIM: a manifest records the instrument's declared input coverage. FULL does not prove the subject result is correct, and static source coverage does not prove a runtime invocation.
+
+---
 ## The fifth rule: the crates exist to orchestrate OMP, and today they scrape it
 
 Everything in this repo is built to drive OMP. Measured 2026-08-31 against the **installed** source

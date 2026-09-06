@@ -12,22 +12,35 @@ fn main() -> ExitCode {
     match args.next().as_deref() {
         Some("census") => census(args.next().map(PathBuf::from)),
         Some("grade") => {
-            let exit: i32 = args
-                .next()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(0);
+            let exit: i32 = args.next().and_then(|s| s.parse().ok()).unwrap_or(0);
             let mut buf = String::new();
             if io::stdin().read_to_string(&mut buf).is_err() {
                 eprintln!("NAMED_TEST_UNPARSEABLE: stdin unread");
                 return ExitCode::from(2);
             }
             match grade(&buf, exit) {
-                Grade::Admit { passed } => {
-                    println!("NAMED_TEST_ADMIT passed={passed}");
+                Grade::Admit { passed, manifest } => {
+                    let wire = serde_json::json!({
+                        "status": "ADMIT",
+                        "passed": passed,
+                        "manifest": manifest,
+                    });
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&wire).expect("serialize grade")
+                    );
                     ExitCode::SUCCESS
                 }
-                Grade::Refuse(err) => {
-                    eprintln!("{err}");
+                Grade::Refuse { error, manifest } => {
+                    let wire = serde_json::json!({
+                        "status": "REFUSED",
+                        "error": error.to_string(),
+                        "manifest": manifest,
+                    });
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&wire).expect("serialize refusal")
+                    );
                     ExitCode::from(1)
                 }
             }
@@ -62,7 +75,11 @@ fn census(root: Option<PathBuf>) -> ExitCode {
             for row in &rows {
                 println!(
                     "{} {} {}",
-                    if row.resolved { "RESOLVED" } else { "UNRESOLVED" },
+                    if row.resolved {
+                        "RESOLVED"
+                    } else {
+                        "UNRESOLVED"
+                    },
                     row.bead_id,
                     row.test_fn
                 );

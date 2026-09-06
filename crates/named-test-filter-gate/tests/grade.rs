@@ -1,7 +1,9 @@
 //! Vacuous cargo filters must refuse. Real passing names must still admit.
 
+use input_manifest::{CargoInputBound, InputManifest};
 use named_test_filter_gate::{
-    census_beads, grade, implemented_test_fns, named_tests_in, parse_tally, Grade, GradeError,
+    census_beads, grade, grade_with_bound, implemented_test_fns, named_tests_in, parse_tally,
+    Grade, GradeError,
 };
 
 const VACUOUS: &str =
@@ -13,7 +15,14 @@ const REAL_PASS: &str =
 #[test]
 fn known_bad_missing_name_zero_passed_refuses() {
     match grade(VACUOUS, 0) {
-        Grade::Refuse(GradeError::Vacuous { passed: 0, filtered: 2 }) => {
+        Grade::Refuse {
+            error:
+                GradeError::Vacuous {
+                    passed: 0,
+                    filtered: 2,
+                },
+            manifest: InputManifest::Full,
+        } => {
             println!("refused vacuous 0 passed / 2 filtered, exit 0");
         }
         other => panic!("missing name must refuse, got {other:?}"),
@@ -23,7 +32,10 @@ fn known_bad_missing_name_zero_passed_refuses() {
 #[test]
 fn known_good_existing_name_admits() {
     match grade(REAL_PASS, 0) {
-        Grade::Admit { passed: 1 } => println!("admitted 1 passed"),
+        Grade::Admit {
+            passed: 1,
+            manifest: InputManifest::Full,
+        } => println!("admitted 1 passed"),
         other => panic!("real pass must admit, got {other:?}"),
     }
 }
@@ -31,7 +43,10 @@ fn known_good_existing_name_admits() {
 #[test]
 fn unparseable_is_named_error_never_pass() {
     match grade("error: could not compile `ompo-start`", 101) {
-        Grade::Refuse(GradeError::Unparseable) => {
+        Grade::Refuse {
+            error: GradeError::Unparseable,
+            manifest: InputManifest::Refused { .. },
+        } => {
             println!("unparseable compile log is named error");
         }
         other => panic!("unparseable must not pass, got {other:?}"),
@@ -40,11 +55,39 @@ fn unparseable_is_named_error_never_pass() {
 }
 
 #[test]
+fn partial_grade_cannot_close_a_bead() {
+    let output = concat!(
+        "test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out\n",
+        "test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out\n",
+    );
+    let grade = grade_with_bound(output, 0, CargoInputBound::Head { lines: 1 });
+    match &grade {
+        Grade::Admit {
+            passed: 26,
+            manifest:
+                InputManifest::Partial {
+                    bound_kind,
+                    bound_value: 2,
+                    ..
+                },
+        } => assert_eq!(bound_kind, "head -1 of N target lines"),
+        other => panic!("bounded grade must be partial, got {other:?}"),
+    }
+    assert!(
+        grade.acceptance_evidence().is_err(),
+        "a partial grade must not close a bead"
+    );
+}
+
+#[test]
 fn named_tests_in_extracts_filter_fn() {
-    let text = "cargo test -p ompo-start --test l3_step_parity both_renderers_borrow_the_same_array";
+    let text =
+        "cargo test -p ompo-start --test l3_step_parity both_renderers_borrow_the_same_array";
     let names = named_tests_in(text);
     assert!(
-        names.iter().any(|n| n == "both_renderers_borrow_the_same_array"),
+        names
+            .iter()
+            .any(|n| n == "both_renderers_borrow_the_same_array"),
         "{names:?}"
     );
 }
@@ -88,7 +131,9 @@ fn live_tree_census_does_not_unpark() {
         println!("UNRESOLVED {} {}", row.bead_id, row.test_fn);
     }
     assert!(
-        implemented.iter().any(|n| n == "skipped_steps_remain_in_both_renders"),
+        implemented
+            .iter()
+            .any(|n| n == "skipped_steps_remain_in_both_renders"),
         "positive control: skipped_steps exists"
     );
     assert!(
