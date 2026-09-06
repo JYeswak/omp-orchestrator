@@ -101,12 +101,36 @@ const GATE_PROPERTIES: &[Claim] = &[
         Some("lint_is_wired_into_blocking_ci"),
     ),
     // Declared absences — remaining gaps are explicit; delivered legs carry citations.
-    ("kernel-bypass-gate", "mutation", Some("mutation_removing_registry_predicate_is_red_and_restores_green")),
-    ("kernel-bypass-gate", "anti-vacuity", Some("empty_crates_scan_exits_gate_error_not_success")),
-    ("pre-delete-citation-check", "mutation", Some("closed_status_predicate_detects_cp_op5uu")),
-    ("pre-delete-citation-check", "anti-vacuity", Some("empty_closed_bead_records_are_an_error_not_a_pass")),
-    ("path-literal-guard", "known-good", None),
-    ("undrained-pipe-lint", "claim-discipline", Some("claim_header_names_enforces_still_passes_provenance")),
+    (
+        "kernel-bypass-gate",
+        "mutation",
+        Some("mutation_removing_registry_predicate_is_red_and_restores_green"),
+    ),
+    (
+        "kernel-bypass-gate",
+        "anti-vacuity",
+        Some("empty_crates_scan_exits_gate_error_not_success"),
+    ),
+    (
+        "pre-delete-citation-check",
+        "mutation",
+        Some("closed_status_predicate_detects_cp_op5uu"),
+    ),
+    (
+        "pre-delete-citation-check",
+        "anti-vacuity",
+        Some("empty_closed_bead_records_are_an_error_not_a_pass"),
+    ),
+    (
+        "path-literal-guard",
+        "known-good",
+        Some("known_good_boundary_paths_are_clean"),
+    ),
+    (
+        "undrained-pipe-lint",
+        "claim-discipline",
+        Some("claim_header_names_enforces_still_passes_provenance"),
+    ),
 ];
 
 fn crate_test_bodies(root: &Path, crate_name: &str) -> String {
@@ -169,19 +193,14 @@ fn every_claimed_property_cites_a_test_that_exists() {
 }
 
 #[test]
-fn a_declared_absence_is_recorded_rather_than_left_blank() {
-    // One row remains None: it is a real absence, not an omission.
-    // If this reaches zero, the remaining absence and 06-gates.md's count are stale
-    // and must be rewritten in the same commit.
+fn every_registered_property_carries_a_citation() {
     let absences = GATE_PROPERTIES
         .iter()
-        .filter(|(_, _, c)| c.is_none())
+        .filter(|(_, _, citation)| citation.is_none())
         .count();
-    assert!(
-        absences > 0,
-        "every property row now carries a citation. If that is real, 06-gates.md's \
-         'Zero gates satisfy all six' is now FALSE and the section must be updated in \
-         the same commit. If it is not real, the absences were deleted rather than closed."
+    assert_eq!(
+        absences, 0,
+        "all currently delivered gate properties must cite a test; stale None rows hide gaps"
     );
 }
 

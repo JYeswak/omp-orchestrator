@@ -65,6 +65,48 @@ fn zero_home_path_literals_across_crates_src() {
     );
 }
 
+/// KNOWN-GOOD boundary leg: legitimate path construction must not look like a home-path literal.
+#[test]
+fn known_good_boundary_paths_are_clean() {
+    let root = std::env::temp_dir().join(format!("plg-known-good-{}", std::process::id()));
+    let src = root.join("crates/example/src");
+    fs::create_dir_all(&src).expect("create known-good fixture tree");
+    fs::write(
+        src.join("lib.rs"),
+        r##"fn repo_root() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .expect("crate root")
+        .to_path_buf()
+}
+fn data_path() -> std::path::PathBuf { repo_root().join("var/data") }
+const SCRATCH: &str = "/tmp/path-literal-guard-fixture";
+"##,
+    )
+    .expect("write known-good fixture source");
+
+    let report = scan(&root);
+    println!(
+        "PATH-LITERAL-GATE PASS: {} files scanned, zero home-path literals",
+        report.scanned.len()
+    );
+    assert_eq!(report.mode, ScanMode::RepoWide);
+    assert_eq!(
+        report.scanned.len(),
+        1,
+        "known-good leg must read a non-empty scan set"
+    );
+    assert!(
+        report.hits.is_empty(),
+        "legitimate path construction was flagged: {report:?}"
+    );
+    assert_eq!(report.verdict(), Verdict::Clean);
+    assert!(report.is_pass());
+    assert!(report.declared_scope_line().contains("1 file(s) read"));
+
+    fs::remove_dir_all(&root).expect("remove known-good fixture tree");
+}
 /// UNREADABLE INPUT is an ERROR, never an empty clean scan. The source directory
 /// is discovered before its permissions are revoked, so the scanner must refuse
 /// when `read_dir` cannot enumerate it rather than silently returning no files.
@@ -116,9 +158,15 @@ fn an_unstaged_literal_cannot_refuse_a_clean_staged_change() {
     let sweep = scan(&root);
     assert_eq!(sweep.mode, ScanMode::RepoWide);
     assert_eq!(sweep.verdict(), Verdict::Violation, "{sweep:?}");
-    let named: Vec<String> = sweep.hits.iter().map(std::string::ToString::to_string).collect();
+    let named: Vec<String> = sweep
+        .hits
+        .iter()
+        .map(std::string::ToString::to_string)
+        .collect();
     assert!(
-        named.iter().any(|hit| hit.contains("scratch.rs") && hit.ends_with(":1")),
+        named
+            .iter()
+            .any(|hit| hit.contains("scratch.rs") && hit.ends_with(":1")),
         "the sweep must NAME file:line, not a count: {named:?}"
     );
     assert!(
@@ -170,8 +218,14 @@ fn both_modes_exist_and_are_distinguishable() {
     // The CLI names both modes too, so an operator or CI job can state its claim.
     let cli = fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"))
         .expect("the CLI must be readable");
-    assert!(cli.contains("--repo-wide"), "the sweep must stay reachable from the CLI");
-    assert!(cli.contains("--staged"), "the scoped mode must be nameable from the CLI");
+    assert!(
+        cli.contains("--repo-wide"),
+        "the sweep must stay reachable from the CLI"
+    );
+    assert!(
+        cli.contains("--staged"),
+        "the scoped mode must be nameable from the CLI"
+    );
 
     fs::remove_dir_all(&root).expect("remove fixture tree");
 }
@@ -184,10 +238,16 @@ fn staged_mode_over_the_real_repo_equals_the_sweep() {
     let root = repo_root();
     let sweep = scan(&root);
     let every: Vec<PathBuf> = sweep.scanned.clone();
-    assert!(!every.is_empty(), "anti-vacuity: the real repo must have files to compare");
+    assert!(
+        !every.is_empty(),
+        "anti-vacuity: the real repo must have files to compare"
+    );
     let scoped = scan_paths(&root, &every);
     assert_eq!(scoped.scanned, sweep.scanned, "the same files must be read");
-    assert_eq!(scoped.hits, sweep.hits, "the same hits, at the same file:line");
+    assert_eq!(
+        scoped.hits, sweep.hits,
+        "the same hits, at the same file:line"
+    );
     assert_eq!(scoped.verdict(), sweep.verdict());
 }
 
@@ -198,7 +258,10 @@ fn staged_mode_over_the_real_repo_equals_the_sweep() {
 fn the_guards_own_source_is_clean_without_an_exclusion() {
     let root = repo_root();
     let own = Path::new("crates/path-literal-guard/src/lib.rs");
-    assert!(is_in_scan_scope(own), "the gate's own source must be IN scope");
+    assert!(
+        is_in_scan_scope(own),
+        "the gate's own source must be IN scope"
+    );
 
     let source = fs::read_to_string(root.join(own)).expect("read the gate's own source");
     assert!(
