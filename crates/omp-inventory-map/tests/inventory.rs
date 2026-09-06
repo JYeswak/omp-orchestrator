@@ -5,6 +5,10 @@ use omp_inventory_map::{
     build_inventory_map, classify_trigger_data, collect_inventory, parse_cargo_metadata,
     parse_cli_commands, parse_rpc_slash_commands,
 };
+use omp_inventory_map::census_invariants::{
+    CensusInvariantError, CensusInvariantRow, check_census_invariants,
+};
+use omp_inventory_map::types_inventory::scan_workspace_types;
 use serde_json::json;
 use std::path::PathBuf;
 #[cfg(unix)]
@@ -205,4 +209,98 @@ fn hung_omp_probe_becomes_unknown_with_typed_timeout() {
         "the hung omp version probe must be named in timeout evidence: {timed_out:?}"
     );
     std::fs::remove_dir_all(root).expect("remove fixture root");
+}
+
+#[test]
+fn real_scan_set_refuses_orphan_and_blank_contract_then_restores_green() {
+    let root = std::env::temp_dir().join(format!(
+        "omp-inventory-map-known-bad-{}",
+        std::process::id()
+    ));
+    let anchor = root.join("crates/scan-anchor");
+    let orphan = root.join("crates/orphan-specimen");
+    std::fs::create_dir_all(anchor.join("src")).expect("anchor source root");
+    std::fs::create_dir_all(orphan.join("src")).expect("orphan source root");
+    std::fs::write(
+        anchor.join("Cargo.toml"),
+        "[package]\nname = \"scan-anchor\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .expect("anchor manifest");
+    std::fs::write(
+        orphan.join("Cargo.toml"),
+        "[package]\nname = \"orphan-specimen\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .expect("orphan manifest");
+    std::fs::write(anchor.join("src/lib.rs"), "pub struct ScanAnchor;\n")
+        .expect("anchor source");
+    std::fs::write(orphan.join("src/lib.rs"), "// no public type\n")
+        .expect("orphan source");
+
+    let planted_inventory = scan_workspace_types(&root).expect("planted scan set");
+    let inventory_errors = planted_inventory
+        .check()
+        .expect_err("orphan crate must be refused");
+    assert!(
+        inventory_errors
+            .iter()
+            .any(|error| error.contains("NAMED-ZERO REQUIRED") && error.contains("orphan-specimen")),
+        "orphan refusal must name the crate: {inventory_errors:?}"
+    );
+
+    let clean_rows = vec![CensusInvariantRow {
+        id: "surface:cli_command:anchor".to_owned(),
+        kind: "cli_command".to_owned(),
+        must_be_true: vec!["omp --help lists anchor".to_owned()],
+        negative_evidence: vec!["a missing COMMANDS block is UNKNOWN for anchor".to_owned()],
+        vacuity_mode: None,
+        vacuity_reason: None,
+        what_it_provides: String::new(),
+        inputs: Vec::new(),
+    }];
+    let mut planted_rows = clean_rows.clone();
+    planted_rows.push(CensusInvariantRow {
+        id: "surface:cli_command:blank-specimen".to_owned(),
+        kind: "cli_command".to_owned(),
+        must_be_true: Vec::new(),
+        negative_evidence: vec!["blank must_be_true is the planted defect".to_owned()],
+        vacuity_mode: None,
+        vacuity_reason: None,
+        what_it_provides: String::new(),
+        inputs: Vec::new(),
+    });
+    let blank_error = check_census_invariants(&planted_rows)
+        .expect_err("blank must_be_true must be refused");
+    assert!(
+        matches!(
+            &blank_error,
+            CensusInvariantError::BlankInvariant { id, field }
+                if id == "surface:cli_command:blank-specimen" && *field == "must_be_true"
+        ),
+        "blank refusal must name row and field: {blank_error:?}"
+    );
+    assert!(
+        blank_error.to_string().contains("blank-specimen")
+            && blank_error.to_string().contains("must_be_true"),
+        "typed blank refusal must carry both identities: {blank_error}"
+    );
+
+    std::fs::remove_dir_all(&orphan).expect("remove orphan specimen");
+    let restored_inventory = scan_workspace_types(&root).expect("restored scan set");
+    assert!(
+        !restored_inventory.crates.is_empty(),
+        "restored scan must remain non-empty"
+    );
+    restored_inventory
+        .check()
+        .expect("removing orphan must restore a green non-empty scan");
+    check_census_invariants(&clean_rows)
+        .expect("removing blank row must restore a green non-empty census");
+    std::fs::remove_dir_all(&anchor).expect("remove final anchor");
+    let empty_scan_error = scan_workspace_types(&root)
+        .expect_err("an empty real scan set must be an error");
+    assert!(
+        format!("{empty_scan_error:?}").contains("no member crates"),
+        "empty scan refusal must name the missing member set: {empty_scan_error:?}"
+    );
+    std::fs::remove_dir_all(root).expect("remove specimen workspace");
 }

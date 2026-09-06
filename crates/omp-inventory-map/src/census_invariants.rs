@@ -80,6 +80,7 @@ impl CensusInvariantRow {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CensusInvariantError {
     EmptyCensus,
+    BlankInvariant { id: String, field: &'static str },
     VacuousInvariantSet {
         field: &'static str,
         kind: String,
@@ -105,6 +106,10 @@ impl fmt::Display for CensusInvariantError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::EmptyCensus => formatter.write_str("EMPTY_CENSUS inventory rows is empty"),
+            Self::BlankInvariant { id, field } => write!(
+                formatter,
+                "EMPTY_INVARIANT id={id} field={field} requires a non-empty contract"
+            ),
             Self::VacuousInvariantSet {
                 field,
                 kind,
@@ -212,7 +217,7 @@ fn is_scanner_input(value: &str) -> bool {
     value.contains("cargo metadata")
 }
 
-/// Refuse an empty census and a one-distinct-value invariant set.
+/// Refuse an empty census, a blank per-row contract, and one-distinct-value invariant set.
 ///
 /// Structural rows with a reason are accepted and ignored by the distinct
 /// count. `vacuity_mode=structural` without a reason is an error, not a pass.
@@ -223,6 +228,17 @@ pub fn check_census_invariants(
         return Err(CensusInvariantError::EmptyCensus);
     }
     for row in rows {
+        for (field, values) in [
+            ("must_be_true", row.must_be_true.as_slice()),
+            ("negative_evidence", row.negative_evidence.as_slice()),
+        ] {
+            if values.is_empty() || values.iter().all(|value| value.trim().is_empty()) {
+                return Err(CensusInvariantError::BlankInvariant {
+                    id: row.id.clone(),
+                    field,
+                });
+            }
+        }
         if matches!(row.vacuity_mode, Some(VacuityMode::Structural))
             && row
                 .vacuity_reason

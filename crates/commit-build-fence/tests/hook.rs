@@ -152,6 +152,43 @@ fn real_hook_refuses_active_registration_with_actionable_identity() {
 }
 
 #[test]
+fn known_bad_active_registration_is_refused_with_typed_reason() {
+    let dir = fresh_repo("known-bad");
+    let store_path = store_for(&dir);
+    RegistrationStore::empty()
+        .save_atomic(&store_path)
+        .expect("initialize known-bad store");
+    install_hook(&dir);
+    let repo = dir.canonicalize().expect("canonical repo");
+    let now = now_unix();
+    let mut store = RegistrationStore::load(&store_path).expect("load known-bad store");
+    store
+        .register(BuildRegistration {
+            build_id: "known-bad-active".to_owned(),
+            repo: repo.display().to_string(),
+            head: current_head(&dir),
+            holder: "known-bad-holder".to_owned(),
+            started_at_unix: now,
+            expires_at_unix: now + 1_800,
+        })
+        .expect("register known-bad build");
+    store.save_atomic(&store_path).expect("save known-bad store");
+
+    stage_file(&dir, "known-bad.rs", "fn known_bad() {}\n");
+    let refused = run_git_with_store(
+        &dir,
+        &store_path,
+        &["commit", "--quiet", "-m", "feat: known-bad [test]"],
+    );
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert_eq!(refused.status.code(), Some(1), "active specimen must refuse: {stderr}");
+    assert!(stderr.contains("COMMIT_FENCE_REFUSED"), "typed refusal missing: {stderr}");
+    assert!(stderr.contains("known-bad-active"), "build identity missing: {stderr}");
+    assert!(stderr.contains("known-bad-holder"), "holder identity missing: {stderr}");
+    fs::remove_dir_all(dir).expect("remove known-bad repository");
+}
+
+#[test]
 fn mutation_live_registration_predicate_is_red_and_restores_green() {
     let dir = fresh_repo("mutation");
     let store_path = store_for(&dir);
