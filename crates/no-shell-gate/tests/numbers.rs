@@ -10,7 +10,8 @@
 //! Grading cannot keep up. The interval between rounds is hours; the drift is
 //! continuous. A human noticing is not a mechanism.
 
-use std::{fs, path::PathBuf, process::Command};
+use std::{fs, path::{Path, PathBuf}, process::{Command, Stdio}};
+
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -26,6 +27,73 @@ struct Figure {
     command: String,
     expect: String,
 }
+
+#[derive(Debug)]
+enum FigureRun {
+    Compared { got: String },
+    LiveNonempty,
+    ProbeMissing { probe: &'static str, detail: String },
+    SpawnFailed,
+}
+
+fn executable_on_path(name: &str, path_var: Option<&str>) -> bool {
+    let mut cmd = Command::new(name);
+    cmd.arg("--version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    if let Some(path) = path_var {
+        cmd.env("PATH", path);
+    }
+    cmd.status().is_ok()
+}
+
+/// Host probes a figure's command needs. Absence is not a measured zero.
+fn missing_host_probe(command: &str, path_var: Option<&str>) -> Option<(&'static str, String)> {
+    if command.contains("br list") || command.contains(" br ") || command.starts_with("br ") {
+        if !executable_on_path("br", path_var) {
+            return Some(("br", "br not on PATH".to_owned()));
+        }
+    }
+    const OMP_TYPES: &str =
+        "/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types";
+    if command.contains(OMP_TYPES) && !Path::new(OMP_TYPES).is_dir() {
+        return Some((
+            "omp_dist_types",
+            format!("{OMP_TYPES} is not a directory"),
+        ));
+    }
+    const BUILDSHARED: &str = "/Volumes/BuildShared/cargo-targets/release";
+    if command.contains("/Volumes/BuildShared") && !Path::new(BUILDSHARED).is_dir() {
+        return Some((
+            "buildshared_release",
+            format!("{BUILDSHARED} is not a directory"),
+        ));
+    }
+    None
+}
+
+fn run_figure(root: &Path, figure: &Figure, path_var: Option<&str>) -> FigureRun {
+    if let Some((probe, detail)) = missing_host_probe(&figure.command, path_var) {
+        return FigureRun::ProbeMissing { probe, detail };
+    }
+    let mut cmd = Command::new("sh");
+    cmd.arg("-c").arg(&figure.command).current_dir(root);
+    if let Some(path) = path_var {
+        cmd.env("PATH", path);
+    }
+    let Ok(out) = cmd.output() else {
+        return FigureRun::SpawnFailed;
+    };
+    let got = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+    if figure.expect == "LIVE" {
+        if got.is_empty() {
+            return FigureRun::SpawnFailed;
+        }
+        return FigureRun::LiveNonempty;
+    }
+    FigureRun::Compared { got }
+}
+
 
 /// TOML basic-string unescaping, done once and correctly.
 ///
@@ -137,53 +205,37 @@ fn no_declared_figure_has_drifted() {
     let mut ran = 0usize;
 
     for f in figures() {
-        // VOLATILE FIGURES. A pane declaring `expect = "LIVE"` in the round-11 fix had
-        // the right instinct and no mechanism: the bead board moves hourly, so pinning
-        // it would fail the build every hour and get the gate switched off. But it must
-        // still be DECLARED, because prose quoting a board total without an "as of" is
-        // exactly the drift this registry exists to surface.
-        //
-        // So LIVE means: the command MUST still run and produce output — a volatile
-        // figure whose command has rotted is a silent hole — but its value is not
-        // compared. The obligation moves to the prose: cite the command, not a number.
-        if f.expect == "LIVE" {
-            let out = Command::new("sh")
-                .arg("-c")
-                .arg(&f.command)
-                .current_dir(&root)
-                .output();
-            match out {
-                Ok(o) if !String::from_utf8_lossy(&o.stdout).trim().is_empty() => {
-                    ran += 1;
-                }
-                _ => drifted.push(format!(
-                    "{}: declared LIVE but its command produced nothing — a volatile figure \
-                     with a broken command is undetectable rot\n      $ {}",
-                    f.key, f.command
-                )),
+        match run_figure(&root, &f, None) {
+            FigureRun::ProbeMissing { probe, detail } => {
+                eprintln!(
+                    "PROBE_MISSING figure={} probe={probe} {detail} — not a measured zero",
+                    f.key
+                );
             }
-            continue;
-        }
-        let out = Command::new("sh")
-            .arg("-c")
-            .arg(&f.command)
-            .current_dir(&root)
-            .output();
-        let Ok(out) = out else {
-            drifted.push(format!("{}: command failed to spawn", f.key));
-            continue;
-        };
-        ran += 1;
-        let got = String::from_utf8_lossy(&out.stdout).trim().to_owned();
-        if got != f.expect {
-            drifted.push(format!(
-                "{}: recorded {:?}, command now answers {:?}\n      $ {}",
-                f.key, f.expect, got, f.command
-            ));
+            FigureRun::LiveNonempty => {
+                ran += 1;
+            }
+            FigureRun::Compared { got } => {
+                ran += 1;
+                if got != f.expect {
+                    drifted.push(format!(
+                        "{}: recorded {:?}, command now answers {:?}\n      $ {}",
+                        f.key, f.expect, got, f.command
+                    ));
+                }
+            }
+            FigureRun::SpawnFailed => {
+                drifted.push(format!(
+                    "{}: declared {} but its command produced nothing — a volatile figure \
+                     with a broken command is undetectable rot\n      $ {}",
+                    f.key,
+                    if f.expect == "LIVE" { "LIVE" } else { "pinned" },
+                    f.command
+                ));
+            }
         }
     }
 
-    // ANTI-VACUITY: zero commands executed reports identically to zero drift.
     assert!(
         ran > 0,
         "executed ZERO commands — the registry is unreadable or every command \
@@ -343,31 +395,29 @@ fn a_figure_deriving_zero_must_declare_the_zero_is_real() {
         if f.command.is_empty() || f.expect == "LIVE" {
             continue;
         }
-        // .current_dir(repo_root()) is LOAD-BEARING, and omitting it is how this
-        // gate first reported 14 of 17 figures deriving zero. The commands use
-        // repo-relative paths (`crates/*/Cargo.toml`); run from the harness's cwd
-        // they match nothing and exit 0. Same silent-false-zero as the unescaped-
-        // paren grep this gate exists to catch — reproduced inside the gate itself.
-        let out = std::process::Command::new("sh")
-            .arg("-c")
-            .arg(&f.command)
-            .current_dir(repo_root())
-            .output();
-        let got = match out {
-            Ok(o) => String::from_utf8_lossy(&o.stdout).trim().to_owned(),
-            Err(_) => continue,
-        };
-        checked += 1;
-        if got.is_empty() || got == "0" {
-            let block = text
-                .split("[figures.")
-                .find(|b| b.starts_with(&f.key))
-                .unwrap_or("");
-            if !block.contains("zero_is_real") {
-                undeclared.push(format!("{} -> {:?}", f.key, got));
+        match run_figure(&repo_root(), &f, None) {
+            FigureRun::ProbeMissing { probe, detail } => {
+                eprintln!(
+                    "PROBE_MISSING figure={} probe={probe} {detail} — not a measured zero",
+                    f.key
+                );
             }
+            FigureRun::Compared { got } => {
+                checked += 1;
+                if got.is_empty() || got == "0" {
+                    let block = text
+                        .split("[figures.")
+                        .find(|b| b.starts_with(&f.key))
+                        .unwrap_or("");
+                    if !block.contains("zero_is_real") {
+                        undeclared.push(format!("{} -> {:?}", f.key, got));
+                    }
+                }
+            }
+            FigureRun::LiveNonempty | FigureRun::SpawnFailed => {}
         }
     }
+
     assert!(
         checked > 0,
         "ANTI-VACUITY: no figure commands ran -- this gate proves nothing about an empty set"
@@ -379,3 +429,56 @@ fn a_figure_deriving_zero_must_declare_the_zero_is_real() {
         undeclared
     );
 }
+
+#[test]
+fn empty_path_does_not_treat_missing_br_as_zero_or_live_rot() {
+    let figure = figures()
+        .into_iter()
+        .find(|f| f.key == "board_total")
+        .expect("board_total is the br-coupled LIVE figure");
+    match run_figure(&repo_root(), &figure, Some("")) {
+        FigureRun::ProbeMissing { probe, detail } => {
+            assert_eq!(probe, "br", "{detail}");
+            assert!(detail.contains("PATH"), "{detail}");
+        }
+        other => panic!("missing br must be PROBE_MISSING, not {other:?}"),
+    }
+}
+
+#[test]
+fn missing_omp_dist_is_probe_missing_not_a_zero_count() {
+    let command = "/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types";
+    let fake = Figure {
+        key: "ipg6_root_symbols".into(),
+        command: format!("R={command}; tot=0; echo $tot"),
+        expect: "611".into(),
+    };
+    if Path::new(command).is_dir() {
+        match missing_host_probe(&fake.command, None) {
+            None => {}
+            other => panic!("present dist tree must not look missing: {other:?}"),
+        }
+        return;
+    }
+    match run_figure(&repo_root(), &fake, None) {
+        FigureRun::ProbeMissing { probe, .. } => assert_eq!(probe, "omp_dist_types"),
+        other => panic!("absent dist tree must be PROBE_MISSING, not {other:?}"),
+    }
+}
+
+#[test]
+fn a_laptop_with_tools_still_fails_when_a_figure_drifts() {
+    let planted = Figure {
+        key: "planted_drift".into(),
+        command: "echo 1".into(),
+        expect: "2".into(),
+    };
+    match run_figure(&repo_root(), &planted, None) {
+        FigureRun::Compared { got } => {
+            assert_eq!(got, "1");
+            assert_ne!(got, planted.expect);
+        }
+        other => panic!("echo 1 must compare, got {other:?}"),
+    }
+}
+
