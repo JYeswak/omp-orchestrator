@@ -11,8 +11,25 @@ OMP_CARGO_TARGET_POLICY = { value = "REPO_OWNED_TARGET", force = true }
 # and not the /zeststream-rch table. The registry FAILS CLOSED for a repo with no
 # row.
 #
-# `force = true` beats a stale exported RCH_WORKER: verified in the sibling repo
-# that with RCH_WORKER=contabo-4 exported, cargo still resolves the pinned lane.
+# ⛔ THE RCH_WORKER PIN WAS REMOVED 2026-09-06 (cp-6yv8f). It could not select a worker.
+# This block previously claimed: "`force = true` beats a stale exported RCH_WORKER:
+# verified in the sibling repo that with RCH_WORKER=contabo-4 exported, cargo still
+# resolves the pinned lane." That conflated two different things. Cargo DOES apply this
+# `[env]` to processes cargo spawns; rch's worker choice is made BEFORE cargo starts, so
+# the pin never reached the decision. Measured from control-plane:
+#     .cargo [env] pin contabo-2    -> Selected worker: contabo-3    INERT
+#     exported RCH_WORKER=contabo-2 -> Selected worker: contabo-2    HARD PIN
+#     exported RCH_WORKER=bogus     -> rc=1 [RCH-I001] refused (unavailable)
+# The LIMITS note below was already correct and was written by the same hand as the false
+# sentence; the pin outlived the note. An inert pin that reads as a lane bind is worse
+# than none, so it is gone rather than annotated.
+#
+# WHERE THE BIND ACTUALLY LIVES: the EXPORTED environment of whatever invokes cargo/rch.
+# For a build, that means `RCH_WORKER=contabo-3 rch exec -- cargo ...` on the command
+# line. `crates/rch-lane-bind` (control-plane) is the PreToolUse enforcer for this and its
+# logic is correct -- run by hand it DENIES a control-plane build requesting contabo-3 --
+# but it produced ZERO trace rows across ~40 Bash calls on 2026-09-06, so do not treat it
+# as live enforcement today. Tracked on cp-6yv8f.
 #
 # LIMITS, stated because a reader will otherwise take this for enforcement:
 #   - This is a STRONG DEFAULT, NOT AN ENFORCEMENT BOUNDARY. Cargo applies [env]
@@ -32,5 +49,4 @@ OMP_CARGO_TARGET_POLICY = { value = "REPO_OWNED_TARGET", force = true }
 # contabo-3` cleared a stale cached lifecycle status that was refusing every
 # pinned build while ssh, `rch workers probe` and `rch admit` all reported ok.
 # A pin added before that fix would still have been refused.
-RCH_WORKER = { value = "contabo-3", force = true }
 CARGO_BUILD_JOBS = { value = "2", force = true }
