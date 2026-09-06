@@ -13,3 +13,6 @@ unsafe_code = "forbid"
 receiver-receipt = { path = "../receiver-receipt" }
 serde_json = "1"
 tick-monitor = { path = "../tick-monitor" }
+
+[dev-dependencies]
+proptest = "1"

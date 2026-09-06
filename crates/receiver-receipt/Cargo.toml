@@ -17,3 +17,4 @@ tick-monitor = { path = "../tick-monitor" }
 # Present solely so the_window_floor_matches_pane_truths_authority can gate the
 # restated TWO_CAPTURE_MIN_SECS against its owner.
 pane-truth = { path = "../pane-truth" }
+proptest = "1"

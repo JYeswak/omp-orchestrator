@@ -178,8 +178,16 @@ fn a_late_ack_is_pending_and_the_packet_is_with_the_receiver() {
         verdict.packet_is_with_the_receiver(),
         "ntm retained a per-target receipt; the pane holds the packet and the ACK is late"
     );
-    assert!(verdict.detail().contains("after=30s"), "{}", verdict.detail());
-    assert!(verdict.detail().contains("attempt=2"), "{}", verdict.detail());
+    assert!(
+        verdict.detail().contains("after=30s"),
+        "{}",
+        verdict.detail()
+    );
+    assert!(
+        verdict.detail().contains("attempt=2"),
+        "{}",
+        verdict.detail()
+    );
 }
 
 /// KNOWN-GOOD: a proven delivery is `DISPATCH_DELIVERED`.
@@ -270,7 +278,10 @@ fn exactly_one_variant_publishes_the_failure_word() {
     ];
     let words: Vec<&str> = variants.iter().map(DispatchVerdict::status_word).collect();
     assert_eq!(
-        words.iter().filter(|word| **word == "DISPATCH_FAILED").count(),
+        words
+            .iter()
+            .filter(|word| **word == "DISPATCH_FAILED")
+            .count(),
         1,
         "exactly one variant may publish the failure word: {words:?}"
     );
