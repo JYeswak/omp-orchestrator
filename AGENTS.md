@@ -8,6 +8,53 @@ This file says how you work here, what every crate is for, and what "done" means
 
 ---
 
+## Honest Work and Anti-Ceremony (binding for agents and humans alike)
+
+**The purpose of agent work here is working, deployable capability. Process serves that outcome and
+never becomes the product.** Adopted 2026-09-07 on Joshua's ruling, from
+`/just-say-no-to-process-porn-and-ceremony`. **This section outranks every rule below it**: when a
+gate, ledger, or doctrine row conflicts with shipping capability, this section decides.
+
+- **A process artifact** (certificate, ledger, dashboard, matrix, meta-report, speculative check)
+  may be created **only if it names a concrete consumer, the named feature it gates, the observed
+  defect class justifying it, and its deletion condition.** Otherwise it does not get created.
+  **Boundary test:** if running code branches on it, it is product; if only humans and status reports
+  read it, it is process and the creation gate applies. **Code written just to flip that answer counts
+  as the pathology, not as a consumer.** Sole exception: a minimal integrity/recovery control
+  (crash-recovery state, provenance snapshot) is legitimate when it prevents a named evidence-loss or
+  corruption mode and is necessary and minimal.
+- **Real code + real tests in the same unit of work.** Forbidden: faked tests, fixtures/mocks
+  presented as live proof, weakened assertions, golden regeneration to force green, hard-coded
+  success paths, placeholder macros in commits, editing the spec instead of implementing it,
+  narrowing scope while claiming full success.
+- **A typed refusal beats a fabricated result and is less valuable than the real capability.**
+  Refusal-only work stays open and says so.
+- **Truthful null results are successful outcomes** — *"checked X, found no material increment"* is a
+  result. **Unsupported claims are worse than silence.**
+- **Name these pathologies when they occur:** gate self-weakening, proof-class inflation, golden
+  regeneration, tolerance widening, suppression-pragma laundering, refusal farming, follow-up
+  laundering. **The names are the deterrent.** Full catalog in the
+  `/just-say-no-to-process-porn-and-ceremony` skill.
+
+**Rules this section deliberately does NOT restate, because they already have a canonical owner
+below** — a frozen rule needs exactly one owner and copies drift:
+
+|rule|owner in this file|
+|---|---|
+|no self-certification; an independent verifier closes, citing an exact revision|`## Grading gate`|
+|never silence stderr in an evidence-bearing command|`## Working here`|
+|a metric predeclares its denominator; agreement is not independent evidence|the retired-figures rule|
+
+**Measured 2026-09-07, the session that adopted this.** A real-work audit over 36 commits classified
+**USER 0 / ENABLER ~14 / PROCESS ~14**: eight new doctrine rules, three scorecard edits, nine beads
+filed and zero closed — **not one a product capability** — while `ompo` stayed at four verbs and this
+repo's crates continued to consume **zero** of OMP's 42 installed RPC methods. **The verdict was
+DRIFTING and the drifting party was the orchestrator.** That is why this section is at the top of the
+file rather than the bottom.
+
+---
+
+
 ## STANDING AUTHORIZATION — read this before you conclude you may not build
 
 **Current state, 2026-09-07. S1 IS AUTHORIZED TO BUILD. S2–S9 ARE FROZEN.**
@@ -747,163 +794,38 @@ failure, not the scraping.
 
 ---
 
-## OMP lifecycles — what they are and where to find them
+## OMP lifecycles — the three that matter
 
-OMP (Oh My Pi) v18.0.11 — node CLI "@oh-my-pi/pi-coding-agent", repo "can1357/oh-my-pi". 29 built-in
-tools plus 3 hidden (yield, goal, think), 136 slash commands, and **39 CLI subcommands** — counted,
-not estimated, from the COMMANDS block of `omp --help`:
+**Receipt:** [`CENSUS-ARCHIVE-OMP.md`](docs/inventories/CENSUS-ARCHIVE-OMP.md#omp-lifecycles--what-they-are-and-where-to-find-them)
+— the RPC state table, the v18 status-line contract, and the installed-surface census. **Its
+integers are archived and NOT citable.**
 
-~~~bash
-omp --help | awk '/^COMMANDS/{f=1;next} f&&/^[[:space:]]*$/{exit} f&&/^  [a-z]/{c++} END{print c}'
-~~~
+**Read the enum, not a table, when precision matters** — `crates/xtask/src/omp_rpc.rs` in
+control-plane is the authority for the RPC machine.
 
-Measured output: `39`.
+**Three properties carry the weight and they are rules, not description:**
 
-The installed RPC handler exposes **42 inbound JSON-RPC command methods**; the derivation command and
-its output are below. Static production reachability in the **control-plane** adapter — a *different*
-repo — is **5/42**. In **this** repo it is **0/42**, and that zero is the fifth rule.
+- **A terminal state admits no further transition**, and the machine enforces it, not the caller.
+- **A restrictive terminal is one a caller MUST NOT read as success** — `Failed` and `TimedOut`.
+  **So a timeout is not a verdict:** an empty buffer from a killed child maps to `TimedOut`, never to
+  the token a genuinely failing subject would produce.
+- **No wait is unbounded, including shutdown.**
 
-**Retired figure: "81 JSON-RPC methods, and we currently use 17 of the 81."** That pair was
-**inherited**, ships **no command that produces it**, and **could not be re-derived** on 2026-08-31
-against the installed binary. The reproducible figures are the **42** handler methods below, the
-**39** subcommands above, **3** `omp/*`-prefixed methods in the bundle (`omp/muxConnect`,
-`omp/muxPing`, `omp/muxRestartServer`), and **57 directories + 14 declaration files** under
-`dist/types`. **81 and 17 are retired — cite neither.** And do not read their retirement as a
-*smaller* surface: what is measurable is larger than 81 and we consume none of it.
-`omp-orchestrator-omp-surface-map-41b` owns producing the real per-crate table.
+**The pane lifecycle is read from a terminal and is wrong more often.** Three rules:
 
-### Installed RPC command census (measured 2026-08-31)
+- **Read the LAST status line, never the buffer** — a whole-buffer scan matches a stale spinner in
+  scrollback, and one pane scored working AND idle simultaneously while genuinely idle.
+- **Two captures or it is not a claim** — `Working (27s)` and a frozen pane render identically.
+  Compare the timer **and** a spinner-stripped content hash ≥75s apart.
+- **`safe_to_dispatch` is not liveness.** A wedged pane accepts a packet, parks it at
+  `Press up to edit queued messages`, and never submits it.
 
-Version gate and source identity:
-
-  omp --version -> omp/18.0.11
-  /Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js
-  SHA-256: a95635ad43ab85fcabcbee9bbcc593d9ea8e68ba54228b4c9fdbd1e25766281c; bytes: 19803745.
-
-This command derives the method list from the installed binary's RPC dispatch handler; it is not a
-hand-transcribed table:
-
-~~~bash
-omp --version && bun -e 'const p="/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js"; const s=await Bun.file(p).text(); const start=s.indexOf("let w=async(v)=>"); const end=s.indexOf("},E=new KWt",start); const methods=[...s.slice(start,end).matchAll(/case"([^"]+)"/g)].map(x=>x[1]); console.log("RPC_COMMAND_METHODS="+methods.length); console.log(methods.join("\n"));'
-~~~
-
-Measured output: RPC_COMMAND_METHODS=42.
-
-negotiate_protocol, prompt, steer, follow_up, abort, abort_and_prompt, new_session, switch_session,
-branch, get_state, set_fast_mode, get_available_commands, set_todos, set_host_tools,
-set_host_uri_schemes, set_subagent_subscription, get_subagents, get_subagent_messages, set_model,
-cycle_model, get_available_models, set_thinking_level, cycle_thinking_level, set_steering_mode,
-set_follow_up_mode, set_interrupt_mode, compact, set_auto_compaction, set_auto_retry, abort_retry,
-bash, abort_bash, get_session_stats, export_html, get_branch_messages, get_last_assistant_text,
-set_session_name, handoff, get_messages, get_messages_page, get_login_providers, login.
-
-### Static production reachability (measured 2026-08-31)
-
-Scope: production Rust under /Users/josh/Developer/control-plane/crates/xtask/src/; tests, comments,
-and compatibility tables are excluded. This command derives Rust constructor call sites and maps each
-constructor through RpcRequest::to_frame to the installed handler method:
-
-~~~bash
-bun -e '
-const installedPath="/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js";
-const installed=await Bun.file(installedPath).text();
-const handlerStart=installed.indexOf("let w=async(v)=>");
-const handlerEnd=installed.indexOf("},E=new KWt",handlerStart);
-const installedMethods=[...installed.slice(handlerStart,handlerEnd).matchAll(/case"([^"]+)"/g)].map(m=>m[1]);
-const sourcePath="/Users/josh/Developer/control-plane/crates/xtask/src/omp_rpc.rs";
-const source=await Bun.file(sourcePath).text();
-const frameStart=source.indexOf("pub fn to_frame");
-const frameEnd=source.indexOf("pub fn handshake_requests",frameStart);
-const frameSource=source.slice(frameStart,frameEnd);
-const variantToMethod=new Map();
-for(const match of frameSource.matchAll(/Self::([A-Za-z]+)(?:(?!Self::)[\s\S]){0,800}?"type"\s*:\s*"([^"]+)"/g)) variantToMethod.set(match[1],match[2]);
-const start=source.indexOf("pub fn handshake_requests");
-const end=source.indexOf("\n}",start);
-const rows=[];
-for(let lineStart=start;lineStart<end;){const lineEnd=source.indexOf("\n",lineStart);const stop=lineEnd<0||lineEnd>end?end:lineEnd;const match=source.slice(lineStart,stop).match(/RpcRequest::([A-Za-z]+)/);if(match){const method=variantToMethod.get(match[1]);if(!method||!installedMethods.includes(method))throw Error("unmapped RPC constructor: "+match[1]);rows.push(sourcePath+":"+source.slice(0,lineStart).split("\n").length+" "+method)}lineStart=stop+1}
-const unique=[...new Set(rows.map(row=>row.slice(row.lastIndexOf(" ")+1)))];
-console.log("installed_rpc_commands="+installedMethods.length);
-console.log("static_production_rpc_commands="+unique.length+"/"+installedMethods.length);
-console.log(rows.join("\n"));
-'
-~~~
-
-Measured output:
-
-installed_rpc_commands=42
-static_production_rpc_commands=5/42
-/Users/josh/Developer/control-plane/crates/xtask/src/omp_rpc.rs:275 negotiate_protocol
-/Users/josh/Developer/control-plane/crates/xtask/src/omp_rpc.rs:276 get_state
-/Users/josh/Developer/control-plane/crates/xtask/src/omp_rpc.rs:277 get_available_commands
-/Users/josh/Developer/control-plane/crates/xtask/src/omp_rpc.rs:278 get_available_models
-/Users/josh/Developer/control-plane/crates/xtask/src/omp_rpc.rs:279 set_fast_mode
-
-RpcRequest::CancelUiRequest at omp_rpc.rs:740 emits the separate extension_ui_response frame and is
-intentionally excluded from the inbound RpcCommand denominator.
-
-This is **static reachability**, not runtime usage. It proves production constructors exist in the scanned
-adapter source; it does not prove a live OMP process, provider response, or invocation through an
-unscanned path.
-
-### The RPC lifecycle (typed, in crates/xtask/src/omp_rpc.rs in control-plane)
-
-Read the enum, not this table, when precision matters — this is a map to the source.
-
-| State | Meaning |
-|---|---|
-| `Spawned` | Child started; no `ready` yet |
-| `Ready` | `ready` observed **and** it advertised the required version |
-| `Negotiated` | `negotiate_protocol` v2 answered successfully |
-| `Active` | Handshake complete: every issued request answered, metadata observed |
-| `Stopping` | Input closed; awaiting exit |
-| `Stopped` | Clean terminal |
-| `Failed` | **Restrictive** terminal — see `FailureKind` |
-| `TimedOut` | **Restrictive** terminal — a bounded wait elapsed |
-
-Two properties carry the weight:
-
-- **Terminal states admit no further transition.** The machine, not the caller, enforces it.
-- **A restrictive terminal is one a caller must not read as success.** `Failed` and `TimedOut` are
-  restrictive. This is why *a timeout is not a verdict*: an empty buffer from a killed child must
-  map to `TimedOut`, never to the token a genuinely failing subject produces.
-- **No wait in the adapter is unbounded, including shutdown.**
-
-Supporting types: `LifecycleMachine` (transitions), `LifecycleReport` (the observable outcome of one
-run), `TimeoutPhase` (which bounded wait elapsed), `FailureKind` (why a restrictive terminal).
-
-### The pane lifecycle (what an operator sees)
-
-Distinct from the RPC lifecycle and more often wrong, because it is read from a terminal.
-
-**The v18 status-line contract, measured 2026-08-31:**
-
-- **Working** — a braille spinner followed by an **elapsed timer** (`⠸ 4m`)
-- **Idle** — the `π` prompt glyph where the spinner would be
-
-The shipped NTM presets required the literal word `Working`, which v18 **never renders**. The
-classifier scored **0/3 on live payload** at 03:08Z and **3/3** after the fix (`d05200c`).
-
-**Read the LAST status line, never the buffer.** A whole-buffer scan matches a stale spinner still
-in scrollback: one pane scored *working AND idle simultaneously* while genuinely idle.
-
-**Two captures or it is not a claim.** `Working (27s)` and a frozen pane render identically. Compare
-timer **and** spinner-stripped content hash ≥75s apart.
-
-**`safe_to_dispatch` is not liveness.** A wedged pane accepts a packet, parks it at
-`Press up to edit queued messages`, and never submits it.
-
-### The bead lifecycle (the unit of work)
-
-`open → in_progress (claimed) → closed (with cited evidence)`, with two traps that are *ours*, both
-measured:
-
-1. **The close reason must start with** `MUTATION-VERIFIED` / `DONE` / `APPROVED` / `WONTFIX`.
-   A prose reason is refused by policy, the refusal scrolls past, and the agent believes it landed.
-2. **A child blocked by its parent epic cannot close.** An epic closes *after* its children, so that
-   dependency is inverted and makes both permanently unclosable. `--force` with the reason recorded
-   is correct when the epic is the only blocker.
-
----
+**The bead lifecycle:** `open → in_progress (claimed) → closed (with cited evidence)`, with two
+traps that are ours. **A close reason must start `MUTATION-VERIFIED` / `DONE` / `APPROVED` /
+`WONTFIX`** — a prose reason is refused by policy, the refusal scrolls past, and the agent believes
+it landed. **And a child blocked by its parent epic cannot close**, which inverts the dependency and
+makes both permanently unclosable; `--force` with the reason recorded is correct when the epic is the
+only blocker.
 
 ## The four skills, and how they compose here
 
@@ -967,295 +889,40 @@ theories could only agree with themselves.
 
 ---
 
-## The crate extraction target list — what each one is, and **which repository it is actually in**
+## The crates — what they are, and WHICH REPOSITORY they are in
 
-**Read the STATUS column before you reason about any row.** The table below has 24 rows and is a
-**historical extraction-target list, not the package inventory.** The workspace is now far larger
-than the table; a row marked CONTROL-PLANE is not an available local dependency and must not be
-cited as present.
+**Receipt:** [`CENSUS-ARCHIVE-CRATES.md`](docs/inventories/CENSUS-ARCHIVE-CRATES.md#the-crate-extraction-target-list--what-each-one-is-and-which-repository-it-is-actually-in)
+— the 24-row historical extraction table, the per-crate source audit, the dependency shape, and the
+`pane-truth` specimen. **Every figure in it is archived and NOT citable.**
 
-### DO NOT CITE A PACKAGE COUNT FROM THIS FILE. RUN THE COMMAND.
-
-**This figure has moved `27 → 50 → 51 → 65` inside the lifetime of this one document**, and each
-stale value was corrected by a later agent who then wrote a fresh integer that went stale in turn.
-A count in prose is wrong the moment anyone lands a crate, and this section has now proven that
-four times. The correction is not a better number — it is **no number**:
+**DO NOT CITE A PACKAGE COUNT FROM THIS FILE. RUN THE COMMAND.** The figure moved
+`27 → 50 → 51 → 65` inside the lifetime of this document, and each stale value was corrected by an
+agent who then wrote a fresh integer that went stale in turn. **The correction is not a better
+number — it is no number:**
 
 ```bash
-# in either repo; these two must agree, or you have a manifest-vs-directory discrepancy
 cargo metadata --no-deps --format-version 1 --offline \
   | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["packages"]))'
-find crates -mindepth 1 -maxdepth 1 -type d | wc -l
-
-# names present in BOTH repos
-comm -12 <(find crates -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort) \
-         <(find /Users/josh/Developer/control-plane/crates -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)
+find crates -mindepth 1 -maxdepth 1 -type d | wc -l      # these two MUST agree
 ```
 
-**One dated measurement, as evidence that the commands run — never as a figure to cite.** Measured
-2026-09-02 by the orchestrator: **65 here** (`cargo metadata` and the directory count agree),
-**62 in control-plane**, **28 names in both**. Compare against the previously-published `27 / 59 / 4`:
-every one of the three moved, and the intersection grew **7×**. The extraction wave is landing
-crates faster than any prose table can track it.
+**DERIVE TOPOLOGY FROM `cargo metadata`, NEVER FROM `grep`.** A shell census reported 1 leaf where
+the resolver reports 33, because `grep -c … || echo 0` emits `"0\n0"` — and a Rust `count()` returns
+a `usize` that cannot. **That is the concrete reason this repo forbids shell rather than
+discouraging it.**
 
-**There is no percent-ported figure, and there cannot be one from this file.** The numerator moves
-hourly and the denominator was never established — the extraction scope has been asserted as 20 and
-as 23 crates and **neither figure ever shipped a producing command.** Treat both the way the retired
-"81 JSON-RPC methods, 17 used" pair is treated: cite neither. `NUMBERS.toml` exists precisely so
-plan sections resolve figures to a runner instead of typing integers; a section that types an
-integer here is a defect, not a shortcut.
+**Extract leaves first** — a crate with zero intra-workspace path deps ports without dragging a
+second crate across the repo boundary.
 
-### Current workspace packages outside the legacy extraction table
+**THERE IS NO PERCENT-PORTED FIGURE AND THERE CANNOT BE ONE.** The extraction scope was asserted as
+20 crates and as 23; **neither figure ever shipped a producing command.** With the numerator moving
+hourly and the denominator never established, any percentage, burndown or "N of M" claim is
+unfounded. **Treat 20 and 23 exactly as the retired "81 JSON-RPC methods, 17 used" pair: cite
+neither.**
 
-These are HERE, but were not part of the 24-row extraction target list:
-
-| Crate | STATUS |
-|---|---|
-| ack-spine | **HERE** |
-| ack-stage | **HERE** |
-| commit-build-fence | **HERE** |
-| dispatch-claim-fence | **HERE** |
-| dispatch-silence-watch | **HERE** |
-| finding | **HERE** |
-| finding-dispatch | **HERE** |
-| installer | **HERE** |
-| kernel-bypass-gate | **HERE** |
-| kernel-only-operator-hook | **HERE** |
-| no-shell-gate | **HERE** |
-| omp-inventory-map | **HERE** |
-| omp-orchestrator | **HERE** |
-| omp-rpc-session | **HERE** |
-| omp-types | **HERE** |
-| path-literal-guard | **HERE** |
-| porting-gate | **HERE** |
-| pre-delete-citation-check | **HERE** |
-| receiver-receipt | **HERE** |
-| state-wildcard-lint | **HERE** |
-| subprocess-contract | **HERE** |
-| tick-monitor | **HERE** |
-| undrained-pipe-lint | **HERE** |
-LOC and `tests/` counts on every `CONTROL-PLANE` row are read from the control-plane working tree.
-They describe source you do not have here. Grouped by the lifecycle stage they serve.
-
-### Ground truth — "what is actually true right now"
-
-These exist because **every classifier we trusted has been wrong at least once**, and a wrong
-liveness read either interrupts real work or leaves a worker idle beside a full queue.
-
-| Crate | STATUS | LOC | What it does | Why it exists |
-|---|---|---:|---|---|
-| `pane-truth` | **CONTROL-PLANE** | 1247 | Ground-truth tmux pane state | The shell version remains the differential oracle; this is the typed reading |
-| `fleet-truth` | **CONTROL-PLANE** | 1621 | Fleet-wide inspection register | One place answers "what is the fleet doing" so callers stop re-deriving it |
-| `fleet-reconcile` | **CONTROL-PLANE** | 1424 | NTM projection vs tmux reality | NTM's snapshot returns `total_sessions: 0` with `success: true` when stale; tmux does not lie |
-| `oracle-compare` | **CONTROL-PLANE** | 449 | Shared comparator: claim vs independent oracle | An empty or unreadable oracle must be an ERROR, never a silent agreement |
-| `pane-oracle-diff` | **CONTROL-PLANE** | 741 | tmux pane census vs ntm projection | Catches projection drift before a dispatch rides it |
-| `oracle-pane-state-differential` | **CONTROL-PLANE** | 613 | session:index pane-set differential (tmux vs ntm) | Uses the shared set comparator; this source has no Z3 implementation |
-| `fleet-composite` | `HERE` | 1372 | Geometric fleet-health composite and diagnostic CLI | Refuses malformed, empty, and non-finite inputs instead of inventing a score |
-
-### Readiness and admission — "may this pane receive work"
-
-| Crate | STATUS | LOC | What it does | Why it exists |
-|---|---|---:|---|---|
-| `pane-dispatch-ready` | **CONTROL-PLANE** | 1555 | Can this pane SAFELY receive a dispatch | `safe_to_dispatch` is not liveness |
-| `pane-dispatch-fence` | `HERE` | 468 | Cross-process per-pane admission fence | Two dispatchers landing during a `/clear` vaporise the packet |
-| `composer-typed` | `HERE` | 556 | Does the composer hold real TYPED text | Sender success is not receiver receipt |
-| `ntm-fleet-monitor` | **CONTROL-PLANE** | 3122 | Typed fleet actions + approval waves. **Classifies; does not send** | Separating classification from actuation makes the verdict auditable |
-
-### Selection — "what should be worked next"
-
-| Crate | STATUS | LOC | What it does | Why it exists |
-|---|---|---:|---|---|
-| `loop-queue-filter` | `HERE` | 912 | Fail-closed queue selector | Epics invite unbounded scope; in-flight work must not be re-offered |
-| `loop-coverage` | **CONTROL-PLANE** | 926 | Typed coverage matrix. **A map, not a gate** | Says honestly what is *not* covered rather than implying completeness |
-| `refill-idle-panes` | **CONTROL-PLANE** | 842 | Refill every idle pane from the bv DAG | An idle worker beside a ready queue is the conductor's failure |
-| `omp-idle-dispatch` | **CONTROL-PLANE** | 1667 | Fail-closed idle OMP pane dispatch lane | Makes repository, session, ledger, and admission inputs explicit before dispatch |
-
-### Dispatch — "send the work"
-
-| Crate | STATUS | LOC | What it does | Why it exists |
-|---|---|---:|---|---|
-| `fast-dispatch` | **CONTROL-PLANE** | 2292 | Admit on a fresh standing verdict, select free panes | Must fail closed on a stale verdict |
-| `tick-dispatch` | **CONTROL-PLANE** | 990 | Ground-truth pane dispatch fence | Decided by tmux/ntm truth, not a cached label |
-| `loop-driver` | **CONTROL-PLANE** | 2484 | Single-instance, deadline-bounded driver | Two ticks fighting over one pane is corruption |
-| `loop-tick` | **CONTROL-PLANE** | 1480 | Single-pane dispatch tick | The unit the driver repeats |
-| `fleet-monitor` | **CONTROL-PLANE** | 2569 | OBSERVE lane: attention wait + idle/ready scan | Block on a state transition; polling is the anti-pattern |
-
-### Verification and reaping — "did it actually happen"
-
-| Crate | STATUS | LOC | What it does | Why it exists |
-|---|---|---:|---|---|
-| `verify-dispatch` | **CONTROL-PLANE** | 1291 | Verification from **bead status only** | Ground truth, never a pane's self-report |
-| `dispatcher-deadman` | **CONTROL-PLANE** | 883 | Watchdog: eligible work that received no packet | The failure that is invisible because everything looks healthy |
-| `reap-finished-panes` | **CONTROL-PLANE** | 1189 | Sweep finished panes before the next dispatch | An unreaped pane is capacity that silently disappears |
-| `wired-but-inert-guard` | **CONTROL-PLANE** | 1394 | Fail-closed proof that declared dispatch gates are actually invoked | Prevents a green unused gate from counting as coverage |
-
-**Dependency shape** (from each `Cargo.toml`, current 24-row table): 17 leaves with zero path deps;
-7 with exactly one — `ntm-fleet-monitor` → `loop-coverage`, `fleet-monitor` →
-`ntm-fleet-monitor`, `pane-oracle-diff` → `oracle-compare`,
-`oracle-pane-state-differential` → `oracle-compare`, `tick-dispatch` → `oracle-compare`,
-`fast-dispatch` → `loop-switch`, and `loop-driver` → `loop-switch`. **Extract leaves first.**
-
-### Porting order over the whole source workspace (measured 2026-08-31)
-
-The dependency shape above is scoped to **the 24 rows of this table only**. The extraction frontier
-is the whole source workspace, and it is larger. Derived from the resolver, not from text:
-
-```bash
-# Run in /Users/josh/Developer/control-plane. Topology comes from cargo, never from grep.
-/Users/josh/.cargo/bin/cargo metadata --no-deps --format-version 1 \
-  | jq -r '[.packages[] | {n: .name,
-                           d: ([.dependencies[] | select(.path != null) | .name] | unique | length)}] as $p
-           | "members=\($p | length)",
-             "leaves=\([$p[] | select(.d == 0)] | length)",
-             "one-dep=\([$p[] | select(.d == 1)] | length)",
-             "two-plus=\([$p[] | select(.d >= 2)] | length)"'
-```
-
-Result: **57 members — 33 true leaves (zero intra-workspace path deps), 23 with exactly one, and 1
-with two** (`controller-tick` → `loop-switch`, `admission-reason`). `crates/loop-tick/Cargo.toml`
-declares its own `[workspace]` and is therefore **not** one of the 57; measured standalone it is
-also a zero-path-dep leaf, so the leaf count is **33 of 57 loaded, or 34 counting the excluded
-manifest**. Cite which denominator you mean. **Extract leaves first**: a leaf ports without
-dragging a second crate across the repo boundary.
-
-**The topology must not come from grep, and here is the actual reproduction** — corrected, because
-the first diagnosis published for this was also wrong, which is the more useful lesson. The
-conductor's original loop reported **1 leaf out of 59** where `cargo metadata` reports 33. The
-published explanation was "the pattern missed Cargo's inline-table syntax." **That explanation is
-false.** The pattern matched fine; only **22 path lines exist across all 57 manifests**, so most
-crates genuinely have no match. The real cause is one shell idiom:
-
-```bash
-d=$(grep -c 'path = "\.\./' "crates/$c/Cargo.toml" 2>/dev/null || echo 0)
-[ "$d" = "0" ] && n=$((n+1))     # never fires
-```
-
-`grep -c` **already prints `0`** and *then* exits 1 when nothing matches, so `|| echo 0` appends a
-**second** zero. `d` becomes `$'0\n0'`, the equality test fails, and every zero-dependency crate is
-scored as *having* dependencies. Measured directly: `d='0'$'\n''0'` → FALSE; dropping the `|| echo 0`
-→ `d2=0` → TRUE.
-
-That is the **same family as `[RCH] remote required` exiting 103 with `0 passed 0 failed`**, which I
-also briefly read as a test result: *a command's failure path emitting something shaped like data*.
-A Rust `count()` returns a `usize` and cannot produce `"0\n0"` — which is the concrete reason this
-repo forbids shell rather than merely discouraging it.
-
-A subagent independently **could not reproduce** the claim, because it ran a differently-shaped
-command (`grep -rlE`, anchored → 0 files; unanchored → 24). Both of us were measuring real things
-and neither was measuring the other's. **A defect report must carry the exact command**, or the
-next person disproves a claim you never made. This is the same confident-zero class as the retired
-"81 JSON-RPC methods, 17 used" figure above. **Derive topology from `cargo metadata`.**
-
-### Specimen: `pane-truth`, installed here and un-portable to this repo
-
-One row, made concrete, because it is the shape of the whole defect:
-
-- `/Users/josh/.local/bin/pane-truth` — **installed**, 2,489,600 bytes, Aug 31 02:22.
-- `/Users/josh/Developer/omp-orchestrator/crates/pane-truth` — **does not exist**.
-- Its only source is `/Users/josh/Developer/control-plane/crates/pane-truth`, whose HEAD is
-  `407ecb5` — an **unrelated history** to ours, sharing no commit with this repo.
-
-So a binary built from another repository's tree sits on `PATH` under a name this workspace
-documents and does not contain. The installer's identity check compares the installed artifact
-against **this** repo's HEAD, which it can never equal, and therefore reports **MISMATCH
-permanently** — not as a transient staleness signal but as a fixed point. A MISMATCH that can never
-clear is not a gate; it is noise that trains operators to ignore the gate. `pane-truth` is not
-installed-and-drifted. It is **installed-from-elsewhere**, and no rebuild here changes that until
-the crate is actually extracted.
-
-### NO-CLAIM: there is no denominator, so there is no "percent ported"
-
-The 57 control-plane members are **candidates, not a work queue.** Some are cron-lane scaffolding
-that should be **deleted rather than moved** — porting them would import a lane we already retired.
-Nothing in this file establishes which of the 57 are targets and which are terminal.
-
-The extraction scope has been stated in this repository as **20 crates** and as **23 crates**
-(bead `omp-orchestrator-815`), and **neither figure was ever derived from a command.** They were
-asserted. With the numerator moving and the denominator never established, **"how much extraction
-is left" is undefined**, and any percentage, burndown, or "N of M ported" claim built on these
-numbers is unfounded — including one built on the 4-of-24 split above, which measures **this
-table**, not the extraction set.
-
-This is the **unstated-denominator defect**, the same failure as the retired
-"81 JSON-RPC methods, and we currently use 17 of the 81" pair earlier in this file: an inherited
-ratio, no producing command, not re-derivable. That pair is retired and cited by nobody. **Treat
-20 and 23 the same way.** The denominator is established by a command that enumerates targets and
-names the terminal crates, or it is not established at all.
-
-**Unsafe posture in the current 24-row table: 5 of 24.** `ntm-fleet-monitor`,
-`refill-idle-panes`, `omp-idle-dispatch`, `wired-but-inert-guard`, and `fleet-composite`
-declare `unsafe_code = "forbid"`. The 815 extraction scope is 23 crates and is also 5-for-23;
-the historical 815 comment claiming 3-for-23 is stale after control-plane commit `8fc3e4b`, which
-added the lint to the other two ported crates. A crate that will not compile under the lint is a
-**finding**, not a reason to drop the lint.
-
-**Measured set reconciliation (2026-08-31).** The pre-audit table had 21 rows, not 20. It included
-the real `oracle-pane-state-differential` crate. The three ported crates named by bead
-`omp-orchestrator-815` bring the documented table to 24 rows, while 815's stated 23-crate
-extraction scope is its original 20 rows plus those three and therefore excludes
-`oracle-pane-state-differential`. That is a real scope mismatch, not a rounding issue.
-
-- Target workspace `/Users/josh/Developer/omp-orchestrator`: 8 loaded Cargo packages.
-- Source workspace `/Users/josh/Developer/control-plane`: 58 tracked top-level crate manifests;
-  Cargo loads 57 packages. The excluded top-level manifest is `crates/loop-tick/Cargo.toml`,
-  which declares its own `[workspace]`; the two other tracked manifests are fixture manifests.
-- Working-tree source totals for the current 24-row table: 32,087 Rust LOC and 22 crate-level
-  `tests/` directories. The 815 23-crate scope totals 31,474 Rust LOC and 21 `tests/`
-  directories under the same counting rule.
-
-The audit is re-runnable from the target repo with the source root explicit:
-
-```bash
-# Target package count; run in /Users/josh/Developer/omp-orchestrator.
-/Users/josh/.cargo/bin/cargo metadata --no-deps --format-version 1 \
-  | jq '[.packages[].manifest_path | select(test("/crates/[^/]+/Cargo.toml$"))] | length'
-
-# Source package count; run in /Users/josh/Developer/control-plane. The warnings are meaningful.
-/Users/josh/.cargo/bin/cargo metadata --no-deps --format-version 1 \
-  | jq '[.packages[].manifest_path | select(test("/crates/[^/]+/Cargo.toml$"))] | length'
-
-# Every documented row -> source files and working-tree Rust LOC.
-bun -e 'const s=await Bun.file("AGENTS.md").text(); const start=s.indexOf("## The crates:"); const a=s.slice(start,s.indexOf(String.fromCharCode(10)+"## Use fh",start)); const ns=a.split(String.fromCharCode(10)).filter(x=>x.startsWith("| "+String.fromCharCode(96))).map(x=>x.split("|")[1].trim().slice(1,-1)); for(const n of ns){const d="/Users/josh/Developer/control-plane/crates/"+n; const p=Bun.spawnSync(["find",d,"-type","f","-name","*.rs","-print"]); const fs=new TextDecoder().decode(p.stdout).trim().split(String.fromCharCode(10)).filter(Boolean); let loc=0; for(const f of fs){const t=await Bun.file(f).text(); loc+=t.split(String.fromCharCode(10)).length-(t.endsWith(String.fromCharCode(10))?1:0)} console.log(n+String.fromCharCode(9)+loc+String.fromCharCode(9)+fs.join(","))}'
-```
-
-**Source audit result (control-plane `src/lib.rs`/`src/main.rs`, unless noted):**
-
-- **CONFIRMED** — `pane-truth`: pane rules, external command output, and two-capture timing are present.
-- **CONFIRMED** — `fleet-truth`: fleet sensors and truth-row rendering are present.
-- **CONFIRMED** — `fleet-reconcile`: tmux/NTM reconciliation, typed verdicts, and self-test are present.
-- **CONFIRMED** — `oracle-compare`: count/set verdicts and unreadable/empty-arm handling are present.
-- **CONFIRMED** — `pane-oracle-diff`: agent-pane census and NTM projection comparison are present.
-- **DIVERGENT** — `oracle-pane-state-differential`: it compares session:index `BTreeSet` values through `oracle-compare`; no Z3 dependency or Z3 implementation is present. The table row now states the implementation rather than the stale label.
-- **CONFIRMED** — `pane-dispatch-ready`: busy, agent, quota, composer, and motion checks feed admission classification.
-- **CONFIRMED** — `pane-dispatch-fence`: per-session/per-pane lock acquisition and release are implemented.
-- **CONFIRMED** — `composer-typed`: marker/ANSI-aware typed-composer parsing and self-test are implemented.
-- **CONFIRMED** — `ntm-fleet-monitor`: typed actions and approval/refusal wave rendering are implemented; the binary does not send.
-- **CONFIRMED** — `loop-queue-filter`: runtime-configured, fail-closed queue filtering is implemented.
-- **CONFIRMED** — `loop-coverage`: proof levels, loop layers, edge cases, and reuse authorities form a coverage map, not a gate.
-- **CONFIRMED** — `refill-idle-panes`: pane survey, refusal classification, recommendation parsing, and bounded assignment planning are implemented.
-- **CONFIRMED** — `fast-dispatch`: fresh-verdict admission, free-pane selection, bounded children, and lock/ledger handling are implemented.
-- **CONFIRMED** — `tick-dispatch`: ground-truth pane, discovery, readiness, and send decisions are implemented.
-- **CONFIRMED** — `loop-driver`: single-instance locking and deadline-bounded driver output are implemented.
-- **CONFIRMED** — `loop-tick`: single-pane dispatch decisions, bounded child execution, and lock acquisition are implemented; its standalone `[workspace]` manifest is the inventory caveat above.
-- **CONFIRMED** — `fleet-monitor`: observe wait, idle/ready scan, and standing-verdict writing are implemented.
-- **CONFIRMED** — `verify-dispatch`: bead-status-only verification and differential CLI behavior are implemented.
-- **CONFIRMED** — `dispatcher-deadman`: eligible-work/no-packet watchdog behavior is implemented.
-- **CONFIRMED** — `reap-finished-panes`: finished-pane sweep and bounded external probes are implemented.
-- **CONFIRMED** — `omp-idle-dispatch`: fail-closed idle-pane dispatch with typed repository/config inputs is implemented.
-- **CONFIRMED** — `wired-but-inert-guard`: tracked caller discovery, gate scans, fail-closed empty-scan handling, and diagnostic commands are implemented.
-- **CONFIRMED** — `fleet-composite`: four-factor geometric scoring, malformed-input refusal, and diagnostic CLI behavior are implemented.
-
-The four names shared by both repositories were checked explicitly: `composer-typed`,
-`fleet-composite`, and `loop-queue-filter` are byte-identical between
-`/Users/josh/Developer/control-plane/crates/<name>` and
-`/Users/josh/Developer/omp-orchestrator/crates/<name>`; `pane-dispatch-fence` has the same
-purpose but differs in both `Cargo.toml` and `src/main.rs` (the target adds
-`subprocess-contract`).
-
-This source audit finds one description divergence and the explicit set/inventory mismatches above;
-it does not establish runtime correctness, wiring, or future drift.
-
----
+**A `CONTROL-PLANE` row in the archive is not evidence a crate is absent here.** Measured: the table
+calls `loop-driver` control-plane; it exists in **both** repos and the copies have **diverged**.
+Check with `find crates -maxdepth 1 -type d -name '<name>'` before believing either.
 
 ## Use fh before you build anything
 
@@ -1500,473 +1167,99 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
    diff with `git log <sha>..HEAD -- <path>`, and state which tree every number came from. A grade
    is otherwise a claim about "the repo right now", which is not a thing five agents can agree on.
 
-8b. **A RETRACTION THAT LIVES ONLY IN A REPORT GETS RE-PROPOSED BY THE NEXT READER. Put it in the
-   source, and give it a test.** `%20`, 2026-09-07, in its own words after I refuted its arc
-   hypothesis.
+**RECEIPTS FOR EVERY ROW BELOW —
+[`INSTRUMENT-DEFECTS.md`](docs/negative-patterns/INSTRUMENT-DEFECTS.md), 35,829 bytes,
+byte-identity proven.** The rule binds here; the evidence that earned it lives there. Extracted
+2026-09-07 by `%19`, which re-extracted by **content anchor** after this file grew under it
+mid-pass — `8g` firing on the extraction of `8g`.
 
-   It had proposed a switch-on precondition of *"until `jplf.1` is selectable."* I dropped the edge
-   it blamed, measured that `jplf.1` stayed invisible, and found the real cause: `jplf.1` is an
-   **epic**, and `br ready` excludes epics fleet-wide — 0 of 32 open epics offered, correctly, since
-   a container is not work. **So the precondition was unsatisfiable by construction** — the
-   never-fires class, proposed in good faith and about to be shipped as a gate's trigger.
+**Per-rule receipts, every anchor verified by OBSERVED RENDER (`pandoc -f gfm -t html`), not by slug
+derivation** — a derived slug was wrong twice (`8f` preserves the underscore in `project_excluded`;
+`8h` takes a TRIPLE hyphen because its title opens with `` ` M` ``):
 
-   **What `%20` did with the retraction is the rule.** It did not merely accept it in a report. It
-   shipped `SWITCH_ON_PRECONDITION` as a **string in the binary** reading *"at least one NON-EPIC
-   arc member is present in `br ready`; never keyed on jplf.1, which is an epic…"*, plus a test
-   named `the_switch_on_precondition_is_not_keyed_on_an_epic` **whose job is to keep the REFUTED
-   keying named** so nobody re-adopts it. Verified: 4 `SWITCH_ON_PRECONDITION` sites in source, the
-   test present.
+[8b](docs/negative-patterns/INSTRUMENT-DEFECTS.md#8b--a-retraction-that-lives-only-in-a-report-gets-re-proposed-by-the-next-reader-put-it-in-the) ·
+[8c](docs/negative-patterns/INSTRUMENT-DEFECTS.md#8c--an-exclusion-record-with-no-corresponding-live-row-is-stale-state-not-contention--and) ·
+[8d](docs/negative-patterns/INSTRUMENT-DEFECTS.md#8d--a-test-name-is-a-claim-and-a-name-promising-a-property-it-does-not-check-is-the-quiet-form) ·
+[8e](docs/negative-patterns/INSTRUMENT-DEFECTS.md#8e--the-lane-sends-your-worktree-for-tracked-paths-only--so-rch-e410-has-two-causes-and) ·
+[8f](docs/negative-patterns/INSTRUMENT-DEFECTS.md#8f--rch-i005-project_excluded-has-three-cases-not-two--and-rch-queue-cannot-tell-you-which) ·
+[8g](docs/negative-patterns/INSTRUMENT-DEFECTS.md#8g--a-broadcast-is-a-snapshot-and-carries-no-timestamp-a-reader-checks) ·
+[8h](docs/negative-patterns/INSTRUMENT-DEFECTS.md#8h---m-alone-is-not-a-collision-signal--m-with-nonzero-insertions-is) ·
+[8i](docs/negative-patterns/INSTRUMENT-DEFECTS.md#8i--run-a-negative-control-on-your-instrument-before-you-believe-its-answer) ·
+[8j](docs/negative-patterns/INSTRUMENT-DEFECTS.md#8j--fh-suggest-never-returns-empty-so-a-suggest-row-is-a-candidate-not-a-hit) ·
+[8k](docs/negative-patterns/INSTRUMENT-DEFECTS.md#8k--ripwire-emits-one-line-so-every-line-filter-deletes-the-whole-payload--and-a-miss-is-not) ·
+[8l](docs/negative-patterns/INSTRUMENT-DEFECTS.md#8l--a-successfalse-from-ntm---robot-send-is-not-proof-of-non-delivery-and-the-retry-may) ·
+[8m](docs/negative-patterns/INSTRUMENT-DEFECTS.md#8m--recording-an-observation-can-destroy-the-evidence-for-it-if-your-write-touches-the) ·
+[8n](docs/negative-patterns/INSTRUMENT-DEFECTS.md#8n--git-add----path-is-path-scoped-and-still-whole-file-it-does-not-isolate-you-from-a-peer) ·
+[8o](docs/negative-patterns/INSTRUMENT-DEFECTS.md#8o--grep--c-symbol-counts-occurrences-including-the-uses-inside-the-thing-you-are-deleting)
 
-   **Why the test matters more than the string.** A comment recording a retraction is prose, and
-   this file has an entire section on prose retractions being re-adopted — a stale *"this kernel is
-   broken"* note licensed hours of hand-rolling after the kernel was fixed. **A test that fails if
-   the refuted form returns cannot be read past.**
+8b. **A retraction that lives only in a report gets re-proposed by the next reader.** Put it in the
+   source and give it a test.
 
-   The general form: when a premise is refuted, ask **where the next reader will look**. If the
-   answer is "the code", the retraction belongs there. A NEGATIVE_EVIDENCE row, a bead comment and a
-   commit body are all *findable*; only a failing test is *unavoidable*.
+8c. **An exclusion record with no live row for your project is STALE STATE, not contention** —
+   unpin and go. Superseded in detail by `8f`.
 
-   **NO-CLAIM.** This keeps a refuted form from being silently re-adopted. It does not make the
-   replacement correct — `%20`'s new leaf-keyed precondition is measured-satisfiable today
-   (`jplf.9` is in `br ready`), but one row is not a moving arc, and it said so.
+8d. **A test name is a CLAIM.** A name promising a property the body does not check is the quiet
+   form of the conjunctive defect; rename it to what it asserts.
 
-8c. **AN EXCLUSION RECORD WITH NO CORRESPONDING LIVE ROW IS STALE STATE, NOT CONTENTION — and
-   treating the two the same converts a five-second retry into a five-minute wait.** `%20`,
-   2026-09-07, measured within five minutes of the rule being written down.
+8e. **The lane sends your worktree for TRACKED paths only, so `RCH-E410` has two causes:** a path
+   absent everywhere, or a path present locally and untracked. **`git add` before blaming the lane.**
 
-   ```
-   [RCH-I005] refused (project_excluded); 'contabo-3' already runs this project
-   rch queue --json  ->  active builds: 0
-   ```
-
-   **Zero active builds, so the exclusion was attributable to no live build — therefore not its
-   own.** It unpinned the worker and the run succeeded on `contabo-1` **first try**. Under the
-   previous reflex — *"`active_project_exclusion` means wait for your own job"* — it had waited
-   three times earlier the same evening.
-
-   **The discriminator is the PROJECT FIELD in the live queue, not the exclusion message.** If the
-   in-flight build is someone else's, waiting is wrong; if there is no in-flight build at all, the
-   record is stale and waiting is wrong for a different reason. Only *"the queue names a live build
-   of my project"* justifies waiting.
-
-   **This generalises past rch.** Any admission surface that records a reservation separately from
-   the work it reserves for can hold a record whose subject is gone — the leaked-lease family, the
-   phantom 4/4 slots on an idle box, the `RCH-I005` that survives a killed client. **Ask what the
-   record is a record OF, and check that thing directly.**
-
-8d. **A TEST NAME IS A CLAIM, AND A NAME PROMISING A PROPERTY IT DOES NOT CHECK IS THE QUIET FORM
-   OF THE CONJUNCTIVE DEFECT.** `%20`, same session, renaming its own test.
-
-   `an_unattributable_session_log_holds_rather_than_guessing` → `..._is_unknown_with_the_unknown_code`.
-   In its words: **"'Holds' was decision language on a body that asserts the outcome and the code, so
-   the name promised a property it never checked."**
-
-   Rule 7b catches the loud form — a name joining two properties with `and` is a conflated assertion
-   advertising itself. **This is the quiet form: a name asserting a property the body never
-   touches.** It is worse in one respect, because a reader scanning names for coverage counts it as
-   covered.
-
-   **The check is mechanical: read the name, then read the assertions, and confirm the name names
-   only what the body asserts.** `%20` verified nothing was lost before renaming — the decision half
-   was already covered by a separate across-every-shape leg carrying that exact evidence row.
-
-8e. **THE LANE SENDS YOUR WORKTREE FOR TRACKED PATHS ONLY — so `RCH-E410` has TWO causes, and
-   rule 8 above applies ON THE REMOTE LANE.** Measured 2026-09-07 by `%19` and `%20` independently,
-   from opposite ends of one fleet-wide outage. Every pane's remote build refused for roughly an
-   hour with `RCH-E410 DependencyPreflightMissing` — *"remote dependency preflight found a missing
-   required path"* — naming a path most of them had never heard of.
-
-   **Cause A — a declared entrypoint that does not exist yet.** `%20` watched the refusal WALK:
+8f. **`RCH-I005 project_excluded` HAS THREE CASES WITH THREE OPPOSITE REMEDIES, and `rch queue`
+   cannot tell you which.** The table IS the rule — dropping any case re-creates the wait `8c` was
+   written to end. **Read the project field.**
 
    ```
-   retry 1   missing crates/gate-runner/src/main.rs
-   retry 2   missing crates/gate-runner/tests/roster.rs
-   retry 3   COMPLETE -> ran
+   no live row for the project        STALE       -> unpin and go
+   a live row that is YOUR OWN build  CONTENTION  -> wait for yourself
+   a live row that is a PEER's build  CONTENTION  -> request another worker
    ```
 
-   `rch`'s preflight requires **every declared entrypoint to exist**, while **cargo's own resolution
-   is lazy** — it does not need `tests/roster.rs` until you build that target. So a manifest
-   declaring `[[bin]]` and `[[test]]` paths before the files exist **passes `cargo metadata`
-   locally and refuses every remote build**, and the refusal walks from one declared path to the
-   next as the author writes them. That is sharper than this file's earlier *"a `Cargo.toml` without
-   a `src/`"* framing, which describes only the first step of the walk.
+8g. **A broadcast is a SNAPSHOT and carries no timestamp a reader checks.** True-when-measured is
+   not true-when-read; **re-derive before acting on a peer's figure.**
 
-   **Cause B — the path exists but is UNTRACKED.** `crates/gate-runner` had all its files on disk,
-   `cargo metadata --offline` loaded clean, and `git ls-files` returned **0**. `rch` ships an
-   overlay built from git, so an untracked directory does not travel.
-
-   **THE BOUNDARY IS TRACKED vs UNTRACKED — NOT INDEX vs HEAD.** I posed exactly that question and
-   declined to guess; `%19` settled it by experiment and **refuted its own first conclusion:**
-
-   ```
-   experiment 1   staged, deliberately NOT committed (absent from git ls-tree -r HEAD)
-                  -> lane exit=0, 1 passed        the worker ran a target in no commit
-                  -> concluded "the overlay archives the INDEX"   <- WRONG
-
-   experiment 2   the negative control it nearly skipped:
-                  index holds 1 #[test], worktree holds 2 (the second UNSTAGED, panicking)
-                  -> lane: "running 2 tests", exit=101, 1 passed; 1 failed
-                  -> AN INDEX ARCHIVE WOULD HAVE RUN ONE TEST
-   ```
-
-   ```
-   untracked path                       does NOT travel     <- the outage
-   staged (A )                          travels
-   UNSTAGED edit to a git-known path    travels
-   ```
-
-   **So `git add` alone is the minimal fix** for cause B — no commit required — though committing is
-   still right, because a tracked-but-uncommitted crate is invisible to a fresh clone.
-
-   **AND THE CONSEQUENCE WORTH MORE THAN THE UNBLOCK: A LANE FIGURE DESCRIBES YOUR WORKTREE, NOT
-   `HEAD`.** Rule 8 says `cargo` reads the WORKTREE while a sha names a TREE. **That holds on the
-   remote lane too** — which everyone here, including me, assumed the clean overlay removed. It does
-   not. A grader citing an on-lane `exit=0, N passed` against a sha has **still mixed two tree
-   states** unless it pinned the tree, exactly as if the run were local. In a five-agent shared
-   checkout the worktree is constantly someone else's.
-
-   **`%19`'s own summary is the reusable half:** one experiment gave a plausible mechanism and a
-   correct practical conclusion; the second refuted the mechanism while preserving the conclusion.
-   Stopping at one would have published *"rch archives the index"* — false, and it would have
-   licensed the belief that unstaged edits are safe from the lane. **The negative control is the
-   whole reason the answer is right.**
-
-   **This is the THIRD instance of the glob-member hazard and its worst variant.** The first two
-   (`response-envelope-check` 23:29, `zz-planted-dup` 05:57) broke workspace **LOADING** — loud,
-   local, instant. This one loads perfectly and breaks only **TRANSFER PREFLIGHT**, so it is
-   invisible from the pane that caused it and reaches peers as a refusal naming an unfamiliar path.
-   And this file's existing ruling landed exactly as written: *"a gate author is precisely the agent
-   most likely to create one."* The author was mid-`fsu7`, building a gate.
-
-8f. **`RCH-I005 project_excluded` HAS THREE CASES, NOT TWO — and `rch queue` cannot tell you which.**
-   Rule 8c established that an exclusion with **no live row** for your project is stale state, not
-   contention: unpin and go. `%8` measured the third case 2026-09-07.
-
-   ```
-   no live row for the project              STALE      -> unpin and go            (8c)
-   live row that is YOUR OWN build          CONTENTION -> wait; a second request duplicates it
-   live row that is a PEER's build, same
-     project, different pane                CONTENTION -> REROUTE to another worker
-   ```
-
-   `%8` found `contabo-3` genuinely running `omp-orchestrator-38cf50d1` —
-   `cargo test -j 2 -p gate-runner --test index_probe`, which was **`%19`'s staged-file
-   experiment**. It rerouted without waiting, `contabo-1` returned `exit=0`. **Waiting would have
-   been wrong**: it was not its own build, so there was nothing to duplicate.
-
-   The trap is that **the queue row does not name the pane**, so it cannot distinguish case 2 from
-   case 3 — which is why this file already records *"`rch queue` cannot tell you whether you are
-   your own blocker."* Answer it from your own knowledge of what you launched, not from the row.
-
-8g. **A BROADCAST IS A SNAPSHOT AND CARRIES NO TIMESTAMP A READER CHECKS.** `%20`, self-reported
-   2026-09-07: it told three panes that only `src/lib.rs` existed under `crates/gate-runner`, and by
-   the time the message sent the owner had written `main.rs`. **True when measured, false when
-   sent** — it had caught a peer mid-write.
-
-   Its own framing is the rule: the same stale-premise class this file records on beads, *"committed
-   by me in a broadcast, where it is worse because a broadcast carries no timestamp a reader
-   checks."* A bead comment sits beside its own history; a broadcast arrives as present tense. **So
-   a broadcast about a live tree must name its measurement time and tell recipients to re-measure**
-   — which is what the correction did.
-
-8h. **` M` ALONE IS NOT A COLLISION SIGNAL. ` M` WITH NONZERO INSERTIONS IS.** Measured 2026-09-07,
-   after a mode-only diff changed two routing decisions in one session.
-
-   The agent write tool sets mode `100755` on `.rs` files it touches. No Rust source here is
-   executable, so it is pure artifact — but in a shared checkout `git status --porcelain` is how a
-   pane decides whether a file is safe to take, and **a mode-only change is indistinguishable from a
-   peer mid-edit.**
-
-   ```bash
-   git diff --numstat -- <path>     # "0<TAB>0<TAB>path" => MODE ONLY, safe to take
-   ```
-
-   **Two false collisions, both of which nearly stood:**
-
-   - `crates/omp-orchestrator/src/main.rs` was reported as *"carries several panes' uncommitted
-     hunks"*, so two `finding` publisher call sites that were **refusing at runtime** were left for
-     their owner. Measured `0+ 0-`, byte-identical to HEAD. The fix landed only because the diffstat
-     was checked.
-   - `crates/asupersync-conformance` showed 2 dirty files, and a pane correctly declined to take an
-     unassigned crate someone appeared to be editing. Measured *"2 files changed, 0 insertions(+), 0
-     deletions(-)"*. **It was free the whole time**, and the caution cost a round trip.
-
-   **A SWEEP DOES NOT HOLD, AND THE SWEEP'S OWN COMMIT SAID SO.** `2bd4e99` cleared the bit from 84
-   files (`0 insertions, 0 deletions`) and its NO-CLAIM predicted regeneration; **81 mode-only dirty
-   files existed roughly two hours later, in the same session.** Sweeping again is theatre. The
-   durable fix is a commit-time refusal, tracked as `omp-orchestrator-3xva`, and its residual is
-   stated there: a commit-time gate cannot stop the write tool, so mode-only rows still appear
-   between a write and a commit and this diagnostic stays necessary.
-
-   **The general form is the reusable half:** a status flag reports *that* something changed, never
-   *what*. Any decision keyed on `git status` alone — collision, ownership, staleness — is keyed on a
-   coarser signal than the decision needs. Read the diff, not the flag.
+8h. **` M` alone is not a collision signal; ` M` with NONZERO insertions is.** Discriminate with
+   `git diff --numstat -- <path>`: **`0 0` means no peer is editing it.** But **`--numstat` answers
+   *"is a peer editing this"*, NOT *"is the exec bit set"* — proven 2026-09-07: on a content-dirty
+   file, `chmod 755` then `chmod 644` leaves numstat **identical at `86 7` both ways.** For the mode
+   question use **`git diff --summary`**, which `--numstat` cannot show on a content-dirty file.
 
 8i. **RUN A NEGATIVE CONTROL ON YOUR INSTRUMENT BEFORE YOU BELIEVE ITS ANSWER.** Joshua,
-   2026-09-07, fleet-wide. **This is the general form of rules 8b through 8h and it subsumes them.**
-
-   Point the instrument at a **guaranteed-absent** subject — `/nonexistent/path/xyz`, a symbol that
-   cannot exist, an empty scan set — and read what it returns. **If "absent" and
-   "present-and-fine" produce the same output, the instrument cannot answer your question and its
-   verdict on the real subject means nothing.**
-
-   ```bash
-   <tool> --root /nonexistent/path/xyz ; echo "rc=$?"      # what does ABSENT look like?
-   <tool> --root . ; echo "rc=$?"                          # now the real one
-   ```
-
-   **If those two are indistinguishable, STOP and fix the instrument before reporting anything.**
-
-   **WHY THIS AND NOT MERELY "NAME YOUR SCOPE".** Joshua's four cases:
+   2026-09-07, fleet-wide. **This is the parent rule: it subsumes `8b`–`8h` and is the lens for
+   `8j`–`8p`.** It is only actionable with the two-probe form, so the recipe stays here:
 
    ```
-   closure-check given an unreachable root  ->  worst=Pass exit=0, "every interpretable stage is
-                                                complete"        VACUOUS, not failing
-   registry-check under a skip_except stub  ->  PASS rows that were literally `true`
-   a grep scoped to docs/evidence           ->  zero, read as "nothing untracked"
-   a grep of config.toml for worker tags    ->  zero, read as "no darwin tag" (it is in workers.toml)
+   <tool> --root /nonexistent/path/xyz ; echo "rc=$?"     # what does ABSENT look like?
+   <tool> --root . ; echo "rc=$?"                         # now the real one
    ```
 
-   **Naming the scope catches the last two. Only a negative control catches the first two, because
-   there the instrument RAN and returned a confident green.** This is the L4 "gates proven to trip"
-   discipline aimed at **any diagnostic binary**, not only at gates. **An empty scan set is an
-   ERROR, never a pass. A verdict about a subject the tool could not read is not a verdict.**
+   **Indistinguishable → the instrument cannot answer your question. Fix it before reporting
+   anything.** A denied, errored, empty or unreadable probe is `UNKNOWN`, never a negative result.
 
-   **IT INVALIDATED A DOCUMENT WITHIN AN HOUR OF ITS BEING COMMITTED.**
-   `docs/plan/DISPATCH-CHAIN-FORKS.md` reported six lifecycle stages `unknown`:
+8j. **`fh suggest` NEVER returns empty, so a row is a CANDIDATE, not a hit.** `fh search` returns
+   `[EMPTY]` for a true miss and is the negative control — **but a STALE index returns
+   `[STALE/SEARCH_INDEX_STALE]` for BOTH verbs, so the control cannot discriminate.** Measured
+   2026-09-07: `fh search` and `fh suggest` on a guaranteed-absent needle returned the **same
+   banner**, same key. **Confirm freshness with `fh health` before trusting either as a control**,
+   or you are inside `8i`'s failure condition while following `8i`'s recipe.
 
-   ```
-   calls(zzz_cannot_exist_fn, also_absent_fn)   ->  NO VERDICT EMITTED
-   calls(run_cycle, reap_finished_panes)        ->  NO VERDICT EMITTED   <- IDENTICAL
-   ```
+8k. **`ripwire` emits ONE line, so any line filter deletes the whole payload** — and a structural
+   miss is not an absence, because macro-argument names are invisible to `--uses`. Read raw, follow
+   up with `--grep`, and pass `--legend=compact`.
 
-   Six rows carried zero information. Cause: `reap_finished_panes` and `ack_stage` are **crate**
-   names, not functions, and two further probed symbols — `prepare_bead`, `DispatchPermit` —
-   **return `grep -c` 0 anywhere in the repo. They were invented.** Re-probed with real symbols and
-   both controls, **nine of eleven stages came back `confirmed`** — the chain was more wired than
-   the document claimed, and the entire error was in the instrument.
+8l. **A `success:false` from `ntm --robot-send` is indeterminate in BOTH directions and the retry
+   may double-paste.** Read the JSON payload, never the exit code.
 
-   **A SECOND INSTRUMENT IN THE SAME TABLE WAS EQUALLY BLIND, and its control is the reusable
-   one:**
+8m. **Recording an observation can destroy the evidence for it.** If your write touches the field
+   you are citing, **capture the value FIRST.**
 
-   ```
-   receiver_receipt::  (qualified, known-used)   7
-   zzz_absent_crate::  (guaranteed absent)       0
-   ```
+8n. **`git add -- <path>` is path-scoped and STILL WHOLE-FILE: it does not isolate you from a peer
+   editing the same file.** When ` M` shows nonzero insertions (`8h`), stage your hunks with
+   `git apply --cached` against HEAD content, then **COMMIT FROM THE INDEX WITH NO PATHSPEC** —
+   `git commit -- <path>` re-reads the WORKTREE and undoes the isolation you just built.
 
-   **A crate used UNQUALIFIED reads identically to an absent one under a `crate::` pattern.**
-   `dispatch_claim_fence` and `dispatch_silence_watch` appear only as `use` lines and were nearly
-   reported as BUILT ≠ WIRED, while the names they import are called bare — `authorize`,
-   `clears_pending_dispatch_intent` ×4, `SilenceVerdict` ×8.
-
-   **AND IT IS EXPRESSIBLE AS A TEST, WHICH IS STRICTLY BETTER THAN A HABIT.** `%20`, proving
-   `m0c`'s amended `2b`, built a differential whose second arm is deliberately **not** the reporter
-   — *"a reporter compared against itself agrees by construction"* — plus a leg asserting the two
-   arms **MUST DISAGREE** on a known-bad input. If they ever agree, arm two has become a copy of arm
-   one **and every equality in the suite is decoration.** A differential whose arms share an
-   implementation is an instrument with no negative control; that leg *is* the control, in-tree and
-   permanent.
-
-   **The same rule applies to a tool's own output fields.** `rch queue` rendering `project` as `?`
-   is **UNREADABLE, not absent-of-rows** — `%20`'s distinction, and it would have justified the
-   opposite dispatch decision. A field you cannot read is not a field whose value is empty.
-
-8j. **`fh suggest` NEVER RETURNS EMPTY, SO A SUGGEST ROW IS A CANDIDATE, NOT A HIT.** Measured
-   2026-09-07 by `%19` and reproduced by me within the hour. It is rule `8i` aimed at the two tools
-   Joshua directed the fleet to use.
-
-   ```
-   fh suggest "zzzqqq nonexistent xyzzy plugh frobnicate"
-     -> 3 confident ranked rows about "nonexistent file" tests    NO EMPTY STATE
-   fh search  "zzz_cannot_exist"
-     -> [EMPTY] ... no false hit was returned          exit 4     DISCRIMINATES
-   ```
-
-   **`suggest` is lexical ranking: it always answers.** So *"it returned rows"* is not evidence that
-   anything matched. **Confirm a suggest row with `fh search` — which does return `[EMPTY]` — or
-   with `fh why <row-id>`, before citing it.**
-
-   **I cited two `fh suggest` rows as before-you-build evidence for `etyur` and they survived
-   confirmation** (`N046` at `ledger:franken-harvest.md:721`; `verify_binary_runs` at
-   `meta_skill/src/updater/mod.rs:620-668`, both row-1/row-3 exact under `fh search`). **They
-   survived by query quality, not by method** — the same verb gave `%19` pure noise. The
-   discriminator is `search`, and I had not run it.
-
-   **`fh` also reports its own freshness and its own input drift, and both change what a row means:**
-
-   ```
-   fh health        [RED] digest_missing_today / digest_stale -- the harvest did not run today
-   fh doctor --json DRIFT exit 5  ACTIVE_GENERATION_PRODUCT_INPUT_DRIFT  (dirty source input)
-   ```
-
-   `%7`'s scoping is the right one: **treat fh as retrieval and provenance context, not a clean repo
-   grade.** A stale row is still evidence; **its age is part of the citation.**
-
-8k. **`ripwire` EMITS ONE LINE, SO EVERY LINE FILTER DELETES THE WHOLE PAYLOAD — and a MISS IS NOT
-   AN ABSENCE.** Measured 2026-09-07 by `%19` (four times, while it began diagnosing the tool) and
-   independently by me on `--exemplar`.
-
-   ```
-   ripwire crates --uses=run_crate | grep -v ...    -> empty, FOUR TIMES
-   raw                                              -> <u role="call"
-                                                       p="crates/gate-runner/src/main.rs:178"
-                                                       in_id="main"/>
-   ```
-
-   **`wc -l` is 0 because the payload is one line.** `head`, `grep -v`, and `sed` line filters all
-   destroy it. **Read raw, or parse the XML.** My own `--exemplar` grep produced two meaningless
-   fragment lines the same way.
-
-   **Three further measured properties, each of which changes a conclusion:**
-
-   1. **A name living only inside a MACRO STRING ARGUMENT is invisible to `--uses`.** In `uds`,
-      `--uses=artifact_unchanged` → EMPTY while grep found **21** hits, with the positive control
-      passing. **In a repo whose contract is typed refusals, the detector names ARE the API and they
-      all live in macro strings.** The follow-up is `ripwire --grep`, **not** bare grep — it
-      attributes each hit to its **enclosing symbol** (`in=`), and `unindexed_hits=` is the
-      macro-string check built into the verb.
-   2. **The legend is 77–95% of every response and does NOT amortise.** `%7` found the lever:
-      **`--legend=compact`.** Prefer ONE well-chosen query over three exploratory ones.
-   3. **It indexes what it FINDS, including scratch and vendored trees.** Measured here by `%19`:
-      **8,570 `.rs` outside `crates/` against 475 inside — 18×**, from a vendored `.rch-tmp/` and
-      target dirs. **An unscoped `ripwire .` in this repo is meaningless.** Scope it, and **state
-      your scan set whenever you publish a count.**
-
-   **AND IT DISTINGUISHES EXERCISED FROM CONSUMED, WHICH A GREP CANNOT.** My grep for `etyur` said
-   *"`derive_checks`: 0 occurrences in `main.rs`"*. `%19`'s `--uses=derive_checks` said **5 uses,
-   every one in `tests/roster.rs`, each attributed to its test fn, ZERO in any `src/`.** Strictly
-   stronger — and it is exactly `N046`'s distinction: *"invocations from /tmp prove testing, not
-   consumption."*
-
-   **AND AN `fh` CAPABILITY ROW'S VERDICT SHAPE AND ITS MECHANISM ARE SEPARABLE. THE MECHANISM MUST
-   BE RE-VERIFIED AGAINST THIS REPO'S OWN LINTS BEFORE IT IS COPIED.** Measured 2026-09-07: I cited
-   `meta_skill/src/updater/mod.rs:620-668` `verify_binary_runs` as the arsenal precedent for
-   `etyur`'s "a declared bin that cannot be exec'd must ERROR". `%19` read it **on the mirror, as
-   instructed** and found:
-
-   ```rust
-   .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
-   let status = loop { match child.try_wait()? { Some(s) => break s, None => { … sleep(25ms) } } };
-   ```
-
-   **That is the undrained-pipe deadlock pattern verbatim, and this repo ships
-   `crates/undrained-pipe-lint` whose entire job is to refuse it** — its predicate at `src/lib.rs:9-10`
-   is *"a Command builder that sets BOTH stdout and stderr to `Stdio::piped()`, whose handle is then
-   polled with `try_wait()` in a loop"*, quoting the asupersync contract above.
-
-   **It is SAFE where it lives and UNSAFE where I pointed it.** `--version` emits a few bytes so the
-   pipe never fills; a declared `[package.metadata.gate]` check is an **arbitrary command with
-   arbitrary output** — exactly the 64 KiB case. **Copying it would have shipped the deadlock into
-   the check runner, and the tell reads as a SLOW gate rather than a WEDGED one**, which is the
-   harder failure to diagnose.
-
-   **Keep the verdict shape, replace the mechanism:** `subprocess_contract::bounded_output` is
-   verified to drain — `src/lib.rs:216` spawns a `stdout_reader` thread, `:160` `join_reader`,
-   `:254-255` joins both. In-repo bounded-spawn exemplars, from `ripwire --callers=bounded_output`
-   (52 callers, `hop_tested=17`): `crate-soundness-verify::run_binary src/lib.rs:262`,
-   `cargo-lane-budget::run_bounded:220`, `admission-reason::spawn_timeout:152`, all tested.
-
-   **`fh` ranked the row correctly and the row is correct in its own crate. The defect exists only
-   at the boundary where it would be reused, so no amount of ranking quality could surface it.**
-   `fh suggest` tells you **where to look** and cannot tell you **whether to copy** — which is why
-   the instruction is *"grep the mirror"*, not *"cite the row"*. `%19` followed the instruction I
-   had given and not followed myself.
-
-8l. **A `success:false` FROM `ntm --robot-send` IS NOT PROOF OF NON-DELIVERY, AND THE RETRY MAY
-   DOUBLE-PASTE.** Measured 2026-09-07 by `%19`: a callback reported
-   `"success": false, "1 of 1 sends failed"` from `tmux send-keys`, then **succeeded byte-identically
-   on immediate retry**, with `blocked: false` and no redaction findings.
-
-   **So the sender's own failure report is indeterminate in both directions** — the first send may
-   have landed, in which case the retry pastes a second copy into the composer. **A partial paste is
-   the worse half of that outcome**, because a truncated packet reads as a malformed instruction
-   rather than as a transport fault.
-
-   This is the mirror of `cp-z42vu`, already recorded above, where a send returned `success:[4]`
-   while the packet never arrived. **Both directions are the signature of an unacknowledged
-   transport**, and the ACK comment is the only evidence the design admits on the tmux path. **Read
-   the receiver, not the sender's verdict** — and when you retry, say so, so a doubled packet is
-   attributable.
-
-8m. **RECORDING AN OBSERVATION CAN DESTROY THE EVIDENCE FOR IT. If your write touches the field you
-   are citing, capture the value FIRST.** Measured 2026-09-07, and it bit inside sixty seconds.
-
-   I censused `in_progress` beads whose holder is not a live pane, found `omp-orchestrator-1p0u`
-   held by `pane3` at `updated_at = 2026-09-06T23:46`, and **posted a comment recording that
-   staleness.** The next read returned `updated_at = 2026-09-07T21:49`. **The comment refreshed the
-   exact field that measured the thing the comment was about**, so the tracker no longer holds the
-   evidence for its own annotation — a later reader sees a bead touched minutes ago and cannot see
-   the 22-hour gap that justified flagging it.
-
-   **This is a different family from every other instrument defect above.** `8b` through `8l` are
-   about an instrument producing its own reading — `$?` after a pipe, `grep -c || echo 0`, a needle
-   inside a comment, `git log -S` skipping merges. Here the instrument read correctly and **the ACT
-   OF WRITING mutated the measurand.** No amount of negative control catches it, because the probe
-   was sound both times; the subject changed between them.
-
-   **The general form: any field maintained by the system you are annotating is destroyed by
-   annotating it.** `updated_at`, `comment_count`, `last_touched`, an mtime, a "last accessed"
-   timestamp, a hit counter. Capture the value in the write itself — as I did, so the figure
-   survives in the comment body and the transcript — or take the measurement to a place the write
-   does not reach.
-
-   **The reusable check is one question: does my write touch the field I am about to cite?** If yes,
-   the citation must be a captured literal, never a re-derivable query. And **do not fix it by
-   declining to record** — an unrecorded observation is worse than a self-destroying one.
-
-8n. **`git add -- <path>` IS PATH-SCOPED AND STILL WHOLE-FILE. IT DOES NOT ISOLATE YOU FROM A PEER
-   EDITING THE SAME FILE.** Measured 2026-09-07 by `%19`, and it is a gap in this file's own
-   standing commit rule.
-
-   The rule above says `git add -- <paths> && git commit -- <paths>`, both pathspecs. That protects
-   against sweeping **other files** out of a shared index. It does **nothing** about sweeping
-   **another agent's hunks inside your file** — and in a five-agent checkout that is the common case.
-
-   Measured: `%19` staged a 21-line deletion in a file carrying a peer's 90 added lines and its first
-   staging attempt captured **3 of the peer's lines** — a `rustfmt` of the helper body, adjacent to
-   the deletion and inside the same hunk. Path-scoping did not see it, because the peer's work was
-   not in another file.
-
-   **The form that works, and it is a different mechanism, not a stricter pathspec:**
-
-   ```
-   git show HEAD:<path> > /tmp/base            # the tree, not the worktree
-   ... produce the intended content from BASE ...
-   diff -u ... | git apply --cached            # index holds HEAD-minus-your-change only
-   git commit                                  # FROM THE INDEX -- no pathspec
-   ```
-
-   **The last line is the counter-intuitive half.** `git commit -- <path>` **re-reads the worktree**
-   for that path and would pull the peer's lines straight back in. So once you have built a precise
-   index with `git apply --cached`, a pathspec on `commit` is actively wrong. `%19` measured
-   `32 deletions, 0 insertions` this way against `3 of the peer's lines` the naive way.
-
-   **When it applies:** only when a peer is live in your file. `git status` showing ` M` with nonzero
-   insertions on a path you are about to touch is the trigger (rule `8h`). Otherwise the two-pathspec
-   form remains correct and is far cheaper.
-
-8o. **`grep -c <symbol>` COUNTS OCCURRENCES, INCLUDING THE USES INSIDE THE THING YOU ARE DELETING.**
-   Measured 2026-09-07, and it is the orchestrator's own error, made **one hour after** committing
-   rule `8m` about instrument defects.
-
-   `%19` proposed deleting a stale test and, conditionally, its helper *"if it has no other caller"*.
-   I measured `grep -c 'workflow_invokes_lint' -> 3`, ruled *"definition plus two call sites, so a
-   caller lives — keep the helper"*, and was **wrong**: both call sites are at `:271` and `:273`,
-   **inside `wired_into_ci_workflow` which spans `:264-276`** — the very function being deleted.
-
-   **`%19` refuted it with the compiler**, which is the right instrument and the reason this row
-   exists: with the deletion applied, `rustc` emits
-   `warning: function 'workflow_invokes_lint' is never used`.
-
-   **This is the mention-vs-invocation defect from this file's own census correction**, where 23
-   crates with a `.flywheel/` mention and no executor read as wired. A count cannot tell a definition
-   from a call, a call from a comment, or **a call that dies with its caller** from one that
-   survives it.
-
-   **Use the compiler, or an enclosing-symbol tool, never a count.** And note `ripwire` failed here
-   too, in a documented way: `--uses=workflow_invokes_lint` returned `count="0"` while two call sites
-   plainly existed, because they sit inside `assert!()` — the macro blind spot. **A structural zero
-   from a macro-blind tool is `UNKNOWN`, not absence**; `--grep` is the prescribed follow-up.
+8o. **`grep -c <symbol>` counts OCCURRENCES, including the uses inside the thing you are deleting.**
+   Use the compiler's dead-code warning, or `ripwire --uses`, which attributes to the enclosing
+   symbol.
 
 8p. **EVERY DISPATCH REQUIRES A CALLBACK, BECAUSE A WORKER HAS NO WAKE TRIGGER.** Joshua's call,
    2026-09-07, fleet-wide. Landed in the dispatch template and synced to
@@ -2138,556 +1431,45 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
 
 ## Instrument contracts: what each surface ACTUALLY returns
 
-Measured 2026-09-05/06. Every row cost someone real work in one session; five of the seven were
-the conductor's own faults, corrected only because a second instrument disagreed. These are not
-style notes — each is a case where the OBVIOUS read of a tool reports the OPPOSITE of the truth.
+**Receipt:** [`CENSUS-ARCHIVE-INSTRUMENTS.md`](docs/inventories/CENSUS-ARCHIVE-INSTRUMENTS.md#instrument-contracts-what-each-surface-actually-returns)
+— a table of **measured surprises, not a specification.** Its counts are archived and **not
+citable**; re-run the producing command.
 
-|surface|the obvious read|what it actually does|the correct test|
-|---|---|---|---|
-|`am file_reservations reserve`|nonzero on refusal|**exits 0** with `granted: []` and `conflicts` naming the holder|`len(granted) > 0`|
-|`jq 'if .granted then'`|false on `[]`|**an empty array is TRUTHY in jq**, so a refusal prints "granted"|test the length, never the array|
-|`inbox-monitor --watch`|zero on success|**exits 12** on a settled watch — the nonzero IS the finding|read `verdict`, not the exit code|
-|`br show <short-id>`|exact match|**suffix-resolves** — `…-ipg.18` returns `…-omp-coverage-mission-ipg.18`|read `.id` back before comparing surfaces|
-|`br list --json`|carries comments|**no `comments` key at all**; a classifier keyed on it reports zero for every row|read `.beads/issues.jsonl`; control on a bead you know|
-|`$?` after a pipe|the subject's status|the **pipeline's last** command — `cmd \| head` reports `head`|redirect to a file, capture separately|
-|`cargo test -p X`|the crate's tests|**that target only** — integration targets are separate, so a count can be honestly low|name the target, or sum them|
-
-**The unifying fault: the exit code is asked to carry a status it cannot express.** Two rows above
-fail in OPPOSITE directions — `reserve` exits 0 on refusal, `inbox-monitor` exits nonzero on success
-— so **no single exit-code convention is safe across our own tooling.** Read the payload.
-
-### The failure this prevents is not a wrong number, it is a confident wrong CAUSE
-
-In every instance the instrument produced a plausible story and the story was believed:
-
-- A `jq` truthiness bug printed `RESERVED for pane1` while `CloudyGrove` held the lease. **One step
-  from two agents editing one file.** What stopped it was an unexplained exit code from the
-  surrounding pipeline, not the probe.
-- `br` suffix-resolution vs Python exact-matching made six beads look absent from the JSONL. The
-  conclusion published was **"the JSONL is stale"**, followed by a pointless flush that correctly
-  answered *"Nothing to export."* The JSONL was never stale.
-- `br list --json`'s missing `comments` key made a classifier report **0 reapable beads out of 119**.
-  The positive control that caught it: `eg0m` has **17** comments. A reader returning 0 for `eg0m`
-  is broken; the data is not empty.
-- `$?` after a pipe reported a gate exiting **0** when its true exit was **1** with 37 real rows.
-  A correctly firing gate was one sentence from being graded as non-firing.
-
-### The offload lane is not the only lane, and a timeout is not a verdict
-
-`rch`'s workers are **Linux x86_64**. That is a property of the OFFLOAD FLEET, not an absence of a
-build lane. `RCH_CARGO_WRAPPER_BYPASS=1 cargo …` is the sanctioned local path, it produces
-`Mach-O 64-bit executable arm64`, and it built and installed five codesigned binaries in one
-session. Measured contrast: `path-literal-guard` returns `10 passed` in **0.00s** locally where the
-same suite hit an RCH `queue_timeout` at **300s**.
-
-This stale premise cost real work **twice in one session**: two panes refused to install, believing
-"no Mach-O artifact lane" existed, and a grading batch labelled **six** offload timeouts as `GAP`.
-
-**A grading verdict vocabulary needs four values, not three: PASS, GAP, STALE, and UNKNOWN.**
-`GAP` means the work fails its acceptance. **"I could not execute the check" is UNKNOWN and says
-nothing about the work.** A batch reporting `PASSED=0 GAPPED=16` where six checks never ran does not
-describe a broken codebase — it describes a saturated queue, and it hands the next reader sixteen
-verdicts of which six were never measured.
-
-### Agent NAME is not an identity
-
-Two panes signed ACKs as `WildStone` simultaneously; one of them was `RubyGate` in Agent Mail; the
-`am` roster separated them only by **model**. `created_by` reads `josh` or `None` on the rows that
-matter, so a grader-≠-author check built on it **excludes nobody while reporting success** — a
-vacuous filter that routed 13 beads to their own authors. The only key that proved unique was the
-**pane id parsed out of the bead's own ACK lines**, and even that is unique only per OCCUPANCY,
-which is why `pane-dispatch-fence`'s `PaneIncarnation` exists.
-
-**NO-CLAIM.** This table is a list of measured surprises, not a specification. Every row states what
-was observed on one host on one date; none of them was read from the tool's source. `reserve`'s exit
-code on a SUCCESSFUL grant is UNMEASURED — only the refusal case was observed — and `br`'s behaviour
-when a suffix matches two beads is likewise unmeasured and must not be assumed to error.
+**The row that is still live and costing work: an agent NAME is not an identity.** `WildStone`
+carries four bindings — bare (36 beads), `pane=%8` (26), `pane=%7` (8), `pane=%9` (5, a dead pane) —
+so a claim or reservation held by a bare name **cannot be attributed to a worker.** Claim as
+`pane=%N;agent=NAME`. Tracked as `omp-orchestrator-ptkmi`.
 
 ---
 
-## A TRANSCRIBED VALUE IS STALE BY DESIGN — FIVE SUBSTRATES, ONE SHAPE
+## A TRANSCRIBED VALUE IS STALE BY DESIGN
 
-**Measured across two repositories on 2026-09-07. Five instances, five different substrates, one
-defect: a claim that transcribes a value instead of binding to something that RE-DERIVES it.**
+**Receipt:** [`LIFECYCLE-FAILURES.md#a-transcribed-value-is-stale-by-design--five-substrates-one-shape`](docs/negative-patterns/LIFECYCLE-FAILURES.md#a-transcribed-value-is-stale-by-design--five-substrates-one-shape)
+— five instances, five substrates, one defect.
 
-**Substrates 1–4 are citations whose TARGET moves. The fifth is different in kind and is the worst,
-because it defeats re-running: a figure whose SCOPE moves while the command and the tree hold
-still.** It has its own subsection at the end.
-
-|substrate|the instance|why it went stale|
-|---|---|---|
-|**FILE LINES**|`CONTRACT.md`'s superseded-by pointer said `:101`, corrected to `:116`, and **the correction invalidated itself in the same edit** — the inserted lines pushed the target to `:124`, then `:132`, then `:154`. Fixed at `13fc201`|any edit above the target shifts it, and the edit most likely to be made is the one fixing the pointer|
-|**BINARY VERSIONS**|AGENTS.md's 42-method RPC census anchors on `let w=async(v)=>` … `},E=new KWt`. **Both return 0** at the installed `omp/18.1.13`; the gate pins `18.0.11 / a95635ad… / 19,803,745 bytes`|**`uca service install` runs a THREE-HOUR auto-updater** across `claude, codex, agy, grok, omp, muse`. The pin is stale by design, not by neglect|
-|**PROSE PREMISES**|control-plane's `AGENTS.md:12` asserted three root files "never existed", measured 2026-09-03. **All three exist.** The stale entry propagated into a dispatch, then a worker restated it back to its author as established fact. Fixed at `daab4fe`|a dated measurement embedded as a standing claim, with the date discarded|
-|**UNREACHABLE ANSWERS**|`crates/omp-surface-consumption/src/lib.rs:18` **had already recorded** the vanished anchor, and `:13-14` the version drift, five days before two agents independently re-derived it. `cargo-bin: 1`, **`PATH: ABSENT`**|the citing document could not reach the crate holding the answer. The operator-surface defect causes measurable duplicate work, not just inelegance|
-
-**THE REMEDY IS THE SAME IN ALL FOUR: bind the claim to something that RE-DERIVES, or stamp it with
-a fetch time and an expiry.** Never transcribe a value that another process owns.
-
-What that looks like concretely, each verified in this repo:
-
-- **Cite a searchable string, not a line number.** `grep -nE '^\*\*S1 IS AUTHORIZED TO BUILD'` —
-  and **anchor it so the pointer is not its own hit.** Unanchored returned **3**, two being the
-  pointer quoting the phrase.
-- **Anchor a binary probe on WIRE CONTRACT, not on minified identifiers.**
-  `omp-surface-consumption:64` gets this right: `ANCHOR_METHOD = "negotiate_protocol"`. A protocol
-  method name survives a rebuild; `let w=async(v)=>` is a minifier's variable name and does not.
-- **Stamp every figure with its measurement time and say which TREE it came from.** `cargo` reads
-  the WORKTREE; a sha names a TREE. A grade citing both has silently mixed two states.
-- **When the answer is in a crate, INSTALL the crate.** An answer nobody can invoke gets re-derived.
-
-### THE COROLLARY THAT COSTS THE MOST: SCOPE A VOIDING RULE TO WHAT IT ACTUALLY GOVERNS
-
-**Measured the same day, and it was my own error.** Joshua's binding rule is **ALL BUILDS MUST TAKE
-THE CONTABO LANE.** I broadcast it to five panes as voiding *"any figure derived from"* a local run.
-
-**That over-applies, and control-plane pane 0 caught it before it did damage: THE BINDING BINDS
-BUILDS.** The two results that actually moved the product that night involved **no cargo at all** —
-`uds-dc-stamp-ne-x35` is a python predicate reading the working tree, and `uds-kii.2` repaired a
-`sed` block inside a markdown contract. Voiding non-build figures would have discarded the only two
-rows that moved `dag_closure_scorecard.tsv` (PASS 1 → 2, UNRUN 46 → 45).
-
-**A voiding rule is itself a claim and inherits every rule above.** State the predicate it voids on,
-not a vibe about provenance: *builds and their test figures*, not *everything measured locally*.
-An over-broad retraction destroys good evidence and is harder to undo than a stale figure, because
-the good evidence does not come back when the rule is narrowed.
-
-**NO-CLAIM.** Binding to a re-deriving probe makes a claim *self-correcting*, not *correct*. A
-probe can re-derive the wrong thing forever — `%20`'s **"I measured TOKEN PRESENCE and reported
-REQUIREMENT EQUIVALENCE"** is exactly that: an instrument internally consistent and pointed at the
-wrong object. Re-derivation fixes staleness; only a positive control and a known-bad leg fix aim.
-
-### I MEASURED A SUBSET AND GENERALISED TO THE POPULATION — 19 of 44, not 19 of 19
-
-**Measured 2026-09-07 by `%20`, correcting me. My own unstated-denominator defect, committed while
-documenting the class.**
-
-I reported *"all 19 recorded HD decisions carry a real decision, so 'awaiting a human' is almost
-always false"* and built a bead-triage rule on it. Re-measured over `docs/decisions.jsonl`:
-
-```
-rows                                  56
-distinct HD ids                       44        <- THE POPULATION
-ANY row carries a decision            19        HD-0001..HD-0018, HD-0033
-NO row carries a decision             25        HD-0019..HD-0032, HD-0034..HD-0044
-of the 19 decided, carrying an execution receipt   ZERO
-```
-
-**My claim is exactly right about those 19 and does not generalise to a population of 44.** So the
-conclusion **INVERTS**: *"awaiting a human"* is **genuinely true for 25 of 44 ids.** The inversion I
-found holds for `HD-0009` specifically — which happened to be the one that mattered, which is
-precisely why the over-generalisation survived.
-
-**AND THE MISSING FOURTH STATE IS THE LARGEST ONE: `ExecutionOwed`.** Every recorded decision is
-unexecuted — **zero execution receipts across all 19.** `HD-0008`'s *"push it"* from 2026-09-02 is
-the archetype.
-
-> **A bead in `ExecutionOwed` is WORK and must NEVER be excluded as a human hold** — which is
-> exactly what a hand reading of a human-sounding title does. I did it twice in one pass: a
-> prose-anywhere matcher over-caught **9** (seven P0), then a title-only matcher over-caught **8**
-> more. Both measured token presence and reported pending-decision state.
-
-The five states a triage predicate must distinguish, per `%20`'s runner (`fe291df`):
-`DependencyBlocked` · `TrackerBlocked` · `ExecutionOwed` · `AwaitingHumanDecision` ·
-`Unclassifiable`. **Count only the two that are work wearing a hold; exclude
-`AwaitingHumanDecision` BY A NAMED PREDICATE; make `Unclassifiable` an ERROR** so a bead naming an
-unknown id is never silently excluded.
-
-### TWO CRITERIA OVER ONE SET MUST NOT DISAGREE ON THE DENOMINATOR
-
-**Measured 2026-09-07: R3 printed `144` where R2 printed `138` over the same beads**, because R3's
-population did not exclude the six layer gates. **Neither number was wrong in isolation and only
-running them side by side revealed it.**
-
-A criterion's denominator is part of its claim. Two criteria scoped to one set and reporting
-different populations means at least one is measuring something other than what it names — and
-**both can pass while disagreeing**, which is the failure mode: nothing in either runner compares
-them.
-
-**`0 of 0` MUST BE PRINTED WITH ITS POPULATION.** `%20`'s live R3 reads
-`0 of 0 blocked (population 138)`, because **a criterion reading 0 from an EMPTY population cannot
-otherwise be told from one reading 0 from a healthy one.** That is the anti-vacuity rule stated as
-an output format rather than a test.
-
-**AND FIXTURES CAUGHT TWO DEAD GUARDS IN THE AUTHOR'S OWN RUNNER, second pass running:**
-
-- **The ledger parser accepted any row with an `id` as a decision id.** Pointed at a BEAD file it
-  yielded one bogus id, `seen_ids` was non-empty, and **the anti-vacuity guard silently did not
-  fire.** Fixed with `re.fullmatch(HD-\\d{4})`.
-- The population/denominator disagreement above.
-
-Together with R2's known-good leg catching a `138 of 138` false FAIL, that is **three instrument
-defects caught by mandatory legs in two passes** — every one invisible to a clean run. **Prefer the
-report that names its own instrument failures over the one that reports green.**
-
-
-### A FIX'S OWN MUTATION OUTPUT IS NOT A DESCRIPTION OF THE PRE-FIX TREE
-
-**Measured 2026-09-07. The first time tonight a wrong line number came from EVIDENCE rather than
-from age — and it is the most dangerous variety, because it arrives with a passing/failing verdict
-attached and therefore looks authoritative.**
-
-A `gate.yml` fix (`99295c8`) shipped a mutation leg that removed the restored job key to prove the
-detector bites. The detector printed
-`DUPLICATE_KEY scope=jobs/head-compiles-as-committed key=runs-on lines=[154, 184]`, and **`184` was
-carried forward as the pre-fix duplicate.** Measured against both real trees:
-
-```
-PRE-FIX  99295c8^   154 runs-on / 155 steps  +  171 runs-on / 172 steps   <- the actual duplicate
-                    strict loader: DUPLICATE KEY 'runs-on' at line 171
-HEAD     99295c8    154 runs-on / 155 steps  +  184 path-literal-guard:   <- a RESTORED JOB KEY
-                                                185 runs-on / 186 steps   <- that job's own body
-```
-
-**`184/185` was never a duplicate pair in any commit.** It is an artifact of the mutation's
-*synthetic intermediate state*: a 13-line explanatory comment had already been inserted, then the
-job key removed. **That state exists in no tree.**
-
-**AND THE DANGEROUS HALF:** in the current tree, line **184 is `path-literal-guard:`** — the
-restored key. A reader who took "184/185" as "the duplicate to remove" would **delete the restored
-job and re-create the original defect**, and the same three detectors would go red exactly as
-before — **so it would read as a regression rather than a re-introduction.**
-
-> **Cite a mutation for DIRECTION — it went red, it came back green, the restore was
-> byte-identical. NEVER for LOCATION.** A mutation deliberately perturbs the file, so its line
-> numbers are the least citable in the whole record.
-
-**What to cite instead, in the form that re-derives:**
-
-```
-pre-fix tree     99295c8^
-strict verdict   DUPLICATE KEY 'runs-on' at line 171     (the loader quotes its OWN line)
-cause            no `path-literal-guard:` job key existed; two jobs had collapsed into one
-remedy           RESTORE one job key — never delete a block; both blocks are real jobs
-fix              99295c8
-```
-
-**The cause sentence re-derives from any tree; the line numbers do not.** Let the strict loader's own
-message carry the line, exactly as `13fc201` did for `CONTRACT.md`.
-
-**AND THE REMEDY WAS INVERTED BY THE SAME ERROR.** Both beads describing this defect proposed
-deciding "which block is canonical" and deleting the other. **Neither block was redundant** — the
-root cause was a *missing* job key, so the correct fix is a one-line RESTORE. **A deletion would
-have removed a real CI job and gone green**, which is the failure the beads existed to prevent.
-
-**Third line-pinned citation to be wrong in one session** — `AGENTS.md`'s `:46/:52`, `m0c`'s title,
-and this one. The first two went stale; this one was **born wrong from a correct measurement of the
-wrong tree state.**
-
-
-### FIFTH SUBSTRATE — A FIGURE WHOSE **SCOPE** MOVES WHILE COMMAND AND TREE HOLD STILL
-
-**Measured 2026-09-07 by `%19`, filed as `omp-orchestrator-mmt4` (P0). The first four substrates are
-citations whose TARGET moves. This is a figure whose DENOMINATOR moves — and it defeats both clauses
-of our grading standard at once.**
-
-Three answers, one command, all real:
-
-```
-local, fail-fast       (bypass, darwin arm64)    11 targets    33 passed /  3 failed
-lane,  fail-fast       (contabo-2, exit 101)      9 targets    23 passed /  2 failed
-lane,  --no-fail-fast  (contabo-2, exit 101)     52 targets   251 passed / 55 failed
-```
-
-**`cargo test` stops at the first failing TARGET, and the stop point is environment-dependent.** The
-two truncated figures are **not** bigger and smaller versions of one measurement — they are
-different **PREFIXES**.
-
-**The mechanism, corroborated at source level by pane 1:** `crates/no-shell-gate/tests/` holds **43**
-integration targets (plus 6 `src/bin` and 1 lib), and **`artifact_provenance.rs` is alphabetically
-FIRST while `bead_shape.rs` is THIRD.** On the lane `artifact_provenance` fails, so execution stops
-and `bead_shape`'s three label failures **never run**. Locally it passes, so they do. **The stop
-point is filename ordering crossed with which target fails in this environment.**
-
-**Why this is P0: it survives both halves of "a grade re-runs, and states the tree."** A grader can
-re-run the exact command, on the exact tree, in the mandated lane, and cite a figure that silently
-omits **43 of 52 targets**. This is the FOURTH quantity in this repo wearing the word "tests", and
-the only one indistinguishable from the full aggregate by inspection.
-
-#### RULING (pane 1, 2026-09-07). Both halves of the proposed choice, split by purpose.
-
-1. **An ACCEPTANCE leg MUST cite a NAMED TARGET** — `cargo test -p <crate> --test <target>`. A named
-   target **cannot truncate**, is cheap, and is what a bead's acceptance is actually about. `%20`'s
-   on-lane re-runs already did this correctly (`--test starvation_taxonomy` → 3/0,
-   `--test empty_staged` → 5/1).
-2. **A CRATE-HEALTH claim MUST carry `--no-fail-fast` AND the target denominator** — "251 passed /
-   55 failed across 52 targets", never "251 passed / 55 failed".
-3. **A bare `cargo test -p <crate>` figure is INADMISSIBLE as evidence.** It is a prefix of unknown
-   length whose end is decided by alphabetical filename order crossed with environment. Not
-   "discouraged" — inadmissible, the same standing as the retired "81 JSON-RPC methods, 17 used".
-4. **A `--no-fail-fast` failure count is a COUNT, not a DEFECT count**, until environment-caused
-   failures are split out. `%19` named this against its own figure: `this_repo_is_clean`,
-   `every_in_repo_line_cite_names_a_line_that_exists` and
-   `hook_validates_staged_bytes_not_a_dirty_worktree_copy` need `.git`, `.beads`, `crontab` or a
-   clean worktree, **none of which `rch` syncs**. **Nobody may cite 55 as a defect count**, its
-   author included.
-
-**AND THE AUTHOR COMMITTED THE DEFECT WHILE FILING A BEAD ABOUT DISHONEST COUNTING.** `3ae3`'s
-description reported "33 passed / 3 failed across 11 targets" as `no-shell-gate`'s state; the crate
-has **52**. A fifth of the suite described as the whole — the unstated-denominator defect. `3ae3`'s
-*defect* survives (absolute-count ratchets over live tracker data is a source property no
-environment changes); its *figures* do not.
-
-**Corollary for the CONTABO binding:** three separate panes have now measured live-`.beads` tests
-going RED on the lane because **`rch` syncs source without `.git` or `.beads`**. That is a
-structural consequence of the binding, not a defect in those tests. An absent mirror is
-**UNMEASURED**, never "the oracle is vacuous" — and the discriminator must be POSITIVE: a tree with
-no `.git` is a synced worker copy and cannot answer; a tree that IS a checkout with no mirror still
-FAILS. Absence alone never satisfies.
-
-**NO-CLAIM.** This ruling makes a truncated aggregate *detectable*, not impossible. `--no-fail-fast`
-still cannot separate an environment failure from a real one — item 4 is a disclosure requirement,
-not a mechanism — and **libtest CAPTURES stdout for a PASSING test**, so a green suite cannot itself
-distinguish "ran and passed" from "declined as UNMEASURED" without `-- --nocapture`.
-
+**Bind a claim to something that RE-DERIVES the value, or carry its measurement time and expiry.
+Never transcribe a value you own.** And **carry the population and the TREE with every figure** — a
+bare `cargo test` aggregate is inadmissible, because `cargo` reads the worktree while a sha names a
+tree (rule 8).
 
 ---
 
-## A DENIED OR ERRORED PROBE IS *UNKNOWN*, NEVER A NEGATIVE RESULT
+## A BORROWED CLAIM INHERITS ITS AUTHOR'S BURDEN
 
-**Measured 2026-09-02, and it is the ugliest root cause of that session.** An agent checked whether
-the `am` CLI carried an auth token with `env | grep -i -E 'agent_mail|AM_'`. **`dcg` DENIED the
-command as a policy violation.** The agent never retried, then asserted *"the CLI carries no token"*
-as measured fact, built a two-authority architecture on it, wrote it into a crate's module docs, and
-broadcast it — where it was adopted as house doctrine.
+**Receipt:** [`LIFECYCLE-FAILURES.md#a-denied-or-errored-probe-is-unknown-never-a-negative-result`](docs/negative-patterns/LIFECYCLE-FAILURES.md#a-denied-or-errored-probe-is-unknown-never-a-negative-result)
+— including the measured case where a `dcg`-denied probe became an asserted negative, then house
+doctrine, across three agents in under an hour.
 
-Every part of it was false. `printenv HTTP_BEARER_TOKEN` -> **SET, 65 chars**; `AGENT_MAIL_TOKEN` ->
-**SET**; both read at `mcp-agent-mail-cli/src/lib.rs:82140`. The CLI had authenticated via the
-environment the entire time. `printenv` was available throughout.
+**Restating someone else's finding makes it yours.** Cite it and verify it, or attribute it and mark
+it unverified. **There is no third option in which you hold it as fact because a peer measured it.**
 
-**The refusal was not evidence. It was the absence of evidence, wearing evidence's shape.** **A tool
-refusal, a non-zero exit, an empty result, and a policy denial are all UNKNOWN.** The honest moves
-are: retry differently, or say unknown. Asserting the negative is the one move that is never
-available.
+**The measurable tell: if you can state a claim's file and line but have not opened that file, you
+are transmitting, not verifying.** A peer's claim arrives with the social weight of collaboration
+rather than the suspicion we reserve for our own probes, which is why this is easier to forget than
+`8i`.
 
-**AND THE THING THAT FALSE PREMISE WAS INVENTED TO EXPLAIN IS NOW UNEXPLAINED AGAIN.** `am agent
-start` reported "no listener on 127.0.0.1:8765" while `curl /health` returned `status: ready` and
-two robot calls returned live data. The two-authorities story accounted for it; the story is false,
-so **the contradiction is OPEN and must stop being cited as answered.** A retracted explanation
-does not leave the thing it explained explained.
-
-**What survives, measured at the shipped tag `v0.3.31`:** the CLI calls the daemon **by default** —
-`mcp-agent-mail-cli/src/lib.rs:8911` is `!direct || daemon_reachable`, doc-commented "the default
-(non-`--direct`) path always prefers the daemon", so **omitting `--direct` takes the daemon
-unconditionally with NO fallback** and the SQLite read is the exception. Its own 401 text at
-`:40179` names `AGENT_MAIL_TOKEN`/`HTTP_BEARER_TOKEN` — a CLI that never called the daemon could not
-emit that. `/api/` and `/mcp/` are each other's alternates (`:9351-9352`). And `am health` really
-does build a throwaway probe SQLite and never contacts the daemon — **that single measurement was
-correct; the error was generalising `health` to the entire CLI.**
-
-**A CORRECTION TO THIS SECTION'S OWN FIRST DRAFT, which is the point of the section.** It shipped a
-replacement row claiming `--direct` is inverted relative to its help text. **That is also false**,
-and a second reader refused it before it could be filed: the installed `--help` reads "Allow a
-direct SQLite read only when no daemon is reachable", which **is** the predicate. Help and code
-agree; the doc comment names GH#158 (WAL contention). **A retraction is not a licence to publish the
-next plausible story** — the replacement needs the same standard as the thing it replaces, and this
-one was accepted into doctrine for twenty minutes on nobody's measurement.
-
-### A BORROWED CLAIM INHERITS ITS AUTHOR'S BURDEN
-
-**The rule above covers the diagnosis half. This is the transmission half, and it is how one wrong
-claim became house doctrine across three agents in under an hour.**
-
-The denied-probe failure was one agent mis-diagnosing its own measurement. What happened next was a
-different failure with a different cure: **two other agents, including this file's editor, repeated
-the finding as established provenance without reading the source.** It arrived measured-sounding —
-file, line, a predicate, a confident causal story — and that shape was accepted *as* verification.
-It was then written into `AGENTS.md`, cited three times as evidence in grades, and broadcast to the
-fleet as "the definitive explanation" before anyone opened the file.
-
-**A report is a claim** — the rule this repo already applies to subagents and to bead close reasons.
-It applies identically to a **peer**, and it is easier to forget there, because a peer's claim
-arrives with the social weight of collaboration rather than the suspicion we reserve for our own
-probes. **Restating someone else's finding makes it yours.** Cite it and verify it, or attribute it
-and mark it unverified. There is no third option in which you get to hold it as fact because someone
-else measured it.
-
-**The measurable tell:** if you can state a claim's file and line but have not opened that file, you
-are transmitting, not verifying. The cheap fix is to open it — every one of the four refutations in
-that investigation cost one `git show` against a version-matched tree.
-
-
-### RE-RUNNING THE HOOK AFTER A COMMIT IS A CATEGORY ERROR, NOT A RED FLAG
-
-**Measured 2026-09-02, and it is a trap laid by a correct fix.** Since the empty-index repair, a
-standalone `.git/hooks/pre-commit` run returns **3** with `NOTHING_TO_CHECK: no staged files to
-check` once the index is empty — which is exactly right, because after a successful commit **there
-is nothing staged to check**. The gate is answering the question it was asked.
-
-But the obvious way to double-check a hook — commit, then run the hook again to be sure — now
-produces a nonzero exit and a refusal-shaped message, and **reads as a failure that just landed**.
-Two agents walked into a version of this tonight, one of them the author of the fix.
-
-**Post-commit, the authoritative evidence is the commit-time `CLEAN: all staged files passed the
-multi-gate checks` line.** A later standalone run measures a *different input* — an empty index —
-and therefore cannot confirm or refute what the commit did. It is not a weaker check; it is a check
-of something else.
-
-**The general form, which is the reusable part:** a gate's verdict is only meaningful paired with
-the input it ran against. Re-running a gate against a *different* input and comparing verdicts is
-the same error as comparing two `git` figures taken from two trees — and it produces the same
-confident-wrong reading. Capture the verdict at the moment of the operation, or re-create the input
-before re-running.
-
-### A PEER'S DEFECT REPORT IS A VERDICT ON A TREE. REFUTING IT ON A DIFFERENT TREE IS THE SAME ERROR.
-
-**The rule above is stated about hooks and commits. It applies identically to a PEER'S BUG REPORT,
-and that is the harder case, because a refutation feels like verification.**
-
-**Measured 2026-09-07, a genuine near-miss.** `%20` reported a fleet-wide cargo outage: a stray `.`
-outside the closing quote at `crates/refill-idle-panes/Cargo.toml:6:137` broke workspace *loading*,
-so `-p <crate>` could not dodge it and every cargo command in the repo failed. Pane 1 measured the
-diff, found a peer's two dependency additions in flight beside the typo, applied the minimal fix —
-period back inside the quote — and broadcast the clearance.
-
-`%19` then measured line 6, got **byte-identical to HEAD** on both sides, saw a `git diff` with
-**no `description` hunk at all**, and drafted: *"the accused line is byte-identical to HEAD; the real
-diff is two added dependency lines."* **A refutation of a correct diagnosis, one message from
-broadcast.**
-
-**The fix had landed between the notice and the read.** `%19`'s measurement was correct and
-consistent with a **post-fix tree**; it could say nothing about the pre-fix claim. And the pre-fix
-state was **unrecoverable** — the file was uncommitted, so there is no history to diff against. Only
-the reporter's own quoted error text survived as evidence.
-
-**The cost of publishing it would have been real and asymmetric:** a correct diagnosis discredited,
-its author's next report discounted, and the next outage of that class read as a false alarm. **A
-wrong refutation is worse than a wrong report**, because it also destroys the reporting channel.
-
-**The mechanical form:** a defect report is a verdict on a tree at a time. Before refuting one,
-establish that you are reading **the same input** — check whether the file changed since the notice
-(`git status`, mtime, or ask), and **name the tree your refutation read**. A refutation that does not
-name its input is exactly as stale as the claim it thinks it is killing.
-
-**Corollary for uncommitted state, which is where this bites hardest.** A `git`-based check cannot
-reconstruct a dirty file's earlier content. When the subject is uncommitted, **the reporter's quoted
-error output IS the primary evidence** — treat it as the artifact, not as a claim to be re-derived.
-A repair that clears the symptom also destroys the evidence, so the fixer must quote the pre-fix
-state in the clearance notice. Pane 1 did quote the byte and the two `sha` values; that is what let
-`%19` reconcile instead of escalate.
-
-**NO-CLAIM.** This makes a stale refutation *detectable*, not impossible. Two panes reading the same
-tree can still disagree for other reasons — different globs, different anchors, different key shapes
-across `br show` / jsonl / `br list`. Naming the tree removes one failure mode from a family this
-file records eight other members of.
-
-
-### A FILTERED DIFF IS NOT A DIFF — and this member of the family drives a DESTRUCTIVE command
-
-**Measured 2026-09-07, self-reported by `%20` against its own remedy.** During the fleet cargo
-outage it needed to inspect one manifest line and ran:
-
-```bash
-git diff -- crates/refill-idle-panes/Cargo.toml | grep -E '^[-+]description'
-```
-
-It then reported the defect correctly — a stray `.` outside the closing quote at `:6:137` — **and
-named `git checkout -- <manifest>` as the fix.** That command would have destroyed a peer's two
-in-flight dependency additions (`agent-mail-native`, `asupersync`) and desynced them from their own
-modified `src/main.rs` and `tests/differential.rs`.
-
-**The distinguishing feature: the evidence was RETRIEVED AND THEN DISCARDED.** The two `+`
-dependency lines were in the command's output stream; the filter dropped them before any human or
-agent read them. Every other member of this family produces a wrong **number** — `$?` after a pipe,
-`git log -S` skipping merges, `grep -c … || echo 0` emitting `"0\n0"`, `rg -c | wc -l` returning the
-glob size. **This one produced a wrong BASIS FOR A DESTRUCTIVE ACTION**, which is a strictly worse
-failure mode than a wrong figure.
-
-**And prose caution did not save it.** `%20` had already written *"a peer mid-edit could have a
-larger change in flight that my fix would clobber"* — correct reasoning about the hazard — and then
-let a narrowed `grep` tell it the hazard was absent. **A stated risk does not survive contact with
-a filtered instrument**; the filter answers a different question and looks complete doing it.
-
-**The mechanical form:** before any command that discards working-tree state, read the **whole**
-diff and the **whole** `git status` for the path. Narrow only to *locate*, never to *decide*. And
-prefer the minimal edit over the categorical revert — the fix that shipped was moving one character
-back inside the quote, which left every other change intact and made line 6 byte-identical to HEAD
-(`sha f4e657007bbd33d1` both sides).
-
-**NO-CLAIM.** Reading the whole diff catches co-located peer work in the *same file*. It does not
-catch a peer whose related edits sit in files you did not diff — here, `src/main.rs` and
-`tests/differential.rs` were also ` M`, and only a path-scoped `git status` showed them. Whole-diff
-plus whole-status, or the check is partial.
-
-### `git show | grep` CONFLATES THE COMMIT MESSAGE WITH THE DIFF — and a claim of absence can be defeated by its own prose
-
-**Measured 2026-09-07. My own claim, caught by `%20`, and the purest instance of the
-self-referential-instrument family in this file.**
-
-I wrote *"`%19`'s diff touches `owner` 0 times"* to attribute a lane test failure to the
-environment rather than to a peer's commit. **The substance was right; the method was not.**
-
-```
-git show 49c7c22 | grep -c owner                                    -> 2   <- includes the MESSAGE
-git show --unified=0 --format= 49c7c22 | grep '^[+-]' | grep -c owner -> 0   <- diff only
-git diff 49c7c22^ 49c7c22 | grep -c owner                            -> 0   <- diff only
-```
-
-**The two hits are in the commit message, and line 59 of that message is the sentence
-*"My diff touches `owner` 0 times"*.** So a verification of absence, run with `git show | grep`,
-**returns nonzero because the claim's own prose contains the needle it denies.**
-
-> **`git show` is `message + diff`. If you are making a claim about the DIFF, you must exclude the
-> message** — `--format=` empties it, or use `git diff <sha>^ <sha>` and never `git show`.
-
-**Why this is worse than the sibling rules:** `git log -S` skipping merges produces a *false zero*,
-which reads as absence and is caught by any positive control. This produces a **false NONZERO on a
-true absence**, so the instrument appears to *refute* a correct claim — and the more carefully the
-commit message documents the reasoning, the more likely it is to defeat the check. **A well-written
-commit message is the failure mode.**
-
-Same family, all measured here: `git log -S` skipping merges; `grep -c … || echo 0` emitting
-`"0\n0"`; `$?` after a pipe returning the pipeline's status; a doc comment containing the needle it
-warns about; a census table naming every gate it checks; and a citation-hygiene scan finding the
-specimens inside its own defect reports. **Twelfth instance, and the first where the instrument's
-extra input was the author's own explanation.**
-
-**`%20` hit the sibling shape on the same bead, one call apart:** its opening census printed **3**
-raw `.output()` sites and was counting the `// omp-orchestrator-3kcl: this was a raw '.output()'…`
-**comments documenting the fix.** Comments stripped → **1**, and that one is the `#[cfg(test)]`
-helper. **Strip comments before matching** — re-learned by publishing a wrong 3 and catching it in
-the next call.
-
-### `git log -S` SKIPS MERGES BY DEFAULT — ITS ZERO IS NOT EVIDENCE OF ABSENCE
-
-**Measured 2026-09-02.** An agent searched for the commit that introduced a string with
-`git log -S`, got an **empty result**, and concluded the anchor did not exist. The real commit was
-`0b929ef` — verified with `git show --name-only`, which lists the file, and
-`git rev-list --parents -n1` returns **3 entries, so it is a MERGE commit.** `git log -S` traverses
-only the first parent by default and therefore **cannot see a change that arrived through a merge.**
-
-**The zero was structurally guaranteed, not observed.** Use `git show --name-only <sha>` when you
-have a candidate, and add `--full-history -m` (or check merges explicitly) when searching. This is
-the sixth member of the instrument-manufactures-its-own-reading family in one session, alongside
-`$?` after a pipe, ERE parens in a BRE context, `grep -c … || echo 0` emitting `"0\n0"`, a backtick
-eaten inside single quotes, and the same command name resolving to different binaries.
-
-**AN EXCEPTION LIST IS EVIDENCE TOO, AND THIS ONE WAS WRONG.** The same pass found that a
-`FIXED_POINTER_ALLOWANCE` row — an entry whose whole purpose is to record where a fix landed —
-**cited a commit that does not touch the file it claimed.** The exception list carried an unverified
-evidence pointer: the identical defect, one level up from the one it was written to record. **Audit
-your allowlists with the same probe you audit the code with**, or the list becomes the place wrong
-evidence hides from the gate that would have caught it.
-
-**AND A SUBAGENT FABRICATED A COMMIT SHA.** Four verdicts were attributed to `4aaae09`;
-`git cat-file -e 4aaae09` reports **the object does not exist.** A second verifier attributed two
-findings to a commit touching neither file. **A cited sha is a claim, and `git cat-file -e` is one
-command.** Parallel verification still earned its cost here — as a *decoy detector*, not as
-corroboration.
-
-
-**AND IT DOWNGRADED THE INVESTIGATOR'S OWN BEST EVIDENCE, which is why this rule is worth more than
-the correction.** `oracle_skew=0` was reported as two independent authorities agreeing about a
-store. It is **two HTTP routes on the same daemon process, authenticated with the same token,
-reading the same in-process state.** It proves one daemon is self-consistent; it does not
-corroborate the store. A differential oracle whose two arms share a process, a credential and a
-cache is not a differential oracle — **it is one reading, taken twice.**
-
-The consequence for consumers ran the *other* way from what was announced: every CLI-derived figure
-came from the DAEMON and is therefore MORE trustworthy than the fleet was told, not less. **The
-numbers were fine; the explanation of where they came from was not.**
-
----
+**And a retraction is not a licence to publish the next plausible story** — the replacement needs the
+same standard as the thing it replaces.
 
 ## Before calling anything a defect, READ THE DEFINITION OF CORRECT BEHAVIOUR
 
@@ -3006,162 +1788,26 @@ agent moves on believing the close landed. Always read the status back:
 
 ---
 
-## Three graph and evidence rules that strangled real work tonight
+## Graph and evidence rules (receipts: [LIFECYCLE-FAILURES.md](docs/negative-patterns/LIFECYCLE-FAILURES.md#three-graph-and-evidence-rules-that-strangled-real-work-tonight))
 
-### An epic OWNS its leaves via parent-child — NEVER a `blocks` edge onto its own leaf
+**Keep ownership in `parent-child` edges and never put a `blocks` edge from an epic onto its own
+leaf** — that is circular by construction and it strangled 13 of the first 30 open beads, four of
+them P0. **The authority is ATTEMPTING the transition and reading the refusal**, not `br show`.
 
-A `blocks` edge from an epic onto a leaf it owns is **circular by construction**: the epic gates
-the leaf, so the leaf cannot start until the epic closes, and the epic cannot close until its
-children finish. **13 of the first 30 unassigned open beads were strangled this way, four of them
-P0.**
+**Audit CLOSED beads for a path before you `git rm` it.** A closed bead's cited evidence is a live
+filesystem dependency, not a historical note.
 
-`br show` reads `open` and unassigned and looks perfectly claimable. **The authority is ATTEMPTING
-the transition and reading the refusal text** — quote it when reporting a blocker:
+**Read a consumer's extractor and its scope before scanning for it.** Measured: a scan sized from an
+inferred regex overstated the problem ~13×, and 47 of 71 "unresolvable" citations were a regex
+artifact rather than broken evidence.
 
-```
-br update cp-u9ikt --status in_progress
-  -> Error: cannot claim blocked issue: cp-epic-fleet-work-quality-08l6.74
-```
+## Post-mortem: the fleet idled 6+ hours while every watchdog fired (receipt: [LIFECYCLE-FAILURES.md](docs/negative-patterns/LIFECYCLE-FAILURES.md#post-mortem-the-fleet-went-idle-for-6-hours-while-every-watchdog-fired-2026-08-31-session-post-wave))
 
-**Find the writer before fixing the edges.** `br dep add <child> <parent>` **transposed** produces
-exactly this shape, so repaired edges regrow while the writer still runs. Also: `br dep list <id>`
-returns **OUT-edges only** — absence of an in-edge is not evidence of an orphan. And for triage use
-`.triage.recommendations`, never `.quick_ref.top_picks` (it reports `unblocks=0` and omits
-high-scoring beads); **skip epic containers**, whose PageRank accumulates from every child so they
-top the list and can never close.
-
-### A port that deletes a file invalidates every CLOSED bead that cited it
-
-`45c613d` deleted four scripts. All four were legitimately superseded and every citing bead was
-**validly closed at the time**. Hours later it surfaced as `check.sh` close-evidence RED with
-everything downstream UNRUN — a gate refusing every dispatch, far from the mistake.
-
-**Before `git rm`, grep CLOSED beads for the path.** A closed bead's evidence is a live dependency
-on the filesystem, not a historical note. Measured exposure: 2 beads via `close_reason`, plus
-comment-level citations the raw count hides. Tracked as `cp-rjuzj`; the commit-time gate that would
-have caught it at the point of the mistake is `omp-orchestrator-pre-delete-citation-check-igk`.
-
-### READ THE CONSUMER BEFORE SCANNING FOR IT — and the harvester manufactures its own failures
-
-> ## ⚠ CORRECTED 2026-09-07 — THIS ENTIRE SECTION IS ABOUT **CONTROL-PLANE**, NOT THIS REPO
->
-> **`crates/close-evidence-gate` DOES NOT EXIST HERE AND NEVER DID.** Measured:
-> `git ls-tree -r HEAD --name-only | grep -c close-evidence-gate` → **0**;
-> `git log --all --diff-filter=D --name-only -- 'crates/close-evidence-gate/*'` → **0**, so it was
-> never deleted either; `grep -rn CITED_PATH crates/` → **0 occurrences anywhere in this repo**.
->
-> It lives at `/Users/josh/Developer/control-plane/crates/close-evidence-gate/src/blob.rs`. **The
-> readings below are REAL — of the wrong repository.** They were published here as "this repo's
-> close-evidence extractor" by the same agent that wrote the fifth rule about not confusing the two
-> boundaries. **A BORROWED CLAIM INHERITS ITS AUTHOR'S BURDEN applies to a borrowed REPOSITORY too**,
-> and the tell was in the text the whole time: the tracking bead is `cp-…`, control-plane's prefix.
->
-> **THE OPERATIONAL HARM IS THE IMPERATIVE, NOT THE CITATIONS.** *"Write every path in a bead
-> comment inside backticks"* was published as governing this repo. **There is no harvester here to
-> evade.** Agents were instructed to obscure paths from a consumer that does not exist — and this
-> repo's real consumer runs the other way: `%19` measured 14 closed beads citing a `bin/` or
-> `.flywheel/` path ONLY in comments, one of them the very bead that created the citation gate, and
-> `crates/no-shell-gate/src/bin/pre-commit-gate.rs:342` now reads those comments through
-> `read_closed_beads_from_mirror`. **Here, a backticked path is a path the gate should still see.**
->
-> **Retained deliberately, because the mechanism transfers even though the location does not:** read
-> the consumer before scanning for it, strip comments and fenced code before matching, over-strip
-> rather than under-strip, and never size an extractor from an inferred regex. Those are why the
-> section stays instead of being deleted. **Do not act on its paths, counts, or the backtick rule
-> inside this repository.**
-
-The close-evidence extractor was twice sized from an **inferred** regex. Read from source
-(`control-plane:crates/close-evidence-gate/src/blob.rs:59` — **not this repo**) it is:
-
-```
-const CITED_PATH: &str = r"(?:^|[^\w/.])(bin/[\w.-]+|\.flywheel/[\w./-]+)";
-```
-
-Three facts that only reading it establishes:
-
-1. **It harvests `bin/` and `.flywheel/` ONLY** — not `crates/`. A scan including `crates/`
-   overstated the problem by ~13×.
-2. **The gate reads `close_reason` + `comments`, NOT `description`** (`grade.rs:44-51`: the `Bead`
-   struct has no description field). So a path in a description cannot break the gate — and a scan
-   restricted to `close_reason` still **understates** it, because comments count.
-3. **Fenced blocks and inline code are blanked before harvesting** (`blob.rs:95-96`:
-   `fence.replace_all` then `inline_code.replace_all`). So in **control-plane**, backticks are a
-   mitigation: a path written `` `bin/foo.sh` `` is invisible to that harvester.
-
-> **THE BACKTICK RULE IS CONTROL-PLANE-ONLY AND IS RETRACTED FOR THIS REPO.** The `WAVE.md`
-> measurement below was taken with control-plane's stripping applied to this repo's file, which is
-> why it reported 0 — it measured a consumer that never reads here.
-
-**And 47 of 71 unresolvable citations are a REGEX ARTIFACT, not broken evidence.** Both alternations
-end in a greedy class containing `.`, so a sentence-ending period is absorbed:
-`.flywheel/HARVEST-LOOP-PLAN.md.` — which resolves the moment the dot is stripped. A further 13 are
-prose fragments (`bin/a`, `bin/b`, `bin/crates`, the last a truncation at the next slash). **The
-real broken-citation count is 9**, and editing bead comments to work around the harvester would
-leave it live to re-manufacture the same rows forever. Tracked as `cp-cited-path-trailing-period-n5mkc`.
-
-## Post-mortem: the fleet went idle for 6+ hours while every watchdog fired (2026-08-31, session post-wave)
-
-The session's product claim — no session goes idle until Joshua says so — failed for ~6 hours
-(roughly 10:00Z to 16:00Z) while every detection layer worked. The causal chain, each link
-measured, not inferred:
-
-1. THE CONDUCTOR FAMILY IS WIRED AND FIRING — and refused at one gate, for hours. Cron entries
-   exist for controller-tick (18,38,58), fast-dispatch (*/5), loop-driver, refill-idle-panes,
-   challenge-lane, fleet-monitor, reap-finished-panes. controller-tick's log tail at 15:59:51Z:
-   "ADMISSION REFUSED — no fresh standing PASS at check-sh-ledger.json". fast-dispatch's log:
-   "drift UNRUN skipped-after-close-evidence; tests UNRUN; mutation UNRUN". The fail-fast chain
-   means ONE red gate makes every downstream gate UNRUN, and the admission verdict can never go
-   green while any single gate is red.
-2. THE GATES WENT RED FASTER THAN THEY WERE FIXED. The standing check-sh verdict failed at 10:00
-   (docs-staleness: the staleness metric counts commits since the doc's last DISK WRITE, so a wave
-   committing ~2/min re-stales AGENTS.md in ~25 minutes). Fixed by landing real findings (5107abc).
-   Then close-evidence RED: 39+5 closed beads without audit-trail comments — backfilled (34 fixed
-   by close-reason evidence patterns already present; 5 unfixable by comments because
-   close-evidence-gate's bead source omits the comments field entirely — source.rs:223). Then
-   bead-lineage RED. Each fix revealed the next red: the chain re-fails on the next gate every
-   time, and at wave rate the admission verdict was red ~continuously.
-3. THE DISK WALL MADE THE REST OF THE CHAIN UNFIXABLE. The `tests` and `mutation` gates require
-   cargo builds; builds are refused at the mint floor (container 6.5-6.8% vs 8%,
-   CARGO_MINT_CONTAINER_EXHAUSTED exit 75) — escalated to Joshua (cp-oakbv). The admission verdict
-   therefore cannot go PASS regardless of gate fixes until disk headroom exists.
-4. THE WATCHDOGS DETECTED AND FILED — AND THE P0s SAT OPEN. challenge-lane auto-filed
-   cp-rjuzj ("close-evidence RED blocks all dispatch") and cp-vgine ("idle OMP capacity beside a
-   ready queue") — both P0, both correct, both sat open for hours. dispatcher-deadman exists for
-   exactly this class. Detection fired; the response layer does not exist: every lane fail-closes
-   on admission, and no mechanism is authorized to act on a DEGRADED signal.
-5. THE CONDUCTOR WAS A PANE. Pane 1 hand-routed work all night (four grades, two fixes, the
-   blocker map) — the manual orchestration was load-bearing while the automated conductor was
-   admission-blocked. When pane 1 investigated the blockers, routing stopped and seven panes went
-   idle. The product's own claim (loop-driver: single-instance deadline-bounded conductor;
-   refill-idle-panes: "an idle worker beside a ready queue is the conductor's failure") is that
-   the conductor is a BINARY. The binary exists, is cron'd, and was refused — see 1-3.
-
-THE NAMED MECHANISMS THAT PREVENT RECURRENCE (in order of leverage):
-  M1 — TYPED DEGRADED DISPATCH: when admission is red, the conductor dispatches LOW-STAKES beads
-       (grading/verification/hygiene — the classes that need no green admission) with
-       admission=stale marked on the lifecycle row. Challenge-lane's own acceptance says
-       "dispatch the idle panes, OR name why the queue is not eligible" — the naming has run all
-       night and must be allowed to end in a dispatch for the work that does not need a green
-       tree. High-stakes dispatch keeps the full gate.
-  M2 — GRADING AS A DISPATCH LANE: `crates/m2-grading-lane` consumes `dispatch_saga::m2::route`.
-       Lineage is `--profile` from argv, not `AGENT_NAME`. Decide-only by default; `--apply`
-       would send. It does not close. IMPL→GRADING *status* remains `dispatch-saga grading-transition`.
-
-
-  M3 — CROSS-SESSION ROUTING: panes idled in a session whose repo was admission-blocked while
-       real work existed in the other repo (grades, backfills, doc currency). The conductor must
-       route by WORK LOCATION, not by session membership.
-  M4 — THE DISK WALL (cp-oakbv, with Joshua): the admission chain's tests/mutation gates
-       physically cannot run below the mint floor. Until resolved, M1 is the only dispatch path.
-  M5 — DOCS-STALENESS METRIC REDESIGN: a counter that re-stales in 25 minutes on a wave is a
-       gate that is red ~forever when the fleet is most active. Measure staleness against
-       substantive-commit classes, or gate it to a longer window during declared waves.
-
-ALSO CORRECTED IN THIS POST-MORTEM (the truncated-instrument class, third instance tonight):
-an early crontab read (head -10) reported controller-tick REMOVED from cron; grep found it at
-line 11+. Read the whole instrument. An uncommitted-edit attribution was also corrected by the
-orchestrator to a committed-land state (228f42a) — check git status at report time, not from
-memory.
+**When admission is red, route typed low-stakes work — grading, verification, hygiene — instead of
+naming the blocker forever.** Detection fired correctly for six hours; the response layer did not
+exist, because every lane fail-closed on admission and nothing was authorized to act on a DEGRADED
+signal. **Route by WORK LOCATION, not by session membership**, and treat a staleness metric that
+re-fires inside 25 minutes as a defect in the metric.
 
 ---
 
