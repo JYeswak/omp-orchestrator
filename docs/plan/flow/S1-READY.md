@@ -344,6 +344,44 @@ Only SilverWolf's 2 have a reviewer who could in principle still respond.
 **Real shape of R4:** one batch of 5 citation rows needing an adopter, 1 hook-count row needing an
 adopter, and 2 SilverWolf rows. Three items, not eight.
 
+### R4 CLEARED 2026-09-07 — and 3 of the 8 rows were MY INSTRUMENT, not their subject
+
+**Verified independently by pane 1 before banking it:** 43 wave files scanned, **75** `box = "S1"`
+rows, **0** with a blank resolution. `boxes/S1.toml:334` now reads
+`open_disagreements = 0  # DERIVED, ALL WAVES, widened from wave=2 by %19` — a predicate, not a
+hardcoded integer. Landed `f701dfc`; `%19` answered the rows and deliberately did **not** close it.
+
+**THE DURABLE FINDING IS THE SELF-REFERENTIAL CORPUS, and it fired twice in five rows:**
+
+> **A citation-hygiene scan over a corpus that CONTAINS its own defect reports finds its own
+> specimens.** The fix is to strip quoted specimens before matching — **never to edit the documents
+> that record the rule.**
+
+- `cite.mirror-truncated-ellipsis` → **REFUTED.** The only `beads_rust` + ellipsis match in
+  `CONTRACT.md` is inside the sentence that **refuses** the form: *"a scout labelled ack-spine and
+  no-shell-gate as `mirror:beads_rust/...` — fabricated; refused"*. A quoted specimen inside the
+  rule against it.
+- `cite.dropped-leading-j` → **CLEARED.** The 2 survivors live in the **PX-D5 row that reports this
+  very defect.** Positive control: `plf.7.2` → **0** rows in `issues.jsonl`, `jplf.7.2` → **1**. No
+  live citation carries the dropped `j`.
+- `wave1_sections` (blocker) → **REFUTED, structurally.** All four sections were present at the
+  review-date tree `e5ab541`: 6 measurements, 10 gaps, 1 agreement, 1 diagram. The reported
+  `0,0,0,0` reproduces **only** under a bare `[[<key>]]` matcher, which drops the `box.` prefix
+  **and cannot see single-bracket tables at all** — `agreement` and `diagram` are `[box.x]`, not
+  `[[box.x]]`. **A structurally-guaranteed zero**, and it was already so at the review date, so it
+  is not drift.
+
+**The row that UNDERSTATED itself, and it is the never-fires class:** `figure.unlabelled-in-owner-files`
+named `boxes/S1.toml`, which **carries a predicate and is not the offender.** The real population is
+**11 sibling owner files (S2–S9) plus `CONTRACT.md`**, each with a bare `open_disagreements = 0` —
+**no predicate, no TREE/WORKTREE label.** Re-scoped to those 12 for their owners.
+
+**One residual pane 1 owns and did not delegate:** `boxes/S1.toml`'s `rejections` comment still
+carries *"wave-1 = 0 of 12 (a SURVEY, not a review)"* — the exact claim refuted at `166c078`. **The
+refutation landed; the prose defending it did not.** `%19` found the same shape in `qibn` (a header
+comment still arguing `certified = false` above eight rows now reading `UNATTEMPTED`).
+**Prose defending a value the file no longer holds, invisible to every predicate.**
+
 ### R5 — every S1 layer gate NAMES its known-bad leg
 
 **Naming is the whole criterion. It does not measure firing** — that is R9, added below because I
@@ -414,8 +452,46 @@ for g in l0-jtgw l1-fnv8 l2-j5m9 l3-z8hz l4-hs15 l5-w44h djn8; do
     "import json,sys;print('$g', json.load(sys.stdin)[0].get('status'))"
 done
 ```
-Measured 2026-09-07: `gate.yml` **14 jobs, 0 naming `s1-l`**; `crontab` **0**; all seven gates
-`status=open`.
+Measured 2026-09-07 by `%20`: `gate.yml` **12 jobs, 0 naming `s1-l`**; `crontab` **0**; all seven
+gates `status=open`, so not one has ever completed.
+
+> **The job count was 14 here and is 15 in `fsu7`; both are counting artifacts and the answer is
+> 12.** `.github/workflows/` holds **one** file. It has **15 keys at two-space indent**, but three
+> of them — `push`, `pull_request`, `workflow_dispatch` — sit under `on:` and are TRIGGERS, not
+> jobs. Counting keys after the `jobs:` anchor gives **12**: `no-shell-gate`,
+> `head-compiles-as-committed`, `path-literal-guard`, `grader-attribution-gate`,
+> `undrained-pipe-lint`, `kernel-bypass-gate`, `state-wildcard-lint`, `installer`,
+> `omp-inventory-map`, `pre-delete-citation-check`, `commit-build-fence`, `porting-gate`.
+> **An indentation-keyed count cannot tell a job from a trigger** — the same class as a `[[bin]]`
+> grep that reports `tick-monitor` as 0 while it is on PATH. The `0 naming s1-l` half is unaffected.
+
+**WIRING FEASIBILITY, measured — R9 CANNOT BE FULLY WIRED TODAY, and wiring what exists would be a
+false green.** `INERT → wire it` is the right remedy, and the inventory says what is wireable:
+
+|layer|named per-layer target that exists today|
+|---|---|
+|L0|`crates/installer/tests/l0_install.rs`|
+|L1|**NONE**|
+|L2|**NONE**|
+|L3|`crates/ompo-start/tests/l3_step_parity.rs`|
+|L4|`crates/ompo-start/tests/l4_pack.rs`, `crates/ompo-start/tests/l4_spawn.rs`|
+|L5|`crates/ompo-start/tests/l5_foundation.rs`|
+
+Plus `crates/s1-coverage/tests/contract.rs`, which is the coverage matrix rather than a layer leg.
+**Four of six layers have a named target; L1 and L2 have none** — they are exactly the planning
+halves `%7` and `%8` hold. And **no layer gate's known-bad leg exists as code at all**: the legs are
+specified in the gate beads' acceptance text (R5 = 7/7 on NAMING), not implemented.
+
+So attaching the four existing targets to an entry point would produce a gate that fires on **4 of
+6** layers while reading as S1 gate coverage — the anti-vacuity failure this file refuses everywhere
+else. **The honest sequence is: L1 and L2 get named targets, then all six attach at once.**
+
+**WHERE TO ATTACH, and it is not a workflow key.** `omp-orchestrator-fsu7` establishes that CI is
+11 gate crates fanned out by YAML with no single entry point, and `%19` measured that **Actions is
+STRICT** — n=60, and 49 duplicate-key runs started **ZERO** jobs. Seven new workflow keys is seven
+new single-colon failure modes that fail SILENT-ZERO. The S1 layer gates hang off the single Rust
+entry point `fsu7` describes, or off one `cargo test` target that names all six — **one key, six
+legs**, so a YAML defect cannot zero five gates while leaving one green.
 
 ⚠ **UNMEASURED as a firing result — classification INERT.** Per gate rule 4a the four
 classifications carry different remedies: **ABSENT** → write it, **INERT** → wire it, **UNRUN** →
@@ -501,14 +577,14 @@ the reading, not the subject, every time.**
 |R1 acceptance on every layer bead|✅ **PASS** — 0 of 144 empty|
 |R2 layer beads wired to their gate|✅ **PASS** — **0 of 138, STRANGLED=0**, snapshot 2026-09-07 (`rc=0`). **Was ⚠ WEAK** until `2fxd` made the predicate require *own-layer-gate* linkage, made the transpose a typed `STRANGLED` refusal, added an anti-vacuity arm, and shipped four executed fixtures. Retired predicate printed beside it on every run. History: published **FAIL 144/144** (wrong at publication — the edges predated this file by 4 days) and its first "correction" (`id`/`dependency_type`, `br show`'s keys, not the JSONL's) **also wrong**|
 |R3 no false `blocked`|⚠ **NEARLY** — 2 (snapshot; was 92 → 89 → 88 → 2)|
-|R4 disagreements resolved, derived count|❌ **FAIL** — **8** (wave-1: 2, wave-2: 6). Scope **RULED** wave-1 counts, three reasons intact. **`S1.toml:336`'s "(a SURVEY, not a review)" is REFUTED** — wave-1's resolutions are `accepted-and-landed`; 0 rejections because all were ACCEPTED. **6 of 8 orphaned** (`pane4-*`), 3 work items not 8|
+|R4 disagreements resolved, derived count|✅ **PASS — 0 of 75** across **43 wave files** (`f701dfc`, `%19`). Owner field widened to `DERIVED, ALL WAVES`. **3 of the original 8 were INSTRUMENT defects**, not subject defects|
 |R5 gates NAME a known-bad leg|✅ **PASS — 7 of 7** (strict: `SUBJECT:` stripped, numbered item required). `8hq3` P0 filed by `%20`|
-|R9 has any gate ever FIRED|⚠ **UNMEASURED → INERT.** 0 in CI, 0 in cron, all 7 `status=open`. **Wire it, do not write it**|
+|R9 has any gate ever FIRED|⚠ **INERT, and NOT WIREABLE TODAY.** 0 of **12** `gate.yml` jobs name `s1-l`, 0 in cron, all 7 `status=open`. **Wire it, do not write it — but only when all six can attach at once:** named per-layer targets exist for **L0/L3/L4/L5 and NOT L1/L2**, and no gate's known-bad leg exists as code. Attaching the four would fire **4 of 6** and read as coverage. Attach at `fsu7`'s single Rust entry point, **never seven workflow keys** — Actions is STRICT (n=60, 49 duplicate-key runs started ZERO jobs)|
 |R6 diagram receipt matches a fresh run|✅ **PASS** — 53/64, exit 0|
 |R7 S0 closed|❌ **FAIL** — epic open; 4 of 7 children open, all P0 (**scope corrected: was mis-counted as 3 of 5**)|
 |R8 instruments not stale/self-referential|❌ **FAIL** — fh RED, 3 worktrees|
 
-**S1 IS NOT READY TO BUILD. 3 PASS · 2 WEAK/NEARLY · 3 FAIL · 1 INERT.**
+**S1 IS NOT READY TO BUILD. 4 PASS · 2 WEAK/NEARLY · 2 FAIL · 1 INERT.**
 
 > **RETRACTION, `ec7d93d`.** That commit published **R5 = FAIL** on a runner with three defects,
 > two of them instrument bugs (title echo, case) and one a **definition change I made myself** —
