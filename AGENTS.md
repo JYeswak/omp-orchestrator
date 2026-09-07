@@ -133,46 +133,72 @@ The exemption list is empty. There is deliberately no `check.sh` carve-out — t
 let **160 scripts and 60,467 lines** accrete in the repo this substrate is extracted from.
 ---
 
-## `cargo test` refuses to run? Use the bypass. (measured 2026-09-04)
+## ⛔ `cargo test` refuses to run? YOU DO NOT BUILD HERE. (gate live 2026-09-07)
 
-**Read this before reporting a test as unrunnable.** A bare `cargo` invocation in this repo goes
-through an `rch` wrapper that offloads to remote workers and **refuses local fallback**:
+**LOCAL BUILDS ARE HARD-REFUSED. `exit=75`. There is no reason string and no confirm token that
+unlocks it.**
 
 ```
-[RCH] remote required; refusing local fallback
-      (no admissible workers: insufficient_total_slots=3,active_project_exclusion=1) — retryable
+RCH_CARGO_WRAPPER_BYPASS=1 cargo build   ->   exit=75   LOCAL BUILD REFUSED
 ```
 
-**The bypass runs it locally and works:**
+Joshua, verbatim: **"CONTABO OR BUST — I'm fucking pissed that I have to repeat this all day every
+day."** Live in `~/.local/bin/cargo` (`f4e9d68`), mutation-proven before install.
 
-```bash
-RCH_CARGO_WRAPPER_BYPASS=1 cargo test -p <crate>
+**THE ONLY FORM:**
+
+```
+RCH_WORKER=<lane> RCH_REQUIRE_REMOTE=1 rch exec -- cargo <sub> -j 2 ...
 ```
 
-**MEASURED COST OF NOT DOCUMENTING THIS: a pane declined a MUTATION-VERIFIED claim it could have
-earned.** On 2026-09-04 a worker landed `ae115ec` and reported *"cargo test blocked: rch hook
-refuses local fallback (no admissible workers). Not MUTATION-VERIFIED."* That refusal was correct
-discipline — an unrunnable test is not a passing test. But the bypass had been in use by the
-conductor all through the previous session, and `grep -c RCH_CARGO_WRAPPER_BYPASS` returned **0 in
-`AGENTS.md`, 0 in `CONTRACT.md`, 0 in `NEGATIVE_EVIDENCE.md`** — every place a pane would look. The
-knowledge existed only in the conductor's shell history, which is the *dispatch-only instruction*
-failure aimed at a tool rather than a requirement.
+Lane per `registries/rch_lanes.tsv`. **NEVER `--target`** — use `--config build.target=` for a
+Mach-O, or you get `os_gate_excluded`. **A refused `rch` build EXITS 0**, so only
+`Remote command finished: exit=<N>` **plus** `test result:` prove it ran; their **absence** is the
+tell. **If `rch` itself is the defect, name the refusal class and escalate. You do not build here.**
 
-**Two things the bypass does NOT license.**
+**THE DISCRIMINATOR IS THE HOST**, so lane work is unaffected: Darwin +
+`build/test/check/run/bench/clippy/doc/install` → REFUSED; Linux on an `rch` worker → allowed, that
+*is* `rch`. **`metadata` is not in the refused set** — observed by `%20` at `rc=0`, not read from the
+wrapper's source.
 
-1. **It changes WHERE the build runs, never WHAT the verdict means.** `NE-001` records three
-   offloaded `101`s in one day whose causes were SIGKILL, SIGKILL, and a tracked file the worker
-   never received — **zero compile errors** between them. An offloaded exit code is not a verdict
-   about the local target. Read `signal:` before `E`.
+**THIS SECTION USED TO TEACH THE BYPASS, AND THAT IS WHY THE GATE WAS NEEDED.** Until 2026-09-07 the
+heading posed the refusal as a question and answered it with the bypass, and line 149 gave the
+command — **the third teaching site of three**, alongside the skill's own pages. (The old imperative
+is deliberately not reproduced here: a section warning about a recipe must not contain it, or a grep
+for the recipe hits this paragraph. That is the self-referential-checker class this file records.)
+
+**The concrete instruction won every time**: 18 ledger rows, all
+`reason=UNSTATED`, 8 from this repo, **not one stopped**, because what existed was a ledger and not a
+gate. **Recording a violation is not preventing one.** Cost: ~9.6 G of dead local `target` dirs,
+`/System/Volumes/Data` at 97 %, and `CARGO_MINT_CONTAINER_EXHAUSTED` refusing *every* fleet build —
+including a pane that could not plant a known-bad because no `cargo` invocation of any kind would
+run. **Found by `%20`, which refused to edit this file because `git diff --numstat` showed a live
+peer.**
+
+**THE 2026-09-04 LESSON IS KEPT, WITHOUT THE COMMAND.** A pane declined a `MUTATION-VERIFIED` claim
+it could have earned, and `grep -c RCH_CARGO_WRAPPER_BYPASS` returned **0** in `AGENTS.md`,
+`CONTRACT.md` and `NEGATIVE_EVIDENCE.md` — every place a pane would look. **The knowledge existed
+only in one shell history**, which is the *dispatch-only instruction* failure aimed at a tool rather
+than a requirement. **The fix was never to publish the recipe. It was to publish the correct form**,
+which is the `rch exec` line above.
+
+**Two things that were never licensed, and both now belong to the `rch` path:**
+
+1. **WHERE a build runs never changes WHAT the verdict means.** `NE-001` records three offloaded
+   `101`s in one day whose causes were SIGKILL, SIGKILL, and a tracked file the worker never
+   received — **zero compile errors** between them. **Read `signal:` before `E`.**
 2. **It is also how you get the wrong artifact.** A bare `cargo build` was silently offloaded and
    returned an `x86-64 ELF` on this `arm64 Darwin` host; five ledger writes failed with
-   `cannot execute binary file` and landed nothing. If a freshly built binary will not run,
-   `file <binary>` first, then rebuild with the bypass. This is `HD-0013`'s rule in practice:
-   **contabo for Linux, the local Mac for darwin.**
+   `cannot execute binary file`. **`file <binary>` BEFORE you run it** — `HD-0013` in practice.
 
-**NO-CLAIM.** The bypass makes the local run possible; it does not make the remote lane healthy.
-`insufficient_total_slots=3` and `active_project_exclusion=1` are unexplained here, and the wrapper
-calls the refusal *retryable*, so a worker fleet problem remains UNMEASURED rather than fixed.
+**NO-CLAIM.** The gate is a **PATH shim and cannot refuse a resolver-path invocation.** Measured by
+`%19` from binary contents, **not** by running a bypass: `command -v cargo` resolves
+`~/.rch/shims/cargo` (gate string **0**) which chains to `~/.local/bin/cargo` (gate string **1**),
+while `~/.cargo/bin/cargo` is the untouched Mach-O with gate string **0**. So an absolute path, a
+`$CARGO`-resolved nested invocation, or any hardcoded cargo path never meets the refusal — the same
+class `AGENTS.md` already records for the kernel-only hook, where wrappers bypass a resolver that
+inspects only the command-position token. **Three rows landed after the gate went live.** Escalated;
+unfixed.
 
 ---
 
