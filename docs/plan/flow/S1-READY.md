@@ -584,7 +584,12 @@ the reading, not the subject, every time.**
 |R7 S0 closed|❌ **FAIL** — epic open; 4 of 7 children open, all P0 (**scope corrected: was mis-counted as 3 of 5**)|
 |R8 instruments not stale/self-referential|❌ **FAIL** — fh RED, 3 worktrees|
 
-**S1 IS NOT READY TO BUILD. 4 PASS · 2 WEAK/NEARLY · 2 FAIL · 1 INERT.**
+**S1 IS NOT READY TO BUILD. 5 PASS · 1 NEARLY · 2 FAIL · 1 INERT.**
+>
+> **THIS TALLY IS A TIMESTAMPED SNAPSHOT, NOT A CONSTANT.** It read `4 PASS` one minute
+> before this line was written, because **R2 flipped to PASS while I was editing R4**.
+> Re-derive from the rows above; never cite this integer. Same discipline as every other
+> figure in this file.
 
 > **RETRACTION, `ec7d93d`.** That commit published **R5 = FAIL** on a runner with three defects,
 > two of them instrument bugs (title echo, case) and one a **definition change I made myself** —
