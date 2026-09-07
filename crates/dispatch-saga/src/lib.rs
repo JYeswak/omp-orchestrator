@@ -20,6 +20,8 @@ use omp_types::ChildOutcome;
 use pane_dispatch_fence::PaneIncarnation;
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
+use std::process::Command;
+use std::time::Duration;
 pub mod grading;
 pub mod m2;
 
@@ -28,6 +30,76 @@ pub mod m2;
 /// Supervisor send path is still unwired. IMPL→GRADING is `grading`.
 pub const DECLARED_NOT_WIRED: &str =
     "supervisor send path deferred: IMPL->GRADING is grading::decide (ack-stage calls it)";
+
+/// Deadline for the one `br` WRITE this crate performs: `br update --status grading`.
+///
+/// ARGUED, NOT PICKED. Three measured bands set the floor, and every one of them is a
+/// LEGITIMATE wait that must not be converted into a failure:
+///
+/// * `.beads/beads.db` is ~31 MB with several live writers. AGENTS.md records reads at
+///   **40-250 s**, one `br comments add` at **56.7 s** under contention, and a close
+///   attempt that held for **290 s**.
+/// * Every `br` call in this repo carries `--lock-timeout 60000`-`90000`, so the command
+///   is itself instructed to wait up to **90 s** for `.beads/.write.lock`. A deadline at
+///   or below that kills `br` while it is obeying the wait we asked for.
+/// * This is a WRITE, not a read: it takes the write lock rather than sharing a reader,
+///   so it queues behind every live writer instead of alongside them.
+///
+/// 420 s sits above the longest observed hold (290 s) plus a full 90 s lock wait, with
+/// headroom, and is still finite. `62lz` chose 300 s for `br list` READS against the same
+/// database; a write needs more, not less. **A ceiling inside the contention band would
+/// convert contention into a false failure on the stage-transition path**, which is the
+/// one place a false failure is invisible — see [`run_bounded`].
+pub const BR_UPDATE_DEADLINE: Duration = Duration::from_secs(420);
+
+/// Run the `br update` that moves IMPL→GRADING, under [`BR_UPDATE_DEADLINE`].
+///
+/// WHY THIS EXISTS: `main.rs` used `Command::new(..).status()` with NO DEADLINE, on the
+/// crate that owns the stage transition. AGENTS.md's asupersync contract is that every
+/// subprocess — `tmux`, `ntm`, `br`, `bv`, a build — is cancellable work with a deadline.
+/// This one was not, and the subject is the worst case: a `br` WRITE holding
+/// `.beads/.write.lock`.
+///
+/// `bounded_output` RATHER THAN `bounded_status`, and the reason is specific to this call
+/// site rather than inherited from `62lz`. `bounded_status` INHERITS stdio, so a refusal
+/// reaches the terminal and nothing else. But `br update --status grading` can be REFUSED
+/// BY POLICY, and AGENTS.md records exactly that failure: *"the refusal scrolls past
+/// in-pane while the agent believes the close landed"*. Capturing stdout and stderr is
+/// what lets this crate tell APPLIED from REFUSED from WEDGED instead of printing all
+/// three and returning success. `62lz` captures because it PARSES; this captures because
+/// it must CLASSIFY.
+///
+/// A TIMEOUT IS NOT A VERDICT. The deadline arm returns
+/// [`ChildOutcome::TimedOut`] and never `Completed`, so no caller can read a killed
+/// child's empty stdout as "the transition did not apply" — the transition's true state
+/// after a kill is UNKNOWN and must be reconciled by READING the bead, which is this
+/// crate's own stated discipline for `DispatchState::Unknown`. `SpawnFailed` stays
+/// distinct from `TimedOut` because the remedies differ: a PATH/env problem versus a
+/// wedged subject.
+///
+/// WHICH BUG THIS IS: a DEADLINE hole, not the undrained-pipe deadlock. `.status()`
+/// inherits the pipes rather than filling them, so the ~64 KiB `try_wait()` deadlock in
+/// AGENTS.md's asupersync section never applied here. Adding a drain would have "fixed" a
+/// bug that was not present and left this one intact. `subprocess-contract` makes the
+/// child its own process-group leader and signals the GROUP on the deadline, so a `br`
+/// that spawned helpers cannot leave them at `ppid=1` — which is why this does not
+/// hand-roll a timer.
+pub fn run_bounded(command: &mut Command, deadline: Duration) -> ChildOutcome {
+    match subprocess_contract::bounded_output(command, deadline) {
+        subprocess_contract::BoundedOutcome::Completed(output) => ChildOutcome::Completed {
+            code: output.status.code(),
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        },
+        subprocess_contract::BoundedOutcome::TimedOut => ChildOutcome::TimedOut {
+            after_ms: u64::try_from(deadline.as_millis()).unwrap_or(u64::MAX),
+            group_killed: true,
+        },
+        subprocess_contract::BoundedOutcome::Unspawned(error) => ChildOutcome::SpawnFailed {
+            message: error.to_string(),
+        },
+    }
+}
 
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

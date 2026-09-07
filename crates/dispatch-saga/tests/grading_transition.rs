@@ -113,3 +113,91 @@ fn default_path_performs_no_tracker_write() {
         "non-author check must exist so mutation can delete it"
     );
 }
+
+// ---------------------------------------------------------------------------
+// omp-orchestrator-heor: the `br update` write on the IMPL->GRADING lane must be
+// BOUNDED. These legs assert the TYPED ARM, never an exit code -- `cargo` returns
+// 101 both for a missing test target and for a workspace that cannot load, so a
+// leg keyed on `rc != 0` goes green on unrelated breakage.
+// ---------------------------------------------------------------------------
+
+/// FIRES-ON-KNOWN-BAD: a child that never returns inside the deadline must land in
+/// `TimedOut` with the GROUP killed, never in `Completed`.
+///
+/// MUTATION TARGET: drop the bound in `dispatch_saga::run_bounded` (or widen the
+/// deadline past the child's lifetime) and this goes RED on the arm, not on a code.
+#[test]
+fn a_child_that_never_returns_is_timed_out_with_the_group_killed() {
+    let mut command = std::process::Command::new("sleep");
+    command.arg("30");
+    let outcome = dispatch_saga::run_bounded(&mut command, std::time::Duration::from_millis(600));
+    match outcome {
+        omp_types::ChildOutcome::TimedOut {
+            after_ms,
+            group_killed,
+        } => {
+            assert!(group_killed, "the deadline must signal the GROUP, not the pid");
+            assert_eq!(after_ms, 600, "the reported deadline must be the one applied");
+        }
+        other => panic!(
+            "an unbounded wait is the defect heor fixes; expected TimedOut, got {other:?}"
+        ),
+    }
+}
+
+/// KNOWN-GOOD LEG, mandatory: an over-strict bound here would stall every
+/// IMPL->GRADING transition, which is a slower death than no bound at all.
+#[test]
+fn a_fast_child_still_completes_with_its_output_unchanged() {
+    let mut command = std::process::Command::new("echo");
+    command.arg("grading");
+    let outcome = dispatch_saga::run_bounded(&mut command, dispatch_saga::BR_UPDATE_DEADLINE);
+    match outcome {
+        omp_types::ChildOutcome::Completed {
+            code,
+            stdout,
+            stderr,
+        } => {
+            assert_eq!(code, Some(0), "a healthy child must report its own code");
+            assert_eq!(stdout.trim(), "grading", "captured stdout must be unchanged");
+            assert!(stderr.is_empty(), "no stderr expected, got {stderr:?}");
+        }
+        other => panic!("the bound must not break the healthy path, got {other:?}"),
+    }
+}
+
+/// `SpawnFailed` must stay DISTINCT from `TimedOut`: a PATH/env problem and a wedged
+/// subject have different remedies, and collapsing them sends the operator to the
+/// wrong one.
+#[test]
+fn an_unspawnable_command_is_not_reported_as_a_deadline() {
+    let mut command =
+        std::process::Command::new("dispatch-saga-heor-no-such-binary-b7f2");
+    let outcome = dispatch_saga::run_bounded(&mut command, dispatch_saga::BR_UPDATE_DEADLINE);
+    match outcome {
+        omp_types::ChildOutcome::SpawnFailed { message } => {
+            assert!(!message.is_empty(), "a spawn failure must name its reason");
+        }
+        other => panic!("an unspawnable command is not a deadline, got {other:?}"),
+    }
+}
+
+/// The deadline is ARGUED, and this leg keeps the argument from silently regressing.
+/// AGENTS.md's measured bands on this database: reads 40-250 s, one `br comments add`
+/// at 56.7 s under contention, a close attempt held 290 s; and every `br` call here
+/// carries `--lock-timeout` up to 90 s, which is a wait we ASKED for. A ceiling inside
+/// that band converts contention into a false failure on the stage-transition path.
+#[test]
+fn the_write_deadline_sits_above_the_measured_contention_band() {
+    let secs = dispatch_saga::BR_UPDATE_DEADLINE.as_secs();
+    assert!(
+        secs > 290 + 90,
+        "deadline {secs}s must exceed the longest observed hold (290s) plus a full \
+         90s lock wait, or a legitimate wait becomes a false failure"
+    );
+    assert!(
+        secs < 3600,
+        "deadline {secs}s must still be FINITE and operator-scaled; an hour-plus bound \
+         is an unbounded wait with extra steps"
+    );
+}
