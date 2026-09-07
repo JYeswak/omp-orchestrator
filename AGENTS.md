@@ -1287,6 +1287,50 @@ Four row types answer different questions:
 `fh` reports a `STALE` banner when its ledger is older than its threshold. **Read it and say so** —
 a stale row is still evidence, but its age is part of the citation.
 
+**AND THE VERIFIER DOES NOT EXAMINE `N` ROWS AT ALL, SO THE TWO ROWS THIS FILE LEANS ON HARDEST ARE
+UNVERIFIED — NOT FALSE, UNVERIFIED.** Measured 2026-09-07 by `%19`, reproduced independently in a
+**425,512-byte** payload:
+
+```
+fh verify ledger --json   success=false  code=DRIFT  exit=5
+  FAILED            22 rows   C124 C127 C133 … C175 C57 S8
+  CANNOT_DETERMINE  33 rows   C117 C118 … C177 C178
+  EVERY row in both lists is C### or S##.  ZERO N rows in either.
+
+control, because ABSENCE is the thing being read:
+  C124 mentioned=True   C57 mentioned=True   S8 mentioned=True   <- known-failed rows DO appear
+  N046 mentioned=False  N043 mentioned=False                     <- N rows never do
+```
+
+**So `N043` not appearing in the drift set is not evidence that `N043` verified.** It is outside the
+verifier's scope — the vacuous-absence trap, the same shape as `closure-check` returning
+`worst=Pass` for roots it could not see. **This file cites `N043` as governing in three places
+(`:67`, `:216`, and the table above), and every one of those citations rests on an unverified row.**
+
+**A ROW ID IS `fh`'s INDEX KEY AND NEVER PROVENANCE — proven from the source end.** In
+`~/.claude/references/franken-harvest.md`: `grep -c N046` → **0**, `grep -c N043` → **0**, while the
+quoted text itself sits at **`:722`**. The citable form is **file + line-range + the quote**, never
+the row id:
+
+```
+~/.claude/references/franken-harvest.md:718-725
+  "Producer-side invocations from /tmp using the long binary name do exist, and were
+   deliberately not counted: they prove testing, not consumption."
+```
+
+**`fh why` resolves LEDGER rows and refuses CODE rows, and the refusal is typed rather than empty:**
+`fh why N046` returns the row plus its body; `fh why TECH:meta_skill:40fa2f6fc247:1089251` returns
+`[EMPTY/WHY_QUERY_NO_MATCH]`. **A `TECH:` row carries its own provenance in the search output — the
+`repo@sha` and the `path:line-range`. That is the citation.** Read the body on the mirror at that
+revision; `fh suggest` tells you **where to look** and cannot tell you **whether to copy** (rule
+`8j`).
+
+**`fh doctor --json` reports `DRIFT` exit 5 (`ACTIVE_GENERATION_PRODUCT_INPUT_DRIFT`) on dirty
+source input**, so treat fh as **retrieval and provenance context, not a clean repo grade** —
+`%7`'s scoping, adopted. **And fh discloses its own limit in the same payload**, to its credit:
+*"This result reports the requested operation only; it does not establish correctness, completeness,
+or causal success."*
+
 ---
 
 ## The asupersync contract (binding)
