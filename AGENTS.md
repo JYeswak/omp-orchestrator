@@ -1506,6 +1506,56 @@ when a suffix matches two beads is likewise unmeasured and must not be assumed t
 
 ---
 
+## A TRANSCRIBED VALUE IS STALE BY DESIGN — FOUR SUBSTRATES, ONE SHAPE
+
+**Measured across two repositories on 2026-09-07. Four instances, four different substrates, one
+defect: a claim that transcribes a value instead of binding to something that RE-DERIVES it.**
+
+|substrate|the instance|why it went stale|
+|---|---|---|
+|**FILE LINES**|`CONTRACT.md`'s superseded-by pointer said `:101`, corrected to `:116`, and **the correction invalidated itself in the same edit** — the inserted lines pushed the target to `:124`, then `:132`, then `:154`. Fixed at `13fc201`|any edit above the target shifts it, and the edit most likely to be made is the one fixing the pointer|
+|**BINARY VERSIONS**|AGENTS.md's 42-method RPC census anchors on `let w=async(v)=>` … `},E=new KWt`. **Both return 0** at the installed `omp/18.1.13`; the gate pins `18.0.11 / a95635ad… / 19,803,745 bytes`|**`uca service install` runs a THREE-HOUR auto-updater** across `claude, codex, agy, grok, omp, muse`. The pin is stale by design, not by neglect|
+|**PROSE PREMISES**|control-plane's `AGENTS.md:12` asserted three root files "never existed", measured 2026-09-03. **All three exist.** The stale entry propagated into a dispatch, then a worker restated it back to its author as established fact. Fixed at `daab4fe`|a dated measurement embedded as a standing claim, with the date discarded|
+|**UNREACHABLE ANSWERS**|`crates/omp-surface-consumption/src/lib.rs:18` **had already recorded** the vanished anchor, and `:13-14` the version drift, five days before two agents independently re-derived it. `cargo-bin: 1`, **`PATH: ABSENT`**|the citing document could not reach the crate holding the answer. The operator-surface defect causes measurable duplicate work, not just inelegance|
+
+**THE REMEDY IS THE SAME IN ALL FOUR: bind the claim to something that RE-DERIVES, or stamp it with
+a fetch time and an expiry.** Never transcribe a value that another process owns.
+
+What that looks like concretely, each verified in this repo:
+
+- **Cite a searchable string, not a line number.** `grep -nE '^\*\*S1 IS AUTHORIZED TO BUILD'` —
+  and **anchor it so the pointer is not its own hit.** Unanchored returned **3**, two being the
+  pointer quoting the phrase.
+- **Anchor a binary probe on WIRE CONTRACT, not on minified identifiers.**
+  `omp-surface-consumption:64` gets this right: `ANCHOR_METHOD = "negotiate_protocol"`. A protocol
+  method name survives a rebuild; `let w=async(v)=>` is a minifier's variable name and does not.
+- **Stamp every figure with its measurement time and say which TREE it came from.** `cargo` reads
+  the WORKTREE; a sha names a TREE. A grade citing both has silently mixed two states.
+- **When the answer is in a crate, INSTALL the crate.** An answer nobody can invoke gets re-derived.
+
+### THE COROLLARY THAT COSTS THE MOST: SCOPE A VOIDING RULE TO WHAT IT ACTUALLY GOVERNS
+
+**Measured the same day, and it was my own error.** Joshua's binding rule is **ALL BUILDS MUST TAKE
+THE CONTABO LANE.** I broadcast it to five panes as voiding *"any figure derived from"* a local run.
+
+**That over-applies, and control-plane pane 0 caught it before it did damage: THE BINDING BINDS
+BUILDS.** The two results that actually moved the product that night involved **no cargo at all** —
+`uds-dc-stamp-ne-x35` is a python predicate reading the working tree, and `uds-kii.2` repaired a
+`sed` block inside a markdown contract. Voiding non-build figures would have discarded the only two
+rows that moved `dag_closure_scorecard.tsv` (PASS 1 → 2, UNRUN 46 → 45).
+
+**A voiding rule is itself a claim and inherits every rule above.** State the predicate it voids on,
+not a vibe about provenance: *builds and their test figures*, not *everything measured locally*.
+An over-broad retraction destroys good evidence and is harder to undo than a stale figure, because
+the good evidence does not come back when the rule is narrowed.
+
+**NO-CLAIM.** Binding to a re-deriving probe makes a claim *self-correcting*, not *correct*. A
+probe can re-derive the wrong thing forever — `%20`'s **"I measured TOKEN PRESENCE and reported
+REQUIREMENT EQUIVALENCE"** is exactly that: an instrument internally consistent and pointed at the
+wrong object. Re-derivation fixes staleness; only a positive control and a known-bad leg fix aim.
+
+---
+
 ## A DENIED OR ERRORED PROBE IS *UNKNOWN*, NEVER A NEGATIVE RESULT
 
 **Measured 2026-09-02, and it is the ugliest root cause of that session.** An agent checked whether
