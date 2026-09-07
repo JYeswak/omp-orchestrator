@@ -1136,15 +1136,76 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
      grep -rl "<crate_underscored>" crates/*/src | grep -v "crates/<crate>/src" | wc -l
    or the lane is declared unwired with a named row and a reason. Silence is not an exception.
    ```
+   **AND THE PROOF MUST TERMINATE AT A REACHABLE TRIGGER, NOT AT ANOTHER UNCALLED CRATE.**
+   Measured 2026-09-07, roughly one hour after this rule landed, and the rule as first written
+   permitted it. Bead `nxc9` asked for a consumer of `dispatch_saga`'s routing decision. `%9`
+   delivered `crates/m2-grading-lane`, which depends on `dispatch-saga` and calls
+   `dispatch_saga::m2::route`. The leg passed exactly as specified — `dispatch-saga` went from 1
+   caller to 2. Then:
 
-   **The scale is smaller than the doctrine implies, and the shape is specific.** Measured the same
-   day across 83 crates: 44 have ≥1 external caller, 39 have none — but **37 of those 39 ship a
-   bin**, and a bin is a caller surface. Probing the real question (rule 3: is there a reachable
-   *trigger* — a workflow, a hook, a `.flywheel/` file, cron, launchd, or a `Command::new` spawn)
-   returned **36 of 37 TRIGGERED and exactly 1 untriggered**: the crate created that hour. Positive
-   control held at 36, so the probe discriminates. **BUILT ≠ WIRED here is not a standing swamp; it
-   is a NEW-crate window.** The repo wires things — just not in the same bead, and "later" depends
-   on somebody noticing.
+   ```
+   m2-grading-lane external callers                          0
+   m2-grading-lane bin                                       1
+   m2-grading-lane refs in workflow/hook/.flywheel/cron      0
+   ```
+
+   **The uncalled-ness moved up one level.** `%9` did precisely what the acceptance asked and the
+   acceptance was mine, so this is the orchestrator's defect for the second time in one hour: a
+   wiring proof that terminates at a fresh consumer proves only that *two* crates are now unwired
+   instead of one. It is a shell game the rule cannot see, because each individual grep is honest.
+
+   **The leg is therefore two-part, and the second part is rule 3:**
+
+   ```
+   WIRING PROOF, part 2 — walk the caller chain to its ROOT and name what fires it:
+     for each crate in the chain, external callers; when a crate has none, it MUST have a
+     reachable trigger — a .github/workflows entry, a .git/hooks script, a .flywheel/ file,
+     a crontab or launchd row, or a Command::new spawn from a crate that itself has one.
+   A chain ending in a crate with neither a caller nor a trigger is UNWIRED, however many
+   manifest edges were added along the way.
+   ```
+
+   The cheap check is one command per link, and the chain is short by construction — if it is long,
+   that is itself the finding.
+
+
+   **RETRACTED, ONE HOUR AFTER I PUBLISHED IT. The first version of this paragraph read: "36 of 37
+   TRIGGERED and exactly 1 untriggered… BUILT ≠ WIRED here is not a standing swamp; it is a
+   NEW-crate window." THAT IS FALSE AND IT WAS THE WORST ERROR OF THE SESSION, because it went
+   into this file where every agent reads it as doctrine.**
+
+   The defect: I counted a mention in a `.flywheel/` markdown file as a *trigger*. **A document
+   that names a binary does not run it.** `.flywheel/AUTONOMOUS-WAVE.md` naming `fast-dispatch` is
+   prose, not an executor. Re-measured 2026-09-07 with comments stripped from every surface and
+   with executors separated from documents:
+
+   |of 36 bin crates with zero library callers|count|
+   |---|---:|
+   |**EXECUTOR** trigger — `.github/workflows`, `.git/hooks`, crontab, launchd, or a `Command::new` spawn|**12**|
+   |**DOCUMENT** mention only — `.flywheel/` prose or registry|**23**|
+   |neither|**1**|
+
+   **So 24 of 36 have no executor trigger, not 1.** Wrong by a factor of 24, and in the reassuring
+   direction — which is the direction that stops people looking.
+
+   **And the doc-only set is the worst possible list**, because it is largely the kernels this file
+   orders agents to use instead of handrolling: `fast-dispatch`, `fleet-monitor`, `fleet-truth`,
+   `loop-driver`, `refill-idle-panes`, `omp-idle-dispatch`, `bead-availability`,
+   `kernel-only-operator-hook`, `s1-coverage`, `s2-gate`, `crate-soundness-verify`,
+   `oracle-pane-state-differential`, `pane-oracle-diff`, `inbox-moni`… twenty-three of them. The
+   KERNEL-ONLY section below asserts these are *"all installed and cron-scheduled."* **They are
+   not.** The only crontab line naming any of them is a **comment** — an epitaph reading
+   *"refill-idle-panes refused 51 ticks, 2026-09-02"* — so the rows were removed and the claim went
+   stale with them.
+
+   **BUILT ≠ WIRED here IS a standing swamp.** Two thirds of our bin kernels have no executor. The
+   corrected shape is worse than the original claim in scale and identical in mechanism: nobody
+   noticed because each individual grep was honest and the coarse signal was flattering.
+
+   The reusable rule, which is the third time this class has bitten in one session: **`grep`ping a
+   directory tree for a binary's name measures MENTIONS, and a mention is not an invocation.**
+   Separate executors from prose before you count, and strip comments from every surface including
+   `crontab -l`, not just the ones you remembered.
 
 10. **A RATCHET KEYED ON AN ABSOLUTE COUNT CANNOT TELL GROWTH FROM REGRESSION.** `crate-atom-gate`
    is the gate for rule 9 and it is correct: 1701 LOC, nine parts, `UNWIRED_ALLOWANCE: &[] = &[]`
@@ -1713,7 +1774,7 @@ session — by the author of the kernels:
 | job | what I did | the kernel that already existed |
 |---|---|---|
 | observe panes | `tmux capture-pane \| grep -oE` for 12 hours | **`tick-monitor observe`** — installed, and returns *more*: state, timer, liveness, attention, dead panes, correct session scoping |
-| dispatch | raw `tmux send-keys` | **`ntm --robot-send`**, `refill-idle-panes`, `fast-dispatch`, `controller-tick`, `loop-driver` — all installed and cron-scheduled |
+| dispatch | raw `tmux send-keys` | **`ntm --robot-send`**, `refill-idle-panes`, `fast-dispatch`, `controller-tick`, `loop-driver` — installed. **NOT cron-scheduled: corrected 2026-09-07.** The only crontab line naming any of them is a COMMENT (*"refill-idle-panes refused 51 ticks, 2026-09-02"*) — an epitaph for rows that were removed. Per the corrected census in rule 9, 23 of 36 bin kernels have a `.flywheel/` document mention and **no executor**. A handroll is still worse than the kernel, but the kernel is not firing on its own either |
 | receipt | `grep -oE` on a timer | **`receiver-receipt`** |
 | file a bead | raw `br create` | **`crates/finding`** — which I wrote *thirty minutes earlier* to make an unfiled gap impossible, then bypassed in the next tool call |
 | read the queue | `br ready --json \| python3` | **`bv --robot-triage`** — the planning brain, which reports scores the raw query cannot see |
