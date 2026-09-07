@@ -436,30 +436,135 @@ mod tests {
     use std::process::{Command as StdCommand, Stdio as StdStdio};
     use std::thread;
 
+    /// THREE states, because two collapsed a real measurement into an absence.
+    ///
+    /// `omp-orchestrator-nndr`: the middle arm did not exist, so a Linux run that MEASURES this
+    /// property green reported `UNMEASURED`. Note the direction of that error — it UNDERSTATED the
+    /// evidence, which is why it survived a grade: a conservative false claim reads as caution.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum GroupKillPlatformVerdict {
+        /// Darwin: the shipped runtime. A pass here is evidence about production.
         VerifiedOnThisPlatform,
+        /// Linux: the property is measured and green HERE, and that is not evidence about the
+        /// platform this contract SHIPS on. Both halves of the claim are true simultaneously and
+        /// the previous two-state enum could not say so.
+        MeasuredOffShippedPlatform,
+        /// Neither: no evidence in either direction. This arm MUST survive — the surviving
+        /// justification is not `o3eb` but the shipped-runtime asymmetry, and deleting the state
+        /// would replace one false claim with another.
         UnmeasuredOnThisPlatform,
     }
 
     const GROUP_KILL_UNMEASURED_VERDICT_CODE: u8 = 20;
+    /// Distinct from [`GROUP_KILL_UNMEASURED_VERDICT_CODE`] and from the Darwin pass, so a reader
+    /// consuming the code alone can never mistake "measured off the shipped platform" for
+    /// "unmeasured". `verdict_codes_are_pairwise_distinct` proves it rather than asserting it.
+    const GROUP_KILL_MEASURED_OFF_PLATFORM_VERDICT_CODE: u8 = 21;
+    const GROUP_KILL_VERIFIED_VERDICT_CODE: u8 = 0;
 
-    /// Darwin is the shipped runtime for this process-group contract, but the
-    /// reachable Rust lane is Linux and its group-kill primitive is known to
-    /// be broken. Keep the tests present on every lane so this distinction is
-    /// emitted as a typed result rather than disappearing behind cfg.
+    fn group_kill_verdict_code(verdict: GroupKillPlatformVerdict) -> u8 {
+        match verdict {
+            GroupKillPlatformVerdict::VerifiedOnThisPlatform => GROUP_KILL_VERIFIED_VERDICT_CODE,
+            GroupKillPlatformVerdict::MeasuredOffShippedPlatform => {
+                GROUP_KILL_MEASURED_OFF_PLATFORM_VERDICT_CODE
+            }
+            GroupKillPlatformVerdict::UnmeasuredOnThisPlatform => {
+                GROUP_KILL_UNMEASURED_VERDICT_CODE
+            }
+        }
+    }
+
+    /// Route a group-kill test by platform.
+    ///
+    /// WHY THIS IS NOT `#[cfg]`: a runtime branch keeps all four bodies compiled and type-checked
+    /// on every lane, so a real measurement can later be PROMOTED. `#[cfg]` would have deleted the
+    /// bodies and there would have been nothing to promote — this bead is that property paying off.
+    ///
+    /// THE JUSTIFICATION, corrected. The previous text read "the reachable Rust lane is Linux and
+    /// its group-kill primitive is known to be broken". That described `o3eb` — six `/bin/kill`
+    /// sites passing a negative pgid with no `--`, a silent no-op under procps-ng — and it was
+    /// FIXED at `e4c9138`, verified an ancestor of the scoping commit `0622849` and nineteen hours
+    /// earlier. All four group-signalling sites now pass `--`. The surviving reason is narrower and
+    /// outlives that fix: **Darwin is the shipped runtime, and a Linux pass is not evidence about
+    /// Darwin.** That is an asymmetry of platforms, not a defect in a tool.
+    ///
+    /// `retry_if` IS HUMAN-CONSUMED. Nothing reads it — not a workflow, hook, crontab or crate; it
+    /// is emitted and never consulted. The `key=value` shape reads as machine-consumed and invites
+    /// the inference of an automated retrigger that does not exist. It is a note to an operator.
     fn group_kill_platform_verdict(test_name: &str) -> GroupKillPlatformVerdict {
         if cfg!(target_os = "macos") {
             return GroupKillPlatformVerdict::VerifiedOnThisPlatform;
         }
 
+        if cfg!(target_os = "linux") {
+            // EMITTED AND THEN THE BODY RUNS. The caller does not return on this arm, which is the
+            // whole correction: the previous code emitted an absence and skipped the measurement it
+            // was already capable of making.
+            println!(
+                "MEASURED_OFF_SHIPPED_PLATFORM property=process_group_kill_and_reap \
+                 test={test_name} platform={} shipped_platform=darwin \
+                 verdict_code={GROUP_KILL_MEASURED_OFF_PLATFORM_VERDICT_CODE} \
+                 retry_if=darwin-native-run (human-consumed; nothing reads this token)",
+                std::env::consts::OS
+            );
+            return GroupKillPlatformVerdict::MeasuredOffShippedPlatform;
+        }
+
         println!(
             "UNMEASURED_ON_THIS_PLATFORM property=process_group_kill_and_reap \
              test={test_name} platform={} verdict_code={GROUP_KILL_UNMEASURED_VERDICT_CODE} \
-             retry_if=darwin-production-group-kill-reap-defect",
+             retry_if=darwin-native-run (human-consumed; nothing reads this token)",
             std::env::consts::OS
         );
         GroupKillPlatformVerdict::UnmeasuredOnThisPlatform
+    }
+
+    /// ITEM 2 and ITEM 4, EXECUTED rather than const-compared.
+    ///
+    /// The harness-free reporter in `tests/platform_scope.rs` compares its own constants, which a
+    /// mutation in THIS module can never reach. These assertions call the real routing function, so
+    /// breaking the platform branch reddens them — that is item 5's refinement applied: a mutation
+    /// must REACH the assertion, not merely prove a guard exists.
+    #[test]
+    fn verdict_codes_are_pairwise_distinct_and_the_routing_matches_the_platform() {
+        let codes = [
+            group_kill_verdict_code(GroupKillPlatformVerdict::VerifiedOnThisPlatform),
+            group_kill_verdict_code(GroupKillPlatformVerdict::MeasuredOffShippedPlatform),
+            group_kill_verdict_code(GroupKillPlatformVerdict::UnmeasuredOnThisPlatform),
+        ];
+        let mut deduped = codes.to_vec();
+        deduped.sort_unstable();
+        deduped.dedup();
+        assert_eq!(
+            deduped.len(),
+            codes.len(),
+            "three verdicts need three codes, got {codes:?} — a collision is how a MEASUREMENT \
+             becomes indistinguishable from an ABSENCE, which is the defect nndr corrects"
+        );
+
+        // KNOWN-GOOD HALF: the UNMEASURED state must SURVIVE. This bead adds an arm; deleting one
+        // would replace a false claim with a different false claim.
+        assert_eq!(
+            group_kill_verdict_code(GroupKillPlatformVerdict::UnmeasuredOnThisPlatform),
+            GROUP_KILL_UNMEASURED_VERDICT_CODE,
+            "the UNMEASURED code must be preserved, not repurposed"
+        );
+
+        // FIRES-ON-KNOWN-BAD: the routing must agree with the platform it is running on. Flipping
+        // the Linux branch back to UnmeasuredOnThisPlatform reddens exactly this.
+        let observed = group_kill_platform_verdict("verdict_codes_are_pairwise_distinct");
+        let expected = if cfg!(target_os = "macos") {
+            GroupKillPlatformVerdict::VerifiedOnThisPlatform
+        } else if cfg!(target_os = "linux") {
+            GroupKillPlatformVerdict::MeasuredOffShippedPlatform
+        } else {
+            GroupKillPlatformVerdict::UnmeasuredOnThisPlatform
+        };
+        assert_eq!(
+            observed, expected,
+            "routing disagreed with the platform: on linux this property IS measured, and \
+             reporting UNMEASURED there is the false claim this bead exists to remove"
+        );
     }
 
     fn pid_alive(pid: u32) -> bool {
@@ -792,6 +897,23 @@ mod tests {
     }
 
     #[test]
+    /// ITEM 6 DECIDED, and I reject the binary framing with a reason.
+    ///
+    /// This test is NEITHER "the canonical Linux measurement" of the whole property NOR
+    /// "accidentally unscoped". It is the canonical Linux measurement of the **REAP half only**,
+    /// and it is correctly unscoped for exactly that.
+    ///
+    /// THE EVIDENCE IS IN THE TWO CHILD COMMANDS. This test runs `/bin/sh -c "sleep 30"` — a
+    /// single simple command, which `sh` execs directly, so there is no grandchild and a
+    /// pid-directed kill would satisfy the descendant assertion below. The dedicated group leg,
+    /// `bounded_status_signals_the_group_so_grandchildren_die_too`, runs
+    /// `( sleep 2; touch marker ) & sleep 30` and asserts the marker was never touched — that one
+    /// cannot pass under a pid-only kill, which is what makes it the group evidence.
+    ///
+    /// So: this test STAYS unscoped and green, because scoping it would delete a real Linux
+    /// measurement; and it MUST NOT be cited as evidence for group signalling, because that would
+    /// be the same overclaim in the opposite direction from the one `nndr` was filed about. The
+    /// four group legs reference it for the reap half and for nothing else.
     fn process_count_returns_to_baseline_after_contract_runs() {
         let root = std::process::id();
         let before = descendants(root);
