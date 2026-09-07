@@ -1324,6 +1324,39 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
    evidence is subject to this too — which is why a leg must pin the message and the code together,
    rather than trusting whichever one it happened to look at first.
 
+   **AND A PREFIX IS NOT A MESSAGE — the crate filed to demonstrate this rule got it half-wrong.**
+   Measured 2026-09-07 by `%7` grading `djfu`: the mutation trap pins the wrong DECISION and the
+   `SALVAGE_UNKNOWN` **prefix**, but never asserts the exact reason text. The mutation it was built
+   for — *"still printed `HOLD` in its reason while deciding `RelaunchAsIs`"* — survives a prefix
+   assertion, because the prefix is unchanged. **Assert the substring that the mutation actually
+   moves**, or the message half is decorative.
+
+7b. **TWO MUTATIONS PROVE INDEPENDENCE ONLY IF THEIR FAILURE SETS ARE DISJOINT.** Measured
+   2026-09-07: `%20` reported *"two mutations redden DIFFERENT leg pairs, so the code assertions and
+   the decision assertions are provably independent."* `%7` re-ran both and found the pairs
+   **overlap**:
+
+   ```
+   M1  Unknown => 20 -> => 0     RED: no_evidence_at_all_is_unknown_with_a_distinct_code…
+                                      an_unattributable_session_log_holds_rather_than_guessing
+   M2  Hold -> RelaunchAsIs      RED: no_evidence_at_all_is_unknown_with_a_distinct_code…
+                                      unknown_never_recommends_a_relaunch_across_every_shape
+   ```
+
+   **One test reddens under both**, so it asserts the code property and the decision property at
+   once and cannot discriminate between them. **An overlap does not merely fail to prove
+   independence — it PROVES at least one test conflates two properties**, which is the defect the
+   mutation pair was supposed to rule out.
+
+   The remedy is to partition: one leg asserts the code and says nothing about the decision, another
+   asserts the decision and says nothing about the code. Then a disjoint redden is a measurement
+   rather than a claim.
+
+   **This is the same family as a correlated oracle** — `riqd`'s leg 3 found two "independent"
+   pane-state channels that derive from the same capture and therefore agree when wrong. **Two
+   probes sharing a subject are one probe.** Ask what each mutation is allowed to touch, and check
+   that the sets differ before calling them independent.
+
 8. **A `cargo` figure is NEVER evidence about a commit.** `cargo test` reads the **WORKTREE**; a
    commit sha names a **TREE**. In a shared checkout those diverge constantly, so a grade that
    cites a sha and a test count has silently mixed two tree states. Measured 2026-09-02, against
