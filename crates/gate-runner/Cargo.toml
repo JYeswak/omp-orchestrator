@@ -1,0 +1,26 @@
+[package]
+name = "gate-runner"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license.workspace = true
+description = "omp-orchestrator-fsu7: ONE derived entry point for every workspace gate, replacing a 12-job YAML fan-out that could start zero jobs"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde_json = "1"
+subprocess-contract = { path = "../subprocess-contract" }
+
+[[bin]]
+name = "gate-runner"
+path = "src/main.rs"
+
+[lib]
+name = "gate_runner"
+path = "src/lib.rs"
+
+[[test]]
+name = "roster"
+path = "tests/roster.rs"
