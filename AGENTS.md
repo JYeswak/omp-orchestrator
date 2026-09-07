@@ -1830,6 +1830,48 @@ the same error as comparing two `git` figures taken from two trees — and it pr
 confident-wrong reading. Capture the verdict at the moment of the operation, or re-create the input
 before re-running.
 
+### A PEER'S DEFECT REPORT IS A VERDICT ON A TREE. REFUTING IT ON A DIFFERENT TREE IS THE SAME ERROR.
+
+**The rule above is stated about hooks and commits. It applies identically to a PEER'S BUG REPORT,
+and that is the harder case, because a refutation feels like verification.**
+
+**Measured 2026-09-07, a genuine near-miss.** `%20` reported a fleet-wide cargo outage: a stray `.`
+outside the closing quote at `crates/refill-idle-panes/Cargo.toml:6:137` broke workspace *loading*,
+so `-p <crate>` could not dodge it and every cargo command in the repo failed. Pane 1 measured the
+diff, found a peer's two dependency additions in flight beside the typo, applied the minimal fix —
+period back inside the quote — and broadcast the clearance.
+
+`%19` then measured line 6, got **byte-identical to HEAD** on both sides, saw a `git diff` with
+**no `description` hunk at all**, and drafted: *"the accused line is byte-identical to HEAD; the real
+diff is two added dependency lines."* **A refutation of a correct diagnosis, one message from
+broadcast.**
+
+**The fix had landed between the notice and the read.** `%19`'s measurement was correct and
+consistent with a **post-fix tree**; it could say nothing about the pre-fix claim. And the pre-fix
+state was **unrecoverable** — the file was uncommitted, so there is no history to diff against. Only
+the reporter's own quoted error text survived as evidence.
+
+**The cost of publishing it would have been real and asymmetric:** a correct diagnosis discredited,
+its author's next report discounted, and the next outage of that class read as a false alarm. **A
+wrong refutation is worse than a wrong report**, because it also destroys the reporting channel.
+
+**The mechanical form:** a defect report is a verdict on a tree at a time. Before refuting one,
+establish that you are reading **the same input** — check whether the file changed since the notice
+(`git status`, mtime, or ask), and **name the tree your refutation read**. A refutation that does not
+name its input is exactly as stale as the claim it thinks it is killing.
+
+**Corollary for uncommitted state, which is where this bites hardest.** A `git`-based check cannot
+reconstruct a dirty file's earlier content. When the subject is uncommitted, **the reporter's quoted
+error output IS the primary evidence** — treat it as the artifact, not as a claim to be re-derived.
+A repair that clears the symptom also destroys the evidence, so the fixer must quote the pre-fix
+state in the clearance notice. Pane 1 did quote the byte and the two `sha` values; that is what let
+`%19` reconcile instead of escalate.
+
+**NO-CLAIM.** This makes a stale refutation *detectable*, not impossible. Two panes reading the same
+tree can still disagree for other reasons — different globs, different anchors, different key shapes
+across `br show` / jsonl / `br list`. Naming the tree removes one failure mode from a family this
+file records eight other members of.
+
 
 ### `git show | grep` CONFLATES THE COMMIT MESSAGE WITH THE DIFF — and a claim of absence can be defeated by its own prose
 
