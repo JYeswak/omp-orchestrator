@@ -268,17 +268,41 @@ fn no_machine_read_config_declares_a_duplicate_sibling_key() {
     );
 }
 
-/// The specific job that was broken must exist, with exactly one `runs-on` and one `steps`.
+/// `gate.yml` declares no duplicate sibling keys, and every job it DOES declare has exactly one
+/// `runs-on` and one `steps`.
 ///
-/// A count-only check would pass if `state-wildcard-lint`'s steps were merged into a neighbour
-/// again, so this asserts the JOB, not the total.
+/// # AMENDED 2026-09-07 (`omp-orchestrator-fsu7`, `%6` ruling (A) conditions 1–4)
+///
+/// This leg was `state_wildcard_lint_has_its_own_job_with_one_runs_on_and_one_steps`. It asserted
+/// a TWELVE-JOB STRUCTURE — that `\n  state-wildcard-lint:\n` appears at job indent, and that the
+/// file declares at least ten jobs. Both were restore-proofs from the 2026-09-06 incident, when a
+/// MISSING job key collapsed two jobs into one and silently halved coverage.
+///
+/// **The structural half MOVED, it was not dropped.** That incident's requirement was never "this
+/// YAML has a job named X"; it was **"X's gate is REACHED"**. Under twelve jobs those were the same
+/// sentence. Under one entry point they are not, and only the second survives translation. The
+/// reachability assertion now lives in
+/// `crates/gate-runner/tests/subsumption_real.rs`, which covers all **fifteen** invoked crates
+/// rather than one, and which was **proven to bite before this leg was amended**: removing
+/// `state-wildcard-lint`'s `[package.metadata.gate]` stanza turns three of its legs RED with
+/// "its run half is UNREACHED". A deleted assertion whose replacement is untested is a coverage
+/// hole with a commit message.
+///
+/// **What stays here is what this crate actually owns: VALIDITY.** A second YAML validator is what
+/// `fsu7` item 9 forbids, so this leg keeps the duplicate-key check and drops the job-count
+/// arithmetic. It is now SHAPE-AGNOSTIC — it passes on a twelve-job file and on a one-job file —
+/// which is deliberate: a validity gate that also pins a job count fails every time the workflow
+/// is legitimately restructured, and a gate that is red by construction gets routed around.
+///
+/// **And this bead's own headline is false**, recorded in `AGENTS.md`: `m0c` claims `gate.yml` is
+/// invalid YAML with duplicate keys at `:46/:52` so nine jobs are unreachable. The file parses
+/// clean under a strict loader and `:52` is a well-formed `kernel-bypass-gate:` job. The false
+/// report came from `yaml.safe_load`, which **silently accepts duplicate keys and takes the last**,
+/// so a bare `safe_load` cannot disprove a duplicate-key claim. The legs are worth keeping; the
+/// stated cause is not.
 #[test]
-fn state_wildcard_lint_has_its_own_job_with_one_runs_on_and_one_steps() {
+fn gate_yml_has_no_duplicate_keys_and_no_job_declares_runs_on_twice() {
     let text = fs::read_to_string(repo_root().join(".github/workflows/gate.yml")).expect("read");
-    assert!(
-        text.contains("\n  state-wildcard-lint:\n"),
-        "the job header that went missing must be present at job indent"
-    );
     let dups = duplicate_keys(
         &text,
         Style::Yaml,
@@ -291,7 +315,9 @@ fn state_wildcard_lint_has_its_own_job_with_one_runs_on_and_one_steps() {
         "gate.yml still has duplicate keys: {dups:?}"
     );
 
-    // every job declares runs-on and steps exactly once
+    // ANTI-VACUITY: a file with no jobs at all would make the check above trivially true, so the
+    // job set must be non-empty. NOT a count — a floor of one, which is the only shape-independent
+    // statement available.
     let jobs: Vec<&str> = text
         .lines()
         .filter_map(|l| {
@@ -303,11 +329,10 @@ fn state_wildcard_lint_has_its_own_job_with_one_runs_on_and_one_steps() {
         })
         .collect();
     assert!(
-        jobs.len() >= 10,
-        "expected at least ten jobs, found {}: {jobs:?}",
-        jobs.len()
+        !jobs.is_empty(),
+        "gate.yml declares no jobs at all — an empty workflow is an ERROR, never a pass, because \
+         it starts nothing and reports nothing"
     );
-    assert!(jobs.contains(&"state-wildcard-lint"), "{jobs:?}");
 }
 
 /// FIRES-ON-KNOWN-BAD: the exact `gate.yml` shape that shipped, reconstructed.
@@ -415,46 +440,68 @@ jobs:
     );
 }
 
-/// MUTATION with a byte-identical restore, run against the REAL file so the leg is attributable.
+/// MUTATION with a byte-identical restore, on a two-job fixture reconstructing the shipped defect.
+///
+/// # AMENDED 2026-09-07 (`omp-orchestrator-fsu7`, `%6` ruling (A) condition 2)
+///
+/// This leg previously mutated the REAL `gate.yml` in memory by deleting
+/// `"\n  state-wildcard-lint:\n"`, which merged that job's keys into its neighbour's and produced
+/// the duplicate `runs-on`/`steps` that shipped on 2026-09-06.
+///
+/// **Under a single-job workflow that mutation is a NO-OP**, and this leg's own anti-vacuity
+/// assertion — *"the mutation must actually change the content"* — caught it. That is a leg working
+/// exactly as designed, and the reason it must keep working is why the fixture moved rather than
+/// the assertion being relaxed.
+///
+/// **The deeper result is worth stating precisely: the defect class is now UNCONSTRUCTIBLE in the
+/// production file, not merely watched.** The shipped defect requires a job header to go missing so
+/// its keys collide with a SIBLING's. With one job there is no sibling to collide with. So the
+/// production invariant is structural, and what remains for this leg to prove is that the DETECTOR
+/// still bites — which needs a fixture with two jobs, since the real file no longer has two.
+///
+/// The byte-identical-restore claim is unchanged and still asserted: this leg reads the real file
+/// and must leave it untouched.
 #[test]
-fn mutating_gate_yml_goes_red_and_a_byte_identical_restore_goes_green() {
+fn mutating_a_two_job_fixture_goes_red_and_the_real_file_is_untouched() {
     let path = repo_root().join(".github/workflows/gate.yml");
     let before = fs::read(&path).expect("read");
-    let text = String::from_utf8_lossy(&before).into_owned();
 
+    // The shipped shape, reconstructed: two jobs, the second's header present.
+    let good = "\
+jobs:
+  kernel-bypass-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - run: cargo test -p kernel-bypass-gate
+  state-wildcard-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - run: cargo test -p state-wildcard-lint
+";
+    let checks_on = Checks {
+        reject_duplicate_sibling_keys: true,
+    };
     assert!(
-        duplicate_keys(
-            &text,
-            Style::Yaml,
-            Checks {
-                reject_duplicate_sibling_keys: true
-            }
-        )
-        .is_empty(),
-        "baseline must be GREEN before mutating"
+        duplicate_keys(good, Style::Yaml, checks_on).is_empty(),
+        "KNOWN-GOOD: a well-formed two-job fixture must be quiet, or the detector is over-strict \
+         and will be routed around"
     );
 
-    // reintroduce exactly the shipped defect: delete the job header that was missing
-    let mutated = text.replace("\n  state-wildcard-lint:\n", "\n");
+    // Reintroduce exactly the 2026-09-06 defect: delete the job header that went missing.
+    let mutated = good.replace("\n  state-wildcard-lint:\n", "\n");
     assert_ne!(
-        mutated, text,
+        mutated, good,
         "the mutation must actually change the content"
     );
-    let red = duplicate_keys(
-        &mutated,
-        Style::Yaml,
-        Checks {
-            reject_duplicate_sibling_keys: true,
-        },
-    );
+    let red = duplicate_keys(&mutated, Style::Yaml, checks_on);
     assert!(
         red.iter().any(|f| f.contains("key=runs-on"))
             && red.iter().any(|f| f.contains("key=steps")),
-        "removing the job header must go RED on both duplicated keys: {red:?}"
+        "removing the job header must go RED on BOTH duplicated keys: {red:?}"
     );
 
-    // and with the predicate disabled the SAME input goes quiet — so the finding is
-    // attributable to this check and not to something else
+    // With the predicate disabled the SAME input goes quiet, so the finding is attributable to
+    // this check rather than to something else in the parser.
     let quiet = duplicate_keys(
         &mutated,
         Style::Yaml,
@@ -467,7 +514,7 @@ fn mutating_gate_yml_goes_red_and_a_byte_identical_restore_goes_green() {
         "with the predicate off the known-bad must stop being reported: {quiet:?}"
     );
 
-    // byte-identical restore: nothing was written, so prove the source is untouched
+    // And the real file is still what it was: this leg writes nothing.
     let after = fs::read(&path).expect("read");
     assert_eq!(before, after, "the real file must be untouched by this leg");
 }
