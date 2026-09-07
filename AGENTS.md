@@ -435,6 +435,58 @@ asking. The measured cost of not asking was every dispatch of the prior session 
 `unproven_transport` while packets landed — which is why this row is worth more as a *correction*
 than it was as a finding.
 
+### AND THE CHAIN IS STILL MISSING A BEAT: **RELEASE**, BETWEEN VERIFY AND CLOSE
+
+**Measured 2026-09-07, and it stalled three beads at once.** The orchestrator routed grades for
+`f3g5`, `djfu` and `lppp` to non-authors while **the author still held `assignee`**. Two panes
+refused inside one minute, in near-identical words:
+
+```
+status=in_progress  assignee=pane=%20;incarnation=1;agent=pane20-omp-claude
+"The current holder is also the author, so an independent grade must wait for an explicit
+ release/reassignment. Please release or reassign, then send the grade request again."
+```
+
+**Both refusals were correct and the routing bug was the dispatcher's.** An
+implementation-complete bead assigned to its implementer is **not grade-ready however the packet is
+worded** — and the packet said the right thing ("take it if unassigned; if `br` shows a holder,
+tell me instead of forcing"), which is precisely why the wall was visible instead of being
+bulldozed by a forced second claim.
+
+```
+file → claim → dispatch → ACK → observe → verify → RELEASE → close
+                                                    ^^^^^^^
+                                    the author hands the bead back before a
+                                    non-author can claim it for grading
+```
+
+**The mechanical form:** the dispatch site must refuse to route a grade to a pane while the bead's
+`assignee` names a different pane. The dispatcher is the only party positioned to notice, because
+it is the only one that knows both the author and the intended grader. Reassignment is not a
+workaround for this — it **is** the release beat, performed by whoever routes.
+
+**AND AN AGENT NAME IS NOT AN IDENTITY.** The first correction set `--assignee WildStone`, which
+**designates nobody**. Derived from every pane-scoped assignee string in the tracker:
+
+```
+%7   WildStone
+%8   WildStone     ← one name, THREE panes
+%9   WildStone
+%19  PearlGate
+%20  pane20-omp-claude
+```
+
+So this file's grading bar — *"DIFFERENT PANE, not different lineage"* — is **load-bearing rather
+than stylistic**: `pane=` is the only unique field in an assignee string. A name is a persona shared
+across panes; a lineage is shared across everything. Any eligibility check keyed on the agent name
+cannot tell an author from a grader. Recorded on `xsu4` and `0luy`, which own author resolution.
+
+**NO-CLAIM.** The release beat makes an independent grade **possible**, not **independent** — the
+grader must still re-execute the acceptance rather than read the author's report. And the collision
+census reads only assignee strings carrying the `pane=` form, so panes that never claimed a bead do
+not appear and a pane renamed across incarnations shows as two rows rather than one collision:
+**three-pane `WildStone` is a floor, not a total.**
+
 ### ONE ACK PER PACKET, NOT ONE PER BEAD — an N-bead packet serialises the fleet
 
 **Measured 2026-09-07, and it is the conductor's defect, not a pane's.** I dispatched three batch
