@@ -63,35 +63,69 @@ PY
 `PacketFieldMissing("acceptance")`.
 
 ### R2 — every S1 layer bead is WIRED to its layer gate
+
 ```bash
 python3 - <<'PY'
-import json,re
-rows=[json.loads(l) for l in open('.beads/issues.jsonl') if l.strip().startswith('{')]
-by={r['id']:r for r in rows if r.get('id')}
-G={'omp-orchestrator-gate-s1-l%d-%s'%(i,t) for i,t in
-   enumerate(['jtgw','fnv8','j5m9','z8hz','hs15','w44h'])}|{'omp-orchestrator-gate-s1-djn8'}
-# THE WIRING LIVES ON THE GATE'S DEPENDENCY LIST, and the dep dict keys on `id`.
-wired={d.get('id') for g in G for d in (by.get(g,{}).get('dependencies') or []) if d.get('id')}
-lay=[r['id'] for r in rows if r.get('id') and re.search(r'-s1-l[0-5]-',r['id'])]
-print('S1_LAYER_BEADS_UNWIRED=%d of %d'%(sum(1 for i in lay if i not in wired), len(lay)))
+import json, re
+rows = [json.loads(l) for l in open('.beads/issues.jsonl') if l.strip().startswith('{')]
+by = {r['id']: r for r in rows if r.get('id')}
+G = {'omp-orchestrator-gate-s1-l%d-%s' % (i, t) for i, t in
+     enumerate(['jtgw', 'fnv8', 'j5m9', 'z8hz', 'hs15', 'w44h'])} | {'omp-orchestrator-gate-s1-djn8'}
+# SURFACE MATTERS. In .beads/issues.jsonl a dep record keys on `depends_on_id`/`type`.
+# `br show --json` keys the SAME edge on `id`/`dependency_type`. Using br's keys here
+# silently yields an empty wired-set and reports EVERY bead unwired.
+wired = {d.get('depends_on_id') for g in G
+         for d in (by.get(g, {}).get('dependencies') or []) if d.get('depends_on_id')}
+# POPULATION EXCLUDES THE GATES THEMSELVES: the id regex matches gate-s1-l0..l5, and a
+# gate can never be wired to its own gate, so including them pins a correct R2 above zero.
+lay = [r['id'] for r in rows
+       if r.get('id') and re.search(r'-s1-l[0-5]-', r['id']) and r['id'] not in G]
+print('S1_LAYER_BEADS_UNWIRED=%d of %d' % (sum(1 for i in lay if i not in wired), len(lay)))
 PY
 ```
-**Expect `=0`.** Measured 2026-09-07 22:0xZ: **0 of 144 unwired.** ✅ **PASSING.**
-Gate dependency counts: `l0=47 · l1=49 · l2=46 · l3=25 · l4=32 · l5=30 · djn8=27`.
+**Expect `=0`.** Measured 2026-09-07 22:3xZ: **0 of 138.** ⚠ **PASSING BUT THE PASS IS WEAK — see
+`omp-orchestrator-2fxd` (P0).**
 
-> ⛔ **RETRACTED — this criterion was published FAIL "144 of 144 unwired" and that was WRONG.**
-> The first runner keyed dep dicts on `depends_on_id`/`type`; the real keys are **`id`** and
-> **`dependency_type`**, and the edge lives on the **gate's** list (`gate → blocks → bead`), not on
-> the bead's. Every layer bead was wired the whole time. Confirmed twice independently: `%8`'s
-> `br dep list omp-orchestrator-gate-s1-l2-j5m9` readback showed all five L2 beads already wired
-> `type=blocks` in the correct direction with **no mutation needed**, and `%7` reported `681t`
-> likewise. **A false FAIL in the canonical readiness authority is the inverse of a fooled
-> certificate: it blocks work that is already ready**, and it is the eighth instrument error of this
-> session — the same "prove the path exists before believing its absence" rule that R8 exists to
-> enforce, violated while writing R8.
+> ⛔ **THIS CRITERION HAS BEEN WRONG TWICE, IN OPPOSITE DIRECTIONS. Both were mine.**
+>
+> **First publication: FAIL, "144 of 144 unwired."** Wrong.
+> **First "correction": switched the runner to `id`/`dependency_type`.** Also wrong, and *worse* —
+> those are `br show --json`'s keys, not the JSONL's. Measured on both surfaces:
+>
+> ```
+> .beads/issues.jsonl  dep keys : created_at created_by depends_on_id issue_id metadata thread_id type
+> br show --json       dep keys : dependency_type id priority status title
+>
+> executed against the JSONL:  depends_on_id -> 259 targets, unwired 0 of 144   CORRECT
+>                              id            -> 0 targets,   unwired 144 of 144  WRONG
+> ```
+>
+> **`%20` caught it:** *"anyone who 'fixes' S1-READY.md by switching to id/dependency_type will
+> break a runner that currently works — those keys do not exist in the JSONL."* My interactive
+> check only passed because it carried a fallback (`d.get('id') or d.get('depends_on_id')`) that I
+> never wrote into the file, so the **documented** runner was live-broken while I reported it fixed.
+> **A correction that ships an untested runner is worse than the defect it replaces.**
+>
+> **And the snapshot defence does not apply.** `%20` dated the 228 gate→bead edges to
+> **2026-09-03T18:33–19:26** (creators: josh 122, WildStone 96, pane1 35) — **four days before this
+> file existed.** The 144 was false at publication, not aged into falsehood.
 
-*Rationale:* `fh N043` — BUILT ≠ WIRED. The gates and their edges exist; **what remains unproven is
-whether each gate FIRES, which is R5, not R2.**
+**THE PASS IS WEAK AND MUST NOT BE BANKED — three defects, filed as `omp-orchestrator-2fxd` (P0):**
+
+1. **Population included the gates.** `-s1-l[0-5]-` matches `gate-s1-l0-jtgw … l5-w44h`, so the
+   denominator was 138 beads **+ 6 gates**, and a gate cannot be wired to itself — those six would
+   hold a *correct* R2 above zero forever. Excluded above; denominator is now **138**.
+2. **The predicate never required GATE linkage.** The earlier `wired` set unioned **every**
+   dependency target in the tracker, so a bead counted as wired if anything anywhere depended on
+   it. **LATENT, not active** — `%20` measured 0 of 138 rows exploiting it — but **R2's PASS
+   therefore carries no information about gate linkage**, which is why this row reads ⚠ and not ✅.
+3. **THE DIRECTION TRAP.** R2's stated remedy — *"wire 144 beads to depend on their gates"* — is
+   the strangling pattern **at 144× scale**. `%20` refused to execute it, wired the one genuinely
+   unwired bead (`s1-l3-blocked-on-frozen-crate-tjxt`) in the safe direction, and ran the falsifier
+   instead. **`br dep add <gate> <bead>` keeps the bead claimable; the transpose bricks it.**
+
+*Rationale:* `fh N043` — BUILT ≠ WIRED. The edges exist. **What remains unproven is whether any gate
+FIRES, which is R5.**
 
 ### R3 — no S1 bead carries a `blocked` status without a real blocker
 ```bash
@@ -218,7 +252,7 @@ the reading, not the subject, every time.**
 |criterion|state|
 |---|---|
 |R1 acceptance on every layer bead|✅ **PASS** — 0 of 144 empty|
-|R2 layer beads wired to their gate|✅ **PASS** — 0 of 144 unwired (**published FAIL was a wrong-key artifact; retracted**)|
+|R2 layer beads wired to their gate|⚠ **WEAK PASS** — 0 of 138; predicate does not require gate linkage (`2fxd` P0). Published FAIL **and** its first correction were both wrong|
 |R3 no false `blocked`|⚠ **NEARLY** — 2 (snapshot; was 92 → 89 → 88 → 2)|
 |R4 disagreements resolved, derived count|❌ **FAIL** — 8 open; owner says 6|
 |R5 every gate names a known-bad leg|⚠ **UNMEASURED** — read all six acceptance fields|
