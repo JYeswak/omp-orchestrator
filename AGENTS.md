@@ -1375,6 +1375,76 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
    diff with `git log <sha>..HEAD -- <path>`, and state which tree every number came from. A grade
    is otherwise a claim about "the repo right now", which is not a thing five agents can agree on.
 
+8b. **A RETRACTION THAT LIVES ONLY IN A REPORT GETS RE-PROPOSED BY THE NEXT READER. Put it in the
+   source, and give it a test.** `%20`, 2026-09-07, in its own words after I refuted its arc
+   hypothesis.
+
+   It had proposed a switch-on precondition of *"until `jplf.1` is selectable."* I dropped the edge
+   it blamed, measured that `jplf.1` stayed invisible, and found the real cause: `jplf.1` is an
+   **epic**, and `br ready` excludes epics fleet-wide — 0 of 32 open epics offered, correctly, since
+   a container is not work. **So the precondition was unsatisfiable by construction** — the
+   never-fires class, proposed in good faith and about to be shipped as a gate's trigger.
+
+   **What `%20` did with the retraction is the rule.** It did not merely accept it in a report. It
+   shipped `SWITCH_ON_PRECONDITION` as a **string in the binary** reading *"at least one NON-EPIC
+   arc member is present in `br ready`; never keyed on jplf.1, which is an epic…"*, plus a test
+   named `the_switch_on_precondition_is_not_keyed_on_an_epic` **whose job is to keep the REFUTED
+   keying named** so nobody re-adopts it. Verified: 4 `SWITCH_ON_PRECONDITION` sites in source, the
+   test present.
+
+   **Why the test matters more than the string.** A comment recording a retraction is prose, and
+   this file has an entire section on prose retractions being re-adopted — a stale *"this kernel is
+   broken"* note licensed hours of hand-rolling after the kernel was fixed. **A test that fails if
+   the refuted form returns cannot be read past.**
+
+   The general form: when a premise is refuted, ask **where the next reader will look**. If the
+   answer is "the code", the retraction belongs there. A NEGATIVE_EVIDENCE row, a bead comment and a
+   commit body are all *findable*; only a failing test is *unavoidable*.
+
+   **NO-CLAIM.** This keeps a refuted form from being silently re-adopted. It does not make the
+   replacement correct — `%20`'s new leaf-keyed precondition is measured-satisfiable today
+   (`jplf.9` is in `br ready`), but one row is not a moving arc, and it said so.
+
+8c. **AN EXCLUSION RECORD WITH NO CORRESPONDING LIVE ROW IS STALE STATE, NOT CONTENTION — and
+   treating the two the same converts a five-second retry into a five-minute wait.** `%20`,
+   2026-09-07, measured within five minutes of the rule being written down.
+
+   ```
+   [RCH-I005] refused (project_excluded); 'contabo-3' already runs this project
+   rch queue --json  ->  active builds: 0
+   ```
+
+   **Zero active builds, so the exclusion was attributable to no live build — therefore not its
+   own.** It unpinned the worker and the run succeeded on `contabo-1` **first try**. Under the
+   previous reflex — *"`active_project_exclusion` means wait for your own job"* — it had waited
+   three times earlier the same evening.
+
+   **The discriminator is the PROJECT FIELD in the live queue, not the exclusion message.** If the
+   in-flight build is someone else's, waiting is wrong; if there is no in-flight build at all, the
+   record is stale and waiting is wrong for a different reason. Only *"the queue names a live build
+   of my project"* justifies waiting.
+
+   **This generalises past rch.** Any admission surface that records a reservation separately from
+   the work it reserves for can hold a record whose subject is gone — the leaked-lease family, the
+   phantom 4/4 slots on an idle box, the `RCH-I005` that survives a killed client. **Ask what the
+   record is a record OF, and check that thing directly.**
+
+8d. **A TEST NAME IS A CLAIM, AND A NAME PROMISING A PROPERTY IT DOES NOT CHECK IS THE QUIET FORM
+   OF THE CONJUNCTIVE DEFECT.** `%20`, same session, renaming its own test.
+
+   `an_unattributable_session_log_holds_rather_than_guessing` → `..._is_unknown_with_the_unknown_code`.
+   In its words: **"'Holds' was decision language on a body that asserts the outcome and the code, so
+   the name promised a property it never checked."**
+
+   Rule 7b catches the loud form — a name joining two properties with `and` is a conflated assertion
+   advertising itself. **This is the quiet form: a name asserting a property the body never
+   touches.** It is worse in one respect, because a reader scanning names for coverage counts it as
+   covered.
+
+   **The check is mechanical: read the name, then read the assertions, and confirm the name names
+   only what the body asserts.** `%20` verified nothing was lost before renaming — the decision half
+   was already covered by a separate across-every-shape leg carrying that exact evidence row.
+
 9. **NO ACCEPTANCE IS COMPLETE WITHOUT A WIRING-PROOF LEG. The dispatch is where BUILT ≠ WIRED
    gets in.** Measured 2026-09-06, and it is the orchestrator's own defect: every acceptance
    written that session demanded fires-on-known-bad, a known-good leg, a mutation leg and
