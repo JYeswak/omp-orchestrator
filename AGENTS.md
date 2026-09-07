@@ -1914,6 +1914,60 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
    the citation must be a captured literal, never a re-derivable query. And **do not fix it by
    declining to record** — an unrecorded observation is worse than a self-destroying one.
 
+8n. **`git add -- <path>` IS PATH-SCOPED AND STILL WHOLE-FILE. IT DOES NOT ISOLATE YOU FROM A PEER
+   EDITING THE SAME FILE.** Measured 2026-09-07 by `%19`, and it is a gap in this file's own
+   standing commit rule.
+
+   The rule above says `git add -- <paths> && git commit -- <paths>`, both pathspecs. That protects
+   against sweeping **other files** out of a shared index. It does **nothing** about sweeping
+   **another agent's hunks inside your file** — and in a five-agent checkout that is the common case.
+
+   Measured: `%19` staged a 21-line deletion in a file carrying a peer's 90 added lines and its first
+   staging attempt captured **3 of the peer's lines** — a `rustfmt` of the helper body, adjacent to
+   the deletion and inside the same hunk. Path-scoping did not see it, because the peer's work was
+   not in another file.
+
+   **The form that works, and it is a different mechanism, not a stricter pathspec:**
+
+   ```
+   git show HEAD:<path> > /tmp/base            # the tree, not the worktree
+   ... produce the intended content from BASE ...
+   diff -u ... | git apply --cached            # index holds HEAD-minus-your-change only
+   git commit                                  # FROM THE INDEX -- no pathspec
+   ```
+
+   **The last line is the counter-intuitive half.** `git commit -- <path>` **re-reads the worktree**
+   for that path and would pull the peer's lines straight back in. So once you have built a precise
+   index with `git apply --cached`, a pathspec on `commit` is actively wrong. `%19` measured
+   `32 deletions, 0 insertions` this way against `3 of the peer's lines` the naive way.
+
+   **When it applies:** only when a peer is live in your file. `git status` showing ` M` with nonzero
+   insertions on a path you are about to touch is the trigger (rule `8h`). Otherwise the two-pathspec
+   form remains correct and is far cheaper.
+
+8o. **`grep -c <symbol>` COUNTS OCCURRENCES, INCLUDING THE USES INSIDE THE THING YOU ARE DELETING.**
+   Measured 2026-09-07, and it is the orchestrator's own error, made **one hour after** committing
+   rule `8m` about instrument defects.
+
+   `%19` proposed deleting a stale test and, conditionally, its helper *"if it has no other caller"*.
+   I measured `grep -c 'workflow_invokes_lint' -> 3`, ruled *"definition plus two call sites, so a
+   caller lives — keep the helper"*, and was **wrong**: both call sites are at `:271` and `:273`,
+   **inside `wired_into_ci_workflow` which spans `:264-276`** — the very function being deleted.
+
+   **`%19` refuted it with the compiler**, which is the right instrument and the reason this row
+   exists: with the deletion applied, `rustc` emits
+   `warning: function 'workflow_invokes_lint' is never used`.
+
+   **This is the mention-vs-invocation defect from this file's own census correction**, where 23
+   crates with a `.flywheel/` mention and no executor read as wired. A count cannot tell a definition
+   from a call, a call from a comment, or **a call that dies with its caller** from one that
+   survives it.
+
+   **Use the compiler, or an enclosing-symbol tool, never a count.** And note `ripwire` failed here
+   too, in a documented way: `--uses=workflow_invokes_lint` returned `count="0"` while two call sites
+   plainly existed, because they sit inside `assert!()` — the macro blind spot. **A structural zero
+   from a macro-blind tool is `UNKNOWN`, not absence**; `--grep` is the prescribed follow-up.
+
 9. **NO ACCEPTANCE IS COMPLETE WITHOUT A WIRING-PROOF LEG. The dispatch is where BUILT ≠ WIRED
    gets in.** Measured 2026-09-06, and it is the orchestrator's own defect: every acceptance
    written that session demanded fires-on-known-bad, a known-good leg, a mutation leg and

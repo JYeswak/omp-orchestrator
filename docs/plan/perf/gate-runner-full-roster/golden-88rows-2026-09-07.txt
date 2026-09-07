@@ -1,0 +1,119 @@
+  2026-09-07T21:20:17.219535Z  INFO rch::hook: Selected worker: contabo-2 at root@94.72.121.46 (2 slots remaining after reservation, speed 50.0)
+    at rch/src/hook.rs:2645 on ThreadId(1)
+
+  2026-09-07T21:20:18.085468Z  INFO rch::hook::transfer_orchestration: Starting remote compilation pipeline for omp-orchestrator (hash: 807ad13fa12ec713)
+    at rch/src/hook/transfer_orchestration.rs:508 on ThreadId(1)
+
+  2026-09-07T21:20:18.085519Z  INFO rch::hook::transfer_orchestration: Prepared dependency sync manifest for 1 roots
+    at rch/src/hook/transfer_orchestration.rs:530 on ThreadId(1)
+
+  2026-09-07T21:20:20.668755Z  INFO rch::hook::transfer_orchestration: Syncing project to worker contabo-2...
+    at rch/src/hook/transfer_orchestration.rs:659 on ThreadId(1)
+
+  2026-09-07T21:20:20.668899Z  INFO rch::transfer: Syncing /Users/josh/Developer/omp-orchestrator -> /Users/josh/Developer/omp-orchestrator on contabo-2 (streaming)
+    at rch/src/transfer.rs:3549 on ThreadId(1)
+
+  2026-09-07T21:20:23.075021Z  INFO rch::hook::transfer_orchestration: Sync complete: 1779 files, 102483 bytes in 2301ms
+    at rch/src/hook/transfer_orchestration.rs:954 on ThreadId(1)
+
+  2026-09-07T21:20:28.787446Z  INFO rch::hook::transfer_orchestration: Executing command remotely: cargo run --quiet -p gate-runner -- --run
+    at rch/src/hook/transfer_orchestration.rs:1014 on ThreadId(1)
+
+  2026-09-07T21:20:28.787544Z  INFO rch::transfer: Rewriting CARGO_TARGET_DIR for remote execution (worker-scoped path): /Users/josh/Developer/omp-orchestrator/target -> /Users/josh/Developer/omp-orchestrator/.rch-target-contabo-2-pool-9fce9d6739375f7cae8bcfc4b2e0b25b
+    at rch/src/transfer.rs:1842 on ThreadId(1)
+
+  2026-09-07T21:20:28.787564Z  INFO rch::transfer: Wrapping command with external timeout protection, kind: cargo build, timeout_secs: 3600
+    at rch/src/transfer.rs:2669 on ThreadId(1)
+
+GATE_RUNNER crates=88 pass=67 fail=21 unmeasurable=0 short=0 no_tests=0
+FAIL crate=ack-spine failing_targets=unattributed_target(failing_tests:live_closed_prefix_census_is_non_vacuous_and_has_no_unadmitted_rows)
+PASS crate=ack-stage targets=7
+FAIL crate=admission-reason failing_targets=unattributed_target(failing_tests:rust_matches_shell_on_nonempty_case_set)
+FAIL crate=agent-mail-native failing_targets=unattributed_target(failing_tests:first_resume_from_origin_succeeds_for_recipient_with_later_first_event)
+PASS crate=asupersync-conformance targets=4
+PASS crate=bead-availability targets=4
+PASS crate=bead-holder targets=4
+PASS crate=blocker-taxonomy targets=4
+PASS crate=cargo-lane-budget targets=6
+PASS crate=commit-build-fence targets=4
+PASS crate=composer-typed targets=6
+PASS crate=convergence-stamp targets=4
+PASS crate=crate-atom-gate targets=6
+PASS crate=crate-soundness-verify targets=6
+PASS crate=decision-ledger targets=4
+PASS crate=dispatch-claim-fence targets=4
+PASS crate=dispatch-saga targets=5
+FAIL crate=dispatch-silence-watch failing_targets=unattributed_target(failing_tests:dispatch_silence_watch_is_in_crontab)
+PASS crate=dispatcher-deadman targets=6
+PASS crate=extraction-roster targets=4
+PASS crate=fast-dispatch targets=5
+FAIL crate=finding failing_targets=unattributed_target(failing_tests:publisher_creates_a_real_bead_in_a_scratch_workspace,recovery_republishes_a_pending_row_and_retires_it)
+PASS crate=finding-dispatch targets=4
+FAIL crate=fleet-composite failing_targets=unattributed_target(failing_tests:tests::known_bad_no_repo_above_cwd_fails_loudly_naming_the_markers)
+FAIL crate=fleet-monitor failing_targets=unattributed_target(failing_tests:lock::tests::rule_unusable_lock_fails_closed)
+PASS crate=fleet-reconcile targets=5
+PASS crate=fleet-truth targets=7
+PASS crate=fuzz-build-gate targets=3
+PASS crate=gate-runner targets=6
+PASS crate=grader-attribution-gate targets=4
+PASS crate=inbox-monitor targets=5
+PASS crate=input-manifest targets=3
+FAIL crate=installer failing_targets=unattributed_target(failing_tests:real_atomic_install_publishes_complete_binary)
+FAIL crate=kernel-bypass-gate failing_targets=unattributed_target(failing_tests:real_workspace_ledger_balances)
+PASS crate=kernel-only-operator-hook targets=4
+PASS crate=lifecycle-event targets=3
+PASS crate=lifecycle-monitor targets=3
+PASS crate=loop-coverage targets=3
+FAIL crate=loop-driver failing_targets=unattributed_target(failing_tests:rust_lock_interoperates_with_the_shell_oracles_lockf)
+FAIL crate=loop-queue-filter failing_targets=unattributed_target(failing_tests:positive_control_with_bv_writes_receipt_and_exits_zero)
+PASS crate=loop-switch targets=5
+PASS crate=loop-tick targets=4
+PASS crate=m2-grading-lane targets=4
+PASS crate=named-test-filter-gate targets=4
+FAIL crate=no-shell-gate failing_targets=unattributed_target(failing_tests:a_corrupted_copy_is_rejected_by_the_provenance_gate,every_preserved_artifact_exists_and_matches_its_cited_hash),unattributed_target(failing_tests:singleton_labels_do_not_multiply,every_allowlist_label_is_actually_used,every_live_bead_carries_at_least_one_taxonomy_label,distinct_label_count_does_not_grow),unattributed_target(failing_tests:the_unstamped_binary_count_only_falls),unattributed_target(failing_tests:planted_package_is_red_until_its_row_exists,every_metadata_package_has_exactly_one_inventory_row),unattributed_target(failing_tests:authority_registry_is_nonempty_unique_and_schema_valid,fresh_reader_receipt_is_pinned_and_zero_new,fixed_pointers_exist_and_touch_authority_sources,board_generator_and_completion_claims_have_independent_falsifiers),unattributed_target(failing_tests:deletion_only_staged_set_reaches_pre_delete_gate),unattributed_target(failing_tests:a_code_that_appears_only_in_prose_is_not_an_emission,every_emitted_exit_code_is_documented,every_pass_through_site_is_declared,every_narrowing_exit_cast_has_a_reasoned_allowance,no_exit_constant_name_is_bound_to_two_values),unattributed_target(failing_tests:a_fixed_pointer_at_a_ledger_only_commit_is_refused_and_named,every_fixed_row_points_at_a_commit_that_touched_its_section,repointing_a_good_row_at_a_ledger_only_commit_flips_the_verdict_and_the_real_file_is_untouched),unattributed_target(failing_tests:foundation_rows_are_complete_and_non_vacuous),unattributed_target(failing_tests:missing_git_metadata_fails_closed),unattributed_target(failing_tests:positive_control_runs_real_hook_and_refuses_staged_shell,report_excludes_its_own_source_and_has_a_no_shell_positive_control),unattributed_target(failing_tests:every_in_repo_line_cite_names_a_line_that_exists),unattributed_target(failing_tests:no_declared_figure_has_drifted),unattributed_target(failing_tests:the_crate_roster_is_derived_from_git_and_covers_the_tree,every_dual_surface_reader_routes_through_oracle_compare_or_is_allowed,the_crates_that_route_are_recognised_as_routing,no_allowance_row_outlives_the_defect_it_records),unattributed_target(failing_tests:unstaged_tick_ledger_is_not_applicable_not_nothing_to_check,hook_validates_staged_bytes_not_a_dirty_worktree_copy,staged_good_tick_ledger_is_clean),unattributed_target(failing_tests:plan_citations_name_constructs),unattributed_target(failing_tests:live_readme_status_matches_authorities,mutation_of_the_live_forbid_claim_goes_red),unattributed_target(failing_tests:no_new_round_is_admitted_unless_the_stamp_covers_every_round),unattributed_target(failing_tests:every_declared_artifact_on_disk_carries_its_required_fields),unattributed_target(failing_tests:gate_checker_scan_is_nonempty_and_clean),unattributed_target(failing_tests:every_crate_is_declared_in_the_surface_map,every_plan_gate_identifier_has_a_referent_or_dies_when,no_public_type_name_collisions_across_crates,every_declared_lane_has_a_production_caller,every_metadata_member_has_a_reachability_classification)
+PASS crate=ntm-fleet-monitor targets=9
+FAIL crate=omp-idle-dispatch failing_targets=unattributed_target(failing_tests:tests::known_bad_no_repo_above_cwd_fails_loudly_naming_the_markers),unattributed_target(failing_tests:complete_environment_passes_startup)
+PASS crate=omp-inventory-map targets=10
+FAIL crate=omp-orchestrator failing_targets=unattributed_target(failing_tests:tests::disabling_supervisor_claim_preserves_known_bad_refusal,tests::preflight_refusal_leaves_tracker_unclaimed,tests::stale_docs_admits_grading_and_writes_degraded_row,tests::supervisor_files_recurring_decision_through_finding_kernel,tests::supervisor_claims_open_bead_before_authorized_dispatch),unattributed_target(failing_tests:every_advisory_unreachable_row_is_named_in_the_allowance,the_ratchet_deadline_is_a_real_number_and_not_a_sentiment,derivation_did_not_convert_one_blocker_into_forty_three),unattributed_target(failing_tests:disk_pressure_still_reports_observation_before_refusal),unattributed_target(failing_tests:every_wave_output_has_a_reachable_census_trigger),unattributed_target(failing_tests:retained_jsm_suggest_has_sha_and_nonzero_named_skill),unattributed_target(failing_tests:the_blocking_refusal_set_is_now_empty),unattributed_target(failing_tests:repository_cargo_policy_forces_the_owned_target),unattributed_target(failing_tests:unowned_target_is_rewritten_with_typed_reason,known_good_registered_target_routes_inside_registered_root,unowned_dir_receives_artifacts_only_without_the_wrapper,fleet_wrapper_matches_measured_revision)
+PASS crate=omp-rpc-session targets=4
+PASS crate=omp-surface-consumption targets=3
+PASS crate=omp-types targets=5
+PASS crate=ompo-doctor targets=5
+PASS crate=ompo-start targets=9
+PASS crate=oracle-compare targets=2
+PASS crate=oracle-pane-state-differential targets=6
+PASS crate=orchestration-tick-gate targets=6
+PASS crate=pane-dispatch-fence targets=4
+FAIL crate=pane-dispatch-ready failing_targets=unattributed_target(failing_tests:mutation_busy_markers_load_bearing)
+PASS crate=pane-oracle-diff targets=6
+PASS crate=pane-truth targets=6
+FAIL crate=path-literal-guard failing_targets=unattributed_target(failing_tests:unreadable_input_is_refused_and_restores_to_a_clean_scan)
+PASS crate=plan-assemble targets=2
+PASS crate=porting-gate targets=4
+PASS crate=pre-delete-citation-check targets=6
+PASS crate=preregistration-gate targets=4
+PASS crate=r1-breadth-gate targets=3
+FAIL crate=reap-finished-panes failing_targets=unattributed_target(failing_tests:mutation_lock_names_holder)
+PASS crate=receiver-receipt targets=5
+PASS crate=refill-idle-panes targets=4
+PASS crate=response-envelope-check targets=3
+PASS crate=s1-coverage targets=4
+PASS crate=s2-gate targets=4
+PASS crate=salvage-taxonomy targets=3
+PASS crate=scratch-home targets=3
+PASS crate=sender-identity targets=3
+PASS crate=silent-success-census targets=4
+PASS crate=staged-build-gate targets=4
+FAIL crate=state-wildcard-lint failing_targets=unattributed_target(failing_tests:lint_is_wired_into_blocking_ci)
+PASS crate=subprocess-contract targets=2
+PASS crate=text-structure targets=3
+PASS crate=tick-dispatch targets=6
+PASS crate=tick-monitor targets=5
+FAIL crate=undrained-pipe-lint failing_targets=unattributed_target(failing_tests:wired_into_ci_workflow)
+FAIL crate=verify-dispatch failing_targets=unattributed_target(failing_tests:tests::disabling_named_beads_all_closed_false_passes_open_set,tests::closed_bead_is_verified,tests::disabling_only_closed_status_counts_false_passes_open_bead,tests::empty_beads_list_is_legacy_and_no_evidence,tests::duplicate_bead_ids_are_deduped,tests::malformed_json_is_skipped,tests::partial_close_is_no_evidence,tests::open_bead_is_no_evidence)
+FAIL crate=wired-but-inert-guard failing_targets=unattributed_target(failing_tests:tests::known_bad_no_repo_above_cwd_fails_loudly_naming_the_markers),unattributed_target(failing_tests:no_repo_above_cwd_fails_loudly_naming_the_markers)
+PASS crate=worker-oracle-gate targets=3
+PASS crate=worker-tag-gate targets=4
+  2026-09-07T21:41:38.299204Z  INFO rch::hook::transfer_orchestration: Remote command finished: exit=1 in 1269361ms
+    at rch/src/hook/transfer_orchestration.rs:1146 on ThreadId(1)
+
