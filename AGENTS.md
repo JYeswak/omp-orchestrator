@@ -1888,6 +1888,32 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
    the receiver, not the sender's verdict** — and when you retry, say so, so a doubled packet is
    attributable.
 
+8m. **RECORDING AN OBSERVATION CAN DESTROY THE EVIDENCE FOR IT. If your write touches the field you
+   are citing, capture the value FIRST.** Measured 2026-09-07, and it bit inside sixty seconds.
+
+   I censused `in_progress` beads whose holder is not a live pane, found `omp-orchestrator-1p0u`
+   held by `pane3` at `updated_at = 2026-09-06T23:46`, and **posted a comment recording that
+   staleness.** The next read returned `updated_at = 2026-09-07T21:49`. **The comment refreshed the
+   exact field that measured the thing the comment was about**, so the tracker no longer holds the
+   evidence for its own annotation — a later reader sees a bead touched minutes ago and cannot see
+   the 22-hour gap that justified flagging it.
+
+   **This is a different family from every other instrument defect above.** `8b` through `8l` are
+   about an instrument producing its own reading — `$?` after a pipe, `grep -c || echo 0`, a needle
+   inside a comment, `git log -S` skipping merges. Here the instrument read correctly and **the ACT
+   OF WRITING mutated the measurand.** No amount of negative control catches it, because the probe
+   was sound both times; the subject changed between them.
+
+   **The general form: any field maintained by the system you are annotating is destroyed by
+   annotating it.** `updated_at`, `comment_count`, `last_touched`, an mtime, a "last accessed"
+   timestamp, a hit counter. Capture the value in the write itself — as I did, so the figure
+   survives in the comment body and the transcript — or take the measurement to a place the write
+   does not reach.
+
+   **The reusable check is one question: does my write touch the field I am about to cite?** If yes,
+   the citation must be a captured literal, never a re-derivable query. And **do not fix it by
+   declining to record** — an unrecorded observation is worse than a self-destroying one.
+
 9. **NO ACCEPTANCE IS COMPLETE WITHOUT A WIRING-PROOF LEG. The dispatch is where BUILT ≠ WIRED
    gets in.** Measured 2026-09-06, and it is the orchestrator's own defect: every acceptance
    written that session demanded fires-on-known-bad, a known-good leg, a mutation leg and
