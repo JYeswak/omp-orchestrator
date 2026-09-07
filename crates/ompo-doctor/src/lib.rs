@@ -18,6 +18,8 @@ use std::process::Command;
 use std::time::Duration;
 use subprocess_contract::{bounded_output, BoundedOutcome};
 
+pub mod umbrella;
+
 pub const ARTIFACT_REFERENCE: &str = ".omp-orchestrator/doctor/report.json";
 const PROBE_DEADLINE: Duration = Duration::from_secs(5);
 

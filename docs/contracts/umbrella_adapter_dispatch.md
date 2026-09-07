@@ -16,15 +16,20 @@ adapter dispatch code exists at the revision measured below.
 
 ## Contract Artifacts
 
-1. Canonical artifact: MISSING today; target `.omp-orchestrator/work/adapters/capabilities.json`,
-   schema `omp.adapter-capabilities/v1`, checked in as a golden artifact so drift between the
-   declared adapter/probe list and the implemented one fails CI.
-2. Smoke runner: MISSING today; target `<umbrella> doctor capabilities --json` and
-   `<umbrella> help <adapter>`. `<umbrella>` is unresolved — see `UAD-NAME`, which must be decided
-   before either target can be written.
-3. Invariant suite: MISSING today; target `crates/ompo-doctor/tests/umbrella_adapter_dispatch.rs`.
-   The Validation block below is an executable premise-and-gap stand-in that fires TODAY; it is not
-   production coverage, and a named-but-missing suite is deliberate planning-wave state.
+1. Canonical artifact: **EXISTS as a live command**, `ompo capabilities --json`, envelope
+   `omp.umbrella/v1`, carrying `adapters`, `adapter_count`, `verbs`, `probe_ids`,
+   `probe_id_count`. It is NOT yet checked in as a golden file; `capabilities_drift_is_red`
+   compares the declared list against `cargo metadata` on every run, which is the stronger
+   check of the two — a golden pins a snapshot, this pins the live oracle. A checked-in golden
+   remains open for CI, where `cargo metadata` may not be available.
+2. Smoke runner: **EXISTS** — `ompo capabilities --json`, `ompo help <adapter>`,
+   `ompo doctor capabilities --json` (the plan's spelling; one implementation, two spellings),
+   and `ompo init [--repo PATH] [--output PATH] [--json]`. `<umbrella>` resolved to `ompo` when
+   `UAD-NAME` was ratified 2026-09-07.
+3. Invariant suite: **EXISTS** at `crates/ompo-doctor/tests/umbrella_adapter_dispatch.rs`, 8
+   tests, plus 10 unit tests in `crates/ompo-doctor/src/umbrella.rs`. Measured
+   **18 passed / 0 failed** local darwin arm64. The Validation block below is the cheap static
+   gate; the suite is the behavioural one.
 
 ## Measured premise — 2026-09-07, HEAD `7b4ac63`, pane %19
 
@@ -74,12 +79,20 @@ catches a defect in what you BUILT and cannot catch having built the WRONG THING
 | `UAD-NAME` | binary name | `ompo` | `omp-orchestrator` | A: the only aggregator-shaped bin exists, 23 doc files, all five S1 layer contracts. B: 8 doc files, and the name is taken by the resident supervisor |
 | `UAD-ADDRESS` | adapter addressing | positional `<adapter>` after the verb | `--scope <family>` | A is what `07-installability` specifies and what 85 named targets need. B is implemented, and families are a COARSER axis — they are complements, not rivals |
 
-RECOMMENDED RESOLUTION, offered as the planning output and NOT ratified here: `ompo` for
-`UAD-NAME`, because it is the shipped aggregator shape and the S1 contract set already depends on
-it, and `omp-orchestrator` stays the resident supervisor; and BOTH axes for `UAD-ADDRESS`, with
-positional `<adapter>` selecting one target and `--scope <family>` selecting a probe family, since
-`s1_l1_doctor.md:90` `L1-BUILD-SCOPE` already requires scope and neither subsumes the other.
-Ratification is a human decision and is the blocking item for this bead.
+**RATIFIED 2026-09-07, PROVISIONAL AND REVERSIBLE** (pane 1, Joshua's override invited).
+`UAD-NAME = ompo`: 27 docs already invoke it including all five S1 layer contracts,
+`crates/ompo-doctor` is the crate that exists, and `omp-orchestrator` stays the resident
+supervisor with four flag-parsed verbs, which must not become an aggregator.
+`UAD-ADDRESS = BOTH axes`: `--scope <family>` is already REQUIRED by `s1_l1_doctor.md:90`
+`L1-BUILD-SCOPE`, and a positional `<adapter>` does not subsume it — a scope selects a probe
+family, an adapter selects a target. Nothing is installed under either name, which is exactly
+why deciding now was cheap and why reversal stays cheap.
+
+IMPLEMENTED CONSEQUENCE, so the ratification is not just a note: `ompo` now dispatches
+`init | doctor | help | capabilities`, the roster is generated from the workspace at build
+time, and `ompo doctor --adapter <name>` REFUSES with
+`UAD_ADAPTER_SCOPED_DOCTOR_UNIMPLEMENTED` rather than accepting a flag that does nothing —
+per-adapter probes are the one part of `UAD-ADDRESS` that is named and not built.
 
 ## Stable ID vocabulary
 
@@ -158,34 +171,56 @@ control and the corrected 23/8 is a measurement rather than a subtraction.
 
 ## Validation
 
-ONE pasteable command. It fires TODAY (exit 1, `UAD-GAP-PRESENT`) and goes green only when the
-adapter surface exists. Run from the repository root.
+ONE pasteable command. Run from the repository root. It reported `UAD-GAP-PRESENT` (exit 1) at
+`7b4ac63` when nothing existed and reports `UAD-OK` at `6e65e42+` now that the surface is built.
+
+**THE `umbrella_bins != 1` CLAUSE IS RETIRED, and the reason matters more than the edit.** The
+first version failed when *two* umbrella-shaped bin targets existed, on the theory that `ompo` and
+`omp-orchestrator` competing was itself the unresolved-name defect. After `UAD-NAME = ompo` was
+ratified (2026-09-07) that clause became WRONG: `omp-orchestrator` legitimately continues to exist
+as the resident supervisor, so the check would refuse forever on a resolved question — a gate red
+by construction, which this repo has measured three times and which always ends in the gate being
+routed around. It is replaced by the check the ratification actually implies: `ompo` carries the
+umbrella verbs and the supervisor does NOT grow them (`supervisor_verb_leak`).
+
+Two further clauses were added because the first version was satisfiable by the wrong crate:
+`capabilities_files` was scanned across `crates/*/src` and answered **9**, so an unrelated crate
+mentioning the word would have turned the gate green. Both scans are now scoped to
+`crates/ompo-doctor/src`. And `hardcoded_roster_literals` refuses the shape where someone replaces
+the generated roster with a literal — the failure `LAW-UAD-ROSTER-DERIVED` exists to prevent.
 
 ```bash
 cd /Users/josh/Developer/omp-orchestrator && \
-PC=$(printf 'fn resolve_adapter(n: &str) {}\n"--adapter"\n' | grep -cE 'fn +[a-z_]*adapter[a-z_]*\(|"--adapter"|adapters\b') && \
+PC=$(printf 'fn resolve_adapter(n: &str) {}\n"--adapter"\n' | grep -cE 'fn +[a-z_]*adapter[a-z_]*\(|"--adapter"|adapters\b' || true) && \
 T=$(cargo metadata --format-version 1 --no-deps --offline 2>/dev/null | jq '[.packages[].targets[]|select(.kind[]=="bin")]|length') && \
-U=$(cargo metadata --format-version 1 --no-deps --offline 2>/dev/null | jq '[.packages[].targets[]|select(.kind[]=="bin").name]|map(select(test("^(ompo|omp-orchestrator)$")))|length') && \
-A=$(grep -rlE 'fn +[a-z_]*adapter[a-z_]*\(|"--adapter"|adapters\b' crates/*/src 2>/dev/null | wc -l | tr -d ' ') && \
-C=$(grep -rl '"capabilities"' crates/ompo-doctor/src crates/omp-orchestrator/src 2>/dev/null | wc -l | tr -d ' ') && \
-SELF=docs/contracts/umbrella_adapter_dispatch.md && \
-N=$(grep -rl 'ompo ' docs/contracts docs/plan 2>/dev/null | grep -vF "$SELF" | wc -l | tr -d ' ') && \
-M=$(grep -rlE 'omp-orchestrator (doctor|help|capabilities)' docs/contracts docs/plan 2>/dev/null | grep -vF "$SELF" | wc -l | tr -d ' ') && \
-printf 'UAD-CENSUS matcher_positive_control=%s workspace_targets=%s umbrella_bins=%s adapter_dispatch_files=%s capabilities_files=%s docs_name_ompo=%s docs_name_omp_orchestrator=%s\n' "$PC" "$T" "$U" "$A" "$C" "$N" "$M" && \
-if [ "$PC" -eq 0 ]; then echo 'UAD-INSTRUMENT-ERROR: matcher cannot match its own needle; the zero below proves nothing'; exit 3; \
+A=$(grep -rlE 'fn +[a-z_]*adapter[a-z_]*\(|"--adapter"|adapters\b' crates/ompo-doctor/src 2>/dev/null | wc -l | tr -d ' ') && \
+C=$(grep -rl '"capabilities"' crates/ompo-doctor/src 2>/dev/null | wc -l | tr -d ' ') && \
+I=$(grep -rlE '"init" =>' crates/ompo-doctor/src 2>/dev/null | wc -l | tr -d ' ') && \
+G=$(grep -rl 'OUT_DIR.*adapters.rs' crates/ompo-doctor/src 2>/dev/null | wc -l | tr -d ' ') && \
+L=$(grep -c 'ADAPTERS: &\[&str\] = &\[' crates/ompo-doctor/src/umbrella.rs 2>/dev/null || true) && \
+S=$(grep -rl '"capabilities"' crates/omp-orchestrator/src 2>/dev/null | wc -l | tr -d ' ') && \
+printf 'UAD-CENSUS matcher_positive_control=%s workspace_targets=%s adapter_files=%s capabilities_files=%s init_verb_sites=%s generated_roster_includes=%s hardcoded_roster_literals=%s supervisor_verb_leak=%s\n' "$PC" "$T" "$A" "$C" "$I" "$G" "$L" "$S" && \
+if [ "$PC" -eq 0 ]; then echo 'UAD-INSTRUMENT-ERROR: matcher cannot match its own needle'; exit 3; \
 elif [ "$T" -eq 0 ]; then echo 'UAD-EMPTY-ROSTER: the target runner returned nothing'; exit 3; \
-elif [ "$A" -eq 0 ] || [ "$C" -eq 0 ]; then printf 'UAD-GAP-PRESENT: no umbrella verb accepts an adapter name; %s targets, 0 reachable\n' "$T"; exit 1; \
-elif [ "$U" -ne 1 ]; then printf 'UAD-NAME-UNRESOLVED: %s umbrella-shaped bin targets exist\n' "$U"; exit 1; \
+elif [ "$A" -eq 0 ] || [ "$C" -eq 0 ] || [ "$I" -eq 0 ]; then echo 'UAD-GAP-PRESENT'; exit 1; \
+elif [ "$G" -eq 0 ] || [ "$L" -ne 0 ]; then echo 'UAD-REGISTRY-HANDROLLED: the roster is a literal, not derived'; exit 1; \
+elif [ "$S" -ne 0 ]; then echo 'UAD-NAME-VIOLATED: the resident supervisor grew an umbrella verb'; exit 1; \
 else echo 'UAD-OK'; fi
 ```
 
-Captured 2026-09-07 at `7b4ac63`:
+Captured 2026-09-07, post-implementation:
 
 ```text
-UAD-CENSUS matcher_positive_control=2 workspace_targets=85 umbrella_bins=2 adapter_dispatch_files=0 capabilities_files=0 docs_name_ompo=23 docs_name_omp_orchestrator=8
-UAD-GAP-PRESENT: no umbrella verb accepts an adapter name; 85 targets, 0 reachable
-exit 1
+UAD-CENSUS matcher_positive_control=2 workspace_targets=85 adapter_files=2 capabilities_files=2 init_verb_sites=1 generated_roster_includes=1 hardcoded_roster_literals=0 supervisor_verb_leak=0
+UAD-OK
 ```
+
+`|| true` ON THE TWO `grep -c` ASSIGNMENTS IS LOAD-BEARING, and it was caught by running this.
+`grep -c` prints `0` and then exits **1**, which killed the `&&` chain before `printf` and produced
+**no output at all with exit 1** — indistinguishable, to a careless reader, from a clean
+`UAD-GAP-PRESENT`. `|| true` keeps the printed `0` and neutralises the exit. NOT `|| echo 0`,
+which appends a SECOND zero and yields `"0\n0"`; that exact idiom is the documented defect that
+made every zero-dependency crate score as having dependencies.
 
 `UAD-INSTRUMENT-ERROR` and `UAD-EMPTY-ROSTER` exit **3**, distinct from the subject verdict's **1**,
 so "the instrument failed" can never be read as "the subject is broken" — this repo has paid for
