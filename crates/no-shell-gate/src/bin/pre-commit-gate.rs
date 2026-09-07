@@ -1,11 +1,13 @@
-//! Multi-call pre-commit gate: runs six workspace gates on the staged file set.
+//! Multi-call pre-commit gate: runs the staged-set gates on the staged file set.
 //!
-//! GATES: no-shell-gate, path-literal-guard, undrained-pipe-lint, orchestration-tick-gate,
-//! state-wildcard-lint, pre-delete-citation-check.
+//! GATES: mode-gate, no-shell-gate, path-literal-guard, undrained-pipe-lint,
+//! orchestration-tick-gate, state-wildcard-lint, pre-delete-citation-check, and staged-build-gate.
 //!
 //! EXIT CODES: 0 = clean, 1 = violation/refusal, 2 = operational error,
 //! 3 = nothing to check.
 //! NO-CLAIM: --no-verify bypasses this hook by design.
+//! WIRED on this machine through .git/hooks/pre-commit; a fresh checkout has no per-clone hook,
+//! so this is local hook coverage rather than a claim about every checkout.
 
 #![forbid(unsafe_code)]
 
@@ -173,6 +175,10 @@ fn main() -> ExitCode {
         return PreCommitOutcome::NothingToCheck.exit_code();
     }
     let mut refusals: Vec<String> = Vec::new();
+    validate_staged_rust_modes(&repo_root, &staged, &mut refusals);
+    eprintln!(
+        "mode-gate: COMMIT_TIME_ONLY -- the write tool may still create mode-only M rows before commit; inspect git diff --numstat -- <path>"
+    );
 
     if let Err(error) = validate_staged_preregistration(&repo_root, &staged) {
         refusals.push(format!("preregistration-gate: {error}"));
@@ -455,6 +461,61 @@ fn main() -> ExitCode {
         PreCommitOutcome::Violation.exit_code()
     }
 }
+/// Refuse executable-mode Rust sources in the staged index.
+///
+/// The write tool can set the executable bit before this commit-time gate runs. The gate therefore
+/// checks the index mode, not the worktree mode, and leaves the interim mode-only status diagnostic
+/// to the operator rather than claiming write-time coverage.
+fn validate_staged_rust_modes(repo_root: &Path, staged: &[String], refusals: &mut Vec<String>) {
+    let mut command = std::process::Command::new("git");
+    command
+        .current_dir(repo_root)
+        .args(["ls-files", "--stage", "-z", "--"]);
+    let index_bytes = match subprocess_contract::bounded_output(
+        &mut command,
+        std::time::Duration::from_secs(10),
+    ) {
+        subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() => {
+            output.stdout
+        }
+        subprocess_contract::BoundedOutcome::Completed(output) => {
+            refusals.push(format!(
+                "mode-gate: ERROR git ls-files --stage exited {}: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr).trim()
+            ));
+            return;
+        }
+        subprocess_contract::BoundedOutcome::TimedOut => {
+            refusals.push("mode-gate: ERROR git ls-files --stage exceeded deadline; group killed".to_owned());
+            return;
+        }
+        subprocess_contract::BoundedOutcome::Unspawned(error) => {
+            refusals.push(format!("mode-gate: ERROR cannot spawn git ls-files --stage: {error}"));
+            return;
+        }
+    };
+
+    for record in index_bytes.split(|byte| *byte == 0) {
+        let Some(tab) = record.iter().position(|byte| *byte == b'\t') else {
+            continue;
+        };
+        let metadata = String::from_utf8_lossy(&record[..tab]);
+        let Some(mode) = metadata.split_whitespace().next() else {
+            continue;
+        };
+        let path = String::from_utf8_lossy(&record[tab + 1..]);
+        if mode == "100755"
+            && path.ends_with(".rs")
+            && staged.iter().any(|candidate| candidate.as_str() == path.as_ref())
+        {
+            refusals.push(format!(
+                "mode-gate: REFUSED path={path} mode={mode} reason=staged Rust source must remain non-executable"
+            ));
+        }
+    }
+}
+
 fn validate_staged_tick_ledger(repo_root: &Path, refusals: &mut Vec<String>) {
     const LEDGER_PATH: &str = ".flywheel/orchestration-ticks.jsonl";
     let staged = match staged_paths_for_tick_ledger(repo_root) {

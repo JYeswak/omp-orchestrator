@@ -12,6 +12,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicU32, Ordering};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 static FIXTURE_SEQ: AtomicU32 = AtomicU32::new(0);
 
@@ -297,4 +299,71 @@ fn deletion_only_staged_set_reaches_pre_delete_gate() {
     assert!(!error.contains("NOTHING_TO_CHECK: no staged files to check"), "deletion-only work must reach the gates: {error}");
     assert_eq!(top_level_outcome(&error), "CLEAN:", "deletion-only work must run the normal gate path: {error}");
     fs::remove_dir_all(dir).expect("remove deletion fixture");
+}
+#[cfg(unix)]
+fn stage_with_mode(dir: &Path, name: &str, mode: u32, content: &str) {
+    if let Some(parent) = Path::new(name).parent().filter(|path| !path.as_os_str().is_empty()) {
+        fs::create_dir_all(dir.join(parent)).expect("create staged fixture parent");
+    }
+    fs::write(dir.join(name), content).expect("write mode fixture");
+    let mut permissions = fs::metadata(dir.join(name)).expect("mode fixture metadata").permissions();
+    permissions.set_mode(mode);
+    fs::set_permissions(dir.join(name), permissions).expect("set mode fixture permissions");
+    run_git(dir, &["add", "--", name], "stage mode fixture");
+}
+
+/// The mode gate owns only staged Rust source modes. A clean Rust file is a real
+/// known-good verdict, and its output must state the write-time residual.
+#[cfg(unix)]
+#[test]
+fn staged_rust_mode_100644_is_clean_and_names_write_time_residual() {
+    let dir = fresh_git_tree("rust-mode-clean");
+    stage_with_mode(&dir, "mode_probe.rs", 0o100644, "fn mode_probe() {}\n");
+    let output = run_gate(&dir);
+    let error = stderr(&output);
+
+    assert_eq!(output.status.code(), Some(0), "100644 Rust source must pass: {error}");
+    assert_eq!(top_level_outcome(&error), "CLEAN:", "clean mode verdict: {error}");
+    assert!(
+        error.contains("mode-gate: COMMIT_TIME_ONLY") && error.contains("git diff --numstat -- <path>"),
+        "the gate must state its write-time residual: {error}"
+    );
+    assert!(!error.contains("mode-gate: REFUSED"), "100644 must not be refused: {error}");
+    fs::remove_dir_all(dir).expect("remove mode clean fixture");
+}
+
+/// KNOWN-BAD: an executable staged Rust source is refused with both path and
+/// index mode, not folded into a generic cargo or empty-index result.
+#[cfg(unix)]
+#[test]
+fn staged_rust_mode_100755_is_refused_with_path_and_mode() {
+    let dir = fresh_git_tree("rust-mode-refused");
+    stage_with_mode(&dir, "mode_probe.rs", 0o100755, "fn mode_probe() {}\n");
+    let output = run_gate(&dir);
+    let error = stderr(&output);
+
+    assert_eq!(output.status.code(), Some(1), "100755 Rust source must refuse: {error}");
+    assert_eq!(top_level_outcome(&error), "VIOLATION:", "mode refusal verdict: {error}");
+    assert!(
+        error.contains("mode-gate: REFUSED path=mode_probe.rs mode=100755"),
+        "refusal must name exact path and mode: {error}"
+    );
+    fs::remove_dir_all(dir).expect("remove mode refusal fixture");
+}
+
+/// KNOWN-GOOD: executable non-Rust paths are outside this gate's scope. The
+/// no-shell gate and the mode gate must not invent a refusal for a real binary
+/// or hook path merely because its index mode is executable.
+#[cfg(unix)]
+#[test]
+fn executable_non_rust_staged_path_is_not_flagged_by_mode_gate() {
+    let dir = fresh_git_tree("non-rust-executable");
+    stage_with_mode(&dir, "bin/probe", 0o100755, "binary-or-hook-placeholder\n");
+    let output = run_gate(&dir);
+    let error = stderr(&output);
+
+    assert_eq!(output.status.code(), Some(0), "non-Rust executable must pass: {error}");
+    assert_eq!(top_level_outcome(&error), "CLEAN:", "non-Rust mode verdict: {error}");
+    assert!(!error.contains("mode-gate: REFUSED"), "mode gate over-scoped non-Rust path: {error}");
+    fs::remove_dir_all(dir).expect("remove non-Rust executable fixture");
 }
