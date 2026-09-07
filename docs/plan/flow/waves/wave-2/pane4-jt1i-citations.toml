@@ -20,7 +20,7 @@ owner_says = "docs/contracts/s1_l1_doctor.md and s1_l2_ecosystem.md (pane 3)"
 reviewer_says = "PATH MISSING in this repo. Relative doctor.rs / mutate.rs paths belong under mirror beads_rust, not this tree. Pane 3 owns those contracts; not edited here."
 evidence = "quoted-anchor 'mutate()+undo by before_hash' in pane 3 contracts; this-repo has no src/cli/commands/"
 severity = "major"
-resolution = ""
+resolution = "ACCEPTED, re-measured by %19 2026-09-07 adopting this orphaned row. CONFIRMED in both halves: src/cli/commands/ is ABSENT from this repo, and doctor.rs|mutate.rs appear 37 times in docs/contracts/s1_l1_doctor.md and 5 times in docs/contracts/s1_l2_ecosystem.md as bare relative paths that resolve to nothing here. Those two contracts belong to the L1/L2 owner, so this STAYS OPEN for them: each path becomes either mirror:beads_rust/<path> or a this-repo path. Adjudicated, not discharged."
 
 [[disagreement]]
 box = "S1"
@@ -29,7 +29,7 @@ owner_says = "S1.toml / WildStone-S1.toml / pane1-S1.toml"
 reviewer_says = "Bare src/main.rs is crate-relative without the crate prefix. Owner files; not edited here."
 evidence = "quoted-anchor 'crates/installer' vs bare src/main.rs in owner files"
 severity = "major"
-resolution = ""
+resolution = "ACCEPTED, re-measured by %19 2026-09-07. CONFIRMED: exactly one bare src/main.rs occurrence in each of the three named owner files (boxes/S1.toml, wave-2/WildStone-S1.toml, wave-2/pane1-S1.toml), matched with a boundary-anchored pattern so crates/x/src/main.rs is not miscounted. STAYS OPEN for those owners: prefix each with its crate. Minor in effect but real -- a crate-relative path in a plan doc resolves for whoever wrote it and for nobody else."
 
 [[disagreement]]
 box = "S1"
@@ -38,7 +38,7 @@ owner_says = "docs/plan/flow/CONTRACT.md"
 reviewer_says = "Truncated mirror ellipsis is not a path. CONTRACT already refused fabricated mirror cites. Owner file; not edited here."
 evidence = "quoted-anchor 'beads_rust' with ellipsis in CONTRACT.md"
 severity = "major"
-resolution = ""
+resolution = "REFUTED(self-referential-corpus) by %19 2026-09-07. The ONLY 'beads_rust' + ellipsis match in CONTRACT.md is inside the sentence that REFUSES the form: 'a scout labelled ack-spine and no-shell-gate as mirror:beads_rust/... -- fabricated; refused'. The ellipsis is a quoted SPECIMEN in the rule against it, never used as a citation. A citation-hygiene scan over a corpus containing its own defect reports finds its own specimens; that is the eighth-plus instance of this class here and the correct fix is to strip quoted specimens before matching, not to edit CONTRACT.md."
 
 [[disagreement]]
 box = "S1"
@@ -47,7 +47,7 @@ owner_says = "S1.toml + planning_to_exhaustion.md + AmberGate wave-1"
 reviewer_says = "Leading j dropped on install/doctor/init ids. Real ids: omp-orchestrator-jplf.7.2, omp-orchestrator-jplf.7.3, omp-orchestrator-jplf.7.12, omp-orchestrator-jplf.1.1. Did NOT enter build-bead acceptance_criteria. Owner files; pane 1 said they are fixing S1.toml."
 evidence = "omp-orchestrator-jplf.7.2 exists in issues.jsonl; corpus spelled the id without the j"
 severity = "blocker"
-resolution = ""
+resolution = "RESOLVED by %19 2026-09-07, three named surfaces measured separately because they diverge. boxes/S1.toml: FIXED, 0 unprefixed plf.N against 10 correct jplf.N -- pane 1 said they were fixing it and they did. wave-1/AmberGate-S1.toml: NO INSTANCE, 0 of either form, so that surface was never affected. docs/contracts/planning_to_exhaustion.md: the 2 survivors are at the PX-D5 row which itself REPORTS this defect -- 'plf.7.3, lf.7.12, plf.7.2 ... the leading j was dropped' -- i.e. specimens inside the finding, same self-referential class as cite.mirror-truncated-ellipsis. Positive control: plf.7.2 resolves to 0 rows in issues.jsonl, jplf.7.2 to 1. NO live citation carries the dropped j. Blocker CLEARED."
 
 [[disagreement]]
 box = "S1"
@@ -56,4 +56,4 @@ owner_says = "CONTRACT.md template open_disagreements; BlueLantern wave-1 quotin
 reviewer_says = "UNLABELLED FIGURE in owner files. Not edited here. S1-COVERAGE headline is labelled WORKTREE."
 evidence = "quoted-anchor 'open_disagreements' without TREE/WORKTREE on neighbouring lines in those owner files"
 severity = "minor"
-resolution = ""
+resolution = "ACCEPTED and WIDENED by %19 2026-09-07 -- the row understates its own scope. boxes/S1.toml open_disagreements IS labelled and carries a derivation predicate in its comment, so it is not the offender. The unlabelled literals are ELEVEN sibling owner files (S2, S3, S4, S5a, S5b, S6a, S6b, S6c, S7, S8, S9) plus CONTRACT.md, each carrying a bare 'open_disagreements = 0' with NO predicate and no TREE/WORKTREE label. That is worse than unlabelled: a hardcoded zero under a gate that reads it is the never-fires-so-always-green class. STAYS OPEN, re-scoped to those 12 files, for their owners."

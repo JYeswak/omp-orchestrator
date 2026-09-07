@@ -5,7 +5,7 @@ owner_says = 'S1 is a committed human-start box'
 reviewer_says = 'The box has none of the required Wave 1 sections: measurement=0, gap=0, agreement=0, diagram=0. It is not reviewable under the 113d20d addendum.'
 evidence = 'date -u 2026-09-03T05:40:12Z; grep -c for each required section in docs/plan/flow/boxes/S1.toml returned 0,0,0,0'
 severity = 'blocker'
-resolution = ''
+resolution = 'REFUTED(instrument) by %19 2026-09-07, adopting an orphaned wave-1 row: all four required sections were PRESENT at the review-date tree e5ab541 -- [[box.measurement]]=6, [[box.gap]]=10, [box.agreement]=1, [box.diagram]=1. The reported 0,0,0,0 is reproducible today ONLY under a bare [[<key>]] matcher, which both drops the box. prefix and misses the two SINGLE-bracket tables; agreement and diagram are [box.x] not [[box.x]], so an array-of-tables matcher cannot see them at all. The finding is a structurally-guaranteed zero, not an absence, and the box was reviewable under 113d20d when the row was written.'
 
 [[disagreement]]
 box = 'S1'
@@ -14,4 +14,4 @@ owner_says = 'mirror:destructive_command_guard/install.sh is a gold-standard ins
 reviewer_says = 'The mirror path exists, but the row does not give a line citation or state the ls verification command. The contract requires every claim citation to be replayable, so the owner must add the exact line and verification evidence in wave 2.'
 evidence = 'test -e /Volumes/ZestData/dicklesworthstone-mirror/destructive_command_guard/install.sh && echo present -> present; current S1 sota_cite has no source line for the mirror claim'
 severity = 'major'
-resolution = ''
+resolution = 'ACCEPTED and STANDS OPEN for the owner, verified by %19 2026-09-07. Both halves re-measured: the mirror path is present (test -e -> present), and S1.toml sota_cite still cites mirror:destructive_command_guard/install.sh with NO line number and NO verification command. A non-author can adjudicate this but cannot discharge it -- the missing artifact is the owner claim itself, so SnowyCanyon adds the line and the ls evidence. Not a blank: stays-open is the resolution.'
