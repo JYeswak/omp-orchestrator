@@ -263,8 +263,32 @@ fn main() -> ExitCode {
     }
 
     // ── GATE 3: undrained-pipe-lint (refuse both-pipes+try_wait-no-drain) ──
+    //
+    // omp-orchestrator-ury6f: the lint's OWN known-bad corpus is written as compiled code, so the
+    // detector flags it and NOBODY could commit that file -- reproduced as 9 refusals on one file,
+    // permanently, because the detector (d4b320b) is five days newer than the fixture's last clean
+    // commit (3c876a5) and no allowance mechanism existed (grep -cE 'ALLOW|allowance' -> 0).
+    //
+    // THE POLICY LIVES IN THE LINT, THE ENFORCEMENT LIVES HERE, and that split is deliberate: the
+    // named list belongs to the crate that owns the fixtures, while this hook is the only surface
+    // that can refuse a commit. `lint_tree` carries the same gate for repo-wide mode.
+    //
+    // EXACT PATHS ONLY. A real both-pipes-plus-poll violation in any OTHER test file -- including a
+    // sibling in the same tests/ directory -- is still refused. That is the difference between an
+    // allowance and the cfg(test)-region exclusion this repo rejected, and the acceptance's
+    // fires-on-known-bad leg is what proves it rather than this comment.
     for staged_file in &staged {
         if staged_file.ends_with(".rs") {
+            if undrained_pipe_lint::is_self_fixture(staged_file) {
+                let _ = writeln!(
+                    io::stderr(),
+                    "undrained-pipe-lint: DECLARED allowance suppressed {staged_file} -- \
+                     this lint's own known-bad corpus; every row is a specimen the detector MUST \
+                     match. DECLARED allowance rows: {}",
+                    undrained_pipe_lint::SELF_FIXTURE_ALLOWANCE.len()
+                );
+                continue;
+            }
             if let Ok(source) = std::fs::read_to_string(staged_file) {
                 for (stdout_line, stderr_line, try_wait_line) in
                     undrained_pipe_lint::find_detailed_violations_in_source(&source)

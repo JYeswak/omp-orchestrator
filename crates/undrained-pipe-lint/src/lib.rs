@@ -317,6 +317,55 @@ pub fn find_violations_in_source(source: &str) -> Vec<(usize, usize)> {
         .collect()
 }
 
+/// THE LINT'S OWN KNOWN-BAD FIXTURES, NAMED, WITH A REASON EACH.
+///
+/// `omp-orchestrator-ury6f`. A lint whose known-bad fixture is written as COMPILED CODE is
+/// indistinguishable from a real violation, so this detector flags its own specimens and nobody can
+/// commit them: reproduced as **9 violations** on one file, permanently, because the detector
+/// (`d4b320b`, 2026-09-05) is five days newer than the fixture's last clean commit (`3c876a5`).
+///
+/// # Why an allowance and not the other two remedies
+///
+/// **Fixtures-as-data was rejected, not skipped, and the reason is measured.** It is the strongest
+/// remedy and this file already uses it in three places (`"fn wait_deadline (mut child: Child) {"`
+/// — data cannot be flagged, code can). But `crates/undrained-pipe-lint/tests/specimens.rs` is
+/// carrying **+34/-43 of another agent's uncommitted work** right now, and converting eleven
+/// compiled specimens into string literals is the largest possible diff to precisely that file.
+/// Two agents rewriting one file cannot both commit — the second sweeps the first. The convention
+/// is right and the moment is wrong; the peer's edit is **not** this conversion (quoted specimens
+/// 3→3, live piped 5→5, live `try_wait` 6→6 between HEAD and their worktree), so nothing is being
+/// duplicated by waiting.
+///
+/// **A `cfg(test)`-region exclusion was rejected on principle.** It is the cheapest and it blinds
+/// the detector in every test file in the workspace — trading one blocked file for fleet-wide
+/// silence. Acceptance item 3 exists to make that cost visible, and this remedy is built to PASS
+/// that leg where remedy C cannot.
+///
+/// # The property that separates this from a silent disable
+///
+/// Every row is an EXACT relative path. **No prefix, no glob, no directory, no extension class.**
+/// A real both-pipes-plus-poll violation in any other test file — including another file in this
+/// same `tests/` directory — is still refused. That is the whole difference between an allowance
+/// and a blind spot, and `allowance_rows_are_exact_paths_with_reasons` asserts it rather than
+/// trusting this comment.
+pub const SELF_FIXTURE_ALLOWANCE: &[(&str, &str)] = &[(
+    "crates/undrained-pipe-lint/tests/specimens.rs",
+    "this lint's own known-bad corpus: every row is a specimen the detector MUST match, so \
+     flagging them is the detector working correctly on input that exists to be flagged",
+)];
+
+/// Is `relative` one of the lint's own fixture files?
+///
+/// Compares the whole path, so `specimens.rs` in some other crate is NOT allowed and neither is
+/// `tests/specimens_extra.rs`. Normalises `\` to `/` so the comparison does not silently fail —
+/// and failing OPEN is the safe direction here: an unrecognised path is linted.
+pub fn is_self_fixture(relative: &str) -> bool {
+    let normalised = relative.replace('\\', "/");
+    SELF_FIXTURE_ALLOWANCE
+        .iter()
+        .any(|(path, _)| *path == normalised)
+}
+
 /// Scan a directory tree for `.rs` files and lint each one.
 pub fn lint_tree(root: &Path, skip_dirs: &[&str]) -> LintReport {
     let mut scanned = Vec::new();
@@ -344,6 +393,12 @@ pub fn lint_tree(root: &Path, skip_dirs: &[&str]) -> LintReport {
                     .display()
                     .to_string();
                 scanned.push(rel.clone());
+                // A NAMED self-fixture is still SCANNED and reported as scanned -- it is only
+                // exempt from producing violations. Dropping it from `scanned` would make the
+                // allowance invisible to an anti-vacuity check on the scan set.
+                if is_self_fixture(&rel) {
+                    continue;
+                }
                 let source = fs::read_to_string(&path).unwrap_or_default();
                 for (piped_line, stderr_piped_line, try_wait_line) in
                     find_detailed_violations_in_source(&source)
