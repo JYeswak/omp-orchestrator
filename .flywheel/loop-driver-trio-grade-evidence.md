@@ -1,5 +1,29 @@
 # `loop-driver` trio grade — `qfw0` / `ciab` / `80f8`
 
+> **RULING LANDED 2026-09-07 by `%6`. Read this block before citing anything below as a
+> recommendation** — every "Recommended disposition" in this file has since been ruled on, and a
+> stale recommendation licenses re-litigating a settled question.
+>
+> |bead|ruling|state now|
+> |---|---|---|
+> |`qfw0`|WIDEN, strike "joined", stays OPEN|`open`, description 4237 B, **acceptance 6095 B where there was NONE**|
+> |`ciab`|**CLOSED WONTFIX** by `%6`, premise refuted, routing adopted verbatim|`closed`, reason starts `WONTFIX - premise REFUTED`|
+> |`80f8`|RETITLE to the switch, `[A2]` amended, stays OPEN|`open`, retitled, `[A2]` correction recorded|
+>
+> **Dedup was REFUSED.** `%6` had asked for a dedup recommendation and would have taken one; the
+> disjoint-fix-site argument is what stopped a close that would have retired an unfixed defect.
+>
+> **Two things outlive this grade.** (1) The `qfw0` result corrects `AGENTS.md`, not just a bead:
+> the asupersync contract's blanket *"Region-owned tasks. No detached tasks."* **conflates
+> ownership with cancellability**, and this site needs the first without the second. That doctrine
+> edit is `%6`'s. (2) The freeze reading below is **WRONG and is corrected in place** — see the
+> `Was a new finding needed?` section.
+>
+> **One residual, deliberately NOT actioned:** `qfw0`'s title still reads *"is a detached Cx-free
+> watchdog"*, which now names the DESIRED property as the defect — the same title-asserts-the-wrong-
+> subject class that got `80f8` retitled. Flagged for `%6` rather than retitled unilaterally, on the
+> `jix1` precedent that a retitle is the orchestrator's call.
+
 Grader: pane `%19` (PearlGate, claude). Auditor: `%8` (WildStone, codex). Filer of `80f8`: `%6`.
 Acceptance amender: `%20`. Non-author of all three, different model lineage from `%8`.
 Date 2026-09-07. **Source census; no build required and none run.**
@@ -237,10 +261,41 @@ which cannot show a caller returning. So coverage exists only **after `qfw0` is 
 is an amendment to an existing bead, not a new finding. Same defect, same class, second site.
 
 **And routing one through the `Finding` kernel is currently impossible anyway**, which is worth
-recording separately: `crates/finding` is a library whose `src/bin/` directory exists and contains
-**0 files**, so there is no runnable filing path. Adding one is a new binary target under a
-`CONTRACT.md:54-58` BUILD FREEZE. That is not a reason to file prose instead; it is a reason the
-amendment route is the correct one here.
+recording separately: `crates/finding` is a library whose `src/bin/` directory exists, contains
+**0 files**, and is **untracked** — which is why `cargo metadata` reports no bin target for it. So
+there is no runnable filing path, and the amendment route is the correct one here.
+
+### RETRACTED IN THE SAME PASS — my freeze citation was wrong TWICE
+
+The sentence originally here read: *"Adding one is a new binary target under a `CONTRACT.md:54-58`
+BUILD FREEZE."* **Both halves are wrong, and `%6` caught it before it cost anything.**
+
+1. **Wrong path.** There is **no root `CONTRACT.md`** in this repo:
+   `git ls-files | grep -cE '^CONTRACT\.md$'` → **0**. The block lives at
+   `docs/plan/flow/CONTRACT.md`. A bare `CONTRACT.md:54-58` resolves to nothing.
+2. **Wrong reading, and I stopped one line early.** The freeze is at `:58`. Three lines later,
+   `:61` reads **"⛔ SUPERSEDED IN PART — DO NOT STOP READING HERE"**, and the anchored grep it
+   prescribes resolves to `:154` — **"S1 IS AUTHORIZED TO BUILD. S2–S9 REMAIN FROZEN."**
+
+```
+58   **BUILD FREEZE.** No new crate, no new feature bead, no install, until …
+61   > ⛔ **SUPERSEDED IN PART — DO NOT STOP READING HERE.** The freeze above is LIFTED FOR S1 …
+67   > grep -nE '^\*\*S1 IS AUTHORIZED TO BUILD' docs/plan/flow/CONTRACT.md
+154  **S1 IS AUTHORIZED TO BUILD. S2–S9 REMAIN FROZEN.**
+```
+
+**The document records this exact failure as having already happened once** — an orchestrator read
+"BUILD FREEZE" in bold, stopped, told the fleet all code was blocked, and routed panes to audits
+while 131 authorized S1 beads sat claimable. **I reproduced the reading; the `:61` pointer exists
+because of it, and it worked.** A superseding amendment downstream of the text it supersedes is
+invisible to a reader who stops at the bold STOP — which is why the pointer must be adjacent, and
+why a line-numbered citation into a living document is a staleness substrate in its own right.
+
+**The substantive concern survived the retraction**, which is the only reason it was worth raising:
+`%6` checked before ruling and found the amendment authorizes builds wired to an S1 layer gate and
+still freezes S2–S9, and the finding-kernel repair (`2sx1`, P0, `%20` building) is in **neither**
+list. Ruling: it proceeds as **phase-0 kernel repair and does NOT install** — build and test only.
+**Being right about the risk does not excuse citing the wrong line for it.**
 
 ---
 
