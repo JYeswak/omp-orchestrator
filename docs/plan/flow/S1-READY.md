@@ -641,42 +641,97 @@ grep -E 'validate_exit|nodes|edges' docs/plan/flow/boxes/S1.toml
 *Rationale:* a `validate_exit = 0` recorded from an earlier revision is a fooled certificate.
 
 ### R7 — S0 is closed
+
+**TWO oracles, because the first runner was broken and could not report anything else.**
+
+**Oracle A — the epic's own refusal.** `br` refuses to close an epic over open children and NAMES
+the count, independent of any query we write:
+
+```bash
+br --lock-timeout 45000 close omp-orchestrator-s0-asupersync-misapplication-audit-kvsq \
+  --reason PROBE --actor r7-probe 2>&1 | head -1
+```
+
+**Expect no `open children` warning once S0 is closed.** Measured 2026-09-07:
+**`epic has 2/13 open children`.** ❌ **FAILING — for a bounded, named reason; see below.**
+
+**Oracle B — the child set, derived with the key that surface actually uses.**
+
 ```bash
 python3 - <<'PY'
 import json
 EPIC='omp-orchestrator-s0-asupersync-misapplication-audit-kvsq'
 rows=[json.loads(l) for l in open('.beads/issues.jsonl') if l.strip().startswith('{')]
-by={r['id']:r for r in rows if r.get('id')}
-kids={d['id'] for d in (by.get(EPIC,{}).get('dependencies') or []) if d.get('id')}
-kids|={r['id'] for r in rows if (r.get('id') or '').startswith('omp-orchestrator-s0-')
-       and r['id']!=EPIC}
-open_=[k for k in kids if by.get(k,{}).get('status')!='closed']
-print('S0_EPIC=%s  CHILDREN=%d  OPEN=%d'%(by.get(EPIC,{}).get('status'),len(kids),len(open_)))
-for k in sorted(open_):
-    print('  ',by[k]['status'],'P%s'%by[k].get('priority'),k.replace('omp-orchestrator-',''))
+by={}
+for r in rows:
+    if r.get('id'): by[r['id']]=r          # jsonl is an append-log; later lines win
+# IN-edges: children point AT the epic. `br dep list` shows OUT-edges only and CANNOT see these.
+kids=[(i,r) for i,r in by.items()
+      for d in (r.get('dependencies') or [])
+      if d.get('depends_on_id')==EPIC and d.get('type')=='parent-child']
+assert kids, 'ANTI-VACUITY: zero children resolved -- the runner is broken, not S0 finished'
+open_=[(i,r) for i,r in kids if r.get('status') not in ('closed','tombstone')]
+print('EPIC=%s  CHILDREN=%d  NON_TERMINAL=%d'
+      % (by.get(EPIC,{}).get('status'), len(kids), len(open_)))
+for i,r in sorted(open_):
+    print('  ', r.get('status'), 'P%s'%r.get('priority'), i.replace('omp-orchestrator-',''))
 PY
 ```
-**Expect `S0_EPIC=closed` and `OPEN=0`.** Measured 2026-09-07 22:1xZ:
-**epic `kvsq` OPEN, 7 children, 4 OPEN — all P0.** ❌ **FAILING.**
+
+**Expect `EPIC=closed` and `NON_TERMINAL=0`.** Measured 2026-09-07: **13 children, 2 non-terminal.**
+
+> ⛔ **THE PREVIOUS RUNNER NEVER CONSULTED THE GRAPH. Finding: `omp-orchestrator-pt5w` (P0).**
+> It read `{d['id'] for d in (by.get(EPIC,{}).get('dependencies') or []) if d.get('id')}` — two
+> defects, the second masking the first. **Direction:** it read the epic's OUT-edges, while
+> `parent-child` ownership is an IN-edge. **Cross-surface consumption:** `d.get('id')` is *correct*
+> for `br show --json`, whose dependency dicts are `dependency_type, id, priority, status, title`,
+> and it was pointed at the **jsonl**, whose dicts are
+> `created_at, created_by, depends_on_id, issue_id, metadata, thread_id, type`. **The two key sets
+> share ZERO names**, so the comprehension evaluated to `set()` **unconditionally** — verified with
+> three real OUT-edges present. `br list --json` is a third shape with **no `dependencies` key at
+> all**, only `dependency_count`. Fixing the direction alone would have left the clause empty.
+> **The criterion has always rested on the `s0-` name prefix while reading as a graph query.**
+> `%20` found it; the bounded blast radius is in `pt5w`, and the in-tree fix pattern is
+> `bead-availability/src/inversion.rs:426-436` — a typed error naming the key it wanted — with its
+> fires-on-known-bad leg at `:636-644`.
+>
+> **The `assert kids` line is not decoration.** A runner resolving zero children and one resolving
+> the right set are indistinguishable when every input is empty, which is exactly how this survived.
+
+> ⛔ **SCOPE CORRECTED TWICE.** First: `jplf.1.1` and `jplf.7.2` were counted as S0 children and are
+> not — they source from `docs/plan/05-actions.md:L253-L262` and
+> `docs/plan/07-installability.md:L113-L116`. Second, 2026-09-07: **four children were parented onto
+> the epic that are not asupersync-audit work at all** — `wo0c` (blocked-agent notification), `f4xl`
+> (contabo-3 DNS), `maco` (`decisions.jsonl` duplicate ids), `nxc9` (M2 grading lane). Their
+> `parent-child` edges were removed and the gate moved **6/17 → 2/13**. **The audit was never what
+> was blocking S0.**
+>
+> **Removing those edges also surfaced two hidden beads:** `maco` and `nxc9` went `br ready`
+> **False → True**. **Being parented under an open epic hides an open bead from the queue while
+> leaving it claimable** — `%20`'s phrase, measured independently on `jix1`, is *"claimable but no
+> longer offered."* A reproducible instance of `kt0m`'s 194.
+
+**The predicate is the AUDIT SLICES, never the `phase-0` label.** Measured: 23 non-terminal
+`phase-0` rows = **3 slices + 20 findings the audits produced**. `w21v` → `qfw0`/`ciab`; `zaxp` →
+`3kcl`; pane-1 work → `47g0`/`fsu7`. **Every successful audit ADDS phase-0 rows**, so a criterion
+keyed on "phase-0 is empty" is unsatisfiable by construction — the never-fires class, same as
+docs-staleness re-staling in 25 minutes on a wave.
+
+**S0's audit is DONE.** All five `s0-audit-*` slices are terminal — `w21v`, `zaxp`, `yt9l`, `eoqd`,
+`xv5r` — and `jix1` closed `APPROVED` as a proof-of-block after `%19` proved `messaging-fabric` is
+coupled to `test-internals` by a production call site (`consumer.rs:1299-1300`; the feature gate is
+at `messaging/mod.rs:81-82`, **not** the crate root). **The epic is gated on one dependency and one
+human:**
 
 ```
-in_progress  P0  s0-audit-checkpoint-density-xv5r
-grading      P0  s0-audit-detached-spawn-w21v
-in_progress  P0  s0-audit-scope-regions-zaxp
-in_progress  P0  s0-unblock-messaging-fabric-feature-jix1
+f3g5  P0  open  block every non-arc bead behind S0   <- blocked by kt0m
+lppp  P2  open  darwin process/reap semantics        <- JOSHUA-DECISION
 ```
 
-> ⛔ **SCOPE CORRECTED.** This criterion first listed `n7yp zey6 jplf.1.1 jplf.1.2 jplf.7.2` and
-> reported "3 of 5". **`jplf.1.1` and `jplf.7.2` are not S0 children** — `jplf.1.1` sources from
-> `docs/plan/05-actions.md:L253-L262` and `jplf.7.2` from `docs/plan/07-installability.md:L113-L116`,
-> and neither appears in the epic's dependency set. Counting them made S0 look 60% done against a
-> denominator that was partly another stage's work. **The runner now derives the child set from the
-> epic instead of a hand-typed list**, which is the same fix R2 needed: stop hand-listing what a
-> query can enumerate.
 *Rationale:* S0 is the asupersync-correctness floor S1 stands on. Building S1 layers on an unproven
-cancellation contract means every layer inherits an unmeasured defect. `%20` just filed `62lz`
-(unbounded `.output()` on the commit path) — a live S0-class violation found *while* S1 was
-authorized.
+cancellation contract means every layer inherits an unmeasured defect. **`lppp` is titled `P0
+JOSHUA-DECISION` and filed at P2** — it gates S0 closure from a priority where no selector will
+offer it, which is its own defect.
 
 ### R8 — no criterion above rests on a stale or self-referential instrument
 ```bash
@@ -707,7 +762,7 @@ the reading, not the subject, every time.**
 |R5 gates NAME a known-bad leg|✅ **PASS — 7 of 7** (strict: `SUBJECT:` stripped, numbered item required). `8hq3` P0 filed by `%20`|
 |R9 has any gate ever FIRED|⚠ **INERT, and NOT WIREABLE TODAY.** 0 of **12** `gate.yml` jobs name `s1-l`, 0 in cron, all 7 `status=open`. **Wire it, do not write it — but only when all six can attach at once:** named per-layer targets exist for **L0/L3/L4/L5 and NOT L1/L2**, and no gate's known-bad leg exists as code. Attaching the four would fire **4 of 6** and read as coverage. Attach at `fsu7`'s single Rust entry point, **never seven workflow keys** — Actions is STRICT (n=60, 49 duplicate-key runs started ZERO jobs)|
 |R6 diagram receipt matches a fresh run|✅ **PASS** — 53/64, exit 0|
-|R7 S0 closed|❌ **FAIL** — epic open; 4 of 7 children open, all P0 (**scope corrected: was mis-counted as 3 of 5**)|
+|R7 S0 closed|❌ **FAIL, and the OLD RUNNER WOULD HAVE SAID PASS.** Two oracles now agree: `br close` refuses with `epic has 2/13 open children`, and the corrected jsonl runner reports `CHILDREN=13 NON_TERMINAL=2`. **The audit is DONE** — all five `s0-audit-*` slices terminal (`w21v` `zaxp` `yt9l` `eoqd` `xv5r`) plus `jix1` closed `APPROVED` as a proof-of-block. Gated on **`f3g5`** (blocked by `kt0m`) and **`lppp`** (JOSHUA-DECISION, filed P2 while titled P0). Four non-audit children were reparented off: gate moved **6/17 → 2/13**, and `maco`/`nxc9` went `br ready` **False → True** on edge removal. **Runner defect `pt5w` (P0):** old clause `d.get('id')` is correct for `br show` and was pointed at the **jsonl** — key sets share **ZERO** names, so it resolved `set()` unconditionally and would have printed `OPEN=0`. Anti-vacuity `assert` added and **verified firing** on the old key|
 |R8 instruments not stale/self-referential|❌ **FAIL, NARROWED** — self-referential half ✅ (runner `2a9df28`, on-lane 10/0). fh half **ROOT-CAUSED, NOT AGENT-FIXABLE**: needs a human TCC grant + a franken-harvest policy fix. **Tree-cleanliness DROPPED from the criterion**|
 
 **S1 IS NOT READY TO BUILD. 5 PASS · 1 NEARLY · 2 FAIL · 1 INERT.**
