@@ -92,21 +92,75 @@ UNPROVEN session=omp-orchestrator pane=%8  reason=first_capture
 OK no two-capture idle panes beside ready work
 ```
 
-**The proposed lane, on minutes offset from control-plane's `3,13,23,33,43,53`:**
+**The lane AS INSTALLED (corrected twice since first proposal):**
 
 ```cron
-8,18,28,38,48,58 * * * * cd /Users/josh/Developer/omp-orchestrator && FLEET_SESSION=omp-orchestrator /bin/bash /Users/josh/Developer/control-plane/bin/lib/scheduled-lane-run.sh --lane omp-fleet-idle-nudge --deadline 480 -- /bin/bash /Users/josh/Developer/control-plane/bin/fleet-idle-monitor.sh --nudge >> /Users/josh/.local/state/flywheel/omp-fleet-idle.log 2>&1
+8,18,28,38,48,58 * * * * cd /Users/josh/Developer/omp-orchestrator && FLEET_SESSION=omp-orchestrator timeout 480 /Users/josh/.local/bin/fleet-idle-monitor --report-only >> /Users/josh/.local/state/flywheel/omp-fleet-idle.log 2>&1
 ```
-## `cd` IS LOAD-BEARING, NOT COSMETIC — and it is a live finding for control-plane
 
-The conductor gets its queue from `br ready --json --limit 0` (`:327`), which is **cwd-dependent**,
-and **the existing control-plane cron line has no `cd`**. Measured: from `$HOME`, `br` resolves to a
-**third tracker entirely** (`fc-*` prefixes) — not `uds`, not `cp`, not `omp-orchestrator`. Yet the
-log shows `uds-*` beads being nudged into `control-plane` panes.
+**Two corrections are baked into that line and both were mine:**
 
-**So the bead source is unbound today.** Whether that is intentional (control-plane owning uds work)
-or a defect is **control-plane's call, not mine** — but without the `cd`, pointing `FLEET_SESSION` at
-this repo could dispatch another repo's beads into my panes. **Both halves are required.**
+1. **The first version invoked TWO `.sh` scripts** — `scheduled-lane-run.sh` and
+   `fleet-idle-monitor.sh` — which I justified as "reuse control-plane's harness, don't invent a
+   second scheduler." **Joshua: *"isn't the whole point to have the scheduler baked into ompo instead
+   of using .sh scripts."*** That is this repo's ONE RULE, and I broke it by borrowing another repo's
+   shell. Both are gone: the crontab header already exports the only three variables the wrapper set
+   (`PATH`, `LC_ALL`, `TMUX_TMPDIR`), and `timeout` is a real binary, so the wall bound survives
+   without the harness. **Lane is now 0 `.sh`.**
+2. **`--nudge` → `--report-only`**, because the queue is unbound. See the retraction below.
+
+**Still not the end state.** `fleet-idle-monitor` is **control-plane's** crate, so this repo's
+keepalive depends on another repository — the same boundary error retracted at `260a3c5`. `ompo` is
+now installed (`Mach-O 64-bit arm64`, 896,128 B, **86 adapters / 11 probe ids**, cross-built on
+Contabo with **zero local Rust builds**), so **`ompo tick` is the candidate home** and `47g0` item 8
+names it.
+## ⛔ RETRACTED 2026-09-07: `cd` DOES **NOT** BIND THE QUEUE. The lane misrouted and is DISARMED.
+
+> **This section originally claimed the `cd` was the second required half and that both halves
+> together bound the queue. THE LANE PROVED OTHERWISE WITHIN THE HOUR.** Filed as
+> **`omp-orchestrator-47g0`** (P0). Lane is now `--report-only`; `--nudge` removed.
+
+**What happened, from the lane's own log:**
+
+```
+IDLE_PROVEN    session=omp-orchestrator pane=%20 age=600s timer=21d
+NUDGE_VERIFIED session=omp-orchestrator pane=%20 bead=uds-snq transition=omp_working_marker
+```
+
+It classified **this** session's panes correctly and dispatched **another repository's bead** into a
+live pane. `%20` refused to work it with three independent proofs: `br show uds-snq` →
+`ISSUE_NOT_FOUND` with **zero** `uds-`-prefixed beads here; the acceptance demands package
+`uds-fuzz` while this repo's is `omp-orchestrator-fuzz`; and `git cat-file -e 4a55b58` fails.
+
+**THE REAL DEFECT IS TWO INDEPENDENT BINDINGS WITH ONLY ONE PARAMETERISED:**
+
+```
+fleet-idle-monitor.rs:117   env::var("FLEET_SESSION")…unwrap_or("control-plane")   <- the PANES
+fleet-idle-monitor.rs:327   .args(["ready","--json","--limit","0"])                <- the QUEUE
+                                                    no env var · no flag · not cwd
+```
+
+**`FLEET_SESSION` selects which panes to classify. NOTHING selects which tracker to dispatch from.**
+
+**And `cd` provably does not fix it** — the lane carries
+`cd /Users/josh/Developer/omp-orchestrator &&` for exactly this purpose, and `br ready` from that
+cwd returns `omp-orchestrator-815`. **The nudge still carried `uds-snq`.** Why the binary ignores
+its invocation cwd is **UNMEASURED**; `47g0` item 2 owns it.
+
+**WHY IT IS P0: THE FAILURE IS SILENT AND SELF-CERTIFYING.** The receipt reads `NUDGE_VERIFIED`
+with a real pane transition, so every liveness surface says healthy while a pane burns a turn on
+work that **cannot be satisfied in the tree it is sitting in.** `%20` caught it only because it
+verified the bead existed before working it — `file → claim → dispatch` catching a dispatch that
+should never have been constructible.
+
+**Fourth cross-repo instance tonight, and the first that dispatched WORK rather than a citation:**
+`close-evidence-gate` doctrine borrowed into `AGENTS.md` (retracted `260a3c5`), `fleet-arc-report`
+cited as in-repo when it exists only in control-plane, `8b1`'s deliverable being cross-repo by
+construction — then this.
+
+**What survives from the original section:** control-plane's own line has no `cd` either, and from
+`$HOME` `br` resolves to a **third** tracker (`fc-*` prefixes). That remains a live finding for
+them — but it is **not** the mechanism here, and I published it as though it were.
 
 ## What this does NOT solve — stated so nobody reads it as covered
 
