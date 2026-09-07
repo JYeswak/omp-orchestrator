@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ai.zeststream.omp-orchestrator.m2-grading-lane</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/josh/.local/bin/m2-grading-lane</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>/Users/josh</string>
+        <key>PATH</key>
+        <string>/Users/josh/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>M2_ORACLE</key>
+        <string>/Users/josh/.local/state/flywheel/m2-grading-lane.jsonl</string>
+        <key>OMP_REPO</key>
+        <string>/Users/josh/Developer/omp-orchestrator</string>
+        <key>OMP_SESSION</key>
+        <string>omp-orchestrator</string>
+    </dict>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/josh/Developer/omp-orchestrator</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StartInterval</key>
+    <integer>300</integer>
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/josh/.local/state/flywheel/m2-grading-lane.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/josh/.local/state/flywheel/m2-grading-lane.err</string>
+</dict>
+</plist>
