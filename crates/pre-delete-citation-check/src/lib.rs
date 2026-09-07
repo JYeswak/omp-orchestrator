@@ -28,6 +28,72 @@
 use serde_json::Value;
 use std::fmt;
 use std::path::Path;
+use std::process::Command;
+use std::time::Duration;
+
+pub use omp_types::named_outcomes::ChildOutcome;
+
+/// Deadline for `git diff --cached --diff-filter=D --name-only`.
+///
+/// A local index read with no lock contention; 30s is two orders of magnitude
+/// above any observed value and exists to terminate a wedged child, not to
+/// police a slow one.
+pub const GIT_DIFF_DEADLINE: Duration = Duration::from_secs(30);
+
+/// Deadline for `br list --json --status closed`.
+///
+/// DELIBERATELY GENEROUS, and the number is argued rather than picked. This gate
+/// runs on the COMMIT path against a ~31 MB `.beads/beads.db` with several live
+/// writers, where AGENTS.md records reads at 40-250s, one `br comments add` at
+/// 56.7s under contention, and a close attempt held for 290s. A ceiling below
+/// that band would fire on a HEALTHY-but-contended read and refuse every commit
+/// in the repo -- the over-strict-gate failure the acceptance for this fix names,
+/// and the same defect as the `mail_pending` ceiling set under its subject's own
+/// documented deadline, where every measured CANCELED was the caller's SIGTERM
+/// landing first. 300s sits above the observed band, so a fire means WEDGED.
+pub const BR_LIST_DEADLINE: Duration = Duration::from_secs(300);
+
+/// Spawn `command` under `deadline` and return the TYPED outcome.
+///
+/// THE DEFECT THIS CLOSES (`omp-orchestrator-62lz`, P0): both spawns on this
+/// commit-path gate used a raw `.output()` with NO DEADLINE. A wedged `br` blocked
+/// a `git commit` forever and the operator could not tell "br is thinking" from
+/// "br is wedged".
+///
+/// WHICH BUG THIS IS, because conflating the two is how a fixer leaves the hole
+/// open: this is a DEADLINE hole, NOT the undrained-pipe deadlock. `.output()`
+/// already drains both stdout and stderr -- that is what it is for -- so the
+/// ~64 KiB `try_wait()` deadlock in AGENTS.md's asupersync section never applied
+/// here. Its tell is 0% CPU with no children; this one's tell is a live child that
+/// never returns. Adding a pipe drain would have "fixed" a bug that was not present
+/// and left this one intact.
+///
+/// A TIMEOUT IS NOT A VERDICT. The deadline arm returns
+/// `ChildOutcome::TimedOut { group_killed: true }` and never `Completed`, so no
+/// caller can read a killed child's empty stdout as "nothing found". `SpawnFailed`
+/// stays distinct from `TimedOut` because the remedies differ: a PATH/env problem
+/// versus a wedged subject.
+///
+/// `bounded_output` rather than `bounded_status`: this crate CAPTURES stdout and
+/// parses it. `subprocess-contract` makes the child its own process-group leader
+/// and signals the GROUP on the deadline, so grandchildren cannot survive at
+/// ppid=1 -- which is why this does not hand-roll a timer.
+pub fn run_bounded(command: &mut Command, deadline: Duration) -> ChildOutcome {
+    match subprocess_contract::bounded_output(command, deadline) {
+        subprocess_contract::BoundedOutcome::Completed(output) => ChildOutcome::Completed {
+            code: output.status.code(),
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        },
+        subprocess_contract::BoundedOutcome::TimedOut => ChildOutcome::TimedOut {
+            after_ms: u64::try_from(deadline.as_millis()).unwrap_or(u64::MAX),
+            group_killed: true,
+        },
+        subprocess_contract::BoundedOutcome::Unspawned(error) => ChildOutcome::SpawnFailed {
+            message: error.to_string(),
+        },
+    }
+}
 
 /// A closed bead whose blob (close_reason or comments) cites a deleted path.
 #[derive(Debug, Clone, PartialEq, Eq)]
