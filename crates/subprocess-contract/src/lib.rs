@@ -474,6 +474,68 @@ mod tests {
         }
     }
 
+    /// WHICH CHANNEL EMITTED A MARKER LINE — item `3b`, and it is a FIELD, not a comment.
+    ///
+    /// `%7` measured the real figure under `-- --nocapture`: **five** marker lines, not four,
+    /// because the routing-oracle test calls the same reporting helper as the four group legs. The
+    /// count in the acceptance was wrong and the code was right, so the fix is to make the two
+    /// kinds distinguishable IN THE LINE rather than to suppress the oracle's marker. Deleting real
+    /// diagnostic output to make an integer match is bending evidence to fit a spec — the same move
+    /// as widening a criterion to pass a gate.
+    ///
+    /// **NEVER ASSERT THE SUM.** `5` is also satisfied by five legs and zero oracles, which is a
+    /// different program. `marker_emitter_counts_are_independent_and_never_summed` asserts `4` and
+    /// `1` in separate legs for exactly that reason.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum MarkerEmitter {
+        /// One of the four `#[test]` bodies that route through the platform verdict.
+        GroupLeg,
+        /// `verdict_codes_are_pairwise_distinct_and_the_routing_matches_the_platform`, which calls
+        /// the routing function so that a mutation REACHES its assertions (item 5). Its marker is a
+        /// by-product of that, and it is real output from a real test.
+        RoutingOracle,
+    }
+
+    impl MarkerEmitter {
+        /// Token values are chosen so **neither is a substring of the other**. A grep for one kind
+        /// must not match the other, which is the entire point of the field; the invariant is
+        /// asserted rather than trusted, because a later rename to `oracle` / `oracle-routing`
+        /// would silently reintroduce the conflation.
+        fn as_str(self) -> &'static str {
+            match self {
+                Self::GroupLeg => "group-leg",
+                Self::RoutingOracle => "routing-oracle",
+            }
+        }
+    }
+
+    /// Render a marker line. Both emit sites go through here, so a test can assert the field is
+    /// present in the ACTUAL text instead of inferring it from a source token.
+    ///
+    /// ITEM 3c — A MARKER COUNT IS EVIDENCE ABOUT REPORTING, NOT ABOUT EXECUTION. `%7` measured
+    /// 13 passed / 0 failed in 3.12s WITH `--nocapture` and 13 passed / 0 failed in 3.13s WITHOUT
+    /// it, zero markers visible. The tests run either way; only the output vanishes, because
+    /// libtest captures stdout for a passing test. The RUNTIME figure is the execution oracle
+    /// (`%19`: 0.76s -> 3.15s when the bodies execute); these lines say what was DECIDED and never
+    /// that anything ran. A reader who counts markers has measured the reporting channel.
+    ///
+    /// And on Darwin the count is ZERO: the shipped-platform arm returns before printing, so the
+    /// five-line figure is a property of a LINUX run. A marker census is platform-scoped too.
+    fn platform_marker_line(
+        headline: &str,
+        test_name: &str,
+        emitter: MarkerEmitter,
+        verdict_code: u8,
+    ) -> String {
+        format!(
+            "{headline} property=process_group_kill_and_reap test={test_name} \
+             emitter={} platform={} verdict_code={verdict_code} \
+             retry_if=darwin-native-run (human-consumed; nothing reads this token)",
+            emitter.as_str(),
+            std::env::consts::OS
+        )
+    }
+
     /// Route a group-kill test by platform.
     ///
     /// WHY THIS IS NOT `#[cfg]`: a runtime branch keeps all four bodies compiled and type-checked
@@ -491,7 +553,10 @@ mod tests {
     /// `retry_if` IS HUMAN-CONSUMED. Nothing reads it — not a workflow, hook, crontab or crate; it
     /// is emitted and never consulted. The `key=value` shape reads as machine-consumed and invites
     /// the inference of an automated retrigger that does not exist. It is a note to an operator.
-    fn group_kill_platform_verdict(test_name: &str) -> GroupKillPlatformVerdict {
+    fn group_kill_platform_verdict(
+        test_name: &str,
+        emitter: MarkerEmitter,
+    ) -> GroupKillPlatformVerdict {
         if cfg!(target_os = "macos") {
             return GroupKillPlatformVerdict::VerifiedOnThisPlatform;
         }
@@ -501,20 +566,25 @@ mod tests {
             // whole correction: the previous code emitted an absence and skipped the measurement it
             // was already capable of making.
             println!(
-                "MEASURED_OFF_SHIPPED_PLATFORM property=process_group_kill_and_reap \
-                 test={test_name} platform={} shipped_platform=darwin \
-                 verdict_code={GROUP_KILL_MEASURED_OFF_PLATFORM_VERDICT_CODE} \
-                 retry_if=darwin-native-run (human-consumed; nothing reads this token)",
-                std::env::consts::OS
+                "{}",
+                platform_marker_line(
+                    "MEASURED_OFF_SHIPPED_PLATFORM",
+                    test_name,
+                    emitter,
+                    GROUP_KILL_MEASURED_OFF_PLATFORM_VERDICT_CODE
+                )
             );
             return GroupKillPlatformVerdict::MeasuredOffShippedPlatform;
         }
 
         println!(
-            "UNMEASURED_ON_THIS_PLATFORM property=process_group_kill_and_reap \
-             test={test_name} platform={} verdict_code={GROUP_KILL_UNMEASURED_VERDICT_CODE} \
-             retry_if=darwin-native-run (human-consumed; nothing reads this token)",
-            std::env::consts::OS
+            "{}",
+            platform_marker_line(
+                "UNMEASURED_ON_THIS_PLATFORM",
+                test_name,
+                emitter,
+                GROUP_KILL_UNMEASURED_VERDICT_CODE
+            )
         );
         GroupKillPlatformVerdict::UnmeasuredOnThisPlatform
     }
@@ -552,7 +622,10 @@ mod tests {
 
         // FIRES-ON-KNOWN-BAD: the routing must agree with the platform it is running on. Flipping
         // the Linux branch back to UnmeasuredOnThisPlatform reddens exactly this.
-        let observed = group_kill_platform_verdict("verdict_codes_are_pairwise_distinct");
+        let observed = group_kill_platform_verdict(
+            "verdict_codes_are_pairwise_distinct",
+            MarkerEmitter::RoutingOracle,
+        );
         let expected = if cfg!(target_os = "macos") {
             GroupKillPlatformVerdict::VerifiedOnThisPlatform
         } else if cfg!(target_os = "linux") {
@@ -564,6 +637,206 @@ mod tests {
             observed, expected,
             "routing disagreed with the platform: on linux this property IS measured, and \
              reporting UNMEASURED there is the false claim this bead exists to remove"
+        );
+    }
+
+    /// Blank line-comment and block-comment spans before matching, so a doc comment that
+    /// DESCRIBES a call site cannot be counted AS one. `AGENTS.md` records seven instances of that
+    /// class, one where a comment warning about a needle contained the needle and kept a census
+    /// GREEN after the emit site was deleted.
+    ///
+    /// THE DELIMITERS ARE COMPARED CHARACTER BY CHARACTER, NOT AS TWO-CHARACTER STRINGS, and the
+    /// first version of this function is why. It matched `pair == "..."` against string literals
+    /// holding the delimiters — its own three comparison arms — so scanning this file entered
+    /// block-comment mode at the FIRST of them and blanked everything after it. That arm sits
+    /// above the four call sites, so the census returned `0` where the truth was `4`. Eighth
+    /// instance in this repository of a checker whose input contains text about the thing it
+    /// checks, and it was caught by the leg it was written to serve rather than by review.
+    ///
+    /// Comparing characters means no adjacency of the delimiters exists in this function's own
+    /// source, and the closing assertion makes the residual class LOUD: a block opener inside any
+    /// other string literal would swallow the tail of the file, report FEWER call sites, and read
+    /// exactly like a real absence.
+    fn code_only(source: &str) -> String {
+        const SLASH: char = '/';
+        const STAR: char = '*';
+        let chars: Vec<char> = source.chars().collect();
+        let mut out = String::with_capacity(source.len());
+        let mut index = 0;
+        let mut in_block = false;
+        while index < chars.len() {
+            let here = chars[index];
+            let next = chars.get(index + 1).copied();
+            if in_block {
+                if here == STAR && next == Some(SLASH) {
+                    in_block = false;
+                    index += 2;
+                    continue;
+                }
+                out.push(if here == '\n' { '\n' } else { ' ' });
+                index += 1;
+                continue;
+            }
+            if here == SLASH && next == Some(STAR) {
+                in_block = true;
+                index += 2;
+                continue;
+            }
+            if here == SLASH && next == Some(SLASH) {
+                while index < chars.len() && chars[index] != '\n' {
+                    out.push(' ');
+                    index += 1;
+                }
+                continue;
+            }
+            out.push(here);
+            index += 1;
+        }
+        assert!(
+            !in_block,
+            "the stripper ended INSIDE a block comment: a block opener in a string literal \
+             swallowed the tail of the file. That reports fewer call sites and reads like a real \
+             absence, so it is asserted rather than left to look like a low count."
+        );
+        out
+    }
+
+    /// ITEM 3b — the two marker kinds are counted INDEPENDENTLY, and the sum is never asserted.
+    ///
+    /// `5` is satisfied by four legs and one oracle, and equally by five legs and zero oracles.
+    /// Those are different programs, so a single total cannot distinguish them and this test
+    /// refuses to compute one. Without this leg, the next reader who adds a second diagnostic
+    /// caller silently makes the figure six with nothing failing — the count-in-prose staleness
+    /// this repository has paid for repeatedly.
+    ///
+    /// The needles are ASSEMBLED FROM PARTS so this test's own source cannot satisfy it. The
+    /// census reads `src/lib.rs`, which is the file this test lives in; a spelled-out needle here
+    /// would make the checker its own input.
+    #[test]
+    fn marker_emitter_counts_are_independent_and_never_summed() {
+        const SOURCE: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"));
+        let code = code_only(SOURCE);
+
+        // POSITIVE CONTROL FIRST. Every count below is meaningless from a stripper that returns
+        // nothing, and a zero from a broken instrument is indistinguishable from a real absence.
+        assert!(
+            code.contains(concat!("fn ", "group_kill_platform_verdict")),
+            "the stripper must preserve real code — positive control failed"
+        );
+        // THE NEGATIVE CONTROL'S NEEDLE MUST ALSO BE ASSEMBLED FROM PARTS. The first version
+        // spelled it out, and the phrase then existed in this test's own string literals — which
+        // survive stripping because they are CODE. So the control failed while the stripper was
+        // working correctly. Ninth instance in this repository of a checker whose input contains
+        // text about the thing it checks, and the second in this one function.
+        let comment_only = concat!("NEVER ASSERT ", "THE SUM");
+        assert!(
+            !code.contains(comment_only),
+            "the stripper must remove comment text; that phrase exists only in a doc comment"
+        );
+        assert!(
+            SOURCE.contains(comment_only),
+            "…and it must be present unstripped, or the negative control is vacuous"
+        );
+
+        let leg_needle = concat!("MarkerEmitter", "::", "GroupLeg");
+        let oracle_needle = concat!("MarkerEmitter", "::", "RoutingOracle");
+
+        // COUNT CALL SITES OF THE ROUTING FUNCTION, NOT BARE VARIANT OCCURRENCES. Counting the
+        // variant token returned 8 where the truth was 4, because this very test uses the variant
+        // four more times — in the rendered-line legs below. Those are real uses and not call
+        // sites, so the fix is to ask the precise question rather than to move the test out of the
+        // file. Assembling the needle from parts protects the checker from the needle's TEXT; it
+        // does nothing about the checker's genuine USE of the thing it counts.
+        let call_token = concat!("group_kill_platform_verdict", "(");
+        let mut legs = 0usize;
+        let mut oracles = 0usize;
+        let mut unlabelled = 0usize;
+        let mut call_sites = 0usize;
+        let mut cursor = 0usize;
+        while let Some(offset) = code[cursor..].find(call_token) {
+            let at = cursor + offset;
+            cursor = at + call_token.len();
+            // The DEFINITION is not a call site. Its signature names the parameter type and would
+            // otherwise land in `unlabelled`, which is the anti-vacuity arm.
+            if code[..at].ends_with("fn ") {
+                continue;
+            }
+            call_sites += 1;
+            let mut window_end = (cursor + 320).min(code.len());
+            while !code.is_char_boundary(window_end) {
+                window_end += 1;
+            }
+            let window = &code[cursor..window_end];
+            let arguments = &window[..window.find(')').unwrap_or(window.len())];
+            if arguments.contains(leg_needle) {
+                legs += 1;
+            } else if arguments.contains(oracle_needle) {
+                oracles += 1;
+            } else {
+                unlabelled += 1;
+            }
+        }
+
+        // ANTI-VACUITY. A scan that finds no call sites reports `0` and `0`, which would satisfy
+        // neither figure — but it would satisfy a reader who only checked that nothing panicked.
+        assert!(
+            call_sites >= 5,
+            "the scan found {call_sites} call sites; an empty or near-empty scan set is an ERROR, \
+             never a pass"
+        );
+        assert_eq!(
+            unlabelled, 0,
+            "{unlabelled} call site(s) pass an emitter this census cannot classify — a caller that \
+             threads the kind through a variable is invisible to the grep item 3b requires"
+        );
+
+        // FIRST FIGURE, on its own.
+        assert_eq!(
+            legs, 4,
+            "exactly four group legs must route through the platform verdict; a fifth leg or a \
+             deleted one changes what the marker census means"
+        );
+
+        // SECOND FIGURE, on its own. Asserted separately and deliberately never added to the
+        // first — that arithmetic is the thing item 3b forbids.
+        assert_eq!(
+            oracles, 1,
+            "exactly one routing-oracle caller must exist; a second diagnostic caller must fail \
+             this leg rather than quietly raise the marker total"
+        );
+
+        // THE FIELD MUST BE IN THE LINE, not merely in the source. A grep for one kind must not
+        // match the other, so neither token may contain the other.
+        let leg = platform_marker_line(
+            "MEASURED_OFF_SHIPPED_PLATFORM",
+            "deadline_killed_child_is_reaped_not_orphaned",
+            MarkerEmitter::GroupLeg,
+            GROUP_KILL_MEASURED_OFF_PLATFORM_VERDICT_CODE,
+        );
+        let oracle = platform_marker_line(
+            "MEASURED_OFF_SHIPPED_PLATFORM",
+            "verdict_codes_are_pairwise_distinct",
+            MarkerEmitter::RoutingOracle,
+            GROUP_KILL_MEASURED_OFF_PLATFORM_VERDICT_CODE,
+        );
+        let leg_field = format!("emitter={}", MarkerEmitter::GroupLeg.as_str());
+        let oracle_field = format!("emitter={}", MarkerEmitter::RoutingOracle.as_str());
+        assert!(
+            leg.contains(&leg_field) && !leg.contains(&oracle_field),
+            "a group-leg marker must carry only the leg field: {leg}"
+        );
+        assert!(
+            oracle.contains(&oracle_field) && !oracle.contains(&leg_field),
+            "an oracle marker must carry only the oracle field: {oracle}"
+        );
+        assert!(
+            !MarkerEmitter::GroupLeg
+                .as_str()
+                .contains(MarkerEmitter::RoutingOracle.as_str())
+                && !MarkerEmitter::RoutingOracle
+                    .as_str()
+                    .contains(MarkerEmitter::GroupLeg.as_str()),
+            "neither emitter token may be a substring of the other, or a grep for one kind              matches the other and the field buys nothing"
         );
     }
 
@@ -626,8 +899,10 @@ mod tests {
 
     #[test]
     fn deadline_killed_child_is_reaped_not_orphaned() {
-        if group_kill_platform_verdict("deadline_killed_child_is_reaped_not_orphaned")
-            == GroupKillPlatformVerdict::UnmeasuredOnThisPlatform
+        if group_kill_platform_verdict(
+            "deadline_killed_child_is_reaped_not_orphaned",
+            MarkerEmitter::GroupLeg,
+        ) == GroupKillPlatformVerdict::UnmeasuredOnThisPlatform
         {
             return;
         }
@@ -727,6 +1002,7 @@ mod tests {
     fn timeout_kills_the_process_group_and_is_not_a_failure_verdict() {
         if group_kill_platform_verdict(
             "timeout_kills_the_process_group_and_is_not_a_failure_verdict",
+            MarkerEmitter::GroupLeg,
         ) == GroupKillPlatformVerdict::UnmeasuredOnThisPlatform
         {
             return;
@@ -799,6 +1075,7 @@ mod tests {
     fn bounded_status_kills_a_hung_child_and_refuses_to_call_it_completed() {
         if group_kill_platform_verdict(
             "bounded_status_kills_a_hung_child_and_refuses_to_call_it_completed",
+            MarkerEmitter::GroupLeg,
         ) == GroupKillPlatformVerdict::UnmeasuredOnThisPlatform
         {
             return;
@@ -837,8 +1114,10 @@ mod tests {
     /// too - the failure created the condition for its own repetition.
     #[test]
     fn bounded_status_signals_the_group_so_grandchildren_die_too() {
-        if group_kill_platform_verdict("bounded_status_signals_the_group_so_grandchildren_die_too")
-            == GroupKillPlatformVerdict::UnmeasuredOnThisPlatform
+        if group_kill_platform_verdict(
+            "bounded_status_signals_the_group_so_grandchildren_die_too",
+            MarkerEmitter::GroupLeg,
+        ) == GroupKillPlatformVerdict::UnmeasuredOnThisPlatform
         {
             return;
         }

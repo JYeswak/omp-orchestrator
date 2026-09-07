@@ -18,6 +18,18 @@
 //! platform produced no evidence in either direction"*, which is a signal worth acting on. A
 //! measurement is not a failure.
 
+/// WHICH CHANNEL EMITTED THIS LINE — item `3b`, extended to the third channel.
+///
+/// `src/lib.rs` labels its markers `group-leg` and `routing-oracle`. This target is a THIRD emitter
+/// of the same headlines, and a kind identified only by the ABSENCE of a field is a state
+/// distinguished by a default branch — the shape `AGENTS.md` names, where adding a case silently
+/// reacquires the defect. So it carries its own token, and the leg grep stays exact even when both
+/// targets run under one command.
+///
+/// NOT A CHANGE TO WHAT %7 VERIFIED: exit 0 on Linux, `verdict_code=21`, the caveat, and both
+/// witness names are untouched. This is an additive field.
+const EMITTER: &str = "platform-scope-reporter";
+
 /// The property under scope.
 const PROPERTY: &str = "process_group_kill_and_reap";
 
@@ -89,8 +101,8 @@ fn main() {
 
     if cfg!(target_os = "macos") {
         println!(
-            "VERIFIED_ON_THIS_PLATFORM property={PROPERTY} platform={SHIPPED_PLATFORM} \
-             legs={GROUP_LEGS} verdict_code={VERIFIED_VERDICT_CODE} \
+            "VERIFIED_ON_THIS_PLATFORM property={PROPERTY} emitter={EMITTER} \
+             platform={SHIPPED_PLATFORM} legs={GROUP_LEGS} verdict_code={VERIFIED_VERDICT_CODE} \
              group_witness={GROUP_HALF_WITNESS}"
         );
         return;
@@ -98,7 +110,7 @@ fn main() {
 
     if cfg!(target_os = "linux") {
         println!(
-            "MEASURED_OFF_SHIPPED_PLATFORM property={PROPERTY} platform={} \
+            "MEASURED_OFF_SHIPPED_PLATFORM property={PROPERTY} emitter={EMITTER} platform={} \
              shipped_platform={SHIPPED_PLATFORM} legs={GROUP_LEGS} \
              verdict_code={MEASURED_OFF_PLATFORM_VERDICT_CODE} \
              reap_witness={REAP_HALF_LINUX_WITNESS} group_witness={GROUP_HALF_WITNESS} \
@@ -113,8 +125,8 @@ fn main() {
     }
 
     println!(
-        "UNMEASURED_ON_THIS_PLATFORM property={PROPERTY} platform={} legs={GROUP_LEGS} \
-         verdict_code={UNMEASURED_VERDICT_CODE} \
+        "UNMEASURED_ON_THIS_PLATFORM property={PROPERTY} emitter={EMITTER} platform={} \
+         legs={GROUP_LEGS} verdict_code={UNMEASURED_VERDICT_CODE} \
          retry_if=darwin-native-run (human-consumed; nothing reads this token)",
         std::env::consts::OS
     );
