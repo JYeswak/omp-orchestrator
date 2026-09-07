@@ -83,7 +83,72 @@ Honest summary: of the four skills this loop applied, **none was selected by the
 | **josh-review-discipline** | nsx1 (S9 reader, no writer: 1 row vs 188 refusals), HD-0008 decided then blocked (17pm), an SLB approval that stalled the reaper install | description: file a Tier-3 decision instead of "decision needed" blasts; poll approved/denied — the S9 writer nsx1 specifies. Cited |
 | **eidetic-engine-cli** / **cass** | jx-history-underused: no `.ee/ee.db` in this repo while control-plane's store holds the exact 2kx2 catch; cass stalled so no session history either; 2kx2 class re-derived 7×, instrument-error taxonomy rebuilt from scrollback | CLAUDE.md §ee ("`ee pack` BEFORE substantive work; `ee remember` is the capture verb"); the skill's `ee resume/pack/remember/why/outcome` hot path → **bead filed (B4)** |
 | **agent-mail** | yfp2 (ambient AGENT_NAME=WildStone; 21/23 mails refused), 2kx2 (reservations empty vs 2 locks), ve4w (no fence) | map kickoff: "reserve files before editing and use the bead id as the thread id" — camp-01; cited (yfp2/2kx2/ve4w) |
-| **socraticode** | xrtc's text-keyed class is CLAUDE.md's grep-first tripwire; pass 5 timed out twice and fell back to structural reads | CLAUDE.md banner (search by meaning before grep); skill description "is X wired / code claim audit / silent zero-hits". Instrument UNKNOWN this pass; cited |
+| **~~socraticode~~ → ripwire** | **socraticode is RETIRED** (CLAUDE.md, Joshua 2026-09-07). Measured the same day: `ripwire --callers` answered in **200 ms rc=0** while socraticode returned `Cannot reach external Qdrant at localhost:6433` with both containers up, plus a 78 GiB index invisible to `docker system df`. In THIS repo the MCP surface returned `Unknown tool` all session and every "search before building" claim silently degraded to grep. | Replaced by the ripwire verdict below. |
+
+### ripwire instrument verdict — measured 2026-09-07, omp-orchestrator (84 crates, 444 files)
+
+**CONFIRMS the CLAUDE.md split: structural queries are the strength, semantic recall is the blind
+spot.** Requested by control-plane pane 0 so it does not scroll.
+
+|query|result|verdict|
+|---|---|---|
+|`--callers=kill_group`|`count=1`, matches the single call site at `tick-monitor/src/lib.rs:131`|**WORKS** (positive control)|
+|`--callers=run_output`|`defs=6 count=20`|**WORKS**|
+|`--deps`|`files=444`|**WORKS**|
+|ranked map, `--top-k`|84 crates in **0.24 s**, top symbol `ClaimStrength::Err` in `omp-types` (plausible: the vocabulary crate 19 crates depend on)|**WORKS**|
+|`--uses=<Rust type>`|`count=0` for `ChildOutcome`, which has **6 files / 23 construction sites**|**DOCUMENTED LIMIT, NOT A BUG** — see below|
+|`--uses=src/lib.rs:SYM`|adds `narrowed_roles="call" call_sites_of_name=0`|the `file:name` form **narrows to the call role**, structurally zero for a type|
+|`--impact=SYM`|carries `reaches`/`importers`, **not** `count=`|read the right attribute or you read absence|
+|`--query`|its own help calls it *"raw BM25 ranking (debug); use --for"*|**lexical, not semantic** — no `codebase_search`-by-meaning equivalent|
+
+**⛔ THE TRAP THAT ALMOST COST US AN UPSTREAM FILING.** `role="type"` is documented
+`captured C/C++/ObjC only` in ripwire's own `src/graphlegend.h` → `kUsesLegendOpen`, **and that
+legend is emitted as an XML comment on every `--uses` call.** My pipeline was
+`| tr '<' '\n' | grep -m1 '^uses'`, which **discards the legend and keeps only the envelope** — so I
+read a documented scoping limit as a confident false zero, built a clean-room repro, ran the full
+`/jeff-issue-chain` (dedup probe: zero hits `--state all` × 3 queries; v0.4.0 released the same day
+01:20Z, so we were current), and was stopped by the rubric's `source_trace` axis, which sent me to
+clone the source — where the legend said the behaviour was intended. **NEVER PIPE AWAY A TOOL'S OWN
+LEGEND.** Withdrawn, not softened; nothing was filed.
+
+**Operational rule:** `--callers` / `--callees` / `--impact` / `--deps` are admissible evidence for
+**functions** with a positive control on the matcher. `--uses` on a **Rust type** is UNMEASURED,
+never zero. A ripwire miss means *"not found by name in the call graph"*, never *"does not exist"*.
+
+**Honesty about ripwire's contribution to today's asupersync/fsqlite gap findings:** ripwire gave
+the **section ranking** of both mega-skills (asupersync top: `SOURCE-MAP`, `STACK-SURFACES`,
+`REPO-CONTRIBUTOR-GUIDE`, `SUPERVISION-OTP`, `BUDGET-OUTCOME-CAPABILITIES`; frankensqlite top:
+`PERF-CLAIMS-DISCIPLINE`, `OPERATOR-CARDS`, `INCIDENT-CORPUS`, `STATUS-LEDGER`,
+`CONCURRENCY-CONTRACT-USAGE`). **The concrete gaps below came from a prescription-vs-source scan,
+NOT from ripwire** — 241 production `.rs` files across 85 crates, comments stripped. Attributing
+them to ripwire would be the false-attribution defect this ledger exists to prevent.
+
+### asupersync prescription gaps — 7 surfaces used ZERO times in production
+
+`Cx::spawn`/`Cx::spawn_in` **0** · capability narrowing (`CapSet`/`cx_narrow`) **0** · native
+drain-correct `select!`/`race!` **0** · `JoinSet` **0** · `AppSpec`/supervision/actor **0** ·
+`TaskResultSender` **0** · two-phase `reserve()/send()` **0**.
+**Present:** `&Cx` 25 files · `checkpoint()` 23 · `RuntimeBuilder` 15 · `Budget` 5 · `Outcome` 5 ·
+`Scope` 2 · `request_cx_with_budget` 2 · `LabRuntime` 1. Whether each absence is a defect or
+correct-for-this-repo is the classification work of `zaxp` and `w21v` — **this row is a census, not
+a verdict.**
+
+**THREE UNBOUNDED CHILDREN IN THE RESIDENT SUPERVISOR**, while `omp-orchestrator/Cargo.toml`
+already declares `subprocess-contract` and `bounded_output`/`bounded_status` already exist:
+`main.rs:4077` `df -k` (in `fn disk_pressure`) · `resident_tick.rs:466` `shasum -a 256` ·
+`target_directory.rs:318` **`lsof -nP +D <path>`**, which recursively walks a tree — and two live
+`lsof -nP +D /Volumes/…` processes were in this host's process list tonight. Same deadline-hole
+class as `62lz`, but in the component whose whole job is bounded observation.
+
+**`tokio` is CLEAN — and my first scan said otherwise.** Both hits are **detector needles with zero
+manifest deps**: `asupersync-conformance/src/lib.rs:11` is the forbidden-crate list itself, and
+`crate-soundness-verify/src/main.rs:207` is `text.contains("tokio")`. **Eighth instance of a
+detector matching its own text** in one session — strip comments and check the manifest before
+calling a needle a dependency.
+
+**Warning carried from control-plane pane 0, unverified by me:** ripwire **indexes what it finds**,
+so in a shared checkout it will index agent scratch trees and multiply results. Check the paths in
+the output before trusting any census.
 
 Gaps (catalog queries that came up empty, `gaps.json`): gap-01 typed dispatch receipt "delivered vs submitted vs acked" wired into the ACK wait (only a prose library skill exists); gap-02 an S6 grading dispatcher (the catalog's closest is a read-only audit). Outside every catalog this run could enumerate: `substrate-liveness-diagnosis` (ms archive only), `verification-before-completion` / `systematic-debugging` (plugin skills, not in `~/.claude/skills*`).
 
