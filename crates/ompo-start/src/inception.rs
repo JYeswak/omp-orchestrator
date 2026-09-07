@@ -8,6 +8,9 @@
 //! returning success.
 
 use sha2::{Digest, Sha256};
+use lifecycle_event::{
+    default_repo_journal, DurableJournal, EmitOutcome, Layer, LifecycleEvent, ReasonCode,
+};
 use std::collections::BTreeMap;
 use std::fmt::{self, Write as _};
 use std::fs::{self, File, OpenOptions};
@@ -386,6 +389,33 @@ fn validate_readback(contents: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn emit_init_event(repo_root: &Path) -> Result<usize, InceptionError> {
+    let journal_path = default_repo_journal(repo_root);
+    let journal = DurableJournal::open(&journal_path).map_err(|error| InceptionError::Readback {
+        path: journal_path.clone(),
+        detail: format!("lifecycle journal open failed: {error}"),
+    })?;
+    let reason = ReasonCode::new("INIT_REPROBE_OK").map_err(|error| InceptionError::Readback {
+        path: journal_path.clone(),
+        detail: error.to_string(),
+    })?;
+    let event = LifecycleEvent::new(
+        Layer::L2,
+        "S1.L1",
+        "S1.L2",
+        "ompo-init",
+        EmitOutcome::Emitted,
+        reason,
+    );
+    let readback = lifecycle_event::emit_one_host(&journal, event).map_err(|error| {
+        InceptionError::Readback {
+            path: journal_path,
+            detail: format!("lifecycle event emit failed: {error}"),
+        }
+    })?;
+    Ok(readback.lines)
+}
+
 pub fn write_inception(
     repo_root: &Path,
     output: &Path,
@@ -401,6 +431,7 @@ pub fn write_inception(
         path: output.to_owned(),
         detail,
     })?;
+    emit_init_event(repo_root)?;
     Ok(manifest)
 }
 
@@ -435,6 +466,11 @@ mod tests {
             );
         }
         assert_eq!(manifest.schema_version, SCHEMA_VERSION);
+        let journal = fs::read_to_string(default_repo_journal(directory.path()))
+            .expect("lifecycle journal");
+        assert!(journal.contains("\"layer\":\"L2\""));
+        assert!(journal.contains("\"reason_code\":\"INIT_REPROBE_OK\""));
+        assert!(journal.contains("\"stage_to\":\"S1.L2\""));
         assert_eq!(manifest.required_tools.len(), REQUIRED_TOOLS.len());
     }
 
