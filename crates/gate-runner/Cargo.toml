@@ -24,3 +24,7 @@ path = "src/lib.rs"
 [[test]]
 name = "roster"
 path = "tests/roster.rs"
+
+[[test]]
+name = "subsumption_real"
+path = "tests/subsumption_real.rs"
