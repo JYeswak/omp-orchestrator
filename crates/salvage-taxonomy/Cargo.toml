@@ -1,0 +1,18 @@
+[package]
+license.workspace = true
+name = "salvage-taxonomy"
+version = "0.1.0"
+edition = "2024"
+description = "What to DO when a dispatched turn dies: a typed outcome and a salvage decision. Classifies; does not actuate."
+
+[lints]
+workspace = true
+
+[dependencies]
+asupersync = { workspace = true }
+
+[dev-dependencies]
+# `classify` takes `&Cx`, so the integration suite cannot construct one without asupersync in
+# dev-dependencies: a `tests/` target links the crate and its DEV-dependencies only. Same git rev
+# as the workspace declaration, so cargo unifies rather than resolving a second copy.
+asupersync = { workspace = true }
