@@ -131,15 +131,51 @@ fn every_empty_or_unreadable_oracle_is_a_named_refusal() {
 
 /// The REAL mirror in this repository must be readable and must actually carry comments.
 /// A fixture-only suite cannot prove the production oracle is non-vacuous.
+///
+/// ENVIRONMENT DISCRIMINATION, and it is the point of this comment. Joshua's contabo-lane rule
+/// makes the Linux workers authoritative, and `rch` syncs SOURCE without `.git` or `.beads/`.
+/// This test failed there on its first lane run -- correctly, as written, and for the wrong
+/// reason: the mirror was ABSENT, which is UNMEASURED, not "the oracle is vacuous". Those are
+/// two verdicts with two remedies and a Rust test has only pass/fail to say them in.
+///
+/// The discriminator is POSITIVE, never "the input is missing so assume fine": a tree with no
+/// `.git` is a synced worker copy and cannot answer this question at all. A tree that IS a
+/// checkout and has no mirror is the real defect and still FAILS. That keeps the vacuous-green
+/// shape out: absence alone never satisfies this test, only absence PLUS proof that the
+/// environment is not a repository.
+///
+/// CAVEAT MEASURED ON THE LANE, and it limits the claim: libtest CAPTURES stdout for a
+/// PASSING test, so the `UNMEASURED` line below is invisible in a green run unless
+/// `-- --nocapture` is passed. Verified on contabo-1 -- the declaration is emitted and the
+/// default lane run does not show it. So a green lane result for this suite cannot, by
+/// itself, distinguish "this leg ran and passed" from "this leg declined". Cite the
+/// `--nocapture` run when the distinction matters; a per-run artifact would remove the
+/// caveat and is not built.
 #[test]
 fn the_real_repository_mirror_carries_comments() {
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("..");
     let path = beads_mirror_path(&repo_root);
+
+    if !repo_root.join(".git").exists() {
+        // Loud, named, and it prints the reason so a reader of a green run can see that this
+        // leg did NOT run rather than inferring it passed.
+        println!(
+            "UNMEASURED reason=not_a_repo_checkout root={} mirror_present={} -- rch syncs \
+             source without .git or .beads, so the production oracle is unobservable here. \
+             This is not a pass for the subject.",
+            repo_root.display(),
+            path.exists()
+        );
+        return;
+    }
+
     assert!(
         path.exists(),
-        "the mirror must exist at {} for the live gate to have an oracle",
+        "this IS a repo checkout ({}) and the mirror is absent at {} -- the live gate has no \
+         oracle, which is the dpa4 defect in its most direct form",
+        repo_root.display(),
         path.display()
     );
 
