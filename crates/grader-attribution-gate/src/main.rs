@@ -1,14 +1,16 @@
 #![forbid(unsafe_code)]
 
-//! Scan the committed bead ledger. Exit 1 only if live count exceeds
-//! `UNATTRIBUTED_CLOSE_CEILING`. Slack (including a clean ledger) is green.
+//! Scan the committed bead ledger. Exit 1 for a ceiling breach or a
+//! post-cutoff row without explicit actor provenance.
 //!
-//! Tracked caller: `.github/workflows/gate.yml`
-//! `cargo test -p grader-attribution-gate`.
+//! Tracked caller: .github/workflows/gate.yml runs both the test battery and
+//! the executable against .beads/issues.jsonl.
 
 use grader_attribution_gate::{
-    ledger_gate_exit, parse_closed_beads, unattributed_close_ids, CeilingVerdict,
-    DEFAULT_AUTHORS, UNATTRIBUTED_CLOSE_CEILING,
+    actor_provenance_gate_exit, actor_provenance_violations, ledger_gate_exit, parse_actor_provenance,
+    parse_closed_beads, unattributed_close_ids, CeilingVerdict, DEFAULT_AUTHORS,
+    ACTOR_PROVENANCE_CUTOFF, ACTOR_PROVENANCE_CUTOFF_REASON, ACTOR_PROVENANCE_EXIT_VIOLATION,
+    UNATTRIBUTED_CLOSE_CEILING,
 };
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -18,7 +20,7 @@ fn main() -> ExitCode {
     if args.iter().any(|a| a == "--help" || a == "-h") {
         eprintln!(
             "usage: grader-attribution-gate --ledger <path>\n\
-             scans closed beads; exits 1 naming ATTRIBUTION_ABSENT rows"
+             scans bead attribution; exits 1 naming ATTRIBUTION_ABSENT or ACTOR_PROVENANCE_RED rows"
         );
         return ExitCode::SUCCESS;
     }
@@ -43,6 +45,27 @@ fn run(ledger: &Path) -> ExitCode {
             return ExitCode::from(3);
         }
     };
+    let actor_rows = match parse_actor_provenance(&text) {
+        Ok(rows) => rows,
+        Err(error) => {
+            eprintln!("{error}");
+            return ExitCode::from(error.exit_code());
+        }
+    };
+    let actor_violations = match actor_provenance_violations(&actor_rows) {
+        Ok(violations) => violations,
+        Err(error) => {
+            eprintln!("{error}");
+            return ExitCode::from(error.exit_code());
+        }
+    };
+    eprintln!(
+        "ACTOR_PROVENANCE_CUTOFF cutoff={} reason={}",
+        ACTOR_PROVENANCE_CUTOFF, ACTOR_PROVENANCE_CUTOFF_REASON
+    );
+    for violation in &actor_violations {
+        eprintln!("{violation}");
+    }
     let rows = match parse_closed_beads(&text) {
         Ok(rows) => rows,
         Err(empty) => {
@@ -56,9 +79,12 @@ fn run(ledger: &Path) -> ExitCode {
     for id in &unattributed {
         eprintln!("ATTRIBUTION_ABSENT bead={id}");
     }
-    match ledger_gate_exit(&unattributed) {
-        0 => ExitCode::SUCCESS,
-        1 => ExitCode::from(1),
-        other => ExitCode::from(other as u8),
+    let ledger_exit = ledger_gate_exit(&unattributed);
+    if ledger_exit != 0 {
+        return ExitCode::from(ledger_exit as u8);
     }
+    if actor_provenance_gate_exit(&actor_violations) == ACTOR_PROVENANCE_EXIT_VIOLATION {
+        return ExitCode::from(ACTOR_PROVENANCE_EXIT_VIOLATION);
+    }
+    ExitCode::SUCCESS
 }

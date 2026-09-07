@@ -5,6 +5,12 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 description = "Refuse unattributed and self-grades so grader != implementer is tracker-visible"
+
+[package.metadata.gate]
+# omp-orchestrator-fsu7: this crate's OWN actor-provenance invocation. The runner
+# substitutes {repo}; the manifest must not hardcode a machine-specific path.
+checks = [["--ledger", "{repo}/.beads/issues.jsonl"]]
+
 [lib]
 name = "grader_attribution_gate"
 path = "src/lib.rs"

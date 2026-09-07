@@ -18,6 +18,237 @@ use std::fmt;
 /// Case-folded comparison is load-bearing (`Josh` vs `josh`, measured in
 /// `bead-holder`).
 pub const DEFAULT_AUTHORS: &[&str] = &["josh"];
+/// The instant after which every bead must carry explicit br --actor provenance.
+///
+/// This is a source constant rather than a CLI default, so the detector has one
+/// reviewable boundary. Rows before it are legacy data and are not retro-attributed.
+pub const ACTOR_PROVENANCE_CUTOFF: &str = "2026-09-07T18:42:29Z";
+
+/// Why the actor cutoff exists: legacy created_by values are not recoverable
+/// without inventing provenance; only future writes can be required explicitly.
+pub const ACTOR_PROVENANCE_CUTOFF_REASON: &str =
+    "legacy created_by values are not retro-attributed; require explicit --actor going forward";
+
+pub const ACTOR_PROVENANCE_EXIT_OK: u8 = 0;
+pub const ACTOR_PROVENANCE_EXIT_VIOLATION: u8 = 1;
+pub const ACTOR_PROVENANCE_EXIT_EMPTY: u8 = 2;
+pub const ACTOR_PROVENANCE_EXIT_INVALID: u8 = 3;
+
+/// One bead row reduced to the fields needed by the future-actor gate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActorProvenanceRow {
+    pub id: String,
+    pub created_at: String,
+    pub created_by: Option<String>,
+}
+
+/// A post-cutoff row attributed to the shared git identity or no identity.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActorProvenanceViolation {
+    pub bead_id: String,
+    pub field: &'static str,
+    pub value: Option<String>,
+}
+
+impl fmt::Display for ActorProvenanceViolation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let value = self.value.as_deref().unwrap_or("<missing>");
+        write!(
+            f,
+            "ACTOR_PROVENANCE_RED code=ACTOR_PROVENANCE_VIOLATION bead={} field={} value={} cutoff={}",
+            self.bead_id, self.field, value, ACTOR_PROVENANCE_CUTOFF
+        )
+    }
+}
+
+/// Errors while reading actor-provenance input. A refused read is not green.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ActorProvenanceError {
+    EmptyScan,
+    MalformedLine { line: usize },
+    MissingField { line: usize, field: &'static str },
+    InvalidTimestamp { line: usize, value: String },
+}
+
+impl fmt::Display for ActorProvenanceError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EmptyScan => f.write_str(
+                "ACTOR_PROVENANCE_SCAN_EMPTY code=ACTOR_PROVENANCE_EMPTY -- bead ledger contained no rows",
+            ),
+            Self::MalformedLine { line } => write!(
+                f,
+                "ACTOR_PROVENANCE_LEDGER_INVALID code=ACTOR_PROVENANCE_MALFORMED line={line}"
+            ),
+            Self::MissingField { line, field } => write!(
+                f,
+                "ACTOR_PROVENANCE_LEDGER_INVALID code=ACTOR_PROVENANCE_MISSING_FIELD line={line} field={field}"
+            ),
+            Self::InvalidTimestamp { line, value } => write!(
+                f,
+                "ACTOR_PROVENANCE_LEDGER_INVALID code=ACTOR_PROVENANCE_INVALID_TIMESTAMP line={line} value={value}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ActorProvenanceError {}
+
+impl ActorProvenanceError {
+    #[must_use]
+    pub const fn exit_code(&self) -> u8 {
+        match self {
+            Self::EmptyScan => ACTOR_PROVENANCE_EXIT_EMPTY,
+            Self::MalformedLine { .. }
+            | Self::MissingField { .. }
+            | Self::InvalidTimestamp { .. } => ACTOR_PROVENANCE_EXIT_INVALID,
+        }
+    }
+}
+
+fn canonical_utc_timestamp(value: &str) -> Option<String> {
+    let (date, time_with_zone) = value.split_once('T')?;
+    let date_bytes = date.as_bytes();
+    if date_bytes.len() != 10
+        || date_bytes[4] != b'-'
+        || date_bytes[7] != b'-'
+        || !date_bytes
+            .iter()
+            .enumerate()
+            .all(|(index, byte)| matches!(index, 4 | 7) || byte.is_ascii_digit())
+    {
+        return None;
+    }
+    let time = time_with_zone.strip_suffix('Z')?;
+    let (clock, fraction) = time.split_once('.').unwrap_or((time, ""));
+    let clock_bytes = clock.as_bytes();
+    if clock_bytes.len() != 8
+        || clock_bytes[2] != b':'
+        || clock_bytes[5] != b':'
+        || !clock_bytes
+            .iter()
+            .enumerate()
+            .all(|(index, byte)| matches!(index, 2 | 5) || byte.is_ascii_digit())
+        || fraction.len() > 9
+        || !fraction.is_empty() && !fraction.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return None;
+    }
+    let mut normalized = String::with_capacity(30);
+    normalized.push_str(date);
+    normalized.push('T');
+    normalized.push_str(clock);
+    normalized.push('.');
+    normalized.push_str(fraction);
+    for _ in fraction.len()..9 {
+        normalized.push('0');
+    }
+    normalized.push('Z');
+    Some(normalized)
+}
+
+fn is_utc_timestamp(value: &str) -> bool {
+    canonical_utc_timestamp(value).is_some()
+}
+
+fn timestamp_after_cutoff(value: &str) -> bool {
+    let Some(current) = canonical_utc_timestamp(value) else {
+        return false;
+    };
+    let Some(cutoff) = canonical_utc_timestamp(ACTOR_PROVENANCE_CUTOFF) else {
+        return false;
+    };
+    current > cutoff
+}
+
+/// Parse every bead row needed by the cutoff gate, refusing malformed input.
+pub fn parse_actor_provenance(jsonl: &str) -> Result<Vec<ActorProvenanceRow>, ActorProvenanceError> {
+    let mut rows = Vec::new();
+    for (line_index, line) in jsonl.lines().enumerate() {
+        let line_number = line_index + 1;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let value = serde_json::from_str::<serde_json::Value>(line)
+            .map_err(|_| ActorProvenanceError::MalformedLine { line: line_number })?;
+        let object = value
+            .as_object()
+            .ok_or(ActorProvenanceError::MalformedLine { line: line_number })?;
+        let id = object
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .ok_or(ActorProvenanceError::MissingField {
+                line: line_number,
+                field: "id",
+            })?
+            .to_owned();
+        let created_at = object
+            .get("created_at")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|created_at| !created_at.is_empty())
+            .ok_or(ActorProvenanceError::MissingField {
+                line: line_number,
+                field: "created_at",
+            })?
+            .to_owned();
+        if !is_utc_timestamp(&created_at) {
+            return Err(ActorProvenanceError::InvalidTimestamp {
+                line: line_number,
+                value: created_at,
+            });
+        }
+        rows.push(ActorProvenanceRow {
+            id,
+            created_at,
+            created_by: object
+                .get("created_by")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|author| !author.is_empty())
+                .map(str::to_owned),
+        });
+    }
+    if rows.is_empty() {
+        Err(ActorProvenanceError::EmptyScan)
+    } else {
+        Ok(rows)
+    }
+}
+
+/// Return only post-cutoff rows lacking an explicit non-default actor.
+pub fn actor_provenance_violations(
+    rows: &[ActorProvenanceRow],
+) -> Result<Vec<ActorProvenanceViolation>, ActorProvenanceError> {
+    if rows.is_empty() {
+        return Err(ActorProvenanceError::EmptyScan);
+    }
+    Ok(rows
+        .iter()
+        .filter(|row| timestamp_after_cutoff(&row.created_at))
+        .filter(|row| {
+            row.created_by
+                .as_deref()
+                .is_none_or(|author| is_default_author(author, DEFAULT_AUTHORS))
+        })
+        .map(|row| ActorProvenanceViolation {
+            bead_id: row.id.clone(),
+            field: "created_by",
+            value: row.created_by.clone(),
+        })
+        .collect())
+}
+
+#[must_use]
+pub fn actor_provenance_gate_exit(violations: &[ActorProvenanceViolation]) -> u8 {
+    if violations.is_empty() {
+        ACTOR_PROVENANCE_EXIT_OK
+    } else {
+        ACTOR_PROVENANCE_EXIT_VIOLATION
+    }
+}
 
 /// Shrinking ratchet over unattributed closed beads in `.beads/issues.jsonl`.
 ///
