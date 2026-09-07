@@ -13,6 +13,9 @@ path = "src/main.rs"
 regex = "1"
 serde_json = "1"
 blocker-taxonomy = { path = "../blocker-taxonomy" }
+# f3g5 acceptance item 6: the withheld reason must be a closed enum arm consumed through
+# admission-reason, not a hand-formatted message. A free-text reason FAILS.
+admission-reason = { path = "../admission-reason" }
 
 
 [dev-dependencies]

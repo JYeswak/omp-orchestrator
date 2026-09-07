@@ -16,9 +16,9 @@ use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use subprocess_contract::{bounded_output, BoundedOutcome};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use subprocess_contract::{bounded_output, BoundedOutcome};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Rule {
@@ -224,6 +224,60 @@ impl std::fmt::Display for ConfigError {
                 "$HOME is unset; cannot derive ~/{HOOKS_REGISTRY_CHECK_HOME_RELATIVE}"
             ),
         }
+    }
+}
+
+/// Why a candidate was WITHHELD from dispatch, as a closed vocabulary.
+///
+/// `omp-orchestrator-block-non-arc-behind-s0-f3g5` acceptance item 6 requires the withheld reason
+/// to be an enum arm consumed through this crate, and states plainly that "a free-text reason
+/// FAILS". The reason is not style. A free string cannot be matched on, cannot be counted without
+/// parsing prose, and drifts the moment two callers phrase the same refusal differently — which is
+/// how `no_distinct_idle_peer` came to name four distinct causes in one token.
+///
+/// One arm today is still a CLOSED vocabulary: adding a second is a source change a reviewer sees,
+/// where a `format!` is not.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Withheld {
+    /// The phase order is binding and this candidate is outside the current phase's arc.
+    ///
+    /// Both fields are load-bearing for the operator: `phase` says which phase is holding the
+    /// queue, and `blocking_bead` says which specific row must close for it to open. A refusal
+    /// that names neither is indistinguishable from a dispatcher that simply stopped.
+    PhaseGate {
+        phase: String,
+        blocking_bead: String,
+    },
+}
+
+impl Withheld {
+    /// The stable machine token. Distinct per arm, so a counter never conflates two causes.
+    #[must_use]
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::PhaseGate { .. } => "phase_gate",
+        }
+    }
+
+    /// The operator-facing line. Names the gate, the phase, and the blocking bead.
+    #[must_use]
+    pub fn detail(&self) -> String {
+        match self {
+            Self::PhaseGate {
+                phase,
+                blocking_bead,
+            } => format!(
+                "WITHHELD_PHASE_GATE phase={phase} blocking_bead={blocking_bead} \
+                 — the phase order is binding on dispatch; this candidate is outside the arc and \
+                 is not in the declared exception set"
+            ),
+        }
+    }
+}
+
+impl std::fmt::Display for Withheld {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}", self.detail())
     }
 }
 

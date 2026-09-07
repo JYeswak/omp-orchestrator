@@ -6,6 +6,10 @@
 //! selector's lexical rules and ordering visible: changing one rule must change a named test.
 
 
+// `omp-orchestrator-block-non-arc-behind-s0-f3g5`: the phase order, made binding on dispatch by
+// ONE selector predicate rather than ~881 dependency edges. Ships DISABLED — see
+// `phase_gate::PHASE_GATE_ENABLED` and `phase_gate::SWITCH_ON_PRECONDITION`.
+pub mod phase_gate;
 pub mod select;
 pub mod selector;
 
