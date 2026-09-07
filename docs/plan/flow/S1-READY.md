@@ -169,18 +169,59 @@ hardcoded `0` is not a measurement** — S2–S9 owner files each carry a litera
 with no predicate at all (`S2:120 · S3:171 · S4:178 · S5a:135 · S5b:140 · S6a:137 · S6b:132 ·
 S6c:137 · S7:165 · S8:175 · S9:132`).
 
-### R5 — every S1 layer gate names its known-bad leg
+### R5 — every S1 layer gate names its known-bad leg AND has fired
+
 ```bash
-for g in l0-jtgw l1-fnv8 l2-j5m9 l3-z8hz l4-hs15 l5-w44h; do
+for g in l0-jtgw l1-fnv8 l2-j5m9 l3-z8hz l4-hs15 l5-w44h djn8; do
   printf '%s ' "$g"
   br --lock-timeout 60000 show "omp-orchestrator-gate-s1-$g" --json \
-    | python3 -c "import json,sys;b=json.load(sys.stdin)[0];a=b.get('acceptance_criteria') or '';print('known-bad' if 'known-bad' in a else 'MISSING')"
+    | python3 -c "import json,sys;a=(json.load(sys.stdin)[0].get('acceptance_criteria') or '');\
+print(len(a), 'known-bad' if 'known-bad' in a.lower() else 'NO-KNOWN-BAD')"
 done
+grep -ci 's1-l' .github/workflows/gate.yml   # expect >0 if any layer gate runs in CI
+crontab -l 2>/dev/null | grep -ci 's1-l'      # expect >0 if any layer gate runs on a timer
 ```
-**Expect `known-bad` × 6.** UNMEASURED — the six gate titles all read *"gate fired on known-bad"*,
-so this likely passes, but **the title is not the acceptance field** and I have not read all six.
-*Rationale:* `AGENTS.md` — a gate that has never fired on a bad input is not evidence of anything;
-an attack-only suite ships an over-strict gate.
+**Expect a known-bad leg on all seven AND a nonzero invocation count.** Measured 2026-09-07 22:4xZ:
+
+```
+gate         acc    known-bad   asserts a MESSAGE
+l0-jtgw      3625   YES         YES
+l1-fnv8      3625   YES         YES
+l2-j5m9      3625   YES         YES
+l3-z8hz      3625   YES         YES
+l4-hs15      3625   YES         YES
+l5-w44h      3625   YES         YES
+djn8         4728   YES         no          <- the stage gate does not assert a message
+
+.github/workflows/gate.yml   14 jobs, 0 naming s1-l
+crontab -l                   0 naming s1-l
+```
+
+❌ **FAILING — and it was mis-labelled UNMEASURED, which hid the remedy.**
+
+**All seven SPECIFY a known-bad leg. NONE HAS EVER FIRED.** Per gate rule 4a the classification is
+**INERT** — the gates exist, are wired as bead dependencies, appear in `docs/contracts/`
+(`s1_l0_install.md:159`, `s1_l3_walkthrough.md:148`, `s1_l4_liveness.md:156`,
+`s1_l5_portal.md:150`), and **nothing invokes any of them.** `gate.yml`'s 14 jobs are
+`no-shell-gate`, `path-literal-guard`, `kernel-bypass-gate`, `state-wildcard-lint`,
+`undrained-pipe-lint`, `grader-attribution-gate`, `installer`, `pre-delete-citation-check`,
+`head-compiles-as-committed` and peers — **not one S1 layer gate.**
+
+**INERT means WIRE IT, not write it.** That distinction is the whole value of this measurement:
+"UNMEASURED" invited someone to go author known-bad legs that already exist at 3,625 chars each.
+
+**POSITIVE CONTROL on the detection method** (mandatory — a method that finds nothing must be shown
+capable of finding something): the pre-commit multi-gate **does** fire and the same method sees it —
+`gate.yml:449-450` invokes `pre-delete-citation-check`, and it was observed firing three times
+today (`exit 3 NOTHING_TO_CHECK` on an empty index, `exit 1 VIOLATION` naming
+`pre-delete-citation-check` on a deletion-only fixture, and RED under a peer's mutation). **Those
+are a DIFFERENT gate family and must never be miscited as R5 progress** — a peer measured them and
+refused exactly that inference.
+
+**Residual on `djn8`:** its 4,728-char acceptance names a known-bad leg but does **not** assert a
+message. `101` is cargo's generic failure and an unrelated workspace-loading error produced an
+identical `101` in this repo, so a leg keyed on `rc != 0` goes green on unrelated breakage. Fix
+before djn8 is relied on as the stage gate.
 
 ### R6 — the box's diagram receipt matches a fresh validator run
 ```bash
@@ -255,23 +296,86 @@ the reading, not the subject, every time.**
 |R2 layer beads wired to their gate|⚠ **WEAK PASS** — 0 of 138; predicate does not require gate linkage (`2fxd` P0). Published FAIL **and** its first correction were both wrong|
 |R3 no false `blocked`|⚠ **NEARLY** — 2 (snapshot; was 92 → 89 → 88 → 2)|
 |R4 disagreements resolved, derived count|❌ **FAIL** — 8 open; owner says 6|
-|R5 every gate names a known-bad leg|⚠ **UNMEASURED** — read all six acceptance fields|
+|R5 gates name a known-bad leg AND fire|❌ **FAIL** — 7/7 specify one (3625 ch each; djn8 4728); **0 of 7 have ever fired**, 0 in CI, 0 in cron → **INERT: wire it, do not write it**. `djn8` asserts no message|
 |R6 diagram receipt matches a fresh run|✅ **PASS** — 53/64, exit 0|
 |R7 S0 closed|❌ **FAIL** — epic open; 4 of 7 children open, all P0 (**scope corrected: was mis-counted as 3 of 5**)|
 |R8 instruments not stale/self-referential|❌ **FAIL** — fh RED, 3 worktrees|
 
-**S1 IS NOT READY TO BUILD. 3 of 8 pass, 1 nearly, 1 unmeasured, 3 fail.**
+**S1 IS NOT READY TO BUILD. 2 PASS · 2 WEAK/NEARLY · 4 FAIL. Nothing is UNMEASURED any more.**
 
 **CORRECTED 2026-09-07 22:0xZ.** As first published this read **2/8 with R2 FAIL**. R2 was a
 **wrong-key artifact** and is retracted at the criterion. R3 fell 92 → 2 under `%20`. The
 remaining real failures are **R7** (S0 epic open, 4 P0 children), **R8** (instruments stale), and **R4** (8
-disagreements) — plus **R5 UNMEASURED, now the load-bearing unknown: the edges exist, but no
-gate has been shown to FIRE.**
+disagreements) — plus **R5 now MEASURED as FAIL: the edges and the known-bad legs both exist; no gate has ever
+fired. INERT, not unwritten.**
 
 **Every failing criterion is planning or hygiene work — none needs new product code.** R2, R3, R4
 are tracker and predicate work. R7 is two beads. R8 is a stale harvest and a worktree prune. That is
 the answer to *"plan S1 fully before executing"*: the plan is not short of ideas, it is short of
 **wiring, honest counts, and a closed floor.**
+
+## What actually gets us to green — measured 2026-09-07 22:4xZ by four read-only scouts
+
+**Every remaining failure is wiring, counting, or hygiene. NOT ONE needs new product code.**
+
+|criterion|the single action that moves it|owner|
+|---|---|---|
+|**R5**|**Wire the seven gates into `gate.yml`.** Their known-bad legs already exist at 3,625 chars each. INERT, not unwritten. Separately: give `djn8` a message assertion|CI lane|
+|**R7**|Close S0's four P0 children, then the epic. **Read `kvsq`'s own 3,060-char acceptance first** — it carries four closing conditions and a known-bad leg, and `deps=0`, so no dependency edge encodes them|the four holders|
+|**R4**|8 rows: 6 in wave-2 `pane1-S1.toml` (five explicitly "stays open"/"escalated"), 2 in `wave-1/SilverWolf-S1.toml` with blank resolutions. **Decide first whether wave-1 is in R4's scope** — the criterion carries no wave qualifier and the owner field is wave-2-scoped, which is the entire 8-vs-6 gap|pane 1 + Joshua|
+|**R8**|`fh` harvest has **no cron/launchd entry** — running it is a read-only scan of 216 frozen mirror repos, safe. Prune 2 worktrees **only after** confirming no live process. 106 dirty across 5 writers — attribute, don't judge|infra|
+|**R2**|`2fxd`: make the predicate require gate linkage rather than any inbound edge|pane 20|
+|**R3**|Add the third state. `AwaitingHumanDecision` has no representation, so the last 2 rows keep R3 permanently nonzero and **flipping them would falsify rows to zero a number**|pane 1|
+
+### THE S0 REFRAME — read this before auditing anything under it
+
+`kvsq`'s own acceptance already retracts the figure its description carries, and it changes what the
+epic *is*:
+
+> *"The description says '20 raw thread::spawn'. That is FALSE and is retracted… `std::thread::spawn`
+> is a SUBSTRING of `thread::spawn`, so 14+6=20 double-counted. Proven by `comm -13` returning 0."*
+
+Its measured decomposition: **14 grep matches → 8 production sites** (2 lint string literals, 2 doc
+comments, 2 under `#[cfg(test)]`), and **of the 8: 5 JOINED, 3 detached-and-defensible** — the
+`tick-monitor:123` waiter captures its pid at `:113` *before* the child moves and group-kills on
+`recv_timeout` expiry; `loop-driver:777`'s wall watchdog must outlive its work by design.
+
+> **"ZERO orphan-producing detached spawns exist in production."** The asupersync contract — drain
+> both pipes on dedicated threads before the wait, capture pid before the move, GROUP kill, join
+> readers against `READER_JOIN_GRACE` — **is already implemented BY HAND and correctly.**
+>
+> **"THEREFORE the epic is a LEVERAGE finding, not a correctness one… we hand-roll exactly what
+> `Scope` and `JoinSet` provide and consume neither."**
+
+**So the "7 asupersync surfaces used ZERO times" census is not a defect list.** `kvsq` condition 2
+requires every recommendation to state what the runtime surface buys **beyond** the hand-rolled
+code, and rules that **"'Nothing but uniformity' is an ACCEPTED verdict and is preferred over an
+invented defect."**
+
+**Tested against that condition, one finding survives and it is worth naming:** the three unbounded
+`.output()` calls in the resident supervisor — `df -k` (`main.rs:4077`), `shasum -a 256`
+(`resident_tick.rs:466`), `lsof -nP +D` (`target_directory.rs:318`) — have **no deadline at all**,
+unlike the 8 spawn sites which are joined or defensibly detached. Bounding them buys a typed
+restrictive terminal where today there is an indefinite block, so it clears condition 2 on its
+merits rather than on uniformity.
+
+**And `kvsq` ships its own known-bad leg, aimed at us:** *"this acceptance must FAIL for any slice
+report whose headline figure equals a number copied from this description rather than re-measured.
+That is the failure this bead just demonstrated on itself."* Two of the four slice titles
+(`w21v`'s "20 raw", `zaxp`'s "ZERO files") carry exactly such inherited figures — **their acceptance
+now forces re-derivation, which is why the drift is a first finding rather than a blocker.**
+
+### Scout instrument note, recorded because it repeated
+
+Two of the four scouts **banked a stale read despite being warned in the same broadcast**:
+`R7S0Closure` reported `w21v` `acceptance_criteria=0` from `.flywheel/o3eb-w21v-grade-evidence.md`
+— a stale artifact — while the DB held **4,710** chars, and attributed `w21v`'s title to `xv5r`.
+`R4Disagreements` cited `CONTRACT.md:56-57` as calling wave-1 a "SURVEY" (those lines are the
+cross-review step and the Wave-1 addendum; the claim is **unsupported**) and reported "ten raw
+`Command::new(ntm)` sites across nine crates" where the measured count is **1 site in 1 crate**
+(`kernel-bypass-gate`), confirmed across seven pattern variants. **A written warning did not prevent
+the class; only reading the authoritative surface does.** `R5GateFiring` by contrast returned
+UNKNOWN wherever it lacked `br` access rather than guessing — that is the behaviour to copy.
 
 ## NO-CLAIM
 
