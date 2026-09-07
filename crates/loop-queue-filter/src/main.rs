@@ -3,6 +3,9 @@
 use loop_queue_filter::select::{
     assign_peer_grade_with_ledger, parse_observed_panes, require_idle_grader,
 };
+use loop_queue_filter::phase_gate::{
+    apply_phase_gate, EXCEPTION_SET, GATED_PHASE, PHASE_GATE_ENABLED, SWITCH_ON_PRECONDITION,
+};
 use loop_queue_filter::selector::select_graph;
 use std::io::{self, Read};
 use std::process::ExitCode;
@@ -169,6 +172,89 @@ fn select_graph_cli(args: &[String]) -> ExitCode {
     }
 }
 
+/// `phase-gate` — report the gate's configuration and, given candidates on stdin, its decision.
+///
+/// ITEM 7 EXISTS BECAUSE OF THIS FUNCTION. `SWITCH_ON_PRECONDITION` was a `const` no code path
+/// referenced, so the linker dropped it and `strings` on the operator binary found neither the
+/// required NON-EPIC text nor the refuted `jplf.1` text — while the source read as compliant. A
+/// `const` is not an artifact. This subcommand PRINTS it, which is what puts it in the binary and
+/// what makes rule `8b` — ship the refuted form as a string plus a test that keeps it named —
+/// true of the thing an operator actually runs rather than of the tree.
+fn phase_gate_cli(args: &[String]) -> ExitCode {
+    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
+        println!(
+            "usage: loop-queue-filter phase-gate [--arc-census N] [--phase-complete] [--enabled]\n\
+             Reads candidate bead ids from stdin, one per line. Reports the gate decision.\n\
+             Exit: 0 decision made, 2 usage, 30 arc census zero, 31 empty candidate set, \
+             32 exception set incomplete."
+        );
+        return ExitCode::SUCCESS;
+    }
+    let mut arc_census: usize = 0;
+    let mut phase_complete = false;
+    let mut enabled = PHASE_GATE_ENABLED;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--arc-census" => {
+                index += 1;
+                arc_census = match args.get(index).and_then(|v| v.parse().ok()) {
+                    Some(value) => value,
+                    None => {
+                        eprintln!("PHASE_GATE_USAGE --arc-census requires an integer");
+                        return ExitCode::from(2);
+                    }
+                };
+            }
+            "--phase-complete" => phase_complete = true,
+            // Explicit opt-in only. The shipped default stays off; see item 12.
+            "--enabled" => enabled = true,
+            other => {
+                eprintln!("PHASE_GATE_USAGE unknown argument={other}");
+                return ExitCode::from(2);
+            }
+        }
+        index += 1;
+    }
+
+    // The configuration is printed BEFORE any decision, so an operator who pipes nothing still
+    // learns the precondition and the shipped default. This is the line that carries the strings.
+    println!(
+        "PHASE_GATE_CONFIG shipped_default_enabled={PHASE_GATE_ENABLED} phase={GATED_PHASE} \
+         exceptions={} precondition=\"{SWITCH_ON_PRECONDITION}\"",
+        EXCEPTION_SET.len()
+    );
+
+    let mut input = String::new();
+    if io::stdin().read_to_string(&mut input).is_err() {
+        eprintln!("PHASE_GATE_USAGE could not read candidates from stdin");
+        return ExitCode::from(2);
+    }
+    let candidates: Vec<String> = input
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(ToOwned::to_owned)
+        .collect();
+
+    match apply_phase_gate(&candidates, arc_census, phase_complete, enabled) {
+        Ok(outcome) => {
+            println!("{}", outcome.render());
+            for id in &outcome.admitted {
+                println!("PHASE_GATE_ADMITTED id={id}");
+            }
+            for (id, reason) in &outcome.withheld {
+                println!("PHASE_GATE_WITHHELD id={id} code={} {}", reason.code(), reason.detail());
+            }
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            ExitCode::from(error.exit_code())
+        }
+    }
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.first().map(String::as_str) == Some("--selftest-guard") {
@@ -177,6 +263,9 @@ fn main() -> ExitCode {
     }
     if args.first().map(String::as_str) == Some("assign-grade") {
         return assign_grade_cli(&args[1..]);
+    }
+    if args.first().map(String::as_str) == Some("phase-gate") {
+        return phase_gate_cli(&args[1..]);
     }
     if args.first().map(String::as_str) == Some("select-graph") {
         return select_graph_cli(&args[1..]);

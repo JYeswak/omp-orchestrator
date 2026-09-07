@@ -5376,6 +5376,51 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         }
     };
 
+    // omp-orchestrator-block-non-arc-behind-s0-f3g5 ITEM 8 — THE PRODUCTION CALLER, flag off.
+    //
+    // Landed with `PHASE_GATE_ENABLED = false` on purpose. I had argued deferral on the grounds
+    // that a flag-off caller was "unobservable in either direction"; that was wrong, and %7's
+    // refutation is the reason this is here: FALSE IS AN OBSERVATION. `gate_active=false` is
+    // exactly the fact that distinguishes a disabled gate from a released phase, and I had built
+    // `GateOutcome::gate_active` for that purpose and then used unobservability to justify not
+    // wiring the field I added for it.
+    //
+    // THE ARC CENSUS HERE IS QUEUE-SCOPED, AND THAT IS ONLY SOUND WHILE THE FLAG IS OFF.
+    // `apply_phase_gate` short-circuits before the census check on the disabled path, so this
+    // value is not consulted today. Enabling the gate REQUIRES replacing it with a tracker-wide
+    // census: a census derived from the queue reports zero for a healthy arc that simply is not
+    // offered, which is the live state — 0 of 37 non-terminal arc members appear in `br ready`.
+    // Named here rather than left for the next reader to discover.
+    let arc_census_queue_scoped = bead_ids
+        .iter()
+        .filter(|id| loop_queue_filter::phase_gate::is_arc_member(id))
+        .count();
+    let mut bead_ids = match loop_queue_filter::phase_gate::apply_phase_gate(
+        &bead_ids,
+        arc_census_queue_scoped,
+        false,
+        loop_queue_filter::phase_gate::PHASE_GATE_ENABLED,
+    ) {
+        Ok(outcome) => {
+            let detail = outcome.render();
+            write_heartbeat(config, tick, "PHASE_GATE", &detail)?;
+            println!("PHASE_GATE {detail}");
+            for (id, reason) in &outcome.withheld {
+                let row = format!("id={id} code={} {}", reason.code(), reason.detail());
+                write_heartbeat(config, tick, "PHASE_GATE_WITHHELD", &row)?;
+                println!("PHASE_GATE_WITHHELD {row}");
+            }
+            outcome.admitted
+        }
+        // A refusal is a refusal: the gate's vacuity arms exist so an unreadable or empty
+        // candidate set can never read as "nothing to dispatch".
+        Err(error) => {
+            let detail = format!("code={} {error}", error.code());
+            write_heartbeat(config, tick, "PHASE_GATE_REFUSED", &detail)?;
+            return Err(format!("PHASE_GATE_REFUSED {detail}"));
+        }
+    };
+
     observation.queue = QueueState {
         ready_count: bead_ids.len(),
         readable: true,
