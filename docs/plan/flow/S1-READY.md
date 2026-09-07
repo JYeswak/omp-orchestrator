@@ -204,6 +204,56 @@ landed the derived predicate at `7b4ac63`; it needs the glob widened, not a new 
 S6a:137 · S6b:132 · S6c:137 · S7:165 · S8:175 · S9:132`), which is the never-fires-so-always-green
 class sitting under this gate.
 
+### AMENDMENT — I looked for evidence against this ruling, found some, then refuted it
+
+Recorded as a sequence because each step was driven by a new measurement and the last one is the
+answer. **Three positions in one pass; the third is grounded in the resolution VALUES rather than a
+counter, which is why it is the durable one.**
+
+**Step 1 — the wave-2 scoping was deliberate, not a defect.** `boxes/S1.toml:334` reads
+`open_disagreements = 6 # DERIVED for wave=2: …`. `%7` scoped it on purpose and said so at the
+field. My framing implied an oversight; it was a choice.
+
+**Step 2 — an in-repo basis for excluding wave-1 exists, and I had wrongly dismissed it.**
+`boxes/S1.toml:336`: `rejections = 25 # … wave-1 = 0 of 12 (a SURVEY, not a review) …`. A scout
+reported this substance citing `CONTRACT.md:56-57`; I checked that citation, found it did not
+support the claim, and filed the claim as **unsupported**. The citation was wrong; the substance was
+real and lives here. **A wrong address does not make a claim false** — I should have searched for the
+assertion before ruling against it.
+
+**Step 3 — and the survey characterization is REFUTED by the data it rests on.** Distinct resolution
+values for `box = "S1"`, measured 2026-09-07:
+
+```
+wave-1 (12 rows)                      wave-2 (63 rows)
+  accepted-and-landed      6            resolved-at-7f9195a    29
+  accepted-and-amended     2            accepted               15
+  accepted                 2            escalated               2
+  <BLANK>                  2            <BLANK>                 6
+                                        L1 / The / NTM          3  <- malformed, prose leakage
+```
+
+**Wave-1's resolutions are `accepted-and-LANDED`** — the disagreement was accepted *and the fix
+shipped*. That is a **stronger** disposition than wave-2's dominant `resolved-at-<sha>` and nothing
+like "acknowledged." **`rejections = 0 of 12` is true and non-discriminating: wave-1 had zero
+rejections because everything was ACCEPTED, not because nothing was reviewed.** My own first
+predicate confirmed the non-discrimination — a `REJECT`-prefix scan returns **{} for BOTH waves**,
+so the asymmetry the survey claim depends on does not exist under any predicate I could construct.
+(`:336`'s own `25 of 50` uses a third denominator and is flagged `WORKTREE ONLY -- and that is a
+defect` two lines above.)
+
+**RULING STANDS AT 8, now on three intact reasons.** Reason 3 is reinstated with better evidence
+than I first gave it: wave-1 was not a survey, it was a review whose findings **landed**.
+
+**AND `S1.toml:336` CARRIES A FALSE PARENTHETICAL.** "(a SURVEY, not a review)" is refuted above. It
+matters because, if ratified, it would drop two genuinely unresolved rows on the strength of a `#`
+comment that no command produces — in a field whose two neighbours are already flagged worktree-only
+defects. Correcting it belongs to `S1.toml`'s owner, not to this file.
+
+**Three malformed wave-2 rows surfaced en route** (`L1`, `The`, `NTM`): multi-line TOML prose
+leaking into the `resolution` capture. Same parser defect measured earlier this session, still live,
+and it means **any single-line resolution predicate slightly understates the real count.**
+
 ### THE 8 ROWS ARE 3 WORK ITEMS, AND 6 OF THEM ARE ORPHANED
 
 **5 of the 8 come from a single file** and are one coherent batch: `pane4-jt1i-citations.toml`'s four
@@ -376,7 +426,7 @@ the reading, not the subject, every time.**
 |R1 acceptance on every layer bead|✅ **PASS** — 0 of 144 empty|
 |R2 layer beads wired to their gate|⚠ **WEAK PASS** — 0 of 138; predicate does not require gate linkage (`2fxd` P0). Published FAIL **and** its first correction were both wrong|
 |R3 no false `blocked`|⚠ **NEARLY** — 2 (snapshot; was 92 → 89 → 88 → 2)|
-|R4 disagreements resolved, derived count|❌ **FAIL** — **8** (wave-1: 2, wave-2: 6). Scope **RULED**: wave-1 counts. Owner field says `6` → widen its glob. **6 of 8 are orphaned** (`pane4-*`, reviewer gone) and are 3 work items, not 8|
+|R4 disagreements resolved, derived count|❌ **FAIL** — **8** (wave-1: 2, wave-2: 6). Scope **RULED** wave-1 counts, three reasons intact. **`S1.toml:336`'s "(a SURVEY, not a review)" is REFUTED** — wave-1's resolutions are `accepted-and-landed`; 0 rejections because all were ACCEPTED. **6 of 8 orphaned** (`pane4-*`), 3 work items not 8|
 |R5 gates NAME a known-bad leg|✅ **PASS — 7 of 7** (strict: `SUBJECT:` stripped, numbered item required). `8hq3` P0 filed by `%20`|
 |R9 has any gate ever FIRED|⚠ **UNMEASURED → INERT.** 0 in CI, 0 in cron, all 7 `status=open`. **Wire it, do not write it**|
 |R6 diagram receipt matches a fresh run|✅ **PASS** — 53/64, exit 0|
