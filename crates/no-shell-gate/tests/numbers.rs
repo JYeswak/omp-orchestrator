@@ -317,6 +317,99 @@ fn a_header_inside_a_multiline_string_is_not_a_declaration() {
     );
 }
 
+/// FIRES-ON-KNOWN-BAD, second shape: a DOTTED key is a sub-table, not a figure.
+///
+/// `%7`'s blocking gap on `omp-orchestrator-m0c`: the independence claim rested on ONE known-bad
+/// input — a header inside a multiline string — while `declared_figure_keys` documents THREE
+/// differences from the reporter. An undemonstrated difference is a comment, not a property, so
+/// the second one gets its own fixture and the third (key sets rather than counts) is asserted
+/// here too, because this fixture is the case where a COUNT equality would have passed.
+///
+/// `[figures.a.b]` is a sub-table of `[figures.a]`. The declaration scanner refuses a dotted key;
+/// the reporter's line loop emits a figure literally named `a.b`, and — worse than the miscount —
+/// it then attributes the sub-table's `command` and `expect` to that phantom figure, so the drift
+/// gate would re-run a command belonging to a table nobody declared as a figure.
+#[test]
+fn a_dotted_key_is_a_sub_table_and_not_a_figure() {
+    let fixture = concat!(
+        "[figures.crates]\n",
+        "command = \"ls -1 crates | wc -l\"\n",
+        "expect = \"88\"\n",
+        "[figures.crates.provenance]\n",
+        "command = \"echo phantom\"\n",
+        "expect = \"phantom\"\n"
+    );
+    let declared = declared_figure_keys(fixture);
+    let emitted = figures_from(fixture);
+    let emitted_keys: Vec<String> = emitted.iter().map(|f| f.key.clone()).collect();
+
+    assert_eq!(
+        declared,
+        vec!["crates".to_owned()],
+        "the declaration scanner must refuse a dotted key: a sub-table is not a figure"
+    );
+    assert!(
+        emitted_keys.contains(&"crates.provenance".to_owned()),
+        "the reporter is expected to be fooled here; if it is not, this fixture no longer \
+         demonstrates the difference and the leg is vacuous"
+    );
+    assert_ne!(
+        declared.len(),
+        emitted_keys.len(),
+        "the two arms MUST disagree on a dotted key, or the second difference \
+         declared_figure_keys documents is a comment rather than a property"
+    );
+
+    // The phantom carries a COMMAND, which is the part that would actually bite: the drift gate
+    // re-runs whatever the reporter hands it.
+    let phantom = emitted
+        .iter()
+        .find(|f| f.key == "crates.provenance")
+        .expect("phantom figure");
+    assert_eq!(
+        phantom.command, "echo phantom",
+        "the sub-table's command is attributed to a figure nobody declared"
+    );
+}
+
+/// THE AGREEMENT ARM — a differential that ALWAYS disagrees is as useless as one that never can.
+///
+/// This is Joshua's standing rule in its second direction. The two known-bad legs prove the arms
+/// CAN disagree; without this, they could be permanently divergent — two scanners that never agree
+/// on anything would satisfy every `assert_ne!` above while carrying no information at all, and
+/// `the_reporter_emits_exactly_the_declared_figure_set` would be failing for a structural reason
+/// rather than reporting a real drop.
+///
+/// So: on a clean registry the arms MUST agree exactly, which is what makes each disagreement
+/// attributable to the specific defect its fixture plants.
+#[test]
+fn on_a_clean_registry_the_two_arms_agree_exactly() {
+    let fixture = concat!(
+        "[figures.one]\n",
+        "command = \"echo 1\"\n",
+        "expect = \"1\"\n",
+        "[figures.two]\n",
+        "command = \"echo 2\"\n",
+        "expect = \"2\"\n"
+    );
+    let declared = declared_figure_keys(fixture);
+    let mut emitted: Vec<String> = figures_from(fixture).into_iter().map(|f| f.key).collect();
+    emitted.sort();
+    let mut expected = declared.clone();
+    expected.sort();
+
+    assert_eq!(
+        declared.len(),
+        2,
+        "the clean fixture must declare two figures, or this control proves nothing"
+    );
+    assert_eq!(
+        emitted, expected,
+        "on a clean registry the arms must agree EXACTLY; permanent divergence would satisfy \
+         every disagreement assertion in this file while carrying no information"
+    );
+}
+
 /// THE ACCEPTANCE'S OWN RATIONALE, PROVEN IN-TREE RATHER THAN ARGUED.
 ///
 /// A dropped figure is the defect item 2b names. This leg shows the equality catching it AND the
