@@ -183,6 +183,11 @@ pub struct ReadinessReport {
     pub admitted: Vec<QueueIssue>,
     pub recovered: Vec<QueueIssue>,
     pub refused: Vec<InvisibleQueueIssue>,
+    pub open_count: usize,
+    pub ready_count: usize,
+    pub blocked_count: usize,
+    pub residual_count: usize,
+    pub projection_gap_count: usize,
 }
 
 impl ReadinessReport {
@@ -190,13 +195,40 @@ impl ReadinessReport {
     pub fn recovered_ids(&self) -> Vec<String> {
         self.recovered.iter().map(|issue| issue.id.clone()).collect()
     }
+
+    #[must_use]
+    pub fn render_text(&self) -> String {
+        let mut out = format!(
+            "READINESS open={} ready={} blocked={} residual={} projection_gap={} recovered={} refused={}\n",
+            self.open_count,
+            self.ready_count,
+            self.blocked_count,
+            self.residual_count,
+            self.projection_gap_count,
+            self.recovered.len(),
+            self.refused.len(),
+        );
+        for issue in &self.recovered {
+            out.push_str(&format!(
+                "QUEUE_READY_RECOVERED id={} priority={}\n",
+                issue.id, issue.priority
+            ));
+        }
+        for row in &self.refused {
+            out.push_str(&format!(
+                "QUEUE_READY_REFUSED id={} reason={}\n",
+                row.issue.id, row.reason
+            ));
+        }
+        out
+    }
 }
 
-/// Reconcile the selector's ready/blocked surfaces with the complete dependency graph.
+/// Reconcile the ready/blocked projections with the complete dependency graph.
 ///
-/// The ready and blocked commands are projections, not the complete open population. An open,
-/// unassigned non-epic whose graph blockers are all released is safe to re-offer even when the
-/// projection omitted it. A graph-blocked omission remains a named refusal, never a silent drop.
+/// The projections are not trusted as a complete selector input. Every open row is accounted for
+/// as admitted, explicitly refused, or already blocked. A graph-available row missing from both
+/// projections is re-offered; graph-blocked and non-dispatchable omissions remain named refusals.
 pub fn reconcile_readiness(
     issues: &[QueueIssue],
     ready_ids: &[String],
@@ -232,43 +264,72 @@ pub fn reconcile_readiness(
         return Err(GraphError::QueueSurfaceOverlap((*id).to_owned()));
     }
 
-    let mut open_candidates = Vec::new();
+    let open_candidates: Vec<QueueIssue> = issues
+        .iter()
+        .filter(|issue| issue.status == IssueStatus::Open)
+        .cloned()
+        .collect();
+    if open_candidates.is_empty() {
+        return Err(GraphError::EmptyCandidateSet);
+    }
+    let open_ids: BTreeSet<String> = open_candidates.iter().map(|issue| issue.id.clone()).collect();
+    let visible_ready = ready.iter().filter(|id| open_ids.contains(**id)).count();
+    let visible_blocked = blocked.iter().filter(|id| open_ids.contains(**id)).count();
+    let projection_gap_count = open_candidates
+        .iter()
+        .filter(|issue| !ready.contains(issue.id.as_str()) && !blocked.contains(issue.id.as_str()))
+        .count();
     let mut admitted = Vec::new();
     let mut recovered = Vec::new();
     let mut refused = Vec::new();
-    for issue in issues.iter().filter(|issue| {
-        issue.status == IssueStatus::Open
-            && issue.issue_type != "epic"
-            && issue.assignee.trim().is_empty()
-    }) {
-        open_candidates.push(issue.clone());
-        if ready.contains(issue.id.as_str()) {
+    let mut accounted = BTreeSet::new();
+    for issue in &open_candidates {
+        let dispatchable = issue.issue_type != "epic" && issue.assignee.trim().is_empty();
+        if ready.contains(issue.id.as_str()) && dispatchable {
             admitted.push(issue.clone());
+            accounted.insert(issue.id.clone());
             continue;
         }
         if blocked.contains(issue.id.as_str()) {
+            accounted.insert(issue.id.clone());
             continue;
         }
         let graph_issue = graph
             .issue(&issue.id)
             .ok_or_else(|| GraphError::MissingGraphIssue(issue.id.clone()))?;
-        match graph_issue.availability {
-            Availability::Available => {
-                admitted.push(issue.clone());
-                recovered.push(issue.clone());
-            }
-            Availability::Blocked => refused.push(InvisibleQueueIssue {
+        let reason = if !dispatchable {
+            Some("row is an epic or carries an assignee; selector must not dispatch it")
+        } else {
+            None
+        };
+        match reason {
+            Some(reason) => refused.push(InvisibleQueueIssue {
                 issue: issue.clone(),
-                reason: "graph reports a non-terminal blocker; blocked projection omitted this row".to_owned(),
+                reason: reason.to_owned(),
             }),
-            Availability::Unknown => refused.push(InvisibleQueueIssue {
-                issue: issue.clone(),
-                reason: "graph availability is unknown; selector must not guess".to_owned(),
-            }),
+            None => match graph_issue.availability {
+                Availability::Available => {
+                    admitted.push(issue.clone());
+                    recovered.push(issue.clone());
+                }
+                Availability::Blocked => refused.push(InvisibleQueueIssue {
+                    issue: issue.clone(),
+                    reason: "graph reports a non-terminal blocker; blocked projection omitted this row".to_owned(),
+                }),
+                Availability::Unknown => refused.push(InvisibleQueueIssue {
+                    issue: issue.clone(),
+                    reason: "graph availability is unknown; selector must not guess".to_owned(),
+                }),
+            },
         }
+        accounted.insert(issue.id.clone());
     }
-    if open_candidates.is_empty() {
-        return Err(GraphError::EmptyCandidateSet);
+    let accounting_residual_count = open_candidates
+        .iter()
+        .filter(|issue| !accounted.contains(issue.id.as_str()))
+        .count();
+    if accounting_residual_count != 0 {
+        return Err(GraphError::UnaccountedOpenIssue(accounting_residual_count));
     }
     admitted.sort_by(|left, right| left.id.cmp(&right.id));
     recovered.sort_by(|left, right| left.id.cmp(&right.id));
@@ -279,6 +340,11 @@ pub fn reconcile_readiness(
         admitted,
         recovered,
         refused,
+        open_count: open_ids.len(),
+        ready_count: visible_ready,
+        blocked_count: visible_blocked,
+        residual_count: projection_gap_count,
+        projection_gap_count,
     })
 }
 
@@ -345,6 +411,7 @@ pub enum GraphError {
     QueueSurfaceOverlap(String),
     MissingGraphIssue(String),
     MissingQueueField(String),
+    UnaccountedOpenIssue(usize),
     MalformedIssues(String),
     MalformedEdges(String),
 }
@@ -366,6 +433,9 @@ impl fmt::Display for GraphError {
             Self::UnknownQueueIssue(id) => write!(formatter, "UNKNOWN_QUEUE_ISSUE: {id}"),
             Self::QueueSurfaceOverlap(id) => write!(formatter, "QUEUE_SURFACE_OVERLAP: {id}"),
             Self::MissingGraphIssue(id) => write!(formatter, "MISSING_GRAPH_ISSUE: {id}"),
+            Self::UnaccountedOpenIssue(count) => {
+                write!(formatter, "UNACCOUNTED_OPEN_ISSUES: {count}")
+            }
             Self::MissingQueueField(field) => write!(formatter, "MISSING_QUEUE_FIELD: {field}"),
             Self::MalformedIssues(detail) => write!(formatter, "MALFORMED_ISSUES: {detail}"),
             Self::MalformedEdges(detail) => write!(formatter, "MALFORMED_EDGES: {detail}"),

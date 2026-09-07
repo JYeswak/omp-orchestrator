@@ -215,6 +215,11 @@ fn available_hidden_child_is_reoffered_instead_of_silently_dropped() {
             .collect::<Vec<_>>(),
         vec!["child", "control"]
     );
+    assert_eq!(report.open_count, 2);
+    assert_eq!(report.ready_count, 1);
+    assert_eq!(report.blocked_count, 0);
+    assert_eq!(report.residual_count, 1);
+    assert!(report.render_text().contains("READINESS open=2 ready=1 blocked=0 residual=1"));
 }
 #[test]
 fn visible_ready_row_is_not_duplicated_by_reconciliation() {

@@ -3,8 +3,8 @@
 use asupersync::runtime::RuntimeBuilder;
 use asupersync::Cx;
 use bead_availability::{
-    classify, collect_live, measure_family, parse_graph_json, parse_issues_jsonl, ScanError,
-    FAMILY_NEEDLES, NO_CLAIM,
+    classify, collect_live, collect_ready_live, measure_family, parse_graph_json, parse_issues_jsonl,
+    ScanError, FAMILY_NEEDLES, NO_CLAIM,
 };
 
 use std::env;
@@ -15,10 +15,11 @@ use std::process::ExitCode;
 static BUILD_ID_MARKER: &[u8] = concat!("build_id=", env!("OMP_BUILD_ID")).as_bytes();
 
 fn usage() -> &'static str {
-    "usage: bead-availability [--json] [--br PATH] [--version]\n\
+    "usage: bead-availability [--json] [--br PATH] [--readiness|--version]\n\
             bead-availability --graph PATH.json\n\
             bead-availability --definition-quality [--issues PATH]\n\
-            exit --definition-quality: 0 at-or-above floor, 1 below-floor, 2 vacuous/unreadable"
+            exit --definition-quality: 0 at-or-above floor, 1 below-floor, 2 vacuous/unreadable\n\
+            readiness: 0 = no projection residual, 1 = residual, 2 = instrument error, 3 = anti-vacuity"
 }
 
 
@@ -27,6 +28,7 @@ fn main() -> ExitCode {
     let mut br_program = String::from("br");
     let mut graph: Option<String> = None;
     let mut definition_quality = false;
+    let mut readiness = false;
     let mut issues_path: Option<String> = None;
     let args = env::args().skip(1).collect::<Vec<_>>();
     let mut index = 0;
@@ -34,6 +36,7 @@ fn main() -> ExitCode {
         match args[index].as_str() {
             "--json" => json = true,
             "--definition-quality" => definition_quality = true,
+            "--readiness" => readiness = true,
             "--version" => {
                 println!("bead-availability 0.1.0 build_id={}", env!("OMP_BUILD_ID"));
                 return ExitCode::SUCCESS;
@@ -86,6 +89,9 @@ fn main() -> ExitCode {
     if definition_quality {
         return run_definition_quality(issues_path.as_deref().unwrap_or(".beads/issues.jsonl"), json);
     }
+    if readiness {
+        return run_readiness(&br_program, json);
+    }
     if let Some(path) = graph {
         return run_graph(Path::new(&path));
     }
@@ -121,6 +127,72 @@ fn main() -> ExitCode {
         Err(error) => {
             eprintln!("BEAD_AVAILABILITY_ERROR {error}");
             ExitCode::from(2)
+        }
+    }
+}
+fn readiness_error_exit(error: &str) -> ExitCode {
+    if error.starts_with("EMPTY_") {
+        ExitCode::from(3)
+    } else {
+        ExitCode::from(2)
+    }
+}
+fn readiness_report_exit(residual_count: usize) -> ExitCode {
+    if residual_count == 0 {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    }
+}
+
+fn run_readiness(br_program: &str, json: bool) -> ExitCode {
+    let runtime = match RuntimeBuilder::current_thread().build() {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            let detail = format!("runtime_build detail={error}");
+            if json {
+                println!("{{\"schema\":\"bead-availability/readiness-v1\",\"status\":\"ERROR\",\"error\":{}}}", serde_json::to_string(&detail).unwrap_or_else(|_| "\"runtime_build\"".to_owned()));
+            }
+            eprintln!("BEAD_AVAILABILITY_READINESS_ERROR {detail}");
+            return ExitCode::from(2);
+        }
+    };
+    let result = runtime.block_on(async {
+        let cx = Cx::current()
+            .ok_or_else(|| "NO_RUNTIME_CONTEXT: readiness collector has no Cx".to_owned())?;
+        collect_ready_live(&cx, br_program).await
+    });
+    match result {
+        Ok(report) => {
+            if json {
+                let value = serde_json::json!({
+                    "schema": report.schema,
+                    "status": if report.residual_count == 0 { "OK" } else { "RESIDUAL" },
+                    "data": report,
+                });
+                match serde_json::to_string_pretty(&value) {
+                    Ok(output) => println!("{output}"),
+                    Err(error) => {
+                        eprintln!("BEAD_AVAILABILITY_READINESS_ERROR render_json detail={error}");
+                        return ExitCode::from(2);
+                    }
+                }
+            } else {
+                print!("{}", report.render_text());
+            }
+            readiness_report_exit(report.residual_count)
+        }
+        Err(error) => {
+            if json {
+                let value = serde_json::json!({
+                    "schema": "bead-availability/readiness-v1",
+                    "status": "ERROR",
+                    "error": error,
+                });
+                println!("{}", serde_json::to_string_pretty(&value).unwrap_or_else(|_| "{\"status\":\"ERROR\"}".to_owned()));
+            }
+            eprintln!("BEAD_AVAILABILITY_READINESS_ERROR {error}");
+            readiness_error_exit(&error)
         }
     }
 }
@@ -207,6 +279,20 @@ fn run_definition_quality(path: &str, json: bool) -> ExitCode {
             eprintln!("{vacuity}");
             ExitCode::from(vacuity.exit_code())
         }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::{readiness_error_exit, readiness_report_exit};
+    use std::process::ExitCode;
+
+    #[test]
+    fn readiness_exit_codes_keep_domain_and_anti_vacuity_distinct() {
+        assert_eq!(readiness_error_exit("EMPTY_READY_SURFACE: br ready returned no candidates"), ExitCode::from(3));
+        assert_eq!(readiness_error_exit("MALFORMED_ISSUES: br blocked response"), ExitCode::from(2));
+        assert_eq!(readiness_error_exit("RUN_FAILED command=br detail=timeout"), ExitCode::from(2));
+        assert_eq!(readiness_report_exit(0), ExitCode::SUCCESS);
+        assert_eq!(readiness_report_exit(1), ExitCode::from(1));
     }
 }
 
