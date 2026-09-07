@@ -1558,6 +1558,70 @@ probe can re-derive the wrong thing forever — `%20`'s **"I measured TOKEN PRES
 REQUIREMENT EQUIVALENCE"** is exactly that: an instrument internally consistent and pointed at the
 wrong object. Re-derivation fixes staleness; only a positive control and a known-bad leg fix aim.
 
+### I MEASURED A SUBSET AND GENERALISED TO THE POPULATION — 19 of 44, not 19 of 19
+
+**Measured 2026-09-07 by `%20`, correcting me. My own unstated-denominator defect, committed while
+documenting the class.**
+
+I reported *"all 19 recorded HD decisions carry a real decision, so 'awaiting a human' is almost
+always false"* and built a bead-triage rule on it. Re-measured over `docs/decisions.jsonl`:
+
+```
+rows                                  56
+distinct HD ids                       44        <- THE POPULATION
+ANY row carries a decision            19        HD-0001..HD-0018, HD-0033
+NO row carries a decision             25        HD-0019..HD-0032, HD-0034..HD-0044
+of the 19 decided, carrying an execution receipt   ZERO
+```
+
+**My claim is exactly right about those 19 and does not generalise to a population of 44.** So the
+conclusion **INVERTS**: *"awaiting a human"* is **genuinely true for 25 of 44 ids.** The inversion I
+found holds for `HD-0009` specifically — which happened to be the one that mattered, which is
+precisely why the over-generalisation survived.
+
+**AND THE MISSING FOURTH STATE IS THE LARGEST ONE: `ExecutionOwed`.** Every recorded decision is
+unexecuted — **zero execution receipts across all 19.** `HD-0008`'s *"push it"* from 2026-09-02 is
+the archetype.
+
+> **A bead in `ExecutionOwed` is WORK and must NEVER be excluded as a human hold** — which is
+> exactly what a hand reading of a human-sounding title does. I did it twice in one pass: a
+> prose-anywhere matcher over-caught **9** (seven P0), then a title-only matcher over-caught **8**
+> more. Both measured token presence and reported pending-decision state.
+
+The five states a triage predicate must distinguish, per `%20`'s runner (`fe291df`):
+`DependencyBlocked` · `TrackerBlocked` · `ExecutionOwed` · `AwaitingHumanDecision` ·
+`Unclassifiable`. **Count only the two that are work wearing a hold; exclude
+`AwaitingHumanDecision` BY A NAMED PREDICATE; make `Unclassifiable` an ERROR** so a bead naming an
+unknown id is never silently excluded.
+
+### TWO CRITERIA OVER ONE SET MUST NOT DISAGREE ON THE DENOMINATOR
+
+**Measured 2026-09-07: R3 printed `144` where R2 printed `138` over the same beads**, because R3's
+population did not exclude the six layer gates. **Neither number was wrong in isolation and only
+running them side by side revealed it.**
+
+A criterion's denominator is part of its claim. Two criteria scoped to one set and reporting
+different populations means at least one is measuring something other than what it names — and
+**both can pass while disagreeing**, which is the failure mode: nothing in either runner compares
+them.
+
+**`0 of 0` MUST BE PRINTED WITH ITS POPULATION.** `%20`'s live R3 reads
+`0 of 0 blocked (population 138)`, because **a criterion reading 0 from an EMPTY population cannot
+otherwise be told from one reading 0 from a healthy one.** That is the anti-vacuity rule stated as
+an output format rather than a test.
+
+**AND FIXTURES CAUGHT TWO DEAD GUARDS IN THE AUTHOR'S OWN RUNNER, second pass running:**
+
+- **The ledger parser accepted any row with an `id` as a decision id.** Pointed at a BEAD file it
+  yielded one bogus id, `seen_ids` was non-empty, and **the anti-vacuity guard silently did not
+  fire.** Fixed with `re.fullmatch(HD-\\d{4})`.
+- The population/denominator disagreement above.
+
+Together with R2's known-good leg catching a `138 of 138` false FAIL, that is **three instrument
+defects caught by mandatory legs in two passes** — every one invisible to a clean run. **Prefer the
+report that names its own instrument failures over the one that reports green.**
+
+
 ### A FIX'S OWN MUTATION OUTPUT IS NOT A DESCRIPTION OF THE PRE-FIX TREE
 
 **Measured 2026-09-07. The first time tonight a wrong line number came from EVIDENCE rather than
