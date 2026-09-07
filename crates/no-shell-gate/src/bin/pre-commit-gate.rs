@@ -322,40 +322,50 @@ fn main() -> ExitCode {
     // ── GATE 5: pre-delete-citation-check (refuse deleting cited files) ───
     let deletions = get_staged_deletions();
     if !deletions.is_empty() {
-        // Bounded tracker readback. A wedged or failed `br` must not
-        // silently skip the citation gate: the refusal below fails the
-        // commit CLOSED (exit-3 class per AmberGate's contract).
-        let mut br_command = std::process::Command::new(finding::BR);
-        br_command.args(["list", "--status=closed", "--json"]);
-        let closed = match subprocess_contract::bounded_output(
-            &mut br_command,
-            std::time::Duration::from_secs(10),
-        ) {
-            subprocess_contract::BoundedOutcome::Completed(out) if out.status.success() => {
-                pre_delete_citation_check::parse_closed_beads(&String::from_utf8_lossy(&out.stdout))
-            }
-            subprocess_contract::BoundedOutcome::TimedOut => {
-                refusals.push(
-                    "pre-delete-citation-check: br readback exceeded deadline; \
-                     citation gate unrun"
-                        .to_owned(),
-                );
-                Vec::new()
-            }
-            _ => {
-                refusals.push(
-                    "pre-delete-citation-check: br readback failed; \
-                     citation gate unrun"
-                        .to_owned(),
-                );
+        // TRACKER SOURCE = THE MIRROR, NOT A SUBPROCESS (omp-orchestrator-dpa4).
+        //
+        // This read used to be `br list --status=closed --json` under a 10s deadline, and
+        // both halves were wrong. Measured 2026-09-07: that command returns 196 closed rows
+        // and ZERO of them carry a `comments` key, so `check_deletions` scanned an empty
+        // comment vector on every bead -- and 14 closed beads in this tracker cite a `bin/`
+        // or `.flywheel/` path ONLY in comments, one of them the very bead that created this
+        // gate. The comment half of the gate was structurally vacuous, not merely untested.
+        // The 10s deadline was the second defect: it sits INSIDE the measured 40-250s `br`
+        // contention band, so a healthy-but-contended read refused the commit, while any
+        // ceiling above the band would make the operator wait minutes. Reading the mirror
+        // removes a subprocess from the commit path and has neither failure mode -- no
+        // `.beads/.write.lock`, no deadline, and the comments are actually present.
+        //
+        // RESTRICTIVE: an absent, unreadable, empty, or record-free mirror pushes a refusal
+        // and fails the commit CLOSED. A deletion is never certified against an oracle that
+        // was not read.
+        let closed = match pre_delete_citation_check::read_closed_beads_from_mirror(&repo_root) {
+            Ok(beads) => beads,
+            Err(error) => {
+                refusals.push(format!(
+                    "pre-delete-citation-check: {error}; citation gate unrun"
+                ));
                 Vec::new()
             }
         };
         let conflicts = pre_delete_citation_check::check_deletions(&deletions, &closed);
+        // DENOMINATORS, so a reader can tell "checked nothing" from "checked everything and
+        // found nothing". A bare "no conflicts" is the vacuous-green shape this gate exists
+        // to refuse.
+        let comment_bearing = closed.iter().filter(|b| !b.comments.is_empty()).count();
+        let _ = writeln!(
+            io::stderr(),
+            "pre-delete-citation-check: staged_deletions={} closed_beads={} \
+             with_comments={} conflicts={}",
+            deletions.len(),
+            closed.len(),
+            comment_bearing,
+            conflicts.len()
+        );
         for c in &conflicts {
             refusals.push(format!(
-                "pre-delete-citation-check: {} cites deleted path {}",
-                c.bead_id, c.deleted_path
+                "pre-delete-citation-check: {} cites deleted path {} in {}",
+                c.bead_id, c.deleted_path, c.field
             ));
         }
     }

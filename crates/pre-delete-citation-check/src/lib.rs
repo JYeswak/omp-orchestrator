@@ -220,6 +220,100 @@ pub fn parse_closed_beads_checked(br_json: &str) -> Result<Vec<ClosedBead>, Stri
     Ok(beads)
 }
 
+/// Read closed beads from the `.beads/issues.jsonl` MIRROR, comments included.
+///
+/// THE DEFECT THIS CLOSES (`omp-orchestrator-dpa4`): `ClosedBead::comments` exists,
+/// [`check_deletions`] scans it, and until this function landed EVERY production caller
+/// passed an empty vector. [`parse_closed_beads`] says so in its own body -- *"The br JSON
+/// does not inline comments; the caller fetches them separately"* -- and no caller ever
+/// did. Measured 2026-09-07: `br list --json --status closed` returns **196 rows and 0 of
+/// them carry a `comments` key at all**, so the comment-scanning half of this gate was
+/// structurally vacuous, not merely untested.
+///
+/// WHY THAT IS THE WHOLE POINT OF THE CRATE. This module's own header records the incident:
+/// `cp-3k9jq`'s close_reason is 104 chars with zero path citations while its comments cite
+/// `bin/fleet-composite.py` in three places, and *"a gate scanning only close reasons passes
+/// this deletion and the incident recurs."* Measured in THIS tracker: **14 closed beads cite
+/// a `bin/` or `.flywheel/` path ONLY in comments and never in close_reason** -- one of them
+/// `omp-orchestrator-pre-delete-citation-check-igk`, the bead that created this gate.
+///
+/// WHY THE MIRROR AND NOT THE TRACKER. It also removes a subprocess from the COMMIT path.
+/// The `br` spawn took the `.beads/.write.lock` contended by several live writers, which is
+/// why its caller needed a deadline at all, and any deadline there is wrong in one of two
+/// directions: inside the measured 40-250s band it converts contention into a refused commit,
+/// above the band it makes the operator wait minutes. A file read has neither failure mode.
+///
+/// RESTRICTIVE, per the gate boundary: an absent, unreadable, empty, or record-free mirror is
+/// an `Err`, never an empty success. A deletion cannot be certified citation-free against an
+/// oracle that was not read.
+///
+/// RESIDUAL, stated: the JSONL is a MIRROR of the database, so a bead closed since the last
+/// flush is invisible here. That is strictly narrower than the hole it replaces, which missed
+/// every comment on every bead regardless of freshness.
+pub fn parse_closed_beads_jsonl_checked(jsonl: &str) -> Result<Vec<ClosedBead>, String> {
+    let mut rows = 0usize;
+    let mut beads = Vec::new();
+    for (index, line) in jsonl.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        rows += 1;
+        let value: Value = serde_json::from_str(line).map_err(|error| {
+            format!("PRE_DELETE_BEADS_UNREADABLE reason=malformed_jsonl line={index} detail={error}")
+        })?;
+        if value.get("status").and_then(Value::as_str).unwrap_or("") != "closed" {
+            continue;
+        }
+        let comments = value
+            .get("comments")
+            .and_then(Value::as_array)
+            .map(|list| {
+                list.iter()
+                    .filter_map(|entry| entry.get("text").and_then(Value::as_str))
+                    .map(str::to_owned)
+                    .collect::<Vec<String>>()
+            })
+            .unwrap_or_default();
+        beads.push(ClosedBead {
+            id: value
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_owned(),
+            close_reason: value
+                .get("close_reason")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_owned(),
+            comments,
+        });
+    }
+    if rows == 0 {
+        return Err("PRE_DELETE_BEADS_EMPTY reason=zero_bead_records_readable".to_owned());
+    }
+    if beads.is_empty() {
+        return Err("PRE_DELETE_BEADS_EMPTY reason=no_closed_records_readable".to_owned());
+    }
+    Ok(beads)
+}
+
+/// Path of the tracker mirror relative to a repository root.
+pub fn beads_mirror_path(repo_root: &Path) -> std::path::PathBuf {
+    repo_root.join(".beads").join("issues.jsonl")
+}
+
+/// Read and check the mirror at `repo_root`. An absent file is restrictive, NOT an empty pass.
+pub fn read_closed_beads_from_mirror(repo_root: &Path) -> Result<Vec<ClosedBead>, String> {
+    let path = beads_mirror_path(repo_root);
+    let text = std::fs::read_to_string(&path).map_err(|error| {
+        format!(
+            "PRE_DELETE_BEADS_UNREADABLE reason=mirror_unreadable path={} detail={error}",
+            path.display()
+        )
+    })?;
+    parse_closed_beads_jsonl_checked(&text)
+}
+
 /// True when the given repo-root path is inside a git repository with at least one commit.
 pub fn is_git_repo(path: &Path) -> bool {
     path.join(".git").exists()
