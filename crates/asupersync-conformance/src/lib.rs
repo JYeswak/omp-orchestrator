@@ -664,23 +664,53 @@ mod tests {
     fn mutation_of_raw_command_needle_goes_red_and_restores_byte_identically() {
         let source =
             b"use std::process::Command; fn main() { let _ = Command::new(\"echo\").output(); }";
-        let before = sha256_hex(source);
-        let mutated = String::from_utf8(source.to_vec())
-            .expect("fixture utf8")
-            .replace(RAW_COMMAND_NEEDLE, "Command::spawn");
+        let path = std::env::temp_dir().join(format!(
+            "asupersync-conformance-raw-command-{}",
+            std::process::id()
+        ));
+        fs::write(&path, source).expect("write original fixture");
+
+        // Capture the original bytes from the fixture before mutating it. The restore
+        // assertion must compare this independent read with a later read-back.
+        let before_bytes = fs::read(&path).expect("read original fixture");
+        let before = sha256_hex(&before_bytes);
+
+        let mut mutated_bytes = before_bytes.clone();
+        let needle_start = mutated_bytes
+            .windows(RAW_COMMAND_NEEDLE.len())
+            .position(|window| window == RAW_COMMAND_NEEDLE.as_bytes())
+            .expect("raw-command needle in fixture");
+        mutated_bytes.splice(
+            needle_start..needle_start + RAW_COMMAND_NEEDLE.len(),
+            b"Command::spawn".iter().copied(),
+        );
+        fs::write(&path, &mutated_bytes).expect("write mutated fixture");
+        let mutated_source = String::from_utf8(fs::read(&path).expect("read mutated fixture"))
+            .expect("mutated fixture utf8");
         let broken =
-            scan_source_text_with_needle("mutant", "src/main.rs", &mutated, RAW_COMMAND_NEEDLE);
+            scan_source_text_with_needle("mutant", "src/main.rs", &mutated_source, RAW_COMMAND_NEEDLE);
         assert_eq!(broken.expect("mutated source remains scannable").len(), 0);
+        println!("MUTATION RED raw_command_needle: mutated scan found zero sites");
+
+        // Restore the fixture through the filesystem, then read it back. A one-byte
+        // restore mutation must make the independent digest assertion fail.
+        fs::write(&path, &before_bytes).expect("restore original fixture");
+        let restored_bytes = fs::read(&path).expect("read restored fixture");
         let restored = scan_source_text(
             "mutant",
             "src/main.rs",
-            std::str::from_utf8(source).unwrap(),
+            std::str::from_utf8(&restored_bytes).expect("restored fixture utf8"),
         )
         .expect("restored source");
-        let after = sha256_hex(source);
+        let after = sha256_hex(&restored_bytes);
         println!("raw_command mutation sha256 before={before} after={after}");
         assert_eq!(restored.len(), 1);
+        assert_eq!(
+            before_bytes, restored_bytes,
+            "mutation fixture restored bytes must match the original read-back"
+        );
         assert_eq!(before, after, "mutation fixture restored byte-identically");
+        fs::remove_file(path).expect("cleanup mutation fixture");
     }
 }
 
