@@ -28,38 +28,23 @@
 //! Re-exporting the first compiles fine and yields a type with no values. **Deriving means reading
 //! the definition, not matching the name.**
 //!
-//! # Derivation trap #2 — the ack vocabulary is UNREACHABLE at our pinned rev
+//! # Upstream ack semantics, authored locally
 //!
-//! `AckKind` and `DeliveryClass` are exactly the types our three dialects were groping toward:
+//! The shared AckKind and DeliveryClass vocabulary is authored in
+//! ack_vocabulary.rs. Its names, order, and delivery-to-ack mapping mirror the
+//! inhabited definitions in pinned asupersync rev fa3c01aec:
+//! messaging/class.rs:17-29 and messaging/class.rs:83-94.
 //!
-//! | `AckKind` variant | asupersync's doc | the authority we reinvented |
-//! |---|---|---|
-//! | `Accepted` | packet plane accepted custody | transport success (`ntm` JSON) |
-//! | `Committed` | authority plane committed the entry | — |
-//! | `Recoverable` | declared durability class met | — |
-//! | `Served` | service obligation completed by callee | bead-comment ack, read back |
-//! | `Received` | delivery/receipt boundary crossed | observational delivery |
+//! They are intentionally not re-exports. The upstream module is gated behind
+//! messaging-fabric, and that feature fails at this pin because
+//! messaging/consumer.rs:1299-1300 calls TaskId::new_ephemeral and
+//! RegionId::new_ephemeral while those constructors require test-internals.
+//! Enabling test-internals would reintroduce upstream issue #46, so this crate
+//! keeps the feature disabled and owns the Phase 0 vocabulary directly.
 //!
-//! **We cannot have them.** Both sit behind `#[cfg(feature = "messaging-fabric")]`, and that
-//! feature does not compile at `fa3c01aec`. Measured, both directions:
-//!
-//! ```text
-//! features = ["messaging-fabric"]                     -> E0599, 2 errors
-//!   messaging/consumer.rs:1299  fn default() { holder: TaskId::new_ephemeral(), … }  (un-gated)
-//!   types/id.rs:136             #[cfg(any(test, feature = "test-internals"))]
-//! features = ["messaging-fabric", "test-internals"]   -> exit 0, 0 errors
-//! ```
-//!
-//! A production `Default` impl calls a test-only constructor. This became load-bearing when
-//! upstream issue #46 — *"default feature set includes test-internals — leaks into downstream
-//! production"* — was correctly **fixed**, removing `test-internals` from
-//! `default = ["proc-macros", "nightly-outcome-try"]`. Enabling it here would reintroduce the exact
-//! leak #46 closed, so we do not.
-//!
-//! **NO-CLAIM:** the mapping table above is a *proposal*, not a migration. Whether a tmux pane that
-//! has never heard of asupersync can produce an `Accepted` is **UNMEASURED** — `--mode=rpc` is
-//! single-session and cannot address a third-party pane, so the receipt gap may survive the
-//! vocabulary.
+//! The local types express vocabulary and ordering only. They do not prove
+//! transport delivery, authority-plane commitment, or receiver receipt; those
+//! remain separate runtime claims.
 
 // ─────────────────────────────────────────────── AUTHORED, not derived (Phase 0 · T3)
 //
@@ -80,7 +65,12 @@ pub use pane_observation::{
 // hypothesis, where this is a KIND order with no such element.
 pub mod claim_strength;
 pub use claim_strength::{ClaimStrength, UnknownClaimStrength};
-// ─────────────────────────────────────────────── AUTHORED, not derived (Phase 0 · T4)
+// ─────────────────────────────────────────────── AUTHORED, not derived (Phase 0 · T2)
+//
+// Contract: the local AckKind/DeliveryClass vocabulary mirrors pinned asupersync
+// semantics because the upstream messaging-fabric feature is unavailable here.
+pub mod ack_vocabulary;
+pub use ack_vocabulary::{AckKind, DeliveryClass};
 //
 // Contract: docs/contracts/lifecycle_contract.md. This is the OMP pane lifecycle, distinct from
 // the sibling control-plane RPC session machine; it bridges the typed subprocess boundary without
@@ -146,16 +136,4 @@ mod tests {
         let _ = (takes_task as fn(&TaskId), takes_region as fn(&RegionId));
     }
 
-    /// The blocked half, asserted as a **named absence** rather than left silent. If a future rev
-    /// makes `messaging-fabric` build without `test-internals`, delete this test and re-export
-    /// `AckKind`/`DeliveryClass` — its failure to compile is the signal to do so.
-    #[test]
-    fn ack_vocabulary_is_documented_as_unreachable() {
-        const BLOCKER: &str =
-            "messaging-fabric requires test-internals at fa3c01aec (consumer.rs:1299 default impl)";
-        assert!(
-            !BLOCKER.is_empty(),
-            "the blocker must stay named, not silently dropped"
-        );
-    }
 }

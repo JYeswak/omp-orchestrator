@@ -510,30 +510,13 @@ pub fn missing_vocabulary() -> Vec<MissingTypeRow> {
         MissingTypeRow {
             name: "DeliveryClass".to_owned(),
             status: MissingStatus::PresentUpstreamBlocked,
-            evidence: "asupersync messaging/class.rs:17 (five variants: \
-                       EphemeralInteractive/DurableOrdered/ObligationBacked/\
-                       MobilitySafe/ForensicReplayable) behind \
-                       #[cfg(feature = \"messaging-fabric\")] \
-                       (messaging/mod.rs:78-79). Without the feature: E0433 \
-                       (probe-verified 2026-08-31). With messaging-fabric alone: \
-                       E0599, consumer.rs:1299 un-gated fn default() calls \
-                       TaskId::new_ephemeral() which is \
-                       cfg(any(test, feature = \"test-internals\")) (orchestrator \
-                       measurement 2026-08-31); +test-internals compiles but \
-                       reintroduces the leak upstream issue #46 closed. BLOCKED \
-                       at pin fa3c01aec; unblock = upstream gates that fn or \
-                       ships a fixed rev."
+            evidence: "Upstream asupersync DeliveryClass at messaging/class.rs:17-29 remains blocked behind messaging-fabric at fa3c01aec: consumer.rs:1299-1300 calls constructors gated by test-internals. Local authored mirror: omp-types/src/ack_vocabulary.rs; this row records upstream reachability, not local absence."
                 .to_owned(),
         },
         MissingTypeRow {
             name: "AckKind".to_owned(),
             status: MissingStatus::PresentUpstreamBlocked,
-            evidence: "TWO upstream declarations (derived): UNINHABITED marker \
-                       `pub enum AckKind {}` obligation/graded.rs:790 — the one \
-                       omp-types re-exported by name in its first draft (scar); \
-                       inhabited five-variant messaging/class.rs:83, behind the \
-                       same BLOCKED messaging-fabric feature gate as \
-                       DeliveryClass. Same evidence and unblock path."
+            evidence: "Upstream inhabited AckKind at messaging/class.rs:83-94 remains blocked behind messaging-fabric at fa3c01aec; obligation/graded.rs:790 is a separate uninhabited marker. Local authored mirror: omp-types/src/ack_vocabulary.rs; this row records upstream reachability, not local absence."
                 .to_owned(),
         },
         MissingTypeRow {
