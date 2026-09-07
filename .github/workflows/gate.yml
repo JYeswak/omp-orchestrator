@@ -28,8 +28,13 @@
 # they are channel-agnostic and survived the flip untouched. They exist so that a
 # toolchain resolution failure is attributed to ITSELF rather than surfacing as a
 # mysterious gate failure, which is the same reason `Workspace loads` is its own
-# step. GitHub Actions does not resolve YAML anchors, so the step is repeated per
-# job rather than shared.
+# step.
+#
+# CORRECTED 2026-09-07 (omp-orchestrator-fsu7): the previous sentence read "GitHub
+# Actions does not resolve YAML anchors, so the step is repeated per job rather than
+# shared." That was true of a twelve-job workflow and is now moot -- there is ONE job,
+# so there is nothing to repeat and no anchor to want. Retained as provenance because
+# the repetition was a deliberate response to a measured 67-run outage, not clutter.
 #
 # HISTORICAL EXCLUSION NOTE: this was the pre-3b5u worktree-only state. The
 # committed-tree job below now builds the complete archived workspace, including
@@ -67,470 +72,76 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  no-shell-gate:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          # FULL HISTORY, not the default fetch-depth: 1. Measured on run
-          # 33583861505: `findings_ledger` went red in CI while green locally, at its
-          # OWN positive control -- "the reader cannot detect a known section touch;
-          # every verdict below is meaningless" -- because it runs
-          # `git show --name-only 07de72b` and a depth-1 clone does not have that
-          # object. That is a verdict about the CHECKOUT masquerading as a verdict
-          # about the code, which is the same false signal this workflow was dark
-          # with for 67 runs. Applied to every job rather than only the ones known
-          # to read history, because guessing which gate touches git is how the
-          # next one gets starved silently. Cost: a full clone per job -- negligible
-          # beside the ~12min asupersync git fetch each job already pays.
-          fetch-depth: 0
-      # THE RUN COST IS A COLD GIT FETCH, NOT THE GATES.
-      #
-      # `asupersync` is a GIT dependency (`crates/*/Cargo.toml`: `asupersync = { git =
-      # "https://github.com/Dicklesworthstone/asupersync", rev = "fa3c01aec" }`), and the
-      # comment above puts that fetch at ~12 minutes PER JOB. Ten jobs paid it
-      # independently on every one of the last twelve runs, which is most of the 17-25
-      # minute wall time — the gates themselves are text scans over a checkout and take
-      # seconds. `Downloaded thiserror v2.0.20` appearing in the log is the tell: nothing
-      # was cached.
-      #
-      # Caching `target/` cannot manufacture a false verdict, which is the failure this
-      # repo actually fears. Every gate re-reads the checked-out tree at RUNTIME, and
-      # `actions/checkout` writes fresh mtimes on every source file, so cargo's fingerprint
-      # comparison rebuilds anything whose source is newer than its cached artifact. The
-      # error direction is a needless rebuild, never a stale scan.
-      - name: Cargo cache — registry, git DB and target
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            ~/.cargo/git/checkouts/
-            target/
-          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            cargo-${{ runner.os }}-${{ github.job }}-
-            cargo-${{ runner.os }}-
-      # Was `rustup toolchain install stable --profile minimal`, and on 2026-09-02
-      # that installed the wrong compiler while being the only job that said
-      # anything about a toolchain at all — the other nine inherited the runner
-      # default silently. RETRACTED as of 2026-09-03: stable is no longer the wrong
-      # compiler, it is the pin. What was actually wrong was naming a channel here
-      # instead of deferring to `rust-toolchain.toml`, and that is still wrong.
-      - name: Rust toolchain (pinned by rust-toolchain.toml)
-        run: |
-          rustup show active-toolchain
-          cargo --version
-          rustc --version
-      # Acceptance 3 (bead omp-orchestrator-workspace-load-gate-of3): the
-      # workspace LOADS as its own step, BEFORE and independently of the gate
-      # steps — a manifest break is attributed to itself, not surfaced as a
-      # mysterious gate failure.
-      - name: Workspace loads
-        run: cargo metadata --no-deps --format-version 1 > /dev/null
-      # `-p no-shell-gate` alone exited 101 with "could not determine which
-      # binary to run" on every run since the package grew its second bin. A gate
-      # that cannot start is indistinguishable from a gate that found nothing.
-      - name: Gate binary — refuse tracked .sh/.py
-        run: cargo run --quiet -p no-shell-gate --bin no-shell-gate
-      - name: Gate tests — red/green legs and the real-tree leg
-        run: cargo test -p no-shell-gate
-      - name: Gate reachability census — machine-readable trigger report
-        run: mkdir -p .flywheel && cargo run --quiet -p no-shell-gate --bin gate-reachability -- --root . --out .flywheel/gate-reachability.json
-      - name: Generate asupersync conformance table
-        run: |
-          cargo run --quiet -p asupersync-conformance -- --repo . --write ASUPERSYNC-CONFORMANCE.md
-          git diff --exit-code -- ASUPERSYNC-CONFORMANCE.md
-      # before another round may start. `--check` is the same command a human and the
-      # pre-commit hook run, so the refusal is not reachable only from `cargo test`.
-      - name: No new round until one stamped doc covers every round
-        run: cargo run --quiet -p convergence-stamp -- --repo . --check
-  head-compiles-as-committed:
-    # REACHABLE TRIGGER: this job runs on push, pull_request, and manual dispatch.
-    # VERDICT CONSUMER: the final step reads the receipt emitted by the gate; a
-    # red build is not left as an unread CI status.
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout full history
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Rust toolchain (pinned by rust-toolchain.toml)
-        run: |
-          rustup show active-toolchain
-          cargo --version
-          rustc --version
-      - name: Verify committed HEAD from a clean archive
-        run: cargo run --quiet -p no-shell-gate --bin head-compiles-gate -- --repo . --receipt "$RUNNER_TEMP/head-compiles.receipt"
-      - name: Read committed-tree verdict
-        run: |
-          cat "$RUNNER_TEMP/head-compiles.receipt"
-          grep -q '^HEAD_COMPILES_GATE PASS ' "$RUNNER_TEMP/head-compiles.receipt"
-  # omp-orchestrator-xib4: THIS JOB KEY WAS LOST, and losing it was worse than
-  # deleting the job. Without this line the body below became a SECOND `runs-on:`
-  # and `steps:` inside `head-compiles-as-committed`, and YAML forbids duplicate
-  # mapping keys: a strict loader refuses the whole file while a lenient one --
-  # which is what CI engines and `yaml.safe_load` do -- takes the LAST value. So
-  # the FIRST steps block above, the one that runs `head-compiles-gate` and greps
-  # `HEAD_COMPILES_GATE PASS`, was silently discarded. The job that verifies the
-  # committed HEAD stopped verifying it while still reporting a status.
+  # ONE JOB, ONE ENTRY POINT -- omp-orchestrator-fsu7.
   #
-  # It also orphaned a declared CI referent: `no-shell-gate/tests/wired_lanes.rs:83`
-  # declares GATE-018 as Wired{Ci} with referent
-  # `.github/workflows/gate.yml::path-literal-guard`, which named no workflow job.
-  # One missing key, three RED detectors.
-  path-literal-guard:
+  # WHY THIS IS ONE JOB AND NOT TWELVE. GitHub Actions is STRICT on duplicate keys:
+  # measured n=60 runs, 49 duplicate-key runs started ZERO jobs. A workflow that fails
+  # to parse starts nothing and reports nothing, which is indistinguishable from a gate
+  # that passed. Worse, the 2026-09-06 defect was a MISSING job key that collapsed two
+  # jobs into one -- silently halving coverage with no error anywhere, remedied by a
+  # one-line restore. A YAML fan-out has no denominator; `gate-runner` has one.
+  #
+  # THE UNIT WAS ALSO WRONG, and this is the sharper finding. Counting jobs is
+  # structurally blind to the fan-out, because it grows INSIDE jobs: measured 2026-09-07,
+  # the twelve jobs invoked 15 distinct gate BINS across 13 crates, and a peer adding one
+  # step took it to 16 while the job count sat at 12. `no-shell-gate` alone hosts THREE
+  # bins. So `bins` replaced `jobs` as this reduction's denominator.
+  #
+  # SUBSUMPTION, PER JOB, BY NAME -- item 10 forbids deleting a job to reduce a count.
+  # Ten jobs had BOTH a `cargo test -p X` half and a `cargo run` half; two were
+  # test-only. Every crate below is in `gate-runner`'s derived roster (its test half),
+  # and every `cargo run` half is declared in the OWNING CRATE'S OWN Cargo.toml under
+  # `[package.metadata.gate]` (its run half), so the declaration travels with the crate
+  # and adding a gate needs no edit here:
+  #
+  #   no-shell-gate               -> roster + checks: no-shell-gate (3 bins),
+  #                                  asupersync-conformance, convergence-stamp
+  #   head-compiles-as-committed  -> roster + checks: no-shell-gate/head-compiles-gate
+  #   path-literal-guard          -> roster (TEST-ONLY job; no run half existed)
+  #   grader-attribution-gate     -> roster + checks
+  #   undrained-pipe-lint         -> roster + checks
+  #   kernel-bypass-gate          -> roster + checks
+  #   state-wildcard-lint         -> roster + checks
+  #   installer                   -> roster + checks
+  #   omp-inventory-map           -> roster (TEST-ONLY; its run half was DELETED earlier,
+  #                                  not moved -- see that job's own former comment)
+  #   pre-delete-citation-check   -> roster + checks
+  #   commit-build-fence          -> roster + checks (two phases: init THEN check)
+  #   porting-gate                -> roster + checks: porting-gate,
+  #                                  preregistration-gate, plan-assemble
+  #
+  # This mapping is ENFORCED, not merely asserted here: `gate_runner::subsumption`
+  # refuses a job whose binary half has no declared check and names the crate. A table
+  # in a comment cannot fail; that function can.
+  #
+  # BOUNDARY (item 9): `m0c` remains canonical for YAML validity. This job is the entry
+  # point only, and nothing here changes push cadence.
+  gate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # full history — see the no-shell-gate job for why
-      - name: Cargo cache — registry, git DB and target
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            ~/.cargo/git/checkouts/
-            target/
-          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            cargo-${{ runner.os }}-${{ github.job }}-
-            cargo-${{ runner.os }}-
+          # FULL HISTORY, not the default fetch-depth: 1. Unchanged from the twelve-job
+          # arrangement and for the same measured reason: gates that read git (the
+          # committed-tree archive check, pre-delete citation scanning) produce a verdict
+          # about the CHECKOUT masquerading as a verdict about the code when the clone is
+          # shallow. That false signal is what left this workflow dark for 67 runs.
+          fetch-depth: 0
       - name: Rust toolchain (pinned by rust-toolchain.toml)
         run: |
+          rustup show active-toolchain
           cargo --version
           rustc --version
-      - run: cargo test -p path-literal-guard
-  grader-attribution-gate:
-    # TRACKED CALLER for omp-orchestrator-gcyf. The chokepoint is the committed
-    # ledger, not br close (panes invoke br by hand). cargo test reads
-    # .beads/issues.jsonl; cargo run names ATTRIBUTION_ABSENT rows.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # full history — see the no-shell-gate job for why
-      - name: Cargo cache — registry, git DB and target
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            ~/.cargo/git/checkouts/
-            target/
-          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            cargo-${{ runner.os }}-${{ github.job }}-
-            cargo-${{ runner.os }}-
-      - name: Rust toolchain (pinned by rust-toolchain.toml)
-        run: |
-          cargo --version
-          rustc --version
-      - name: Gate tests — production ledger, iis6 pass, leht/mj8w positive control
-        run: cargo test -p grader-attribution-gate
-  undrained-pipe-lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # full history — see the no-shell-gate job for why
-      - name: Cargo cache — registry, git DB and target
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            ~/.cargo/git/checkouts/
-            target/
-          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            cargo-${{ runner.os }}-${{ github.job }}-
-            cargo-${{ runner.os }}-
-      - name: Rust toolchain (pinned by rust-toolchain.toml)
-        run: |
-          cargo --version
-          rustc --version
-      - run: cargo test -p undrained-pipe-lint
-      - name: Scan checked-out workspace for undrained-pipe pattern
-        run: cargo run --quiet -p undrained-pipe-lint -- .
-  kernel-bypass-gate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # full history — see the no-shell-gate job for why
-      - name: Cargo cache — registry, git DB and target
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            ~/.cargo/git/checkouts/
-            target/
-          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            cargo-${{ runner.os }}-${{ github.job }}-
-            cargo-${{ runner.os }}-
-      - name: Rust toolchain (pinned by rust-toolchain.toml)
-        run: |
-          cargo --version
-          rustc --version
-      - run: cargo test -p kernel-bypass-gate
-      - name: Scan checked-out workspace for kernel bypasses
-        run: cargo run --quiet -p kernel-bypass-gate -- .
-  state-wildcard-lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # full history — see the no-shell-gate job for why
-      - name: Cargo cache — registry, git DB and target
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            ~/.cargo/git/checkouts/
-            target/
-          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            cargo-${{ runner.os }}-${{ github.job }}-
-            cargo-${{ runner.os }}-
-      - name: Rust toolchain (pinned by rust-toolchain.toml)
-        run: |
-          cargo --version
-          rustc --version
-      - run: cargo test -p state-wildcard-lint
-      - name: Reject wildcard arms on state-like enums
-        run: cargo run --quiet -p state-wildcard-lint -- .
-  installer:
-    # WIRING: the installer was BUILT, tested and hardened this session and was
-    # invoked by nothing — caught by wired_lanes, not by a human. `--check`
-    # compares the binaries the workspace declares against what is installed and
-    # exits nonzero on drift, so it is a real gate rather than a smoke run.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # full history — see the no-shell-gate job for why
-      - name: Cargo cache — registry, git DB and target
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            ~/.cargo/git/checkouts/
-            target/
-          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            cargo-${{ runner.os }}-${{ github.job }}-
-            cargo-${{ runner.os }}-
-      - name: Rust toolchain (pinned by rust-toolchain.toml)
-        run: |
-          cargo --version
-          rustc --version
-      - run: cargo test -p installer
-      # THIS LEG USED TO CARRY ZERO BITS. Reported by the InstallerBuildBreak lane,
-      # re-measured here. `--check` SKIPS every declared binary that is not installed,
-      # and a fresh runner never has one, so the drift denominator is always 0 and the
-      # step could not go red. Verbatim, `--check --bin-dir <empty dir>`:
-      #
-      #   installer --check: HEAD=6777b98
-      #     omp-orchestrator: NOT INSTALLED (skipped)
-      #     tick-monitor: NOT INSTALLED (skipped)
-      #     pane-truth: NOT INSTALLED (skipped)
-      #     installer: NOT INSTALLED (skipped)
-      #   INSTALLER IDENTITY OK: 0/0 binaries consistent with HEAD 6777b98
-      #   EXIT=0
-      #
-      # That is the inverse of the kernel-bypass-gate finding in this same commit
-      # series: there a gate had no reachable GREEN leg, here it has no reachable RED
-      # one. Both are uninformative — a verdict that cannot vary carries no bits.
-      #
-      # WHY NOT `--install installer` FIRST, which would give a real 1/1 denominator:
-      # measured locally, that path works (1/1, IDENTITY OK, exit 0) but it shells
-      # `cargo build --release -p installer` (crates/installer/src/lib.rs:366) and then
-      # `launchctl` (:548, :605), which does not exist on ubuntu-latest. Adding a
-      # release build plus an unverifiable macOS-only spawn to the workflow we are
-      # trying to make reliable would trade a vacuous green for a probable new red on
-      # a guess. NOT DONE. Wants an installed-fixture leg or a named debt row.
-      #
-      # WHAT IS LANDED is the part that can be proven: an explicit throwaway --bin-dir
-      # for both legs, so neither depends on ~/.local/bin existing on a runner (it does
-      # not, and this step has NEVER executed on a runner — the installer job died at
-      # compile on all twelve failed runs, so the old unqualified `--check` is
-      # unproven, not proven), plus a KNOWN-BAD leg that makes the MISMATCH path
-      # demonstrably reachable there. Both outcomes below were measured locally at
-      # 6777b98: 0/0 exit 0, and MISMATCH exit 1.
-      - name: installer --check, with a known-BAD leg so the verdict can vary
-        run: |
-          set -euo pipefail
-          bin="$RUNNER_TEMP/installer-bin"
-          mkdir -p "$bin"
-          echo "--- leg 1 (known-GOOD): empty bin dir must be accepted, 0/0"
-          cargo run --quiet -p installer -- --check --bin-dir "$bin"
-          echo "--- leg 2 (known-BAD): a drifted installed binary must REFUSE"
-          cp /bin/echo "$bin/installer"
-          if cargo run --quiet -p installer -- --check --bin-dir "$bin"; then
-            echo "REFUSED: --check accepted a binary that is not this HEAD."
-            echo "The drift comparison is not reachable on this runner, so leg 1's"
-            echo "green means nothing. Fix the checker, do not delete this leg."
-            exit 1
-          fi
-          echo "installer --check: 0/0 accepted and MISMATCH refused, both observed here"
-  omp-inventory-map:
-    # WIRING: this is one of the eight gates §06 is built around and CI did not
-    # invoke it. Caught by wired_lanes, not by a human. the only gate that mutates a real filesystem tree (TREE leg); it was never run by CI.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # full history — see the no-shell-gate job for why
-      - name: Cargo cache — registry, git DB and target
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            ~/.cargo/git/checkouts/
-            target/
-          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            cargo-${{ runner.os }}-${{ github.job }}-
-            cargo-${{ runner.os }}-
-      - name: Rust toolchain (pinned by rust-toolchain.toml)
-        run: |
-          cargo --version
-          rustc --version
-      - run: cargo test -p omp-inventory-map
-      # DELETED, not fixed: `cargo run --quiet -p omp-inventory-map -- .`
-      #
-      # There is NO argv that makes it pass on a runner, so correcting it the way
-      # the fence was corrected would not have worked. Measured against a clean
-      # `git clone --local` checkout at 4fb865c:
-      #   `-- .`                   exit 1  ERROR   "CONFIG_ERROR unknown argument ."
-      #   `-- doctor|health|audit` exit 2  UNKNOWN
-      #   `-- types --repo .`      exit 2  REFUSED (29 collisions, 23 unallowanced)
-      #   `-- version`             exit 0  OK      <- the only exit-0 command
-      # Independently confirmed here: `version` -> 0, `.` -> 1, `types --repo .` -> 2.
-      # doctor/health/audit probe the LOCALLY INSTALLED omp npm package and map any
-      # unresolved probe to exit 2, so the step asked a local-machine probe for a
-      # verdict about a GitHub runner. `types` is a report, not a gate.
-      #
-      # COVERAGE IS NOT LOST, and this is the load-bearing half: the type-census
-      # blocking leg now lives in the test suite above, as a derived invariant rather
-      # than the `assert_eq!` name snapshot that drifted from six names to eight and
-      # became cause 3 of this bead. `types_inventory` needs no external program —
-      # `grep -c 'omp_program\|find_program\|cargo_program'
-      # crates/omp-inventory-map/src/types_inventory.rs` returns 0, against a positive
-      # control of 3 in the same crate's `main.rs`, so the needle can match and the
-      # zero is real. It is a pure `crates/**` tree scan and runs on any runner.
-  pre-delete-citation-check:
-    # WIRING: this is one of the eight gates §06 is built around and CI did not
-    # invoke it. Caught by wired_lanes, not by a human. refuses a delete whose citation is unresolved; never run by CI.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # full history — see the no-shell-gate job for why
-      - name: Cargo cache — registry, git DB and target
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            ~/.cargo/git/checkouts/
-            target/
-          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            cargo-${{ runner.os }}-${{ github.job }}-
-            cargo-${{ runner.os }}-
-      - name: Rust toolchain (pinned by rust-toolchain.toml)
-        run: |
-          cargo --version
-          rustc --version
-      - run: cargo test -p pre-delete-citation-check
-      - run: cargo run --quiet -p pre-delete-citation-check -- .
-  commit-build-fence:
-    # WIRING: this is one of the eight gates §06 is built around. CI must
-    # initialize the checkout-local store before asking check for a verdict.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # full history — see the no-shell-gate job for why
-      - name: Cargo cache — registry, git DB and target
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            ~/.cargo/git/checkouts/
-            target/
-          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            cargo-${{ runner.os }}-${{ github.job }}-
-            cargo-${{ runner.os }}-
-      - name: Rust toolchain (pinned by rust-toolchain.toml)
-        run: |
-          cargo --version
-          rustc --version
-      - run: cargo test -p commit-build-fence
-      - name: Initialize commit fence store for fresh checkout
-        run: cargo run --quiet -p commit-build-fence -- init --repo .
-      - name: Check commit fence on clean checkout
-        run: cargo run --quiet -p commit-build-fence -- check --repo .
-
-  porting-gate:
-    # WIRING: a candidate must pass all six arrival clauses from the same archive state.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # full history — see the no-shell-gate job for why
-      - name: Cargo cache — registry, git DB and target
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            ~/.cargo/git/checkouts/
-            target/
-          key: cargo-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            cargo-${{ runner.os }}-${{ github.job }}-
-            cargo-${{ runner.os }}-
-      - name: Rust toolchain (pinned by rust-toolchain.toml)
-        run: |
-          cargo --version
-          rustc --version
-      - run: cargo test -p porting-gate
-      - name: Gate candidate porting-gate from clean archive
-        run: cargo run --quiet -p porting-gate -- --repo . --crate porting-gate
-      # The assembled plan is GENERATED, and a gate demands it be current. Detecting
-      # staleness was never the hard part — the remedy was: before 2026-09-01 the only
-      # assembler was 3,297 bytes of Python in /tmp, so one reboot made the freshness
-      # gate permanently unsatisfiable. Regenerating here and refusing a diff makes
-      # staleness IMPOSSIBLE rather than merely reportable, which is the wiring
-      # docs/plan/04-diagrams.md R4 says every generated artifact still needs.
-      - name: Preregistration gate — plan-assemble compile leg and prior-hypothesis witness
-        run: |
-          cargo build --quiet -p plan-assemble
-          cargo run --quiet -p preregistration-gate -- --repo .
-      - name: docs/PLAN.md must match its section files
-        run: |
-          cargo run --quiet -p plan-assemble
-          git diff --exit-code -- docs/PLAN.md
+      - name: Workspace loads
+        # Its OWN step so a manifest failure is attributed to itself. Measured four times
+        # in one evening: a `Cargo.toml` under the `crates/*` glob with no `src/` breaks
+        # workspace LOADING, so `-p <crate>` cannot dodge it and every command returns an
+        # identical 101 with a completely different cause.
+        run: cargo metadata --no-deps --format-version 1 > /dev/null
+      - name: Gate roster is not vacuous
+        # An empty roster is an ERROR with its own exit code, never a pass. Runs BEFORE
+        # the gates so a filtered or unreadable workspace is named as such rather than
+        # reported as "all gates green".
+        run: cargo run --quiet -p gate-runner -- --plan
+      - name: Every gate, one entry point
+        run: cargo run --quiet -p gate-runner -- --run

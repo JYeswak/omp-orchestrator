@@ -28,3 +28,7 @@ path = "tests/roster.rs"
 [[test]]
 name = "subsumption_real"
 path = "tests/subsumption_real.rs"
+
+[[test]]
+name = "workflow_shape"
+path = "tests/workflow_shape.rs"
