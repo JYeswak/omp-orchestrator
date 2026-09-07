@@ -430,6 +430,7 @@ pub enum BoundedOutcome {
 mod tests {
     use super::*;
     use asupersync::runtime::RuntimeBuilder;
+    use text_structure::code_only;
     use asupersync::types::CancelKind;
     use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
@@ -640,66 +641,24 @@ mod tests {
         );
     }
 
-    /// Blank line-comment and block-comment spans before matching, so a doc comment that
-    /// DESCRIBES a call site cannot be counted AS one. `AGENTS.md` records seven instances of that
-    /// class, one where a comment warning about a needle contained the needle and kept a census
-    /// GREEN after the emit site was deleted.
-    ///
-    /// THE DELIMITERS ARE COMPARED CHARACTER BY CHARACTER, NOT AS TWO-CHARACTER STRINGS, and the
-    /// first version of this function is why. It matched `pair == "..."` against string literals
-    /// holding the delimiters — its own three comparison arms — so scanning this file entered
-    /// block-comment mode at the FIRST of them and blanked everything after it. That arm sits
-    /// above the four call sites, so the census returned `0` where the truth was `4`. Eighth
-    /// instance in this repository of a checker whose input contains text about the thing it
-    /// checks, and it was caught by the leg it was written to serve rather than by review.
-    ///
-    /// Comparing characters means no adjacency of the delimiters exists in this function's own
-    /// source, and the closing assertion makes the residual class LOUD: a block opener inside any
-    /// other string literal would swallow the tail of the file, report FEWER call sites, and read
-    /// exactly like a real absence.
-    fn code_only(source: &str) -> String {
-        const SLASH: char = '/';
-        const STAR: char = '*';
-        let chars: Vec<char> = source.chars().collect();
-        let mut out = String::with_capacity(source.len());
-        let mut index = 0;
-        let mut in_block = false;
-        while index < chars.len() {
-            let here = chars[index];
-            let next = chars.get(index + 1).copied();
-            if in_block {
-                if here == STAR && next == Some(SLASH) {
-                    in_block = false;
-                    index += 2;
-                    continue;
-                }
-                out.push(if here == '\n' { '\n' } else { ' ' });
-                index += 1;
-                continue;
-            }
-            if here == SLASH && next == Some(STAR) {
-                in_block = true;
-                index += 2;
-                continue;
-            }
-            if here == SLASH && next == Some(SLASH) {
-                while index < chars.len() && chars[index] != '\n' {
-                    out.push(' ');
-                    index += 1;
-                }
-                continue;
-            }
-            out.push(here);
-            index += 1;
-        }
-        assert!(
-            !in_block,
-            "the stripper ended INSIDE a block comment: a block opener in a string literal \
-             swallowed the tail of the file. That reports fewer call sites and reads like a real \
-             absence, so it is asserted rather than left to look like a low count."
-        );
-        out
-    }
+    // HANDROLLED STRIPPER REMOVED 2026-09-07 -- `text-structure::code_only` already existed, and
+    // `no-shell-gate/tests/text_structure_lint.rs` named this exact file for it:
+    //   RAW_TEXT_MATCH_IN_GATE crates/subprocess-contract/src/lib.rs:local matcher definition
+    //
+    // KEEP THE LESSON, DROP THE CODE. The first local version compared TWO-CHARACTER STRINGS
+    // against its own three comparison arms -- string literals holding the delimiters -- so
+    // scanning this file entered block-comment mode at the first of them and blanked everything
+    // after it. That arm sat above the four call sites, so the census returned 0 where the truth
+    // was 4: eighth instance in this repository of a checker whose input contains text about the
+    // thing it checks, and caught by the leg it was written to serve rather than by review.
+    //
+    // COMPARING CHARACTERS FIXED THE SELF-POISONING AND LEFT A REAL RESIDUAL. The local version
+    // had NO STRING-LITERAL STATE, so a block opener inside any literal in a scanned file still
+    // swallowed the tail -- fewer call sites, reading exactly like a real absence. A closing
+    // `!in_block` assertion made the UNBALANCED case loud and could never see a BALANCED pair.
+    // The kernel tracks string literals including raw strings, counts nested block comments, and
+    // returns `Cow::Borrowed` when nothing needed masking. KERNEL-ONLY: a handroll is not merely
+    // redundant, it is usually worse, and the gate that says so was already written.
 
     /// ITEM 3b — the two marker kinds are counted INDEPENDENTLY, and the sum is never asserted.
     ///

@@ -10,6 +10,9 @@ description = "Shared cancel-correct process-group and dual-pipe subprocess boun
 asupersync = { workspace = true }
 
 [dev-dependencies]
+# `code_only` is the shared structure-keyed matcher; no-shell-gate/tests/
+# text_structure_lint.rs refuses a local re-implementation.
+text-structure = { path = "../text-structure" }
 futures-lite = "2"
 
 [lints.rust]

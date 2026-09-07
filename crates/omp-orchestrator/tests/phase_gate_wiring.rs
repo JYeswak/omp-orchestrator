@@ -20,58 +20,27 @@
 //! with the restart.
 
 use std::path::Path;
+use text_structure::code_only;
 
 fn supervisor_source() -> String {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/main.rs");
     std::fs::read_to_string(&path).expect("the supervisor source must be readable")
 }
 
-/// Blank `//` and `/* */` so a doc comment that DESCRIBES the wiring cannot satisfy a check for
-/// the wiring. `AGENTS.md` records seven instances of this class, including one where a comment
-/// warning about a needle contained the needle and kept a census GREEN after the emit site was
-/// deleted. Over-stripping is the safe direction: it can only report LESS wiring.
-fn code_only(source: &str) -> String {
-    let mut out = String::with_capacity(source.len());
-    let bytes: Vec<char> = source.chars().collect();
-    let mut index = 0;
-    let mut block = 0usize;
-    while index < bytes.len() {
-        let two: String = bytes[index..(index + 2).min(bytes.len())].iter().collect();
-        if block > 0 {
-            if two == "*/" {
-                block -= 1;
-                index += 2;
-                continue;
-            }
-            if two == "/*" {
-                block += 1;
-                index += 2;
-                continue;
-            }
-            out.push(if bytes[index] == '\n' { '\n' } else { ' ' });
-            index += 1;
-            continue;
-        }
-        if two == "/*" {
-            block = 1;
-            index += 2;
-            continue;
-        }
-        if two == "//" {
-            while index < bytes.len() && bytes[index] != '\n' {
-                out.push(' ');
-                index += 1;
-            }
-            continue;
-        }
-        out.push(bytes[index]);
-        index += 1;
-    }
-    out
-}
+// HANDROLLED STRIPPER REMOVED 2026-09-07 -- `text-structure::code_only` already existed, and
+// `no-shell-gate/tests/text_structure_lint.rs` names this exact file for it:
+//   RAW_TEXT_MATCH_IN_GATE crates/omp-orchestrator/tests/phase_gate_wiring.rs:local matcher
+// The local copy compared TWO-CHARACTER STRINGS and, worse, had NO STRING-LITERAL state, so a
+// block-comment opener inside any literal in the scanned file would blank the tail and report LESS
+// wiring -- indistinguishable from a real absence. The kernel tracks literals (raw strings
+// included) and counts nested block comments. KERNEL-ONLY: a handroll is not merely redundant, it
+// is usually worse.
 
-/// POSITIVE CONTROL FIRST. A needle that cannot match returns zero from a working probe and from a
-/// broken one, so every count below is meaningless until the stripper is shown to preserve code.
+/// POSITIVE CONTROL FIRST, and it is now a control on the SHARED kernel rather than on a local
+/// copy. A needle that cannot match returns zero from a working probe and from a broken one, so
+/// every assertion below is meaningless until the stripper is shown to preserve code AND to remove
+/// comment text. This is the standing rule — point the instrument at a guaranteed-absent subject
+/// and read what it returns — expressed as a test.
 #[test]
 fn the_comment_stripper_preserves_code_and_removes_comments() {
     let source = supervisor_source();
@@ -93,7 +62,8 @@ fn the_comment_stripper_preserves_code_and_removes_comments() {
 /// ITEM 8 — the caller exists in CODE, not in a comment, and is wired to the OFF constant.
 #[test]
 fn the_dispatch_path_calls_the_phase_gate_with_the_shipped_constant() {
-    let code = code_only(&supervisor_source());
+    let source = supervisor_source();
+    let code = code_only(&source);
     assert!(
         code.contains("loop_queue_filter::phase_gate::apply_phase_gate"),
         "no production call to apply_phase_gate survives comment stripping"
@@ -114,7 +84,8 @@ fn the_dispatch_path_calls_the_phase_gate_with_the_shipped_constant() {
 /// disabled gate from a released phase, and it reaches the heartbeat rather than only stdout.
 #[test]
 fn the_gate_outcome_is_written_to_the_heartbeat() {
-    let code = code_only(&supervisor_source());
+    let source = supervisor_source();
+    let code = code_only(&source);
     for status in [
         "\"PHASE_GATE\"",
         "\"PHASE_GATE_WITHHELD\"",
@@ -136,11 +107,17 @@ fn the_gate_outcome_is_written_to_the_heartbeat() {
 /// unfiltered set would convert the gate's own anti-vacuity codes into a silent passthrough.
 #[test]
 fn a_gate_refusal_returns_an_error_rather_than_dispatching() {
-    let code = code_only(&supervisor_source());
+    let source = supervisor_source();
+    let code = code_only(&source);
+    let code: &str = code.as_ref();
     let refusal = code
         .find("PHASE_GATE_REFUSED")
         .expect("the refusal arm must exist");
-    let tail = &code[refusal..(refusal + 400).min(code.len())];
+    let mut end = (refusal + 400).min(code.len());
+    while !code.is_char_boundary(end) {
+        end += 1;
+    }
+    let tail = &code[refusal..end];
     assert!(
         tail.contains("return Err("),
         "the refusal arm must return an error; found instead: {tail}"
@@ -151,7 +128,8 @@ fn a_gate_refusal_returns_an_error_rather_than_dispatching() {
 /// otherwise it filters a set nobody dispatches, which is a call site rather than a gate.
 #[test]
 fn the_caller_precedes_the_queue_observation_that_consumes_the_set() {
-    let code = code_only(&supervisor_source());
+    let source = supervisor_source();
+    let code = code_only(&source);
     let gate = code
         .find("apply_phase_gate")
         .expect("apply_phase_gate call site");
