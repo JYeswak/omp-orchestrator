@@ -19,6 +19,8 @@ name = "omp_orchestrator"
 path = "src/lib.rs"
 
 [dependencies]
+admission-reason = { path = "../admission-reason" }
+omp-types = { path = "../omp-types" }
 ack-spine = { path = "../ack-spine" }
 ack-stage = { path = "../ack-stage" }
 agent-mail-native = { path = "../agent-mail-native" }

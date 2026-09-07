@@ -1,6 +1,6 @@
 use omp_types::pane_observation::{
-    CaptureSnapshot, DispatchAdmissibility, EvidenceGrade, MIN_TWO_CAPTURE_INTERVAL_SECS,
-    PaneLiveness, PaneObservation, UnknownReason,
+    CaptureSnapshot, DispatchAdmissibility, DispatchPacketClass, EvidenceGrade, PaneLiveness,
+    PaneObservation, UnknownReason, MIN_TWO_CAPTURE_INTERVAL_SECS,
 };
 
 fn snapshot(at: u64, liveness: PaneLiveness, timer: Option<&str>, hash: &str) -> CaptureSnapshot {
@@ -135,4 +135,25 @@ fn law_l5_dispatch_admissibility_is_independent() {
         allowed.dispatch_admissibility(),
         DispatchAdmissibility::Allowed
     ));
+}
+
+#[test]
+fn law_l6_admission_arms_have_stable_tokens_and_degraded_names_gate() {
+    let tokens: Vec<_> = DispatchAdmissibility::ALL
+        .into_iter()
+        .map(DispatchAdmissibility::as_str)
+        .collect();
+    assert_eq!(tokens, vec!["unknown", "allowed", "refused", "degraded"]);
+    let classes: Vec<_> = DispatchPacketClass::ALL
+        .into_iter()
+        .map(DispatchPacketClass::as_str)
+        .collect();
+    assert_eq!(classes, vec!["work", "grading", "plan_dependent"]);
+    let degraded = DispatchAdmissibility::degraded(DispatchPacketClass::PlanDependent);
+    assert_eq!(degraded.as_str(), "degraded");
+    assert_eq!(
+        degraded.refused_class(),
+        Some(DispatchPacketClass::PlanDependent)
+    );
+    assert_eq!(degraded.naming_gate(), Some("name_the_failing_gate"));
 }

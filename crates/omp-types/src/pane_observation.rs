@@ -26,13 +26,83 @@ pub enum PaneLiveness {
 }
 
 /// Readiness is independent from pane liveness.
+/// Packet classes are named by the input boundary they cross, not by stakes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum DispatchPacketClass {
+    Work,
+    Grading,
+    PlanDependent,
+}
+
+impl DispatchPacketClass {
+    pub const ALL: [Self; 3] = [Self::Work, Self::Grading, Self::PlanDependent];
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Work => "work",
+            Self::Grading => "grading",
+            Self::PlanDependent => "plan_dependent",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DispatchAdmissibility {
     Unknown,
     Allowed,
     Refused,
+    /// The naming gate refused the plan-dependent class, while this packet's
+    /// independent class may proceed under explicit degraded admission.
+    Degraded {
+        refused_class: DispatchPacketClass,
+        naming_gate: &'static str,
+    },
 }
 
+impl DispatchAdmissibility {
+    /// Declaration-order vocabulary. A sample Degraded row is included so a
+    /// new arm cannot hide outside the stable wire vocabulary.
+    pub const ALL: [Self; 4] = [
+        Self::Unknown,
+        Self::Allowed,
+        Self::Refused,
+        Self::Degraded {
+            refused_class: DispatchPacketClass::PlanDependent,
+            naming_gate: "name_the_failing_gate",
+        },
+    ];
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Unknown => "unknown",
+            Self::Allowed => "allowed",
+            Self::Refused => "refused",
+            Self::Degraded { .. } => "degraded",
+        }
+    }
+
+    pub fn degraded(refused_class: DispatchPacketClass) -> Self {
+        let naming_gate = admission_reason::Rule::NameTheFailingGate.as_str();
+        Self::Degraded {
+            refused_class,
+            naming_gate,
+        }
+    }
+
+    pub const fn refused_class(self) -> Option<DispatchPacketClass> {
+        match self {
+            Self::Degraded { refused_class, .. } => Some(refused_class),
+            Self::Unknown | Self::Allowed | Self::Refused => None,
+        }
+    }
+
+    pub const fn naming_gate(self) -> Option<&'static str> {
+        match self {
+            Self::Degraded { naming_gate, .. } => Some(naming_gate),
+            Self::Unknown | Self::Allowed | Self::Refused => None,
+        }
+    }
+}
 /// One capture after terminal parsing has selected the last status line.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CaptureSnapshot {

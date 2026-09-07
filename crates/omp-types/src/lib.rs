@@ -67,7 +67,7 @@
 // workspace; it is not a re-export from asupersync and has no Phase 0 caller migration.
 pub mod pane_observation;
 pub use pane_observation::{
-    CaptureSnapshot, DispatchAdmissibility, EvidenceGrade, MIN_TWO_CAPTURE_INTERVAL_SECS,
+    CaptureSnapshot, DispatchAdmissibility, DispatchPacketClass, EvidenceGrade, MIN_TWO_CAPTURE_INTERVAL_SECS,
     ObservationError, PaneLiveness, PaneObservation, UnknownReason,
 };
 

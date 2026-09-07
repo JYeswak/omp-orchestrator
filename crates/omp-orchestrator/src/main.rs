@@ -43,6 +43,8 @@ use ntm_fleet_monitor::bead_lifecycle::{
 };
 use ntm_fleet_monitor::parse_activity_json;
 use ntm_fleet_monitor::{classify, Approved, Intent, TypedAction};
+use omp_orchestrator::packet_admission::{self, PacketAdmission};
+use omp_types::{DispatchAdmissibility, DispatchPacketClass};
 use omp_orchestrator::{
     applicable, census_gates, cross_pane_hold, decide, dispatch_packet, read_idle_authorization,
     GateCensus, Observation, PaneObservation, QueueState, SupervisorDecision,
@@ -2025,7 +2027,10 @@ async fn prepare_bead_dispatch(
     tick: u64,
     claim_enabled: bool,
     hold_intent: cross_pane_hold::HoldIntent,
-) -> Result<(BeadSnapshot, String), String> {
+    docs_fresh: bool,
+    degraded_authorized: bool,
+    admitted_pane_count: usize,
+) -> Result<(BeadSnapshot, String, PacketAdmission), String> {
 
     let initial = load_bead_snapshot(cx, config, bead).await?;
     let receiver_agent = receiver_agent_for_dispatch(config, pane, bead, &initial)?;
@@ -2054,6 +2059,49 @@ async fn prepare_bead_dispatch(
         None,
     )
     .map_err(|error| format!("DISPATCH_PACKET_REFUSED bead={bead} pane={pane} error={error}"))?;
+    let packet_class = match hold_intent {
+        cross_pane_hold::HoldIntent::Grade => DispatchPacketClass::Grading,
+        cross_pane_hold::HoldIntent::Work => packet_admission::classify_packet(&packet)
+            .map_err(|error| format!("PACKET_ADMISSION_REFUSED bead={bead} error={error}"))?,
+    };
+    let admission = packet_admission::evaluate_for_class(
+        &packet,
+        packet_class,
+        !docs_fresh,
+        degraded_authorized,
+    )
+    .map_err(|error| format!("PACKET_ADMISSION_REFUSED bead={bead} error={error}"))?;
+    match admission.verdict {
+        DispatchAdmissibility::Allowed => {}
+        DispatchAdmissibility::Degraded { .. } => {
+            let detail = format!(
+                "admission=degraded packet_class={} refused_class={} naming_gate={} admitted_pane_count={} reason={}",
+                admission.packet_class.as_str(),
+                admission
+                    .refused_class()
+                    .expect("degraded has a refused class")
+                    .as_str(),
+                admission.naming_gate().expect("degraded names its gate"),
+                admitted_pane_count,
+                admission.reason,
+            );
+            write_heartbeat(config, tick, "ADMISSION_DEGRADED", &detail)?;
+            println!("ADMISSION_DEGRADED tick={tick} bead={bead} pane={pane} {detail}");
+        }
+        DispatchAdmissibility::Refused => {
+            return Err(format!(
+                "ADMISSION_REFUSED bead={bead} pane={pane} packet_class={} gate=docs-stale reason={}",
+                admission.packet_class.as_str(),
+                admission.reason,
+            ));
+        }
+        DispatchAdmissibility::Unknown => {
+            return Err(format!(
+                "ADMISSION_REFUSED bead={bead} pane={pane} packet_class={} reason=unknown-admission",
+                admission.packet_class.as_str()
+            ));
+        }
+    }
     authorize_dispatch_preflight(pane_observation, &packet, bead, pane)?;
     let incarnation = admit_immediately_before_send(&config.session, pane)?;
     println!(
@@ -2076,7 +2124,7 @@ async fn prepare_bead_dispatch(
     .await?;
     let receiver_agent =
         authorize_bead_dispatch_as(config, pane, bead, &snapshot, &claim_owner, identities)?;
-    Ok((snapshot, receiver_agent))
+    Ok((snapshot, receiver_agent, admission))
 }
 
 async fn run_silence_watch(
@@ -2168,6 +2216,8 @@ fn begin_dispatch_lifecycle(
     bead: &str,
     packet: &str,
     tick: u64,
+    admission: &PacketAdmission,
+    admitted_pane_count: usize,
 ) -> Result<LifecycleLedger, String> {
     let bead_id = BeadId::new(bead).map_err(|error| error.to_string())?;
     let target =
@@ -2195,19 +2245,36 @@ fn begin_dispatch_lifecycle(
     .map_err(|error| error.to_string())?;
     let selected_id = EventId::new(selected_event_key_for_run(bead, tick, lifecycle_run_id()))
         .map_err(|error| error.to_string())?;
+    let mut selected_fields = vec![
+        (
+            "decision".to_owned(),
+            format!("dispatch preflight passed pane={pane}"),
+        ),
+        ("run_id".to_owned(), lifecycle_run_id().to_owned()),
+        ("build_id".to_owned(), BUILD_ID.to_owned()),
+        ("pid".to_owned(), std::process::id().to_string()),
+        ("admission".to_owned(), admission.verdict.as_str().to_owned()),
+        ("packet_class".to_owned(), admission.packet_class.as_str().to_owned()),
+    ];
+    if let DispatchAdmissibility::Degraded { .. } = admission.verdict {
+        selected_fields.push((
+            "refused_class".to_owned(),
+            admission.refused_class().expect("degraded has a refused class").as_str().to_owned(),
+        ));
+        selected_fields.push((
+            "naming_gate".to_owned(),
+            admission.naming_gate().expect("degraded names its gate").to_owned(),
+        ));
+        selected_fields.push((
+            "admitted_pane_count".to_owned(),
+            admitted_pane_count.to_string(),
+        ));
+    }
     let selected = LedgerEvidence::new(
         selected_id,
         now_ms,
         EvidencePolicy::new(now_ms, 0),
-        [
-            (
-                "decision".to_owned(),
-                format!("dispatch preflight passed pane={pane}"),
-            ),
-            ("run_id".to_owned(), lifecycle_run_id().to_owned()),
-            ("build_id".to_owned(), BUILD_ID.to_owned()),
-            ("pid".to_owned(), std::process::id().to_string()),
-        ],
+        selected_fields,
     )
     .map_err(|error| error.to_string())?;
     LifecycleLedger::start(
@@ -2676,6 +2743,8 @@ async fn send_and_verify(
     snapshot: &BeadSnapshot,
     before: &[u8],
     tick: u64,
+    admission: &PacketAdmission,
+    admitted_pane_count: usize,
 ) -> Result<DispatchVerdict, String> {
     let at_send = load_bead_snapshot(cx, config, bead).await?;
     refuse_terminal_status_at_send(bead, at_send.status_label())?;
@@ -2702,10 +2771,17 @@ async fn send_and_verify(
     let pre_identity = ntm_output_identity(cx, config, pane).await?;
     let pre_observation =
         observe_capture(pane, &String::from_utf8_lossy(before), pre_at, pre_identity);
-    let mut lifecycle =
-        begin_dispatch_lifecycle(config, pane, pane_observation, bead, &packet, tick).map_err(
-            |error| format!("LIFECYCLE_LEDGER_REFUSED bead={bead} pane={pane} error={error}"),
-        )?;
+    let mut lifecycle = begin_dispatch_lifecycle(
+        config,
+        pane,
+        pane_observation,
+        bead,
+        &packet,
+        tick,
+        admission,
+        admitted_pane_count,
+    )
+    .map_err(|error| format!("LIFECYCLE_LEDGER_REFUSED bead={bead} pane={pane} error={error}"))?;
     let dispatch_at_ms = now_unix().saturating_mul(1_000);
     let dispatch_id = EventId::new(run_scoped_event_key("dispatch", bead, tick, ""))
         .map_err(|error| error.to_string())?;
@@ -3790,6 +3866,14 @@ enum DocsVerdict {
     Stale(String),
     /// This repo does not assemble a plan, so freshness is not a property it has.
     NotApplicable(String),
+}
+
+/// Read the durable HD-0015 policy amendment. Missing or malformed authority
+/// keeps stale-input dispatch fully refused; it never silently enables a bypass.
+fn degraded_policy_authorized(config: &Config) -> bool {
+    fs::read_to_string(config.repo.join("docs/decisions.jsonl"))
+        .map(|text| packet_admission::authority_allows_degraded(&text))
+        .unwrap_or(false)
 }
 
 fn docs_are_stale(config: &Config) -> Result<DocsVerdict, String> {
@@ -4998,16 +5082,20 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     // checked AFTER the dispatch fence and BEFORE observation, because a stale
     // assembly makes every downstream dispatch send an agent to work from old
     // knowledge, which is the failure this condition exists to prevent.
-    match docs_are_stale(config)? {
-        DocsVerdict::Fresh => {}
+    // HD-0001 (docs/decisions.jsonl): the condition says the tick loop continues
+    // only as long as docs are kept up to date. It is packet-specific: a stale
+    // assembly still refuses a packet carrying plan-document input, while an
+    // independent packet can continue only under authorized degraded admission.
+    // Classification happens after renderer output exists, so observation and queue remain measurable.
+    let docs_fresh = match docs_are_stale(config)? {
+        DocsVerdict::Fresh => true,
         DocsVerdict::Stale(why) => {
             write_heartbeat(config, tick, "DOCS_STALE", &why)?;
             let detail = format!(
-                "DOCS_STALE owner=josh next_action=re-assemble-docs/PLAN.md detail={why} \
-                 authority=HD-0001"
+                "DOCS_STALE owner=josh next_action=classify-packet-input authority=HD-0001 detail={why}"
             );
             println!("{detail}");
-            return Ok(());
+            false
         }
         // NAMED, never a silent green: a reader must be able to tell "this repo has no
         // assembly to be stale" from "the assembly is fresh". Both continue the tick; only
@@ -5015,11 +5103,14 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         DocsVerdict::NotApplicable(why) => {
             write_heartbeat(config, tick, "DOCS_ASSEMBLY_NOT_APPLICABLE", &why)?;
             println!(
-                "DOCS_ASSEMBLY_NOT_APPLICABLE owner=loop next_action=continue scope=repo \
-                 detail={why} authority=HD-0001"
+                "DOCS_ASSEMBLY_NOT_APPLICABLE owner=loop next_action=continue scope=repo authority=HD-0001 detail={why}"
             );
+            true
         }
-    }
+    };
+    // HD-0015 is required only when the assembly is stale. Fresh input keeps the
+    // ordinary Allowed verdict without consulting the degraded policy.
+    let degraded_authorized = docs_fresh || degraded_policy_authorized(config);
 
     let mut monitor_args = vec![
         "observe".to_owned(),
@@ -5351,9 +5442,27 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             )
             .await?;
             let identities = load_identity_registries(cx, config).await?;
+            let admitted_pane_count = observation
+                .panes
+                .iter()
+                .filter(|pane| pane.is_dispatchable)
+                .count();
             let dispatch_result = async {
-                let (snapshot, receiver_agent) =
-                    prepare_bead_dispatch(cx, config, &pane, &pane_observation, bead, &identities, tick, true, hold_intent).await?;
+                let (snapshot, receiver_agent, admission) = prepare_bead_dispatch(
+                    cx,
+                    config,
+                    &pane,
+                    &pane_observation,
+                    bead,
+                    &identities,
+                    tick,
+                    true,
+                    hold_intent,
+                    docs_fresh,
+                    degraded_authorized,
+                    admitted_pane_count,
+                )
+                .await?;
 
                 let dispatch_epoch = now_unix() as i64;
                 write_dispatch_intent(config, &pane, bead)?;
@@ -5372,6 +5481,8 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                     &snapshot,
                     &before,
                     tick,
+                    &admission,
+                    admitted_pane_count,
                 )
                 .await;
                 let send_detail = match &stage_result {
@@ -6242,8 +6353,12 @@ mod tests {
                 tick,
                 claim_enabled,
                 cross_pane_hold::HoldIntent::Work,
+                true,
+                true,
+                1,
             )
             .await
+            .map(|(snapshot, receiver, _admission)| (snapshot, receiver))
         })
     }
 
@@ -8537,8 +8652,49 @@ run
 Done: exit 0
 Stop: now
 "#;
-        begin_dispatch_lifecycle(&config, "%7", &pane, "bead", packet, 7)
+        let admission = packet_admission::evaluate(packet, false, false).expect("fresh packet admission");
+        begin_dispatch_lifecycle(&config, "%7", &pane, "bead", packet, 7, &admission, 1)
             .expect("retained two-capture evidence must authorize without the label");
+    }
+    #[test]
+    fn stale_docs_admits_grading_and_writes_degraded_row() {
+        let temp = tempfile::tempdir().expect("degraded dispatch fixture");
+        let bead = "omp-orchestrator-n7yp-fixture";
+        let (config, _state, _args, _supervisor) = open_bead_br_fixture(&temp, bead);
+        let pane = retained_dispatchable_pane("%1408");
+        let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
+        let result = runtime.block_on(async {
+            let cx = Cx::current().expect("runtime context");
+            let identities = test_identity_registries();
+            prepare_bead_dispatch(
+                &cx,
+                &config,
+                "%1408",
+                &pane,
+                bead,
+                &identities,
+                17,
+                true,
+                cross_pane_hold::HoldIntent::Grade,
+                false,
+                true,
+                2,
+            )
+            .await
+        })
+        .expect("degraded grading packet should be admitted");
+        assert!(matches!(result.2.verdict, DispatchAdmissibility::Degraded { .. }));
+        let heartbeat = std::fs::read_to_string(&config.heartbeat_ledger).expect("heartbeat");
+        for field in [
+            "ADMISSION_DEGRADED",
+            "admission=degraded",
+            "packet_class=grading",
+            "refused_class=plan_dependent",
+            "naming_gate=name_the_failing_gate",
+            "admitted_pane_count=2",
+        ] {
+            assert!(heartbeat.contains(field), "missing {field}: {heartbeat}");
+        }
     }
     #[test]
     fn dispatch_preflight_accepts_retained_dispatchable_evidence() {

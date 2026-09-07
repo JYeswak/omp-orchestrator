@@ -20,6 +20,7 @@ path = "src/lib.rs"
 asupersync = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 subprocess-contract = { path = "../subprocess-contract" }
+admission-reason = { path = "../admission-reason" }
 
 [lints.rust]
 unsafe_code = "forbid"
