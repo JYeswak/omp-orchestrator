@@ -686,3 +686,62 @@ mod tests {
         assert_eq!(before, after, "mutation fixture restored byte-identically");
     }
 }
+
+
+/// The verdict of a `--check` comparison.
+///
+/// # omp-orchestrator-fsu7
+///
+/// `gate.yml` implemented this check as `--write` followed by `git diff --exit-code`. That has two
+/// defects and only the second is obvious:
+///
+/// 1. It **mutates the tree during a gate run**, so a concurrent agent's `git status` shows a
+///    modified file that is not theirs. Tonight cost real time to exactly that confusion twice.
+/// 2. `git diff` compares against the **WORKTREE**. In a five-agent shared checkout the doc can be
+///    dirty from a peer, so the verdict depends on someone else's uncommitted work and is **false
+///    in either direction** — green when the doc is stale but a peer happened to regenerate it,
+///    red when the doc is current but a peer is mid-edit.
+///
+/// So the comparison is a pure function over two strings: no filesystem write, no git, no shared
+/// state. It lives in the library rather than the binary because `rch` admits only compilation
+/// commands (`RCH-E301` on a `sh -c` sequence), so a shell-scripted known-good leg cannot run on
+/// the lane at all — the leg has to be a test.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CheckVerdict {
+    /// The stored document matches what a fresh scan renders.
+    Current,
+    /// It does not. Carries what a reader needs to act WITHOUT reaching for `git diff`.
+    Stale {
+        stored_bytes: usize,
+        regenerated_bytes: usize,
+        /// 1-indexed first differing line, or `0` when only trailing content differs.
+        first_differing_line: usize,
+    },
+}
+
+/// Compare a stored document against a freshly rendered one.
+///
+/// Byte equality, deliberately: this document is generated, so any difference is drift. A
+/// normalising comparison would hide exactly the whitespace churn that signals a renderer change.
+#[must_use]
+pub fn check_document(stored: &str, regenerated: &str) -> CheckVerdict {
+    if stored == regenerated {
+        return CheckVerdict::Current;
+    }
+    CheckVerdict::Stale {
+        stored_bytes: stored.len(),
+        regenerated_bytes: regenerated.len(),
+        first_differing_line: first_differing_line(stored, regenerated),
+    }
+}
+
+/// 1-indexed first differing line, or `0` when the difference is only trailing content.
+#[must_use]
+pub fn first_differing_line(stored: &str, regenerated: &str) -> usize {
+    for (index, (a, b)) in stored.lines().zip(regenerated.lines()).enumerate() {
+        if a != b {
+            return index + 1;
+        }
+    }
+    0
+}

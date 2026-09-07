@@ -22,3 +22,9 @@ undrained-pipe-lint = { path = "../undrained-pipe-lint" }
 
 [lints.rust]
 unsafe_code = "forbid"
+
+[package.metadata.gate]
+# omp-orchestrator-fsu7: --check compares in memory and writes NOTHING. gate.yml previously did
+# --write followed by `git diff --exit-code`, which mutated the tree mid-gate AND compared against
+# the WORKTREE -- giving a false verdict either way in a shared checkout.
+checks = [["--repo", "{repo}", "--check", "{repo}/ASUPERSYNC-CONFORMANCE.md"]]
