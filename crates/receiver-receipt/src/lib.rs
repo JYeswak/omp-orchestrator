@@ -16,9 +16,11 @@ use tick_monitor::classify;
 
 pub mod irc_delivery;
 pub use irc_delivery::{
-    pane_transport_cannot_use_irc_receipt, record_hub_irc_receipt, HubReceiverEvidence,
+    maps_sender_exit_onto_irc_receipt, pane_transport_cannot_use_irc_receipt,
+    record_hub_irc_receipt, refuse_sender_exit_mapping_file, HubReceiverEvidence,
     IrcDeliveryOutcome, IrcDeliveryReceipt, PaneIrcRefusal,
 };
+
 
 /// How much the receiver census proves about the named pane.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

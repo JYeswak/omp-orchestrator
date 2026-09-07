@@ -6,6 +6,13 @@ edition = "2021"
 publish = false
 description = "Receiver-side dispatch receipt classifier"
 
+[[bin]]
+name = "receiver-receipt"
+path = "src/bin/receiver-receipt.rs"
+test = false
+doc = false
+
+
 [lints.rust]
 unsafe_code = "forbid"
 

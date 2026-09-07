@@ -13,10 +13,12 @@ use std::process::{Command, ExitCode};
 fn usage() -> ExitCode {
     eprintln!(
         "usage: receiver-receipt capture <tmux-target> <file> <unix-seconds>\n\
-         usage: receiver-receipt assess <pane-id> <pre-file> <post-file> <pre-seconds> <post-seconds>"
+         usage: receiver-receipt assess <pane-id> <pre-file> <post-file> <pre-seconds> <post-seconds>\n\
+         usage: receiver-receipt scan-sender-exit-mapping <path>"
     );
     ExitCode::from(2)
 }
+
 fn identity(at: u64) -> ObservationIdentity {
     ObservationIdentity {
         epoch: "receiver-receipt-cli".into(),
@@ -100,6 +102,19 @@ fn main() -> ExitCode {
             };
             assess(&pane, &pre, &post, pre_at, post_at)
         }
+        Some("scan-sender-exit-mapping") => {
+            let Some(path) = args.next() else {
+                return usage();
+            };
+            match receiver_receipt::refuse_sender_exit_mapping_file(std::path::Path::new(&path)) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(msg) => {
+                    eprintln!("{msg}");
+                    ExitCode::from(1)
+                }
+            }
+        }
         _ => usage(),
+
     }
 }

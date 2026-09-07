@@ -8,6 +8,8 @@
 //! is the cp-z42vu shape (sender success read as delivery).
 
 use std::fmt;
+use std::path::Path;
+
 
 /// Byte-for-byte the upstream interface in `dist/types/irc/bus.d.ts`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,6 +84,49 @@ pub fn pane_transport_cannot_use_irc_receipt(
         sender_exit,
     })
 }
+
+fn code_only_lines(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for line in text.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("//") {
+            continue;
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    out
+}
+
+/// True when source maps sender exit onto IrcDeliveryReceipt without the typed refusal.
+pub fn maps_sender_exit_onto_irc_receipt(text: &str) -> bool {
+    let code = code_only_lines(text);
+    code.contains("IrcDeliveryReceipt")
+        && (code.contains("sender_exit")
+            || code.contains("sender.exit")
+            || code.contains("status.success()"))
+        && code.contains("IrcDeliveryOutcome")
+        && !code.contains("PANE_TRANSPORT_HAS_NO_IRC_RECEIPT")
+}
+
+/// Gate: nonzero to the caller when `path` is a sender-exit mapping specimen.
+/// THE mapping guard. Mutation deletes this check; the known-bad bin test goes RED.
+pub fn refuse_sender_exit_mapping_file(path: &Path) -> Result<(), String> {
+    let text = std::fs::read_to_string(path).map_err(|error| {
+        format!("UNREADABLE specimen={} error={error}", path.display())
+    })?;
+    if maps_sender_exit_onto_irc_receipt(&text) {
+        Err(format!(
+            "SENDER_EXIT_MAPPED_TO_IRC_RECEIPT specimen={} PANE_TRANSPORT_HAS_NO_IRC_RECEIPT",
+            path.display()
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+
+
 
 #[cfg(test)]
 mod tests {

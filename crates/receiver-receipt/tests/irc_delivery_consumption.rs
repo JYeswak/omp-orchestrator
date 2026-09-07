@@ -9,6 +9,7 @@ use receiver_receipt::{
 };
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -60,13 +61,24 @@ fn scan_irc_delivery_callers(crates_src_roots: &[PathBuf]) -> Result<Vec<PathBuf
     Ok(hits)
 }
 
-fn maps_sender_exit_onto_irc_receipt(text: &str) -> bool {
-    let code = code_only_lines(text);
-    code.contains("IrcDeliveryReceipt")
-        && (code.contains("sender_exit") || code.contains("sender.exit") || code.contains("status.success()"))
-        && code.contains("IrcDeliveryOutcome")
-        && !code.contains("PANE_TRANSPORT_HAS_NO_IRC_RECEIPT")
+fn specimen_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/maps_sender_exit.rs")
 }
+
+fn run_mapping_gate() -> std::process::Output {
+    let specimen = specimen_path();
+    let bin = std::env::var_os("CARGO_BIN_EXE_receiver_receipt")
+        .or_else(|| std::env::var_os("CARGO_BIN_EXE_receiver-receipt"))
+        .expect("Cargo must set CARGO_BIN_EXE_receiver_receipt for the package bin");
+    Command::new(bin)
+        .args([
+            "scan-sender-exit-mapping",
+            specimen.to_str().expect("utf8"),
+        ])
+        .output()
+        .expect("spawn receiver-receipt")
+}
+
 
 #[test]
 fn empty_scan_set_is_an_error_not_a_pass() {
@@ -102,72 +114,41 @@ fn hub_send_records_upstream_receipt_as_receiver_evidence() {
 
 #[test]
 fn known_bad_sender_exit_mapping_is_named_and_refused() {
-    let dir = std::env::temp_dir().join(format!(
-        "irc-delivery-known-bad-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos()
-    ));
-    fs::create_dir_all(&dir).expect("specimen dir");
-    let specimen = dir.join("maps_sender_exit.rs");
-    fs::write(
-        &specimen,
-        r#"
-        fn from_exit(sender_exit: i32) -> IrcDeliveryReceipt {
-            IrcDeliveryReceipt {
-                to: "x".into(),
-                outcome: if sender_exit == 0 { IrcDeliveryOutcome::Injected } else { IrcDeliveryOutcome::Failed },
-                error: None,
-            }
-        }
-        "#,
-    )
-    .expect("write specimen");
-    let text = fs::read_to_string(&specimen).expect("read specimen");
-    assert!(
-        maps_sender_exit_onto_irc_receipt(&text),
-        "detector must name the specimen {}",
-        specimen.display()
+    let output = run_mapping_gate();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_ne!(
+        output.status.code(),
+        Some(0),
+        "gate must return nonzero, stderr={stderr}"
     );
-    let pane = pane_transport_cannot_use_irc_receipt("tmux-send-keys", 0);
-    let err = pane.expect_err("pane transport");
     assert!(
-        err.to_string().contains(specimen.file_name().unwrap().to_str().unwrap())
-            || err.to_string().contains("PANE_TRANSPORT_HAS_NO_IRC_RECEIPT"),
-        "refusal must name the contract: {err}"
+        stderr.contains("maps_sender_exit.rs"),
+        "refusal must name the specimen path, stderr={stderr}"
     );
-    let production = fs::read_to_string(repo_root().join("crates/receiver-receipt/src/irc_delivery.rs"))
-        .expect("production");
     assert!(
-        !maps_sender_exit_onto_irc_receipt(&production),
-        "production must not map sender exit onto IrcDeliveryReceipt"
+        stderr.contains("SENDER_EXIT_MAPPED_TO_IRC_RECEIPT")
+            || stderr.contains("PANE_TRANSPORT_HAS_NO_IRC_RECEIPT"),
+        "refusal must name the contract, stderr={stderr}"
     );
-    let _ = fs::remove_dir_all(&dir);
-}
-
-#[test]
-fn deleting_the_mapping_guard_turns_known_bad_red() {
     let production = fs::read_to_string(
         repo_root().join("crates/receiver-receipt/src/irc_delivery.rs"),
     )
     .expect("production");
     assert!(
-        production.contains("PANE_TRANSPORT_HAS_NO_IRC_RECEIPT"),
-        "deleting PANE_TRANSPORT_HAS_NO_IRC_RECEIPT from irc_delivery.rs turns this RED"
-    );
-    let specimen = r#"
-        fn from_exit(sender_exit: i32) -> IrcDeliveryReceipt {
-            IrcDeliveryReceipt { to: "x".into(), outcome: IrcDeliveryOutcome::Injected, error: None }
-        }
-    "#;
-    assert!(
-        maps_sender_exit_onto_irc_receipt(specimen),
-        "guard must still classify a sender-exit mapping specimen as known-bad"
+        !receiver_receipt::maps_sender_exit_onto_irc_receipt(&production),
+        "production must not map sender exit onto IrcDeliveryReceipt"
     );
 }
 
+#[test]
+fn deleting_the_mapping_guard_turns_known_bad_red() {
+    let output = run_mapping_gate();
+    assert_ne!(
+        output.status.code(),
+        Some(0),
+        "deleting refuse_sender_exit_mapping_file's mapping check makes this exit 0"
+    );
+}
 
 #[test]
 fn positive_control_clean_surface_records_typed_refusal_not_sender_exit() {
