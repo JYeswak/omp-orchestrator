@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 use lifecycle_event::{
     default_repo_journal, DurableJournal, EmitOutcome, Layer, LifecycleEvent, ReasonCode,
 };
+use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fmt::{self, Write as _};
 use std::fs::{self, File, OpenOptions};
@@ -86,6 +87,12 @@ pub struct InceptionManifest {
     pub host_capabilities: HostCapabilities,
     pub required_tools: Vec<String>,
     pub trust_status: TrustStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InceptionReadback {
+    pub repo_identity: RepoIdentity,
+    pub control_files_complete: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -307,6 +314,76 @@ fn render_manifest(manifest: &InceptionManifest) -> String {
     output
 }
 
+fn sha256_hex(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        write!(hex, "{byte:02x}").expect("writing to String cannot fail");
+    }
+    hex
+}
+
+fn snapshot_existing(path: &Path) -> Result<Option<PathBuf>, InceptionError> {
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let bytes = fs::read(path).map_err(|error| InceptionError::Write {
+        path: path.to_owned(),
+        detail: format!("backup read failed: {error}"),
+    })?;
+    let parent = path.parent().ok_or_else(|| InceptionError::Write {
+        path: path.to_owned(),
+        detail: "output has no parent directory".to_owned(),
+    })?;
+    let backup_dir = parent.join("backups");
+    fs::create_dir_all(&backup_dir).map_err(|error| InceptionError::Write {
+        path: backup_dir.clone(),
+        detail: format!("backup directory failed: {error}"),
+    })?;
+    let filename = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("inception.json");
+    let backup = backup_dir.join(format!("{filename}.{}.bak", sha256_hex(&bytes)));
+    if backup.exists() {
+        let existing = fs::read(&backup).map_err(|error| InceptionError::Write {
+            path: backup.clone(),
+            detail: format!("backup verification failed: {error}"),
+        })?;
+        if existing != bytes {
+            return Err(InceptionError::Write {
+                path: backup,
+                detail: "existing backup content differs from target".to_owned(),
+            });
+        }
+        return Ok(Some(backup));
+    }
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&backup)
+        .map_err(|error| InceptionError::Write {
+            path: backup.clone(),
+            detail: format!("backup create failed: {error}"),
+        })?;
+    file.write_all(&bytes).map_err(|error| InceptionError::Write {
+        path: backup.clone(),
+        detail: format!("backup write failed: {error}"),
+    })?;
+    file.sync_all().map_err(|error| InceptionError::Write {
+        path: backup.clone(),
+        detail: format!("backup fsync failed: {error}"),
+    })?;
+    drop(file);
+    File::open(&backup_dir)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| InceptionError::Write {
+            path: backup_dir,
+            detail: format!("backup parent fsync failed: {error}"),
+        })?;
+    Ok(Some(backup))
+}
+
 fn temporary_path(path: &Path) -> PathBuf {
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -368,26 +445,76 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), InceptionError> {
     result
 }
 
-fn validate_readback(contents: &str) -> Result<(), String> {
+fn validate_readback(contents: &str) -> Result<InceptionReadback, String> {
+    let value: Value = serde_json::from_str(contents)
+        .map_err(|error| format!("invalid JSON: {error}"))?;
     let missing: Vec<&str> = REQUIRED_KEYS
         .iter()
         .copied()
-        .filter(|key| !contents.contains(&format!("\"{key}\":")))
+        .filter(|key| value.get(*key).is_none())
         .collect();
     if !missing.is_empty() {
         return Err(format!("missing required keys: {}", missing.join(",")));
     }
-    if !contents.contains("\"required_tools\": [") {
-        return Err("required_tools is not an array".to_owned());
+    if value.get("schema_version").and_then(Value::as_str) != Some(SCHEMA_VERSION) {
+        return Err("schema_version does not match inception.v1".to_owned());
     }
-    if REQUIRED_TOOLS
-        .iter()
-        .any(|tool| !contents.contains(&json_string(tool)))
-    {
+    let repo_identity = value
+        .get("repo_identity")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "repo_identity is not an object".to_owned())?;
+    let canonical_path = repo_identity
+        .get("canonical_path")
+        .and_then(Value::as_str)
+        .filter(|path| !path.trim().is_empty())
+        .ok_or_else(|| "repo_identity.canonical_path is missing".to_owned())?;
+    let git_marker = repo_identity
+        .get("git_marker")
+        .and_then(Value::as_str)
+        .filter(|marker| !marker.trim().is_empty())
+        .ok_or_else(|| "repo_identity.git_marker is missing".to_owned())?;
+    let control_files = value
+        .get("control_files")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "control_files is not an object".to_owned())?;
+    let control_files_complete = REQUIRED_CONTROL_FILES.iter().all(|path| {
+        control_files
+            .get(*path)
+            .and_then(Value::as_bool)
+            == Some(true)
+    });
+    if !control_files_complete {
+        return Err("control_files is incomplete".to_owned());
+    }
+    let tools = value
+        .get("required_tools")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "required_tools is not an array".to_owned())?;
+    if REQUIRED_TOOLS.iter().any(|tool| {
+        !tools.iter().any(|value| value.as_str() == Some(tool))
+    }) {
         return Err("required_tools is incomplete".to_owned());
     }
-    Ok(())
+    Ok(InceptionReadback {
+        repo_identity: RepoIdentity {
+            canonical_path: canonical_path.to_owned(),
+            git_marker: git_marker.to_owned(),
+        },
+        control_files_complete,
+    })
 }
+
+pub fn read_inception(output: &Path) -> Result<InceptionReadback, InceptionError> {
+    let contents = fs::read_to_string(output).map_err(|error| InceptionError::Readback {
+        path: output.to_owned(),
+        detail: error.to_string(),
+    })?;
+    validate_readback(&contents).map_err(|detail| InceptionError::Readback {
+        path: output.to_owned(),
+        detail,
+    })
+}
+
 
 fn emit_init_event(repo_root: &Path) -> Result<usize, InceptionError> {
     let journal_path = default_repo_journal(repo_root);
@@ -422,15 +549,18 @@ pub fn write_inception(
 ) -> Result<InceptionManifest, InceptionError> {
     let manifest = build_manifest(repo_root)?;
     let bytes = render_manifest(&manifest).into_bytes();
+    let _backup = snapshot_existing(output)?;
     write_atomic(output, &bytes)?;
-    let readback = fs::read_to_string(output).map_err(|error| InceptionError::Readback {
-        path: output.to_owned(),
-        detail: error.to_string(),
-    })?;
-    validate_readback(&readback).map_err(|detail| InceptionError::Readback {
-        path: output.to_owned(),
-        detail,
-    })?;
+    let readback = read_inception(output)?;
+    if readback.repo_identity != manifest.repo_identity {
+        return Err(InceptionError::Readback {
+            path: output.to_owned(),
+            detail: format!(
+                "repo_identity changed during readback: expected={} found={}",
+                manifest.repo_identity.canonical_path, readback.repo_identity.canonical_path
+            ),
+        });
+    }
     emit_init_event(repo_root)?;
     Ok(manifest)
 }
@@ -472,6 +602,25 @@ mod tests {
         assert!(journal.contains("\"reason_code\":\"INIT_REPROBE_OK\""));
         assert!(journal.contains("\"stage_to\":\"S1.L2\""));
         assert_eq!(manifest.required_tools.len(), REQUIRED_TOOLS.len());
+    }
+
+    #[test]
+    fn readback_returns_identity_and_preserves_prior_artifact() {
+        let (directory, output) = fixture();
+        let first = write_inception(directory.path(), &output).expect("first write");
+        let before = fs::read(&output).expect("first artifact");
+        let second = write_inception(directory.path(), &output).expect("second write");
+        let readback = read_inception(&output).expect("readback");
+        assert_eq!(readback.repo_identity, second.repo_identity);
+        assert!(readback.control_files_complete);
+        assert_eq!(first.repo_identity, second.repo_identity);
+        let backup_dir = output.parent().unwrap().join("backups");
+        let backups: Vec<_> = fs::read_dir(&backup_dir)
+            .expect("backup directory")
+            .map(|entry| entry.expect("backup entry").path())
+            .collect();
+        assert_eq!(backups.len(), 1);
+        assert_eq!(fs::read(&backups[0]).expect("backup artifact"), before);
     }
 
     #[test]
