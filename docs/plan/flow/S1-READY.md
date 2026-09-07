@@ -204,23 +204,150 @@ the two is what made R5 read FAIL for an hour.
 
 ### R3 — no S1 bead carries a `blocked` status without a real blocker
 ```bash
-python3 -c "
-import json,re
-n=sum(1 for l in open('.beads/issues.jsonl') if l.strip().startswith('{')
-      for r in [json.loads(l)] if r.get('id') and re.search(r'-s1-l[0-5]-',r['id'])
-      and r.get('status')=='blocked' and not (r.get('dependencies') or []))
-print('S1_FALSELY_BLOCKED=%d'%n)"
+# R3_JSONL / R3_DECISIONS point the SAME runner at fixtures; both default to live.
+R3_JSONL=${R3_JSONL:-.beads/issues.jsonl} \
+R3_DECISIONS=${R3_DECISIONS:-docs/decisions.jsonl} python3 - <<'PY'
+import json, os, re, sys
+beads, decisions = os.environ['R3_JSONL'], os.environ['R3_DECISIONS']
+rows = [json.loads(l) for l in open(beads) if l.strip().startswith('{')]
+# ANY-ROW DECISION RESOLUTION. HD-0009..HD-0014 each have an EMPTY FIRST ROW followed by a
+# decision of up to 3,056 chars, so a `decision == ""` scan re-asks answered questions.
+# This mirrors crates/decision-ledger (`empty_first_row_does_not_mask_nonempty_decision`,
+# regression floor a8e2fc6) -- that kernel is the single source; see the NO-CLAIM below.
+decided = set()
+seen_ids = set()
+for l in open(decisions):
+    if not l.strip().startswith('{'):
+        continue
+    d = json.loads(l)
+    hid = d.get('id') or d.get('hd') or d.get('decision_id') or ''
+    # AN HD ID MUST LOOK LIKE ONE. Without this, ANY row carrying an `id` registers as a
+    # decision id -- a bead file passed as the ledger yielded bogus ids and SILENTLY
+    # DISARMED the anti-vacuity guard below. Caught by r3's own fixture run.
+    if not re.fullmatch(r'HD-\d{4}', hid):
+        continue
+    if hid:
+        seen_ids.add(hid)
+        if (d.get('decision') or '').strip():
+            decided.add(hid)
+# POPULATION EXCLUDES THE SIX LAYER GATES, exactly as R2 does. Two criteria over one set must
+# not disagree on the denominator: with the gates in, this printed 144 where R2 printed 138.
+GATES = {'omp-orchestrator-gate-s1-l%d-%s' % (i, t) for i, t in
+         enumerate(['jtgw', 'fnv8', 'j5m9', 'z8hz', 'hs15', 'w44h'])} | {'omp-orchestrator-gate-s1-djn8'}
+lay = [r for r in rows
+       if r.get('id') and re.search(r'-s1-l[0-5]-', r['id']) and r['id'] not in GATES]
+blocked = [r for r in lay if r.get('status') == 'blocked']
+cls = {'DependencyBlocked': [], 'TrackerBlocked': [], 'ExecutionOwed': [],
+       'AwaitingHumanDecision': [], 'Unclassifiable': []}
+for r in blocked:
+    if r.get('dependencies'):
+        cls['DependencyBlocked'].append(r['id']); continue
+    blob = ' '.join(str(r.get(k) or '') for k in ('title', 'description', 'acceptance_criteria'))
+    hds = sorted(set(re.findall(r'HD-\d{4}', blob)))
+    if not hds:
+        cls['TrackerBlocked'].append(r['id'])
+    elif any(h in decided for h in hds):
+        cls['ExecutionOwed'].append(r['id'])
+    elif all(h in seen_ids for h in hds):
+        cls['AwaitingHumanDecision'].append(r['id'])
+    else:
+        cls['Unclassifiable'].append(r['id'])
+# ANTI-VACUITY, both arms. An unreadable ledger and an empty blocked set are DIFFERENT facts
+# from "no false blocks", and neither may read as a pass.
+if not seen_ids:
+    print('S1_FALSELY_BLOCKED=ERROR decision_ledger_has_no_ids surface=%s' % decisions); sys.exit(1)
+if not lay:
+    print('S1_FALSELY_BLOCKED=ERROR empty_layer_population surface=%s' % beads); sys.exit(1)
+# FALSELY blocked = the two classes that are WORK wearing a hold. AwaitingHumanDecision is a
+# REAL hold and is excluded BY A NAMED PREDICATE, not by hand.
+false_n = len(cls['TrackerBlocked']) + len(cls['ExecutionOwed'])
+print('S1_FALSELY_BLOCKED=%d of %d blocked (population %d)   surface=%s'
+      % (false_n, len(blocked), len(lay), beads))
+for k in ('DependencyBlocked', 'TrackerBlocked', 'ExecutionOwed',
+          'AwaitingHumanDecision', 'Unclassifiable'):
+    print('  %-22s %d%s' % (k, len(cls[k]), (' ' + ','.join(cls[k])) if cls[k] else ''))
+if cls['Unclassifiable']:
+    print('UNCLASSIFIABLE names an HD id absent from the ledger -- ERROR, not an exclusion')
+    sys.exit(1)
+sys.exit(1 if false_n else 0)
+PY
 ```
-**Expect `=0`.** Measured 2026-09-07 22:0xZ: **2**. ⚠ **NEARLY PASSING.**
-**This figure is a DATED SNAPSHOT, not a constant** — it read **92**, then **89**, then **88**, then **2** inside one hour as `%20` converted them. **The runner is authoritative; every number in this file is a
-timestamped snapshot — re-run before citing.** That discipline is here because this repo has
-already been bitten three times by an assertion pinned to a live count: `docs-staleness`, the
-`crate-atom-gate` ceilings, and `eg0m_jsonl_comment_count_is_seventeen` (asserts 17 against a live
-27 — bead `325h`, whose acceptance explicitly FORBIDS re-pinning it to 27).
-*Rationale:* `blocked` with an empty graph is `TrackerBlocked`, never `DependencyBlocked`
-(`AGENTS.md`). Proven by transition, not by reading the field:
+**Expect `=0` with every excluded row named.** Measured 2026-09-07: **`0 of 0 blocked (population
+138)`**, all five classes empty, `rc=0`. ✅ **PASSING — but read the next paragraph before banking
+it.**
+
+> **THE NUMBER REACHED ZERO PARTLY BY FLIPPING TWO ROWS WHOSE CLASSIFICATION WAS NEVER RECORDED, and
+> that is the defect this predicate closes.** The trajectory was 92 → 89 → 88 → 2 → 0. The last two
+> — `s1-l3-hd0009-lo3g` and `s1-l5-decisions-owed-4tq2` — were the rows `%20` refused to flip,
+> because *"flipping them would be falsifying rows to zero a number."* They are now `open`. For one
+> of them that is the RIGHT answer for a reason nobody wrote down; for the other it is
+> UNDETERMINED:
+>
+> * **`lo3g` names `HD-0009`, and `HD-0009` HAS A DECISION** — two rows, an empty first row then
+>   **385 chars**. So *"halt step until Joshua decides"* was **false**: nobody is awaiting a human.
+>   Its true class is **`ExecutionOwed`**, which is WORK, so `open` is correct — and the predicate
+>   above now says so instead of leaving it to memory.
+> * **`4tq2` names NO HD id at all** (*"L5 decisions_owed with age"* is about the aggregate). Under
+>   this predicate it is `TrackerBlocked`, i.e. it counts — which means flipping it was defensible
+>   but was never justified by any rule. Had it stayed `blocked`, R3 would read 1, correctly.
+>
+> **`0 of 0 blocked` is now printed with its denominator** precisely because a criterion that reads
+> `0` from an EMPTY population cannot be distinguished from one that read `0` from a healthy one.
+
+**THE DOMAIN HAS FOUR STATES, NOT THREE — measured, and it corrects a generalisation of my own
+source.** The three-state framing (`DependencyBlocked` / `TrackerBlocked` /
+`AwaitingHumanDecision`) misses the class that actually dominates:
+
+```
+docs/decisions.jsonl : 56 rows, 44 distinct HD ids
+  ANY row carries a decision : 19   HD-0001..HD-0018, HD-0033
+  NO row carries a decision  : 25   HD-0019..HD-0032, HD-0034..HD-0044
+  of the 19 decided ids, how many carry an execution receipt
+    (execution_status AND executed_at AND actuator_receipt) : 0
+```
+
+So **every recorded decision is UNEXECUTED**, and *"awaiting a human"* is true for **25 of 44** ids
+— not almost-never. The claim *"all 19 recorded HD decisions carry a real decision"* is **exactly
+right about those 19 and does not generalise to the ledger**, whose population is 44. `HD-0008`'s
+*"push it"*, recorded 2026-09-02 and never executed, is the archetype and already has a bead
+(`hd0008-decision-never-executed-ql7w`). **`ExecutionOwed` is therefore the fourth state, it is the
+largest one, and a bead in it is WORK — it must never be excluded as a human hold.**
+
+**FIRES-ON-KNOWN-BAD — five fixtures under `docs/fixtures/`, all executed:**
+
+|fixture|class|counts?|rc|
+|---|---|---|---|
+|`r3-dependency-blocked`|`DependencyBlocked` — blocked WITH a real edge|no|0|
+|`r3-tracker-blocked`|`TrackerBlocked` — no edge, no HD id|**yes**|1|
+|`r3-execution-owed`|`ExecutionOwed` — names `HD-9001`, decided in `r3-decisions.jsonl` via an **empty first row** then a decision|**yes**|1|
+|`r3-awaiting-human`|`AwaitingHumanDecision` — names `HD-9002`, asked and never answered|no|0|
+|`r3-decisions.jsonl`|the fixture ledger; `HD-9001` proves the any-row rule, `HD-9002` the exclusion|—|—|
+|`r2-empty.jsonl` as the LEDGER|anti-vacuity arm 1|`ERROR decision_ledger_has_no_ids`|1|
+|`r2-empty.jsonl` as the BEADS|anti-vacuity arm 2|`ERROR empty_layer_population`|1|
+
+> **BOTH OF THOSE ARMS WERE DEAD ON THE FIRST RUN, and the fixtures are what showed it.** The
+> ledger parser accepted *any* row carrying an `id` as a decision id, so pointing `R3_DECISIONS` at
+> a BEAD file produced 1 bogus "decision id", `seen_ids` was non-empty, and the guard **silently
+> did not fire**. Fixed by requiring `re.fullmatch(r'HD-\d{4}', hid)`. The same run also caught the
+> population disagreeing with R2 — 144 against R2's 138, because R3 was not excluding the six layer
+> gates. **Two criteria over one set must never disagree on the denominator**, and only running them
+> side by side reveals it.
+
+`r3-execution-owed` is the leg the old predicate could not express: it is `blocked` with no edge and
+a human-sounding title, so a hand reading would exclude it as a hold — and it is work.
+*Rationale:* `blocked` with an empty graph is never `DependencyBlocked` (`AGENTS.md`). **Proven by
+transition, not by reading the field:**
 `br update omp-orchestrator-s1-l0-b01-3vro --status in_progress` → `blocked → in_progress`,
 accepted, no refusal. **A false block hides work from `br ready` and from every selector.**
+
+**NO-CLAIM.** The any-row rule here is a *transcription* of `crates/decision-ledger`
+(`execution.rs`, regression floor `a8e2fc6`), not a call into it. That kernel is the single source
+and it also carries the execution half (`nonempty decision without execution_status/executed_at/
+actuator_receipt`). It has a `[[bin]]` target and is **NOT on PATH**, and it cannot be installed
+today: the lane produces Linux artifacts and local builds are prohibited, which is
+`omp-orchestrator-qir1`. **When a darwin artifact lane exists, this runner should call the kernel
+instead of restating it** — a transcription can drift from its source, which is the whole defect
+class this file tracks.
 
 ### R4 — the S1 box's disagreements are resolved, counted by a DERIVED predicate
 ```bash
@@ -576,13 +703,13 @@ the reading, not the subject, every time.**
 |---|---|
 |R1 acceptance on every layer bead|✅ **PASS** — 0 of 144 empty|
 |R2 layer beads wired to their gate|✅ **PASS** — **0 of 138, STRANGLED=0**, snapshot 2026-09-07 (`rc=0`). **Was ⚠ WEAK** until `2fxd` made the predicate require *own-layer-gate* linkage, made the transpose a typed `STRANGLED` refusal, added an anti-vacuity arm, and shipped four executed fixtures. Retired predicate printed beside it on every run. History: published **FAIL 144/144** (wrong at publication — the edges predated this file by 4 days) and its first "correction" (`id`/`dependency_type`, `br show`'s keys, not the JSONL's) **also wrong**|
-|R3 no false `blocked`|⚠ **NEARLY** — 2 (snapshot; was 92 → 89 → 88 → 2)|
+|R3 no false `blocked`|✅ **PASS — `0 of 0 blocked (population 138)`**, `rc=0`, all five classes empty, denominator now agreeing with R2. **Was ⚠ NEARLY (2).** Trajectory 92 → 89 → 88 → 2 → 0, and **the last two were flipped without their class being recorded** — `lo3g` correctly (`HD-0009` HAS a 385-char decision, so its "awaiting Joshua" was false; true class `ExecutionOwed`, which is WORK), `4tq2` undetermined (names no HD id → `TrackerBlocked`, so it counts). The predicate now records the reason instead of leaving it to memory, and prints the blocked-denominator so a `0` from an EMPTY population is distinguishable. **FOUR states, not three:** the missing one is `ExecutionOwed` and it is the largest — **19 of 44 HD ids carry a decision and ZERO of those 19 carry an execution receipt**|
 |R4 disagreements resolved, derived count|✅ **PASS — 0 of 75** across **43 wave files** (`f701dfc`, `%19`). Owner field widened to `DERIVED, ALL WAVES`. **3 of the original 8 were INSTRUMENT defects**, not subject defects|
 |R5 gates NAME a known-bad leg|✅ **PASS — 7 of 7** (strict: `SUBJECT:` stripped, numbered item required). `8hq3` P0 filed by `%20`|
 |R9 has any gate ever FIRED|⚠ **INERT, and NOT WIREABLE TODAY.** 0 of **12** `gate.yml` jobs name `s1-l`, 0 in cron, all 7 `status=open`. **Wire it, do not write it — but only when all six can attach at once:** named per-layer targets exist for **L0/L3/L4/L5 and NOT L1/L2**, and no gate's known-bad leg exists as code. Attaching the four would fire **4 of 6** and read as coverage. Attach at `fsu7`'s single Rust entry point, **never seven workflow keys** — Actions is STRICT (n=60, 49 duplicate-key runs started ZERO jobs)|
 |R6 diagram receipt matches a fresh run|✅ **PASS** — 53/64, exit 0|
 |R7 S0 closed|❌ **FAIL** — epic open; 4 of 7 children open, all P0 (**scope corrected: was mis-counted as 3 of 5**)|
-|R8 instruments not stale/self-referential|❌ **FAIL** — fh RED, 3 worktrees|
+|R8 instruments not stale/self-referential|❌ **FAIL, NARROWED** — self-referential half ✅ (runner `2a9df28`, on-lane 10/0). fh half **ROOT-CAUSED, NOT AGENT-FIXABLE**: needs a human TCC grant + a franken-harvest policy fix. **Tree-cleanliness DROPPED from the criterion**|
 
 **S1 IS NOT READY TO BUILD. 5 PASS · 1 NEARLY · 2 FAIL · 1 INERT.**
 >
@@ -612,6 +739,109 @@ fired. INERT, not unwritten.**
 are tracker and predicate work. R7 is two beads. R8 is a stale harvest and a worktree prune. That is
 the answer to *"plan S1 fully before executing"*: the plan is not short of ideas, it is short of
 **wiring, honest counts, and a closed floor.**
+
+### R8 NARROWED 2026-09-07, and the headline is a REFUSAL
+
+**`%19` root-caused all three components and refused to clear the one it could have.** Runner landed
+at `2a9df28`; verified by pane 1 before banking.
+
+#### THE REFUSAL, and it corrects my own dispatch
+
+I told `%19` the harvest run was **safe**. It is safe. **It is still the wrong move**, and `%19` said
+so verbatim:
+
+> *"My interactive context CAN read those files, so a manual run would publish a digest, turn
+> `fh health` GREEN, flip R8's fh component to PASS — **and the scheduled lane would still be broken
+> and re-fail at 05:15 tomorrow.** That is a forged certificate, and it is worse than the red it
+> replaces because it closes the question."*
+
+**A green obtained by running the thing by hand certifies the operator, not the lane.** This is the
+`.sh`-wrapper lesson in a different substrate: the mechanism must fire *where it is scheduled*, not
+*where an agent can reach*.
+
+#### The lanes EXIST and are FAILING — absent and failing have opposite remedies
+
+Comments stripped (`crontab -l | sed 's/#.*//'`), positive control 53 real rows:
+`15 5 * * * franken-harvest-daily`, `19 5 * * * fh-manifest-refresh`, `45 6 * * *
+franken-harvest-health`. **My dispatch said "no cron entry" — wrong; the remedy is diagnose, never
+add.**
+
+#### TWO INDEPENDENT FAULTS, and conflating them was nearly a wrong root cause
+
+**Fault A — a CONTEXT defect, not a data defect.** Verified by pane 1:
+
+```
+cron + launchd   MANIFEST_REFRESH_HEAD_READ_FAILED cannot read HEAD for aadc   rc=5 (both)
+interactive      git -C …/dicklesworthstone-mirror/aadc rev-parse HEAD
+                 -> 5a0265a06b87c442d4012cfb8af846001af168a1                  READS FINE
+```
+
+The scheduled context cannot read what an interactive shell can, corroborated by
+`Operation not permitted` on another mirror path. That is **Full Disk Access / TCC for the
+cron+ssh context on `/Volumes/ZestData` — a HUMAN GRANT, not an agent action.**
+
+**Fault B is what actually blocks today's digest, and A is not it.** `fh-manifest-refresh` has failed
+≥3 days *while digests published on 09-05 and 09-06*, so A cannot be the blocker.
+`franken-harvest-daily`'s terminal line, verified:
+
+```
+[DRIFT] corpus denominator drift: discovered 60, expected 59 under policy franken-harvest.corpus.v1
+```
+
+**A policy compiled into another project's binary.** `%19` declined to edit another project's policy
+blind, correctly.
+
+`%19` also **refuted its own first hypothesis** — a frozen corpus correctly declining would not
+produce **23 consecutive digests, 08-30..09-06.**
+
+#### FOUR DENOMINATORS FOR ONE CORPUS
+
+`%19` measured **219** mirror dirs; the `zeststream-rch` skill says **216**; pane 1 measures **217**;
+the policy asserts **60 discovered / 59 expected**. **Four values, one corpus** — the
+unstated-denominator defect at scale, and nobody should cite any of them without its glob.
+
+#### THE LIVENESS PROBE FAILED ITS OWN POSITIVE CONTROL — so the worktree half is UNKNOWN
+
+`lsof +D` returned **0 open fds for both candidate worktrees AND 0 for the live checkout's
+`crates/`.** **A probe that reports zero on a directory five panes are actively editing has no
+discriminating power**, so its zero proves nothing. `%19` refused to prune on its strength.
+
+And it declined to prune at all, for a reason worth keeping: **pruning clears only the ABSENT entry,
+taking 3 → 2 while the actual policy violation (`/private/tmp`, which `scratch-home` forbids for
+durable state) survives.** A cosmetic number over a live defect — the shape R8 exists to catch.
+
+#### TREE-CLEANLINESS IS DROPPED FROM R8. Pane 1's ruling.
+
+111 dirty/untracked files, top writers `agent-mail-native` 8, `omp-orchestrator` 5, `ack-spine` 5,
+then 3s across ten crates — **the signature of five live panes, not rot.**
+
+> **A dirty-file count over a shared checkout with five concurrent writers is RED PRECISELY WHEN THE
+> FLEET IS MOST PRODUCTIVE.** That is the docs-staleness metric and `crate-atom-gate`'s absolute
+> ceilings for a third time.
+
+R8's name is *"instruments not stale/**self-referential**"*. Tree cleanliness was never that. **Kept:
+the fh half and the self-referential half — both real, neither moves with normal work.**
+
+#### The self-referential half is DONE and its legs are TESTS, not notes
+
+`cargo test -j 2 -p text-structure --test self_referential` → contabo-2, **exit 0, 10 passed / 0
+failed**, named target per the mmt4 ruling. `prose_specimen_stripped` blanks fenced blocks and inline
+spans **while preserving line structure AND byte length**, so line and column citations survive.
+
+- **POSITIVE CONTROL:** a stripper that removed everything would make every scan vacuously green, so
+  one leg proves it still finds a needle **outside** a specimen before any zero is trusted.
+- **ANTI-VACUITY:** an empty hit set is a named ERROR — **and a declared rule file matching NOTHING
+  is ALSO an error**, because a stale exclusion silently widens the citable set on the next edit.
+- **The real-corpus leg RAN rather than declining** — verified under `--nocapture` that no
+  `UNMEASURED reason=corpus_absent` was emitted, so the two documents that produced the original
+  false positives were actually read on the worker.
+
+#### One UNRUN, quoted not inferred
+
+`cargo test -p text-structure --lib` refused twice, 45 s apart, identical mix:
+`critical_pressure=1, active_project_exclusion=2, os_gate_excluded=1`. `%19` waited and retried per
+the self-exclusion rule; `critical_pressure=1` persisted. **The crate's pre-existing lib unit tests
+are UNRUN, not passing.**
 
 ## What actually gets us to green — measured 2026-09-07 22:4xZ by four read-only scouts
 

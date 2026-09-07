@@ -1,0 +1,2 @@
+{"id": "omp-orchestrator-gate-s1-l3-z8hz", "status": "open", "title": "gate stand-in", "dependencies": []}
+{"id": "omp-orchestrator-s1-l3-fx-dep-aaaa", "status": "blocked", "title": "FIXTURE blocked BY A REAL EDGE", "dependencies": [{"issue_id": "omp-orchestrator-s1-l3-fx-dep-aaaa", "depends_on_id": "omp-orchestrator-some-prereq-zzzz", "type": "blocks", "created_at": "2026-09-07T00:00:00Z", "created_by": "fixture", "metadata": "{}", "thread_id": ""}]}
