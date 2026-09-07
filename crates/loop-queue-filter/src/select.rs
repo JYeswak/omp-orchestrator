@@ -1521,12 +1521,72 @@ mod tests {
         assert_eq!(ordered, ranked);
     }
 
+    /// REPLACES `eg0m_jsonl_comment_count_is_seventeen` (`omp-orchestrator-325h`).
+    ///
+    /// The old test read the LIVE `.beads/issues.jsonl` and asserted `== 17` against a
+    /// tracker count that only grows. It was RED-FOREVER BY CONSTRUCTION: `eg0m` had 27
+    /// comments when this landed and will never have 17 again. Re-pinning 17 -> 27 would
+    /// re-arm the identical trap for the next comment added, so the tracker is replaced
+    /// by a FIXTURE and the assertion is on the CONTRACT the test actually cared about --
+    /// "the JSONL reader can read comments at all", per its own message *"if this is 0
+    /// the reader is broken, not the data"*.
+    ///
+    /// WHAT IS LOST, stated rather than hidden: this no longer proves the live
+    /// `.beads/issues.jsonl` PATH resolves from this crate. `closed_lwdo1_row_is_not_offered`
+    /// in this module still reads the live file, so that coverage survives elsewhere; if it
+    /// is ever removed, path resolution becomes untested.
     #[test]
-    fn eg0m_jsonl_comment_count_is_seventeen() {
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../.beads/issues.jsonl");
-        let text = std::fs::read_to_string(path).expect("issues.jsonl");
-        let n = comment_count(&text, "omp-orchestrator-eg0m").expect("parse");
-        assert_eq!(n, 17, "if this is 0 the reader is broken, not the data");
+    fn the_jsonl_reader_counts_comments_from_a_fixture() {
+        let jsonl = concat!(
+            r#"{"id":"fx-three","status":"closed","comments":[{"author":"a","text":"one"},"#,
+            r#"{"author":"b","text":"two"},{"author":"c","text":"three"}]}"#,
+            "\n",
+            r#"{"id":"fx-zero","status":"open","comments":[]}"#,
+            "\n"
+        );
+        assert_eq!(
+            comment_count(jsonl, "fx-three").expect("fixture must parse"),
+            3,
+            "the reader must count every comment on the addressed row"
+        );
+        assert_eq!(
+            comment_count(jsonl, "fx-zero").expect("fixture must parse"),
+            0,
+            "a row with an empty comments array counts zero"
+        );
+    }
+
+    /// FIRES-ON-KNOWN-BAD for the replacement: malformed JSONL must produce the SPECIFIC
+    /// typed message, never a silent zero. A reader that answers 0 for unreadable input is
+    /// indistinguishable from one answering 0 for a comment-free bead -- which is exactly
+    /// how the pinned test's own "if this is 0 the reader is broken" ambiguity arose.
+    ///
+    /// Asserts the MESSAGE, not `is_err()`: AGENTS.md gate rule 7 records `cargo` exiting
+    /// 101 for two unrelated causes, and the same logic applies to a bare `Err`.
+    #[test]
+    fn unreadable_jsonl_is_a_named_error_not_a_silent_zero() {
+        let error = comment_count("{not json at all", "fx-three")
+            .expect_err("malformed JSONL must be an error, never Ok(0)");
+        assert!(
+            error.contains("QUEUE_UNRANKED comments jsonl line 0"),
+            "the refusal must name the surface and the offending line; got {error:?}"
+        );
+    }
+
+    /// ANTI-VACUITY: an EMPTY scan set must not read as a healthy zero. An empty document
+    /// parses cleanly, so this pins the residual honestly -- `comment_count` cannot today
+    /// distinguish "row absent" from "row has no comments", and both answer 0. That
+    /// ambiguity is a separate defect and is filed, not fixed here.
+    #[test]
+    fn an_absent_row_and_a_comment_free_row_both_answer_zero_today() {
+        assert_eq!(comment_count("", "fx-three").expect("empty parses"), 0);
+        assert_eq!(
+            comment_count(r#"{"id":"other","comments":[{"author":"a","text":"x"}]}"#, "fx-three")
+                .expect("parses"),
+            0,
+            "an ABSENT id answers 0, identical to a comment-free row: the signature cannot \
+             express NotFound. Filed as a follow-up rather than changed under 325h."
+        );
     }
 
     #[test]
