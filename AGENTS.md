@@ -1596,6 +1596,39 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
    a broadcast about a live tree must name its measurement time and tell recipients to re-measure**
    — which is what the correction did.
 
+8h. **` M` ALONE IS NOT A COLLISION SIGNAL. ` M` WITH NONZERO INSERTIONS IS.** Measured 2026-09-07,
+   after a mode-only diff changed two routing decisions in one session.
+
+   The agent write tool sets mode `100755` on `.rs` files it touches. No Rust source here is
+   executable, so it is pure artifact — but in a shared checkout `git status --porcelain` is how a
+   pane decides whether a file is safe to take, and **a mode-only change is indistinguishable from a
+   peer mid-edit.**
+
+   ```bash
+   git diff --numstat -- <path>     # "0<TAB>0<TAB>path" => MODE ONLY, safe to take
+   ```
+
+   **Two false collisions, both of which nearly stood:**
+
+   - `crates/omp-orchestrator/src/main.rs` was reported as *"carries several panes' uncommitted
+     hunks"*, so two `finding` publisher call sites that were **refusing at runtime** were left for
+     their owner. Measured `0+ 0-`, byte-identical to HEAD. The fix landed only because the diffstat
+     was checked.
+   - `crates/asupersync-conformance` showed 2 dirty files, and a pane correctly declined to take an
+     unassigned crate someone appeared to be editing. Measured *"2 files changed, 0 insertions(+), 0
+     deletions(-)"*. **It was free the whole time**, and the caution cost a round trip.
+
+   **A SWEEP DOES NOT HOLD, AND THE SWEEP'S OWN COMMIT SAID SO.** `2bd4e99` cleared the bit from 84
+   files (`0 insertions, 0 deletions`) and its NO-CLAIM predicted regeneration; **81 mode-only dirty
+   files existed roughly two hours later, in the same session.** Sweeping again is theatre. The
+   durable fix is a commit-time refusal, tracked as `omp-orchestrator-3xva`, and its residual is
+   stated there: a commit-time gate cannot stop the write tool, so mode-only rows still appear
+   between a write and a commit and this diagnostic stays necessary.
+
+   **The general form is the reusable half:** a status flag reports *that* something changed, never
+   *what*. Any decision keyed on `git status` alone — collision, ownership, staleness — is keyed on a
+   coarser signal than the decision needs. Read the diff, not the flag.
+
 9. **NO ACCEPTANCE IS COMPLETE WITHOUT A WIRING-PROOF LEG. The dispatch is where BUILT ≠ WIRED
    gets in.** Measured 2026-09-06, and it is the orchestrator's own defect: every acceptance
    written that session demanded fires-on-known-bad, a known-good leg, a mutation leg and
