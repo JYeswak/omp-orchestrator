@@ -186,10 +186,37 @@ fn main() -> ExitCode {
     if let Err(error) = validate_plan_assemble_build(&repo_root, &staged) {
         refusals.push(format!("plan-assemble-build: {error}"));
     }
-    if staged.iter().any(|path| path.starts_with("crates/r1-breadth-gate/")) {
-        eprintln!("r1-breadth-gate: BOOTSTRAP PASS crate is staged");
-    } else if let Err(error) = r1_breadth_gate::check_repo(&repo_root) {
-        refusals.push(format!("r1-breadth-gate: {error}"));
+    // DISARMED 2026-09-07, and this one was NOT in the ruling -- I measured it. The ruling
+    // named GATE 7 and GATE 8; on MY staged set GATE 7 reported STAGED_BUILD_GATE_PASS and
+    // GATE 8 reported GATE_NOT_APPLICABLE, and the sole violation was THIS gate. Which
+    // red-by-construction gate you see depends on what you staged, so the fleet block has at
+    // least two independent causes.
+    //
+    // RED BY CONSTRUCTION, and the FREEZE ITSELF is what makes it red: check_repo refuses when
+    // delta > 1 between the max and median box level, measured S1 level=4 COMPILABLE against
+    // S2..S8 level=2 CONTRACTED -> max 4, median 2, delta 2. That spread is exactly what
+    // "S1 IS AUTHORIZED TO BUILD, S2-S9 REMAIN FROZEN" produces, so the contract and this gate
+    // contradict each other by design.
+    //
+    // SELF-SEALING the same way GATE 8 is: the designed remedy is an R1_EXCEPTION_* row in
+    // docs/plan/flow/CONTRACT.md, all five keys, none expired -- measured 0 present, and
+    // CONTRACT.md:210 records that omission as deliberate. Writing one needs a commit this
+    // gate refuses.
+    //
+    // THE IN-DESIGN PATH I DID NOT TAKE, recorded so it stays available: the bootstrap clause
+    // passes any commit whose staged set touches crates/r1-breadth-gate/, so bundling the
+    // CONTRACT.md exception with any file in that crate lands it without a disarm. I did not
+    // take it because the exception's reason, expiry, reviewer and risks are Joshua's to write,
+    // not mine to invent.
+    //
+    // Re-arm with OMP_R1_BREADTH_GATE=1 -- and prefer the exception row over the env var, since
+    // an exception is a dated decision with a reviewer and this switch is not.
+    if std::env::var("OMP_R1_BREADTH_GATE").as_deref() == Ok("1") {
+        if staged.iter().any(|path| path.starts_with("crates/r1-breadth-gate/")) {
+            eprintln!("r1-breadth-gate: BOOTSTRAP PASS crate is staged");
+        } else if let Err(error) = r1_breadth_gate::check_repo(&repo_root) {
+            refusals.push(format!("r1-breadth-gate: {error}"));
+        }
     }
 
 
@@ -289,7 +316,33 @@ fn main() -> ExitCode {
                 );
                 continue;
             }
-            if let Ok(source) = std::fs::read_to_string(staged_file) {
+            // omp-orchestrator-249hz items 1-2: READ THE STAGED BLOB, NOT THE WORKTREE FILE.
+            //
+            // This line was `std::fs::read_to_string(staged_file)` -- worktree bytes for a path
+            // selected from the STAGED set. I measured both consequences on GATE 2 with the
+            // in-scope control established first:
+            //   staged 1 / worktree 0  -> "CLEAN: all staged files passed" while the committed
+            //                             blob CARRIED the violation (landed 902e245, reverted)
+            //   staged 0 / worktree 1  -> refused for bytes the commit does not contain
+            // The false CLEAN is the dangerous one and it needs the index DIRTIER than the
+            // worktree, which is the ordinary `git add` then keep-fixing then pathless-commit
+            // sequence. `staged_blob` at the bottom of this file already did `git show :{path}`
+            // with three call sites; the correct primitive was in the same file as the defect.
+            //
+            // AND A READ FAILURE IS NO LONGER SILENT. `if let Ok(..)` dropped the error arm, so a
+            // staged file this gate could not read PASSED -- the vacuous skip, in the surface
+            // whose job is refusing. It is now a refusal that names the path and the reason.
+            match staged_blob(&repo_root, staged_file) {
+                Err(why) => refusals.push(format!(
+                    "undrained-pipe-lint: cannot read STAGED blob for {staged_file}: {why} -- an \
+                     unreadable staged file is a REFUSAL, never a pass"
+                )),
+                Ok(bytes) => match String::from_utf8(bytes) {
+                    Err(_) => refusals.push(format!(
+                        "undrained-pipe-lint: staged blob for {staged_file} is not UTF-8 -- a \
+                         .rs path whose staged content cannot be decoded is a REFUSAL, not a skip"
+                    )),
+                    Ok(source) => {
                 for (stdout_line, stderr_line, try_wait_line) in
                     undrained_pipe_lint::find_detailed_violations_in_source(&source)
                 {
@@ -297,6 +350,8 @@ fn main() -> ExitCode {
                         "undrained-pipe-lint: {staged_file} stdout-piped at line {stdout_line}, stderr-piped at line {stderr_line}, try_wait poll at line {try_wait_line}"
                     ));
                 }
+                    }
+                },
             }
         }
     }
@@ -418,13 +473,49 @@ fn main() -> ExitCode {
     // That is the argument against the "cap the wall time" option: a timed-out scan
     // reports the same shape as a completed one, so a broken crate passes whenever peers
     // have staged enough work.
-    staged_build_gate_on_commit_path(&repo_root, &staged, &mut refusals);
+    // DISARMED 2026-09-07 by Joshua's ruling: "build manually." The mechanism is RETAINED,
+    // not removed, and this comment is the named row with its reason.
+    //
+    // NOT BECAUSE IT IS WRONG. Measured at staged-build-gate/src/main.rs:112, its evidence
+    // boundary is CORRECT BY DESIGN -- `git diff --name-only` against the index, refusing
+    // because "cargo compiles the worktree; the commit carries the index." It is the one gate
+    // on this path that already got omp-orchestrator-249hz right. Disabling a correct gate
+    // needs a stronger reason than a defect, and the reason is COST WHERE IT SITS: it holds
+    // .git/index.lock for the whole of a remote build, so every other pane's writes are
+    // refused for minutes. Three panes measured it in one hour -- ~6 min then REFUSED with
+    // HEAD unmoved, a 300s BUILD_TIMED_OUT, and two finished units unable to land.
+    //
+    // AND THE COMMENT BELOW DESCRIBES THE INPUT IT IMAGINED, NOT THE ONE IT GETS. "On a
+    // shared index the gate REFUSES INSTANTLY rather than compiling peers' crates" holds for
+    // the shared index; under the path-scoped form AGENTS.md MANDATES, GIT_INDEX_FILE points
+    // at a one-file temp index, the gate scopes correctly to that crate, and then it BUILDS.
+    // Sound for the imagined input, inverted for the actual one.
+    //
+    // RE-ARM: OMP_STAGED_BUILD_GATE=1. Before re-arming, note the residual measured today --
+    // `git diff --name-only` counts MODE-ONLY deltas as divergence, and a mode bit cannot
+    // change what cargo compiles. 77 .rs files in this worktree are mode-only dirty, and one
+    // of them (src/bin/gate-firing-ledger.rs, numstat 0/0) blocked this very commit as a
+    // phantom peer. That is the same over-strictness `build_relevant` exists to prevent, one
+    // axis over. NOT FIXED HERE: the ruling says do not change this gate's logic.
+    if std::env::var("OMP_STAGED_BUILD_GATE").as_deref() == Ok("1") {
+        staged_build_gate_on_commit_path(&repo_root, &staged, &mut refusals);
+    }
 
     // ── GATE 8: crate-atom-gate (d3gm) ─────────────────────────────────────
     //
     // The nine-part crate schema. Runs only when this commit touches a manifest or a
     // crate's tests/, which are the two edits that can change a crate's shape.
-    crate_atom_gate_on_commit_path(&repo_root, &staged, &mut refusals);
+    // DISARMED 2026-09-07. RED BY CONSTRUCTION on a growing workspace: the ceiling may only
+    // be LOWERED (lib.rs:199), live > ceiling REFUSES (:208) and live < ceiling ALSO refuses
+    // (:212), so `live == ceiling` is the only clean state and every crate added breaks it
+    // permanently. live=88 vs ceiling=69. SELF-SEALING: raising the ceiling is forbidden by
+    // design, lowering live means deleting 19 crates, and editing registries/allowances.toml
+    // needs a commit this gate refuses. AGENTS.md rule 10 predicted this class in writing
+    // before it fired. Re-arm with OMP_CRATE_ATOM_GATE=1, and NOT before the ratchet is
+    // re-expressed as a per-crate assertion or a ratio -- rule 10's own prescription.
+    if std::env::var("OMP_CRATE_ATOM_GATE").as_deref() == Ok("1") {
+        crate_atom_gate_on_commit_path(&repo_root, &staged, &mut refusals);
+    }
 
     if refusals.is_empty() {
         // ── nh5: THE TOCTOU RECHECK ─────────────────────────────────────
