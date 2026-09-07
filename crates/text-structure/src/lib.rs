@@ -365,6 +365,159 @@ pub fn raw_text_matches(source: &str) -> Vec<RawTextMatch> {
     findings
 }
 
+/// Return prose (markdown/TOML/plain) with QUOTED SPECIMENS blanked.
+///
+/// S1 criterion R8, self-referential half. `code_only` blanks Rust comments; this is its
+/// prose sibling, and prose is where the class actually bit us. Blanks, preserving line
+/// structure so line numbers survive:
+///
+/// * fenced blocks — ```` ``` ```` … ```` ``` ````
+/// * inline code spans — `` `like this` ``
+///
+/// WHY THIS EXISTS, measured 2026-09-07 across one session. A citation-hygiene scan over a
+/// corpus that CONTAINS its own defect reports finds its OWN specimens, and every instance
+/// was a false positive on a document that was already correct:
+///
+/// * `CONTRACT.md`'s only `mirror:beads_rust/...` match is inside the sentence REFUSING that
+///   form — a specimen in the rule against it.
+/// * `planning_to_exhaustion.md`'s two unprefixed `plf.N` ids are inside the PX-D5 row that
+///   REPORTS the dropped leading `j`.
+/// * a contract's own doc-name census counted itself, reporting 24/9 where the true figures
+///   were 23/8, because the file names both candidates while arguing about them.
+///
+/// The remedy is to strip specimens before matching — NEVER to edit the documents that
+/// record the rule, which is how a correct document gets "fixed" into a wrong one.
+///
+/// OVER-STRIPPING IS THE SAFE DIRECTION: it can only report LESS, and the failure this
+/// prevents is a false POSITIVE against a compliant file.
+pub fn prose_specimen_stripped(source: &str) -> Cow<'_, str> {
+    if !source.contains('`') {
+        return Cow::Borrowed(source);
+    }
+    let mut out = String::with_capacity(source.len());
+    let mut fenced = false;
+    for line in source.lines() {
+        if line.trim_start().starts_with("```") {
+            fenced = !fenced;
+            blank_line_into(&mut out, line);
+            continue;
+        }
+        if fenced {
+            blank_line_into(&mut out, line);
+            continue;
+        }
+        // Inline spans. An UNCLOSED backtick blanks to end of line: a half-open span is
+        // ambiguous, and the safe direction is to strip.
+        let mut buf = String::with_capacity(line.len());
+        let mut inside = false;
+        for ch in line.chars() {
+            if ch == '`' {
+                inside = !inside;
+                buf.push(' ');
+            } else if inside {
+                buf.push(' ');
+            } else {
+                buf.push(ch);
+            }
+        }
+        out.push_str(&buf);
+        out.push('\n');
+    }
+    if !source.ends_with('\n') {
+        out.pop();
+    }
+    Cow::Owned(out)
+}
+
+fn blank_line_into(out: &mut String, line: &str) {
+    for _ in line.chars() {
+        out.push(' ');
+    }
+    out.push('\n');
+}
+
+/// One scan hit, attributed to the file it came from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScanHit {
+    /// Path the hit was found in.
+    pub path: String,
+    /// The matched text, for a reader to judge.
+    pub matched: String,
+}
+
+/// What a census scan actually measured, split so a self-hit cannot be cited as a defect.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScanVerdict {
+    /// Hits in files that DECLARE the rule — never citable as defects.
+    pub self_referential: Vec<ScanHit>,
+    /// Hits in files that do not declare the rule.
+    pub citable: Vec<ScanHit>,
+}
+
+impl ScanVerdict {
+    /// Both denominators, always. A bare count of either half is the defect this splits.
+    #[must_use]
+    pub fn census(&self) -> String {
+        format!(
+            "SCAN_CENSUS hits={} self_referential={} citable={}",
+            self.self_referential.len() + self.citable.len(),
+            self.self_referential.len(),
+            self.citable.len()
+        )
+    }
+}
+
+/// Split a scan's hits into self-referential and citable.
+///
+/// `rule_files` are the paths that DEFINE the rule being scanned for — a checker's own
+/// source, the contract that states the convention, the finding that reports the defect. A hit
+/// in one of those is the scanner seeing its own specimen.
+///
+/// ANTI-VACUITY: an empty hit set is an `Err`, never an empty pass. A scan that covered
+/// nothing reports identically to one that covered everything and found nothing, and this
+/// repository has paid for that conflation repeatedly.
+///
+/// A `rule_files` entry matching NO hit is also an `Err`: a stale exclusion silently widens
+/// the citable set on the next edit, and an allowlist row that matches nothing is the same
+/// never-fires shape as the gate it guards.
+pub fn classify_scan(hits: &[ScanHit], rule_files: &[&str]) -> Result<ScanVerdict, String> {
+    if hits.is_empty() {
+        return Err(
+            "SCAN_EMPTY reason=zero_hits — an empty scan set is an ERROR, never a pass".to_owned(),
+        );
+    }
+    let mut verdict = ScanVerdict {
+        self_referential: Vec::new(),
+        citable: Vec::new(),
+    };
+    let mut used = vec![false; rule_files.len()];
+    for hit in hits {
+        match rule_files
+            .iter()
+            .position(|rule| hit.path == *rule || hit.path.ends_with(rule))
+        {
+            Some(index) => {
+                used[index] = true;
+                verdict.self_referential.push(hit.clone());
+            }
+            None => verdict.citable.push(hit.clone()),
+        }
+    }
+    let stale: Vec<&str> = rule_files
+        .iter()
+        .zip(&used)
+        .filter(|(_, hit)| !**hit)
+        .map(|(rule, _)| *rule)
+        .collect();
+    if !stale.is_empty() {
+        return Err(format!(
+            "SCAN_STALE_RULE_FILE reason=declared_rule_file_matched_no_hit rows={stale:?} — a \
+             stale exclusion silently widens the citable set on the next edit"
+        ));
+    }
+    Ok(verdict)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
