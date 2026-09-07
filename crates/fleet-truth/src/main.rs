@@ -5,7 +5,7 @@
 
 use fleet_truth::{
     fleet_ops_alert, last_save_age_hours, parse_behind, repo_has_git, spawn_timeout, truth_row,
-    FleetTruthRules, Sensors, TruthRow,
+    unmeasured_row, FleetTruthRules, Sensors, TruthRow,
 };
 use serde_json::{json, Value};
 use std::io::{self, Read, Write};
@@ -480,22 +480,64 @@ fn run_register(json_out: bool, sessions: &[String], rules: &FleetTruthRules) ->
     // state), so the sweep is embarrassingly parallel and the fix is structural.
     //
     // Determinism is preserved: the `sort_by_key` below restores a total order over the results,
-    // so output does not depend on which thread finishes first.  Threads are joined unconditionally
-    // -- a panicking sensor thread degrades to that session being dropped from the register rather
-    // than poisoning the whole observation.
+    // so output does not depend on which thread finishes first. Threads are joined
+    // unconditionally, which is why `zaxp` correctly certified this site as needing no
+    // asupersync child region: the lexical scope owns the children and the parent cannot return
+    // before quiescence.
+    //
+    // omp-orchestrator-dw3l — WHAT CHANGED AND WHY THE OLD TRADEOFF WAS REAL BUT DOMINATED.
+    // This was `filter_map(|h| h.join().ok())`, and the comment here defended it: a panicking
+    // sensor thread "degrades to that session being dropped from the register rather than
+    // poisoning the whole observation." That tradeoff was genuine — poisoning the whole
+    // register on one bad session would make the ground-truth crate unusable — but it is a
+    // FALSE DICHOTOMY. A typed UNMEASURED row gives both halves: the register survives AND
+    // nothing is silently lost.
+    //
+    // The dropped-row form made a session whose sensors PANICKED indistinguishable from a
+    // session that DOES NOT EXIST, in the one crate whose whole purpose is to be the place
+    // callers trust instead of re-deriving. QUIESCENCE held; ERROR PROPAGATION did not.
+    //
+    // Each handle is now paired with its session NAME so the row can say which session was
+    // unmeasurable, and every session yields exactly one row — see the denominator assertion
+    // below, which is what makes a short table unconstructible rather than merely unlikely.
     let mut rows: Vec<TruthRow> = std::thread::scope(|scope| {
         let handles: Vec<_> = sess_list
             .iter()
             .map(|s| {
                 let (since, ledger) = (&since, &ledger);
-                scope.spawn(move || truth_row(&sensors_for(s, since, ledger, stale_h, now), rules))
+                (
+                    s.as_str(),
+                    scope.spawn(move || {
+                        truth_row(&sensors_for(s, since, ledger, stale_h, now), rules)
+                    }),
+                )
             })
             .collect();
         handles
             .into_iter()
-            .filter_map(|h| h.join().ok())
+            .map(|(session, handle)| match handle.join() {
+                Ok(row) => row,
+                // NEVER dropped. `unmeasured_row` reuses truth_row's existing
+                // identity-unknown shape, so this ranks to the TOP under
+                // `identity_unknown_ranks_high` where an operator sees it.
+                Err(_) => unmeasured_row(session, rules, "sensor thread panicked"),
+            })
             .collect::<Vec<_>>()
     });
+
+    // DENOMINATOR (dw3l acceptance item 3). A reader must be able to tell a short table from a
+    // complete one WITHOUT counting panes by hand. This holds by construction now — one row per
+    // handle, one handle per session — and the assertion is here so a future `filter`/`flat_map`
+    // that reintroduces dropping fails loudly instead of shrinking the register quietly.
+    assert_eq!(
+        rows.len(),
+        sess_list.len(),
+        "FLEET_TRUTH_SHORT_TABLE sessions_requested={} rows_returned={} — the register must \
+         emit one row per session; a shorter table makes a failed session indistinguishable \
+         from an absent one",
+        sess_list.len(),
+        rows.len()
+    );
     rows.sort_by_key(|a| std::cmp::Reverse(a.score));
 
     if json_out {

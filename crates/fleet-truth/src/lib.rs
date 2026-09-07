@@ -135,6 +135,48 @@ impl TruthRow {
     }
 }
 
+/// A row for a session whose sensors could NOT be measured, so the register never returns a
+/// SHORT table.
+///
+/// `omp-orchestrator-dw3l`. The scope in `main.rs` used `filter_map(|h| h.join().ok())`, which
+/// maps a panicked child to `None` and DROPS it. Quiescence held — the lexical scope joins
+/// every handle before returning, which is why `zaxp` correctly certified that site as needing
+/// no asupersync child region — but ERROR PROPAGATION did not. Those are two different
+/// properties and only the first is what a region buys.
+///
+/// WHY A SHORT TABLE IS THE WORST FAILURE FOR THIS CRATE SPECIFICALLY: fleet-truth is the
+/// ground-truth register, the one place that answers what the fleet is doing so callers stop
+/// re-deriving it. A dropped row makes a session whose `truth_row` PANICKED indistinguishable
+/// from a session that DOES NOT EXIST. That is this repository's silent-success class inverted:
+/// a silent PARTIAL, which is worse, because a caller counting rows sees a smaller fleet and
+/// has no signal that anything was lost.
+///
+/// THE SHAPE IS NOT NEW VOCABULARY. It reuses `truth_row`'s existing identity-unknown row
+/// verbatim: `?` in every sensor field, `UNKNOWN` for `save_age`, and the same
+/// `identity_unknown_ranks_high` score rule, so an unmeasurable session RANKS TO THE TOP where
+/// an operator sees it instead of vanishing off the bottom.
+#[must_use]
+pub fn unmeasured_row(session: &str, rules: &FleetTruthRules, cause: &str) -> TruthRow {
+    let score = if rules.identity_unknown_ranks_high {
+        999
+    } else {
+        0
+    };
+    TruthRow {
+        score,
+        session: session.to_owned(),
+        repo: "?".into(),
+        commits: "?".into(),
+        last_bead_close: "?".into(),
+        dirty: "?".into(),
+        behind: "?".into(),
+        ctx: "?".into(),
+        save_age: "UNKNOWN".into(),
+        save_alert: "unmeasured".into(),
+        reason: format!("UNMEASURED {cause} (fail-closed: rank-high, inspect)"),
+    }
+}
+
 pub fn truth_row(s: &Sensors, rules: &FleetTruthRules) -> TruthRow {
     if s.vstate != "OK" {
         let score = if rules.identity_unknown_ranks_high {
