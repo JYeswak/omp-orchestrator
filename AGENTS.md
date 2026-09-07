@@ -1831,6 +1831,45 @@ confident-wrong reading. Capture the verdict at the moment of the operation, or 
 before re-running.
 
 
+### `git show | grep` CONFLATES THE COMMIT MESSAGE WITH THE DIFF — and a claim of absence can be defeated by its own prose
+
+**Measured 2026-09-07. My own claim, caught by `%20`, and the purest instance of the
+self-referential-instrument family in this file.**
+
+I wrote *"`%19`'s diff touches `owner` 0 times"* to attribute a lane test failure to the
+environment rather than to a peer's commit. **The substance was right; the method was not.**
+
+```
+git show 49c7c22 | grep -c owner                                    -> 2   <- includes the MESSAGE
+git show --unified=0 --format= 49c7c22 | grep '^[+-]' | grep -c owner -> 0   <- diff only
+git diff 49c7c22^ 49c7c22 | grep -c owner                            -> 0   <- diff only
+```
+
+**The two hits are in the commit message, and line 59 of that message is the sentence
+*"My diff touches `owner` 0 times"*.** So a verification of absence, run with `git show | grep`,
+**returns nonzero because the claim's own prose contains the needle it denies.**
+
+> **`git show` is `message + diff`. If you are making a claim about the DIFF, you must exclude the
+> message** — `--format=` empties it, or use `git diff <sha>^ <sha>` and never `git show`.
+
+**Why this is worse than the sibling rules:** `git log -S` skipping merges produces a *false zero*,
+which reads as absence and is caught by any positive control. This produces a **false NONZERO on a
+true absence**, so the instrument appears to *refute* a correct claim — and the more carefully the
+commit message documents the reasoning, the more likely it is to defeat the check. **A well-written
+commit message is the failure mode.**
+
+Same family, all measured here: `git log -S` skipping merges; `grep -c … || echo 0` emitting
+`"0\n0"`; `$?` after a pipe returning the pipeline's status; a doc comment containing the needle it
+warns about; a census table naming every gate it checks; and a citation-hygiene scan finding the
+specimens inside its own defect reports. **Twelfth instance, and the first where the instrument's
+extra input was the author's own explanation.**
+
+**`%20` hit the sibling shape on the same bead, one call apart:** its opening census printed **3**
+raw `.output()` sites and was counting the `// omp-orchestrator-3kcl: this was a raw '.output()'…`
+**comments documenting the fix.** Comments stripped → **1**, and that one is the `#[cfg(test)]`
+helper. **Strip comments before matching** — re-learned by publishing a wrong 3 and catching it in
+the next call.
+
 ### `git log -S` SKIPS MERGES BY DEFAULT — ITS ZERO IS NOT EVIDENCE OF ABSENCE
 
 **Measured 2026-09-02.** An agent searched for the commit that introduced a string with
