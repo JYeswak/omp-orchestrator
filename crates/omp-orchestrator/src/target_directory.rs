@@ -309,20 +309,79 @@ pub fn reap_target(path: &Path, apply: bool) -> Result<ReapDecision, TargetDirec
     })
 }
 
+/// Deadline for the constant-time `df -k` statfs probe.
+///
+/// MEASURED 2026-09-07 at **78 ms** on this repository's path. `df` does not scale with tree
+/// size, so slowness is not the failure mode — a WEDGED MOUNT is, where statfs never returns.
+/// 30s is ~385x the observed value: it cannot fire on a healthy volume and still terminates a
+/// hung one. Same class and same constant as `pre-delete-citation-check`'s `GIT_DIFF_DEADLINE`
+/// (omp-orchestrator-62lz), which bounds a local index read for the same reason.
+///
+/// Lives here rather than in `main.rs` so `deadlines_are_ordered_and_argued` can assert the
+/// ordering against [`LSOF_DEADLINE`] from a test target; a deadline argued only in a comment
+/// regresses silently.
+pub const DF_DEADLINE: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Deadline for the RECURSIVE `lsof -nP +D` descent.
+///
+/// MEASURED 2026-09-07, not picked. `lsof -nP +D` over this repository's own `target/` tree —
+/// **617,897 files — took 17,359 ms**; over a
+/// 16,083-file tree it took 2,215 ms. Cost scales with file count at roughly 28 us/file, so a
+/// target tree several times larger is entirely plausible and must not trip the bound.
+///
+/// 180s is ~10x the measured worst case. It therefore fires only on a genuinely WEDGED descent
+/// — a stale network mount encountered mid-walk is the realistic case — and never on a merely
+/// large tree. This probe gates a REAP decision rather than a commit, so a slow honest answer
+/// is preferable to a fast false refusal that would strand disk.
+///
+/// IT MUST NOT SHARE A CONSTANT WITH [`DF_DEADLINE`]: `df` is a constant-time statfs measured
+/// at 78 ms, this is an unbounded-fanout walk measured at 17.4 s. One shared value would be
+/// wrong by ~200x in one direction or the other, and `deadlines_are_ordered_and_argued` pins
+/// the ordering so the argument cannot silently regress.
+pub const LSOF_DEADLINE: std::time::Duration = std::time::Duration::from_secs(180);
+
 fn open_file_detail(path: &Path) -> Result<Option<String>, TargetDirectoryError> {
     let executable = if Path::new("/usr/sbin/lsof").is_file() {
         "/usr/sbin/lsof"
     } else {
         "lsof"
     };
-    let output = Command::new(executable)
-        .args(["-nP", "+D"])
-        .arg(path)
-        .output()
-        .map_err(|error| TargetDirectoryError::ProbeUnavailable {
-            path: path.to_path_buf(),
-            reason: format!("{executable}: {error}"),
-        })?;
+    let mut command = Command::new(executable);
+    command.args(["-nP", "+D"]).arg(path);
+
+    // `bounded_output`, NOT `bounded_status`, and the reason is specific to this call: the
+    // caller COUNTS stdout lines below (`lines.len() - 1`). `bounded_status` INHERITS stdio, so
+    // it would print lsof's inventory to the operator's terminal and hand back nothing to
+    // count. This site also has to CLASSIFY the outcome rather than read an exit code, because
+    // lsof exits 1 for "nothing open" — a legitimate answer, not a failure.
+    //
+    // omp-orchestrator-3kcl: this was a raw `.output()` with no deadline. A wedged lsof — a
+    // stale mount inside the descent — blocked a reap decision forever with no typed outcome,
+    // and the operator could not tell "lsof is walking 600k files" from "lsof is stuck".
+    let output = match subprocess_contract::bounded_output(&mut command, LSOF_DEADLINE) {
+        subprocess_contract::BoundedOutcome::Completed(output) => output,
+        // RESTRICTIVE, and deliberately NOT folded into ProbeUnavailable's spawn arm: a
+        // deadline is not a missing binary. The remedies differ — install lsof versus
+        // investigate a hung mount — so the reason string names which one happened.
+        subprocess_contract::BoundedOutcome::TimedOut => {
+            return Err(TargetDirectoryError::ProbeUnavailable {
+                path: path.to_path_buf(),
+                reason: format!(
+                    "{executable} TIMED_OUT after {}s on a recursive +D walk; process group \
+                     signalled. This is NOT an lsof failure verdict and NOT an empty result — \
+                     the open-file set is UNKNOWN, so the directory must not be treated as \
+                     unused",
+                    LSOF_DEADLINE.as_secs()
+                ),
+            });
+        }
+        subprocess_contract::BoundedOutcome::Unspawned(error) => {
+            return Err(TargetDirectoryError::ProbeUnavailable {
+                path: path.to_path_buf(),
+                reason: format!("{executable}: {error}"),
+            });
+        }
+    };
     if !output.status.success() && output.status.code() != Some(1) {
         return Err(TargetDirectoryError::ProbeUnavailable {
             path: path.to_path_buf(),

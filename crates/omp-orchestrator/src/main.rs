@@ -4074,10 +4074,38 @@ fn disk_pressure(config: &Config) -> Result<Option<String>, String> {
         }
     }
 
-    let out = std::process::Command::new("df")
-        .args(["-k", &probe.display().to_string()])
-        .output()
-        .map_err(|e| format!("DISK_PRESSURE df failed to spawn: {e}"))?;
+    // `bounded_output`, NOT `bounded_status`: the caller PARSES stdout below — df's second
+    // line, split into fields for total and available blocks. `bounded_status` inherits stdio,
+    // so it would print the table to the terminal and hand back nothing to parse.
+    //
+    // omp-orchestrator-3kcl: this was a raw `.output()` with no deadline. `df` is a
+    // constant-time statfs — MEASURED at 78 ms on this repo's path — so the failure mode is
+    // not slowness, it is a WEDGED MOUNT, where statfs never returns. That blocked the disk
+    // pressure probe forever with no typed outcome.
+    let mut command = std::process::Command::new("df");
+    command.args(["-k", &probe.display().to_string()]);
+    let out = match subprocess_contract::bounded_output(
+        &mut command,
+        omp_orchestrator::target_directory::DF_DEADLINE,
+    ) {
+        subprocess_contract::BoundedOutcome::Completed(out) => out,
+        // A timeout is NOT the "no data row" error below. That one means df answered and the
+        // volume was unreadable; this means df never answered, so capacity is UNKNOWN. An
+        // unreadable volume is already a FINDING here, and an unanswered one must not
+        // silently become the same string.
+        subprocess_contract::BoundedOutcome::TimedOut => {
+            return Err(format!(
+                "DISK_PRESSURE df TIMED_OUT after {}s on {} — process group signalled. This \
+                 is NOT a capacity verdict: statfs measured 78ms healthy, so a timeout means a \
+                 WEDGED MOUNT and the free space is UNKNOWN, never zero and never fine",
+                omp_orchestrator::target_directory::DF_DEADLINE.as_secs(),
+                probe.display()
+            ));
+        }
+        subprocess_contract::BoundedOutcome::Unspawned(error) => {
+            return Err(format!("DISK_PRESSURE df failed to spawn: {error}"));
+        }
+    };
     let text = String::from_utf8_lossy(&out.stdout);
 
     // df's second line: Filesystem 1K-blocks Used Available Capacity ... Mounted
