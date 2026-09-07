@@ -1497,6 +1497,105 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
    only what the body asserts.** `%20` verified nothing was lost before renaming — the decision half
    was already covered by a separate across-every-shape leg carrying that exact evidence row.
 
+8e. **THE LANE SENDS YOUR WORKTREE FOR TRACKED PATHS ONLY — so `RCH-E410` has TWO causes, and
+   rule 8 above applies ON THE REMOTE LANE.** Measured 2026-09-07 by `%19` and `%20` independently,
+   from opposite ends of one fleet-wide outage. Every pane's remote build refused for roughly an
+   hour with `RCH-E410 DependencyPreflightMissing` — *"remote dependency preflight found a missing
+   required path"* — naming a path most of them had never heard of.
+
+   **Cause A — a declared entrypoint that does not exist yet.** `%20` watched the refusal WALK:
+
+   ```
+   retry 1   missing crates/gate-runner/src/main.rs
+   retry 2   missing crates/gate-runner/tests/roster.rs
+   retry 3   COMPLETE -> ran
+   ```
+
+   `rch`'s preflight requires **every declared entrypoint to exist**, while **cargo's own resolution
+   is lazy** — it does not need `tests/roster.rs` until you build that target. So a manifest
+   declaring `[[bin]]` and `[[test]]` paths before the files exist **passes `cargo metadata`
+   locally and refuses every remote build**, and the refusal walks from one declared path to the
+   next as the author writes them. That is sharper than this file's earlier *"a `Cargo.toml` without
+   a `src/`"* framing, which describes only the first step of the walk.
+
+   **Cause B — the path exists but is UNTRACKED.** `crates/gate-runner` had all its files on disk,
+   `cargo metadata --offline` loaded clean, and `git ls-files` returned **0**. `rch` ships an
+   overlay built from git, so an untracked directory does not travel.
+
+   **THE BOUNDARY IS TRACKED vs UNTRACKED — NOT INDEX vs HEAD.** I posed exactly that question and
+   declined to guess; `%19` settled it by experiment and **refuted its own first conclusion:**
+
+   ```
+   experiment 1   staged, deliberately NOT committed (absent from git ls-tree -r HEAD)
+                  -> lane exit=0, 1 passed        the worker ran a target in no commit
+                  -> concluded "the overlay archives the INDEX"   <- WRONG
+
+   experiment 2   the negative control it nearly skipped:
+                  index holds 1 #[test], worktree holds 2 (the second UNSTAGED, panicking)
+                  -> lane: "running 2 tests", exit=101, 1 passed; 1 failed
+                  -> AN INDEX ARCHIVE WOULD HAVE RUN ONE TEST
+   ```
+
+   ```
+   untracked path                       does NOT travel     <- the outage
+   staged (A )                          travels
+   UNSTAGED edit to a git-known path    travels
+   ```
+
+   **So `git add` alone is the minimal fix** for cause B — no commit required — though committing is
+   still right, because a tracked-but-uncommitted crate is invisible to a fresh clone.
+
+   **AND THE CONSEQUENCE WORTH MORE THAN THE UNBLOCK: A LANE FIGURE DESCRIBES YOUR WORKTREE, NOT
+   `HEAD`.** Rule 8 says `cargo` reads the WORKTREE while a sha names a TREE. **That holds on the
+   remote lane too** — which everyone here, including me, assumed the clean overlay removed. It does
+   not. A grader citing an on-lane `exit=0, N passed` against a sha has **still mixed two tree
+   states** unless it pinned the tree, exactly as if the run were local. In a five-agent shared
+   checkout the worktree is constantly someone else's.
+
+   **`%19`'s own summary is the reusable half:** one experiment gave a plausible mechanism and a
+   correct practical conclusion; the second refuted the mechanism while preserving the conclusion.
+   Stopping at one would have published *"rch archives the index"* — false, and it would have
+   licensed the belief that unstaged edits are safe from the lane. **The negative control is the
+   whole reason the answer is right.**
+
+   **This is the THIRD instance of the glob-member hazard and its worst variant.** The first two
+   (`response-envelope-check` 23:29, `zz-planted-dup` 05:57) broke workspace **LOADING** — loud,
+   local, instant. This one loads perfectly and breaks only **TRANSFER PREFLIGHT**, so it is
+   invisible from the pane that caused it and reaches peers as a refusal naming an unfamiliar path.
+   And this file's existing ruling landed exactly as written: *"a gate author is precisely the agent
+   most likely to create one."* The author was mid-`fsu7`, building a gate.
+
+8f. **`RCH-I005 project_excluded` HAS THREE CASES, NOT TWO — and `rch queue` cannot tell you which.**
+   Rule 8c established that an exclusion with **no live row** for your project is stale state, not
+   contention: unpin and go. `%8` measured the third case 2026-09-07.
+
+   ```
+   no live row for the project              STALE      -> unpin and go            (8c)
+   live row that is YOUR OWN build          CONTENTION -> wait; a second request duplicates it
+   live row that is a PEER's build, same
+     project, different pane                CONTENTION -> REROUTE to another worker
+   ```
+
+   `%8` found `contabo-3` genuinely running `omp-orchestrator-38cf50d1` —
+   `cargo test -j 2 -p gate-runner --test index_probe`, which was **`%19`'s staged-file
+   experiment**. It rerouted without waiting, `contabo-1` returned `exit=0`. **Waiting would have
+   been wrong**: it was not its own build, so there was nothing to duplicate.
+
+   The trap is that **the queue row does not name the pane**, so it cannot distinguish case 2 from
+   case 3 — which is why this file already records *"`rch queue` cannot tell you whether you are
+   your own blocker."* Answer it from your own knowledge of what you launched, not from the row.
+
+8g. **A BROADCAST IS A SNAPSHOT AND CARRIES NO TIMESTAMP A READER CHECKS.** `%20`, self-reported
+   2026-09-07: it told three panes that only `src/lib.rs` existed under `crates/gate-runner`, and by
+   the time the message sent the owner had written `main.rs`. **True when measured, false when
+   sent** — it had caught a peer mid-write.
+
+   Its own framing is the rule: the same stale-premise class this file records on beads, *"committed
+   by me in a broadcast, where it is worse because a broadcast carries no timestamp a reader
+   checks."* A bead comment sits beside its own history; a broadcast arrives as present tense. **So
+   a broadcast about a live tree must name its measurement time and tell recipients to re-measure**
+   — which is what the correction did.
+
 9. **NO ACCEPTANCE IS COMPLETE WITHOUT A WIRING-PROOF LEG. The dispatch is where BUILT ≠ WIRED
    gets in.** Measured 2026-09-06, and it is the orchestrator's own defect: every acceptance
    written that session demanded fires-on-known-bad, a known-good leg, a mutation leg and
