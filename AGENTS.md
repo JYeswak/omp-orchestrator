@@ -1119,6 +1119,67 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
    diff with `git log <sha>..HEAD -- <path>`, and state which tree every number came from. A grade
    is otherwise a claim about "the repo right now", which is not a thing five agents can agree on.
 
+9. **NO ACCEPTANCE IS COMPLETE WITHOUT A WIRING-PROOF LEG. The dispatch is where BUILT ≠ WIRED
+   gets in.** Measured 2026-09-06, and it is the orchestrator's own defect: every acceptance
+   written that session demanded fires-on-known-bad, a known-good leg, a mutation leg and
+   anti-vacuity — and **not one demanded a caller.** So `crates/blocker-taxonomy` shipped at 662
+   LOC with 19 green tests, satisfied its acceptance completely, and was invoked by nothing:
+   `grep -rl blocker-taxonomy crates/*/Cargo.toml` minus its own manifest -> **0**;
+   `blocker_taxonomy` references outside its own crate -> **0**. The acceptance never asked, so
+   the pane never wired it, and the pane was right.
+
+   **Every acceptance for a new mechanism MUST carry this leg, stated as a command:**
+
+   ```
+   WIRING PROOF: after this lands, both of these are NONZERO and pasted in the close reason —
+     grep -rl "<crate>"  crates/*/Cargo.toml | grep -v "crates/<crate>/Cargo.toml" | wc -l
+     grep -rl "<crate_underscored>" crates/*/src | grep -v "crates/<crate>/src" | wc -l
+   or the lane is declared unwired with a named row and a reason. Silence is not an exception.
+   ```
+
+   **The scale is smaller than the doctrine implies, and the shape is specific.** Measured the same
+   day across 83 crates: 44 have ≥1 external caller, 39 have none — but **37 of those 39 ship a
+   bin**, and a bin is a caller surface. Probing the real question (rule 3: is there a reachable
+   *trigger* — a workflow, a hook, a `.flywheel/` file, cron, launchd, or a `Command::new` spawn)
+   returned **36 of 37 TRIGGERED and exactly 1 untriggered**: the crate created that hour. Positive
+   control held at 36, so the probe discriminates. **BUILT ≠ WIRED here is not a standing swamp; it
+   is a NEW-crate window.** The repo wires things — just not in the same bead, and "later" depends
+   on somebody noticing.
+
+10. **A RATCHET KEYED ON AN ABSOLUTE COUNT CANNOT TELL GROWTH FROM REGRESSION.** `crate-atom-gate`
+   is the gate for rule 9 and it is correct: 1701 LOC, nine parts, `UNWIRED_ALLOWANCE: &[] = &[]`
+   exactly as this file prescribes, systemic allowances carrying `owner=` and `dies_when=`, and
+   `check --repo .` scans **84 crates / 747 rows** and exits **1 / `ATOM_INCOMPLETE`**. It would
+   have caught the crate above.
+
+   **It has never been invoked.** References to it in any workflow, hook, `.flywheel/` file or
+   crontab: **0**. So the gate that enforces "nothing ships unwired" is itself the purest instance
+   of the thing it forbids — rule 3 aimed at the rule-3 enforcer. The bead that owns wiring it
+   (`omp-orchestrator-d3gm`, P0) has been `in_progress` and stalled for the whole session.
+
+   And wiring it as-is would refuse forever, for the wrong reason. Its ceilings were set at a
+   ~69-crate workspace; the workspace is now 83, and three parts move in **exact lockstep** with
+   that growth:
+
+   |part|live|ceiling|gap|
+   |---|---:|---:|---:|
+   |part4 tests|82|68|**14**|
+   |part6 claim|83|69|**14**|
+   |part8 oracle|83|69|**14**|
+   |part9 wired-caller|29|26|3|
+   |part1 lib|1|2|**slack**|
+
+   **14 = the number of crates added.** Every new crate adds a row to every part it does not
+   satisfy, so a compliant addition breaches the ceiling identically to a broken one. Read
+   correctly, `part9` **improved**: 11 of the 14 new crates DID get a caller. Read by the gate, it
+   is a `CEILING_BREACHED`.
+
+   This is the same family as the docs-staleness metric in the post-mortem below, which re-stales
+   `AGENTS.md` in ~25 minutes during a wave: **a counter that grows with healthy activity is red
+   precisely when the fleet is most productive**, and a gate that is red by construction gets
+   routed around. Express the ratchet as a per-crate assertion or a ratio, never a workspace-wide
+   absolute, and only then wire it fail-closed.
+
 ## Instrument contracts: what each surface ACTUALLY returns
 
 Measured 2026-09-05/06. Every row cost someone real work in one session; five of the seven were
