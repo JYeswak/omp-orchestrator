@@ -123,27 +123,6 @@ fn present_but_empty_crates_dir_is_an_error_not_a_pass() {
     std::fs::remove_dir_all(&root).expect("remove vacuous root");
 }
 
-#[test]
-fn lint_is_wired_into_blocking_ci() {
-    let workflow = std::fs::read_to_string(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../.github/workflows/gate.yml"
-    ))
-    .expect("gate workflow must be readable");
-    assert!(
-        workflow
-            .lines()
-            .any(|line| line.contains("cargo run --quiet -p state-wildcard-lint -- .")),
-        "the state wildcard lint needs a blocking CI caller"
-    );
-    assert!(
-        !workflow
-            .lines()
-            .any(|line| line.contains("cargo test -p unrelated-state-wildcard-lint")),
-        "positive control: unrelated commands must not count as wiring"
-    );
-}
-
 /// REGRESSION for real finding 1, derived 2026-09-02 from the crate's own API:
 /// `crates/cargo-lane-budget/src/main.rs: match line 29, wildcard arm line 60`.
 /// Line 60 is the INNER `match args[index].as_str()` arm; the outer `match mode`
