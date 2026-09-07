@@ -190,8 +190,8 @@ fn classify_id(id: &str, group: &[&Row], probe: Probe) -> Classified {
             decision,
         };
     }
-    let mut evidence = "nonempty decision without execution_status/executed_at/actuator_receipt"
-        .to_owned();
+    let mut evidence =
+        "nonempty decision without execution_status/executed_at/actuator_receipt".to_owned();
     if let Some(unpushed) = probe.origin_main_unpushed {
         if decision_is_push(&decision) && unpushed > 0 {
             evidence = format!(
@@ -288,14 +288,12 @@ fn ymd_utc(ts: u64) -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::Row;
     use serde_json::{json, Value};
     use std::path::PathBuf;
-
 
     fn row(value: Value) -> Row {
         Row { value }
@@ -309,7 +307,13 @@ mod tests {
             "decision": "A: push to public origin/main as-is. Josh 2026-09-02: 'this is a build in public repo - push it'",
             "ts": 1_788_389_737_u64
         }));
-        let report = check_rows(&[hd], Probe { origin_main_unpushed: Some(471) }).unwrap();
+        let report = check_rows(
+            &[hd],
+            Probe {
+                origin_main_unpushed: Some(471),
+            },
+        )
+        .unwrap();
         assert_eq!(report.unexecuted_count(), 1);
         assert_eq!(report.unexecuted[0].id, "HD-0008");
         assert_eq!(report.unexecuted[0].recorded_date, "2026-09-02");
@@ -318,6 +322,25 @@ mod tests {
         assert!(rendered.contains("id=HD-0008"), "{rendered}");
         assert!(rendered.contains("recorded_date=2026-09-02"), "{rendered}");
         assert!(rendered.contains("verdict=unexecuted"), "{rendered}");
+    }
+
+    #[test]
+    fn empty_first_row_does_not_mask_nonempty_decision() {
+        let request = row(json!({
+            "id": "HD-0015",
+            "decision": "",
+            "ts": 1_788_540_013_u64
+        }));
+        let answer = row(json!({
+            "id": "HD-0015",
+            "decision": "SCOPE IT by packet class",
+            "decider": "Joshua",
+            "ts": 1_788_729_041_u64
+        }));
+        let report = check_rows(&[request, answer], Probe::default()).unwrap();
+        assert_eq!(report.rows.len(), 1);
+        assert_eq!(report.rows[0].decision, "SCOPE IT by packet class");
+        assert_eq!(report.rows[0].class, ExecutionClass::Unexecuted);
     }
 
     #[test]
@@ -369,9 +392,25 @@ mod tests {
             "actuator": "git-push",
             "ts": 1_788_389_737_u64
         }));
-        let still = check_rows(&[hd.clone()], Probe { origin_main_unpushed: Some(2) }).unwrap();
-        assert_eq!(still.unexecuted_count(), 1, "probe must outrank a false receipt");
-        let cleared = check_rows(&[hd], Probe { origin_main_unpushed: Some(0) }).unwrap();
+        let still = check_rows(
+            &[hd.clone()],
+            Probe {
+                origin_main_unpushed: Some(2),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            still.unexecuted_count(),
+            1,
+            "probe must outrank a false receipt"
+        );
+        let cleared = check_rows(
+            &[hd],
+            Probe {
+                origin_main_unpushed: Some(0),
+            },
+        )
+        .unwrap();
         assert_eq!(cleared.unexecuted_count(), 0);
     }
 
@@ -387,7 +426,8 @@ mod tests {
 
     #[test]
     fn missing_or_empty_file_is_typed_error_not_pass() {
-        let missing = check_path(Path::new("/no/such/decisions.jsonl"), Probe::default()).unwrap_err();
+        let missing =
+            check_path(Path::new("/no/such/decisions.jsonl"), Probe::default()).unwrap_err();
         assert!(missing.to_string().starts_with("ERR_NO_DECISION_ROWS"));
         let base = PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into()))
             .join(".local/state/zeststream/scratch/decision-ledger-tests");
@@ -398,5 +438,4 @@ mod tests {
         assert!(err.to_string().starts_with("ERR_NO_DECISION_ROWS"));
         let _ = std::fs::remove_file(&empty);
     }
-
 }
