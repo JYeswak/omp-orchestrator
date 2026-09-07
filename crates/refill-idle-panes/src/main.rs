@@ -11,6 +11,11 @@
 //! Verbs: `--plan` (default, mutates nothing) | `--apply` | `--selftest`
 
 use dispatch_claim_fence::{authorize, parse_br_show_json, BeadSnapshot, DispatchIntent};
+use agent_mail_native::identity::{format_sender_header, resolve_pane_identity};
+use agent_mail_native::journey::ProjectKey;
+use agent_mail_native::MailClient;
+use asupersync::runtime::RuntimeBuilder;
+use asupersync::Cx;
 use refill_idle_panes::{
     actuation_refusal, authorize_plan_line, conflict_verdict, decide, decide_capacity,
     measurability_refusal,
@@ -29,6 +34,7 @@ use subprocess_contract::{bounded_output, bounded_status, BoundedOutcome};
 const DEFAULT_MAX_PANES: usize = 8;
 const PENDING_DISPATCH_MAX_AGE_SECS: u64 = 600;
 const CLAIM_TIMEOUT_SECS: u64 = 30;
+const SENDER_IDENTITY_TIMEOUT: Duration = Duration::from_secs(CLAIM_TIMEOUT_SECS);
 
 fn env_or(key: &str, fallback: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| fallback.to_string())
@@ -182,6 +188,47 @@ fn reconcile_fleet() -> Result<(), String> {
 /// The `Target:` line names the RESOLVED repository root (`REFILL_REPO` env > upward
 /// `.git`/`.beads` marker walk from the cwd) — never a literal, because a packet
 /// naming a wrong checkout compiles into a worker that reads the wrong repo.
+fn sender_header(repo: &Path, session: &str) -> Result<String, String> {
+    let pane_id = std::env::var("TMUX_PANE")
+        .map_err(|_| "SENDER_IDENTITY_REFUSED reason=TMUX_PANE_missing".to_owned())?;
+    let project = ProjectKey::new(repo.display().to_string());
+    let client = MailClient::discover().with_request_timeout(SENDER_IDENTITY_TIMEOUT);
+    let runtime = RuntimeBuilder::current_thread()
+        .build()
+        .map_err(|error| format!("SENDER_IDENTITY_REFUSED reason=runtime_build error={error}"))?;
+    let identity = runtime.block_on(async {
+        let cx = Cx::current()
+            .ok_or_else(|| "SENDER_IDENTITY_REFUSED reason=no_runtime_context".to_owned())?;
+        resolve_pane_identity(&cx, &client, &project, &pane_id)
+            .await
+            .map_err(|error| format!("SENDER_IDENTITY_REFUSED pane={pane_id} error={error}"))
+    })?;
+    if identity.pane_id != pane_id {
+        return Err(format!(
+            "SENDER_IDENTITY_REFUSED requested_pane={pane_id} resolved_pane={}",
+            identity.pane_id
+        ));
+    }
+    if let Some(identity_session) = identity.session.as_deref() {
+        if identity_session != session {
+            return Err(format!(
+                "SENDER_IDENTITY_REFUSED pane={pane_id} session={identity_session} expected_session={session}"
+            ));
+        }
+    }
+    let header = format_sender_header(&identity, session, &project)
+        .map_err(|error| format!("SENDER_IDENTITY_REFUSED pane={pane_id} error={error}"))?;
+    if !header.starts_with("FROM:")
+        || !header
+            .lines()
+            .nth(1)
+            .is_some_and(|line| line.starts_with("REPLY-VIA:"))
+    {
+        return Err("SENDER_IDENTITY_REFUSED reason=malformed_header".to_owned());
+    }
+    Ok(header)
+}
+
 fn packet_from_row(
     bead: &str,
     footer: Option<&str>,
@@ -847,12 +894,23 @@ fn run(invocation: &Invocation) -> ExitCode {
         return ExitCode::from(outcome.code);
     }
 
+    let sender_prefix = match sender_header(Path::new(&target), &session) {
+        Ok(prefix) => prefix,
+        Err(error) => {
+            eprintln!("refill: {error}");
+            return ExitCode::from(64);
+        }
+    };
+
     let assignments = plan(&panes, &picks, max);
     let pending_base = pending_marker_base();
     let (mut sent, mut skipped) = (0usize, 0usize);
     for Assignment { pane, bead } in &assignments {
         let packet = match render_packet(bead, footer.as_deref(), &target) {
-            Ok(packet) => packet,
+            Ok(mut packet) => {
+                packet.insert_str(0, &sender_prefix);
+                packet
+            },
             Err(reason) => {
                 println!(
                     "REFILL_REFUSED pane={pane} bead={bead} target={target} reason={reason}"

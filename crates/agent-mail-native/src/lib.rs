@@ -106,8 +106,7 @@ pub use error::MailError;
 pub use journey::{AgentName, ProjectKey, ResumePoint, SenderToken};
 pub use identity::{
     assert_readback_fields, cleanup_pane_identities, cleanup_pane_identities_arguments,
-    parse_pane_identity, resolve_pane_identity, tmux_identity_argv, tmux_identity_argv_from_env,
-    validate_register_fields,
-    BindingStatus, IdentityError, PaneIdentity,
+    format_sender_header, parse_pane_identity, resolve_pane_identity, tmux_identity_argv,
+    tmux_identity_argv_from_env, validate_register_fields, BindingStatus, IdentityError, PaneIdentity,
 };
 pub use wake::{AttentionCursor, MailWakeOutcome, WakeRequest};

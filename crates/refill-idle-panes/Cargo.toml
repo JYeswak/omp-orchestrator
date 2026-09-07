@@ -14,6 +14,8 @@ name = "refill_idle_panes"
 path = "src/lib.rs"
 
 [dependencies]
+agent-mail-native = { path = "../agent-mail-native" }
+asupersync = { workspace = true }
 subprocess-contract = { path = "../subprocess-contract" }
 fleet-reconcile = { path = "../fleet-reconcile" }
 dispatch-claim-fence = { path = "../dispatch-claim-fence" }

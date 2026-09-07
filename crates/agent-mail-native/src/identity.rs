@@ -197,6 +197,40 @@ pub struct PaneIdentity {
     pub pane_index: Option<u32>,
 }
 
+/// Format the first two lines of a dispatch packet from a verified pane identity.
+///
+/// The name is the durable reply handle; the index and tmux pane ID make the
+/// routing target explicit. This formatter does not resolve identity or infer it
+/// from environment state; callers must supply the resolver result.
+pub fn format_sender_header(
+    identity: &PaneIdentity,
+    session: &str,
+    project: &ProjectKey,
+) -> Result<String, IdentityError> {
+    if identity.binding != BindingStatus::VerifiedLive {
+        return Err(IdentityError::UnverifiedPaneBinding {
+            binding: binding_string(identity.binding),
+        });
+    }
+    let agent_name =
+        identity
+            .agent_name
+            .as_ref()
+            .ok_or(IdentityError::MissingPaneIdentityField {
+                field: "agent_name",
+            })?;
+    let pane_index = identity
+        .pane_index
+        .ok_or(IdentityError::MissingPaneIdentityField {
+            field: "pane_index",
+        })?;
+    Ok(format!(
+        "FROM: {agent_name} pane_index={pane_index} pane_id={} binding=verified-live\nREPLY-VIA: ntm --robot-send={session} --panes={pane_index} --msg-file <path>; Agent Mail to {agent_name} project={}\n",
+        identity.pane_id,
+        project.as_str()
+    ))
+}
+
 /// Parse a pane resolver response and refuse every non-live binding.
 pub fn parse_pane_identity(response: &Value) -> Result<PaneIdentity, IdentityError> {
     let Some(object) = response.as_object() else {

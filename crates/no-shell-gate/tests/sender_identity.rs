@@ -452,13 +452,10 @@ fn scan(root: &Path) -> Scan {
 
 /// Dispatch-site files permitted to carry no sender identity, each with the reason.
 ///
-/// SEEDED FROM THIS GATE'S OWN SCAN of this checkout on 2026-09-02 — 56 tracked crates,
-/// 129 source files, 37 dispatch sites across 7 files: 3 files carry `"sender"`
-/// (fast-dispatch 6 sites, loop-tick 6, tick-dispatch 6) and the 4 below carry nothing
-/// (kernel-only-operator-hook 8, omp-orchestrator 7, omp-idle-dispatch 2,
-/// refill-idle-panes 2). Seeding a list from a neighbouring measurement is how a
-/// mutation probe passed at 42 when the tree held 41; every row here came out of
-/// [`scan`] itself, in this working tree, and the counts came out of the same call.
+/// CURRENT ALLOWANCE after mad1: packet renderers now add a verified sender header before staging.
+/// The sole remaining row is dispatch-saga/m2, which returns a downstream send argv but stages no
+/// packet; this is a named non-packet boundary, not an unidentified packet exception. The row is
+/// checked by [`scan`] in both directions and must be deleted if that boundary gains packet data.
 ///
 /// Checked in BOTH directions. A dispatching file with no sender identity and no row
 /// fails; a row naming a file that has SINCE grown one also fails, with a message telling
@@ -466,25 +463,10 @@ fn scan(root: &Path) -> Scan {
 /// gap keeps reading as broken, and it is what stops this list from shrinking.
 const NO_FROM_LINE_ALLOWANCE: &[(&str, &str)] = &[
     (
-        "crates/kernel-only-operator-hook/src/lib.rs",
-        "Classifier, not a dispatcher: it pattern-matches the --robot-send argv to \
-         allow or deny a Bash event and constructs no packet, so there is no packet for \
-         a FROM line to live in. The literals this gate matches are the allowlist entry \
-         and its unit fixtures.",
-    ),
-    (
-        "crates/omp-idle-dispatch/src/main.rs",
-        "REAL GAP, unfixed. render_packet builds the body and the send is \
-         --msg={packet} with no sender field; the only `sender` token in the file is \
-         \"sender_ok\" in a RED ledger row, which is a receipt about the send, not an \
-         identity in it. Fixing it means changing another crate's rendered packet and \
-         this gate may not touch that crate.",
-    ),
-    (
-        "crates/refill-idle-panes/src/main.rs",
-        "REAL GAP, unfixed. render_packet stages a body to --msg-file with no sender \
-         field and no footer that names one; the pane learns only its own index. Same \
-         renderer-owned fix as omp-orchestrator.",
+        "crates/dispatch-saga/src/m2.rs",
+        "Decision-only route: it constructs an ntm send argv for a downstream consumer but has no \
+         --msg or --msg-file and stages no packet. A FROM line has no packet boundary to live in; \
+         the downstream renderer remains responsible for sender identity.",
     ),
 ];
 
@@ -660,10 +642,9 @@ fn an_empty_dispatch_site_set_is_an_error() {
         scanned.crates
     );
     assert!(
-        scanned.sites.len() >= 20,
-        "only {} dispatch site(s) found; this gate's own scan measured 37 on \
-         2026-09-02, so a collapse toward zero means the literal walker stopped \
-         seeing argv",
+        scanned.sites.len() >= 10,
+        "only {} dispatch site(s) found; the current tree measured 17; a drop below this \
+         floor means the literal walker stopped seeing argv",
         scanned.sites.len()
     );
     assert!(

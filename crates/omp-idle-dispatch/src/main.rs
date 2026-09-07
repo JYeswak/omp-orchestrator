@@ -11,6 +11,11 @@ use omp_idle_dispatch::{
     receiver_transition, recently_dispatched, render_packet, IdleDispatchPaneState, TickVerdict,
     DEFAULT_CONFIRM_SECONDS, DEFAULT_COOLDOWN_SECONDS, LANE, QUEUE_WIDTH,
 };
+use agent_mail_native::identity::{format_sender_header, resolve_pane_identity};
+use agent_mail_native::journey::ProjectKey;
+use agent_mail_native::MailClient;
+use asupersync::runtime::RuntimeBuilder;
+use asupersync::Cx;
 use serde_json::{json, Value};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
@@ -23,6 +28,7 @@ use subprocess_contract::{bounded_output, bounded_status, BoundedOutcome};
 const COMMAND_TIMEOUT_SECONDS: u64 = 30;
 const DEFAULT_RECEIVER_PROOF_SECONDS: u64 = 30;
 const RECEIVER_PROOF_ENV: &str = "OMP_DISPATCH_RECEIVER_PROOF_S";
+const SENDER_IDENTITY_TIMEOUT: Duration = Duration::from_secs(COMMAND_TIMEOUT_SECONDS);
 
 /// Marker entries that identify a repository root while walking up from the cwd.
 /// `.git` may be a directory (plain checkout) or a file (worktree/submodule).
@@ -491,6 +497,47 @@ fn pane_index(pane: &str) -> Result<String, CommandError> {
     .map(|value| value.trim().to_string())
 }
 
+fn sender_header(repo: &Path, session: &str) -> Result<String, String> {
+    let pane_id = std::env::var("TMUX_PANE")
+        .map_err(|_| "SENDER_IDENTITY_REFUSED reason=TMUX_PANE_missing".to_owned())?;
+    let project = ProjectKey::new(repo.display().to_string());
+    let client = MailClient::discover().with_request_timeout(SENDER_IDENTITY_TIMEOUT);
+    let runtime = RuntimeBuilder::current_thread()
+        .build()
+        .map_err(|error| format!("SENDER_IDENTITY_REFUSED reason=runtime_build error={error}"))?;
+    let identity = runtime.block_on(async {
+        let cx = Cx::current()
+            .ok_or_else(|| "SENDER_IDENTITY_REFUSED reason=no_runtime_context".to_owned())?;
+        resolve_pane_identity(&cx, &client, &project, &pane_id)
+            .await
+            .map_err(|error| format!("SENDER_IDENTITY_REFUSED pane={pane_id} error={error}"))
+    })?;
+    if identity.pane_id != pane_id {
+        return Err(format!(
+            "SENDER_IDENTITY_REFUSED requested_pane={pane_id} resolved_pane={}",
+            identity.pane_id
+        ));
+    }
+    if let Some(identity_session) = identity.session.as_deref() {
+        if identity_session != session {
+            return Err(format!(
+                "SENDER_IDENTITY_REFUSED pane={pane_id} session={identity_session} expected_session={session}"
+            ));
+        }
+    }
+    let header = format_sender_header(&identity, session, &project)
+        .map_err(|error| format!("SENDER_IDENTITY_REFUSED pane={pane_id} error={error}"))?;
+    if !header.starts_with("FROM:")
+        || !header
+            .lines()
+            .nth(1)
+            .is_some_and(|line| line.starts_with("REPLY-VIA:"))
+    {
+        return Err("SENDER_IDENTITY_REFUSED reason=malformed_header".to_owned());
+    }
+    Ok(header)
+}
+
 fn run_tick(dry_run: bool, repo: &Path) -> u8 {
     // Resolution before any side effect: a missing repo or `$HOME` must fail loudly
     // here, never mid-tick after panes have been captured.
@@ -502,6 +549,18 @@ fn run_tick(dry_run: bool, repo: &Path) -> u8 {
     let lock_path = PathBuf::from(env_or("OMP_DISPATCH_LOCK", DEFAULT_LOCK));
     let Some(_lock) = lock_or_report(&lock_path) else {
         return 75;
+    };
+    let sender_prefix = match sender_header(repo, &session) {
+        Ok(prefix) => prefix,
+        Err(error) => {
+            emit(json!({
+                "schema": "omp-idle-dispatch.error.v1",
+                "lane": LANE,
+                "error": "sender_identity_refused",
+                "detail": error,
+            }));
+            return CONFIG_ERROR_EXIT;
+        }
     };
     let panes = match live_panes(&session) {
         Ok(panes) if !panes.is_empty() => panes,
@@ -578,7 +637,8 @@ fn run_tick(dry_run: bool, repo: &Path) -> u8 {
         let Some(queue) = plan.pane_queues.first() else {
             break;
         };
-        let packet = render_packet(&utc_timestamp(SystemTime::now()), ready_count, queue);
+        let mut packet = render_packet(&utc_timestamp(SystemTime::now()), ready_count, queue);
+        packet.insert_str(0, &sender_prefix);
         let first_bead = queue
             .first()
             .map(|bead| bead.id.clone())

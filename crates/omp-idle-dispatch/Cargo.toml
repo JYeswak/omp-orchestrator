@@ -18,6 +18,8 @@ name = "omp_idle_dispatch"
 path = "src/lib.rs"
 
 [dependencies]
+agent-mail-native = { path = "../agent-mail-native" }
+asupersync = { workspace = true }
 subprocess-contract = { path = "../subprocess-contract" }
 tick-monitor = { path = "../tick-monitor" }
 finding = { path = "../finding" }

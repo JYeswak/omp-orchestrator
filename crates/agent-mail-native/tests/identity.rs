@@ -1,7 +1,9 @@
 use agent_mail_native::identity::{
-    assert_readback_fields, cleanup_pane_identities_arguments, parse_pane_identity,
-    tmux_identity_argv, validate_register_fields, BindingStatus, IdentityError,
+    assert_readback_fields, cleanup_pane_identities_arguments, format_sender_header,
+    parse_pane_identity, tmux_identity_argv, validate_register_fields, BindingStatus,
+    IdentityError, PaneIdentity,
 };
+use agent_mail_native::journey::{AgentName, ProjectKey};
 use serde_json::{json, Map, Value};
 
 fn fields(entries: impl IntoIterator<Item = (&'static str, Value)>) -> Map<String, Value> {
@@ -106,16 +108,61 @@ fn pane_binding_rejects_unknown_status() {
 
 #[test]
 fn tmux_identity_targets_the_calling_pane() {
+    let active_pane = "%1396";
+    let calling_pane = "%1413";
+    let args = tmux_identity_argv(calling_pane);
     assert_eq!(
-        tmux_identity_argv("%1413"),
+        args,
         [
             "display-message",
             "-t",
-            "%1413",
+            calling_pane,
             "-p",
             "#{pane_id} #{session_name}:#{window_index}.#{pane_index}"
         ]
     );
+    assert_ne!(
+        args[2], active_pane,
+        "the query must not follow the focused pane"
+    );
+}
+
+#[test]
+fn sender_header_names_the_verified_agent_and_both_reply_routes() {
+    let identity = PaneIdentity {
+        pane_id: "%1408".to_owned(),
+        binding: BindingStatus::VerifiedLive,
+        agent_name: Some(AgentName::new("AmberGate")),
+        session: Some("omp-orchestrator".to_owned()),
+        pane_index: Some(4),
+    };
+    let header = format_sender_header(
+        &identity,
+        "omp-orchestrator",
+        &ProjectKey::new("/Users/josh/Developer/omp-orchestrator"),
+    )
+    .expect("verified identity formats");
+    assert_eq!(
+        header,
+        "FROM: AmberGate pane_index=4 pane_id=%1408 binding=verified-live\nREPLY-VIA: ntm --robot-send=omp-orchestrator --panes=4 --msg-file <path>; Agent Mail to AmberGate project=/Users/josh/Developer/omp-orchestrator\n"
+    );
+}
+
+#[test]
+fn sender_header_refuses_missing_pane_index() {
+    let identity = PaneIdentity {
+        pane_id: "%1408".to_owned(),
+        binding: BindingStatus::VerifiedLive,
+        agent_name: Some(AgentName::new("AmberGate")),
+        session: None,
+        pane_index: None,
+    };
+    assert!(matches!(
+        format_sender_header(&identity, "omp-orchestrator", &ProjectKey::new("project")),
+        Err(IdentityError::MissingPaneIdentityField {
+            field: "pane_index"
+        })
+    ));
 }
 
 #[test]
