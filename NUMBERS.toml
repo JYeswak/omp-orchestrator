@@ -78,10 +78,11 @@ expect   = "LIVE"
 appears  = ["docs/plan/01-idea.md", "docs/plan/06-gates.md", "docs/plan/00-brief.md"]
 
 [figures.no_claim_blocks]
-command  = "grep -rc '^\\*\\*NO-CLAIM' docs/plan/*.md 2>/dev/null | awk -F: '{s+=$2} END{print s}'"
-expect   = "52"
+class    = "invariant"
+command  = "for f in docs/plan/*.md; do [ -e \"$f\" ] || { echo EMPTY_SCAN; exit 0; }; grep -q '^\\*\\*NO-CLAIM' \"$f\" || basename \"$f\"; done | sort | paste -sd, - | sed 's/^$/NONE/'"
+expect   = "10-prior-art.md,CURRENT-REALITY.md,DISPATCH-CHAIN-FORKS.md,KEEPALIVE.md,R24-SOTA-CHARTER.md,ROUNDS.md,round24-L1-dag.md,skill-ledger-20260902.md"
 appears  = ["docs/PLAN.md"]
-note     = "CURRENT at the kxe.5 reconciliation pin: the exact command returns 52. Earlier 48 and 49 values are dated historical snapshots; the command is the authority and must be re-run after plan-section edits."
+note     = "RECLASSIFIED 2026-09-07 (omp-orchestrator-43lgt). Was expect=52, drifted to 53 -- a total count of NO-CLAIM blocks, which rises whenever anyone writes one and therefore cannot distinguish a new disclosure from a lost one. The figure now records the RESIDUE BY NAME: plan documents carrying ZERO NO-CLAIM block. Growth-invariant -- a new plan document WITH a disclosure changes nothing, and one without it is named. NONE is the target state; EMPTY_SCAN is the anti-vacuity token. The prior note said the command is the authority and must be re-run after plan-section edits, which was true and was exactly the treadmill: re-running it produces a fresh integer that is wrong again by the next edit."
 
 [figures.surface_engaged_pct]
 command  = "python3 -c \"import json;r=[json.loads(l) for l in open('docs/plan/SURFACE-MAP.jsonl') if l.strip()];e=sum(1 for x in r if x.get('disposition') in ('CONSUMED','WIRE','VALIDATE'));print(f'{100*e/len(r):.1f}')\""
@@ -196,10 +197,11 @@ appears  = ["docs/plan/03-crates.md", "AGENTS.md"]
 
 note     = "Current scan finds zero missing target directories; the 20-crate upstream corpus remains the source-of-truth input, not unextracted work."
 [figures.workspace_crates_on_disk]
-command  = "ls -1 crates | wc -l"
-expect   = "72"
+class    = "invariant"
+command  = "d=$(find crates -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' '); m=$(cargo metadata --no-deps --format-version 1 --offline 2>/dev/null | python3 -c 'import json,sys; print(len(json.load(sys.stdin)[\"packages\"]))' 2>/dev/null || echo X); if [ \"$d\" -eq 0 ]; then echo EMPTY_SCAN; elif [ \"$m\" = X ] || [ \"$m\" -eq 0 ]; then echo UNMEASURABLE_METADATA; elif [ \"$d\" -eq \"$m\" ]; then echo EQUAL; else echo \"SKEW=$d-$m\"; fi"
+expect   = "EQUAL"
 appears  = ["docs/plan/03-crates.md", "AGENTS.md", "docs/PLAN.md"]
-note     = "Re-recorded 2026-09-05: command answers 72 (was 65). Dies when a crate directory is added or removed; then re-run the command. Never invent the integer."
+note     = "RECLASSIFIED 2026-09-07 (omp-orchestrator-43lgt). Was expect=72, drifted to 88 -- a monotone growth counter recorded as an absolute integer, which re-stales every time the fleet lands a crate. The class change, not an update: the recorded value is now an EQUALITY between two INDEPENDENT derivations (directory count vs cargo metadata package count), so legitimate growth moves BOTH sides and the figure stays EQUAL. What still reddens is the defect worth catching: a crate directory with no loadable manifest, or a manifest outside the workspace. Anti-vacuity is in the emitted token, not in a comment -- EMPTY_SCAN when crates/ is unreadable and UNMEASURABLE_METADATA when cargo cannot answer, both distinct from EQUAL and from SKEW. Measured at the pin: EQUAL, 88 == 88; from a directory with no crates/: EMPTY_SCAN."
 
 # -- BLOCKER RESOLUTIONS, round 13. Three graders independently flagged one
 # property carrying multiple live denominators. Every number was TRUE; none was
@@ -224,9 +226,10 @@ expect   = "611"
 note     = "Re-recorded 2026-09-05: command answers 611 (was 622). Dies when the installed OMP dist types change; then re-run the command."
 
 [figures.spawning_crates]
-command  = "n=0; for d in crates/*/; do c=$(find \"$d/src\" -name '*.rs' -type f -exec grep -c 'Command::new' {} + 2>/dev/null | awk -F: '{s+=$NF} END{print s+0}'); [ \"${c:-0}\" -gt 0 ] && n=$((n+1)); done; echo $n"
-expect   = "51"
-note     = "Re-recorded 2026-09-05: command answers 51 (was 47). Dies when a crate gains or loses Command::new in src/; then re-run the command."
+class    = "invariant"
+command  = "[ -d crates ] || { echo EMPTY_SCAN; exit 0; }; r=$(for d in crates/*/; do n=$(basename \"$d\"); find \"$d/src\" -name '*.rs' -type f -exec grep -l 'Command::new' {} + >/dev/null 2>&1 || continue; grep -q 'subprocess-contract' \"$d/Cargo.toml\" 2>/dev/null || printf '%s\\n' \"$n\"; done | sort | paste -sd, -); [ -n \"$r\" ] && echo \"$r\" || echo NONE"
+expect   = "asupersync-conformance,kernel-bypass-gate,omp-rpc-session,receiver-receipt,tick-monitor"
+note     = "RECLASSIFIED 2026-09-07 (omp-orchestrator-43lgt). Was expect=51, drifted to 55 -- the count of crates that spawn, which grows with the workspace and says nothing about whether the spawning is bounded. The figure now records the RESIDUE BY NAME rather than the population by count: crates that spawn and do NOT declare subprocess-contract. Growth-invariant by construction -- a new spawner that declares the contract changes nothing, and one that does not is NAMED rather than merely counted, which is the pattern franken_lean@d4977e80 crates/fln-conformance/src/tree_identity.rs:70-99 arrived at (RootResolutionCensus: declare the residue per path, so a new one is NAMED rather than merely counted). Citation verified by reading the body on the mirror at that revision, positive control 1 / negative control 0 -- not by quoting an fh row id, which is not provenance. NONE is the target state; EMPTY_SCAN is the anti-vacuity token and is not a pass. SCOPE, stated because a zero is a conclusion about the scope: the needle is textual and matches src/ anywhere, so #[cfg(test)] spawn sites COUNT -- ripwire attributed 15 of 97 enclosing-symbol rows in crates/ to test functions, which a shell command cannot distinguish. This figure therefore measures declared-contract coverage over ALL spawn sites, not production-only."
 
 [figures.help_discoverable_binaries]
 command  = "R=/Volumes/BuildShared/cargo-targets/release; n=0; for b in $(~/.cargo/bin/cargo metadata --format-version 1 --no-deps 2>/dev/null | python3 -c \"import sys,json;m=json.load(sys.stdin);print(' '.join(sorted(t['name'] for p in m['packages'] for t in p['targets'] if 'bin' in t['kind'])))\"); do [ -x \"$R/$b\" ] || continue; o=$(timeout 15 \"$R/$b\" --help 2>&1 | head -1); case \"$o\" in usage*) case \"$o\" in *unknown*|*error*) ;; *) n=$((n+1));; esac;; esac; done; echo $n"

@@ -317,6 +317,190 @@ fn a_header_inside_a_multiline_string_is_not_a_declaration() {
     );
 }
 
+/// A figure's CLASS, derived from the shape of what it records.
+///
+/// `omp-orchestrator-43lgt`. The bead named three drifted figures; the CENSUS found the class is
+/// **ten more of the same shape that simply have not drifted yet**. A pinned bare integer against a
+/// repository that grows hourly is latent drift whether or not it has fired.
+#[derive(Debug, PartialEq, Eq)]
+enum FigureClass {
+    /// `expect = "LIVE"` — deliberately unpinned, so the drift gate never compares it. Honest, and
+    /// it buys no regression protection.
+    PointInTime,
+    /// A recorded value that cannot move under legitimate growth: an equality between two
+    /// independent derivations, or a residue declared BY NAME.
+    Invariant,
+    /// A pinned bare integer. This is the class `43lgt` exists to close.
+    PinnedInteger,
+}
+
+/// PINNED-INTEGER FIGURES THAT ARE NOT BEING RECLASSIFIED HERE, EACH NAMED WITH ITS REASON.
+///
+/// Per `AGENTS.md`: an exception is a named row with a reason, never silence. Every row is a figure
+/// whose stability I have NOT analysed, so converting it would be patching on my own diagnosis
+/// across figures outside this bead — the thing `43lgt` item 6 explicitly forbids.
+///
+/// **Several are plausibly genuine invariants** — four of the ten record `0` and are residues that
+/// should stay at zero, so a pinned `0` is a target rather than a growth counter. That distinction
+/// needs a per-figure decision, which is what this list defers rather than hides.
+///
+/// The list being NON-EMPTY is deliberate and it is the guard: a NEW pinned integer added to the
+/// registry appears in neither `class` nor here, and the leg below reddens. A count of ten proves
+/// nothing; the names are what make a new one attributable.
+const PINNED_INTEGER_RESIDUE: &[(&str, &str)] = &[
+    ("installer_known_binaries", "small closed set; grows only when the installer ships a new binary, which is a deliberate act"),
+    ("plan_sections", "the plan's own section count; a new section is a decision, not drift"),
+    ("convergence_rows", "moves with the convergence table; needs the same equality treatment as workspace_crates_on_disk"),
+    ("surface_map_unmapped_rows", "should trend DOWN to zero as the surface is mapped; a rise is the real signal and a fixed integer cannot express a monotone direction"),
+    ("unextracted_crates", "records 0 — a target state, not a growth counter"),
+    ("control_plane_unextracted_loc", "records 0 — a target state, not a growth counter"),
+    ("ipg6_root_symbols", "a symbol census over one root; unanalysed"),
+    ("help_discoverable_binaries", "grows with installed binaries; needs a residue-by-name form like spawning_crates"),
+    ("gate8_operator_mismatch_receipts", "records 0 — a target state"),
+    ("gate14_diary_operators_monthly", "records 0 — a target state"),
+];
+
+/// The three figures reclassified by `43lgt`, which MUST NOT read as pinned integers again.
+const RECLASSIFIED_BY_43LGT: &[&str] = &[
+    "workspace_crates_on_disk",
+    "spawning_crates",
+    "no_claim_blocks",
+];
+
+fn figure_class(expect: &str) -> FigureClass {
+    if expect == "LIVE" {
+        return FigureClass::PointInTime;
+    }
+    let bare_integer = !expect.is_empty()
+        && expect
+            .strip_prefix('-')
+            .unwrap_or(expect)
+            .chars()
+            .all(|c| c.is_ascii_digit());
+    if bare_integer {
+        FigureClass::PinnedInteger
+    } else {
+        FigureClass::Invariant
+    }
+}
+
+/// Read one declared key out of a `[figures.<key>]` block. Deliberately NOT reusing `figures_from`:
+/// that reporter absorbs any `command`/`expect` line following a header, and this needs `class`,
+/// which it does not model. A second parser here is the same independence discipline `2b` uses.
+fn figure_field(text: &str, figure: &str, field: &str) -> Option<String> {
+    let header = format!("[figures.{figure}]");
+    let start = text.find(&header)? + header.len();
+    let rest = &text[start..];
+    let end = rest.find("\n[figures.").unwrap_or(rest.len());
+    for line in rest[..end].lines() {
+        let line = line.trim();
+        if line.starts_with(field) {
+            if let Some((_, value)) = line.split_once('=') {
+                let value = value.trim();
+                return Some(
+                    value
+                        .strip_prefix('"')
+                        .and_then(|v| v.strip_suffix('"'))
+                        .unwrap_or(value)
+                        .to_owned(),
+                );
+            }
+        }
+    }
+    None
+}
+
+/// ITEM 2 — THE CLASS DISCIPLINE, and the count is deliberately NOT the assertion.
+///
+/// `43lgt` item 2 asks for a census by class and warns that the count must not itself become a new
+/// absolute figure. So this leg asserts a PROPERTY: **every pinned-integer figure is either
+/// declared `class = "invariant"` — with a note saying why it cannot move — or named in
+/// `PINNED_INTEGER_RESIDUE` with a reason.** A new pinned integer satisfies neither and reddens.
+///
+/// That is growth-invariant in the same way the reclassified figures are: adding a figure of any
+/// OTHER shape changes nothing here, and adding a pinned integer is a decision someone must record.
+/// The census counts live in the bead's report with their timestamp, where a measurement belongs.
+#[test]
+fn every_pinned_integer_figure_is_classified_or_named_as_residue() {
+    let text = fs::read_to_string(repo_root().join("NUMBERS.toml")).expect("registry must exist");
+    let declared = declared_figure_keys(&text);
+
+    // ANTI-VACUITY. A parser that returns nothing classifies nothing and passes.
+    assert!(
+        declared.len() > 5,
+        "only {} figures parsed; an empty or near-empty scan set is an ERROR, not a pass",
+        declared.len()
+    );
+
+    let mut unaccounted = Vec::new();
+    for key in &declared {
+        let Some(expect) = figure_field(&text, key, "expect") else {
+            continue;
+        };
+        if figure_class(&expect) != FigureClass::PinnedInteger {
+            continue;
+        }
+        let declares_invariant =
+            figure_field(&text, key, "class").as_deref() == Some("invariant");
+        let named = PINNED_INTEGER_RESIDUE.iter().any(|(name, _)| name == key);
+        if !declares_invariant && !named {
+            unaccounted.push(format!("{key} (expect={expect})"));
+        }
+    }
+    assert!(
+        unaccounted.is_empty(),
+        "pinned-integer figures with no class and no named residue row: {}\n\
+         A pinned bare integer against a repository that grows is latent drift. Declare \
+         class = \"invariant\" with a note saying why it cannot move, or add a row to \
+         PINNED_INTEGER_RESIDUE with a reason. Silence is not an exception.",
+        unaccounted.join(", ")
+    );
+}
+
+/// ITEM 3 and ITEM 4 — the reclassified figures must not be pinned integers again, and legitimate
+/// growth must not redden them.
+///
+/// FIRES-ON-KNOWN-BAD is the classifier itself, exercised on both sides: a bare integer must
+/// classify as `PinnedInteger` and the new forms must not. Without the positive arm the leg passes
+/// for a classifier stuck on `Invariant`, which would make every assertion here vacuous.
+///
+/// ITEM 5 — each reclassified command must carry its own anti-vacuity token in the COMMAND, so an
+/// unreadable scan emits `EMPTY_SCAN` rather than an empty string that compares unequal for the
+/// wrong reason. A figure whose command cannot run must say so in its own code.
+#[test]
+fn the_reclassified_figures_are_growth_invariant_and_carry_their_own_vacuity_code() {
+    let text = fs::read_to_string(repo_root().join("NUMBERS.toml")).expect("registry must exist");
+
+    // The classifier discriminates — checked before it is trusted.
+    assert_eq!(figure_class("88"), FigureClass::PinnedInteger);
+    assert_eq!(figure_class("-3"), FigureClass::PinnedInteger);
+    assert_eq!(figure_class("LIVE"), FigureClass::PointInTime);
+    assert_eq!(figure_class("EQUAL"), FigureClass::Invariant);
+
+    for key in RECLASSIFIED_BY_43LGT {
+        let expect = figure_field(&text, key, "expect")
+            .unwrap_or_else(|| panic!("{key} must declare an expectation"));
+        assert_ne!(
+            figure_class(&expect),
+            FigureClass::PinnedInteger,
+            "{key} was reclassified by 43lgt and must not read as a pinned integer again; \
+             expect={expect}"
+        );
+        assert_eq!(
+            figure_field(&text, key, "class").as_deref(),
+            Some("invariant"),
+            "{key} must declare its new class explicitly, not leave it to be derived"
+        );
+        let command = figure_field(&text, key, "command")
+            .unwrap_or_else(|| panic!("{key} must declare a command"));
+        assert!(
+            command.contains("EMPTY_SCAN"),
+            "{key}'s command must emit its own anti-vacuity token; an unreadable scan that \
+             prints nothing is indistinguishable from a scan that found nothing"
+        );
+    }
+}
+
 /// FIRES-ON-KNOWN-BAD, second shape: a DOTTED key is a sub-table, not a figure.
 ///
 /// `%7`'s blocking gap on `omp-orchestrator-m0c`: the independence claim rested on ONE known-bad
