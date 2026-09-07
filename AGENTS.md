@@ -1873,6 +1873,43 @@ across `br show` / jsonl / `br list`. Naming the tree removes one failure mode f
 file records eight other members of.
 
 
+### A FILTERED DIFF IS NOT A DIFF — and this member of the family drives a DESTRUCTIVE command
+
+**Measured 2026-09-07, self-reported by `%20` against its own remedy.** During the fleet cargo
+outage it needed to inspect one manifest line and ran:
+
+```bash
+git diff -- crates/refill-idle-panes/Cargo.toml | grep -E '^[-+]description'
+```
+
+It then reported the defect correctly — a stray `.` outside the closing quote at `:6:137` — **and
+named `git checkout -- <manifest>` as the fix.** That command would have destroyed a peer's two
+in-flight dependency additions (`agent-mail-native`, `asupersync`) and desynced them from their own
+modified `src/main.rs` and `tests/differential.rs`.
+
+**The distinguishing feature: the evidence was RETRIEVED AND THEN DISCARDED.** The two `+`
+dependency lines were in the command's output stream; the filter dropped them before any human or
+agent read them. Every other member of this family produces a wrong **number** — `$?` after a pipe,
+`git log -S` skipping merges, `grep -c … || echo 0` emitting `"0\n0"`, `rg -c | wc -l` returning the
+glob size. **This one produced a wrong BASIS FOR A DESTRUCTIVE ACTION**, which is a strictly worse
+failure mode than a wrong figure.
+
+**And prose caution did not save it.** `%20` had already written *"a peer mid-edit could have a
+larger change in flight that my fix would clobber"* — correct reasoning about the hazard — and then
+let a narrowed `grep` tell it the hazard was absent. **A stated risk does not survive contact with
+a filtered instrument**; the filter answers a different question and looks complete doing it.
+
+**The mechanical form:** before any command that discards working-tree state, read the **whole**
+diff and the **whole** `git status` for the path. Narrow only to *locate*, never to *decide*. And
+prefer the minimal edit over the categorical revert — the fix that shipped was moving one character
+back inside the quote, which left every other change intact and made line 6 byte-identical to HEAD
+(`sha f4e657007bbd33d1` both sides).
+
+**NO-CLAIM.** Reading the whole diff catches co-located peer work in the *same file*. It does not
+catch a peer whose related edits sit in files you did not diff — here, `src/main.rs` and
+`tests/differential.rs` were also ` M`, and only a path-scoped `git status` showed them. Whole-diff
+plus whole-status, or the check is partial.
+
 ### `git show | grep` CONFLATES THE COMMIT MESSAGE WITH THE DIFF — and a claim of absence can be defeated by its own prose
 
 **Measured 2026-09-07. My own claim, caught by `%20`, and the purest instance of the
