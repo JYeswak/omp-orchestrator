@@ -11,7 +11,8 @@ use grader_attribution_gate::{
     ACTOR_PROVENANCE_EXIT_INVALID, ACTOR_PROVENANCE_EXIT_OK, ACTOR_PROVENANCE_EXIT_VIOLATION,
     DEFAULT_AUTHORS, UNATTRIBUTED_CLOSE_CEILING,
 };
-use std::path::PathBuf;
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
 
 fn production_jsonl() -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.beads/issues.jsonl");
@@ -124,7 +125,7 @@ fn post_cutoff_default_author_fires_and_names_id_and_field() {
     assert_eq!(actor_provenance_gate_exit(&violations), ACTOR_PROVENANCE_EXIT_VIOLATION);
     assert_eq!(violations.len(), 1);
     let message = violations[0].to_string();
-    assert!(message.contains("bead=omp-orchestrator-f02x"), "{message}");
+    assert!(message.contains("bead=omp-orchestrator-3pt8"), "{message}");
     assert!(message.contains("field=created_by"), "{message}");
     assert!(message.contains("code=ACTOR_PROVENANCE_VIOLATION"), "{message}");
 }
@@ -133,7 +134,7 @@ fn post_cutoff_default_author_fires_and_names_id_and_field() {
 fn future_agent_and_legacy_josh_are_both_allowed_in_their_scopes() {
     let rows: Vec<_> = actor_fixture_rows()
         .into_iter()
-        .filter(|row| row.id != "omp-orchestrator-f02x")
+        .filter(|row| row.id != "omp-orchestrator-3pt8")
         .collect();
     let violations = actor_provenance_violations(&rows).expect("non-empty scan");
     assert!(violations.is_empty(), "legacy josh and future agent must pass: {violations:?}");
@@ -149,6 +150,139 @@ fn actor_fixture_records_source_hash_and_capture_time() {
     );
     assert_eq!(ACTOR_FIXTURE_CAPTURED_AT, "2026-09-07T19:55:44Z");
     assert_eq!(actor_fixture_rows().len(), 3);
+}
+
+#[test]
+fn fractional_cutoff_is_classified_on_both_sides_with_and_without_fractional_digits() {
+    let jsonl = concat!(
+        r#"{"id":"omp-orchestrator-before-whole","created_at":"2026-09-07T18:42:28Z","created_by":"josh"}"#,
+        "\n",
+        r#"{"id":"omp-orchestrator-before-fraction","created_at":"2026-09-07T18:42:28.999999Z","created_by":"josh"}"#,
+        "\n",
+        r#"{"id":"omp-orchestrator-after-whole","created_at":"2026-09-07T18:42:30Z","created_by":"josh"}"#,
+        "\n",
+        r#"{"id":"omp-orchestrator-after-fraction","created_at":"2026-09-07T18:42:29.423263Z","created_by":"josh"}"#,
+    );
+    let rows = parse_actor_provenance(jsonl).expect("fractional boundary fixture parses");
+    let violations = actor_provenance_violations(&rows).expect("non-empty scan");
+    let ids: Vec<_> = violations.iter().map(|violation| violation.bead_id.as_str()).collect();
+    assert_eq!(
+        ids,
+        vec!["omp-orchestrator-after-whole", "omp-orchestrator-after-fraction"],
+        "the cutoff must compare instants, not timestamp spellings"
+    );
+}
+
+fn jsonl_field_shapes(jsonl: &str) -> BTreeSet<Vec<String>> {
+    jsonl
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .filter_map(|value| value.as_object().cloned())
+        .map(|object| {
+            let mut fields: Vec<_> = object.keys().cloned().collect();
+            fields.sort();
+            fields
+        })
+        .collect()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum FixtureShapeVerdict {
+    Matched,
+    Skipped { path: String, reason: String },
+}
+
+impl std::fmt::Display for FixtureShapeVerdict {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Matched => formatter.write_str("ACTOR_FIXTURE_SHAPE PASS source=live_ledger"),
+            Self::Skipped { path, reason } => write!(
+                formatter,
+                "ACTOR_FIXTURE_SHAPE SKIP reason={reason} path={path}"
+            ),
+        }
+    }
+}
+
+fn fixture_shapes_match_live(fixture: &str, live: &str) -> Result<(), String> {
+    let fixture_shapes = jsonl_field_shapes(fixture);
+    if fixture_shapes.is_empty() {
+        return Err("fixture field-shape scan is empty".to_owned());
+    }
+    let live_shapes = jsonl_field_shapes(live);
+    if live_shapes.is_empty() {
+        return Err("live field-shape scan is empty".to_owned());
+    }
+    for shape in fixture_shapes {
+        if !live_shapes.contains(&shape) {
+            return Err(format!("fixture shape is absent from live ledger: {shape:?}"));
+        }
+    }
+    Ok(())
+}
+
+fn fixture_shape_check(
+    fixture: &str,
+    live: Result<String, std::io::Error>,
+    path: &Path,
+) -> Result<FixtureShapeVerdict, String> {
+    let live = match live {
+        Ok(live) => live,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(FixtureShapeVerdict::Skipped {
+                path: path.display().to_string(),
+                reason: "live_ledger_absent".to_owned(),
+            });
+        }
+        Err(error) => return Err(format!("live ledger unreadable path={}: {error}", path.display())),
+    };
+    fixture_shapes_match_live(fixture, &live).map(|()| FixtureShapeVerdict::Matched)
+}
+
+#[test]
+fn fixture_shape_matches_live_or_reports_an_explicit_skip() {
+    let fixture = actor_fixture_jsonl();
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.beads/issues.jsonl");
+    let verdict = fixture_shape_check(fixture, std::fs::read_to_string(&path), &path)
+        .unwrap_or_else(|error| panic!("ACTOR_FIXTURE_SHAPE RED source=.beads/issues.jsonl: {error}"));
+    eprintln!("{verdict}");
+}
+
+#[test]
+fn fixture_shape_negative_control_distinguishes_absent_from_present() {
+    let absent_path = Path::new("/nonexistent/path/xyz");
+    let absent = fixture_shape_check(
+        actor_fixture_jsonl(),
+        Err(std::io::Error::new(std::io::ErrorKind::NotFound, "guaranteed absent")),
+        absent_path,
+    )
+    .expect("a missing live file is an explicit skip, not an error");
+    let present = fixture_shape_check(
+        actor_fixture_jsonl(),
+        Ok(actor_fixture_jsonl().to_owned()),
+        Path::new("committed fixture"),
+    )
+    .expect("the known-present fixture shape must compare");
+    assert!(
+        matches!(absent, FixtureShapeVerdict::Skipped { .. }),
+        "absent negative control must be typed SKIP: {absent}"
+    );
+    assert_eq!(present, FixtureShapeVerdict::Matched);
+    assert_ne!(absent, present, "absent and present must not read identically");
+    assert!(absent.to_string().contains("reason=live_ledger_absent"));
+}
+#[test]
+fn fixture_shape_mismatch_is_red_with_a_specific_reason() {
+    let drifted_live =
+        r#"{"id":"omp-orchestrator-drifted-shape","created_at":"2026-09-07T20:00:00Z","created_by":"WildStone"}"#;
+    let error = fixture_shape_check(
+        actor_fixture_jsonl(),
+        Ok(drifted_live.to_owned()),
+        Path::new("drifted live fixture"),
+    )
+    .expect_err("a schema shape absent from live must be RED");
+    assert!(error.contains("fixture shape is absent from live ledger"), "{error}");
 }
 
 #[test]
