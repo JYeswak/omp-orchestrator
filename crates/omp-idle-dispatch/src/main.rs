@@ -34,7 +34,15 @@ const REPO_ENV: &str = "OMP_DISPATCH_REPO";
 const SESSION_ENV: &str = "OMP_DISPATCH_SESSION";
 /// Environment variable overriding the ledger path.
 const LEDGER_ENV: &str = "OMP_DISPATCH_LEDGER";
-/// Ledger location relative to `$HOME` when `OMP_DISPATCH_LEDGER` is unset.
+/// `PATH` for spawned children: `$HOME/.local/bin` first, then the system directories.
+///
+/// NOT the ledger path. This function sat directly beneath the doc comment
+/// "Ledger location relative to `$HOME`..." — which belongs to `LEDGER_HOME_RELATIVE`
+/// below — and the misattribution cost three probes on 2026-09-07 while reconstructing
+/// hand-dispatch ledger rows: the reader concluded the default ledger location was a
+/// colon-separated `PATH` string and went looking for a defect that does not exist.
+/// A doc comment that describes its neighbour is the same class as prose asserting
+/// behaviour the code does not have.
 fn default_path() -> String {
     let home = std::env::var_os("HOME")
         .filter(|value| !value.is_empty())
@@ -47,6 +55,7 @@ fn default_path() -> String {
         None => "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin".to_owned(),
     }
 }
+/// Ledger location relative to `$HOME` when `OMP_DISPATCH_LEDGER` is unset.
 const LEDGER_HOME_RELATIVE: &str = ".local/state/flywheel/omp-idle-dispatch.jsonl";
 const DEFAULT_LOCK: &str = "/tmp/omp-idle-dispatch.lock";
 const NO_PANES_EXIT: u8 = 78;
