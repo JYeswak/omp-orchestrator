@@ -152,6 +152,41 @@ pub enum CrateVerdict {
 }
 
 impl CrateVerdict {
+    /// One operator-facing row for this verdict.
+    ///
+    /// # Why this is a method and not inlined in `GateReport::render`
+    ///
+    /// `--run` streams each verdict the moment its crate finishes, so the same row is emitted
+    /// twice: once live and once in the final report. Two `format!` sites drift — measured in this
+    /// very crate, where `failing_targets=unknown` reached an operator because the streamed shape
+    /// and the parsed shape were maintained separately. One function makes them byte-identical by
+    /// construction, and `the_streamed_row_is_byte_identical_to_the_reported_row` asserts it.
+    #[must_use]
+    pub fn render_row(&self, name: &str) -> String {
+        match self {
+            Self::Passed { targets } => format!("PASS crate={name} targets={targets}\n"),
+            Self::Failed { failing } => {
+                format!("FAIL crate={name} failing_targets={}\n", failing.join(","))
+            }
+            Self::Unmeasurable { reason } => {
+                format!("UNMEASURABLE crate={name} reason={reason}\n")
+            }
+            Self::Short { expected, observed } => format!(
+                "SHORT crate={name} expected={expected} observed={observed} \
+                 reason=a_target_vanished_or_failed_to_compile\n"
+            ),
+            Self::NoTests { disposition } => match disposition {
+                NoTestsDisposition::DeclaredException { reason } => {
+                    format!("NO_TESTS crate={name} disposition=declared reason={reason}\n")
+                }
+                NoTestsDisposition::Undeclared => format!(
+                    "NO_TESTS crate={name} disposition=UNDECLARED \
+                     reason=a_crate_with_no_tests_cannot_gate_anything\n"
+                ),
+            },
+        }
+    }
+
     /// Does this verdict block the gate?
     #[must_use]
     pub fn is_blocking(&self) -> bool {
@@ -247,35 +282,7 @@ impl GateReport {
             ));
         }
         for (name, verdict) in &self.verdicts {
-            match verdict {
-                CrateVerdict::Passed { targets } => {
-                    out.push_str(&format!("PASS crate={name} targets={targets}\n"));
-                }
-                CrateVerdict::Failed { failing } => {
-                    out.push_str(&format!(
-                        "FAIL crate={name} failing_targets={}\n",
-                        failing.join(",")
-                    ));
-                }
-                CrateVerdict::Unmeasurable { reason } => {
-                    out.push_str(&format!("UNMEASURABLE crate={name} reason={reason}\n"));
-                }
-                CrateVerdict::Short { expected, observed } => {
-                    out.push_str(&format!(
-                        "SHORT crate={name} expected={expected} observed={observed} \
-                         reason=a_target_vanished_or_failed_to_compile\n"
-                    ));
-                }
-                CrateVerdict::NoTests { disposition } => match disposition {
-                    NoTestsDisposition::DeclaredException { reason } => out.push_str(&format!(
-                        "NO_TESTS crate={name} disposition=declared reason={reason}\n"
-                    )),
-                    NoTestsDisposition::Undeclared => out.push_str(&format!(
-                        "NO_TESTS crate={name} disposition=UNDECLARED \
-                         reason=a_crate_with_no_tests_cannot_gate_anything\n"
-                    )),
-                },
-            }
+            out.push_str(&verdict.render_row(name));
         }
         out
     }
@@ -430,6 +437,58 @@ pub fn build_report(
 ///
 /// Found by this crate's own anti-vacuity leg (`--run --only <nonexistent>`), which is the case
 /// that exists to prove an empty scope is an ERROR — and which surfaced a second defect on the way.
+
+/// The verdict for ONE crate, from its roster entry and whatever was observed for it.
+///
+/// # Why this is public and separate
+///
+/// `--run` streams a verdict the moment its crate finishes, so the per-crate decision has to
+/// exist before any `GateReport` does. Recomputing it a second way in the streaming path is how
+/// a live row and a final row come to disagree — and a disagreement there is worse than no
+/// streaming at all, because an operator would be reading two different answers to one question.
+/// `build_report_scoped` calls this in a loop; `main` calls it once per crate as it lands.
+///
+/// `None` observations mean the crate was never run, which is `Short`, never `Passed`: a crate
+/// absent from the observation map has produced no evidence, and absence of evidence must not
+/// render as a pass.
+#[must_use]
+pub fn verdict_for(entry: &RosterEntry, observed: Option<&Observed>) -> CrateVerdict {
+    if entry.invocations.is_empty() {
+        let disposition = NO_TESTS_ALLOWANCE
+            .iter()
+            .find(|(name, _)| *name == entry.crate_name)
+            .map_or(NoTestsDisposition::Undeclared, |(_, reason)| {
+                NoTestsDisposition::DeclaredException { reason }
+            });
+        return CrateVerdict::NoTests { disposition };
+    }
+    let Some(obs) = observed else {
+        return CrateVerdict::Short {
+            expected: entry.expected(),
+            observed: 0,
+        };
+    };
+    if let Some(reason) = &obs.unmeasurable {
+        return CrateVerdict::Unmeasurable {
+            reason: reason.clone(),
+        };
+    }
+    if !obs.failed.is_empty() {
+        return CrateVerdict::Failed {
+            failing: obs.failed.clone(),
+        };
+    }
+    let seen = obs.passed.len() + obs.failed.len();
+    if seen < entry.expected() {
+        return CrateVerdict::Short {
+            expected: entry.expected(),
+            observed: seen,
+        };
+    }
+    CrateVerdict::Passed { targets: seen }
+}
+
+#[must_use]
 pub fn build_report_scoped(
     roster: &[RosterEntry],
     full_roster: &[RosterEntry],
@@ -440,43 +499,7 @@ pub fn build_report_scoped(
     let mut verdicts = BTreeMap::new();
 
     for entry in roster {
-        let verdict = if entry.invocations.is_empty() {
-            let disposition = NO_TESTS_ALLOWANCE
-                .iter()
-                .find(|(name, _)| *name == entry.crate_name)
-                .map_or(NoTestsDisposition::Undeclared, |(_, reason)| {
-                    NoTestsDisposition::DeclaredException { reason }
-                });
-            CrateVerdict::NoTests { disposition }
-        } else {
-            match observations.get(&entry.crate_name) {
-                None => CrateVerdict::Short {
-                    expected: entry.expected(),
-                    observed: 0,
-                },
-                Some(obs) => {
-                    if let Some(reason) = &obs.unmeasurable {
-                        CrateVerdict::Unmeasurable {
-                            reason: reason.clone(),
-                        }
-                    } else if !obs.failed.is_empty() {
-                        CrateVerdict::Failed {
-                            failing: obs.failed.clone(),
-                        }
-                    } else {
-                        let observed = obs.passed.len() + obs.failed.len();
-                        if observed < entry.expected() {
-                            CrateVerdict::Short {
-                                expected: entry.expected(),
-                                observed,
-                            }
-                        } else {
-                            CrateVerdict::Passed { targets: observed }
-                        }
-                    }
-                }
-            }
-        };
+        let verdict = verdict_for(entry, observations.get(&entry.crate_name));
         verdicts.insert(entry.crate_name.clone(), verdict);
     }
 

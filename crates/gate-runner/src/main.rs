@@ -30,7 +30,8 @@
 //! poll hangs at 0% CPU, and a `cargo test` over 88 crates produces far more than 64 KiB.
 
 use gate_runner::{
-    build_report_scoped, check_allowance, derive_roster, parse_ledger, Invocation, Observed,
+    build_report_scoped, check_allowance, derive_roster, parse_ledger, verdict_for, Invocation,
+    Observed,
     EXIT_METADATA_UNREADABLE,
 };
 use std::collections::BTreeMap;
@@ -173,15 +174,88 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
+    // STREAM EACH VERDICT AS IT LANDS, AND MAKE IT DURABLE BEFORE MOVING ON.
+    //
+    // Measured 2026-09-07: the first full `--run` took 1289s and emitted 2471 bytes with ZERO
+    // verdict rows until it finished, because the report was rendered once after the loop. That
+    // is not "slow" — an interruption at crate 80 of 88 destroyed the record that 79 passed, so
+    // every interrupted run cost its entire cost. `9gta3` item 1.
+    let bank = bank_path(&repo);
     let mut observations = BTreeMap::new();
     for entry in &roster {
         let observed = run_crate(&repo, &entry.crate_name);
+        let verdict = verdict_for(entry, Some(&observed));
+        let row = verdict.render_row(&entry.crate_name);
+        // stdout first so an operator sees it even if the bank is unwritable, then the durable
+        // copy. A bank failure must be LOUD and must not be mistaken for a crate verdict.
+        print!("{row}");
+        let _ = std::io::Write::flush(&mut std::io::stdout());
+        if let Err(error) = bank_append(&bank, &row) {
+            eprintln!(
+                "GATE_RUNNER_BANK_UNWRITABLE path={} detail={error} -- verdicts are still \
+                 streaming to stdout, but an interrupted run will NOT be resumable",
+                bank.display()
+            );
+        }
         observations.insert(entry.crate_name.clone(), observed);
     }
 
     let report = build_report_scoped(&roster, &full_roster, &observations, &ledger);
     print!("{}", report.render());
     ExitCode::from(report.exit_code())
+}
+
+/// Where streamed verdicts are banked so an interrupted run keeps what it earned.
+///
+/// `GATE_RUNNER_BANK` overrides it — the tests need a path they own, and a test writing into the
+/// real bank would corrupt a running gate's resume state.
+///
+/// The default lives under `target/`, which is already ignored, so the bank cannot become the
+/// untracked-file-at-the-repo-root class this repo has a janitor skill for.
+fn bank_path(repo: &Path) -> PathBuf {
+    if let Ok(explicit) = std::env::var("GATE_RUNNER_BANK") {
+        if !explicit.trim().is_empty() {
+            return PathBuf::from(explicit);
+        }
+    }
+    repo.join("target").join("gate-runner-bank.rows")
+}
+
+/// Append one already-rendered row, then `sync_all` before returning.
+///
+/// # What makes the KILL survivable, corrected by a mutation that FAILED TO BITE
+///
+/// This comment first claimed `sync_all` was what defended against a kill, *"the exact case where
+/// an unflushed buffer is lost with the process."* **That is false.** `std::fs::File` is not
+/// buffered in user space, so `write_all` is a `write(2)` and the kernel holds the bytes the
+/// moment it returns; a `SIGKILL` after that loses nothing. Measured 2026-09-07 by replacing
+/// `file.sync_all()` with `Ok(())` and re-running the suite on the lane:
+///
+/// ```text
+/// sync_all REMOVED -> exit=0, 4 passed / 0 failed   <- the mutation did NOT bite
+/// the whole bank write REMOVED -> exit=101, 3 of 4 RED  <- that one did
+/// ```
+///
+/// **So `write_all` provides the tested property and `sync_all` provides a DIFFERENT, untested
+/// one:** durability across a machine crash or power loss, where the page cache is also lost. It
+/// is kept because 88 fsyncs cost nothing against 88 `cargo test` invocations, and because a
+/// resume bank that survives only a tidy shutdown is the case that needed no bank.
+///
+/// **NO-CLAIM: no leg in this suite covers the crash case.** Removing `sync_all` leaves the suite
+/// green, so its presence here is a judgement about a failure mode this repo cannot cheaply test,
+/// not a property under gate. Said out loud because an fsync that nothing exercises is exactly
+/// the kind of line a later reader deletes as noise.
+fn bank_append(path: &Path, row: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    file.write_all(row.as_bytes())?;
+    file.sync_all()
 }
 
 /// Walk up for a repository marker. Never a constant: a wrong root compiles fine and then gates
