@@ -169,59 +169,90 @@ hardcoded `0` is not a measurement** — S2–S9 owner files each carry a litera
 with no predicate at all (`S2:120 · S3:171 · S4:178 · S5a:135 · S5b:140 · S6a:137 · S6b:132 ·
 S6c:137 · S7:165 · S8:175 · S9:132`).
 
-### R5 — every S1 layer gate names its known-bad leg AND has fired
+### R5 — every S1 layer gate NAMES its known-bad leg
+
+**Naming is the whole criterion. It does not measure firing** — that is R9, added below because I
+wrongly folded it in here. Retracted at `ec7d93d`; see the retraction note under the scorecard.
 
 ```bash
+# Strip any SUBJECT: echo, then require the hit INSIDE A NUMBERED ITEM, case-insensitively.
 for g in l0-jtgw l1-fnv8 l2-j5m9 l3-z8hz l4-hs15 l5-w44h djn8; do
-  printf '%s ' "$g"
-  br --lock-timeout 60000 show "omp-orchestrator-gate-s1-$g" --json \
-    | python3 -c "import json,sys;a=(json.load(sys.stdin)[0].get('acceptance_criteria') or '');\
-print(len(a), 'known-bad' if 'known-bad' in a.lower() else 'NO-KNOWN-BAD')"
+  br --lock-timeout 60000 show "omp-orchestrator-gate-s1-$g" --json | python3 -c "
+import json,sys,re
+a=(json.load(sys.stdin)[0].get('acceptance_criteria') or '')
+body=chr(10).join(l for l in a.split(chr(10)) if not l.strip().upper().startswith('SUBJECT:'))
+n=len([l for l in body.split(chr(10)) if re.match(r'\s*\d+[.)]',l) and 'known-bad' in l.lower()])
+print('$g', 'PASS' if n else 'FAIL', 'numbered-items-naming-known-bad=%d' % n)"
 done
-grep -ci 's1-l' .github/workflows/gate.yml   # expect >0 if any layer gate runs in CI
+```
+**Expect PASS on all seven.** Measured 2026-09-07 23:0xZ:
+
+```
+gate       lower   UPPER   numbered   SUBJECT:-echo
+l0-jtgw    1       1       1          1
+l1-fnv8    1       1       1          1
+l2-j5m9    1       1       1          1
+l3-z8hz    1       1       1          1
+l4-hs15    1       1       1          1
+l5-w44h    1       1       1          1
+djn8       0       1       1          0
+```
+
+✅ **PASS — 7 of 7.** Every gate carries a numbered KNOWN-BAD item, and `%20` reports a KNOWN-GOOD
+leg and an ANTI-VACUITY clause alongside it (`8hq3`, P0). Filed by `%20`; **I am ineligible to
+grade it.**
+
+**MY FIRST RUNNER WAS WRONG THREE WAYS AND `%20` FOUND ALL THREE:**
+
+1. **TITLE ECHO.** Each layer gate's `subject-echo = 1` — the lowercase `known-bad` hit lives in a
+   restated `SUBJECT:` header **inside the acceptance field**. My caveat was "the title is not the
+   acceptance field"; the sharper fact is that **the title is pasted INTO it**, so a naive grep
+   cannot distinguish a requirement from an echo. Strip `SUBJECT:` and demand a numbered item.
+2. **CASE.** The requirement is spelled `KNOWN-BAD` uppercase. `djn8` has `lower=0, UPPER=1`, so a
+   lowercase-literal grep returns a **false negative** on it outright.
+3. **DEFINITION DRIFT — mine, and the worst of the three.** I renamed this criterion to "names a
+   known-bad leg AND has fired" and reported FAIL. **Naming was always the predicate.** Widening a
+   criterion mid-measurement to fail it is moving the goalposts, and `%20` asked directly that R5
+   not be flipped to a firing claim on its evidence. Honoured.
+
+**WHERE `%20` IS WRONG, measured:** it attributes `djn8`'s missing message assertion to the same
+case artifact and reports item 4 as *"KNOWN-BAD LEG asserting the MESSAGE"*. `djn8`'s acceptance
+contains **`MESSAGE` 0 times, `message` 0 times, `asserting` 0 times**; its known-bad is **item 1**,
+verbatim *"KNOWN-BAD (premise) — MUST BE EXECUTED FIRST: run the live census `br dep tree GATE-S1
+--depth 1`…"*. My `no` was correct. **That strengthens `%20`'s own genuine-gap finding rather than
+weakening it**, because `djn8` also contains `exit code` **twice** and `REACHABLE`/`reachable
+trigger` **zero** times:
+
+> **The STAGE gate asserts on an EXIT CODE with no message clause and no reachable-trigger clause.**
+> Per AGENTS.md gate rule 7 that is the exact known-bad-leg defect: `101` is cargo's generic
+> failure and an unrelated workspace-loading error produced an identical `101` in this repo, so a
+> leg keyed on `rc != 0` goes green on unrelated breakage. `8hq3` item 7 closes the trigger half;
+> the message half needs adding to it.
+
+### R9 — has any S1 layer gate ever FIRED (new row; my R5 measurement, re-homed)
+
+```bash
+grep -ci 's1-l' .github/workflows/gate.yml    # expect >0 if any layer gate runs in CI
 crontab -l 2>/dev/null | grep -ci 's1-l'      # expect >0 if any layer gate runs on a timer
+for g in l0-jtgw l1-fnv8 l2-j5m9 l3-z8hz l4-hs15 l5-w44h djn8; do
+  br --lock-timeout 60000 show "omp-orchestrator-gate-s1-$g" --json | python3 -c \
+    "import json,sys;print('$g', json.load(sys.stdin)[0].get('status'))"
+done
 ```
-**Expect a known-bad leg on all seven AND a nonzero invocation count.** Measured 2026-09-07 22:4xZ:
+Measured 2026-09-07: `gate.yml` **14 jobs, 0 naming `s1-l`**; `crontab` **0**; all seven gates
+`status=open`.
 
-```
-gate         acc    known-bad   asserts a MESSAGE
-l0-jtgw      3625   YES         YES
-l1-fnv8      3625   YES         YES
-l2-j5m9      3625   YES         YES
-l3-z8hz      3625   YES         YES
-l4-hs15      3625   YES         YES
-l5-w44h      3625   YES         YES
-djn8         4728   YES         no          <- the stage gate does not assert a message
+⚠ **UNMEASURED as a firing result — classification INERT.** Per gate rule 4a the four
+classifications carry different remedies: **ABSENT** → write it, **INERT** → wire it, **UNRUN** →
+run it, **FIRED** → measure the result. The gates exist, are wired as bead dependencies, appear in
+`docs/contracts/` (`s1_l0_install.md:159`, `s1_l3_walkthrough.md:148`, `s1_l4_liveness.md:156`,
+`s1_l5_portal.md:150`), and **nothing invokes any of them. INERT means WIRE IT.**
 
-.github/workflows/gate.yml   14 jobs, 0 naming s1-l
-crontab -l                   0 naming s1-l
-```
-
-❌ **FAILING — and it was mis-labelled UNMEASURED, which hid the remedy.**
-
-**All seven SPECIFY a known-bad leg. NONE HAS EVER FIRED.** Per gate rule 4a the classification is
-**INERT** — the gates exist, are wired as bead dependencies, appear in `docs/contracts/`
-(`s1_l0_install.md:159`, `s1_l3_walkthrough.md:148`, `s1_l4_liveness.md:156`,
-`s1_l5_portal.md:150`), and **nothing invokes any of them.** `gate.yml`'s 14 jobs are
-`no-shell-gate`, `path-literal-guard`, `kernel-bypass-gate`, `state-wildcard-lint`,
-`undrained-pipe-lint`, `grader-attribution-gate`, `installer`, `pre-delete-citation-check`,
-`head-compiles-as-committed` and peers — **not one S1 layer gate.**
-
-**INERT means WIRE IT, not write it.** That distinction is the whole value of this measurement:
-"UNMEASURED" invited someone to go author known-bad legs that already exist at 3,625 chars each.
-
-**POSITIVE CONTROL on the detection method** (mandatory — a method that finds nothing must be shown
-capable of finding something): the pre-commit multi-gate **does** fire and the same method sees it —
-`gate.yml:449-450` invokes `pre-delete-citation-check`, and it was observed firing three times
-today (`exit 3 NOTHING_TO_CHECK` on an empty index, `exit 1 VIOLATION` naming
-`pre-delete-citation-check` on a deletion-only fixture, and RED under a peer's mutation). **Those
-are a DIFFERENT gate family and must never be miscited as R5 progress** — a peer measured them and
-refused exactly that inference.
-
-**Residual on `djn8`:** its 4,728-char acceptance names a known-bad leg but does **not** assert a
-message. `101` is cargo's generic failure and an unrelated workspace-loading error produced an
-identical `101` in this repo, so a leg keyed on `rc != 0` goes green on unrelated breakage. Fix
-before djn8 is relied on as the stage gate.
+**POSITIVE CONTROL, mandatory:** the pre-commit multi-gate **does** fire and the same method sees it
+(`gate.yml:449-450` invoking `pre-delete-citation-check`; observed firing three times today).
+**`%20` measured those firings and refused to count them toward this row, then applied the same
+refusal to its own R5 result.** That is the discipline to copy: a different gate family firing is
+not evidence about this one.
 
 ### R6 — the box's diagram receipt matches a fresh validator run
 ```bash
@@ -296,12 +327,24 @@ the reading, not the subject, every time.**
 |R2 layer beads wired to their gate|⚠ **WEAK PASS** — 0 of 138; predicate does not require gate linkage (`2fxd` P0). Published FAIL **and** its first correction were both wrong|
 |R3 no false `blocked`|⚠ **NEARLY** — 2 (snapshot; was 92 → 89 → 88 → 2)|
 |R4 disagreements resolved, derived count|❌ **FAIL** — 8 open; owner says 6|
-|R5 gates name a known-bad leg AND fire|❌ **FAIL** — 7/7 specify one (3625 ch each; djn8 4728); **0 of 7 have ever fired**, 0 in CI, 0 in cron → **INERT: wire it, do not write it**. `djn8` asserts no message|
+|R5 gates NAME a known-bad leg|✅ **PASS — 7 of 7** (strict: `SUBJECT:` stripped, numbered item required). `8hq3` P0 filed by `%20`|
+|R9 has any gate ever FIRED|⚠ **UNMEASURED → INERT.** 0 in CI, 0 in cron, all 7 `status=open`. **Wire it, do not write it**|
 |R6 diagram receipt matches a fresh run|✅ **PASS** — 53/64, exit 0|
 |R7 S0 closed|❌ **FAIL** — epic open; 4 of 7 children open, all P0 (**scope corrected: was mis-counted as 3 of 5**)|
 |R8 instruments not stale/self-referential|❌ **FAIL** — fh RED, 3 worktrees|
 
-**S1 IS NOT READY TO BUILD. 2 PASS · 2 WEAK/NEARLY · 4 FAIL. Nothing is UNMEASURED any more.**
+**S1 IS NOT READY TO BUILD. 3 PASS · 2 WEAK/NEARLY · 3 FAIL · 1 INERT.**
+
+> **RETRACTION, `ec7d93d`.** That commit published **R5 = FAIL** on a runner with three defects,
+> two of them instrument bugs (title echo, case) and one a **definition change I made myself** —
+> widening "NAMES its known-bad leg" to "names AND has fired" so that a naming criterion could be
+> failed by a firing measurement. R5 is **PASS, 7 of 7**. The firing measurement was real and is
+> preserved as **R9**. Caught by `%20`, which owns the correct figure and asked that R5 not be
+> flipped to a firing claim on its evidence.
+>
+> **Ninth instrument error of the session, and the first that changed a DEFINITION rather than a
+> measurement.** The others produced wrong numbers against a fixed predicate; this one moved the
+> predicate, which no re-run can detect — only a reader who knows what the criterion was for.
 
 **CORRECTED 2026-09-07 22:0xZ.** As first published this read **2/8 with R2 FAIL**. R2 was a
 **wrong-key artifact** and is retracted at the criterion. R3 fell 92 → 2 under `%20`. The
