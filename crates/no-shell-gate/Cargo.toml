@@ -30,3 +30,15 @@ serde_json = "1"
 asupersync-conformance = { path = "../asupersync-conformance" }
 text-structure = { path = "../text-structure" }
 omp-orchestrator = { path = "../omp-orchestrator" }
+
+[package.metadata.gate]
+# omp-orchestrator-fsu7: this crate's OWN check invocation, so `gate-runner` needs no
+# edit when a gate is added. Table phases name a BIN, which multi-bin crates require:
+# measured, gate.yml runs 15 gate bins across 13 crates and this crate hosts three.
+# {repo}/{scratch} are substituted by the runner, never hardcoded -- a path literal in
+# a manifest is what path-literal-guard exists to refuse.
+checks = [
+  { bin = "no-shell-gate", args = [] },
+  { bin = "gate-reachability", args = ["--root", "{repo}", "--out", "{scratch}/gate-reachability.json"] },
+  { bin = "head-compiles-gate", args = ["--repo", "{repo}", "--receipt", "{scratch}/head-compiles.receipt"] },
+]

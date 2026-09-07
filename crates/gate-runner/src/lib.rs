@@ -502,11 +502,33 @@ pub fn parse_ledger(text: &str) -> BTreeSet<String> {
 /// `{repo}` and `{scratch}` are substituted by the runner, because a check needing an absolute
 /// path must not hardcode one — that is `path-literal-guard`'s own subject, and an author's home
 /// directory baked into a manifest is exactly how it fires.
+///
+/// # Multi-bin crates
+///
+/// MEASURED 2026-09-07: `gate.yml` invokes **15 distinct gate bins across 13 crates**, and
+/// `no-shell-gate` alone hosts **three** — `no-shell-gate`, `gate-reachability` and
+/// `head-compiles-gate`. So a crate-keyed schema cannot express the fan-out, and each phase names
+/// its own bin. `%6`'s ruling replaced `jobs` with `bins` as item 3's denominator for exactly this
+/// reason: the fan-out grows INSIDE jobs, so a job count is structurally blind to it.
+///
+/// Both stanza forms are accepted, because a single-bin gate should not pay for a multi-bin one:
+///
+/// ```toml
+/// checks = [["--repo", "{repo}"]]                                   # crate's default bin
+/// checks = [{ bin = "gate-reachability", args = ["--root", "{repo}"] }]
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckPhase {
+    /// `None` means the crate's default bin — the bare-array form.
+    pub bin: Option<String>,
+    pub args: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CheckInvocation {
     pub crate_name: String,
-    /// One argv per sequential phase. `commit-build-fence` needs two; most need one.
-    pub phases: Vec<Vec<String>>,
+    /// One phase per sequential invocation. `commit-build-fence` needs two; most need one.
+    pub phases: Vec<CheckPhase>,
 }
 
 /// Read every crate's declared checks from `cargo metadata`'s `package.metadata` passthrough.
@@ -539,16 +561,47 @@ pub fn derive_checks(metadata_json: &str) -> Result<Vec<CheckInvocation>, Roster
         };
         let mut phases = Vec::new();
         for phase in declared {
-            let Some(argv) = phase.as_array() else {
-                return Err(RosterError::MetadataUnreadable {
-                    detail: format!("{name}: metadata.gate.checks must be a list of argv lists"),
+            // Bare array -> the crate's default bin. Table -> a NAMED bin, which multi-bin
+            // crates need. Anything else is UNREADABLE rather than "no check declared":
+            // silently treating a broken declaration as absent is how a gate stops running
+            // while everything reads green.
+            if let Some(argv) = phase.as_array() {
+                phases.push(CheckPhase {
+                    bin: None,
+                    args: argv
+                        .iter()
+                        .filter_map(|a| a.as_str().map(str::to_owned))
+                        .collect(),
                 });
-            };
-            phases.push(
-                argv.iter()
-                    .filter_map(|a| a.as_str().map(str::to_owned))
-                    .collect(),
-            );
+            } else if let Some(table) = phase.as_object() {
+                let Some(bin) = table.get("bin").and_then(serde_json::Value::as_str) else {
+                    return Err(RosterError::MetadataUnreadable {
+                        detail: format!(
+                            "{name}: a metadata.gate.checks table phase must name a `bin`"
+                        ),
+                    });
+                };
+                let args = table
+                    .get("args")
+                    .and_then(serde_json::Value::as_array)
+                    .map(|argv| {
+                        argv.iter()
+                            .filter_map(|a| a.as_str().map(str::to_owned))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                phases.push(CheckPhase {
+                    bin: Some(bin.to_owned()),
+                    args,
+                });
+            } else {
+                return Err(RosterError::MetadataUnreadable {
+                    detail: format!(
+                        "{name}: metadata.gate.checks must be a list of argv lists or \
+                         {{ bin, args }} tables"
+                    ),
+                });
+            }
         }
         if !phases.is_empty() {
             checks.push(CheckInvocation {

@@ -377,7 +377,9 @@ fn a_gate_declares_its_own_check_invocation_in_its_own_manifest() {
     let checks = derive_checks(md).expect("parses");
     assert_eq!(checks.len(), 1, "a crate with no stanza declares no check, and that is not an error");
     assert_eq!(checks[0].crate_name, "alpha");
-    assert_eq!(checks[0].phases, vec![vec!["--repo".to_owned(), "{repo}".to_owned()]]);
+    assert_eq!(checks[0].phases.len(), 1);
+    assert_eq!(checks[0].phases[0].bin, None, "a bare array means the crate's default bin");
+    assert_eq!(checks[0].phases[0].args, vec!["--repo", "{repo}"]);
 }
 
 /// A multi-phase gate keeps its ORDER. `commit-build-fence` is `init` then `check`, and running
@@ -388,8 +390,61 @@ fn a_multi_phase_gate_keeps_its_phase_order() {
         "metadata":{"gate":{"checks":[["init","--repo","{repo}"],["check","--repo","{repo}"]]}}}]}"#;
     let checks = derive_checks(md).expect("parses");
     assert_eq!(checks[0].phases.len(), 2);
-    assert_eq!(checks[0].phases[0][0], "init", "phase order is load-bearing");
-    assert_eq!(checks[0].phases[1][0], "check");
+    assert_eq!(checks[0].phases[0].args[0], "init", "phase order is load-bearing");
+    assert_eq!(checks[0].phases[1].args[0], "check");
+}
+
+/// THE CASE THE SCHEMA EXISTS FOR: one crate hosting several gate bins.
+///
+/// MEASURED: `gate.yml` runs **15 distinct gate bins across 13 crates**, and `no-shell-gate` alone
+/// hosts three — `no-shell-gate`, `gate-reachability`, `head-compiles-gate`. A crate-keyed schema
+/// silently collapses those to one, which is the fan-out surviving the fix meant to remove it.
+/// `%6` replaced `jobs` with `bins` as item 3's denominator for this reason: the fan-out grows
+/// INSIDE jobs, so a job count is structurally blind to it.
+#[test]
+fn a_crate_hosting_several_gate_bins_keeps_all_of_them() {
+    let md = r#"{"packages":[{"name":"multi","manifest_path":"/x/m/Cargo.toml","targets":[],
+        "metadata":{"gate":{"checks":[
+          {"bin":"multi","args":[]},
+          {"bin":"reachability","args":["--root","{repo}"]},
+          {"bin":"head-compiles","args":["--repo","{repo}","--receipt","{scratch}/r"]}
+        ]}}}]}"#;
+    let checks = derive_checks(md).expect("parses");
+    assert_eq!(checks.len(), 1, "one crate");
+    assert_eq!(
+        checks[0].phases.len(),
+        3,
+        "THREE bins must survive; collapsing them to one is the defect fsu7 exists to end"
+    );
+    let bins: Vec<Option<&str>> = checks[0]
+        .phases
+        .iter()
+        .map(|p| p.bin.as_deref())
+        .collect();
+    assert_eq!(
+        bins,
+        vec![Some("multi"), Some("reachability"), Some("head-compiles")],
+        "each phase names its OWN bin, in order"
+    );
+    // And the placeholders in a named-bin phase expand like any other.
+    let expanded = expand(&checks[0].phases[2].args, "/w/repo", "/w/scratch");
+    assert_eq!(expanded, vec!["--repo", "/w/repo", "--receipt", "/w/scratch/r"]);
+}
+
+/// A table phase with no `bin` is UNREADABLE, not a default-bin phase.
+///
+/// Defaulting here would silently run the wrong binary — and on a multi-bin crate the wrong
+/// binary is a different gate entirely.
+#[test]
+fn a_table_phase_without_a_bin_is_unreadable() {
+    let md = r#"{"packages":[{"name":"alpha","manifest_path":"/x/a/Cargo.toml","targets":[],
+        "metadata":{"gate":{"checks":[{"args":["--repo","{repo}"]}]}}}]}"#;
+    let error = derive_checks(md).expect_err("a table phase must name its bin");
+    assert!(matches!(error, RosterError::MetadataUnreadable { .. }));
+    assert!(
+        error.to_string().contains("must name a `bin`"),
+        "the message must say what was missing: {error}"
+    );
 }
 
 /// Placeholders are substituted by the runner, never hardcoded.
@@ -457,7 +512,7 @@ fn a_job_with_a_declared_check_is_subsumed_on_both_halves() {
     let roster = derive_roster(&md, &lib_tests(&[])).expect("parses");
     let checks = vec![gate_runner::CheckInvocation {
         crate_name: "scanner".to_owned(),
-        phases: vec![vec!["{repo}".to_owned()]],
+        phases: vec![gate_runner::CheckPhase { bin: None, args: vec!["{repo}".to_owned()] }],
     }];
     assert_eq!(
         subsumption_of("scanner", true, &roster, &checks),
