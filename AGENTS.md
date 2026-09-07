@@ -2212,6 +2212,38 @@ state that, it must make it.** A valid escalation reads *"I cannot act because <
 names the clause. *"This needs Joshua"* is not an escalation; it is an unassigned task with a
 person's name on it.
 
+**⛔ AND THE CLAUSE MUST BE UNAVOIDABLE, NOT MERELY PRESENT. Measured 2026-09-07: I failed this
+twice in one hour, on the two items I had just written the test to prevent.**
+
+Joshua, verbatim: *"these dont seem like me items — you keep coming back to me items on these — why
+exactly are they mine and nt something you all can handle and choose the best statistical option"*.
+
+**A clause licenses an escalation only when EVERY admissible option requires it.** I was treating
+*"the goal touches a stated policy"* as clause 1, when clause 1 asks whether **the action I intend**
+reverses one. Both items had an in-policy option I had already identified and did not take:
+
+|item|what I escalated|the in-policy option I had already named|
+|---|---|---|
+|`lppp` half A|*"re-enable a Mac worker — reverses the zero-local-builds ruling"*|**gate the four Darwin tests with a typed `cfg(target_os)` skip.** Pure agent work, no lane, and it makes the verdict HONEST where a Linux failure was masquerading as evidence about Darwin|
+|install `finding`|*"the freeze's no-install clause, and a Mach-O needs the local Mac"*|**don't install.** `%20` filed two beads with full acceptance by executing the kernel's SEQUENCE by hand. The install buys *enforcement*, not capability|
+
+**Both are now decided by pane1 as `HD-0045` and `HD-0046`, with the options weighed in the row.**
+
+**Why the in-policy option is not a compromise.** On `lppp` the property is UNVERIFIED either way —
+re-enabling a Mac would verify it, gating it would not. But **reporting it as UNMEASURED is TRUE
+while reporting it as FAILED is FALSE**, and the false red is what trains operators to ignore a
+suite. So the cheap option is also the honest one, and the expensive option buys verification of a
+property that has never bitten us.
+
+**The mechanical form: before escalating, enumerate the options and state why each in-policy one is
+inadmissible.** If you cannot, you have a decision, not an escalation. An escalation whose row does
+not list a rejected in-policy alternative is incomplete — and if the human has to ask *"why is this
+mine"*, the answer was in the options you never wrote down.
+
+**NO-CLAIM.** This makes an avoidable escalation *visible in the row*, not impossible — an agent can
+still enumerate options dishonestly, or miss one. What it removes is the specific failure where the
+option was already identified in the agent's own analysis and simply not chosen.
+
 **Corollary — a decision already given must be EXECUTED, not re-asked.** Both recording gaps above
 had the human's own words in the row. Re-asking a settled question is the same failure as escalating
 an unsettled one: it converts his answer into another item in his queue.
