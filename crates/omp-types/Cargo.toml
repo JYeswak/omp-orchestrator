@@ -9,14 +9,12 @@ description = "The canonical type vocabulary. Derived from asupersync at the pin
 path = "src/lib.rs"
 
 [dependencies]
-# NO `messaging-fabric` FEATURE, and this is a measured upstream blocker, not a preference.
-# AckKind and DeliveryClass live behind `#[cfg(feature = "messaging-fabric")]`, and that feature
-# DOES NOT COMPILE at rev fa3c01aec: messaging/consumer.rs:1299-1300 has an un-gated `fn default()`
-# calling TaskId::new_ephemeral() / RegionId::new_ephemeral(), which are
-# `#[cfg(any(test, feature = "test-internals"))]`. Since issue #46 correctly removed
-# test-internals from the default feature set, messaging-fabric now requires a TEST feature to
-# build. Enabling test-internals here would reintroduce exactly the production leak #46 closed.
-# So the ack vocabulary is UNREACHABLE at our pinned rev; only the ungated `types` module is.
+# Upstream AckKind and DeliveryClass remain behind the messaging-fabric feature, and that feature
+# DOES NOT COMPILE at rev fa3c01aec: messaging/consumer.rs:1299-1300 calls constructors
+# gated by test-internals. Keep both upstream feature flags disabled here; the local authored
+# vocabulary lives in src/ack_vocabulary.rs and mirrors the pinned semantics.
+# Enabling test-internals would reintroduce exactly the production leak upstream issue #46 closed.
+# The dependency stays on the unchanged workspace pin; no feature is enabled in this crate.
 asupersync = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 subprocess-contract = { path = "../subprocess-contract" }
