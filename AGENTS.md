@@ -399,6 +399,58 @@ a file, a one-line pointer in the bead, `--lock-timeout 60000` on every call, an
 output** — a suppressed `br update` failure is indistinguishable from success and silently lost two
 claims in one session.
 
+#### THE PACKET'S ONE ACK TOKEN MUST BE A REAL BEAD TOKEN — a nickname is unmatchable
+
+**Caught by `%9` 2026-09-07, in my own rule, one packet after I wrote it.** It ACKed and reported:
+*"`ACK s1ratify on %9 --` (on `omp-orchestrator-jplf.7.2`; token bead `s1ratify` does not exist)."*
+
+**The token is mechanical, not a label.** `crates/ack-stage/src/lib.rs:293-298`:
+
+```rust
+fn ack_token(bead_id: &str) -> &str { bead_id.rsplit('-').next().unwrap_or(bead_id) }
+fn ack_prefix(bead_id: &str, pane_id: &str) -> String {
+    format!("ACK {} on {pane_id} -- ", ack_token(bead_id))
+}
+```
+
+and the match is `strip_prefix` at `:507` against `format!("ACK {} on ", ack_token(bead_id))` — an
+**exact prefix**. So a packet nickname can never match, and neither can a decorated token:
+
+```
+bead omp-orchestrator-typed-blocker-taxonomy-report-redispatch-zey6   token = zey6
+  ACK zey6 on %9 --          MATCHES
+  ACK zey6-grade on %9 --    NO MATCH   (extra text before " on ")
+  ACK s1ratify on %9 --      NO MATCH   (no bead ends in -s1ratify)
+```
+
+**Measured over `.beads/issues.jsonl` — the JSONL, because `br list --json` omits comments
+entirely** (same defect as `close-evidence-gate`'s source at `source.rs:223`; my first audit
+returned a blind `0`):
+
+```
+ACK comments matching the ack-stage prefix : 415
+ACK comments UNMATCHABLE by construction   :  37   (8.2%)
+  ACK selector on %9      on a bead whose token is 2ceb
+  ACK reap on %9          on 3r1r
+  ACK childoutcome on %9  on 7kxf
+  ACK reroute on %9       on 93lo
+```
+
+**So the protocol is 92% healthy and the 37 are a real, bounded leak** — not the catastrophe the
+first look suggested. Every one of the 37 reads to `ack-stage` as `AckReadbackMissing` and downgrades
+its delivery to `Indeterminate/unproven_transport`: **the dispatch landed, the work happened, and the
+evidence is unusable.**
+
+**And the one-ACK-per-packet rule above MADE THIS WORSE, which is why the two clauses ship
+together.** Per-bead ACKs were correct by construction — each token came from its own bead. By
+collapsing to one ACK and naming it after the *packet*, I detached the token from any bead at all.
+**A dispatcher writing a batch packet MUST pick one bead from the batch and use its bare token.**
+
+**NO-CLAIM.** This fixes the token's *shape*. It does not make an ACK proof of progress — an ACK is
+a delivery receipt any agent can type, and `:290-291` still holds the tmux path at
+`INDETERMINATE` on receiver heuristics alone. And 415 matching ACKs is not 415 verified dispatches;
+it is 415 parseable ones.
+
 **And the correction is the load-bearing part, per this file's own rule about stale doctrine.** A
 doctrine row asserting a mechanism is broken *licenses routing around it indefinitely*. Left
 uncorrected, this section would have kept telling readers the ACK path produces nothing, long after
