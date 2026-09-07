@@ -366,6 +366,39 @@ asking. The measured cost of not asking was every dispatch of the prior session 
 `unproven_transport` while packets landed — which is why this row is worth more as a *correction*
 than it was as a finding.
 
+### ONE ACK PER PACKET, NOT ONE PER BEAD — an N-bead packet serialises the fleet
+
+**Measured 2026-09-07, and it is the conductor's defect, not a pane's.** I dispatched three batch
+packets in one wave, each demanding an ACK **per bead** — six ACK comments. Every ACK is a
+`br comments add`, every one takes `.beads/.write.lock`, and `.beads/beads.db` is **31 MB with four
+live writers**. `%8`'s first ACK landed; its second timed out after `1m17s` waiting on **PID 15800 —
+`%9` posting an ACK I had also demanded.** I serialised my own fleet behind a delivery receipt.
+
+`%8` did the right thing twice: it **refused to kill a peer's `br` process**, and it reported the PID
+and the wait instead of retrying blind. Second time in one session a pane correctly refused that
+kill, and both times the report beat the kill.
+
+**The ruling: a packet needs ONE ACK.** The ACK exists to answer *"did the packet arrive"* — because
+on the tmux path `ack-stage` admits only a matching bead comment, a timer reset plus a content-hash
+change being explicitly insufficient (`crates/ack-stage/src/lib.rs:290-291`). **One ACK from a pane
+answers that completely.** A second ACK for a second bead in the *same* packet raises no evidence
+tier; it only multiplies write-lock contention on the critical path.
+
+**Unchanged per bead:** the verdict, the re-run evidence, which tree each number came from, and the
+`MUTATION-VERIFIED` / `DONE` / `APPROVED` / `WONTFIX` prefix with the status read back. **This
+relaxes the delivery receipt, never the acceptance evidence.**
+
+The rule immediately above says *"the dispatch site must emit the ACK instruction itself"* — correct,
+and as written it invited a per-bead reading, which is what I built the packet from. **The dispatch
+site must emit exactly one ACK token per packet.**
+
+**NO-CLAIM.** This removes ACK amplification from the dispatch path; it does **not** fix the
+contention. ~31 MB for ~939 beads is ~32 KB each, reads run 40–250 s against a 30 s default, and one
+`br list --limit 4000` full scan starves every writer. The write discipline stands: long evidence to
+a file, a one-line pointer in the bead, `--lock-timeout 60000` on every call, and **read the
+output** — a suppressed `br update` failure is indistinguishable from success and silently lost two
+claims in one session.
+
 **And the correction is the load-bearing part, per this file's own rule about stale doctrine.** A
 doctrine row asserting a mechanism is broken *licenses routing around it indefinitely*. Left
 uncorrected, this section would have kept telling readers the ACK path produces nothing, long after
