@@ -59,19 +59,57 @@ no_claim = "what this box does not establish"
 **BUILD FREEZE.** No new crate, no new feature bead, no install, until every box has `agreement.status = "converged"` AND Joshua's approval row in `docs/decisions.jsonl`. The four in-flight beads (`d3gm`, `6nhj`, `ywd5`, `gfb`) go to GRADING or release; nothing new is claimed.
 
 > ⛔ **SUPERSEDED IN PART — DO NOT STOP READING HERE.** The freeze above is **LIFTED FOR S1** by the
-> Wave-2 amendment at **`:101` of this file** ("S1 IS AUTHORIZED TO BUILD. S2–S9 REMAIN FROZEN").
-> S2–S9 remain frozen exactly as written. **Read `:61-111` before concluding you may not build.**
+> Wave-2 amendment below, which reads "S1 IS AUTHORIZED TO BUILD. S2–S9 REMAIN FROZEN." S2–S9
+> remain frozen exactly as written. **Do not conclude you may not build until you have run:**
 >
-> This pointer exists because the amendment 42 lines below was invisible for a full session:
+> ```bash
+> # Anchored on the bold heading form so the pointer you are reading is NOT a hit: exactly 1.
+> grep -nE '^\*\*S1 IS AUTHORIZED TO BUILD' docs/plan/flow/CONTRACT.md
+> ```
+>
+> **LINE NUMBERS REMOVED 2026-09-07, and the reason is the more useful half.** This pointer said
+> `:101`, was corrected to `:116` after `grep` showed `:101` landed on the strangulation-cycle
+> diagram — and **the correction invalidated itself in the same edit**: adding eight lines above the
+> target pushed the text to `:124`, then to `:132`. Three wrong numbers, each wrong the moment it
+> was written.
+>
+> **A line-number cross-reference inside a living document is SELF-INVALIDATING.** Not a careless
+> mistake — a structural property: any edit above the target shifts it, and the edit most likely to
+> be made is the one fixing the pointer. **A pointer with a wrong target is worse than no pointer**,
+> because it converts "I did not look" into "I looked and it was not there." Cite a searchable
+> string and let the reader's `grep` resolve the address. Same family as this repo's rule to search
+> for a *fragment* of a name rather than the whole name.
+>
+> **The anchor is `^\*\*` deliberately.** The unanchored form returns **3** hits, two of which are
+> this pointer quoting the phrase — the self-referential-instrument defect this repo has now hit
+> eight times (a census whose table names every gate it checks; a doc comment containing the needle
+> it warned about; a `jq` probe asking whether a list contained itself). **An instrument whose input
+> contains text about its own subject reports on itself.** Anchored: exactly 1 hit, the amendment.
+>
+> This pointer exists because the amendment **downstream in this file** was invisible for a full
+> session (the prose here said "42 lines below"; it is now 79 — the same self-invalidating defect,
+> in words instead of a number, so the distance is deliberately no longer stated):
 > the orchestrator read "BUILD FREEZE" in bold, stopped — which is the correct reading of a
 > document that says STOP — told the fleet all code was blocked, and routed three panes to audits
 > while **131 authorized S1 beads sat claimable**. A superseding amendment placed downstream of the
 > text it supersedes cannot be found by a reader who obeys that text.
 >
-> **Note the gate ids at `:105` are MISTYPED:** they read `gate-s1-10-jtgw … -15-w44h`; the real ids
-> are `gate-s1-l0-jtgw … gate-s1-l5-w44h` — `l0` (ell-zero) written as `10` (one-zero). Searching
-> for the contract's spelling returns ABSENT for all six and makes the authorized set look empty.
-> Copy the ids from the STANDING AUTHORIZATION block at the top of `AGENTS.md`, never from prose.
+> **Note the gate ids in the authorization prose below are MISTYPED:** they read
+> `gate-s1-10-jtgw … -15-w44h`; the real ids are `gate-s1-l0-jtgw … gate-s1-l5-w44h` — `l0`
+> (ell-zero) written as `10` (one-zero). Searching for the contract's spelling returns ABSENT for
+> all six and makes the authorized set look empty. **Never copy them from this file.** The correct
+> six live in `AGENTS.md`; this runner was executed before being published and returns exactly 6:
+>
+> ```bash
+> grep -oE 'gate-s1-l[0-9]-[a-z0-9]+' AGENTS.md | sort -u    # -> 6 ids
+> ```
+>
+> **The first version of this note shipped a runner against THIS file that returns 0**, because the
+> correct ids appear in `CONTRACT.md` only inside the warning you are reading — so the check would
+> have "proved" the authorized set empty, which is the exact failure the note exists to prevent.
+> **A published runner that was never executed is an unverified claim wearing a command's
+> authority.** Anti-vacuity leg: `gate-s9-l[0-9]` returns 0, so the 6 is a real match, not a
+> pattern that matches anything.
 
 ## Wave 2 amendment — THE FREEZE'S EXIT CONDITION IS UNREACHABLE (measured 2026-09-03)
 
