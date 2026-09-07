@@ -279,3 +279,31 @@ fn cli_check_refuses_a_verdict_change_and_keeps_the_site_in_the_document() {
     assert!(stdout.contains("first_differing_line="));
     fs::remove_dir_all(root).expect("fixture cleanup");
 }
+/// The write operation is deterministic: two independent destinations must receive
+/// identical bytes, so a caller can compare or publish either artifact safely.
+#[test]
+fn cli_write_is_byte_identical_across_distinct_paths() {
+    let source = "fn run() {\n    let _ = Command::new(\"echo\").status();\n}\n";
+    let root = fixture_repo(source);
+    let first = root.join("first/ASUPERSYNC-CONFORMANCE.md");
+    let second = root.join("second/ASUPERSYNC-CONFORMANCE.md");
+    fs::create_dir_all(first.parent().expect("first parent")).expect("first output directory");
+    fs::create_dir_all(second.parent().expect("second parent")).expect("second output directory");
+    let first_arg = first.to_str().expect("first output path utf8");
+    let second_arg = second.to_str().expect("second output path utf8");
+
+    let first_run = run_cli(&root, &["--write", first_arg]);
+    assert!(first_run.status.success(), "first write failed: {first_run:?}");
+    let second_run = run_cli(&root, &["--write", second_arg]);
+    assert!(second_run.status.success(), "second write failed: {second_run:?}");
+
+    let first_bytes = fs::read(&first).expect("first output must exist");
+    let second_bytes = fs::read(&second).expect("second output must exist");
+    assert!(!first_bytes.is_empty(), "first write produced an empty document");
+    assert!(!second_bytes.is_empty(), "second write produced an empty document");
+    assert_eq!(
+        first_bytes, second_bytes,
+        "consecutive --write runs to distinct paths must be byte-identical"
+    );
+    fs::remove_dir_all(root).expect("fixture cleanup");
+}
