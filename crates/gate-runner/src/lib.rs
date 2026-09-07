@@ -415,7 +415,28 @@ pub fn build_report(
     observations: &BTreeMap<String, Observed>,
     ledger: &BTreeSet<String>,
 ) -> GateReport {
-    let derived: BTreeSet<String> = roster.iter().map(|e| e.crate_name.clone()).collect();
+    build_report_scoped(roster, roster, observations, ledger)
+}
+
+/// As [`build_report`], but drift is computed against a SEPARATE full roster.
+///
+/// # Why this split exists
+///
+/// `--only` narrows what is RUN; it does not narrow the workspace. Comparing the ledger against a
+/// filtered roster reported **87 spurious** `in_ledger_absent_from_workspace` rows — and because
+/// [`GateReport::exit_code`] ranks drift ABOVE gate failures, a scoped run returned
+/// [`EXIT_LEDGER_DRIFT`] regardless of the real verdict, making `--only` useless for exactly the
+/// decision it exists to support.
+///
+/// Found by this crate's own anti-vacuity leg (`--run --only <nonexistent>`), which is the case
+/// that exists to prove an empty scope is an ERROR — and which surfaced a second defect on the way.
+pub fn build_report_scoped(
+    roster: &[RosterEntry],
+    full_roster: &[RosterEntry],
+    observations: &BTreeMap<String, Observed>,
+    ledger: &BTreeSet<String>,
+) -> GateReport {
+    let derived: BTreeSet<String> = full_roster.iter().map(|e| e.crate_name.clone()).collect();
     let mut verdicts = BTreeMap::new();
 
     for entry in roster {

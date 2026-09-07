@@ -487,6 +487,7 @@ fn a_job_whose_run_half_is_undeclared_is_not_subsumed() {
     let no_checks: Vec<gate_runner::CheckInvocation> = Vec::new();
 
     // test-only job: covered by the roster alone.
+
     assert_eq!(
         subsumption_of("scanner", false, &roster, &no_checks),
         Subsumption::Covered { tests: true, checks: false }
@@ -541,4 +542,69 @@ fn subsumption_of(
     checks: &[gate_runner::CheckInvocation],
 ) -> Subsumption {
     gate_runner::subsumption(job_crate, ran_binary, roster, checks)
+}
+
+/// REGRESSION: `--only` narrows what is RUN, never the workspace the ledger is compared against.
+///
+/// # The defect this pins, found by the anti-vacuity leg
+///
+/// `--run --only <one crate>` compared the 88-row ledger against a roster filtered to ONE entry
+/// and reported **87 spurious** `in_ledger_absent_from_workspace` rows. Because
+/// `exit_code()` ranks drift ABOVE gate failures, the scoped run returned `EXIT_LEDGER_DRIFT`
+/// regardless of the actual verdict — making `--only` useless for exactly the decision it exists
+/// to support (deciding R9 without a 286-invocation run).
+///
+/// The anti-vacuity case — `--only` on a name that matches nothing — is what surfaced it. A leg
+/// written to prove an empty scope is an ERROR found a second defect on the way, which is the
+/// argument for anti-vacuity legs generally: they exercise the boundary nothing else visits.
+#[test]
+fn scoping_the_run_does_not_manufacture_ledger_drift() {
+    let md = metadata(&[("alpha", &["a"]), ("beta", &["b"]), ("gamma", &["g"])]);
+    let full = derive_roster(&md, &lib_tests(&[])).expect("parses");
+    let ledger: BTreeSet<String> = ["alpha", "beta", "gamma"]
+        .iter()
+        .map(|s| (*s).to_owned())
+        .collect();
+
+    // Scope to one crate, as `--only alpha` does.
+    let scoped: Vec<_> = full
+        .iter()
+        .filter(|e| e.crate_name == "alpha")
+        .cloned()
+        .collect();
+    let mut obs = BTreeMap::new();
+    obs.insert("alpha".to_owned(), observed_pass(&["a"]));
+
+    let report = gate_runner::build_report_scoped(&scoped, &full, &obs, &ledger);
+    assert!(
+        report.ledger_only.is_empty(),
+        "beta and gamma are in the workspace; scoping the RUN must not report them as missing \
+         from it: {:?}",
+        report.ledger_only
+    );
+    assert_eq!(
+        report.exit_code(),
+        EXIT_OK,
+        "a scoped run of a passing crate must report the crate's verdict, not drift: {}",
+        report.render()
+    );
+    assert_eq!(
+        report.verdicts.len(),
+        1,
+        "and only the scoped crate is executed, so only it gets a verdict"
+    );
+
+    // KNOWN-BAD, so this leg cannot pass by disabling drift detection entirely: a ledger row with
+    // no crate in the FULL roster is still reported.
+    let stale: BTreeSet<String> = ["alpha", "beta", "gamma", "deleted-gate"]
+        .iter()
+        .map(|s| (*s).to_owned())
+        .collect();
+    let report = gate_runner::build_report_scoped(&scoped, &full, &obs, &stale);
+    assert_eq!(report.exit_code(), EXIT_LEDGER_DRIFT);
+    assert!(
+        report.render().contains("crate=deleted-gate"),
+        "real drift must still be named under a scoped run: {}",
+        report.render()
+    );
 }
