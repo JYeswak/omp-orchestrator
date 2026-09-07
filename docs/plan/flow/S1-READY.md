@@ -598,21 +598,20 @@ false green.** `INERT → wire it` is the right remedy, and the inventory says w
 |layer|named per-layer target that exists today|
 |---|---|
 |L0|`crates/installer/tests/l0_install.rs`|
-|L1|**NONE**|
-|L2|**NONE**|
+|L1|`crates/ompo-doctor/tests/l1_doctor.rs`|
+|L2|`crates/ompo-start/tests/l2_ecosystem.rs`|
 |L3|`crates/ompo-start/tests/l3_step_parity.rs`|
 |L4|`crates/ompo-start/tests/l4_pack.rs`, `crates/ompo-start/tests/l4_spawn.rs`|
 |L5|`crates/ompo-start/tests/l5_foundation.rs`|
-
 Plus `crates/s1-coverage/tests/contract.rs`, which is the coverage matrix rather than a layer leg.
-**Four of six layers have a named target; L1 and L2 have none** — they are exactly the planning
-halves `%7` and `%8` hold. And **no layer gate's known-bad leg exists as code at all**: the legs are
-specified in the gate beads' acceptance text (R5 = 7/7 on NAMING), not implemented.
+**All six layers now have a named target; L1 and L2 were the planning halves `%7` and `%8` held.**
+The new targets are real integration targets over `ompo-doctor` and `ompo-start`. **No layer gate's
+known-bad leg exists as code at all**: the legs are specified in the gate beads' acceptance text
+(R5 = 7/7 on NAMING), not implemented.
 
-So attaching the four existing targets to an entry point would produce a gate that fires on **4 of
-6** layers while reading as S1 gate coverage — the anti-vacuity failure this file refuses everywhere
-else. **The honest sequence is: L1 and L2 get named targets, then all six attach at once.**
-
+Attaching the six named targets to an entry point must happen as one six-leg gate, not six separate
+workflow keys. Until that single entry point exists and fires, R9 remains INERT rather than reading
+the target inventory as gate coverage.
 **WHERE TO ATTACH, and it is not a workflow key.** `omp-orchestrator-fsu7` establishes that CI is
 11 gate crates fanned out by YAML with no single entry point, and `%19` measured that **Actions is
 STRICT** — n=60, and 49 duplicate-key runs started **ZERO** jobs. Seven new workflow keys is seven
