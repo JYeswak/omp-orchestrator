@@ -2135,6 +2135,71 @@ New files need **both**, in that order. And export `OMP_MSG_SRC=<msgfile>` when 
 — a refusal that scrolls past while the agent believes the commit landed. **Read the sha back.**
 
 ---
+## What counts as a HUMAN DECISION (binding) — and the escalation queue currently contains none
+
+**Measured 2026-09-07, on Joshua's challenge that agents *"push a lot to human decisions, which
+aren't actually human decisions at all — it's a cop-out."* He is right, and the mechanism is worse
+than a habit: it is AUTOMATED.**
+
+`docs/decisions.jsonl`, 56 rows, resolving the append-log properly (12 rows carry `answers->`
+pointers; counting the `decision` field alone overstates the backlog at 35):
+
+```
+25 genuinely open
+  13  "Bead X cannot be dispatched: its receiver agent is missing. Assign a holder, re-scope it, or park it?"
+   8  "Bead X has exhausted its ack retries and is awaiting a human. Assign a holder, re-scope it, or park it?"
+   4  substantive
+```
+
+**21 of 25 (84%) are auto-generated from two templates, and "assign a holder" is the orchestrator's
+entire job.** A missing receiver means the dispatcher found no pane; the remedy is to dispatch it.
+None of those 21 is a decision — they are orchestrator work, auto-forwarded to a human at machine
+speed. And 26 beads carry the same claim in prose, **10 of them P0**.
+
+**All four substantive rows fail the test too:** `HD-0020` asks whether to lift the build freeze
+**while quoting Joshua saying "lift the freeze"** — a recording gap. `HD-0032` re-asks a decision
+already recorded as `HD-0008` *"push to public origin/main as-is"* — an execution gap, still
+unexecuted at 649 commits. `HD-0030` asks whether to wire a gate with no reachable trigger — the
+third rule of this file already answers that. `HD-0019` is a methodology choice an agent can make
+and record.
+
+### THE TEST
+
+A decision is HUMAN only if it requires one of:
+
+1. **AUTHORITY** — it reverses or sets a policy the human stated, spends money, or accepts risk on
+   his behalf. *"Re-enable a disabled Mac worker"* qualifies; the ruling exists precisely because
+   agents kept routing around it.
+2. **EXCLUSIVE CAPABILITY** — only he can perform it: a TCC grant, physical access, credentials, a
+   purchase, an account he controls.
+3. **TASTE ON A PUBLIC ARTIFACT** — what the product *is*, or what ships under his name.
+
+**Everything else is agent work**, explicitly including: ambiguity; two defensible options; *"this
+needs a ruling"*; a missing assignee; re-scope-or-park; an UNMEASURED surface — **measure it**; an
+unwired gate — **wire it**; a stale document — **update it**.
+
+### THE OPERATIONAL FORM
+
+**An agent may not escalate without first stating the decision it WOULD make and why. If it can
+state that, it must make it.** A valid escalation reads *"I cannot act because <clause 1/2/3>"*, and
+names the clause. *"This needs Joshua"* is not an escalation; it is an unassigned task with a
+person's name on it.
+
+**Corollary — a decision already given must be EXECUTED, not re-asked.** Both recording gaps above
+had the human's own words in the row. Re-asking a settled question is the same failure as escalating
+an unsettled one: it converts his answer into another item in his queue.
+
+**Corollary — one label must not cover two halves.** `lppp` is the specimen: *"no Darwin Rust lane
+is schedulable"* is genuinely clause 1 (re-enabling a worker reverses a stated ruling), while *"four
+tests assert Darwin process-group semantics and run on Linux"* is a test-scoping defect and pure
+agent work. Labelling the whole bead `JOSHUA-DECISION` **at P2** stalled both halves at a priority
+no selector offers. **Split the bead; escalate only the half that needs a clause.**
+
+**NO-CLAIM.** This test makes a cop-out *nameable*, not impossible — an agent can still assert
+clause 1 falsely, and nothing here detects that. The auto-generated templates are the tractable half:
+a dispatcher that cannot place a bead should re-queue it or file it as orchestrator work, and it
+should be unable to emit a row whose only options are the orchestrator's own verbs.
+
 
 ## Honest limits
 
