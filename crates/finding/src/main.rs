@@ -65,11 +65,14 @@ file options (WHAT, WHY, ACCEPTANCE and LABELS are all REQUIRED by the kernel):
   --spool <dir>             default <repo>/.flywheel/findings
   --repo <dir>              default .
   --br <program>            default br
+  --actor <name>            REQUIRED: the audit-trail actor. No default exists -- br falls back
+                            to the ambient git identity and credits a human for agent work.
 
 pending / recover options:
   --spool <dir>
   --repo <dir>              recover only
   --br <program>            recover only
+  --actor <name>            recover only, REQUIRED
 ";
 
 fn main() -> ExitCode {
@@ -110,6 +113,7 @@ struct Config {
     spool: PathBuf,
     repo: PathBuf,
     br: PathBuf,
+    actor: Option<String>,
 }
 
 fn run(op: Op, args: &[String]) -> ExitCode {
@@ -142,7 +146,12 @@ fn run(op: Op, args: &[String]) -> ExitCode {
 }
 
 async fn run_async(cx: &Cx, op: Op, config: Config) -> ExitCode {
-    let publisher = BrPublisher::new(config.br.clone(), config.repo.clone());
+    // REQUIRED, not defaulted. Joshua 2026-09-07: an omitted actor credits a human for agent
+    // work and defeats non-author grading, so the bin refuses rather than guessing.
+    let publisher = match config.actor.as_ref() {
+        Some(actor) => BrPublisher::new(config.br.clone(), config.repo.clone()).with_actor(actor),
+        None => return fail(&FindingError::ActorUnset),
+    };
     match op {
         Op::File => {
             // `Finding::new` is the ONLY constructor and it refuses an incomplete
@@ -235,6 +244,13 @@ fn fail(error: &FindingError) -> ExitCode {
         }
         // A cancelled file() leaves a RECOVERABLE spool row; naming its path is
         // the whole point of the spool guarantee, so it goes to the operator.
+        FindingError::ActorUnset => {
+            eprintln!(
+                "FINDING_ACTOR_UNSET pass --actor <YourAgentName>; br falls back to the ambient \
+                 git identity and would credit a human for agent work"
+            );
+            EXIT_MISSING_FIELD
+        }
         FindingError::Cancelled { spool_path } => {
             eprintln!(
                 "FINDING_CANCELLED recoverable_spool_row={}",
@@ -259,6 +275,7 @@ fn parse(args: &[String]) -> Result<Config, String> {
     let mut spool: Option<PathBuf> = None;
     let mut repo = PathBuf::from(".");
     let mut br = PathBuf::from(BR);
+    let mut actor: Option<String> = None;
 
     let mut index = 0;
     while index < args.len() {
@@ -308,6 +325,7 @@ fn parse(args: &[String]) -> Result<Config, String> {
             "--spool" => spool = Some(PathBuf::from(value("--spool")?)),
             "--repo" => repo = PathBuf::from(value("--repo")?),
             "--br" => br = PathBuf::from(value("--br")?),
+            "--actor" => actor = Some(value("--actor")?),
             other => return Err(format!("unknown flag {other:?}")),
         }
         index += 2;
@@ -327,6 +345,7 @@ fn parse(args: &[String]) -> Result<Config, String> {
         spool,
         repo,
         br,
+        actor,
     })
 }
 

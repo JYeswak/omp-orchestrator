@@ -79,6 +79,17 @@ pub enum FindingError {
     PublishFailed(String),
     /// The region was cancelled. The spool row survives; this is DEFERRED.
     Cancelled { spool_path: PathBuf },
+    /// No actor was set, so `br` would fall back to the ambient git identity.
+    ///
+    /// Joshua, 2026-09-07: *"i dont complete tasks, we shouldn't allow agents to put josh"*. We
+    /// share one checkout and therefore one git identity, so an omitted `--actor` credits a human
+    /// for work an agent did. It is not cosmetic: it defeats non-author grading, because routing a
+    /// grader off `created_by` can hand an agent its own bead while the audit trail reads CLEAN.
+    ///
+    /// This is a REFUSAL rather than a default because there is no correct default. The publisher
+    /// cannot know who is filing, and guessing is fabricated provenance — worse than absent
+    /// provenance.
+    ActorUnset,
 }
 
 impl fmt::Display for FindingError {
@@ -98,6 +109,12 @@ impl fmt::Display for FindingError {
                 f,
                 "FILING_DEFERRED: cancelled after spooling; recoverable at {}",
                 spool_path.display()
+            ),
+            Self::ActorUnset => write!(
+                f,
+                "FINDING_ACTOR_UNSET: no --actor was set, so `br` would fall back to the ambient git \
+                 identity and credit a human for agent work. There is no correct default; pass \
+                 BrPublisher::with_actor(<YourAgentName>)."
             ),
         }
     }
@@ -327,7 +344,14 @@ impl SpooledFinding {
     /// Retire the row only after a CONFIRMED publish. Renaming rather than
     /// deleting keeps the audit trail.
     pub fn mark_published(&self, id: &str) -> Result<(), FindingError> {
-        let done = self.path.with_extension(format!("filed-{}", sanitize(id)));
+        // BOUNDED, and the bound is not cosmetic. An unbounded id in a filename returns
+        // ENAMETOOLONG, which leaves the bead FILED in the tracker and its spool row still
+        // `.pending` — so the next `recover_pending` re-files it and creates a DUPLICATE bead.
+        // Surfaced by adding `--actor` to the publisher argv, which lengthened a test publisher's
+        // echoed id past 255 bytes; a real `br` id is short, so nothing in production had hit it.
+        let done = self
+            .path
+            .with_extension(format!("filed-{}", sanitize(&truncate_for_filename(id))));
         std::fs::rename(&self.path, &done).map_err(|e| FindingError::SpoolUnwritable(e.to_string()))
     }
 }
@@ -404,6 +428,11 @@ pub trait Publisher {
 pub struct BrPublisher {
     program: PathBuf,
     repo: PathBuf,
+    /// `None` REFUSES at publish time rather than defaulting. `new` is left two-argument on
+    /// purpose: making it three-argument would stop `crates/omp-orchestrator` compiling for every
+    /// pane in a shared checkout, and a fleet-wide build break is a worse remedy than a loud
+    /// runtime refusal at the two call sites that have not been updated.
+    actor: Option<String>,
 }
 
 impl BrPublisher {
@@ -411,12 +440,24 @@ impl BrPublisher {
         Self {
             program: program.into(),
             repo: repo.into(),
+            actor: None,
         }
+    }
+
+    /// Set the audit-trail actor. REQUIRED: without it `publish` returns
+    /// [`FindingError::ActorUnset`].
+    #[must_use]
+    pub fn with_actor(mut self, actor: impl Into<String>) -> Self {
+        self.actor = Some(actor.into());
+        self
     }
 }
 
 impl Publisher for BrPublisher {
     async fn publish(&self, cx: &Cx, finding: &Finding) -> Result<String, FindingError> {
+        // BEFORE any argv is built: a misattributed bead cannot be un-filed, and retro-attribution
+        // by guess is fabricated provenance.
+        let actor = self.actor.as_ref().ok_or(FindingError::ActorUnset)?;
         let priority = finding.priority().to_string();
         let labels = finding.labels().join(",");
         let mut command = Command::new(self.program.clone());
@@ -429,6 +470,8 @@ impl Publisher for BrPublisher {
             .arg(priority)
             .args(["--labels"])
             .arg(labels)
+            .args(["--actor"])
+            .arg(actor)
             .args(["--silent", "--no-daemon", "--no-color"])
             .current_dir(self.repo.clone());
         let output = run_output(cx, command)
@@ -460,6 +503,23 @@ fn stable_stem(text: &str) -> String {
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
     format!("{hash:016x}")
+}
+
+/// Longest id fragment allowed in a spool filename. 96 bytes leaves ample room for the
+/// `finding-<16 hex>.filed-` stem inside the common 255-byte limit.
+const MAX_FILENAME_ID: usize = 96;
+
+/// Keep the leading bytes on a char boundary. A real bead id is far shorter than this, so the
+/// bound only engages for a publisher that returns something other than an id.
+fn truncate_for_filename(id: &str) -> String {
+    if id.len() <= MAX_FILENAME_ID {
+        return id.to_owned();
+    }
+    let mut end = MAX_FILENAME_ID;
+    while end > 0 && !id.is_char_boundary(end) {
+        end -= 1;
+    }
+    id[..end].to_owned()
 }
 
 fn sanitize(id: &str) -> String {

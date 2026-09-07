@@ -121,6 +121,7 @@ fn an_incomplete_finding_is_refused_and_the_message_names_the_missing_field() {
         let mut args = vec!["file"];
         args.extend(base);
         args.extend(["--spool", spool.to_str().expect("utf-8 scratch path")]);
+        args.extend(["--actor", "pane20-test"]);
         let output = run(&args);
         assert_eq!(
             output.status.code(),
@@ -176,6 +177,8 @@ fn a_well_formed_finding_files_and_drains_the_pending_sweep() {
         spool_arg,
         "--br",
         "/bin/echo",
+        "--actor",
+        "pane20-test",
     ]);
     assert!(
         output.status.success(),
@@ -278,6 +281,8 @@ fn a_dead_publisher_is_a_distinct_cause_from_an_incomplete_finding() {
         spool.to_str().expect("utf-8"),
         "--br",
         "/usr/bin/true",
+        "--actor",
+        "pane20-test",
     ]);
     assert_eq!(
         output.status.code(),
@@ -314,4 +319,80 @@ fn an_unknown_subcommand_is_a_usage_error_and_not_a_silent_success() {
     assert!(stderr(&output).contains("FINDING_USAGE"));
     let bare = run(&[]);
     assert_eq!(bare.status.code(), Some(EXIT_USAGE), "no args must not exit 0");
+}
+
+/// THE ACTOR IS REQUIRED, and this is the leg that catches an omitted one.
+///
+/// Joshua, 2026-09-07: *"i dont complete tasks, we shouldn't allow agents to put josh"*. `br` falls
+/// back to the ambient git identity, one checkout means one git identity, so an omitted `--actor`
+/// credits a human for agent work. It defeated non-author grading and it defeated ME: all three
+/// beads I filed tonight read `created_by=josh`, because I copied `BrPublisher`'s argv verbatim and
+/// the kernel itself never passed the flag. A refusal is correct rather than a default, because the
+/// publisher cannot know who is filing and a guess is fabricated provenance.
+#[test]
+fn filing_without_an_actor_is_refused_and_the_message_says_why() {
+    let scratch = Scratch::new("actor");
+    let spool = scratch.path("spool");
+    let output = run(&[
+        "file",
+        "--what",
+        "w",
+        "--why",
+        "y",
+        "--acceptance",
+        "a",
+        "--labels",
+        "l",
+        "--spool",
+        spool.to_str().expect("utf-8"),
+        "--br",
+        "/bin/echo",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(EXIT_MISSING_FIELD),
+        "an omitted actor must REFUSE, not default: {}",
+        stderr(&output)
+    );
+    let text = stderr(&output);
+    assert!(
+        text.contains("FINDING_ACTOR_UNSET") && text.contains("ambient"),
+        "the refusal must name the flag AND why a default is wrong, got: {text}"
+    );
+    assert!(
+        !spool.exists(),
+        "nothing may be spooled for a finding that cannot be attributed, found {:?}",
+        entries(&spool)
+    );
+}
+
+/// And the actor must reach `br`'s argv, not merely be accepted. `/bin/echo` returns its argv as
+/// the "bead id", so the flag is observable end to end.
+#[test]
+fn the_actor_reaches_the_br_argv() {
+    let scratch = Scratch::new("actor-argv");
+    let spool = scratch.path("spool");
+    let output = run(&[
+        "file",
+        "--what",
+        "w",
+        "--why",
+        "y",
+        "--acceptance",
+        "a",
+        "--labels",
+        "l",
+        "--spool",
+        spool.to_str().expect("utf-8"),
+        "--br",
+        "/bin/echo",
+        "--actor",
+        "pane20-argv-probe",
+    ]);
+    assert!(output.status.success(), "a complete finding must file: {}", stderr(&output));
+    let id = stdout(&output);
+    assert!(
+        id.contains("--actor") && id.contains("pane20-argv-probe"),
+        "the actor must appear in br's real argv, got: {id}"
+    );
 }
