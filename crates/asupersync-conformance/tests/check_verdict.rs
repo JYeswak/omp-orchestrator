@@ -22,7 +22,9 @@ use asupersync_conformance::{
     check_document, first_differing_line, render_document, scan_source_text, CheckVerdict,
     CrateRow, Report,
 };
+use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
 
 
 fn fixture_report(source: &str) -> Report {
@@ -198,4 +200,82 @@ fn a_verdict_change_is_stale_and_names_the_site() {
         matches!(check_document(&stored, &regenerated), CheckVerdict::Stale { .. }),
         "a changed triage verdict must remain RED rather than disappear with the line number"
     );
+}
+
+fn fixture_repo(source: &str) -> PathBuf {
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!("asupersync-conformance-cli-{nonce}"));
+    fs::create_dir_all(root.join("crates/fixture/src")).expect("fixture source directory");
+    fs::write(
+        root.join("Cargo.toml"),
+        "[workspace]\nmembers = [\"crates/fixture\"]\n",
+    )
+    .expect("fixture workspace manifest");
+    fs::write(
+        root.join("crates/fixture/Cargo.toml"),
+        "[package]\nname = \"fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .expect("fixture package manifest");
+    fs::write(root.join("crates/fixture/src/main.rs"), source).expect("fixture source");
+    root
+}
+
+fn run_cli(root: &std::path::Path, args: &[&str]) -> std::process::Output {
+    let root = root.to_str().expect("fixture root utf8");
+    Command::new(env!("CARGO_BIN_EXE_asupersync-conformance"))
+        .args(["--repo", root])
+        .args(args)
+        .output()
+        .expect("conformance CLI must run")
+}
+
+#[test]
+fn cli_check_ignores_source_line_shift_when_verdict_unchanged() {
+    let source = "fn run() {\n    let _ = Command::new(\"echo\").status();\n}\n";
+    let root = fixture_repo(source);
+    let document = root.join("ASUPERSYNC-CONFORMANCE.md");
+    let document_arg = document.to_str().expect("document path utf8");
+    let generated = run_cli(&root, &["--write", document_arg]);
+    assert!(generated.status.success(), "write failed: {generated:?}");
+
+    fs::write(
+        root.join("crates/fixture/src/main.rs"),
+        format!("\n\n{source}"),
+    )
+    .expect("shift fixture source");
+    let checked = run_cli(&root, &["--check", document_arg]);
+    assert_eq!(
+        checked.status.code(),
+        Some(0),
+        "line-only source movement must remain current: {}",
+        String::from_utf8_lossy(&checked.stdout)
+    );
+    assert!(String::from_utf8_lossy(&checked.stdout).contains("ASUPERSYNC_CONFORMANCE_CURRENT"));
+    fs::remove_dir_all(root).expect("fixture cleanup");
+}
+
+#[test]
+fn cli_check_refuses_a_verdict_change_and_keeps_the_site_in_the_document() {
+    let no_pipes = "fn run() {\n    let _ = Command::new(\"echo\").status();\n}\n";
+    let stdout_piped =
+        "fn run() {\n    let _ = Command::new(\"echo\").stdout(Stdio::piped()).output();\n}\n";
+    let root = fixture_repo(no_pipes);
+    let document = root.join("ASUPERSYNC-CONFORMANCE.md");
+    let document_arg = document.to_str().expect("document path utf8");
+    let generated = run_cli(&root, &["--write", document_arg]);
+    assert!(generated.status.success(), "write failed: {generated:?}");
+    let stored = fs::read_to_string(&document).expect("stored fixture document");
+    assert!(stored.contains("src/main.rs"), "stored document must name the site");
+
+    fs::write(root.join("crates/fixture/src/main.rs"), stdout_piped)
+        .expect("change fixture verdict");
+    let checked = run_cli(&root, &["--check", document_arg]);
+    assert_eq!(checked.status.code(), Some(1), "verdict change must be stale: {checked:?}");
+    let stdout = String::from_utf8_lossy(&checked.stdout);
+    assert!(stdout.contains("ASUPERSYNC_CONFORMANCE_DRIFT reason=STALE"));
+    assert!(stdout.contains("first_differing_line="));
+    fs::remove_dir_all(root).expect("fixture cleanup");
 }
