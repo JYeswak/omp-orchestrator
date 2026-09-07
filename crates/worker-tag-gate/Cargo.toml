@@ -1,0 +1,17 @@
+[package]
+license.workspace = true
+name = "worker-tag-gate"
+version = "0.1.0"
+edition = "2021"
+description = "Refuses an rch workers.toml in which a NON-DARWIN worker carries the os:darwin tag. Joshua 2026-09-07: 'we should never be able to tag any of our boxes darwin, it breaks our systems.' A worker declaring an OS is RESTRICTED to commands targeting that OS, so an os:darwin tag on a Linux box makes it refuse every native build."
+
+[[bin]]
+name = "worker-tag-gate"
+path = "src/main.rs"
+
+[lib]
+name = "worker_tag_gate"
+path = "src/lib.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
