@@ -47,6 +47,14 @@ doc = false
 bench = false
 
 [[bin]]
+name = "ack_stage_assess"
+path = "fuzz_targets/ack_stage_assess.rs"
+test = false
+doc = false
+bench = false
+
+
+[[bin]]
 name = "receiver_receipt_ack_wait"
 path = "fuzz_targets/receiver_receipt_ack_wait.rs"
 test = false
