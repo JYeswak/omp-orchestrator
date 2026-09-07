@@ -1276,7 +1276,8 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
    production data goes unchecked: BUILT ≠ WIRED at test granularity. If a leg must be opt-in,
    something in-tree has to opt in.
 
-7. **A known-bad leg must assert its MESSAGE, not just its exit code.** Measured 2026-09-02.
+7. **A known-bad leg must assert its MESSAGE *AND* its exit code — pinning either one alone is
+   defeasible, and BOTH failure directions are measured.** Measured 2026-09-02.
    `DJ-D-OT-UNGATED` rests on `cargo test -p no-shell-gate --test orchestration_tick` returning
    **101 / "no test target named `orchestration_tick`"**. During an unrelated fleet outage — a
    `Cargo.toml` under the `crates/*` glob with no `src/`, which breaks workspace **loading** so
@@ -1287,6 +1288,31 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
    on any unrelated breakage. Grep the specific string, and print the output so a reader can see
    which cause fired.
 
+   **AND THE CONVERSE IS ALSO MEASURED — 2026-09-07, which is why this rule now says AND.** The
+   sentence above used to read *"assert its MESSAGE, not just its exit code"*, whose natural reading
+   is **message INSTEAD OF code**. `%19`'s M1 mutation on `2sx1` defeats that reading directly:
+
+   ```
+   assertion `left == right` failed: a publisher returning no id must exit 5, not the
+   missing-field code: FINDING_PUBLISH_FAILED detail=br create returned success without an id
+     left: Some(3)   right: Some(5)
+   ```
+
+   **The token stayed correct while the code collapsed.** `FINDING_PUBLISH_FAILED` was still
+   printed, so a leg pinning only the MESSAGE would have stayed **GREEN** under a mutation that
+   merged two distinct causes into one exit code. `%20`'s leg pinned both and caught it.
+
+   So the two directions are symmetric and neither assertion subsumes the other:
+
+   |mutation|code|message|caught by|
+   |---|---|---|---|
+   |unrelated breakage (workspace-load outage)|same `101`|**differs**|message|
+   |two causes collapsed to one code|**differs** `5→3`|same string|code|
+
+   **Pin both, or the leg is defeasible in one direction you have not named.** `%19` found this
+   against a bead it was grading and reported it as a correction to *our rule*, not as a pass —
+   which is the behaviour the grading gate exists to produce.
+
    **This is the sixth instrument defect of that session, and they are one family:** `$?` after a
    pipe returning the pipeline's status (three false findings, all in surfaces being audited FOR
    false success); a `timeout` ceiling below the subject's documented 5-minute deadline read as
@@ -1295,7 +1321,8 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
    a pane-identity probe whose input contained every agent name because the operator had typed them
    all; the flagship pre-commit gate exiting **0** on an empty index while the worktree was dirty at
    30 files. **In every case the instrument produced the reading, not the subject.** A gate's own
-   evidence is subject to this too, which is why the message matters more than the code.
+   evidence is subject to this too — which is why a leg must pin the message and the code together,
+   rather than trusting whichever one it happened to look at first.
 
 8. **A `cargo` figure is NEVER evidence about a commit.** `cargo test` reads the **WORKTREE**; a
    commit sha names a **TREE**. In a shared checkout those diverge constantly, so a grade that
