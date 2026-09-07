@@ -159,15 +159,37 @@ grep -E 'validate_exit|nodes|edges' docs/plan/flow/boxes/S1.toml
 
 ### R7 — S0 is closed
 ```bash
-for t in n7yp zey6 jplf.1.1 jplf.1.2 jplf.7.2; do
-  printf '%s ' "$t"; br --lock-timeout 60000 show "omp-orchestrator-$t" --json \
-    | python3 -c "import json,sys;print(json.load(sys.stdin)[0].get('status'))"
-done
-br --lock-timeout 60000 show omp-orchestrator-s0-asupersync-misapplication-audit-kvsq --json \
-  | python3 -c "import json,sys;print('epic:',json.load(sys.stdin)[0].get('status'))"
+python3 - <<'PY'
+import json
+EPIC='omp-orchestrator-s0-asupersync-misapplication-audit-kvsq'
+rows=[json.loads(l) for l in open('.beads/issues.jsonl') if l.strip().startswith('{')]
+by={r['id']:r for r in rows if r.get('id')}
+kids={d['id'] for d in (by.get(EPIC,{}).get('dependencies') or []) if d.get('id')}
+kids|={r['id'] for r in rows if (r.get('id') or '').startswith('omp-orchestrator-s0-')
+       and r['id']!=EPIC}
+open_=[k for k in kids if by.get(k,{}).get('status')!='closed']
+print('S0_EPIC=%s  CHILDREN=%d  OPEN=%d'%(by.get(EPIC,{}).get('status'),len(kids),len(open_)))
+for k in sorted(open_):
+    print('  ',by[k]['status'],'P%s'%by[k].get('priority'),k.replace('omp-orchestrator-',''))
+PY
 ```
-**Expect all `closed`.** Measured: `n7yp` closed, `zey6` closed, `jplf.1.2` closed, **`jplf.1.1`
-open (P1)**, **`jplf.7.2` open (P0)**, epic `kvsq` **open**. ❌ **FAILING — 3 of 5.**
+**Expect `S0_EPIC=closed` and `OPEN=0`.** Measured 2026-09-07 22:1xZ:
+**epic `kvsq` OPEN, 7 children, 4 OPEN — all P0.** ❌ **FAILING.**
+
+```
+in_progress  P0  s0-audit-checkpoint-density-xv5r
+grading      P0  s0-audit-detached-spawn-w21v
+in_progress  P0  s0-audit-scope-regions-zaxp
+in_progress  P0  s0-unblock-messaging-fabric-feature-jix1
+```
+
+> ⛔ **SCOPE CORRECTED.** This criterion first listed `n7yp zey6 jplf.1.1 jplf.1.2 jplf.7.2` and
+> reported "3 of 5". **`jplf.1.1` and `jplf.7.2` are not S0 children** — `jplf.1.1` sources from
+> `docs/plan/05-actions.md:L253-L262` and `jplf.7.2` from `docs/plan/07-installability.md:L113-L116`,
+> and neither appears in the epic's dependency set. Counting them made S0 look 60% done against a
+> denominator that was partly another stage's work. **The runner now derives the child set from the
+> epic instead of a hand-typed list**, which is the same fix R2 needed: stop hand-listing what a
+> query can enumerate.
 *Rationale:* S0 is the asupersync-correctness floor S1 stands on. Building S1 layers on an unproven
 cancellation contract means every layer inherits an unmeasured defect. `%20` just filed `62lz`
 (unbounded `.output()` on the commit path) — a live S0-class violation found *while* S1 was
@@ -201,14 +223,14 @@ the reading, not the subject, every time.**
 |R4 disagreements resolved, derived count|❌ **FAIL** — 8 open; owner says 6|
 |R5 every gate names a known-bad leg|⚠ **UNMEASURED** — read all six acceptance fields|
 |R6 diagram receipt matches a fresh run|✅ **PASS** — 53/64, exit 0|
-|R7 S0 closed|❌ **FAIL** — 3 of 5; epic open|
+|R7 S0 closed|❌ **FAIL** — epic open; 4 of 7 children open, all P0 (**scope corrected: was mis-counted as 3 of 5**)|
 |R8 instruments not stale/self-referential|❌ **FAIL** — fh RED, 3 worktrees|
 
 **S1 IS NOT READY TO BUILD. 3 of 8 pass, 1 nearly, 1 unmeasured, 3 fail.**
 
 **CORRECTED 2026-09-07 22:0xZ.** As first published this read **2/8 with R2 FAIL**. R2 was a
 **wrong-key artifact** and is retracted at the criterion. R3 fell 92 → 2 under `%20`. The
-remaining real failures are **R7** (S0 open), **R8** (instruments stale), and **R4** (8
+remaining real failures are **R7** (S0 epic open, 4 P0 children), **R8** (instruments stale), and **R4** (8
 disagreements) — plus **R5 UNMEASURED, now the load-bearing unknown: the edges exist, but no
 gate has been shown to FIRE.**
 
