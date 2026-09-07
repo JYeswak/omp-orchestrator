@@ -145,10 +145,80 @@ manifest deps**: `asupersync-conformance/src/lib.rs:11` is the forbidden-crate l
 `crate-soundness-verify/src/main.rs:207` is `text.contains("tokio")`. **Eighth instance of a
 detector matching its own text** in one session — strip comments and check the manifest before
 calling a needle a dependency.
+**⛔ NEVER READ A RIPWIRE VERDICT THROUGH A PIPE.** Measured here 2026-09-07, reproducing
+control-plane pane 0's own bite exactly:
 
-**Warning carried from control-plane pane 0, unverified by me:** ripwire **indexes what it finds**,
-so in a shared checkout it will index agent scratch trees and multiply results. Check the paths in
-the output before trusting any census.
+```
+ripwire crates --quality-delta >out.xml 2>err;  rc=2   stdout 13866 B   <- the real verdict
+ripwire crates --quality-delta 2>&1 | head -5;  rc=0                    <- the PIPE status
+```
+
+PinkGorge recorded rc=0 from the piped form and *"nearly reported it green"* on a gate whose entire
+purpose is a verdict — while `gating="2"` sat in the header the whole time, so **the document
+disagreed with the rc and the rc was believed.** Same class as this repo's `$?`-after-a-pipe rule
+for `check.sh`; ripwire is now its second subject. `ripwire … > out.xml; rc=$?` then filter.
+
+**AND OUR OWN TREE IS RED.** `ripwire crates --quality-delta` at `e2686b0c4+dirty`:
+`regressions="63" preexisting-worse="53" new-symbol="10" gating="41"`, first gating row
+`duplication applescript_string | json_quote was=0 now=135` at `tick-monitor/src/lib.rs:1376`.
+Against a `+dirty` worktree, so these are live agent edits mixed with landed debt — **not yet
+triaged, and NOT a claim that 41 are real defects.** The legend says so itself: *"weigh and fix the
+real ones, do not game the number."*
+
+### ⚠ PATH INFLATION — narrowed to what was actually measured
+
+**Measured by control-plane pane 0 in `uds`, same binary same minute:**
+
+```
+ripwire .      --uses=field  ->  count="18"
+ripwire crates --uses=field  ->  count="6"      exactly 3x
+```
+
+Cause: **two independent scratch CLONES at the repo root** — `.grade-o0o8.17`, `.grade-o0o8.4`,
+12 MB each with their own `.git` **directory** (`git worktree list` shows only main, so these are
+clones, not worktrees). The 12 phantom rows carry paths like
+`.grade-o0o8.17/crates/review-lineage-check/src/lib.rs:76`.
+
+**THE HONEST ROW IS NARROWER THAN "ripwire indexes scratch trees":** an **UNSCOPED root
+(`ripwire .`)** picks up sibling scratch trees and multiplies counts by the number of trees.
+**Scoping the root below them removes it entirely** — pane 0's `ripwire crates --quality-delta` did
+**not** inflate, because `.grade-*/crates/…` lies outside that root.
+
+**Our exposure, measured here and materially different:** 31 nested `.git` dirs exist under
+`./.rch-tmp/` (test fixtures), yet `ripwire .` `--deps` → **447** files vs `ripwire crates` →
+**442** — a **5-file delta, not 3×** — and `--callers=kill_group` returns **1 either way**. The
+per-crate `crates/*/src` scans used for the asupersync census were never exposed. **Scope the root
+and the class does not arise.**
+
+### ✅ `--quality-delta` FAILS CLOSED — proven by pane 0, three states, not assumed
+
+```
+no baseline at all   rc=1   ZERO BYTES stdout; stderr names the missing baseline   REFUSES
+genuine zero         rc=0   2371 B, regressions="0" gating="0" baseline="git-HEAD"  ASSERTS
+planted known-bad    rc=2   regressions="3" preexisting-worse="1" new-symbol="2" gating="1"
+                            (restored byte-identically, sha256 830e5f1784a6c590, post rc=0)
+```
+
+**The distinguishing evidence is the BYTE COUNT and the STDERR, not the number.** A vacuous zero is
+**0 bytes + rc=1**; a real zero is a 2,371-byte document that *positively asserts* `regressions="0"`
+with its own provenance. That is the anti-vacuity property this repo normally has to **add** to a
+gate, and ripwire ships it. **So the answer to "does it need a positive control like `--callers`
+did" is NO** — and note the partition holds: only `preexisting-worse` gates, `new-symbol` does not.
+
+**My `--uses` zero was a different animal:** a legitimate *structural* zero whose emitted legend had
+to be read to interpret. `--quality-delta` cannot produce that ambiguity.
+
+### ⚠ `git -C <scratch-dir>` — the trap fires only when the dir has NO `.git`
+
+Pane 0: *"`git -C .grade-7urn <anything>` silently resolves to the MAIN repo, because git walks UP
+when a directory has no `.git`"* — it returned the main tree's status and was read as 718
+uncommitted insertions at risk inside a scratch tree, where there was nothing.
+
+**Measured here, the trap does NOT fire on our fixtures** — `.rch-tmp/plan-assemble-silent-success-51268-0`
+has a **real** `.git`, so `git -C … rev-parse --show-toplevel` correctly returns the fixture dir, not
+`/Users/josh/Developer/omp-orchestrator`. **So the precondition is a directory WITHOUT `.git`, not
+"a scratch directory".** `git -C <dir> rev-parse --show-toplevel` before believing any git answer
+about one.
 
 Gaps (catalog queries that came up empty, `gaps.json`): gap-01 typed dispatch receipt "delivered vs submitted vs acked" wired into the ACK wait (only a prose library skill exists); gap-02 an S6 grading dispatcher (the catalog's closest is a read-only audit). Outside every catalog this run could enumerate: `substrate-liveness-diagnosis` (ms archive only), `verification-before-completion` / `systematic-debugging` (plugin skills, not in `~/.claude/skills*`).
 
