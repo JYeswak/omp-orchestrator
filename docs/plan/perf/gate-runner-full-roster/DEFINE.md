@@ -124,13 +124,37 @@ levers are scheduling: bounded parallelism over the serial loop at `main.rs:185`
 a shared build. **If H1 REJECTS**, something in our own code — roster derivation, output parsing,
 the manifest walk — is material and a CPU profile is warranted.
 
-**H1 is cheap to settle and nothing else should be measured before it.** Sum of per-crate child
-durations ÷ run total. `≥ 0.95` supports; `≤ 0.80` rejects and names a real code hotspot.
+**H1 is cheap to settle and nothing else should be measured before it.**
+
+**THE DENOMINATOR IS NAMED, AND MY FIRST VERSION OF THIS LINE NAMED THE WRONG ONE.** `%19` flagged
+it: *"if the ratio comes back below 0.95 I would suspect the instrument before the code, since the
+denominator is two `rch` transport timestamps and the numerator will be 88 in-process spans."*
+Measured against the banked log — sync completes at `21:20:23` and the command is wrapped at
+`21:20:28`, against a first-to-last span of `1281 s`, so **~11 s ≈ 0.9 % of the total is `rch`
+transport that no crate spent.**
+
+**0.9 % sounds ignorable and it is not, because it straddles the threshold.** A true ratio of `0.955`
+is pushed to `0.946` by transport alone and would REJECT on an instrument artifact — the exact class
+this repository keeps paying for. So:
+
+```
+numerator     sum of the 88 per-crate wall_ms spans
+denominator   gate-runner's OWN total, emitted by the same instrumentation
+              NOT the rch first-to-last timestamp span, which includes sync and setup
+verdict       >= 0.95 supports;  <= 0.80 rejects and names a real code hotspot
+              0.80 .. 0.95 is INDETERMINATE, not a weak support
+```
 
 **Stated prior, so the measurement can embarrass it:** I expect H1 to SUPPORT at ≥ 0.97, because 88
-serial `cargo test` invocations at a 14.6 s mean is almost entirely compile-and-test work. **Writing
-the prior down is the point** — an unfalsifiable expectation is not a hypothesis, and `%19` filed a
-prediction tonight that its own run refuted, which is the behaviour worth copying.
+serial `cargo test` invocations at a 14.6 s mean is almost entirely compile-and-test work. **`%19`
+independently predicted SUPPORT and by more than 0.97**, on the sharper ground that `run_crate` does
+one `Command::new("cargo")` per crate while everything else in the loop is a `format!`, a `print!`
+and an fsync — **88 fsyncs against 88 `cargo test` invocations.**
+
+**Two agreeing priors are a reason to be more careful, not less.** They make H1 the comfortable
+answer, so the indeterminate band above exists to stop a near-miss being read as confirmation.
+**Writing the prior down is the point** — an unfalsifiable expectation is not a hypothesis, and `%19`
+filed a prediction tonight that its own run refuted, which is the behaviour worth copying.
 
 ## What a completed hand-off looks like
 

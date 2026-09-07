@@ -1968,6 +1968,52 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
    plainly existed, because they sit inside `assert!()` — the macro blind spot. **A structural zero
    from a macro-blind tool is `UNKNOWN`, not absence**; `--grep` is the prescribed follow-up.
 
+8p. **EVERY DISPATCH REQUIRES A CALLBACK, BECAUSE A WORKER HAS NO WAKE TRIGGER.** Joshua's call,
+   2026-09-07, fleet-wide. Landed in the dispatch template and synced to
+   `~/.config/ntm/templates/dispatch.md`, **which had been stale since Jul 26.**
+
+   **This is a defect in the ARCHITECTURE, not in any pane.** A worker's turn ends and it waits for
+   input. It cannot self-dispatch and nothing polls it. So the controller learns a pane is free
+   **only if the pane says so** — and a pane that finishes silently is **indistinguishable from a
+   pane still working.** The fleet then stalls on that ambiguity rather than on the work.
+
+   **Measured that night: three panes went idle holding a FINISHED unit, each costing a round trip to
+   discover.** The instruction previously given to one of them — *"self-dispatch"* — is something the
+   architecture forbids. The callback is the correct fix, and it lives on the worker's side because
+   only the worker knows when its turn is ending.
+
+   **Fire it on all three outcomes:**
+
+   ```
+   DONE          the unit landed. Carries the sha AND its readback.
+   BLOCKED       HIGHEST VALUE and the most skipped. The controller cannot route around a
+                 blocker it does not know exists.
+   NEEDS-RULING  a judgement that is not yours. Name the decision in ONE sentence.
+                 Do not idle waiting on it and do not guess.
+   ```
+
+   **A `BLOCKED` or `NEEDS-RULING` callback is a SUCCESS, not a failure report.** A worker reporting
+   `NO_ELIGIBLE_TARGET` with evidence has **succeeded** — that is a signal about the QUEUE, not about
+   the worker.
+
+   **What every callback carries:**
+
+   - the bead id or row touched
+   - the commit sha **and** its `git show HEAD:<path>` verification. **A bare sha is not proof the
+     content survived; `1 file changed` is the command succeeding, not the content persisting.**
+   - for ANY remote build, **both** proof lines — `Remote command finished: exit=<N>` **and**
+     `test result:`. **A refused `rch` build EXITS 0, so their ABSENCE is the tell.**
+   - `NEXT:` what you would pick up unprompted. **This is what turns two round trips into one.**
+   - `NO-CLAIM:` the precise limit of what you proved.
+
+   **DO NOT BATCH.** Report when the unit lands, not at the end of several — the point is that the
+   controller learns you are free **at the moment you become free.**
+
+   **The dispatcher's half:** a packet that does not state this contract owns the silence it gets.
+   Measured 2026-09-02 as a clean natural experiment — three packets carrying a stated bar produced
+   three conforming contracts; the one packet that omitted it produced the only non-conforming
+   deliverable, despite having the richest substance of the four.
+
 9. **NO ACCEPTANCE IS COMPLETE WITHOUT A WIRING-PROOF LEG. The dispatch is where BUILT ≠ WIRED
    gets in.** Measured 2026-09-06, and it is the orchestrator's own defect: every acceptance
    written that session demanded fires-on-known-bad, a known-good leg, a mutation leg and
