@@ -133,6 +133,18 @@ fn unescape(s: &str) -> String {
 fn figures() -> Vec<Figure> {
     let text = fs::read_to_string(repo_root().join("NUMBERS.toml"))
         .expect("NUMBERS.toml must exist — it is the registry this gate re-runs");
+    figures_from(&text)
+}
+
+/// The reporter, parameterised over its input.
+///
+/// `omp-orchestrator-m0c` item 2b: the acceptance now asserts that *the number of figures the
+/// REPORTER emits equals the number of `[figures.*]` tables declared*. That is unprovable while the
+/// reporter can only read one hardcoded file — a fires-on-known-bad leg needs to hand it a registry
+/// with a known defect, and a mutation leg needs to reach it without editing the real registry that
+/// five agents are writing to. Splitting the read from the parse costs nothing and makes both
+/// possible; `figures()` is unchanged in behaviour.
+fn figures_from(text: &str) -> Vec<Figure> {
     let mut out: Vec<Figure> = Vec::new();
     for line in text.lines() {
         let l = line.trim();
@@ -168,6 +180,179 @@ fn figures() -> Vec<Figure> {
         }
     }
     out
+}
+
+/// The DECLARATION count, derived by a route the reporter does not share.
+///
+/// `omp-orchestrator-m0c` item 2b needs two arms, and an arm that reuses `figures_from` proves
+/// nothing — a reporter compared against itself agrees by construction. So this scanner is
+/// deliberately implemented differently, and the differences are the defect classes it can see
+/// that the reporter cannot:
+///
+/// * it SKIPS triple-quoted regions, so a `[figures.x]` written inside a multiline string is not a
+///   declaration. The reporter's line loop has no string state and counts it.
+/// * it REFUSES a dotted key, so `[figures.a.b]` is a sub-table and not a figure. The reporter
+///   would emit a figure literally named `a.b`.
+/// * it returns the KEY SET, not a count, so two registries with 36 different keys cannot compare
+///   equal — a count equality is satisfied by a reporter that emits the wrong 36.
+fn declared_figure_keys(text: &str) -> Vec<String> {
+    let triple_double = "\"\"\"";
+    let triple_single = "'''";
+    let mut keys = Vec::new();
+    let mut in_multiline = false;
+    for raw in text.lines() {
+        let line = raw.trim();
+        let fences = line.matches(triple_double).count() + line.matches(triple_single).count();
+        if fences % 2 == 1 {
+            in_multiline = !in_multiline;
+            continue;
+        }
+        if in_multiline || line.starts_with('#') {
+            continue;
+        }
+        let Some(inner) = line
+            .strip_prefix("[figures.")
+            .and_then(|rest| rest.strip_suffix(']'))
+        else {
+            continue;
+        };
+        if inner.is_empty() || inner.contains('.') || inner.contains('[') {
+            continue;
+        }
+        keys.push(inner.to_owned());
+    }
+    keys
+}
+
+/// ITEM 2b IN ITS AMENDED FORM: the reporter emits EXACTLY the declared figure set.
+///
+/// The old acceptance said "reports 22 figures". It was already wrong at 36 and would be wrong at
+/// 37, so it could neither be satisfied nor graded — the absolute-count staleness this repository
+/// has now hit five times in one session. An equality catches the defect that actually matters,
+/// **a reporter that silently drops a figure**, which a fixed integer cannot distinguish from
+/// healthy growth.
+///
+/// KEY SETS, NOT COUNTS. `36 == 36` is also satisfied by a reporter emitting the wrong thirty-six.
+///
+/// The existing `>= 5` floor in `every_figure_declares_a_runnable_command_and_an_expectation` is
+/// deliberately NOT removed: it is a cheap non-vacuity guard and it is honest about being a floor.
+/// What it cannot do is see a drop — 5 of 36 satisfies it — and that is proven in-tree by
+/// `a_dropped_figure_is_caught_by_the_equality_and_missed_by_the_floor` rather than argued here.
+#[test]
+fn the_reporter_emits_exactly_the_declared_figure_set() {
+    let text = fs::read_to_string(repo_root().join("NUMBERS.toml")).expect("registry must exist");
+    let declared = declared_figure_keys(&text);
+    let emitted: Vec<String> = figures_from(&text).into_iter().map(|f| f.key).collect();
+
+    // ANTI-VACUITY. An empty registry makes every equality below trivially true, and it reports
+    // identically to a healthy one.
+    assert!(
+        !declared.is_empty(),
+        "the registry declares no [figures.*] tables; an empty scan set is an ERROR, not a pass"
+    );
+
+    let mut unique = declared.clone();
+    unique.sort();
+    unique.dedup();
+    assert_eq!(
+        unique.len(),
+        declared.len(),
+        "a figure key is declared twice; the reporter would keep one and a count would still \
+         agree, which is how a duplicate hides"
+    );
+
+    assert_eq!(
+        emitted.len(),
+        declared.len(),
+        "the reporter emitted {} figures against {} declared tables — a silent drop is exactly \
+         what item 2b's equality exists to catch",
+        emitted.len(),
+        declared.len()
+    );
+
+    let mut sorted_emitted = emitted;
+    sorted_emitted.sort();
+    assert_eq!(
+        sorted_emitted, unique,
+        "the reporter emitted the wrong SET, not merely the wrong count — a count equality would \
+         have passed here"
+    );
+}
+
+/// FIRES-ON-KNOWN-BAD, and it proves the two arms are genuinely independent.
+///
+/// A `[figures.*]` header written inside a multiline string is DATA, not a declaration. The
+/// declaration scanner tracks string state and skips it; the reporter's line loop has none and
+/// counts it. They MUST disagree here — if they agree, the second arm is a copy of the first and
+/// every equality above is decoration.
+#[test]
+fn a_header_inside_a_multiline_string_is_not_a_declaration() {
+    let fixture = concat!(
+        "[figures.real]\n",
+        "command = \"echo 1\"\n",
+        "expect = \"1\"\n",
+        "[figures.with_prose]\n",
+        "command = \"echo 2\"\n",
+        "expect = \"2\"\n",
+        "note = \"\"\"\n",
+        "[figures.not_a_figure]\n",
+        "\"\"\"\n"
+    );
+    let declared = declared_figure_keys(fixture);
+    let emitted: Vec<String> = figures_from(fixture).into_iter().map(|f| f.key).collect();
+    assert_eq!(
+        declared,
+        vec!["real".to_owned(), "with_prose".to_owned()],
+        "the declaration scanner must skip a header inside a multiline string"
+    );
+    assert!(
+        emitted.contains(&"not_a_figure".to_owned()),
+        "the reporter is expected to be fooled here; if it is not, this fixture no longer \
+         demonstrates independence and the leg is vacuous"
+    );
+    assert_ne!(
+        declared.len(),
+        emitted.len(),
+        "the two arms must be able to DISAGREE, or the differential proves nothing"
+    );
+}
+
+/// THE ACCEPTANCE'S OWN RATIONALE, PROVEN IN-TREE RATHER THAN ARGUED.
+///
+/// A dropped figure is the defect item 2b names. This leg shows the equality catching it AND the
+/// `>= 5` floor missing it, on the same input — the concrete form of "a fixed integer cannot
+/// distinguish a drop from healthy growth", and the reason the floor was kept rather than trusted.
+#[test]
+fn a_dropped_figure_is_caught_by_the_equality_and_missed_by_the_floor() {
+    let text = fs::read_to_string(repo_root().join("NUMBERS.toml")).expect("registry must exist");
+    let declared = declared_figure_keys(&text);
+    assert!(
+        declared.len() > 5,
+        "this leg needs a registry larger than the floor to make the point; declared={}",
+        declared.len()
+    );
+
+    // The reporter, crippled the way a real refactor would cripple it: it stops early.
+    let dropped: Vec<String> = figures_from(&text)
+        .into_iter()
+        .map(|f| f.key)
+        .take(5)
+        .collect();
+
+    assert!(
+        dropped.len() >= 5,
+        "the FLOOR still passes on a reporter that dropped {} of {} figures — that is why a floor \
+         is not an equality",
+        declared.len() - dropped.len(),
+        declared.len()
+    );
+    assert_ne!(
+        dropped.len(),
+        declared.len(),
+        "and the EQUALITY sees it: {} emitted against {} declared",
+        dropped.len(),
+        declared.len()
+    );
 }
 
 #[test]
