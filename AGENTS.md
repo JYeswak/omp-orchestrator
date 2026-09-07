@@ -1287,6 +1287,24 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    Use the compiler's dead-code warning, or `ripwire --uses`, which attributes to the enclosing
    symbol.
 
+8q. **AN `OR`ed READBACK NEEDLE IS ONLY AS STRONG AS ITS WEAKEST ALTERNATIVE — it confirms the FILE,
+   not the EDIT.** Measured 2026-09-07 by `%20`, which caught it because two instruments disagreed.
+
+   ```
+   grep -cE 'cannot read STAGED blob|is not UTF-8'  at HEAD  ->  2   reads as "my change landed"
+   staged_blob(&repo_root, staged_file)             at HEAD  ->  0   the change: ABSENT
+   cannot read STAGED blob                          at HEAD  ->  0   mine: absent
+   is not UTF-8                                     at HEAD  ->  2   PRE-EXISTING, another gate
+   ```
+
+   **Rule `8p` requires a `git show HEAD:<path>` readback. This is how that readback lies:** an
+   alternation matches pre-existing text, so the readback passes while the edit is nowhere in the
+   tree. **Use a needle UNIQUE to the change** — a new function name, a new literal — never a
+   disjunction of plausible strings.
+
+   **The tell is two instruments disagreeing**, which is why `%20` caught it and a single grep would
+   not have. **Same family as `8o`:** a text count answering a different question than the one asked.
+
 8p. **EVERY DISPATCH REQUIRES A CALLBACK, BECAUSE A WORKER HAS NO WAKE TRIGGER.** Joshua's call,
    2026-09-07, fleet-wide. Landed in the dispatch template and synced to
    `~/.config/ntm/templates/dispatch.md`, **which had been stale since Jul 26.**
@@ -1620,6 +1638,46 @@ production path. Most theater is (c).
 
 **Search before building.** `mcp__socraticode__codebase_search` by meaning, then `fh suggest`.
 `grep` is the follow-up that jumps to a line, never the opening move.
+
+### USE THE STRUCTURAL TOOLS WHILE BUILDING CRATES, NOT AFTER (binding, Joshua 2026-09-07)
+
+**Every tool below was verified present on this machine before being written here.** A prescribed
+tool that is absent is worse than none — it produces a confident zero.
+
+|question|tool|NOT this|
+|---|---|---|
+|who calls this symbol|`ripwire --callers=SYM` / `--uses=SYM`|`grep -c` — see `8o`|
+|what does this symbol reach|`ripwire --callees=SYM`, `--impact=SYM`|reading imports|
+|is this code dead|`ripwire --dead-code`, or `rustc`'s own warning|absence of grep hits|
+|where is a symbol defined|`ripwire --whereis=SYM`|filename guessing|
+|rewrite a pattern across files|`ast-grep` / `sg`|`sed` on source|
+|workspace topology, crate counts|`cargo metadata --format-version 1` + `jq`|`grep`/`find` — see the crates section|
+|does this markdown anchor resolve|`pandoc -f gfm -t html` and read the real `id=`|deriving a slug|
+|has this been solved already|`fh suggest`, then `fh why <row>`|building it again|
+|what should be worked next|`bv --robot-triage`|`br ready --json` by hand|
+
+**FOUR MEASURED FAILURES FROM ONE SESSION, each of which a tool above would have caught:**
+
+1. **`grep -c ompo` reported the flagship binary wired in 62 places. The true count is 0** — every
+   hit was an `omp-orchestrator` **substring**. Caught only by grepping a binary known to be in the
+   crontab as a control. **`ompo` is invoked by nothing: crontab 0, hooks 0, `.flywheel` 0, other
+   crates 0, `Command::new("ompo")` 0.**
+2. **`grep -c workflow_invokes_lint` returned 3 and the ruling built on it was wrong** — both call
+   sites were **inside the function being deleted**. `rustc`'s dead-code warning settled it (`8o`).
+3. **A shell census reported 1 workspace leaf where `cargo metadata` reports 33**, because
+   `grep -c … || echo 0` emits `"0\n0"`.
+4. **Two markdown anchors were derived wrong** — an underscore dropped and a triple hyphen missed —
+   and would have shipped broken. `pandoc` rendering the real `id=` caught both.
+
+**AND THE TOOLS HAVE THEIR OWN BLIND SPOTS, so pair them:** `ripwire --uses` returned **0** for a
+symbol with two live call sites because they sat inside `assert!()` — the **macro-argument blind
+spot** (`8k`). A structural zero from a macro-blind tool is `UNKNOWN`, not absence; `--grep` is the
+prescribed follow-up. **`ripwire` emits ONE line**, so any line filter deletes the whole payload —
+read raw and pass `--legend=compact`.
+
+**THE RULE, one sentence:** for any question about *who calls*, *what reaches*, *what is dead*, or
+*how many crates*, **a text count is not an answer** — use the structural tool, and when it returns
+zero, prove the instrument can return nonzero before you believe it (`8i`).
 
 **Commits.** Path-scoped with an explicit list — `git commit -- <paths>`. Never `-A`; a shared
 checkout means a bare commit sweeps in another agent's unfinished work. Commit messages carry a
