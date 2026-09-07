@@ -12,6 +12,8 @@ path = "src/main.rs"
 [dependencies]
 regex = "1"
 serde_json = "1"
+blocker-taxonomy = { path = "../blocker-taxonomy" }
+
 
 [dev-dependencies]
 path-literal-guard = { path = "../path-literal-guard" }

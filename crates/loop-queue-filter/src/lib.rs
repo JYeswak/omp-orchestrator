@@ -12,6 +12,9 @@ pub mod selector;
 /// Queue-kernel subcommand. Callers must not spell `br ready`.
 pub const READY_SUBCOMMAND: &str = "ready";
 use regex::Regex;
+use blocker_taxonomy::{report, BeadRecord, ReportError, ALL_KINDS};
+
+
 use serde_json::{Map, Value};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -385,6 +388,101 @@ fn rows_from_input(data: Value) -> Vec<Map<String, Value>> {
         .collect()
 }
 
+fn bead_from_row(row: &Map<String, Value>) -> BeadRecord {
+    let assignee = string_field(row, "assignee");
+    let unresolved_out_blocks = row
+        .get("unresolved_out_blocks")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    let unresolved_out_parent_child = row
+        .get("unresolved_out_parent_child")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    BeadRecord {
+        id: row_id(row),
+        status: string_field(row, "status"),
+        assignee: if assignee.is_empty() {
+            None
+        } else {
+            Some(assignee)
+        },
+        issue_type: string_field(row, "issue_type"),
+        priority: row
+            .get("priority")
+            .and_then(Value::as_i64)
+            .unwrap_or(2) as i32,
+        unresolved_out_blocks,
+        unresolved_out_parent_child,
+        heartbeat_reason: {
+            let r = string_field(row, "heartbeat_reason");
+            if r.is_empty() {
+                None
+            } else {
+                Some(r)
+            }
+        },
+        hold_pane: {
+            let p = string_field(row, "hold_pane");
+            if p.is_empty() {
+                None
+            } else {
+                Some(p)
+            }
+        },
+        pending_dispatch_marker: row
+            .get("pending_dispatch_marker")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        grading_started_unterminal: row
+            .get("grading_started_unterminal")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+    }
+}
+
+/// THE call site. Mutation deletes this name from `run`; the starvation test must go RED.
+fn append_blocker_taxonomy_when_starved(
+    rows: &[Map<String, Value>],
+    stderr: &mut String,
+) -> Result<(), ReportError> {
+    let records: Vec<BeadRecord> = rows.iter().map(bead_from_row).collect();
+    let classified = report(&records)?;
+    let mut counts = vec![0usize; ALL_KINDS.len()];
+    for bead in &classified.beads {
+        for kind in &bead.kinds {
+            if let Some(idx) = ALL_KINDS.iter().position(|k| k == kind) {
+                counts[idx] += 1;
+            }
+        }
+    }
+    let dominant = counts
+        .iter()
+        .enumerate()
+        .filter(|(_, n)| **n > 0)
+        .max_by_key(|(_, n)| **n)
+        .map(|(idx, n)| (ALL_KINDS[idx], *n));
+    if let Some((kind, n)) = dominant {
+        stderr.push_str(&format!(
+            "BLOCKER_KIND\t{kind:?}\t{n}\tdominant while queue empty — FIX THE BLOCKER\n"
+        ));
+    }
+
+    Ok(())
+}
+
+
 /// Execute one selector invocation.  Invalid JSON intentionally returns the Python oracle's
 /// quiet success, while configuration errors are visible on stderr with their original codes.
 pub fn run(input: &str, args: &[String], runtime: &Runtime) -> RunOutput {
@@ -399,11 +497,14 @@ pub fn run(input: &str, args: &[String], runtime: &Runtime) -> RunOutput {
             code: 0,
         };
     };
-    let mut open_rows: Vec<Map<String, Value>> = rows_from_input(data)
-        .into_iter()
+    let all_rows: Vec<Map<String, Value>> = rows_from_input(data);
+    let mut open_rows: Vec<Map<String, Value>> = all_rows
+        .iter()
         .filter(|row| string_field(row, "status") == "open")
         .filter(|row| string_field(row, "issue_type") != "epic")
+        .cloned()
         .collect();
+
 
     if let Some(class) = &config.harvest_class {
         open_rows.retain(|row| harvest_class(row) == *class);
@@ -573,11 +674,23 @@ pub fn run(input: &str, args: &[String], runtime: &Runtime) -> RunOutput {
             stderr.push_str(&format!("  {}  {}\n", row_id(row), title));
         }
     }
+    if fresh.is_empty() {
+        if let Err(err) = append_blocker_taxonomy_when_starved(&all_rows, &mut stderr) {
+            stderr.push_str(&format!("{err:?}\n"));
+            return RunOutput {
+                stdout,
+                stderr,
+                code: 1,
+            };
+        }
+    }
+
     RunOutput {
         stdout,
         stderr,
         code: 0,
     }
+
 }
 
 #[cfg(test)]
