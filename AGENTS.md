@@ -1778,6 +1778,30 @@ New files need **both**, in that order. And export `OMP_MSG_SRC=<msgfile>` when 
 
 ## Grading gate: no bead closes on its own author's word
 
+> ✅ **INDEPENDENCE RULE RELAXED — Joshua, 2026-09-07:** *"we dont have to cross lineage, all work
+> seems to be going to opus right now — any work can grade or produce as long as its not same
+> pane."*
+>
+> **The bar is DIFFERENT PANE, not different model lineage.** `%19` may grade `%20`; `%7` may grade
+> `%8`; any pane may grade any other pane's work. **A pane still may not grade its own.**
+>
+> **Supersedes** the 2026-09-06 ruling that review independence required a different model lineage.
+> That rule was correct for a 4-lineage fleet and became the binding constraint once the fleet
+> converged on two — with 3 Claude and 2 Codex, Codex output was gated on Claude availability and
+> two same-lineage panes could not clear each other's queues. Control-plane measured the same wall
+> at 2+2 and called it *"the NORMAL CASE, not an edge case"*, with a pane idled 47 minutes on it.
+>
+> **What does NOT change:** a bead is still closed by an agent who did not implement it; the grader
+> still **re-runs** rather than reads; the close reason still starts `MUTATION-VERIFIED` / `DONE` /
+> `APPROVED` / `WONTFIX`; and the status is still read back, because a prose reason is refused by
+> policy and the refusal scrolls past in-pane.
+>
+> **And `review-lineage-check`'s `LINEAGES` const still keeps all three** — Grok included. This
+> relaxes who may be ASSIGNED a grade; it does not retroactively invalidate a recorded review.
+> Availability and validity remain different facts, and deleting a lineage to tidy a list would
+> destroy correct history — including the Grok review that caught the malformed ACK token in this
+> file's own dispatch doctrine.
+
 **A bead is closed by an agent who did NOT implement it.** Verification runs
 `/beads-compliance-and-completion-verification` against the bead's own acceptance
 criteria, and the close reason cites what the GRADER re-executed — not what the
