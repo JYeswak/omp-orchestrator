@@ -1,0 +1,28 @@
+[package]
+license.workspace = true
+name = "ompo-doctor"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "S1 system doctor: bounded probes and lifecycle-event writer"
+
+[lints]
+workspace = true
+
+[lib]
+name = "ompo_doctor"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ompo"
+path = "src/main.rs"
+
+[dependencies]
+lifecycle-event = { path = "../lifecycle-event", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+subprocess-contract = { path = "../subprocess-contract" }
+
+
+[dev-dependencies]
+tempfile = "3"
