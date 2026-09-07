@@ -66,18 +66,32 @@ PY
 ```bash
 python3 - <<'PY'
 import json,re
+rows=[json.loads(l) for l in open('.beads/issues.jsonl') if l.strip().startswith('{')]
+by={r['id']:r for r in rows if r.get('id')}
 G={'omp-orchestrator-gate-s1-l%d-%s'%(i,t) for i,t in
    enumerate(['jtgw','fnv8','j5m9','z8hz','hs15','w44h'])}|{'omp-orchestrator-gate-s1-djn8'}
-rows=[json.loads(l) for l in open('.beads/issues.jsonl') if l.strip().startswith('{')]
-lay=[r for r in rows if r.get('id') and re.search(r'-s1-l[0-5]-',r['id'])]
-wired={d.get('depends_on_id') for r in rows for d in (r.get('dependencies') or [])}|\
-      {r['id'] for r in rows for d in (r.get('dependencies') or []) if (d.get('depends_on_id') or '') in G}
-print('S1_LAYER_BEADS_UNWIRED=%d of %d'%(sum(1 for r in lay if r['id'] not in wired), len(lay)))
+# THE WIRING LIVES ON THE GATE'S DEPENDENCY LIST, and the dep dict keys on `id`.
+wired={d.get('id') for g in G for d in (by.get(g,{}).get('dependencies') or []) if d.get('id')}
+lay=[r['id'] for r in rows if r.get('id') and re.search(r'-s1-l[0-5]-',r['id'])]
+print('S1_LAYER_BEADS_UNWIRED=%d of %d'%(sum(1 for i in lay if i not in wired), len(lay)))
 PY
 ```
-**Expect `=0`.** Measured 2026-09-07: **144 of 144 unwired** — exactly **one** bead in the repo
-*Rationale:* `fh N043` — BUILT ≠ WIRED. The authorization is live and nothing is attached to it.
-**This is the single largest gap and it is pure planning work.**
+**Expect `=0`.** Measured 2026-09-07 22:0xZ: **0 of 144 unwired.** ✅ **PASSING.**
+Gate dependency counts: `l0=47 · l1=49 · l2=46 · l3=25 · l4=32 · l5=30 · djn8=27`.
+
+> ⛔ **RETRACTED — this criterion was published FAIL "144 of 144 unwired" and that was WRONG.**
+> The first runner keyed dep dicts on `depends_on_id`/`type`; the real keys are **`id`** and
+> **`dependency_type`**, and the edge lives on the **gate's** list (`gate → blocks → bead`), not on
+> the bead's. Every layer bead was wired the whole time. Confirmed twice independently: `%8`'s
+> `br dep list omp-orchestrator-gate-s1-l2-j5m9` readback showed all five L2 beads already wired
+> `type=blocks` in the correct direction with **no mutation needed**, and `%7` reported `681t`
+> likewise. **A false FAIL in the canonical readiness authority is the inverse of a fooled
+> certificate: it blocks work that is already ready**, and it is the eighth instrument error of this
+> session — the same "prove the path exists before believing its absence" rule that R8 exists to
+> enforce, violated while writing R8.
+
+*Rationale:* `fh N043` — BUILT ≠ WIRED. The gates and their edges exist; **what remains unproven is
+whether each gate FIRES, which is R5, not R2.**
 
 ### R3 — no S1 bead carries a `blocked` status without a real blocker
 ```bash
@@ -88,9 +102,8 @@ n=sum(1 for l in open('.beads/issues.jsonl') if l.strip().startswith('{')
       and r.get('status')=='blocked' and not (r.get('dependencies') or []))
 print('S1_FALSELY_BLOCKED=%d'%n)"
 ```
-**Expect `=0`.** Measured 2026-09-07 21:5xZ: **89**. ❌ **FAILING.**
-**This figure is a DATED SNAPSHOT, not a constant** — it read **92** twenty minutes earlier and fell
-to 89 as `%20` reclaimed beads. **The runner is authoritative; every number in this file is a
+**Expect `=0`.** Measured 2026-09-07 22:0xZ: **2**. ⚠ **NEARLY PASSING.**
+**This figure is a DATED SNAPSHOT, not a constant** — it read **92**, then **89**, then **88**, then **2** inside one hour as `%20` converted them. **The runner is authoritative; every number in this file is a
 timestamped snapshot — re-run before citing.** That discipline is here because this repo has
 already been bitten three times by an assertion pinned to a live count: `docs-staleness`, the
 `crate-atom-gate` ceilings, and `eg0m_jsonl_comment_count_is_seventeen` (asserts 17 against a live
@@ -183,15 +196,21 @@ the reading, not the subject, every time.**
 |criterion|state|
 |---|---|
 |R1 acceptance on every layer bead|✅ **PASS** — 0 of 144 empty|
-|R2 layer beads wired to their gate|❌ **FAIL** — 144 of 144 unwired|
-|R3 no false `blocked`|❌ **FAIL** — 89 (snapshot; was 92)|
+|R2 layer beads wired to their gate|✅ **PASS** — 0 of 144 unwired (**published FAIL was a wrong-key artifact; retracted**)|
+|R3 no false `blocked`|⚠ **NEARLY** — 2 (snapshot; was 92 → 89 → 88 → 2)|
 |R4 disagreements resolved, derived count|❌ **FAIL** — 8 open; owner says 6|
 |R5 every gate names a known-bad leg|⚠ **UNMEASURED** — read all six acceptance fields|
 |R6 diagram receipt matches a fresh run|✅ **PASS** — 53/64, exit 0|
 |R7 S0 closed|❌ **FAIL** — 3 of 5; epic open|
 |R8 instruments not stale/self-referential|❌ **FAIL** — fh RED, 3 worktrees|
 
-**S1 IS NOT READY TO BUILD. 2 of 8 pass, 1 unmeasured, 5 fail.**
+**S1 IS NOT READY TO BUILD. 3 of 8 pass, 1 nearly, 1 unmeasured, 3 fail.**
+
+**CORRECTED 2026-09-07 22:0xZ.** As first published this read **2/8 with R2 FAIL**. R2 was a
+**wrong-key artifact** and is retracted at the criterion. R3 fell 92 → 2 under `%20`. The
+remaining real failures are **R7** (S0 open), **R8** (instruments stale), and **R4** (8
+disagreements) — plus **R5 UNMEASURED, now the load-bearing unknown: the edges exist, but no
+gate has been shown to FIRE.**
 
 **Every failing criterion is planning or hygiene work — none needs new product code.** R2, R3, R4
 are tracker and predicate work. R7 is two beads. R8 is a stale harvest and a worktree prune. That is
