@@ -307,8 +307,9 @@ unwired. Four properties make it hold:
    defeated the mitigation it documented.**
    Splitting the needle protects the checker from its own code; it does nothing about every OTHER
    file's prose, and a peer's comment mentioning a primitive would register as a caller. The
-   general fix is to blank `//` and `/* */` before matching, exactly as `close-evidence-gate` blanks
-   fenced and inline code before harvesting paths. **Over-stripping is the safe direction** — it can
+   general fix is to blank `//` and `/* */` before matching, exactly as **control-plane's**
+   `close-evidence-gate` blanks fenced and inline code before harvesting paths (that crate is NOT in
+   this repo — see the corrected section below). **Over-stripping is the safe direction** — it can
    only report LESS reachability, and the failure this prevents is a false GREEN.
    The lesson is not about comments. **A mutation that fails to bite is the most valuable result
    available**: the suite was green, acceptance 4 was satisfied on paper, and only deleting the
@@ -492,8 +493,22 @@ bead omp-orchestrator-typed-blocker-taxonomy-report-redispatch-zey6   token = ze
 ```
 
 **Measured over `.beads/issues.jsonl` — the JSONL, because `br list --json` omits comments
-entirely** (same defect as `close-evidence-gate`'s source at `source.rs:223`; my first audit
-returned a blind `0`):
+entirely; my first audit returned a blind `0`. CITATION CORRECTED 2026-09-07:** this was originally
+attributed to `close-evidence-gate`'s `source.rs:223`, **a control-plane crate that does not exist
+in this repo**. The defect is real HERE and `%19` proved it locally at
+`crates/pre-delete-citation-check/src/lib.rs:194`, whose own body reads *"The br JSON does not
+inline comments; the caller fetches them separately"* — **and no caller ever did**, both production
+callers passing `Vec::new()` at `:198`. Measured: `br list --json --status closed` → **196 rows, 0
+carrying a `comments` key**; the JSONL → **195 rows, 182 carrying comments**; **14 closed beads
+cite a `bin/` or `.flywheel/` path ONLY in comments, one of them the bead that created the citation
+gate.** Fixed and wired at `crates/no-shell-gate/src/bin/pre-commit-gate.rs:342`
+(`read_closed_beads_from_mirror`), verified by pane 1 at the live hook crate.
+
+**This names a variant not previously recorded here: BUILT ≠ WIRED at FIELD granularity.** Not an
+uncalled crate — an unfilled struct field whose consumer runs on every commit. `ClosedBead::comments`
+existed, `check_deletions` scanned it, and the callers handed it an empty vector, so the gate could
+never catch the incident named in its own header. A crate-level wiring census cannot see this; only
+reading what the caller passes can.
 
 ```
 ACK comments matching the ack-stage prefix : 415
@@ -1876,8 +1891,35 @@ have caught it at the point of the mistake is `omp-orchestrator-pre-delete-citat
 
 ### READ THE CONSUMER BEFORE SCANNING FOR IT — and the harvester manufactures its own failures
 
+> ## ⚠ CORRECTED 2026-09-07 — THIS ENTIRE SECTION IS ABOUT **CONTROL-PLANE**, NOT THIS REPO
+>
+> **`crates/close-evidence-gate` DOES NOT EXIST HERE AND NEVER DID.** Measured:
+> `git ls-tree -r HEAD --name-only | grep -c close-evidence-gate` → **0**;
+> `git log --all --diff-filter=D --name-only -- 'crates/close-evidence-gate/*'` → **0**, so it was
+> never deleted either; `grep -rn CITED_PATH crates/` → **0 occurrences anywhere in this repo**.
+>
+> It lives at `/Users/josh/Developer/control-plane/crates/close-evidence-gate/src/blob.rs`. **The
+> readings below are REAL — of the wrong repository.** They were published here as "this repo's
+> close-evidence extractor" by the same agent that wrote the fifth rule about not confusing the two
+> boundaries. **A BORROWED CLAIM INHERITS ITS AUTHOR'S BURDEN applies to a borrowed REPOSITORY too**,
+> and the tell was in the text the whole time: the tracking bead is `cp-…`, control-plane's prefix.
+>
+> **THE OPERATIONAL HARM IS THE IMPERATIVE, NOT THE CITATIONS.** *"Write every path in a bead
+> comment inside backticks"* was published as governing this repo. **There is no harvester here to
+> evade.** Agents were instructed to obscure paths from a consumer that does not exist — and this
+> repo's real consumer runs the other way: `%19` measured 14 closed beads citing a `bin/` or
+> `.flywheel/` path ONLY in comments, one of them the very bead that created the citation gate, and
+> `crates/no-shell-gate/src/bin/pre-commit-gate.rs:342` now reads those comments through
+> `read_closed_beads_from_mirror`. **Here, a backticked path is a path the gate should still see.**
+>
+> **Retained deliberately, because the mechanism transfers even though the location does not:** read
+> the consumer before scanning for it, strip comments and fenced code before matching, over-strip
+> rather than under-strip, and never size an extractor from an inferred regex. Those are why the
+> section stays instead of being deleted. **Do not act on its paths, counts, or the backtick rule
+> inside this repository.**
+
 The close-evidence extractor was twice sized from an **inferred** regex. Read from source
-(`crates/close-evidence-gate/src/blob.rs:59`) it is:
+(`control-plane:crates/close-evidence-gate/src/blob.rs:59` — **not this repo**) it is:
 
 ```
 const CITED_PATH: &str = r"(?:^|[^\w/.])(bin/[\w.-]+|\.flywheel/[\w./-]+)";
@@ -1891,12 +1933,12 @@ Three facts that only reading it establishes:
    struct has no description field). So a path in a description cannot break the gate — and a scan
    restricted to `close_reason` still **understates** it, because comments count.
 3. **Fenced blocks and inline code are blanked before harvesting** (`blob.rs:95-96`:
-   `fence.replace_all` then `inline_code.replace_all`). So **backticks are the mitigation**: a path
-   written `` `bin/foo.sh` `` is invisible to the harvester; written bare, it is harvested.
+   `fence.replace_all` then `inline_code.replace_all`). So in **control-plane**, backticks are a
+   mitigation: a path written `` `bin/foo.sh` `` is invisible to that harvester.
 
-> **Write every path in a bead comment inside backticks.** Measured: this repo's `WAVE.md` harvests
-> **0** paths under production stripping despite naming nine, because they are all backticked —
-> while a bead body written in plain prose harvested **9**, five of which can never resolve.
+> **THE BACKTICK RULE IS CONTROL-PLANE-ONLY AND IS RETRACTED FOR THIS REPO.** The `WAVE.md`
+> measurement below was taken with control-plane's stripping applied to this repo's file, which is
+> why it reported 0 — it measured a consumer that never reads here.
 
 **And 47 of 71 unresolvable citations are a REGEX ARTIFACT, not broken evidence.** Both alternations
 end in a greedy class containing `.`, so a sentence-ending period is absorbed:
