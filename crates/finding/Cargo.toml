@@ -8,6 +8,14 @@ description = "A named gap is an obligation: Finding cannot be dropped, only fil
 [lints]
 workspace = true
 
+# THE OPERATOR SURFACE (`omp-orchestrator-2sx1`). This crate had 14 manifest
+# callers, 19 src callers, and ZERO bin targets, so the only way to file a
+# finding was the `br create` the kernel exists to replace. The lib stays the
+# single implementation; `src/main.rs` is argv, a runtime, and exit codes.
+[[bin]]
+name = "finding"
+path = "src/main.rs"
+
 [dependencies]
 asupersync = { workspace = true }
 subprocess-contract = { path = "../subprocess-contract" }
