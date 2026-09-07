@@ -1993,9 +1993,47 @@ the binary's strings. **That is the fix to make — not a reason to hand-dispatc
 > kernel.** That is why the kernels stay broken. Routing around a broken kernel is not pragmatism;
 > it is the thing that guarantees the next agent finds it broken too.
 
-The same shape, three ways in one session: prose instead of beads (`crates/finding` exists, zero
-callers); `br create` instead of `Finding` (the standard exists as a type, unenforced); hand-grep
-instead of `tick-monitor` (the census exists, unqueried).
+The same shape, three ways in one session: prose instead of beads; `br create` instead of `Finding`
+(the standard exists as a type, unenforced); hand-grep instead of `tick-monitor` (the census exists,
+unqueried).
+
+#### ⛔ CORRECTED 2026-09-07 — "`crates/finding` exists, ZERO CALLERS" IS FALSE IN BOTH HALVES
+
+**Retracted:** *"`crates/finding` exists, zero callers"* and the row above reading *"which I wrote
+thirty minutes earlier to make an unfiled gap impossible, then bypassed in the next tool call."*
+Caught by `%20` and re-measured:
+
+```
+external manifest callers                    14
+src references (`finding::`)                 17   across 15 crates
+  ack-spine, crate-atom-gate, dispatch-silence-watch, fast-dispatch, finding-dispatch,
+  fleet-truth, loop-coverage, loop-tick, no-shell-gate, omp-idle-dispatch,
+  omp-inventory-map, omp-orchestrator, pre-delete-citation-check, refill-idle-panes,
+  verify-dispatch
+
+[[bin]] in Cargo.toml                         0
+src/bin/ entries                              0
+src/main.rs                                   ABSENT
+`finding` on PATH                             ABSENT
+```
+
+**It is WELL WIRED as a library and has NO OPERATOR SURFACE.** An agent at a shell **cannot invoke
+it**, so `br create` is the only path available — and that **inverts this rule's premise.** The
+failure was never *"the author bypassed his own kernel."* It is **"the kernel has no operator surface
+to bypass."**
+
+**The verdict class was wrong, per gate rule 4a (`fh C69`).** "Zero callers" is an **ABSENT** verdict
+— *build the callers*. The truth is a **MISSING BIN** — *build the operator surface*. Fourteen
+manifest edges were sitting there the whole time the row said none existed.
+
+**And this is the SECOND stale broken-kernel row hit in one session**, after `refill-idle-panes`,
+which this file already records as *"CORRECTED — the kernel was FIXED and the doctrine outlived the
+defect."* This file's own warning applies to itself: **a doctrine row asserting a kernel is broken
+licenses routing around it indefinitely, so it MUST be re-measured before it is obeyed.** Two rows,
+one night, both stale in the direction that excuses a handroll.
+
+**The live gap is a missing `[[bin]]` on `crates/finding`** — that is the fix, and it is S1-authorized
+work, not a doctrine note.
 
 ### The full loop, demonstrated end to end through kernels only
 
