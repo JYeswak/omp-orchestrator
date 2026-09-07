@@ -14,3 +14,8 @@ futures-lite = "2"
 
 [lints.rust]
 unsafe_code = "forbid"
+
+[[test]]
+name = "platform_scope"
+path = "tests/platform_scope.rs"
+harness = false
