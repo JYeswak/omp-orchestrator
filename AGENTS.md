@@ -285,7 +285,9 @@ fact. **The only path that reached a human was a nonzero typed outcome the opera
 
 So the census is the **first** check in `decide()`, ahead of the pane and queue checks, and it is
 unreachable-around: no branch may return `SupervisedWorking` or `AuthorizedIdle` while any gate is
-unwired. Four properties make it hold:
+unwired. These properties make it hold — **and the list is deliberately unnumbered in its
+introduction**, because it read "Four properties" while carrying five for at least a day. A count in
+prose is wrong the moment anyone adds a row, which is the defect the list itself is about:
 
 1. **Absence of a census is itself a refusal.** `None => GateUnwired { CENSUS_NOT_PERFORMED }`.
    Nobody satisfies the supervisor by declining to look.
@@ -314,6 +316,33 @@ unwired. Four properties make it hold:
    The lesson is not about comments. **A mutation that fails to bite is the most valuable result
    available**: the suite was green, acceptance 4 was satisfied on paper, and only deleting the
    subject showed the gate could not see it.
+
+6. **THE TRIGGER FILE MUST PARSE, AND A PARSE FAILURE IS INDISTINGUISHABLE FROM A PASS.** Added
+   2026-09-07 from `omp-orchestrator-m0c`. A census that asks *"is there a trigger"* answers YES for
+   a workflow file that no runner can read. `%19` measured the consequence: a duplicate sibling key
+   starts **zero jobs**, and a workflow that fails to parse **reports nothing at all** — so from
+   outside, *"the gate fired RED"* and *"the workflow never ran"* are the same observation. That is
+   the unread-red failure one step earlier: not a verdict nobody reads, but a verdict that was never
+   produced.
+   **Parse it with a STRICT loader.** `yaml.safe_load` silently ACCEPTS duplicate keys and takes the
+   last, so it cannot be used to prove a duplicate-key claim either way. `m0c`'s own headline —
+   *"`gate.yml` is invalid YAML (duplicate keys at `:46`/`:52`) so all nine CI gate jobs are
+   unreachable"* — came from exactly that loader and is **false**: the file parses clean under a
+   strict duplicate-key loader and `:52` is a well-formed job. The bead was right that an unparseable
+   trigger is fatal and wrong that this one was unparseable.
+   **And the reachability assertion must not pin a SHAPE.** `m0c`'s leg asserted a twelve-job
+   structure, which was correct on 2026-09-06 — a missing job key had collapsed two jobs into one and
+   silently halved coverage — and became a false RED the moment `fsu7` reduced the workflow to one
+   entry point. The invariant was never *"this YAML has a job named X"*; it was *"X's gate is
+   REACHED"*. Under twelve jobs those were one sentence; under one they are not, and only the second
+   survives translation. **The structural half MOVES CRATES rather than disappearing** — reachability
+   went to `gate-runner`'s subsumption census, which covers every invoked crate instead of one, and
+   was proven to bite BEFORE the old leg was deleted: removing `state-wildcard-lint`'s
+   `[package.metadata.gate]` stanza turns 3 of its 4 legs RED with *"its run half is UNREACHED"*.
+   A deleted assertion whose replacement is untested is a coverage hole with a commit message. This
+   is rule 10 aimed at a test instead of a ratchet: **an assertion keyed on an absolute count is red
+   by construction the next time the thing it counts legitimately changes, and a gate that is red by
+   construction gets routed around.**
 
 **NO-CLAIM.** This makes an unwired gate **loud, not impossible**. Static reachability proves a
 trigger exists; it cannot prove the gate *ran* this cycle. `tick-monitor` had callers and starved
