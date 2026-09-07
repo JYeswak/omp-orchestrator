@@ -1558,6 +1558,60 @@ probe can re-derive the wrong thing forever — `%20`'s **"I measured TOKEN PRES
 REQUIREMENT EQUIVALENCE"** is exactly that: an instrument internally consistent and pointed at the
 wrong object. Re-derivation fixes staleness; only a positive control and a known-bad leg fix aim.
 
+### A FIX'S OWN MUTATION OUTPUT IS NOT A DESCRIPTION OF THE PRE-FIX TREE
+
+**Measured 2026-09-07. The first time tonight a wrong line number came from EVIDENCE rather than
+from age — and it is the most dangerous variety, because it arrives with a passing/failing verdict
+attached and therefore looks authoritative.**
+
+A `gate.yml` fix (`99295c8`) shipped a mutation leg that removed the restored job key to prove the
+detector bites. The detector printed
+`DUPLICATE_KEY scope=jobs/head-compiles-as-committed key=runs-on lines=[154, 184]`, and **`184` was
+carried forward as the pre-fix duplicate.** Measured against both real trees:
+
+```
+PRE-FIX  99295c8^   154 runs-on / 155 steps  +  171 runs-on / 172 steps   <- the actual duplicate
+                    strict loader: DUPLICATE KEY 'runs-on' at line 171
+HEAD     99295c8    154 runs-on / 155 steps  +  184 path-literal-guard:   <- a RESTORED JOB KEY
+                                                185 runs-on / 186 steps   <- that job's own body
+```
+
+**`184/185` was never a duplicate pair in any commit.** It is an artifact of the mutation's
+*synthetic intermediate state*: a 13-line explanatory comment had already been inserted, then the
+job key removed. **That state exists in no tree.**
+
+**AND THE DANGEROUS HALF:** in the current tree, line **184 is `path-literal-guard:`** — the
+restored key. A reader who took "184/185" as "the duplicate to remove" would **delete the restored
+job and re-create the original defect**, and the same three detectors would go red exactly as
+before — **so it would read as a regression rather than a re-introduction.**
+
+> **Cite a mutation for DIRECTION — it went red, it came back green, the restore was
+> byte-identical. NEVER for LOCATION.** A mutation deliberately perturbs the file, so its line
+> numbers are the least citable in the whole record.
+
+**What to cite instead, in the form that re-derives:**
+
+```
+pre-fix tree     99295c8^
+strict verdict   DUPLICATE KEY 'runs-on' at line 171     (the loader quotes its OWN line)
+cause            no `path-literal-guard:` job key existed; two jobs had collapsed into one
+remedy           RESTORE one job key — never delete a block; both blocks are real jobs
+fix              99295c8
+```
+
+**The cause sentence re-derives from any tree; the line numbers do not.** Let the strict loader's own
+message carry the line, exactly as `13fc201` did for `CONTRACT.md`.
+
+**AND THE REMEDY WAS INVERTED BY THE SAME ERROR.** Both beads describing this defect proposed
+deciding "which block is canonical" and deleting the other. **Neither block was redundant** — the
+root cause was a *missing* job key, so the correct fix is a one-line RESTORE. **A deletion would
+have removed a real CI job and gone green**, which is the failure the beads existed to prevent.
+
+**Third line-pinned citation to be wrong in one session** — `AGENTS.md`'s `:46/:52`, `m0c`'s title,
+and this one. The first two went stale; this one was **born wrong from a correct measurement of the
+wrong tree state.**
+
+
 ### FIFTH SUBSTRATE — A FIGURE WHOSE **SCOPE** MOVES WHILE COMMAND AND TREE HOLD STILL
 
 **Measured 2026-09-07 by `%19`, filed as `omp-orchestrator-mmt4` (P0). The first four substrates are
