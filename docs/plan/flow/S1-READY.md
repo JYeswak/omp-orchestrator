@@ -162,12 +162,62 @@ for f in glob.glob('docs/plan/flow/waves/*/*.toml'):
         if not v.strip() or v.strip().startswith(('remaining','ACK_PARTIAL')): u+=1
 print('S1_UNRESOLVED_ALL_WAVES=%d'%u)"
 ```
-**Expect `=0` and the owner field's number to equal it.** Measured: **8 across all waves** (6 in
-wave-2, +2 in wave-1); owner field reads `6` because its predicate is wave-2-scoped. ❌ **FAILING.**
-*Rationale:* `%7` landed the derived predicate at `7b4ac63`; it must widen to all waves. **A
-hardcoded `0` is not a measurement** — S2–S9 owner files each carry a literal `open_disagreements=0`
-with no predicate at all (`S2:120 · S3:171 · S4:178 · S5a:135 · S5b:140 · S6a:137 · S6b:132 ·
-S6c:137 · S7:165 · S8:175 · S9:132`).
+**Expect `=0` and the owner field's number to equal it.** Measured 2026-09-07 by pane 1, per-wave
+with the row identities, not just a total:
+
+```
+box=S1 rows per wave    wave-1: 12    wave-2: 63
+box=S1 BLANK per wave   wave-1:  2    wave-2:  6      TOTAL 8
+
+wave-1   SilverWolf-S1.toml           wave1_sections
+wave-1   SilverWolf-S1.toml           sota_cite
+wave-2   pane4-jt1i-citations.toml    cite.beads-rust-cli-paths-unprefixed
+wave-2   pane4-jt1i-citations.toml    cite.bare-src-main-without-crate
+wave-2   pane4-jt1i-citations.toml    cite.mirror-truncated-ellipsis
+wave-2   pane4-jt1i-citations.toml    cite.dropped-leading-j-on-jplf-family
+wave-2   pane4-jt1i-citations.toml    figure.unlabelled-in-owner-files
+wave-2   pane4-qibn-hook-count.toml   box.hook.certified_false_vs_unattempted
+```
+
+❌ **FAILING at 8.** The owner field reads `6` because its predicate is wave-2-scoped while this
+criterion's own runner globs `waves/*/*.toml` — **all waves**. That mismatch is the entire 8-vs-6
+gap and it was the open scope question.
+
+### RULING — wave-1 counts. Pane 1, 2026-09-07.
+
+Three reasons, in order of weight:
+
+1. **A blank resolution is unresolved regardless of which round produced it.** If wave-2 had
+   superseded a wave-1 row, that row would carry a resolution *saying so* — every other resolved row
+   does, including the fifteen wave-2 rows that read "stays open" or "escalated". **Blank means
+   nobody answered it**, which is exactly what this criterion measures.
+2. **Excluding wave-1 creates an escape hatch.** A finding could be evaded by having been filed in
+   an earlier review round, which inverts the purpose of cross-review.
+3. **Wave-1 is not a stale dumping ground — it is proportionally MORE resolved.** 10 of 12 answered
+   (83%) against wave-2's 57 of 63 (90%). Comparable diligence, so there is no empirical basis for
+   treating one round as authoritative and the other as noise.
+
+**Action:** widen the owner field's predicate to all waves so it reads `8`, then work the rows. `%7`
+landed the derived predicate at `7b4ac63`; it needs the glob widened, not a new mechanism.
+**A hardcoded `0` is not a measurement** — S2–S9 owner files each carry a literal
+`open_disagreements=0` with no predicate at all (`S2:120 · S3:171 · S4:178 · S5a:135 · S5b:140 ·
+S6a:137 · S6b:132 · S6c:137 · S7:165 · S8:175 · S9:132`), which is the never-fires-so-always-green
+class sitting under this gate.
+
+### THE 8 ROWS ARE 3 WORK ITEMS, AND 6 OF THEM ARE ORPHANED
+
+**5 of the 8 come from a single file** and are one coherent batch: `pane4-jt1i-citations.toml`'s four
+`cite.*` rows plus `figure.unlabelled-in-owner-files` are all citation-hygiene findings. Treating
+them as five independent blockers overstates the remaining work by ~2.5×.
+
+**But `pane4-*` files belong to pane 4, which left the fleet** (credits exhausted; roster since
+changed). So **6 of the 8 rows — the 5 `jt1i` plus the 1 `qibn` — have no live owner**, and the
+reviewer who filed them cannot answer them. Per this repo's rule that availability and validity are
+different facts, those findings **remain valid and must be adopted by a live pane, not voided**.
+Only SilverWolf's 2 have a reviewer who could in principle still respond.
+
+**Real shape of R4:** one batch of 5 citation rows needing an adopter, 1 hook-count row needing an
+adopter, and 2 SilverWolf rows. Three items, not eight.
 
 ### R5 — every S1 layer gate NAMES its known-bad leg
 
@@ -326,7 +376,7 @@ the reading, not the subject, every time.**
 |R1 acceptance on every layer bead|✅ **PASS** — 0 of 144 empty|
 |R2 layer beads wired to their gate|⚠ **WEAK PASS** — 0 of 138; predicate does not require gate linkage (`2fxd` P0). Published FAIL **and** its first correction were both wrong|
 |R3 no false `blocked`|⚠ **NEARLY** — 2 (snapshot; was 92 → 89 → 88 → 2)|
-|R4 disagreements resolved, derived count|❌ **FAIL** — 8 open; owner says 6|
+|R4 disagreements resolved, derived count|❌ **FAIL** — **8** (wave-1: 2, wave-2: 6). Scope **RULED**: wave-1 counts. Owner field says `6` → widen its glob. **6 of 8 are orphaned** (`pane4-*`, reviewer gone) and are 3 work items, not 8|
 |R5 gates NAME a known-bad leg|✅ **PASS — 7 of 7** (strict: `SUBJECT:` stripped, numbered item required). `8hq3` P0 filed by `%20`|
 |R9 has any gate ever FIRED|⚠ **UNMEASURED → INERT.** 0 in CI, 0 in cron, all 7 `status=open`. **Wire it, do not write it**|
 |R6 diagram receipt matches a fresh run|✅ **PASS** — 53/64, exit 0|
@@ -365,7 +415,7 @@ the answer to *"plan S1 fully before executing"*: the plan is not short of ideas
 |---|---|---|
 |**R5**|**Wire the seven gates into `gate.yml`.** Their known-bad legs already exist at 3,625 chars each. INERT, not unwritten. Separately: give `djn8` a message assertion|CI lane|
 |**R7**|Close S0's four P0 children, then the epic. **Read `kvsq`'s own 3,060-char acceptance first** — it carries four closing conditions and a known-bad leg, and `deps=0`, so no dependency edge encodes them|the four holders|
-|**R4**|8 rows: 6 in wave-2 `pane1-S1.toml` (five explicitly "stays open"/"escalated"), 2 in `wave-1/SilverWolf-S1.toml` with blank resolutions. **Decide first whether wave-1 is in R4's scope** — the criterion carries no wave qualifier and the owner field is wave-2-scoped, which is the entire 8-vs-6 gap|pane 1 + Joshua|
+|**R4**|**Scope decided: wave-1 counts** (blank ≠ superseded; excluding it is an escape hatch; wave-1 is proportionally *more* resolved, 83% vs 90%). Widen the owner field's glob to all waves → `8`. Then adopt the **6 orphaned `pane4-*` rows** — 5 are one citation-hygiene batch, 1 is hook-count — and answer SilverWolf's 2|pane 1 ruled; a live pane adopts|
 |**R8**|`fh` harvest has **no cron/launchd entry** — running it is a read-only scan of 216 frozen mirror repos, safe. Prune 2 worktrees **only after** confirming no live process. 106 dirty across 5 writers — attribute, don't judge|infra|
 |**R2**|`2fxd`: make the predicate require gate linkage rather than any inbound edge|pane 20|
 |**R3**|Add the third state. `AwaitingHumanDecision` has no representation, so the last 2 rows keep R3 permanently nonzero and **flipping them would falsify rows to zero a number**|pane 1|
