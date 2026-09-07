@@ -105,15 +105,80 @@ fn the_installed_hook_is_not_older_than_the_source_it_enforces() {
 
     // An absent hook is a finding, not a pass. A repo whose gates are documented
     // and uninstalled is the shape this project keeps refusing.
+    // THREE STATES, NOT TWO -- re-keyed 2026-09-07 (`hzm43`).
+    //
+    // This used to early-return and PASS whenever the hook was unreadable, saying so with an
+    // `eprintln!`. libtest CAPTURES a passing test's output, so the reason was invisible inside a
+    // green run -- and `.git/` is excluded from the rch overlay (`~/.config/rch/config.toml:29`),
+    // so EVERY lane run of this suite reported green about a hook it could not see. That is how a
+    // five-day-stale hook survived: the oracle whose whole job is catching staleness was
+    // structurally blind in the only environment we run Rust in. The comment above it read "say so
+    // out loud instead of passing silently" -- and the mechanism it described could not do that.
+    //
+    // The precondition is now keyed on what actually distinguishes the two absences:
+    //
+    //   `.git` present, no hook -> a real checkout enforcing NOTHING. FAIL.
+    //   no `.git` at all        -> a synced worker copy that cannot answer. UNMEASURED.
+    //   hook present            -> compare mtimes, as before.
+    //
+    // Absence alone still never satisfies this leg: it takes absence PLUS proof that the
+    // environment cannot answer.
+    // KEYED ON WHETHER THE REPOSITORY HAS HISTORY -- and the lane refuted three simpler keys
+    // first, one run each, 2026-09-07:
+    //
+    //   `.git` exists          worker=YES   not a discriminator
+    //   `.git/hooks` exists    worker=YES   not a discriminator -- a DIRECTORY SKELETON survives
+    //   `.git/HEAD` is_file    worker=YES   not a discriminator -- HEAD exists with no history
+    //
+    // The rch worker presents a COMPLETE, EMPTY repository: `.git/` is excluded from the sync,
+    // and something on the worker `git init`s the tree, so every existence check inside `.git`
+    // answers YES while the hook is absent. Each of those keys reproduced the `mirror_oracle`
+    // defect retracted earlier the same day -- a precondition on a PROXY whose value varies by
+    // environment.
+    //
+    // History is the property that a `git init` cannot fake and a real checkout cannot lack:
+    // a tree that can run a PRE-COMMIT hook is a tree with commits in it. An empty init has no
+    // refs and no packed-refs.
+    let head_file = root.join(".git/HEAD");
+    let hooks_dir = root.join(".git/hooks");
+    let has_history = root.join(".git/packed-refs").is_file()
+        || std::fs::read_dir(root.join(".git/refs/heads"))
+            .map(|mut entries| entries.next().is_some())
+            .unwrap_or(false);
     let Ok(hook_meta) = std::fs::metadata(&hook) else {
-        // In a fresh clone or a CI checkout there are no hooks at all, and failing
-        // there would make this gate un-runnable rather than informative. Say so
-        // out loud instead of passing silently.
-        eprintln!(
-            "SKIP the_installed_hook_is_not_older_than_the_source_it_enforces: \
-             no hook at {} — nothing is enforcing pre-commit here, which is worth \
-             knowing but is not a staleness finding",
+        assert!(
+            !has_history,
+            "THIS IS A COMMITTING CHECKOUT AND NO PRE-COMMIT HOOK IS INSTALLED.\n\
+             \n\
+             HEAD file: {}\n\
+             hooks dir: {}\n\
+             absent:    {}\n\
+             \n\
+             A repository whose gates are documented and uninstalled is the shape this project\n\
+             keeps refusing, and it is not a skip: every pre-commit gate in this tree is inert\n\
+             here. Measured 2026-09-07 -- an installed hook five days older than the gate it was\n\
+             meant to carry let a `100644 => 100755` exec bit land 2h16m AFTER that gate shipped.\n\
+             \n\
+             Repair:\n\
+               cargo build --release --bin pre-commit-gate\n\
+               cp <target>/release/pre-commit-gate .git/hooks/pre-commit",
+            head_file.display(),
+            hooks_dir.display(),
             hook.display()
+        );
+        // No history: an empty `git init` skeleton, which is what an rch worker presents. It
+        // cannot host a commit, so it cannot answer this question. Every discriminator is
+        // printed -- including the three the lane refuted -- so a reader of a green run can see
+        // WHICH state this was rather than inferring a pass from silence.
+        eprintln!(
+            "UNMEASURED the_installed_hook_is_not_older_than_the_source_it_enforces: \
+             reason=no_history root={} git_exists={} hooks_dir_exists={} head_is_file={} \
+             has_history=false -- an empty repository cannot commit, so the installed hook is \
+             unobservable here. This is NOT a pass for the subject.",
+            root.display(),
+            root.join(".git").exists(),
+            hooks_dir.exists(),
+            head_file.is_file()
         );
         return;
     };
@@ -152,6 +217,20 @@ const LANDED_HOOK_LITERALS: &[(&str, &str)] = &[
     ("NOTHING_TO_CHECK", "POSITIVE CONTROL: present in every hook since 93537c8"),
     ("GATE_SECTION_HELD", "c10a96a fix(pre-commit): serialize the gate section"),
     ("STAGED_BUILD_GATE_REFUSED", "4e1df0b feat(gates): wire staged-build-gate"),
+    // ADDED 2026-09-07 (`hzm43`), and it would have caught the stale hook five days earlier.
+    //
+    // `1a7082d` landed `validate_staged_rust_modes` at 14:09; the installed hook was from
+    // 2026-09-02 19:29, so the gate was never in the binary, and `a602074` re-landed a
+    // `100644 => 100755` exec bit at 16:25 unrefused. The mtime leg could not see it -- 48
+    // sources were newer, and that leg had already been laundered by a `cp` revert.
+    //
+    // The literal is the REFUSAL'S OWN PREFIX, not the function name, because `strings` finds
+    // string LITERALS and not logic: on a hook that demonstrably carries this gate,
+    // `validate_staged_rust_modes` returns 0 (symbol stripped in release) and `100755` returns 0
+    // (a numeric comparison never appears as text). Keying on the emitted message is the only
+    // form of this probe that can work -- a format string can only be compiled in if the emit
+    // site exists. It still does NOT prove the branch is reachable; the live probe does that.
+    ("mode-gate: REFUSED", "1a7082d feat(no-shell-gate): refuse executable Rust source modes"),
 ];
 
 /// Staleness the fleet has ACCEPTED, each row naming the bead that removes it.
