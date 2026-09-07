@@ -1683,10 +1683,10 @@ THE NAMED MECHANISMS THAT PREVENT RECURRENCE (in order of leverage):
        "dispatch the idle panes, OR name why the queue is not eligible" — the naming has run all
        night and must be allowed to end in a dispatch for the work that does not need a green
        tree. High-stakes dispatch keeps the full gate.
-  M2 — GRADING AS A DISPATCH LANE: still unbuilt as auto-routing. The IMPL→GRADING *decision*
-       is `dispatch-saga grading-transition` (decide-only; `--apply` writes status). Routing
-       idle graders onto beads already in `grading` is not that mechanism. Tonight four grades
-       were MANUAL orchestrator routings; the handoffs created waits that looked like idleness.
+  M2 — GRADING AS A DISPATCH LANE: `crates/m2-grading-lane` consumes `dispatch_saga::m2::route`.
+       Lineage is `--profile` from argv, not `AGENT_NAME`. Decide-only by default; `--apply`
+       would send. It does not close. IMPL→GRADING *status* remains `dispatch-saga grading-transition`.
+
 
   M3 — CROSS-SESSION ROUTING: panes idled in a session whose repo was admission-blocked while
        real work existed in the other repo (grades, backfills, doc currency). The conductor must

@@ -1,0 +1,22 @@
+[package]
+name = "m2-grading-lane"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Consumes dispatch-saga M2 routing: idle cross-lineage graders onto grading beads."
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "m2-grading-lane"
+path = "src/main.rs"
+
+[lib]
+name = "m2_grading_lane"
+path = "src/lib.rs"
+
+[dependencies]
+dispatch-saga = { path = "../dispatch-saga" }
+
+[lints]
+workspace = true

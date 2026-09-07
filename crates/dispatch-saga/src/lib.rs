@@ -21,6 +21,8 @@ use pane_dispatch_fence::PaneIncarnation;
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 pub mod grading;
+pub mod m2;
+
 
 
 /// Supervisor send path is still unwired. IMPL→GRADING is `grading`.
