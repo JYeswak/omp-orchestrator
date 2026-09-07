@@ -1658,6 +1658,75 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
    *what*. Any decision keyed on `git status` alone — collision, ownership, staleness — is keyed on a
    coarser signal than the decision needs. Read the diff, not the flag.
 
+8i. **RUN A NEGATIVE CONTROL ON YOUR INSTRUMENT BEFORE YOU BELIEVE ITS ANSWER.** Joshua,
+   2026-09-07, fleet-wide. **This is the general form of rules 8b through 8h and it subsumes them.**
+
+   Point the instrument at a **guaranteed-absent** subject — `/nonexistent/path/xyz`, a symbol that
+   cannot exist, an empty scan set — and read what it returns. **If "absent" and
+   "present-and-fine" produce the same output, the instrument cannot answer your question and its
+   verdict on the real subject means nothing.**
+
+   ```bash
+   <tool> --root /nonexistent/path/xyz ; echo "rc=$?"      # what does ABSENT look like?
+   <tool> --root . ; echo "rc=$?"                          # now the real one
+   ```
+
+   **If those two are indistinguishable, STOP and fix the instrument before reporting anything.**
+
+   **WHY THIS AND NOT MERELY "NAME YOUR SCOPE".** Joshua's four cases:
+
+   ```
+   closure-check given an unreachable root  ->  worst=Pass exit=0, "every interpretable stage is
+                                                complete"        VACUOUS, not failing
+   registry-check under a skip_except stub  ->  PASS rows that were literally `true`
+   a grep scoped to docs/evidence           ->  zero, read as "nothing untracked"
+   a grep of config.toml for worker tags    ->  zero, read as "no darwin tag" (it is in workers.toml)
+   ```
+
+   **Naming the scope catches the last two. Only a negative control catches the first two, because
+   there the instrument RAN and returned a confident green.** This is the L4 "gates proven to trip"
+   discipline aimed at **any diagnostic binary**, not only at gates. **An empty scan set is an
+   ERROR, never a pass. A verdict about a subject the tool could not read is not a verdict.**
+
+   **IT INVALIDATED A DOCUMENT WITHIN AN HOUR OF ITS BEING COMMITTED.**
+   `docs/plan/DISPATCH-CHAIN-FORKS.md` reported six lifecycle stages `unknown`:
+
+   ```
+   calls(zzz_cannot_exist_fn, also_absent_fn)   ->  NO VERDICT EMITTED
+   calls(run_cycle, reap_finished_panes)        ->  NO VERDICT EMITTED   <- IDENTICAL
+   ```
+
+   Six rows carried zero information. Cause: `reap_finished_panes` and `ack_stage` are **crate**
+   names, not functions, and two further probed symbols — `prepare_bead`, `DispatchPermit` —
+   **return `grep -c` 0 anywhere in the repo. They were invented.** Re-probed with real symbols and
+   both controls, **nine of eleven stages came back `confirmed`** — the chain was more wired than
+   the document claimed, and the entire error was in the instrument.
+
+   **A SECOND INSTRUMENT IN THE SAME TABLE WAS EQUALLY BLIND, and its control is the reusable
+   one:**
+
+   ```
+   receiver_receipt::  (qualified, known-used)   7
+   zzz_absent_crate::  (guaranteed absent)       0
+   ```
+
+   **A crate used UNQUALIFIED reads identically to an absent one under a `crate::` pattern.**
+   `dispatch_claim_fence` and `dispatch_silence_watch` appear only as `use` lines and were nearly
+   reported as BUILT ≠ WIRED, while the names they import are called bare — `authorize`,
+   `clears_pending_dispatch_intent` ×4, `SilenceVerdict` ×8.
+
+   **AND IT IS EXPRESSIBLE AS A TEST, WHICH IS STRICTLY BETTER THAN A HABIT.** `%20`, proving
+   `m0c`'s amended `2b`, built a differential whose second arm is deliberately **not** the reporter
+   — *"a reporter compared against itself agrees by construction"* — plus a leg asserting the two
+   arms **MUST DISAGREE** on a known-bad input. If they ever agree, arm two has become a copy of arm
+   one **and every equality in the suite is decoration.** A differential whose arms share an
+   implementation is an instrument with no negative control; that leg *is* the control, in-tree and
+   permanent.
+
+   **The same rule applies to a tool's own output fields.** `rch queue` rendering `project` as `?`
+   is **UNREADABLE, not absent-of-rows** — `%20`'s distinction, and it would have justified the
+   opposite dispatch decision. A field you cannot read is not a field whose value is empty.
+
 9. **NO ACCEPTANCE IS COMPLETE WITHOUT A WIRING-PROOF LEG. The dispatch is where BUILT ≠ WIRED
    gets in.** Measured 2026-09-06, and it is the orchestrator's own defect: every acceptance
    written that session demanded fires-on-known-bad, a known-good leg, a mutation leg and

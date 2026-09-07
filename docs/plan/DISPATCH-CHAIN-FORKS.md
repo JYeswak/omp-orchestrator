@@ -24,36 +24,67 @@ ran the loop by hand tonight for hours and found a beat the code does not implem
 
 ---
 
-## Stage coverage — measured, not asserted
+## Stage coverage — CORRECTED 2026-09-07 after a negative control invalidated the first table
 
-`run_cycle` at `crates/omp-orchestrator/src/main.rs:5007`, **933 lines**. Verified with
-`ripwire --verify='calls(run_cycle,SYM)'` (three-valued: confirmed / refuted / unknown) plus
-comment-stripped source census.
+**THE FIRST VERSION OF THIS TABLE WAS BUILT ON AN UNCONTROLLED INSTRUMENT AND SIX OF ITS ROWS WERE
+MEANINGLESS.** Joshua's standing rule — *run a negative control on your instrument before you believe
+its answer* — was aimed at this document within an hour of it landing, and it fired:
 
-|stage|mechanism|consumed by `main.rs`|`calls(run_cycle,·)`|
-|---|---|---|---|
-|observe|`parse_observation`, `tick-monitor`|yes|**confirmed**|
-|select|`loop_queue_filter::select_dispatch_order_with_pagerank`|yes|**confirmed**|
-|admission|`admission-reason`|9 fork variants|(method, unresolved)|
-|phase gate|`apply_phase_gate`|2 sites|**confirmed**|
-|claim|`dispatch_claim_fence::`|1 site|unknown|
-|dispatch|`reap`/send path|72 `reap` mentions|unknown|
-|ACK|`ack_stage::` 2, `ack_spine::` 7|yes|unknown|
-|receipt|`receiver_receipt::`|7 sites|unknown|
-|silence|`dispatch_silence_watch::`|1 site|unknown|
-|grade|`gate_peer_grading`|yes|**confirmed**|
-|reap|`crates/reap-finished-panes` **PRESENT**, `OMP_REAP_SWEEP` 4 reads|yes|unknown|
-|finding|`file_supervisor_finding`|yes|**confirmed**|
+```
+calls(zzz_cannot_exist_fn, also_absent_fn)   ->  NO VERDICT EMITTED
+calls(run_cycle, reap_finished_panes)        ->  NO VERDICT EMITTED   <- IDENTICAL
+calls(run_cycle, ack_stage)                  ->  NO VERDICT EMITTED   <- IDENTICAL
+```
 
-**`unknown` here means the probe did not resolve, NOT that the call is absent.** A denied or
-unresolved probe is UNKNOWN, never a negative result — the rule this repo paid for twice. Six stages
-need a resolved verdict before any restart claim.
+**A guaranteed-absent symbol and six of my "unknown" stages produced the same output.** So those rows
+carried zero information. **The cause was mine: I probed `reap_finished_panes`, `ack_stage`,
+`prepare_bead` and `DispatchPermit` — the first two are CRATE names, not functions, and the last two
+do not exist anywhere (`grep -c` → 0 each). I invented them.**
+
+**A second instrument in the same table was equally blind.** Its own negative control:
+
+```
+receiver_receipt::  (qualified, known-used)   7
+zzz_absent_crate::  (guaranteed absent)       0
+```
+
+**So a crate used UNQUALIFIED reads identically to an absent one under a `crate::` pattern.**
+`dispatch_claim_fence` and `dispatch_silence_watch` appear only as `use` lines — which I nearly
+reported as BUILT ≠ WIRED — while the names they import are called bare:
+`clears_pending_dispatch_intent` **4×**, `SilenceVerdict` **8×**, plus `authorize` and
+`authorize_with_identities`.
+
+### The corrected table — controls run in the same session, both directions
+
+```
+NEGATIVE  calls(run_cycle, zzz_cannot_exist)  ->  (empty)      the absent signature
+POSITIVE  calls(run_cycle, apply_phase_gate)  ->  confirmed    the instrument discriminates
+```
+
+|stage|real symbol|verdict|
+|---|---|---|
+|observe|`parse_observation`|**confirmed**|
+|select|`select_dispatch_order_with_pagerank`|**confirmed**|
+|claim|`authorize` (from `dispatch_claim_fence`)|**confirmed**|
+|phase gate|`apply_phase_gate`|**confirmed**|
+|ACK|`step` (from `ack_spine::ledger`)|**confirmed**|
+|silence|`clears_pending_dispatch_intent`|**confirmed**|
+|grade|`gate_peer_grading`|**confirmed**|
+|reap|`finished_pane_reaper_args`|**confirmed**|
+|finding|`file_supervisor_finding`|**confirmed**|
+|receipt|`classify_ack_wait`|**UNMEASURED** — absent signature; called qualified as `receiver_receipt::classify_ack_wait` at `:3020`, so the probe and the call disagree on the name|
+|dispatch (send)|no resolved symbol yet|**UNMEASURED**|
+
+**Nine of eleven stages confirmed, two unmeasured — not "six unknown".** The chain is **more wired
+than the first version of this document claimed**, and the error was entirely in the instrument.
+
+**`UNMEASURED` here means the probe returned the absent signature.** It is not a verdict about the
+code and must not be read as one — which is exactly the distinction the negative control exists to
+make visible.
 
 **CORRECTION to `AGENTS.md`'s crate table:** it lists `reap-finished-panes` as **CONTROL-PLANE**.
-It is **PRESENT here**. The table's `CONTROL-PLANE` column is stale for at least this row, and the
-row was cited in an earlier assessment that the reap stage did not exist locally.
-
----
+It is **PRESENT here**, and I cited that stale row when I first assessed that the reap stage did not
+exist locally.
 
 ## Every fork: 235 variants across 8 crates
 
