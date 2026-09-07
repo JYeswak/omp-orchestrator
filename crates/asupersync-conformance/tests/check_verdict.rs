@@ -18,7 +18,33 @@
 //! five-agent shared checkout the verdict depends on a peer's uncommitted work and is false in
 //! EITHER direction.
 
-use asupersync_conformance::{check_document, first_differing_line, CheckVerdict};
+use asupersync_conformance::{
+    check_document, first_differing_line, render_document, scan_source_text, CheckVerdict,
+    CrateRow, Report,
+};
+use std::path::PathBuf;
+
+
+fn fixture_report(source: &str) -> Report {
+    let spawn_sites =
+        scan_source_text("fixture", "src/main.rs", source).expect("fixture source scans");
+    Report {
+        root: PathBuf::from("fixture"),
+        crates: vec![CrateRow {
+            name: "fixture".to_owned(),
+            forbid_unsafe: false,
+            dep_asupersync: false,
+            dep_subprocess_contract: false,
+            async_fns: 0,
+            cx_first: 0,
+            checkpoints: 0,
+            raw_command: spawn_sites.len(),
+            forbidden_deps: Vec::new(),
+        }],
+        spawn_sites,
+        undrained_violations: 0,
+    }
+}
 
 /// KNOWN-GOOD, mandatory. A document that matches is CURRENT and must not be reported as drift.
 ///
@@ -122,4 +148,54 @@ fn the_line_helper_is_total() {
     assert_eq!(first_differing_line("", ""), 0);
     assert_eq!(first_differing_line("", "x\n"), 0, "no pair to compare");
     assert_eq!(first_differing_line("x\n", "y\n"), 1);
+}
+
+
+/// A source-line insertion must not change a report when the scanned verdict is unchanged.
+#[test]
+fn a_line_shift_without_a_verdict_change_is_current() {
+    let before = "fn run() {\n    let _ = Command::new(\"echo\").status();\n}\n";
+    let after = "\n\nfn run() {\n    let _ = Command::new(\"echo\").status();\n}\n";
+    let stored = render_document(
+        &fixture_report(before),
+        "asupersync-conformance fixture",
+        "fixture",
+    );
+    let regenerated = render_document(
+        &fixture_report(after),
+        "asupersync-conformance fixture",
+        "fixture",
+    );
+
+    assert_eq!(
+        check_document(&stored, &regenerated),
+        CheckVerdict::Current,
+        "moving a source site without changing its verdict must not stale the document"
+    );
+}
+
+/// A real triage change must remain visible as drift after source coordinates are removed.
+#[test]
+fn a_verdict_change_is_stale_and_names_the_site() {
+    let no_pipes = "fn run() {\n    let _ = Command::new(\"echo\").status();\n}\n";
+    let stdout_piped = "fn run() {\n    let _ = Command::new(\"echo\").stdout(Stdio::piped()).output();\n}\n";
+    let stored = render_document(
+        &fixture_report(no_pipes),
+        "asupersync-conformance fixture",
+        "fixture",
+    );
+    let regenerated = render_document(
+        &fixture_report(stdout_piped),
+        "asupersync-conformance fixture",
+        "fixture",
+    );
+
+    assert!(stored.contains("src/main.rs"));
+    assert!(regenerated.contains("src/main.rs"));
+    assert!(stored.contains("DEADLOCK_SAFE_NO_PIPES"));
+    assert!(regenerated.contains("DEADLOCK_SAFE_STDOUT_ONLY"));
+    assert!(
+        matches!(check_document(&stored, &regenerated), CheckVerdict::Stale { .. }),
+        "a changed triage verdict must remain RED rather than disappear with the line number"
+    );
 }

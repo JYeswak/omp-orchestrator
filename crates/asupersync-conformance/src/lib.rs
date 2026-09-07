@@ -74,7 +74,6 @@ impl TriageKind {
 pub struct SpawnSite {
     pub crate_name: String,
     pub file: String,
-    pub line: usize,
     pub triage: TriageKind,
     pub reason: String,
 }
@@ -328,7 +327,6 @@ pub fn scan_source_text_with_needle(
         sites.push(SpawnSite {
             crate_name: crate_name.to_owned(),
             file: file.to_owned(),
-            line: line_index + 1,
             triage,
             reason,
         });
@@ -542,13 +540,12 @@ pub fn render_document(report: &Report, command: &str, measured_revision: &str) 
     ));
     output.push_str("## Raw Command triage\n\n");
     output.push_str("Every discovered site is classified; no `UNTRIAGED` row is emitted. The lexical lint is also run over the same source set.\n\n");
-    output.push_str("| crate | file | line | triage | reason |\n|---|---|---:|---|---|\n");
+    output.push_str("| crate | file | triage | reason |\n|---|---|---|---|\n");
     for site in &report.spawn_sites {
         output.push_str(&format!(
-            "| {} | {} | {} | {} | {} |\n",
+            "| {} | {} | {} | {} |\n",
             site.crate_name,
             site.file,
-            site.line,
             site.triage.label(),
             site.reason
         ));
