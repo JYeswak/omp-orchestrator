@@ -8,6 +8,74 @@ This file says how you work here, what every crate is for, and what "done" means
 
 ---
 
+## STANDING AUTHORIZATION — read this before you conclude you may not build
+
+**Current state, 2026-09-07. S1 IS AUTHORIZED TO BUILD. S2–S9 ARE FROZEN.**
+
+|scope|state|
+|---|---|
+|**S1** — any bead wired to an S1 layer gate or `gate-s1-djn8`|**AUTHORIZED**: crates, feature beads, tests, installs. Each lands behind its own gate with a known-bad leg.|
+|**S2–S9** — crates, beads, installs, canonical mapping changes|**FROZEN.** `gate-s1-djn8` blocks `gate-s2-ehx8`; S2 cannot start until S1 closes.|
+|`approval` fields|Still an HD row id. Building does not grant approval — it removes the reason approval could never be earned.|
+
+**The seven gate ids, COPY-PASTE THESE, never retype them:**
+
+```
+omp-orchestrator-gate-s1-l0-jtgw
+omp-orchestrator-gate-s1-l1-fnv8
+omp-orchestrator-gate-s1-l2-j5m9
+omp-orchestrator-gate-s1-l3-z8hz
+omp-orchestrator-gate-s1-l4-hs15
+omp-orchestrator-gate-s1-l5-w44h
+omp-orchestrator-gate-s1-djn8
+```
+
+### Why this block exists, measured 2026-09-07
+
+**The orchestrator told the fleet for an entire session that the freeze blocked all code, and routed
+three panes to audits while 131 authorized beads sat claimable.** Two mechanisms produced that, and
+neither was a reading failure:
+
+**1. A SUPERSEDING AMENDMENT MUST LAND AT THE ORIGINAL TEXT, NOT DOWNSTREAM OF IT.**
+`docs/plan/flow/CONTRACT.md:59` says **BUILD FREEZE** in bold. The amendment lifting it for S1 is at
+`:101`. A reader who stops at the word FREEZE never reaches the word AUTHORIZED — and stopping there
+is the correct reading of a document that says STOP. The freeze line now must carry its own
+superseded-by pointer; an amendment 42 lines later is invisible by construction.
+
+**2. A HOMOGLYPH IN AN AUTHORIZATION ID EMPTIES THE AUTHORIZED SET.** `CONTRACT.md:105` writes the
+gates as `gate-s1-10-jtgw … -15-w44h`. The real ids are `gate-s1-l0-…` — **`l0` (ell-zero)
+transcribed as `10` (one-zero).** Searching the tracker for the contract's spelling returned
+`ABSENT` for all six, so the authorization looked like it pointed at nothing. A token search
+(`jtgw` → 4 hits) proved they exist. **This is why the block above is copy-paste and the ids are
+never retyped in prose.**
+
+**And the verdict that error produced was the wrong KIND of verdict** — see the C69 rule in the gate
+section: *"no such mechanism exists"* and *"the mechanism exists and was not exercised"* have
+different remedies, and emitting the first when the second is true sends the reader to build
+something that already exists.
+
+### The state the authorization was in when found
+
+```
+S1 layer beads                                   144   (L0 47 · L1 6 · L2 6 · L3 24 · L4 31 · L5 30)
+  with empty acceptance                            0
+  marked `blocked` with ZERO dependency edges     92   <- stale string, not a graph fact
+  immediately claimable                          131
+beads wired to ANY of the seven gates              1   <- and it is gate-s2-ehx8, the BLOCKED edge
+```
+
+**The authorization was live and nothing was attached to it** — `N043` (BUILT ≠ WIRED) aimed at a
+permission instead of a lane. The 92 false blocks were proven by attempting the transition, not by
+reading the field: `br update omp-orchestrator-s1-l0-b01-3vro --status in_progress` returned
+`blocked → in_progress` with no refusal. **`blocked` with an empty graph is `TrackerBlocked`, never
+`DependencyBlocked`.**
+
+**Standing authorization, adopted from `frankensqlite/AGENTS.md:50` via `fh`:** swarm lanes work
+autonomously inside the authorized scope. Claim the next ready bead and proceed; never end a turn
+waiting for permission that this table already grants. **If you believe you are blocked from
+building, re-read this block first and attempt the transition second — the field may be lying.**
+
+
 ## The one rule
 
 **No `.sh`. No `.py`.** Not in `bin/`, not in `scripts/`, not "just for testing." A Rust gate walks
@@ -1152,6 +1220,34 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
    byte-identically. If it stays green, the leg is not attributable and proves nothing.
 4. **Anti-vacuity.** An empty scan set is an **ERROR**, never a pass. A deliverable never checked
    reports identically to one that passed.
+4a. **A SURVEY THAT FINDS NOTHING MUST SAY WHICH NOTHING** (`fh C69`, doctrine, inserted `3e09f5a`,
+   amended `1bf70ce`; harvest was STALE — `digest_missing_today` — when cited on 2026-09-07):
+
+   > *"no such mechanism exists here"* and *"the mechanism exists and was not exercised"* are **two
+   > verdicts with two different remedies**, and a survey that emits one colour for both sends the
+   > reader to the wrong repair.
+
+   Three outcomes, three colours, never merged:
+
+   ```
+   ABSENT       the thing does not exist        -> build it
+   INERT        it exists, nothing invokes it   -> WIRE it   (N043; do NOT rebuild)
+   UNRUN        it exists and is wired, not run -> run it    (never a pass; see 4 above)
+   ```
+
+   **Measured 2026-09-07, on this repo's own authorization.** I searched the tracker for the six S1
+   layer gates using `CONTRACT.md`'s spelling, got `ABSENT` six times, and reported the
+   authorization as pointing at nothing. They existed under `gate-s1-l0-…`; the contract had
+   transcribed `l0` as `10`. The correct verdict was **INERT** — all six present, all `open`, and
+   **zero beads wired to any of them.** ABSENT says *write the gates*; INERT says *attach the work*.
+   I nearly dispatched the first.
+
+   **The discriminator is a positive control on the matcher itself.** `gate-s1-djn8` and
+   `gate-s2-ehx8` both returned PRESENT from the same query, so the query worked and the six really
+   were missing *under that spelling* — which is exactly how a structurally-guaranteed zero passes
+   as a measurement. A token-level search (`jtgw` → 4 hits) is what separated ABSENT from INERT.
+   **Before reporting absence, search for a FRAGMENT of the name, not the whole name.**
+
 5. **State the claim as a floor-raise.** Say what the gate mechanically enforces *and* what still
    passes. A residual "guarantees / proves / makes impossible" in a gate header is itself a defect —
    the overclaim is worse than the gap, because a reader stops looking.

@@ -58,6 +58,21 @@ no_claim = "what this box does not establish"
 
 **BUILD FREEZE.** No new crate, no new feature bead, no install, until every box has `agreement.status = "converged"` AND Joshua's approval row in `docs/decisions.jsonl`. The four in-flight beads (`d3gm`, `6nhj`, `ywd5`, `gfb`) go to GRADING or release; nothing new is claimed.
 
+> ⛔ **SUPERSEDED IN PART — DO NOT STOP READING HERE.** The freeze above is **LIFTED FOR S1** by the
+> Wave-2 amendment at **`:101` of this file** ("S1 IS AUTHORIZED TO BUILD. S2–S9 REMAIN FROZEN").
+> S2–S9 remain frozen exactly as written. **Read `:61-111` before concluding you may not build.**
+>
+> This pointer exists because the amendment 42 lines below was invisible for a full session:
+> the orchestrator read "BUILD FREEZE" in bold, stopped — which is the correct reading of a
+> document that says STOP — told the fleet all code was blocked, and routed three panes to audits
+> while **131 authorized S1 beads sat claimable**. A superseding amendment placed downstream of the
+> text it supersedes cannot be found by a reader who obeys that text.
+>
+> **Note the gate ids at `:105` are MISTYPED:** they read `gate-s1-10-jtgw … -15-w44h`; the real ids
+> are `gate-s1-l0-jtgw … gate-s1-l5-w44h` — `l0` (ell-zero) written as `10` (one-zero). Searching
+> for the contract's spelling returns ABSENT for all six and makes the authorized set look empty.
+> Copy the ids from the STANDING AUTHORIZATION block at the top of `AGENTS.md`, never from prose.
+
 ## Wave 2 amendment — THE FREEZE'S EXIT CONDITION IS UNREACHABLE (measured 2026-09-03)
 
 **The freeze above cannot be satisfied, and the measurement proves it rather than arguing it.**
