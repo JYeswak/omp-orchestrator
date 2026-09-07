@@ -51,32 +51,59 @@ line works as written. `omp plugin` exists (3 mentions in `omp --help`).
 
 ## UNAVAILABLE HERE — do not adopt these
 
-### 1. The session-jsonl liveness oracle DOES NOT TRACK OUR PANES
+### 1. ⛔ RETRACTED 2026-09-07 — THE LIVENESS ORACLE IS AVAILABLE. I MEASURED THE WRONG PATH WITH A BROKEN COMMAND.
 
-loktar00's headline liveness recommendation:
+**This section previously read "The session-jsonl liveness oracle DOES NOT TRACK OUR PANES" and
+claimed the oracle would report the entire fleet dead. Both halves were wrong, and the error was
+instrumental, not observational.** Caught by `%20`, which named the right path from its own
+measurement.
 
-> *"The log's `Working...` heartbeat is NOT a health signal; the session jsonl's growth is."*
-> Path: `~/.omp/agent/sessions/--<cwd-with-dashes>--/`
-
-**Measured: every one of the 6 session dirs is stale, and 0 files anywhere under `~/.omp` were
-modified in the last 10 minutes — while five panes were actively working.**
+**Error 1 — the command could not work.** I used GNU syntax on BSD `find`:
 
 ```
--tmp                                   newest  10945 min ago
---private-tmp-claude-501--…-scratchpad--        21840 min ago
--Developer-control-plane                        13071 min ago
--                                       (0 files)
--Developer-omp-orchestrator                      8326 min ago
--Developer-zeststream-cast                      11631 min ago
+$ find /tmp -name freshness-control-probe -newermt '-10 minutes'
+find: I cannot figure out how to interpret ‘-10 minutes’ as a date or time
 ```
 
-**It would report the entire fleet DEAD.** Our panes run OMP *interactively under tmux*, not via
-`omp -p` headless — and only the headless path appears to write session jsonl. Also note the
-directory encoding differs from the documented form: ours is `-Developer-omp-orchestrator`, not
-`--Users-josh-Developer-omp-orchestrator--`. **Measure the encoding; do not assume it.**
+I piped stderr away, so **a failing command reported `0` and I read it as "no fresh files."** A
+positive control — `touch` a file, then look for it — returns `0` under that form and `1` under the
+BSD idiom `-mmin -10`. Same family as every other instrument defect in `AGENTS.md`: the instrument
+produced the reading, not the subject.
 
-**Consequence:** the oracle is real and would be strictly better than parsing paint — but it is
-available only if we adopt `omp -p`, which is the fifth rule's actual remedy.
+**Error 2 — the wrong path.** loktar00 documents `~/.omp/agent/sessions/`. Our sessions are
+**profile-scoped**: `~/.omp/profiles/<profile>/agent/sessions/`, 11 profiles.
+
+**Re-measured with `-mmin`:**
+
+```
+                                    <10min   <60min   total
+~/.omp/profiles/codex/…/sessions      14      101     21829
+~/.omp/profiles/claude/…/sessions      5       10      2162
+~/.omp/profiles/glm/…/sessions         0        0       159
+~/.omp/profiles/grok/…/sessions        0        0       778
+~/.omp/agent/sessions                  0        0         9   <- the path I measured. genuinely dead.
+```
+
+**19 files written in 10 minutes across the two live profiles.** `%20` measured 26 in its own window
+and reports it is **pane-attributable** — claude 3/3 and codex 2/2 live, grok 0 live against 1 dead
+pane.
+
+**So both facts are true and I published only half.** The documented path IS dead here (9 files,
+nothing inside 24h). The profile-scoped path is alive. The oracle is usable **today**, without
+adopting `omp -p`, which retracts this section's original conclusion.
+
+**Why it matters:** `AGENTS.md`'s fifth rule complains that we classify pane state with a
+braille-spinner regex over `capture-pane` — *"a spinner is a rendering, and we are parsing paint."*
+A profile-scoped session-jsonl mtime is a **non-rendering** liveness signal available now. It does
+not replace the footer parse (a jsonl says a process is writing, not what state it is in), but it is
+an independent second channel — and independence is exactly what `riqd`'s leg 3 found missing, where
+both existing channels derive from the same capture and therefore agree when wrong.
+
+**NO-CLAIM.** Freshness is bursty: the same command returned 0 fresh for every profile minutes
+earlier, when panes had just delivered reports and were idle. So an mtime gap is not evidence of a
+dead pane on any single sample — it needs a window, exactly as loktar00's own table says (*"session
+jsonl stale >20 min"* is their threshold, not >0). And the directory encoding still differs from the
+documented form; measure it, never assume it.
 
 ### 2. CAO's marker table is 0-of-4 applicable
 
@@ -98,6 +125,47 @@ CAO's fixtures (OMP 17.2.10) versus our live panes:
 Braille spinner + elapsed timer + model + cwd + branch with dirty counts (`*90` modified,
 `?28` untracked). CAO says it explicitly: *"recapture terminal fixtures before changing markers for
 a new OMP release."* **They were right and their own table is the casualty.**
+
+### 3. ⛔ RETRACTED — "LOCAL `rch exec` CPU TIME FROZEN" IS NOT A WEDGE SIGNATURE
+
+**Retracting a claim I made in commit `b0ef77c`'s message and used to justify cancelling a build.**
+I reported three local `rch exec` PIDs with *"elapsed climbing 10:28 → 10:36, CPU time FROZEN at
+00:00 across three samples"* and called that the wedge signature, citing the `zeststream-rch` skill.
+
+**`%20` sampled the same way and refuted it:**
+
+```
+sample 1  pid=37956  elapsed=01:50  cputime=00:00
+sample 2  pid=37956  elapsed=02:02  cputime=00:00
+sample 3  pid=8388   elapsed=00:07  cputime=00:00   <- brand new
+```
+
+`cputime=00:00` appeared on **a healthy `registry-check` build**, on the wedged franken-harvest
+darwin build, and on PIDs that appeared and vanished between samples. **`rch exec` is a thin local
+orchestrator — the CPU burns on the remote box, so `00:00` is its NORMAL state.** A wedge detector
+built on local CPU time would report **every healthy build as wedged**.
+
+**What survives:** *elapsed climbing while REMOTE progress stalls* — i.e. `progress_age_secs` from
+`rch queue --json`. The CPU half is uninformative on this side of the SSH boundary. The skill's own
+table gives the local-CPU form as the discriminator; on this measurement that half does not hold,
+and the skill should be corrected upstream.
+
+**The cancellation was still correct** — but on the `progress_age=233s` evidence, not on the CPU
+reading I cited beside it. Two pieces of evidence in one paragraph, only one load-bearing, and I did
+not separate them.
+
+### 4. `rch queue` CANNOT TELL YOU WHETHER YOU ARE YOUR OWN BLOCKER
+
+Measured by `%20`. At the moment `contabo-3` refused it with *"'contabo-3' already runs this
+project"*, `rch queue --json` showed **two active builds and NO contabo-3 row at all**. The retry
+succeeded on contabo-3 sixty seconds later, so the exclusion was almost certainly its own first
+invocation — **registered by admission and invisible to the queue.**
+
+**Why this is load-bearing:** `active_project_exclusion` reads identically to capacity loss, and the
+skill's remedy table says *"pin a DIFFERENT worker"* for one and *"wait for your own job"* for the
+other. **Requesting another worker is exactly how this repo's verdict builds scattered onto
+`contabo-1` (zeststream-cast's) and `contabo-2` (control-plane's).** The queue view cannot
+discriminate; a probe loop that waits is the correct response.
 
 ---
 
