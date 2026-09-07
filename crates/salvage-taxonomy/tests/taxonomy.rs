@@ -162,14 +162,22 @@ fn an_empty_completion_relaunches_as_is() {
     assert!(result.reason.contains("no partial state to preserve"));
 }
 
-/// ANTI-VACUITY. An unobserved turn and a finished turn must not report identically. This asserts
-/// the distinct code as well as the arm, because `Unknown` sharing `Finished`'s zero would make
-/// "could not look" indistinguishable from "done" to any caller reading the code.
+/// ANTI-VACUITY, **CODE HALF ONLY**. An unobserved turn and a finished turn must not report
+/// identically to a caller reading the exit code.
+///
+/// PARTITIONED DELIBERATELY, and this is the correction of my own error. The single test that used
+/// to live here was named `..._is_unknown_with_a_distinct_code_and_never_a_relaunch` — **two
+/// `and`s joining two properties** — and it reddened under BOTH mutations, which I then published
+/// as proof that the code and decision assertions were "provably independent". Overlapping failure
+/// sets prove the opposite: at least one test conflates two properties. `%7` measured it.
+///
+/// A conjunctive test name is a conflated assertion advertising itself, and it is visible at write
+/// time rather than at mutation time. This leg asserts the CODE and says nothing about the
+/// decision, so the code mutation reddens it and the decision mutation must not.
 #[test]
-fn no_evidence_at_all_is_unknown_with_a_distinct_code_and_never_a_relaunch() {
+fn no_evidence_at_all_carries_a_code_distinct_from_finished() {
     let result = classified(TurnEvidence::default());
     assert_eq!(result.outcome, TurnOutcome::Unknown);
-    assert_eq!(result.decision, SalvageDecision::Hold);
     assert_eq!(result.exit_code(), 20, "Unknown must not share Finished's 0");
     assert_ne!(
         result.exit_code(),
@@ -178,12 +186,33 @@ fn no_evidence_at_all_is_unknown_with_a_distinct_code_and_never_a_relaunch() {
             decision: SalvageDecision::Verify,
             reason: String::new(),
         }
-        .exit_code()
+        .exit_code(),
+        "'could not look' and 'done' must not be the same integer"
     );
-    assert!(result.reason.contains("SALVAGE_UNKNOWN"));
+}
+
+/// ANTI-VACUITY, **DECISION HALF ONLY**, and it pins the EXACT reason text rather than a prefix.
+///
+/// A PREFIX IS NOT A MESSAGE. `AGENTS.md` rule 7 says pin the message AND the code because my
+/// `2sx1` mutation left `FINDING_PUBLISH_FAILED` printed while the code collapsed `5 -> 3`. The
+/// crate filed to demonstrate that rule then asserted `contains("SALVAGE_UNKNOWN")` — a prefix,
+/// which SURVIVES the very mutation the commit body advertised as the headline: flipping this arm
+/// to `RelaunchAsIs` leaves the word `HOLD` printed in the reason while the decision underneath it
+/// is wrong. `%7` caught that the message half was unpinned. So the assertion below is the full
+/// sentence, not its first token.
+#[test]
+fn no_evidence_at_all_holds_with_the_exact_reason_text() {
+    let result = classified(TurnEvidence::default());
+    assert_eq!(result.decision, SalvageDecision::Hold);
     assert!(
         !result.decision.is_relaunch(),
         "an unclassified turn is EXACTLY the case where a relaunch duplicates landed work"
+    );
+    assert_eq!(
+        result.reason,
+        "SALVAGE_UNKNOWN no evidence supplied — HOLD. Relaunching an unclassified turn is exactly \
+         how landed work gets duplicated.",
+        "the EXACT reason text, because a prefix assertion survives a decision mutation"
     );
 }
 
@@ -272,10 +301,17 @@ fn unknown_never_recommends_a_relaunch_across_every_shape() {
     }
 }
 
-/// A profile-wide staleness figure must not be substituted for a pane-attributable one: with no
-/// attributable session log the answer is HOLD, and the reason says so explicitly.
+/// A profile-wide staleness figure must not be substituted for a pane-attributable one.
+///
+/// NAMED FOR WHAT IT ASSERTS. This leg used to be called
+/// `an_unattributable_session_log_holds_rather_than_guessing` — "holds" is decision language, and
+/// the body asserts the OUTCOME and the CODE. It reddened under the code mutation and stayed
+/// green under the decision mutation, so the name promised a property the body never checked. The
+/// decision half for this shape is covered by
+/// `unknown_never_recommends_a_relaunch_across_every_shape`, which includes exactly this evidence
+/// row, so nothing is lost by keeping this leg on the code side of the partition.
 #[test]
-fn an_unattributable_session_log_holds_rather_than_guessing() {
+fn an_unattributable_session_log_is_unknown_with_the_unknown_code() {
     let result = classified(TurnEvidence {
         exit: None,
         session_stale_secs: None,
