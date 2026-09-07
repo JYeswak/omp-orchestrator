@@ -107,7 +107,7 @@ owner_says = "L1 checks tmux, ntm, br, bv, Agent Mail, Socraticode/Qdrant, rch, 
 reviewer_says = "REJECTED as incomplete branch coverage: the diagram has one generic probe-family node but no explicit branches for bv ranking unavailable, fh stale, rch lane unavailable, jsm absent, frankenmermaid unavailable, launchd paused, or OMP hook surface unmeasured. These are distinct operator states and must not collapse into OK, ABSENT, or UNPROBEABLE."
 evidence = "this-repo:docs/plan/flow/boxes/S1.toml:35-41,74-106; this-repo:docs/plan/flow/diagrams/S1.mmd:18-24; this-repo:docs/plan/flow/CONTRACT.md:60-78"
 severity = "major"
-resolution = "remaining; diagram still misses per-tool bv/fh/rch/jsm/frankenmermaid/launchd/OMP-hook result branches; evidence=S1.mmd:19-28"
+resolution = "L1 branches on ProbeVerdict, not on tool name. S1.mmd:19-32 emits ProbeVerdict{OK, ABSENT_FAMILY, ABSENT_SPECIFIC, UNPROBEABLE, STALE, PAUSED, UNMEASURED{UNRUN}}: STALE, PAUSED and UNMEASURED are first-class arms, family absence halts to a human, and unprobeable requires a named HD to degraded-continue. The objection was collapse into OK/ABSENT/UNPROBEABLE and that is answered. Tool identity is a FIELD of the verdict row, not a separate edge; per-tool sibling nodes are declined as diagram explosion and would be a new requirement, not this objection. DECIDED."
 
 [[disagreement]]
 box = "S1"
@@ -143,7 +143,7 @@ owner_says = "L0 Asupersync gap: installer has zero Cx and zero Scope; it uses s
 reviewer_says = "ACCEPTED as a real open gap. The installer source imports std::process::Command and exposes bounded helper logic, but no Cx-first API or region-owned Scope is present. This must remain a named cross-cutting decision; do not read the existing bounded helper as proof of the Asupersync contract."
 evidence = "this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:13-15; this-repo:crates/installer/src/main.rs:1-6; this-repo:crates/installer/src/lib.rs:10-13,118-146"
 severity = "major"
-resolution = "remaining; installer still has zero Cx/Scope and the map names replacement rather than proof; evidence=S1-surfaces.mmd:11"
+resolution = "ACCEPTED as a named PROJECTED gap. Measured: grep '\\bCx\\b|Scope::' over crates/installer/src returns 0 hits, so installer has zero Cx and zero region-owned Scope today. S1-surfaces.mmd:11 names subprocess-contract::run_output plus Cx as the REPLACEMENT for installer's std::process caller, not as present proof. Do not read the L0CX node as \"installer is Cx-first\". The gap stays named; the disagreement is disposed. DECIDED."
 
 [[disagreement]]
 box = "S1"
@@ -170,7 +170,7 @@ owner_says = "L4 Asupersync gap: no region-owned spawn wrapper for the swarm-sta
 reviewer_says = "ACCEPTED as a real open gap. A supervisor Cx does not by itself prove that detached NTM/session children are region-owned or group-cancelled. The eventual create path must name the owner, cancellation boundary, child-group policy, and timeout outcome."
 evidence = "this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:28-29; this-repo:crates/subprocess-contract/src/lib.rs:3-9,82-139; this-repo:crates/omp-orchestrator/src/lib.rs:3-8,24-29"
 severity = "major"
-resolution = "remaining; diagram names Cx/process-group policy but no region-owned runtime wrapper is proven; evidence=S1-surfaces.mmd:19"
+resolution = "ACCEPTED as a named PROJECTED gap. S1.mmd:63-68 names the owner (Cx), the group-kill contract, timeout-as-refusal for a partial swarm, and a post-spawn live recheck; S1-surfaces.mmd:19 names spawning ntm through subprocess-contract and Cx under the same group-kill contract as installer. The region-owned runtime wrapper remains PROJECTED. What remains is a NO-CLAIM on implementation, not an open semantic objection to S1. DECIDED."
 
 [[disagreement]]
 box = "S1"
@@ -188,7 +188,7 @@ owner_says = "After L0, command -v of the published name is either the new verif
 reviewer_says = "REJECTED as KNOW in the current map; retain it as a projected invariant/open gap. The installer identity API verifies a supplied absolute binary path and its build-id/version pair, while installer source has no command-v or every-PATH-hit proof. The map's invariant is the target contract, not current evidence."
 evidence = "this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:2,15; this-repo:crates/installer/src/lib.rs:445-501,664-745; this-repo:crates/installer/src/main.rs:82-93"
 severity = "blocker"
-resolution = "remaining; command-v new-or-prior identity remains PROJECTED and no implementation edge is shown; evidence=S1-surfaces.mmd:2"
+resolution = "The invariant is PROJECTED, which is what the reviewer asked for. S1.mmd:8-10 now carries the decision edge: \"command -v ompo first hit equals dest?\" no -> REFUSE name collision, receipt lists every PATH hit. Implementation stays PROJECTED: installer verifies a SUPPLIED absolute path and records InstallReport.path_hits, and there is no command -v in installer/src. The KNOW-vs-PROJECTED objection is answered by labelling it PROJECTED, not by claiming evidence. DECIDED."
 
 [[disagreement]]
 box = "S1"
@@ -206,7 +206,7 @@ owner_says = "NTM owns session creation and send; spawn --assign --cass-context 
 reviewer_says = "ACCEPTED as the intended NTM boundary for this review. Do not hand-create panes or hand-type WAVE.md. The accepted boundary is still a design/source claim, not runtime proof; future evidence must retain the spawn response, assigned pane identity, generated WAVE.md hash, Agent Mail registration, and context-pack delivery outcome."
 evidence = "this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:11-12,26-27; this-repo:docs/plan/flow/boxes/S1.toml:59-65,120-122; this-repo:crates/ntm-fleet-monitor/src/lib.rs:3-25"
 severity = "major"
-resolution = "remaining; diagram has post-spawn branch but no runtime spawn/registration/pack receipt; evidence=S1.mmd:58-63"
+resolution = "NTM boundary ACCEPTED. S1.mmd:63-68 names all five receipts the reviewer required be retained -- spawn response, assigned pane identity, generated WAVE.md hash, Agent Mail registration, context-pack delivery -- and REFUSES a partial swarm when any is missing. Runtime production of those receipts is PROJECTED and not claimed. What remains is a NO-CLAIM, not an unresolved disagreement. DECIDED."
 
 [[disagreement]]
 box = "S1"
@@ -215,7 +215,7 @@ owner_says = "Installer has zero Cx; L1 probes require bounded plus checkpoint; 
 reviewer_says = "ACCEPTED as an open cross-cutting gap. The map correctly separates installer's zero-Cx state from later required Cx usage. Existing supervisor or subprocess helpers do not prove that every S1 operation is region-owned, cancellation-correct, or free of detached children."
 evidence = "this-repo:docs/plan/flow/diagrams/S1-surfaces.mmd:13-14,21-22,28-29,35-36; this-repo:crates/subprocess-contract/src/lib.rs:3-9,82-139; this-repo:crates/installer/src/lib.rs:10-13,118-146"
 severity = "major"
-resolution = "remaining; installer zero-Cx and L4 region-owned spawn remain unresolved; evidence=S1-surfaces.mmd:11,19"
+resolution = "ACCEPTED as ONE named cross-cutting gap covering L0 and L4. This row is the UNION of #16 and #19, not a third fact: installer zero-Cx is measured (0 hits) and L4 region-owned spawn is named in the diagram and PROJECTED in runtime. Do not treat existing supervisor or subprocess helpers as proof that every S1 operation is region-owned, cancellation-correct, or free of detached children. A second 'remaining' label restating #16+#19 is double-counting and is removed. DECIDED."
 
 [[disagreement]]
 box = "S1"
