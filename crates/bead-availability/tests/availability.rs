@@ -280,3 +280,11 @@ fn queue_parser_refuses_missing_priority_instead_of_guessing() {
     let error = bead_availability::parse_queue_issues(&value).expect_err("missing priority");
     assert!(error.to_string().contains("MISSING_QUEUE_FIELD"));
 }
+#[test]
+fn queue_id_parser_accepts_ready_and_blocked_envelopes() {
+    let value = json!({"issues": [{"id": "child"}]});
+    assert_eq!(
+        bead_availability::parse_queue_ids(&value, "br blocked").expect("issues envelope"),
+        vec!["child".to_owned()]
+    );
+}

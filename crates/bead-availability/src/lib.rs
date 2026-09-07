@@ -460,7 +460,8 @@ pub fn parse_queue_issues(value: &Value) -> Result<Vec<QueueIssue>, GraphError> 
 pub fn parse_queue_ids(value: &Value, surface: &str) -> Result<Vec<String>, GraphError> {
     let rows = value
         .as_array()
-        .ok_or_else(|| GraphError::MalformedIssues(format!("{surface}: response is not an array")))?;
+        .or_else(|| value.get("issues").and_then(Value::as_array))
+        .ok_or_else(|| GraphError::MalformedIssues(format!("{surface}: response is not an array or issues envelope")))?;
     let mut out = Vec::with_capacity(rows.len());
     let mut ids = BTreeSet::new();
     for (index, row) in rows.iter().enumerate() {
