@@ -1506,10 +1506,14 @@ when a suffix matches two beads is likewise unmeasured and must not be assumed t
 
 ---
 
-## A TRANSCRIBED VALUE IS STALE BY DESIGN — FOUR SUBSTRATES, ONE SHAPE
+## A TRANSCRIBED VALUE IS STALE BY DESIGN — FIVE SUBSTRATES, ONE SHAPE
 
-**Measured across two repositories on 2026-09-07. Four instances, four different substrates, one
+**Measured across two repositories on 2026-09-07. Five instances, five different substrates, one
 defect: a claim that transcribes a value instead of binding to something that RE-DERIVES it.**
+
+**Substrates 1–4 are citations whose TARGET moves. The fifth is different in kind and is the worst,
+because it defeats re-running: a figure whose SCOPE moves while the command and the tree hold
+still.** It has its own subsection at the end.
 
 |substrate|the instance|why it went stale|
 |---|---|---|
@@ -1553,6 +1557,72 @@ the good evidence does not come back when the rule is narrowed.
 probe can re-derive the wrong thing forever — `%20`'s **"I measured TOKEN PRESENCE and reported
 REQUIREMENT EQUIVALENCE"** is exactly that: an instrument internally consistent and pointed at the
 wrong object. Re-derivation fixes staleness; only a positive control and a known-bad leg fix aim.
+
+### FIFTH SUBSTRATE — A FIGURE WHOSE **SCOPE** MOVES WHILE COMMAND AND TREE HOLD STILL
+
+**Measured 2026-09-07 by `%19`, filed as `omp-orchestrator-mmt4` (P0). The first four substrates are
+citations whose TARGET moves. This is a figure whose DENOMINATOR moves — and it defeats both clauses
+of our grading standard at once.**
+
+Three answers, one command, all real:
+
+```
+local, fail-fast       (bypass, darwin arm64)    11 targets    33 passed /  3 failed
+lane,  fail-fast       (contabo-2, exit 101)      9 targets    23 passed /  2 failed
+lane,  --no-fail-fast  (contabo-2, exit 101)     52 targets   251 passed / 55 failed
+```
+
+**`cargo test` stops at the first failing TARGET, and the stop point is environment-dependent.** The
+two truncated figures are **not** bigger and smaller versions of one measurement — they are
+different **PREFIXES**.
+
+**The mechanism, corroborated at source level by pane 1:** `crates/no-shell-gate/tests/` holds **43**
+integration targets (plus 6 `src/bin` and 1 lib), and **`artifact_provenance.rs` is alphabetically
+FIRST while `bead_shape.rs` is THIRD.** On the lane `artifact_provenance` fails, so execution stops
+and `bead_shape`'s three label failures **never run**. Locally it passes, so they do. **The stop
+point is filename ordering crossed with which target fails in this environment.**
+
+**Why this is P0: it survives both halves of "a grade re-runs, and states the tree."** A grader can
+re-run the exact command, on the exact tree, in the mandated lane, and cite a figure that silently
+omits **43 of 52 targets**. This is the FOURTH quantity in this repo wearing the word "tests", and
+the only one indistinguishable from the full aggregate by inspection.
+
+#### RULING (pane 1, 2026-09-07). Both halves of the proposed choice, split by purpose.
+
+1. **An ACCEPTANCE leg MUST cite a NAMED TARGET** — `cargo test -p <crate> --test <target>`. A named
+   target **cannot truncate**, is cheap, and is what a bead's acceptance is actually about. `%20`'s
+   on-lane re-runs already did this correctly (`--test starvation_taxonomy` → 3/0,
+   `--test empty_staged` → 5/1).
+2. **A CRATE-HEALTH claim MUST carry `--no-fail-fast` AND the target denominator** — "251 passed /
+   55 failed across 52 targets", never "251 passed / 55 failed".
+3. **A bare `cargo test -p <crate>` figure is INADMISSIBLE as evidence.** It is a prefix of unknown
+   length whose end is decided by alphabetical filename order crossed with environment. Not
+   "discouraged" — inadmissible, the same standing as the retired "81 JSON-RPC methods, 17 used".
+4. **A `--no-fail-fast` failure count is a COUNT, not a DEFECT count**, until environment-caused
+   failures are split out. `%19` named this against its own figure: `this_repo_is_clean`,
+   `every_in_repo_line_cite_names_a_line_that_exists` and
+   `hook_validates_staged_bytes_not_a_dirty_worktree_copy` need `.git`, `.beads`, `crontab` or a
+   clean worktree, **none of which `rch` syncs**. **Nobody may cite 55 as a defect count**, its
+   author included.
+
+**AND THE AUTHOR COMMITTED THE DEFECT WHILE FILING A BEAD ABOUT DISHONEST COUNTING.** `3ae3`'s
+description reported "33 passed / 3 failed across 11 targets" as `no-shell-gate`'s state; the crate
+has **52**. A fifth of the suite described as the whole — the unstated-denominator defect. `3ae3`'s
+*defect* survives (absolute-count ratchets over live tracker data is a source property no
+environment changes); its *figures* do not.
+
+**Corollary for the CONTABO binding:** three separate panes have now measured live-`.beads` tests
+going RED on the lane because **`rch` syncs source without `.git` or `.beads`**. That is a
+structural consequence of the binding, not a defect in those tests. An absent mirror is
+**UNMEASURED**, never "the oracle is vacuous" — and the discriminator must be POSITIVE: a tree with
+no `.git` is a synced worker copy and cannot answer; a tree that IS a checkout with no mirror still
+FAILS. Absence alone never satisfies.
+
+**NO-CLAIM.** This ruling makes a truncated aggregate *detectable*, not impossible. `--no-fail-fast`
+still cannot separate an environment failure from a real one — item 4 is a disclosure requirement,
+not a mechanism — and **libtest CAPTURES stdout for a PASSING test**, so a green suite cannot itself
+distinguish "ran and passed" from "declined as UNMEASURED" without `-- --nocapture`.
+
 
 ---
 
