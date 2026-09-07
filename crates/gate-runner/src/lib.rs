@@ -478,3 +478,142 @@ pub fn parse_ledger(text: &str) -> BTreeSet<String> {
         .map(str::to_owned)
         .collect()
 }
+
+/// A gate's own declared check invocation, read from ITS OWN manifest.
+///
+/// # Why this is not a list in this crate
+///
+/// The roster's TEST half is fully derivable: a crate's test targets are what cargo builds. The
+/// RUN half is not — `undrained-pipe-lint` wants `.`, `porting-gate` wants
+/// `--repo . --crate porting-gate`, `commit-build-fence` wants `init` then `check`. Those are
+/// semantics, and no amount of metadata inspection recovers them.
+///
+/// A central list in `gate-runner` would mean a new gate crate needs an edit HERE, which is the
+/// YAML fan-out moved into Rust — the precise failure `fsu7` item 5 forbids. So each gate declares
+/// its own invocation in its own `Cargo.toml`:
+///
+/// ```toml
+/// [package.metadata.gate]
+/// checks = [["--repo", "{repo}"]]
+/// ```
+///
+/// The declaration travels with the crate, so adding a gate touches only that gate.
+///
+/// `{repo}` and `{scratch}` are substituted by the runner, because a check needing an absolute
+/// path must not hardcode one — that is `path-literal-guard`'s own subject, and an author's home
+/// directory baked into a manifest is exactly how it fires.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckInvocation {
+    pub crate_name: String,
+    /// One argv per sequential phase. `commit-build-fence` needs two; most need one.
+    pub phases: Vec<Vec<String>>,
+}
+
+/// Read every crate's declared checks from `cargo metadata`'s `package.metadata` passthrough.
+///
+/// A crate with no stanza declares no check, which is not an error: most crates are libraries and
+/// only a gate has a repo-scanning verb.
+pub fn derive_checks(metadata_json: &str) -> Result<Vec<CheckInvocation>, RosterError> {
+    let value: serde_json::Value =
+        serde_json::from_str(metadata_json).map_err(|error| RosterError::MetadataUnreadable {
+            detail: error.to_string(),
+        })?;
+    let packages = value
+        .get("packages")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| RosterError::MetadataUnreadable {
+            detail: "no `packages` array".to_owned(),
+        })?;
+    let mut checks = Vec::new();
+    for package in packages {
+        let Some(name) = package.get("name").and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        let Some(declared) = package
+            .get("metadata")
+            .and_then(|m| m.get("gate"))
+            .and_then(|g| g.get("checks"))
+            .and_then(serde_json::Value::as_array)
+        else {
+            continue;
+        };
+        let mut phases = Vec::new();
+        for phase in declared {
+            let Some(argv) = phase.as_array() else {
+                return Err(RosterError::MetadataUnreadable {
+                    detail: format!("{name}: metadata.gate.checks must be a list of argv lists"),
+                });
+            };
+            phases.push(
+                argv.iter()
+                    .filter_map(|a| a.as_str().map(str::to_owned))
+                    .collect(),
+            );
+        }
+        if !phases.is_empty() {
+            checks.push(CheckInvocation {
+                crate_name: name.to_owned(),
+                phases,
+            });
+        }
+    }
+    checks.sort_by(|a, b| a.crate_name.cmp(&b.crate_name));
+    Ok(checks)
+}
+
+/// Substitute `{repo}` and `{scratch}` in a declared argv.
+#[must_use]
+pub fn expand(argv: &[String], repo: &str, scratch: &str) -> Vec<String> {
+    argv.iter()
+        .map(|arg| arg.replace("{repo}", repo).replace("{scratch}", scratch))
+        .collect()
+}
+
+/// What a former `gate.yml` job did, and what now subsumes it.
+///
+/// `fsu7` item 10 forbids deleting a job to reduce the count: the 2026-09-06 defect was a MISSING
+/// job key that collapsed two jobs into one, and the remedy was a one-line RESTORE. So subsumption
+/// is asserted MECHANICALLY rather than described in prose — a table in a commit message cannot
+/// fail, and this can.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Subsumption {
+    /// Its `cargo test -p X` half is in the derived roster, and its `cargo run` half (if any) is a
+    /// declared check.
+    Covered { tests: bool, checks: bool },
+    /// The job ran something this runner cannot yet express. NAMED, never dropped.
+    NotSubsumed { reason: String },
+}
+
+/// Decide, per former job crate, whether the entry point subsumes it.
+///
+/// `ran_binary` says whether the old job invoked the crate's binary as well as its tests: a job
+/// with a run half needs a declared check, a test-only job does not.
+#[must_use]
+pub fn subsumption(
+    job_crate: &str,
+    ran_binary: bool,
+    roster: &[RosterEntry],
+    checks: &[CheckInvocation],
+) -> Subsumption {
+    let tests = roster
+        .iter()
+        .any(|e| e.crate_name == job_crate && !e.invocations.is_empty());
+    let declared = checks.iter().any(|c| c.crate_name == job_crate);
+    if !tests {
+        return Subsumption::NotSubsumed {
+            reason: format!("{job_crate} contributes no test invocation to the derived roster"),
+        };
+    }
+    if ran_binary && !declared {
+        return Subsumption::NotSubsumed {
+            reason: format!(
+                "{job_crate} ran its BINARY in gate.yml and declares no \
+                 [package.metadata.gate] checks — its test half is covered, its run half is NOT"
+            ),
+        };
+    }
+    Subsumption::Covered {
+        tests,
+        checks: declared,
+    }
+}

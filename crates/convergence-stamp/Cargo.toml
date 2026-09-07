@@ -11,3 +11,10 @@ serde_json = "1"
 
 [lints.rust]
 unsafe_code = "forbid"
+
+[package.metadata.gate]
+# omp-orchestrator-fsu7: this crate's OWN check invocation, so `gate-runner` needs no
+# edit when a gate is added. {repo}/{scratch} are substituted by the runner rather
+# than hardcoded, because a path literal in a manifest is what path-literal-guard
+# exists to refuse.
+checks = [["--repo", "{repo}", "--check"]]

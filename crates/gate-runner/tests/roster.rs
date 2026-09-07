@@ -15,9 +15,9 @@
 //! short crate, and a ledger that names a crate the workspace no longer has.
 
 use gate_runner::{
-    build_report, check_allowance, derive_roster, parse_ledger, CrateVerdict, Invocation,
-    NoTestsDisposition, Observed, RosterError, EXIT_EMPTY_ROSTER, EXIT_GATE_FAILED,
-    EXIT_LEDGER_DRIFT, EXIT_OK, EXIT_SHORT_ROSTER,
+    build_report, check_allowance, derive_checks, derive_roster, expand, parse_ledger,
+    CrateVerdict, Invocation, NoTestsDisposition, Observed, RosterError, Subsumption,
+    EXIT_EMPTY_ROSTER, EXIT_GATE_FAILED, EXIT_LEDGER_DRIFT, EXIT_OK, EXIT_SHORT_ROSTER,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -360,4 +360,130 @@ fn the_ledger_format_is_deliberately_trivial() {
         "a ledger that needs a parser is a ledger that can fail to parse, and this file exists to \
          detect silent loss"
     );
+}
+
+/// A gate's check invocation is read from ITS OWN manifest, so adding a gate needs no edit here.
+///
+/// This is acceptance item 5 for the RUN half. The roster's test half is derivable from cargo's
+/// target discovery; a repo-scanning verb's argv is not, and a central list of them in this crate
+/// would be the YAML fan-out moved into Rust.
+#[test]
+fn a_gate_declares_its_own_check_invocation_in_its_own_manifest() {
+    let md = r#"{"packages":[
+        {"name":"alpha","manifest_path":"/x/a/Cargo.toml","targets":[],
+         "metadata":{"gate":{"checks":[["--repo","{repo}"]]}}},
+        {"name":"plain-lib","manifest_path":"/x/p/Cargo.toml","targets":[]}
+    ]}"#;
+    let checks = derive_checks(md).expect("parses");
+    assert_eq!(checks.len(), 1, "a crate with no stanza declares no check, and that is not an error");
+    assert_eq!(checks[0].crate_name, "alpha");
+    assert_eq!(checks[0].phases, vec![vec!["--repo".to_owned(), "{repo}".to_owned()]]);
+}
+
+/// A multi-phase gate keeps its ORDER. `commit-build-fence` is `init` then `check`, and running
+/// them the other way round would fence against a stamp that does not exist yet.
+#[test]
+fn a_multi_phase_gate_keeps_its_phase_order() {
+    let md = r#"{"packages":[{"name":"fence","manifest_path":"/x/f/Cargo.toml","targets":[],
+        "metadata":{"gate":{"checks":[["init","--repo","{repo}"],["check","--repo","{repo}"]]}}}]}"#;
+    let checks = derive_checks(md).expect("parses");
+    assert_eq!(checks[0].phases.len(), 2);
+    assert_eq!(checks[0].phases[0][0], "init", "phase order is load-bearing");
+    assert_eq!(checks[0].phases[1][0], "check");
+}
+
+/// Placeholders are substituted by the runner, never hardcoded.
+///
+/// A manifest carrying `/Users/<someone>/...` is exactly what `path-literal-guard` refuses, and it
+/// would make every other machine's run wrong.
+#[test]
+fn placeholders_are_substituted_rather_than_hardcoded() {
+    let argv = vec!["--repo".to_owned(), "{repo}".to_owned(), "--bin-dir".to_owned(), "{scratch}".to_owned()];
+    let out = expand(&argv, "/w/repo", "/w/scratch");
+    assert_eq!(out, vec!["--repo", "/w/repo", "--bin-dir", "/w/scratch"]);
+    assert!(
+        !out.iter().any(|a| a.contains('{')),
+        "an unsubstituted placeholder would reach the gate as a literal brace: {out:?}"
+    );
+}
+
+/// A malformed stanza is UNREADABLE, not an absent check.
+///
+/// Silently treating a broken declaration as "no check declared" is how a gate stops running while
+/// everything reads green — the exact defect `fsu7` exists to end.
+#[test]
+fn a_malformed_check_stanza_is_unreadable_not_absent() {
+    let md = r#"{"packages":[{"name":"alpha","manifest_path":"/x/a/Cargo.toml","targets":[],
+        "metadata":{"gate":{"checks":["--repo ."]}}}]}"#;
+    let error = derive_checks(md).expect_err("a string where an argv list belongs must refuse");
+    assert!(matches!(error, RosterError::MetadataUnreadable { .. }));
+    assert!(
+        error.to_string().contains("list of argv lists"),
+        "the message must name the shape it wanted: {error}"
+    );
+}
+
+/// ITEM 10, MECHANICALLY. A job whose binary half has no declared check is NOT subsumed, and the
+/// reason names it — so no job can be deleted on the strength of a prose table.
+#[test]
+fn a_job_whose_run_half_is_undeclared_is_not_subsumed() {
+    let md = metadata(&[("scanner", &["contract"])]);
+    let roster = derive_roster(&md, &lib_tests(&[])).expect("parses");
+    let no_checks: Vec<gate_runner::CheckInvocation> = Vec::new();
+
+    // test-only job: covered by the roster alone.
+    assert_eq!(
+        subsumption_of("scanner", false, &roster, &no_checks),
+        Subsumption::Covered { tests: true, checks: false }
+    );
+
+    // same crate, but the old job ALSO ran its binary and nothing declares that.
+    match subsumption_of("scanner", true, &roster, &no_checks) {
+        Subsumption::NotSubsumed { reason } => {
+            assert!(reason.contains("scanner"), "the reason must NAME the crate: {reason}");
+            assert!(
+                reason.contains("run half is NOT"),
+                "and must say which half is uncovered: {reason}"
+            );
+        }
+        other => panic!("a run half with no declared check must NOT be subsumed: {other:?}"),
+    }
+}
+
+/// And with the check declared, the same job IS subsumed on both halves.
+#[test]
+fn a_job_with_a_declared_check_is_subsumed_on_both_halves() {
+    let md = metadata(&[("scanner", &["contract"])]);
+    let roster = derive_roster(&md, &lib_tests(&[])).expect("parses");
+    let checks = vec![gate_runner::CheckInvocation {
+        crate_name: "scanner".to_owned(),
+        phases: vec![vec!["{repo}".to_owned()]],
+    }];
+    assert_eq!(
+        subsumption_of("scanner", true, &roster, &checks),
+        Subsumption::Covered { tests: true, checks: true }
+    );
+}
+
+/// A crate absent from the roster is never quietly subsumed.
+#[test]
+fn a_job_naming_a_crate_with_no_tests_is_not_subsumed() {
+    let md = metadata(&[("hollow", &[])]);
+    let roster = derive_roster(&md, &lib_tests(&[("hollow", false)])).expect("parses");
+    match subsumption_of("hollow", false, &roster, &[]) {
+        Subsumption::NotSubsumed { reason } => {
+            assert!(reason.contains("hollow"), "{reason}");
+            assert!(reason.contains("no test invocation"), "{reason}");
+        }
+        other => panic!("expected NotSubsumed, got {other:?}"),
+    }
+}
+
+fn subsumption_of(
+    job_crate: &str,
+    ran_binary: bool,
+    roster: &[gate_runner::RosterEntry],
+    checks: &[gate_runner::CheckInvocation],
+) -> Subsumption {
+    gate_runner::subsumption(job_crate, ran_binary, roster, checks)
 }
