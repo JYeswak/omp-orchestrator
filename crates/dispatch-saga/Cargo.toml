@@ -8,6 +8,16 @@ description = "At-most-one send under a DispatchKey; Unknown is first-class; rec
 [dependencies]
 omp-types = { path = "../omp-types" }
 pane-dispatch-fence = { path = "../pane-dispatch-fence" }
+grader-attribution-gate = { path = "../grader-attribution-gate" }
+blocker-taxonomy = { path = "../blocker-taxonomy" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+
+[[bin]]
+name = "dispatch-saga"
+path = "src/main.rs"
+
 
 [lints.rust]
 unsafe_code = "forbid"

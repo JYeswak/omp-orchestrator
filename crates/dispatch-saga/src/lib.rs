@@ -13,17 +13,20 @@
 //! NO-CLAIM: at-most-once SEND under a key, not exactly-once delivery. The
 //! substrate is tmux. This crate does not prove the receiver is alive.
 //!
-//! DECLARED_NOT_WIRED: call site is `crates/omp-orchestrator/src/main.rs`
-//! (held by `%7` for `u8nw`).
+//! Wired: `grading` (IMPL→GRADING decide-only) plus caller `ack-stage`.
+//! Supervisor dispatch path remains unwired on purpose.
 
 use omp_types::ChildOutcome;
 use pane_dispatch_fence::PaneIncarnation;
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
+pub mod grading;
 
-/// Call site deferred. This names the debt; it is not a caller.
+
+/// Supervisor send path is still unwired. IMPL→GRADING is `grading`.
 pub const DECLARED_NOT_WIRED: &str =
-    "call site deferred: crates/omp-orchestrator/src/main.rs held by %7/u8nw";
+    "supervisor send path deferred: IMPL->GRADING is grading::decide (ack-stage calls it)";
+
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ClaimState {
@@ -206,10 +209,7 @@ pub enum ExecuteError {
 }
 
 /// One send under *k*, and only from [`DispatchState::Pending`].
-pub fn execute(
-    saga: &mut Saga,
-    transport: &mut impl Transport,
-) -> Result<Receipt, ExecuteError> {
+pub fn execute(saga: &mut Saga, transport: &mut impl Transport) -> Result<Receipt, ExecuteError> {
     if saga.claim != ClaimState::Claimed {
         return Err(ExecuteError::ClaimSkipped {
             key: saga.key.clone(),
@@ -311,7 +311,10 @@ pub struct CloseEvidence {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CloseRefusal {
-    Unreconciled { key: DispatchKey, last: DispatchState },
+    Unreconciled {
+        key: DispatchKey,
+        last: DispatchState,
+    },
 }
 
 pub fn close(saga: &mut Saga, evidence: Option<CloseEvidence>) -> Result<(), CloseRefusal> {
@@ -385,7 +388,9 @@ mod tests {
 
     impl SendStub {
         fn new() -> Self {
-            Self { calls: Cell::new(0) }
+            Self {
+                calls: Cell::new(0),
+            }
         }
     }
     impl Transport for SendStub {
@@ -436,7 +441,10 @@ mod tests {
         let mut stub = SendStub::new();
         execute(&mut saga, &mut stub).unwrap();
         let err = execute(&mut saga, &mut stub).unwrap_err();
-        assert!(matches!(err, ExecuteError::TerminalAssignmentAttempt { .. }));
+        assert!(matches!(
+            err,
+            ExecuteError::TerminalAssignmentAttempt { .. }
+        ));
         assert_eq!(stub.calls.get(), 1);
     }
 
@@ -480,7 +488,9 @@ mod tests {
             11,
         );
         assert_eq!(saga.claim(), ClaimState::Claimed);
-        assert!(matches!(done, Reconcile::StillUnknown { .. }) || saga.claim() == ClaimState::Claimed);
+        assert!(
+            matches!(done, Reconcile::StillUnknown { .. }) || saga.claim() == ClaimState::Claimed
+        );
     }
 
     #[test]
@@ -513,7 +523,10 @@ mod tests {
         surface_crash(&mut saga, CrashPoint::AfterSentBeforeAck);
         assert_eq!(saga.ack(), AckState::Unknown);
         let err = execute(&mut saga, &mut stub).unwrap_err();
-        assert!(matches!(err, ExecuteError::TerminalAssignmentAttempt { .. }));
+        assert!(matches!(
+            err,
+            ExecuteError::TerminalAssignmentAttempt { .. }
+        ));
         assert_eq!(stub.calls.get(), 1);
         reconcile(
             &mut saga,
@@ -564,10 +577,7 @@ mod tests {
         let saga = claimed(key_5rh());
         ledger.write("supervisor", saga.clone()).unwrap();
         let err = ledger.write("refill-idle-panes", saga).unwrap_err();
-        assert!(matches!(
-            err,
-            LedgerError::SingleWriterViolation { .. }
-        ));
+        assert!(matches!(err, LedgerError::SingleWriterViolation { .. }));
     }
 
     #[test]
@@ -606,11 +616,14 @@ mod tests {
         assert_eq!(sent.dispatch(), DispatchState::Sent);
         pending.dispatch = DispatchState::Failed;
         assert_eq!(pending.dispatch(), DispatchState::Failed);
-        surface_crash(&mut {
-            let mut s = claimed(key_5rh());
-            s.dispatch = DispatchState::Sending;
-            s
-        }, CrashPoint::AfterSending);
+        surface_crash(
+            &mut {
+                let mut s = claimed(key_5rh());
+                s.dispatch = DispatchState::Sending;
+                s
+            },
+            CrashPoint::AfterSending,
+        );
         let mut unknown = claimed(key_5rh());
         unknown.dispatch = DispatchState::Sending;
         surface_crash(&mut unknown, CrashPoint::AfterSending);

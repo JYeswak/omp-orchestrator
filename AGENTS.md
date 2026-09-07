@@ -1560,6 +1560,12 @@ IMPL     implementation-complete, commit landed
   ->  CLOSED    the grader closes; reason starts MUTATION-VERIFIED / DONE / APPROVED / WONTFIX
 ```
 
+The IMPL→GRADING edge is owned by `crates/dispatch-saga` (`dispatch-saga grading-transition`).
+Decide-only by default; `--apply` may `br update --status grading`. A pane MUST NOT move its
+own bead (that is self-certifying the stage). The grader still closes. Caller: `ack-stage`
+(`impl_to_grading_after_ack`).
+
+
 The close policy REFUSES a prose reason, and the refusal scrolls past in-pane while the
 agent moves on believing the close landed. Always read the status back:
 `br show <id> --json | jq -r '.[0].status'` — note `br show` returns a BARE list, while
@@ -1677,10 +1683,11 @@ THE NAMED MECHANISMS THAT PREVENT RECURRENCE (in order of leverage):
        "dispatch the idle panes, OR name why the queue is not eligible" — the naming has run all
        night and must be allowed to end in a dispatch for the work that does not need a green
        tree. High-stakes dispatch keeps the full gate.
-  M2 — GRADING AS A DISPATCH LANE: beads in `grading` auto-route to eligible non-author graders.
-       Tonight four grades were MANUAL orchestrator routings; the handoffs created waits that
-       looked like idleness. (The close drought and the idle panes are one defect — confirmed
-       again: 5cl/6gq sat in grading while panes idled.)
+  M2 — GRADING AS A DISPATCH LANE: still unbuilt as auto-routing. The IMPL→GRADING *decision*
+       is `dispatch-saga grading-transition` (decide-only; `--apply` writes status). Routing
+       idle graders onto beads already in `grading` is not that mechanism. Tonight four grades
+       were MANUAL orchestrator routings; the handoffs created waits that looked like idleness.
+
   M3 — CROSS-SESSION ROUTING: panes idled in a session whose repo was admission-blocked while
        real work existed in the other repo (grades, backfills, doc currency). The conductor must
        route by WORK LOCATION, not by session membership.

@@ -12,12 +12,25 @@ use receiver_receipt::{
 use serde_json::Value;
 use std::fmt;
 use tick_monitor::Observation;
+use dispatch_saga::grading::{
+    decide_all as saga_decide_impl_to_grading, GradingCandidate, GradingDecision,
+};
+
 
 pub mod cell_matrix;
 
 
 /// Maximum number of retry actions for one dispatch attempt sequence.
 pub const MAX_RETRY_ATTEMPTS: u32 = 3;
+/// Next beat after ACK: IMPL→GRADING decision. Decide-only; never closes.
+pub fn impl_to_grading_after_ack(
+    candidates: &[GradingCandidate],
+    eligible_graders: &[String],
+) -> Result<Vec<GradingDecision>, dispatch_saga::grading::ReportError> {
+    saga_decide_impl_to_grading(candidates, eligible_graders)
+}
+
+
 
 /// Transport used to submit a packet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
