@@ -5949,6 +5949,20 @@ fn prior_finding_observations(config: &Config, key: &str) -> u32 {
         .unwrap_or(u32::MAX)
 }
 
+/// The actor recorded on every bead this supervisor files through [`finding`].
+///
+/// `BrPublisher::publish` refuses without an actor (`FindingError::ActorUnset`) because `br` falls
+/// back to the ambient git identity, and every pane in this repo shares one checkout -- so an
+/// omitted actor credits a human for agent work. Measured 2026-09-07: 32.9% of this tracker's beads
+/// read `created_by=josh`, and the root cause was `crates/finding`'s own publisher omitting the
+/// flag, which meant the SANCTIONED filing sequence was the misattributing one.
+///
+/// This is not a default standing in for an unknown filer. At these call sites the filer is known:
+/// the supervisor process itself observed the decision and owed the finding. Naming it is the
+/// honest answer, not a guess -- which is why `with_actor` is caller-supplied rather than defaulted
+/// inside the publisher.
+const SUPERVISOR_ACTOR: &str = "omp-supervisor";
+
 async fn recover_pending_findings(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     fs::create_dir_all(&config.finding_spool).map_err(|error| {
         format!(
@@ -5956,7 +5970,8 @@ async fn recover_pending_findings(cx: &Cx, config: &Config, tick: u64) -> Result
             config.finding_spool.display()
         )
     })?;
-    let publisher = BrPublisher::new(config.br.clone(), config.repo.clone());
+    let publisher =
+        BrPublisher::new(config.br.clone(), config.repo.clone()).with_actor(SUPERVISOR_ACTOR);
     match finding::Finding::recover_pending(cx, &config.finding_spool, &publisher).await {
         Ok(filed) => {
             let detail = format!("pending={} filed={filed}", filed);
@@ -5995,7 +6010,8 @@ async fn file_supervisor_finding(
         | MaybeFinding::NotYet(NotYet::AlreadyEmitted { .. })
         | MaybeFinding::NotYet(NotYet::NotAFindableDecision) => Ok(()),
         MaybeFinding::Owed(finding) => {
-            let publisher = BrPublisher::new(config.br.clone(), config.repo.clone());
+            let publisher = BrPublisher::new(config.br.clone(), config.repo.clone())
+                .with_actor(SUPERVISOR_ACTOR);
             match finding.file(cx, &config.finding_spool, &publisher).await {
                 Ok(filed) => {
                     let detail = format!("key={key} seen={seen} bead_id={}", filed.id());
