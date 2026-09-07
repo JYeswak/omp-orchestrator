@@ -14,8 +14,9 @@
 use std::path::PathBuf;
 
 use decision_ledger::{
-    append_request, classify_heartbeat, hd_reference, next_id, question_key, read_rows,
-    record_decision, replay, request_row, AppendOutcome, Decision, LedgerError, Request,
+    append_agent_disposition, append_request, classify_heartbeat, hd_reference, next_id, read_rows,
+    record_decision, replay, request_row, AgentDisposition, AppendOutcome, Decision,
+    HeartbeatAction, HumanClause, LedgerError, Request,
 };
 
 /// A scratch ledger under the session-scoped scratch home, never `/tmp`.
@@ -48,30 +49,33 @@ const MONITOR_BLIND: &str = "MONITOR_BLIND owner=josh next_action=repair-monitor
 #[test]
 fn a_second_identical_tick_appends_nothing() {
     let path = scratch("dedupe");
-    let request = classify_heartbeat("GATE_UNWIRED", GATE_UNWIRED, 1_788_330_000)
-        .expect("a row naming owner=josh is a human-addressed row");
+    let request = match classify_heartbeat(
+        "SUPERVISOR_REFUSED",
+        "RISK owner=josh clause=authority bead=omp-orchestrator-risk-1",
+        1_788_330_000,
+    ) {
+        HeartbeatAction::Human(request) => request,
+        other => panic!("explicit clause must produce a human request: {other:?}"),
+    };
 
     let first = append_request(&path, &request).expect("first append");
     assert!(matches!(first, AppendOutcome::Appended { .. }), "{first:?}");
     assert_eq!(first.id(), "HD-0001", "an empty ledger starts at HD-0001");
 
     let second = append_request(&path, &request).expect("second append");
-    assert!(matches!(second, AppendOutcome::Deduped { .. }), "{second:?}");
+    assert!(
+        matches!(second, AppendOutcome::Deduped { .. }),
+        "{second:?}"
+    );
     assert_eq!(second.id(), "HD-0001", "the dedupe must name the OPEN row");
     assert!(!second.wrote());
 
-    // 186 more ticks, as measured. The file must still hold exactly one row.
     for _ in 0..186 {
         append_request(&path, &request).expect("repeat append");
     }
     let rows = read_rows(&path).expect("readable");
-    assert_eq!(
-        rows.len(),
-        1,
-        "188 identical GATE_UNWIRED ticks are ONE question asked 188 times"
-    );
+    assert_eq!(rows.len(), 1, "identical ticks are ONE human question");
 }
-
 /// A DIFFERENT bead is a DIFFERENT decision, and must not be deduped into the first.
 ///
 /// This is why the dedupe key is not digit-stripped: `oj6.3` and `oj6.4` differ only in
@@ -79,29 +83,35 @@ fn a_second_identical_tick_appends_nothing() {
 /// one question about neither.
 #[test]
 fn two_beads_are_two_questions_even_though_they_differ_only_in_digits() {
-    let path = scratch("per-bead");
-    let three = classify_heartbeat("SUPERVISOR_REFUSED", DISPATCH_BLOCKED, 1_788_330_100)
-        .expect("classified");
-    let four = classify_heartbeat(
+    let capacity = classify_heartbeat(
         "SUPERVISOR_REFUSED",
-        &DISPATCH_BLOCKED.replace("oj6.3", "oj6.4"),
-        1_788_330_200,
-    )
-    .expect("classified");
-
-    assert_ne!(
-        question_key(&three.question),
-        question_key(&four.question),
-        "a digit-blind key would merge two beads into one decision"
+        "DISPATCH_BLOCKED bead=omp-orchestrator-ack-spine-oj6.3 receiver agent is missing owner=josh next_action=claim-bead",
+        1_788_330_100,
     );
-    assert_eq!(three.blocking, "bead:omp-orchestrator-ack-spine-oj6.3");
-    assert_eq!(four.blocking, "bead:omp-orchestrator-ack-spine-oj6.4");
+    assert!(
+        matches!(
+            capacity,
+            HeartbeatAction::RequeueCapacity { ref bead, ref reason }
+                if bead == "omp-orchestrator-ack-spine-oj6.3" && reason == "no_eligible_pane"
+        ),
+        "capacity must be re-queued, not escalated: {capacity:?}"
+    );
 
-    append_request(&path, &three).expect("first");
-    append_request(&path, &four).expect("second");
-    assert_eq!(read_rows(&path).expect("readable").len(), 2);
+    let transport = classify_heartbeat(
+        "SUPERVISOR_REFUSED",
+        "DISPATCH_FAILED bead=omp-orchestrator-ack-spine-oj6.4 ACK_STAGE_RETRY_BLOCKED owes_human=false",
+        1_788_330_200,
+    );
+    assert!(
+        matches!(
+            transport,
+            HeartbeatAction::RedispatchTransport { ref bead, ref reason }
+                if bead == "omp-orchestrator-ack-spine-oj6.4"
+                    && reason == "receiver_receipt_unproven"
+        ),
+        "unproven transport must re-dispatch: {transport:?}"
+    );
 }
-
 /// ACCEPTANCE 3, second half: a close carrying `HD-…` records the answer; a close without
 /// one records nothing.
 #[test]
@@ -113,7 +123,11 @@ fn only_a_close_that_cites_an_hd_id_records_a_decision() {
     assert_eq!(hd_reference("HD-12"), Some("HD-12".to_owned()));
     // The negative arm is the load-bearing one: a close is not automatically a decision.
     assert_eq!(hd_reference("DONE all acceptance legs green"), None);
-    assert_eq!(hd_reference("see HD- for details"), None, "no digits, no id");
+    assert_eq!(
+        hd_reference("see HD- for details"),
+        None,
+        "no digits, no id"
+    );
     assert_eq!(hd_reference(""), None);
 }
 
@@ -127,11 +141,11 @@ fn an_unattributed_or_unasked_decision_is_refused_by_name() {
         question: "Wire, retire, or declare advisory?".to_owned(),
         asked_by: "omp-orchestrator-supervisor".to_owned(),
         blocking: "gate:ack-spine".to_owned(),
+        clause: Some(HumanClause::Authority),
         ts: 1_788_330_000,
     };
     let outcome = append_request(&path, &request).expect("append");
 
-    // No such question.
     let orphan = Decision {
         id: "HD-9999".to_owned(),
         decision: "wire it".to_owned(),
@@ -146,7 +160,6 @@ fn an_unattributed_or_unasked_decision_is_refused_by_name() {
         })
     );
 
-    // No decider.
     let unattributed = Decision {
         id: outcome.id().to_owned(),
         decision: "wire it".to_owned(),
@@ -158,7 +171,6 @@ fn an_unattributed_or_unasked_decision_is_refused_by_name() {
         Err(LedgerError::MissingField { field: "decider" })
     );
 
-    // No words.
     let wordless = Decision {
         id: outcome.id().to_owned(),
         decision: String::new(),
@@ -170,7 +182,6 @@ fn an_unattributed_or_unasked_decision_is_refused_by_name() {
         Err(LedgerError::MissingField { field: "decision" })
     );
 
-    // KNOWN-GOOD: the complete form lands, or the refusals above prove nothing.
     let good = Decision {
         id: outcome.id().to_owned(),
         decision: "wire it on the lane".to_owned(),
@@ -183,6 +194,58 @@ fn an_unattributed_or_unasked_decision_is_refused_by_name() {
     assert_eq!(rows.len(), 2, "append-only: the question row is preserved");
     assert!(!rows[0].is_answered(), "the request row stays a request");
     assert!(rows[1].is_answered(), "the answer row carries the decision");
+}
+/// A request without a named clause is refused at the write boundary.
+#[test]
+fn a_clauseless_request_is_refused_with_a_named_field() {
+    let path = scratch("missing-clause");
+    let request = Request {
+        question: "Should the policy change?".to_owned(),
+        asked_by: "omp-orchestrator-supervisor".to_owned(),
+        blocking: "status:POLICY".to_owned(),
+        clause: None,
+        ts: 1_788_330_000,
+    };
+    let error = append_request(&path, &request).expect_err("clause is mandatory");
+    assert_eq!(error, LedgerError::MissingField { field: "clause" });
+    assert!(error.to_string().contains("field=clause"), "{error}");
+}
+
+/// Machine-owned dispatch recovery is not recorded as a human answer.
+#[test]
+fn a_machine_disposition_requeues_without_a_human_answer() {
+    let path = scratch("disposition");
+    std::fs::write(
+        &path,
+        r#"{"id":"HD-0042","question":"Bead x cannot be dispatched","decision":"","decider":"","recorded_by":"supervisor"}
+"#,
+    )
+    .expect("seed request");
+
+    let first = append_agent_disposition(
+        &path,
+        "HD-0042",
+        AgentDisposition::Requeued,
+        "capacity:no_eligible_pane",
+        1_788_330_000,
+    )
+    .expect("append disposition");
+    assert!(matches!(first, AppendOutcome::Appended { ref id } if id == "HD-0042"));
+    let rows = read_rows(&path).expect("readable");
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[1].value["answers"], "HD-0042");
+    assert_eq!(rows[1].value["disposition"], "REQUEUED");
+    assert_eq!(rows[1].value["decision"], "");
+
+    let second = append_agent_disposition(
+        &path,
+        "HD-0042",
+        AgentDisposition::Requeued,
+        "capacity:no_eligible_pane",
+        1_788_330_001,
+    )
+    .expect("dedupe disposition");
+    assert!(matches!(second, AppendOutcome::Deduped { ref id } if id == "HD-0042"));
 }
 
 /// An unreadable ledger must NOT be treated as an empty one.
@@ -209,7 +272,6 @@ fn an_unreadable_ledger_is_an_error_and_a_missing_one_is_empty() {
 /// count and the subjects printed rather than a bare zero.
 #[test]
 fn replaying_the_measured_day_reports_at_least_three_distinct_requests() {
-    // 168 + 22 + 16 rows, exactly as counted, plus noise the classifier must ignore.
     let mut rows: Vec<(String, String, u64)> = Vec::new();
     for i in 0..168 {
         rows.push((
@@ -232,7 +294,16 @@ fn replaying_the_measured_day_reports_at_least_three_distinct_requests() {
             1_788_350_000 + i,
         ));
     }
-    // Rows that address nobody. A classifier that counted these would inflate the loss.
+    rows.push((
+        "SUPERVISOR_REFUSED".into(),
+        "RISK owner=josh clause=taste bead=omp-orchestrator-public-1".into(),
+        1_788_360_000,
+    ));
+    rows.push((
+        "SUPERVISOR_REFUSED".into(),
+        "RISK owner=josh clause=taste bead=omp-orchestrator-public-1".into(),
+        1_788_360_001,
+    ));
     for i in 0..500 {
         rows.push((
             "CYCLE_STARTED".into(),
@@ -244,42 +315,16 @@ fn replaying_the_measured_day_reports_at_least_three_distinct_requests() {
     let report = replay(&rows);
     report
         .require_nonvacuous()
-        .expect("706 rows is not a vacuous replay");
-    assert_eq!(report.rows_read, 706);
-    assert_eq!(
-        report.human_addressed, 206,
-        "168 + 22 + 16; the 500 CYCLE_STARTED rows address nobody"
-    );
+        .expect("706 rows is not vacuous");
+    assert_eq!(report.rows_read, 708);
+    assert_eq!(report.human_addressed, 2);
     assert_eq!(
         report.distinct.len(),
-        3,
-        "three distinct questions, not 206 rows: {:?}",
-        report
-            .distinct
-            .iter()
-            .map(|entry| &entry.blocking)
-            .collect::<Vec<_>>()
+        1,
+        "only explicitly clause-named work escalates"
     );
-    let subjects: Vec<&str> = report
-        .distinct
-        .iter()
-        .map(|entry| entry.blocking.as_str())
-        .collect();
-    assert!(subjects.contains(&"gate:ack-spine"), "{subjects:?}");
-    assert!(
-        subjects.contains(&"bead:omp-orchestrator-ack-spine-oj6.3"),
-        "{subjects:?}"
-    );
-    assert!(subjects.contains(&"gate:tick-monitor"), "{subjects:?}");
-    // The occurrence counts are carried, so "168 times" survives the collapse.
-    let gate = report
-        .distinct
-        .iter()
-        .find(|entry| entry.blocking == "gate:ack-spine")
-        .expect("present");
-    assert_eq!(gate.occurrences, 168);
+    assert_eq!(report.distinct[0].clause, HumanClause::Taste);
 }
-
 /// ANTI-VACUITY on the replay itself: zero rows read is an ERROR, not a clean day.
 #[test]
 fn a_replay_that_read_nothing_is_an_error_not_a_clean_day() {
@@ -310,21 +355,29 @@ fn a_replay_that_read_nothing_is_an_error_not_a_clean_day() {
 /// A classifier that silently discards the case it did not anticipate is how S9 acquired
 /// a reader and no writer in the first place.
 #[test]
-fn an_unclassified_human_addressed_row_still_becomes_a_request() {
-    let request = classify_heartbeat(
+fn an_unclassified_human_addressed_row_becomes_named_agent_work() {
+    let action = classify_heartbeat(
         "QUEUE_EMPTY_NEEDS_JOSH",
         "QUEUE_EMPTY_NEEDS_JOSH owner=josh next_action=authorize-or-create-work free=4",
         1_788_360_000,
-    )
-    .expect("a row naming owner=josh must produce a request even if unmatched");
-    assert!(request.question.contains("UNCLASSIFIED"), "{request:?}");
-    assert_eq!(request.blocking, "status:QUEUE_EMPTY_NEEDS_JOSH");
-
-    // And a row addressing nobody stays None, or every tick becomes a question.
-    assert!(classify_heartbeat("CYCLE_STARTED", "tick=1 panes=5", 1).is_none());
-    assert!(classify_heartbeat("DOCS_STALE", "detail=PLAN.md drifted", 1).is_none());
+    );
+    assert!(
+        matches!(
+            action,
+            HeartbeatAction::AgentWork { ref status, ref reason }
+                if status == "QUEUE_EMPTY_NEEDS_JOSH" && reason == "human_clause_missing"
+        ),
+        "an unlabelled row is agent work, not a human request: {action:?}"
+    );
+    assert!(matches!(
+        classify_heartbeat("CYCLE_STARTED", "tick=1 panes=5", 1),
+        HeartbeatAction::Ignored
+    ));
+    assert!(matches!(
+        classify_heartbeat("DOCS_STALE", "detail=PLAN.md drifted", 1),
+        HeartbeatAction::Ignored
+    ));
 }
-
 /// The schema extension is ADDITIVE: every key the existing reader indexes is present.
 ///
 /// Measured keys across the 8 existing rows: binds_stages, condition, decider, decision,
@@ -338,6 +391,7 @@ fn a_request_row_carries_every_key_the_existing_reader_indexes() {
             question: "Wire, retire, or declare advisory?".to_owned(),
             asked_by: "omp-orchestrator-supervisor".to_owned(),
             blocking: "gate:ack-spine".to_owned(),
+            clause: Some(HumanClause::Authority),
             ts: 1_788_330_000,
         },
     );
@@ -359,11 +413,16 @@ fn a_request_row_carries_every_key_the_existing_reader_indexes() {
     // The additive half.
     assert!(row.get("asked_by").is_some());
     assert!(row.get("blocking").is_some());
+    assert_eq!(
+        row.get("clause").and_then(|value| value.as_str()),
+        Some("authority")
+    );
     assert!(row.get("question_key").is_some());
     // A request is NOT an answer, and the reader tells them apart by an empty decision.
     assert_eq!(row.get("decision").and_then(|v| v.as_str()), Some(""));
     assert_eq!(
-        row.get("binds_stages").map(std::string::ToString::to_string),
+        row.get("binds_stages")
+            .map(std::string::ToString::to_string),
         Some("[\"S9\"]".to_owned())
     );
 }

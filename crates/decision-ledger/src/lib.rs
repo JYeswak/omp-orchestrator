@@ -47,6 +47,32 @@ use serde_json::{json, Map, Value};
 
 pub mod execution;
 
+/// The three conditions that make a decision genuinely human.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HumanClause {
+    Authority,
+    ExclusiveCapability,
+    Taste,
+}
+
+impl HumanClause {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Authority => "authority",
+            Self::ExclusiveCapability => "exclusive_capability",
+            Self::Taste => "taste",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "authority" => Some(Self::Authority),
+            "exclusive_capability" => Some(Self::ExclusiveCapability),
+            "taste" => Some(Self::Taste),
+            _ => None,
+        }
+    }
+}
 
 /// A question the loop needs a human to answer.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,6 +83,8 @@ pub struct Request {
     pub asked_by: String,
     /// What is halted: `gate:<name>` or `bead:<id>`.
     pub blocking: String,
+    /// The named HUMAN DECISION clause. None is rejected at the append boundary.
+    pub clause: Option<HumanClause>,
     /// Unix seconds.
     pub ts: u64,
 }
@@ -87,6 +115,22 @@ pub enum AppendOutcome {
     /// ONE question asked 188 times, and a ledger that records it 188 times is as
     /// unreadable as one that records it never.
     Deduped { id: String },
+}
+
+/// How the dispatcher handled a machine-owned failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AgentDisposition {
+    Requeued,
+    OrchestratorWork,
+}
+
+impl AgentDisposition {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Requeued => "REQUEUED",
+            Self::OrchestratorWork => "ORCHESTRATOR_WORK",
+        }
+    }
 }
 
 impl AppendOutcome {
@@ -271,6 +315,7 @@ pub fn request_row(id: &str, request: &Request) -> Value {
         "question": request.question,
         "asked_by": request.asked_by,
         "blocking": request.blocking,
+        "clause": request.clause.map_or(Value::Null, |clause| Value::String(clause.as_str().to_owned())),
         "question_key": question_key(&request.question),
         "options_considered": Value::Array(Vec::new()),
         "decision": "",
@@ -291,6 +336,9 @@ pub fn append_request(path: &Path, request: &Request) -> Result<AppendOutcome, L
     if request.blocking.trim().is_empty() {
         return Err(LedgerError::MissingField { field: "blocking" });
     }
+    if request.clause.is_none() {
+        return Err(LedgerError::MissingField { field: "clause" });
+    }
     let rows = read_rows(path)?;
     let key = question_key(&request.question);
     if let Some(existing) = rows
@@ -304,6 +352,67 @@ pub fn append_request(path: &Path, request: &Request) -> Result<AppendOutcome, L
     let id = next_id(&rows);
     append_line(path, &request_row(&id, request))?;
     Ok(AppendOutcome::Appended { id })
+}
+
+/// Append a machine-owned disposition for an existing request.
+///
+/// This is deliberately separate from `record_decision`: a re-queue or an
+/// orchestrator-owned work item is not a human answer and must not manufacture one.
+pub fn append_agent_disposition(
+    path: &Path,
+    request_id: &str,
+    disposition: AgentDisposition,
+    reason: &str,
+    ts: u64,
+) -> Result<AppendOutcome, LedgerError> {
+    if request_id.trim().is_empty() {
+        return Err(LedgerError::MissingField {
+            field: "request_id",
+        });
+    }
+    if reason.trim().is_empty() {
+        return Err(LedgerError::MissingField {
+            field: "disposition_reason",
+        });
+    }
+    let rows = read_rows(path)?;
+    let request = rows
+        .iter()
+        .find(|row| row.id() == Some(request_id) && row.question().is_some())
+        .ok_or_else(|| LedgerError::NoSuchRequest {
+            id: request_id.to_owned(),
+        })?;
+    if let Some(existing) = rows.iter().find(|row| {
+        row.value.get("answers").and_then(Value::as_str) == Some(request_id)
+            && row
+                .value
+                .get("disposition")
+                .and_then(Value::as_str)
+                .is_some()
+    }) {
+        return Ok(AppendOutcome::Deduped {
+            id: existing.id().unwrap_or(request_id).to_owned(),
+        });
+    }
+    let row = json!({
+        "id": request_id,
+        "ts": ts,
+        "question": request.question().unwrap_or_default(),
+        "answers": request_id,
+        "decision": "",
+        "decider": "",
+        "recorded_by": "omp-orchestrator",
+        "disposition": disposition.as_str(),
+        "disposition_reason": reason,
+        "binds_stages": json!(["S9"]),
+        "transcript_ref": "",
+        "review_after": "",
+        "supersedes": "",
+    });
+    append_line(path, &row)?;
+    Ok(AppendOutcome::Appended {
+        id: request_id.to_owned(),
+    })
 }
 
 /// Record a human's answer to an existing request.
@@ -376,76 +485,89 @@ pub fn now_unix() -> u64 {
         .unwrap_or_default()
 }
 
-/// Turn one heartbeat row into a human-decision request, or `None`.
+/// The typed action for one heartbeat row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HeartbeatAction {
+    Placed { bead: String },
+    RequeueCapacity { bead: String, reason: String },
+    RedispatchTransport { bead: String, reason: String },
+    Human(Request),
+    AgentWork { status: String, reason: String },
+    Ignored,
+}
+
+impl HeartbeatAction {
+    pub const fn label(&self) -> &'static str {
+        match self {
+            Self::Placed { .. } => "DISPATCH_PLACED",
+            Self::RequeueCapacity { .. } => "DISPATCH_REQUEUED",
+            Self::RedispatchTransport { .. } => "DISPATCH_REDISPATCH",
+            Self::Human(_) => "HUMAN_DECISION",
+            Self::AgentWork { .. } => "AGENT_WORK",
+            Self::Ignored => "IGNORED",
+        }
+    }
+}
+
+/// Classify one heartbeat without converting a dispatch failure into a human question.
 ///
-/// # Keyed on the SUBJECT, not the text
-///
-/// The 188 `GATE_UNWIRED` rows carry a byte-identical detail, but the `DISPATCH_BLOCKED`
-/// rows carry a pane id and a tick number that change every time. A textual key would
-/// emit one row per tick for those; a digit-stripped key would merge two different beads.
-/// So the question is COMPOSED from the extracted subject — `gate:ack-spine`,
-/// `bead:omp-orchestrator-x` — and the dedupe key falls out of that.
-///
-/// # Unclassified is not discarded
-///
-/// A row that says `owner=josh` and matches no known shape still produces a request, with
-/// its detail as the question. A classifier that silently drops the case it did not
-/// anticipate is how S9 got a reader and no writer in the first place.
-pub fn classify_heartbeat(status: &str, detail: &str, ts: u64) -> Option<Request> {
+/// Missing receiver capacity remains in the ready queue with a bounded cooldown.
+/// Unproven transport stays in the receipt/re-dispatch lane. Only an explicit
+/// `clause=authority`, `clause=exclusive_capability`, or `clause=taste` can create
+/// a HUMAN request; an addressed row without that clause becomes named agent work.
+pub fn classify_heartbeat(status: &str, detail: &str, ts: u64) -> HeartbeatAction {
+    let bead = field_after(detail, "bead=")
+        .map(|value| value.split_whitespace().next().unwrap_or(value).to_owned());
+    let capacity = detail.contains("receiver agent is missing")
+        || detail.contains("next_action=claim-bead")
+        || detail.contains("next_action=select-matching-pane")
+        || detail.contains("next_action=configure-pane-agent-map");
+    if let Some(bead) = bead.as_ref().filter(|_| capacity) {
+        return HeartbeatAction::RequeueCapacity {
+            bead: bead.clone(),
+            reason: "no_eligible_pane".to_owned(),
+        };
+    }
+    let transport =
+        detail.contains("ACK_STAGE_RETRY_BLOCKED") || detail.contains("exhausted its ack retries");
+    if let Some(bead) = bead.as_ref().filter(|_| transport) {
+        return HeartbeatAction::RedispatchTransport {
+            bead: bead.clone(),
+            reason: "receiver_receipt_unproven".to_owned(),
+        };
+    }
+    if status == "DISPATCHED" {
+        return bead.map_or(HeartbeatAction::Ignored, |bead| HeartbeatAction::Placed {
+            bead,
+        });
+    }
     let addressed = detail.contains("owner=josh") || detail.contains("AWAIT_HUMAN");
     if !addressed {
-        return None;
+        return HeartbeatAction::Ignored;
     }
-    let asked_by = "omp-orchestrator-supervisor".to_owned();
-
-    if let Some(gate) = field_after(detail, "unwired=") {
-        let gate = gate.split(['[', ' ']).next().unwrap_or(gate);
-        return Some(Request {
-            question: format!(
-                "Gate {gate} has no reachable trigger. Wire it, retire it, or declare it \
-                 advisory with a named reason?"
-            ),
-            asked_by,
-            blocking: format!("gate:{gate}"),
-            ts,
-        });
-    }
-    if status == "MONITOR_BLIND" || detail.starts_with("MONITOR_BLIND") {
-        return Some(Request {
-            question: "tick-monitor observed zero panes, so the supervisor is blind. \
-                       Repair the monitor or authorise dispatch without a census?"
-                .to_owned(),
-            asked_by,
-            blocking: "gate:tick-monitor".to_owned(),
-            ts,
-        });
-    }
-    if let Some(bead) = field_after(detail, "bead=") {
-        let bead = bead.split_whitespace().next().unwrap_or(bead);
-        let subject = if detail.contains("AWAIT_HUMAN") {
-            format!("Bead {bead} has exhausted its ack retries and is awaiting a human.")
-        } else {
-            format!("Bead {bead} cannot be dispatched: its receiver agent is missing.")
+    let Some(clause) = field_after(detail, "clause=").and_then(HumanClause::parse) else {
+        return HeartbeatAction::AgentWork {
+            status: status.to_owned(),
+            reason: "human_clause_missing".to_owned(),
         };
-        return Some(Request {
-            question: format!("{subject} Assign a holder, re-scope it, or park it?"),
-            asked_by,
-            blocking: format!("bead:{bead}"),
-            ts,
-        });
-    }
-    // The anticipated-shape list ends here, and the row still names a human. Carry it.
-    Some(Request {
-        question: format!(
-            "UNCLASSIFIED human-addressed refusal from status {status}: {}",
-            detail.split_whitespace().collect::<Vec<_>>().join(" ")
-        ),
-        asked_by,
-        blocking: format!("status:{status}"),
+    };
+    let question = format!(
+        "Human decision clause={} status={status}: {}",
+        clause.as_str(),
+        detail.split_whitespace().collect::<Vec<_>>().join(" ")
+    );
+    let blocking = bead
+        .map(|bead| format!("bead:{bead}"))
+        .or_else(|| field_after(detail, "unwired=").map(|gate| format!("gate:{gate}")))
+        .unwrap_or_else(|| format!("status:{status}"));
+    HeartbeatAction::Human(Request {
+        question,
+        asked_by: "omp-orchestrator-supervisor".to_owned(),
+        blocking,
+        clause: Some(clause),
         ts,
     })
 }
-
 /// The value following `needle`, up to the next whitespace.
 fn field_after<'a>(haystack: &'a str, needle: &str) -> Option<&'a str> {
     let start = haystack.find(needle)? + needle.len();
@@ -466,6 +588,8 @@ pub struct ReplayEntry {
     pub question: String,
     /// What it blocks.
     pub blocking: String,
+    /// The named human-decision clause carried by the source row.
+    pub clause: HumanClause,
     /// How many heartbeat rows collapsed into this one question.
     pub occurrences: usize,
     /// Earliest occurrence.
@@ -511,7 +635,7 @@ pub fn replay(rows: &[(String, String, u64)]) -> Replay {
     let mut order: Vec<ReplayEntry> = Vec::new();
     let mut human_addressed = 0usize;
     for (status, detail, ts) in rows {
-        let Some(request) = classify_heartbeat(status, detail, *ts) else {
+        let HeartbeatAction::Human(request) = classify_heartbeat(status, detail, *ts) else {
             continue;
         };
         human_addressed += 1;
@@ -526,6 +650,7 @@ pub fn replay(rows: &[(String, String, u64)]) -> Replay {
             order.push(ReplayEntry {
                 question: request.question,
                 blocking: request.blocking,
+                clause: request.clause.expect("human actions carry a clause"),
                 occurrences: 1,
                 first_ts: *ts,
             });

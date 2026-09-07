@@ -13,6 +13,7 @@ use ack_stage::{
 };
 
 use ack_spine::ledger::StepKind;
+use decision_ledger::{HeartbeatAction, HumanClause};
 use agent_mail_native::identity::{format_sender_header, resolve_pane_identity, BindingStatus, PaneIdentity};
 use agent_mail_native::journey::{
     self as mail, AgentName, DeliveryReceipt, ProjectKey, SendRequest,
@@ -3277,8 +3278,10 @@ fn write_heartbeat(config: &Config, tick: u64, status: &str, detail: &str) -> Re
             )
         })?;
     }
+    let ts_unix = now_unix();
+    let heartbeat_action = decision_ledger::classify_heartbeat(status, detail, ts_unix);
     let row = serde_json::json!({
-        "ts_unix": now_unix(),
+        "ts_unix": ts_unix,
         "event": "supervisor_heartbeat",
         "build_id": BUILD_ID,
         "run_id": lifecycle_run_id(),
@@ -3288,6 +3291,7 @@ fn write_heartbeat(config: &Config, tick: u64, status: &str, detail: &str) -> Re
         "repo": config.repo.display().to_string(),
         "session": config.session,
         "detail": detail,
+        "dispatch_action": heartbeat_action.label(),
     });
     let bytes = serde_json::to_vec(&row)
         .map_err(|error| format!("HEARTBEAT_WRITE_ERROR serialize: {error}"))?;
@@ -3322,41 +3326,59 @@ fn write_heartbeat(config: &Config, tick: u64, status: &str, detail: &str) -> Re
     // a progress file.
     //
     // THE FUNNEL IS THE POINT. There are 42 `write_heartbeat` call sites; patching
-    // the two that happened to fire today would leave the next refusal shape
-    // unrecorded, which is the hand-maintained-list defect this repo keeps paying
-    // for. One call here covers `GATE_UNWIRED`, `DISPATCH_BLOCKED … owner=josh`,
-    // `MONITOR_BLIND`, `ACK_STAGE_RETRY_BLOCKED action=AWAIT_HUMAN`, and any future
-    // shape — `classify_heartbeat` returns `None` for rows that address nobody, and
-    // carries an UNCLASSIFIED request rather than dropping a row it did not expect.
+    // only the two shapes observed today would leave the next refusal unclassified.
+    // The typed classifier keeps capacity failures in the queue with a cooldown,
+    // keeps unproven transport in the receipt/re-dispatch lane, and admits a request
+    // to `docs/decisions.jsonl` only when the detail names a HUMAN DECISION clause.
+    // An addressed row without a clause is emitted as AGENT_WORK, never as a copy-out.
     //
     // A LEDGER FAILURE MUST NOT KILL A TICK. The decision ledger is a record, not a
     // gate: refusing the heartbeat because the record failed would convert a
     // bookkeeping fault into a fleet outage. So the outcome is REPORTED on stderr and
     // the tick proceeds — and it is reported, not swallowed, because a writer that
     // fails silently is the defect this whole bead is about.
-    if let Some(request) = decision_ledger::classify_heartbeat(status, detail, now_unix()) {
-        let ledger = config.repo.join("docs/decisions.jsonl");
-        match decision_ledger::append_request(&ledger, &request) {
-            // Deduped is the common case by design: 188 identical ticks are ONE
-            // question. Silent, or the log becomes the thing it replaced.
-            Ok(outcome) if !outcome.wrote() => {}
-            Ok(outcome) => {
-                let _ = writeln!(
-                    io::stderr(),
-                    "S9_REQUEST_RECORDED id={} blocking={} question={}",
-                    outcome.id(),
-                    request.blocking,
-                    request.question
-                );
-            }
-            Err(error) => {
-                let _ = writeln!(
-                    io::stderr(),
-                    "S9_REQUEST_UNRECORDED status={status} blocking={} detail={error}",
-                    request.blocking
-                );
+    match heartbeat_action {
+        HeartbeatAction::Human(request) => {
+            let ledger = config.repo.join("docs/decisions.jsonl");
+            match decision_ledger::append_request(&ledger, &request) {
+                Ok(outcome) if !outcome.wrote() => {}
+                Ok(outcome) => {
+                    let _ = writeln!(
+                        io::stderr(),
+                        "S9_REQUEST_RECORDED id={} clause={} blocking={} question={}",
+                        outcome.id(),
+                        request.clause.map_or("missing", HumanClause::as_str),
+                        request.blocking,
+                        request.question
+                    );
+                }
+                Err(error) => {
+                    let _ = writeln!(
+                        io::stderr(),
+                        "S9_REQUEST_UNRECORDED status={status} blocking={} detail={error}",
+                        request.blocking
+                    );
+                }
             }
         }
+        HeartbeatAction::RequeueCapacity { bead, reason } => {
+            eprintln!(
+                "DISPATCH_REQUEUED bead={bead} reason={reason} after_secs={} next_action=retry-with-backoff",
+                PENDING_DISPATCH_MAX_AGE_SECS
+            );
+        }
+        HeartbeatAction::RedispatchTransport { bead, reason } => {
+            eprintln!(
+                "DISPATCH_REDISPATCH bead={bead} reason={reason} next_action=select-different-pane"
+            );
+        }
+        HeartbeatAction::Placed { bead } => {
+            eprintln!("DISPATCH_PLACED bead={bead} next_action=observe-receipt");
+        }
+        HeartbeatAction::AgentWork { status, reason } => {
+            eprintln!("AGENT_WORK status={status} reason={reason} next_action=route-to-worker");
+        }
+        HeartbeatAction::Ignored => {}
     }
     Ok(())
 }
@@ -3558,7 +3580,12 @@ fn last_dispatch_claimed_ts(heartbeat: &str, bead: &str) -> Option<u64> {
         let Ok(row) = serde_json::from_str::<Value>(line) else {
             continue;
         };
-        if row.get("status").and_then(Value::as_str) != Some("DISPATCH_CLAIMED") {
+        let claimed = row.get("status").and_then(Value::as_str) == Some("DISPATCH_CLAIMED");
+        let requeued = row
+            .get("dispatch_action")
+            .and_then(Value::as_str)
+            .is_some_and(|action| action == "DISPATCH_REQUEUED");
+        if !claimed && !requeued {
             continue;
         }
         let detail = row.get("detail").and_then(Value::as_str).unwrap_or("");
@@ -6296,6 +6323,38 @@ mod tests {
             std::fs::write(docs.join("PLAN.md"), a).expect("assembly");
         }
         (guard, config)
+    }
+
+    #[test]
+    fn capacity_refusal_is_requeued_without_a_decision_row() {
+        let guard = tempfile::tempdir().expect("heartbeat fixture root");
+        let heartbeat = guard.path().join("heartbeat.jsonl");
+        let config = fixture_config(heartbeat.clone());
+        write_heartbeat(
+            &config,
+            1,
+            "SUPERVISOR_REFUSED",
+            "DISPATCH_BLOCKED bead=omp-orchestrator-capacity-1 receiver agent is missing owner=josh next_action=claim-bead",
+        )
+        .expect("heartbeat write");
+
+        let line = std::fs::read_to_string(&heartbeat).expect("heartbeat readable");
+        let row: Value = serde_json::from_str(line.trim()).expect("heartbeat JSON");
+        assert_eq!(row["dispatch_action"], "DISPATCH_REQUEUED");
+        assert!(
+            !config.repo.join("docs/decisions.jsonl").exists(),
+            "capacity recovery must not create a human decision row"
+        );
+        let now = row["ts_unix"].as_u64().expect("timestamp");
+        assert!(
+            redispatch_cooldown_age(
+                &line,
+                "omp-orchestrator-capacity-1",
+                now.saturating_add(1)
+            )
+            .is_some(),
+            "a requeued bead must remain on cooldown"
+        );
     }
 
     #[test]

@@ -3,7 +3,7 @@
 //!
 //! ```text
 //! decision-ledger replay <heartbeat.jsonl> [--since <unix>] [--apply] [--ledger <path>]
-//! decision-ledger request --question <q> --asked-by <who> --blocking <gate:x|bead:y>
+//! decision-ledger request --question <q> --asked-by <who> --blocking <gate:x|bead:y> --clause <authority|exclusive_capability|taste>
 //! decision-ledger decision --id HD-000N --decision <d> --decider <who> [--recorded-by <a>] [--ref <r>]
 //! decision-ledger from-close --reason <close reason> --decision <d> --decider <who>
 //! ```
@@ -11,24 +11,24 @@
 //! `replay` DEFAULTS TO DRY-RUN. Reading the day's heartbeat and appending 30 rows to the
 //! decision ledger as a side effect of asking "what did we lose?" would be its own defect.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use decision_ledger::{
-    append_request, classify_heartbeat, hd_reference, now_unix, read_rows, record_decision, replay,
-    AppendOutcome, Decision, Request,
-};
 use decision_ledger::execution::{check_path, Probe};
+use decision_ledger::{
+    append_agent_disposition, append_request, hd_reference, now_unix, read_rows, record_decision,
+    replay, AgentDisposition, Decision, HumanClause, Request,
+};
 use serde_json::Value;
-
 
 const USAGE: &str = "usage:\n  \
     decision-ledger replay <heartbeat.jsonl> [--since <unix>] [--apply] [--ledger <path>]\n  \
-    decision-ledger request --question <q> --asked-by <who> --blocking <gate:x|bead:y> [--ledger <p>]\n  \
+    decision-ledger reconcile-dispatch [--apply] [--ledger <path>]\n  \
+    decision-ledger request --question <q> --asked-by <who> --blocking <gate:x|bead:y> --clause <authority|exclusive_capability|taste> [--ledger <p>]\n  \
     decision-ledger decision --id HD-000N --decision <d> --decider <who> [--recorded-by <a>] [--ref <r>] [--ledger <p>]\n  \
     decision-ledger from-close --reason <text> --decision <d> --decider <who> [--recorded-by <a>] [--ledger <p>]\n  \
     decision-ledger check-unexecuted [--ledger <p>] [--unpushed-count <n>]";
-
 
 fn default_ledger() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -53,6 +53,7 @@ fn main() -> ExitCode {
     let ledger = flag(&args, "--ledger").map_or_else(default_ledger, PathBuf::from);
     match args.first().map(String::as_str) {
         Some("replay") => cmd_replay(&args, &ledger),
+        Some("reconcile-dispatch") => cmd_reconcile_dispatch(&args, &ledger),
         Some("request") => cmd_request(&args, &ledger),
         Some("decision") => cmd_decision(&args, &ledger),
         Some("from-close") => cmd_from_close(&args, &ledger),
@@ -139,6 +140,7 @@ fn cmd_replay(args: &[String], ledger: &Path) -> ExitCode {
             question: entry.question.clone(),
             asked_by: "omp-orchestrator-supervisor".to_owned(),
             blocking: entry.blocking.clone(),
+            clause: Some(entry.clause),
             ts: entry.first_ts,
         };
         match append_request(ledger, &request) {
@@ -167,20 +169,94 @@ fn cmd_replay(args: &[String], ledger: &Path) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// Backfill machine-owned dispatch rows without pretending they are human answers.
+fn cmd_reconcile_dispatch(args: &[String], ledger: &Path) -> ExitCode {
+    let rows = match read_rows(ledger) {
+        Ok(rows) => rows,
+        Err(error) => return fail(error),
+    };
+    let answered: BTreeSet<String> = rows
+        .iter()
+        .filter_map(|row| row.value.get("answers").and_then(Value::as_str))
+        .map(str::to_owned)
+        .collect();
+    let mut candidates = Vec::new();
+    for row in &rows {
+        let Some(id) = row.id() else { continue };
+        let Some(question) = row.question() else {
+            continue;
+        };
+        if answered.contains(id) {
+            continue;
+        }
+        let disposition = if question.contains("cannot be dispatched") {
+            Some((AgentDisposition::Requeued, "capacity:no_eligible_pane"))
+        } else if question.contains("exhausted its ack retries") {
+            Some((
+                AgentDisposition::Requeued,
+                "transport:receipt_unproven;next_action=select-different-pane",
+            ))
+        } else {
+            None
+        };
+        if let Some((disposition, reason)) = disposition {
+            candidates.push((id.to_owned(), disposition, reason.to_owned()));
+        }
+    }
+    let apply = args.iter().any(|arg| arg == "--apply");
+    println!(
+        "DISPATCH_BACKFILL candidates={} moved=0 remaining={} mode={}",
+        candidates.len(),
+        candidates.len(),
+        if apply { "APPLY" } else { "DRY-RUN" }
+    );
+    if !apply {
+        return ExitCode::SUCCESS;
+    }
+    let mut moved = 0usize;
+    for (id, disposition, reason) in &candidates {
+        match append_agent_disposition(ledger, id, *disposition, reason, now_unix()) {
+            Ok(outcome) => {
+                if outcome.wrote() {
+                    moved += 1;
+                }
+                println!(
+                    "DISPATCH_BACKFILL_ROW id={} disposition={} result={}",
+                    id,
+                    disposition.as_str(),
+                    if outcome.wrote() {
+                        "MOVED"
+                    } else {
+                        "ALREADY_RESOLVED"
+                    }
+                );
+            }
+            Err(error) => return fail(error),
+        }
+    }
+    println!(
+        "DISPATCH_BACKFILL moved={moved} remaining={}",
+        candidates.len().saturating_sub(moved)
+    );
+    ExitCode::SUCCESS
+}
+
 fn cmd_request(args: &[String], ledger: &Path) -> ExitCode {
-    let (Some(question), Some(asked_by), Some(blocking)) = (
+    let (Some(question), Some(asked_by), Some(blocking), Some(clause)) = (
         flag(args, "--question"),
         flag(args, "--asked-by"),
         flag(args, "--blocking"),
+        flag(args, "--clause").and_then(|value| HumanClause::parse(&value)),
     ) else {
         return fail(format!(
-            "request needs --question, --asked-by, --blocking\n{USAGE}"
+            "request needs --question, --asked-by, --blocking, --clause=authority|exclusive_capability|taste\n{USAGE}"
         ));
     };
     let request = Request {
         question,
         asked_by,
         blocking,
+        clause: Some(clause),
         ts: now_unix(),
     };
     match append_request(ledger, &request) {
@@ -279,7 +355,6 @@ fn cmd_check_unexecuted(args: &[String], ledger: &Path) -> ExitCode {
         }
     }
 }
-
 
 /// Count the rows a caller can expect to read back, for a quick health line.
 #[allow(dead_code)]
