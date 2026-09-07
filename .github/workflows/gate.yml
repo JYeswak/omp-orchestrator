@@ -168,6 +168,20 @@ jobs:
         run: |
           cat "$RUNNER_TEMP/head-compiles.receipt"
           grep -q '^HEAD_COMPILES_GATE PASS ' "$RUNNER_TEMP/head-compiles.receipt"
+  # omp-orchestrator-xib4: THIS JOB KEY WAS LOST, and losing it was worse than
+  # deleting the job. Without this line the body below became a SECOND `runs-on:`
+  # and `steps:` inside `head-compiles-as-committed`, and YAML forbids duplicate
+  # mapping keys: a strict loader refuses the whole file while a lenient one --
+  # which is what CI engines and `yaml.safe_load` do -- takes the LAST value. So
+  # the FIRST steps block above, the one that runs `head-compiles-gate` and greps
+  # `HEAD_COMPILES_GATE PASS`, was silently discarded. The job that verifies the
+  # committed HEAD stopped verifying it while still reporting a status.
+  #
+  # It also orphaned a declared CI referent: `no-shell-gate/tests/wired_lanes.rs:83`
+  # declares GATE-018 as Wired{Ci} with referent
+  # `.github/workflows/gate.yml::path-literal-guard`, which named no workflow job.
+  # One missing key, three RED detectors.
+  path-literal-guard:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
