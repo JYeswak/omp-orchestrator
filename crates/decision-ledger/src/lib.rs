@@ -415,6 +415,39 @@ pub fn append_agent_disposition(
     })
 }
 
+/// Identify unresolved machine-owned dispatch rows for the backfill command.
+///
+/// The answer links are the append-log authority: a request is a candidate only when no
+/// response row already carries `answers=<id>`. The returned disposition is machine-owned,
+/// never a human answer.
+pub fn dispatch_backfill_candidates(rows: &[Row]) -> Vec<(String, AgentDisposition, String)> {
+    let answered: BTreeSet<String> = rows
+        .iter()
+        .filter_map(|row| row.value.get("answers").and_then(Value::as_str))
+        .map(str::to_owned)
+        .collect();
+    rows.iter()
+        .filter_map(|row| {
+            let id = row.id()?;
+            let question = row.question()?;
+            if answered.contains(id) {
+                return None;
+            }
+            let disposition = if question.contains("cannot be dispatched") {
+                Some((AgentDisposition::Requeued, "capacity:no_eligible_pane"))
+            } else if question.contains("exhausted its ack retries") {
+                Some((
+                    AgentDisposition::Requeued,
+                    "transport:receipt_unproven;next_action=select-different-pane",
+                ))
+            } else {
+                None
+            }?;
+            Some((id.to_owned(), disposition.0, disposition.1.to_owned()))
+        })
+        .collect()
+}
+
 /// Record a human's answer to an existing request.
 ///
 /// Appends rather than rewriting the request row: the ledger is an append-only log, and a

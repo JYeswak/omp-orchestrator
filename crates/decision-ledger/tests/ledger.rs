@@ -14,9 +14,9 @@
 use std::path::PathBuf;
 
 use decision_ledger::{
-    append_agent_disposition, append_request, classify_heartbeat, hd_reference, next_id, read_rows,
-    record_decision, replay, request_row, AgentDisposition, AppendOutcome, Decision,
-    HeartbeatAction, HumanClause, LedgerError, Request,
+    append_agent_disposition, append_request, classify_heartbeat, dispatch_backfill_candidates,
+    hd_reference, next_id, read_rows, record_decision, replay, request_row, AgentDisposition,
+    AppendOutcome, Decision, HeartbeatAction, HumanClause, LedgerError, Request, Row,
 };
 
 /// A scratch ledger under the session-scoped scratch home, never `/tmp`.
@@ -246,6 +246,30 @@ fn a_machine_disposition_requeues_without_a_human_answer() {
     )
     .expect("dedupe disposition");
     assert!(matches!(second, AppendOutcome::Deduped { ref id } if id == "HD-0042"));
+}
+
+/// A planted unresolved template is visible to the dry-run planner, while its answer link clears it.
+#[test]
+fn planted_dispatch_row_is_visible_to_dry_run_planner() {
+    let request = Row {
+        value: serde_json::json!({
+            "id": "HD-0042",
+            "question": "Bead x cannot be dispatched: its receiver agent is missing.",
+        }),
+    };
+    let candidates = dispatch_backfill_candidates(&[request.clone()]);
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].0, "HD-0042");
+    assert_eq!(candidates[0].1, AgentDisposition::Requeued);
+    assert_eq!(candidates[0].2, "capacity:no_eligible_pane");
+
+    let answer = Row {
+        value: serde_json::json!({"id":"HD-0042","answers":"HD-0042","disposition":"REQUEUED"}),
+    };
+    assert!(
+        dispatch_backfill_candidates(&[request, answer]).is_empty(),
+        "an answer link must make the dry-run candidate disappear"
+    );
 }
 
 /// An unreadable ledger must NOT be treated as an empty one.

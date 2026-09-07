@@ -11,14 +11,13 @@
 //! `replay` DEFAULTS TO DRY-RUN. Reading the day's heartbeat and appending 30 rows to the
 //! decision ledger as a side effect of asking "what did we lose?" would be its own defect.
 
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use decision_ledger::execution::{check_path, Probe};
 use decision_ledger::{
-    append_agent_disposition, append_request, hd_reference, now_unix, read_rows, record_decision,
-    replay, AgentDisposition, Decision, HumanClause, Request,
+    append_agent_disposition, append_request, dispatch_backfill_candidates, hd_reference, now_unix,
+    read_rows, record_decision, replay, Decision, HumanClause, Request,
 };
 use serde_json::Value;
 
@@ -175,34 +174,7 @@ fn cmd_reconcile_dispatch(args: &[String], ledger: &Path) -> ExitCode {
         Ok(rows) => rows,
         Err(error) => return fail(error),
     };
-    let answered: BTreeSet<String> = rows
-        .iter()
-        .filter_map(|row| row.value.get("answers").and_then(Value::as_str))
-        .map(str::to_owned)
-        .collect();
-    let mut candidates = Vec::new();
-    for row in &rows {
-        let Some(id) = row.id() else { continue };
-        let Some(question) = row.question() else {
-            continue;
-        };
-        if answered.contains(id) {
-            continue;
-        }
-        let disposition = if question.contains("cannot be dispatched") {
-            Some((AgentDisposition::Requeued, "capacity:no_eligible_pane"))
-        } else if question.contains("exhausted its ack retries") {
-            Some((
-                AgentDisposition::Requeued,
-                "transport:receipt_unproven;next_action=select-different-pane",
-            ))
-        } else {
-            None
-        };
-        if let Some((disposition, reason)) = disposition {
-            candidates.push((id.to_owned(), disposition, reason.to_owned()));
-        }
-    }
+    let candidates = dispatch_backfill_candidates(&rows);
     let apply = args.iter().any(|arg| arg == "--apply");
     println!(
         "DISPATCH_BACKFILL candidates={} moved=0 remaining={} mode={}",
