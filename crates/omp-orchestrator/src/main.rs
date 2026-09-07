@@ -13,7 +13,7 @@ use ack_stage::{
 };
 
 use ack_spine::ledger::StepKind;
-use agent_mail_native::identity::{resolve_pane_identity, BindingStatus, PaneIdentity};
+use agent_mail_native::identity::{format_sender_header, resolve_pane_identity, BindingStatus, PaneIdentity};
 use agent_mail_native::journey::{
     self as mail, AgentName, DeliveryReceipt, ProjectKey, SendRequest,
 };
@@ -844,48 +844,6 @@ fn parse_observation(bytes: &[u8], gate_census: GateCensus) -> Result<Observatio
         },
         gate_census: Some(gate_census),
     })
-}
-
-fn parse_ready(bytes: &[u8]) -> Result<(Vec<String>, BTreeMap<String, u64>), String> {
-    let value: Value = serde_json::from_slice(bytes).map_err(|error| {
-        format!(
-            "QUEUE_UNREADABLE {} {} JSON: {error}",
-            finding::BR,
-            loop_queue_filter::READY_SUBCOMMAND
-        )
-    })?;
-    let rows = value.as_array().ok_or_else(|| {
-        format!(
-            "QUEUE_UNREADABLE {} {} did not return an array",
-            finding::BR,
-            loop_queue_filter::READY_SUBCOMMAND
-        )
-    })?;
-    let mut ids = Vec::with_capacity(rows.len());
-    let mut priorities = BTreeMap::new();
-    for (index, row) in rows.iter().enumerate() {
-        let id = row
-            .get("id")
-            .and_then(Value::as_str)
-            .filter(|id| !id.trim().is_empty())
-            .ok_or_else(|| {
-                format!(
-                    "QUEUE_UNREADABLE {} {} row {index} has no non-empty id",
-                    finding::BR,
-                    loop_queue_filter::READY_SUBCOMMAND
-                )
-            })?;
-        let priority = row.get("priority").and_then(Value::as_u64).ok_or_else(|| {
-            format!(
-                "QUEUE_UNREADABLE {} {} row {index} has no priority",
-                finding::BR,
-                loop_queue_filter::READY_SUBCOMMAND
-            )
-        })?;
-        ids.push(id.to_owned());
-        priorities.insert(id.to_owned(), priority);
-    }
-    Ok((ids, priorities))
 }
 
 async fn capture_pane(cx: &Cx, config: &Config, pane: &str) -> Result<Vec<u8>, String> {
@@ -2050,15 +2008,16 @@ async fn prepare_bead_dispatch(
     // This is deliberately before claim_bead_for_supervisor. A refused pane must
     // not become tracker state: file -> claim -> dispatch is only valid after
     // the dispatch preflight has authorized the pane and packet.
-    let packet = dispatch_packet::render_with_pane(
+    let packet = render_packet_with_sender(
+        cx,
+        config,
         &initial,
-        &config.repo,
         Some(pane),
         Some(&receiver_agent),
         None,
         None,
     )
-    .map_err(|error| format!("DISPATCH_PACKET_REFUSED bead={bead} pane={pane} error={error}"))?;
+    .await?;
     let packet_class = match hold_intent {
         cross_pane_hold::HoldIntent::Grade => DispatchPacketClass::Grading,
         cross_pane_hold::HoldIntent::Work => packet_admission::classify_packet(&packet)
@@ -2750,15 +2709,16 @@ async fn send_and_verify(
     refuse_terminal_status_at_send(bead, at_send.status_label())?;
     let capture = AtSendCapture::from_snapshot(&at_send);
     write_heartbeat(config, tick, "AT_SEND_CAPTURE", &capture.detail(bead, pane))?;
-    let packet = dispatch_packet::render_with_pane(
+    let packet = render_packet_with_sender(
+        cx,
+        config,
         snapshot,
-        &config.repo,
         Some(pane),
         Some(receiver_agent),
         None,
         None,
     )
-    .map_err(|error| format!("DISPATCH_PACKET_REFUSED bead={bead} pane={pane} error={error}"))?;
+    .await?;
     let staged = env::temp_dir().join(format!(
         "omp-orchestrator-dispatch-{}-{}-{}.txt",
         std::process::id(),
@@ -4560,6 +4520,54 @@ async fn mail_sender_pane_identity(
         .map_err(|error| format!("SENDER_IDENTITY_REFUSED pane={pane_id} error={error}"))
 }
 
+fn packet_sender_header(
+    identity: &PaneIdentity,
+    session: &str,
+    project: &ProjectKey,
+) -> Result<String, String> {
+    let header = format_sender_header(identity, session, project)
+        .map_err(|error| format!("SENDER_IDENTITY_REFUSED pane={} error={error}", identity.pane_id))?;
+    if !header.starts_with("FROM:")
+        || !header
+            .lines()
+            .nth(1)
+            .is_some_and(|line| line.starts_with("REPLY-VIA:"))
+    {
+        return Err("SENDER_IDENTITY_REFUSED reason=malformed_header".to_owned());
+    }
+    Ok(header)
+}
+
+async fn render_packet_with_sender(
+    cx: &Cx,
+    config: &Config,
+    snapshot: &BeadSnapshot,
+    pane: Option<&str>,
+    receiver_agent: Option<&str>,
+    why_now: Option<&str>,
+    traps: Option<&str>,
+) -> Result<String, String> {
+    let project = ProjectKey::new(config.repo.display().to_string());
+    let client = MailClient::discover().with_request_timeout(MAIL_REQUEST_TIMEOUT);
+    let identity = mail_sender_pane_identity(cx, &client, &project).await?;
+    let sender_header = packet_sender_header(&identity, &config.session, &project)?;
+    let mut packet = dispatch_packet::render_with_pane(
+        snapshot,
+        &config.repo,
+        pane,
+        receiver_agent,
+        why_now,
+        traps,
+    )
+    .map_err(|error| format!(
+        "DISPATCH_PACKET_REFUSED bead={} pane={} error={error}",
+        snapshot.id(),
+        pane.unwrap_or("<none>")
+    ))?;
+    packet.insert_str(0, &sender_header);
+    Ok(packet)
+}
+
 /// The environment variables consulted for the sender identity, in order.
 ///
 /// yfp2: the list moved to `sender-identity`, where each entry carries whether it is OWNED
@@ -5244,12 +5252,38 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         "REAP_FINISHED_PANES tick={tick} session={} summary={reaper_summary}",
         config.session
     );
-    let ready_args = vec!["ready".to_owned(), "--json".to_owned()];
-    let ready_output = invoke(cx, config, &config.br, &ready_args).await?;
-    let ready = require_success(&config.br, ready_output).map_err(|error| {
-        format!("QUEUE_UNREADABLE owner=josh next_action=repair-br-or-escalate: {error}")
-    })?;
-    let (ready_ids, ready_priorities) = parse_ready(&ready)?;
+    let readiness = bead_availability::collect_ready_live(cx, &config.br)
+        .await
+        .map_err(|error| {
+            format!("QUEUE_VISIBILITY_UNREADABLE owner=josh next_action=repair-br-or-escalate: {error}")
+        })?;
+    if !readiness.recovered.is_empty() {
+        let ids = readiness.recovered_ids();
+        let detail = format!("recovered={} ids={}", ids.len(), ids.join(","));
+        write_heartbeat(config, tick, "QUEUE_READY_RECOVERED", &detail)?;
+        println!("QUEUE_READY_RECOVERED tick={tick} {detail}");
+    }
+    if !readiness.refused.is_empty() {
+        let ids = readiness
+            .refused
+            .iter()
+            .map(|row| row.issue.id.as_str())
+            .collect::<Vec<_>>()
+            .join(",");
+        let detail = format!("refused={} ids={ids}", readiness.refused.len());
+        write_heartbeat(config, tick, "QUEUE_READY_REFUSED", &detail)?;
+        println!("QUEUE_READY_REFUSED tick={tick} {detail}");
+    }
+    let ready_ids: Vec<String> = readiness
+        .admitted
+        .iter()
+        .map(|issue| issue.id.clone())
+        .collect();
+    let ready_priorities: BTreeMap<String, u64> = readiness
+        .admitted
+        .iter()
+        .map(|issue| (issue.id.clone(), issue.priority))
+        .collect();
     let triage_args = vec!["--robot-triage".to_owned()];
     let mut bead_ids = match invoke(cx, config, &config.bv, &triage_args).await {
         Ok(output) => {
@@ -6019,20 +6053,15 @@ async fn render_dispatch_command(
                     .map_or_else(|| "<none>".to_owned(), |path| path.display().to_string())
             )
         })?;
-    dispatch_packet::render_with_pane(
+    render_packet_with_sender(
+        cx,
+        config,
         &snapshot,
-        &config.repo,
         Some(&request.pane),
-        None,
+        Some(&receiver_agent),
         request.why_now.as_deref(),
         traps.as_deref(),
-    )
-    .map_err(|error| {
-        format!(
-            "PACKET_RENDER_REFUSED bead={} pane={} error={error}",
-            request.bead, request.pane
-        )
-    })
+    ).await
 }
 
 fn close_readback_exit(outcome: CloseReadback) -> std::process::ExitCode {

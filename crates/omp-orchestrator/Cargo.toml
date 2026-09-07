@@ -19,6 +19,7 @@ name = "omp_orchestrator"
 path = "src/lib.rs"
 
 [dependencies]
+bead-availability = { path = "../bead-availability" }
 admission-reason = { path = "../admission-reason" }
 omp-types = { path = "../omp-types" }
 ack-spine = { path = "../ack-spine" }

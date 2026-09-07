@@ -161,6 +161,126 @@ pub struct GraphReport {
     pub issues: Vec<BeadAvailability>,
     pub stale_edges: Vec<StaleEdge>,
 }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QueueIssue {
+    pub id: String,
+    pub status: IssueStatus,
+    pub priority: u64,
+    pub issue_type: String,
+    pub assignee: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InvisibleQueueIssue {
+    pub issue: QueueIssue,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReadinessReport {
+    pub schema: &'static str,
+    pub open_candidates: Vec<QueueIssue>,
+    pub admitted: Vec<QueueIssue>,
+    pub recovered: Vec<QueueIssue>,
+    pub refused: Vec<InvisibleQueueIssue>,
+}
+
+impl ReadinessReport {
+    #[must_use]
+    pub fn recovered_ids(&self) -> Vec<String> {
+        self.recovered.iter().map(|issue| issue.id.clone()).collect()
+    }
+}
+
+/// Reconcile the selector's ready/blocked surfaces with the complete dependency graph.
+///
+/// The ready and blocked commands are projections, not the complete open population. An open,
+/// unassigned non-epic whose graph blockers are all released is safe to re-offer even when the
+/// projection omitted it. A graph-blocked omission remains a named refusal, never a silent drop.
+pub fn reconcile_readiness(
+    issues: &[QueueIssue],
+    ready_ids: &[String],
+    blocked_ids: &[String],
+    graph: &GraphReport,
+) -> Result<ReadinessReport, GraphError> {
+    if issues.is_empty() {
+        return Err(GraphError::EmptyIssueSet);
+    }
+    if ready_ids.is_empty() {
+        return Err(GraphError::EmptyReadySurface);
+    }
+    let known: BTreeSet<&str> = issues.iter().map(|issue| issue.id.as_str()).collect();
+    let mut ready = BTreeSet::new();
+    for id in ready_ids {
+        if !known.contains(id.as_str()) {
+            return Err(GraphError::UnknownQueueIssue(id.clone()));
+        }
+        if !ready.insert(id.as_str()) {
+            return Err(GraphError::DuplicateQueueIssue(id.clone()));
+        }
+    }
+    let mut blocked = BTreeSet::new();
+    for id in blocked_ids {
+        if !known.contains(id.as_str()) {
+            return Err(GraphError::UnknownQueueIssue(id.clone()));
+        }
+        if !blocked.insert(id.as_str()) {
+            return Err(GraphError::DuplicateQueueIssue(id.clone()));
+        }
+    }
+    if let Some(id) = ready.intersection(&blocked).next() {
+        return Err(GraphError::QueueSurfaceOverlap((*id).to_owned()));
+    }
+
+    let mut open_candidates = Vec::new();
+    let mut admitted = Vec::new();
+    let mut recovered = Vec::new();
+    let mut refused = Vec::new();
+    for issue in issues.iter().filter(|issue| {
+        issue.status == IssueStatus::Open
+            && issue.issue_type != "epic"
+            && issue.assignee.trim().is_empty()
+    }) {
+        open_candidates.push(issue.clone());
+        if ready.contains(issue.id.as_str()) {
+            admitted.push(issue.clone());
+            continue;
+        }
+        if blocked.contains(issue.id.as_str()) {
+            continue;
+        }
+        let graph_issue = graph
+            .issue(&issue.id)
+            .ok_or_else(|| GraphError::MissingGraphIssue(issue.id.clone()))?;
+        match graph_issue.availability {
+            Availability::Available => {
+                admitted.push(issue.clone());
+                recovered.push(issue.clone());
+            }
+            Availability::Blocked => refused.push(InvisibleQueueIssue {
+                issue: issue.clone(),
+                reason: "graph reports a non-terminal blocker; blocked projection omitted this row".to_owned(),
+            }),
+            Availability::Unknown => refused.push(InvisibleQueueIssue {
+                issue: issue.clone(),
+                reason: "graph availability is unknown; selector must not guess".to_owned(),
+            }),
+        }
+    }
+    if open_candidates.is_empty() {
+        return Err(GraphError::EmptyCandidateSet);
+    }
+    admitted.sort_by(|left, right| left.id.cmp(&right.id));
+    recovered.sort_by(|left, right| left.id.cmp(&right.id));
+    refused.sort_by(|left, right| left.issue.id.cmp(&right.issue.id));
+    Ok(ReadinessReport {
+        schema: "bead-availability/readiness-v1",
+        open_candidates,
+        admitted,
+        recovered,
+        refused,
+    })
+}
 
 impl GraphReport {
     #[must_use]
@@ -217,7 +337,14 @@ fn render_unblocks(unblocks: &Unblocks) -> String {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GraphError {
     EmptyIssueSet,
+    EmptyReadySurface,
+    EmptyCandidateSet,
     DuplicateIssue(String),
+    DuplicateQueueIssue(String),
+    UnknownQueueIssue(String),
+    QueueSurfaceOverlap(String),
+    MissingGraphIssue(String),
+    MissingQueueField(String),
     MalformedIssues(String),
     MalformedEdges(String),
 }
@@ -228,13 +355,23 @@ impl fmt::Display for GraphError {
             Self::EmptyIssueSet => {
                 formatter.write_str("EMPTY_ISSUE_SET: br list returned no issues")
             }
+            Self::EmptyReadySurface => {
+                formatter.write_str("EMPTY_READY_SURFACE: br ready returned no candidates")
+            }
+            Self::EmptyCandidateSet => {
+                formatter.write_str("EMPTY_CANDIDATE_SET: no open unassigned non-epic candidates")
+            }
             Self::DuplicateIssue(id) => write!(formatter, "DUPLICATE_ISSUE: {id}"),
+            Self::DuplicateQueueIssue(id) => write!(formatter, "DUPLICATE_QUEUE_ISSUE: {id}"),
+            Self::UnknownQueueIssue(id) => write!(formatter, "UNKNOWN_QUEUE_ISSUE: {id}"),
+            Self::QueueSurfaceOverlap(id) => write!(formatter, "QUEUE_SURFACE_OVERLAP: {id}"),
+            Self::MissingGraphIssue(id) => write!(formatter, "MISSING_GRAPH_ISSUE: {id}"),
+            Self::MissingQueueField(field) => write!(formatter, "MISSING_QUEUE_FIELD: {field}"),
             Self::MalformedIssues(detail) => write!(formatter, "MALFORMED_ISSUES: {detail}"),
             Self::MalformedEdges(detail) => write!(formatter, "MALFORMED_EDGES: {detail}"),
         }
     }
 }
-
 impl std::error::Error for GraphError {}
 
 #[derive(Debug)]
@@ -261,6 +398,83 @@ impl fmt::Display for LiveError {
             }
         }
     }
+}
+fn parse_queue_issue(value: &Value, context: &str) -> Result<QueueIssue, GraphError> {
+    let id = value
+        .get("id")
+        .and_then(Value::as_str)
+        .filter(|id| !id.trim().is_empty())
+        .ok_or_else(|| GraphError::MissingQueueField(format!("{context}.id")))?;
+    let status = value
+        .get("status")
+        .and_then(Value::as_str)
+        .map(IssueStatus::parse)
+        .ok_or_else(|| GraphError::MissingQueueField(format!("{context}.status")))?;
+    let priority = value
+        .get("priority")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| GraphError::MissingQueueField(format!("{context}.priority")))?;
+    let issue_type = value
+        .get("issue_type")
+        .or_else(|| value.get("type"))
+        .and_then(Value::as_str)
+        .filter(|kind| !kind.trim().is_empty())
+        .ok_or_else(|| GraphError::MissingQueueField(format!("{context}.issue_type")))?;
+    let assignee = value
+        .get("assignee")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    Ok(QueueIssue {
+        id: id.to_owned(),
+        status,
+        priority,
+        issue_type: issue_type.to_owned(),
+        assignee,
+    })
+}
+
+/// Parse the complete issue projection used to recover rows omitted by br ready.
+pub fn parse_queue_issues(value: &Value) -> Result<Vec<QueueIssue>, GraphError> {
+    let issues = value
+        .get("issues")
+        .and_then(Value::as_array)
+        .ok_or_else(|| GraphError::MalformedIssues("missing issues array".to_owned()))?;
+    if issues.is_empty() {
+        return Err(GraphError::EmptyIssueSet);
+    }
+    let mut out = Vec::with_capacity(issues.len());
+    let mut ids = BTreeSet::new();
+    for (index, issue) in issues.iter().enumerate() {
+        let parsed = parse_queue_issue(issue, &format!("issues[{index}]"))?;
+        if !ids.insert(parsed.id.clone()) {
+            return Err(GraphError::DuplicateIssue(parsed.id));
+        }
+        out.push(parsed);
+    }
+    Ok(out)
+}
+
+/// Parse a ready/blocked projection as a unique id set. Empty blocked is valid;
+/// empty ready is rejected by reconcile_readiness as an anti-vacuity error.
+pub fn parse_queue_ids(value: &Value, surface: &str) -> Result<Vec<String>, GraphError> {
+    let rows = value
+        .as_array()
+        .ok_or_else(|| GraphError::MalformedIssues(format!("{surface}: response is not an array")))?;
+    let mut out = Vec::with_capacity(rows.len());
+    let mut ids = BTreeSet::new();
+    for (index, row) in rows.iter().enumerate() {
+        let id = row
+            .get("id")
+            .and_then(Value::as_str)
+            .filter(|id| !id.trim().is_empty())
+            .ok_or_else(|| GraphError::MissingQueueField(format!("{surface}[{index}].id")))?;
+        if !ids.insert(id.to_owned()) {
+            return Err(GraphError::DuplicateQueueIssue(id.to_owned()));
+        }
+        out.push(id.to_owned());
+    }
+    Ok(out)
 }
 
 /// Parse a br list -a JSON envelope. Closed issues are required because their
@@ -499,6 +713,30 @@ async fn run_br(cx: &Cx, program: &str, args: &[&str]) -> Result<Vec<u8>, LiveEr
     Ok(output.stdout)
 }
 
+async fn collect_edges_for(
+    cx: &Cx,
+    br_program: &str,
+    issue_ids: &[String],
+) -> Result<Vec<BlockerEdge>, String> {
+    let mut edges = Vec::new();
+    for issue_id in issue_ids {
+        cx.checkpoint()
+            .map_err(|_| format!("CANCELLED before blocker read bead={issue_id}"))?;
+        let output = run_br(
+            cx,
+            br_program,
+            &["dep", "list", issue_id, "--direction", "down", "--json"],
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+        let value: Value = serde_json::from_slice(&output).map_err(|error| {
+            format!("JSON_FAILED command=br dep list bead={issue_id} detail={error}")
+        })?;
+        edges.extend(parse_br_blockers(&value, issue_id).map_err(|error| error.to_string())?);
+    }
+    Ok(edges)
+}
+
 /// Read every non-terminal issue with br -a and ask br for its live blockers.
 /// The -a flag is load-bearing: default br list omits the closed blockers this
 /// command must report as RELEASED.
@@ -515,24 +753,61 @@ pub async fn collect_live(cx: &Cx, br_program: &str) -> Result<GraphReport, Stri
         .to_string()
     })?;
     let issues = parse_br_issues(&issue_value).map_err(|error| error.to_string())?;
-    let mut edges = Vec::new();
-    for issue in issues.iter().filter(|issue| issue.status.is_non_terminal()) {
-        cx.checkpoint()
-            .map_err(|_| format!("CANCELLED before blocker read bead={}", issue.id))?;
-        let output = run_br(
-            cx,
-            br_program,
-            &["dep", "list", &issue.id, "--direction", "down", "--json"],
-        )
+    let issue_ids: Vec<String> = issues
+        .iter()
+        .filter(|issue| issue.status.is_non_terminal())
+        .map(|issue| issue.id.clone())
+        .collect();
+    let edges = collect_edges_for(cx, br_program, &issue_ids).await?;
+    evaluate_graph(&issues, &edges).map_err(|error| error.to_string())
+}
+
+/// Reconcile br ready/blocked with the complete open issue population. Only
+/// omitted candidate rows are queried for blockers; this preserves bounded work
+/// without trusting either projection as a complete selector input.
+pub async fn collect_ready_live(cx: &Cx, br_program: &str) -> Result<ReadinessReport, String> {
+    let issue_bytes = run_br(cx, br_program, &["list", "-a", "--json"])
         .await
         .map_err(|error| error.to_string())?;
-        let value: Value = serde_json::from_slice(&output).map_err(|error| {
-            format!(
-                "JSON_FAILED command=br dep list bead={} detail={error}",
-                issue.id
-            )
-        })?;
-        edges.extend(parse_br_blockers(&value, &issue.id).map_err(|error| error.to_string())?);
-    }
-    evaluate_graph(&issues, &edges).map_err(|error| error.to_string())
+    let issue_value: Value = serde_json::from_slice(&issue_bytes)
+        .map_err(|error| format!("JSON_FAILED command=br list -a --json detail={error}"))?;
+    let queue_issues = parse_queue_issues(&issue_value).map_err(|error| error.to_string())?;
+    let issues: Vec<IssueRecord> = queue_issues
+        .iter()
+        .map(|issue| IssueRecord {
+            id: issue.id.clone(),
+            status: issue.status,
+        })
+        .collect();
+
+    let ready_bytes = run_br(cx, br_program, &["ready", "--json"])
+        .await
+        .map_err(|error| error.to_string())?;
+    let ready_value: Value = serde_json::from_slice(&ready_bytes)
+        .map_err(|error| format!("JSON_FAILED command=br ready --json detail={error}"))?;
+    let ready_ids = parse_queue_ids(&ready_value, "br ready").map_err(|error| error.to_string())?;
+
+    let blocked_bytes = run_br(cx, br_program, &["blocked", "--json"])
+        .await
+        .map_err(|error| error.to_string())?;
+    let blocked_value: Value = serde_json::from_slice(&blocked_bytes)
+        .map_err(|error| format!("JSON_FAILED command=br blocked --json detail={error}"))?;
+    let blocked_ids = parse_queue_ids(&blocked_value, "br blocked").map_err(|error| error.to_string())?;
+    let ready = ready_ids.iter().collect::<BTreeSet<_>>();
+    let blocked = blocked_ids.iter().collect::<BTreeSet<_>>();
+    let hidden_ids: Vec<String> = queue_issues
+        .iter()
+        .filter(|issue| {
+            issue.status == IssueStatus::Open
+                && issue.issue_type != "epic"
+                && issue.assignee.trim().is_empty()
+                && !ready.contains(&issue.id)
+                && !blocked.contains(&issue.id)
+        })
+        .map(|issue| issue.id.clone())
+        .collect();
+    let edges = collect_edges_for(cx, br_program, &hidden_ids).await?;
+    let graph = evaluate_graph(&issues, &edges).map_err(|error| error.to_string())?;
+    reconcile_readiness(&queue_issues, &ready_ids, &blocked_ids, &graph)
+        .map_err(|error| error.to_string())
 }

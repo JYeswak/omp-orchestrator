@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 
 use bead_availability::{
-    evaluate_graph, parse_bv_unblocks, Availability, BlockerEdge, IssueRecord, IssueStatus,
-    Unblocks,
+    evaluate_graph, parse_bv_unblocks, reconcile_readiness, Availability, BeadAvailability,
+    BlockerEdge, GraphReport, IssueRecord, IssueStatus, QueueIssue, Unblocks,
 };
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -168,4 +168,115 @@ fn closed_to_blocking_mutation_is_red_and_restores_byte_identically() {
         "MUTATION RESTORED before={before_sha} mutated={mutated_sha} after={after_sha} byte_identical=true"
     );
     fs::remove_file(path).expect("remove fixture");
+}
+fn queue_issue(id: &str, issue_type: &str) -> QueueIssue {
+    QueueIssue {
+        id: id.to_owned(),
+        status: IssueStatus::Open,
+        priority: 0,
+        issue_type: issue_type.to_owned(),
+        assignee: String::new(),
+    }
+}
+
+fn queue_graph(ids: &[&str], availability: Availability) -> GraphReport {
+    GraphReport {
+        schema: "bead-availability/v1",
+        issues: ids
+            .iter()
+            .map(|id| BeadAvailability {
+                bead_id: (*id).to_owned(),
+                status: IssueStatus::Open,
+                availability,
+                blockers: Vec::new(),
+                unblocks: Unblocks::Known { count: 0 },
+            })
+            .collect(),
+        stale_edges: Vec::new(),
+    }
+}
+
+#[test]
+fn available_hidden_child_is_reoffered_instead_of_silently_dropped() {
+    let issues = vec![queue_issue("child", "task"), queue_issue("control", "task")];
+    let report = reconcile_readiness(
+        &issues,
+        &["control".to_owned()],
+        &[],
+        &queue_graph(&["child", "control"], Availability::Available),
+    )
+    .expect("non-empty ready surface and graph");
+    assert_eq!(report.recovered_ids(), vec!["child".to_owned()]);
+    assert_eq!(
+        report
+            .admitted
+            .iter()
+            .map(|row| row.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["child", "control"]
+    );
+}
+#[test]
+fn visible_ready_row_is_not_duplicated_by_reconciliation() {
+    let issues = vec![queue_issue("child", "task")];
+    let report = reconcile_readiness(
+        &issues,
+        &["child".to_owned()],
+        &[],
+        &queue_graph(&["child"], Availability::Available),
+    )
+    .expect("visible ready row");
+    assert!(report.recovered.is_empty());
+    assert_eq!(report.admitted.len(), 1);
+}
+
+#[test]
+fn hidden_graph_blocker_is_named_not_reoffered() {
+    let issues = vec![queue_issue("child", "task"), queue_issue("control", "task")];
+    let report = reconcile_readiness(
+        &issues,
+        &["control".to_owned()],
+        &[],
+        &queue_graph(&["child", "control"], Availability::Blocked),
+    )
+    .expect("non-empty ready surface and graph");
+    assert!(report.recovered.is_empty());
+    assert_eq!(report.refused.len(), 1);
+    assert_eq!(report.refused[0].issue.id, "child");
+    assert!(report.refused[0].reason.contains("non-terminal blocker"));
+}
+
+#[test]
+fn empty_ready_surface_is_an_error_not_total_visibility() {
+    let error = reconcile_readiness(
+        &[queue_issue("child", "task")],
+        &[],
+        &[],
+        &queue_graph(&["child"], Availability::Available),
+    )
+    .expect_err("empty ready input is anti-vacuous error");
+    assert!(error.to_string().contains("EMPTY_READY_SURFACE"));
+}
+#[test]
+fn queue_parser_preserves_surface_identity_fields() {
+    let value = json!({
+        "issues": [{
+            "id": "child",
+            "status": "open",
+            "priority": 0,
+            "issue_type": "task",
+            "assignee": ""
+        }]
+    });
+    let rows = bead_availability::parse_queue_issues(&value).expect("queue rows");
+    assert_eq!(rows, vec![queue_issue("child", "task")]);
+}
+
+#[test]
+fn queue_parser_refuses_missing_priority_instead_of_guessing() {
+    let value = json!({
+        "issues": [{"id": "child", "status": "open", "issue_type": "task"}]
+    });
+    let error = bead_availability::parse_queue_issues(&value).expect_err("missing priority");
+    assert!(error.to_string().contains("MISSING_QUEUE_FIELD"));
 }
