@@ -65,26 +65,90 @@ PY
 ### R2 — every S1 layer bead is WIRED to its layer gate
 
 ```bash
-python3 - <<'PY'
-import json, re
-rows = [json.loads(l) for l in open('.beads/issues.jsonl') if l.strip().startswith('{')]
+# R2_JSONL lets the SAME runner be pointed at a fixture; it defaults to the live tracker.
+R2_JSONL=${R2_JSONL:-.beads/issues.jsonl} python3 - <<'PY'
+import json, os, re, sys
+path = os.environ['R2_JSONL']
+rows = [json.loads(l) for l in open(path) if l.strip().startswith('{')]
 by = {r['id']: r for r in rows if r.get('id')}
 G = {'omp-orchestrator-gate-s1-l%d-%s' % (i, t) for i, t in
      enumerate(['jtgw', 'fnv8', 'j5m9', 'z8hz', 'hs15', 'w44h'])} | {'omp-orchestrator-gate-s1-djn8'}
 # SURFACE MATTERS. In .beads/issues.jsonl a dep record keys on `depends_on_id`/`type`.
 # `br show --json` keys the SAME edge on `id`/`dependency_type`. Using br's keys here
 # silently yields an empty wired-set and reports EVERY bead unwired.
-wired = {d.get('depends_on_id') for g in G
-         for d in (by.get(g, {}).get('dependencies') or []) if d.get('depends_on_id')}
+DEPS = lambda i: (by.get(i, {}).get('dependencies') or [])
 # POPULATION EXCLUDES THE GATES THEMSELVES: the id regex matches gate-s1-l0..l5, and a
 # gate can never be wired to its own gate, so including them pins a correct R2 above zero.
 lay = [r['id'] for r in rows
        if r.get('id') and re.search(r'-s1-l[0-5]-', r['id']) and r['id'] not in G]
-print('S1_LAYER_BEADS_UNWIRED=%d of %d' % (sum(1 for i in lay if i not in wired), len(lay)))
+def own_gate(i):
+    return 'omp-orchestrator-gate-s1-l%s-%s' % (
+        re.search(r'-s1-l([0-5])-', i).group(1),
+        ['jtgw', 'fnv8', 'j5m9', 'z8hz', 'hs15', 'w44h'][int(re.search(r'-s1-l([0-5])-', i).group(1))])
+# GATE LINKAGE IS REQUIRED, and ONLY its own layer gate counts. The retired predicate
+# unioned EVERY dependency target in the tracker, so any inbound edge from anywhere read
+# as "wired" -- see the fires-on-known-bad leg below, where the two answers differ.
+held = {i: i in {d.get("depends_on_id") for d in DEPS(own_gate(i))} for i in lay}
+# DIRECTION IS PART OF THE PREDICATE. gate->bead keeps the bead claimable; the transpose
+# is the strangling pattern and must be an ERROR, never a way to satisfy this criterion.
+strangled = [i for i in lay if own_gate(i) in {d.get('depends_on_id') for d in DEPS(i)}]
+unwired = [i for i in lay if not held[i] and i not in strangled]
+# ANTI-VACUITY: an empty layer set or an absent gate is an ERROR, never a pass.
+if not lay:
+    print('S1_LAYER_BEADS_UNWIRED=ERROR empty_layer_population surface=%s' % path); sys.exit(1)
+if not (G & set(by)):
+    print('S1_LAYER_BEADS_UNWIRED=ERROR no_gate_rows_present surface=%s' % path); sys.exit(1)
+print('S1_LAYER_BEADS_UNWIRED=%d of %d  STRANGLED=%d  surface=%s'
+      % (len(unwired), len(lay), len(strangled), path))
+# The retired predicate, printed beside the corrected one so the difference is the evidence.
+any_inbound = {d.get('depends_on_id') for r in rows for d in (r.get('dependencies') or [])}
+print('RETIRED_PREDICATE_any_inbound_edge=%d of %d'
+      % (sum(1 for i in lay if i not in any_inbound), len(lay)))
+if strangled:
+    print('STRANGLED_IDS=%s' % ','.join(strangled)); sys.exit(1)
+sys.exit(1 if unwired else 0)
 PY
 ```
-**Expect `=0`.** Measured 2026-09-07 22:3xZ: **0 of 138.** ⚠ **PASSING BUT THE PASS IS WEAK — see
-`omp-orchestrator-2fxd` (P0).**
+**Expect `=0` and `STRANGLED=0`.** Measured 2026-09-07: **0 of 138, STRANGLED=0.** ✅ **PASSING —
+`omp-orchestrator-2fxd` (P0) landed the predicate, the direction check, the anti-vacuity arm and the
+fixture legs. The retired predicate is printed beside the corrected one on every run, so the two can
+never silently converge again.**
+
+**FIRES-ON-KNOWN-BAD, and the difference between the two answers IS the defect.** Four fixtures under
+`docs/fixtures/`, each a `.jsonl` the runner above reads through `R2_JSONL`:
+
+```bash
+for f in unwired wired strangled empty; do
+  printf '%-10s ' "$f"
+  R2_JSONL=docs/fixtures/r2-$f.jsonl <the runner above>; echo "  rc=$?"
+done
+```
+
+|fixture|what it holds|corrected|retired|rc|
+|---|---|---|---|---|
+|`r2-unwired`|a layer bead depended on ONLY by a **non-gate** row|**1 of 1 UNWIRED**|**0 of 1** — calls it wired|1|
+|`r2-wired`|the **gate** depends on the bead (safe direction)|0 of 1|0 of 1|0|
+|`r2-strangled`|the **bead** depends on its own gate (transpose)|`STRANGLED=1` + `STRANGLED_IDS=`|`1 of 1` — flags it unwired and CANNOT SAY WHY|1|
+|`r2-empty`|zero S1 layer beads|`ERROR empty_layer_population`|would print `0 of 0`|1|
+
+Every row above is executed output, not predicted. Two of the four are legs that could not exist
+before:
+
+* **`r2-unwired`** — the retired predicate **cannot** report it, because a single inbound edge from
+  any non-gate row satisfied it. This is defect 2 made visible.
+* **`r2-strangled`** — the retired predicate calls it `1 of 1` unwired, which is *directionally
+  right and diagnostically useless*: the edge exists, it is simply transposed, so an operator
+  following that output would **add the very edge that is already there** and leave the bead
+  bricked. The corrected runner names the id and exits 1 on `STRANGLED`, so **the remedy that would
+  brick S1 can no longer be scored as compliance, nor mistaken for a missing edge.**
+
+> **A KNOWN-GOOD LEG CAUGHT THIS RUNNER'S OWN BUG BEFORE IT SHIPPED, and that is the argument for
+> making one mandatory.** The first version of the predicate above tested
+> `own_gate(i) in DEPS(own_gate(i))` — the wrong variable — and reported **`138 of 138` unwired on
+> the live tracker**, which is *precisely* the false FAIL this criterion has already published once.
+> Every attack leg (`r2-unwired`, `r2-strangled`, `r2-empty`) passed happily with that bug in place;
+> only `r2-wired`, the leg that asserts a CORRECT input still succeeds, went red. An attack-only
+> suite would have shipped it.
 
 > ⛔ **THIS CRITERION HAS BEEN WRONG TWICE, IN OPPOSITE DIRECTIONS. Both were mine.**
 >
@@ -110,22 +174,33 @@ PY
 > **2026-09-03T18:33–19:26** (creators: josh 122, WildStone 96, pane1 35) — **four days before this
 > file existed.** The 144 was false at publication, not aged into falsehood.
 
-**THE PASS IS WEAK AND MUST NOT BE BANKED — three defects, filed as `omp-orchestrator-2fxd` (P0):**
+**THE THREE DEFECTS, ALL NOW CLOSED BY `omp-orchestrator-2fxd` (P0) — kept here because a reader
+must be able to tell a fixed criterion from a fixed number:**
 
 1. **Population included the gates.** `-s1-l[0-5]-` matches `gate-s1-l0-jtgw … l5-w44h`, so the
    denominator was 138 beads **+ 6 gates**, and a gate cannot be wired to itself — those six would
    hold a *correct* R2 above zero forever. Excluded above; denominator is now **138**.
-2. **The predicate never required GATE linkage.** The earlier `wired` set unioned **every**
+2. **The predicate never required GATE linkage.** ~~The earlier `wired` set unioned **every**
    dependency target in the tracker, so a bead counted as wired if anything anywhere depended on
-   it. **LATENT, not active** — `%20` measured 0 of 138 rows exploiting it — but **R2's PASS
-   therefore carries no information about gate linkage**, which is why this row reads ⚠ and not ✅.
+   it.~~ **FIXED.** The predicate now tests membership in *its own layer gate's* dependency targets
+   and nothing else, and every run prints the retired predicate beside it so the two cannot
+   silently converge again. The defect was **LATENT, not active** — 0 of 138 rows exploited it — so
+   the figure never moved; what changed is that the PASS now carries information. `r2-unwired` is
+   the fixture that makes the difference observable.
 3. **THE DIRECTION TRAP.** R2's stated remedy — *"wire 144 beads to depend on their gates"* — is
    the strangling pattern **at 144× scale**. `%20` refused to execute it, wired the one genuinely
    unwired bead (`s1-l3-blocked-on-frozen-crate-tjxt`) in the safe direction, and ran the falsifier
    instead. **`br dep add <gate> <bead>` keeps the bead claimable; the transpose bricks it.**
+   **NOW MECHANICAL, not advisory:** a bead whose own dependency list names its layer gate is
+   reported as `STRANGLED` with its id and exits 1. The transpose can no longer be scored as
+   compliance — and, per the `r2-strangled` row above, it can no longer be mistaken for a *missing*
+   edge either, which is the mistake the retired predicate's output invited.
 
-*Rationale:* `fh N043` — BUILT ≠ WIRED. The edges exist. **What remains unproven is whether any gate
-FIRES, which is R5.**
+*Rationale:* `fh N043` — BUILT ≠ WIRED. The edges exist and the predicate now proves they are
+**gate** edges in the **safe** direction. **What remains unproven is whether any gate ever FIRES,
+which is R9 — not R5.** R5 asks whether each gate NAMES a known-bad leg and passes 7 of 7
+(`omp-orchestrator-8hq3`); firing is a separate criterion with a separate runner, and conflating
+the two is what made R5 read FAIL for an hour.
 
 ### R3 — no S1 bead carries a `blocked` status without a real blocker
 ```bash
@@ -424,7 +499,7 @@ the reading, not the subject, every time.**
 |criterion|state|
 |---|---|
 |R1 acceptance on every layer bead|✅ **PASS** — 0 of 144 empty|
-|R2 layer beads wired to their gate|⚠ **WEAK PASS** — 0 of 138; predicate does not require gate linkage (`2fxd` P0). Published FAIL **and** its first correction were both wrong|
+|R2 layer beads wired to their gate|✅ **PASS** — **0 of 138, STRANGLED=0**, snapshot 2026-09-07 (`rc=0`). **Was ⚠ WEAK** until `2fxd` made the predicate require *own-layer-gate* linkage, made the transpose a typed `STRANGLED` refusal, added an anti-vacuity arm, and shipped four executed fixtures. Retired predicate printed beside it on every run. History: published **FAIL 144/144** (wrong at publication — the edges predated this file by 4 days) and its first "correction" (`id`/`dependency_type`, `br show`'s keys, not the JSONL's) **also wrong**|
 |R3 no false `blocked`|⚠ **NEARLY** — 2 (snapshot; was 92 → 89 → 88 → 2)|
 |R4 disagreements resolved, derived count|❌ **FAIL** — **8** (wave-1: 2, wave-2: 6). Scope **RULED** wave-1 counts, three reasons intact. **`S1.toml:336`'s "(a SURVEY, not a review)" is REFUTED** — wave-1's resolutions are `accepted-and-landed`; 0 rejections because all were ACCEPTED. **6 of 8 orphaned** (`pane4-*`), 3 work items not 8|
 |R5 gates NAME a known-bad leg|✅ **PASS — 7 of 7** (strict: `SUBJECT:` stripped, numbered item required). `8hq3` P0 filed by `%20`|

@@ -1,0 +1,2 @@
+{"id": "omp-orchestrator-gate-s1-l0-jtgw", "status": "open", "title": "GATE S1-L0 fixture stand-in", "dependencies": []}
+{"id": "omp-orchestrator-s1-l0-fx1-aaaa", "status": "open", "title": "FIXTURE layer bead STRANGLED by the transposed edge", "dependencies": [{"issue_id": "omp-orchestrator-s1-l0-fx1-aaaa", "depends_on_id": "omp-orchestrator-gate-s1-l0-jtgw", "type": "blocks", "created_at": "2026-09-07T00:00:00Z", "created_by": "fixture", "metadata": "{}", "thread_id": ""}]}
