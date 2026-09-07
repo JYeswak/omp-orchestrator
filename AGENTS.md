@@ -1727,6 +1727,123 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
    is **UNREADABLE, not absent-of-rows** — `%20`'s distinction, and it would have justified the
    opposite dispatch decision. A field you cannot read is not a field whose value is empty.
 
+8j. **`fh suggest` NEVER RETURNS EMPTY, SO A SUGGEST ROW IS A CANDIDATE, NOT A HIT.** Measured
+   2026-09-07 by `%19` and reproduced by me within the hour. It is rule `8i` aimed at the two tools
+   Joshua directed the fleet to use.
+
+   ```
+   fh suggest "zzzqqq nonexistent xyzzy plugh frobnicate"
+     -> 3 confident ranked rows about "nonexistent file" tests    NO EMPTY STATE
+   fh search  "zzz_cannot_exist"
+     -> [EMPTY] ... no false hit was returned          exit 4     DISCRIMINATES
+   ```
+
+   **`suggest` is lexical ranking: it always answers.** So *"it returned rows"* is not evidence that
+   anything matched. **Confirm a suggest row with `fh search` — which does return `[EMPTY]` — or
+   with `fh why <row-id>`, before citing it.**
+
+   **I cited two `fh suggest` rows as before-you-build evidence for `etyur` and they survived
+   confirmation** (`N046` at `ledger:franken-harvest.md:721`; `verify_binary_runs` at
+   `meta_skill/src/updater/mod.rs:620-668`, both row-1/row-3 exact under `fh search`). **They
+   survived by query quality, not by method** — the same verb gave `%19` pure noise. The
+   discriminator is `search`, and I had not run it.
+
+   **`fh` also reports its own freshness and its own input drift, and both change what a row means:**
+
+   ```
+   fh health        [RED] digest_missing_today / digest_stale -- the harvest did not run today
+   fh doctor --json DRIFT exit 5  ACTIVE_GENERATION_PRODUCT_INPUT_DRIFT  (dirty source input)
+   ```
+
+   `%7`'s scoping is the right one: **treat fh as retrieval and provenance context, not a clean repo
+   grade.** A stale row is still evidence; **its age is part of the citation.**
+
+8k. **`ripwire` EMITS ONE LINE, SO EVERY LINE FILTER DELETES THE WHOLE PAYLOAD — and a MISS IS NOT
+   AN ABSENCE.** Measured 2026-09-07 by `%19` (four times, while it began diagnosing the tool) and
+   independently by me on `--exemplar`.
+
+   ```
+   ripwire crates --uses=run_crate | grep -v ...    -> empty, FOUR TIMES
+   raw                                              -> <u role="call"
+                                                       p="crates/gate-runner/src/main.rs:178"
+                                                       in_id="main"/>
+   ```
+
+   **`wc -l` is 0 because the payload is one line.** `head`, `grep -v`, and `sed` line filters all
+   destroy it. **Read raw, or parse the XML.** My own `--exemplar` grep produced two meaningless
+   fragment lines the same way.
+
+   **Three further measured properties, each of which changes a conclusion:**
+
+   1. **A name living only inside a MACRO STRING ARGUMENT is invisible to `--uses`.** In `uds`,
+      `--uses=artifact_unchanged` → EMPTY while grep found **21** hits, with the positive control
+      passing. **In a repo whose contract is typed refusals, the detector names ARE the API and they
+      all live in macro strings.** The follow-up is `ripwire --grep`, **not** bare grep — it
+      attributes each hit to its **enclosing symbol** (`in=`), and `unindexed_hits=` is the
+      macro-string check built into the verb.
+   2. **The legend is 77–95% of every response and does NOT amortise.** `%7` found the lever:
+      **`--legend=compact`.** Prefer ONE well-chosen query over three exploratory ones.
+   3. **It indexes what it FINDS, including scratch and vendored trees.** Measured here by `%19`:
+      **8,570 `.rs` outside `crates/` against 475 inside — 18×**, from a vendored `.rch-tmp/` and
+      target dirs. **An unscoped `ripwire .` in this repo is meaningless.** Scope it, and **state
+      your scan set whenever you publish a count.**
+
+   **AND IT DISTINGUISHES EXERCISED FROM CONSUMED, WHICH A GREP CANNOT.** My grep for `etyur` said
+   *"`derive_checks`: 0 occurrences in `main.rs`"*. `%19`'s `--uses=derive_checks` said **5 uses,
+   every one in `tests/roster.rs`, each attributed to its test fn, ZERO in any `src/`.** Strictly
+   stronger — and it is exactly `N046`'s distinction: *"invocations from /tmp prove testing, not
+   consumption."*
+
+   **AND AN `fh` CAPABILITY ROW'S VERDICT SHAPE AND ITS MECHANISM ARE SEPARABLE. THE MECHANISM MUST
+   BE RE-VERIFIED AGAINST THIS REPO'S OWN LINTS BEFORE IT IS COPIED.** Measured 2026-09-07: I cited
+   `meta_skill/src/updater/mod.rs:620-668` `verify_binary_runs` as the arsenal precedent for
+   `etyur`'s "a declared bin that cannot be exec'd must ERROR". `%19` read it **on the mirror, as
+   instructed** and found:
+
+   ```rust
+   .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+   let status = loop { match child.try_wait()? { Some(s) => break s, None => { … sleep(25ms) } } };
+   ```
+
+   **That is the undrained-pipe deadlock pattern verbatim, and this repo ships
+   `crates/undrained-pipe-lint` whose entire job is to refuse it** — its predicate at `src/lib.rs:9-10`
+   is *"a Command builder that sets BOTH stdout and stderr to `Stdio::piped()`, whose handle is then
+   polled with `try_wait()` in a loop"*, quoting the asupersync contract above.
+
+   **It is SAFE where it lives and UNSAFE where I pointed it.** `--version` emits a few bytes so the
+   pipe never fills; a declared `[package.metadata.gate]` check is an **arbitrary command with
+   arbitrary output** — exactly the 64 KiB case. **Copying it would have shipped the deadlock into
+   the check runner, and the tell reads as a SLOW gate rather than a WEDGED one**, which is the
+   harder failure to diagnose.
+
+   **Keep the verdict shape, replace the mechanism:** `subprocess_contract::bounded_output` is
+   verified to drain — `src/lib.rs:216` spawns a `stdout_reader` thread, `:160` `join_reader`,
+   `:254-255` joins both. In-repo bounded-spawn exemplars, from `ripwire --callers=bounded_output`
+   (52 callers, `hop_tested=17`): `crate-soundness-verify::run_binary src/lib.rs:262`,
+   `cargo-lane-budget::run_bounded:220`, `admission-reason::spawn_timeout:152`, all tested.
+
+   **`fh` ranked the row correctly and the row is correct in its own crate. The defect exists only
+   at the boundary where it would be reused, so no amount of ranking quality could surface it.**
+   `fh suggest` tells you **where to look** and cannot tell you **whether to copy** — which is why
+   the instruction is *"grep the mirror"*, not *"cite the row"*. `%19` followed the instruction I
+   had given and not followed myself.
+
+8l. **A `success:false` FROM `ntm --robot-send` IS NOT PROOF OF NON-DELIVERY, AND THE RETRY MAY
+   DOUBLE-PASTE.** Measured 2026-09-07 by `%19`: a callback reported
+   `"success": false, "1 of 1 sends failed"` from `tmux send-keys`, then **succeeded byte-identically
+   on immediate retry**, with `blocked: false` and no redaction findings.
+
+   **So the sender's own failure report is indeterminate in both directions** — the first send may
+   have landed, in which case the retry pastes a second copy into the composer. **A partial paste is
+   the worse half of that outcome**, because a truncated packet reads as a malformed instruction
+   rather than as a transport fault.
+
+   This is the mirror of `cp-z42vu`, already recorded above, where a send returned `success:[4]`
+   while the packet never arrived. **Both directions are the signature of an unacknowledged
+   transport**, and the ACK comment is the only evidence the design admits on the tmux path. **Read
+   the receiver, not the sender's verdict** — and when you retry, say so, so a doubled packet is
+   attributable.
+
 9. **NO ACCEPTANCE IS COMPLETE WITHOUT A WIRING-PROOF LEG. The dispatch is where BUILT ≠ WIRED
    gets in.** Measured 2026-09-06, and it is the orchestrator's own defect: every acceptance
    written that session demanded fires-on-known-bad, a known-good leg, a mutation leg and
