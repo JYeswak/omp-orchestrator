@@ -119,22 +119,40 @@ verb at a time and each bounded its scraper-removal claim to the file it touched
 Option (B), the pane-side RPC bridge is DEFERRED as the typed endgame, so **`fphs buz1 uvps jw9z djte` stay
 blocked on purpose — do not force them.** (C) filed upstream.
 
-**NEXT MILESTONE: S1 — 9 of 10, and R10 is the ONLY fail.** `docs/plan/flow/S1-READY.md`:
+**JOSHUA'S RULING 2026-09-08, verbatim: *"so unlock s1 and keep it going and not focus on s2."***
+**S2 IS DROPPED.** Do not plan it, do not dispatch its beads, do not touch `boxes/S2.toml` or
+`arc-s2-plan-gate-u4vq`. **The one exception is `gate-s1-djn8`**, because an unexecutable S1 gate
+means S1 can never be marked done — that is S1 unlock work, not S2 work.
+
+**⛔ "S1-READY" IS A READINESS GATE, NOT A DONE GATE, AND PANE 1 CONFLATED THEM ON 2026-09-08.**
+`docs/plan/flow/S1-READY.md` line 1: *"the fh-backed criteria for when S1 may be BUILT."* Its ten
+criteria answer **may we start**. Pane 1 closed R10, announced *"S1 IS CLOSED"*, and was wrong
+within the hour — Joshua's question about S2 lock-in is what surfaced it. **Re-derive both numbers
+before citing either:**
 
 ```
-R1-R9  PASS  -- and EVERY ONE IS STATIC. R10 was added BECAUSE the other nine cannot see execution:
-              "Not one requires the system to run." All four lanes said so unprompted.
-R10    FAIL  = two beads, both P0
-  fsu7   part (a)  gate-runner banks a verdict for all 88 roster crates. VERDICT CLASS: UNRUN --
-                   roster 88 rows, --run at main.rs:72, banking at lib.rs:442, all BUILT, never
-                   invoked. CHUNKING IS WITHDRAWN by its own proposer: ONE run banked all 88 in
-                   1289 s. Do not re-propose it.
-  etyur  part (b)  PREMISE REFUTED 2026-09-08 -- the RUN HALF exists at main.rs:220-251 and says
-                   so itself: "declared and executed are different facts. This loop produces the
-                   second one." Needs a CLOSER, not a builder.
-SCOPE: R10 is THE GATE LAYER running, not the dispatcher. gb28 holds f3g5 item 9 as
-UNRUN-pending-restart and NOBODY is to act on it.
+R1-R10  ALL TEN PASS  -- readiness only. R10 CLOSED 2026-09-08 on EXECUTION, both halves:
+          fsu7  (a) CLOSED  one --run, 2857 s, 88 unique crate rows banked, set_difference=0,
+                            PASS 59 / FAIL 17 / UNMEASURABLE 12, sha256 verified byte-identical
+          etyur (b) CLOSED  DONE ALREADY-FIXED/PREMISE-FALSE, graded by a non-author
+S1 ITSELF  NOT DONE  -- ~164 non-closed S1 beads (l0 43 · l1 5 · l2 6 · l3 24 · l4 31 · l5 30)
+THE DONE-BAR lives ONLY in gate-s1-djn8's acceptance field: zero open S1 beads AND
+          agreement.status == "converged" AND a refutation that CHANGED the box AND Joshua approval.
 ```
+
+**AND BOTH STAGE GATES ARE CURRENTLY UNEXECUTABLE — `33ze6`.** `gate-s1-djn8` and `gate-s2-ehx8`
+name `docs/plan/flow/boxes/s1.json` / `s2.json`; **neither exists** (only `S1.toml`…`S9.toml` do),
+so `jq` errors and the census cannot run. **An absent input produces no verdict, and no verdict is
+indistinguishable from a pass.** Also: `agreement.status = "draft"` not `converged`, `approval = ""`,
+and the cited `CONTRACT.md:82-113` predicates have MOVED (approval is at `:337`). **Do NOT flip
+`draft` → `converged` to make a gate pass — that is gate self-weakening.**
+
+**THE RESIDUAL R10 REVEALED, which is NOT S1 debt:** 17 crates FAIL and 12 are UNMEASURABLE against
+the declared roster. That is the first real per-crate work list this repo has had. **S1 closing
+would not make the tree clean, and R10 passing does not mean the gates are green.**
+
+SCOPE: R10 was THE GATE LAYER running, not the dispatcher. `gb28` holds `f3g5` item 9 as
+UNRUN-pending-restart and NOBODY is to act on it.
 
 ## WHAT THIS TICK CANNOT DO
 
