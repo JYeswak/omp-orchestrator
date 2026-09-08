@@ -222,14 +222,16 @@ fn query_ntm_is_working(session: &str, selector: &str) -> Result<NtmPaneObservat
 
 fn apply_ntm_observation(
     mut row: PaneRow,
+    terminal_working: Option<bool>,
     observation: Result<NtmPaneObservation, String>,
 ) -> PaneRow {
     row.provenance = "ntm".to_owned();
     match observation {
         Ok(observation) => {
-            let tmux_working = row.claims_busy;
+            let disagreement =
+                terminal_working.is_some_and(|value| value != observation.is_working);
             row.claims_busy = observation.is_working;
-            if tmux_working != observation.is_working {
+            if disagreement {
                 row.verdict = "STATE_SOURCES_DISAGREE".to_owned();
                 row.confidence = "low".to_owned();
             } else if observation.is_working {
@@ -767,6 +769,7 @@ pub fn run_live(session: &str, rules: &PaneTruthRules) -> i32 {
             Ok(observation) if ntm_is_omp_agent(&observation.agent_type) => (
                 apply_ntm_observation(
                     classify_snapshot("", cpu, prior, epoch, rules),
+                    None,
                     Ok(observation),
                 ),
                 None,
@@ -779,7 +782,11 @@ pub fn run_live(session: &str, rules: &PaneTruthRules) -> i32 {
                 )
             }
             Err(error) => (
-                apply_ntm_observation(classify_snapshot("", cpu, prior, epoch, rules), Err(error)),
+                apply_ntm_observation(
+                    classify_snapshot("", cpu, prior, epoch, rules),
+                    None,
+                    Err(error),
+                ),
                 None,
             ),
         };
@@ -982,6 +989,13 @@ mod tests {
         });
         value.to_string()
     }
+    fn apply_with_terminal(
+        row: PaneRow,
+        observation: Result<NtmPaneObservation, String>,
+    ) -> PaneRow {
+        let terminal_working = row.claims_busy;
+        apply_ntm_observation(row, Some(terminal_working), observation)
+    }
 
     #[test]
     fn ntm_working_known_good_agrees_with_the_replaced_spinner() {
@@ -994,11 +1008,22 @@ mod tests {
             10_000,
             &PaneTruthRules::default(),
         );
-        let row = apply_ntm_observation(row, Ok(observation));
+        let row = apply_with_terminal(row, Ok(observation));
 
         assert_eq!(row.provenance, "ntm");
         assert_eq!(row.verdict, "WORKING");
         assert!(row.claims_busy);
+        assert!(row.state_source_error.is_none());
+    }
+    #[test]
+    fn ntm_working_without_terminal_capture_is_not_a_disagreement() {
+        let raw = ntm_working_json("4", "omp", true);
+        let observation = parse_ntm_is_working(Some(0), &raw, "", "4").expect("working pane");
+        let row = classify_snapshot("", 0.0, None, 10_000, &PaneTruthRules::default());
+        let row = apply_ntm_observation(row, None, Ok(observation));
+
+        assert_eq!(row.verdict, "WORKING");
+        assert_eq!(row.provenance, "ntm");
         assert!(row.state_source_error.is_none());
     }
 
@@ -1013,7 +1038,7 @@ mod tests {
             10_000,
             &PaneTruthRules::default(),
         );
-        let row = apply_ntm_observation(row, Ok(observation));
+        let row = apply_with_terminal(row, Ok(observation));
 
         assert_eq!(row.provenance, "ntm");
         assert_eq!(row.verdict, "IDLE");
@@ -1031,7 +1056,7 @@ mod tests {
             10_000,
             &PaneTruthRules::default(),
         );
-        let row = apply_ntm_observation(row, Ok(observation));
+        let row = apply_with_terminal(row, Ok(observation));
 
         assert_eq!(row.verdict, "STATE_SOURCES_DISAGREE");
         assert_eq!(row.confidence, "low");
