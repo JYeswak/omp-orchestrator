@@ -40,4 +40,5 @@ consumes = [
     { kind = "rpc_notification", name = "message_end", call_site = "src/main.rs::run_rpc_event_probe" },
     { kind = "rpc_notification", name = "turn_end", call_site = "src/main.rs::run_rpc_event_probe" },
     { kind = "rpc_notification", name = "agent_end", call_site = "src/main.rs::run_rpc_event_probe" },
+    { kind = "rpc_handler", name = "negotiate_protocol", call_site = "src/rpc_probe.rs" },
 ]
