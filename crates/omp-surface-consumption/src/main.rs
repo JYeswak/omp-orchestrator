@@ -56,6 +56,29 @@ fn resolve_bundle() -> Result<PathBuf, String> {
         .map_err(|error| format!("cannot canonicalize {launcher}: {error}; set OMP_BUNDLE"))
 }
 
+fn resolve_version() -> Result<String, String> {
+    let mut command = Command::new("omp");
+    command.arg("--version");
+    match subprocess_contract::bounded_output(&mut command, Duration::from_secs(15)) {
+        subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() =>
+            String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .map(str::trim)
+                .find(|line| line.starts_with("omp/") && line.len() > 4)
+                .map(str::to_owned)
+                .ok_or_else(|| "omp --version returned no omp/<version> line".to_owned()),
+        subprocess_contract::BoundedOutcome::Completed(output) => Err(format!(
+            "omp --version exited {:?}: {}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        )),
+        subprocess_contract::BoundedOutcome::TimedOut =>
+            Err("omp --version timed out; version is UNMEASURED".to_owned()),
+        subprocess_contract::BoundedOutcome::Unspawned(error) =>
+            Err(format!("omp --version unavailable: {error}")),
+    }
+}
+
 fn main() -> ExitCode {
     let bundle = match resolve_bundle() {
         Ok(bundle) => bundle,
@@ -74,10 +97,18 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    let version = match resolve_version() {
+        Ok(version) => version,
+        Err(error) => {
+            eprintln!("OMP_SURFACE_ERROR reason=version_unmeasured detail=\"{error}\"");
+            return ExitCode::from(2);
+        }
+    };
     // Bundle identity FIRST. A table without it is a snapshot nobody can date, and
     // this bundle changed version, size, and sha within one day.
     println!(
-        "OMP_BUNDLE path={} bytes={} sha256={}",
+        "OMP_BUNDLE version={} path={} bytes={} sha256={}",
+        version,
         bundle.display(),
         text.len(),
         sha256_hex(text.as_bytes())
