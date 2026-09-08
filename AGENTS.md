@@ -1602,6 +1602,38 @@ Never transcribe a value you own.** And **carry the population and the TREE with
 bare `cargo test` aggregate is inadmissible, because `cargo` reads the worktree while a sha names a
 tree (rule 8).
 
+### AND A BEAD'S ACCEPTANCE IS A TRANSCRIBED VALUE — RE-DERIVE IT BEFORE YOU DISPATCH IT
+
+**Binding on the DISPATCH path. Measured 2026-09-08: 170 of 755 non-terminal beads cite a hard
+count, and every one checked that night was stale — three of three.**
+
+```
+n4q   "6 unbounded .output() spawns"      -> historically 5, currently 0. Fix landed in 2b6b2d7.
+i0uh  "12 records lack purpose/inputs/…"  -> all 12 already carried every field.
+815   "14 crates are TERMINAL"            -> the audit derived 1. Thirteen misclassified,
+                                             ONE OF THEM A LIVE CRONTAB EXECUTOR.
+```
+
+**Every one was stale in the direction that makes a bead look like live work**, so the queue serves
+it forever and a pane spends its unit discovering the premise is gone. **`815`'s version nearly cost
+a deletion of a running crate.**
+
+**THE RULE: before a packet is sent, re-derive any count, path, or state the acceptance asserts.
+If it moved, amend the acceptance FIRST — never after the send**, because an acceptance edited
+mid-flight moves the target under a worker (see the dispatch-only-instruction rule above).
+
+**And the verdict a stale premise earns is not `WONTFIX`:**
+
+```
+ALREADY-FIXED   the defect is gone. Close with the sha that fixed it and a NON-AUTHOR grade.
+PREMISE-FALSE   the count/state was never right. Amend the acceptance with the measurement.
+STILL-LIVE      re-derived and unchanged. Dispatch it.
+```
+
+**A dispatch against a stale premise is indistinguishable from a dispatch against a real defect
+until the pane reports back** — which is a full unit spent to learn nothing, and it is the
+dispatcher's cost, not the worker's.
+
 ---
 
 ## A BORROWED CLAIM INHERITS ITS AUTHOR'S BURDEN
