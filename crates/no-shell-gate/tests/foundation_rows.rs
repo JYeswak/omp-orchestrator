@@ -82,6 +82,10 @@ const KEY_ALLOWANCE: &[(&str, &str)] = &[
          owner, not resolved by weakening this gate. Dies when SCHEMAS.toml adds `source` to \
          its optional list, or when 7sd's acceptance drops the field.",
     ),
+    (
+        "hypothesis_id",
+        "required by preregistration-gate for every docs/plan JSONL evidence row; dies_when=the evidence gate removes the citation requirement or FOUNDATION.jsonl is no longer a preregistered evidence artifact",
+    ),
 ];
 
 const STAGES: &[&str] = &["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9"];
