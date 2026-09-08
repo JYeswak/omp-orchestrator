@@ -595,14 +595,18 @@ mod tests {
         }
     }
 
-    /// The allowance list contains the reviewed cli/ps cross-axis decision and validates
-    /// every field at the gate trigger.
+    /// The allowance list contains reviewed cross-axis, placeholder, and CLI decisions and
+    /// validates every field at the gate trigger.
     #[test]
-    fn allowance_integrity_passes_on_the_named_cli_ps_decision() {
+    fn allowance_integrity_passes_on_named_decisions() {
         assert!(allowance_integrity().is_ok());
-        assert_eq!(DELIBERATELY_NOT.len(), 1);
-        assert_eq!(DELIBERATELY_NOT[0].kind, "cli");
-        assert_eq!(DELIBERATELY_NOT[0].name, "ps");
+        assert_eq!(DELIBERATELY_NOT.len(), 37);
+        assert!(DELIBERATELY_NOT
+            .iter()
+            .any(|row| row.kind == "cli" && row.name == "ps"));
+        assert!(DELIBERATELY_NOT
+            .iter()
+            .any(|row| row.kind == "transport_mode" && row.name == "value"));
     }
 
     /// `--repo` must be honoured, or the gate would silently measure whatever directory it

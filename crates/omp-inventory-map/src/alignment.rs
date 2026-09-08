@@ -82,18 +82,59 @@ pub struct DeliberateNonConsumption {
     pub dies_when: &'static str,
 }
 
-/// Deliberate non-consumption rows.
-///
-/// EMPTY BY DESIGN. Adding a row is a decision that must survive review; leaving a surface
-/// out of both this list and a consumer declaration makes the gate fail, which is the
-/// intended pressure.
-pub const DELIBERATELY_NOT: &[DeliberateNonConsumption] = &[DeliberateNonConsumption {
-    kind: "cli",
-    name: "ps",
-    owner: "omp-inventory-map",
-    reason: "command is consumed on the daemon_process axis by ompo-doctor, so declaring cli would duplicate ownership",
-    dies_when: "daemon_process and cli axes gain an explicit cross-axis equivalence contract or the CLI surface is retired",
-}];
+/// Deliberate non-consumption rows. Each row keeps an otherwise-visible surface in the map
+/// while recording the owner, reason, and condition that retires the decision.
+pub const DELIBERATELY_NOT: &[DeliberateNonConsumption] = &[
+    DeliberateNonConsumption {
+        kind: "cli",
+        name: "ps",
+        owner: "omp-inventory-map",
+        reason: "command is consumed on the daemon_process axis by ompo-doctor, so declaring cli would duplicate ownership",
+        dies_when: "daemon_process and cli axes gain an explicit cross-axis equivalence contract or the CLI surface is retired",
+    },
+    DeliberateNonConsumption {
+        kind: "transport_mode",
+        name: "value",
+        owner: "omp-inventory-map",
+        reason: "placeholder value is not a consumable mode identity and no separate mode-level caller exists",
+        dies_when: "the deriver emits concrete mode entries with a declared payload or the transport_mode axis is retired",
+    },
+    DeliberateNonConsumption {        kind: "cli",        name: "acp",        owner: "omp-inventory-map",        reason: "point-to-point subprocess server, not an attach-to-live-pane control surface",        dies_when: "OMP publishes an attach-existing-pane ACP contract",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "agents",        owner: "omp-inventory-map",        reason: "unpack writes agent files into user or project configuration",        dies_when: "agent export becomes a read-only runtime registry",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "auth-broker",        owner: "omp-inventory-map",        reason: "credential-vault login, migration, token, and service operations cross the secret/operator boundary",        dies_when: "OMP exposes a redacted, read-only auth-health contract for orchestration",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "auth-gateway",        owner: "omp-inventory-map",        reason: "starts or controls a network proxy",        dies_when: "the gateway publishes a bounded health/readiness API consumed by this orchestrator",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "bench",        owner: "omp-inventory-map",        reason: "provider/model benchmark is an evaluation workload, not live lifecycle state",        dies_when: "a scheduled benchmark consumer and budget contract are added",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "browser-relay",        owner: "omp-inventory-map",        reason: "starts a local browser-control service",        dies_when: "the orchestrator owns a typed relay health/control contract",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "cleanse",        owner: "omp-inventory-map",        reason: "launches subagents and can fix project state",        dies_when: "it exposes a read-only, bounded diagnostic result with no agent or file mutation",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "commit",        owner: "omp-inventory-map",        reason: "edits repository history-adjacent artifacts and is human-reviewed",        dies_when: "the orchestrator explicitly owns a commit-generation protocol",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "completions",        owner: "omp-inventory-map",        reason: "emits shell ergonomics rather than runtime state",        dies_when: "the completion output becomes an input to a declared runtime consumer",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "compress",        owner: "omp-inventory-map",        reason: "rewrites caller-selected files",        dies_when: "the orchestrator owns a reversible prompt-compaction API",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "config",        owner: "omp-inventory-map",        reason: "configuration mutation changes future sessions",        dies_when: "OMP exposes a read-only effective-config snapshot needed by a consumer",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "dry-balance",        owner: "omp-inventory-map",        reason: "auth-account policy simulation is not OMP session lifecycle state",        dies_when: "account admission becomes a declared orchestration input",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "gallery",        owner: "omp-inventory-map",        reason: "visual QA surface",        dies_when: "an automated visual regression consumer is declared",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "gc",        owner: "omp-inventory-map",        reason: "performs storage reclamation",        dies_when: "OMP publishes a read-only GC readiness/result contract",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "git",        owner: "omp-inventory-map",        reason: "interactive terminal UI and repository mutation",        dies_when: "OMP publishes a non-interactive typed git operation contract",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "grep",        owner: "omp-inventory-map",        reason: "diagnostic tool invocation, not OMP lifecycle state",        dies_when: "the orchestrator declares grep output as a stable control-plane input",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "grievances",        owner: "omp-inventory-map",        reason: "QA issue maintenance includes deletion and push actions",        dies_when: "a read-only, authenticated grievance feed is an explicit fleet input",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "if-bench",        owner: "omp-inventory-map",        reason: "evaluation workload, not runtime control",        dies_when: "a scheduled benchmark consumer and cost policy are added",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "images",        owner: "omp-inventory-map",        reason: "publication health plus purge mutation is outside this OMP lifecycle",        dies_when: "a declared image-backend health consumer exists",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "install",        owner: "omp-inventory-map",        reason: "mutates installed extensions and trust surface",        dies_when: "extension installation is replaced by a reviewed typed deployment protocol",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "join",        owner: "omp-inventory-map",        reason: "human collaboration entry point",        dies_when: "collab session membership is an explicit orchestrator-owned resource",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "plugin",        owner: "omp-inventory-map",        reason: "plugin lifecycle mutates executable extension code",        dies_when: "reviewed plugin state is exposed as a read-only contract",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "read",        owner: "omp-inventory-map",        reason: "generic operator/tool read surface, not a stable OMP lifecycle input",        dies_when: "the orchestrator declares a bounded URI/file source contract",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "render",        owner: "omp-inventory-map",        reason: "presentation and repaint diagnostics",        dies_when: "render timing becomes a declared automated quality signal",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "say",        owner: "omp-inventory-map",        reason: "local audio side effect",        dies_when: "voice output is an explicit orchestrator-owned notification channel",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "search",        owner: "omp-inventory-map",        reason: "external research workload, not OMP session state",        dies_when: "search results become a declared bounded research input",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "setup",        owner: "omp-inventory-map",        reason: "installs dependencies and changes machine state",        dies_when: "setup becomes a declarative, reversible provisioning API",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "share",        owner: "omp-inventory-map",        reason: "external publication of session data",        dies_when: "the orchestrator owns an approved session-publication contract",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "shell",        owner: "omp-inventory-map",        reason: "interactive terminal and arbitrary command execution",        dies_when: "OMP offers a bounded typed command-execution API accepted by this orchestrator",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "ssh",        owner: "omp-inventory-map",        reason: "edits operator connection configuration",        dies_when: "remote host state is exposed through a declared non-interactive control plane",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "tiny-models",        owner: "omp-inventory-map",        reason: "downloads and changes local model state",        dies_when: "local-model lifecycle is an explicit provisioned dependency",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "token",        owner: "omp-inventory-map",        reason: "direct credential emission is outside an orchestrator consumer boundary",        dies_when: "OMP exposes redacted credential-health metadata without token material",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "ttsr",        owner: "omp-inventory-map",        reason: "rule diagnostics and source scanning, not OMP lifecycle state",        dies_when: "TTSR verdicts become a declared CI/runtime gate input",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "update",        owner: "omp-inventory-map",        reason: "changes the installed OMP binary",        dies_when: "updates are handled by an approved release controller",    },
+    DeliberateNonConsumption {        kind: "cli",        name: "worktree",        owner: "omp-inventory-map",        reason: "repository topology mutation conflicts with this workspace's zero-worktree policy",        dies_when: "the workspace policy explicitly permits orchestrator-owned worktrees",    },
+];
 
 /// One consumer declaration, read from a crate's manifest.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -773,16 +814,49 @@ mod tests {
         );
     }
 
-    /// The cli/ps row is a deliberate cross-axis exclusion: the query is consumed as
-    /// daemon_process/omp ps, while this derived cli/ps row remains visible and named.
+    /// The two cross-axis/placeholder rows and 35 generated CLI exclusions are
+    /// deliberate, owned, and retirable.
     #[test]
-    fn the_deliberately_not_allowance_is_named_and_retirable() {
-        assert_eq!(DELIBERATELY_NOT.len(), 1);
-        let row = &DELIBERATELY_NOT[0];
-        assert_eq!((row.kind, row.name), ("cli", "ps"));
-        assert_eq!(row.owner, "omp-inventory-map");
-        assert!(!row.reason.is_empty());
-        assert!(!row.dies_when.is_empty());
+    fn the_deliberately_not_allowances_are_named_and_retirable() {
+        assert_eq!(DELIBERATELY_NOT.len(), 37);
+        let cli = DELIBERATELY_NOT
+            .iter()
+            .find(|row| row.kind == "cli" && row.name == "ps")
+            .expect("cli ps allowance");
+        assert_eq!(cli.owner, "omp-inventory-map");
+        let transport = DELIBERATELY_NOT
+            .iter()
+            .find(|row| row.kind == "transport_mode" && row.name == "value")
+            .expect("transport placeholder allowance");
+        assert_eq!(transport.owner, "omp-inventory-map");
+        for row in DELIBERATELY_NOT {
+            assert!(!row.reason.is_empty());
+            assert!(!row.dies_when.is_empty());
+        }
+    }
+
+    #[test]
+    fn cli_allowances_match_channel_a_reference() {
+        let markdown = include_str!("../../../references/CHANNEL-A-CLI.md");
+        let documented: BTreeSet<&str> = markdown
+            .lines()
+            .filter_map(|line| {
+                let rest = line.strip_prefix("| ")?;
+                let (name, tail) = rest.split_once(" |")?;
+                tail.contains("OPERATOR-ONLY / DELIBERATELY_NOT")
+                    .then_some(name.trim_matches(char::from(96)))
+            })
+            .collect();
+        assert_eq!(documented.len(), 35);
+        let actual: BTreeSet<&str> = DELIBERATELY_NOT
+            .iter()
+            .filter(|row| row.kind == "cli" && row.name != "ps")
+            .map(|row| row.name)
+            .collect();
+        assert_eq!(actual, documented);
+        assert!(DELIBERATELY_NOT
+            .iter()
+            .any(|row| row.kind == "cli" && row.name == "ps"));
     }
 
     /// UNCLASSIFIED must never come from a default branch. Proven behaviourally: an entry
@@ -813,22 +887,22 @@ mod tests {
         let error = align(
             "/opt/omp",
             "omp/18.0.11",
-            &[entry("cli", "read"), entry("cli", "grep")],
+            &[entry("cli", "read"), entry("cli", "unknown")],
             &consumers,
         )
-        .expect_err("grep is unclassified");
+        .expect_err("unknown is unclassified");
         assert!(matches!(&error, AlignmentError::Unclassified(rows) if rows.len() == 1));
 
         // And the ratio itself, on a passing set.
         let both = index_consumers(&metadata(
             r#"{"kind":"cli","name":"read","call_site":"a.rs"},
-               {"kind":"cli","name":"grep","call_site":"b.rs"}"#,
+               {"kind":"cli","name":"unknown","call_site":"b.rs"}"#,
         ))
         .expect("index");
         let report = align(
             "/opt/omp",
             "omp/18.0.11",
-            &[entry("cli", "read"), entry("cli", "grep")],
+            &[entry("cli", "read"), entry("cli", "unknown")],
             &both,
         )
         .expect("passes");
@@ -872,7 +946,7 @@ mod tests {
         assert_eq!(report.packages_scanned, 2);
     }
 
-    /// Exit vocabulary shared with `repair`/`undo`, not merely parallel: content refusals
+    /// Exit vocabulary shared with repair/undo, not merely parallel: content refusals
     /// are 2, instrument failures are 3, and 4 stays reserved for upstream-unreachable.
     #[test]
     fn exit_vocabulary_separates_content_from_instrument_and_reserves_four() {
@@ -887,9 +961,8 @@ mod tests {
         }
     }
 
-    /// A stale allowance row -- one naming a surface that no longer exists -- is reported
-    /// rather than silently kept. The live cli/ps allowance is absent from this fixture, so
-    /// the stale row is observable.
+    /// Allowances naming absent surfaces are reported rather than silently kept. Both current
+    /// deliberate rows are absent from this fixture, so both stale rows are observable.
     #[test]
     fn stale_allowance_rows_are_reported() {
         let consumers = index_consumers(&metadata(
@@ -898,11 +971,12 @@ mod tests {
         .expect("index");
         let report = align("/opt/omp", "omp/18.0.11", &[entry("transport", "mux")], &consumers)
             .expect("passes");
-        assert_eq!(report.stale_allowances.len(), 1);
-        assert_eq!(
-            report.stale_allowances[0],
-            "cli:ps owner=omp-inventory-map dies_when=daemon_process and cli axes gain an explicit cross-axis equivalence contract or the CLI surface is retired"
-        );
+        assert_eq!(report.stale_allowances.len(), 37);
+        assert!(report.stale_allowances.iter().any(|row| row.starts_with("cli:ps owner=")));
+        assert!(report
+            .stale_allowances
+            .iter()
+            .any(|row| row.starts_with("transport_mode:value owner=")));
     }
 
     /// Found by %20 while landing the first real declarations. Two crates claiming one
