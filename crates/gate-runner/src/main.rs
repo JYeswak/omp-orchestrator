@@ -618,8 +618,9 @@ fn run_crate(repo: &Path, crate_name: &str) -> Observed {
                 String::from_utf8_lossy(&output.stdout),
                 String::from_utf8_lossy(&output.stderr)
             );
-            parse_cargo_output(&text)
+            classify_completed_cargo_output(output.status.code(), &text)
         }
+
         BoundedOutcome::TimedOut => Observed {
             passed: Vec::new(),
             failed: Vec::new(),
@@ -775,6 +776,20 @@ fn executable_available(executable: &str, path: &std::ffi::OsStr) -> bool {
 /// declared invocations produced them, so `observed < expected` still catches a shortfall while
 /// "the declared targets are the ones that ran" stays UNMEASURED. Only a per-invocation run
 /// attributes by construction — which is the real argument for the 286-invocation denominator.
+fn classify_completed_cargo_output(status_code: Option<i32>, text: &str) -> Observed {
+    if status_code == Some(4) {
+        return Observed {
+            passed: Vec::new(),
+            failed: Vec::new(),
+            unmeasurable: Some(UnmeasurablePrecondition::PolicyUnavailable {
+                policy: "child-exit-4".to_owned(),
+                detail: "child returned exit=4; gate result is unmeasurable, not failed".to_owned(),
+            }),
+        };
+    }
+    parse_cargo_output(text)
+}
+
 fn parse_cargo_output(text: &str) -> Observed {
     if text.contains("failed to load manifest") || text.contains("failed to parse manifest") {
         return Observed {
@@ -1128,5 +1143,28 @@ test result: FAILED. 25 passed; 1 failed; 0 ignored
         assert_eq!(strip_ansi("a\u{1b}[0mb"), "ab");
         assert_eq!(strip_ansi("a\u{1b}Xb"), "ab", "a non-CSI escape drops only itself");
         assert_eq!(strip_ansi("a\u{1b}[31"), "a", "a truncated CSI consumes to end of line");
+    }
+    #[test]
+    fn child_exit_four_is_unmeasurable_not_a_failure() {
+        let observed = classify_completed_cargo_output(
+            Some(4),
+            "test result: FAILED. 0 passed; 1 failed; 0 ignored",
+        );
+        assert!(observed.failed.is_empty());
+        assert!(matches!(
+            observed.unmeasurable,
+            Some(UnmeasurablePrecondition::PolicyUnavailable { ref policy, .. })
+                if policy == "child-exit-4"
+        ));
+    }
+
+    #[test]
+    fn ordinary_child_failure_still_parses_as_failure() {
+        let observed = classify_completed_cargo_output(
+            Some(101),
+            "test bad ... FAILED\ntest result: FAILED. 0 passed; 1 failed; 0 ignored",
+        );
+        assert!(observed.unmeasurable.is_none());
+        assert_eq!(observed.failed.len(), 1);
     }
 }
