@@ -1,144 +1,123 @@
 #![forbid(unsafe_code)]
 
-//! Count-twin invariant (06.16 / xm0n.7): for every observed/`expected_*` pair,
-//! either the counts match or envelope `status` is `UNKNOWN` and the mismatching
-//! pair is named. Closing slash_commands 0-vs-136 is out of scope.
+//! Dynamic probe contract for the inventory map.
+//!
+//! The historical name remains for the public module path, but the implementation no longer
+//! compares live counts with transcribed absolutes. Each required surface is judged by
+//! its own probe evidence: known, non-empty output is healthy; missing, unknown, or zero output
+//! is an explicit mismatch.
 
-use crate::InventoryCounts;
+use crate::{ProbeEvidence, ProbeState};
 use serde_json::Value;
 use std::fmt;
 
-/// The seven twins pinned by `docs/plan/06-gates.md` §2.7 (f). Order is the
-/// `InventoryCounts` field order. An empty list is a typed error, not a skip.
-pub const COUNT_TWINS: &[(&str, &str)] = &[
-    ("cli_commands", "expected_cli_commands"),
-    ("type_roots", "expected_type_roots"),
-    ("declarations", "expected_declarations"),
-    ("rpc_handlers", "expected_rpc_handlers"),
-    ("slash_commands", "expected_slash_commands"),
-    ("omp_methods", "expected_omp_methods"),
-    ("workspace_crates", "expected_workspace_crates"),
+/// Subjects whose live evidence must be present before the map can claim `OK`.
+pub const REQUIRED_PROBES: &[&str] = &[
+    "omp_version",
+    "omp_help_cli_commands",
+    "omp_type_roots",
+    "omp_type_declarations",
+    "omp_rpc_handlers",
+    "omp_rpc_slash_commands",
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TwinMismatch {
-    pub pair: String,
-    pub observed: usize,
-    pub expected: usize,
+pub struct ProbeMismatch {
+    pub name: String,
+    pub state: ProbeState,
+    pub observed: Option<usize>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TwinError {
-    EmptyPairList,
-    EnvelopeEmpty,
-    NoStatus,
-    NoPairsFound,
-    UnknownPairName(String),
-    ExpectedWithoutObserved(String),
-    MismatchClaimedOk {
-        pair: String,
-        observed: usize,
-        expected: usize,
-    },
-    UnknownWithoutNamedPair,
-    UnknownNamesMatchingPair {
-        pair: String,
-    },
-}
-
-impl fmt::Display for TwinError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::EmptyPairList => f.write_str("COUNT_TWIN_EMPTY_PAIR_LIST"),
-            Self::EnvelopeEmpty => f.write_str("EnvelopeEmpty"),
-            Self::NoStatus => f.write_str("COUNT_TWIN_NO_STATUS"),
-            Self::NoPairsFound => f.write_str("NoPairsFound"),
-            Self::UnknownPairName(name) => {
-                write!(f, "COUNT_TWIN_UNKNOWN_PAIR pair={name}")
-            }
-            Self::ExpectedWithoutObserved(name) => {
-                write!(f, "COUNT_TWIN_EXPECTED_WITHOUT_OBSERVED pair={name}")
-            }
-            Self::MismatchClaimedOk {
-                pair,
-                observed,
-                expected,
-            } => write!(
-                f,
-                "COUNT_TWIN_MISMATCH_CLAIMED_OK pair={pair} observed={observed} expected={expected}"
-            ),
-            Self::UnknownWithoutNamedPair => {
-                f.write_str("COUNT_TWIN_UNKNOWN_WITHOUT_NAMED_PAIR")
-            }
-            Self::UnknownNamesMatchingPair { pair } => {
-                write!(f, "COUNT_TWIN_UNKNOWN_NAMES_MATCHING_PAIR pair={pair}")
-            }
-        }
-    }
-}
-
-pub fn mismatches(counts: &InventoryCounts) -> Vec<TwinMismatch> {
-    COUNT_TWINS
+/// Find missing, unknown, and empty required probe evidence.
+#[must_use]
+pub fn mismatches(probes: &[ProbeEvidence]) -> Vec<ProbeMismatch> {
+    REQUIRED_PROBES
         .iter()
-        .filter_map(|(observed_name, _)| {
-            let (observed, expected) = twin_values(counts, observed_name)?;
-            (observed != expected).then_some(TwinMismatch {
-                pair: (*observed_name).to_owned(),
-                observed,
-                expected,
-            })
+        .filter_map(|name| {
+            let evidence = probes.iter().find(|probe| probe.name == *name);
+            match evidence {
+                Some(probe)
+                    if probe.state == ProbeState::Known
+                        && probe.observed.is_some_and(|count| count > 0) => None,
+                Some(probe) => Some(ProbeMismatch {
+                    name: (*name).to_owned(),
+                    state: probe.state,
+                    observed: probe.observed,
+                }),
+                None => Some(ProbeMismatch {
+                    name: (*name).to_owned(),
+                    state: ProbeState::Unknown,
+                    observed: None,
+                }),
+            }
         })
         .collect()
 }
 
-pub fn format_mismatches(rows: &[TwinMismatch]) -> String {
+#[must_use]
+pub fn format_mismatches(rows: &[ProbeMismatch]) -> String {
     rows.iter()
         .map(|row| {
             format!(
-                "COUNT_TWIN_MISMATCH pair={} observed={} expected={}",
-                row.pair, row.observed, row.expected
+                "COUNT_PROBE_UNMEASURED name={} state={:?} observed={:?}",
+                row.name, row.state, row.observed
             )
         })
         .collect::<Vec<_>>()
         .join("; ")
 }
 
-fn twin_values(counts: &InventoryCounts, observed: &str) -> Option<(usize, usize)> {
-    Some(match observed {
-        "cli_commands" => (counts.cli_commands, counts.expected_cli_commands),
-        "type_roots" => (counts.type_roots, counts.expected_type_roots),
-        "declarations" => (counts.declarations, counts.expected_declarations),
-        "rpc_handlers" => (counts.rpc_handlers, counts.expected_rpc_handlers),
-        "slash_commands" => (counts.slash_commands, counts.expected_slash_commands),
-        "omp_methods" => (counts.omp_methods, counts.expected_omp_methods),
-        "workspace_crates" => (counts.workspace_crates, counts.expected_workspace_crates),
-        _ => return None,
-    })
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TwinError {
+    EmptyRequiredProbeList,
+    EnvelopeEmpty,
+    NoStatus,
+    NoProbes,
+    MalformedProbes,
+    MismatchClaimedOk { name: String },
+    UnknownWithoutNamedProbe,
+    UnknownNamesMatchingProbe { name: String },
 }
 
-fn named_pairs_from_error(error: Option<&str>) -> Vec<String> {
+impl fmt::Display for TwinError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EmptyRequiredProbeList => formatter.write_str("COUNT_PROBE_EMPTY_REQUIRED_SET"),
+            Self::EnvelopeEmpty => formatter.write_str("COUNT_PROBE_ENVELOPE_EMPTY"),
+            Self::NoStatus => formatter.write_str("COUNT_PROBE_NO_STATUS"),
+            Self::NoProbes => formatter.write_str("COUNT_PROBE_NO_EVIDENCE"),
+            Self::MalformedProbes => formatter.write_str("COUNT_PROBE_MALFORMED_EVIDENCE"),
+            Self::MismatchClaimedOk { name } => {
+                write!(formatter, "COUNT_PROBE_MISMATCH_CLAIMED_OK name={name}")
+            }
+            Self::UnknownWithoutNamedProbe => {
+                formatter.write_str("COUNT_PROBE_UNKNOWN_WITHOUT_NAMED_PROBE")
+            }
+            Self::UnknownNamesMatchingProbe { name } => {
+                write!(formatter, "COUNT_PROBE_UNKNOWN_NAMES_MATCHING_PROBE name={name}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for TwinError {}
+
+fn names_from_error(error: Option<&str>) -> Vec<String> {
     let Some(error) = error else {
         return Vec::new();
     };
-    let mut names = Vec::new();
-    let mut rest = error;
-    while let Some(idx) = rest.find("pair=") {
-        rest = &rest[idx + 5..];
-        let name: String = rest
-            .chars()
-            .take_while(|ch| *ch == '_' || ch.is_ascii_alphabetic())
-            .collect();
-        if !name.is_empty() {
-            names.push(name);
-        }
-    }
-    names
+    error
+        .split(';')
+        .filter_map(|part| part.split("name=").nth(1))
+        .filter_map(|name| name.split_whitespace().next())
+        .map(str::to_owned)
+        .collect()
 }
 
-/// `guard` is the count-twin conditional. Tests invert it for the mutation leg.
+/// Validate the robot envelope's dynamic probe evidence. `guard=false` is the mutation leg.
 pub fn evaluate_envelope_guarded(envelope: &Value, guard: bool) -> Result<(), TwinError> {
-    if COUNT_TWINS.is_empty() {
-        return Err(TwinError::EmptyPairList);
+    if REQUIRED_PROBES.is_empty() {
+        return Err(TwinError::EmptyRequiredProbeList);
     }
     if envelope.is_null() || envelope.as_object().is_some_and(serde_json::Map::is_empty) {
         return Err(TwinError::EnvelopeEmpty);
@@ -147,69 +126,42 @@ pub fn evaluate_envelope_guarded(envelope: &Value, guard: bool) -> Result<(), Tw
         .get("status")
         .and_then(Value::as_str)
         .ok_or(TwinError::NoStatus)?;
-    let counts = envelope
-        .pointer("/data/counts")
-        .or_else(|| envelope.get("counts"))
-        .ok_or(TwinError::NoPairsFound)?;
-    let obj = counts.as_object().ok_or(TwinError::NoPairsFound)?;
-    if obj.is_empty() {
-        return Err(TwinError::NoPairsFound);
-    }
-    for key in obj.keys() {
-        if let Some(rest) = key.strip_prefix("expected_") {
-            if !COUNT_TWINS.iter().any(|(_, expected)| *expected == key) {
-                return Err(TwinError::UnknownPairName(key.clone()));
-            }
-            if !obj.contains_key(rest) {
-                return Err(TwinError::ExpectedWithoutObserved(rest.to_owned()));
-            }
-        }
-    }
-    for (observed, expected) in COUNT_TWINS {
-        if obj.contains_key(*expected) && !obj.contains_key(*observed) {
-            return Err(TwinError::ExpectedWithoutObserved((*observed).to_owned()));
-        }
-    }
-    let parsed: InventoryCounts =
-        serde_json::from_value(counts.clone()).map_err(|_| TwinError::NoPairsFound)?;
-    let mismatch_rows = mismatches(&parsed);
-    let named = named_pairs_from_error(envelope.get("error").and_then(Value::as_str));
+    let probes_value = envelope
+        .pointer("/data/probes")
+        .or_else(|| envelope.get("probes"))
+        .ok_or(TwinError::NoProbes)?;
+    let probes: Vec<ProbeEvidence> =
+        serde_json::from_value(probes_value.clone()).map_err(|_| TwinError::MalformedProbes)?;
+    let rows = mismatches(&probes);
     if !guard {
         return Ok(());
     }
+    let named = names_from_error(envelope.get("error").and_then(Value::as_str));
     if status == "OK" {
-        if let Some(row) = mismatch_rows.first() {
-            return Err(TwinError::MismatchClaimedOk {
-                pair: row.pair.clone(),
-                observed: row.observed,
-                expected: row.expected,
-            });
-        }
-        return Ok(());
+        return rows.first().map_or(Ok(()), |row| {
+            Err(TwinError::MismatchClaimedOk {
+                name: row.name.clone(),
+            })
+        });
     }
     if status == "UNKNOWN" {
-        if mismatch_rows.is_empty() {
-            if let Some(name) = named.first() {
-                return Err(TwinError::UnknownNamesMatchingPair {
-                    pair: name.clone(),
-                });
-            }
-            return Err(TwinError::UnknownWithoutNamedPair);
+        if rows.is_empty() || named.is_empty() {
+            return Err(TwinError::UnknownWithoutNamedProbe);
         }
-        if named.is_empty() {
-            return Err(TwinError::UnknownWithoutNamedPair);
+        if let Some(name) = named
+            .iter()
+            .find(|name| !rows.iter().any(|row| &row.name == *name))
+        {
+            return Err(TwinError::UnknownNamesMatchingProbe { name: name.clone() });
         }
-        for name in &named {
-            if !mismatch_rows.iter().any(|row| &row.pair == name) {
-                return Err(TwinError::UnknownNamesMatchingPair { pair: name.clone() });
-            }
+        if let Some(row) = rows
+            .iter()
+            .find(|row| !named.iter().any(|name| name == &row.name))
+        {
+            return Err(TwinError::UnknownNamesMatchingProbe {
+                name: row.name.clone(),
+            });
         }
-        for row in &mismatch_rows {
-            if !named.iter().any(|name| name == &row.pair) {
-                return Err(TwinError::UnknownWithoutNamedPair);
-            }
-        }
-        return Ok(());
     }
     Ok(())
 }

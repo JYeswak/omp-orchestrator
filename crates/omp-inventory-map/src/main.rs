@@ -7,8 +7,8 @@ use omp_inventory_map::census_invariants::{
     CensusInvariantError, CensusInvariantRow, check_census_invariants,
 };
 use omp_inventory_map::{
-    count_twins, CRATE_VERSION, EXPECTED_OMP_VERSION, InventoryMap, ProbeConfig, ProbeState,
-    SCHEMA_VERSION, SurfaceMapAudit, collect_inventory, collect_surface_map_audit,
+    count_twins, CRATE_VERSION, InventoryMap, ProbeConfig, ProbeState, SCHEMA_VERSION,
+    SurfaceMapAudit, collect_inventory, collect_surface_map_audit,
 };
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -107,7 +107,7 @@ fn version() -> Result<(), String> {
         data: Some(json!({
             "crate_version": CRATE_VERSION,
             "schema_version": SCHEMA_VERSION,
-            "expected_omp_version": EXPECTED_OMP_VERSION,
+            "probe_version_source": "omp --version during collect",
         })),
         error: None,
     })
@@ -167,7 +167,7 @@ fn collect(command: String, config: ProbeConfig) -> ExitCode {
     match runtime.block_on(async { collect_inventory(&cx, &config).await }) {
         Ok(map) => match check_census_invariants(&census_rows(&map)) {
             Ok(()) => {
-                let mismatch_rows = count_twins::mismatches(&map.counts);
+                let mismatch_rows = count_twins::mismatches(&map.probes);
                 let status = if mismatch_rows.is_empty() {
                     map_status(&map)
                 } else {
@@ -204,7 +204,7 @@ fn collect(command: String, config: ProbeConfig) -> ExitCode {
                 ExitCode::from(1)
             }
             Err(error) => {
-                let mismatch_rows = count_twins::mismatches(&map.counts);
+                let mismatch_rows = count_twins::mismatches(&map.probes);
                 let (status, mut message) = if mismatch_rows.is_empty() {
                     ("VACUOUS_INVARIANT_SET", error.to_string())
                 } else {

@@ -182,9 +182,8 @@ fn census_invariants_emitted_map_is_kind_specific() {
         declarations: Some(vec!["index.d.ts".to_owned()]),
         rpc_handlers: Some(vec!["prompt".to_owned()]),
         slash_commands: Some(vec!["compact".to_owned()]),
-        omp_methods: Some(vec!["omp/muxConnect".to_owned()]),
         transport_modes: Some(vec!["rpc".to_owned()]),
-        omp_version: Some("omp/18.0.11".to_owned()),
+        omp_version: Some("omp/18.1.14".to_owned()),
         ..InventoryInputs::default()
     })
     .expect("fixture map");

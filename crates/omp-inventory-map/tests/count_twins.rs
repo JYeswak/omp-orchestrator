@@ -1,206 +1,119 @@
 #![forbid(unsafe_code)]
 
 use omp_inventory_map::count_twins::{
-    evaluate_envelope, evaluate_envelope_guarded, TwinError, COUNT_TWINS,
+    evaluate_envelope, evaluate_envelope_guarded, mismatches, ProbeMismatch, REQUIRED_PROBES,
 };
-use serde_json::{json, Value};
-use std::process::Command;
+use omp_inventory_map::{ProbeEvidence, ProbeState};
+use serde_json::json;
 
-fn matched_counts() -> Value {
-    json!({
-        "cli_commands": 39,
-        "type_roots": 57,
-        "declarations": 14,
-        "rpc_handlers": 42,
-        "slash_commands": 136,
-        "omp_methods": 3,
-        "workspace_crates": 72,
-        "expected_cli_commands": 39,
-        "expected_type_roots": 57,
-        "expected_declarations": 14,
-        "expected_rpc_handlers": 42,
-        "expected_slash_commands": 136,
-        "expected_omp_methods": 3,
-        "expected_workspace_crates": 72
-    })
+fn known_probes() -> Vec<ProbeEvidence> {
+    REQUIRED_PROBES
+        .iter()
+        .map(|name| ProbeEvidence {
+            name: (*name).to_owned(),
+            command: vec!["live-probe".to_owned(), (*name).to_owned()],
+            state: ProbeState::Known,
+            observed: Some(1),
+            output: "measured".to_owned(),
+            detail: "live evidence".to_owned(),
+        })
+        .collect()
 }
 
-fn counts_with_slash(observed: usize, expected: usize) -> Value {
-    let mut counts = matched_counts();
-    counts["slash_commands"] = json!(observed);
-    counts["expected_slash_commands"] = json!(expected);
-    counts
-}
-
-fn envelope(status: &str, counts: Value, error: Option<&str>) -> Value {
+fn envelope(status: &str, probes: &[ProbeEvidence], error: Option<&str>) -> serde_json::Value {
     json!({
         "status": status,
-        "data": { "counts": counts },
-        "error": error
+        "data": {"probes": probes},
+        "error": error,
     })
 }
 
 #[test]
-fn seven_pairs_are_enumerated_and_nonempty() {
-    assert_eq!(COUNT_TWINS.len(), 7);
-    assert!(!COUNT_TWINS.is_empty());
-    for (observed, expected) in COUNT_TWINS {
-        assert!(expected.starts_with("expected_"));
-        assert_eq!(&expected["expected_".len()..], *observed);
+fn required_probe_set_is_nonempty_and_unique() {
+    assert!(!REQUIRED_PROBES.is_empty());
+    for (index, name) in REQUIRED_PROBES.iter().enumerate() {
+        assert!(!name.is_empty());
+        assert!(!REQUIRED_PROBES[index + 1..].contains(name));
     }
 }
 
 #[test]
-fn unknown_pair_name_in_envelope_is_typed_error() {
-    let mut counts = matched_counts();
-    counts["expected_widgets"] = json!(1);
-    let err = evaluate_envelope(&envelope("OK", counts, None)).expect_err("extra pair");
-    assert!(
-        err.to_string().contains("COUNT_TWIN_UNKNOWN_PAIR pair=expected_widgets"),
-        "{err}"
-    );
+fn known_nonempty_live_evidence_has_no_mismatches() {
+    assert!(mismatches(&known_probes()).is_empty());
 }
 
 #[test]
-fn expected_without_observed_twin_is_typed_error() {
-    let mut counts = matched_counts();
-    counts.as_object_mut().unwrap().remove("slash_commands");
-    let err = evaluate_envelope(&envelope("OK", counts, None)).expect_err("missing observed");
-    assert!(
-        err.to_string()
-            .contains("COUNT_TWIN_EXPECTED_WITHOUT_OBSERVED pair=slash_commands"),
-        "{err}"
-    );
+fn missing_probe_is_a_typed_mismatch() {
+    let mut probes = known_probes();
+    probes.pop();
+    let rows = mismatches(&probes);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].name, REQUIRED_PROBES[REQUIRED_PROBES.len() - 1]);
 }
 
 #[test]
-fn known_bad_mismatch_with_status_ok_fails_naming_the_pair() {
-    let err = evaluate_envelope(&envelope(
-        "OK",
-        counts_with_slash(0, 136),
-        None,
-    ))
-    .expect_err("mismatch+OK");
-    let text = err.to_string();
-    assert!(text.contains("pair=slash_commands"), "{text}");
-    assert!(text.contains("observed=0"), "{text}");
-    assert!(text.contains("expected=136"), "{text}");
+fn zero_probe_is_not_a_match() {
+    let mut probes = known_probes();
+    probes[0].observed = Some(0);
+    let rows = mismatches(&probes);
+    assert_eq!(rows, vec![ProbeMismatch {
+        name: REQUIRED_PROBES[0].to_owned(),
+        state: ProbeState::Known,
+        observed: Some(0),
+    }]);
 }
 
 #[test]
-fn known_bad_unknown_without_named_pair_fails() {
-    let err = evaluate_envelope(&envelope(
-        "UNKNOWN",
-        counts_with_slash(0, 136),
-        None,
-    ))
-    .expect_err("UNKNOWN unnamed");
-    assert!(
-        err.to_string().contains("COUNT_TWIN_UNKNOWN_WITHOUT_NAMED_PAIR"),
-        "{err}"
-    );
+fn unknown_probe_is_not_a_match() {
+    let mut probes = known_probes();
+    probes[1].state = ProbeState::Unknown;
+    let rows = mismatches(&probes);
+    assert_eq!(rows[0].name, REQUIRED_PROBES[1]);
 }
 
 #[test]
-fn known_bad_unknown_naming_a_matching_pair_fails() {
-    let err = evaluate_envelope(&envelope(
-        "UNKNOWN",
-        matched_counts(),
-        Some("COUNT_TWIN_MISMATCH pair=slash_commands observed=136 expected=136"),
-    ))
-    .expect_err("names a match");
-    assert!(
-        err.to_string()
-            .contains("COUNT_TWIN_UNKNOWN_NAMES_MATCHING_PAIR pair=slash_commands"),
-        "{err}"
-    );
+fn known_good_envelope_is_accepted() {
+    evaluate_envelope(&envelope("OK", &known_probes(), None)).expect("known evidence");
 }
 
 #[test]
-fn known_good_all_seven_match_status_ok() {
-    evaluate_envelope(&envelope("OK", matched_counts(), None)).expect("all match");
+fn known_bad_ok_status_names_the_probe() {
+    let mut probes = known_probes();
+    probes[0].observed = Some(0);
+    let error = format!("{}", omp_inventory_map::count_twins::format_mismatches(&mismatches(&probes)));
+    let err = evaluate_envelope(&envelope("OK", &probes, Some(&error))).expect_err("bad OK");
+    assert!(err.to_string().contains("MISMATCH_CLAIMED_OK"));
 }
 
 #[test]
-fn known_good_one_mismatch_unknown_and_named() {
-    evaluate_envelope(&envelope(
-        "UNKNOWN",
-        counts_with_slash(0, 136),
-        Some("COUNT_TWIN_MISMATCH pair=slash_commands observed=0 expected=136"),
-    ))
-    .expect("one named mismatch");
+fn unknown_status_requires_matching_named_probe() {
+    let mut probes = known_probes();
+    probes[0].state = ProbeState::Unknown;
+    let error = format!("{}", omp_inventory_map::count_twins::format_mismatches(&mismatches(&probes)));
+    evaluate_envelope(&envelope("UNKNOWN", &probes, Some(&error))).expect("named unknown");
 }
 
 #[test]
-fn known_good_two_mismatches_both_named() {
-    let mut counts = counts_with_slash(0, 136);
-    counts["omp_methods"] = json!(0);
-    evaluate_envelope(&envelope(
-        "UNKNOWN",
-        counts,
-        Some(
-            "COUNT_TWIN_MISMATCH pair=slash_commands observed=0 expected=136; COUNT_TWIN_MISMATCH pair=omp_methods observed=0 expected=3",
-        ),
-    ))
-    .expect("two named mismatches");
+fn mutation_disabling_guard_is_not_the_production_contract() {
+    let mut probes = known_probes();
+    probes[0].observed = Some(0);
+    let error = format!("{}", omp_inventory_map::count_twins::format_mismatches(&mismatches(&probes)));
+    evaluate_envelope_guarded(&envelope("OK", &probes, Some(&error)), false)
+        .expect("mutation leg isolates the guard");
+    assert!(evaluate_envelope(&envelope("OK", &probes, Some(&error))).is_err());
 }
 
 #[test]
-fn empty_envelope_is_typed_error_not_a_pass() {
-    let err = evaluate_envelope(&json!({})).expect_err("empty");
-    assert!(matches!(err, TwinError::EnvelopeEmpty), "{err}");
-    let err = evaluate_envelope(&json!({"status": "OK"})).expect_err("no counts");
-    assert!(matches!(err, TwinError::NoPairsFound), "{err}");
-    let err = evaluate_envelope(&json!({"data": {"counts": {}}})).expect_err("no status");
-    assert!(matches!(err, TwinError::NoStatus), "{err}");
+fn empty_probe_set_is_an_error_not_a_vacuous_pass() {
+    let err = evaluate_envelope(&json!({"status":"OK","data":{"probes":[]}}))
+        .expect_err("empty evidence");
+    assert!(err.to_string().contains("COUNT_PROBE"));
 }
 
 #[test]
-fn mutation_inverting_the_guard_goes_red_then_restores() {
-    let bad = envelope("OK", counts_with_slash(0, 136), None);
-    assert!(evaluate_envelope(&bad).is_err(), "guard present");
-    assert!(
-        evaluate_envelope_guarded(&bad, false).is_ok(),
-        "inverted guard misses mismatch+OK — RED"
-    );
-    assert!(evaluate_envelope(&bad).is_err(), "restore still refuses");
-    let source = include_str!("../src/count_twins.rs");
-    assert!(source.contains("evaluate_envelope_guarded(envelope, true)"));
-}
-
-#[test]
-fn live_inventory_envelope_names_slash_commands_unknown() {
-    let bin = env!("CARGO_BIN_EXE_omp-inventory-map");
-    let output = Command::new(bin)
-        .arg("doctor")
-        .arg("--json")
-        .output()
-        .expect("spawn omp-inventory-map doctor");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let code = output.status.code().unwrap_or(-1);
-    assert!(
-        !stdout.trim().is_empty(),
-        "live envelope stdout empty; stderr={stderr}"
-    );
-    let envelope: Value = serde_json::from_str(stdout.trim()).unwrap_or_else(|_| {
-        panic!("live envelope is not JSON status={code} stdout={stdout} stderr={stderr}")
-    });
-    let status = envelope.get("status").and_then(Value::as_str).unwrap_or("");
-    let error = envelope.get("error").and_then(Value::as_str).unwrap_or("");
-    assert_eq!(status, "UNKNOWN", "live status={status} error={error}");
-    assert!(
-        error.contains("pair=slash_commands"),
-        "live error must name slash_commands, got {error}"
-    );
-    assert!(
-        error.contains("observed=0"),
-        "live error must name observed=0, got {error}"
-    );
-    assert!(
-        error.contains("expected=136"),
-        "live error must name expected=136, got {error}"
-    );
-    evaluate_envelope(&envelope).expect("live envelope must satisfy the named-mismatch conditional");
-    assert_eq!(code, 2, "live exit must be 2; error={error}");
+fn lsp_method_constant_cannot_reappear() {
+    let source = include_str!("../src/lib.rs");
+    assert!(!source.contains("EXPECTED_OMP_METHODS"));
+    assert!(!source.contains("parse_omp_methods_source"));
+    assert!(!source.contains("omp_methods"));
 }

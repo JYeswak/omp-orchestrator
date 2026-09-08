@@ -232,7 +232,6 @@ fn render_surface_diagram(input: &str) -> Result<(String, usize, usize), Generat
     let declarations = count("declarations")?;
     let rpc_handlers = count("rpc_handlers")?;
     let slash_commands = count("slash_commands")?;
-    let omp_methods = count("omp_methods")?;
     let capability_not_used = count_classification(rows, "CAPABILITY_NOT_USED");
     let direct = count_classification(rows, "MAPPED_BY_DIRECT_PROBE");
     let scraped = count_classification(rows, "SCRAPED_OR_OBSERVED_ALTERNATIVE");
@@ -254,8 +253,8 @@ fn render_surface_diagram(input: &str) -> Result<(String, usize, usize), Generat
     output.push_str("    inv -->|consumes| tr_mode[\"transport:--mode=&lt;value&gt;\"]\n");
     output.push_str("    subgraph UNTOUCHED[\"surface not yet consumed\"]\n");
     output.push_str(&format!(
-        "        mass[\"{} census rows<br/>{} cli_commands · {} type_roots · {} declarations<br/>{} rpc_handlers · {} slash_commands · {} omp_methods<br/>{} CAPABILITY_NOT_USED · {} MAPPED_BY_DIRECT_PROBE · {} SCRAPED_OR_OBSERVED_ALTERNATIVE\"]\n",
-        rows.len(), cli_commands, type_roots, declarations, rpc_handlers, slash_commands, omp_methods,
+        "        mass[\"{} census rows<br/>{} cli_commands · {} type_roots · {} declarations<br/>{} rpc_handlers · {} slash_commands<br/>{} CAPABILITY_NOT_USED · {} MAPPED_BY_DIRECT_PROBE · {} SCRAPED_OR_OBSERVED_ALTERNATIVE\"]\n",
+        rows.len(), cli_commands, type_roots, declarations, rpc_handlers, slash_commands,
         capability_not_used, direct, scraped
     ));
     output.push_str("    end\n");
@@ -373,7 +372,7 @@ mod tests {
         {"name":"b","dependencies":[]},
         {"name":"c","dependencies":[{"name":"b","path":"../b"}]}
     ]}"#;
-    const INVENTORY: &str = r#"{"data":{"counts":{"workspace_crates":3,"cli_commands":1,"type_roots":2,"declarations":3,"rpc_handlers":4,"slash_commands":5,"omp_methods":6},"rows":[
+    const INVENTORY: &str = r#"{"data":{"counts":{"workspace_crates":3,"cli_commands":1,"type_roots":2,"declarations":3,"rpc_handlers":4,"slash_commands":5},"rows":[
         {"classification":"CAPABILITY_NOT_USED"},
         {"classification":"MAPPED_BY_DIRECT_PROBE"},
         {"classification":"SCRAPED_OR_OBSERVED_ALTERNATIVE"}

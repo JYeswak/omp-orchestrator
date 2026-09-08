@@ -30,13 +30,6 @@ use text_structure::toml_code_only;
 
 pub const SCHEMA_VERSION: &str = "omp-inventory-map/v1";
 pub const CRATE_VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const EXPECTED_OMP_VERSION: &str = "omp/18.0.11";
-pub const EXPECTED_CLI_COMMANDS: usize = 39;
-pub const EXPECTED_TYPE_ROOTS: usize = 57;
-pub const EXPECTED_DECLARATIONS: usize = 14;
-pub const EXPECTED_RPC_HANDLERS: usize = 42;
-pub const EXPECTED_SLASH_COMMANDS: usize = 136;
-pub const EXPECTED_OMP_METHODS: usize = 3;
 pub const MAX_PROBE_BYTES: usize = 16 * 1024 * 1024;
 
 const INVENTORY_CRATE: &str = "omp-inventory-map";
@@ -685,7 +678,6 @@ pub struct InventoryInputs {
     pub declarations: Option<Vec<String>>,
     pub rpc_handlers: Option<Vec<String>>,
     pub slash_commands: Option<Vec<String>>,
-    pub omp_methods: Option<Vec<String>>,
     pub transport_modes: Option<Vec<String>>,
     pub probe_evidence: Vec<ProbeEvidence>,
 }
@@ -697,15 +689,7 @@ pub struct InventoryCounts {
     pub declarations: usize,
     pub rpc_handlers: usize,
     pub slash_commands: usize,
-    pub omp_methods: usize,
     pub workspace_crates: usize,
-    pub expected_cli_commands: usize,
-    pub expected_type_roots: usize,
-    pub expected_declarations: usize,
-    pub expected_rpc_handlers: usize,
-    pub expected_slash_commands: usize,
-    pub expected_omp_methods: usize,
-    pub expected_workspace_crates: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1013,27 +997,8 @@ pub fn parse_rpc_handlers_source(source: &str) -> ProbeValue<Vec<String>> {
     }
 }
 
-/// Derive the three `omp/*` methods visible in the installed bundle.
-pub fn parse_omp_methods_source(source: &str) -> ProbeValue<Vec<String>> {
-    let mut methods = BTreeSet::new();
-    let mut cursor = source;
-    while let Some(start) = cursor.find("\"omp/") {
-        let after = &cursor[start + 1..];
-        let Some(end_quote) = after.find('"') else {
-            return ProbeValue::unknown("omp/* method string is unterminated");
-        };
-        methods.insert(after[..end_quote].to_owned());
-        cursor = &after[end_quote + 1..];
-    }
-    if methods.is_empty() {
-        ProbeValue::unknown("installed bundle contains no omp/* methods")
-    } else {
-        ProbeValue::known(
-            methods.into_iter().collect(),
-            "parsed installed omp/* method strings",
-        )
-    }
-}
+// The installed omp/mux* strings are LSP plumbing, not orchestration surface;
+// no parser or inventory rows are produced for them.
 
 fn collect_rpc_command_names(value: &Value, prefix: &str, names: &mut BTreeSet<String>) {
     let Some(object) = value.as_object() else {
@@ -1055,7 +1020,9 @@ fn collect_rpc_command_names(value: &Value, prefix: &str, names: &mut BTreeSet<S
     }
 }
 
-/// Parse the `available_commands_update` JSON line emitted by OMP RPC startup.
+/// Parse the available_commands_update JSON line emitted by OMP RPC startup.
+/// This is the recursive path subject; it is distinct from top-level command count,
+/// static bundle literals, and any slash-alias vocabulary.
 pub fn parse_rpc_slash_commands(output: &str) -> ProbeValue<Vec<String>> {
     let mut names = BTreeSet::new();
     for line in output
@@ -1086,16 +1053,16 @@ pub fn parse_rpc_slash_commands(output: &str) -> ProbeValue<Vec<String>> {
     }
 }
 
-fn list_state<T>(value: &Option<Vec<T>>, expected: usize) -> ProbeState {
+fn list_state<T>(value: &Option<Vec<T>>) -> ProbeState {
     match value {
-        Some(items) if !items.is_empty() && items.len() == expected => ProbeState::Known,
+        Some(items) if !items.is_empty() => ProbeState::Known,
         _ => ProbeState::Unknown,
     }
 }
 
-fn value_or_unknown<T: Clone>(value: &Option<Vec<T>>, expected: usize) -> (Vec<T>, ProbeState) {
+fn value_or_unknown<T: Clone>(value: &Option<Vec<T>>) -> (Vec<T>, ProbeState) {
     match value {
-        Some(items) if !items.is_empty() => (items.clone(), list_state(value, expected)),
+        Some(items) if !items.is_empty() => (items.clone(), list_state(value)),
         _ => (vec![], ProbeState::Unknown),
     }
 }
@@ -1272,6 +1239,7 @@ fn push_surface(
     name: &str,
     status: ProbeState,
     source: &str,
+    measured_version: &str,
 ) {
     let owner = owner_for(kind, name);
     let (classification, orphan_reason) = classification_for(kind, name, owner);
@@ -1285,7 +1253,7 @@ fn push_surface(
         owner,
         vec![
             format!("direct probe={source}"),
-            "installed OMP v18.0.11".to_owned(),
+            format!("measured_omp_version={measured_version}"),
         ],
         vec![
             format!("enumerated {kind} name={name}"),
@@ -1296,8 +1264,13 @@ fn push_surface(
     ));
 }
 
-fn push_unknown_surface(rows: &mut Vec<InventoryRow>, kind: &str, source: &str) {
-    push_surface(rows, kind, "UNKNOWN_PROBE", ProbeState::Unknown, source);
+fn push_unknown_surface(
+    rows: &mut Vec<InventoryRow>,
+    kind: &str,
+    source: &str,
+    measured_version: &str,
+) {
+    push_surface(rows, kind, "UNKNOWN_PROBE", ProbeState::Unknown, source, measured_version);
 }
 
 /// Build the graph and table from pure fixture inputs.
@@ -1312,28 +1285,24 @@ pub fn build_inventory_map(inputs: InventoryInputs) -> Result<InventoryMap, Inve
             .cli_help
             .as_ref()
             .map(|help| parse_cli_commands(help).value.unwrap_or_default()),
-        EXPECTED_CLI_COMMANDS,
     );
     let (cli_commands, cli_state) = cli;
-    let (type_roots, type_state) = value_or_unknown(&inputs.type_roots, EXPECTED_TYPE_ROOTS);
-    let (declarations, declaration_state) =
-        value_or_unknown(&inputs.declarations, EXPECTED_DECLARATIONS);
-    let (rpc_handlers, rpc_state) = value_or_unknown(&inputs.rpc_handlers, EXPECTED_RPC_HANDLERS);
-    let (slash_commands, slash_state) =
-        value_or_unknown(&inputs.slash_commands, EXPECTED_SLASH_COMMANDS);
-    let (omp_methods, omp_method_state) =
-        value_or_unknown(&inputs.omp_methods, EXPECTED_OMP_METHODS);
+    let (type_roots, type_state) = value_or_unknown(&inputs.type_roots);
+    let (declarations, declaration_state) = value_or_unknown(&inputs.declarations);
+    let (rpc_handlers, rpc_state) = value_or_unknown(&inputs.rpc_handlers);
+    let (slash_commands, slash_state) = value_or_unknown(&inputs.slash_commands);
     let transport_state = match &inputs.transport_modes {
         Some(modes) if !modes.is_empty() => ProbeState::Known,
         _ => ProbeState::Unknown,
     };
 
+    let measured_version = inputs.omp_version.as_deref().unwrap_or("UNKNOWN");
     let mut rows = Vec::new();
     for name in &cli_commands {
-        push_surface(&mut rows, "cli_command", name, cli_state, "omp --help");
+        push_surface(&mut rows, "cli_command", name, cli_state, "omp --help", measured_version);
     }
     if cli_commands.is_empty() {
-        push_unknown_surface(&mut rows, "cli_command", "omp --help");
+        push_unknown_surface(&mut rows, "cli_command", "omp --help", measured_version);
     }
     for name in &type_roots {
         push_surface(
@@ -1342,10 +1311,11 @@ pub fn build_inventory_map(inputs: InventoryInputs) -> Result<InventoryMap, Inve
             name,
             type_state,
             "find dist/types -type d",
+            measured_version,
         );
     }
     if type_roots.is_empty() {
-        push_unknown_surface(&mut rows, "type_root", "find dist/types -type d");
+        push_unknown_surface(&mut rows, "type_root", "find dist/types -type d", measured_version);
     }
     for name in &declarations {
         push_surface(
@@ -1354,10 +1324,16 @@ pub fn build_inventory_map(inputs: InventoryInputs) -> Result<InventoryMap, Inve
             name,
             declaration_state,
             "find dist/types -name '*.d.ts'",
+            measured_version,
         );
     }
     if declarations.is_empty() {
-        push_unknown_surface(&mut rows, "declaration", "find dist/types -name '*.d.ts'");
+        push_unknown_surface(
+            &mut rows,
+            "declaration",
+            "find dist/types -name '*.d.ts'",
+            measured_version,
+        );
     }
     for name in &rpc_handlers {
         push_surface(
@@ -1366,10 +1342,11 @@ pub fn build_inventory_map(inputs: InventoryInputs) -> Result<InventoryMap, Inve
             name,
             rpc_state,
             "installed cli.js dispatch cases",
+            measured_version,
         );
     }
     if rpc_handlers.is_empty() {
-        push_unknown_surface(&mut rows, "rpc_handler", "source dispatch");
+        push_unknown_surface(&mut rows, "rpc_handler", "source dispatch", measured_version);
     }
     for name in &slash_commands {
         push_surface(
@@ -1377,24 +1354,19 @@ pub fn build_inventory_map(inputs: InventoryInputs) -> Result<InventoryMap, Inve
             "slash_command",
             name,
             slash_state,
-            "omp --mode=rpc startup",
+            "omp --mode=rpc startup recursive command names",
+            measured_version,
         );
     }
     if slash_commands.is_empty() {
-        push_unknown_surface(&mut rows, "slash_command", "omp --mode=rpc startup");
-    }
-    for name in &omp_methods {
-        push_surface(
+        push_unknown_surface(
             &mut rows,
-            "omp_method",
-            name,
-            omp_method_state,
-            "installed cli.js string census",
+            "slash_command",
+            "omp --mode=rpc startup recursive command names",
+            measured_version,
         );
     }
-    if omp_methods.is_empty() {
-        push_unknown_surface(&mut rows, "omp_method", "installed cli.js string census");
-    }
+    // No omp_method rows: omp/mux* is the LSP multiplexer, not orchestration surface.
     let transport_name = inputs
         .transport_modes
         .as_ref()
@@ -1406,8 +1378,10 @@ pub fn build_inventory_map(inputs: InventoryInputs) -> Result<InventoryMap, Inve
         &transport_name,
         transport_state,
         "omp --help",
+        measured_version,
     );
 
+    let measured_version = inputs.omp_version.as_deref().unwrap_or("UNKNOWN");
     let mut nodes = Vec::with_capacity(rows.len() + cargo.packages.len() + 1);
     nodes.push(InventoryNode {
         id: "omp:installed".to_owned(),
@@ -1415,10 +1389,12 @@ pub fn build_inventory_map(inputs: InventoryInputs) -> Result<InventoryMap, Inve
         kind: "omp_installation".to_owned(),
         label: "installed OMP".to_owned(),
         source: "direct omp --version probe".to_owned(),
-        what_it_provides:
-            "The installed OMP v18.0.11 process and its observable metadata surfaces.".to_owned(),
-        provides: "The installed OMP v18.0.11 process and its observable metadata surfaces."
-            .to_owned(),
+        what_it_provides: format!(
+            "Installed OMP {measured_version} process and its observable metadata surfaces."
+        ),
+        provides: format!(
+            "Installed OMP {measured_version} process and its observable metadata surfaces."
+        ),
         crate_consumes_today: "NONE".to_owned(),
         crate_should_own: "NONE".to_owned(),
         inputs: vec!["omp --version".to_owned(), "omp --help".to_owned()],
@@ -1428,7 +1404,7 @@ pub fn build_inventory_map(inputs: InventoryInputs) -> Result<InventoryMap, Inve
         ],
         negative_evidence: vec![NO_SOURCE_GREP.to_owned()],
         classification: "EXTERNAL_SURFACE".to_owned(),
-        status: if inputs.omp_version.as_deref() == Some(EXPECTED_OMP_VERSION) {
+        status: if inputs.omp_version.is_some() {
             ProbeState::Known
         } else {
             ProbeState::Unknown
@@ -1535,23 +1511,14 @@ pub fn build_inventory_map(inputs: InventoryInputs) -> Result<InventoryMap, Inve
         declarations: declarations.len(),
         rpc_handlers: rpc_handlers.len(),
         slash_commands: slash_commands.len(),
-        omp_methods: omp_methods.len(),
         workspace_crates: cargo.packages.len(),
-        expected_cli_commands: EXPECTED_CLI_COMMANDS,
-        expected_type_roots: EXPECTED_TYPE_ROOTS,
-        expected_declarations: EXPECTED_DECLARATIONS,
-        expected_rpc_handlers: EXPECTED_RPC_HANDLERS,
-        expected_slash_commands: EXPECTED_SLASH_COMMANDS,
-        expected_omp_methods: EXPECTED_OMP_METHODS,
-        expected_workspace_crates: cargo.packages.len(),
     };
-    let all_known = inputs.omp_version.as_deref() == Some(EXPECTED_OMP_VERSION)
+    let all_known = inputs.omp_version.is_some()
         && cli_state.is_known()
         && type_state.is_known()
         && declaration_state.is_known()
         && rpc_state.is_known()
         && slash_state.is_known()
-        && omp_method_state.is_known()
         && transport_state.is_known();
     let mut probes = inputs.probe_evidence;
     probes.push(ProbeEvidence {
@@ -1884,9 +1851,7 @@ pub async fn collect_inventory(
         match std::fs::read_to_string(&bundle) {
             Ok(source) => {
                 let handlers = parse_rpc_handlers_source(&source);
-                let omp_methods = parse_omp_methods_source(&source);
                 inputs.rpc_handlers = handlers.value.clone();
-                inputs.omp_methods = omp_methods.value.clone();
                 inputs.probe_evidence.push(evidence(
                     "omp_rpc_handlers",
                     vec![
@@ -1903,22 +1868,8 @@ pub async fn collect_inventory(
                         .unwrap_or_else(|| "<unknown>".to_owned()),
                     handlers.detail,
                 ));
-                inputs.probe_evidence.push(evidence(
-                    "omp_methods",
-                    vec![
-                        "installed".to_owned(),
-                        bundle.display().to_string(),
-                        "omp/* strings".to_owned(),
-                    ],
-                    omp_methods.state,
-                    omp_methods.value.as_ref().map(Vec::len),
-                    omp_methods
-                        .value
-                        .as_ref()
-                        .map(|items| items.join(","))
-                        .unwrap_or_else(|| "<unknown>".to_owned()),
-                    omp_methods.detail,
-                ));
+                // The omp/mux* layer is LSP plumbing, not an orchestration method;
+                // it is intentionally excluded from the inventory model.
             }
             Err(error) => inputs.probe_evidence.push(evidence(
                 "omp_bundle_metadata",

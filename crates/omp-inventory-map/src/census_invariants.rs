@@ -18,9 +18,9 @@ use serde::{Deserialize, Serialize};
 
 /// Count of inventory row kinds the scanner emits today.
 ///
-/// `cli_command`, `type_root`, `declaration`, `rpc_handler`, `slash_command`,
-/// `omp_method`, `transport`, `workspace_crate`.
-pub const ROW_KIND_COUNT: usize = 8;
+/// cli_command, type_root, declaration, rpc_handler, slash_command,
+/// transport, workspace_crate.
+pub const ROW_KIND_COUNT: usize = 7;
 
 /// Named kinds the live collector emits. A census whose distinct invariant
 /// sets are fewer than this count is still vacuous even if not literally 1.
@@ -30,7 +30,6 @@ pub const ROW_KINDS: [&str; ROW_KIND_COUNT] = [
     "declaration",
     "rpc_handler",
     "slash_command",
-    "omp_method",
     "transport",
     "workspace_crate",
 ];
@@ -323,12 +322,7 @@ pub fn invariants_for_kind(kind: &str, identity: &str) -> (Vec<String>, Vec<Stri
                 "slash_command {identity} is not treated as a discovered count"
             )],
         ),
-        "omp_method" => (
-            vec![format!("installed cli.js bundle contains {identity}")],
-            vec![format!(
-                "omp_method {identity} is not reconstructed from tmux pane scrapes"
-            )],
-        ),
+        // The LSP mux surface is excluded from the inventory model.
         "transport" => (
             vec![format!(
                 "omp --help documents --mode including {identity}"
