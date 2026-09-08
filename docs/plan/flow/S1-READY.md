@@ -5,7 +5,9 @@ define it. Requested by Joshua 2026-09-07: *"we need to have specific fh backed 
 is ready to build."*
 
 **Bead:** `omp-orchestrator-gate-s1-djn8`
-
+**Done definition:** S1 readiness is distinct from S1 completion. S1 is DONE only when
+omp-orchestrator-gate-s1-djn8 is independently graded closed under its acceptance; the
+criteria below authorize building, but do not claim that S1 has been built or completed.
 **Why ONE file.** `fh C47` (doctrine; content retrieved, **provenance UNAVAILABLE — `fh why C47`
 returned `[DRIFT/LEDGER_SOURCE_DRIFT]`, refusing a partial trace**):
 
