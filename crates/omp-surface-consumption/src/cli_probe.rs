@@ -47,6 +47,7 @@ pub enum CliProbeError {
     InvalidJson(String),
     WrongTopLevel,
     MissingKey(&'static str),
+    EmptyCollection(&'static str),
 }
 
 impl fmt::Display for CliProbeError {
@@ -57,6 +58,7 @@ impl fmt::Display for CliProbeError {
             Self::InvalidJson(detail) => write!(formatter, "CLI_PROBE_INVALID_JSON {detail}"),
             Self::WrongTopLevel => formatter.write_str("CLI_PROBE_WRONG_TOP_LEVEL"),
             Self::MissingKey(key) => write!(formatter, "CLI_PROBE_MISSING_KEY key={key}"),
+            Self::EmptyCollection(key) => write!(formatter, "CLI_PROBE_EMPTY_COLLECTION key={key}"),
         }
     }
 }
@@ -79,6 +81,28 @@ fn value_kind(value: &Value) -> &'static str {
         Value::Array(_) => "array",
         Value::Object(_) => "object",
     }
+}
+
+fn validate_payload(probe: CliProbe, value: &Value) -> Result<(), CliProbeError> {
+    let object = value.as_object().ok_or(CliProbeError::WrongTopLevel)?;
+    for key in probe.required_keys() {
+        if !object.contains_key(*key) {
+            return Err(CliProbeError::MissingKey(key));
+        }
+    }
+    let nonempty = match probe {
+        CliProbe::Models => "models",
+        CliProbe::Usage => "reports",
+        CliProbe::Stats => return Ok(()),
+    };
+    if object
+        .get(nonempty)
+        .and_then(Value::as_array)
+        .is_none_or(Vec::is_empty)
+    {
+        return Err(CliProbeError::EmptyCollection(nonempty));
+    }
+    Ok(())
 }
 
 /// Run one OMP data command through the shared bounded process boundary.
@@ -114,12 +138,7 @@ pub fn probe_json(binary: &str, probe: CliProbe) -> Result<Value, CliProbeError>
     };
 
     let value = extract_json(&output.stdout)?;
-    let object = value.as_object().ok_or(CliProbeError::WrongTopLevel)?;
-    for key in probe.required_keys() {
-        if !object.contains_key(*key) {
-            return Err(CliProbeError::MissingKey(key));
-        }
-    }
+    validate_payload(probe, &value)?;
     Ok(value)
 }
 
@@ -177,6 +196,17 @@ mod tests {
     #[test]
     fn refuses_missing_json_output() {
         assert!(matches!(extract_json(b"status only"), Err(CliProbeError::EmptyOutput)));
+    }
+    #[test]
+    fn refuses_empty_consumable_collections() {
+        assert!(matches!(
+            validate_payload(CliProbe::Models, &serde_json::json!({"models": []})),
+            Err(CliProbeError::EmptyCollection("models"))
+        ));
+        assert!(matches!(
+            validate_payload(CliProbe::Usage, &serde_json::json!({"reports": [], "capacity": {}, "accountsWithoutUsage": []})),
+            Err(CliProbeError::EmptyCollection("reports"))
+        ));
     }
 
 }

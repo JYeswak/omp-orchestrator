@@ -95,6 +95,63 @@ No row is `UNKNOWN`: every invocation supplied a usable description and usage sh
 claim that help proves runtime behavior; commands classified `CONSUMABLE` still require a separate
 runtime contract before adoption.
 
+## Consumable CLI declarations
+
+The four candidates were probed with their default JSON paths. The outputs are different subjects:
+aggregate usage statistics, provider-account limits, model catalog, and daemon-process state.
+
+```text
+stats --json: top-level byAgentType, byFolder, byModel, costSeries, modelPerformanceSeries,
+             modelSeries, overall, timeSeries; overall=object; byModel=1; timeSeries=25
+usage --json: top-level accountsWithoutUsage, capacity, disabledCredentials, generatedAt, reports;
+             reports=2; report item is provider/fetchedAt/limits/resetCredits/metadata
+models --json: top-level models; models=9; item has id/name/provider/contextWindow/maxTokens,
+              reasoning/thinking/input/cost and selector
+ps --json: array; scopes=1; daemons=2; daemon item has state/pid/name/command and lifecycle
+```
+
+`stats --json` also has `--port` and `--host`, which can serve a dashboard. This audit did not
+start a port. `usage invalidate` and `models refresh` are mutations or refresh operations and were
+not invoked. The declared paths are the read-only/default JSON paths only.
+
+`models --json` and RPC `get_available_models` were compared by sorted model id:
+
+```text
+cli_rc=0 rpc_rc=0 cli_ids=9 rpc_ids=9
+cli_minus_rpc=
+rpc_minus_cli=
+```
+
+The catalogs are cardinality- and id-identical at this measurement. The CLI declaration is kept
+for the provider-facing catalog surface, but no new user-facing OMP verb is added; the existing
+`get_available_models` RPC path remains the runtime model operation.
+
+The three read paths are declared in `crates/omp-surface-consumption/Cargo.toml`:
+
+```toml
+[package.metadata.omp_surface]
+consumes = [
+    { kind = "cli", name = "models", call_site = "src/main.rs::run_cli_probe" },
+    { kind = "cli", name = "stats", call_site = "src/main.rs::run_cli_probe" },
+    { kind = "cli", name = "usage", call_site = "src/main.rs::run_cli_probe" },
+]
+```
+
+`src/main.rs::run_cli_probe` is an opt-in real caller. It invokes exactly `<name> --json` through
+the shared bounded process helper, parses the JSON document after the `stats` status prefix,
+requires the declared top-level keys, and refuses empty `models` or `reports` collections. The
+runtime smoke against an arm64 Mach-O returned `rc=0` for all three paths:
+
+```text
+OMP_CLI_CONSUMPTION command=models ... models_count=9
+OMP_CLI_CONSUMPTION command=stats ... overall_type=object by_model_count=1 time_series_count=25
+OMP_CLI_CONSUMPTION command=usage ... reports_count=2 capacity_type=object
+```
+
+Anti-vacuity is a code path, not a table claim: missing required keys return a typed error, and
+empty `models` or `reports` arrays return `CLI_PROBE_EMPTY_COLLECTION`. `ps` is intentionally
+excluded from this metadata because `%20` owns its `daemon_process` axis.
+
 ## Slash-command reconciliation
 
 `omp-inventory-map`'s current parser recursively walks every `subcommands` array in the RPC startup
