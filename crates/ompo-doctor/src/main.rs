@@ -26,6 +26,7 @@
 use ompo_doctor::liveness::{self, Observation};
 use ompo_doctor::adapter_exec;
 use ompo_doctor::upstream_report;
+use ompo_doctor::omp_state;
 use ompo_doctor::state_triad;
 use ompo_doctor::umbrella::{self, ProbeId};
 use ompo_doctor::{current_repo, run_doctor};
@@ -76,6 +77,7 @@ fn main() -> ExitCode {
         "audit" => run_audit(rest),
         "why" => run_why(rest),
         "upstream-report" => run_upstream_report(rest),
+        "state" => run_state(rest),
         "doctor" => run_doctor_verb(rest),
         other => {
             // NAMES the rejected verb. A bare usage dump leaves the caller unable to tell a
@@ -931,4 +933,70 @@ fn run_doctor_verb(rest: &[String]) -> ExitCode {
             ExitCode::from(1)
         }
     }
+}
+
+/// `ompo state [--json]` — the FIRST verb that reads OMP's OWN surface rather than ours.
+///
+/// Every other verb in this binary orchestrates workspace crates. This one drives OMP's
+/// native `--mode=rpc` protocol through `omp-rpc-session` and issues OMP's real `get_state`
+/// command, which is the protocol answer to the question `AGENTS.md`'s fifth rule says we
+/// scrape from a braille spinner.
+///
+/// The runtime is built here rather than in the module so the async boundary is visible at
+/// the CLI edge, and the pattern is copied from `omp-orchestrator/src/main.rs:6213` rather
+/// than invented.
+fn run_state(rest: &[String]) -> ExitCode {
+    for arg in rest {
+        if arg != "--json" {
+            eprintln!(
+                "ompo state: unknown argument {arg:?} \
+                 hint=`ompo state [--json]` drives one bounded OMP --mode=rpc session"
+            );
+            return ExitCode::from(EXIT_BAD_INVOCATION);
+        }
+    }
+    let json = wants_json(rest);
+    let runtime = match asupersync::runtime::RuntimeBuilder::current_thread().build() {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            // The instrument, not the subject: we never reached OMP.
+            eprintln!("ompo state: OMP_STATE_RUNTIME_UNAVAILABLE detail={error}");
+            return ExitCode::from(EXIT_INSTRUMENT);
+        }
+    };
+    let outcome = runtime.block_on(async {
+        match asupersync::Cx::current() {
+            Some(cx) => Ok(omp_state::read_state(&cx, "omp").await),
+            None => Err("no runtime context"),
+        }
+    });
+    let outcome = match outcome {
+        Ok(outcome) => outcome,
+        Err(detail) => {
+            eprintln!("ompo state: OMP_STATE_RUNTIME_UNAVAILABLE detail={detail}");
+            return ExitCode::from(EXIT_INSTRUMENT);
+        }
+    };
+    if json {
+        // The envelope prints on BOTH paths, but a refusal's envelope carries no state
+        // fields -- so a reader cannot mistake one for the other. stdout stays clean of a
+        // success-shaped object on failure because the status and reason_code differ.
+        match serde_json::to_string(&omp_state::envelope(&outcome)) {
+            Ok(text) if outcome.exit_code() == omp_state::EXIT_OK => println!("{text}"),
+            Ok(text) => eprintln!("{text}"),
+            Err(error) => {
+                eprintln!("ompo state: cannot encode report: {error}");
+                return ExitCode::from(EXIT_INSTRUMENT);
+            }
+        }
+    } else if let omp_state::StateOutcome::Answered(state) = &outcome {
+        println!("{}", omp_state::render(state));
+    } else {
+        eprintln!(
+            "ompo state: {} detail={}",
+            outcome.reason_code(),
+            outcome.detail()
+        );
+    }
+    ExitCode::from(outcome.exit_code())
 }

@@ -21,6 +21,7 @@ use subprocess_contract::{bounded_output, BoundedOutcome};
 pub mod umbrella;
 pub mod adapter_exec;
 pub mod upstream_report;
+pub mod omp_state;
 pub mod liveness;
 pub mod provenance;
 pub mod selfdoc;

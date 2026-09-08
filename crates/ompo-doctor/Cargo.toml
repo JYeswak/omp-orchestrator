@@ -23,6 +23,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 subprocess-contract = { path = "../subprocess-contract" }
 ompo-start = { path = "../ompo-start" }
+omp-rpc-session = { path = "../omp-rpc-session" }
+asupersync = { workspace = true }
 
 
 [dev-dependencies]
