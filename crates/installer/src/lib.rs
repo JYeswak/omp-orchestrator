@@ -776,11 +776,19 @@ fn parse_build_id(text: &str) -> Option<String> {
                 .split(|character: char| character.is_whitespace() || character == '_')
                 .next()?
         };
-        (!token.is_empty()
-            && !token.eq_ignore_ascii_case("absent")
-            && !token.eq_ignore_ascii_case("unavailable")
-            && !token.eq_ignore_ascii_case("unversioned"))
-            .then(|| token.to_owned())
+        let lowercase = token.to_ascii_lowercase();
+        let anonymous_sentinel = ["absent", "unavailable", "unversioned"]
+            .iter()
+            .any(|sentinel| {
+                lowercase == *sentinel
+                    || lowercase.strip_prefix(sentinel).is_some_and(|suffix| {
+                        suffix
+                            .chars()
+                            .next()
+                            .is_some_and(|character| !character.is_ascii_alphanumeric())
+                    })
+            });
+        (!token.is_empty() && !anonymous_sentinel).then(|| token.to_owned())
     })
 }
 
@@ -1433,11 +1441,20 @@ exit 0
     fn anonymous_build_identity_is_absent_from_leg_inventory() {
         for value in ["absent", "unavailable", "unversioned"] {
             assert_eq!(parse_build_id(&format!("installer 0.1.0 build_id={value}")), None);
+            assert_eq!(parse_build_id(&format!("installer 0.1.0 build_id={value}~/")), None);
         }
+        assert_eq!(
+            parse_build_id("installer 0.1.0 build_id=head-42"),
+            Some("head-42".to_owned())
+        );
         assert_eq!(
             parse_build_id("installer 0.1.0 build_id=0123456789abcdef"),
             Some("0123456789abcdef".to_owned())
         );
+        let hex40 = "0123456789abcdef0123456789abcdef01234567";
+        let hex64 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        assert_eq!(parse_build_id(&format!("build_id={hex40}~/")), Some(hex40.to_owned()));
+        assert_eq!(parse_build_id(&format!("build_id={hex64}~/")), Some(hex64.to_owned()));
     }
     #[cfg(unix)]
     #[test]
