@@ -1144,17 +1144,45 @@ fn classification_for(kind: &str, name: &str, owner: Option<&str>) -> (String, S
             | "follow_up"
             | "bash"
     );
+    // OVERCLAIM RETIRED 2026-09-08 (omp-orchestrator-ablcf, finding by %19, verified and
+    // framed by %20). These two reasons used to assert facts this function structurally
+    // CANNOT know:
+    //
+    //   "No typed runtime adapter owns {kind}:{name}"
+    //   "The repository has no measured runtime trigger for {kind}:{name}."
+    //
+    // Ownership is decided by `owner_for`, which can name exactly ONE owner -- this crate
+    // -- so a consumer anywhere else in the workspace is invisible to it. The first
+    // sentence went FALSE the moment ompo-doctor::omp_state adopted `get_state`
+    // (ADOPTED_METHOD at HEAD), while `get_messages` in the same list stayed true. One
+    // name went false, not the list.
+    //
+    // The fix is NOT to delete `"get_state"` from the candidate list: editing a hand-typed
+    // list to track reality is transcription maintenance, which is the defect the list
+    // already IS -- it buys a day and re-earns the finding when the next cell lands. The
+    // fix is to stop claiming what cannot be determined here and to name the mechanism
+    // that CAN: `alignment::align`, which derives consumption from each crate's own
+    // `[package.metadata.omp_surface]` declaration and returns UNCLASSIFIED rather than a
+    // confident wrong answer.
+    //
+    // The classification LABELS are unchanged on purpose: `frankenmermaid` counts them and
+    // two tests pin them, so renaming would be a wide edit for no gain. This is a REMOVAL
+    // of a false claim, not a second mechanism.
     if candidate {
         (
             "SCRAPED_OR_OBSERVED_ALTERNATIVE".to_owned(),
             format!(
-                "No typed runtime adapter owns {kind}:{name}; retain as a named wire candidate."
+                "{kind}:{name} is a named wire candidate. Ownership is UNDETERMINED here: \
+                 see alignment::align, which derives it from consumer declarations."
             ),
         )
     } else {
         (
             "CAPABILITY_NOT_USED".to_owned(),
-            format!("The repository has no measured runtime trigger for {kind}:{name}."),
+            format!(
+                "{kind}:{name} carries no owner in this probe. Ownership is UNDETERMINED \
+                 here: see alignment::align, which derives it from consumer declarations."
+            ),
         )
     }
 }
