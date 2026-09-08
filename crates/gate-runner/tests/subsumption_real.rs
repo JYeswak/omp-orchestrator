@@ -201,15 +201,16 @@ fn the_former_job_list_is_non_empty_and_every_crate_exists() {
 /// declaring none.
 ///
 /// Without this, a `declares_check` that always returned `true` would make every leg above pass.
-/// A scan that cannot report absence cannot report presence either.
+/// A scan that cannot report absence cannot report presence either. `omp-types` is a normal
+/// library crate with no gate metadata; `gate-runner` is intentionally metadata-declared so its
+/// own lane is reachable.
 #[test]
 fn the_stanza_detector_can_report_absence() {
     let root = repo_root();
     assert!(
-        !declares_check(&root, "gate-runner"),
-        "gate-runner itself declares no gate stanza — it IS the runner — so the detector must \
-         report absence here; if this fails, the detector is stuck on true and every other leg in \
-         this file is vacuous"
+        !declares_check(&root, "omp-types"),
+        "omp-types declares no gate stanza, so the detector must report absence here; if this fails, \
+         the detector is stuck on true and every other leg in this file is vacuous"
     );
     assert!(
         declares_check(&root, "state-wildcard-lint"),
