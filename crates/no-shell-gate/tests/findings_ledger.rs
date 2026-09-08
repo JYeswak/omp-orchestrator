@@ -500,6 +500,21 @@ fn unverifiable_fixed_pointers(repo: &Path, rows: &[Value], honour_allowance: bo
     out
 }
 
+const FIXED_POINTER_REJECTION_EXIT: u8 = 3;
+
+fn fixed_pointer_diagnostic(
+    repo: &Path,
+    rows: &[Value],
+    honour_allowance: bool,
+) -> (Vec<String>, u8) {
+    let failures = unverifiable_fixed_pointers(repo, rows, honour_allowance);
+    let exit_code = if failures.is_empty() {
+        0
+    } else {
+        FIXED_POINTER_REJECTION_EXIT
+    };
+    (failures, exit_code)
+}
 fn validate_serial_rule(
     convergence: &[Value],
     findings: &[(String, u64, bool, String)],
@@ -893,7 +908,9 @@ fn every_fixed_row_points_at_a_commit_that_touched_its_section() {
         fixed_pointer_precondition(&fixed_rows(&rows)),
         FixedPointerPrecondition::Ready
     ));
-    assert!(unverifiable_fixed_pointers(&root, &rows, false).is_empty());
+    let (failures, exit_code) = fixed_pointer_diagnostic(&root, &rows, false);
+    assert!(failures.is_empty(), "{failures:?}");
+    assert_eq!(exit_code, 0);
     let _ = fs::remove_dir_all(root);
 }
 
@@ -903,7 +920,9 @@ fn a_fixed_pointer_at_a_ledger_only_commit_is_refused_and_named() {
     let (root, _section_commit, ledger_commit) = git_fixture_repo("fixed-ledger-only");
     let rows: Vec<Value> = serde_json::json!([{"id":"PLANTED-ledger-only","round":21,"section":"04-diagrams","disposition":"FIXED","fixed_in":ledger_commit}])
         .as_array().expect("array").clone();
-    let text = unverifiable_fixed_pointers(&root, &rows, false).join("\n");
+    let (failures, exit_code) = fixed_pointer_diagnostic(&root, &rows, false);
+    let text = failures.join("\n");
+    assert_eq!(exit_code, 3);
     assert!(
         text.contains("FINDINGS_FIXED_POINTER_LEDGER_ONLY"),
         "{text}"
@@ -950,16 +969,21 @@ fn repointing_a_good_row_at_a_ledger_only_commit_flips_the_verdict_and_the_real_
     let before_digest = convergence_stamp::sha256_hex(&fs::read(&real_path).expect("read"));
     let baseline: Vec<Value> = serde_json::json!([{"id":"FIXTURE-mutated","round":21,"section":"04-diagrams","disposition":"FIXED","fixed_in":section_commit}])
         .as_array().expect("array").clone();
-    assert!(unverifiable_fixed_pointers(&fixture, &baseline, false).is_empty());
+    let (baseline_failures, baseline_exit) = fixed_pointer_diagnostic(&fixture, &baseline, false);
+    assert!(baseline_failures.is_empty(), "{baseline_failures:?}");
+    assert_eq!(baseline_exit, 0);
     let mutated: Vec<Value> = serde_json::json!([{"id":"FIXTURE-mutated","round":21,"section":"04-diagrams","disposition":"FIXED","fixed_in":ledger_commit}])
         .as_array().expect("array").clone();
-    let red = unverifiable_fixed_pointers(&fixture, &mutated, false);
+    let (red, red_exit) = fixed_pointer_diagnostic(&fixture, &mutated, false);
+    assert_eq!(red_exit, 3);
     assert!(
         red.iter()
             .any(|f| f.starts_with("FINDINGS_FIXED_POINTER_LEDGER_ONLY")),
         "{red:?}"
     );
-    assert!(unverifiable_fixed_pointers(&fixture, &baseline, false).is_empty());
+    let (restored_failures, restored_exit) = fixed_pointer_diagnostic(&fixture, &baseline, false);
+    assert!(restored_failures.is_empty(), "{restored_failures:?}");
+    assert_eq!(restored_exit, 0);
     assert_eq!(
         before_digest,
         convergence_stamp::sha256_hex(&fs::read(&real_path).expect("read"))
