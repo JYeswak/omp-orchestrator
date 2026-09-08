@@ -880,28 +880,33 @@ alternative). This is a language-server multiplexer for OMP workers, not a tmux-
 The two observed workers (PIDs 43609 and 75508) held anonymous inherited socketpairs; no
 `lsp-mux.sock` existed on disk and `OMP_LSP_MUX_SOCKET` was unset. Those methods are therefore
 not an attach route for the existing tmux server and must not be advertised as one.
+**Current pane-state route (measured 2026-09-08): use the profile-scoped terminal-session index as
+an input, not as proof of liveness.** For a pane `%N`, read the profile from the pane's own
+`omp --profile` argv, then read `~/.omp/profiles/<profile>/agent/terminal-sessions/tmux-%N`.
+The entry's line 2 is the last session opened, not necessarily the live agent's session. Validate
+that it is under that profile's `agent/sessions/` root before passing it to the state-only OMP
+reader; otherwise the pane state is `UNKNOWN`. A valid mapping retires spinner parsing without
+inventing an endpoint.
 
-**Current pane-state route (measured 2026-09-08): use the profile-scoped terminal-session index.**
-For a pane `%N`, read `~/.omp/profiles/<profile>/agent/terminal-sessions/tmux-%N`, then read
-the referenced session JSONL with its profile/session directory and ask `ompo state` for typed
-state. The profile is read from the pane's own `omp --profile` argv. This retires the spinner
-regex for profiled OMP panes without inventing an endpoint.
+**Terminal-session entry contract is observed, not assumed.** The format is variable-length: line 1
+= cwd, line 2 = candidate session JSONL path, and optional line 3 = a state token. Across the 64
+current entries (Claude 22, Codex 42), the only observed token is `fresh` (14 entries), while 50
+entries have no line 3. The current Codex `tmux-%8` entry points outside the profile's agent session
+root at a scratch conformance fixture, so it is not proof of the live pane session. A reader MUST
+preserve missing line 3 as `Unknown/MissingStateToken`, never infer `fresh`; an entry whose line
+2 is outside the profile root is `Unknown/ForeignSessionPath`; tokens not observed remain `UNKNOWN`.
 
-**Terminal-session entry contract is observed, not assumed.** The required positional fields are
-line 1 = cwd and line 2 = session JSONL path; line 3, when present, is a state token. Across the
-64 current entries (Claude 22, Codex 42), the only observed token is `fresh` (14 entries), while
-50 entries have no line 3, including the current Codex `tmux-%8` scratch-session entry. A reader
-MUST preserve missing line 3 as `Unknown/MissingStateToken`, never infer `fresh`; tokens not
-observed remain `UNKNOWN` rather than absent.
-
-**Route decision:** choose the profile-store reader for existing panes. `omp acp` is a real
-JSON-RPC protocol for supervisor-owned subprocess sessions, but it is point-to-point and cannot
+**Route decision:** choose the validated profile-store reader for existing panes. `omp acp` is a
+real JSON-RPC protocol for supervisor-owned subprocess sessions, but it is point-to-point and cannot
 attach to an already-running pane. A new pane-keyed mux would buy a separately addressable,
-push-capable endpoint, but no current consumer needs that beyond the profile-store reader; adding
-one now would duplicate supervision, socket lifecycle, and recovery without adding observed
-capability. Revisit only when a consumer requires remote subscriptions or control unavailable
-through the reader. This decision is version-bound to installed OMP 18.1.5 and the observed machine
-state; re-derive it after upgrades or profile changes.
+push-capable endpoint, but no current consumer needs that beyond a validated reader; adding one now
+would duplicate supervision, socket lifecycle, and recovery without adding observed capability. The
+profile-store route is not an endpoint and must return `UNKNOWN` when its candidate session is not
+validated as belonging to the profile. Revisit a mux only when a consumer requires remote
+subscriptions or control unavailable through the reader.
+
+This decision is version-bound to installed OMP 18.1.14 and the observed machine state; re-derive it
+after upgrades or profile changes.
 
 `omp-orchestrator-omp-surface-map-41b` owns turning this into the per-crate table.
 
