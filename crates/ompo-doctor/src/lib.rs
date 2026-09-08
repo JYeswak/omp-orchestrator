@@ -22,6 +22,8 @@ pub mod umbrella;
 pub mod adapter_exec;
 pub mod upstream_report;
 pub mod omp_state;
+pub mod omp_messages;
+pub mod omp_stats;
 pub mod liveness;
 pub mod provenance;
 pub mod selfdoc;
