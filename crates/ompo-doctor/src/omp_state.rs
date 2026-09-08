@@ -156,6 +156,23 @@ impl StateOutcome {
     }
 }
 
+/// OMP's `model` is an OBJECT, not a string — measured against `omp/18.1.14`: eighteen keys
+/// including `id`, `name` and `provider`. A first pass read it with `as_str()` and reported
+/// `model=absent` for a field that WAS present, which is the honest failure direction but
+/// still the wrong answer: "OMP stopped sending this" and "we read it with the wrong type"
+/// have different remedies. `id` is the stable identifier (`"claude-opus-5"`); `name` is the
+/// display string and is not used as an identity.
+fn model_id(data: &Value) -> Option<String> {
+    let model = data.get("model")?;
+    if let Some(text) = model.as_str() {
+        return Some(text.to_owned());
+    }
+    model
+        .get("id")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+}
+
 /// Project OMP's raw `get_state` data into the typed shape.
 #[must_use]
 pub fn project(data: &Value, lifecycle: &str, negotiated: u32) -> OmpState {
@@ -164,7 +181,7 @@ pub fn project(data: &Value, lifecycle: &str, negotiated: u32) -> OmpState {
             .get("sessionId")
             .and_then(Value::as_str)
             .map(str::to_owned),
-        model: data.get("model").and_then(Value::as_str).map(str::to_owned),
+        model: model_id(data),
         is_streaming: data.get("isStreaming").and_then(Value::as_bool),
         queued_message_count: data.get("queuedMessageCount").and_then(Value::as_u64),
         message_count: data.get("messageCount").and_then(Value::as_u64),
@@ -327,7 +344,7 @@ mod tests {
     fn payload() -> Value {
         json!({
             "sessionId": "abc-123",
-            "model": "anthropic/claude-opus-5",
+            "model": {"id": "claude-opus-5", "name": "Claude Opus 5", "provider": "anthropic"},
             "isStreaming": false,
             "queuedMessageCount": 0,
             "messageCount": 41,
@@ -339,7 +356,7 @@ mod tests {
     fn the_projection_reads_omps_field_names_not_ours() {
         let state = project(&payload(), "stopped", 2);
         assert_eq!(state.session_id.as_deref(), Some("abc-123"));
-        assert_eq!(state.model.as_deref(), Some("anthropic/claude-opus-5"));
+        assert_eq!(state.model.as_deref(), Some("claude-opus-5"));
         assert_eq!(state.is_streaming, Some(false));
         assert_eq!(state.queued_message_count, Some(0));
         assert_eq!(state.message_count, Some(41));
@@ -357,6 +374,29 @@ mod tests {
         assert_eq!(state.model, None);
         assert!(render(&state).contains("is_streaming=absent"));
         assert!(render(&state).contains("messages=absent"));
+    }
+
+    #[test]
+    fn the_model_object_is_read_by_id_not_with_the_wrong_type() {
+        // MEASURED: OMP sends `model` as an eighteen-key OBJECT, not a string. Reading it
+        // with as_str() reported `model=absent` for a field that was present -- honest in
+        // direction and still the wrong answer.
+        let state = project(&payload(), "stopped", 2);
+        assert_eq!(state.model.as_deref(), Some("claude-opus-5"));
+    }
+
+    #[test]
+    fn a_string_model_still_reads_so_an_omp_shape_change_does_not_break_the_verb() {
+        let state = project(&json!({"model": "some-future-string"}), "stopped", 2);
+        assert_eq!(state.model.as_deref(), Some("some-future-string"));
+    }
+
+    #[test]
+    fn a_model_object_without_an_id_reads_as_absent_rather_than_borrowing_the_display_name() {
+        // `name` is a display string, not an identity. Falling back to it would report a
+        // human label where a caller expects a stable id.
+        let state = project(&json!({"model": {"name": "Claude Opus 5"}}), "stopped", 2);
+        assert_eq!(state.model, None);
     }
 
     #[test]
