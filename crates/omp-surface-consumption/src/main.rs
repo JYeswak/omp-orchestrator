@@ -84,7 +84,7 @@ fn main() -> ExitCode {
         Ok(bundle) => bundle,
         Err(error) => {
             eprintln!("OMP_SURFACE_ERROR reason=bundle_unresolved detail=\"{error}\" next_action=set-OMP_BUNDLE-or-install-omp");
-            return ExitCode::from(2);
+            return ExitCode::from(4);
         }
     };
     let text = match std::fs::read_to_string(&bundle) {
@@ -94,6 +94,13 @@ fn main() -> ExitCode {
                 "OMP_SURFACE_ERROR reason=bundle_unreadable path={} error=\"{error}\" next_action=set-OMP_BUNDLE",
                 bundle.display()
             );
+            return ExitCode::from(2);
+        }
+    };
+    let set = match derive_command_set(&case_sites(&text)) {
+        Ok(set) => set,
+        Err(error) => {
+            eprintln!("OMP_SURFACE_ERROR reason={} next_action=inspect-the-anchor", describe(&error));
             return ExitCode::from(2);
         }
     };
@@ -114,13 +121,6 @@ fn main() -> ExitCode {
         sha256_hex(text.as_bytes())
     );
 
-    let set = match derive_command_set(&case_sites(&text)) {
-        Ok(set) => set,
-        Err(error) => {
-            eprintln!("OMP_SURFACE_ERROR reason={} next_action=inspect-the-anchor", describe(&error));
-            return ExitCode::from(2);
-        }
-    };
     println!(
         "OMP_RPC_COMMAND_SET inbound={} outbound={} seam_gap_bytes={} anchor={}",
         set.inbound.len(),
