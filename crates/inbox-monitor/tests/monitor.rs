@@ -201,7 +201,12 @@ fn item2_cursor_durability_no_replay_and_no_gap() {
     // about, so the two `Clear`s above are not a broken reader.
     let unread_rows = vec![row(40772, "BlueLantern", "[identity] lifecycle", None)];
     assert!(matches!(
-        classify(&page, &unread_rows, Some(after_restart), DaemonArm::NotConsulted),
+        classify(
+            &page,
+            &unread_rows,
+            Some(after_restart),
+            DaemonArm::NotConsulted
+        ),
         MonitorVerdict::MailWaiting { .. }
     ));
 
@@ -232,7 +237,12 @@ fn item5_fires_on_known_bad_unread_message_is_loud() {
         "[identity] BlueLantern - lifecycle and inbox monitor protocol",
         None,
     );
-    let loud = classify(&page, std::slice::from_ref(&unread_row), Some(5059), DaemonArm::NotConsulted);
+    let loud = classify(
+        &page,
+        std::slice::from_ref(&unread_row),
+        Some(5059),
+        DaemonArm::NotConsulted,
+    );
     match &loud {
         MonitorVerdict::MailWaiting {
             unread,
@@ -267,7 +277,12 @@ fn item5_fires_on_known_bad_unread_message_is_loud() {
         read_ts: Some("2026-09-02T05:03:50Z".to_string()),
         ..unread_row
     };
-    let quiet = classify(&page, std::slice::from_ref(&read_row), Some(5059), DaemonArm::NotConsulted);
+    let quiet = classify(
+        &page,
+        std::slice::from_ref(&read_row),
+        Some(5059),
+        DaemonArm::NotConsulted,
+    );
     assert_eq!(quiet, MonitorVerdict::Clear);
     assert_eq!(quiet.exit_code(), EXIT_CLEAR);
 
@@ -298,7 +313,10 @@ fn item5_fires_on_known_bad_unread_message_is_loud() {
         row(2, "b", "y", Some("2h ago")),
     ];
     assert_eq!(unread(&all_read).len(), 0);
-    assert_eq!(classify(&page, &all_read, None, DaemonArm::NotConsulted), MonitorVerdict::Clear);
+    assert_eq!(
+        classify(&page, &all_read, None, DaemonArm::NotConsulted),
+        MonitorVerdict::Clear
+    );
 }
 
 // ---------------------------------------------------------------------------------------
@@ -403,7 +421,12 @@ fn a_cursor_ahead_of_the_tail_is_a_regression_not_a_clear_run() {
 
     // KNOWN BAD: our state claims to have consumed past the durable tail. Every subsequent
     // `--after` would ask for events beyond the end and receive nothing — a silent skip.
-    let regressed = classify(&page, &[], Some(page.tail_cursor + 1), DaemonArm::NotConsulted);
+    let regressed = classify(
+        &page,
+        &[],
+        Some(page.tail_cursor + 1),
+        DaemonArm::NotConsulted,
+    );
     assert_eq!(
         regressed,
         MonitorVerdict::CursorRegressed {
@@ -421,13 +444,21 @@ fn a_cursor_ahead_of_the_tail_is_a_regression_not_a_clear_run() {
         classify(&page, &[], Some(page.tail_cursor), DaemonArm::NotConsulted),
         MonitorVerdict::Clear
     );
-    // KNOWN GOOD: behind the tail is an ordinary resume.
+    // A proven position behind the tail with addressed events is a cursor-keyed wake, not Clear.
+    let advanced = classify(&page, &[], Some(floor_of(&page)), DaemonArm::NotConsulted);
     assert_eq!(
-        classify(&page, &[], Some(floor_of(&page)), DaemonArm::NotConsulted),
-        MonitorVerdict::Clear
+        advanced,
+        MonitorVerdict::CursorAdvanced {
+            persisted: floor_of(&page),
+            next_cursor: page.next_cursor,
+            events: page.events.len(),
+        }
     );
     // KNOWN GOOD: never positioned is not a regression.
-    assert_eq!(classify(&page, &[], None, DaemonArm::NotConsulted), MonitorVerdict::Clear);
+    assert_eq!(
+        classify(&page, &[], None, DaemonArm::NotConsulted),
+        MonitorVerdict::Clear
+    );
 
     // PRECEDENCE INVERTED, 2026-09-02, deliberately and with the reason recorded.
     //
@@ -446,13 +477,23 @@ fn a_cursor_ahead_of_the_tail_is_a_regression_not_a_clear_run() {
     // then (pre-fix) persisted that position as if everything before it had been consumed.
     let rows = vec![row(1, "BlueLantern", "s", None)];
     assert!(matches!(
-        classify(&page, &rows, Some(page.tail_cursor + 1), DaemonArm::NotConsulted),
+        classify(
+            &page,
+            &rows,
+            Some(page.tail_cursor + 1),
+            DaemonArm::NotConsulted
+        ),
         MonitorVerdict::CursorRegressed { .. }
     ));
     // And the mail claim is still reachable the moment the position is provable — this is the
     // known-good arm that keeps the reordering from being an over-strict gate.
     assert!(matches!(
-        classify(&page, &rows, Some(page.tail_cursor), DaemonArm::NotConsulted),
+        classify(
+            &page,
+            &rows,
+            Some(page.tail_cursor),
+            DaemonArm::NotConsulted
+        ),
         MonitorVerdict::MailWaiting { .. }
     ));
 }
@@ -602,7 +643,12 @@ fn a_first_run_with_no_persisted_cursor_is_a_baseline_not_below_floor() {
     // FIRES-ON-KNOWN-BAD control, so the leg above is not passing because the comparison is
     // dead: the SAME page with a stored position one below the floor does fault.
     assert!(matches!(
-        classify(&page, &[], Some(floor_of(&page) - 1), DaemonArm::NotConsulted),
+        classify(
+            &page,
+            &[],
+            Some(floor_of(&page) - 1),
+            DaemonArm::NotConsulted
+        ),
         MonitorVerdict::CursorBelowFloor { .. }
     ));
 }
@@ -613,7 +659,10 @@ fn a_cursor_inside_the_window_still_reports_mail_or_clear_normally() {
 
     // KNOWN GOOD: 5150 sits inside [5147, 5165]. The new check must not swallow the normal
     // path — an over-strict guard is worse than none, because it gets disabled.
-    assert_eq!(classify(&page, &[], Some(5150), DaemonArm::NotConsulted), MonitorVerdict::Clear);
+    assert_eq!(
+        classify(&page, &[], Some(5150), DaemonArm::NotConsulted),
+        MonitorVerdict::Clear
+    );
 
     let rows = vec![row(7, "GreenFrog", "still routes", None)];
     match classify(&page, &rows, Some(5150), DaemonArm::NotConsulted) {
@@ -643,11 +692,21 @@ fn a_cursor_inside_the_window_still_reports_mail_or_clear_normally() {
     // And the fault is still one step away in each direction, so neither boundary is passing
     // because the checks are dead.
     assert!(matches!(
-        classify(&page, &[], Some(floor_of(&page) - 1), DaemonArm::NotConsulted),
+        classify(
+            &page,
+            &[],
+            Some(floor_of(&page) - 1),
+            DaemonArm::NotConsulted
+        ),
         MonitorVerdict::CursorBelowFloor { .. }
     ));
     assert!(matches!(
-        classify(&page, &[], Some(page.tail_cursor + 1), DaemonArm::NotConsulted),
+        classify(
+            &page,
+            &[],
+            Some(page.tail_cursor + 1),
+            DaemonArm::NotConsulted
+        ),
         MonitorVerdict::CursorRegressed { .. }
     ));
 }
@@ -1009,13 +1068,27 @@ fn y256_the_live_disagreement_is_reported_and_neither_side_is_picked() {
         },
         "the live divergence must not resolve to either arm"
     );
-    assert_eq!(verdict.exit_code(), 16, "a distinct code, not folded into 12");
+    assert_eq!(
+        verdict.exit_code(),
+        16,
+        "a distinct code, not folded into 12"
+    );
 
     // BOTH numbers and BOTH sources in the line a human reads. A disagreement that names
     // one side is the defect this verdict replaces.
     let line = verdict.human_line();
-    for needle in ["96", "20", "daemon", "CLI", "storage.sqlite3", "fetch_inbox"] {
-        assert!(line.contains(needle), "the line must carry {needle:?}: {line}");
+    for needle in [
+        "96",
+        "20",
+        "daemon",
+        "CLI",
+        "storage.sqlite3",
+        "fetch_inbox",
+    ] {
+        assert!(
+            line.contains(needle),
+            "the line must carry {needle:?}: {line}"
+        );
     }
     assert!(
         !line.contains("unread; oldest from"),
@@ -1242,7 +1315,12 @@ fn an_absent_floor_is_not_a_cursor_fault() {
     // with a floor PRESENT, a position below it is still refused.
     let floored = parse_event_page(SNOWY_CANYON_PAGE_JSON).expect("the measured page must parse");
     assert!(matches!(
-        classify(&floored, &[], Some(floor_of(&floored) - 1), DaemonArm::NotConsulted),
+        classify(
+            &floored,
+            &[],
+            Some(floor_of(&floored) - 1),
+            DaemonArm::NotConsulted
+        ),
         MonitorVerdict::CursorBelowFloor { .. }
     ));
 }
@@ -1313,10 +1391,7 @@ fn blindness_must_be_established_before_it_ends_a_watch() {
 
     // FIRES ON KNOWN BAD: the third consecutive failure is a condition, not a blip, and the
     // watch must stop being quiet about it.
-    assert_eq!(
-        watch_step(&blind, 2, WATCH_BLIND_STREAK),
-        WatchStep::Stop
-    );
+    assert_eq!(watch_step(&blind, 2, WATCH_BLIND_STREAK), WatchStep::Stop);
     assert_eq!(WATCH_BLIND_STREAK, 3);
 
     // The degenerate limit must collapse to RESTRICTIVE, never to "tolerate forever": a zero

@@ -178,6 +178,13 @@ pub const EXIT_CURSOR_BELOW_FLOOR: u8 = 15;
 /// both reported, each attributed to the authority that said it.
 pub const EXIT_AUTHORITIES_DISAGREE: u8 = 16;
 
+/// CursorAdvanced — this recipient's cursor advanced and the page carried events, but no
+/// unread flag survived to trigger MailWaiting.
+///
+/// A distinct wake code: it is neither clear (0) nor mail waiting (12) nor a fault. The
+/// caller must process the page and persist next_cursor; the row does not claim the event's
+/// urgency or that every event was addressed to this recipient.
+pub const EXIT_CURSOR_ADVANCED: u8 = 18;
 /// `Clear` — read both surfaces, nothing is owed.
 pub const EXIT_CLEAR: u8 = 0;
 
@@ -238,6 +245,7 @@ impl UnreachableReason {
 /// | 15 | [`MonitorVerdict::CursorBelowFloor`] | our persisted cursor is below THIS recipient's oldest retained event, so the resume position cannot be proven continuous | that mail is waiting, and NOT that the mailbox lost anything. A recipient's events are sparse in a global sequence, so a position below the floor is indistinguishable from a recipient that started later — and the daemon will not say so, it CLAMPS to the floor and returns success |
 ///
 /// | 16 | [`MonitorVerdict::AuthoritiesDisagree`] | both mailbox authorities answered and gave DIFFERENT unread counts, so no count is reported | that anything failed, and NOT that mail is or is not waiting. Both reads SUCCEEDED; the disagreement is the finding. Measured live: daemon 96, CLI 20 |
+/// | 18 | [`MonitorVerdict::CursorAdvanced`] | the recipient cursor advanced and events were present even though unread flags were clear | that the message is urgent or still unread; this is a weaker wake than `MailWaiting` |
 ///
 /// The load-bearing column is **does NOT mean**, per that registry's §1: a refusal and a
 /// failure are indistinguishable from the outside when the only signal is a small integer.
@@ -307,6 +315,14 @@ pub enum MonitorVerdict {
         /// The `am` CLI's unread count — the designated differential ORACLE.
         cli_unread: usize,
     },
+    /// The recipient cursor advanced with a non-empty event page while unread flags were
+    /// absent. This is a wake, but weaker than MailWaiting: process the page and persist the
+    /// next cursor without claiming unread urgency.
+    CursorAdvanced {
+        persisted: u64,
+        next_cursor: u64,
+        events: usize,
+    },
 }
 
 impl MonitorVerdict {
@@ -319,6 +335,7 @@ impl MonitorVerdict {
             MonitorVerdict::CursorRegressed { .. } => EXIT_CURSOR_REGRESSED,
             MonitorVerdict::CursorBelowFloor { .. } => EXIT_CURSOR_BELOW_FLOOR,
             MonitorVerdict::AuthoritiesDisagree { .. } => EXIT_AUTHORITIES_DISAGREE,
+            MonitorVerdict::CursorAdvanced { .. } => EXIT_CURSOR_ADVANCED,
         }
     }
 
@@ -331,6 +348,7 @@ impl MonitorVerdict {
             MonitorVerdict::CursorRegressed { .. } => "cursor_regressed",
             MonitorVerdict::CursorBelowFloor { .. } => "cursor_below_floor",
             MonitorVerdict::AuthoritiesDisagree { .. } => "authorities_disagree",
+            MonitorVerdict::CursorAdvanced { .. } => "cursor_advanced",
         }
     }
 
@@ -392,6 +410,13 @@ impl MonitorVerdict {
                  is reported because reporting one without naming its authority is not \
                  evidence. Reconcile the surfaces; do not restart anything"
             ),
+            MonitorVerdict::CursorAdvanced {
+                persisted,
+                next_cursor,
+                events,
+            } => format!(
+                "inbox-monitor: CURSOR ADVANCED — persisted {persisted} -> next_cursor {next_cursor} with {events} event(s), but unread flags were clear; process the page and persist the new cursor"
+            ),
         }
     }
 
@@ -426,6 +451,7 @@ impl MonitorVerdict {
             // suspect when it is not. The verdict repeats on every run until the surfaces are
             // reconciled, which is intended for a monitor that must not self-clear.
             MonitorVerdict::AuthoritiesDisagree { .. } => true,
+            MonitorVerdict::CursorAdvanced { .. } => true,
             MonitorVerdict::Unreachable { .. }
             | MonitorVerdict::CursorRegressed { .. }
             | MonitorVerdict::CursorBelowFloor { .. } => false,
@@ -874,6 +900,17 @@ pub fn classify(
         };
     }
 
+    // Cursor advancement is weaker than an unread row: mail flags win above. A non-empty
+    // page still proves addressed traffic arrived even when the read flag was consumed.
+    if let Some(persisted) = persisted_cursor {
+        if page.next_cursor != 0 && page.next_cursor > persisted && !page.events.is_empty() {
+            return MonitorVerdict::CursorAdvanced {
+                persisted,
+                next_cursor: page.next_cursor,
+                events: page.events.len(),
+            };
+        }
+    }
     MonitorVerdict::Clear
 }
 
@@ -954,6 +991,7 @@ pub fn watch_step(
         MonitorVerdict::MailWaiting { .. }
         | MonitorVerdict::CursorRegressed { .. }
         | MonitorVerdict::CursorBelowFloor { .. }
+        | MonitorVerdict::CursorAdvanced { .. }
         | MonitorVerdict::AuthoritiesDisagree { .. } => WatchStep::Stop,
         MonitorVerdict::Unreachable { .. } => {
             let streak = consecutive_blind.saturating_add(1);
@@ -1505,6 +1543,28 @@ pub fn now_epoch_secs() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn event(cursor: u64) -> Event {
+        Event {
+            cursor,
+            message_id: cursor + 10_000,
+            kind: "to".into(),
+            delivered_ts: "2026-09-08T00:00:00Z".into(),
+            from: "Sender".into(),
+            subject: "probe".into(),
+            importance: "normal".into(),
+            ack_required: false,
+        }
+    }
+
+    fn page(next_cursor: u64, events: Vec<Event>) -> EventPage {
+        EventPage {
+            oldest_available_cursor: (next_cursor != 0).then_some(1),
+            tail_cursor: next_cursor,
+            next_cursor,
+            has_more: false,
+            events,
+        }
+    }
 
     #[test]
     fn iso8601_matches_known_epochs() {
@@ -1523,7 +1583,11 @@ mod tests {
                 oldest_subject: "b".into(),
             }
             .exit_code(),
-            MonitorVerdict::Unreachable { detail: "x".into(), reason: UnreachableReason::Indeterminate }.exit_code(),
+            MonitorVerdict::Unreachable {
+                detail: "x".into(),
+                reason: UnreachableReason::Indeterminate,
+            }
+            .exit_code(),
             MonitorVerdict::CursorRegressed {
                 persisted: 2,
                 tail: 1,
@@ -1533,6 +1597,12 @@ mod tests {
                 persisted: 5105,
                 oldest_available: 5147,
                 tail: 5165,
+            }
+            .exit_code(),
+            MonitorVerdict::CursorAdvanced {
+                persisted: 5,
+                next_cursor: 6,
+                events: 1,
             }
             .exit_code(),
         ];
@@ -1548,6 +1618,59 @@ mod tests {
         }
     }
 
+    #[test]
+    fn cursor_advance_wakes_after_mail_flag_consumption() {
+        let verdict = classify(&page(6, vec![event(5)]), &[], Some(5), DaemonArm::Unread(0));
+        assert_eq!(
+            verdict,
+            MonitorVerdict::CursorAdvanced {
+                persisted: 5,
+                next_cursor: 6,
+                events: 1,
+            }
+        );
+        assert_eq!(verdict.exit_code(), EXIT_CURSOR_ADVANCED);
+        assert!(verdict.advances_cursor());
+        assert!(matches!(watch_step(&verdict, 0, 3), WatchStep::Stop));
+    }
+
+    #[test]
+    fn unread_mail_wins_over_cursor_advance() {
+        let rows = vec![InboxRow {
+            id: 42,
+            from: "Sender".into(),
+            subject: "waiting".into(),
+            read_ts: None,
+            importance: "normal".into(),
+            ack_required: false,
+        }];
+        let verdict = classify(
+            &page(6, vec![event(5)]),
+            &rows,
+            Some(5),
+            DaemonArm::Unread(1),
+        );
+        assert!(matches!(
+            verdict,
+            MonitorVerdict::MailWaiting { unread: 1, .. }
+        ));
+        assert_eq!(verdict.exit_code(), EXIT_MAIL_WAITING);
+    }
+
+    #[test]
+    fn cursor_advance_requires_baseline_nonzero_next_and_events() {
+        let baseline = classify(&page(6, vec![event(5)]), &[], None, DaemonArm::Unread(0));
+        assert!(matches!(baseline, MonitorVerdict::Clear));
+
+        let empty_events = classify(&page(6, Vec::new()), &[], Some(5), DaemonArm::Unread(0));
+        assert!(matches!(empty_events, MonitorVerdict::Clear));
+
+        let equal = classify(&page(6, vec![event(5)]), &[], Some(6), DaemonArm::Unread(0));
+        assert!(matches!(equal, MonitorVerdict::Clear));
+
+        let empty_feed = classify(&page(0, Vec::new()), &[], None, DaemonArm::Unread(0));
+        assert!(matches!(empty_feed, MonitorVerdict::Clear));
+    }
     #[test]
     fn an_agent_name_cannot_escape_the_state_directory() {
         let home = Path::new("/tmp/does-not-need-to-exist");

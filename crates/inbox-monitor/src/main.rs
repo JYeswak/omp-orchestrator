@@ -32,8 +32,9 @@ use agent_mail_native::client::MailClient;
 use agent_mail_native::error::MailError;
 use agent_mail_native::journey::{fetch_inbox, AgentName, InboxRequest, ProjectKey};
 use asupersync::runtime::RuntimeBuilder;
-use asupersync::Cx;
 use asupersync::time::sleep;
+use asupersync::Cx;
+use inbox_monitor::wake::{classify_watch_arm_live, cursor_keyed_wake, WatchArm};
 use inbox_monitor::{
     append_ledger, classify, cursor_path_in, home_dir, iso8601_utc, ledger_path_in, now_epoch_secs,
     parse_event_page, parse_inbox_rows, read_cursor, resolve_pane, unread, watch_step,
@@ -41,9 +42,6 @@ use inbox_monitor::{
     WatchOutcome, WatchStep, EXIT_AUTHORITIES_DISAGREE, EXIT_CLEAR, EXIT_CURSOR_BELOW_FLOOR,
     EXIT_CURSOR_REGRESSED, EXIT_MAIL_WAITING, EXIT_UNREACHABLE, EXIT_WATCH_TIMED_OUT,
     WATCH_BLIND_STREAK,
-};
-use inbox_monitor::wake::{
-    classify_watch_arm_live, cursor_keyed_wake, WatchArm,
 };
 use std::path::Path;
 use std::process::{Command, ExitCode};
@@ -263,7 +261,6 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
     } else {
         None
     };
-
 
     Ok(Args {
         agent,
@@ -527,7 +524,7 @@ async fn observe(cx: &Cx, args: &Args, persisted: Option<u64>) -> Observation {
                     direct_read,
                     daemon_health,
                     daemon_arm,
-                    }
+                }
             }
         },
         Read::Failed(detail) => {
@@ -541,7 +538,7 @@ async fn observe(cx: &Cx, args: &Args, persisted: Option<u64>) -> Observation {
                 direct_read,
                 daemon_health,
                 daemon_arm,
-                }
+            }
         }
     };
 
@@ -555,7 +552,7 @@ async fn observe(cx: &Cx, args: &Args, persisted: Option<u64>) -> Observation {
             direct_read,
             daemon_health,
             daemon_arm,
-            };
+        };
     }
 
     let mut inbox_command = am_command(&args.project, &args.agent, &["inbox", "--unread"]);
@@ -573,7 +570,7 @@ async fn observe(cx: &Cx, args: &Args, persisted: Option<u64>) -> Observation {
                     direct_read,
                     daemon_health,
                     daemon_arm,
-                    }
+                }
             }
         },
         Read::Failed(detail) => {
@@ -587,7 +584,7 @@ async fn observe(cx: &Cx, args: &Args, persisted: Option<u64>) -> Observation {
                 direct_read,
                 daemon_health,
                 daemon_arm,
-                }
+            }
         }
     };
 
@@ -600,7 +597,7 @@ async fn observe(cx: &Cx, args: &Args, persisted: Option<u64>) -> Observation {
         direct_read,
         daemon_health,
         daemon_arm,
-        }
+    }
 }
 
 /// A mis-invocation, which is NOT an observation and therefore never wears a verdict code.
@@ -699,7 +696,8 @@ fn emit(
             | MonitorVerdict::MailWaiting { .. }
             | MonitorVerdict::CursorRegressed { .. }
             | MonitorVerdict::CursorBelowFloor { .. }
-            | MonitorVerdict::AuthoritiesDisagree { .. } => None,
+            | MonitorVerdict::AuthoritiesDisagree { .. }
+            | MonitorVerdict::CursorAdvanced { .. } => None,
         },
         // The typed reason, beside the free text. A consumer branching on WHY the monitor
         // could not observe must not have to substring-match `detail`: a 401 and an absent
@@ -710,7 +708,8 @@ fn emit(
             | MonitorVerdict::MailWaiting { .. }
             | MonitorVerdict::CursorRegressed { .. }
             | MonitorVerdict::CursorBelowFloor { .. }
-            | MonitorVerdict::AuthoritiesDisagree { .. } => None,
+            | MonitorVerdict::AuthoritiesDisagree { .. }
+            | MonitorVerdict::CursorAdvanced { .. } => None,
         },
         // BOTH numbers, each attributed. A disagreement row that carries one of them is the
         // defect this verdict exists to remove.
@@ -727,7 +726,8 @@ fn emit(
             | MonitorVerdict::MailWaiting { .. }
             | MonitorVerdict::Unreachable { .. }
             | MonitorVerdict::CursorRegressed { .. }
-            | MonitorVerdict::CursorBelowFloor { .. } => Some(observation.unread_count),
+            | MonitorVerdict::CursorBelowFloor { .. }
+            | MonitorVerdict::CursorAdvanced { .. } => Some(observation.unread_count),
         },
         "primary_authority": "daemon:mcp/fetch_inbox",
         "oracle_authority": "cli:am inbox --unread",
@@ -737,7 +737,8 @@ fn emit(
             | MonitorVerdict::Unreachable { .. }
             | MonitorVerdict::CursorRegressed { .. }
             | MonitorVerdict::CursorBelowFloor { .. }
-            | MonitorVerdict::AuthoritiesDisagree { .. } => None,
+            | MonitorVerdict::AuthoritiesDisagree { .. }
+            | MonitorVerdict::CursorAdvanced { .. } => None,
         },
         "oldest_subject": match &observation.verdict {
             MonitorVerdict::MailWaiting { oldest_subject, .. } => Some(oldest_subject.clone()),
@@ -745,7 +746,8 @@ fn emit(
             | MonitorVerdict::Unreachable { .. }
             | MonitorVerdict::CursorRegressed { .. }
             | MonitorVerdict::CursorBelowFloor { .. }
-            | MonitorVerdict::AuthoritiesDisagree { .. } => None,
+            | MonitorVerdict::AuthoritiesDisagree { .. }
+            | MonitorVerdict::CursorAdvanced { .. } => None,
         },
         // The floor the verdict was decided against, carried on the VERDICT and not only on
         // the page. A row that says "below floor" without both numbers is undiagnosable, and
@@ -758,7 +760,8 @@ fn emit(
             MonitorVerdict::Clear
             | MonitorVerdict::MailWaiting { .. }
             | MonitorVerdict::Unreachable { .. }
-            | MonitorVerdict::CursorRegressed { .. } => None,
+            | MonitorVerdict::CursorRegressed { .. }
+            | MonitorVerdict::CursorAdvanced { .. } => None,
         },
     });
     let line = row.to_string();
