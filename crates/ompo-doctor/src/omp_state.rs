@@ -270,11 +270,20 @@ pub async fn read_state(
     session: Option<&str>,
     session_dir: Option<&std::path::Path>,
 ) -> StateOutcome {
+    let session = match session {
+        Some(value) if value.trim().is_empty() => {
+            return StateOutcome::TransportFailed {
+                detail: "invalid existing-session selector: a non-empty id or path is required".to_owned(),
+            };
+        }
+        Some(value) => Some(value.trim()),
+        None => None,
+    };
     let mut command = OmpCommand::new(binary);
     if let Some(path) = session_dir {
         command = command.arg("--session-dir").arg(path);
     }
-    if let Some(session_id) = session.map(str::trim).filter(|id| !id.is_empty()) {
+    if let Some(session_id) = session {
         command = match command.resume(session_id) {
             Ok(command) => command,
             Err(error) => return StateOutcome::TransportFailed { detail: error.to_string() },
