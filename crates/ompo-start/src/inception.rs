@@ -413,6 +413,122 @@ fn snapshot_existing(path: &Path) -> Result<Option<PathBuf>, InceptionError> {
     Ok(Some(backup))
 }
 
+/// One content-keyed backup of the inception artifact.
+///
+/// The name carries the SHA-256 of the CONTENT, not a timestamp
+/// (`snapshot_existing` builds `{filename}.{sha256}.bak`). That is deliberate — it makes a
+/// duplicate backup a no-op instead of an accumulating pile — and it has a consequence the
+/// restore path must respect: **content-keyed backups have no order.** There is no
+/// "latest" to resolve, so a restore that picks one when several exist would be guessing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BackupEntry {
+    pub path: PathBuf,
+    /// SHA-256 of the backup's bytes, as recorded in its filename.
+    pub content_sha: String,
+}
+
+/// What a restore did, or would have done.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RestoreReport {
+    /// `0` when the artifact already matched the backup byte for byte.
+    pub actions: usize,
+    pub restored_from: Option<PathBuf>,
+    pub content_sha: String,
+}
+
+/// Every backup of `output`, sorted by content hash for determinism.
+///
+/// # Errors
+///
+/// Fails only if the backup directory exists and cannot be read. A MISSING directory is
+/// an empty list, not an error: never initialised and nothing-to-restore are the same
+/// observable state here, and the caller is the one positioned to type that refusal.
+pub fn list_backups(output: &Path) -> Result<Vec<BackupEntry>, InceptionError> {
+    let Some(parent) = output.parent() else {
+        return Ok(Vec::new());
+    };
+    let backup_dir = parent.join("backups");
+    if !backup_dir.is_dir() {
+        return Ok(Vec::new());
+    }
+    let filename = output
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("inception.json");
+    let prefix = format!("{filename}.");
+    let entries = fs::read_dir(&backup_dir).map_err(|error| InceptionError::Write {
+        path: backup_dir.clone(),
+        detail: format!("backup listing failed: {error}"),
+    })?;
+    let mut found = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| InceptionError::Write {
+            path: backup_dir.clone(),
+            detail: format!("backup entry unreadable: {error}"),
+        })?;
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        let Some(rest) = name.strip_prefix(&prefix) else {
+            continue;
+        };
+        let Some(sha) = rest.strip_suffix(".bak") else {
+            continue;
+        };
+        // Own the sha BEFORE moving `path`: `sha` borrows through `name`, which borrows
+        // `path`, so constructing the struct with `path` first is E0505. Same shape as the
+        // liveness.rs:86 error diagnosed for %7 tonight -- bind the derived value, then move.
+        let content_sha = sha.to_owned();
+        found.push(BackupEntry { path, content_sha });
+    }
+    found.sort_by(|left, right| left.content_sha.cmp(&right.content_sha));
+    Ok(found)
+}
+
+/// Restore `output` from `entry`, through the SAME atomic write the writer uses.
+///
+/// Idempotent: when the artifact already matches the backup, `actions` is `0` and nothing
+/// is written. That mirrors the writer's own property rather than re-implementing it.
+///
+/// # Errors
+///
+/// Refuses a backup whose bytes do not hash to the SHA in its own filename. A corrupted
+/// backup restored silently would be worse than no restore at all — the operator would
+/// believe the artifact had been recovered.
+pub fn restore_backup(
+    output: &Path,
+    entry: &BackupEntry,
+) -> Result<RestoreReport, InceptionError> {
+    let bytes = fs::read(&entry.path).map_err(|error| InceptionError::Write {
+        path: entry.path.clone(),
+        detail: format!("backup read failed: {error}"),
+    })?;
+    let actual = sha256_hex(&bytes);
+    if actual != entry.content_sha {
+        return Err(InceptionError::Write {
+            path: entry.path.clone(),
+            detail: format!(
+                "backup integrity failed: filename claims {} but content hashes {actual}",
+                entry.content_sha
+            ),
+        });
+    }
+    if fs::read(output).is_ok_and(|current| current == bytes) {
+        return Ok(RestoreReport {
+            actions: 0,
+            restored_from: None,
+            content_sha: actual,
+        });
+    }
+    write_atomic(output, &bytes)?;
+    Ok(RestoreReport {
+        actions: 1,
+        restored_from: Some(entry.path.clone()),
+        content_sha: actual,
+    })
+}
+
 fn temporary_path(path: &Path) -> PathBuf {
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
