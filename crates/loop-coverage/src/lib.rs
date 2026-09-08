@@ -656,8 +656,8 @@ pub const EXTERNAL_AUTHORITY_ALLOWANCE: &[(&str, &str)] = &[
 /// smuggled in together with an allowance row that permits it. Widening the allowlist
 /// then requires editing this number, which is a one-line diff a reviewer cannot miss.
 ///
-/// Measured 2026-09-08 after removing five forbidden shell authorities: 14.
-pub const EXPECTED_ABSENT_AUTHORITIES: usize = 14;
+/// Measured 2026-09-08 after removing five forbidden shell and two Python authorities: 10.
+pub const EXPECTED_ABSENT_AUTHORITIES: usize = 10;
 
 /// A check that did not run, and the declared row that permits it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

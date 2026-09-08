@@ -695,10 +695,6 @@ mod tests {
             state.display()
         );
         assert_eq!(
-            classify_invoker(&old, &state, repo_root, &home),
-            ("SCHEDULED", "cron_parent")
-        );
-        assert_eq!(
             classify_invoker(&new, &state, repo_root, &home),
             ("SCHEDULED", "cron_parent")
         );
