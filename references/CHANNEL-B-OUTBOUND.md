@@ -149,16 +149,24 @@ stream tool updates.
 
 ## Consumer decision
 
-No Rust consumer exists today. `crates/omp-rpc-session` retains non-response event frames as
-`RpcFrame::Unknown`, and no package metadata declaration names `rpc_dispatch_seam_outbound`. Do not declare
-a speculative consumer. A future consumer must first define typed event payloads and a real
-callsite, then declare `kind = "rpc_dispatch_seam_outbound"` with the event name and callsite.
+A real bounded consumer now exists in `crates/omp-surface-consumption/src/rpc_probe.rs`, invoked by
+`src/main.rs::run_rpc_event_probe` and declared for all six seam event names. The probe uses a
+keep-open, no-tools, deadline-bounded RPC prompt; it consumes the five observed event types and
+has a parser branch for `tool_stream_update`, which remains runtime-UNKNOWN without tool execution.
+The metadata kind remains the internal `rpc_notification`; the aligner labels its subject
+`rpc_dispatch_seam_outbound`. No speculative consumer claim is made for runtime frames outside the seam.
 
 ## Gate status
 
-No mechanism or source gate was added in this pass. The deliverable is a probe table and a
-confirmed denominator. Mutation, known-good, byte-restore, and wiring gate legs are therefore not
-applicable; inventing them would claim an event consumer that does not exist.
+The consumer mechanism is now present, so its proof is explicit:
+
+- known-good: remote package tests passed 11 library, 1 binary, and 2 integration tests;
+- mutation: renaming `tool_stream_update` in `NOTIFICATION_TYPES` caused the library test
+  `counts_dispatch_seam_events_without_retaining_payloads` to fail; the allowlist was restored;
+- anti-vacuity: an empty event stream returns a typed error; the parser never silently passes zero
+  frames;
+- wiring: the six declarations point to `src/main.rs::run_rpc_event_probe`, and fresh alignment
+  classified all six seam notifications. No additional source gate was introduced.
 
 ## OMP integration skill delta
 
@@ -174,6 +182,7 @@ PROVENANCE omp/18.1.14; bundle dist/cli.js; current repository WORKTREE; probe r
 ## No-claim boundary
 
 This proves event emission during one fresh no-tools prompt, not delivery to a resumed live pane,
-not tool-stream emission, and not long-running prompt cancellation. The event declarations are
-versioned package artifacts and may drift independently of the bundle. No OMP installation or
-Rust source was changed.
+not tool-stream emission, and not long-running prompt cancellation. The consumer's parser branch
+accepts `tool_stream_update`, but no tool-enabled runtime exercise was authorized. The event
+declarations are versioned package artifacts and may drift independently of the bundle. No OMP
+installation changed; the Rust consumer landed in `817dcf9`.
