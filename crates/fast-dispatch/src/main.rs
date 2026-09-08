@@ -9,8 +9,7 @@
 //!
 //! WHAT IS RUST: admission, FREE-pane selection, conductor skip, session-repo
 //! map, lock, bounded child runner, packet assembly, send orchestration.
-//! WHAT STILL SHELLS: check.sh, pane-dispatch-ready.sh, cargo-lane-budget.sh,
-//! loop-queue-filter, composer-typed.py, pane-dispatch-fence, ntm, br, tmux.
+//! WHAT REMAINS EXTERNAL: loop-queue-filter, composer-typed.py, pane-dispatch-fence, ntm, br, tmux.
 
 #[path = "dispatch_cli_contract.rs"]
 mod dispatch_cli_contract;
@@ -130,7 +129,15 @@ fn run_timeout(mut cmd: Command, timeout: Duration) -> Option<std::process::Outp
         BoundedOutcome::TimedOut | BoundedOutcome::Unspawned(_) => None,
     }
 }
-
+fn configured_rust_binary(env_name: &str, binary: &str) -> PathBuf {
+    if let Some(path) = std::env::var_os(env_name).filter(|value| !value.is_empty()) {
+        return PathBuf::from(path);
+    }
+    if let Some(home) = std::env::var_os("HOME").filter(|value| !value.is_empty()) {
+        return PathBuf::from(home).join(".local/bin").join(binary);
+    }
+    PathBuf::from(binary)
+}
 fn say(line: &str) {
     println!("{line}");
 }
@@ -297,83 +304,6 @@ fn host_load_ncpu() -> (u64, u64) {
     (load, ncpu.max(1))
 }
 
-fn admission_subject_id() -> String {
-    let mut cmd = Command::new(cp().join("bin/check.sh"));
-    cmd.arg("--subject-id");
-    let Some(out) = run_timeout(cmd, Duration::from_secs(30)) else {
-        return String::new();
-    };
-    let text = String::from_utf8_lossy(&out.stdout);
-    let last = text.lines().last().unwrap_or("").trim();
-    if last.contains(':') {
-        last.to_string()
-    } else {
-        String::new()
-    }
-}
-
-fn repair_repaired_but_unpublished(check_ledger: &Path, cfg: &AdmissionConfig) -> bool {
-    let profiler = cp()
-        .join("bin/dispatch-stall-profile.sh")
-        .display()
-        .to_string();
-    if !Path::new(&profiler).is_file() {
-        return false;
-    }
-    let mut cmd = Command::new(&profiler);
-    cmd.arg("--check")
-        .env("DSP_CHECK_LEDGER", check_ledger)
-        .env("DSP_ADMISSION_WINDOW", cfg.fresh_seconds.to_string())
-        .env("DSP_FORCE_QUEUE", "1")
-        .env("DSP_FORCE_FREE", "1");
-    let out = run_timeout(cmd, Duration::from_secs(120));
-    let text = out
-        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
-        .unwrap_or_default();
-    if !text.contains("verdict=REPAIRED_BUT_UNPUBLISHED") {
-        return false;
-    }
-    say(&format!(
-        "[{}] admission repair: stale RED gate passes live; running the complete publication chain",
-        ts()
-    ));
-    let state_dir = check_ledger
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| {
-            std::env::var_os("HOME")
-                .filter(|v| !v.is_empty())
-                .map(|h| PathBuf::from(h).join(".local/state/flywheel"))
-                .unwrap_or_else(|| PathBuf::from("."))
-        });
-    let mut pub_cmd = Command::new(cp().join("bin/check.sh"));
-    pub_cmd
-        .arg("--publish")
-        .env(
-            "CHECK_SH_LEDGER",
-            state_dir.join("check-sh-ledger.fast-dispatch.json"),
-        )
-        .env("CHECK_SH_PUBLISH_LEDGER", check_ledger)
-        .env(
-            "CHECK_SH_PUBLISH_EVENT_LEDGER",
-            state_dir.join("fast-dispatch.jsonl"),
-        )
-        .env(
-            "CHECK_SH_PUBLISH_FRESH_SECONDS",
-            cfg.fresh_seconds.to_string(),
-        )
-        .env(
-            "CHECK_SH_PUBLISH_DEADLINE_SECONDS",
-            cfg.fresh_seconds.to_string(),
-        );
-    if let Some(out) = run_timeout(pub_cmd, Duration::from_secs(cfg.fresh_seconds as u64)) {
-        let text = String::from_utf8_lossy(&out.stdout);
-        if !text.is_empty() {
-            print!("{text}");
-        }
-    }
-    admission_fresh_pass(check_ledger, cfg)
-}
 
 fn ntm_sessions() -> Vec<String> {
     let mut cmd = Command::new(tick_monitor::NTM);
@@ -400,13 +330,12 @@ fn ntm_sessions() -> Vec<String> {
 }
 
 fn pane_is_free(session: &str, pane: &str) -> bool {
-    let mut cmd = Command::new(cp().join("bin/pane-dispatch-ready.sh"));
-    cmd.arg(session).arg(format!("--pane={pane}"));
+    let mut cmd = Command::new(configured_rust_binary("FD_PANE_READY", "pane-dispatch-ready"));
+    cmd.args([session, &format!("--pane={pane}"), "--json"]);
     run_timeout(cmd, Duration::from_secs(90))
-        .map(|o| o.status.success())
+        .map(|output| output.status.success())
         .unwrap_or(false)
 }
-
 fn composer_occupied(raw_tail: &str) -> bool {
     let script = cp().join("bin/composer-typed.py").display().to_string();
     if !Path::new(&script).is_file() {
@@ -855,33 +784,36 @@ fn live_tick(rules: FastDispatchRules) -> ExitCode {
 
     let mut cfg = AdmissionConfig::from_env();
     cfg.rules = rules.clone();
-    cfg.subject_id = admission_subject_id();
-
-    if !admission_fresh_pass(&check_ledger, &cfg) {
-        let _ = repair_repaired_but_unpublished(&check_ledger, &cfg);
-    }
-    if !admission_fresh_pass(&check_ledger, &cfg) {
+    if cfg.subject_id.is_empty() {
         say(&format!(
-            "[{}] admission REFUSED — no admissible standing check.sh verdict at {}",
-            ts(),
-            check_ledger.display()
+            "[{}] admission REFUSED — subject identity is unavailable; subject-id producer is DELIBERATELY_NOT until its Rust contract is recovered (owner=admission-identity, dies_when=typed producer lands)",
+            ts()
         ));
-        let reason = cp().join("bin/admission-reason.sh").display().to_string();
-        if Path::new(&reason).is_file() {
-            let mut cmd = Command::new(&reason);
-            cmd.arg("--ledger").arg(&check_ledger);
-            if let Some(out) = run_timeout(cmd, Duration::from_secs(30)) {
-                for line in String::from_utf8_lossy(&out.stdout).lines() {
-                    say(&format!("  {line}"));
-                }
-            }
-        }
         ledger_write(
             &ledger_path,
             &json!({
                 "ts": ts(),
                 "event": "dispatch_blocked",
-                "blocked_by": "check.sh",
+                "blocked_by": "admission-identity-unmeasured",
+                "detail": "subject_identity_unavailable",
+                "invoker": invoker,
+            })
+            .to_string(),
+        );
+        return ExitCode::from(77);
+    }
+    if !admission_fresh_pass(&check_ledger, &cfg) {
+        say(&format!(
+            "[{}] admission REFUSED — no admissible standing verdict at {}",
+            ts(),
+            check_ledger.display()
+        ));
+        ledger_write(
+            &ledger_path,
+            &json!({
+                "ts": ts(),
+                "event": "dispatch_blocked",
+                "blocked_by": "standing-admission-ledger",
                 "ledger_path": check_ledger.display().to_string(),
                 "detail": "no_fresh_standing_pass",
                 "invoker": invoker,
@@ -895,7 +827,7 @@ fn live_tick(rules: FastDispatchRules) -> ExitCode {
                 "event": "fast_tick",
                 "dispatched": 0,
                 "invoker": invoker,
-                "blocked_by": "check.sh",
+                "blocked_by": "standing-admission-ledger",
                 "ledger_path": check_ledger.display().to_string(),
                 "elapsed_s": start.elapsed().as_secs(),
             })
@@ -920,7 +852,7 @@ fn live_tick(rules: FastDispatchRules) -> ExitCode {
 
     let (load, ncpu) = host_load_ncpu();
     let budget_bound = Duration::from_secs(cargo_lane_timeout_secs(load, ncpu));
-    let mut budget_cmd = Command::new(cp().join("bin/cargo-lane-budget.sh"));
+    let mut budget_cmd = Command::new(configured_rust_binary("FD_BUDGET", "cargo-lane-budget"));
     budget_cmd.arg("--check");
     let budget = run_timeout(budget_cmd, budget_bound);
     let budget_ok = budget.as_ref().map(|o| o.status.success()).unwrap_or(false);
@@ -1060,6 +992,15 @@ fn live_tick(rules: FastDispatchRules) -> ExitCode {
             suppressed += 1;
             continue;
         }
+        let ready_probe = configured_rust_binary("FD_PANE_READY", "pane-dispatch-ready");
+        if !ready_probe.is_absolute() {
+            say(&format!(
+                "  [{repo}] DISPATCH SUPPRESSED — ready probe path is not absolute: {}",
+                ready_probe.display()
+            ));
+            suppressed += 1;
+            continue;
+        }
         let send_file = state_dir.join("fast-dispatch-send.json");
         let mut fence_cmd = Command::new(&fence);
         fence_cmd
@@ -1072,7 +1013,7 @@ fn live_tick(rules: FastDispatchRules) -> ExitCode {
             .arg("--owner")
             .arg("fast-dispatch")
             .arg("--ready-probe")
-            .arg(cp().join("bin/pane-dispatch-ready.sh"))
+            .arg(&ready_probe)
             .arg("--")
             .arg("timeout")
             .arg("120")

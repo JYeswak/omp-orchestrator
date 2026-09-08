@@ -21,14 +21,13 @@ pub fn handle(binary: &str, args: &[String]) -> Option<ExitCode> {
 }
 fn oracle_output() -> Result<String, String> {
     let oracle = std::env::var_os("DISPATCH_STALL_ORACLE")
+        .filter(|value| !value.is_empty())
         .map(PathBuf::from)
-        .or_else(|| {
-            std::env::var_os("CONTROL_PLANE_REPO")
-                .map(|root| PathBuf::from(root).join("bin/dispatch-stall-profile.sh"))
-        })
-        .unwrap_or_else(|| PathBuf::from("dispatch-stall-profile"));
-    let mut command = Command::new("/bin/bash");
-    command.arg(oracle).arg("--check").stdin(Stdio::null());
+        .ok_or_else(|| {
+            "DISPATCH_STALL_ORACLE unavailable; DELIBERATELY_NOT owner=n7mjb; dies_when=the external diagnostic oracle is explicitly configured".to_owned()
+        })?;
+    let mut command = Command::new(&oracle);
+    command.arg("--check").stdin(Stdio::null());
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut command, 0);
     let output = match subprocess_contract::bounded_output(&mut command, ORACLE_TIMEOUT) {
@@ -288,7 +287,7 @@ fn capabilities(binary: &str) -> ExitCode {
         .collect::<Vec<_>>()
         .join(",");
     println!(
-        "{{\"schema\":\"dispatch.capabilities.v1\",\"binary\":\"{}\",\"read_only\":true,\"verbs\":[{}],\"exit_codes\":{{\"0\":\"success\",\"2\":\"usage error\",\"3\":\"diagnostic oracle unavailable or timed out\"}},\"oracle\":\"bin/dispatch-stall-profile.sh\"}}",
+        "{{\"schema\":\"dispatch.capabilities.v1\",\"binary\":\"{}\",\"read_only\":true,\"verbs\":[{}],\"exit_codes\":{{\"0\":\"success\",\"2\":\"usage error\",\"3\":\"diagnostic oracle unavailable or timed out\"}},\"oracle\":\"DISPATCH_STALL_ORACLE (explicit external path)\"}}",
         escape(binary),
         verbs
     );
@@ -301,7 +300,7 @@ fn robot_docs(binary: &str, args: &[String]) -> ExitCode {
         return ExitCode::from(2);
     }
     println!(
-        "{binary} diagnostic guide\n\n  {binary} status --json   current dispatch verdict, queue, panes, age, and gate\n  {binary} why              evidence chain and the remedy for the current refusal\n  {binary} capabilities --json   machine-readable verbs and exit codes\n\nRead-only diagnostics. `status` and `why` use bin/dispatch-stall-profile.sh as their differential oracle.\n"
+        "{binary} diagnostic guide\n\n  {binary} status --json   current dispatch verdict, queue, panes, age, and gate\n  {binary} why              evidence chain and the remedy for the current refusal\n  {binary} capabilities --json   machine-readable verbs and exit codes\n\nRead-only diagnostics. status and why use the explicitly configured DISPATCH_STALL_ORACLE path.\n"
     );
     ExitCode::SUCCESS
 }

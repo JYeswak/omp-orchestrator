@@ -1,10 +1,11 @@
 #![forbid(unsafe_code)]
 
-//! Fast-dispatch admission and pane selection, ported from `bin/fast-dispatch.sh`.
+//! Fast-dispatch admission and pane selection, implemented in Rust.
 //!
-//! The shell file is the differential oracle and is not edited by this crate.
-//! check.sh and loop-queue-filter are EXTERNAL commands with stable CLI contracts;
-//! this crate does not reimplement them.
+//! The standing-ledger decision is owned by this crate. The historical subject-id and
+//! repaired-publication producers have no recovered Rust contract and are DELIBERATELY_NOT:
+//! owner=n7mjb; dies_when=their typed Rust producers are specified and wired. Queue filtering,
+//! composer classification, pane fencing, NTM, br, and tmux remain explicit external boundaries.
 //!
 //! ADMISSION CONTRACT (do not weaken):
 //!   admit ONLY on a FRESH standing PASS. Stale PASS refuses. Non-PASS refuses.
@@ -254,30 +255,23 @@ CORPUS-FIRST (mandatory before authoring any new check):\n\
     CORPUS: NEW — fh returned no relevant row; propose the new doctrine row\n\
   A null result is not a clean pass: preserve the query and outcome so the next wave can re-derive it.\n";
 
-/// Exact crontab parent, matching bin/fast-dispatch.sh classify_invoker (fh C54).
-/// Cron on this box wraps the job as `/bin/sh -c <crontab command>`. Both expected
-/// shapes derive from the RESOLVED repository root and home (omp-orchestrator-npq):
-/// the matcher keeps its semantics on any machine without carrying a literal checkout
-/// path — a literal would match this box's crontab and silently miss every other.
+/// Recognize the exact scheduler parent for the Rust fast-dispatch binary.
+/// The repository argument remains part of the public classifier contract, but the
+/// installed command is resolved from HOME so the matcher never embeds a checkout path.
 pub fn classify_invoker(
     parent: &str,
     state_dir: &Path,
     repo_root: &Path,
     home: &Path,
 ) -> (&'static str, &'static str) {
+    let _ = repo_root;
     let state = state_dir.display();
-    let old = format!(
-        "/bin/sh -c /bin/bash {}/bin/fast-dispatch.sh >> {}/fast-dispatch.log 2>&1",
-        repo_root.display(),
-        state
-    );
     let new = format!(
         "/bin/sh -c {}/.local/bin/fast-dispatch >> {}/fast-dispatch.log 2>&1",
         home.display(),
         state
     );
-    let t = parent.trim();
-    if t == old || t == new {
+    if parent.trim() == new {
         ("SCHEDULED", "cron_parent")
     } else {
         ("MANUAL", "unproven_parent")
@@ -695,11 +689,6 @@ mod tests {
             .ancestors()
             .nth(2)
             .expect("crate lives two levels below the repository root");
-        let old = format!(
-            "/bin/sh -c /bin/bash {}/bin/fast-dispatch.sh >> {}/fast-dispatch.log 2>&1",
-            repo_root.display(),
-            state.display()
-        );
         let new = format!(
             "/bin/sh -c {}/.local/bin/fast-dispatch >> {}/fast-dispatch.log 2>&1",
             home.display(),

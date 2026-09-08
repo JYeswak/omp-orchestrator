@@ -26,10 +26,12 @@ impl Run {
 impl Drop for Run {
     fn drop(&mut self) {
         let elapsed = self.started.elapsed().as_secs().to_string();
-        let helper = std::env::var_os("SCHEDULED_LANE_TELEMETRY_HELPER")
+        let Some(helper) = std::env::var_os("SCHEDULED_LANE_TELEMETRY_HELPER")
+            .filter(|value| !value.is_empty())
             .map(PathBuf::from)
-            .or_else(|| std::env::var_os("CONTROL_PLANE_REPO").map(|root| PathBuf::from(root).join("bin/lib/scheduled-lane-telemetry.sh")));
-        let Some(helper) = helper else { return; };
+        else {
+            return;
+        };
         let mut command = Command::new(helper);
         command.args(["--record", self.lane, &elapsed, "0"]);
         let _ = bounded_status(&mut command, Duration::from_secs(5));

@@ -2,11 +2,12 @@
 
 //! Cargo lane population and admission budget.
 //!
-//! `bin/cargo-lane-budget.sh` remains the differential oracle.  This crate owns the
-//! decision logic: derive the lane ceiling from the measured tmux session count,
-//! count lane markers with a bounded walk, and use APFS `Capacity Not Allocated` for
-//! the shared-container bound.  tmux, diskutil, df, and find-shaped filesystem
-//! inspection are external boundaries; no shell or Python is used for decisions.
+//! The missing shell oracle is DELIBERATELY_NOT:
+//! owner=n7mjb; dies_when=an independent Rust reference algorithm or a recovered external oracle
+//! is specified. This crate owns the Rust decision logic. Derive the lane ceiling from the
+//! measured tmux session count, count lane markers with a bounded walk, and use APFS
+//! `Capacity Not Allocated` for the shared-container bound. tmux, diskutil, df, and
+//! find-shaped filesystem inspection are external boundaries; no shell or Python is used for decisions.
 
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
@@ -15,8 +16,8 @@ use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use subprocess_contract::{bounded_output, BoundedOutcome};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use subprocess_contract::{bounded_output, BoundedOutcome};
 
 pub const DEFAULT_LANES_PER_SESSION: u64 = 22;
 pub const DEFAULT_HEADROOM: u64 = 29;

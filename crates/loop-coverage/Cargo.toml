@@ -24,5 +24,7 @@ finding = { path = "../finding" }
 loop-queue-filter = { path = "../loop-queue-filter" }
 tick-monitor = { path = "../tick-monitor" }
 
+[dev-dependencies]
+text-structure = { path = "../text-structure" }
 [lints.rust]
 unsafe_code = "forbid"

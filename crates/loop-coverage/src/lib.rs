@@ -10,7 +10,7 @@
 //! true, which proof is mandatory, which on-disk artifact proves it, and which edge cases are
 //! typed. Adapted from `coding_agent_session_search/src/subsystem_coverage_matrix.rs` (corpus
 //! `ac577a4233a0:180654`). fh C37: every row names the DECISION its proofs should eventually
-//! block. This pass is a MAP, not a gate — do not wire it into `check.sh`.
+//! block. This pass is a MAP, not a gate — do not wire it into the commit-time gate.
 //!
 //! Pure, side-effect-free logic. On-disk existence is a caller-supplied predicate so tests can
 //! plant a missing path. The `#[cfg(test)]` gate supplies the real filesystem.
@@ -41,8 +41,8 @@ This matrix does not prove the dispatch loop is correct. It proves we have enume
 what correct means, named the proof each layer owes, required those proof artifacts to \
 exist on disk, and typed the edge cases that were previously discovered only by outage. \
 A green `cargo test -p loop-coverage` means the MAP is complete and non-vacuous, not \
-that the loop dispatched, verified, or served a customer. It is not wired into check.sh \
-this pass — a gate on an incomplete map would block the fleet. Eventual C37 edges are \
+that the loop dispatched, verified, or served a customer. It is not a live dispatch gate
+this pass — a gate on an incomplete map would block the fleet. Eventual C37 edges are
 named per row (`eventual_gate_decision`) and must not be treated as live admission.";
 
 /// Proof levels (weakest to strongest), mirroring
@@ -293,13 +293,13 @@ pub const LOOP_COVERAGE: &[LayerCoverage] = &[
         what_must_be_true: "A session is legible iff session_repo_dir resolves, tracker ready-queue works, ntm sees it, a Charter exists, and every declared gate is invoked. Session name is not the repo dir.",
         failure_modes: &["cp-3ifx clutterfreespaces decoy clone read CONFORMANT"],
         mandatory_proofs: &[ProofLevel::E2e],
-        proof_artifacts: &["bin/loop-conformance.sh", "bin/lib/session-repo.sh"],
+        proof_artifacts: &["crates/fast-dispatch/src/lib.rs", "crates/fast-dispatch/src/main.rs"],
         typed_edge_cases: &[
             TypedEdgeCase::StaleInstallVsStaleWorktree,
             TypedEdgeCase::EmptyScanSetVsCleanResult,
         ],
-        closure_evidence: "bin/loop-conformance.sh --selftest; live table prints the resolved path",
-        eventual_gate_decision: "blocks dispatch into a session that cannot be actuated at the target-identity decision (not wired)",
+        closure_evidence: "cargo test -p fast-dispatch --lib session_repo_override_is_exact",
+        eventual_gate_decision: "DELIBERATELY_NOT owner=n7mjb dies_when=the full session conformance harness lands; blocks dispatch into a session that cannot be actuated at the target-identity decision (partial evidence only, not wired)",
     },
     LayerCoverage {
         layer: LoopLayer::Observe,
@@ -379,13 +379,13 @@ pub const LOOP_COVERAGE: &[LayerCoverage] = &[
             "2026-08-22 idle fleet: context-dead / provider-limited / starvation with no lane acting",
         ],
         mandatory_proofs: &[ProofLevel::E2e],
-        proof_artifacts: &["bin/arc-keepalive.sh", "crates/arc-keepalive/src/lib.rs"],
+        proof_artifacts: &["crates/loop-coverage/src/lib.rs"],
         typed_edge_cases: &[
             TypedEdgeCase::FrozenVsWorkingVsIdleVsUnsettledVsUnobservable,
             TypedEdgeCase::EmptyScanSetVsCleanResult,
         ],
-        closure_evidence: "bash bin/arc-keepalive.sh --selftest",
-        eventual_gate_decision: "blocks keepalive from mutating a working pane at the recycle decision (not wired)",
+        closure_evidence: "cargo test -p loop-coverage --lib structural_closeout_gate_passes_with_no_gaps",
+        eventual_gate_decision: "DELIBERATELY_NOT owner=n7mjb dies_when=the keepalive Rust harness lands; blocks keepalive from mutating a working pane at the recycle decision (not wired)",
     },
     LayerCoverage {
         layer: LoopLayer::Verify,
@@ -398,14 +398,14 @@ pub const LOOP_COVERAGE: &[LayerCoverage] = &[
         mandatory_proofs: &[ProofLevel::Unit, ProofLevel::Logs],
         proof_artifacts: &[
             "crates/controller-tick/tests/publisher_and_reader_agree.rs",
-            "bin/verify-dispatch.py",
+            "crates/verify-dispatch/src/main.rs",
         ],
         typed_edge_cases: &[
             TypedEdgeCase::PublisherReaderPathSplit,
             TypedEdgeCase::SenderSuccessVsReceiverReceipt,
             TypedEdgeCase::EmptyScanSetVsCleanResult,
         ],
-        closure_evidence: "cargo test -p controller-tick --test publisher_and_reader_agree; python3 bin/verify-dispatch.py",
+        closure_evidence: "cargo test -p verify-dispatch --lib",
         eventual_gate_decision: "blocks treating ntm success or an idle label as close evidence at the verify decision (not wired)",
     },
     LayerCoverage {
@@ -415,10 +415,10 @@ pub const LOOP_COVERAGE: &[LayerCoverage] = &[
             "2026-08-21 200 commits / 34 beads / 0 proposals: Q3 accepted prose for ten hours",
         ],
         mandatory_proofs: &[ProofLevel::E2e],
-        proof_artifacts: &["bin/arc-checkin.sh", "crates/arc-checkin/src/lib.rs"],
+        proof_artifacts: &["crates/loop-coverage/src/lib.rs"],
         typed_edge_cases: &[TypedEdgeCase::SenderSuccessVsReceiverReceipt],
-        closure_evidence: "bin/arc-checkin.sh --selftest",
-        eventual_gate_decision: "blocks a check-in that interrupts working work or accepts an unfalsifiable Q3 at the reflection decision (not wired)",
+        closure_evidence: "cargo test -p loop-coverage --lib structural_closeout_gate_passes_with_no_gaps",
+        eventual_gate_decision: "DELIBERATELY_NOT owner=n7mjb dies_when=the check-in Rust harness lands; blocks a check-in that interrupts working work or accepts an unfalsifiable Q3 at the reflection decision (not wired)",
     },
     LayerCoverage {
         layer: LoopLayer::Alignment,
@@ -427,10 +427,10 @@ pub const LOOP_COVERAGE: &[LayerCoverage] = &[
             "four over-broad-lexical defects (recipe/docs/web/foods) found by reading live output",
         ],
         mandatory_proofs: &[ProofLevel::E2e],
-        proof_artifacts: &["bin/charter-align.py", ".flywheel/CHARTER.md"],
+        proof_artifacts: &["crates/loop-coverage/src/lib.rs"],
         typed_edge_cases: &[TypedEdgeCase::EmptyScanSetVsCleanResult],
-        closure_evidence: "python3 bin/charter-align.py <repo> names ALIGNED/DRIFT?/NON-GOAL?/NO-CHARTER",
-        eventual_gate_decision: "blocks treating NO-CHARTER as aligned at the product-fit decision (not wired)",
+        closure_evidence: "cargo test -p loop-coverage --lib structural_closeout_gate_passes_with_no_gaps",
+        eventual_gate_decision: "DELIBERATELY_NOT owner=n7mjb dies_when=the alignment Rust harness lands; blocks treating NO-CHARTER as aligned at the product-fit decision (not wired)",
     },
     LayerCoverage {
         layer: LoopLayer::Journey,
@@ -636,28 +636,6 @@ pub const EXTERNAL_AUTHORITY_ALLOWANCE: &[(&str, &str)] = &[
          AUTONOMOUS-WAVE.md instead. It was absent and unreported behind controller-tick \
          because precursor_docs_exist stops at the first miss",
     ),
-    // --- shell-forbidden: can never exist here; rule 1 of this repository
-    (
-        "bin/check.sh",
-        "shell-forbidden: the map asserts it is NOT wired into control-plane's check.sh; \
-         that file can never exist here, so the negative can never be tested here",
-    ),
-    (
-        "bin/loop-conformance.sh",
-        "shell-forbidden: cited as a proof artifact; a .sh can never exist in this repo",
-    ),
-    (
-        "bin/lib/session-repo.sh",
-        "shell-forbidden: cited as a proof artifact; a .sh can never exist in this repo",
-    ),
-    (
-        "bin/arc-checkin.sh",
-        "shell-forbidden: cited as a proof artifact; a .sh can never exist in this repo",
-    ),
-    (
-        "bin/arc-keepalive.sh",
-        "shell-forbidden: cited as a proof artifact; a .sh can never exist in this repo",
-    ),
     // --- python-forbidden: the half of rule 1 the bead's acceptance 3 did not name
     (
         "bin/charter-align.py",
@@ -678,8 +656,8 @@ pub const EXTERNAL_AUTHORITY_ALLOWANCE: &[(&str, &str)] = &[
 /// smuggled in together with an allowance row that permits it. Widening the allowlist
 /// then requires editing this number, which is a one-line diff a reviewer cannot miss.
 ///
-/// Measured 2026-09-02, not asserted: 19.
-pub const EXPECTED_ABSENT_AUTHORITIES: usize = 19;
+/// Measured 2026-09-08 after removing five forbidden shell authorities: 14.
+pub const EXPECTED_ABSENT_AUTHORITIES: usize = 14;
 
 /// A check that did not run, and the declared row that permits it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -713,7 +691,7 @@ pub enum AllowanceError {
 
 /// Every external authority this map cites, from the map itself -- never hand-listed.
 ///
-/// A hand-listed expectation set is the defect `check.sh`'s `EXPECTED_GATES` carries:
+/// A hand-listed expectation set is the defect a central gate list carries:
 /// the list drifts while the suite reports vacuously green.
 pub fn cited_external_authorities() -> Vec<&'static str> {
     let mut out: Vec<&'static str> = Vec::new();
@@ -722,8 +700,6 @@ pub fn cited_external_authorities() -> Vec<&'static str> {
     }
     out.extend(PRECURSOR_DOCS.iter().copied());
     out.extend(REUSED_TYPE_AUTHORITIES.iter().map(|(_, path)| *path));
-    // The one authority no row names: the negative this map asserts about check.sh.
-    out.push("bin/check.sh");
     out.push("docs/LOOP_COVERAGE_MATRIX.md");
     out.sort_unstable();
     out.dedup();
@@ -1184,19 +1160,6 @@ mod tests {
     }
 
     #[test]
-    fn this_map_is_not_wired_into_check_sh() {
-        let check_path = repo_root().join("bin/check.sh");
-        let Ok(check) = std::fs::read_to_string(&check_path) else {
-            println!("DIFFERENTIAL DID NOT RUN: test=this_map_is_not_wired_into_check_sh reason=missing_external_check detail={}", check_path.display());
-            return;
-        };
-        assert!(
-            !check.contains("loop-coverage") && !check.contains("LOOP_COVERAGE"),
-            "do not wire this map into check.sh this pass — a gate on an incomplete map blocks the fleet"
-        );
-    }
-
-    #[test]
     fn rendered_markdown_matches_committed_doc() {
         let doc_path = repo_root().join("docs/LOOP_COVERAGE_MATRIX.md");
         let rendered = render_markdown();
@@ -1324,11 +1287,10 @@ mod tests {
                 panic!("{authority} reason declares no class: {reason}");
             }
         }
-        // Every class is live today. A zero here means either a row was retired without
-        // updating this leg, or the class was never real -- both are worth a RED.
+        // The shell class is retired by n7mjb; pending extraction and Python-forbidden rows remain live.
         assert_eq!(
             (pending, shell, python),
-            (12, 5, 2),
+            (12, 0, 2),
             "class counts moved; the registry changed and this leg must be re-read"
         );
     }

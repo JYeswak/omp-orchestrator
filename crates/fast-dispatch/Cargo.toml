@@ -3,7 +3,7 @@ license.workspace = true
 name = "fast-dispatch"
 version = "0.1.0"
 edition = "2021"
-description = "Fast dispatch lane: admit on a fresh standing PASS, select FREE panes only, send with bounded children. bin/fast-dispatch.sh remains the differential oracle."
+description = "Fast dispatch lane: admit on a fresh standing PASS, select FREE panes only, send with bounded children. The former shell differential oracle is DELIBERATELY_NOT until an independent Rust reference is specified."
 
 [[bin]]
 name = "fast-dispatch"
