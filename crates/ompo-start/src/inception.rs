@@ -31,6 +31,28 @@ const REQUIRED_CONTROL_FILES: &[&str] = &[
     "docs/decisions.jsonl",
 ];
 
+/// The control files an initialised repository must carry, exposed read-only.
+///
+/// `health` needs the same list `initialize` refuses on, and a second copy would drift the
+/// moment either side changed. Reused rather than re-derived.
+#[must_use]
+pub fn required_control_files() -> &'static [&'static str] {
+    REQUIRED_CONTROL_FILES
+}
+
+/// Presence of each required control file under `repo`, WITHOUT writing anything.
+///
+/// This is the single computation behind both `initialize`'s
+/// `INCEPTION_CONTROL_FILES_MISSING` refusal and `ompo health`'s read-only signal, so the
+/// two can never disagree about what "complete" means.
+#[must_use]
+pub fn control_file_presence(repo: &Path) -> BTreeMap<String, bool> {
+    REQUIRED_CONTROL_FILES
+        .iter()
+        .map(|relative| ((*relative).to_owned(), repo.join(relative).is_file()))
+        .collect()
+}
+
 const REQUIRED_TOOLS: &[&str] = &["git", "cargo", "br", "bv", "ntm", "am", "jq"];
 const REQUIRED_KEYS: &[&str] = &[
     "schema_version",
@@ -167,10 +189,7 @@ fn build_manifest(repo_root: &Path) -> Result<InceptionManifest, InceptionError>
         });
     }
 
-    let control_files: BTreeMap<String, bool> = REQUIRED_CONTROL_FILES
-        .iter()
-        .map(|relative| ((*relative).to_owned(), canonical.join(relative).is_file()))
-        .collect();
+    let control_files: BTreeMap<String, bool> = control_file_presence(&canonical);
     let missing: Vec<String> = control_files
         .iter()
         .filter_map(|(path, present)| (!present).then_some(path.clone()))
