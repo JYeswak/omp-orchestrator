@@ -583,16 +583,14 @@ mod tests {
         }
     }
 
-    /// The allowance list is empty today, so this asserts the check RUNS and finds nothing
-    /// rather than asserting a vacuous truth.
+    /// The allowance list contains the reviewed cli/ps cross-axis decision and validates
+    /// every field at the gate trigger.
     #[test]
-    fn allowance_integrity_passes_on_the_empty_list_and_would_catch_a_blank_field() {
+    fn allowance_integrity_passes_on_the_named_cli_ps_decision() {
         assert!(allowance_integrity().is_ok());
-        assert_eq!(
-            DELIBERATELY_NOT.len(),
-            0,
-            "the allowance list is empty by design; a row is a reviewed decision"
-        );
+        assert_eq!(DELIBERATELY_NOT.len(), 1);
+        assert_eq!(DELIBERATELY_NOT[0].kind, "cli");
+        assert_eq!(DELIBERATELY_NOT[0].name, "ps");
     }
 
     /// `--repo` must be honoured, or the gate would silently measure whatever directory it

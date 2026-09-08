@@ -87,7 +87,13 @@ pub struct DeliberateNonConsumption {
 /// EMPTY BY DESIGN. Adding a row is a decision that must survive review; leaving a surface
 /// out of both this list and a consumer declaration makes the gate fail, which is the
 /// intended pressure.
-pub const DELIBERATELY_NOT: &[DeliberateNonConsumption] = &[];
+pub const DELIBERATELY_NOT: &[DeliberateNonConsumption] = &[DeliberateNonConsumption {
+    kind: "cli",
+    name: "ps",
+    owner: "omp-inventory-map",
+    reason: "command is consumed on the daemon_process axis by ompo-doctor, so declaring cli would duplicate ownership",
+    dies_when: "daemon_process and cli axes gain an explicit cross-axis equivalence contract or the CLI surface is retired",
+}];
 
 /// One consumer declaration, read from a crate's manifest.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -767,24 +773,16 @@ mod tests {
         );
     }
 
-    /// THE ALLOWANCE LIST IS EMPTY BY DESIGN, and this pins it. A future row must be added
-    /// deliberately and carry its owner and death condition.
+    /// The cli/ps row is a deliberate cross-axis exclusion: the query is consumed as
+    /// daemon_process/omp ps, while this derived cli/ps row remains visible and named.
     #[test]
-    fn the_deliberately_not_allowance_is_empty_and_every_row_would_carry_its_reason() {
-        assert!(
-            DELIBERATELY_NOT.is_empty(),
-            "the allowance list is empty by design; a row here is a reviewed decision"
-        );
-        for row in DELIBERATELY_NOT {
-            assert!(!row.owner.is_empty(), "{}:{} has no owner", row.kind, row.name);
-            assert!(!row.reason.is_empty(), "{}:{} has no reason", row.kind, row.name);
-            assert!(
-                !row.dies_when.is_empty(),
-                "{}:{} has no dies_when -- a row nobody can retire accumulates forever",
-                row.kind,
-                row.name
-            );
-        }
+    fn the_deliberately_not_allowance_is_named_and_retirable() {
+        assert_eq!(DELIBERATELY_NOT.len(), 1);
+        let row = &DELIBERATELY_NOT[0];
+        assert_eq!((row.kind, row.name), ("cli", "ps"));
+        assert_eq!(row.owner, "omp-inventory-map");
+        assert!(!row.reason.is_empty());
+        assert!(!row.dies_when.is_empty());
     }
 
     /// UNCLASSIFIED must never come from a default branch. Proven behaviourally: an entry
@@ -890,8 +888,8 @@ mod tests {
     }
 
     /// A stale allowance row -- one naming a surface that no longer exists -- is reported
-    /// rather than silently kept. With an empty list this asserts the mechanism runs and
-    /// finds nothing, which is the honest state today.
+    /// rather than silently kept. The live cli/ps allowance is absent from this fixture, so
+    /// the stale row is observable.
     #[test]
     fn stale_allowance_rows_are_reported() {
         let consumers = index_consumers(&metadata(
@@ -900,10 +898,10 @@ mod tests {
         .expect("index");
         let report = align("/opt/omp", "omp/18.0.11", &[entry("transport", "mux")], &consumers)
             .expect("passes");
+        assert_eq!(report.stale_allowances.len(), 1);
         assert_eq!(
-            report.stale_allowances.len(),
-            DELIBERATELY_NOT.len(),
-            "with an empty allowance list there is nothing stale to report"
+            report.stale_allowances[0],
+            "cli:ps owner=omp-inventory-map dies_when=daemon_process and cli axes gain an explicit cross-axis equivalence contract or the CLI surface is retired"
         );
     }
 
