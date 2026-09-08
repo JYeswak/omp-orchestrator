@@ -25,5 +25,19 @@ subprocess-contract = { path = "../subprocess-contract" }
 [dev-dependencies]
 sha2 = "0.10"
 
+[package.metadata.gate]
+# omp-orchestrator-ablcf: this crate's OWN check invocation, so `gate-runner` needs no edit
+# when the alignment gate changes. `{repo}` is substituted by the runner, never hardcoded --
+# a path literal in a manifest is what path-literal-guard exists to refuse.
+#
+# WHY THIS BIN AND NOT A NEW GATE: `alignment::align` had thirteen refusing legs and ZERO
+# callers, which is the condition it was written to fix. Pane 1 approved attaching to
+# `gate-runner --run`, an executor that ALREADY FIRES (GATE_RUNNER_CHECKS executed=16 at
+# b57bc7b), rather than minting an eighth uninvoked gate -- crate-atom-gate is 1,701 lines
+# with an empty allowance list and zero invocations, and one of those is enough.
+#
+# This crate is multi-bin, so the phase names a BIN explicitly.
+checks = [{ bin = "omp-surface-align", args = ["--repo", "{repo}"] }]
+
 [lints.rust]
 unsafe_code = "forbid"

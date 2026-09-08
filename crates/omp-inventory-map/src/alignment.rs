@@ -157,6 +157,31 @@ impl ConsumerIndex {
             .iter()
             .find(|declaration| declaration.kind == kind && declaration.name == name)
     }
+
+    /// Surfaces declared by MORE THAN ONE crate.
+    ///
+    /// Found by `%20` while landing the first real declarations: [`find`](Self::find)
+    /// returns the FIRST match, so two crates claiming the same `(kind, name)` means credit
+    /// goes to whichever package `cargo metadata` happens to emit first — a decision nobody
+    /// made, and one that can change between cargo versions without any manifest changing.
+    ///
+    /// This is not a style objection. A `CONSUMED` row names a crate and a call site as
+    /// evidence, so crediting the wrong crate publishes a false citation.
+    #[must_use]
+    pub fn duplicate_claims(&self) -> Vec<(String, String, Vec<String>)> {
+        let mut by_surface: BTreeMap<(String, String), Vec<String>> = BTreeMap::new();
+        for declaration in &self.declarations {
+            by_surface
+                .entry((declaration.kind.clone(), declaration.name.clone()))
+                .or_default()
+                .push(declaration.crate_name.clone());
+        }
+        by_surface
+            .into_iter()
+            .filter(|(_, crates)| crates.len() > 1)
+            .map(|((kind, name), crates)| (kind, name, crates))
+            .collect()
+    }
 }
 
 /// The verdict for one derived surface entry.
@@ -212,6 +237,10 @@ pub enum AlignmentError {
     NoPackagesScanned,
     /// A declaration was present and malformed. Refused rather than dropped.
     MalformedDeclarations(Vec<DeclarationDefect>),
+    /// Two or more crates declared the same surface. Refused because a CONSUMED row names
+    /// a crate and a call site as evidence, and `find` would credit whichever package
+    /// `cargo metadata` emitted first — publishing a citation nobody chose.
+    DuplicateClaims(Vec<(String, String, Vec<String>)>),
     /// The point of the gate.
     Unclassified(Vec<SurfaceEntry>),
 }
@@ -231,6 +260,23 @@ impl std::fmt::Display for AlignmentError {
                  'nobody declares consumption' and 'the metadata was unreadable' are \
                  different states and this is the second"
             ),
+            Self::DuplicateClaims(claims) => {
+                writeln!(
+                    formatter,
+                    "ALIGN_DUPLICATE_CLAIMS count={} detail=two or more crates declared the \
+                     same surface; `find` credits whichever cargo emits first, so the \
+                     CONSUMED row would cite a crate nobody chose",
+                    claims.len()
+                )?;
+                for (kind, name, crates) in claims {
+                    writeln!(
+                        formatter,
+                        "  ALIGN_DUPLICATE_SURFACE kind={kind} name={name} claimed_by={}",
+                        crates.join(",")
+                    )?;
+                }
+                Ok(())
+            }
             Self::MalformedDeclarations(defects) => {
                 writeln!(
                     formatter,
@@ -272,7 +318,9 @@ impl AlignmentError {
     #[must_use]
     pub const fn exit_code(&self) -> u8 {
         match self {
-            Self::MalformedDeclarations(_) | Self::Unclassified(_) => 2,
+            Self::MalformedDeclarations(_)
+            | Self::DuplicateClaims(_)
+            | Self::Unclassified(_) => 2,
             Self::EmptySurfaceSet | Self::NoPackagesScanned => 3,
         }
     }
@@ -450,6 +498,14 @@ pub fn align(
         return Err(AlignmentError::MalformedDeclarations(
             consumers.defects.clone(),
         ));
+    }
+    // Before classifying anything: if two crates claim one surface, every CONSUMED row
+    // derived from that index is a coin flip on cargo's emission order. Refused here rather
+    // than resolved by a rule, because any tie-break we invented would be a decision the
+    // declaring crates did not make.
+    let duplicates = consumers.duplicate_claims();
+    if !duplicates.is_empty() {
+        return Err(AlignmentError::DuplicateClaims(duplicates));
     }
 
     let mut rows = Vec::with_capacity(surface.len());
@@ -801,5 +857,50 @@ mod tests {
             DELIBERATELY_NOT.len(),
             "with an empty allowance list there is nothing stale to report"
         );
+    }
+
+    /// Found by %20 while landing the first real declarations. Two crates claiming one
+    /// surface must REFUSE, not pick: `find` returns the first match, so the credited crate
+    /// would be whichever `cargo metadata` emitted first -- a citation nobody chose, and one
+    /// that can change between cargo versions without any manifest changing.
+    #[test]
+    fn two_crates_claiming_one_surface_is_refused_rather_than_resolved() {
+        let json = r#"{"packages":[
+            {"name":"ompo-doctor","metadata":{"omp_surface":{"consumes":[
+                {"kind":"rpc_handler","name":"get_state","call_site":"src/omp_state.rs"}]}}},
+            {"name":"omp-inventory-map","metadata":{"omp_surface":{"consumes":[
+                {"kind":"rpc_handler","name":"get_state","call_site":"src/other.rs"}]}}}
+        ]}"#;
+        let consumers = index_consumers(json).expect("index");
+        assert_eq!(consumers.declarations.len(), 2, "both rows must be INDEXED");
+        assert!(consumers.defects.is_empty(), "neither row is malformed");
+
+        let claims = consumers.duplicate_claims();
+        assert_eq!(claims.len(), 1);
+        assert_eq!(claims[0].0, "rpc_handler");
+        assert_eq!(claims[0].1, "get_state");
+        assert_eq!(claims[0].2.len(), 2, "both claimants must be named");
+
+        let error = align(
+            "/opt/omp",
+            "omp/18.1.14",
+            &[entry("rpc_handler", "get_state")],
+            &consumers,
+        )
+        .expect_err("must refuse an ambiguous credit");
+        let rendered = error.to_string();
+        assert!(rendered.contains("ALIGN_DUPLICATE_CLAIMS"), "{rendered}");
+        assert!(rendered.contains("ompo-doctor"), "must name both claimants: {rendered}");
+        assert!(rendered.contains("omp-inventory-map"), "{rendered}");
+        assert_eq!(error.exit_code(), 2);
+
+        // POSITIVE CONTROL: one claimant classifies cleanly, so the refusal is about
+        // ambiguity and not about the surface.
+        let single = index_consumers(&metadata(
+            r#"{"kind":"rpc_handler","name":"get_state","call_site":"src/omp_state.rs"}"#,
+        ))
+        .expect("index");
+        assert!(single.duplicate_claims().is_empty());
+        assert!(align("/opt/omp", "omp/18.1.14", &[entry("rpc_handler", "get_state")], &single).is_ok());
     }
 }
