@@ -2064,13 +2064,15 @@ says so in its own doc comment on the `PolicyRefused` variant:
 > *"The tracker command itself stores arbitrary reasons, so a direct tracker close can bypass this
 > verdict; the status must be read back rather than inferred from the command appearing to succeed."*
 
-**So `ack-spine` types the four prefixes, carries a `CLOSE_REASON_POLICY_REFUSED` verdict, and names
-its own bypass — and `CloseReason` references outside that crate measure ZERO** against a positive
-control of 14. The classifier is correct and INERT: what is missing is a caller on the path a close
-actually takes. **A doctrine row asserting a hole is closed is worse than a missing gate**, because a
-reader checks whether the hole is closed and finds a sentence saying it is. Measured cost: **6 of 241
-closed beads carry a non-conforming prefix**, one of them EMPTY, and nothing refused any of them.
+**So ack-spine types eight prefixes, carries a CLOSE_REASON_POLICY_REFUSED verdict, and names its own bypass.**
+The classifier is consumed by pre-delete-citation-check::check_close_reason_policy, and the
+pre-commit gate invokes that reader when .beads/issues.jsonl is staged. Direct br close still
+stores arbitrary reasons; the gate is DETECTION, not PREVENTION, and catches the bad row on the
+next mirror-staging commit rather than preventing the original close.
 
+**The historical measurement below predates this caller:** 6 of 241 closed beads carried a
+non-conforming prefix, one EMPTY, and nothing refused them. Those existing closes are not
+retroactively reopened; future staged mirror reads report the denominator and refuse new drift.
 **WHAT IS ACTUALLY TRUE, and it is the only durable half: ALWAYS READ THE STATUS BACK.**
 
 ```

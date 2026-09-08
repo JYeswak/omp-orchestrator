@@ -1,7 +1,8 @@
 //! Multi-call pre-commit gate: runs the staged-set gates on the staged file set.
 //!
 //! GATES: mode-gate, no-shell-gate, path-literal-guard, undrained-pipe-lint,
-//! orchestration-tick-gate, state-wildcard-lint, pre-delete-citation-check, and staged-build-gate.
+//! orchestration-tick-gate, state-wildcard-lint, close-reason-policy,
+//! pre-delete-citation-check, and staged-build-gate.
 //!
 //! EXIT CODES: 0 = clean, 1 = violation/refusal, 2 = operational error,
 //! 3 = nothing to check.
@@ -455,6 +456,10 @@ fn main() -> ExitCode {
         }
     }
 
+    // ── GATE 6: close-reason-policy (uqnut) ─────────────────────────────
+    // The mirror is checked only when this commit stages the tracker input; direct
+    // br close remains a prior event and this gate detects it, never prevents it.
+    validate_staged_close_reason_policy(&repo_root, &staged, &mut refusals);
     validate_staged_tick_ledger(&repo_root, &mut refusals);
 
     // ── GATE 7: staged-build-gate (929j) ────────────────────────────────
@@ -831,6 +836,61 @@ fn added_lines_or_all(diff: &str, text: &str) -> Vec<usize> {
     }
 }
 
+/// Validate closed-bead reasons when the tracker mirror is part of the staged set.
+///
+/// This is DETECTION, not prevention: direct br close can store an arbitrary reason
+/// before a later commit stages the mirror, and an uncommitted mirror is outside this
+/// hook's input. The mirror reader remains restrictive, so absence and unreadability
+/// cannot turn into a clean zero.
+fn validate_staged_close_reason_policy(
+    repo_root: &Path,
+    staged: &[String],
+    refusals: &mut Vec<String>,
+) {
+    const MIRROR: &str = ".beads/issues.jsonl";
+    if !staged.iter().any(|path| path == MIRROR) {
+        return;
+    }
+
+    let detection_scope =
+        "detection_only=true bad direct br close may land first; the next mirror-staging commit detects it; uncommitted closes are outside scope";
+    let closed = match pre_delete_citation_check::read_closed_beads_from_mirror(repo_root) {
+        Ok(beads) => beads,
+        Err(error) => {
+            let _ = writeln!(
+                io::stderr(),
+                "close-reason-policy: state=ERROR staged_mirror={MIRROR} closed_beads=0 verified=0 conflicts=0 {detection_scope} detail={error}"
+            );
+            refusals.push(format!("close-reason-policy: {error}"));
+            return;
+        }
+    };
+    let report = match pre_delete_citation_check::check_close_reason_policy(&closed) {
+        Ok(report) => report,
+        Err(error) => {
+            let _ = writeln!(
+                io::stderr(),
+                "close-reason-policy: state=ERROR staged_mirror={MIRROR} closed_beads=0 verified=0 conflicts=0 {detection_scope} detail={error}"
+            );
+            refusals.push(format!("close-reason-policy: {error}"));
+            return;
+        }
+    };
+    let _ = writeln!(
+        io::stderr(),
+        "close-reason-policy: state={} staged_mirror={MIRROR} closed_beads={} verified={} conflicts={} {detection_scope}",
+        if report.violations.is_empty() { "CLEAN" } else { "REFUSED" },
+        report.closed_beads,
+        report.verified,
+        report.violations.len(),
+    );
+    for violation in report.violations {
+        refusals.push(format!(
+            "close-reason-policy: bead={} {}",
+            violation.bead_id, violation.verdict
+        ));
+    }
+}
 fn validate_staged_preregistration(repo_root: &Path, staged: &[String]) -> Result<(), String> {
     let base_revision = bounded_git_text(repo_root, &["rev-parse", "HEAD"])?
         .trim()

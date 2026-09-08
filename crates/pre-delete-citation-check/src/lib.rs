@@ -313,6 +313,55 @@ pub fn read_closed_beads_from_mirror(repo_root: &Path) -> Result<Vec<ClosedBead>
     })?;
     parse_closed_beads_jsonl_checked(&text)
 }
+/// One closed bead whose close reason does not carry an admitted prefix.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CloseReasonViolation {
+    pub bead_id: String,
+    pub verdict: ack_spine::close_reason::CloseReasonVerdict,
+}
+
+/// The bounded result of checking the closed-bead mirror's close reasons.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CloseReasonPolicyReport {
+    pub closed_beads: usize,
+    pub verified: usize,
+    pub violations: Vec<CloseReasonViolation>,
+}
+
+/// Check every closed mirror row with the canonical ack-spine classifier.
+///
+/// This is detection, not prevention: direct br close may store an arbitrary reason,
+/// and this report is consumed on a later commit when the mirror is staged. An empty
+/// record set is an error rather than a clean report, so a missing read cannot pass.
+pub fn check_close_reason_policy(
+    closed_beads: &[ClosedBead],
+) -> Result<CloseReasonPolicyReport, String> {
+    if closed_beads.is_empty() {
+        return Err(
+            "CLOSE_REASON_MIRROR_EMPTY reason=no_closed_records_to_check detection_only=true"
+                .to_owned(),
+        );
+    }
+
+    let mut verified = 0;
+    let mut violations = Vec::new();
+    for bead in closed_beads {
+        let verdict = ack_spine::close_reason::classify_close_reason(Some(&bead.close_reason));
+        if verdict.is_verified() {
+            verified += 1;
+        } else {
+            violations.push(CloseReasonViolation {
+                bead_id: bead.id.clone(),
+                verdict,
+            });
+        }
+    }
+    Ok(CloseReasonPolicyReport {
+        closed_beads: closed_beads.len(),
+        verified,
+        violations,
+    })
+}
 
 /// True when the given repo-root path is inside a git repository with at least one commit.
 pub fn is_git_repo(path: &Path) -> bool {
@@ -399,5 +448,46 @@ mod tests {
         let git_output = "bin/a.sh\nbin/b.py\n\nbin/c.sh\n";
         let parsed = parse_staged_deletions(git_output);
         assert_eq!(parsed, vec!["bin/a.sh", "bin/b.py", "bin/c.sh"]);
+    }
+    #[test]
+    fn close_reason_policy_accepts_extended_prefixes() {
+        let beads = vec![
+            bead("good-premise", "PREMISE-FALSE: the measured premise was wrong", &[]),
+            bead("good-fixed", "ALREADY-FIXED: landed in 0123456", &[]),
+            bead("good-not-required", "MUTATION-NOT-REQUIRED: known-good leg already exists", &[]),
+            bead("good-attributed", "MUTATION-ATTRIBUTED: live proof captured", &[]),
+            bead("good-done", "DONE: worker=contabo-1 cargo test passed", &[]),
+        ];
+        let report = check_close_reason_policy(&beads).expect("non-empty mirror report");
+        assert_eq!(report.closed_beads, 5);
+        assert_eq!(report.verified, 5);
+        assert!(report.violations.is_empty(), "{report:?}");
+    }
+
+    #[test]
+    fn close_reason_policy_names_prose_and_empty_rows() {
+        let beads = vec![
+            bead("bad-prose", "fixed it", &[]),
+            bead("bad-empty", "", &[]),
+        ];
+        let report = check_close_reason_policy(&beads).expect("non-empty mirror report");
+        assert_eq!(report.closed_beads, 2);
+        assert_eq!(report.verified, 0);
+        assert_eq!(
+            report
+                .violations
+                .iter()
+                .map(|violation| violation.bead_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["bad-prose", "bad-empty"]
+        );
+        assert_eq!(report.violations[0].verdict.label(), "CLOSE_REASON_POLICY_REFUSED");
+        assert_eq!(report.violations[1].verdict.label(), "CLOSE_REASON_EMPTY");
+    }
+
+    #[test]
+    fn close_reason_policy_rejects_an_empty_scan() {
+        let error = check_close_reason_policy(&[]).expect_err("empty mirror must fail closed");
+        assert!(error.contains("CLOSE_REASON_MIRROR_EMPTY"), "{error}");
     }
 }

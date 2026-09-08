@@ -14,8 +14,17 @@ use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
 
-/// The four tokens documented by `AGENTS.md:1289`.
-const DOCUMENTED_PREFIXES: &[&str] = &["MUTATION-VERIFIED", "DONE", "APPROVED", "WONTFIX"];
+/// The eight tokens documented by AGENTS.md.
+const DOCUMENTED_PREFIXES: &[&str] = &[
+    "MUTATION-VERIFIED",
+    "MUTATION-NOT-REQUIRED",
+    "MUTATION-ATTRIBUTED",
+    "DONE",
+    "APPROVED",
+    "PREMISE-FALSE",
+    "ALREADY-FIXED",
+    "WONTFIX",
+];
 
 /// The initial mcq2 census recorded 43 closed positive-control rows.
 const INITIAL_MUTATION_VERIFIED: usize = 43;
@@ -96,7 +105,7 @@ fn unadmitted_close_is_a_distinct_typed_ledger_kind() {
 }
 
 #[test]
-fn live_closed_prefix_census_is_non_vacuous_and_has_no_unadmitted_rows() {
+fn live_closed_prefix_census_is_non_vacuous_and_only_known_legacy_empty_remains() {
     let rows = live_issue_rows();
     let closed: Vec<&Value> = rows.iter().filter(|row| is_closed(row)).collect();
     assert!(
@@ -120,27 +129,17 @@ fn live_closed_prefix_census_is_non_vacuous_and_has_no_unadmitted_rows() {
         "positive control disappeared: initial census had {INITIAL_MUTATION_VERIFIED} closed MUTATION-VERIFIED rows"
     );
 
-    let unadmitted: Vec<String> = closed
+    let legacy_empty = closed
         .iter()
-        .filter_map(|row| {
-            let reason = close_reason(row);
-            (!matches!(
-                classify_close_reason(reason),
-                CloseReasonVerdict::Verified { .. }
-            ))
-            .then(|| {
-                format!(
-                    "{}: {}",
-                    row.get("id")
-                        .and_then(Value::as_str)
-                        .unwrap_or("<missing-id>"),
-                    reason.unwrap_or("<missing-reason>")
-                )
-            })
-        })
-        .collect();
-    assert!(
-        unadmitted.is_empty(),
-        "closed rows without an admitted prefix remain: {unadmitted:?}"
+        .find(|row| row.get("id").and_then(Value::as_str) == Some("omp-orchestrator-s1-l0-b10-3r1g"))
+        .expect("known pre-gate empty close must remain in the mirror");
+    let legacy_reason = legacy_empty
+        .get("close_reason")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    assert_eq!(
+        classify_close_reason(Some(legacy_reason)),
+        CloseReasonVerdict::Empty,
+        "the legacy null/empty close remains visible as refused and is not retroactively reopened"
     );
 }

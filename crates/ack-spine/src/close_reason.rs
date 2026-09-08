@@ -32,7 +32,7 @@
 //! outranks everything.
 //!
 //! The installed `br 0.4.1` command accepts and stores arbitrary close-reason
-//! strings; it is not the validator. The four-token set below is the policy
+//! strings; it is not the validator. The eight-token set below is the policy
 //! enforced by this classifier for callers that pass a reason through it.
 //! Direct `br close` calls bypass this module, which is why the live closed-row
 //! census is a required separate control rather than proof that `br` refused a
@@ -54,10 +54,18 @@ use std::fmt;
 pub enum ClosePrefix {
     /// A mutation was planted and the guard was shown to go RED on it.
     MutationVerified,
+    /// The mutation leg was not required because the gate was already known to fire.
+    MutationNotRequired,
+    /// The mutation was attributed and the live subject was proven independently.
+    MutationAttributed,
     /// The work was completed and verified, without a mutation leg.
     Done,
     /// A grader approved the work.
     Approved,
+    /// The work is deliberately not needed; the premise was false.
+    PremiseFalse,
+    /// The work was already completed by another landed change.
+    AlreadyFixed,
     /// The work will not be done, with the reason recorded.
     WontFix,
 }
@@ -66,14 +74,18 @@ impl ClosePrefix {
     /// Every sanctioned prefix, in the order the policy lists them.
     ///
     /// Ordered longest-first WHERE ONE IS A PREFIX OF ANOTHER is not needed
-    /// today — none of the four shares a prefix with another — but the matcher
+    /// today — none of the eight shares a prefix with another — but the matcher
     /// below iterates this slice, so adding a future prefix that shadows an
     /// existing one would need that care. Stated because the next editor will
     /// not otherwise know it was considered.
     pub const ALL: &'static [Self] = &[
         Self::MutationVerified,
+        Self::MutationNotRequired,
+        Self::MutationAttributed,
         Self::Done,
         Self::Approved,
+        Self::PremiseFalse,
+        Self::AlreadyFixed,
         Self::WontFix,
     ];
 
@@ -82,8 +94,12 @@ impl ClosePrefix {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::MutationVerified => "MUTATION-VERIFIED",
+            Self::MutationNotRequired => "MUTATION-NOT-REQUIRED",
+            Self::MutationAttributed => "MUTATION-ATTRIBUTED",
             Self::Done => "DONE",
             Self::Approved => "APPROVED",
+            Self::PremiseFalse => "PREMISE-FALSE",
+            Self::AlreadyFixed => "ALREADY-FIXED",
             Self::WontFix => "WONTFIX",
         }
     }
@@ -156,7 +172,8 @@ impl fmt::Display for CloseReasonVerdict {
             Self::PolicyRefused { leading } => write!(
                 formatter,
                 "CLOSE_REASON_POLICY_REFUSED leading={leading} -- a reason must start with one of \
-                 MUTATION-VERIFIED, DONE, APPROVED, WONTFIX; the local guard refuses this, but a \
+                 MUTATION-VERIFIED, MUTATION-NOT-REQUIRED, MUTATION-ATTRIBUTED, DONE, APPROVED, \
+                 PREMISE-FALSE, ALREADY-FIXED, WONTFIX; the local guard refuses this, but a \
                  direct br close bypasses it, so read the status back"
             ),
             Self::CargoWorkerMissing { leading } => write!(
@@ -176,7 +193,7 @@ impl fmt::Display for CloseReasonVerdict {
     }
 }
 
-/// Classify a close reason against the local four-prefix policy.
+/// Classify a close reason against the local six-prefix policy.
 ///
 /// `None` means the caller did not read the reason and yields
 /// [`CloseReasonVerdict::Unread`] — never a verified verdict.
@@ -340,14 +357,27 @@ mod tests {
         assert_ne!(done, mutation);
         assert_eq!(
             ClosePrefix::ALL.len(),
-            4,
-            "the policy names exactly four prefixes"
+            8,
+            "the policy names exactly eight prefixes"
         );
         let mut tokens: Vec<&str> = ClosePrefix::ALL.iter().map(|p| p.as_str()).collect();
         let before = tokens.len();
         tokens.sort_unstable();
         tokens.dedup();
         assert_eq!(tokens.len(), before, "duplicate prefix token");
+    }
+    #[test]
+    fn extended_prefixes_do_not_accept_shadowing_tokens() {
+        for (accepted, shadowed) in [
+            ("PREMISE-FALSE", "PREMISE-FALSELY"),
+            ("ALREADY-FIXED", "ALREADY-FIXEDLY"),
+        ] {
+            assert!(classify_close_reason(Some(&format!("{accepted}: detail"))).is_verified());
+            assert!(
+                !classify_close_reason(Some(&format!("{shadowed}: detail"))).is_verified(),
+                "shadowed token must remain refused: {shadowed}"
+            );
+        }
     }
 
     #[test]

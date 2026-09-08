@@ -94,6 +94,10 @@ fn stage(dir: &Path, name: &str, content: &str) {
     fs::write(dir.join(name), content).expect("write staged fixture");
     run_git(dir, &["add", "--", name], "git add");
 }
+fn stage_close_mirror(dir: &Path, content: &str) {
+    fs::create_dir_all(dir.join(".beads")).expect("create bead mirror directory");
+    stage(dir, ".beads/issues.jsonl", content);
+}
 
 fn run_gate(dir: &Path) -> Output {
     let scoped_index = dir.join(".git/calr-gate-index");
@@ -177,6 +181,104 @@ fn one_clean_staged_file_is_clean() {
         "clean verdict must be the explicit top-level outcome: {error}"
     );
     assert_no_ambiguous_nested_outcomes(&error);
+}
+/// KNOWN-GOOD: the extended vocabulary is accepted when the mirror is staged.
+#[test]
+fn staged_close_reason_policy_accepts_extended_prefixes() {
+    let dir = fresh_git_tree("close-prefix-good");
+    stage_close_mirror(
+        &dir,
+        r#"{"id":"good-premise","status":"closed","close_reason":"PREMISE-FALSE: the premise was disproven"}
+{"id":"good-fixed","status":"closed","close_reason":"ALREADY-FIXED: landed in 0123456"}
+"#,
+    );
+    let output = run_gate(&dir);
+    let error = stderr(&output);
+
+    assert_eq!(output.status.code(), Some(0), "extended prefixes must pass: {error}");
+    assert_eq!(top_level_outcome(&error), "CLEAN:", "{error}");
+    assert!(
+        error.contains("close-reason-policy: state=CLEAN")
+            && error.contains("closed_beads=2")
+            && error.contains("verified=2")
+            && error.contains("conflicts=0")
+            && error.contains("detection_only=true"),
+        "the clean report must carry denominators and the detection boundary: {error}"
+    );
+    fs::remove_dir_all(dir).expect("remove close prefix good fixture");
+}
+
+/// FIRES-ON-KNOWN-BAD: prose and an empty reason are both named refusals.
+#[test]
+fn staged_close_reason_policy_refuses_prose_and_empty_reasons() {
+    let dir = fresh_git_tree("close-prefix-bad");
+    stage_close_mirror(
+        &dir,
+        r#"{"id":"bad-prose","status":"closed","close_reason":"fixed it"}
+{"id":"bad-empty","status":"closed","close_reason":""}
+"#,
+    );
+    let output = run_gate(&dir);
+    let error = stderr(&output);
+
+    assert_eq!(output.status.code(), Some(1), "bad close reasons must refuse: {error}");
+    assert_eq!(top_level_outcome(&error), "VIOLATION:", "{error}");
+    assert!(
+        error.contains("close-reason-policy: state=REFUSED")
+            && error.contains("closed_beads=2")
+            && error.contains("verified=0")
+            && error.contains("conflicts=2")
+            && error.contains("bad-prose")
+            && error.contains("CLOSE_REASON_POLICY_REFUSED leading=fixed")
+            && error.contains("bad-empty")
+            && error.contains("CLOSE_REASON_EMPTY")
+            && error.contains("detection_only=true"),
+        "refusal must pin both bead ids, verdicts, denominators, and scope: {error}"
+    );
+    fs::remove_dir_all(dir).expect("remove close prefix bad fixture");
+}
+
+/// ANTI-VACUITY: an unreadable or record-free mirror cannot pass as a clean scan.
+#[test]
+fn staged_close_reason_policy_fails_closed_for_missing_or_record_free_mirror() {
+    let missing = fresh_git_tree("close-prefix-missing");
+    stage_close_mirror(
+        &missing,
+        r#"{"id":"missing-at-read","status":"closed","close_reason":"DONE: staged first"}
+"#,
+    );
+    fs::remove_file(missing.join(".beads/issues.jsonl")).expect("remove mirror after staging");
+    let missing_output = run_gate(&missing);
+    let missing_error = stderr(&missing_output);
+    assert_eq!(missing_output.status.code(), Some(1), "missing mirror must refuse: {missing_error}");
+    assert!(
+        missing_error.contains("close-reason-policy: state=ERROR")
+            && missing_error.contains("PRE_DELETE_BEADS_UNREADABLE")
+            && missing_error.contains("closed_beads=0"),
+        "missing mirror refusal must name unreadability and zero scanned rows: {missing_error}"
+    );
+    fs::remove_dir_all(missing).expect("remove missing mirror fixture");
+
+    let record_free = fresh_git_tree("close-prefix-record-free");
+    stage_close_mirror(
+        &record_free,
+        r#"{"id":"open-only","status":"open","close_reason":""}
+"#,
+    );
+    let record_free_output = run_gate(&record_free);
+    let record_free_error = stderr(&record_free_output);
+    assert_eq!(
+        record_free_output.status.code(),
+        Some(1),
+        "record-free mirror must refuse: {record_free_error}"
+    );
+    assert!(
+        record_free_error.contains("close-reason-policy: state=ERROR")
+            && record_free_error.contains("PRE_DELETE_BEADS_EMPTY")
+            && record_free_error.contains("closed_beads=0"),
+        "record-free refusal must remain distinct from a valid zero-conflict scan: {record_free_error}"
+    );
+    fs::remove_dir_all(record_free).expect("remove record-free mirror fixture");
 }
 
 /// KNOWN-BAD: one staged forbidden-extension file reports VIOLATION, not a

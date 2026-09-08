@@ -10,6 +10,7 @@ name = "pre-delete-citation-check"
 path = "src/main.rs"
 
 [dependencies]
+ack-spine = { path = "../ack-spine" }
 serde_json = "1"
 finding = { path = "../finding" }
 subprocess-contract = { path = "../subprocess-contract" }
