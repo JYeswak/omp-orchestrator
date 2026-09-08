@@ -147,9 +147,29 @@ indistinguishable from a pass.** Also: `agreement.status = "draft"` not `converg
 and the cited `CONTRACT.md:82-113` predicates have MOVED (approval is at `:337`). **Do NOT flip
 `draft` → `converged` to make a gate pass — that is gate self-weakening.**
 
-**THE RESIDUAL R10 REVEALED, which is NOT S1 debt:** 17 crates FAIL and 12 are UNMEASURABLE against
-the declared roster. That is the first real per-crate work list this repo has had. **S1 closing
-would not make the tree clean, and R10 passing does not mean the gates are green.**
+**THE RESIDUAL R10 REVEALED, which is NOT S1 debt — AND THE FIGURE IS DISPUTED, READ `pd5ua`
+BEFORE ACTING ON IT.** The banked local run says **17 FAIL / 12 UNMEASURABLE**; CI's latest
+`GATE_RUNNER` line over the **same 88-crate roster** says something else:
+
+```
+CI run 34171417882   crates=88  pass=70  fail=16  unmeasurable=2      sum 88
+fsu7's banked rows   crates=88  PASS 59  FAIL 17  UNMEASURABLE 12     sum 88
+delta                pass +11 · fail -1 · UNMEASURABLE -10
+```
+
+**`UNMEASURABLE` maps to a typed `MISSING_EXECUTABLE`, so CI measured TEN crates the local run
+could not — CI is the strictly MORE COMPLETE reading, and both this block and `S1-READY.md` were
+citing the less complete one as the work list.** Both are kept on purpose: the local numbers are
+what R10 was closed against, so deleting them would make R10's close unverifiable. `pd5ua` owns
+picking the authoritative reading and enumerating the ten. **This does NOT retract R10** — R10
+asked whether the layer RAN, and it ran both times.
+
+**AND THE SHARPER FACT, from `%20`'s `6nhj` census:** `gh run list --limit 100` returns **83
+completed runs — 71 failure, 12 cancelled, ZERO success** — with **no run id or SHA cited anywhere
+in `.beads/issues.jsonl`**. So the more complete measurement has been running 83 times and being
+ignored, while this fleet spent 2857 s of Contabo time producing a lower-fidelity copy of it.
+**That is `REACHABLE_RED_UNREAD` costing real work rather than merely being true.**
+**S1 closing would not make the tree clean, and R10 passing does not mean the gates are green.**
 
 SCOPE: R10 was THE GATE LAYER running, not the dispatcher. `gb28` holds `f3g5` item 9 as
 UNRUN-pending-restart and NOBODY is to act on it.
