@@ -58,6 +58,8 @@
 //! dispatch is CORRECT rather than lazy. This crate counts which methods appear in our
 //! source; it does not say the remaining 33 should be adopted.
 
+pub mod cli_probe;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 

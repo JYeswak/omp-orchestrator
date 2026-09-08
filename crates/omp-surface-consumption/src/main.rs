@@ -11,9 +11,8 @@
 //!      bundle unreadable) or ZERO methods mapped, which is either the headline or a
 //!      broken scan and must not read as a clean pass
 
-mod cli_probe;
 use omp_surface_consumption::{
-    build_table, case_sites, derive_command_set, render_table, DeriveError,
+    build_table, case_sites, cli_probe, derive_command_set, render_table, DeriveError,
 };
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
