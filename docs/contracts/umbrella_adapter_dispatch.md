@@ -88,11 +88,40 @@ supervisor with four flag-parsed verbs, which must not become an aggregator.
 family, an adapter selects a target. Nothing is installed under either name, which is exactly
 why deciding now was cheap and why reversal stays cheap.
 
-IMPLEMENTED CONSEQUENCE, so the ratification is not just a note: `ompo` now dispatches
-`init | doctor | help | capabilities`, the roster is generated from the workspace at build
-time, and `ompo doctor --adapter <name>` REFUSES with
-`UAD_ADAPTER_SCOPED_DOCTOR_UNIMPLEMENTED` rather than accepting a flag that does nothing —
-per-adapter probes are the one part of `UAD-ADDRESS` that is named and not built.
+IMPLEMENTED CONSEQUENCE, so the ratification is not just a note: the roster is generated from
+the workspace at build time, and **both spellings of the adapter axis now EXECUTE.**
+
+**SUPERSEDED 2026-09-08 by `c4fb273`, recorded rather than overwritten.** This paragraph read:
+*"`ompo doctor --adapter <name>` REFUSES with `UAD_ADAPTER_SCOPED_DOCTOR_UNIMPLEMENTED` rather
+than accepting a flag that does nothing — per-adapter probes are the one part of `UAD-ADDRESS`
+that is named and not built."* It was true when written and is now false in both halves. A
+contract asserting that a shipped capability does not exist licenses rebuilding it, which is
+the `ABSENT`-vs-`INERT` misclassification in `AGENTS.md` gate rule 4a aimed at our own doc.
+
+`crates/ompo-doctor/src/adapter_exec.rs` runs the adapter under a bounded 5 s deadline through
+`subprocess-contract` (process-group kill, both pipes drained) and returns one of four typed
+verdicts. **The exit code is recorded, not believed** — measured across the 38 roster adapters
+resolvable on the author's host, `--help` exits `0`, `1`, `2`, `64`, `78` and `255`, and eleven
+print a usage line while exiting nonzero, while `loop-queue-filter --help` exits `0` with no
+output at all. Keying the verdict on the code is therefore wrong in both directions, so
+**output-presence is the discriminator.**
+
+```
+ompo doctor --adapter all      executed=88 live=37 degraded=1 unmeasurable=50 exit=1
+  UAD_ADAPTER_LIVE            37   spawned and answered
+  UAD_ADAPTER_NO_HELP_CONTRACT 1   loop-queue-filter -- exit 0, no output
+  UAD_ADAPTER_NOT_INSTALLED   50   absent from PATH: UNMEASURABLE, exit 4, never a failure
+  UAD_ADAPTER_TIMED_OUT        0   a timeout is a restrictive terminal, never a pass
+```
+
+Every verdict carries the `PATH` resolution actually executed, because a roster name may
+resolve to a foreign binary — measured by the executor itself: `installer` resolves to
+`/usr/sbin/installer`. It also carries the child's first output line, the field whose absence
+made 11 of 12 `CHECK_FAIL` rows uncausable in the 88-crate `gate-runner` roster run.
+
+`UAD_UNKNOWN_ADAPTER reason=absent_from_roster` at exit `2` is the arm this flag never had:
+`help` refused an absent name while `doctor --adapter` reported it as merely unimplemented, so
+`LAW-UAD-UNKNOWN-IS-TWO` held on one axis and not the other. It now holds on both.
 
 ## Stable ID vocabulary
 
