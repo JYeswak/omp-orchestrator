@@ -17,11 +17,17 @@
 //!   1  the verb ran and the subject failed
 //!   2  the INVOCATION was wrong — unknown verb, unknown adapter, missing argument
 //!   3  the instrument could not run (roster unavailable, encode failure)
+//!   4  an adapter could not be MEASURED — absent from `PATH`, or it exceeded the deadline.
+//!      Distinct from `3` because "the instrument broke" and "the subject is unreachable"
+//!      have different remedies; `adapter_exec::EXIT_UNMEASURABLE` owns that value.
 //! `2` alone cannot separate an unknown verb from an unknown adapter, so every refusal below
 //! names what it rejected. AGENTS.md gate rule 7: an exit code is not a message.
 
+use ompo_doctor::liveness::{self, Observation};
+use ompo_doctor::adapter_exec;
 use ompo_doctor::umbrella::{self, ProbeId};
 use ompo_doctor::{current_repo, run_doctor};
+use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -30,6 +36,16 @@ const EXIT_BAD_INVOCATION: u8 = 2;
 /// Instrument error: the umbrella itself could not answer.
 const EXIT_INSTRUMENT: u8 = 3;
 
+/// `--json` read from the WHOLE argv rather than from a positional scan.
+///
+/// The adapter axis can be addressed positionally (`ompo doctor pane-truth --json`) or by
+/// flag (`ompo doctor --json --adapter pane-truth`), and a left-to-right parser reaches the
+/// adapter before it has seen a trailing `--json`. Scanning the argv makes both orders
+/// behave identically instead of one of them silently printing the human report.
+fn wants_json(rest: &[String]) -> bool {
+    rest.iter().any(|arg| arg == "--json")
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(verb) = args.first().map(String::as_str) else {
@@ -37,6 +53,9 @@ fn main() -> ExitCode {
         return ExitCode::from(EXIT_BAD_INVOCATION);
     };
     let rest = &args[1..];
+    if let Some(code) = ompo_doctor::selfdoc::dispatch(verb, rest) {
+        return ExitCode::from(code);
+    }
 
     match verb {
         "--help" | "-h" | "help" if rest.is_empty() => {
@@ -46,6 +65,8 @@ fn main() -> ExitCode {
         "help" => run_help(rest),
         "capabilities" => run_capabilities(rest),
         "init" => run_init(rest),
+        "start" => run_start(rest),
+        "portal" => run_portal(rest),
         "doctor" => run_doctor_verb(rest),
         other => {
             // NAMES the rejected verb. A bare usage dump leaves the caller unable to tell a
@@ -58,6 +79,311 @@ fn main() -> ExitCode {
             ExitCode::from(EXIT_BAD_INVOCATION)
         }
     }
+}
+
+
+fn source_json(source: &ompo_start::liveness::SourceVerdict) -> Value {
+    json!({
+        "available": source.available,
+        "fresh": source.fresh,
+        "reason_code": source.reason_code,
+        "age_ms": source.age_ms,
+        "panes": source.panes,
+    })
+}
+
+fn liveness_json(observation: &Observation) -> Value {
+    let sources = observation
+        .verdict
+        .sources()
+        .iter()
+        .map(|source| (source.name.clone(), source_json(source)))
+        .collect::<serde_json::Map<String, Value>>();
+    json!({
+        "status": observation.verdict.status(),
+        "reason_code": observation.verdict.reason_code(),
+        "sources": sources,
+    })
+}
+
+fn step_json(step: &ompo_start::Step) -> Value {
+    json!({
+        "id": step.id,
+        "title": step.title,
+        "status": format!("{:?}", step.status).to_ascii_uppercase(),
+        "reason_code": step.reason_code,
+        "next_command": step.next_command,
+        "predicate": format!("{:?}", step.predicate),
+    })
+}
+
+fn run_start(rest: &[String]) -> ExitCode {
+    let mut repo = match current_repo() {
+        Ok(path) => path,
+        Err(error) => {
+            eprintln!("ompo start: {error}");
+            return ExitCode::from(EXIT_INSTRUMENT);
+        }
+    };
+    let mut session = "omp-orchestrator".to_owned();
+    let mut json_output = false;
+    let mut persona_a = false;
+    let mut hd0010_decided = false;
+    let mut spawn_requested = false;
+    let mut agents: Vec<(String, String)> = Vec::new();
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--json" => json_output = true,
+            "--persona-a" => persona_a = true,
+            "--hd-0010-decided" => hd0010_decided = true,
+            "--spawn" => spawn_requested = true,
+            "--repo" => {
+                index += 1;
+                let Some(value) = rest.get(index) else {
+                    eprintln!("ompo start: UAD_MISSING_VALUE flag=--repo");
+                    return ExitCode::from(EXIT_BAD_INVOCATION);
+                };
+                repo = PathBuf::from(value);
+            }
+            "--session" => {
+                index += 1;
+                let Some(value) = rest.get(index) else {
+                    eprintln!("ompo start: UAD_MISSING_VALUE flag=--session");
+                    return ExitCode::from(EXIT_BAD_INVOCATION);
+                };
+                session = value.clone();
+            }
+            "--cc" | "--cod" => {
+                let flag = rest[index].clone();
+                index += 1;
+                let Some(value) = rest.get(index) else {
+                    eprintln!("ompo start: UAD_MISSING_VALUE flag={flag}");
+                    return ExitCode::from(EXIT_BAD_INVOCATION);
+                };
+                agents.push((flag, value.clone()));
+            }
+            value if value.starts_with("--cc=") || value.starts_with("--cod=") => {
+                let (flag, value) = value.split_once('=').expect("equals checked");
+                if value.is_empty() {
+                    eprintln!("ompo start: UAD_MISSING_VALUE flag={flag}");
+                    return ExitCode::from(EXIT_BAD_INVOCATION);
+                }
+                agents.push((flag.to_owned(), value.to_owned()));
+            }
+            "--help" | "-h" => {
+                println!("{}", umbrella::usage());
+                return ExitCode::SUCCESS;
+            }
+            other => {
+                eprintln!("ompo start: UAD_UNKNOWN_ARGUMENT argument={other:?}");
+                return ExitCode::from(EXIT_BAD_INVOCATION);
+            }
+        }
+        index += 1;
+    }
+
+    let observation = liveness::observe(&session);
+    let live = observation.verdict.is_live();
+    let mut steps = ompo_start::fixture_steps();
+    ompo_start::apply_predicates(&mut steps, live, persona_a, hd0010_decided);
+
+    let spawn = if !spawn_requested {
+        json!({"status": "NOT_REQUESTED"})
+    } else if persona_a {
+        eprintln!("ompo start: L4_SPAWN_REFUSED reason=PERSONA_A_NO_SPAWN");
+        return ExitCode::from(EXIT_BAD_INVOCATION);
+    } else if live {
+        json!({"status": "NOT_NEEDED", "reason_code": "L4_LIVE"})
+    } else if !hd0010_decided {
+        eprintln!("ompo start: L4_SPAWN_REFUSED reason=HD-0010_UNDECIDED");
+        return ExitCode::from(EXIT_BAD_INVOCATION);
+    } else {
+        match liveness::spawn(&session, &repo, &agents) {
+            Ok(report) => json!({
+                "status": if report.exit_code == Some(0) { "EXECUTED" } else { "FAILED" },
+                "command": report.command,
+                "exit_code": report.exit_code,
+                "stdout": report.stdout,
+                "stderr": report.stderr,
+            }),
+            Err(error) => {
+                eprintln!("ompo start: {error}");
+                return ExitCode::from(1);
+            }
+        }
+    };
+
+    let data = json!({
+        "repo": repo.display().to_string(),
+        "session": session,
+        "step_count": steps.len(),
+        "ordered_ids": ompo_start::json_ordered_ids(&steps),
+        "next_step_id": ompo_start::next_step(&steps).map(|step| step.id),
+        "next_command": ompo_start::json_next_command(&steps),
+        "steps": steps.iter().map(step_json).collect::<Vec<_>>(),
+        "liveness": liveness_json(&observation),
+        "spawn": spawn,
+    });
+    if json_output {
+        match serde_json::to_string(&umbrella::envelope("start", "OK", data)) {
+            Ok(text) => println!("{text}"),
+            Err(error) => {
+                eprintln!("ompo start: cannot encode: {error}");
+                return ExitCode::from(EXIT_INSTRUMENT);
+            }
+        }
+    } else {
+        println!(
+            "OMPO_START session={} steps={} liveness={} next={}",
+            session,
+            steps.len(),
+            observation.verdict.status(),
+            ompo_start::json_next_command(&steps).unwrap_or("none")
+        );
+        for step in &steps {
+            println!(
+                "  {} status={} reason_code={} next_command={}",
+                step.id,
+                format!("{:?}", step.status).to_ascii_uppercase(),
+                step.reason_code.unwrap_or("none"),
+                step.next_command.unwrap_or("none")
+            );
+        }
+    }
+    ExitCode::SUCCESS
+}
+
+fn run_portal(rest: &[String]) -> ExitCode {
+    let mut repo = match current_repo() {
+        Ok(path) => path,
+        Err(error) => {
+            eprintln!("ompo portal: {error}");
+            return ExitCode::from(EXIT_INSTRUMENT);
+        }
+    };
+    let mut session = "omp-orchestrator".to_owned();
+    let mut json_output = false;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--json" => json_output = true,
+            "--repo" => {
+                index += 1;
+                let Some(value) = rest.get(index) else {
+                    eprintln!("ompo portal: UAD_MISSING_VALUE flag=--repo");
+                    return ExitCode::from(EXIT_BAD_INVOCATION);
+                };
+                repo = PathBuf::from(value);
+            }
+            "--session" => {
+                index += 1;
+                let Some(value) = rest.get(index) else {
+                    eprintln!("ompo portal: UAD_MISSING_VALUE flag=--session");
+                    return ExitCode::from(EXIT_BAD_INVOCATION);
+                };
+                session = value.clone();
+            }
+            "--help" | "-h" => {
+                println!("{}", umbrella::usage());
+                return ExitCode::SUCCESS;
+            }
+            other => {
+                eprintln!("ompo portal: UAD_UNKNOWN_ARGUMENT argument={other:?}");
+                return ExitCode::from(EXIT_BAD_INVOCATION);
+            }
+        }
+        index += 1;
+    }
+
+    let observation = liveness::observe(&session);
+    let sources = observation
+        .verdict
+        .sources()
+        .iter()
+        .map(|source| (source.name.clone(), source_json(source)))
+        .collect::<serde_json::Map<String, Value>>();
+    let mut alerts = Vec::new();
+    for source in observation.verdict.sources() {
+        if !source.available || !source.fresh || source.age_ms.is_none() {
+            alerts.push(json!({
+                "severity": if source.available { "warn" } else { "error" },
+                "summary": format!("{} source is not fresh and available", source.name),
+                "action": format!("ompo portal --json --session {}", session),
+            }));
+        }
+    }
+    let inception_path = repo.join(".omp-orchestrator").join("inception.json");
+    let inception = match ompo_start::inception::read_inception(&inception_path) {
+        Ok(_) => json!({"path": inception_path.display().to_string(), "status": "PRESENT", "readback": "PASS"}),
+        Err(error) if !inception_path.exists() => json!({"path": inception_path.display().to_string(), "status": "ABSENT", "readback": "REFUSE", "reason": error.to_string()}),
+        Err(error) => json!({"path": inception_path.display().to_string(), "status": "INVALID", "readback": "REFUSE", "reason": error.to_string()}),
+    };
+    let all_sources_fresh = observation
+        .verdict
+        .sources()
+        .iter()
+        .all(|source| source.available && source.fresh && source.age_ms.is_some());
+    let available_sources = observation
+        .verdict
+        .sources()
+        .iter()
+        .filter(|source| source.available)
+        .count();
+    let input_manifest = if all_sources_fresh {
+        json!({"state": "FULL", "source": "ntm,tick-monitor,agent-mail"})
+    } else {
+        json!({
+            "state": "PARTIAL",
+            "bound_kind": "available_liveness_sources",
+            "bound_value": available_sources,
+            "source": "ompo portal runtime"
+        })
+    };
+    let one_next_action = if inception["status"] == "ABSENT" || inception["status"] == "INVALID" {
+        json!({"command": format!("ompo init --repo {} --json", repo.display()), "reason_code": "L5_INCEPTION_READBACK"})
+    } else if !observation.verdict.is_live() {
+        json!({"command": format!("ompo start --repo {} --session {} --json", repo.display(), session), "reason_code": observation.verdict.reason_code()})
+    } else {
+        json!({"command": format!("ompo start --repo {} --session {} --json", repo.display(), session), "reason_code": "L3_REVIEW"})
+    };
+    let row = json!({
+        "schema_id": ompo_start::portal::SCHEMA_ID,
+        "schema_version": "1",
+        "generated_at": now_millis(),
+        "sources": sources,
+        "_alerts": alerts,
+        "one_next_action": one_next_action,
+        "liveness": liveness_json(&observation),
+        "inception": inception,
+        "input_manifest": input_manifest,
+    });
+    let row = match ompo_start::portal::seal(row) {
+        Ok(row) => row,
+        Err(error) => {
+            eprintln!("ompo portal: {error}");
+            return ExitCode::from(EXIT_INSTRUMENT);
+        }
+    };
+    if json_output {
+        match serde_json::to_string(&umbrella::envelope("portal", "OK", row)) {
+            Ok(text) => println!("{text}"),
+            Err(error) => {
+                eprintln!("ompo portal: cannot encode: {error}");
+                return ExitCode::from(EXIT_INSTRUMENT);
+            }
+        }
+    } else {
+        println!("OMPO_PORTAL status={} data_hash={}", observation.verdict.status(), row["data_hash"]);
+    }
+    ExitCode::SUCCESS
+}
+
+fn now_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 /// `ompo help <adapter>` — `LAW-UAD-EVERY-TARGET-ADDRESSABLE` and `LAW-UAD-UNKNOWN-IS-TWO`.
@@ -258,24 +584,30 @@ fn run_doctor_verb(rest: &[String]) -> ExitCode {
                 scope = value.clone();
             }
             "--adapter" => {
-                // The OTHER addressing axis, and it is deliberately refused here rather than
-                // silently ignored: `--scope` selects a probe FAMILY, an adapter selects a
-                // workspace TARGET, and per-adapter doctor probes are not implemented. A
-                // flag that is accepted and does nothing is worse than one that refuses.
+                // UAD-ADDRESS, the ADAPTER axis, EXECUTED rather than refused. The
+                // placeholder this replaces said `reason=per_adapter_probes_not_built`,
+                // which was accurate until now: the flag named the missing capability.
+                // `--json` is read from the whole argv, so flag order does not matter.
                 index += 1;
-                let named = rest.get(index).cloned().unwrap_or_default();
-                eprintln!(
-                    "ompo doctor: UAD_ADAPTER_SCOPED_DOCTOR_UNIMPLEMENTED adapter={named:?} \
-                     reason=per_adapter_probes_not_built hint=`ompo help {named}` resolves the \
-                     name; `--scope` selects a probe family"
-                );
-                return ExitCode::from(EXIT_BAD_INVOCATION);
+                let Some(named) = rest.get(index).cloned() else {
+                    eprintln!("ompo doctor: UAD_MISSING_VALUE flag=--adapter");
+                    return ExitCode::from(EXIT_BAD_INVOCATION);
+                };
+                return ExitCode::from(adapter_exec::run_axis(&named, wants_json(rest)));
             }
             "--help" | "-h" => {
                 println!("{}", umbrella::usage());
                 return ExitCode::SUCCESS;
             }
             other => {
+                // `docs/plan/07-installability.md:128` prescribes `doctor [<adapter>]`, so a
+                // bare roster name is the PRESCRIBED spelling of the same axis as
+                // `--adapter`; both route to ONE executor. A token that is neither the
+                // roster selector nor a roster member keeps the old refusal, so a typo is
+                // still named rather than swallowed.
+                if adapter_exec::is_axis_selector(other) {
+                    return ExitCode::from(adapter_exec::run_axis(other, wants_json(rest)));
+                }
                 eprintln!("ompo doctor: unknown argument {other:?}");
                 return ExitCode::from(EXIT_BAD_INVOCATION);
             }

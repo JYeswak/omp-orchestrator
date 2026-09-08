@@ -22,9 +22,9 @@ include!(concat!(env!("OUT_DIR"), "/adapters.rs"));
 /// Envelope schema version for every umbrella command.
 pub const SCHEMA_VERSION: &str = "omp.umbrella/v1";
 
-/// Verbs the umbrella dispatches. `UAD-ADDRESSABLE` is about ADAPTERS, not verbs; this list
-/// is the small closed set of things `ompo` itself does.
-pub const VERBS: &[&str] = &["init", "doctor", "help", "capabilities"];
+/// Verbs the umbrella dispatches. `start` owns the ordered walkthrough and
+/// `portal` projects liveness and next action into a robot envelope.
+pub const VERBS: &[&str] = &["init", "doctor", "help", "capabilities", "start", "portal", "quickstart", "completion"];
 
 /// The adapter roster. Never empty: `build.rs` refuses to generate an empty one, and
 /// [`roster_or_error`] is the runtime guard for the same property.
@@ -172,6 +172,8 @@ pub fn usage() -> String {
         "usage: ompo <verb> [args]\n\
          \x20 init [--repo PATH] [--output PATH] [--json]      write and read back the inception manifest\n\
          \x20 doctor [--repo PATH] [--scope FAMILY] [--json]   probe tools, emit lifecycle events\n\
+         \x20 start [--repo PATH] [--session NAME] [--json]    run the ordered S1 walkthrough\n\
+         \x20 portal [--repo PATH] [--session NAME] --json     emit the S1 robot portal envelope\n\
          \x20 help <adapter>                                   usage for one of {} workspace adapters\n\
          \x20 capabilities [--json]                            enumerate adapters, verbs, probe ids\n\
          ADDRESSING: a positional <adapter> selects a workspace TARGET; --scope selects a PROBE\n\
