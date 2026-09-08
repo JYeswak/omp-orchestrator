@@ -9,7 +9,7 @@ description = "Receiver-side dispatch receipt classifier"
 [[bin]]
 name = "receiver-receipt"
 path = "src/bin/receiver-receipt.rs"
-test = false
+test = true
 doc = false
 
 
@@ -17,10 +17,17 @@ doc = false
 unsafe_code = "forbid"
 
 [dependencies]
+# 94268 decision: option (a). The CLI binary owns this capture boundary; moving
+# it to tick-monitor would launder the raw spawn into that crate's deliberate
+# exemption. The library remains pure, while the binary uses the shared group-
+# kill and dual-pipe contract instead of leaving either failure mode reachable.
+subprocess-contract = { path = "../subprocess-contract" }
 tick-monitor = { path = "../tick-monitor" }
 
 [dev-dependencies]
-# Dev-only ON PURPOSE: pane-truth spawns tmux and this crate must stay I/O-free.
+# Dev-only ON PURPOSE: pane-truth spawns tmux; the LIBRARY remains I/O-free.
+# The receiver-receipt BIN is deliberately different: it owns the CLI capture
+# boundary and uses subprocess-contract for bounded process-group semantics.
 # Present solely so the_window_floor_matches_pane_truths_authority can gate the
 # restated TWO_CAPTURE_MIN_SECS against its owner.
 pane-truth = { path = "../pane-truth" }
