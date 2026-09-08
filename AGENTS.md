@@ -869,8 +869,37 @@ unconstructible:
 - **(b) reimplemented by scraping — 4:** pane state, dispatch, session, health check. Each has an OMP
   RPC or CLI alternative *that exists today*. These are not gaps; they are rewrites of shipped
   surface, done through a terminal.
-- **(c) should use — 5:** `omp/muxConnect`, `omp/muxPing`, `omp/muxRestartServer`, `goals`, `collab`.
-  Nothing in `crates/` mentions any of the five.
+- **(c) should use — 2:** `goals`, `collab`. Nothing in `crates/` mentions either.
+
+**CORRECTION 2026-09-08 — the three `omp/*` names above are not pane orchestration.** The
+installed OMP bundle defines `__omp_worker_lsp_mux`, `OMP_LSP_MUX_SOCKET`,
+`OMP_LSP_MUX_PROJECT_DIR`, `omp.lsp.mux`, the ready banner `omp lsp mux listening on \S+`,
+and `pong`; its Unix address is `path.join(dir, "lsp-mux.sock")` (with a Windows named-pipe
+alternative). This is a language-server multiplexer for OMP workers, not a tmux-pane/session API.
+The two observed workers (PIDs 43609 and 75508) held anonymous inherited socketpairs; no
+`lsp-mux.sock` existed on disk and `OMP_LSP_MUX_SOCKET` was unset. Those methods are therefore
+not an attach route for the existing tmux server and must not be advertised as one.
+
+**Current pane-state route (measured 2026-09-08): use the profile-scoped terminal-session index.**
+For a pane `%N`, read `~/.omp/profiles/<profile>/agent/terminal-sessions/tmux-%N`, then read
+the referenced session JSONL with its profile/session directory and ask `ompo state` for typed
+state. The profile is read from the pane's own `omp --profile` argv. This retires the spinner
+regex for profiled OMP panes without inventing an endpoint.
+
+**Terminal-session entry contract is observed, not assumed.** The required positional fields are
+line 1 = cwd and line 2 = session JSONL path; line 3, when present, is a state token. Across the
+64 current entries (Claude 22, Codex 42), the only observed token is `fresh` (14 entries), while
+50 entries have no line 3, including the current Codex `tmux-%8` scratch-session entry. A reader
+MUST preserve missing line 3 as `Unknown/MissingStateToken`, never infer `fresh`; tokens not
+observed remain `UNKNOWN` rather than absent.
+
+**Route decision:** choose the profile-store reader for existing panes. `omp acp` is a real
+JSON-RPC protocol for supervisor-owned subprocess sessions, but it is point-to-point and cannot
+attach to an already-running pane. A new pane-keyed mux would buy a separately addressable,
+push-capable endpoint, but no current consumer needs that beyond the profile-store reader; adding
+one now would duplicate supervision, socket lifecycle, and recovery without adding observed
+capability. Revisit only when a consumer requires remote subscriptions or control unavailable
+through the reader.
 
 `omp-orchestrator-omp-surface-map-41b` owns turning this into the per-crate table.
 
