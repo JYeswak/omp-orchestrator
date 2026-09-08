@@ -1,9 +1,9 @@
 use installer::{
     check_build_fence, classify_agent_scan, classify_restart_postcondition, git_head,
     git_rev_parse_short, install_binary, merge_hooks, publish_atomic, refuse_path_collisions,
-    resolve_repo_ownership, seal_install_report, stage_artifact_stream, verify_identity,
-    verify_minisign_policy, AgentOutcome, HookWrite, IdentityCheck, InstallError, RepoOwnership,
-    RestartPostcondition,
+    resolve_platform_triple, resolve_repo_ownership, seal_install_report, stage_artifact_stream,
+    verify_identity, verify_minisign_policy, AgentOutcome, HookWrite, IdentityCheck, InstallError,
+    RepoOwnership, RestartPostcondition,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -477,6 +477,29 @@ fn hook_merge_injected_failure_restores_pre_merge_bytes() {
     assert_eq!(fs::read(&second).expect("second"), b"second-orig");
 }
 
+#[test]
+fn platform_triple_resolver() {
+    let cases = [
+        (("macos", "aarch64", None), "aarch64-apple-darwin"),
+        (("macos", "x86_64", None), "x86_64-apple-darwin"),
+        (("linux", "aarch64", Some("gnu")), "aarch64-unknown-linux-gnu"),
+        (("linux", "x86_64", Some("gnu")), "x86_64-unknown-linux-gnu"),
+    ];
+    for ((os, arch, libc), expected) in cases {
+        let resolved = resolve_platform_triple(os, arch, libc).expect("supported tuple");
+        assert_eq!(resolved.artifact_triple, expected);
+        assert_eq!(resolved.fallback, None);
+    }
+    let musl = resolve_platform_triple("linux", "x86_64", Some("musl"))
+        .expect("musl fallback tuple");
+    assert_eq!(musl.artifact_triple, "x86_64-unknown-linux-gnu");
+    assert_eq!(musl.fallback, Some("musl-to-gnu"));
+
+    let error = resolve_platform_triple("windows", "x86_64", None)
+        .expect_err("unsupported tuple must refuse");
+    assert!(matches!(error, InstallError::PlatformTripleUnsupported { .. }));
+    assert_eq!(error.to_string().split_whitespace().next(), Some("L0-PLATFORM-TRIPLE"));
+}
 #[test]
 fn zero_agents_is_error_not_clean() {
     let error = classify_agent_scan(&[]).expect_err("empty-scan must not pass");

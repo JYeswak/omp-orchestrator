@@ -77,6 +77,12 @@ pub enum InstallError {
     IncompleteInstallReport {
         missing: Vec<String>,
     },
+    /// Unsupported host tuple for the L0 artifact resolver.
+    PlatformTripleUnsupported {
+        os: String,
+        arch: String,
+        libc: Option<String>,
+    },
 }
 
 impl fmt::Display for InstallError {
@@ -151,8 +157,47 @@ impl fmt::Display for InstallError {
                 "L0-REPORT: incomplete; missing {}",
                 missing.join(",")
             ),
+            Self::PlatformTripleUnsupported { os, arch, libc } => write!(
+                formatter,
+                "L0-PLATFORM-TRIPLE unsupported os={os} arch={arch} libc={libc:?}"
+            ),
         }
     }
+}
+
+
+/// Canonical artifact triple selected from the running platform tuple.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PlatformResolution {
+    pub artifact_triple: &'static str,
+    pub fallback: Option<&'static str>,
+}
+
+/// L0-PLATFORM-TRIPLE. Resolve the four supported OS/arch tuples and the one
+/// explicit Linux-musl -> Linux-gnu artifact fallback.
+pub fn resolve_platform_triple(
+    os: &str,
+    arch: &str,
+    libc: Option<&str>,
+) -> Result<PlatformResolution, InstallError> {
+    let result = match (os, arch, libc) {
+        ("macos", "aarch64", None) => PlatformResolution { artifact_triple: "aarch64-apple-darwin", fallback: None },
+        ("macos", "x86_64", None) => PlatformResolution { artifact_triple: "x86_64-apple-darwin", fallback: None },
+        ("linux", "aarch64", Some("gnu")) => PlatformResolution { artifact_triple: "aarch64-unknown-linux-gnu", fallback: None },
+        ("linux", "x86_64", Some("gnu")) => PlatformResolution { artifact_triple: "x86_64-unknown-linux-gnu", fallback: None },
+        ("linux", "x86_64", Some("musl")) => PlatformResolution { artifact_triple: "x86_64-unknown-linux-gnu", fallback: Some("musl-to-gnu") },
+        _ => return Err(InstallError::PlatformTripleUnsupported { os: os.to_owned(), arch: arch.to_owned(), libc: libc.map(ToOwned::to_owned) }),
+    };
+    Ok(result)
+}
+
+/// Resolve the platform that will own the installed artifact.
+pub fn current_platform_triple() -> Result<PlatformResolution, InstallError> {
+    let libc = match std::env::consts::OS {
+        "linux" => Some(if cfg!(target_env = "musl") { "musl" } else { "gnu" }),
+        _ => None,
+    };
+    resolve_platform_triple(std::env::consts::OS, std::env::consts::ARCH, libc)
 }
 
 /// L0-VERIFY-MINISIGN. Required signatures are checked, never warned away.

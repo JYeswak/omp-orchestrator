@@ -194,6 +194,18 @@ fn run_install(repo_root: &PathBuf, bin_dir: &PathBuf, target: &str) -> ExitCode
             return ExitCode::from(3);
         }
     };
+    let platform = match installer::current_platform_triple() {
+        Ok(platform) => platform,
+        Err(error) => {
+            eprintln!("INSTALLER PLATFORM REFUSED: {error}");
+            return ExitCode::from(2);
+        }
+    };
+    println!(
+        "INSTALLER PLATFORM: artifact={} fallback={:?}",
+        platform.artifact_triple,
+        platform.fallback
+    );
     let before_start = match installer::running_process_start(binary_name) {
         Ok(start) => start,
         Err(error) => {
