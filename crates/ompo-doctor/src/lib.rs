@@ -20,9 +20,12 @@ use subprocess_contract::{bounded_output, BoundedOutcome};
 
 pub mod umbrella;
 pub mod adapter_exec;
+pub mod upstream_report;
 pub mod liveness;
 pub mod provenance;
 pub mod selfdoc;
+pub mod state_triad;
+pub mod health_repair;
 
 pub const ARTIFACT_REFERENCE: &str = ".omp-orchestrator/doctor/report.json";
 const PROBE_DEADLINE: Duration = Duration::from_secs(5);
