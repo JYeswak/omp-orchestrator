@@ -51,7 +51,7 @@ pub const VERBS: &[&str] = &[
     // it was simply missing its usage line, which `every_verb_appears_in_usage`
     // demanded on the test's first day. That is the parity leg working, not a
     // collision to revert.
-    "state", "stats", "messages",];
+    "state", "stats", "messages", "ps",];
 
 /// The adapter roster. Never empty: `build.rs` refuses to generate an empty one, and
 /// [`roster_or_error`] is the runtime guard for the same property.
@@ -210,6 +210,7 @@ pub fn usage() -> String {
          \x20 state [--json]                                   project OMP's own state over --mode=rpc\n\
          \x20 stats [--json]                                   project OMP's session cost and token counts\n\
          \x20 messages [--json]                                project OMP's message roles and counts\n\
+         \x20 ps [--repo PATH] [--json]                 project-scoped supervised daemon rows\n\
          \x20 upstream-report <adapter> [--apply] [--json]     draft an upstream issue; --apply gated\n\
          \x20 quickstart [--json]                              orientation for a new operator or agent\n\
          \x20 completion <shell>                               emit a completion script for <shell>\n\

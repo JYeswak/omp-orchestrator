@@ -29,6 +29,7 @@ use ompo_doctor::upstream_report;
 use ompo_doctor::omp_state;
 use ompo_doctor::omp_stats;
 use ompo_doctor::omp_messages;
+use ompo_doctor::omp_process;
 use ompo_doctor::state_triad;
 use ompo_doctor::umbrella::{self, ProbeId};
 use ompo_doctor::{current_repo, run_doctor};
@@ -82,6 +83,7 @@ fn main() -> ExitCode {
         "state" => run_state(rest),
         "stats" => run_stats(rest),
         "messages" => run_messages(rest),
+        "ps" => run_ps(rest),
         "doctor" => run_doctor_verb(rest),
         other => {
             // NAMES the rejected verb. A bare usage dump leaves the caller unable to tell a
@@ -1030,6 +1032,87 @@ fn run_state(rest: &[String]) -> ExitCode {
     }
     ExitCode::from(outcome.exit_code())
 }
+/// ompo ps [--repo PATH] [--json] — read the project-scoped supervised daemon rows.
+///
+/// This is a read-only CLI child probe. It never connects to broker.sock and never invokes a
+/// lifecycle mutation. The default scope is exactly the caller's current directory.
+fn run_ps(rest: &[String]) -> ExitCode {
+    let mut repo = match std::env::current_dir() {
+        Ok(path) => path,
+        Err(error) => {
+            eprintln!("ompo ps: OMP_PS_UNMEASURED detail=cannot read current directory: {error}");
+            return ExitCode::from(omp_process::EXIT_UNMEASURED);
+        }
+    };
+    let mut json_output = false;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--json" => json_output = true,
+            "--repo" => {
+                index += 1;
+                let Some(path) = rest.get(index) else {
+                    eprintln!("ompo ps: UAD_MISSING_VALUE flag=--repo");
+                    return ExitCode::from(omp_process::EXIT_BAD_INVOCATION);
+                };
+                repo = PathBuf::from(path);
+            }
+            "--help" | "-h" => {
+                println!("{}", umbrella::usage());
+                return ExitCode::SUCCESS;
+            }
+            other => {
+                eprintln!(
+                    "ompo ps: unknown argument {other:?} hint=ompo ps [--repo PATH] [--json]"
+                );
+                return ExitCode::from(omp_process::EXIT_BAD_INVOCATION);
+            }
+        }
+        index += 1;
+    }
+
+    let runtime = match asupersync::runtime::RuntimeBuilder::current_thread().build() {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            eprintln!("ompo ps: OMP_PS_UNMEASURED detail=runtime unavailable: {error}");
+            return ExitCode::from(omp_process::EXIT_UNMEASURED);
+        }
+    };
+    let outcome = runtime.block_on(async {
+        match asupersync::Cx::current() {
+            Some(cx) => Ok(omp_process::read_processes(&cx, &repo).await),
+            None => Err("no runtime context"),
+        }
+    });
+    let outcome = match outcome {
+        Ok(outcome) => outcome,
+        Err(detail) => {
+            eprintln!("ompo ps: OMP_PS_UNMEASURED detail={detail}");
+            return ExitCode::from(omp_process::EXIT_UNMEASURED);
+        }
+    };
+
+    if json_output {
+        match serde_json::to_string(&omp_process::envelope(&outcome)) {
+            Ok(text) if outcome.exit_code() == omp_process::EXIT_OK => println!("{text}"),
+            Ok(text) => eprintln!("{text}"),
+            Err(error) => {
+                eprintln!("ompo ps: OMP_PS_UNMEASURED detail=cannot encode report: {error}");
+                return ExitCode::from(omp_process::EXIT_UNMEASURED);
+            }
+        }
+    } else if let omp_process::ProcessProbeVerdict::Answered(scopes) = &outcome.verdict {
+        println!("{}", omp_process::render(scopes));
+    } else {
+        eprintln!(
+            "ompo ps: {} detail={}",
+            outcome.reason_code(),
+            outcome.detail()
+        );
+    }
+    ExitCode::from(outcome.exit_code())
+}
+
 /// `tokens`, `toolCalls` or `premiumRequests` from OMP at all.
 fn run_stats(rest: &[String]) -> ExitCode {
     for arg in rest {

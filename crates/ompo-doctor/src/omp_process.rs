@@ -7,8 +7,9 @@
 //! child's exit code separately from the parse/verdict: a process that exits successfully is
 //! not thereby a valid JSON answer, and a non-zero child exit is never promoted to success.
 
+use omp_rpc_session::NO_CLAIM_BOUNDARY;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::fmt;
 use std::path::Path;
 use std::process::Command;
@@ -36,7 +37,8 @@ pub struct DaemonProcess {
     pub name: String,
     pub id: String,
     pub state: String,
-    pub pid: u32,
+    /// Running rows carry a PID; exited rows omit it in OMP's wire response.
+    pub pid: Option<u32>,
     #[serde(rename = "createdAt")]
     pub created_at: u64,
     #[serde(rename = "startedAt")]
@@ -120,6 +122,78 @@ pub struct ProcessProbeOutcome {
     pub verdict: ProcessProbeVerdict,
 }
 
+/// ps exit dictionary. A successful answer is distinct from a typed child/parser
+/// failure, while a missing instrument or deadline remains explicitly unmeasured.
+pub const EXIT_OK: u8 = 0;
+pub const EXIT_FAILED: u8 = 1;
+pub const EXIT_BAD_INVOCATION: u8 = 2;
+pub const EXIT_UNMEASURED: u8 = 4;
+
+impl ProcessProbeOutcome {
+    #[must_use]
+    pub fn reason_code(&self) -> &'static str {
+        match &self.verdict {
+            ProcessProbeVerdict::Answered(_) => "OMP_PS_OK",
+            ProcessProbeVerdict::ChildFailed { .. } => "OMP_PS_CHILD_FAILED",
+            ProcessProbeVerdict::TimedOut => "OMP_PS_TIMEOUT_UNMEASURED",
+            ProcessProbeVerdict::SpawnFailed { .. } => "OMP_PS_SPAWN_UNMEASURED",
+            ProcessProbeVerdict::InvalidJson { .. } => "OMP_PS_INVALID_JSON",
+            ProcessProbeVerdict::InvalidShape { .. } => "OMP_PS_INVALID_SHAPE",
+        }
+    }
+
+    #[must_use]
+    pub fn exit_code(&self) -> u8 {
+        match &self.verdict {
+            ProcessProbeVerdict::Answered(_) => EXIT_OK,
+            ProcessProbeVerdict::TimedOut | ProcessProbeVerdict::SpawnFailed { .. } => {
+                EXIT_UNMEASURED
+            }
+            ProcessProbeVerdict::ChildFailed { .. }
+            | ProcessProbeVerdict::InvalidJson { .. }
+            | ProcessProbeVerdict::InvalidShape { .. } => EXIT_FAILED,
+        }
+    }
+
+    #[must_use]
+    pub fn envelope_status(&self) -> &'static str {
+        match &self.verdict {
+            ProcessProbeVerdict::Answered(_) => "OK",
+            ProcessProbeVerdict::TimedOut | ProcessProbeVerdict::SpawnFailed { .. } => "UNKNOWN",
+            ProcessProbeVerdict::ChildFailed { .. }
+            | ProcessProbeVerdict::InvalidJson { .. }
+            | ProcessProbeVerdict::InvalidShape { .. } => "DEGRADED",
+        }
+    }
+
+    #[must_use]
+    pub fn is_unmeasured(&self) -> bool {
+        matches!(
+            &self.verdict,
+            ProcessProbeVerdict::TimedOut | ProcessProbeVerdict::SpawnFailed { .. }
+        )
+    }
+
+    #[must_use]
+    pub fn detail(&self) -> String {
+        match &self.verdict {
+            ProcessProbeVerdict::Answered(scopes) => format!(
+                "project_scopes={} daemon_rows={}",
+                scopes.len(),
+                scopes
+                    .iter()
+                    .map(|scope| scope.daemons.len())
+                    .sum::<usize>()
+            ),
+            ProcessProbeVerdict::ChildFailed { detail }
+            | ProcessProbeVerdict::SpawnFailed { detail }
+            | ProcessProbeVerdict::InvalidJson { detail }
+            | ProcessProbeVerdict::InvalidShape { detail } => detail.clone(),
+            ProcessProbeVerdict::TimedOut => "omp ps probe deadline expired".to_owned(),
+        }
+    }
+}
+
 /// Classify captured `omp ps` output without spawning a process.
 pub fn classify_ps_output(
     exit_code: Option<i32>,
@@ -189,6 +263,75 @@ pub async fn read_processes(cx: &asupersync::Cx, repo: &Path) -> ProcessProbeOut
             },
         },
     }
+}
+
+/// Render a successful process listing for a human operator. Failure details belong on stderr
+/// at the CLI boundary, just as they do for state, stats, and messages.
+#[must_use]
+pub fn render(scopes: &[ProcessScope]) -> String {
+    let daemon_rows: usize = scopes.iter().map(|scope| scope.daemons.len()).sum();
+    format!(
+        "OMPO_PS project_scopes={} daemon_rows={} adopted_method=omp ps",
+        scopes.len(),
+        daemon_rows
+    )
+}
+
+/// The JSON envelope. Only the successful answer exposes project scopes and daemon rows;
+/// failure envelopes carry typed reason/detail fields and never echo broker credentials.
+#[must_use]
+pub fn envelope(outcome: &ProcessProbeOutcome) -> Value {
+    let data = match &outcome.verdict {
+        ProcessProbeVerdict::Answered(scopes) => json!({
+            "adopted_method": "omp ps",
+            "project_scopes": scopes,
+            "project_scope_count": scopes.len(),
+            "daemon_row_count": scopes.iter().map(|scope| scope.daemons.len()).sum::<usize>(),
+            "reason_code": outcome.reason_code(),
+            "no_claim": NO_CLAIM_BOUNDARY,
+        }),
+        ProcessProbeVerdict::ChildFailed { .. } => json!({
+            "adopted_method": "omp ps",
+            "reason_code": outcome.reason_code(),
+            "detail": outcome.detail(),
+            "exit_code": outcome.exit_code(),
+            "unmeasured": outcome.is_unmeasured(),
+            "no_claim": NO_CLAIM_BOUNDARY,
+        }),
+        ProcessProbeVerdict::TimedOut => json!({
+            "adopted_method": "omp ps",
+            "reason_code": outcome.reason_code(),
+            "detail": outcome.detail(),
+            "exit_code": outcome.exit_code(),
+            "unmeasured": outcome.is_unmeasured(),
+            "no_claim": NO_CLAIM_BOUNDARY,
+        }),
+        ProcessProbeVerdict::SpawnFailed { .. } => json!({
+            "adopted_method": "omp ps",
+            "reason_code": outcome.reason_code(),
+            "detail": outcome.detail(),
+            "exit_code": outcome.exit_code(),
+            "unmeasured": outcome.is_unmeasured(),
+            "no_claim": NO_CLAIM_BOUNDARY,
+        }),
+        ProcessProbeVerdict::InvalidJson { .. } => json!({
+            "adopted_method": "omp ps",
+            "reason_code": outcome.reason_code(),
+            "detail": outcome.detail(),
+            "exit_code": outcome.exit_code(),
+            "unmeasured": outcome.is_unmeasured(),
+            "no_claim": NO_CLAIM_BOUNDARY,
+        }),
+        ProcessProbeVerdict::InvalidShape { .. } => json!({
+            "adopted_method": "omp ps",
+            "reason_code": outcome.reason_code(),
+            "detail": outcome.detail(),
+            "exit_code": outcome.exit_code(),
+            "unmeasured": outcome.is_unmeasured(),
+            "no_claim": NO_CLAIM_BOUNDARY,
+        }),
+    };
+    crate::umbrella::envelope("ps", outcome.envelope_status(), data)
 }
 
 #[cfg(test)]
