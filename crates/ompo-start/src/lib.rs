@@ -12,6 +12,8 @@ pub mod pack;
 pub mod inception;
 pub mod foundation;
 
+pub mod liveness;
+pub mod portal;
 pub use foundation::{append_s1_foundation, s1_row, s1_rows_citing_inception, INCEPTION_REF, SOURCE};
 pub use pack::{retain_pack_receipt, PackError, PackReceipt, SendAttempt, TICK_ZERO_TARGET};
 pub use spawn::{
