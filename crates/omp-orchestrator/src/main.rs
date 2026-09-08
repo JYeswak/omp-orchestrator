@@ -772,6 +772,382 @@ fn require_success(program: &str, output: Output) -> Result<Vec<u8>, String> {
     ))
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct NtmSendAdmission {
+    target: String,
+    state: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct NtmSendReceipt {
+    raw_json: String,
+    operation_id: String,
+    status: String,
+    payload_sha256: String,
+    payload_bytes: u64,
+    admissions: Vec<NtmSendAdmission>,
+    successful: Vec<String>,
+    failed: Vec<String>,
+}
+
+fn receipt_string(
+    object: &serde_json::Map<String, Value>,
+    field: &'static str,
+) -> Result<String, String> {
+    match object.get(field).and_then(Value::as_str) {
+        Some(value) if !value.is_empty() => Ok(value.to_owned()),
+        Some(_) => Err(format!("NTM_SEND_RECEIPT_MALFORMED field={field} reason=empty")),
+        None if object.contains_key(field) => {
+            Err(format!("NTM_SEND_RECEIPT_MALFORMED field={field} reason=wrong_type"))
+        }
+        None => Err(format!("NTM_SEND_RECEIPT_MALFORMED field={field} reason=missing")),
+    }
+}
+
+fn receipt_strings(
+    object: &serde_json::Map<String, Value>,
+    field: &'static str,
+) -> Result<Vec<String>, String> {
+    let Some(value) = object.get(field) else {
+        return Err(format!("NTM_SEND_RECEIPT_MALFORMED field={field} reason=missing"));
+    };
+    let Some(values) = value.as_array() else {
+        return Err(format!("NTM_SEND_RECEIPT_MALFORMED field={field} reason=wrong_type"));
+    };
+    values
+        .iter()
+        .map(|value| {
+            value.as_str().map(ToOwned::to_owned).ok_or_else(|| {
+                format!("NTM_SEND_RECEIPT_MALFORMED field={field} reason=wrong_item_type")
+            })
+        })
+        .collect()
+}
+
+fn receipt_exit_label(exit_code: Option<i32>) -> String {
+    exit_code.map_or_else(|| "signal".to_owned(), |code| code.to_string())
+}
+
+fn receipt_failure(
+    exit_code: Option<i32>,
+    error_code: &str,
+    message: &str,
+    stderr: &[u8],
+) -> String {
+    format!(
+        "NTM_SEND_RECEIPT_FAILED exit={} error_code={error_code} message={message} stderr={}",
+        receipt_exit_label(exit_code),
+        String::from_utf8_lossy(stderr).trim()
+    )
+}
+
+/// Parse the durable NTM send-receipt response.
+///
+/// A non-zero command is not a missing result: preserve its exit code and the daemon's
+/// structured error so the caller cannot mistake an unavailable receipt for delivery.
+fn parse_ntm_send_receipt(
+    exit_code: Option<i32>,
+    stdout: &[u8],
+    stderr: &[u8],
+) -> Result<NtmSendReceipt, String> {
+    let raw_json = String::from_utf8(stdout.to_vec()).map_err(|_| {
+        receipt_failure(
+            exit_code,
+            "INVALID_UTF8",
+            "receipt stdout is not UTF-8",
+            stderr,
+        )
+    })?;
+    let value: Value = serde_json::from_str(&raw_json).map_err(|error| {
+        receipt_failure(
+            exit_code,
+            "INVALID_JSON",
+            &format!("receipt stdout is invalid JSON: {error}"),
+            stderr,
+        )
+    })?;
+    let Some(object) = value.as_object() else {
+        return Err(receipt_failure(
+            exit_code,
+            "NOT_AN_OBJECT",
+            "receipt response is not a JSON object",
+            stderr,
+        ));
+    };
+    if exit_code != Some(0) {
+        let error_code = object
+            .get("error_code")
+            .and_then(Value::as_str)
+            .unwrap_or("UNKNOWN");
+        let message = object
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("missing daemon error message");
+        return Err(receipt_failure(exit_code, error_code, message, stderr));
+    }
+    if object.get("success").and_then(Value::as_bool) != Some(true) {
+        return Err(receipt_failure(
+            exit_code,
+            object
+                .get("error_code")
+                .and_then(Value::as_str)
+                .unwrap_or("UNSUCCESSFUL"),
+            object
+                .get("error")
+                .and_then(Value::as_str)
+                .unwrap_or("receipt response did not report success"),
+            stderr,
+        ));
+    }
+    let operation = object
+        .get("operation")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "NTM_SEND_RECEIPT_MALFORMED field=operation reason=missing".to_owned())?;
+    let outcome = object
+        .get("outcome")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "NTM_SEND_RECEIPT_MALFORMED field=outcome reason=missing".to_owned())?;
+    if outcome.get("success").and_then(Value::as_bool) != Some(true) {
+        return Err(
+            "NTM_SEND_RECEIPT_MALFORMED field=outcome.success reason=not_true".to_owned(),
+        );
+    }
+    let Some(admission_values) = operation.get("admissions").and_then(Value::as_array) else {
+        return Err("NTM_SEND_RECEIPT_MALFORMED field=operation.admissions reason=missing_or_wrong_type".to_owned());
+    };
+    if admission_values.is_empty() {
+        return Err("NTM_SEND_RECEIPT_MALFORMED field=operation.admissions reason=empty".to_owned());
+    }
+    let mut admissions = Vec::with_capacity(admission_values.len());
+    for value in admission_values {
+        let Some(admission) = value.as_object() else {
+            return Err(
+                "NTM_SEND_RECEIPT_MALFORMED field=operation.admissions reason=wrong_item_type"
+                    .to_owned(),
+            );
+        };
+        admissions.push(NtmSendAdmission {
+            target: receipt_string(admission, "target")?,
+            state: receipt_string(admission, "state")?,
+        });
+    }
+    let payload_sha256 = receipt_string(operation, "payload_sha256")?;
+    if payload_sha256.len() != 64
+        || !payload_sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(
+            "NTM_SEND_RECEIPT_MALFORMED field=operation.payload_sha256 reason=not_lower_hex_sha256"
+                .to_owned(),
+        );
+    }
+    let payload_bytes = operation
+        .get("payload_bytes")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| {
+            "NTM_SEND_RECEIPT_MALFORMED field=operation.payload_bytes reason=missing_or_wrong_type"
+                .to_owned()
+        })?;
+    Ok(NtmSendReceipt {
+        raw_json,
+        operation_id: receipt_string(operation, "operation_id")?,
+        status: receipt_string(operation, "status")?,
+        payload_sha256,
+        payload_bytes,
+        admissions,
+        successful: receipt_strings(outcome, "successful")?,
+        failed: receipt_strings(outcome, "failed")?,
+    })
+}
+
+fn ntm_operation_id_component(value: &str) -> String {
+    value
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character
+            } else {
+                '-'
+            }
+        })
+        .collect()
+}
+
+fn ntm_send_operation_id(bead: &str, pane: &str, tick: u64) -> String {
+    format!(
+        "omp-ntm-send-{}-{}-{}-{}",
+        ntm_operation_id_component(lifecycle_run_id()),
+        tick,
+        ntm_operation_id_component(pane),
+        ntm_operation_id_component(bead)
+    )
+}
+
+fn ntm_send_args(
+    session: &str,
+    pane: &str,
+    staged_packet: &Path,
+    operation_id: &str,
+) -> Vec<String> {
+    vec![
+        tick_monitor::ntm_send_arg(session),
+        format!("--panes={pane}"),
+        format!("--msg-file={}", staged_packet.display()),
+        format!("--op-id={operation_id}"),
+    ]
+}
+
+fn ntm_send_receipt_args(operation_id: &str) -> Vec<String> {
+    vec![format!("--robot-send-receipt={operation_id}")]
+}
+
+fn ntm_target_matches(target: &str, pane: &str) -> bool {
+    target == pane || target.trim_start_matches('%') == pane.trim_start_matches('%')
+}
+
+fn validate_ntm_send_receipt(
+    receipt: &NtmSendReceipt,
+    operation_id: &str,
+    packet: &str,
+    pane: &str,
+) -> Result<(), String> {
+    if receipt.operation_id != operation_id {
+        return Err(format!(
+            "NTM_SEND_RECEIPT_REFUSED reason=operation_id_mismatch expected={operation_id} got={}",
+            receipt.operation_id
+        ));
+    }
+    if receipt.status != "completed" {
+        return Err(format!(
+            "NTM_SEND_RECEIPT_REFUSED reason=operation_not_completed status={}",
+            receipt.status
+        ));
+    }
+    let expected_sha = packet_digest(packet.as_bytes());
+    let expected_sha = expected_sha.strip_prefix("sha256:").unwrap_or(&expected_sha);
+    if receipt.payload_sha256 != expected_sha {
+        return Err(format!(
+            "NTM_SEND_RECEIPT_REFUSED reason=payload_digest_mismatch expected={expected_sha} got={}",
+            receipt.payload_sha256
+        ));
+    }
+    if receipt.payload_bytes != packet.len() as u64 {
+        return Err(format!(
+            "NTM_SEND_RECEIPT_REFUSED reason=payload_bytes_mismatch expected={} got={}",
+            packet.len(),
+            receipt.payload_bytes
+        ));
+    }
+    let target_admitted = receipt
+        .admissions
+        .iter()
+        .find(|admission| ntm_target_matches(&admission.target, pane))
+        .ok_or_else(|| {
+            format!(
+                "NTM_SEND_RECEIPT_REFUSED reason=target_admission_missing pane={pane}"
+            )
+        })?;
+    if target_admitted.state != "submitted" {
+        return Err(format!(
+            "NTM_SEND_RECEIPT_REFUSED reason=target_not_submitted pane={pane} state={}",
+            target_admitted.state
+        ));
+    }
+    if !receipt
+        .successful
+        .iter()
+        .any(|target| ntm_target_matches(target, pane))
+    {
+        return Err(format!(
+            "NTM_SEND_RECEIPT_REFUSED reason=target_not_successful pane={pane}"
+        ));
+    }
+    if receipt
+        .failed
+        .iter()
+        .any(|target| ntm_target_matches(target, pane))
+    {
+        return Err(format!(
+            "NTM_SEND_RECEIPT_REFUSED reason=target_failed pane={pane}"
+        ));
+    }
+    Ok(())
+}
+
+async fn query_ntm_send_receipt(
+    cx: &Cx,
+    config: &Config,
+    operation_id: &str,
+    pane: &str,
+) -> Result<NtmSendReceipt, String> {
+    let output = invoke(
+        cx,
+        config,
+        &config.ntm,
+        &ntm_send_receipt_args(operation_id),
+    )
+    .await
+    .map_err(|error| {
+        format!(
+            "NTM_SEND_RECEIPT_REFUSED pane={pane} operation_id={operation_id} error={error}"
+        )
+    })?;
+    parse_ntm_send_receipt(output.status.code(), &output.stdout, &output.stderr).map_err(|error| {
+        format!(
+            "NTM_SEND_RECEIPT_REFUSED pane={pane} operation_id={operation_id} {error}"
+        )
+    })
+}
+
+fn write_ntm_send_receipt(
+    config: &Config,
+    tick: u64,
+    pane: &str,
+    bead: &str,
+    receipt: &NtmSendReceipt,
+) -> Result<(), String> {
+    let detail = json!({
+        "bead": bead,
+        "pane": pane,
+        "operation_id": receipt.operation_id,
+        "status": receipt.status,
+        "payload_sha256": receipt.payload_sha256,
+        "payload_bytes": receipt.payload_bytes,
+        "admissions": receipt.admissions.iter().map(|admission| json!({
+            "target": admission.target,
+            "state": admission.state,
+        })).collect::<Vec<_>>(),
+        "successful": receipt.successful,
+        "failed": receipt.failed,
+        "raw_json": receipt.raw_json,
+    })
+    .to_string();
+    write_heartbeat(config, tick, "NTM_SEND_RECEIPT_RECORDED", &detail)
+}
+async fn send_ntm_with_receipt(
+    cx: &Cx,
+    config: &Config,
+    pane: &str,
+    bead: &str,
+    packet: &str,
+    staged: &Path,
+    tick: u64,
+) -> Result<TransportReceipt, String> {
+    let operation_id = ntm_send_operation_id(bead, pane, tick);
+    let send_args = ntm_send_args(&config.session, pane, staged, &operation_id);
+    let output = invoke(cx, config, &config.ntm, &send_args).await?;
+    let stdout = require_success(&config.ntm, output)?;
+    let transport = TransportReceipt::capture_ntm(&stdout).map_err(|error| {
+        format!("DISPATCH_BLOCKED bead={bead} malformed ntm receipt: {error}")
+    })?;
+    let durable = query_ntm_send_receipt(cx, config, &operation_id, pane).await?;
+    validate_ntm_send_receipt(&durable, &operation_id, packet, pane).map_err(|error| {
+        format!("DISPATCH_BLOCKED bead={bead} pane={pane} {error}")
+    })?;
+    write_ntm_send_receipt(config, tick, pane, bead, &durable)?;
+    Ok(transport)
+}
 fn classify_ompo_ps_output(output: &Output) -> OmpoPsEvidence {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1017,7 +1393,11 @@ async fn post_send_observation(
     cx: &Cx,
     config: &Config,
     pane: &str,
+    codex: bool,
 ) -> (PostSendObservation, Option<String>) {
+    if !codex {
+        return (PostSendObservation::Missing, None);
+    }
     let list_args = vec![
         "list-panes".to_owned(),
         "-t".to_owned(),
@@ -2894,18 +3274,7 @@ async fn send_and_verify(
             Some(0),
         )
     } else {
-        let send_args = vec![
-            tick_monitor::ntm_send_arg(&config.session),
-            format!("--panes={pane}"),
-            format!("--msg-file={}", staged.display()),
-        ];
-        let stdout = require_success(
-            &config.ntm,
-            invoke(cx, config, &config.ntm, &send_args).await?,
-        )?;
-        TransportReceipt::capture_ntm(&stdout).map_err(|error| {
-            format!("DISPATCH_BLOCKED bead={bead} malformed ntm receipt: {error}")
-        })?
+        send_ntm_with_receipt(cx, config, pane, bead, &packet, &staged, tick).await?
     };
     let _ = fs::remove_file(&staged);
     write_transport_receipt(config, tick, pane, bead, &transport)?;
@@ -2942,7 +3311,8 @@ async fn send_and_verify(
     loop {
         cx.checkpoint()
             .map_err(|_| "CANCELLED while verifying receiver receipt".to_owned())?;
-        let (post_send, pane_capture) = post_send_observation(cx, config, pane).await;
+        let (post_send, pane_capture) =
+            post_send_observation(cx, config, pane, codex).await;
         if let receiver_receipt::PostSendObservation::Present(observation) = &post_send {
             if first_working.is_none()
                 && matches!(
@@ -6481,6 +6851,89 @@ mod tests {
         )
     }
 
+    fn good_ntm_receipt_json(packet: &str, operation_id: &str, target: &str) -> String {
+        let digest = packet_digest(packet.as_bytes());
+        let digest = digest.strip_prefix("sha256:").unwrap_or(&digest);
+        json!({
+            "success": true,
+            "operation": {
+                "operation_id": operation_id,
+                "status": "completed",
+                "payload_sha256": digest,
+                "payload_bytes": packet.len(),
+                "admissions": [{"target": target, "state": "submitted"}],
+            },
+            "outcome": {
+                "success": true,
+                "successful": [target],
+                "failed": [],
+            },
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn ntm_send_receipt_known_good_binds_payload_and_target() {
+        let packet = "receipt test packet\\n";
+        let operation_id = "omp-ntm-send-test-good";
+        let raw = good_ntm_receipt_json(packet, operation_id, "5");
+        let receipt = parse_ntm_send_receipt(Some(0), raw.as_bytes(), b"").expect("valid receipt");
+
+        validate_ntm_send_receipt(&receipt, operation_id, packet, "%5")
+            .expect("receipt binds the submitted payload to the target");
+        assert_eq!(receipt.status, "completed");
+        assert_eq!(ntm_send_receipt_args(operation_id), vec![
+            "--robot-send-receipt=omp-ntm-send-test-good"
+        ]);
+    }
+
+    #[test]
+    fn missing_ntm_send_receipt_is_not_delivery_and_pins_message_and_exit() {
+        let raw = br#"{"success":false,"error":"send operation 'missing-op' not found","error_code":"NOT_FOUND"}"#;
+        let error = parse_ntm_send_receipt(Some(1), raw, b"").expect_err("missing receipt");
+
+        assert!(error.contains("NTM_SEND_RECEIPT_FAILED"));
+        assert!(error.contains("exit=1"), "the command exit code is evidence: {error}");
+        assert!(error.contains("error_code=NOT_FOUND"), "the daemon code is evidence: {error}");
+        assert!(
+            error.contains("message=send operation 'missing-op' not found"),
+            "the daemon message identifies the missing receipt: {error}"
+        );
+        assert!(!error.contains("completed"), "missing receipt cannot be read as delivery");
+    }
+
+    #[test]
+    fn empty_ntm_admissions_are_unknown_not_a_vacuous_pass() {
+        let packet = "receipt anti-vacuity\\n";
+        let operation_id = "omp-ntm-send-test-empty";
+        let mut value: Value = serde_json::from_str(&good_ntm_receipt_json(packet, operation_id, "5"))
+            .expect("fixture JSON");
+        value["operation"]["admissions"] = Value::Array(Vec::new());
+        let error = parse_ntm_send_receipt(
+            Some(0),
+            value.to_string().as_bytes(),
+            b"",
+        )
+        .expect_err("an empty admission set is not evidence");
+
+        assert_eq!(
+            error,
+            "NTM_SEND_RECEIPT_MALFORMED field=operation.admissions reason=empty"
+        );
+    }
+
+    #[test]
+    fn ntm_send_carries_idempotency_key_into_the_reachable_trigger() {
+        let args = ntm_send_args(
+            "omp-orchestrator",
+            "%5",
+            Path::new("/state/packet.txt"),
+            "omp-ntm-send-test-wiring",
+        );
+        assert_eq!(args[0], "--robot-send=omp-orchestrator");
+        assert!(args.iter().any(|arg| arg == "--op-id=omp-ntm-send-test-wiring"));
+        assert!(args.iter().any(|arg| arg == "--msg-file=/state/packet.txt"));
+    }
     /// The four repo shapes the docs gate must distinguish. Measured 2026-09-05:
     /// `omp-orchestrator` is 676,234 B / 13 sections; `uds` and `control-plane` are
     /// absent / 0. The original order read the assembly FIRST, so shapes 3 and 4 were
