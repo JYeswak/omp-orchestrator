@@ -227,7 +227,7 @@ fn an_unwritable_bank_is_named_and_does_not_silence_the_stream() {
 /// and `GateReport::render` must contain exactly what the stream emitted.
 #[test]
 fn the_streamed_row_is_byte_identical_to_the_reported_row() {
-    use gate_runner::{CrateVerdict, GateReport};
+    use gate_runner::{CrateVerdict, GateReport, UnmeasurablePrecondition};
     use std::collections::{BTreeMap, BTreeSet};
 
     let cases = vec![
@@ -236,12 +236,17 @@ fn the_streamed_row_is_byte_identical_to_the_reported_row() {
             "b",
             CrateVerdict::Failed {
                 failing: vec!["x".to_owned(), "y".to_owned()],
+                unmeasurable: None,
             },
         ),
         (
             "c",
             CrateVerdict::Unmeasurable {
-                reason: "no_test_result_line_in_output".to_owned(),
+                reason: UnmeasurablePrecondition::AllTestsSkipped {
+                    expected: 1,
+                    skipped: 1,
+                    detail: "fixture".to_owned(),
+                },
             },
         ),
         (

@@ -17,6 +17,7 @@
 use gate_runner::{
     build_report, check_allowance, derive_checks, derive_roster, expand, parse_ledger,
     CrateVerdict, Invocation, NoTestsDisposition, Observed, RosterError, Subsumption,
+    UnmeasurablePrecondition,
     EXIT_EMPTY_ROSTER, EXIT_GATE_FAILED, EXIT_LEDGER_DRIFT, EXIT_OK, EXIT_SHORT_ROSTER,
 };
 use std::collections::{BTreeMap, BTreeSet};
@@ -256,7 +257,10 @@ fn an_unmeasurable_crate_is_neither_pass_nor_fail() {
         Observed {
             passed: Vec::new(),
             failed: Vec::new(),
-            unmeasurable: Some("br_absent_on_worker".to_owned()),
+            unmeasurable: Some(UnmeasurablePrecondition::MissingExecutable {
+                executable: "br".to_owned(),
+                detail: "fixture missing command".to_owned(),
+            }),
         },
     );
     let ledger: BTreeSet<String> = ["alpha"].iter().map(|s| (*s).to_owned()).collect();
@@ -271,10 +275,33 @@ fn an_unmeasurable_crate_is_neither_pass_nor_fail() {
     assert!(!verdict.is_blocking());
     assert_eq!(verdict.code(), "UNMEASURABLE", "and it is NOT reported as PASS");
     assert!(
-        report.render().contains("UNMEASURABLE crate=alpha reason=br_absent_on_worker"),
+        report.render().contains("UNMEASURABLE crate=alpha reason=MISSING_EXECUTABLE executable=br detail=fixture missing command"),
         "{}",
         report.render()
     );
+}
+#[test]
+fn measured_environment_does_not_hide_a_real_failure() {
+    let md = metadata(&[("alpha", &["bad"])]);
+    let roster = derive_roster(&md, &lib_tests(&[])).expect("parses");
+    let mut observations = BTreeMap::new();
+    observations.insert(
+        "alpha".to_owned(),
+        Observed {
+            passed: Vec::new(),
+            failed: vec!["bad".to_owned()],
+            unmeasurable: Some(UnmeasurablePrecondition::MissingPath {
+                path: ".git".to_owned(),
+                detail: "fixture missing git metadata".to_owned(),
+            }),
+        },
+    );
+    let ledger: BTreeSet<String> = ["alpha"].iter().map(|s| (*s).to_owned()).collect();
+    let report = build_report(&roster, &observations, &ledger);
+    assert_eq!(report.exit_code(), EXIT_GATE_FAILED);
+    let rendered = report.render();
+    assert!(rendered.contains("FAIL crate=alpha failing_targets=bad"), "{rendered}");
+    assert!(rendered.contains("unmeasurable=MISSING_PATH path=.git"), "{rendered}");
 }
 
 /// ITEM 7's DECISION, asserted rather than described: a crate with no tests at all is an ERROR
@@ -387,7 +414,10 @@ fn a_gate_declares_its_own_check_invocation_in_its_own_manifest() {
 #[test]
 fn a_multi_phase_gate_keeps_its_phase_order() {
     let md = r#"{"packages":[{"name":"fence","manifest_path":"/x/f/Cargo.toml","targets":[],
-        "metadata":{"gate":{"checks":[["init","--repo","{repo}"],["check","--repo","{repo}"]]}}}]}"#;
+        "metadata":{"gate":{"checks":[
+            {"bin":"fence","args":["init","--repo","{repo}"],"setup":true},
+            {"bin":"fence","args":["check","--repo","{repo}"]}
+          ]}}}]}"#;
     let checks = derive_checks(md).expect("parses");
     assert_eq!(checks[0].phases.len(), 2);
     assert_eq!(checks[0].phases[0].args[0], "init", "phase order is load-bearing");
@@ -405,7 +435,7 @@ fn a_multi_phase_gate_keeps_its_phase_order() {
 fn a_crate_hosting_several_gate_bins_keeps_all_of_them() {
     let md = r#"{"packages":[{"name":"multi","manifest_path":"/x/m/Cargo.toml","targets":[],
         "metadata":{"gate":{"checks":[
-          {"bin":"multi","args":[]},
+          {"bin":"multi","args":[],"takes_no_args":true},
           {"bin":"reachability","args":["--root","{repo}"]},
           {"bin":"head-compiles","args":["--repo","{repo}","--receipt","{scratch}/r"]}
         ]}}}]}"#;
@@ -513,7 +543,7 @@ fn a_job_with_a_declared_check_is_subsumed_on_both_halves() {
     let roster = derive_roster(&md, &lib_tests(&[])).expect("parses");
     let checks = vec![gate_runner::CheckInvocation {
         crate_name: "scanner".to_owned(),
-        phases: vec![gate_runner::CheckPhase { bin: None, args: vec!["{repo}".to_owned()] }],
+        phases: vec![gate_runner::CheckPhase { setup: false, takes_no_args: false, bin: None, args: vec!["{repo}".to_owned()] }],
     }];
     assert_eq!(
         subsumption_of("scanner", true, &roster, &checks),
@@ -606,5 +636,103 @@ fn scoping_the_run_does_not_manufacture_ledger_drift() {
         report.render().contains("crate=deleted-gate"),
         "real drift must still be named under a scoped run: {}",
         report.render()
+    );
+}
+
+/// HAZARD 2 leg (a): a bare `[]` is REFUSED as ambiguous, naming the stanza.
+///
+/// `%6`'s ruling on `etyur`: a field that cannot distinguish *"no arguments"* from *"someone
+/// truncated this"* IS the defect, and picking a reading only chooses which failure is silent.
+#[test]
+fn a_bare_empty_argv_is_refused_as_ambiguous() {
+    let md = r#"{"packages":[{"name":"pa","manifest_path":"/x/p/Cargo.toml","targets":[],
+        "metadata":{"gate":{"checks":[[]]}}}]}"#;
+    let error = derive_checks(md).expect_err("a bare [] must be REFUSED, not read as zero-arg");
+    let text = error.to_string();
+    assert!(text.contains("pa"), "the refusal must name the stanza: {text}");
+    assert!(
+        text.contains("AMBIGUOUS") && text.contains("takes_no_args"),
+        "the refusal must name the cause AND the remedy: {text}"
+    );
+}
+
+/// HAZARD 2 leg (b): the explicit marker is ACCEPTED and yields a real zero-arg phase.
+#[test]
+fn an_explicitly_declared_zero_arg_check_is_accepted() {
+    let md = r#"{"packages":[{"name":"pa","manifest_path":"/x/p/Cargo.toml","targets":[],
+        "metadata":{"gate":{"checks":[{"bin":"pa","args":[],"takes_no_args":true}]}}}]}"#;
+    let checks = derive_checks(md).expect("the marker must be accepted");
+    assert_eq!(checks[0].phases.len(), 1);
+    assert!(checks[0].phases[0].args.is_empty());
+    assert!(checks[0].phases[0].takes_no_args);
+}
+
+/// HAZARD 2 leg (c) — NON-WIDENING, and this is the ruling's whole safety.
+///
+/// Every marker that admits a previously-refused case is a candidate bypass. So a stanza
+/// malformed some OTHER way must STILL be refused after `takes_no_args` exists.
+#[test]
+fn the_no_arg_marker_does_not_widen_into_a_bypass() {
+    // a table with no `bin` is still unreadable, marker or not
+    let no_bin = r#"{"packages":[{"name":"pa","manifest_path":"/x/p/Cargo.toml","targets":[],
+        "metadata":{"gate":{"checks":[{"args":[],"takes_no_args":true}]}}}]}"#;
+    assert!(
+        derive_checks(no_bin).is_err(),
+        "a table phase with no bin must still be refused"
+    );
+    // a non-array, non-table phase is still unreadable
+    let scalar = r#"{"packages":[{"name":"pa","manifest_path":"/x/p/Cargo.toml","targets":[],
+        "metadata":{"gate":{"checks":["takes_no_args"]}}}]}"#;
+    assert!(
+        derive_checks(scalar).is_err(),
+        "a scalar phase must still be refused"
+    );
+    // and the marker must not make a REPEATED BIN skip its setup declaration
+    let repeated = r#"{"packages":[{"name":"f","manifest_path":"/x/f/Cargo.toml","targets":[],
+        "metadata":{"gate":{"checks":[
+          {"bin":"f","args":[],"takes_no_args":true},
+          {"bin":"f","args":["check"]}
+        ]}}}]}"#;
+    assert!(
+        derive_checks(repeated).is_err(),
+        "takes_no_args must not exempt a repeated bin from declaring setup"
+    );
+}
+
+/// HAZARD 1 leg: a repeated bin that does not declare `setup` is REFUSED.
+///
+/// FIRES-ON-KNOWN-BAD against the shape real production data had until this landed:
+/// `commit-build-fence` declared `["init", ...]` then `["check", ...]` as bare arrays, and its
+/// `init` writes `git_dir(repo)/omp-build-registration.json`.
+#[test]
+fn a_repeated_bin_without_a_setup_declaration_is_refused() {
+    let md = r#"{"packages":[{"name":"fence","manifest_path":"/x/f/Cargo.toml","targets":[],
+        "metadata":{"gate":{"checks":[["init","--repo","{repo}"],["check","--repo","{repo}"]]}}}]}"#;
+    let error = derive_checks(md).expect_err("a same-bin sequence must declare setup");
+    let text = error.to_string();
+    assert!(
+        text.contains("setup = true") && text.contains("SEQUENCE"),
+        "the refusal must name the remedy and the reason: {text}"
+    );
+}
+
+/// KNOWN-GOOD, and the leg that caught my over-broad first rule: DISTINCT bins are a FAN-OUT,
+/// not a sequence, and need no setup declaration.
+///
+/// My first version keyed the refusal on POSITION -- every phase before the last -- which refused
+/// `no-shell-gate`'s three genuine checks. The rule was wrong, not the fixture.
+#[test]
+fn distinct_bins_are_a_fan_out_and_need_no_setup_declaration() {
+    let md = r#"{"packages":[{"name":"nsg","manifest_path":"/x/n/Cargo.toml","targets":[],
+        "metadata":{"gate":{"checks":[
+          {"bin":"nsg","args":["--repo","{repo}"]},
+          {"bin":"gate-reachability","args":["--root","{repo}"]},
+          {"bin":"head-compiles-gate","args":["--repo","{repo}"]}
+        ]}}}]}"#;
+    let checks = derive_checks(md).expect("three distinct bins are all checks");
+    assert_eq!(checks[0].phases.len(), 3);
+    assert!(
+        checks[0].phases.iter().all(|p| !p.setup),
+        "none of them is setup, and none needed to say so"
     );
 }

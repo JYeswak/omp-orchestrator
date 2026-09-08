@@ -122,11 +122,50 @@ pub enum NoTestsDisposition {
     Undeclared,
 }
 
+/// A typed reason for an environment that prevented a truthful gate result.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UnmeasurablePrecondition {
+    MissingPath { path: String, detail: String },
+    MissingExecutable { executable: String, detail: String },
+    MissingScheduler { scheduler: String, detail: String },
+    MissingDaemon { endpoint: String, detail: String },
+    PolicyUnavailable { policy: String, detail: String },
+    AllTestsSkipped { expected: usize, skipped: usize, detail: String },
+    FixtureScopeUnavailable {
+        root: String,
+        conflicting_marker: String,
+        detail: String,
+    },
+}
+
+fn one_line_detail(detail: &str) -> String {
+    detail
+        .chars()
+        .map(|character| match character {
+            '\n' | '\r' => ' ',
+            character => character,
+        })
+        .collect()
+}
+
+impl fmt::Display for UnmeasurablePrecondition {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MissingPath { path, detail } => write!(formatter, "MISSING_PATH path={path} detail={}", one_line_detail(detail)),
+            Self::MissingExecutable { executable, detail } => write!(formatter, "MISSING_EXECUTABLE executable={executable} detail={}", one_line_detail(detail)),
+            Self::MissingScheduler { scheduler, detail } => write!(formatter, "MISSING_SCHEDULER scheduler={scheduler} detail={}", one_line_detail(detail)),
+            Self::MissingDaemon { endpoint, detail } => write!(formatter, "MISSING_DAEMON endpoint={endpoint} detail={}", one_line_detail(detail)),
+            Self::PolicyUnavailable { policy, detail } => write!(formatter, "POLICY_UNAVAILABLE policy={policy} detail={}", one_line_detail(detail)),
+            Self::AllTestsSkipped { expected, skipped, detail } => write!(formatter, "ALL_TESTS_SKIPPED expected={expected} skipped={skipped} detail={}", one_line_detail(detail)),
+            Self::FixtureScopeUnavailable { root, conflicting_marker, detail } => write!(formatter, "FIXTURE_SCOPE_UNAVAILABLE root={root} conflicting_marker={conflicting_marker} detail={}", one_line_detail(detail)),
+        }
+    }
+}
 /// Crates that legitimately contribute no test invocation, each with a reason.
 ///
 /// **EMPTY BY DESIGN, and that is the measured outcome rather than an aspiration.** The bead
 /// anticipated `asupersync-conformance` needing a row here for having "ZERO test targets". It does
-/// not: it has **six** `#[test]` functions in a `#[cfg(test)]` module, so it contributes a `--lib`
+/// not: it has **six** #[test] functions in a #[cfg(test)] module, so it contributes a --lib
 /// leg like any other crate. Measured across all 87 packages, **zero** crates are genuinely
 /// untested, so there is nothing to except.
 ///
@@ -140,11 +179,14 @@ pub const NO_TESTS_ALLOWANCE: &[(&str, &str)] = &[];
 pub enum CrateVerdict {
     /// Every expected invocation ran and passed.
     Passed { targets: usize },
-    /// At least one invocation failed. Carries the failing target names so the message names them.
-    Failed { failing: Vec<String> },
+    /// At least one invocation failed. Any measured environment limitation is preserved beside the failure.
+    Failed {
+        failing: Vec<String>,
+        unmeasurable: Option<UnmeasurablePrecondition>,
+    },
     /// The environment could not answer — e.g. `br` absent on a Contabo worker. Neither a pass nor
     /// a failure, and never folded into either.
-    Unmeasurable { reason: String },
+    Unmeasurable { reason: UnmeasurablePrecondition },
     /// Fewer results than the roster expected.
     Short { expected: usize, observed: usize },
     /// No invocations, with its disposition stated.
@@ -165,8 +207,20 @@ impl CrateVerdict {
     pub fn render_row(&self, name: &str) -> String {
         match self {
             Self::Passed { targets } => format!("PASS crate={name} targets={targets}\n"),
-            Self::Failed { failing } => {
-                format!("FAIL crate={name} failing_targets={}\n", failing.join(","))
+            Self::Failed {
+                failing,
+                unmeasurable,
+            } => {
+                let environment = unmeasurable
+                    .as_ref()
+                    .map(|reason| format!(" unmeasurable={reason}"))
+                    .unwrap_or_default();
+                format!(
+                    "FAIL crate={name} failing_targets={}{}{newline}",
+                    failing.join(","),
+                    environment,
+                    newline = '\n'
+                )
             }
             Self::Unmeasurable { reason } => {
                 format!("UNMEASURABLE crate={name} reason={reason}\n")
@@ -407,7 +461,7 @@ pub struct Observed {
     /// Target names that reported a failing one.
     pub failed: Vec<String>,
     /// Set when the environment could not answer at all.
-    pub unmeasurable: Option<String>,
+    pub unmeasurable: Option<UnmeasurablePrecondition>,
 }
 
 /// Fold the roster and the observations into a report.
@@ -468,14 +522,15 @@ pub fn verdict_for(entry: &RosterEntry, observed: Option<&Observed>) -> CrateVer
             observed: 0,
         };
     };
-    if let Some(reason) = &obs.unmeasurable {
-        return CrateVerdict::Unmeasurable {
-            reason: reason.clone(),
-        };
-    }
     if !obs.failed.is_empty() {
         return CrateVerdict::Failed {
             failing: obs.failed.clone(),
+            unmeasurable: obs.unmeasurable.clone(),
+        };
+    }
+    if let Some(reason) = &obs.unmeasurable {
+        return CrateVerdict::Unmeasurable {
+            reason: reason.clone(),
         };
     }
     let seen = obs.passed.len() + obs.failed.len();
@@ -566,6 +621,35 @@ pub struct CheckPhase {
     /// `None` means the crate's default bin — the bare-array form.
     pub bin: Option<String>,
     pub args: Vec<String>,
+    /// This phase MUTATES and is therefore setup, not a check. **Declared, never inferred.**
+    ///
+    /// `%6`'s ruling on `etyur` hazard 1, adopting the recommendation that a declared check must
+    /// be side-effect-free. Two failure modes make it binding, and both go here because they are
+    /// the *why*:
+    ///
+    /// 1. **A gate that mutates the tree it gates cannot distinguish two states.** *"The tree was
+    ///    already conformant"* and *"I made it conformant"* produce the same green, which is
+    ///    unfalsifiable from outside.
+    /// 2. **A verdict that depends on which worker ran it is not a verdict.** `commit-build-fence`
+    ///    writes `git_dir(repo)/omp-build-registration.json` (`main.rs:279`), and `.git/` is
+    ///    excluded from the rch overlay — so *"execute every declared check"* is host-coupled by
+    ///    construction.
+    pub setup: bool,
+    /// An INTENTIONAL zero-argument invocation, distinguishable from a truncated stanza.
+    ///
+    /// `%6`'s ruling on hazard 2. A bare `[]` cannot distinguish *"no arguments"* from *"someone
+    /// truncated this"*, and **a field that cannot distinguish those two states IS the defect** —
+    /// picking a reading only chooses which failure is silent:
+    ///
+    /// ```text
+    /// [] read as "no arguments"  -> a TRUNCATED stanza runs and reports PASS
+    /// [] read as "truncated"     -> a LEGITIMATE zero-arg check can never be declared
+    /// ```
+    ///
+    /// So `[]` is REFUSED, and the intent is carried by a marker a truncation cannot forge: the
+    /// table form with `takes_no_args = true`. A truncation deletes text; it does not invent a
+    /// key.
+    pub takes_no_args: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -610,12 +694,28 @@ pub fn derive_checks(metadata_json: &str) -> Result<Vec<CheckInvocation>, Roster
             // silently treating a broken declaration as absent is how a gate stops running
             // while everything reads green.
             if let Some(argv) = phase.as_array() {
+                // HAZARD 2: a bare `[]` is REFUSED. An empty argv cannot distinguish an
+                // intentional zero-argument check from a truncated stanza, and the bare-array
+                // form has no room to say which. The table form with `takes_no_args = true`
+                // carries the intent in a key a truncation cannot invent.
+                if argv.is_empty() {
+                    return Err(RosterError::MetadataUnreadable {
+                        detail: format!(
+                            "{name}: metadata.gate.checks has a bare `[]` phase, which is \
+                             AMBIGUOUS -- an intentional zero-argument check and a truncated \
+                             stanza are indistinguishable in that form. Declare it as \
+                             {{ bin = \"<bin>\", args = [], takes_no_args = true }}"
+                        ),
+                    });
+                }
                 phases.push(CheckPhase {
                     bin: None,
                     args: argv
                         .iter()
                         .filter_map(|a| a.as_str().map(str::to_owned))
                         .collect(),
+                    setup: false,
+                    takes_no_args: false,
                 });
             } else if let Some(table) = phase.as_object() {
                 let Some(bin) = table.get("bin").and_then(serde_json::Value::as_str) else {
@@ -625,7 +725,7 @@ pub fn derive_checks(metadata_json: &str) -> Result<Vec<CheckInvocation>, Roster
                         ),
                     });
                 };
-                let args = table
+                let args: Vec<String> = table
                     .get("args")
                     .and_then(serde_json::Value::as_array)
                     .map(|argv| {
@@ -634,9 +734,26 @@ pub fn derive_checks(metadata_json: &str) -> Result<Vec<CheckInvocation>, Roster
                             .collect()
                     })
                     .unwrap_or_default();
+                let takes_no_args = table
+                    .get("takes_no_args")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false);
+                if args.is_empty() && !takes_no_args {
+                    return Err(RosterError::MetadataUnreadable {
+                        detail: format!(
+                            "{name}: table phase `{bin}` declares no args and does not set \
+                             `takes_no_args = true` -- an empty argv is AMBIGUOUS, not empty"
+                        ),
+                    });
+                }
                 phases.push(CheckPhase {
                     bin: Some(bin.to_owned()),
                     args,
+                    setup: table
+                        .get("setup")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(false),
+                    takes_no_args,
                 });
             } else {
                 return Err(RosterError::MetadataUnreadable {
@@ -646,6 +763,39 @@ pub fn derive_checks(metadata_json: &str) -> Result<Vec<CheckInvocation>, Roster
                     ),
                 });
             }
+        }
+        // HAZARD 1, the ENFORCEABLE form: SETUP MUST BE DECLARED, NEVER INFERRED.
+        //
+        // A side effect cannot be detected statically, so the refusal keys on the shape that
+        // carries one: THE SAME BIN INVOKED TWICE. `commit-build-fence` runs
+        // `commit-build-fence init` then `commit-build-fence check`, and the `init` writes
+        // `git_dir(repo)/omp-build-registration.json` — a sequence, where everything before the
+        // last invocation exists to set up the last one.
+        //
+        // KEYING ON POSITION INSTEAD WAS WRONG AND A FIXTURE CAUGHT IT. My first version refused
+        // any phase before the last that did not declare setup, which refused `no-shell-gate` —
+        // three DISTINCT bins (`no-shell-gate`, `gate-reachability`, `head-compiles-gate`), all
+        // genuine checks, none setup. A multi-BIN crate is a fan-out; a repeated bin is a
+        // sequence. `a_crate_hosting_several_gate_bins_keeps_all_of_them` went RED and it was
+        // right: the rule, not the fixture, was over-broad.
+        let mut refusal = None;
+        for (index, phase) in phases.iter().enumerate() {
+            let later_same_bin = phases[index + 1..].iter().any(|next| next.bin == phase.bin);
+            if later_same_bin && !phase.setup {
+                refusal = Some(format!(
+                    "{name}: phase {index} invokes bin `{}` which is invoked again later and does \
+                     not declare `setup = true`. A repeated bin is a SEQUENCE, so every earlier \
+                     invocation exists to set up the last one -- and a declared CHECK must be \
+                     side-effect-free, because a gate that mutates the tree it gates cannot \
+                     distinguish \"already conformant\" from \"I made it conformant\": both \
+                     produce the same green",
+                    phase.bin.as_deref().unwrap_or("<default>")
+                ));
+                break;
+            }
+        }
+        if let Some(detail) = refusal {
+            return Err(RosterError::MetadataUnreadable { detail });
         }
         if !phases.is_empty() {
             checks.push(CheckInvocation {

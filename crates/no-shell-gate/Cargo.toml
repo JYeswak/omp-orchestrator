@@ -38,7 +38,11 @@ omp-orchestrator = { path = "../omp-orchestrator" }
 # {repo}/{scratch} are substituted by the runner, never hardcoded -- a path literal in
 # a manifest is what path-literal-guard exists to refuse.
 checks = [
-  { bin = "no-shell-gate", args = [] },
+  # HAZARD 2 (omp-orchestrator-etyur): this bin genuinely takes no arguments -- it scans the
+  # repo from cwd. `takes_no_args` says so in a key a TRUNCATION cannot invent, because a bare
+  # `args = []` is indistinguishable from a half-written stanza and reading it either way only
+  # chooses which failure is silent.
+  { bin = "no-shell-gate", args = [], takes_no_args = true },
   { bin = "gate-reachability", args = ["--root", "{repo}", "--out", "{scratch}/gate-reachability.json"] },
   { bin = "head-compiles-gate", args = ["--repo", "{repo}", "--receipt", "{scratch}/head-compiles.receipt"] },
 ]

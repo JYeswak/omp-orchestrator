@@ -30,8 +30,9 @@
 //! poll hangs at 0% CPU, and a `cargo test` over 88 crates produces far more than 64 KiB.
 
 use gate_runner::{
-    build_report_scoped, check_allowance, derive_roster, parse_ledger, verdict_for, Invocation,
-    Observed,
+    build_report_scoped, check_allowance, derive_checks, derive_roster, parse_ledger, verdict_for,
+    Invocation,
+    Observed, UnmeasurablePrecondition,
     EXIT_METADATA_UNREADABLE,
 };
 use std::collections::BTreeMap;
@@ -119,6 +120,22 @@ fn main() -> ExitCode {
         return ExitCode::from(EXIT_METADATA_UNREADABLE);
     }
 
+    // The DECLARED checks, parsed from each crate's own manifest. A parse failure is fatal:
+    // silently treating a broken declaration as "no check" is how a gate stops running while
+    // everything reads green, which is `etyur`'s whole subject.
+    let checks = match derive_checks(&metadata) {
+        Ok(checks) => checks,
+        Err(error) => {
+            eprintln!("GATE_RUNNER_CHECKS_UNREADABLE {error}");
+            return ExitCode::from(EXIT_METADATA_UNREADABLE);
+        }
+    };
+    // `{scratch}` is load-bearing for three declared invocations — `installer --bin-dir`,
+    // `gate-reachability --out`, `head-compiles-gate --receipt` — so it must be a real directory
+    // that OUTLIVES the command. Per AGENTS.md that is ZS_SCRATCH, never `mktemp`: a bare
+    // `mktemp` has no session owner and cannot be safely reaped.
+    let scratch = scratch_dir(&repo);
+
     // LEDGER DRIFT IS A WORKSPACE FACT, NOT A SCOPE FACT.
     //
     // Measured by this crate's own anti-vacuity leg: comparing the 88-row ledger against a
@@ -200,9 +217,226 @@ fn main() -> ExitCode {
         observations.insert(entry.crate_name.clone(), observed);
     }
 
+    // ── THE RUN HALF: EXECUTE THE DECLARED CHECKS ─────────────────────────────────────────
+    //
+    // `omp-orchestrator-etyur` / R10(b). Until this loop existed, `derive_checks`, `expand` and
+    // `subsumption` were exercised ONLY by `tests/roster.rs` — measured with
+    // `ripwire --uses`: 5 uses, 2 uses, 1 use, every one a test, ZERO production consumers. So
+    // 13 crates were graded `Covered { checks: true }` by a chain nothing called, and the field
+    // named `checks` carried the value `declared`.
+    //
+    // `declared` and `executed` are different facts. This loop produces the second one.
+    let mut check_rows = 0usize;
+    let mut check_failures = 0usize;
+    for invocation in &checks {
+        if !roster.iter().any(|e| e.crate_name == invocation.crate_name) {
+            continue;
+        }
+        for (index, phase) in invocation.phases.iter().enumerate() {
+            let outcome = run_declared_check(&repo, &scratch, &invocation.crate_name, phase);
+            let row = outcome.render_row(&invocation.crate_name, index);
+            print!("{row}");
+            let _ = std::io::Write::flush(&mut std::io::stdout());
+            if let Err(error) = bank_append(&bank, &row) {
+                eprintln!(
+                    "GATE_RUNNER_BANK_UNWRITABLE path={} detail={error}",
+                    bank.display()
+                );
+            }
+            check_rows += 1;
+            if outcome.is_blocking() {
+                check_failures += 1;
+            }
+        }
+    }
+    // ANTI-VACUITY, SCOPED — because an over-strict gate gets routed around, which is a slower
+    // death than no gate (rule 2).
+    //
+    // A FULL-roster run that executes zero declared checks is the dead-wiring state `etyur` was
+    // filed for, and it read as green for as long as it existed: that is an ERROR.
+    //
+    // A SCOPED run is different. 75 of the 88 crates declare no check at all, so
+    // `--only subprocess-contract` legitimately has nothing to execute — erroring there would
+    // make `--only` unusable for most of the workspace and teach everyone to stop using it.
+    // It still must not be SILENT: absence gets its own row.
+    if check_rows == 0 && !roster.is_empty() {
+        if only.is_some() {
+            let row = format!(
+                "CHECK_NONE_DECLARED scope={} reason=this_crate_declares_no_check\n",
+                roster
+                    .iter()
+                    .map(|e| e.crate_name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            );
+            print!("{row}");
+            let _ = bank_append(&bank, &row);
+        } else {
+            eprintln!(
+                "GATE_RUNNER_NO_CHECKS_EXECUTED roster={} declared={} -- a FULL roster that \
+                 executes ZERO declared checks is an ERROR, never a pass: it is \
+                 indistinguishable from the parse-only state omp-orchestrator-etyur was filed \
+                 for, where 13 crates were graded Covered{{checks:true}} by a chain nothing \
+                 called",
+                roster.len(),
+                checks.len()
+            );
+            return ExitCode::from(gate_runner::EXIT_EMPTY_ROSTER);
+        }
+    }
+    println!(
+        "GATE_RUNNER_CHECKS executed={check_rows} failed={check_failures} declared_crates={}",
+        checks.len()
+    );
+
     let report = build_report_scoped(&roster, &full_roster, &observations, &ledger);
     print!("{}", report.render());
-    ExitCode::from(report.exit_code())
+    // A FAILING DECLARED CHECK MUST FAIL THE RUN. Reporting it and exiting 0 is the
+    // ledger-instead-of-a-gate defect this repo has already paid for twice.
+    let code = report.exit_code();
+    if code == gate_runner::EXIT_OK && check_failures > 0 {
+        return ExitCode::from(gate_runner::EXIT_GATE_FAILED);
+    }
+    ExitCode::from(code)
+}
+
+/// What executing ONE declared check phase produced.
+///
+/// `Skipped` is a first-class outcome, not an absence: a SETUP phase mutates, so running it
+/// during a gate pass would make the gate unable to distinguish *"already conformant"* from
+/// *"I made it conformant"*. Declining is the correct behaviour and it must be VISIBLE.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum CheckOutcome {
+    Passed,
+    Failed { code: String },
+    /// The environment could not host the check. NOT a failure of the check.
+    Unmeasurable { reason: String },
+    /// A declared SETUP phase, deliberately not executed on a check pass.
+    SkippedSetup,
+}
+
+impl CheckOutcome {
+    fn is_blocking(&self) -> bool {
+        matches!(self, Self::Failed { .. })
+    }
+
+    fn render_row(&self, crate_name: &str, phase: usize) -> String {
+        match self {
+            Self::Passed => format!("CHECK_PASS crate={crate_name} phase={phase}\n"),
+            Self::Failed { code } => {
+                format!("CHECK_FAIL crate={crate_name} phase={phase} {code}\n")
+            }
+            Self::Unmeasurable { reason } => {
+                format!("CHECK_UNMEASURABLE crate={crate_name} phase={phase} reason={reason}\n")
+            }
+            Self::SkippedSetup => format!(
+                "CHECK_SKIPPED_SETUP crate={crate_name} phase={phase} \
+                 reason=declared_setup_mutates_and_is_not_a_check\n"
+            ),
+        }
+    }
+}
+
+/// Execute one declared check phase and classify it.
+///
+/// # Why the exit code alone is not the verdict
+///
+/// `AGENTS.md` rule 7: `101` is `cargo`'s generic failure and cannot discriminate a real RED from
+/// a workspace that failed to load — this repo has hit that twice. So the row carries the exit
+/// code AND the classification, and a spawn failure is `Unmeasurable` rather than `Failed`:
+/// "the environment could not host this" and "the check refused" are different facts with
+/// different remedies.
+fn run_declared_check(
+    repo: &Path,
+    scratch: &Path,
+    crate_name: &str,
+    phase: &gate_runner::CheckPhase,
+) -> CheckOutcome {
+    if phase.setup {
+        return CheckOutcome::SkippedSetup;
+    }
+    let bin = phase.bin.clone().unwrap_or_else(|| crate_name.to_owned());
+    let args = gate_runner::expand(
+        &phase.args,
+        &repo.to_string_lossy(),
+        &scratch.to_string_lossy(),
+    );
+    let mut command = Command::new("cargo");
+    command
+        .args(["run", "--quiet", "-p", crate_name, "--bin", &bin, "--"])
+        .args(&args)
+        .current_dir(repo)
+        .env("CARGO_TERM_COLOR", "never");
+    match bounded_output(&mut command, PER_CRATE_DEADLINE) {
+        BoundedOutcome::Completed(output) => {
+            if output.status.success() {
+                CheckOutcome::Passed
+            } else {
+                let text = format!(
+                    "{}{}",
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                // A refused REMOTE build is the environment, not the check. Measured this
+                // session: `[RCH] remote required; refusing local fallback` arrives with a
+                // nonzero code that says nothing about the subject.
+                if text.contains("remote required; refusing local fallback")
+                    || text.contains("no admissible workers")
+                {
+                    return CheckOutcome::Unmeasurable {
+                        reason: "rch_refused_the_build".to_owned(),
+                    };
+                }
+                if text.contains("LOCAL BUILD REFUSED") {
+                    return CheckOutcome::Unmeasurable {
+                        reason: "local_build_refused_by_gate".to_owned(),
+                    };
+                }
+                CheckOutcome::Failed {
+                    code: format!(
+                        "bin={bin} exit={} argv={}",
+                        output
+                            .status
+                            .code()
+                            .map_or_else(|| "signal".to_owned(), |c| c.to_string()),
+                        args.join(" ")
+                    ),
+                }
+            }
+        }
+        BoundedOutcome::TimedOut => CheckOutcome::Unmeasurable {
+            reason: format!("exceeded_{}s_deadline", PER_CRATE_DEADLINE.as_secs()),
+        },
+        BoundedOutcome::Unspawned(error) => CheckOutcome::Unmeasurable {
+            reason: format!("cargo_unspawnable:{error}"),
+        },
+    }
+}
+
+/// The per-run `{scratch}` directory, session-owned per `AGENTS.md`.
+///
+/// `ZS_SCRATCH` when set; otherwise a session-scoped path under the documented root. NOT
+/// `mktemp`: three declared invocations write artifacts that outlive their command
+/// (`installer --bin-dir`, `gate-reachability --out`, `head-compiles-gate --receipt`), and a
+/// `mktemp` directory has no session owner and cannot be safely reaped.
+fn scratch_dir(repo: &Path) -> PathBuf {
+    let base = std::env::var("ZS_SCRATCH").map(PathBuf::from).unwrap_or_else(|_| {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_owned());
+        Path::new(&home)
+            .join(".local/state/zeststream/scratch")
+            .join("omp-orchestrator")
+            .join("gate-runner")
+    });
+    let dir = base.join(format!("checks-{}", std::process::id()));
+    if let Err(error) = std::fs::create_dir_all(&dir) {
+        eprintln!(
+            "GATE_RUNNER_SCRATCH_UNWRITABLE path={} detail={error} -- declared checks that write \
+             to {{scratch}} will report UNMEASURABLE rather than failing",
+            dir.display()
+        );
+    }
+    let _ = repo;
+    dir
 }
 
 /// Where streamed verdicts are banked so an interrupted run keeps what it earned.
@@ -353,6 +587,13 @@ fn dir_has_test_attr(dir: &Path) -> bool {
 /// later target. That is how a crate-health claim of "251 passed / 55 failed" came from 52 of 55
 /// targets while reading as complete.
 fn run_crate(repo: &Path, crate_name: &str) -> Observed {
+    if let Some(reason) = environment_precondition(repo, crate_name) {
+        return Observed {
+            passed: Vec::new(),
+            failed: Vec::new(),
+            unmeasurable: Some(reason),
+        };
+    }
     let mut command = Command::new("cargo");
     command
         .args([
@@ -382,17 +623,117 @@ fn run_crate(repo: &Path, crate_name: &str) -> Observed {
         BoundedOutcome::TimedOut => Observed {
             passed: Vec::new(),
             failed: Vec::new(),
-            unmeasurable: Some(format!(
-                "exceeded_{}s_deadline",
-                PER_CRATE_DEADLINE.as_secs()
-            )),
+            unmeasurable: Some(UnmeasurablePrecondition::PolicyUnavailable {
+                policy: "cargo-deadline".to_owned(),
+                detail: format!("exceeded_{}s_deadline", PER_CRATE_DEADLINE.as_secs()),
+            }),
         },
         BoundedOutcome::Unspawned(error) => Observed {
             passed: Vec::new(),
             failed: Vec::new(),
-            unmeasurable: Some(format!("cargo_unspawnable:{error}")),
+            unmeasurable: Some(UnmeasurablePrecondition::MissingExecutable {
+                executable: "cargo".to_owned(),
+                detail: format!("cargo could not be spawned: {error}"),
+            }),
         },
     }
+}
+
+/// Classify only preconditions that make a lane's result untruthful, without hiding an observed
+/// test failure. These probes are lane-specific because a generic environment refusal would turn
+/// ordinary test failures into silent passes.
+fn environment_precondition(repo: &Path, crate_name: &str) -> Option<UnmeasurablePrecondition> {
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    environment_precondition_with_path(repo, crate_name, &path)
+}
+
+fn environment_precondition_with_path(
+    repo: &Path,
+    crate_name: &str,
+    path: &std::ffi::OsStr,
+) -> Option<UnmeasurablePrecondition> {
+    let missing_executable = |executable: &str| {
+        (!executable_available(executable, path)).then(|| {
+            UnmeasurablePrecondition::MissingExecutable {
+                executable: executable.to_owned(),
+                detail: format!("{executable} is unavailable on PATH"),
+            }
+        })
+    };
+
+    if matches!(
+        crate_name,
+        "fleet-composite" | "omp-idle-dispatch" | "wired-but-inert-guard"
+    ) {
+        let temp_root = std::env::temp_dir();
+        if let Some(marker) = marker_in_ancestors(&temp_root) {
+            return Some(UnmeasurablePrecondition::FixtureScopeUnavailable {
+                root: temp_root.display().to_string(),
+                conflicting_marker: marker.display().to_string(),
+                detail: "the marker-free fixture is nested below a repository marker".to_owned(),
+            });
+        }
+    }
+    match crate_name {
+        "installer" if !repo.join(".git").exists() => Some(UnmeasurablePrecondition::MissingPath {
+            path: ".git".to_owned(),
+            detail: "the installer lane requires repository metadata".to_owned(),
+        }),
+        "ack-spine" if !repo.join(".beads/issues.jsonl").is_file() => {
+            Some(UnmeasurablePrecondition::MissingPath {
+                path: ".beads/issues.jsonl".to_owned(),
+                detail: "the ack-spine lane requires the tracker ledger".to_owned(),
+            })
+        }
+        "finding" => missing_executable("br"),
+        "loop-queue-filter" => missing_executable("bv"),
+        "dispatch-silence-watch" if !executable_available("crontab", path) => {
+            Some(UnmeasurablePrecondition::MissingScheduler {
+                scheduler: "crontab".to_owned(),
+                detail: "the dispatch-silence-watch lane requires the scheduler CLI".to_owned(),
+            })
+        }
+        "admission-reason" => {
+            if !executable_available("sh", path) {
+                Some(UnmeasurablePrecondition::MissingExecutable {
+                    executable: "sh".to_owned(),
+                    detail: "the differential oracle requires a shell interpreter".to_owned(),
+                })
+            } else {
+                let oracle = repo.join("../control-plane/bin/admission-reason.sh");
+                (!oracle.is_file()).then(|| UnmeasurablePrecondition::PolicyUnavailable {
+                    policy: "admission-reason-differential".to_owned(),
+                    detail: format!("oracle missing at {}", oracle.display()),
+                })
+            }
+        }
+        "loop-driver" if !Path::new("/usr/bin/lockf").is_file() => {
+            Some(UnmeasurablePrecondition::PolicyUnavailable {
+                policy: "lockf-shell-oracle".to_owned(),
+                detail: "the loop-driver differential oracle requires /usr/bin/lockf".to_owned(),
+            })
+        }
+        _ => None,
+    }
+}
+
+fn marker_in_ancestors(start: &Path) -> Option<PathBuf> {
+    for directory in start.ancestors() {
+        for marker in [".git", ".beads"] {
+            let candidate = directory.join(marker);
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+fn executable_available(executable: &str, path: &std::ffi::OsStr) -> bool {
+    let candidate = Path::new(executable);
+    if candidate.components().count() > 1 {
+        return candidate.is_file();
+    }
+    std::env::split_paths(path).any(|directory| directory.join(executable).is_file())
 }
 /// Parse `test result:` lines, attributing each to a target.
 ///
@@ -439,7 +780,10 @@ fn parse_cargo_output(text: &str) -> Observed {
         return Observed {
             passed: Vec::new(),
             failed: Vec::new(),
-            unmeasurable: Some("workspace_manifest_unloadable".to_owned()),
+            unmeasurable: Some(UnmeasurablePrecondition::PolicyUnavailable {
+                policy: "cargo-workspace".to_owned(),
+                detail: "cargo could not load or parse the workspace manifest".to_owned(),
+            }),
         };
     }
     let mut passed = Vec::new();
@@ -447,6 +791,7 @@ fn parse_cargo_output(text: &str) -> Observed {
     let mut current: Option<String> = None;
     let mut pending: Vec<String> = Vec::new();
     let mut ordinal = 0usize;
+    let mut summaries = Vec::new();
     for line in text.lines() {
         let plain = strip_ansi(line);
         let trimmed = plain.trim();
@@ -456,6 +801,9 @@ fn parse_cargo_output(text: &str) -> Observed {
             current = Some("doc".to_owned());
         } else if let Some(rest) = trimmed.strip_prefix("test result:") {
             ordinal += 1;
+            if let Some(summary) = parse_summary_counts(rest) {
+                summaries.push(summary);
+            }
             let label = match &current {
                 Some(name) => name.clone(),
                 None if !pending.is_empty() => {
@@ -474,11 +822,27 @@ fn parse_cargo_output(text: &str) -> Observed {
             pending.push(name);
         }
     }
+    if summaries.iter().all(|(passed, failed, _)| *passed + *failed == 0) && !summaries.is_empty() {
+        let skipped = summaries.iter().map(|(_, _, skipped)| *skipped).sum();
+        return Observed {
+            passed,
+            failed,
+            unmeasurable: Some(UnmeasurablePrecondition::AllTestsSkipped {
+                expected: summaries.len(),
+                skipped,
+                detail: "every cargo test result reported zero executed tests".to_owned(),
+            }),
+        };
+    }
     if passed.is_empty() && failed.is_empty() {
         return Observed {
             passed,
             failed,
-            unmeasurable: Some("no_test_result_line_in_output".to_owned()),
+            unmeasurable: Some(UnmeasurablePrecondition::AllTestsSkipped {
+                expected: 0,
+                skipped: 0,
+                detail: "no cargo test result line was observed".to_owned(),
+            }),
         };
     }
     Observed {
@@ -486,6 +850,57 @@ fn parse_cargo_output(text: &str) -> Observed {
         failed,
         unmeasurable: None,
     }
+}
+
+fn parse_summary_counts(rest: &str) -> Option<(usize, usize, usize)> {
+    let trimmed = rest.trim_start();
+    let details = trimmed
+        .strip_prefix("ok.")
+        .or_else(|| trimmed.strip_prefix("FAILED."))?
+        .trim();
+    Some((
+        summary_count(details, "passed")?,
+        summary_count(details, "failed")?,
+        summary_count(details, "ignored")?,
+    ))
+}
+
+fn summary_count(details: &str, label: &str) -> Option<usize> {
+    details.split(';').find_map(|field| {
+        field
+            .trim()
+            .strip_suffix(label)
+            .and_then(|count| count.trim().parse().ok())
+    })
+}
+#[test]
+fn environment_preconditions_have_typed_bad_and_good_legs() {
+    let empty_path = std::ffi::OsString::new();
+    assert!(matches!(
+        environment_precondition_with_path(Path::new("/missing-repo"), "finding", &empty_path),
+        Some(UnmeasurablePrecondition::MissingExecutable { ref executable, .. })
+            if executable == "br"
+    ));
+    assert!(matches!(
+        environment_precondition_with_path(Path::new("/missing-repo"), "dispatch-silence-watch", &empty_path),
+        Some(UnmeasurablePrecondition::MissingScheduler { ref scheduler, .. })
+            if scheduler == "crontab"
+    ));
+
+    let bin_dir = std::env::temp_dir().join(format!(
+        "gate-runner-precondition-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&bin_dir);
+    std::fs::create_dir_all(&bin_dir).expect("fixture directory");
+    std::fs::write(bin_dir.join("br"), b"fixture").expect("fixture executable");
+    let path = std::env::join_paths([bin_dir.as_path()]).expect("fixture PATH");
+    assert_eq!(
+        environment_precondition_with_path(Path::new("/missing-repo"), "finding", &path),
+        None,
+        "a present positive-control executable must not be classified as missing"
+    );
+    let _ = std::fs::remove_dir_all(bin_dir);
 }
 /// Remove ANSI CSI sequences so a colorized line matches the same predicates as a plain one.
 ///
@@ -616,11 +1031,32 @@ test result: FAILED. 25 passed; 1 failed; 0 ignored
     #[test]
     fn output_with_no_result_line_is_unmeasurable() {
         let observed = parse_cargo_output("error: could not compile `installer`\n");
-        assert_eq!(
-            observed.unmeasurable.as_deref(),
-            Some("no_test_result_line_in_output")
+        assert!(
+            matches!(
+                &observed.unmeasurable,
+                Some(UnmeasurablePrecondition::AllTestsSkipped {
+                    expected: 0,
+                    skipped: 0,
+                    ..
+                })
+            ),
+            "missing result evidence must be typed as unmeasurable: {:?}",
+            observed.unmeasurable
         );
         assert!(observed.passed.is_empty() && observed.failed.is_empty());
+    }
+    #[test]
+    fn zero_executed_results_are_all_skipped_not_passed() {
+        let text = "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s\n";
+        let observed = parse_cargo_output(text);
+        assert!(matches!(
+            observed.unmeasurable,
+            Some(UnmeasurablePrecondition::AllTestsSkipped {
+                expected: 1,
+                skipped: 1,
+                ..
+            })
+        ));
     }
 
     /// KNOWN-BAD, byte-exact from a measured rch lane log 2026-09-07.

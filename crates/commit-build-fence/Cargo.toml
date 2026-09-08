@@ -27,4 +27,13 @@ unsafe_code = "forbid"
 # edit when a gate is added. {repo}/{scratch} are substituted by the runner rather
 # than hardcoded, because a path literal in a manifest is what path-literal-guard
 # exists to refuse.
-checks = [["init", "--repo", "{repo}"], ["check", "--repo", "{repo}"]]
+# HAZARD 1 (omp-orchestrator-etyur, %6's ruling): `init` MUTATES -- it writes
+# git_dir(repo)/omp-build-registration.json (src/main.rs:279) -- so it is SETUP, not a
+# check, and it must SAY SO. A gate that mutates the tree it gates cannot distinguish
+# "already conformant" from "I made it conformant": both produce the same green.
+# Declaring it requires the table form, which is deliberate -- setup is declared, never
+# inferred from position.
+checks = [
+    { bin = "commit-build-fence", args = ["init", "--repo", "{repo}"], setup = true },
+    { bin = "commit-build-fence", args = ["check", "--repo", "{repo}"] },
+]

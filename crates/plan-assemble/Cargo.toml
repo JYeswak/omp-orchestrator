@@ -25,4 +25,9 @@ unsafe_code = "forbid"
 # measured, gate.yml runs 15 gate bins across 13 crates and this crate hosts three.
 # {repo}/{scratch} are substituted by the runner, never hardcoded -- a path literal in
 # a manifest is what path-literal-guard exists to refuse.
-checks = [[]]
+# HAZARD 2 (omp-orchestrator-etyur, %6's ruling): a bare `[]` is REFUSED, because it cannot
+# distinguish an INTENTIONAL zero-argument check from a TRUNCATED stanza -- and a field that
+# cannot distinguish those two states IS the defect; picking a reading only chooses which
+# failure is silent. The intent is carried by a key a truncation cannot invent: a truncation
+# deletes text, it does not add `takes_no_args`.
+checks = [{ bin = "plan-assemble", args = [], takes_no_args = true }]
