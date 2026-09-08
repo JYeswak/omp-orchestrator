@@ -594,7 +594,14 @@ mod tests {
         )
         .expect("work");
         let grade = render_grading_packet(
-            &snapshot("omp-orchestrator-lwdo.1", "body", "typed acceptance"),
+            &BeadSnapshot::new_with_acceptance(
+                "omp-orchestrator-lwdo.1",
+                "packet fixture",
+                "body",
+                "typed acceptance",
+                "in_progress",
+                Some("pane=%3;incarnation=1;agent=WildStone"),
+            ),
             Path::new("/repo"),
             "%3",
             "%9",
