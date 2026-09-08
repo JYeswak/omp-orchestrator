@@ -11,6 +11,7 @@
 //!      bundle unreadable) or ZERO methods mapped, which is either the headline or a
 //!      broken scan and must not read as a clean pass
 
+mod cli_probe;
 use omp_surface_consumption::{
     build_table, case_sites, derive_command_set, render_table, DeriveError,
 };
@@ -79,7 +80,30 @@ fn resolve_version() -> Result<String, String> {
     }
 }
 
+fn run_cli_probe(name: &str) -> ExitCode {
+    let Some(probe) = cli_probe::CliProbe::parse(name) else {
+        eprintln!("OMP_CLI_ERROR reason=unknown_probe name={name} expected=models|stats|usage");
+        return ExitCode::from(2);
+    };
+    match cli_probe::probe_json("omp", probe) {
+        Ok(value) => {
+            println!("{}", cli_probe::summary(probe, &value));
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("OMP_CLI_ERROR reason={error}");
+            ExitCode::from(2)
+        }
+    }
+}
 fn main() -> ExitCode {
+    if std::env::args().nth(1).as_deref() == Some("--probe-cli") {
+        let Some(name) = std::env::args().nth(2) else {
+            eprintln!("OMP_CLI_ERROR reason=missing_probe expected=models|stats|usage");
+            return ExitCode::from(2);
+        };
+        return run_cli_probe(&name);
+    }
     let bundle = match resolve_bundle() {
         Ok(bundle) => bundle,
         Err(error) => {

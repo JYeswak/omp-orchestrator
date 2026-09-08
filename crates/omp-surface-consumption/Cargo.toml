@@ -21,7 +21,17 @@ unsafe_code = "forbid"
 
 [dependencies]
 subprocess-contract = { path = "../subprocess-contract" }
+serde_json = "1"
 
 [package.metadata.gate]
 # Run the existing scanner through gate-runner as an explicit zero-argument phase.
 checks = [{ bin = "omp-surface-consumption", args = [], takes_no_args = true }]
+
+# These declarations have real opt-in callsites in src/main.rs::run_cli_probe.
+# models is declared without a new user-facing verb because its ids duplicate get_available_models.
+[package.metadata.omp_surface]
+consumes = [
+    { kind = "cli", name = "models", call_site = "src/main.rs::run_cli_probe" },
+    { kind = "cli", name = "stats", call_site = "src/main.rs::run_cli_probe" },
+    { kind = "cli", name = "usage", call_site = "src/main.rs::run_cli_probe" },
+]
