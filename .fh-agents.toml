@@ -7,7 +7,9 @@
 #
 # `fh agents` reports three states per canonical section: NAMED (his canonical title is present),
 # UNNAMED (the DOCTRINE is present under YOUR OWN heading), ABSENT (nothing). UNNAMED is
-# reachable ONLY through the 
+# reachable ONLY through the [synonyms] table below. With no map, UNNAMED is structurally
+# unreachable and ABSENT absorbs it — so the tool reports doctrine you DO have as missing.
+#
 # CORRECTED 2026-09-08, same day: rows dropped for FAILING THE OWNERSHIP TEST.
 #
 # Every phrase here was verified to OCCUR before being declared. That was the wrong question.
@@ -24,8 +26,6 @@
 # sections. Re-add only with a phrase distinctive enough to occur in the OWNING section and
 # nowhere else, then verify by resolving the UNNAMED row back to its heading.
 
-[synonyms] table below. With no map, UNNAMED is structurally
-# unreachable and ABSENT absorbs it — so the tool reports doctrine you DO have as missing.
 #
 # Measured on franken-harvest's own AGENTS.md, same bytes, two runs:
 #     without .fh-agents.toml   DISCIPLINE  NAMED 10  UNNAMED 0  ABSENT 7
@@ -76,7 +76,7 @@
 # `## The crates — what they are, and WHICH REPOSITORY they are in`.
 "project structure" = ["which repository"]
 
-# `## The fourth rule: file -> claim -> dispatch` — the bead is the spec.
+# ``### `/beads-workflow` — the bead is the spec``.
 "beads workflow integration" = ["bead is the spec"]
 
 # Code-search doctrine lives here under our own instruments, not his.
