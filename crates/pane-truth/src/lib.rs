@@ -1,27 +1,23 @@
 #![forbid(unsafe_code)]
 
-//! Ground-truth tmux pane state. NTM labels are never consulted.
-//! A positive liveness claim requires a prior capture at least 75 seconds old
-//! whose rendered content changed; CPU and explicit status markers remain the
-//! shell oracle's independent signals.
+//! Ground-truth pane state. OMP-owned panes use NTM's typed
+//! --robot-is-working observation; panes without an OMP agent type retain the
+//! tmux status-line fallback.
+//! A typed NTM state is authoritative for working/idle, while a disagreement
+//! with the rendered fallback is reported as STATE_SOURCES_DISAGREE.
 //!
-//! OMP v18 status-line contract (bead omp-orchestrator-pane-truth-omp-v18-blind-lre,
-//! measured 2026-08-31): a WORKING pane renders a braille spinner frame followed
-//! by a bare elapsed timer on its LAST status line (`⠸ 56m · ◉ GLM 5.3 · …`);
-//! IDLE renders the `π` prompt glyph. The detector below is ported from
-//! crates/tick-monitor (commit 7b2219f, 41 selftest legs) and keeps its four
-//! measured traps: lowercase-unit-only timers (`1.3M` is a token budget,
-//! `S0.25` a spend counter — both sit on every live v18 line), LAST-line
-//! anchoring (a braille character in scrollback prose is not pane state),
-//! spinner-stripped content hashing (a raw-frame hash changes every animation
-//! step, so a dead pane reads changing forever), and the persisted prior
-//! capture that makes two-capture liveness reachable across invocations.
+//! OMP v18 status-line parsing remains the non-OMP fallback. A positive
+//! terminal liveness claim still requires a prior capture at least 75 seconds
+//! old whose rendered content changed; CPU and explicit status markers remain
+//! independent signals. Spinner frames are rendering, not state.
 //!
-//! NO-CLAIM: this fixes the STATUS-LINE detector. Single-capture liveness is
-//! still not sound — the two-capture rule stands, and `liveness_two_capture:
-//! false` means UNPROVEN, never idle. A verdict of IDLE at low CPU with no
-//! prior capture remains the weakest cell in the ladder; a consumer must not
-//! treat one observation as proof of life or of idleness.
+//! NO-CLAIM: this replaces terminal paint only for OMP-owned panes. Non-OMP
+//! panes still use the status-line detector and its lowercase-unit-only timer,
+//! LAST-line anchoring, spinner-stripped hashing, and persisted prior capture.
+//! Single-capture liveness is still not sound — the two-capture rule stands,
+//! and liveness_two_capture=false means UNPROVEN, never idle. A verdict of IDLE
+//! at low CPU with no prior capture remains the weakest cell in the ladder; a
+//! consumer must not treat one observation as proof of life or of idleness.
 
 use chrono::{SecondsFormat, Utc};
 use regex::Regex;
@@ -113,6 +109,148 @@ pub struct ExternalOutput {
     pub stderr: String,
     pub timed_out: bool,
 }
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct NtmPaneObservation {
+    agent_type: String,
+    is_working: bool,
+}
+
+fn ntm_is_omp_agent(agent_type: &str) -> bool {
+    agent_type == "omp" || agent_type.starts_with("omp-")
+}
+
+fn ntm_exit_label(status: Option<i32>) -> String {
+    status.map_or_else(|| "signal".to_owned(), |code| code.to_string())
+}
+
+fn parse_ntm_is_working(
+    status: Option<i32>,
+    stdout: &str,
+    stderr: &str,
+    selector: &str,
+) -> Result<NtmPaneObservation, String> {
+    let value: Value = serde_json::from_str(stdout).map_err(|error| {
+        format!(
+            "NTM_IS_WORKING_FAILED exit={} error_code=INVALID_JSON message={error} stderr={stderr}",
+            ntm_exit_label(status)
+        )
+    })?;
+    let Some(object) = value.as_object() else {
+        return Err(format!(
+            "NTM_IS_WORKING_FAILED exit={} error_code=NOT_AN_OBJECT message=response_is_not_object stderr={stderr}",
+            ntm_exit_label(status)
+        ));
+    };
+    if status != Some(0) {
+        return Err(format!(
+            "NTM_IS_WORKING_FAILED exit={} error_code={} message={} stderr={stderr}",
+            ntm_exit_label(status),
+            object
+                .get("error_code")
+                .and_then(Value::as_str)
+                .unwrap_or("UNKNOWN"),
+            object
+                .get("error")
+                .and_then(Value::as_str)
+                .unwrap_or("missing_ntm_error")
+        ));
+    }
+    if object.get("success").and_then(Value::as_bool) != Some(true) {
+        return Err(format!(
+            "NTM_IS_WORKING_UNKNOWN exit=0 error_code=UNSUCCESSFUL message={} stderr={stderr}",
+            object
+                .get("error")
+                .and_then(Value::as_str)
+                .unwrap_or("response_did_not_report_success")
+        ));
+    }
+    let Some(panes) = object.get("panes").and_then(Value::as_object) else {
+        return Err(
+            "NTM_IS_WORKING_UNKNOWN exit=0 error_code=EMPTY_PANE_SET message=panes_missing stderr="
+                .to_owned(),
+        );
+    };
+    if panes.is_empty() {
+        return Err(
+            "NTM_IS_WORKING_UNKNOWN exit=0 error_code=EMPTY_PANE_SET message=panes_empty stderr="
+                .to_owned(),
+        );
+    }
+    let Some(pane) = panes.get(selector).and_then(Value::as_object) else {
+        return Err(format!(
+            "NTM_IS_WORKING_FAILED exit=0 error_code=PANE_NOT_FOUND message=selector_{selector}_missing stderr={stderr}"
+        ));
+    };
+    let agent_type = pane
+        .get("agent_type")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            format!(
+                "NTM_IS_WORKING_UNKNOWN exit=0 error_code=MALFORMED_PANE message=agent_type_missing selector={selector} stderr={stderr}"
+            )
+        })?;
+    let is_working = pane
+        .get("is_working")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| {
+            format!(
+                "NTM_IS_WORKING_UNKNOWN exit=0 error_code=MALFORMED_PANE message=is_working_missing selector={selector} stderr={stderr}"
+            )
+        })?;
+    Ok(NtmPaneObservation {
+        agent_type: agent_type.to_owned(),
+        is_working,
+    })
+}
+
+fn query_ntm_is_working(session: &str, selector: &str) -> Result<NtmPaneObservation, String> {
+    let binary = std::env::var("PANE_TRUTH_NTM_BIN").unwrap_or_else(|_| "ntm".to_owned());
+    let mut command = Command::new(binary);
+    command.args([
+        format!("--robot-is-working={session}"),
+        format!("--panes={selector}"),
+    ]);
+    let output = run_external(command, CHILD_DEADLINE)?;
+    if output.timed_out {
+        return Err(
+            "NTM_IS_WORKING_FAILED exit=timeout error_code=TIMED_OUT message=robot_is_working_deadline stderr="
+                .to_owned(),
+        );
+    }
+    parse_ntm_is_working(output.status, &output.stdout, &output.stderr, selector)
+}
+
+fn apply_ntm_observation(
+    mut row: PaneRow,
+    observation: Result<NtmPaneObservation, String>,
+) -> PaneRow {
+    row.provenance = "ntm".to_owned();
+    match observation {
+        Ok(observation) => {
+            let tmux_working = row.claims_busy;
+            row.claims_busy = observation.is_working;
+            if tmux_working != observation.is_working {
+                row.verdict = "STATE_SOURCES_DISAGREE".to_owned();
+                row.confidence = "low".to_owned();
+            } else if observation.is_working {
+                row.verdict = "WORKING".to_owned();
+                row.confidence = "high".to_owned();
+            } else if !row.claims_done && !row.awaiting_input {
+                row.verdict = "IDLE".to_owned();
+                row.confidence = "high".to_owned();
+            }
+            row.state_source_error = None;
+        }
+        Err(error) => {
+            row.verdict = "UNPROVEN".to_owned();
+            row.confidence = "low".to_owned();
+            row.state_source_error = Some(error);
+            row.last_line.clear();
+            row.claims_busy = false;
+        }
+    }
+    row
+}
 
 /// Run a child with closed stdin and a hard wall deadline.
 pub fn run_external(mut command: Command, deadline: Duration) -> Result<ExternalOutput, String> {
@@ -147,6 +285,8 @@ pub struct PaneRow {
     pub confidence: String,
     pub last_line: String,
     pub liveness_two_capture: bool,
+    pub provenance: String,
+    pub state_source_error: Option<String>,
 }
 
 fn tail_lines(text: &str, n: usize) -> String {
@@ -478,6 +618,8 @@ pub fn classify_snapshot(
         confidence: confidence.to_string(),
         last_line,
         liveness_two_capture: liveness,
+        provenance: "tmux".to_owned(),
+        state_source_error: None,
     }
 }
 
@@ -615,17 +757,38 @@ pub fn run_live(session: &str, rules: &PaneTruthRules) -> i32 {
         let Some(pid) = fields[1].parse().ok() else {
             continue;
         };
-        let text = capture(session, index).unwrap_or_default();
+        let ntm_state = query_ntm_is_working(session, fields[0]);
         let cpu = tree_cpu(pid).unwrap_or(0.0);
         let prior = previous.iter().rev().find(|row| {
             row.get("pane_index").and_then(Value::as_u64) == Some(index as u64)
                 && row.get("pane_pid").and_then(Value::as_u64) == Some(pid as u64)
         });
-        let mut row = classify_snapshot(&text, cpu, prior, epoch, rules);
+        let (mut row, terminal_text) = match ntm_state {
+            Ok(observation) if ntm_is_omp_agent(&observation.agent_type) => (
+                apply_ntm_observation(
+                    classify_snapshot("", cpu, prior, epoch, rules),
+                    Ok(observation),
+                ),
+                None,
+            ),
+            Ok(_) => {
+                let text = capture(session, index).unwrap_or_default();
+                (
+                    classify_snapshot(&text, cpu, prior, epoch, rules),
+                    Some(text),
+                )
+            }
+            Err(error) => (
+                apply_ntm_observation(classify_snapshot("", cpu, prior, epoch, rules), Err(error)),
+                None,
+            ),
+        };
         row.pane_index = index;
         row.pane_id = fields[2].to_string();
         row.pane_pid = pid;
-        append_history(&history_file, &row, &text, epoch);
+        if let Some(text) = terminal_text.as_deref() {
+            append_history(&history_file, &row, text, epoch);
+        }
         panes.push(row);
     }
     if panes.is_empty() {
@@ -811,6 +974,100 @@ pub fn selftest(rules: &PaneTruthRules) -> i32 {
 mod tests {
     use super::*;
 
+    fn ntm_working_json(selector: &str, agent_type: &str, is_working: bool) -> String {
+        let mut value = json!({"success": true, "panes": {}});
+        value["panes"][selector] = json!({
+            "agent_type": agent_type,
+            "is_working": is_working,
+        });
+        value.to_string()
+    }
+
+    #[test]
+    fn ntm_working_known_good_agrees_with_the_replaced_spinner() {
+        let raw = ntm_working_json("4", "omp", true);
+        let observation = parse_ntm_is_working(Some(0), &raw, "", "4").expect("working pane");
+        let row = classify_snapshot(
+            V18_WORKING_GLM_1409,
+            0.0,
+            None,
+            10_000,
+            &PaneTruthRules::default(),
+        );
+        let row = apply_ntm_observation(row, Ok(observation));
+
+        assert_eq!(row.provenance, "ntm");
+        assert_eq!(row.verdict, "WORKING");
+        assert!(row.claims_busy);
+        assert!(row.state_source_error.is_none());
+    }
+
+    #[test]
+    fn ntm_idle_known_good_agrees_with_the_pi_prompt() {
+        let raw = ntm_working_json("4", "omp", false);
+        let observation = parse_ntm_is_working(Some(0), &raw, "", "4").expect("idle pane");
+        let row = classify_snapshot(
+            V18_IDLE_GLM_1409,
+            0.0,
+            None,
+            10_000,
+            &PaneTruthRules::default(),
+        );
+        let row = apply_ntm_observation(row, Ok(observation));
+
+        assert_eq!(row.provenance, "ntm");
+        assert_eq!(row.verdict, "IDLE");
+        assert!(!row.claims_busy);
+    }
+
+    #[test]
+    fn ntm_and_spinner_disagreement_is_typed_not_coerced() {
+        let raw = ntm_working_json("4", "omp", true);
+        let observation = parse_ntm_is_working(Some(0), &raw, "", "4").expect("working pane");
+        let row = classify_snapshot(
+            V18_IDLE_GLM_1409,
+            0.0,
+            None,
+            10_000,
+            &PaneTruthRules::default(),
+        );
+        let row = apply_ntm_observation(row, Ok(observation));
+
+        assert_eq!(row.verdict, "STATE_SOURCES_DISAGREE");
+        assert_eq!(row.confidence, "low");
+        assert!(row.claims_busy);
+    }
+
+    #[test]
+    fn nonexistent_ntm_pane_pins_message_and_exit_code() {
+        let raw = r#"{"success":false,"error":"pane selector \"999\" not found; available: 0 (%5)","error_code":"PANE_NOT_FOUND"}"#;
+        let error = parse_ntm_is_working(Some(1), raw, "", "999")
+            .expect_err("nonexistent pane must refuse");
+
+        assert!(
+            error.contains("exit=1"),
+            "exit code is part of the refusal: {error}"
+        );
+        assert!(
+            error.contains("error_code=PANE_NOT_FOUND"),
+            "typed code: {error}"
+        );
+        assert!(
+            error.contains(r#"message=pane selector "999" not found"#),
+            "exact daemon message: {error}"
+        );
+        assert!(!error.contains("is_working=false"));
+    }
+
+    #[test]
+    fn empty_ntm_pane_set_is_unknown_not_all_idle() {
+        let error = parse_ntm_is_working(Some(0), r#"{"success":true,"panes":{}}"#, "", "4")
+            .expect_err("empty pane set");
+
+        assert!(error.starts_with("NTM_IS_WORKING_UNKNOWN"));
+        assert!(error.contains("error_code=EMPTY_PANE_SET"));
+        assert!(!error.contains("is_working=false"));
+    }
     #[test]
     fn two_capture_requires_seventy_five_seconds() {
         let prior = json!({"capture_epoch": 900, "content_hash": content_hash("claude\nWorking (0s - esc to interrupt)"), "timer_seconds": 0});
