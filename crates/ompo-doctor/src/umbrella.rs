@@ -24,7 +24,7 @@ pub const SCHEMA_VERSION: &str = "omp.umbrella/v1";
 
 /// Verbs the umbrella dispatches. `start` owns the ordered walkthrough and
 /// `portal` projects liveness and next action into a robot envelope.
-pub const VERBS: &[&str] = &["init", "doctor", "help", "capabilities", "start", "portal", "quickstart", "completion"];
+pub const VERBS: &[&str] = &["init", "doctor", "help", "capabilities", "start", "portal", "quickstart", "completion", "upstream-report"];
 
 /// The adapter roster. Never empty: `build.rs` refuses to generate an empty one, and
 /// [`roster_or_error`] is the runtime guard for the same property.

@@ -25,6 +25,7 @@
 
 use ompo_doctor::liveness::{self, Observation};
 use ompo_doctor::adapter_exec;
+use ompo_doctor::upstream_report;
 use ompo_doctor::umbrella::{self, ProbeId};
 use ompo_doctor::{current_repo, run_doctor};
 use serde_json::{json, Value};
@@ -67,6 +68,7 @@ fn main() -> ExitCode {
         "init" => run_init(rest),
         "start" => run_start(rest),
         "portal" => run_portal(rest),
+        "upstream-report" => run_upstream_report(rest),
         "doctor" => run_doctor_verb(rest),
         other => {
             // NAMES the rejected verb. A bare usage dump leaves the caller unable to tell a
@@ -386,6 +388,72 @@ fn now_millis() -> u64 {
         .unwrap_or(0)
 }
 
+/// ompo upstream-report <adapter> [--json] [--apply]
+///
+/// Printing is the DEFAULT and --apply is the gated opt-in, per the canonical standard: a
+/// verb that writes to the tree on a bare invocation cannot be explored safely.
+fn run_upstream_report(rest: &[String]) -> ExitCode {
+    let json = wants_json(rest);
+    let apply = rest.iter().any(|arg| arg == "--apply");
+    let Some(adapter) = rest.iter().find(|arg| !arg.starts_with("--")) else {
+        eprintln!(
+            "ompo upstream-report: UAD_MISSING_VALUE argument=<adapter> \
+             hint=ompo capabilities --json enumerates every adapter"
+        );
+        return ExitCode::from(EXIT_BAD_INVOCATION);
+    };
+    let verdict = match adapter_exec::execute(adapter) {
+        Ok(verdict) => verdict,
+        Err(error) => {
+            eprintln!("ompo upstream-report: {error}");
+            return ExitCode::from(EXIT_BAD_INVOCATION);
+        }
+    };
+    let decision = upstream_report::classify(&verdict);
+    if apply {
+        let repo = match current_repo() {
+            Ok(path) => path,
+            Err(error) => {
+                eprintln!("ompo upstream-report: {error}");
+                return ExitCode::from(EXIT_INSTRUMENT);
+            }
+        };
+        return match upstream_report::apply(&verdict, &decision, &repo) {
+            Ok(applied) => {
+                println!("{} path={}", applied.reason_code(), applied.path().display());
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("ompo upstream-report: {error}");
+                ExitCode::from(EXIT_BAD_INVOCATION)
+            }
+        };
+    }
+    if json {
+        let value = upstream_report::envelope(&verdict, &decision);
+        match serde_json::to_string(&value) {
+            Ok(text) => {
+                println!("{text}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("ompo upstream-report: cannot encode report: {error}");
+                ExitCode::from(EXIT_INSTRUMENT)
+            }
+        }
+    } else {
+        match &decision {
+            Ok(reportable) => {
+                print!("{}", upstream_report::draft(&verdict, reportable));
+                ExitCode::SUCCESS
+            }
+            Err(not) => {
+                println!("{} adapter={} detail={}", not.reason_code(), adapter, not.detail());
+                ExitCode::SUCCESS
+            }
+        }
+    }
+}
 /// `ompo help <adapter>` — `LAW-UAD-EVERY-TARGET-ADDRESSABLE` and `LAW-UAD-UNKNOWN-IS-TWO`.
 fn run_help(rest: &[String]) -> ExitCode {
     let Some(adapter) = rest.first() else {
