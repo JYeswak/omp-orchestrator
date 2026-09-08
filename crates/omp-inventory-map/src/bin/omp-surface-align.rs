@@ -157,6 +157,31 @@ fn main() -> ExitCode {
         println!("ALIGN_ORPHAN_DECLARATION {orphan}");
     }
 
+    // Coverage BEFORE the verdict, for the same reason orphans are: `align` returns early
+    // when anything is unclassified, so printing per-kind coverage only on the Ok path hides
+    // the CONSUMED count in exactly the refusing run where a reader needs it. 85 of 88
+    // unclassified means 3 ARE classified, and a reader should not have to do that
+    // subtraction to find out.
+    {
+        let consumers_ref = &consumers;
+        let mut by_kind: std::collections::BTreeMap<&str, (usize, usize)> =
+            std::collections::BTreeMap::new();
+        for entry in &surface {
+            let slot = by_kind.entry(entry.kind.as_str()).or_insert((0, 0));
+            slot.0 += 1;
+            if alignment::classify(entry, consumers_ref).is_classified() {
+                slot.1 += 1;
+            }
+        }
+        for (kind, (total, classified)) in by_kind {
+            let bps = if total == 0 { 0 } else { (classified * 10_000) / total };
+            println!(
+                "ALIGN_COVERAGE kind={kind} total={total} classified={classified} \
+                 classified_bps={bps}"
+            );
+        }
+    }
+
     match alignment::align(
         &omp_root.display().to_string(),
         omp_version,
@@ -249,15 +274,81 @@ fn derive_surface(hint: Option<&Path>) -> (InputManifest, Vec<SurfaceEntry>) {
         }
     }
 
-    if surface.is_empty() {
-        // The artifact answered and yielded nothing parseable. That is UNMEASURED, not an
-        // empty surface: `align` would refuse it as EmptySurfaceSet, and refusing here with
-        // a named bound is more useful than an instrument error with no cause.
+    // The mux {id,type} frame vocabulary, from %7's extractor rather than a second bundle
+    // parser of my own. Verified before composing: its ANCHOR_METHOD is `negotiate_protocol`
+    // and its inbound set carries get_state / get_session_stats / get_messages -- the exact
+    // names %20 declared. A parser here would have been the duplicate-classifier defect.
+    //
+    // `inbound` are the methods OMP ACCEPTS -- what a consumer CALLS, and the kind the
+    // declarations name. `outbound` gets its OWN kind rather than being folded in: receiving
+    // a notification and calling a method are different acts, and one kind covering both
+    // would make every CONSUMED row ambiguous about direction.
+    match read_bundle(&program) {
+        Ok(bundle) => {
+            let sites = omp_surface_consumption::case_sites(&bundle);
+            match omp_surface_consumption::derive_command_set(&sites) {
+                Ok(set) => {
+                    // Published because %7 publishes it: a small seam gap means the
+                    // inbound/outbound split is a guess, and every direction claim
+                    // downstream inherits that uncertainty. Hiding it would make these
+                    // kinds look more certain than the extractor claims.
+                    println!(
+                        "ALIGN_SEAM inbound={} outbound={} seam_gap_bytes={}",
+                        set.inbound.len(),
+                        set.outbound.len(),
+                        set.seam_gap
+                    );
+                    for name in set.inbound {
+                        surface.push(SurfaceEntry { kind: "rpc_handler".to_owned(), name });
+                    }
+                    for name in set.outbound {
+                        surface.push(SurfaceEntry {
+                            kind: "rpc_notification".to_owned(),
+                            name,
+                        });
+                    }
+                }
+                // `{error:?}` and not `{error}`: %7's `DeriveError` is a public error type
+                // with NO `Display` impl, so a caller cannot render it in a message. Using
+                // Debug rather than editing their crate; reported to them as a finding.
+                Err(error) => println!(
+                    "ALIGN_SEAM_UNMEASURED detail={error:?} \
+                     note=rpc_handler kinds ABSENT from this run's surface"
+                ),
+            }
+        }
+        Err(detail) => println!(
+            "ALIGN_BUNDLE_UNMEASURED detail={detail} \
+             note=rpc_handler kinds ABSENT from this run's surface"
+        ),
+    }
+
+    // ANTI-VACUITY AT AXIS GRANULARITY (pane 1's ruling, omp-orchestrator-ablcf).
+    //
+    // `surface.is_empty()` was the only vacuity check, so a run where ONE axis silently
+    // yielded nothing still said `state=FULL`. That is gate rule 4 evaded at a finer grain:
+    // the scan set was non-empty overall while an axis this bin CLAIMS to cover contributed
+    // zero, and the consequence is worse than a missing row -- every declaration on that
+    // axis is then reported as an ORPHAN, which blames the declaring crate for a gap in the
+    // extractor. A correct-looking verdict pointing at the wrong party.
+    //
+    // So FULL now means "every declared axis contributed", not "I read the bundle".
+    let mut empty_axes = Vec::new();
+    for axis in DECLARED_AXES {
+        if !surface.iter().any(|entry| entry.kind == *axis) {
+            empty_axes.push(*axis);
+        }
+    }
+    for axis in DECLARED_AXES {
+        let count = surface.iter().filter(|entry| entry.kind == *axis).count();
+        println!("ALIGN_AXIS kind={axis} entries={count}");
+    }
+    if !empty_axes.is_empty() {
         return (
             InputManifest::Partial {
-                bound_kind: "omp_surface_unparseable",
-                bound_value: format!("help_bytes={}", help.len()),
-                source: "omp --help",
+                bound_kind: "declared_axis_yielded_zero",
+                bound_value: empty_axes.join(","),
+                source: "derive_surface",
             },
             surface,
         );
@@ -269,6 +360,62 @@ fn derive_surface(hint: Option<&Path>) -> (InputManifest, Vec<SurfaceEntry>) {
         },
         surface,
     )
+}
+
+/// Every axis this bin claims to cover. `FULL` requires each to contribute at least one
+/// entry; an axis yielding zero makes the run `PARTIAL` and names itself.
+///
+/// Declared as a const rather than inferred from what was produced, because inferring it
+/// from the output is circular: an axis that yields nothing would simply not be in the list,
+/// and the vacuity would be invisible again.
+pub const DECLARED_AXES: &[&str] =
+    &["cli", "transport_mode", "rpc_handler", "rpc_notification"];
+
+
+/// Read the installed bundle, resolved from the `omp` program itself.
+///
+/// `omp` on this host resolves directly INTO the package —
+/// `~/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js` — so the artifact
+/// under measurement is the file the binary IS, and no separate discovery heuristic is
+/// needed. A non-JS resolution is reported rather than guessed at.
+///
+/// NOTE ON THE CAP: this crate's own `MAX_PROBE_BYTES` is 16 MiB and the live bundle
+/// measures 21,379,674 bytes, so a read bounded by that constant would refuse the CURRENT
+/// artifact — reporting `UNMEASURED` for a bundle that is present and readable. The cap here
+/// is generous and explicit, and the mismatch is filed rather than silently worked around.
+const MAX_BUNDLE_BYTES: u64 = 64 * 1024 * 1024;
+
+fn read_bundle(program: &Path) -> Result<String, String> {
+    let resolved = which(program).ok_or_else(|| format!("cannot resolve {}", program.display()))?;
+    let canonical = resolved
+        .canonicalize()
+        .map_err(|error| format!("canonicalize {}: {error}", resolved.display()))?;
+    if canonical.extension().and_then(|ext| ext.to_str()) != Some("js") {
+        return Err(format!(
+            "resolved to {} which is not a .js bundle",
+            canonical.display()
+        ));
+    }
+    let size = std::fs::metadata(&canonical)
+        .map_err(|error| format!("stat {}: {error}", canonical.display()))?
+        .len();
+    if size > MAX_BUNDLE_BYTES {
+        return Err(format!("bundle is {size} bytes, above the {MAX_BUNDLE_BYTES} cap"));
+    }
+    std::fs::read_to_string(&canonical)
+        .map_err(|error| format!("read {}: {error}", canonical.display()))
+}
+
+/// Resolve a bare program name through `PATH`; pass an explicit path straight through.
+fn which(program: &Path) -> Option<PathBuf> {
+    if program.components().count() > 1 {
+        return Some(program.to_path_buf());
+    }
+    std::env::var_os("PATH").and_then(|paths| {
+        std::env::split_paths(&paths)
+            .map(|dir| dir.join(program))
+            .find(|candidate| candidate.is_file())
+    })
 }
 
 fn probe(program: &Path, args: &[&str]) -> Result<String, String> {
