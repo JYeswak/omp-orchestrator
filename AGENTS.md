@@ -872,7 +872,7 @@ unconstructible:
   These historical rewrites are not evidence that the corresponding protocol is an attach route.
 - **(c) should use — 2:** `goals`, `collab`. Nothing in `crates/` mentions either.
 
-**CORRECTION 2026-09-08 — the three `omp/*` names above are not pane orchestration.** The
+**CORRECTION 2026-09-08 — the three `omp/*` names formerly listed in the installed-surface row are not pane orchestration.** The
 installed OMP bundle defines `__omp_worker_lsp_mux`, `OMP_LSP_MUX_SOCKET`,
 `OMP_LSP_MUX_PROJECT_DIR`, `omp.lsp.mux`, the ready banner `omp lsp mux listening on \S+`,
 and `pong`; its Unix address is `path.join(dir, "lsp-mux.sock")` (with a Windows named-pipe
