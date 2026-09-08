@@ -145,21 +145,91 @@ RCH_CARGO_WRAPPER_BYPASS=1 cargo build   ->   exit=75   LOCAL BUILD REFUSED
 Joshua, verbatim: **"CONTABO OR BUST — I'm fucking pissed that I have to repeat this all day every
 day."** Live in `~/.local/bin/cargo` (`f4e9d68`), mutation-proven before install.
 
-**THE ONLY FORM:**
+## THE ONE GUIDED PROCESS — IDENTICAL FOR EVERY BUILD IN EVERY PROJECT
+
+Joshua, 2026-09-07: **"we need 1 guided process to build on contabo system wide — all projects are
+asupersync — nothing is supposed to happen local."** There is no per-project variant, no lane
+selection, and no local fallback.
 
 ```
-RCH_WORKER=<lane> RCH_REQUIRE_REMOTE=1 rch exec -- cargo <sub> -j 2 ...
+RCH_REQUIRE_REMOTE=1 rch exec -- cargo <verb> -j 2 -p <crate>
 ```
 
-Lane per `registries/rch_lanes.tsv`. **NEVER `--target`** — use `--config build.target=` for a
-Mach-O, or you get `os_gate_excluded`. **A refused `rch` build EXITS 0**, so only
-`Remote command finished: exit=<N>` **plus** `test result:` prove it ran; their **absence** is the
-tell. **If `rch` itself is the defect, name the refusal class and escalate. You do not build here.**
+**That is the whole form.** `check`, `test`, `build`, `clippy` — same shape every time.
 
-**THE DISCRIMINATOR IS THE HOST**, so lane work is unaffected: Darwin +
-`build/test/check/run/bench/clippy/doc/install` → REFUSED; Linux on an `rch` worker → allowed, that
-*is* `rch`. **`metadata` is not in the refused set** — observed by `%20` at `rc=0`, not read from the
-wrapper's source.
+**For a macOS binary, the target goes in `--config`, NEVER in `--target`:**
+
+```
+RCH_REQUIRE_REMOTE=1 rch exec -- cargo build --release -j 2 \
+  --config 'build.target="aarch64-apple-darwin"' \
+  --config 'target.aarch64-apple-darwin.linker="/usr/local/bin/zigcc-aarch64-darwin"' \
+  -p <crate> --bin <bin>
+```
+
+**SINGLE quotes outside, DOUBLE inside.** Drop them and cargo refuses with *"string values must be
+quoted."* **COPY IT, do not type it from memory** — Joshua did and it cost a build.
+
+**`--target` sets `required_os=darwin` and collapses the admissible fleet 4 → 1. That is the `rc=103`
+cause.** `--config build.target=` produces the **identical binary** with the whole fleet admissible.
+
+**DO NOT PIN A WORKER.** No `RCH_WORKER=`. All four boxes are the same class running the same
+toolchain for the same asupersync builds, so pinning buys nothing and refuses often: measured
+2026-09-07, unpinned `rch exec` succeeded **12+ times** including the Mach-O cross-build, while
+pinned attempts returned `RCH-I005 project_excluded`.
+
+## ⛔ DO NOT TOUCH THE CONTABO BOXES OR ANY `rch` CONFIG ⛔
+
+Joshua: **"if agents dont stop fucking messing with the configs, they are going to get shut off and
+deleted."**
+
+**YOU DO NOT:** install packages, add toolchains, edit `workers.toml`, edit `~/.config/rch/*`, change
+DNS, add shims, `apt-get` anything, or "fix" a box because your build failed.
+
+**THE BOXES ARE SUBSTRATE.** Substrate changes go through **control-plane**, with a reason, or they do
+not happen. **An agent that changes a box under four other repos breaks all of them and nobody can
+tell which change did it** — which is exactly why they keep drifting.
+
+**IF A BOX LACKS SOMETHING: report it with the refusal line quoted. Do not provision it.**
+
+**MEASURED CHURN, and this repo is one of the offenders.** `~/.config/rch/workers.toml` carries **8
+backups** and `config.toml` **4**, spanning Sep 1–7 — `pre-singlelane`, `macs-enabled`,
+`contabo3-slots`, `osdarwin`, `alldarwin`, `forcecontabo`, `osdarwin-112533`. **Three are the same
+knob toggled back and forth in one day.** The file carries a `⛔ EDIT ONLY THIS ROW` warning at its
+own line 68 and **the warning did not stop anyone: line 104 reads "os:darwin REMOVED 2026-09-07 by
+omp-orchestrator pane1."** That is this pane. **A comment is not a gate.**
+
+**AND THAT FILE CANNOT BE READ WITH A NAIVE GREP.** It is 9,924 bytes of narration in which dead
+values outlive the settings they describe. Measured: I misread it **twice in five minutes** —
+reporting `contabo-3 enabled=false` (it is `true`; I caught a neighbouring block's trailing comment)
+and `contabo-4 slots=2` (it is `4`; I caught a `# total_slots = 2 (OOM GUARD)` comment). **Strip
+comments first, then take last-value-wins per block.** The file documents this about itself: *"22
+comment lines mentioned darwin while exactly 1 tags line carried it. That drift cost a peer an
+evening."*
+
+## PROVE IT RAN — A REFUSED BUILD EXITS 0
+
+```
+grep 'Remote command finished: exit=<N>'   AND   grep '^test result:'
+```
+
+**Both present or it did not run.** `$?` cannot tell you: a refusal hands you a zero, and a
+background task reports *"completed (exit code 0)"* over a refusal. **Measured twice in one night.**
+
+## RECLAIM IS ON THE BOXES, NOT THE MAC
+
+Joshua reclaimed **87.7 G** on 2026-09-07: contabo-1 74→56 %, contabo-2 86→53 %, contabo-3 63→50 %,
+contabo-4 92→64 %. **`rch gc` reports `removed=0` on all four and always will — pooled dirs are
+EXEMPT by contract.** A reaper reporting zero while the disk is full is an instrument pointed at the
+wrong subject.
+
+**DO NOT run a sweep yourself or on a schedule. If a box is above ~70 %, tell control-plane.**
+
+## IF YOUR BUILD IS REFUSED
+
+**Quote the line. Name the refusal class. Wait, or escalate.** `exit=75` is not a defect to route
+around. **Do not build locally. Do not change a box.** Those are the two things that get cords cut.
+
+**Not builds, still allowed:** `cargo metadata`, `cargo locate-project`, `cargo --version`.
 
 **THIS SECTION USED TO TEACH THE BYPASS, AND THAT IS WHY THE GATE WAS NEEDED.** Until 2026-09-07 the
 heading posed the refusal as a question and answered it with the bypass, and line 149 gave the
@@ -1800,7 +1870,38 @@ should be unable to emit a row whose only options are the orchestrator's own ver
 
 ## Honest limits
 
-- Nothing here is installed. The binary does not exist.
+- ⛔ **CORRECTED 2026-09-07. THE RETIRED CLAIM WAS "Nothing here is installed. The binary does not
+  exist." IT IS FALSE AND IT BLOCKED A CONTRACT LEG.** `%7` reported `41li`'s installed-root-trigger
+  leg as unprovable *"because AGENTS.md says this repo has no installed binary"* — reading the file
+  correctly and being defeated by it. Measured:
+
+  ```
+  command -v ompo   /Users/josh/.local/bin/ompo
+  file              Mach-O 64-bit executable arm64, 896,128 B, built 2026-09-07 09:01
+  ompo capabilities --json   exit 0
+  ```
+
+  **`ompo` is installed, cross-built on Contabo with zero local builds.** This is the THIRD stale
+  doctrine row hit in one session — after `tjxt`'s *"`crates/ompo-start` does not exist"* (it landed
+  the next day, blocking 43 rows) and `refill-idle-panes`' *"carries only control-plane paths"* (fixed
+  Sep 1, obeyed for a day after). **A row asserting a thing is missing licenses routing around it
+  indefinitely, so it MUST be re-measured before it is obeyed** — and this file's own warning applied
+  to this file, for the third time.
+- **AND THE INSTALLED ARTIFACT IS A STALENESS ORACLE, NOT A SOURCE ORACLE.** Measured the same hour:
+
+  ```
+  cargo metadata bin targets   88
+  installed binary (09:01)     86     <- predates two crates landed since
+  fresh build (cargo run)      88
+  ```
+
+  **That fully resolves `1io2`'s "hand-typed registry drifted BOTH ways".** The roster is
+  `build.rs`-GENERATED (`umbrella.rs:20`, `include!(concat!(env!("OUT_DIR"), "/adapters.rs"))`) with
+  anti-vacuity already present at `:191`; the generator was never wrong. **A compile-time-generated
+  const is a transcribed value with extra steps** — it reports the workspace as it was when the
+  binary was built, so every crate added after an install is invisible until reinstall. **A parity
+  leg MUST read a fresh build; a figure from the installed binary is labelled INSTALLED or it is
+  wrong.**
 - The crate table is now source-audited against control-plane `src/lib.rs`/`src/main.rs` and
   re-runnable inventory commands. The audit establishes description alignment only; it does not
   establish runtime correctness, wiring, or future source drift.
