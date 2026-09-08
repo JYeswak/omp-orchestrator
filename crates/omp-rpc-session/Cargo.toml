@@ -18,5 +18,10 @@ path = "src/main.rs"
 asupersync = { workspace = true }
 serde_json = "1"
 
+[package.metadata.gate]
+# Cell 2 runtime gate: execute the state-only RPC path against the configured OMP binary.
+# The default request set remains the complete four-method sequence; --state is explicit.
+checks = [{ bin = "omp-rpc-session", args = ["quick", "--state"] }]
+
 [lints.rust]
 unsafe_code = "forbid"

@@ -1,5 +1,6 @@
 use omp_rpc_session::{
-    MalformedReason, ProtocolVersion, RpcFrame, RpcRequest, RpcSessionReport, parse_frame,
+    MalformedReason, OmpCommand, ProtocolVersion, RpcFrame, RpcRequest, RpcSessionConfig,
+    RpcSessionReport, parse_frame,
 };
 
 mod fixture {
@@ -89,4 +90,43 @@ fn unknown_malformed_and_rejected_frames_are_not_dropped() {
 #[test]
 fn protocol_v2_is_the_only_negotiated_version() {
     assert_eq!(ProtocolVersion::V2.0, 2);
+}
+
+#[test]
+fn existing_session_attach_adds_only_the_resume_selector() {
+    let command = OmpCommand::new("omp")
+        .resume("01a06796-2e83-70b6-9adb-79fa276b0f31")
+        .expect("non-empty session id");
+    let args: Vec<String> = command
+        .args()
+        .iter()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(args, ["--mode=rpc", "--resume=01a06796-2e83-70b6-9adb-79fa276b0f31"]);
+
+    let config = RpcSessionConfig::for_existing_session("omp", "session-123")
+        .expect("configures existing session");
+    assert_eq!(config.command.args().last().unwrap().to_string_lossy(), "--resume=session-123");
+
+    let error = OmpCommand::new("omp").resume("  ").expect_err("empty selector must refuse");
+    assert!(error.to_string().contains("existing-session selector"));
+}
+
+#[test]
+fn state_sequence_is_explicit_and_does_not_narrow_the_default() {
+    assert_eq!(RpcRequest::sequence().len(), 4);
+    assert_eq!(
+        RpcRequest::state_sequence().map(RpcRequest::command),
+        ["negotiate_protocol", "get_state"]
+    );
+}
+
+#[test]
+fn config_defaults_to_full_sequence_and_accepts_narrow_selector() {
+    let full = RpcSessionConfig::with_command(OmpCommand::new("omp"));
+    assert_eq!(full.requests, RpcRequest::sequence().to_vec());
+
+    let state = full.clone().with_requests(RpcRequest::state_sequence());
+    assert_eq!(state.requests, RpcRequest::state_sequence().to_vec());
+    assert_ne!(state.requests, full.requests);
 }

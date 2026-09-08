@@ -194,3 +194,12 @@ fn the_flag_order_does_not_change_the_verb_behaviour() {
         String::from_utf8_lossy(&second.stderr)
     );
 }
+
+#[test]
+fn an_empty_existing_session_selector_is_an_invocation_error() {
+    let out = ompo().args(["state", "--session"]).output().expect("ompo runs");
+    assert_eq!(out.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("STATE_SESSION_REQUIRED"), "got {stderr:?}");
+    assert!(!stderr.contains("OMP_STATE_TRANSPORT_FAILED"), "got {stderr:?}");
+}

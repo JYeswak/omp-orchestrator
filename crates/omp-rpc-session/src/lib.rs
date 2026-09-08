@@ -2,17 +2,19 @@
 
 //! Typed, bounded transport for one OMP `--mode=rpc` process.
 //!
-//! The adapter owns exactly one child process, sends a fixed request sequence,
-//! drains both output pipes, and closes the child before returning. It never
-//! invokes a shell and never treats a missing, malformed, unknown, rejected, or
-//! timed-out frame as success.
+//! The adapter owns exactly one child process, sends a configured request sequence,
+//! drains both output pipes, and closes the child before returning. The default
+//! configuration requests protocol negotiation, state, session stats, and messages;
+//! callers can select a narrower non-empty set for one projection. It never invokes
+//! a shell and never treats a missing, malformed, unknown, rejected, or timed-out
+//! frame as success.
 //!
 //! # OMP surface
 //!
-//! This crate covers the OMP `--mode=rpc` single-session transport and these
-//! request methods: `negotiate_protocol` v2, `get_state`, `get_session_stats`,
-//! and `get_messages`. Session continuity flags are observations only; this
-//! crate does not claim continuity across processes or sessions.
+//! This crate covers the OMP mode=rpc single-session transport and its four
+//! request methods. An exact resume selector can attach the child to an existing
+//! session; the returned session id is observed evidence, not a cross-process
+//! continuity guarantee.
 //!
 //! # No-claim boundary
 //!
@@ -43,7 +45,7 @@ pub const NO_CLAIM_BOUNDARY: &str = "This adapter drives one configured OMP --mo
 const DEFAULT_MAX_FRAME_BYTES: usize = 1_048_576;
 const DEFAULT_MAX_CAPTURE_BYTES: usize = 4 * 1_048_576;
 const DEFAULT_BINARY: &str = "omp";
-const REQUEST_IDS: [&str; 4] = ["negotiate-2", "state", "stats", "messages"];
+
 
 /// A bounded phase timeout. No phase, including shutdown, is unbounded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -121,6 +123,20 @@ impl OmpCommand {
         self
     }
 
+    /// Attach the RPC child to an existing OMP session by its exact session id.
+    /// The id is passed as one literal --resume=<id> argument; it is never shell-parsed.
+    pub fn resume(mut self, session_id: impl AsRef<str>) -> Result<Self, RpcError> {
+        let session_id = session_id.as_ref().trim();
+        if session_id.is_empty() {
+            return Err(RpcError::InvalidSessionSelector {
+                detail: "an existing session id is required".to_owned(),
+            });
+        }
+        self.args
+            .push(OsString::from(format!("--resume={session_id}")));
+        Ok(self)
+    }
+
     pub fn current_dir(mut self, path: impl Into<PathBuf>) -> Self {
         self.current_dir = Some(path.into());
         self
@@ -133,7 +149,7 @@ impl OmpCommand {
     }
 
     fn process_command(&self, max_capture_bytes: usize) -> Command {
-        let mut command = Command::new("omp");
+        let mut command = Command::new(&self.binary);
         command.args(&self.args);
         if let Some(path) = &self.current_dir {
             command.current_dir(path);
@@ -166,10 +182,11 @@ impl OmpCommand {
     }
 }
 
-/// Configuration for one bounded session run.
+/// Configuration for one bounded OMP mode=rpc session run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RpcSessionConfig {
     pub command: OmpCommand,
+    pub requests: Vec<RpcRequest>,
     pub deadlines: Deadlines,
     pub max_frame_bytes: usize,
     pub max_capture_bytes: usize,
@@ -179,6 +196,7 @@ impl RpcSessionConfig {
     pub fn new(binary: impl Into<PathBuf>) -> Self {
         Self {
             command: OmpCommand::new(binary),
+            requests: RpcRequest::sequence().to_vec(),
             deadlines: Deadlines::default(),
             max_frame_bytes: DEFAULT_MAX_FRAME_BYTES,
             max_capture_bytes: DEFAULT_MAX_CAPTURE_BYTES,
@@ -188,10 +206,27 @@ impl RpcSessionConfig {
     pub fn with_command(command: OmpCommand) -> Self {
         Self {
             command,
+            requests: RpcRequest::sequence().to_vec(),
             deadlines: Deadlines::default(),
             max_frame_bytes: DEFAULT_MAX_FRAME_BYTES,
             max_capture_bytes: DEFAULT_MAX_CAPTURE_BYTES,
         }
+    }
+
+    pub fn with_requests<I>(mut self, requests: I) -> Self
+    where
+        I: IntoIterator<Item = RpcRequest>,
+    {
+        self.requests = requests.into_iter().collect();
+        self
+    }
+
+    /// Configure one bounded RPC run attached to an exact existing session id.
+    pub fn for_existing_session(
+        binary: impl Into<PathBuf>,
+        session_id: impl AsRef<str>,
+    ) -> Result<Self, RpcError> {
+        Ok(Self::with_command(OmpCommand::new(binary).resume(session_id)?))
     }
 
     pub fn deadlines(mut self, deadlines: Deadlines) -> Self {
@@ -274,6 +309,11 @@ impl RpcRequest {
             Self::GetSessionStats,
             Self::GetMessages,
         ]
+    }
+
+    /// The minimal sequence for reading state from an existing OMP session.
+    pub const fn state_sequence() -> [Self; 2] {
+        [Self::NegotiateProtocol, Self::GetState]
     }
 
     pub fn to_frame(self) -> String {
@@ -629,6 +669,8 @@ pub struct RpcSessionReport {
     pub lifecycle: Lifecycle,
     pub ready: ReadyFrame,
     pub negotiated: ProtocolVersion,
+    pub methods: Vec<String>,
+    pub expected_responses: usize,
     pub frames: Vec<RpcFrame>,
     pub responses: Vec<ResponseFrame>,
     pub selected: SelectedResponses,
@@ -641,7 +683,7 @@ impl RpcSessionReport {
         self.lifecycle == Lifecycle::Stopped
             && self.negotiated == ProtocolVersion::V2
             && self.exit_code == Some(0)
-            && self.responses.len() == REQUEST_IDS.len()
+            && self.responses.len() == self.expected_responses
             && self.responses.iter().all(|response| response.success)
     }
 
@@ -664,7 +706,8 @@ impl RpcSessionReport {
                 "supportedProtocolVersions": self.ready.supported_protocol_versions.iter().map(|v| v.0).collect::<Vec<_>>()
             },
             "negotiated": self.negotiated.0,
-            "adoptedMethods": Self::adopted_methods(),
+            "adoptedMethods": self.methods,
+            "expectedResponseCount": self.expected_responses,
             "responseCount": self.responses.len(),
             "frameCount": self.frames.len(),
             "unknownFrames": self.frames.iter().filter(|frame| matches!(frame, RpcFrame::Unknown(_))).count(),
@@ -787,6 +830,9 @@ pub enum RpcError {
         operation: String,
         detail: String,
     },
+    InvalidSessionSelector {
+        detail: String,
+    },
     ProcessExited {
         code: Option<i32>,
     },
@@ -812,6 +858,9 @@ impl fmt::Display for RpcError {
         match self {
             Self::Process { operation, detail } => {
                 write!(formatter, "process {operation}: {detail}")
+            }
+            Self::InvalidSessionSelector { detail } => {
+                write!(formatter, "invalid existing-session selector: {detail}")
             }
             Self::ProcessExited { code } => {
                 write!(formatter, "omp exited unsuccessfully: {code:?}")
@@ -865,11 +914,25 @@ fn validate_binary(binary: &Path) -> Result<(), RpcError> {
     }
 }
 
-/// Run one bounded OMP RPC session. The caller's `&Cx` owns cancellation.
+/// Run the configured bounded OMP RPC request sequence.
+/// The caller's Cx owns cancellation.
 pub async fn run_session(
     cx: &asupersync::Cx,
     config: &RpcSessionConfig,
 ) -> Result<RpcSessionReport, RpcError> {
+    run_session_with_sequence(cx, config, &config.requests).await
+}
+
+async fn run_session_with_sequence(
+    cx: &asupersync::Cx,
+    config: &RpcSessionConfig,
+    sequence: &[RpcRequest],
+) -> Result<RpcSessionReport, RpcError> {
+    if sequence.is_empty() {
+        return Err(RpcError::Protocol(ProtocolError::MissingResponses(vec![
+            "request sequence".to_owned(),
+        ])));
+    }
     validate_binary(config.command.binary())?;
     checkpoint(cx)?;
     let mut child = config
@@ -894,7 +957,7 @@ pub async fn run_session(
         stdout,
     ));
 
-    let protocol_future = drive_protocol(cx, &mut child, reader, stdin, config);
+    let protocol_future = drive_protocol(cx, &mut child, reader, stdin, config, sequence);
     let stderr_future = drain_bounded(cx, stderr, config.max_capture_bytes);
     let (protocol_result, stderr_result) = asupersync::join!(protocol_future, stderr_future);
     let stderr = stderr_result.map_err(|error| map_io("stderr", error))?;
@@ -915,6 +978,7 @@ async fn drive_protocol(
     mut reader: LineReader<BufReader<asupersync::process::ChildStdout>>,
     mut stdin: ChildStdin,
     config: &RpcSessionConfig,
+    sequence: &[RpcRequest],
 ) -> Result<RpcSessionReport, RpcError> {
     let startup = asupersync::time::timeout(
         asupersync::time::wall_now(),
@@ -954,7 +1018,7 @@ async fn drive_protocol(
     let request_phase = asupersync::time::timeout(
         asupersync::time::wall_now(),
         config.deadlines.request,
-        exchange_requests(cx, &mut reader, &mut stdin, frames, config.max_frame_bytes),
+        exchange_requests(cx, &mut reader, &mut stdin, frames, sequence, config.max_frame_bytes),
     )
     .await;
     let (mut frames, responses, selected) = match request_phase {
@@ -973,18 +1037,18 @@ async fn drive_protocol(
             ));
         }
     };
-    if responses.len() != REQUEST_IDS.len() {
-        let outstanding = REQUEST_IDS
+    if responses.len() != sequence.len() {
+        let outstanding = sequence
             .iter()
-            .filter(|id| {
+            .filter(|request| {
                 !responses.iter().any(|response| {
                     response
                         .id
                         .as_ref()
-                        .is_some_and(|actual| actual.as_str() == **id)
+                        .is_some_and(|actual| actual.as_str() == request.id())
                 })
             })
-            .map(|id| (*id).to_owned())
+            .map(|request| request.id().to_owned())
             .collect();
         let error = RpcError::Protocol(ProtocolError::MissingResponses(outstanding));
         let cleanup = cleanup_child(cx, child, reader, stdin, config).await;
@@ -1064,6 +1128,8 @@ async fn drive_protocol(
         lifecycle,
         ready,
         negotiated,
+        methods: sequence.iter().map(|request| request.command().to_owned()).collect(),
+        expected_responses: sequence.len(),
         frames,
         responses,
         selected,
@@ -1133,9 +1199,9 @@ async fn exchange_requests(
     reader: &mut LineReader<BufReader<asupersync::process::ChildStdout>>,
     stdin: &mut ChildStdin,
     mut frames: Vec<RpcFrame>,
+    sequence: &[RpcRequest],
     max_frame_bytes: usize,
 ) -> Result<(Vec<RpcFrame>, Vec<ResponseFrame>, SelectedResponses), RpcError> {
-    let sequence = RpcRequest::sequence();
     let mut pending = sequence
         .iter()
         .map(|request| request.id().to_owned())

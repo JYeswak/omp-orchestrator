@@ -950,27 +950,56 @@ fn run_doctor_verb(rest: &[String]) -> ExitCode {
 /// the CLI edge, and the pattern is copied from `omp-orchestrator/src/main.rs:6213` rather
 /// than invented.
 fn run_state(rest: &[String]) -> ExitCode {
-    for arg in rest {
-        if arg != "--json" {
-            eprintln!(
-                "ompo state: unknown argument {arg:?} \
-                 hint=`ompo state [--json]` drives one bounded OMP --mode=rpc session"
-            );
-            return ExitCode::from(EXIT_BAD_INVOCATION);
+    let mut json = false;
+    let mut session = None;
+    let mut session_dir = None;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--json" => json = true,
+            "--session" => {
+                index += 1;
+                let Some(value) = rest.get(index) else {
+                    eprintln!("ompo state: STATE_SESSION_REQUIRED detail=--session requires an existing session id");
+                    return ExitCode::from(EXIT_BAD_INVOCATION);
+                };
+                if value.trim().is_empty() {
+                    eprintln!("ompo state: STATE_SESSION_REQUIRED detail=--session requires a non-empty existing session id");
+                    return ExitCode::from(EXIT_BAD_INVOCATION);
+                }
+                session = Some(value.as_str());
+            }
+            "--session-dir" => {
+                index += 1;
+                let Some(value) = rest.get(index) else {
+                    eprintln!("ompo state: STATE_SESSION_DIR_REQUIRED detail=--session-dir requires a path");
+                    return ExitCode::from(EXIT_BAD_INVOCATION);
+                };
+                if value.trim().is_empty() {
+                    eprintln!("ompo state: STATE_SESSION_DIR_REQUIRED detail=--session-dir requires a non-empty path");
+                    return ExitCode::from(EXIT_BAD_INVOCATION);
+                }
+                session_dir = Some(PathBuf::from(value));
+            }
+            arg => {
+                eprintln!(
+                    "ompo state: unknown argument {arg:?} hint=--session <existing-id> [--session-dir PATH] [--json] drives one bounded OMP mode=rpc session"
+                );
+                return ExitCode::from(EXIT_BAD_INVOCATION);
+            }
         }
+        index += 1;
     }
-    let json = wants_json(rest);
     let runtime = match asupersync::runtime::RuntimeBuilder::current_thread().build() {
         Ok(runtime) => runtime,
         Err(error) => {
-            // The instrument, not the subject: we never reached OMP.
             eprintln!("ompo state: OMP_STATE_RUNTIME_UNAVAILABLE detail={error}");
             return ExitCode::from(EXIT_INSTRUMENT);
         }
     };
     let outcome = runtime.block_on(async {
         match asupersync::Cx::current() {
-            Some(cx) => Ok(omp_state::read_state(&cx, "omp").await),
+            Some(cx) => Ok(omp_state::read_state(&cx, "omp", session, session_dir.as_deref()).await),
             None => Err("no runtime context"),
         }
     });
@@ -982,9 +1011,6 @@ fn run_state(rest: &[String]) -> ExitCode {
         }
     };
     if json {
-        // The envelope prints on BOTH paths, but a refusal's envelope carries no state
-        // fields -- so a reader cannot mistake one for the other. stdout stays clean of a
-        // success-shaped object on failure because the status and reason_code differ.
         match serde_json::to_string(&omp_state::envelope(&outcome)) {
             Ok(text) if outcome.exit_code() == omp_state::EXIT_OK => println!("{text}"),
             Ok(text) => eprintln!("{text}"),
@@ -1004,11 +1030,6 @@ fn run_state(rest: &[String]) -> ExitCode {
     }
     ExitCode::from(outcome.exit_code())
 }
-
-/// `ompo stats [--json]` — OMP's own session cost and token counts over `--mode=rpc`.
-///
-/// The second axis-2 cell. `get_session_stats` was measured to ANSWER before a line was
-/// written, and it is capability this repo did not have: nothing here could read `cost`,
 /// `tokens`, `toolCalls` or `premiumRequests` from OMP at all.
 fn run_stats(rest: &[String]) -> ExitCode {
     for arg in rest {

@@ -36,7 +36,7 @@
 
 use crate::umbrella;
 use omp_rpc_session::{
-    run_session, OmpCommand, RpcError, RpcSessionConfig, TimeoutPhase, NO_CLAIM_BOUNDARY,
+    run_session, OmpCommand, RpcError, RpcRequest, RpcSessionConfig, TimeoutPhase, NO_CLAIM_BOUNDARY,
 };
 use serde_json::{json, Value};
 
@@ -85,6 +85,8 @@ pub enum StateOutcome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OmpState {
     pub session_id: Option<String>,
+    /// The exact selector supplied with --session, present only after an existing-session attach.
+    pub requested_session: Option<String>,
     pub model: Option<String>,
     pub is_streaming: Option<bool>,
     pub queued_message_count: Option<u64>,
@@ -181,6 +183,7 @@ pub fn project(data: &Value, lifecycle: &str, negotiated: u32) -> OmpState {
             .get("sessionId")
             .and_then(Value::as_str)
             .map(str::to_owned),
+        requested_session: None,
         model: model_id(data),
         is_streaming: data.get("isStreaming").and_then(Value::as_bool),
         queued_message_count: data.get("queuedMessageCount").and_then(Value::as_u64),
@@ -210,6 +213,9 @@ pub fn classify_error(error: &RpcError) -> StateOutcome {
                 }
             }
         }
+        RpcError::InvalidSessionSelector { detail } => StateOutcome::TransportFailed {
+            detail: format!("invalid existing-session selector: {detail}"),
+        },
         RpcError::ProcessExited { code } => StateOutcome::TransportFailed {
             detail: format!(
                 "omp exited before answering, code={}",
@@ -245,6 +251,7 @@ fn timeout_phase(phase: TimeoutPhase) -> &'static str {
 fn primary_label(primary: &RpcError) -> &'static str {
     match primary {
         RpcError::Process { .. } => "process",
+        RpcError::InvalidSessionSelector { .. } => "invalid-session-selector",
         RpcError::ProcessExited { .. } => "process-exited",
         RpcError::Cancelled { .. } => "cancelled",
         RpcError::Timeout { .. } => "timeout",
@@ -254,11 +261,26 @@ fn primary_label(primary: &RpcError) -> &'static str {
     }
 }
 
-/// Drive one bounded OMP `--mode=rpc` session and read its state.
+/// Drive one bounded OMP mode=rpc session and read its state.
 ///
-/// `&Cx` first, per the asupersync contract; cancellation belongs to the caller.
-pub async fn read_state(cx: &asupersync::Cx, binary: &str) -> StateOutcome {
-    let config = RpcSessionConfig::with_command(OmpCommand::new(binary));
+/// Cx is first, per the asupersync contract; cancellation belongs to the caller.
+pub async fn read_state(
+    cx: &asupersync::Cx,
+    binary: &str,
+    session: Option<&str>,
+    session_dir: Option<&std::path::Path>,
+) -> StateOutcome {
+    let mut command = OmpCommand::new(binary);
+    if let Some(path) = session_dir {
+        command = command.arg("--session-dir").arg(path);
+    }
+    if let Some(session_id) = session.map(str::trim).filter(|id| !id.is_empty()) {
+        command = match command.resume(session_id) {
+            Ok(command) => command,
+            Err(error) => return StateOutcome::TransportFailed { detail: error.to_string() },
+        };
+    }
+    let config = RpcSessionConfig::with_command(command).with_requests(RpcRequest::state_sequence());
     match run_session(cx, &config).await {
         Ok(report) => {
             let negotiated = report.negotiated.0;
@@ -277,7 +299,9 @@ pub async fn read_state(cx: &asupersync::Cx, binary: &str) -> StateOutcome {
             }
             match report.selected.state.as_ref() {
                 Some(data) => {
-                    StateOutcome::Answered(Box::new(project(data, lifecycle, negotiated)))
+                    let mut state = project(data, lifecycle, negotiated);
+                    state.requested_session = session.map(str::to_owned);
+                    StateOutcome::Answered(Box::new(state))
                 }
                 None => StateOutcome::NoPayload,
             }
@@ -318,6 +342,7 @@ pub fn envelope(outcome: &StateOutcome) -> Value {
             "lifecycle": state.lifecycle,
             "protocol_negotiated": state.protocol_negotiated,
             "session_id": state.session_id,
+            "requested_session": state.requested_session,
             "model": state.model,
             "is_streaming": state.is_streaming,
             "queued_message_count": state.queued_message_count,
